@@ -1,0 +1,2396 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PRONOS — El mercado de predicciones de Latinoamérica</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ============================================================
+       RESET & BASE
+    ============================================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #080808;
+      --surface1: #111111;
+      --surface2: #181818;
+      --surface3: #1e1e1e;
+      --border: rgba(255,255,255,0.07);
+      --border-active: rgba(0,232,122,0.35);
+      --green: #00E87A;
+      --green-dim: rgba(0,232,122,0.12);
+      --green-glow: rgba(0,232,122,0.18);
+      --gold: #F5C842;
+      --gold-dim: rgba(245,200,66,0.12);
+      --red: #FF4545;
+      --red-dim: rgba(255,69,69,0.12);
+      --text-primary: #F0F0F0;
+      --text-secondary: #888;
+      --text-muted: #555;
+      --base-blue: #0052FF;
+      --font-display: 'Bebas Neue', sans-serif;
+      --font-body: 'DM Sans', sans-serif;
+      --font-mono: 'DM Mono', monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      font-size: 16px;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    button { cursor: pointer; border: none; background: none; font-family: var(--font-body); }
+    svg { display: block; }
+
+    /* ============================================================
+       GRID TEXTURE (hero bg)
+    ============================================================ */
+    .grid-texture {
+      background-image:
+        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+
+    /* ============================================================
+       1. TICKER STRIP
+    ============================================================ */
+    #ticker {
+      background: #0a0a0a;
+      border-bottom: 1px solid var(--border);
+      height: 36px;
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+      position: relative;
+      z-index: 200;
+    }
+
+    .ticker-badge {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 16px;
+      height: 100%;
+      border-right: 1px solid var(--border);
+      background: #0a0a0a;
+      z-index: 2;
+    }
+    .ticker-badge .dot-live {
+      width: 7px; height: 7px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: pulse-dot 1.4s ease-in-out infinite;
+      box-shadow: 0 0 6px var(--green);
+    }
+    .ticker-badge span {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      color: var(--green);
+      text-transform: uppercase;
+    }
+
+    .ticker-track-wrapper {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .ticker-track {
+      display: flex;
+      align-items: center;
+      white-space: nowrap;
+      animation: ticker-scroll 40s linear infinite;
+      gap: 0;
+    }
+
+    .ticker-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 28px;
+      border-right: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+    .ticker-item .label { color: var(--text-muted); }
+    .ticker-item .val { color: var(--green); font-weight: 500; }
+    .ticker-item .vs { color: var(--text-muted); font-size: 10px; }
+    .ticker-item .sep {
+      width: 3px; height: 3px;
+      background: var(--text-muted);
+      border-radius: 50%;
+      margin: 0 4px;
+    }
+
+    @keyframes ticker-scroll {
+      0%   { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
+
+    /* ============================================================
+       2. NAVIGATION
+    ============================================================ */
+    #nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 48px;
+      background: rgba(8,8,8,0.6);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    #nav.scrolled {
+      border-bottom-color: var(--border);
+      box-shadow: 0 4px 32px rgba(0,0,0,0.6);
+    }
+
+    .nav-logo {
+      font-family: var(--font-display);
+      font-size: 28px;
+      letter-spacing: 0.04em;
+      color: var(--text-primary);
+      position: relative;
+    }
+    .nav-logo .green-dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      background: var(--green);
+      border-radius: 50%;
+      margin-left: 1px;
+      vertical-align: middle;
+      position: relative;
+      top: -3px;
+      box-shadow: 0 0 10px var(--green);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 36px;
+    }
+    .nav-links a {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      letter-spacing: 0.01em;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--text-primary); }
+
+    .btn-nav-cta {
+      background: var(--green);
+      color: #000;
+      font-family: var(--font-body);
+      font-size: 13px;
+      font-weight: 700;
+      padding: 9px 20px;
+      border-radius: 6px;
+      letter-spacing: 0.01em;
+      transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+    }
+    .btn-nav-cta:hover {
+      background: #00ff88;
+      box-shadow: 0 0 20px rgba(0,232,122,0.4);
+      transform: translateY(-1px);
+    }
+
+    /* ============================================================
+       3. HERO
+    ============================================================ */
+    #hero {
+      min-height: calc(100vh - 100px);
+      display: flex;
+      align-items: center;
+      padding: 80px 48px;
+      position: relative;
+      overflow: hidden;
+    }
+    #hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.022) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.022) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+    #hero::after {
+      content: '';
+      position: absolute;
+      top: -20%;
+      left: -10%;
+      width: 70%;
+      height: 100%;
+      background: radial-gradient(ellipse at center, rgba(0,232,122,0.07) 0%, transparent 65%);
+      pointer-events: none;
+    }
+
+    .hero-inner {
+      max-width: 1280px;
+      width: 100%;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 480px;
+      gap: 64px;
+      align-items: center;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Hero left */
+    .hero-left {}
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(0,232,122,0.08);
+      border: 1px solid rgba(0,232,122,0.2);
+      border-radius: 100px;
+      padding: 6px 14px;
+      margin-bottom: 28px;
+    }
+    .hero-badge .dot {
+      width: 7px; height: 7px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: pulse-dot 1.4s ease-in-out infinite;
+      box-shadow: 0 0 8px var(--green);
+    }
+    .hero-badge span {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      color: var(--green);
+      text-transform: uppercase;
+    }
+
+    .hero-headline {
+      font-family: var(--font-display);
+      font-size: clamp(56px, 6.5vw, 88px);
+      line-height: 1;
+      letter-spacing: 0.02em;
+      color: var(--text-primary);
+      text-transform: uppercase;
+      margin-bottom: 24px;
+    }
+    .hero-headline .accent { color: var(--green); }
+
+    .hero-sub {
+      font-size: 17px;
+      line-height: 1.7;
+      color: var(--text-secondary);
+      max-width: 520px;
+      margin-bottom: 36px;
+      font-weight: 400;
+    }
+
+    .hero-btns {
+      display: flex;
+      gap: 14px;
+      margin-bottom: 40px;
+      flex-wrap: wrap;
+    }
+    .btn-primary {
+      background: var(--green);
+      color: #000;
+      font-weight: 700;
+      font-size: 15px;
+      padding: 14px 28px;
+      border-radius: 8px;
+      transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+      letter-spacing: 0.01em;
+    }
+    .btn-primary:hover {
+      background: #00ff88;
+      box-shadow: 0 0 28px rgba(0,232,122,0.45);
+      transform: translateY(-2px);
+    }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-primary);
+      font-weight: 600;
+      font-size: 15px;
+      padding: 13px 28px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.15);
+      transition: border-color 0.2s, background 0.2s, transform 0.15s;
+    }
+    .btn-ghost:hover {
+      border-color: rgba(255,255,255,0.35);
+      background: rgba(255,255,255,0.05);
+      transform: translateY(-2px);
+    }
+
+    .hero-stats {
+      display: flex;
+      align-items: center;
+      gap: 0;
+    }
+    .hero-stat {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-right: 24px;
+      margin-right: 24px;
+      border-right: 1px solid var(--border);
+    }
+    .hero-stat:last-child { border-right: none; margin-right: 0; padding-right: 0; }
+    .hero-stat-val {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+    .hero-stat-val .green { color: var(--green); }
+    .hero-stat-label {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Fight card */
+    .fight-card {
+      background: var(--surface1);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.6), 0 0 60px rgba(0,232,122,0.06);
+    }
+
+    .fight-card-header {
+      background: var(--surface2);
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    .fight-card-header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .fight-card-header-left .dot {
+      width: 7px; height: 7px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: pulse-dot 1.4s ease-in-out infinite;
+      box-shadow: 0 0 8px var(--green);
+    }
+    .fight-card-title {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      color: var(--green);
+      text-transform: uppercase;
+    }
+    .fight-league {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+    }
+
+    .fight-fighters {
+      padding: 28px 24px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .fighter {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+    }
+    .fighter-avatar {
+      width: 80px; height: 80px;
+      border-radius: 50%;
+      border: 2.5px solid var(--green);
+      box-shadow: 0 0 20px rgba(0,232,122,0.4), 0 0 50px rgba(0,232,122,0.2);
+      background: linear-gradient(135deg, #1a2a1a, var(--surface3));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-size: 26px;
+      color: var(--green);
+      letter-spacing: 0.04em;
+      position: relative;
+      animation: avatar-pulse 3s ease-in-out infinite;
+    }
+    @keyframes avatar-pulse {
+      0%, 100% { box-shadow: 0 0 20px rgba(0,232,122,0.4), 0 0 50px rgba(0,232,122,0.2); }
+      50% { box-shadow: 0 0 30px rgba(0,232,122,0.6), 0 0 70px rgba(0,232,122,0.3); }
+    }
+    .fighter-avatar.tba {
+      border-color: var(--text-muted);
+      box-shadow: none;
+      color: var(--text-muted);
+      font-size: 22px;
+    }
+    .fighter-name {
+      font-family: var(--font-display);
+      font-size: 18px;
+      letter-spacing: 0.04em;
+      color: var(--text-primary);
+      text-align: center;
+    }
+    .fighter-record {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+      text-align: center;
+      line-height: 1.5;
+    }
+    .fighter-record .badge {
+      display: inline-block;
+      background: rgba(245,200,66,0.12);
+      color: var(--gold);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 9px;
+      margin-top: 4px;
+      letter-spacing: 0.08em;
+    }
+
+    .fight-vs {
+      font-family: var(--font-display);
+      font-size: 28px;
+      color: var(--text-muted);
+      letter-spacing: 0.1em;
+      flex-shrink: 0;
+    }
+
+    .fight-market {
+      padding: 0 24px 20px;
+    }
+    .fight-market-q {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-family: var(--font-mono);
+    }
+
+    .odds-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .odds-btn {
+      flex: 1;
+      padding: 12px 10px;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+      border: 1px solid transparent;
+    }
+    .odds-btn:hover { transform: translateY(-2px); }
+    .odds-btn.green-btn {
+      background: rgba(0,232,122,0.1);
+      border-color: rgba(0,232,122,0.3);
+    }
+    .odds-btn.green-btn:hover { box-shadow: 0 4px 20px rgba(0,232,122,0.2); }
+    .odds-btn.surface-btn {
+      background: var(--surface2);
+      border-color: var(--border);
+    }
+    .odds-pct {
+      font-family: var(--font-display);
+      font-size: 26px;
+      letter-spacing: 0.04em;
+      line-height: 1;
+    }
+    .green-btn .odds-pct { color: var(--green); }
+    .surface-btn .odds-pct { color: var(--text-secondary); }
+    .odds-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+    }
+
+    /* Probability bar */
+    .prob-bar-wrapper {
+      margin-bottom: 14px;
+    }
+    .prob-bar-labels {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .prob-bar-track {
+      height: 6px;
+      background: var(--surface2);
+      border-radius: 100px;
+      overflow: hidden;
+    }
+    .prob-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--green), #00c96a);
+      border-radius: 100px;
+      transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+      width: 67%;
+    }
+
+    .fight-volume {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-top: 1px solid var(--border);
+      margin: 0;
+    }
+    .fight-vol-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+    }
+    .fight-vol-val {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+    .fight-vol-val span { color: var(--green); }
+
+    .fight-card-footer {
+      padding: 16px 24px 20px;
+    }
+    .btn-connect-wallet {
+      width: 100%;
+      background: var(--green);
+      color: #000;
+      font-weight: 700;
+      font-size: 14px;
+      padding: 14px;
+      border-radius: 8px;
+      transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+      letter-spacing: 0.01em;
+    }
+    .btn-connect-wallet:hover {
+      background: #00ff88;
+      box-shadow: 0 0 28px rgba(0,232,122,0.45);
+      transform: translateY(-1px);
+    }
+
+    /* ============================================================
+       4. MARKETS SECTION
+    ============================================================ */
+    #markets {
+      padding: 100px 48px;
+      max-width: 1280px;
+      margin: 0 auto;
+      position: relative;
+    }
+
+    .section-header {
+      margin-bottom: 40px;
+    }
+    .section-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      color: var(--green);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .section-title {
+      font-family: var(--font-display);
+      font-size: clamp(38px, 4vw, 54px);
+      letter-spacing: 0.04em;
+      color: var(--text-primary);
+      text-transform: uppercase;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 40px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0;
+    }
+    .tab-btn {
+      font-family: var(--font-body);
+      font-size: 14px;
+      font-weight: 600;
+      padding: 10px 20px;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      cursor: pointer;
+      transition: color 0.2s, border-color 0.2s;
+      letter-spacing: 0.01em;
+    }
+    .tab-btn:hover { color: var(--text-secondary); }
+    .tab-btn.active {
+      color: var(--green);
+      border-bottom-color: var(--green);
+    }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    .markets-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+
+    /* Market Card */
+    .market-card {
+      background: var(--surface1);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+      cursor: pointer;
+    }
+    .market-card:hover {
+      transform: translateY(-4px);
+      border-color: var(--border-active);
+      box-shadow: 0 12px 48px rgba(0,0,0,0.5), 0 0 24px rgba(0,232,122,0.08);
+    }
+
+    .mc-header {
+      background: var(--surface2);
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    .mc-cat {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+    .mc-badge {
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      padding: 3px 9px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+    .mc-badge.live {
+      background: rgba(0,232,122,0.12);
+      color: var(--green);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .mc-badge.live::before {
+      content: '';
+      width: 5px; height: 5px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: pulse-dot 1.4s ease-in-out infinite;
+      box-shadow: 0 0 6px var(--green);
+    }
+    .mc-badge.tomorrow {
+      background: var(--gold-dim);
+      color: var(--gold);
+      border: 1px solid rgba(245,200,66,0.2);
+    }
+    .mc-badge.upcoming {
+      background: rgba(255,255,255,0.05);
+      color: var(--text-muted);
+    }
+
+    .mc-body { padding: 18px 18px 16px; }
+    .mc-title {
+      font-family: var(--font-display);
+      font-size: 19px;
+      letter-spacing: 0.04em;
+      color: var(--text-primary);
+      margin-bottom: 6px;
+      line-height: 1.15;
+    }
+    .mc-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+      font-family: var(--font-mono);
+      letter-spacing: 0.04em;
+    }
+
+    /* Two-outcome bar */
+    .mc-bar-row {
+      margin-bottom: 12px;
+    }
+    .mc-bar-label-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 5px;
+    }
+    .mc-bar-name {
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+    }
+    .mc-bar-pct {
+      font-family: var(--font-display);
+      font-size: 16px;
+      letter-spacing: 0.04em;
+    }
+    .mc-bar-pct.green { color: var(--green); }
+    .mc-bar-pct.red { color: var(--red); }
+    .mc-bar-pct.gold { color: var(--gold); }
+    .mc-bar-pct.muted { color: var(--text-muted); }
+    .mc-track {
+      height: 5px;
+      background: var(--surface3);
+      border-radius: 100px;
+      overflow: hidden;
+    }
+    .mc-fill {
+      height: 100%;
+      border-radius: 100px;
+    }
+    .mc-fill.green { background: linear-gradient(90deg, var(--green), #00c96a); }
+    .mc-fill.gold { background: linear-gradient(90deg, var(--gold), #e0b030); }
+    .mc-fill.red { background: linear-gradient(90deg, var(--red), #cc2222); }
+    .mc-fill.muted { background: rgba(255,255,255,0.15); }
+
+    /* Three-outcome layout */
+    .mc-three-outcomes {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .mc-outcome {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 8px;
+      text-align: center;
+      transition: border-color 0.2s, background 0.2s, transform 0.15s;
+      cursor: pointer;
+    }
+    .mc-outcome:hover { transform: translateY(-2px); }
+    .mc-outcome.win {
+      background: rgba(0,232,122,0.08);
+      border-color: rgba(0,232,122,0.25);
+    }
+    .mc-outcome.draw {
+      background: rgba(255,255,255,0.03);
+    }
+    .mc-outcome.lose {
+      background: rgba(255,69,69,0.07);
+      border-color: rgba(255,69,69,0.2);
+    }
+    .mc-outcome-pct {
+      font-family: var(--font-display);
+      font-size: 22px;
+      letter-spacing: 0.04em;
+      line-height: 1;
+      margin-bottom: 3px;
+    }
+    .win .mc-outcome-pct { color: var(--green); }
+    .draw .mc-outcome-pct { color: var(--text-secondary); }
+    .lose .mc-outcome-pct { color: var(--red); }
+    .mc-outcome-label {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    /* Multi-outcome (Casa de los Famosos) */
+    .mc-multi {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      margin-bottom: 12px;
+    }
+    .mc-multi-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .mc-multi-name {
+      font-size: 12px;
+      color: var(--text-secondary);
+      width: 110px;
+      flex-shrink: 0;
+    }
+    .mc-multi-track {
+      flex: 1;
+      height: 5px;
+      background: var(--surface3);
+      border-radius: 100px;
+      overflow: hidden;
+    }
+    .mc-multi-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--green), #00c96a);
+      border-radius: 100px;
+    }
+    .mc-multi-pct {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--green);
+      width: 32px;
+      text-align: right;
+    }
+
+    .mc-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 18px;
+      border-top: 1px solid var(--border);
+      background: var(--surface2);
+    }
+    .mc-vol {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+    .mc-vol span { color: var(--text-secondary); }
+    .mc-bet-btn {
+      background: var(--green-dim);
+      color: var(--green);
+      border: 1px solid rgba(0,232,122,0.2);
+      font-weight: 600;
+      font-size: 12px;
+      padding: 6px 14px;
+      border-radius: 6px;
+      transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+    }
+    .mc-bet-btn:hover {
+      background: rgba(0,232,122,0.2);
+      box-shadow: 0 0 12px rgba(0,232,122,0.2);
+      transform: translateY(-1px);
+    }
+
+    /* Matchup header for Liga MX */
+    .mc-matchup {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+    .mc-team {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    .mc-team-crest {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .crest-america {
+      background: linear-gradient(135deg, #F5C842, #e0a800);
+      color: #000;
+    }
+    .crest-mazatlan {
+      background: linear-gradient(135deg, #2a1a3e, #1a0f2e);
+      color: #c5b5e8;
+      border: 1.5px solid #6b4fa0;
+    }
+    .crest-cruzazul {
+      background: linear-gradient(135deg, #1a50e0, #0038b0);
+      color: #fff;
+      font-size: 11px;
+      letter-spacing: 0.02em;
+    }
+    .crest-necaxa {
+      background: linear-gradient(135deg, #cc0000, #880000);
+      color: #fff;
+      font-size: 11px;
+      letter-spacing: 0.02em;
+    }
+    .mc-team-name {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+    }
+    .mc-match-vs {
+      font-family: var(--font-display);
+      font-size: 18px;
+      color: var(--text-muted);
+    }
+
+    /* Matchday label */
+    .mc-matchday {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+      margin-bottom: 14px;
+    }
+
+    /* ============================================================
+       5. HOW IT WORKS
+    ============================================================ */
+    #how-it-works {
+      padding: 100px 48px;
+      background: var(--surface1);
+      position: relative;
+      overflow: hidden;
+    }
+    #how-it-works::before {
+      content: '';
+      position: absolute;
+      top: -30%;
+      right: -10%;
+      width: 60%;
+      height: 160%;
+      background: radial-gradient(ellipse at center, rgba(0,232,122,0.05) 0%, transparent 65%);
+      pointer-events: none;
+    }
+
+    .how-inner {
+      max-width: 1280px;
+      margin: 0 auto;
+      position: relative;
+      z-index: 1;
+    }
+
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 40px;
+      margin-top: 60px;
+      margin-bottom: 64px;
+    }
+
+    .step {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .step-num {
+      font-family: var(--font-display);
+      font-size: 72px;
+      color: rgba(0,232,122,0.15);
+      letter-spacing: 0.04em;
+      line-height: 1;
+    }
+    .step-title {
+      font-family: var(--font-display);
+      font-size: 28px;
+      letter-spacing: 0.04em;
+      color: var(--text-primary);
+      text-transform: uppercase;
+    }
+    .step-desc {
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--text-secondary);
+      max-width: 300px;
+    }
+    .step-btns {
+      display: flex;
+      gap: 10px;
+      margin-top: 6px;
+      flex-wrap: wrap;
+    }
+    .step-btn-google {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #fff;
+      color: #222;
+      font-weight: 600;
+      font-size: 13px;
+      padding: 9px 16px;
+      border-radius: 7px;
+      transition: box-shadow 0.2s, transform 0.15s;
+      cursor: pointer;
+      border: none;
+    }
+    .step-btn-google:hover {
+      box-shadow: 0 4px 20px rgba(255,255,255,0.15);
+      transform: translateY(-1px);
+    }
+    .step-btn-wallet {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--green-dim);
+      color: var(--green);
+      border: 1px solid rgba(0,232,122,0.25);
+      font-weight: 600;
+      font-size: 13px;
+      padding: 9px 16px;
+      border-radius: 7px;
+      transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+      cursor: pointer;
+    }
+    .step-btn-wallet:hover {
+      background: rgba(0,232,122,0.2);
+      box-shadow: 0 0 16px rgba(0,232,122,0.2);
+      transform: translateY(-1px);
+    }
+
+    /* Google G SVG */
+    .google-g {
+      width: 16px; height: 16px;
+    }
+    .wallet-icon {
+      width: 16px; height: 16px;
+    }
+
+    .step-icon-circle {
+      width: 56px; height: 56px;
+      border-radius: 50%;
+      background: rgba(0,232,122,0.08);
+      border: 1px solid rgba(0,232,122,0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 4px;
+    }
+
+    .tech-strip {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      border-top: 1px solid var(--border);
+      padding-top: 40px;
+    }
+    .tech-pill {
+      padding: 10px 28px;
+      border-right: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+    .tech-pill:last-child { border-right: none; }
+    .tech-pill .dot {
+      display: inline-block;
+      width: 6px; height: 6px;
+      background: var(--green);
+      border-radius: 50%;
+      margin-right: 8px;
+      box-shadow: 0 0 6px var(--green);
+      vertical-align: middle;
+    }
+    .tech-pill .base-dot {
+      background: var(--base-blue);
+      box-shadow: 0 0 6px var(--base-blue);
+    }
+
+    /* ============================================================
+       6. PARTNERS STRIP
+    ============================================================ */
+    #partners {
+      padding: 70px 48px;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .partners-inner {
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+    .partners-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      text-align: center;
+      margin-bottom: 36px;
+    }
+    .partners-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 60px;
+      flex-wrap: wrap;
+    }
+    .partner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      opacity: 0.4;
+      transition: opacity 0.25s;
+      cursor: default;
+    }
+    .partner:hover { opacity: 1; }
+    .partner-logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .partner-logo-tvp {
+      width: 80px; height: 44px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-size: 20px;
+      letter-spacing: 0.1em;
+      color: var(--text-secondary);
+    }
+    .partner-logo-base {
+      width: 44px; height: 44px;
+      background: var(--base-blue);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .partner-logo-mazatlan {
+      width: 44px; height: 44px;
+      background: linear-gradient(135deg, #2a1a3e, #1a0f2e);
+      border-radius: 50%;
+      border: 1.5px solid #6b4fa0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-size: 13px;
+      color: #c5b5e8;
+      letter-spacing: 0.04em;
+    }
+    .partner-logo-verde {
+      width: 44px; height: 44px;
+      background: var(--surface2);
+      border: 2px solid var(--green);
+      border-radius: 50%;
+      box-shadow: 0 0 14px rgba(0,232,122,0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-size: 15px;
+      color: var(--green);
+      letter-spacing: 0.04em;
+    }
+    .partner-name {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    /* ============================================================
+       7. WAITLIST CTA
+    ============================================================ */
+    #waitlist {
+      padding: 120px 48px;
+      position: relative;
+      overflow: hidden;
+      text-align: center;
+    }
+    #waitlist::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 80%;
+      height: 100%;
+      background: radial-gradient(ellipse at center, rgba(0,232,122,0.1) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    #waitlist::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+
+    .waitlist-inner {
+      max-width: 600px;
+      margin: 0 auto;
+      position: relative;
+      z-index: 1;
+    }
+    .waitlist-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      color: var(--green);
+      text-transform: uppercase;
+      margin-bottom: 18px;
+    }
+    .waitlist-title {
+      font-family: var(--font-display);
+      font-size: clamp(48px, 6vw, 76px);
+      letter-spacing: 0.04em;
+      color: var(--text-primary);
+      text-transform: uppercase;
+      line-height: 1;
+      margin-bottom: 16px;
+    }
+    .waitlist-sub {
+      font-size: 15px;
+      color: var(--text-secondary);
+      margin-bottom: 40px;
+    }
+
+    .waitlist-form {
+      display: flex;
+      gap: 10px;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+    .waitlist-form input {
+      flex: 1;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px;
+      padding: 14px 18px;
+      font-family: var(--font-body);
+      font-size: 14px;
+      color: var(--text-primary);
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .waitlist-form input::placeholder { color: var(--text-muted); }
+    .waitlist-form input:focus {
+      border-color: rgba(0,232,122,0.4);
+      box-shadow: 0 0 0 3px rgba(0,232,122,0.08);
+    }
+    .waitlist-form button {
+      background: var(--green);
+      color: #000;
+      font-weight: 700;
+      font-size: 14px;
+      padding: 14px 24px;
+      border-radius: 8px;
+      white-space: nowrap;
+      transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+    }
+    .waitlist-form button:hover {
+      background: #00ff88;
+      box-shadow: 0 0 24px rgba(0,232,122,0.4);
+      transform: translateY(-1px);
+    }
+
+    .waitlist-success {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      background: rgba(0,232,122,0.1);
+      border: 1px solid rgba(0,232,122,0.3);
+      border-radius: 10px;
+      padding: 18px 28px;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+    .waitlist-success.show { display: flex; }
+    .waitlist-success-icon {
+      width: 24px; height: 24px;
+      background: var(--green);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .waitlist-success span {
+      font-size: 15px;
+      color: var(--green);
+      font-weight: 600;
+    }
+
+    /* ============================================================
+       8. FOOTER
+    ============================================================ */
+    #footer {
+      padding: 48px;
+      border-top: 1px solid var(--border);
+    }
+    .footer-inner {
+      max-width: 1280px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    .footer-logo {
+      font-family: var(--font-display);
+      font-size: 24px;
+      letter-spacing: 0.04em;
+      color: var(--text-primary);
+    }
+    .footer-logo .green-dot {
+      display: inline-block;
+      width: 7px; height: 7px;
+      background: var(--green);
+      border-radius: 50%;
+      margin-left: 1px;
+      vertical-align: middle;
+      position: relative;
+      top: -2px;
+      box-shadow: 0 0 8px var(--green);
+    }
+    .footer-tagline {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .footer-copy {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+    }
+
+    /* ============================================================
+       MODAL
+    ============================================================ */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.75);
+      backdrop-filter: blur(8px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal-box {
+      background: var(--surface1);
+      border: 1px solid var(--border-active);
+      border-radius: 16px;
+      padding: 40px 44px;
+      max-width: 420px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 32px 80px rgba(0,0,0,0.8), 0 0 40px rgba(0,232,122,0.1);
+      animation: modal-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    @keyframes modal-in {
+      from { opacity: 0; transform: scale(0.88) translateY(16px); }
+      to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .modal-dot {
+      width: 56px; height: 56px;
+      background: rgba(0,232,122,0.1);
+      border: 1px solid rgba(0,232,122,0.3);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+    }
+    .modal-title {
+      font-family: var(--font-display);
+      font-size: 32px;
+      letter-spacing: 0.06em;
+      color: var(--text-primary);
+      margin-bottom: 10px;
+    }
+    .modal-sub {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+    .modal-close {
+      width: 100%;
+      background: var(--green);
+      color: #000;
+      font-weight: 700;
+      font-size: 14px;
+      padding: 13px;
+      border-radius: 8px;
+      transition: background 0.2s, box-shadow 0.2s;
+    }
+    .modal-close:hover {
+      background: #00ff88;
+      box-shadow: 0 0 24px rgba(0,232,122,0.4);
+    }
+
+    /* ============================================================
+       UTILITIES
+    ============================================================ */
+    .gold { color: var(--gold); }
+    .green { color: var(--green); }
+    .red { color: var(--red); }
+
+    /* Divider line between sections */
+    .section-wrap {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 48px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ============================================================
+     1. TICKER STRIP
+============================================================ -->
+<div id="ticker">
+  <div class="ticker-badge">
+    <div class="dot-live"></div>
+    <span>EN VIVO</span>
+  </div>
+  <div class="ticker-track-wrapper">
+    <div class="ticker-track" id="tickerTrack">
+      <!-- Items duplicated in JS for seamless loop -->
+      <div class="ticker-item">
+        <span class="label">MARCO VERDE</span>
+        <span class="sep"></span>
+        <span>Verde</span>
+        <span class="val">67%</span>
+        <span class="vs">vs</span>
+        <span>Moreno</span>
+        <span class="val">33%</span>
+      </div>
+      <div class="ticker-item">
+        <span class="label">LIGA MX · JOR 11</span>
+        <span class="sep"></span>
+        <span>América</span>
+        <span class="val">71%</span>
+        <span class="vs">·</span>
+        <span>Empate</span>
+        <span class="val">18%</span>
+        <span class="vs">·</span>
+        <span>Mazatlán</span>
+        <span class="val">11%</span>
+      </div>
+      <div class="ticker-item">
+        <span class="label">LA CASA DE LOS FAMOSOS</span>
+        <span class="sep"></span>
+        <span>Laura Zapata</span>
+        <span class="val">34%</span>
+        <span class="vs">lider</span>
+      </div>
+      <div class="ticker-item">
+        <span class="label">GOBERNATURA BC 2027</span>
+        <span class="sep"></span>
+        <span>Morena</span>
+        <span class="val">52%</span>
+        <span class="vs">·</span>
+        <span>PAN</span>
+        <span class="val">31%</span>
+        <span class="vs">·</span>
+        <span>PRI</span>
+        <span class="val">17%</span>
+      </div>
+      <div class="ticker-item">
+        <span class="label">MUNDIAL 2026 SEDE MÉXICO</span>
+        <span class="sep"></span>
+        <span>México pasa fase de grupos</span>
+        <span class="val">61%</span>
+      </div>
+      <div class="ticker-item">
+        <span class="label">ELECCIONES INTERMEDIAS 2027</span>
+        <span class="sep"></span>
+        <span>Morena mantiene mayoría</span>
+        <span class="val">58%</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     2. NAVIGATION
+============================================================ -->
+<nav id="nav">
+  <a href="#" class="nav-logo">PRONOS<span class="green-dot"></span></a>
+  <div class="nav-links">
+    <a href="#markets">Mercados</a>
+    <a href="#how-it-works">Cómo funciona</a>
+    <button class="btn-nav-cta" onclick="showModal()">Únete al beta</button>
+  </div>
+</nav>
+
+<!-- ============================================================
+     3. HERO
+============================================================ -->
+<section id="hero">
+  <div class="hero-inner">
+    <!-- Left column -->
+    <div class="hero-left">
+      <div class="hero-badge">
+        <div class="dot"></div>
+        <span>Beta Próximamente · Latinoamérica</span>
+      </div>
+
+      <h1 class="hero-headline">
+        El mercado<br>
+        de <span class="accent">predicciones</span><br>
+        de Latinoamérica
+      </h1>
+
+      <p class="hero-sub">
+        Predice el resultado de peleas, partidos y reality shows.
+        Gana en USDC. Liquidado en cadena. Sin intermediarios.
+      </p>
+
+      <div class="hero-btns">
+        <a href="#markets" class="btn-primary">Ver mercados</a>
+        <a href="#how-it-works" class="btn-ghost">Cómo funciona</a>
+      </div>
+
+      <div class="hero-stats">
+        <div class="hero-stat">
+          <span class="hero-stat-val"><span class="green">4</span></span>
+          <span class="hero-stat-label">Mercados activos</span>
+        </div>
+        <div class="hero-stat">
+          <span class="hero-stat-val"><span class="green">$47K</span></span>
+          <span class="hero-stat-label">Volumen</span>
+        </div>
+        <div class="hero-stat">
+          <span class="hero-stat-val"><span class="green">3</span></span>
+          <span class="hero-stat-label">Países</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right column: Fight Card -->
+    <div class="fight-card">
+      <div class="fight-card-header">
+        <div class="fight-card-header-left">
+          <div class="dot"></div>
+          <span class="fight-card-title">Próxima Pelea · En Vivo</span>
+        </div>
+        <span class="fight-league">BOXEO PRO</span>
+      </div>
+
+      <div class="fight-fighters">
+        <div class="fighter">
+          <div class="fighter-avatar">MV</div>
+          <div class="fighter-name">Marco Verde</div>
+          <div class="fighter-record">
+            3-0 PRO · PLATA OLÍMPICA 2024
+            <div class="badge">OLY</div>
+          </div>
+        </div>
+        <div class="fight-vs">VS</div>
+        <div class="fighter">
+          <div class="fighter-avatar tba">AM</div>
+          <div class="fighter-name">Alex Moreno</div>
+          <div class="fighter-record">Oponente confirmado</div>
+        </div>
+      </div>
+
+      <div class="fight-market">
+        <div class="fight-market-q">¿Quién gana la pelea?</div>
+
+        <div class="odds-row">
+          <div class="odds-btn green-btn" onclick="showModal()">
+            <span class="odds-pct" id="verdeOdds">67%</span>
+            <span class="odds-label">Verde</span>
+          </div>
+          <div class="odds-btn surface-btn" onclick="showModal()">
+            <span class="odds-pct" id="oponenteOdds">33%</span>
+            <span class="odds-label">Moreno</span>
+          </div>
+        </div>
+
+        <div class="prob-bar-wrapper">
+          <div class="prob-bar-labels">
+            <span id="barLabelLeft">Verde 67%</span>
+            <span id="barLabelRight">Moreno 33%</span>
+          </div>
+          <div class="prob-bar-track">
+            <div class="prob-bar-fill" id="probBar"></div>
+          </div>
+        </div>
+
+        <div class="fight-volume">
+          <span class="fight-vol-label">VOLUMEN APOSTADO</span>
+          <span class="fight-vol-val"><span id="volumeCounter">$12,400</span> USDC</span>
+        </div>
+      </div>
+
+      <div class="fight-card-footer">
+        <button class="btn-connect-wallet" onclick="showModal()">Conectar wallet</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     4. MARKETS SECTION
+============================================================ -->
+<section id="markets">
+  <div class="section-header">
+    <div class="section-eyebrow">Predicciones en tiempo real</div>
+    <div class="section-title">Mercados Activos</div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="todos">Todos</button>
+    <button class="tab-btn" data-tab="boxeo">Boxeo</button>
+    <button class="tab-btn" data-tab="ligamx">Liga MX</button>
+    <button class="tab-btn" data-tab="entretenimiento">Entretenimiento</button>
+    <button class="tab-btn" data-tab="politica">Política</button>
+  </div>
+
+  <!-- TODOS -->
+  <div class="tab-panel active" id="tab-todos">
+    <div class="markets-grid">
+
+      <!-- Boxeo 1 -->
+      <div class="market-card">
+        <div class="mc-header">
+          <span class="mc-cat">Boxeo · Marco Verde</span>
+          <span class="mc-badge live">En vivo</span>
+        </div>
+        <div class="mc-body">
+          <div class="mc-title">¿Marco Verde gana por KO?</div>
+          <div class="mc-sub">Pelea profesional 2026</div>
+          <div class="mc-bar-row">
+            <div class="mc-bar-label-row">
+              <span class="mc-bar-name">Verde por KO</span>
+              <span class="mc-bar-pct green">67%</span>
+            </div>
+            <div class="mc-track"><div class="mc-fill green" style="width:67%"></div></div>
+          </div>
+          <div class="mc-bar-row">
+            <div class="mc-bar-label-row">
+              <span class="mc-bar-name">No KO</span>
+              <span class="mc-bar-pct red">33%</span>
+            </div>
+            <div class="mc-track"><div class="mc-fill red" style="width:33%"></div></div>
+          </div>
+        </div>
+        <div class="mc-footer">
+          <span class="mc-vol">Vol: <span>$8,200 USDC</span></span>
+          <button class="mc-bet-btn" onclick="showModal()">Predecir</button>
+        </div>
+      </div>
+
+      <!-- Liga MX América vs Mazatlán -->
+      <div class="market-card">
+        <div class="mc-header">
+          <span class="mc-cat">Liga MX · Clausura · Jor. 11</span>
+          <span class="mc-badge tomorrow">Mañana</span>
+        </div>
+        <div class="mc-body">
+          <div class="mc-matchup">
+            <div class="mc-team">
+              <div class="mc-team-crest crest-america">CA</div>
+              <div class="mc-team-name">América</div>
+            </div>
+            <div class="mc-match-vs">VS</div>
+            <div class="mc-team">
+              <div class="mc-team-crest crest-mazatlan">MFC</div>
+              <div class="mc-team-name">Mazatlán</div>
+            </div>
+          </div>
+          <div class="mc-matchday">Lun 16 Mar · Clausura 2026</div>
+          <div class="mc-three-outcomes">
+            <div class="mc-outcome win">
+              <div class="mc-outcome-pct">71%</div>
+              <div class="mc-outcome-label">América</div>
+            </div>
+            <div class="mc-outcome draw">
+              <div class="mc-outcome-pct">18%</div>
+              <div class="mc-outcome-label">Empate</div>
+            </div>
+            <div class="mc-outcome lose">
+              <div class="mc-outcome-pct">11%</div>
+              <div class="mc-outcome-label">Mazatlán</div>
+            </div>
+          </div>
+        </div>
+        <div class="mc-footer">
+          <span class="mc-vol">Vol: <span>$14,800 USDC</span></span>
+          <button class="mc-bet-btn" onclick="showModal()">Predecir</button>
+        </div>
+      </div>
+
+      <!-- La Casa de los Famosos -->
+      <div class="market-card">
+        <div class="mc-header">
+          <span class="mc-cat">Entretenimiento · Reality</span>
+          <span class="mc-badge live">En vivo</span>
+        </div>
+        <div class="mc-body">
+          <div class="mc-title">¿Quién es eliminado esta semana?</div>
+          <div class="mc-sub">La Casa de los Famosos · Temporada 2026</div>
+          <div class="mc-multi">
+            <div class="mc-multi-row">
+              <span class="mc-multi-name">Laura Zapata</span>
+              <div class="mc-multi-track"><div class="mc-multi-fill" style="width:34%"></div></div>
+              <span class="mc-multi-pct">34%</span>
+            </div>
+            <div class="mc-multi-row">
+              <span class="mc-multi-name">Yina Calderón</span>
+              <div class="mc-multi-track"><div class="mc-multi-fill" style="width:22%"></div></div>
+              <span class="mc-multi-pct">22%</span>
+            </div>
+            <div class="mc-multi-row">
+              <span class="mc-multi-name">Caeli</span>
+              <div class="mc-multi-track"><div class="mc-multi-fill" style="width:19%"></div></div>
+              <span class="mc-multi-pct">19%</span>
+            </div>
+            <div class="mc-multi-row">
+              <span class="mc-multi-name">Kenny Rodríguez</span>
+              <div class="mc-multi-track"><div class="mc-multi-fill" style="width:15%"></div></div>
+              <span class="mc-multi-pct">15%</span>
+            </div>
+            <div class="mc-multi-row">
+              <span class="mc-multi-name">Sergio Mayer</span>
+              <div class="mc-multi-track"><div class="mc-multi-fill" style="width:10%"></div></div>
+              <span class="mc-multi-pct">10%</span>
+            </div>
+          </div>
+        </div>
+        <div class="mc-footer">
+          <span class="mc-vol">Vol: <span>$6,550 USDC</span></span>
+          <button class="mc-bet-btn" onclick="showModal()">Predecir</button>
+        </div>
+      </div>
+
+      <!-- Gobernatura BC -->
+      <div class="market-card">
+        <div class="mc-header">
+          <span class="mc-cat">Política · Baja California</span>
+          <span class="mc-badge upcoming">2027</span>
+        </div>
+        <div class="mc-body">
+          <div class="mc-title">Gobernatura de Baja California 2027</div>
+          <div class="mc-sub">Elección estatal · Nov 2027</div>
+          <div class="mc-bar-row">
+            <div class="mc-bar-label-row">
+              <span class="mc-bar-name">Morena</span>
+              <span class="mc-bar-pct green">52%</span>
+            </div>
+            <div class="mc-track"><div class="mc-fill green" style="width:52%"></div></div>
+          </div>
+          <div class="mc-bar-row">
+            <div class="mc-bar-label-row">
+              <span class="mc-bar-name">PAN</span>
+              <span class="mc-bar-pct" style="color:#60a5fa">31%</span>
+            </div>
+            <div class="mc-track"><div class="mc-fill" style="width:31%; background:linear-gradient(90deg,#60a5fa,#3b82f6)"></div></div>
+          </div>
+          <div class="mc-bar-row">
+            <div class="mc-bar-label-row">
+              <span class="mc-bar-name">PRI</span>
+              <span class="mc-bar-pct red">17%</span>
+            </div>
+            <div class="mc-track"><div class="mc-fill red" style="width:17%"></div></div>
+          </div>
+        </div>
+        <div class="mc-footer">
+          <span class="mc-vol">Vol: <span>$9,100 USDC</span></span>
+          <button class="mc-bet-btn" onclick="showModal()">Predecir</button>
+        </div>
+      </div>
+
+      <!-- Boxeo 2: rounds -->
+      <div class="market-card">
+        <div class="mc-header">
+          <span class="mc-cat">Boxeo · Marco Verde</span>
+          <span class="mc-badge live">En vivo</span>
+        </div>
+        <div class="mc-body">
+          <div class="mc-title">¿Pelea dura más de 6 rounds?</div>
+          <div class="mc-sub">Pelea profesional 2026</div>
+          <div class="mc-bar-row">
+            <div class="mc-bar-label-row">
+              <span class="mc-bar-name">Sí (más de 6)</span>
+              <span class="mc-bar-pct" style="color:#F5C842">44%</span>
+            </div>
+            <div class="mc-track"><div class="mc-fill gold" style="width:44%"></div></div>
+          </div>
+          <div class="mc-bar-row">
+            <div class="mc-bar-label-row">
+              <span class="mc-bar-name">No (KO antes)</span>
+              <span class="mc-bar-pct red">56%</span>
+            </div>
+            <div class="mc-track"><div class="mc-fill red" style="width:56%"></div></div>
+          </div>
+        </div>
+        <div class="mc-footer">
+          <span class="mc-vol">Vol: <span>$4,200 USDC</span></span>
+          <button class="mc-bet-btn" onclick="showModal()">Predecir</button>
+        </div>
+      </div>
+
+      <!-- Elecciones Intermedias -->
+      <div class="market-card">
+        <div class="mc-header">
+          <span class="mc-cat">Política · Nacional</span>
+          <span class="mc-badge upcoming">2027</span>
+        </div>
+        <div class="mc-body">
+          <div class="mc-title">¿Morena mantiene mayoría en elecciones intermedias?</div>
+          <div class="mc-sub">Elecciones intermedias · Jun 2027</div>
+          <div class="mc-bar-row">
+            <div class="mc-bar-label-row">
+              <span class="mc-bar-name">Sí, mantiene mayoría</span>
+              <span class="mc-bar-pct green">58%</span>
+            </div>
+            <div class="mc-track"><div class="mc-fill green" style="width:58%"></div></div>
+          </div>
+          <div class="mc-bar-row">
+            <div class="mc-bar-label-row">
+              <span class="mc-bar-name">No, pierde mayoría</span>
+              <span class="mc-bar-pct red">42%</span>
+            </div>
+            <div class="mc-track"><div class="mc-fill red" style="width:42%"></div></div>
+          </div>
+        </div>
+        <div class="mc-footer">
+          <span class="mc-vol">Vol: <span>$11,300 USDC</span></span>
+          <button class="mc-bet-btn" onclick="showModal()">Predecir</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- BOXEO -->
+  <div class="tab-panel" id="tab-boxeo">
+    <div class="markets-grid">
+      <div class="market-card">
+        <div class="mc-header">
+          <span class="mc-cat">Boxeo · Marco Verde</span>
+          <span class="mc-badge live">En vivo</span>
+        </div>
+        <div class="mc-body">
+          <div class="mc-title">¿Marco Verde gana por KO?</div>
+          <div class="mc-sub">Pelea profesional 2026</div>
+          <div class="mc-bar-row">
+            <div class="mc-bar-label-row"><span class="mc-bar-name">Verde por KO</span><span class="mc-bar-pct green">67%</span></div>
+            <div class="mc-track"><div class="mc-fill green" style="width:67%"></div></div>
+          </div>
+          <div class="mc-bar-row">
+            <div class="mc-bar-label-row"><span class="mc-bar-name">No KO</span><span class="mc-bar-pct red">33%</span></div>
+            <div class="mc-track"><div class="mc-fill red" style="width:33%"></div></div>
+          </div>
+        </div>
+        <div class="mc-footer"><span class="mc-vol">Vol: <span>$8,200 USDC</span></span><button class="mc-bet-btn" onclick="showModal()">Predecir</button></div>
+      </div>
+      <div class="market-card">
+        <div class="mc-header">
+          <span class="mc-cat">Boxeo · Marco Verde</span>
+          <span class="mc-badge live">En vivo</span>
+        </div>
+        <div class="mc-body">
+          <div class="mc-title">¿Pelea dura más de 6 rounds?</div>
+          <div class="mc-sub">Pelea profesional 2026</div>
+          <div class="mc-bar-row">
+            <div class="mc-bar-label-row"><span class="mc-bar-name">Sí (más de 6)</span><span class="mc-bar-pct gold">44%</span></div>
+            <div class="mc-track"><div class="mc-fill gold" style="width:44%"></div></div>
+          </div>
+          <div class="mc-bar-row">
+            <div class="mc-bar-label-row"><span class="mc-bar-name">No (KO antes)</span><span class="mc-bar-pct red">56%</span></div>
+            <div class="mc-track"><div class="mc-fill red" style="width:56%"></div></div>
+          </div>
+        </div>
+        <div class="mc-footer"><span class="mc-vol">Vol: <span>$4,200 USDC</span></span><button class="mc-bet-btn" onclick="showModal()">Predecir</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LIGA MX -->
+  <div class="tab-panel" id="tab-ligamx">
+    <div class="markets-grid">
+      <!-- América vs Mazatlán TOMORROW -->
+      <div class="market-card">
+        <div class="mc-header">
+          <span class="mc-cat">Liga MX · Clausura · Jor. 11</span>
+          <span class="mc-badge tomorrow">Mañana</span>
+        </div>
+        <div class="mc-body">
+          <div class="mc-matchup">
+            <div class="mc-team"><div class="mc-team-crest crest-america">CA</div><div class="mc-team-name">América</div></div>
+            <div class="mc-match-vs">VS</div>
+            <div class="mc-team"><div class="mc-team-crest crest-mazatlan">MFC</div><div class="mc-team-name">Mazatlán</div></div>
+          </div>
+          <div class="mc-matchday">Lun 16 Mar · Clausura 2026</div>
+          <div class="mc-three-outcomes">
+            <div class="mc-outcome win"><div class="mc-outcome-pct">71%</div><div class="mc-outcome-label">América</div></div>
+            <div class="mc-outcome draw"><div class="mc-outcome-pct">18%</div><div class="mc-outcome-label">Empate</div></div>
+            <div class="mc-outcome lose"><div class="mc-outcome-pct">11%</div><div class="mc-outcome-label">Mazatlán</div></div>
+          </div>
+        </div>
+        <div class="mc-footer"><span class="mc-vol">Vol: <span>$14,800 USDC</span></span><button class="mc-bet-btn" onclick="showModal()">Predecir</button></div>
+      </div>
+      <!-- Mazatlán vs Cruz Azul -->
+      <div class="market-card">
+        <div class="mc-header">
+          <span class="mc-cat">Liga MX · Clausura · Jor. 12</span>
+          <span class="mc-badge upcoming">Sáb 21 Mar</span>
+        </div>
+        <div class="mc-body">
+          <div class="mc-matchup">
+            <div class="mc-team"><div class="mc-team-crest crest-mazatlan">MFC</div><div class="mc-team-name">Mazatlán</div></div>
+            <div class="mc-match-vs">VS</div>
+            <div class="mc-team"><div class="mc-team-crest crest-cruzazul">CZL</div><div class="mc-team-name">Cruz Azul</div></div>
+          </div>
+          <div class="mc-matchday">Sáb 21 Mar · Clausura 2026</div>
+          <div class="mc-three-outcomes">
+            <div class="mc-outcome draw" style="flex:1"><div class="mc-outcome-pct">28%</div><div class="mc-outcome-label">Mazatlán</div></div>
+            <div class="mc-outcome draw" style="flex:1"><div class="mc-outcome-pct">24%</div><div class="mc-outcome-label">Empate</div></div>
+            <div class="mc-outcome win" style="flex:1"><div class="mc-outcome-pct">48%</div><div class="mc-outcome-label">Cruz Azul</div></div>
+          </div>
+        </div>
+        <div class="mc-footer"><span class="mc-vol">Vol: <span>$3,400 USDC</span></span><button class="mc-bet-btn" onclick="showModal()">Predecir</button></div>
+      </div>
+      <!-- Necaxa vs Mazatlán -->
+      <div class="market-card">
+        <div class="mc-header">
+          <span class="mc-cat">Liga MX · Clausura · Jor. 14</span>
+          <span class="mc-badge upcoming">Vie 4 Abr</span>
+        </div>
+        <div class="mc-body">
+          <div class="mc-matchup">
+            <div class="mc-team"><div class="mc-team-crest crest-necaxa">NEX</div><div class="mc-team-name">Necaxa</div></div>
+            <div class="mc-match-vs">VS</div>
+            <div class="mc-team"><div class="mc-team-crest crest-mazatlan">MFC</div><div class="mc-team-name">Mazatlán</div></div>
+          </div>
+          <div class="mc-matchday">Vie 4 Abr · Clausura 2026</div>
+          <div class="mc-three-outcomes">
+            <div class="mc-outcome win" style="flex:1"><div class="mc-outcome-pct">44%</div><div class="mc-outcome-label">Necaxa</div></div>
+            <div class="mc-outcome draw" style="flex:1"><div class="mc-outcome-pct">26%</div><div class="mc-outcome-label">Empate</div></div>
+            <div class="mc-outcome draw" style="flex:1"><div class="mc-outcome-pct">30%</div><div class="mc-outcome-label">Mazatlán</div></div>
+          </div>
+        </div>
+        <div class="mc-footer"><span class="mc-vol">Vol: <span>$1,200 USDC</span></span><button class="mc-bet-btn" onclick="showModal()">Predecir</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ENTRETENIMIENTO -->
+  <div class="tab-panel" id="tab-entretenimiento">
+    <div class="markets-grid">
+      <div class="market-card">
+        <div class="mc-header">
+          <span class="mc-cat">Entretenimiento · Reality</span>
+          <span class="mc-badge live">En vivo</span>
+        </div>
+        <div class="mc-body">
+          <div class="mc-title">¿Quién es eliminado esta semana?</div>
+          <div class="mc-sub">La Casa de los Famosos · Temporada 2026</div>
+          <div class="mc-multi">
+            <div class="mc-multi-row"><span class="mc-multi-name">Laura Zapata</span><div class="mc-multi-track"><div class="mc-multi-fill" style="width:34%"></div></div><span class="mc-multi-pct">34%</span></div>
+            <div class="mc-multi-row"><span class="mc-multi-name">Yina Calderón</span><div class="mc-multi-track"><div class="mc-multi-fill" style="width:22%"></div></div><span class="mc-multi-pct">22%</span></div>
+            <div class="mc-multi-row"><span class="mc-multi-name">Caeli</span><div class="mc-multi-track"><div class="mc-multi-fill" style="width:19%"></div></div><span class="mc-multi-pct">19%</span></div>
+            <div class="mc-multi-row"><span class="mc-multi-name">Kenny Rodríguez</span><div class="mc-multi-track"><div class="mc-multi-fill" style="width:15%"></div></div><span class="mc-multi-pct">15%</span></div>
+            <div class="mc-multi-row"><span class="mc-multi-name">Sergio Mayer</span><div class="mc-multi-track"><div class="mc-multi-fill" style="width:10%"></div></div><span class="mc-multi-pct">10%</span></div>
+          </div>
+        </div>
+        <div class="mc-footer"><span class="mc-vol">Vol: <span>$6,550 USDC</span></span><button class="mc-bet-btn" onclick="showModal()">Predecir</button></div>
+      </div>
+      <div class="market-card">
+        <div class="mc-header">
+          <span class="mc-cat">Entretenimiento · Reality</span>
+          <span class="mc-badge live">En vivo</span>
+        </div>
+        <div class="mc-body">
+          <div class="mc-title">¿Cuántos episodios más dura la temporada?</div>
+          <div class="mc-sub">La Casa de los Famosos · Temporada 2026</div>
+          <div class="mc-bar-row">
+            <div class="mc-bar-label-row"><span class="mc-bar-name">Menos de 10</span><span class="mc-bar-pct red">22%</span></div>
+            <div class="mc-track"><div class="mc-fill red" style="width:22%"></div></div>
+          </div>
+          <div class="mc-bar-row">
+            <div class="mc-bar-label-row"><span class="mc-bar-name">10 a 15 episodios</span><span class="mc-bar-pct gold">45%</span></div>
+            <div class="mc-track"><div class="mc-fill gold" style="width:45%"></div></div>
+          </div>
+          <div class="mc-bar-row">
+            <div class="mc-bar-label-row"><span class="mc-bar-name">Más de 15</span><span class="mc-bar-pct green">33%</span></div>
+            <div class="mc-track"><div class="mc-fill green" style="width:33%"></div></div>
+          </div>
+        </div>
+        <div class="mc-footer"><span class="mc-vol">Vol: <span>$2,800 USDC</span></span><button class="mc-bet-btn" onclick="showModal()">Predecir</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- POLÍTICA -->
+  <div class="tab-panel" id="tab-politica">
+    <div class="markets-grid">
+      <div class="market-card">
+        <div class="mc-header">
+          <span class="mc-cat">Política · Baja California</span>
+          <span class="mc-badge upcoming">2027</span>
+        </div>
+        <div class="mc-body">
+          <div class="mc-title">Gobernatura de Baja California 2027</div>
+          <div class="mc-sub">Elección estatal · Nov 2027</div>
+          <div class="mc-bar-row">
+            <div class="mc-bar-label-row"><span class="mc-bar-name">Morena</span><span class="mc-bar-pct green">52%</span></div>
+            <div class="mc-track"><div class="mc-fill green" style="width:52%"></div></div>
+          </div>
+          <div class="mc-bar-row">
+            <div class="mc-bar-label-row"><span class="mc-bar-name">PAN</span><span class="mc-bar-pct" style="color:#60a5fa">31%</span></div>
+            <div class="mc-track"><div class="mc-fill" style="width:31%;background:linear-gradient(90deg,#60a5fa,#3b82f6)"></div></div>
+          </div>
+          <div class="mc-bar-row">
+            <div class="mc-bar-label-row"><span class="mc-bar-name">PRI</span><span class="mc-bar-pct red">17%</span></div>
+            <div class="mc-track"><div class="mc-fill red" style="width:17%"></div></div>
+          </div>
+        </div>
+        <div class="mc-footer"><span class="mc-vol">Vol: <span>$9,100 USDC</span></span><button class="mc-bet-btn" onclick="showModal()">Predecir</button></div>
+      </div>
+      <div class="market-card">
+        <div class="mc-header">
+          <span class="mc-cat">Política · Nacional</span>
+          <span class="mc-badge upcoming">2027</span>
+        </div>
+        <div class="mc-body">
+          <div class="mc-title">¿Morena mantiene mayoría en elecciones intermedias?</div>
+          <div class="mc-sub">Elecciones intermedias · Jun 2027</div>
+          <div class="mc-bar-row">
+            <div class="mc-bar-label-row"><span class="mc-bar-name">Sí, mantiene mayoría</span><span class="mc-bar-pct green">58%</span></div>
+            <div class="mc-track"><div class="mc-fill green" style="width:58%"></div></div>
+          </div>
+          <div class="mc-bar-row">
+            <div class="mc-bar-label-row"><span class="mc-bar-name">No, pierde mayoría</span><span class="mc-bar-pct red">42%</span></div>
+            <div class="mc-track"><div class="mc-fill red" style="width:42%"></div></div>
+          </div>
+        </div>
+        <div class="mc-footer"><span class="mc-vol">Vol: <span>$11,300 USDC</span></span><button class="mc-bet-btn" onclick="showModal()">Predecir</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     5. HOW IT WORKS
+============================================================ -->
+<section id="how-it-works">
+  <div class="how-inner">
+    <div class="section-header">
+      <div class="section-eyebrow">Sin fricción. Sin intermediarios.</div>
+      <div class="section-title">Cómo Funciona</div>
+    </div>
+
+    <div class="steps-grid">
+      <!-- Step 1 -->
+      <div class="step">
+        <div class="step-num">01</div>
+        <div class="step-title">Entra con Google o tu wallet</div>
+        <p class="step-desc">
+          Acceso con un click via Google Sign-In para usuarios normales, o conecta tu wallet de Base directamente para usuarios crypto. Sin fricción.
+        </p>
+        <div class="step-btns">
+          <button class="step-btn-google" onclick="showModal()">
+            <svg class="google-g" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+            </svg>
+            Entrar con Google
+          </button>
+          <button class="step-btn-wallet" onclick="showModal()">
+            <svg class="wallet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="5" width="20" height="14" rx="2"/><path d="M16 12h2"/>
+            </svg>
+            Conectar Wallet
+          </button>
+        </div>
+      </div>
+
+      <!-- Step 2 -->
+      <div class="step">
+        <div class="step-num">02</div>
+        <div class="step-title">Elige tu mercado</div>
+        <p class="step-desc">
+          Deportes, entretenimiento, política. Mercados reales con liquidez real. Elige un resultado y deposita USDC. La plataforma gestiona el smart contract.
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+          <span style="background:var(--surface3);border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);letter-spacing:0.06em">Boxeo</span>
+          <span style="background:var(--surface3);border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);letter-spacing:0.06em">Liga MX</span>
+          <span style="background:var(--surface3);border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);letter-spacing:0.06em">Reality TV</span>
+          <span style="background:var(--surface3);border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);letter-spacing:0.06em">Política</span>
+        </div>
+      </div>
+
+      <!-- Step 3 -->
+      <div class="step">
+        <div class="step-num">03</div>
+        <div class="step-title">Cobra tus ganancias</div>
+        <p class="step-desc">
+          Cuando el evento se resuelve, el smart contract en Base liquida automáticamente. Tu USDC llega a tu wallet. Sin intermediarios. Sin demoras.
+        </p>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:8px;background:var(--green-dim);border:1px solid rgba(0,232,122,0.2);border-radius:8px;padding:12px 16px">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00E87A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <span style="font-family:var(--font-mono);font-size:11px;color:var(--green);letter-spacing:0.06em">Liquidación automática en cadena</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="tech-strip">
+      <div class="tech-pill"><span class="dot base-dot"></span>Construido en Base</div>
+      <div class="tech-pill"><span class="dot"></span>Liquidado en cadena</div>
+      <div class="tech-pill"><span class="dot"></span>Sin intermediarios</div>
+      <div class="tech-pill"><span class="dot"></span>Powered by USDC</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     6. PARTNERS STRIP
+============================================================ -->
+<section id="partners">
+  <div class="partners-inner">
+    <div class="partners-label">Respaldado por</div>
+    <div class="partners-row">
+
+      <div class="partner">
+        <div class="partner-logo">
+          <div class="partner-logo-base">
+            <svg width="26" height="26" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M50 0C22.39 0 0 22.39 0 50C0 77.61 22.39 100 50 100C77.61 100 100 77.61 100 50C100 22.39 77.61 0 50 0Z" fill="#0052FF"/>
+              <path d="M50.1 80.1C34.6 80.1 22.1 67.6 22.1 52.1C22.1 36.6 34.6 24.1 50.1 24.1C64.2 24.1 75.9 34.1 78.0 47.3H61.6C59.8 42.6 55.3 39.2 50.1 39.2C42.1 39.2 35.7 45.6 35.7 53.6C35.7 61.6 42.1 68.0 50.1 68.0C55.3 68.0 59.8 64.6 61.6 59.9H78.0C75.9 73.1 64.2 80.1 50.1 80.1Z" fill="white"/>
+            </svg>
+          </div>
+        </div>
+        <div class="partner-name">Base · Coinbase L2</div>
+      </div>
+
+      <div class="partner">
+        <div class="partner-logo">
+          <div class="partner-logo-mazatlan">MFC</div>
+        </div>
+        <div class="partner-name">Mazatlán F.C.</div>
+      </div>
+
+      <div class="partner">
+        <div class="partner-logo">
+          <div class="partner-logo-verde">MV</div>
+        </div>
+        <div class="partner-name">Marco Verde OLY</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     7. WAITLIST CTA
+============================================================ -->
+<section id="waitlist">
+  <div class="waitlist-inner">
+    <div class="waitlist-eyebrow">Acceso beta limitado · Q3 2026</div>
+    <div class="waitlist-title">Sé el primero en entrar</div>
+    <p class="waitlist-sub">Acceso beta limitado. Lanzamiento Q3 2026.</p>
+
+    <form class="waitlist-form" id="waitlistForm">
+      <input type="email" placeholder="tu@email.com" required id="waitlistEmail" />
+      <button type="submit">Quiero acceso</button>
+    </form>
+
+    <div class="waitlist-success" id="waitlistSuccess">
+      <div class="waitlist-success-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <span>¡Listo! Te avisamos pronto.</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     8. FOOTER
+============================================================ -->
+<footer id="footer">
+  <div class="footer-inner">
+    <div>
+      <div class="footer-logo">PRONOS<span class="green-dot"></span></div>
+      <div class="footer-tagline" style="margin-top:6px">El mercado de predicciones de Latinoamérica</div>
+    </div>
+    <div class="footer-copy">© 2026 Pronos. Todos los derechos reservados.</div>
+  </div>
+</footer>
+
+<!-- ============================================================
+     MODAL: Próximamente
+============================================================ -->
+<div class="modal-overlay" id="modalOverlay" onclick="handleOverlayClick(event)">
+  <div class="modal-box">
+    <div class="modal-dot">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00E87A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <polyline points="12 6 12 12 16 14"/>
+      </svg>
+    </div>
+    <div class="modal-title">Próximamente</div>
+    <p class="modal-sub">La plataforma está en desarrollo activo. Lanzamiento Q3 2026. Regístrate en la lista de espera para ser el primero en acceder.</p>
+    <button class="modal-close" onclick="hideModal()">Entendido</button>
+  </div>
+</div>
+
+<!-- ============================================================
+     JAVASCRIPT
+============================================================ -->
+<script>
+  /* ---- Ticker: duplicate items for seamless loop ---- */
+  (function() {
+    const track = document.getElementById('tickerTrack');
+    // Clone all children and append, so CSS animation loops seamlessly
+    const children = Array.from(track.children);
+    children.forEach(function(child) {
+      track.appendChild(child.cloneNode(true));
+    });
+    // Set animation duration based on content width for smooth loop
+    const totalWidth = track.scrollWidth;
+    // Each half is equal, animation moves exactly 50% = one full set
+  })();
+
+  /* ---- Nav: scroll shadow ---- */
+  window.addEventListener('scroll', function() {
+    const nav = document.getElementById('nav');
+    if (window.scrollY > 10) {
+      nav.classList.add('scrolled');
+    } else {
+      nav.classList.remove('scrolled');
+    }
+  });
+
+  /* ---- Tab switching ---- */
+  document.querySelectorAll('.tab-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const tab = this.dataset.tab;
+      // update buttons
+      document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+      this.classList.add('active');
+      // update panels
+      document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+      document.getElementById('tab-' + tab).classList.add('active');
+    });
+  });
+
+  /* ---- Fight card: animated probability bar (±2% every 3s) ---- */
+  var verdeBase = 67;
+  var verde = verdeBase;
+  var direction = 1;
+
+  function animateProbBar() {
+    // oscillate ±2
+    verde += direction * (Math.random() * 0.4 + 0.1);
+    if (verde >= 69) direction = -1;
+    if (verde <= 65) direction = 1;
+
+    var v = Math.round(verde);
+    var o = 100 - v;
+
+    document.getElementById('probBar').style.width = v + '%';
+    document.getElementById('verdeOdds').textContent = v + '%';
+    document.getElementById('oponenteOdds').textContent = o + '%';
+    document.getElementById('barLabelLeft').textContent = 'Verde ' + v + '%';
+    document.getElementById('barLabelRight').textContent = 'Moreno ' + o + '%';
+  }
+  setInterval(animateProbBar, 3000);
+
+  /* ---- Fight card: volume counter ticks up ---- */
+  var volume = 12400;
+  function tickVolume() {
+    var increment = Math.floor(Math.random() * 80) + 10;
+    volume += increment;
+    var formatted = '$' + volume.toLocaleString('en-US');
+    document.getElementById('volumeCounter').textContent = formatted;
+  }
+  setInterval(tickVolume, 4000);
+
+  /* ---- Modal ---- */
+  function showModal() {
+    document.getElementById('modalOverlay').classList.add('show');
+  }
+  function hideModal() {
+    document.getElementById('modalOverlay').classList.remove('show');
+  }
+  function handleOverlayClick(e) {
+    if (e.target === document.getElementById('modalOverlay')) hideModal();
+  }
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') hideModal();
+  });
+
+  /* ---- Waitlist form ---- */
+  document.getElementById('waitlistForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    this.style.display = 'none';
+    document.getElementById('waitlistSuccess').classList.add('show');
+  });
+
+  /* ---- Smooth scroll for anchor links ---- */
+  document.querySelectorAll('a[href^="#"]').forEach(function(a) {
+    a.addEventListener('click', function(e) {
+      var target = document.querySelector(this.getAttribute('href'));
+      if (target) {
+        e.preventDefault();
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  });
+</script>
+
+</body>
+</html>
