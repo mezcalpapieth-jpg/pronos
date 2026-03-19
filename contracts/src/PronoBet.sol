@@ -200,7 +200,7 @@ contract PronoBet {
      *         NOT for use after resolution.
      */
     function emergencyWithdraw() external onlyOwner {
-        require(!resolved, "PronoBet: market is resolved — use collectFee()");
+        require(!resolved, "PronoBet: market is resolved - use collectFee()");
         bettingOpen = false;
         uint256 bal = usdc.balanceOf(address(this));
         usdc.transfer(owner, bal);
