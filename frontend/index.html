@@ -1,0 +1,2671 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PRONOS — El mercado de predicciones de Latinoamérica</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ============================================================
+       RESET & BASE
+    ============================================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #080808;
+      --surface1: #111111;
+      --surface2: #181818;
+      --surface3: #1e1e1e;
+      --border: rgba(255,255,255,0.07);
+      --border-active: rgba(0,232,122,0.35);
+      --green: #00E87A;
+      --green-dim: rgba(0,232,122,0.12);
+      --green-glow: rgba(0,232,122,0.18);
+      --gold: #F5C842;
+      --gold-dim: rgba(245,200,66,0.12);
+      --red: #FF4545;
+      --red-dim: rgba(255,69,69,0.12);
+      --text-primary: #F0F0F0;
+      --text-secondary: #888;
+      --text-muted: #555;
+      --base-blue: #0052FF;
+      --font-display: 'Bebas Neue', sans-serif;
+      --font-body: 'DM Sans', sans-serif;
+      --font-mono: 'DM Mono', monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      font-size: 16px;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    button { cursor: pointer; border: none; background: none; font-family: var(--font-body); }
+    svg { display: block; }
+
+    /* ============================================================
+       GRID TEXTURE (hero bg)
+    ============================================================ */
+    .grid-texture {
+      background-image:
+        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+
+    /* ============================================================
+       1. TICKER STRIP
+    ============================================================ */
+    #ticker {
+      background: #0a0a0a;
+      border-bottom: 1px solid var(--border);
+      height: 36px;
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+      position: relative;
+      z-index: 200;
+    }
+
+    .ticker-badge {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 16px;
+      height: 100%;
+      border-right: 1px solid var(--border);
+      background: #0a0a0a;
+      z-index: 2;
+    }
+    .ticker-badge .dot-live {
+      width: 7px; height: 7px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: pulse-dot 1.4s ease-in-out infinite;
+      box-shadow: 0 0 6px var(--green);
+    }
+    .ticker-badge span {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      color: var(--green);
+      text-transform: uppercase;
+    }
+
+    .ticker-track-wrapper {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .ticker-track {
+      display: flex;
+      align-items: center;
+      white-space: nowrap;
+      animation: ticker-scroll 40s linear infinite;
+      gap: 0;
+    }
+
+    .ticker-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 28px;
+      border-right: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+    .ticker-item .label { color: var(--text-muted); }
+    .ticker-item .val { color: var(--green); font-weight: 500; }
+    .ticker-item .vs { color: var(--text-muted); font-size: 10px; }
+    .ticker-item .sep {
+      width: 3px; height: 3px;
+      background: var(--text-muted);
+      border-radius: 50%;
+      margin: 0 4px;
+    }
+
+    @keyframes ticker-scroll {
+      0%   { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
+
+    /* ============================================================
+       2. NAVIGATION
+    ============================================================ */
+    #nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 48px;
+      background: rgba(8,8,8,0.6);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    #nav.scrolled {
+      border-bottom-color: var(--border);
+      box-shadow: 0 4px 32px rgba(0,0,0,0.6);
+    }
+
+    .nav-logo {
+      font-family: var(--font-display);
+      font-size: 28px;
+      letter-spacing: 0.04em;
+      color: var(--text-primary);
+      position: relative;
+    }
+    .nav-logo .green-dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      background: var(--green);
+      border-radius: 50%;
+      margin-left: 1px;
+      vertical-align: middle;
+      position: relative;
+      top: -3px;
+      box-shadow: 0 0 10px var(--green);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 36px;
+    }
+    .nav-links a {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      letter-spacing: 0.01em;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--text-primary); }
+
+    .btn-nav-cta {
+      background: var(--green);
+      color: #000;
+      font-family: var(--font-body);
+      font-size: 13px;
+      font-weight: 700;
+      padding: 9px 20px;
+      border-radius: 6px;
+      letter-spacing: 0.01em;
+      transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+    }
+    .btn-nav-cta:hover {
+      background: #00ff88;
+      box-shadow: 0 0 20px rgba(0,232,122,0.4);
+      transform: translateY(-1px);
+    }
+
+    /* ============================================================
+       3. HERO
+    ============================================================ */
+    #hero {
+      min-height: calc(100vh - 100px);
+      display: flex;
+      align-items: center;
+      padding: 80px 48px;
+      position: relative;
+      overflow: hidden;
+    }
+    #hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.022) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.022) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+    #hero::after {
+      content: '';
+      position: absolute;
+      top: -20%;
+      left: -10%;
+      width: 70%;
+      height: 100%;
+      background: radial-gradient(ellipse at center, rgba(0,232,122,0.07) 0%, transparent 65%);
+      pointer-events: none;
+    }
+
+    .hero-inner {
+      max-width: 1280px;
+      width: 100%;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 480px;
+      gap: 64px;
+      align-items: center;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Hero left */
+    .hero-left {}
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(0,232,122,0.08);
+      border: 1px solid rgba(0,232,122,0.2);
+      border-radius: 100px;
+      padding: 6px 14px;
+      margin-bottom: 28px;
+    }
+    .hero-badge .dot {
+      width: 7px; height: 7px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: pulse-dot 1.4s ease-in-out infinite;
+      box-shadow: 0 0 8px var(--green);
+    }
+    .hero-badge span {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      color: var(--green);
+      text-transform: uppercase;
+    }
+
+    .hero-headline {
+      font-family: var(--font-display);
+      font-size: clamp(56px, 6.5vw, 88px);
+      line-height: 1;
+      letter-spacing: 0.02em;
+      color: var(--text-primary);
+      text-transform: uppercase;
+      margin-bottom: 24px;
+    }
+    .hero-headline .accent { color: var(--green); }
+
+    .hero-sub {
+      font-size: 17px;
+      line-height: 1.7;
+      color: var(--text-secondary);
+      max-width: 520px;
+      margin-bottom: 36px;
+      font-weight: 400;
+    }
+
+    .hero-btns {
+      display: flex;
+      gap: 14px;
+      margin-bottom: 40px;
+      flex-wrap: wrap;
+    }
+    .btn-primary {
+      background: var(--green);
+      color: #000;
+      font-weight: 700;
+      font-size: 15px;
+      padding: 14px 28px;
+      border-radius: 8px;
+      transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+      letter-spacing: 0.01em;
+    }
+    .btn-primary:hover {
+      background: #00ff88;
+      box-shadow: 0 0 28px rgba(0,232,122,0.45);
+      transform: translateY(-2px);
+    }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-primary);
+      font-weight: 600;
+      font-size: 15px;
+      padding: 13px 28px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.15);
+      transition: border-color 0.2s, background 0.2s, transform 0.15s;
+    }
+    .btn-ghost:hover {
+      border-color: rgba(255,255,255,0.35);
+      background: rgba(255,255,255,0.05);
+      transform: translateY(-2px);
+    }
+
+    .hero-stats {
+      display: flex;
+      align-items: center;
+      gap: 0;
+    }
+    .hero-stat {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-right: 24px;
+      margin-right: 24px;
+      border-right: 1px solid var(--border);
+    }
+    .hero-stat:last-child { border-right: none; margin-right: 0; padding-right: 0; }
+    .hero-stat-val {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+    .hero-stat-val .green { color: var(--green); }
+    .hero-stat-label {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Fight card */
+    .fight-card {
+      background: var(--surface1);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.6), 0 0 60px rgba(0,232,122,0.06);
+    }
+
+    .fight-card-header {
+      background: var(--surface2);
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    .fight-card-header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .fight-card-header-left .dot {
+      width: 7px; height: 7px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: pulse-dot 1.4s ease-in-out infinite;
+      box-shadow: 0 0 8px var(--green);
+    }
+    .fight-card-title {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      color: var(--green);
+      text-transform: uppercase;
+    }
+    .fight-league {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+    }
+
+    .fight-fighters {
+      padding: 28px 24px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .fighter {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+    }
+    .fighter-avatar {
+      width: 80px; height: 80px;
+      border-radius: 50%;
+      border: 2.5px solid var(--green);
+      box-shadow: 0 0 20px rgba(0,232,122,0.4), 0 0 50px rgba(0,232,122,0.2);
+      background: linear-gradient(135deg, #1a2a1a, var(--surface3));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-size: 26px;
+      color: var(--green);
+      letter-spacing: 0.04em;
+      position: relative;
+      animation: avatar-pulse 3s ease-in-out infinite;
+    }
+    @keyframes avatar-pulse {
+      0%, 100% { box-shadow: 0 0 20px rgba(0,232,122,0.4), 0 0 50px rgba(0,232,122,0.2); }
+      50% { box-shadow: 0 0 30px rgba(0,232,122,0.6), 0 0 70px rgba(0,232,122,0.3); }
+    }
+    .fighter-avatar.tba {
+      border-color: var(--text-muted);
+      box-shadow: none;
+      color: var(--text-muted);
+      font-size: 22px;
+    }
+    .fighter-name {
+      font-family: var(--font-display);
+      font-size: 18px;
+      letter-spacing: 0.04em;
+      color: var(--text-primary);
+      text-align: center;
+    }
+    .fighter-record {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+      text-align: center;
+      line-height: 1.5;
+    }
+    .fighter-record .badge {
+      display: inline-block;
+      background: rgba(245,200,66,0.12);
+      color: var(--gold);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 9px;
+      margin-top: 4px;
+      letter-spacing: 0.08em;
+    }
+
+    .fight-vs {
+      font-family: var(--font-display);
+      font-size: 28px;
+      color: var(--text-muted);
+      letter-spacing: 0.1em;
+      flex-shrink: 0;
+    }
+
+    .fight-market {
+      padding: 0 24px 20px;
+    }
+    .fight-market-q {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-family: var(--font-mono);
+    }
+
+    .odds-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .odds-btn {
+      flex: 1;
+      padding: 12px 10px;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+      border: 1px solid transparent;
+    }
+    .odds-btn:hover { transform: translateY(-2px); }
+    .odds-btn.green-btn {
+      background: rgba(0,232,122,0.1);
+      border-color: rgba(0,232,122,0.3);
+    }
+    .odds-btn.green-btn:hover { box-shadow: 0 4px 20px rgba(0,232,122,0.2); }
+    .odds-btn.surface-btn {
+      background: var(--surface2);
+      border-color: var(--border);
+    }
+    .odds-pct {
+      font-family: var(--font-display);
+      font-size: 26px;
+      letter-spacing: 0.04em;
+      line-height: 1;
+    }
+    .green-btn .odds-pct { color: var(--green); }
+    .surface-btn .odds-pct { color: var(--text-secondary); }
+    .odds-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+    }
+
+    /* Probability bar */
+    .prob-bar-wrapper {
+      margin-bottom: 14px;
+    }
+    .prob-bar-labels {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .prob-bar-track {
+      height: 6px;
+      background: var(--surface2);
+      border-radius: 100px;
+      overflow: hidden;
+    }
+    .prob-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--green), #00c96a);
+      border-radius: 100px;
+      transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+      width: 67%;
+    }
+
+    .fight-volume {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-top: 1px solid var(--border);
+      margin: 0;
+    }
+    .fight-vol-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+    }
+    .fight-vol-val {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+    .fight-vol-val span { color: var(--green); }
+
+    .fight-card-footer {
+      padding: 16px 24px 20px;
+    }
+    .btn-connect-wallet {
+      width: 100%;
+      background: var(--green);
+      color: #000;
+      font-weight: 700;
+      font-size: 14px;
+      padding: 14px;
+      border-radius: 8px;
+      transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+      letter-spacing: 0.01em;
+    }
+    .btn-connect-wallet:hover {
+      background: #00ff88;
+      box-shadow: 0 0 28px rgba(0,232,122,0.45);
+      transform: translateY(-1px);
+    }
+
+    /* ============================================================
+       4. MARKETS SECTION
+    ============================================================ */
+    #markets {
+      padding: 100px 48px;
+      max-width: 1280px;
+      margin: 0 auto;
+      position: relative;
+    }
+
+    .section-header {
+      margin-bottom: 40px;
+    }
+    .section-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      color: var(--green);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .section-title {
+      font-family: var(--font-display);
+      font-size: clamp(38px, 4vw, 54px);
+      letter-spacing: 0.04em;
+      color: var(--text-primary);
+      text-transform: uppercase;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 40px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0;
+    }
+    .tab-btn {
+      font-family: var(--font-body);
+      font-size: 14px;
+      font-weight: 600;
+      padding: 10px 20px;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      cursor: pointer;
+      transition: color 0.2s, border-color 0.2s;
+      letter-spacing: 0.01em;
+    }
+    .tab-btn:hover { color: var(--text-secondary); }
+    .tab-btn.active {
+      color: var(--green);
+      border-bottom-color: var(--green);
+    }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    .markets-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+
+    /* Market Card */
+    .market-card {
+      background: var(--surface1);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+      cursor: pointer;
+    }
+    .market-card:hover {
+      transform: translateY(-4px);
+      border-color: var(--border-active);
+      box-shadow: 0 12px 48px rgba(0,0,0,0.5), 0 0 24px rgba(0,232,122,0.08);
+    }
+
+    .mc-header {
+      background: var(--surface2);
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    .mc-cat {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+    .mc-badge {
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      padding: 3px 9px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+    .mc-badge.live {
+      background: rgba(0,232,122,0.12);
+      color: var(--green);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .mc-badge.live::before {
+      content: '';
+      width: 5px; height: 5px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: pulse-dot 1.4s ease-in-out infinite;
+      box-shadow: 0 0 6px var(--green);
+    }
+    .mc-badge.tomorrow {
+      background: var(--gold-dim);
+      color: var(--gold);
+      border: 1px solid rgba(245,200,66,0.2);
+    }
+    .mc-badge.upcoming {
+      background: rgba(255,255,255,0.05);
+      color: var(--text-muted);
+    }
+
+    .mc-body { padding: 18px 18px 16px; }
+    .mc-title {
+      font-family: var(--font-display);
+      font-size: 19px;
+      letter-spacing: 0.04em;
+      color: var(--text-primary);
+      margin-bottom: 6px;
+      line-height: 1.15;
+    }
+    .mc-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+      font-family: var(--font-mono);
+      letter-spacing: 0.04em;
+    }
+
+    /* Two-outcome bar */
+    .mc-bar-row {
+      margin-bottom: 12px;
+    }
+    .mc-bar-label-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 5px;
+    }
+    .mc-bar-name {
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+    }
+    .mc-bar-pct {
+      font-family: var(--font-display);
+      font-size: 16px;
+      letter-spacing: 0.04em;
+    }
+    .mc-bar-pct.green { color: var(--green); }
+    .mc-bar-pct.red { color: var(--red); }
+    .mc-bar-pct.gold { color: var(--gold); }
+    .mc-bar-pct.muted { color: var(--text-muted); }
+    .mc-track {
+      height: 5px;
+      background: var(--surface3);
+      border-radius: 100px;
+      overflow: hidden;
+    }
+    .mc-fill {
+      height: 100%;
+      border-radius: 100px;
+    }
+    .mc-fill.green { background: linear-gradient(90deg, var(--green), #00c96a); }
+    .mc-fill.gold { background: linear-gradient(90deg, var(--gold), #e0b030); }
+    .mc-fill.red { background: linear-gradient(90deg, var(--red), #cc2222); }
+    .mc-fill.muted { background: rgba(255,255,255,0.15); }
+
+    /* Three-outcome layout */
+    .mc-three-outcomes {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .mc-outcome {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 8px;
+      text-align: center;
+      transition: border-color 0.2s, background 0.2s, transform 0.15s;
+      cursor: pointer;
+    }
+    .mc-outcome:hover { transform: translateY(-2px); }
+    .mc-outcome.win {
+      background: rgba(0,232,122,0.08);
+      border-color: rgba(0,232,122,0.25);
+    }
+    .mc-outcome.draw {
+      background: rgba(255,255,255,0.03);
+    }
+    .mc-outcome.lose {
+      background: rgba(255,69,69,0.07);
+      border-color: rgba(255,69,69,0.2);
+    }
+    .mc-outcome-pct {
+      font-family: var(--font-display);
+      font-size: 22px;
+      letter-spacing: 0.04em;
+      line-height: 1;
+      margin-bottom: 3px;
+    }
+    .win .mc-outcome-pct { color: var(--green); }
+    .draw .mc-outcome-pct { color: var(--text-secondary); }
+    .lose .mc-outcome-pct { color: var(--red); }
+    .mc-outcome-label {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    /* Multi-outcome (Casa de los Famosos) */
+    .mc-multi {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      margin-bottom: 12px;
+    }
+    .mc-multi-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .mc-multi-name {
+      font-size: 12px;
+      color: var(--text-secondary);
+      width: 110px;
+      flex-shrink: 0;
+    }
+    .mc-multi-track {
+      flex: 1;
+      height: 5px;
+      background: var(--surface3);
+      border-radius: 100px;
+      overflow: hidden;
+    }
+    .mc-multi-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--green), #00c96a);
+      border-radius: 100px;
+    }
+    .mc-multi-pct {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--green);
+      width: 32px;
+      text-align: right;
+    }
+
+    .mc-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 18px;
+      border-top: 1px solid var(--border);
+      background: var(--surface2);
+    }
+    .mc-vol {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+    .mc-vol span { color: var(--text-secondary); }
+    .mc-bet-btn {
+      background: var(--green-dim);
+      color: var(--green);
+      border: 1px solid rgba(0,232,122,0.2);
+      font-weight: 600;
+      font-size: 12px;
+      padding: 6px 14px;
+      border-radius: 6px;
+      transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+    }
+    .mc-bet-btn:hover {
+      background: rgba(0,232,122,0.2);
+      box-shadow: 0 0 12px rgba(0,232,122,0.2);
+      transform: translateY(-1px);
+    }
+
+    /* Matchup header for Liga MX */
+    .mc-matchup {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+    .mc-team {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    .mc-team-crest {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .crest-america {
+      background: linear-gradient(135deg, #F5C842, #e0a800);
+      color: #000;
+    }
+    .crest-mazatlan {
+      background: linear-gradient(135deg, #2a1a3e, #1a0f2e);
+      color: #c5b5e8;
+      border: 1.5px solid #6b4fa0;
+    }
+    .crest-cruzazul {
+      background: linear-gradient(135deg, #1a50e0, #0038b0);
+      color: #fff;
+      font-size: 11px;
+      letter-spacing: 0.02em;
+    }
+    .crest-necaxa {
+      background: linear-gradient(135deg, #cc0000, #880000);
+      color: #fff;
+      font-size: 11px;
+      letter-spacing: 0.02em;
+    }
+    .mc-team-name {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+    }
+    .mc-match-vs {
+      font-family: var(--font-display);
+      font-size: 18px;
+      color: var(--text-muted);
+    }
+
+    /* Matchday label */
+    .mc-matchday {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+      margin-bottom: 14px;
+    }
+
+    /* ============================================================
+       5. HOW IT WORKS
+    ============================================================ */
+    #how-it-works {
+      padding: 100px 48px;
+      background: var(--surface1);
+      position: relative;
+      overflow: hidden;
+    }
+    #how-it-works::before {
+      content: '';
+      position: absolute;
+      top: -30%;
+      right: -10%;
+      width: 60%;
+      height: 160%;
+      background: radial-gradient(ellipse at center, rgba(0,232,122,0.05) 0%, transparent 65%);
+      pointer-events: none;
+    }
+
+    .how-inner {
+      max-width: 1280px;
+      margin: 0 auto;
+      position: relative;
+      z-index: 1;
+    }
+
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 40px;
+      margin-top: 60px;
+      margin-bottom: 64px;
+    }
+
+    .step {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .step-num {
+      font-family: var(--font-display);
+      font-size: 72px;
+      color: rgba(0,232,122,0.15);
+      letter-spacing: 0.04em;
+      line-height: 1;
+    }
+    .step-title {
+      font-family: var(--font-display);
+      font-size: 28px;
+      letter-spacing: 0.04em;
+      color: var(--text-primary);
+      text-transform: uppercase;
+    }
+    .step-desc {
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--text-secondary);
+      max-width: 300px;
+    }
+    .step-btns {
+      display: flex;
+      gap: 10px;
+      margin-top: 6px;
+      flex-wrap: wrap;
+    }
+    .step-btn-google {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #fff;
+      color: #222;
+      font-weight: 600;
+      font-size: 13px;
+      padding: 9px 16px;
+      border-radius: 7px;
+      transition: box-shadow 0.2s, transform 0.15s;
+      cursor: pointer;
+      border: none;
+    }
+    .step-btn-google:hover {
+      box-shadow: 0 4px 20px rgba(255,255,255,0.15);
+      transform: translateY(-1px);
+    }
+    .step-btn-wallet {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--green-dim);
+      color: var(--green);
+      border: 1px solid rgba(0,232,122,0.25);
+      font-weight: 600;
+      font-size: 13px;
+      padding: 9px 16px;
+      border-radius: 7px;
+      transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+      cursor: pointer;
+    }
+    .step-btn-wallet:hover {
+      background: rgba(0,232,122,0.2);
+      box-shadow: 0 0 16px rgba(0,232,122,0.2);
+      transform: translateY(-1px);
+    }
+
+    /* Google G SVG */
+    .google-g {
+      width: 16px; height: 16px;
+    }
+    .wallet-icon {
+      width: 16px; height: 16px;
+    }
+
+    .step-icon-circle {
+      width: 56px; height: 56px;
+      border-radius: 50%;
+      background: rgba(0,232,122,0.08);
+      border: 1px solid rgba(0,232,122,0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 4px;
+    }
+
+    .tech-strip {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      border-top: 1px solid var(--border);
+      padding-top: 40px;
+    }
+    .tech-pill {
+      padding: 10px 28px;
+      border-right: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+    .tech-pill:last-child { border-right: none; }
+    .tech-pill .dot {
+      display: inline-block;
+      width: 6px; height: 6px;
+      background: var(--green);
+      border-radius: 50%;
+      margin-right: 8px;
+      box-shadow: 0 0 6px var(--green);
+      vertical-align: middle;
+    }
+    .tech-pill .base-dot {
+      background: var(--base-blue);
+      box-shadow: 0 0 6px var(--base-blue);
+    }
+
+    /* ============================================================
+       6. PARTNERS STRIP
+    ============================================================ */
+    #partners {
+      padding: 70px 48px;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .partners-inner {
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+    .partners-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      text-align: center;
+      margin-bottom: 36px;
+    }
+    .partners-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 60px;
+      flex-wrap: wrap;
+    }
+    .partner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      opacity: 0.4;
+      transition: opacity 0.25s;
+      cursor: default;
+    }
+    .partner:hover { opacity: 1; }
+    .partner-logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .partner-logo-tvp {
+      width: 80px; height: 44px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-size: 20px;
+      letter-spacing: 0.1em;
+      color: var(--text-secondary);
+    }
+    .partner-logo-base {
+      width: 44px; height: 44px;
+      background: var(--base-blue);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .partner-logo-mazatlan {
+      width: 44px; height: 44px;
+      background: linear-gradient(135deg, #2a1a3e, #1a0f2e);
+      border-radius: 50%;
+      border: 1.5px solid #6b4fa0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-size: 13px;
+      color: #c5b5e8;
+      letter-spacing: 0.04em;
+    }
+    .partner-logo-verde {
+      width: 44px; height: 44px;
+      background: var(--surface2);
+      border: 2px solid var(--green);
+      border-radius: 50%;
+      box-shadow: 0 0 14px rgba(0,232,122,0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-size: 15px;
+      color: var(--green);
+      letter-spacing: 0.04em;
+    }
+    .partner-name {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    /* ============================================================
+       7. WAITLIST CTA
+    ============================================================ */
+    #waitlist {
+      padding: 120px 48px;
+      position: relative;
+      overflow: hidden;
+      text-align: center;
+    }
+    #waitlist::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 80%;
+      height: 100%;
+      background: radial-gradient(ellipse at center, rgba(0,232,122,0.1) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    #waitlist::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+
+    .waitlist-inner {
+      max-width: 600px;
+      margin: 0 auto;
+      position: relative;
+      z-index: 1;
+    }
+    .waitlist-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      color: var(--green);
+      text-transform: uppercase;
+      margin-bottom: 18px;
+    }
+    .waitlist-title {
+      font-family: var(--font-display);
+      font-size: clamp(48px, 6vw, 76px);
+      letter-spacing: 0.04em;
+      color: var(--text-primary);
+      text-transform: uppercase;
+      line-height: 1;
+      margin-bottom: 16px;
+    }
+    .waitlist-sub {
+      font-size: 15px;
+      color: var(--text-secondary);
+      margin-bottom: 40px;
+    }
+
+    .waitlist-form {
+      display: flex;
+      gap: 10px;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+    .waitlist-form input {
+      flex: 1;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px;
+      padding: 14px 18px;
+      font-family: var(--font-body);
+      font-size: 14px;
+      color: var(--text-primary);
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .waitlist-form input::placeholder { color: var(--text-muted); }
+    .waitlist-form input:focus {
+      border-color: rgba(0,232,122,0.4);
+      box-shadow: 0 0 0 3px rgba(0,232,122,0.08);
+    }
+    .waitlist-form button {
+      background: var(--green);
+      color: #000;
+      font-weight: 700;
+      font-size: 14px;
+      padding: 14px 24px;
+      border-radius: 8px;
+      white-space: nowrap;
+      transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+    }
+    .waitlist-form button:hover {
+      background: #00ff88;
+      box-shadow: 0 0 24px rgba(0,232,122,0.4);
+      transform: translateY(-1px);
+    }
+
+    .waitlist-success {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      background: rgba(0,232,122,0.1);
+      border: 1px solid rgba(0,232,122,0.3);
+      border-radius: 10px;
+      padding: 18px 28px;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+    .waitlist-success.show { display: flex; }
+    .waitlist-success-icon {
+      width: 24px; height: 24px;
+      background: var(--green);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .waitlist-success span {
+      font-size: 15px;
+      color: var(--green);
+      font-weight: 600;
+    }
+
+    /* ============================================================
+       8. FOOTER
+    ============================================================ */
+    #footer {
+      padding: 48px;
+      border-top: 1px solid var(--border);
+    }
+    .footer-inner {
+      max-width: 1280px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    .footer-logo {
+      font-family: var(--font-display);
+      font-size: 24px;
+      letter-spacing: 0.04em;
+      color: var(--text-primary);
+    }
+    .footer-logo .green-dot {
+      display: inline-block;
+      width: 7px; height: 7px;
+      background: var(--green);
+      border-radius: 50%;
+      margin-left: 1px;
+      vertical-align: middle;
+      position: relative;
+      top: -2px;
+      box-shadow: 0 0 8px var(--green);
+    }
+    .footer-tagline {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .footer-copy {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+    }
+
+    /* ============================================================
+       MODAL
+    ============================================================ */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.75);
+      backdrop-filter: blur(8px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal-box {
+      background: var(--surface1);
+      border: 1px solid var(--border-active);
+      border-radius: 16px;
+      padding: 40px 44px;
+      max-width: 420px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 32px 80px rgba(0,0,0,0.8), 0 0 40px rgba(0,232,122,0.1);
+      animation: modal-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    @keyframes modal-in {
+      from { opacity: 0; transform: scale(0.88) translateY(16px); }
+      to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .modal-dot {
+      width: 56px; height: 56px;
+      background: rgba(0,232,122,0.1);
+      border: 1px solid rgba(0,232,122,0.3);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+    }
+    .modal-title {
+      font-family: var(--font-display);
+      font-size: 32px;
+      letter-spacing: 0.06em;
+      color: var(--text-primary);
+      margin-bottom: 10px;
+    }
+    .modal-sub {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+    .modal-close {
+      width: 100%;
+      background: var(--green);
+      color: #000;
+      font-weight: 700;
+      font-size: 14px;
+      padding: 13px;
+      border-radius: 8px;
+      transition: background 0.2s, box-shadow 0.2s;
+    }
+    .modal-close:hover {
+      background: #00ff88;
+      box-shadow: 0 0 24px rgba(0,232,122,0.4);
+    }
+
+    /* ============================================================
+       UTILITIES
+    ============================================================ */
+    .gold { color: var(--gold); }
+    .green { color: var(--green); }
+    .red { color: var(--red); }
+
+    /* Divider line between sections */
+    .section-wrap {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 48px;
+    }
+  </style>
+
+  <!-- ============================================================
+       EXTRA CSS: Wallet + Betting UI (added for Web3 integration)
+  ============================================================ -->
+  <style>
+    /* Wallet button states */
+    .btn-wallet-connected {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--surface2);
+      border: 1px solid var(--border-active);
+      color: var(--green);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 8px 16px;
+      border-radius: 6px;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-wallet-connected:hover { background: var(--surface3); }
+    .wallet-dot {
+      width: 7px; height: 7px; background: var(--green);
+      border-radius: 50%; box-shadow: 0 0 6px var(--green);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    /* Bet modal */
+    .bet-modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.8); backdrop-filter: blur(10px);
+      z-index: 1000; align-items: center; justify-content: center;
+    }
+    .bet-modal-overlay.show { display: flex; }
+    .bet-modal-box {
+      background: var(--surface1);
+      border: 1px solid var(--border-active);
+      border-radius: 16px; padding: 32px 36px;
+      max-width: 440px; width: 90%;
+      box-shadow: 0 32px 80px rgba(0,0,0,0.8), 0 0 40px rgba(0,232,122,0.1);
+      animation: modal-in 0.25s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .bet-modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 24px;
+    }
+    .bet-modal-title {
+      font-family: var(--font-display); font-size: 22px;
+      letter-spacing: 0.04em; color: var(--text-primary);
+    }
+    .bet-modal-close {
+      width: 32px; height: 32px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 50%; font-size: 18px; color: var(--text-muted);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: background 0.2s, color 0.2s;
+    }
+    .bet-modal-close:hover { background: var(--surface3); color: var(--text-primary); }
+    .bet-outcome-tag {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(0,232,122,0.1); border: 1px solid rgba(0,232,122,0.25);
+      border-radius: 6px; padding: 6px 14px; margin-bottom: 20px;
+      font-family: var(--font-mono); font-size: 12px; color: var(--green);
+      letter-spacing: 0.06em;
+    }
+    .bet-input-label {
+      font-size: 13px; color: var(--text-secondary);
+      font-family: var(--font-mono); letter-spacing: 0.04em; margin-bottom: 8px;
+    }
+    .bet-input-row {
+      display: flex; gap: 8px; margin-bottom: 16px;
+    }
+    .bet-input {
+      flex: 1; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px 16px; color: var(--text-primary);
+      font-family: var(--font-mono); font-size: 16px; outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .bet-input:focus {
+      border-color: rgba(0,232,122,0.4);
+      box-shadow: 0 0 0 3px rgba(0,232,122,0.08);
+    }
+    .bet-input-suffix {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px 14px;
+      font-family: var(--font-mono); font-size: 13px; color: var(--text-muted);
+      display: flex; align-items: center; letter-spacing: 0.04em;
+    }
+    .bet-quick-btns { display: flex; gap: 6px; margin-bottom: 20px; }
+    .bet-quick-btn {
+      flex: 1; padding: 7px 0; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 6px;
+      font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);
+      cursor: pointer; transition: all 0.15s; letter-spacing: 0.04em;
+    }
+    .bet-quick-btn:hover {
+      border-color: rgba(0,232,122,0.3); color: var(--green);
+      background: rgba(0,232,122,0.06);
+    }
+    .bet-payout-box {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 14px 16px; margin-bottom: 20px;
+    }
+    .bet-payout-row {
+      display: flex; justify-content: space-between; align-items: center;
+      font-family: var(--font-mono); font-size: 12px;
+    }
+    .bet-payout-row + .bet-payout-row { margin-top: 8px; }
+    .bet-payout-label { color: var(--text-muted); letter-spacing: 0.04em; }
+    .bet-payout-val { color: var(--text-secondary); }
+    .bet-payout-val.highlight { color: var(--green); font-size: 15px; }
+    .bet-submit-btn {
+      width: 100%; background: var(--green); color: #000;
+      font-weight: 700; font-size: 15px; padding: 14px;
+      border-radius: 8px; transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+      letter-spacing: 0.01em;
+    }
+    .bet-submit-btn:hover:not(:disabled) {
+      background: #00ff88; box-shadow: 0 0 28px rgba(0,232,122,0.45);
+      transform: translateY(-1px);
+    }
+    .bet-submit-btn:disabled {
+      opacity: 0.5; cursor: not-allowed;
+    }
+    .bet-warning {
+      font-size: 11px; color: var(--text-muted); text-align: center;
+      margin-top: 12px; font-family: var(--font-mono); letter-spacing: 0.04em;
+    }
+
+    /* Toast notification */
+    .toast {
+      position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%);
+      background: var(--surface1); border: 1px solid var(--border-active);
+      border-radius: 10px; padding: 14px 24px;
+      font-family: var(--font-mono); font-size: 13px; color: var(--green);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+      z-index: 2000; opacity: 0; transition: opacity 0.3s;
+      pointer-events: none; white-space: nowrap; letter-spacing: 0.04em;
+    }
+    .toast.show { opacity: 1; }
+    .toast.error { color: var(--red); border-color: rgba(255,69,69,0.35); }
+
+    /* Market resolved banner */
+    .resolved-banner {
+      background: linear-gradient(135deg, rgba(0,232,122,0.12), rgba(0,232,122,0.06));
+      border: 1px solid rgba(0,232,122,0.3);
+      border-radius: 12px; padding: 20px 24px; margin-bottom: 24px;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px; flex-wrap: wrap;
+    }
+    .resolved-label {
+      font-family: var(--font-mono); font-size: 10px;
+      letter-spacing: 0.14em; color: var(--green); text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .resolved-result {
+      font-family: var(--font-display); font-size: 24px;
+      letter-spacing: 0.04em; color: var(--text-primary);
+    }
+    .btn-claim {
+      background: var(--green); color: #000; font-weight: 700;
+      font-size: 14px; padding: 12px 24px; border-radius: 8px;
+      transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+      white-space: nowrap;
+    }
+    .btn-claim:hover {
+      background: #00ff88; box-shadow: 0 0 24px rgba(0,232,122,0.4);
+      transform: translateY(-1px);
+    }
+
+    /* World Cup match card (hero right col) */
+    .wc-card {
+      background: var(--surface1); border: 1px solid var(--border);
+      border-radius: 16px; overflow: hidden;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.6), 0 0 60px rgba(0,232,122,0.06);
+    }
+    .wc-card-header {
+      background: var(--surface2); padding: 14px 20px;
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    .wc-card-header-left {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .wc-card-badge {
+      font-family: var(--font-mono); font-size: 10px;
+      font-weight: 500; letter-spacing: 0.14em;
+      color: var(--green); text-transform: uppercase;
+    }
+    .wc-card-league {
+      font-family: var(--font-mono); font-size: 10px;
+      color: var(--text-muted); letter-spacing: 0.06em;
+    }
+    .wc-teams-row {
+      padding: 28px 24px 20px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    .wc-team {
+      display: flex; flex-direction: column; align-items: center; gap: 10px; flex: 1;
+    }
+    .wc-flag {
+      width: 72px; height: 72px; border-radius: 50%;
+      border: 2.5px solid var(--green);
+      box-shadow: 0 0 20px rgba(0,232,122,0.35), 0 0 50px rgba(0,232,122,0.15);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 38px; background: var(--surface2);
+      animation: avatar-pulse 3s ease-in-out infinite;
+    }
+    .wc-flag.dim {
+      border-color: rgba(255,255,255,0.15);
+      box-shadow: none;
+      animation: none;
+    }
+    .wc-team-name {
+      font-family: var(--font-display); font-size: 17px;
+      letter-spacing: 0.04em; color: var(--text-primary); text-align: center;
+    }
+    .wc-team-sub {
+      font-family: var(--font-mono); font-size: 9px;
+      color: var(--text-muted); letter-spacing: 0.06em; text-align: center;
+    }
+    .wc-vs {
+      font-family: var(--font-display); font-size: 28px;
+      color: var(--text-muted); letter-spacing: 0.1em; flex-shrink: 0;
+    }
+    .wc-market { padding: 0 24px 20px; }
+    .wc-market-q {
+      font-size: 13px; font-weight: 600; color: var(--text-secondary);
+      margin-bottom: 14px; text-transform: uppercase;
+      letter-spacing: 0.06em; font-family: var(--font-mono);
+    }
+    .wc-odds-three {
+      display: flex; gap: 8px; margin-bottom: 14px;
+    }
+    .wc-odds-btn {
+      flex: 1; padding: 12px 8px; border-radius: 8px;
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+      cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
+      border: 1px solid transparent;
+    }
+    .wc-odds-btn:hover:not(:disabled) { transform: translateY(-2px); }
+    .wc-odds-btn.green-btn {
+      background: rgba(0,232,122,0.1); border-color: rgba(0,232,122,0.3);
+    }
+    .wc-odds-btn.green-btn:hover:not(:disabled) { box-shadow: 0 4px 20px rgba(0,232,122,0.2); }
+    .wc-odds-btn.draw-btn {
+      background: var(--surface2); border-color: var(--border);
+    }
+    .wc-odds-btn.red-btn {
+      background: rgba(255,69,69,0.08); border-color: rgba(255,69,69,0.2);
+    }
+    .wc-odds-btn.red-btn:hover:not(:disabled) { box-shadow: 0 4px 20px rgba(255,69,69,0.15); }
+    .wc-odds-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .wc-pct {
+      font-family: var(--font-display); font-size: 24px; letter-spacing: 0.04em; line-height: 1;
+    }
+    .green-btn .wc-pct { color: var(--green); }
+    .draw-btn .wc-pct { color: var(--text-secondary); }
+    .red-btn .wc-pct { color: var(--red); }
+    .wc-label {
+      font-family: var(--font-mono); font-size: 9px;
+      color: var(--text-muted); letter-spacing: 0.06em;
+    }
+    .wc-volume {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 0; border-top: 1px solid var(--border); margin: 0;
+    }
+    .wc-vol-label {
+      font-family: var(--font-mono); font-size: 10px;
+      color: var(--text-muted); letter-spacing: 0.06em;
+    }
+    .wc-vol-val {
+      font-family: var(--font-mono); font-size: 13px;
+      font-weight: 500; color: var(--text-primary);
+    }
+    .wc-vol-val span { color: var(--green); }
+    .wc-card-footer { padding: 16px 24px 20px; }
+  </style>
+</head>
+<body>
+
+<!-- ============================================================
+     TOAST
+============================================================ -->
+<div class="toast" id="toast"></div>
+
+<!-- ============================================================
+     BET MODAL
+============================================================ -->
+<div class="bet-modal-overlay" id="betModal" onclick="handleBetOverlayClick(event)">
+  <div class="bet-modal-box">
+    <div class="bet-modal-header">
+      <div class="bet-modal-title">HACER PREDICCIÓN</div>
+      <button class="bet-modal-close" onclick="closeBetModal()">×</button>
+    </div>
+    <div class="bet-outcome-tag" id="betOutcomeTag">🇲🇽 México gana</div>
+    <div class="bet-input-label">MONTO A APOSTAR</div>
+    <div class="bet-input-row">
+      <input class="bet-input" id="betAmount" type="number" min="1" step="1" placeholder="10" oninput="updatePayoutEstimate()" />
+      <div class="bet-input-suffix">USDC</div>
+    </div>
+    <div class="bet-quick-btns">
+      <button class="bet-quick-btn" onclick="setAmount(5)">$5</button>
+      <button class="bet-quick-btn" onclick="setAmount(10)">$10</button>
+      <button class="bet-quick-btn" onclick="setAmount(25)">$25</button>
+      <button class="bet-quick-btn" onclick="setAmount(50)">$50</button>
+    </div>
+    <div class="bet-payout-box">
+      <div class="bet-payout-row">
+        <span class="bet-payout-label">APUESTA</span>
+        <span class="bet-payout-val" id="betSummaryAmount">—</span>
+      </div>
+      <div class="bet-payout-row">
+        <span class="bet-payout-label">PAGO ESTIMADO</span>
+        <span class="bet-payout-val highlight" id="betEstPayout">—</span>
+      </div>
+      <div class="bet-payout-row">
+        <span class="bet-payout-label">COMISIÓN (2%)</span>
+        <span class="bet-payout-val">ya incluida</span>
+      </div>
+    </div>
+    <button class="bet-submit-btn" id="betSubmitBtn" onclick="submitBet()">Confirmar apuesta</button>
+    <div class="bet-warning">⚡ Transacción en Base Sepolia · Fuera de red de prueba</div>
+  </div>
+</div>
+
+<!-- ============================================================
+     1. TICKER
+============================================================ -->
+<div id="ticker">
+  <div class="ticker-badge">
+    <div class="dot-live"></div>
+    <span>EN VIVO</span>
+  </div>
+  <div class="ticker-track-wrapper">
+    <div class="ticker-track" id="tickerTrack">
+      <div class="ticker-item">
+        <span class="label">MUNDIAL 2026</span>
+        <span class="sep"></span>
+        <span>🇲🇽 México</span>
+        <span class="vs">vs</span>
+        <span>🇿🇦 Sudáfrica</span>
+        <span class="val" id="ticker-mx">—%</span>
+      </div>
+      <div class="ticker-item">
+        <span class="label">POOL TOTAL</span>
+        <span class="sep"></span>
+        <span class="val" id="ticker-pool">$0 USDC</span>
+      </div>
+      <div class="ticker-item">
+        <span class="label">APERTURA</span>
+        <span class="sep"></span>
+        <span>11 JUN 2026 · AZTECA</span>
+      </div>
+      <div class="ticker-item">
+        <span class="label">RESULTADO</span>
+        <span class="sep"></span>
+        <span class="val" id="ticker-result">PENDIENTE</span>
+      </div>
+      <div class="ticker-item">
+        <span class="label">EMPATE</span>
+        <span class="sep"></span>
+        <span class="val" id="ticker-draw">—%</span>
+      </div>
+      <div class="ticker-item">
+        <span class="label">SUDÁFRICA</span>
+        <span class="sep"></span>
+        <span class="val" id="ticker-sa">—%</span>
+      </div>
+      <div class="ticker-item">
+        <span class="label">CADENA</span>
+        <span class="sep"></span>
+        <span>BASE SEPOLIA</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     2. NAVIGATION
+============================================================ -->
+<nav id="nav">
+  <a href="#" class="nav-logo">PRONOS<span class="green-dot"></span></a>
+  <div class="nav-links">
+    <a href="#market">El mercado</a>
+    <a href="#how-it-works">Cómo funciona</a>
+    <div id="navWalletArea">
+      <button class="btn-nav-cta" onclick="connectWallet()">Conectar wallet</button>
+    </div>
+  </div>
+</nav>
+
+<!-- ============================================================
+     3. HERO
+============================================================ -->
+<section id="hero">
+  <div class="hero-inner">
+    <!-- Left column -->
+    <div class="hero-left">
+      <div class="hero-badge">
+        <div class="dot"></div>
+        <span>Mundial 2026 · Partido Inaugural</span>
+      </div>
+
+      <h1 class="hero-headline">
+        El primer<br>
+        mercado de<br>
+        <span class="accent">predicciones</span><br>
+        on-chain
+      </h1>
+
+      <p class="hero-sub">
+        Apuesta USDC en quién gana el partido inaugural del
+        Mundial 2026. México vs Sudáfrica. Liquidado automáticamente
+        en Base. Sin intermediarios.
+      </p>
+
+      <div class="hero-btns">
+        <a href="#market" class="btn-primary">Ver el mercado</a>
+        <a href="#how-it-works" class="btn-ghost">Cómo funciona</a>
+      </div>
+
+      <div class="hero-stats">
+        <div class="hero-stat">
+          <span class="hero-stat-val"><span class="green" id="heroTotalPool">$0</span></span>
+          <span class="hero-stat-label">Volumen apostado</span>
+        </div>
+        <div class="hero-stat">
+          <span class="hero-stat-val"><span class="green">11 Jun</span></span>
+          <span class="hero-stat-label">Fecha del partido</span>
+        </div>
+        <div class="hero-stat">
+          <span class="hero-stat-val"><span class="green">2%</span></span>
+          <span class="hero-stat-label">Comisión</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right column: World Cup Match Card -->
+    <div class="wc-card">
+      <div class="wc-card-header">
+        <div class="wc-card-header-left">
+          <div class="dot" style="width:7px;height:7px;background:var(--green);border-radius:50%;animation:pulse-dot 1.4s ease-in-out infinite;box-shadow:0 0 8px var(--green)"></div>
+          <span class="wc-card-badge">Partido Inaugural · Mundial 2026</span>
+        </div>
+        <span class="wc-card-league">FIFA WORLD CUP</span>
+      </div>
+
+      <div class="wc-teams-row">
+        <div class="wc-team">
+          <div class="wc-flag">🇲🇽</div>
+          <div class="wc-team-name">México</div>
+          <div class="wc-team-sub">ANFITRIÓN · GRUPO A</div>
+        </div>
+        <div class="wc-vs">VS</div>
+        <div class="wc-team">
+          <div class="wc-flag dim">🇿🇦</div>
+          <div class="wc-team-name">Sudáfrica</div>
+          <div class="wc-team-sub">GRUPO A</div>
+        </div>
+      </div>
+
+      <div class="wc-market">
+        <div class="wc-market-q">¿Quién gana el partido inaugural?</div>
+        <div class="wc-odds-three">
+          <button class="wc-odds-btn green-btn" onclick="openBetModal(1)" id="btn-mx">
+            <span class="wc-pct" id="hero-mx-pct">—%</span>
+            <span class="wc-label">🇲🇽 México</span>
+          </button>
+          <button class="wc-odds-btn draw-btn" onclick="openBetModal(2)" id="btn-draw">
+            <span class="wc-pct" id="hero-draw-pct">—%</span>
+            <span class="wc-label">Empate</span>
+          </button>
+          <button class="wc-odds-btn red-btn" onclick="openBetModal(3)" id="btn-sa">
+            <span class="wc-pct" id="hero-sa-pct">—%</span>
+            <span class="wc-label">🇿🇦 Sudáfrica</span>
+          </button>
+        </div>
+
+        <div class="wc-volume">
+          <span class="wc-vol-label">POOL TOTAL</span>
+          <span class="wc-vol-val"><span id="heroVolCounter">$0</span> USDC</span>
+        </div>
+      </div>
+
+      <div class="wc-card-footer">
+        <button class="btn-connect-wallet" id="heroConnectBtn" onclick="connectWallet()">
+          Conectar wallet para apostar
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     4. MARKET SECTION (single market)
+============================================================ -->
+<section id="market" style="padding:100px 48px; max-width:1280px; margin:0 auto;">
+  <div class="section-header">
+    <div class="section-eyebrow">Predicciones en tiempo real</div>
+    <div class="section-title">El Mercado</div>
+  </div>
+
+  <!-- Resolved banner (hidden until resolved) -->
+  <div class="resolved-banner" id="resolvedBanner" style="display:none">
+    <div>
+      <div class="resolved-label">✅ Mercado resuelto</div>
+      <div class="resolved-result" id="resolvedResult">—</div>
+    </div>
+    <button class="btn-claim" id="claimBtn" onclick="claimWinnings()" style="display:none">
+      Cobrar ganancias
+    </button>
+  </div>
+
+  <!-- Main market card -->
+  <div style="background:var(--surface1);border:1px solid var(--border);border-radius:16px;overflow:hidden;max-width:720px;margin:0 auto;">
+    <div class="mc-header">
+      <span class="mc-cat">FIFA WORLD CUP 2026 · Partido Inaugural</span>
+      <span class="mc-badge live" id="marketBadge">Apuestas abiertas</span>
+    </div>
+    <div class="mc-body">
+      <!-- Teams matchup -->
+      <div class="mc-matchup" style="margin-bottom:8px">
+        <div class="mc-team">
+          <div style="width:56px;height:56px;border-radius:50%;background:var(--surface2);border:2px solid rgba(0,232,122,0.3);display:flex;align-items:center;justify-content:center;font-size:28px">🇲🇽</div>
+          <div class="mc-team-name">México</div>
+        </div>
+        <div class="mc-match-vs">VS</div>
+        <div class="mc-team">
+          <div style="width:56px;height:56px;border-radius:50%;background:var(--surface2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:28px">🇿🇦</div>
+          <div class="mc-team-name">Sudáfrica</div>
+        </div>
+      </div>
+
+      <div class="mc-matchday">11 Jun 2026 · Estadio Azteca · Ciudad de México · FIFA World Cup 2026</div>
+
+      <div class="mc-three-outcomes" style="margin-top:16px">
+        <div class="mc-outcome win" style="cursor:pointer" onclick="openBetModal(1)">
+          <div class="mc-outcome-pct" id="market-mx-pct">—%</div>
+          <div class="mc-outcome-label">🇲🇽 México</div>
+        </div>
+        <div class="mc-outcome draw" style="cursor:pointer" onclick="openBetModal(2)">
+          <div class="mc-outcome-pct" id="market-draw-pct">—%</div>
+          <div class="mc-outcome-label">🤝 Empate</div>
+        </div>
+        <div class="mc-outcome lose" style="cursor:pointer" onclick="openBetModal(3)">
+          <div class="mc-outcome-pct" id="market-sa-pct">—%</div>
+          <div class="mc-outcome-label">🇿🇦 Sudáfrica</div>
+        </div>
+      </div>
+
+      <!-- Odds bars -->
+      <div style="margin-top:16px">
+        <div class="mc-bar-row">
+          <div class="mc-bar-label-row">
+            <span class="mc-bar-name">🇲🇽 México gana</span>
+            <span class="mc-bar-pct green" id="bar-mx-pct">—%</span>
+          </div>
+          <div class="mc-track"><div class="mc-fill green" id="bar-mx-fill" style="width:33%"></div></div>
+        </div>
+        <div class="mc-bar-row">
+          <div class="mc-bar-label-row">
+            <span class="mc-bar-name">🤝 Empate</span>
+            <span class="mc-bar-pct gold" id="bar-draw-pct">—%</span>
+          </div>
+          <div class="mc-track"><div class="mc-fill gold" id="bar-draw-fill" style="width:33%"></div></div>
+        </div>
+        <div class="mc-bar-row">
+          <div class="mc-bar-label-row">
+            <span class="mc-bar-name">🇿🇦 Sudáfrica gana</span>
+            <span class="mc-bar-pct red" id="bar-sa-pct">—%</span>
+          </div>
+          <div class="mc-track"><div class="mc-fill red" id="bar-sa-fill" style="width:33%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mc-footer" style="padding:14px 18px">
+      <span class="mc-vol">Pool total: <span id="marketVol">$0 USDC</span></span>
+      <button class="mc-bet-btn" id="marketBetBtn" onclick="openBetModal(1)">Apostar</button>
+    </div>
+  </div>
+
+  <!-- User positions (shown when wallet connected) -->
+  <div id="userPositions" style="display:none;margin-top:32px;max-width:720px;margin-left:auto;margin-right:auto">
+    <div style="font-family:var(--font-mono);font-size:11px;letter-spacing:0.12em;color:var(--text-muted);text-transform:uppercase;margin-bottom:16px">Mis apuestas</div>
+    <div id="userPositionsContent" style="background:var(--surface1);border:1px solid var(--border);border-radius:12px;padding:20px"></div>
+  </div>
+</section>
+
+<!-- ============================================================
+     5. HOW IT WORKS
+============================================================ -->
+<section id="how-it-works">
+  <div class="how-inner">
+    <div class="section-header">
+      <div class="section-eyebrow">Sin fricción. Sin intermediarios.</div>
+      <div class="section-title">Cómo Funciona</div>
+    </div>
+
+    <div class="steps-grid">
+      <div class="step">
+        <div class="step-num">01</div>
+        <div class="step-icon-circle">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <div class="step-title">Conecta tu wallet</div>
+        <p class="step-desc">Acceso en un click con MetaMask o Coinbase Wallet en Base. Sin registro, sin contraseña, sin fricción.</p>
+        <div class="step-btns">
+          <button class="step-btn-wallet" onclick="connectWallet()">
+            <svg class="wallet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+            Conectar Wallet
+          </button>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">02</div>
+        <div class="step-icon-circle">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <div class="step-title">Elige tu predicción</div>
+        <p class="step-desc">México gana, empate, o Sudáfrica gana. Deposita USDC en el resultado que eliges. Las odds se actualizan en tiempo real.</p>
+        <div class="step-btns">
+          <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);letter-spacing:0.06em">🇲🇽 México · 🤝 Empate · 🇿🇦 Sudáfrica</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">03</div>
+        <div class="step-icon-circle">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        </div>
+        <div class="step-title">Cobra tus ganancias</div>
+        <p class="step-desc">Cuando el partido termina, el smart contract en Base liquida automáticamente. Tu USDC llega a tu wallet. Sin intermediarios. Sin demoras.</p>
+        <div class="step-btns">
+          <span style="font-family:var(--font-mono);font-size:11px;color:var(--green);letter-spacing:0.06em">⚡ Liquidación automática en cadena</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="tech-strip">
+      <div class="tech-pill"><span class="dot base-dot"></span>Base Network</div>
+      <div class="tech-pill"><span class="dot"></span>USDC Nativo</div>
+      <div class="tech-pill"><span class="dot"></span>Smart Contract</div>
+      <div class="tech-pill"><span class="dot"></span>Sin Custodios</div>
+      <div class="tech-pill"><span class="dot"></span>2% Comisión</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     6. PARTNERS
+============================================================ -->
+<section id="partners">
+  <div class="partners-inner">
+    <div class="partners-label">Respaldado por</div>
+    <div class="partners-row">
+      <div class="partner">
+        <div class="partner-logo">
+          <div class="partner-logo-base">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2" stroke="white" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+          </div>
+        </div>
+        <div class="partner-name">Base · Coinbase L2</div>
+      </div>
+      <div class="partner">
+        <div class="partner-logo">
+          <div class="partner-logo-mazatlan">MFC</div>
+        </div>
+        <div class="partner-name">Mazatlán F.C.</div>
+      </div>
+      <div class="partner">
+        <div class="partner-logo">
+          <div class="partner-logo-verde">MV</div>
+        </div>
+        <div class="partner-name">Marco Verde OLY</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     7. FOOTER
+============================================================ -->
+<footer id="footer">
+  <div class="footer-inner">
+    <div>
+      <div class="footer-logo">PRONOS<span class="green-dot"></span></div>
+      <div class="footer-tagline">El mercado de predicciones de Latinoamérica</div>
+    </div>
+    <div class="footer-copy">© 2026 Pronos. Todos los derechos reservados.</div>
+  </div>
+</footer>
+
+
+<!-- ============================================================
+     JAVASCRIPT — Web3 Integration
+     Uses viem via ESM CDN (no build step required)
+     Contract: PronoBet on Base Sepolia
+============================================================ -->
+<script type="module">
+import {
+  createPublicClient,
+  createWalletClient,
+  http,
+  custom,
+  parseUnits,
+  formatUnits,
+  parseAbi,
+} from 'https://esm.sh/viem@2.17.0';
+import { baseSepolia } from 'https://esm.sh/viem@2.17.0/chains';
+
+// ─── CONFIG ─────────────────────────────────────────────────────────────────
+// ⚠️  Update this address after deploying the contract
+const PRONOS_BET_ADDRESS = '0x0000000000000000000000000000000000000000'; // TODO: fill after deploy
+const USDC_ADDRESS       = '0x036CbD53842c5426634e7929541eC2318f3dCF7e'; // Base Sepolia USDC
+const RPC_URL            = 'https://sepolia.base.org';
+
+const PRONOS_ABI = parseAbi([
+  'function bettingOpen() view returns (bool)',
+  'function resolved() view returns (bool)',
+  'function result() view returns (uint8)',
+  'function totalPool() view returns (uint256)',
+  'function getOdds() view returns (uint256 mexicoPct, uint256 drawPct, uint256 saPct)',
+  'function getMarketState() view returns (bool bettingOpen, bool resolved, uint8 result, uint256 totalPool, uint256 mexicoPool, uint256 drawPool, uint256 saPool)',
+  'function getUserBets(address user) view returns (tuple(uint8 outcome, uint256 amount, bool claimed)[])',
+  'function estimatePayout(uint8 _outcome, uint256 _amount) view returns (uint256)',
+  'function placeBet(uint8 _outcome, uint256 _amount) external',
+  'function claimWinnings() external',
+  'event BetPlaced(address indexed bettor, uint8 outcome, uint256 amount)',
+  'event MarketResolved(uint8 result)',
+  'event WinningsClaimed(address indexed bettor, uint256 payout)',
+]);
+
+const USDC_ABI = parseAbi([
+  'function approve(address spender, uint256 amount) external returns (bool)',
+  'function allowance(address owner, address spender) view returns (uint256)',
+  'function balanceOf(address account) view returns (uint256)',
+]);
+
+const OUTCOME_LABELS = { 1: '🇲🇽 México gana', 2: '🤝 Empate', 3: '🇿🇦 Sudáfrica gana' };
+
+// ─── STATE ──────────────────────────────────────────────────────────────────
+let publicClient = createPublicClient({ chain: baseSepolia, transport: http(RPC_URL) });
+let walletClient = null;
+let userAddress  = null;
+let selectedOutcome = 1;
+let marketState  = null;
+
+// ─── CONTRACT READS ──────────────────────────────────────────────────────────
+
+async function fetchMarketState() {
+  try {
+    const [bettingOpen, resolved, result, totalPool, mxPool, drPool, saPool] =
+      await publicClient.readContract({
+        address: PRONOS_BET_ADDRESS,
+        abi: PRONOS_ABI,
+        functionName: 'getMarketState',
+      });
+
+    const [mxPct, drPct, saPct] = await publicClient.readContract({
+      address: PRONOS_BET_ADDRESS,
+      abi: PRONOS_ABI,
+      functionName: 'getOdds',
+    });
+
+    marketState = { bettingOpen, resolved, result: Number(result), totalPool, mxPct, drPct, saPct };
+    updateUI(marketState);
+
+    if (userAddress) await fetchUserPositions();
+  } catch (err) {
+    console.warn('Contract read failed (not deployed yet?):', err.message);
+    setPlaceholderUI();
+  }
+}
+
+function updateUI(s) {
+  const mxP  = Number(s.mxPct) / 100;
+  const drP  = Number(s.drPct) / 100;
+  const saP  = Number(s.saPct) / 100;
+  const pool = formatUSDC(s.totalPool);
+
+  // Percentages
+  const fmt = (n) => n.toFixed(1) + '%';
+  setIds('hero-mx-pct',    fmt(mxP));
+  setIds('hero-draw-pct',  fmt(drP));
+  setIds('hero-sa-pct',    fmt(saP));
+  setIds('market-mx-pct',  fmt(mxP));
+  setIds('market-draw-pct',fmt(drP));
+  setIds('market-sa-pct',  fmt(saP));
+  setIds('bar-mx-pct',     fmt(mxP));
+  setIds('bar-draw-pct',   fmt(drP));
+  setIds('bar-sa-pct',     fmt(saP));
+
+  // Bars
+  setStyle('bar-mx-fill',   'width', mxP + '%');
+  setStyle('bar-draw-fill', 'width', drP + '%');
+  setStyle('bar-sa-fill',   'width', saP + '%');
+
+  // Volumes
+  setIds('heroVolCounter',  pool);
+  setIds('heroTotalPool',   pool);
+  setIds('marketVol',       pool + ' USDC');
+
+  // Ticker
+  setIds('ticker-mx',   fmt(mxP));
+  setIds('ticker-draw', fmt(drP));
+  setIds('ticker-sa',   fmt(saP));
+  setIds('ticker-pool', '$' + pool);
+
+  // Market status
+  const badge = document.getElementById('marketBadge');
+  if (s.resolved) {
+    badge.textContent = 'Resuelto';
+    badge.className = 'mc-badge upcoming';
+    setIds('ticker-result', OUTCOME_LABELS[s.result] || '—');
+
+    const banner = document.getElementById('resolvedBanner');
+    banner.style.display = 'flex';
+    setIds('resolvedResult', '🏆 Resultado: ' + (OUTCOME_LABELS[s.result] || '—'));
+
+    // Disable bet buttons
+    ['btn-mx','btn-draw','btn-sa'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = true;
+    });
+    document.getElementById('marketBetBtn').disabled = true;
+  } else if (!s.bettingOpen) {
+    badge.textContent = 'Apuestas cerradas';
+    badge.className = 'mc-badge upcoming';
+  }
+}
+
+function setPlaceholderUI() {
+  // Contract not deployed yet — show equal thirds as placeholder
+  ['hero-mx-pct','hero-draw-pct','hero-sa-pct',
+   'market-mx-pct','market-draw-pct','market-sa-pct',
+   'bar-mx-pct','bar-draw-pct','bar-sa-pct'].forEach(id => setIds(id, '33.3%'));
+  setStyle('bar-mx-fill',   'width', '33.3%');
+  setStyle('bar-draw-fill', 'width', '33.3%');
+  setStyle('bar-sa-fill',   'width', '33.3%');
+}
+
+async function fetchUserPositions() {
+  if (!userAddress) return;
+  try {
+    const bets = await publicClient.readContract({
+      address: PRONOS_BET_ADDRESS,
+      abi: PRONOS_ABI,
+      functionName: 'getUserBets',
+      args: [userAddress],
+    });
+
+    const posEl = document.getElementById('userPositions');
+    const contentEl = document.getElementById('userPositionsContent');
+
+    if (!bets || bets.length === 0) {
+      posEl.style.display = 'none';
+      return;
+    }
+
+    posEl.style.display = 'block';
+
+    let html = '';
+    let hasWinnable = false;
+
+    for (const bet of bets) {
+      const outcome = Number(bet.outcome);
+      const amount  = formatUSDC(bet.amount);
+      const claimed = bet.claimed;
+      const isWinner = marketState?.resolved && marketState?.result === outcome;
+
+      if (isWinner && !claimed) hasWinnable = true;
+
+      html += `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+          <div>
+            <div style="font-family:var(--font-mono);font-size:12px;color:var(--text-primary)">${OUTCOME_LABELS[outcome]}</div>
+            <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-top:2px">Apostado: $${amount} USDC</div>
+          </div>
+          <div style="font-family:var(--font-mono);font-size:11px;text-align:right">
+            ${claimed ? '<span style="color:var(--text-muted)">Cobrado ✓</span>'
+              : isWinner ? '<span style="color:var(--green)">¡Ganador! 🏆</span>'
+              : marketState?.resolved ? '<span style="color:var(--red)">Perdido</span>'
+              : '<span style="color:var(--gold)">En juego</span>'}
+          </div>
+        </div>`;
+    }
+
+    contentEl.innerHTML = html;
+
+    // Show claim button if user has unclaimed winnings
+    const claimBtn = document.getElementById('claimBtn');
+    if (hasWinnable && claimBtn) claimBtn.style.display = 'block';
+
+  } catch (err) {
+    console.warn('Failed to fetch user bets:', err.message);
+  }
+}
+
+// ─── WALLET CONNECTION ───────────────────────────────────────────────────────
+
+window.connectWallet = async function() {
+  if (!window.ethereum) {
+    showToast('Instala MetaMask o Coinbase Wallet para continuar', true);
+    window.open('https://metamask.io', '_blank');
+    return;
+  }
+
+  try {
+    const [address] = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    userAddress = address;
+
+    walletClient = createWalletClient({
+      chain: baseSepolia,
+      transport: custom(window.ethereum),
+    });
+
+    // Switch to Base Sepolia if needed
+    try {
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0x' + (84532).toString(16) }],
+      });
+    } catch (switchErr) {
+      if (switchErr.code === 4902) {
+        await window.ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [{
+            chainId: '0x' + (84532).toString(16),
+            chainName: 'Base Sepolia',
+            rpcUrls: ['https://sepolia.base.org'],
+            nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+            blockExplorerUrls: ['https://sepolia.basescan.org'],
+          }],
+        });
+      }
+    }
+
+    updateWalletUI(address);
+    await fetchUserPositions();
+    showToast('Wallet conectada: ' + shortAddr(address));
+
+  } catch (err) {
+    showToast('No se pudo conectar la wallet', true);
+    console.error(err);
+  }
+};
+
+function updateWalletUI(address) {
+  const navArea = document.getElementById('navWalletArea');
+  navArea.innerHTML = `
+    <button class="btn-wallet-connected" onclick="window.connectWallet()">
+      <div class="wallet-dot"></div>
+      ${shortAddr(address)}
+    </button>`;
+
+  const heroBtn = document.getElementById('heroConnectBtn');
+  heroBtn.textContent = 'Apostar ahora';
+  heroBtn.onclick = () => openBetModal(1);
+}
+
+// ─── BET MODAL ───────────────────────────────────────────────────────────────
+
+window.openBetModal = function(outcome) {
+  if (!userAddress) {
+    window.connectWallet();
+    return;
+  }
+  if (marketState && !marketState.bettingOpen) {
+    showToast('Las apuestas están cerradas', true);
+    return;
+  }
+  selectedOutcome = outcome;
+  document.getElementById('betOutcomeTag').textContent = OUTCOME_LABELS[outcome];
+  document.getElementById('betAmount').value = '';
+  setIds('betSummaryAmount', '—');
+  setIds('betEstPayout', '—');
+  document.getElementById('betModal').classList.add('show');
+};
+
+window.closeBetModal = function() {
+  document.getElementById('betModal').classList.remove('show');
+};
+
+window.handleBetOverlayClick = function(e) {
+  if (e.target === document.getElementById('betModal')) closeBetModal();
+};
+
+window.setAmount = function(amt) {
+  document.getElementById('betAmount').value = amt;
+  updatePayoutEstimate();
+};
+
+window.updatePayoutEstimate = async function() {
+  const raw = parseFloat(document.getElementById('betAmount').value);
+  if (!raw || raw <= 0) {
+    setIds('betSummaryAmount', '—');
+    setIds('betEstPayout', '—');
+    return;
+  }
+  setIds('betSummaryAmount', '$' + raw.toFixed(2) + ' USDC');
+
+  try {
+    const amountRaw = parseUnits(raw.toString(), 6);
+    const estPayout = await publicClient.readContract({
+      address: PRONOS_BET_ADDRESS,
+      abi: PRONOS_ABI,
+      functionName: 'estimatePayout',
+      args: [selectedOutcome, amountRaw],
+    });
+    setIds('betEstPayout', '~$' + formatUSDC(estPayout) + ' USDC');
+  } catch {
+    // Contract might not be deployed yet
+    setIds('betEstPayout', 'Disponible tras el deploy');
+  }
+};
+
+window.submitBet = async function() {
+  const raw = parseFloat(document.getElementById('betAmount').value);
+  if (!raw || raw < 1) { showToast('Monto mínimo: 1 USDC', true); return; }
+  if (!walletClient)   { showToast('Conecta tu wallet primero', true); return; }
+
+  const btn = document.getElementById('betSubmitBtn');
+  btn.disabled = true;
+  btn.textContent = 'Aprobando USDC...';
+
+  try {
+    const amountRaw = parseUnits(raw.toString(), 6);
+
+    // Step 1: Check allowance
+    const allowance = await publicClient.readContract({
+      address: USDC_ADDRESS,
+      abi: USDC_ABI,
+      functionName: 'allowance',
+      args: [userAddress, PRONOS_BET_ADDRESS],
+    });
+
+    // Step 2: Approve if needed
+    if (allowance < amountRaw) {
+      showToast('Aprobando USDC... (firma en tu wallet)');
+      const approveHash = await walletClient.writeContract({
+        address: USDC_ADDRESS,
+        abi: USDC_ABI,
+        functionName: 'approve',
+        args: [PRONOS_BET_ADDRESS, amountRaw],
+        account: userAddress,
+      });
+      await publicClient.waitForTransactionReceipt({ hash: approveHash });
+    }
+
+    // Step 3: Place bet
+    btn.textContent = 'Confirmando apuesta...';
+    showToast('Enviando apuesta... (firma en tu wallet)');
+
+    const betHash = await walletClient.writeContract({
+      address: PRONOS_BET_ADDRESS,
+      abi: PRONOS_ABI,
+      functionName: 'placeBet',
+      args: [selectedOutcome, amountRaw],
+      account: userAddress,
+    });
+
+    btn.textContent = 'Esperando confirmación...';
+    await publicClient.waitForTransactionReceipt({ hash: betHash });
+
+    closeBetModal();
+    showToast('✅ ¡Apuesta confirmada! ' + OUTCOME_LABELS[selectedOutcome]);
+    await fetchMarketState();
+
+  } catch (err) {
+    console.error(err);
+    showToast(err.shortMessage || 'Error al apostar', true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Confirmar apuesta';
+  }
+};
+
+// ─── CLAIM WINNINGS ──────────────────────────────────────────────────────────
+
+window.claimWinnings = async function() {
+  if (!walletClient) { showToast('Conecta tu wallet primero', true); return; }
+
+  const btn = document.getElementById('claimBtn');
+  btn.disabled = true;
+  btn.textContent = 'Cobrando...';
+
+  try {
+    showToast('Enviando transacción... (firma en tu wallet)');
+    const hash = await walletClient.writeContract({
+      address: PRONOS_BET_ADDRESS,
+      abi: PRONOS_ABI,
+      functionName: 'claimWinnings',
+      account: userAddress,
+    });
+    await publicClient.waitForTransactionReceipt({ hash });
+    showToast('✅ ¡USDC cobrado! Revisa tu wallet');
+    await fetchMarketState();
+  } catch (err) {
+    console.error(err);
+    showToast(err.shortMessage || 'Error al cobrar', true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Cobrar ganancias';
+  }
+};
+
+// ─── UTILITIES ───────────────────────────────────────────────────────────────
+
+function formatUSDC(raw) {
+  return (Number(raw) / 1e6).toFixed(2);
+}
+function shortAddr(addr) {
+  return addr.slice(0, 6) + '...' + addr.slice(-4);
+}
+function setIds(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+function setStyle(id, prop, val) {
+  const el = document.getElementById(id);
+  if (el) el.style[prop] = val;
+}
+
+window.showToast = function(msg, isError) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (isError ? ' error' : '');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 4000);
+};
+
+// ─── TICKER DUPLICATION ──────────────────────────────────────────────────────
+(function() {
+  const track = document.getElementById('tickerTrack');
+  Array.from(track.children).forEach(c => track.appendChild(c.cloneNode(true)));
+})();
+
+// ─── NAV SCROLL ───────────────────────────────────────────────────────────────
+window.addEventListener('scroll', function() {
+  document.getElementById('nav').classList.toggle('scrolled', window.scrollY > 10);
+});
+
+// ─── SMOOTH SCROLL ───────────────────────────────────────────────────────────
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+  a.addEventListener('click', e => {
+    const t = document.querySelector(a.getAttribute('href'));
+    if (t) { e.preventDefault(); t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  });
+});
+
+// ─── ESCAPE KEY ──────────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeBetModal();
+});
+
+// ─── WALLET AUTO-RECONNECT ───────────────────────────────────────────────────
+if (window.ethereum) {
+  window.ethereum.request({ method: 'eth_accounts' }).then(accounts => {
+    if (accounts.length > 0) {
+      userAddress = accounts[0];
+      walletClient = createWalletClient({ chain: baseSepolia, transport: custom(window.ethereum) });
+      updateWalletUI(accounts[0]);
+    }
+  });
+  window.ethereum.on('accountsChanged', accounts => {
+    userAddress = accounts[0] || null;
+    if (userAddress) { updateWalletUI(userAddress); fetchMarketState(); }
+    else { location.reload(); }
+  });
+}
+
+// ─── INIT ────────────────────────────────────────────────────────────────────
+fetchMarketState();
+setInterval(fetchMarketState, 30_000); // refresh every 30s
+
+</script>
+</body>
+</html>

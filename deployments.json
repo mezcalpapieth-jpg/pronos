@@ -1,0 +1,9 @@
+{
+  "_comment": "Fill this after running the deploy script. Then update PRONOS_BET_ADDRESS in frontend/index.html",
+  "PronoBet": "",
+  "USDC": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+  "chainId": 84532,
+  "network": "base-sepolia",
+  "deployedAt": "",
+  "deployer": ""
+}

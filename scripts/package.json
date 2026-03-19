@@ -1,0 +1,19 @@
+{
+  "name": "pronos-scripts",
+  "version": "1.0.0",
+  "description": "Admin scripts for Pronos prediction market",
+  "scripts": {
+    "check":   "ts-node check-market.ts",
+    "resolve": "ts-node resolve-market.ts",
+    "close":   "ts-node close-betting.ts"
+  },
+  "dependencies": {
+    "viem": "^2.17.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "ts-node": "^10.9.2",
+    "@types/node": "^20.12.7"
+  }
+}

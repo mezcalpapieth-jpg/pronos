@@ -1,0 +1,15 @@
+# Env files — NEVER commit these
+.env
+.env.local
+
+# Foundry build artifacts
+contracts/out/
+contracts/cache/
+contracts/lib/
+
+# Node
+scripts/node_modules/
+scripts/dist/
+
+# System
+.DS_Store
