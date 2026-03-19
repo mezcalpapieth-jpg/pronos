@@ -25,12 +25,9 @@ contract Deploy is Script {
     // Base Mainnet USDC
     address constant USDC_BASE_MAINNET = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
 
-    function run() external {
-        uint256 deployerKey = vm.envUint("PRIVATE_KEY");
-        address deployer    = vm.addr(deployerKey);
-
+    function run() external broadcast {
         console.log("=== PRONOS DEPLOY ===");
-        console.log("Deployer:", deployer);
+        console.log("Deployer:", msg.sender);
         console.log("Chain ID:", block.chainid);
 
         // Pick USDC address based on chain
@@ -40,11 +37,7 @@ contract Deploy is Script {
 
         console.log("USDC:", usdc);
 
-        vm.startBroadcast(deployerKey);
-
-        PronoBet pronoBet = new PronoBet(usdc, deployer);
-
-        vm.stopBroadcast();
+        PronoBet pronoBet = new PronoBet(usdc, msg.sender);
 
         console.log("");
         console.log("=== DEPLOYED ===");
