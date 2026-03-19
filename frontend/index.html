@@ -2185,29 +2185,21 @@
 
 
 <!-- ============================================================
+
+<!-- ============================================================
      JAVASCRIPT — Web3 Integration
-     Uses viem via ESM CDN (no build step required)
+     Uses ethers.js v5 UMD from CDN (works in all static hosts)
      Contract: PronoBet on Base Sepolia
 ============================================================ -->
-<script type="module">
-import {
-  createPublicClient,
-  createWalletClient,
-  http,
-  custom,
-  parseUnits,
-  formatUnits,
-  parseAbi,
-} from 'https://esm.sh/viem@2.17.0';
-import { baseSepolia } from 'https://esm.sh/viem@2.17.0/chains';
-
+<script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js" type="application/javascript"></script>
+<script>
 // ─── CONFIG ─────────────────────────────────────────────────────────────────
-// ⚠️  Update this address after deploying the contract
-const PRONOS_BET_ADDRESS = '0x9a03F59DD857856d930b12f5da63c586d824804D'; // TODO: fill after deploy
-const USDC_ADDRESS       = '0x036CbD53842c5426634e7929541eC2318f3dCF7e'; // Base Sepolia USDC
+const PRONOS_BET_ADDRESS = '0x9a03F59DD857856d930b12f5da63c586d824804D';
+const USDC_ADDRESS       = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
 const RPC_URL            = 'https://sepolia.base.org';
+const BASE_SEPOLIA_ID    = 84532;
 
-const PRONOS_ABI = parseAbi([
+const PRONOS_ABI = [
   'function bettingOpen() view returns (bool)',
   'function resolved() view returns (bool)',
   'function result() view returns (uint8)',
@@ -2218,260 +2210,187 @@ const PRONOS_ABI = parseAbi([
   'function estimatePayout(uint8 _outcome, uint256 _amount) view returns (uint256)',
   'function placeBet(uint8 _outcome, uint256 _amount) external',
   'function claimWinnings() external',
-  'event BetPlaced(address indexed bettor, uint8 outcome, uint256 amount)',
-  'event MarketResolved(uint8 result)',
-  'event WinningsClaimed(address indexed bettor, uint256 payout)',
-]);
+];
 
-const USDC_ABI = parseAbi([
+const USDC_ABI = [
   'function approve(address spender, uint256 amount) external returns (bool)',
   'function allowance(address owner, address spender) view returns (uint256)',
   'function balanceOf(address account) view returns (uint256)',
-]);
+];
 
 const OUTCOME_LABELS = { 1: '🇲🇽 México gana', 2: '🤝 Empate', 3: '🇿🇦 Sudáfrica gana' };
 
 // ─── STATE ──────────────────────────────────────────────────────────────────
-let publicClient = createPublicClient({ chain: baseSepolia, transport: http(RPC_URL) });
-let walletClient = null;
-let userAddress  = null;
-let selectedOutcome = 1;
-let marketState  = null;
+const provider  = new ethers.providers.JsonRpcProvider(RPC_URL);
+const readContract = new ethers.Contract(PRONOS_BET_ADDRESS, PRONOS_ABI, provider);
+let   signer       = null;
+let   userAddress  = null;
+let   selectedOutcome = 1;
+let   marketState  = null;
 
 // ─── CONTRACT READS ──────────────────────────────────────────────────────────
-
 async function fetchMarketState() {
   try {
-    const [bettingOpen, resolved, result, totalPool, mxPool, drPool, saPool] =
-      await publicClient.readContract({
-        address: PRONOS_BET_ADDRESS,
-        abi: PRONOS_ABI,
-        functionName: 'getMarketState',
-      });
+    const s = await readContract.getMarketState();
+    const odds = await readContract.getOdds();
 
-    const [mxPct, drPct, saPct] = await publicClient.readContract({
-      address: PRONOS_BET_ADDRESS,
-      abi: PRONOS_ABI,
-      functionName: 'getOdds',
-    });
+    marketState = {
+      bettingOpen: s.bettingOpen,
+      resolved:    s.resolved,
+      result:      s.result,
+      totalPool:   s.totalPool,
+      mxPct:       odds.mexicoPct,
+      drPct:       odds.drawPct,
+      saPct:       odds.saPct,
+    };
 
-    marketState = { bettingOpen, resolved, result: Number(result), totalPool, mxPct, drPct, saPct };
     updateUI(marketState);
-
     if (userAddress) await fetchUserPositions();
   } catch (err) {
-    console.warn('Contract read failed (not deployed yet?):', err.message);
-    setPlaceholderUI();
+    console.warn('Contract read error:', err.message);
   }
 }
 
 function updateUI(s) {
-  const mxP  = Number(s.mxPct) / 100;
-  const drP  = Number(s.drPct) / 100;
-  const saP  = Number(s.saPct) / 100;
+  const mxP = Number(s.mxPct) / 100;
+  const drP = Number(s.drPct) / 100;
+  const saP = Number(s.saPct) / 100;
   const pool = formatUSDC(s.totalPool);
+  const fmt  = n => n.toFixed(1) + '%';
 
-  // Percentages
-  const fmt = (n) => n.toFixed(1) + '%';
-  setIds('hero-mx-pct',    fmt(mxP));
-  setIds('hero-draw-pct',  fmt(drP));
-  setIds('hero-sa-pct',    fmt(saP));
-  setIds('market-mx-pct',  fmt(mxP));
-  setIds('market-draw-pct',fmt(drP));
-  setIds('market-sa-pct',  fmt(saP));
-  setIds('bar-mx-pct',     fmt(mxP));
-  setIds('bar-draw-pct',   fmt(drP));
-  setIds('bar-sa-pct',     fmt(saP));
+  ['hero-mx-pct','market-mx-pct','bar-mx-pct'].forEach(id => setId(id, fmt(mxP)));
+  ['hero-draw-pct','market-draw-pct','bar-draw-pct'].forEach(id => setId(id, fmt(drP)));
+  ['hero-sa-pct','market-sa-pct','bar-sa-pct'].forEach(id => setId(id, fmt(saP)));
 
-  // Bars
   setStyle('bar-mx-fill',   'width', mxP + '%');
   setStyle('bar-draw-fill', 'width', drP + '%');
   setStyle('bar-sa-fill',   'width', saP + '%');
 
-  // Volumes
-  setIds('heroVolCounter',  pool);
-  setIds('heroTotalPool',   pool);
-  setIds('marketVol',       pool + ' USDC');
+  setId('heroVolCounter',  pool);
+  setId('heroTotalPool',   pool);
+  setId('marketVol',       pool + ' USDC');
+  setId('ticker-mx',       fmt(mxP));
+  setId('ticker-draw',     fmt(drP));
+  setId('ticker-sa',       fmt(saP));
+  setId('ticker-pool',     '$' + pool);
 
-  // Ticker
-  setIds('ticker-mx',   fmt(mxP));
-  setIds('ticker-draw', fmt(drP));
-  setIds('ticker-sa',   fmt(saP));
-  setIds('ticker-pool', '$' + pool);
-
-  // Market status
   const badge = document.getElementById('marketBadge');
   if (s.resolved) {
-    badge.textContent = 'Resuelto';
-    badge.className = 'mc-badge upcoming';
-    setIds('ticker-result', OUTCOME_LABELS[s.result] || '—');
-
+    if (badge) { badge.textContent = 'Resuelto'; badge.className = 'mc-badge upcoming'; }
+    setId('ticker-result', OUTCOME_LABELS[s.result] || '—');
     const banner = document.getElementById('resolvedBanner');
-    banner.style.display = 'flex';
-    setIds('resolvedResult', '🏆 Resultado: ' + (OUTCOME_LABELS[s.result] || '—'));
-
-    // Disable bet buttons
-    ['btn-mx','btn-draw','btn-sa'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.disabled = true;
-    });
-    document.getElementById('marketBetBtn').disabled = true;
+    if (banner) banner.style.display = 'flex';
+    setId('resolvedResult', '🏆 Resultado: ' + (OUTCOME_LABELS[s.result] || '—'));
+    ['btn-mx','btn-draw','btn-sa'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = true; });
+    const bb = document.getElementById('marketBetBtn'); if (bb) bb.disabled = true;
   } else if (!s.bettingOpen) {
-    badge.textContent = 'Apuestas cerradas';
-    badge.className = 'mc-badge upcoming';
+    if (badge) { badge.textContent = 'Apuestas cerradas'; badge.className = 'mc-badge upcoming'; }
   }
-}
-
-function setPlaceholderUI() {
-  // Contract not deployed yet — show equal thirds as placeholder
-  ['hero-mx-pct','hero-draw-pct','hero-sa-pct',
-   'market-mx-pct','market-draw-pct','market-sa-pct',
-   'bar-mx-pct','bar-draw-pct','bar-sa-pct'].forEach(id => setIds(id, '33.3%'));
-  setStyle('bar-mx-fill',   'width', '33.3%');
-  setStyle('bar-draw-fill', 'width', '33.3%');
-  setStyle('bar-sa-fill',   'width', '33.3%');
 }
 
 async function fetchUserPositions() {
   if (!userAddress) return;
   try {
-    const bets = await publicClient.readContract({
-      address: PRONOS_BET_ADDRESS,
-      abi: PRONOS_ABI,
-      functionName: 'getUserBets',
-      args: [userAddress],
-    });
-
-    const posEl = document.getElementById('userPositions');
+    const bets = await readContract.getUserBets(userAddress);
+    const posEl     = document.getElementById('userPositions');
     const contentEl = document.getElementById('userPositionsContent');
+    if (!bets || bets.length === 0) { if (posEl) posEl.style.display = 'none'; return; }
+    if (posEl) posEl.style.display = 'block';
 
-    if (!bets || bets.length === 0) {
-      posEl.style.display = 'none';
-      return;
-    }
-
-    posEl.style.display = 'block';
-
-    let html = '';
-    let hasWinnable = false;
-
+    let html = '', hasWinnable = false;
     for (const bet of bets) {
-      const outcome = Number(bet.outcome);
-      const amount  = formatUSDC(bet.amount);
-      const claimed = bet.claimed;
-      const isWinner = marketState?.resolved && marketState?.result === outcome;
-
+      const outcome  = Number(bet.outcome);
+      const amount   = formatUSDC(bet.amount);
+      const claimed  = bet.claimed;
+      const isWinner = marketState && marketState.resolved && Number(marketState.result) === outcome;
       if (isWinner && !claimed) hasWinnable = true;
-
-      html += `
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
-          <div>
-            <div style="font-family:var(--font-mono);font-size:12px;color:var(--text-primary)">${OUTCOME_LABELS[outcome]}</div>
-            <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-top:2px">Apostado: $${amount} USDC</div>
-          </div>
-          <div style="font-family:var(--font-mono);font-size:11px;text-align:right">
-            ${claimed ? '<span style="color:var(--text-muted)">Cobrado ✓</span>'
-              : isWinner ? '<span style="color:var(--green)">¡Ganador! 🏆</span>'
-              : marketState?.resolved ? '<span style="color:var(--red)">Perdido</span>'
-              : '<span style="color:var(--gold)">En juego</span>'}
-          </div>
-        </div>`;
+      html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+        <div>
+          <div style="font-family:var(--font-mono);font-size:12px;color:var(--text-primary)">${OUTCOME_LABELS[outcome]}</div>
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-top:2px">Apostado: $${amount} USDC</div>
+        </div>
+        <div style="font-family:var(--font-mono);font-size:11px;text-align:right">
+          ${claimed ? '<span style="color:var(--text-muted)">Cobrado ✓</span>'
+            : isWinner ? '<span style="color:var(--green)">¡Ganador! 🏆</span>'
+            : marketState && marketState.resolved ? '<span style="color:var(--red)">Perdido</span>'
+            : '<span style="color:var(--gold)">En juego</span>'}
+        </div>
+      </div>`;
     }
-
-    contentEl.innerHTML = html;
-
-    // Show claim button if user has unclaimed winnings
+    if (contentEl) contentEl.innerHTML = html;
     const claimBtn = document.getElementById('claimBtn');
     if (hasWinnable && claimBtn) claimBtn.style.display = 'block';
-
   } catch (err) {
     console.warn('Failed to fetch user bets:', err.message);
   }
 }
 
 // ─── WALLET CONNECTION ───────────────────────────────────────────────────────
-
 window.connectWallet = async function() {
   if (!window.ethereum) {
     showToast('Instala MetaMask o Coinbase Wallet para continuar', true);
-    window.open('https://metamask.io', '_blank');
+    setTimeout(() => window.open('https://metamask.io', '_blank'), 1500);
     return;
   }
 
   try {
-    const [address] = await window.ethereum.request({ method: 'eth_requestAccounts' });
-    userAddress = address;
+    await window.ethereum.request({ method: 'eth_requestAccounts' });
 
-    walletClient = createWalletClient({
-      chain: baseSepolia,
-      transport: custom(window.ethereum),
-    });
-
-    // Switch to Base Sepolia if needed
+    // Switch to Base Sepolia
     try {
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
-        params: [{ chainId: '0x' + (84532).toString(16) }],
+        params: [{ chainId: '0x' + BASE_SEPOLIA_ID.toString(16) }],
       });
     } catch (switchErr) {
       if (switchErr.code === 4902) {
         await window.ethereum.request({
           method: 'wallet_addEthereumChain',
-          params: [{
-            chainId: '0x' + (84532).toString(16),
-            chainName: 'Base Sepolia',
-            rpcUrls: ['https://sepolia.base.org'],
-            nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-            blockExplorerUrls: ['https://sepolia.basescan.org'],
-          }],
+          params: [{ chainId: '0x' + BASE_SEPOLIA_ID.toString(16), chainName: 'Base Sepolia',
+            rpcUrls: [RPC_URL], nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+            blockExplorerUrls: ['https://sepolia.basescan.org'] }],
         });
       }
     }
 
-    updateWalletUI(address);
+    const web3Provider = new ethers.providers.Web3Provider(window.ethereum);
+    await web3Provider.send('eth_requestAccounts', []);
+    signer      = web3Provider.getSigner();
+    userAddress = await signer.getAddress();
+
+    updateWalletUI(userAddress);
     await fetchUserPositions();
-    showToast('Wallet conectada: ' + shortAddr(address));
+    showToast('Wallet conectada: ' + shortAddr(userAddress));
 
   } catch (err) {
-    showToast('No se pudo conectar la wallet', true);
     console.error(err);
+    if (err.code !== 4001) showToast('Error al conectar wallet', true);
   }
 };
 
 function updateWalletUI(address) {
   const navArea = document.getElementById('navWalletArea');
-  navArea.innerHTML = `
+  if (navArea) navArea.innerHTML = `
     <button class="btn-wallet-connected" onclick="window.connectWallet()">
-      <div class="wallet-dot"></div>
-      ${shortAddr(address)}
+      <div class="wallet-dot"></div>${shortAddr(address)}
     </button>`;
-
   const heroBtn = document.getElementById('heroConnectBtn');
-  heroBtn.textContent = 'Apostar ahora';
-  heroBtn.onclick = () => openBetModal(1);
+  if (heroBtn) { heroBtn.textContent = 'Apostar ahora'; heroBtn.onclick = () => openBetModal(1); }
 }
 
 // ─── BET MODAL ───────────────────────────────────────────────────────────────
-
 window.openBetModal = function(outcome) {
-  if (!userAddress) {
-    window.connectWallet();
-    return;
-  }
-  if (marketState && !marketState.bettingOpen) {
-    showToast('Las apuestas están cerradas', true);
-    return;
-  }
+  if (!userAddress) { window.connectWallet(); return; }
+  if (marketState && !marketState.bettingOpen) { showToast('Las apuestas están cerradas', true); return; }
   selectedOutcome = outcome;
-  document.getElementById('betOutcomeTag').textContent = OUTCOME_LABELS[outcome];
-  document.getElementById('betAmount').value = '';
-  setIds('betSummaryAmount', '—');
-  setIds('betEstPayout', '—');
-  document.getElementById('betModal').classList.add('show');
+  setId('betOutcomeTag', OUTCOME_LABELS[outcome]);
+  const inp = document.getElementById('betAmount'); if (inp) inp.value = '';
+  setId('betSummaryAmount', '—'); setId('betEstPayout', '—');
+  const modal = document.getElementById('betModal'); if (modal) modal.classList.add('show');
 };
 
 window.closeBetModal = function() {
-  document.getElementById('betModal').classList.remove('show');
+  const modal = document.getElementById('betModal'); if (modal) modal.classList.remove('show');
 };
 
 window.handleBetOverlayClick = function(e) {
@@ -2479,140 +2398,83 @@ window.handleBetOverlayClick = function(e) {
 };
 
 window.setAmount = function(amt) {
-  document.getElementById('betAmount').value = amt;
+  const inp = document.getElementById('betAmount'); if (inp) inp.value = amt;
   updatePayoutEstimate();
 };
 
 window.updatePayoutEstimate = async function() {
   const raw = parseFloat(document.getElementById('betAmount').value);
-  if (!raw || raw <= 0) {
-    setIds('betSummaryAmount', '—');
-    setIds('betEstPayout', '—');
-    return;
-  }
-  setIds('betSummaryAmount', '$' + raw.toFixed(2) + ' USDC');
-
+  if (!raw || raw <= 0) { setId('betSummaryAmount','—'); setId('betEstPayout','—'); return; }
+  setId('betSummaryAmount', '$' + raw.toFixed(2) + ' USDC');
   try {
-    const amountRaw = parseUnits(raw.toString(), 6);
-    const estPayout = await publicClient.readContract({
-      address: PRONOS_BET_ADDRESS,
-      abi: PRONOS_ABI,
-      functionName: 'estimatePayout',
-      args: [selectedOutcome, amountRaw],
-    });
-    setIds('betEstPayout', '~$' + formatUSDC(estPayout) + ' USDC');
-  } catch {
-    // Contract might not be deployed yet
-    setIds('betEstPayout', 'Disponible tras el deploy');
-  }
+    const amtRaw = ethers.utils.parseUnits(raw.toString(), 6);
+    const est    = await readContract.estimatePayout(selectedOutcome, amtRaw);
+    setId('betEstPayout', '~$' + formatUSDC(est) + ' USDC');
+  } catch { setId('betEstPayout', 'Disponible tras el deploy'); }
 };
 
 window.submitBet = async function() {
   const raw = parseFloat(document.getElementById('betAmount').value);
   if (!raw || raw < 1) { showToast('Monto mínimo: 1 USDC', true); return; }
-  if (!walletClient)   { showToast('Conecta tu wallet primero', true); return; }
+  if (!signer) { showToast('Conecta tu wallet primero', true); return; }
 
   const btn = document.getElementById('betSubmitBtn');
-  btn.disabled = true;
-  btn.textContent = 'Aprobando USDC...';
+  btn.disabled = true; btn.textContent = 'Aprobando USDC...';
 
   try {
-    const amountRaw = parseUnits(raw.toString(), 6);
+    const amtRaw      = ethers.utils.parseUnits(raw.toString(), 6);
+    const usdcContract = new ethers.Contract(USDC_ADDRESS, USDC_ABI, signer);
+    const pronoContract = new ethers.Contract(PRONOS_BET_ADDRESS, PRONOS_ABI, signer);
 
-    // Step 1: Check allowance
-    const allowance = await publicClient.readContract({
-      address: USDC_ADDRESS,
-      abi: USDC_ABI,
-      functionName: 'allowance',
-      args: [userAddress, PRONOS_BET_ADDRESS],
-    });
-
-    // Step 2: Approve if needed
-    if (allowance < amountRaw) {
+    const allowance = await usdcContract.allowance(userAddress, PRONOS_BET_ADDRESS);
+    if (allowance.lt(amtRaw)) {
       showToast('Aprobando USDC... (firma en tu wallet)');
-      const approveHash = await walletClient.writeContract({
-        address: USDC_ADDRESS,
-        abi: USDC_ABI,
-        functionName: 'approve',
-        args: [PRONOS_BET_ADDRESS, amountRaw],
-        account: userAddress,
-      });
-      await publicClient.waitForTransactionReceipt({ hash: approveHash });
+      const approveTx = await usdcContract.approve(PRONOS_BET_ADDRESS, amtRaw);
+      await approveTx.wait();
     }
 
-    // Step 3: Place bet
     btn.textContent = 'Confirmando apuesta...';
     showToast('Enviando apuesta... (firma en tu wallet)');
-
-    const betHash = await walletClient.writeContract({
-      address: PRONOS_BET_ADDRESS,
-      abi: PRONOS_ABI,
-      functionName: 'placeBet',
-      args: [selectedOutcome, amountRaw],
-      account: userAddress,
-    });
-
+    const betTx = await pronoContract.placeBet(selectedOutcome, amtRaw);
     btn.textContent = 'Esperando confirmación...';
-    await publicClient.waitForTransactionReceipt({ hash: betHash });
+    await betTx.wait();
 
     closeBetModal();
     showToast('✅ ¡Apuesta confirmada! ' + OUTCOME_LABELS[selectedOutcome]);
     await fetchMarketState();
-
   } catch (err) {
     console.error(err);
-    showToast(err.shortMessage || 'Error al apostar', true);
+    showToast(err.reason || err.message || 'Error al apostar', true);
   } finally {
-    btn.disabled = false;
-    btn.textContent = 'Confirmar apuesta';
+    btn.disabled = false; btn.textContent = 'Confirmar apuesta';
   }
 };
 
-// ─── CLAIM WINNINGS ──────────────────────────────────────────────────────────
-
+// ─── CLAIM ───────────────────────────────────────────────────────────────────
 window.claimWinnings = async function() {
-  if (!walletClient) { showToast('Conecta tu wallet primero', true); return; }
-
+  if (!signer) { showToast('Conecta tu wallet primero', true); return; }
   const btn = document.getElementById('claimBtn');
-  btn.disabled = true;
-  btn.textContent = 'Cobrando...';
-
+  btn.disabled = true; btn.textContent = 'Cobrando...';
   try {
-    showToast('Enviando transacción... (firma en tu wallet)');
-    const hash = await walletClient.writeContract({
-      address: PRONOS_BET_ADDRESS,
-      abi: PRONOS_ABI,
-      functionName: 'claimWinnings',
-      account: userAddress,
-    });
-    await publicClient.waitForTransactionReceipt({ hash });
+    const pronoContract = new ethers.Contract(PRONOS_BET_ADDRESS, PRONOS_ABI, signer);
+    showToast('Firmando transacción...');
+    const tx = await pronoContract.claimWinnings();
+    await tx.wait();
     showToast('✅ ¡USDC cobrado! Revisa tu wallet');
     await fetchMarketState();
   } catch (err) {
     console.error(err);
-    showToast(err.shortMessage || 'Error al cobrar', true);
+    showToast(err.reason || 'Error al cobrar', true);
   } finally {
-    btn.disabled = false;
-    btn.textContent = 'Cobrar ganancias';
+    btn.disabled = false; btn.textContent = 'Cobrar ganancias';
   }
 };
 
 // ─── UTILITIES ───────────────────────────────────────────────────────────────
-
-function formatUSDC(raw) {
-  return (Number(raw) / 1e6).toFixed(2);
-}
-function shortAddr(addr) {
-  return addr.slice(0, 6) + '...' + addr.slice(-4);
-}
-function setIds(id, val) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = val;
-}
-function setStyle(id, prop, val) {
-  const el = document.getElementById(id);
-  if (el) el.style[prop] = val;
-}
+function formatUSDC(raw) { return (Number(raw) / 1e6).toFixed(2); }
+function shortAddr(a)    { return a.slice(0,6) + '...' + a.slice(-4); }
+function setId(id, val)  { const el = document.getElementById(id); if (el) el.textContent = val; }
+function setStyle(id, p, v) { const el = document.getElementById(id); if (el) el.style[p] = v; }
 
 window.showToast = function(msg, isError) {
   const t = document.getElementById('toast');
@@ -2625,12 +2487,13 @@ window.showToast = function(msg, isError) {
 // ─── TICKER DUPLICATION ──────────────────────────────────────────────────────
 (function() {
   const track = document.getElementById('tickerTrack');
-  Array.from(track.children).forEach(c => track.appendChild(c.cloneNode(true)));
+  if (track) Array.from(track.children).forEach(c => track.appendChild(c.cloneNode(true)));
 })();
 
-// ─── NAV SCROLL ───────────────────────────────────────────────────────────────
+// ─── NAV SCROLL ──────────────────────────────────────────────────────────────
 window.addEventListener('scroll', function() {
-  document.getElementById('nav').classList.toggle('scrolled', window.scrollY > 10);
+  const nav = document.getElementById('nav');
+  if (nav) nav.classList.toggle('scrolled', window.scrollY > 10);
 });
 
 // ─── SMOOTH SCROLL ───────────────────────────────────────────────────────────
@@ -2642,29 +2505,27 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
 });
 
 // ─── ESCAPE KEY ──────────────────────────────────────────────────────────────
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeBetModal();
-});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeBetModal(); });
 
-// ─── WALLET AUTO-RECONNECT ───────────────────────────────────────────────────
+// ─── AUTO-RECONNECT ──────────────────────────────────────────────────────────
 if (window.ethereum) {
-  window.ethereum.request({ method: 'eth_accounts' }).then(accounts => {
+  window.ethereum.request({ method: 'eth_accounts' }).then(async accounts => {
     if (accounts.length > 0) {
+      const web3Provider = new ethers.providers.Web3Provider(window.ethereum);
+      signer      = web3Provider.getSigner();
       userAddress = accounts[0];
-      walletClient = createWalletClient({ chain: baseSepolia, transport: custom(window.ethereum) });
       updateWalletUI(accounts[0]);
     }
   });
   window.ethereum.on('accountsChanged', accounts => {
-    userAddress = accounts[0] || null;
-    if (userAddress) { updateWalletUI(userAddress); fetchMarketState(); }
-    else { location.reload(); }
+    if (accounts.length > 0) { userAddress = accounts[0]; updateWalletUI(accounts[0]); fetchMarketState(); }
+    else location.reload();
   });
 }
 
 // ─── INIT ────────────────────────────────────────────────────────────────────
 fetchMarketState();
-setInterval(fetchMarketState, 30_000); // refresh every 30s
+setInterval(fetchMarketState, 30000);
 
 </script>
 </body>
