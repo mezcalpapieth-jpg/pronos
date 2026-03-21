@@ -354,7 +354,6 @@ function renderMockMarkets(filter) {
     <div class="mock-card" title="${m.title}">
       <div class="mock-card-header">
         <span class="mock-card-cat">${m.icon} ${m.categoryLabel}</span>
-        <span class="mock-card-badge">MOCK</span>
       </div>
       <div class="mock-card-body">
         <div class="mock-card-title">${m.title}</div>

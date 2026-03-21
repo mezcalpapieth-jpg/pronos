@@ -1068,17 +1068,6 @@
   color: var(--text-muted);
   text-transform: uppercase;
 }
-.mock-card-badge {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  color: var(--green);
-  background: var(--green-dim);
-  border: 1px solid rgba(0,232,122,0.2);
-  border-radius: 4px;
-  padding: 2px 8px;
-  text-transform: uppercase;
-}
 
 .mock-card-body {
   padding: 18px 16px 14px;
@@ -1113,8 +1102,8 @@
   border-color: rgba(0,232,122,0.25);
 }
 .mock-opt.no {
-  background: var(--surface2);
-  border-color: var(--border);
+  background: rgba(255, 59, 59, 0.12);
+  border-color: rgba(255, 59, 59, 0.3);
 }
 .mock-opt-pct {
   font-family: var(--font-display);
@@ -1123,7 +1112,7 @@
   line-height: 1;
 }
 .mock-opt.yes .mock-opt-pct { color: var(--green); }
-.mock-opt.no .mock-opt-pct { color: var(--text-secondary); }
+.mock-opt.no .mock-opt-pct { color: #ff3b3b; }
 .mock-opt-label {
   font-family: var(--font-mono);
   font-size: 10px;
