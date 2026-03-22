@@ -450,3 +450,256 @@ function renderPortfolio() {
 // ─── INIT EXTRAS ─────────────────────────────────────────────────────────────
 initCategoryFilters();
 renderPortfolio();
+
+// ─── HERO MARKET CAROUSEL ────────────────────────────────────────────────────
+
+const HMC_COLORS = {
+  green:  '#00E87A',
+  gold:   '#F5C842',
+  red:    '#FF4545',
+  blue:   '#4d8bff',
+  purple: '#c47aff',
+};
+
+// Random walk from start→end over n steps
+function hmcGenWalk(start, end, n, noise) {
+  const pts = [];
+  let v = start;
+  for (let i = 0; i < n; i++) {
+    const t      = i / Math.max(n - 1, 1);
+    const target = start + (end - start) * t;
+    v = v * 0.75 + target * 0.25 + (Math.random() - 0.5) * noise;
+    pts.push(Math.max(1, Math.min(99, v)));
+  }
+  return pts;
+}
+
+// Normalize so all series sum to 100 at every time step
+function hmcNormalize(seriesArr) {
+  const n   = seriesArr[0].length;
+  const res = seriesArr.map(s => [...s]);
+  for (let i = 0; i < n; i++) {
+    const total = res.reduce((sum, s) => sum + s[i], 0);
+    res.forEach(s => { s[i] = (s[i] / total) * 100; });
+  }
+  return res;
+}
+
+function hmcBuildHistory(outcomes, days) {
+  const raw = outcomes.map(o => hmcGenWalk(o.start, o.pct, days, o.noise || 3));
+  return hmcNormalize(raw);
+}
+
+const HERO_MARKETS = [
+  {
+    id: 0,
+    cat: '⚽ Deportes · Mundial 2026',
+    question: '¿México gana el partido inaugural del Mundial 2026?',
+    volume: '$23,412',
+    outcomes: [
+      { label: '🇲🇽 México',    color: 'green',  pct: 62, start: 51, noise: 3.5 },
+      { label: 'Empate',        color: 'gold',   pct: 21, start: 27, noise: 2   },
+      { label: '🇿🇦 Sudáfrica', color: 'red',    pct: 17, start: 22, noise: 2   },
+    ],
+  },
+  {
+    id: 1,
+    cat: '🏀 NBA · MVP 2025–26',
+    question: '¿SGA gana el MVP de la NBA esta temporada?',
+    volume: '$411,200',
+    outcomes: [
+      { label: '✅ Sí', color: 'green', pct: 68, start: 54, noise: 4 },
+      { label: '❌ No', color: 'red',   pct: 32, start: 46, noise: 4 },
+    ],
+  },
+  {
+    id: 2,
+    cat: '₿ Crypto · Bitcoin',
+    question: '¿Bitcoin supera los $150,000 USD antes de dic 2026?',
+    volume: '$1,240,000',
+    outcomes: [
+      { label: '✅ Sí', color: 'green', pct: 54, start: 40, noise: 5 },
+      { label: '❌ No', color: 'red',   pct: 46, start: 60, noise: 5 },
+    ],
+  },
+  {
+    id: 3,
+    cat: '🌎 Política · México 2027',
+    question: '¿Cuál partido gana más escaños en las elecciones MX 2027?',
+    volume: '$87,300',
+    outcomes: [
+      { label: 'MORENA', color: 'green',  pct: 58, start: 63, noise: 2.5 },
+      { label: 'PAN',    color: 'blue',   pct: 28, start: 23, noise: 2   },
+      { label: 'PRI',    color: 'red',    pct: 14, start: 14, noise: 1.5 },
+    ],
+  },
+  {
+    id: 4,
+    cat: '🎵 Música · Grammy 2027',
+    question: '¿Quién gana el Grammy al Álbum del Año 2027?',
+    volume: '$34,800',
+    outcomes: [
+      { label: 'Kendrick', color: 'purple', pct: 42, start: 34, noise: 4 },
+      { label: 'Sabrina',  color: 'gold',   pct: 31, start: 31, noise: 3 },
+      { label: 'Otro',     color: 'red',    pct: 27, start: 35, noise: 3 },
+    ],
+  },
+];
+
+// Pre-build all period histories once
+const HMC_HISTORIES = HERO_MARKETS.map(m => ({
+  '1D':  hmcBuildHistory(m.outcomes, 24),
+  '1W':  hmcBuildHistory(m.outcomes, 7),
+  '1M':  hmcBuildHistory(m.outcomes, 30),
+  'ALL': hmcBuildHistory(m.outcomes, 90),
+}));
+
+let hmcIdx    = 0;
+let hmcPeriod = '1M';
+let hmcTimer  = null;
+
+// data[] → smooth SVG cubic-bezier path string
+function hmcPointsToPath(data, W, H) {
+  const n      = data.length;
+  const PAD    = 10;
+  const innerH = H - PAD * 2;
+  const pts    = data.map((v, i) => [
+    (i / (n - 1)) * W,
+    PAD + innerH - (v / 100) * innerH,
+  ]);
+  let d = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  for (let i = 1; i < n; i++) {
+    const cx = (pts[i][0] - pts[i - 1][0]) / 3;
+    d += ` C${(pts[i-1][0]+cx).toFixed(1)},${pts[i-1][1].toFixed(1)},` +
+         `${(pts[i][0]-cx).toFixed(1)},${pts[i][1].toFixed(1)},` +
+         `${pts[i][0].toFixed(1)},${pts[i][1].toFixed(1)}`;
+  }
+  return d;
+}
+
+function hmcRender(idx) {
+  const m   = HERO_MARKETS[idx];
+  const ser = HMC_HISTORIES[idx][hmcPeriod];
+  const W   = 420, H = 120;
+
+  document.getElementById('hmcCat').textContent      = m.cat;
+  document.getElementById('hmcQuestion').textContent = m.question;
+  document.getElementById('hmcVol').textContent      = m.volume + ' USDC';
+
+  // ── Chart ──────────────────────────────────────────
+  const ns    = 'http://www.w3.org/2000/svg';
+  const defs  = document.getElementById('hmcDefs');
+  const paths = document.getElementById('hmcChartPaths');
+  defs.innerHTML  = '';
+  paths.innerHTML = '';
+
+  const mainColor = HMC_COLORS[m.outcomes[0].color];
+  const gradId    = 'hmc-g-' + idx;
+
+  // gradient fill def for main series
+  const grad = document.createElementNS(ns, 'linearGradient');
+  grad.setAttribute('id', gradId);
+  grad.setAttribute('x1', '0'); grad.setAttribute('y1', '0');
+  grad.setAttribute('x2', '0'); grad.setAttribute('y2', '1');
+  [['0%', '0.18'], ['100%', '0']].forEach(([offset, opacity]) => {
+    const stop = document.createElementNS(ns, 'stop');
+    stop.setAttribute('offset', offset);
+    stop.setAttribute('stop-color', mainColor);
+    stop.setAttribute('stop-opacity', opacity);
+    grad.appendChild(stop);
+  });
+  defs.appendChild(grad);
+
+  ser.forEach((data, si) => {
+    const color    = HMC_COLORS[m.outcomes[si].color];
+    const linePath = hmcPointsToPath(data, W, H);
+
+    // gradient fill under main series
+    if (si === 0) {
+      const fill = document.createElementNS(ns, 'path');
+      fill.setAttribute('d', linePath + ` L${W},${H} L0,${H} Z`);
+      fill.setAttribute('fill', `url(#${gradId})`);
+      fill.setAttribute('stroke', 'none');
+      paths.appendChild(fill);
+    }
+
+    // line
+    const line = document.createElementNS(ns, 'path');
+    line.setAttribute('d', linePath);
+    line.setAttribute('fill', 'none');
+    line.setAttribute('stroke', color);
+    line.setAttribute('stroke-width', si === 0 ? '2' : '1.5');
+    line.setAttribute('stroke-opacity', si === 0 ? '1' : '0.7');
+    paths.appendChild(line);
+
+    // end-point dot
+    const n = data.length;
+    const PAD = 10, innerH = H - PAD * 2;
+    const ey = PAD + innerH - (data[n - 1] / 100) * innerH;
+    const dot = document.createElementNS(ns, 'circle');
+    dot.setAttribute('cx', W); dot.setAttribute('cy', ey.toFixed(1));
+    dot.setAttribute('r', '3.5');
+    dot.setAttribute('fill', color);
+    dot.setAttribute('stroke', 'var(--surface1)');
+    dot.setAttribute('stroke-width', '1.5');
+    paths.appendChild(dot);
+  });
+
+  // ── Legend ──────────────────────────────────────────
+  document.getElementById('hmcLegend').innerHTML = m.outcomes.map((o, si) => {
+    const pct = ser[si][ser[si].length - 1].toFixed(0);
+    const col = HMC_COLORS[o.color];
+    return `<div class="hmc-legend-item">
+      <div class="hmc-legend-line" style="background:${col}"></div>
+      <span>${o.label}</span>
+      <span class="hmc-legend-pct" style="color:${col}">${pct}%</span>
+    </div>`;
+  }).join('');
+
+  // ── Outcome buttons ──────────────────────────────────
+  document.getElementById('hmcOutcomes').innerHTML = m.outcomes.map((o, si) => {
+    const pct = ser[si][ser[si].length - 1].toFixed(0);
+    return `<button class="hmc-outcome-btn" data-color="${o.color}" onclick="hmcBet(${idx},${si})">
+      <span class="hmc-outcome-pct">${pct}%</span>
+      <span class="hmc-outcome-label">${o.label}</span>
+    </button>`;
+  }).join('');
+
+  // ── Dots ────────────────────────────────────────────
+  document.getElementById('hmcDots').innerHTML = HERO_MARKETS.map((_, i) =>
+    `<div class="hmc-dot${i === idx ? ' active' : ''}" onclick="hmcGo(${i})"></div>`
+  ).join('');
+
+  hmcIdx = idx;
+}
+
+function heroCarouselNext() { hmcGo((hmcIdx + 1) % HERO_MARKETS.length); }
+function heroCarouselPrev() { hmcGo((hmcIdx - 1 + HERO_MARKETS.length) % HERO_MARKETS.length); }
+function hmcGo(i)           { hmcRender(i); hmcResetTimer(); }
+
+function hmcBet(marketIdx, outcomeIdx) {
+  if (marketIdx === 0) {
+    openBetModal(outcomeIdx + 1);
+  } else {
+    showToast('🔜 Mercado próximamente disponible');
+  }
+}
+
+function hmcResetTimer() {
+  if (hmcTimer) clearInterval(hmcTimer);
+  hmcTimer = setInterval(() => hmcRender((hmcIdx + 1) % HERO_MARKETS.length), 8000);
+}
+
+// Time selector
+document.getElementById('hmcTimesel').addEventListener('click', e => {
+  const btn = e.target.closest('.hmc-time-btn');
+  if (!btn) return;
+  document.querySelectorAll('.hmc-time-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  hmcPeriod = btn.dataset.period;
+  hmcRender(hmcIdx);
+});
+
+// Boot
+hmcRender(0);
+hmcResetTimer();

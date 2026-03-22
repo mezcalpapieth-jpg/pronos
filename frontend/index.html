@@ -117,7 +117,7 @@
   <a href="#" class="nav-logo">PRONOS<span class="green-dot"></span></a>
   <div class="nav-links">
     <a href="#market">El mercado</a>
-    <a href="#portfolio">Portafolio</a>
+    <a href="/portfolio">Portafolio</a>
     <a href="#how-it-works">Cómo funciona</a>
     <div id="navWalletArea">
       <button class="btn-nav-cta" onclick="connectWallet()">Conectar wallet</button>
@@ -171,58 +171,61 @@
       </div>
     </div>
 
-    <!-- Right column: World Cup Match Card -->
-    <div class="wc-card">
-      <div class="wc-card-header">
-        <div class="wc-card-header-left">
-          <div class="dot" style="width:7px;height:7px;background:var(--green);border-radius:50%;animation:pulse-dot 1.4s ease-in-out infinite;box-shadow:0 0 8px var(--green)"></div>
-          <span class="wc-card-badge">Partido Inaugural · Mundial 2026</span>
-        </div>
-        <span class="wc-card-league">FIFA WORLD CUP</span>
-      </div>
+    <!-- Right column: Hero Market Card (Polymarket-style carousel) -->
+    <div class="hmc" id="heroMarketCard">
 
-      <div class="wc-teams-row">
-        <div class="wc-team">
-          <div class="wc-flag">🇲🇽</div>
-          <div class="wc-team-name">México</div>
-          <div class="wc-team-sub">ANFITRIÓN · GRUPO A</div>
+      <!-- Top bar: category tag + time period selector -->
+      <div class="hmc-topbar">
+        <div class="hmc-cat">
+          <div class="hmc-live-dot"></div>
+          <span id="hmcCat">⚽ Deportes · Mundial 2026</span>
         </div>
-        <div class="wc-vs">VS</div>
-        <div class="wc-team">
-          <div class="wc-flag dim">🇿🇦</div>
-          <div class="wc-team-name">Sudáfrica</div>
-          <div class="wc-team-sub">GRUPO A</div>
+        <div class="hmc-timesel" id="hmcTimesel">
+          <button class="hmc-time-btn" data-period="1D">1D</button>
+          <button class="hmc-time-btn" data-period="1W">1W</button>
+          <button class="hmc-time-btn active" data-period="1M">1M</button>
+          <button class="hmc-time-btn" data-period="ALL">ALL</button>
         </div>
       </div>
 
-      <div class="wc-market">
-        <div class="wc-market-q">¿Quién gana el partido inaugural?</div>
-        <div class="wc-odds-three">
-          <button class="wc-odds-btn green-btn" onclick="openBetModal(1)" id="btn-mx">
-            <span class="wc-pct" id="hero-mx-pct">—%</span>
-            <span class="wc-label">🇲🇽 México</span>
-          </button>
-          <button class="wc-odds-btn draw-btn" onclick="openBetModal(2)" id="btn-draw">
-            <span class="wc-pct" id="hero-draw-pct">—%</span>
-            <span class="wc-label">Empate</span>
-          </button>
-          <button class="wc-odds-btn red-btn" onclick="openBetModal(3)" id="btn-sa">
-            <span class="wc-pct" id="hero-sa-pct">—%</span>
-            <span class="wc-label">🇿🇦 Sudáfrica</span>
-          </button>
-        </div>
+      <!-- Market question -->
+      <div class="hmc-question" id="hmcQuestion">¿México gana el partido inaugural del Mundial 2026?</div>
 
-        <div class="wc-volume">
-          <span class="wc-vol-label">POOL TOTAL</span>
-          <span class="wc-vol-val"><span id="heroVolCounter">$0</span> USDC</span>
+      <!-- Price history chart (SVG) -->
+      <div class="hmc-chart-wrap">
+        <svg class="hmc-chart-svg" id="hmcChart" viewBox="0 0 420 120" preserveAspectRatio="none">
+          <defs id="hmcDefs"></defs>
+          <line x1="0" y1="10"  x2="420" y2="10"  stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
+          <line x1="0" y1="37"  x2="420" y2="37"  stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
+          <line x1="0" y1="64"  x2="420" y2="64"  stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
+          <line x1="0" y1="91"  x2="420" y2="91"  stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
+          <g id="hmcChartPaths"></g>
+        </svg>
+        <div class="hmc-y-labels">
+          <span>100%</span>
+          <span>75%</span>
+          <span>50%</span>
+          <span>25%</span>
+          <span>0%</span>
         </div>
       </div>
 
-      <div class="wc-card-footer">
-        <button class="btn-connect-wallet" id="heroConnectBtn" onclick="connectWallet()">
-          Conectar wallet para apostar
-        </button>
+      <!-- Legend -->
+      <div class="hmc-legend" id="hmcLegend"></div>
+
+      <!-- Outcome bet buttons -->
+      <div class="hmc-outcomes" id="hmcOutcomes"></div>
+
+      <!-- Footer: volume + carousel nav -->
+      <div class="hmc-footer">
+        <div class="hmc-volume">VOL <strong id="hmcVol">—</strong></div>
+        <div class="hmc-carousel-nav">
+          <button class="hmc-nav-btn" onclick="heroCarouselPrev()">&#8592;</button>
+          <div class="hmc-dots" id="hmcDots"></div>
+          <button class="hmc-nav-btn" onclick="heroCarouselNext()">&#8594;</button>
+        </div>
       </div>
+
     </div>
   </div>
 </section>

@@ -1263,3 +1263,269 @@
   background: var(--green-dim);
   border: 1px solid rgba(0,232,122,0.2);
 }
+
+/* ============================================================
+   HERO MARKET CARD  (Polymarket-style carousel)
+============================================================ */
+.hmc {
+  background: var(--surface1);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.6), 0 0 60px rgba(0,232,122,0.05);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.hmc-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 0;
+}
+
+.hmc-cat {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.hmc-live-dot {
+  width: 6px; height: 6px;
+  background: var(--green);
+  border-radius: 50%;
+  animation: pulse-dot 1.4s ease-in-out infinite;
+  box-shadow: 0 0 6px var(--green);
+  flex-shrink: 0;
+}
+
+.hmc-timesel {
+  display: flex;
+  gap: 2px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 2px;
+}
+
+.hmc-time-btn {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  padding: 4px 9px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.hmc-time-btn.active {
+  background: var(--surface1);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+
+.hmc-time-btn:hover:not(.active) { color: var(--text-secondary); }
+
+.hmc-question {
+  padding: 10px 20px 4px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.45;
+}
+
+.hmc-chart-wrap {
+  position: relative;
+  margin: 6px 20px 0 16px;
+}
+
+.hmc-chart-svg {
+  width: 100%;
+  height: 130px;
+  display: block;
+  overflow: visible;
+}
+
+.hmc-y-labels {
+  position: absolute;
+  right: -16px;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.hmc-y-labels span {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  color: rgba(255,255,255,0.18);
+  line-height: 1;
+}
+
+.hmc-legend {
+  display: flex;
+  gap: 16px;
+  padding: 10px 20px 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.hmc-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.hmc-legend-line {
+  width: 18px;
+  height: 2px;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+.hmc-legend-pct {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.hmc-outcomes {
+  display: flex;
+  gap: 7px;
+  padding: 6px 16px 0;
+}
+
+.hmc-outcome-btn {
+  flex: 1;
+  padding: 11px 6px;
+  border-radius: 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.18s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.hmc-outcome-btn:hover { transform: translateY(-1px); }
+
+.hmc-outcome-pct {
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.hmc-outcome-label {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  padding: 0 2px;
+}
+
+/* outcome color variants */
+.hmc-outcome-btn[data-color="green"]  { border-color: rgba(0,232,122,0.22);  background: rgba(0,232,122,0.07); }
+.hmc-outcome-btn[data-color="green"] .hmc-outcome-pct  { color: var(--green); }
+.hmc-outcome-btn[data-color="green"]:hover  { background: rgba(0,232,122,0.13); border-color: rgba(0,232,122,0.4); box-shadow: 0 4px 16px rgba(0,232,122,0.1); }
+
+.hmc-outcome-btn[data-color="red"]    { border-color: rgba(255,69,69,0.22);   background: rgba(255,69,69,0.07); }
+.hmc-outcome-btn[data-color="red"] .hmc-outcome-pct    { color: var(--red); }
+.hmc-outcome-btn[data-color="red"]:hover    { background: rgba(255,69,69,0.13); border-color: rgba(255,69,69,0.4); box-shadow: 0 4px 16px rgba(255,69,69,0.1); }
+
+.hmc-outcome-btn[data-color="gold"]   { border-color: rgba(245,200,66,0.22);  background: rgba(245,200,66,0.07); }
+.hmc-outcome-btn[data-color="gold"] .hmc-outcome-pct   { color: var(--gold); }
+.hmc-outcome-btn[data-color="gold"]:hover   { background: rgba(245,200,66,0.13); border-color: rgba(245,200,66,0.4); }
+
+.hmc-outcome-btn[data-color="blue"]   { border-color: rgba(77,139,255,0.22);  background: rgba(77,139,255,0.07); }
+.hmc-outcome-btn[data-color="blue"] .hmc-outcome-pct   { color: #4d8bff; }
+.hmc-outcome-btn[data-color="blue"]:hover   { background: rgba(77,139,255,0.13); border-color: rgba(77,139,255,0.4); }
+
+.hmc-outcome-btn[data-color="purple"] { border-color: rgba(196,122,255,0.22); background: rgba(196,122,255,0.07); }
+.hmc-outcome-btn[data-color="purple"] .hmc-outcome-pct { color: #c47aff; }
+.hmc-outcome-btn[data-color="purple"]:hover { background: rgba(196,122,255,0.13); border-color: rgba(196,122,255,0.4); }
+
+.hmc-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--border);
+  margin-top: 12px;
+}
+
+.hmc-volume {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+.hmc-volume strong {
+  color: var(--text-secondary);
+  margin-left: 4px;
+  font-weight: 500;
+}
+
+.hmc-carousel-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hmc-nav-btn {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  line-height: 1;
+}
+
+.hmc-nav-btn:hover {
+  background: rgba(0,232,122,0.1);
+  border-color: rgba(0,232,122,0.3);
+  color: var(--green);
+}
+
+.hmc-dots { display: flex; gap: 5px; align-items: center; }
+
+.hmc-dot {
+  height: 5px;
+  width: 5px;
+  border-radius: 3px;
+  background: var(--border);
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.hmc-dot.active {
+  background: var(--green);
+  box-shadow: 0 0 5px var(--green);
+  width: 14px;
+}
