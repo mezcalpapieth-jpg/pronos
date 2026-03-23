@@ -117,13 +117,28 @@
   <a href="#" class="nav-logo">PRONOS<span class="green-dot"></span></a>
   <div class="nav-links">
     <a href="#market">El mercado</a>
-    <a href="#portfolio">Portafolio</a>
+    <a href="/portfolio">Portafolio</a>
     <a href="#how-it-works">Cómo funciona</a>
     <div id="navWalletArea">
       <button class="btn-nav-cta" onclick="connectWallet()">Conectar wallet</button>
     </div>
   </div>
 </nav>
+
+<!-- ============================================================
+     2b. CATEGORY BAR
+============================================================ -->
+<div class="category-bar" id="categoryBar">
+  <div class="category-bar-inner">
+    <div class="market-filters" id="marketFilters">
+      <button class="filter-btn active" data-filter="trending">🔥 Trending</button>
+      <button class="filter-btn" data-filter="musica">🎵 Música &amp; Farándula</button>
+      <button class="filter-btn" data-filter="mexico">🇲🇽 México &amp; CDMX</button>
+      <button class="filter-btn" data-filter="politica">🌎 Política Internacional</button>
+      <button class="filter-btn" data-filter="deportes">⚽ Deportes &amp; Crypto</button>
+    </div>
+  </div>
+</div>
 
 <!-- ============================================================
      3. HERO
@@ -171,58 +186,61 @@
       </div>
     </div>
 
-    <!-- Right column: World Cup Match Card -->
-    <div class="wc-card">
-      <div class="wc-card-header">
-        <div class="wc-card-header-left">
-          <div class="dot" style="width:7px;height:7px;background:var(--green);border-radius:50%;animation:pulse-dot 1.4s ease-in-out infinite;box-shadow:0 0 8px var(--green)"></div>
-          <span class="wc-card-badge">Partido Inaugural · Mundial 2026</span>
-        </div>
-        <span class="wc-card-league">FIFA WORLD CUP</span>
-      </div>
+    <!-- Right column: Hero Market Card (Polymarket-style carousel) -->
+    <div class="hmc" id="heroMarketCard">
 
-      <div class="wc-teams-row">
-        <div class="wc-team">
-          <div class="wc-flag">🇲🇽</div>
-          <div class="wc-team-name">México</div>
-          <div class="wc-team-sub">ANFITRIÓN · GRUPO A</div>
+      <!-- Top bar: category tag + time period selector -->
+      <div class="hmc-topbar">
+        <div class="hmc-cat">
+          <div class="hmc-live-dot"></div>
+          <span id="hmcCat">⚽ Deportes · Mundial 2026</span>
         </div>
-        <div class="wc-vs">VS</div>
-        <div class="wc-team">
-          <div class="wc-flag dim">🇿🇦</div>
-          <div class="wc-team-name">Sudáfrica</div>
-          <div class="wc-team-sub">GRUPO A</div>
+        <div class="hmc-timesel" id="hmcTimesel">
+          <button class="hmc-time-btn" data-period="1D">1D</button>
+          <button class="hmc-time-btn" data-period="1W">1W</button>
+          <button class="hmc-time-btn active" data-period="1M">1M</button>
+          <button class="hmc-time-btn" data-period="ALL">ALL</button>
         </div>
       </div>
 
-      <div class="wc-market">
-        <div class="wc-market-q">¿Quién gana el partido inaugural?</div>
-        <div class="wc-odds-three">
-          <button class="wc-odds-btn green-btn" onclick="openBetModal(1)" id="btn-mx">
-            <span class="wc-pct" id="hero-mx-pct">—%</span>
-            <span class="wc-label">🇲🇽 México</span>
-          </button>
-          <button class="wc-odds-btn draw-btn" onclick="openBetModal(2)" id="btn-draw">
-            <span class="wc-pct" id="hero-draw-pct">—%</span>
-            <span class="wc-label">Empate</span>
-          </button>
-          <button class="wc-odds-btn red-btn" onclick="openBetModal(3)" id="btn-sa">
-            <span class="wc-pct" id="hero-sa-pct">—%</span>
-            <span class="wc-label">🇿🇦 Sudáfrica</span>
-          </button>
-        </div>
+      <!-- Market question -->
+      <div class="hmc-question" id="hmcQuestion">¿México gana el partido inaugural del Mundial 2026?</div>
 
-        <div class="wc-volume">
-          <span class="wc-vol-label">POOL TOTAL</span>
-          <span class="wc-vol-val"><span id="heroVolCounter">$0</span> USDC</span>
+      <!-- Price history chart (SVG) -->
+      <div class="hmc-chart-wrap">
+        <svg class="hmc-chart-svg" id="hmcChart" viewBox="0 0 420 120" preserveAspectRatio="none">
+          <defs id="hmcDefs"></defs>
+          <line x1="0" y1="10"  x2="420" y2="10"  stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
+          <line x1="0" y1="37"  x2="420" y2="37"  stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
+          <line x1="0" y1="64"  x2="420" y2="64"  stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
+          <line x1="0" y1="91"  x2="420" y2="91"  stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
+          <g id="hmcChartPaths"></g>
+        </svg>
+        <div class="hmc-y-labels">
+          <span>100%</span>
+          <span>75%</span>
+          <span>50%</span>
+          <span>25%</span>
+          <span>0%</span>
         </div>
       </div>
 
-      <div class="wc-card-footer">
-        <button class="btn-connect-wallet" id="heroConnectBtn" onclick="connectWallet()">
-          Conectar wallet para apostar
-        </button>
+      <!-- Legend -->
+      <div class="hmc-legend" id="hmcLegend"></div>
+
+      <!-- Outcome bet buttons -->
+      <div class="hmc-outcomes" id="hmcOutcomes"></div>
+
+      <!-- Footer: volume + carousel nav -->
+      <div class="hmc-footer">
+        <div class="hmc-volume">VOL <strong id="hmcVol">—</strong></div>
+        <div class="hmc-carousel-nav">
+          <button class="hmc-nav-btn" onclick="heroCarouselPrev()">&#8592;</button>
+          <div class="hmc-dots" id="hmcDots"></div>
+          <button class="hmc-nav-btn" onclick="heroCarouselNext()">&#8594;</button>
+        </div>
       </div>
+
     </div>
   </div>
 </section>
@@ -230,96 +248,7 @@
 <!-- ============================================================
      4. MARKET SECTION
 ============================================================ -->
-<section id="market" style="padding:100px 48px; max-width:1280px; margin:0 auto;">
-  <div class="section-header">
-    <div class="section-eyebrow">Predicciones en tiempo real</div>
-    <div class="section-title">El Mercado</div>
-  </div>
-
-  <!-- Category filters -->
-  <div class="market-filters" id="marketFilters">
-    <button class="filter-btn active" data-filter="todos">Todos</button>
-    <button class="filter-btn" data-filter="musica">🎵 Música & Farándula</button>
-    <button class="filter-btn" data-filter="mexico">🇲🇽 México & CDMX</button>
-    <button class="filter-btn" data-filter="politica">🌎 Política Internacional</button>
-    <button class="filter-btn" data-filter="deportes">⚽ Deportes & Crypto</button>
-  </div>
-
-  <!-- Resolved banner (hidden until resolved) -->
-  <div class="resolved-banner" id="resolvedBanner" style="display:none">
-    <div>
-      <div class="resolved-label">✅ Mercado resuelto</div>
-      <div class="resolved-result" id="resolvedResult">—</div>
-    </div>
-    <button class="btn-claim" id="claimBtn" onclick="claimWinnings()" style="display:none">
-      Cobrar ganancias
-    </button>
-  </div>
-
-  <!-- On-chain featured market card (shown when filter = todos | deportes) -->
-  <div id="onchainMarketWrap" style="max-width:720px;margin:0 auto 32px;">
-    <div style="background:var(--surface1);border:1px solid var(--border);border-radius:16px;overflow:hidden;">
-      <div class="mc-header">
-        <span class="mc-cat">FIFA WORLD CUP 2026 · Partido Inaugural</span>
-        <span class="mc-badge live" id="marketBadge">Apuestas abiertas</span>
-      </div>
-      <div class="mc-body">
-        <div class="mc-matchup" style="margin-bottom:8px">
-          <div class="mc-team">
-            <div style="width:56px;height:56px;border-radius:50%;background:var(--surface2);border:2px solid rgba(0,232,122,0.3);display:flex;align-items:center;justify-content:center;font-size:28px">🇲🇽</div>
-            <div class="mc-team-name">México</div>
-          </div>
-          <div class="mc-match-vs">VS</div>
-          <div class="mc-team">
-            <div style="width:56px;height:56px;border-radius:50%;background:var(--surface2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:28px">🇿🇦</div>
-            <div class="mc-team-name">Sudáfrica</div>
-          </div>
-        </div>
-        <div class="mc-matchday">11 Jun 2026 · Estadio Azteca · Ciudad de México · FIFA World Cup 2026</div>
-        <div class="mc-three-outcomes" style="margin-top:16px">
-          <div class="mc-outcome win" style="cursor:pointer" onclick="openBetModal(1)">
-            <div class="mc-outcome-pct" id="market-mx-pct">—%</div>
-            <div class="mc-outcome-label">🇲🇽 México</div>
-          </div>
-          <div class="mc-outcome draw" style="cursor:pointer" onclick="openBetModal(2)">
-            <div class="mc-outcome-pct" id="market-draw-pct">—%</div>
-            <div class="mc-outcome-label">🤝 Empate</div>
-          </div>
-          <div class="mc-outcome lose" style="cursor:pointer" onclick="openBetModal(3)">
-            <div class="mc-outcome-pct" id="market-sa-pct">—%</div>
-            <div class="mc-outcome-label">🇿🇦 Sudáfrica</div>
-          </div>
-        </div>
-        <div style="margin-top:16px">
-          <div class="mc-bar-row">
-            <div class="mc-bar-label-row">
-              <span class="mc-bar-name">🇲🇽 México gana</span>
-              <span class="mc-bar-pct green" id="bar-mx-pct">—%</span>
-            </div>
-            <div class="mc-track"><div class="mc-fill green" id="bar-mx-fill" style="width:33%"></div></div>
-          </div>
-          <div class="mc-bar-row">
-            <div class="mc-bar-label-row">
-              <span class="mc-bar-name">🤝 Empate</span>
-              <span class="mc-bar-pct gold" id="bar-draw-pct">—%</span>
-            </div>
-            <div class="mc-track"><div class="mc-fill gold" id="bar-draw-fill" style="width:33%"></div></div>
-          </div>
-          <div class="mc-bar-row">
-            <div class="mc-bar-label-row">
-              <span class="mc-bar-name">🇿🇦 Sudáfrica gana</span>
-              <span class="mc-bar-pct red" id="bar-sa-pct">—%</span>
-            </div>
-            <div class="mc-track"><div class="mc-fill red" id="bar-sa-fill" style="width:33%"></div></div>
-          </div>
-        </div>
-      </div>
-      <div class="mc-footer" style="padding:14px 18px">
-        <span class="mc-vol">Pool total: <span id="marketVol">$0 USDC</span></span>
-        <button class="mc-bet-btn" id="marketBetBtn" onclick="openBetModal(1)">Apostar</button>
-      </div>
-    </div>
-  </div>
+<section id="market" style="padding:60px 48px; max-width:1280px; margin:0 auto;">
 
   <!-- Mock markets grid (rendered by app.js from markets.js data) -->
   <div class="markets-grid" id="mockMarketsGrid"></div>
