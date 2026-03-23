@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PRONOS — El mercado de predicciones de Latinoamérica</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/sections.css" />
+</head>
+<body>
+
+<!-- ============================================================
+     TOAST
+============================================================ -->
+<div class="toast" id="toast"></div>
+
+<!-- ============================================================
+     BET MODAL
+============================================================ -->
+<div class="bet-modal-overlay" id="betModal" onclick="handleBetOverlayClick(event)">
+  <div class="bet-modal-box">
+    <div class="bet-modal-header">
+      <div class="bet-modal-title">HACER PREDICCIÓN</div>
+      <button class="bet-modal-close" onclick="closeBetModal()">×</button>
+    </div>
+    <div class="bet-outcome-tag" id="betOutcomeTag">🇲🇽 México gana</div>
+    <div class="bet-input-label">MONTO A APOSTAR</div>
+    <div class="bet-input-row">
+      <input class="bet-input" id="betAmount" type="number" min="1" step="1" placeholder="10" oninput="updatePayoutEstimate()" />
+      <div class="bet-input-suffix">USDC</div>
+    </div>
+    <div class="bet-quick-btns">
+      <button class="bet-quick-btn" onclick="setAmount(5)">$5</button>
+      <button class="bet-quick-btn" onclick="setAmount(10)">$10</button>
+      <button class="bet-quick-btn" onclick="setAmount(25)">$25</button>
+      <button class="bet-quick-btn" onclick="setAmount(50)">$50</button>
+    </div>
+    <div class="bet-payout-box">
+      <div class="bet-payout-row">
+        <span class="bet-payout-label">APUESTA</span>
+        <span class="bet-payout-val" id="betSummaryAmount">—</span>
+      </div>
+      <div class="bet-payout-row">
+        <span class="bet-payout-label">PAGO ESTIMADO</span>
+        <span class="bet-payout-val highlight" id="betEstPayout">—</span>
+      </div>
+      <div class="bet-payout-row">
+        <span class="bet-payout-label">COMISIÓN (2%)</span>
+        <span class="bet-payout-val">ya incluida</span>
+      </div>
+    </div>
+    <button class="bet-submit-btn" id="betSubmitBtn" onclick="submitBet()">Confirmar apuesta</button>
+    <div class="bet-warning">⚡ Transacción en Base Sepolia · Fuera de red de prueba</div>
+  </div>
+</div>
+
+<!-- ============================================================
+     1. TICKER
+============================================================ -->
+<div id="ticker">
+  <div class="ticker-badge">
+    <div class="dot-live"></div>
+    <span>EN VIVO</span>
+  </div>
+  <div class="ticker-track-wrapper">
+    <div class="ticker-track" id="tickerTrack">
+      <div class="ticker-item">
+        <span class="label">MUNDIAL 2026</span>
+        <span class="sep"></span>
+        <span>🇲🇽 México</span>
+        <span class="vs">vs</span>
+        <span>🇿🇦 Sudáfrica</span>
+        <span class="val" id="ticker-mx">—%</span>
+      </div>
+      <div class="ticker-item">
+        <span class="label">POOL TOTAL</span>
+        <span class="sep"></span>
+        <span class="val" id="ticker-pool">$0 USDC</span>
+      </div>
+      <div class="ticker-item">
+        <span class="label">APERTURA</span>
+        <span class="sep"></span>
+        <span>11 JUN 2026 · AZTECA</span>
+      </div>
+      <div class="ticker-item">
+        <span class="label">RESULTADO</span>
+        <span class="sep"></span>
+        <span class="val" id="ticker-result">PENDIENTE</span>
+      </div>
+      <div class="ticker-item">
+        <span class="label">EMPATE</span>
+        <span class="sep"></span>
+        <span class="val" id="ticker-draw">—%</span>
+      </div>
+      <div class="ticker-item">
+        <span class="label">SUDÁFRICA</span>
+        <span class="sep"></span>
+        <span class="val" id="ticker-sa">—%</span>
+      </div>
+      <div class="ticker-item">
+        <span class="label">CADENA</span>
+        <span class="sep"></span>
+        <span>BASE SEPOLIA</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     2. NAVIGATION
+============================================================ -->
+<nav id="nav">
+  <a href="#" class="nav-logo">PRONOS<span class="green-dot"></span></a>
+  <div class="nav-links">
+    <a href="#market">El mercado</a>
+    <a href="/portfolio">Portafolio</a>
+    <a href="#how-it-works">Cómo funciona</a>
+    <div id="navWalletArea">
+      <button class="btn-nav-cta" onclick="connectWallet()">Conectar wallet</button>
+    </div>
+  </div>
+</nav>
+
+<!-- ============================================================
+     2b. CATEGORY BAR
+============================================================ -->
+<div class="category-bar" id="categoryBar">
+  <div class="category-bar-inner">
+    <div class="market-filters" id="marketFilters">
+      <button class="filter-btn active" data-filter="trending">🔥 Trending</button>
+      <button class="filter-btn" data-filter="musica">🎵 Música &amp; Farándula</button>
+      <button class="filter-btn" data-filter="mexico">🇲🇽 México &amp; CDMX</button>
+      <button class="filter-btn" data-filter="politica">🌎 Política Internacional</button>
+      <button class="filter-btn" data-filter="deportes">⚽ Deportes &amp; Crypto</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     3. HERO
+============================================================ -->
+<section id="hero">
+  <div class="hero-inner">
+    <!-- Left column -->
+    <div class="hero-left">
+      <div class="hero-badge">
+        <div class="dot"></div>
+        <span>Mundial 2026 · Partido Inaugural</span>
+      </div>
+
+      <h1 class="hero-headline">
+        El primer<br>
+        mercado de<br>
+        <span class="accent">predicciones</span><br>
+        on-chain
+      </h1>
+
+      <p class="hero-sub">
+        Apuesta USDC en quién gana el partido inaugural del
+        Mundial 2026. México vs Sudáfrica. Liquidado automáticamente
+        en Base. Sin intermediarios.
+      </p>
+
+      <div class="hero-btns">
+        <a href="#market" class="btn-primary">Ver el mercado</a>
+        <a href="#how-it-works" class="btn-ghost">Cómo funciona</a>
+      </div>
+
+      <div class="hero-stats">
+        <div class="hero-stat">
+          <span class="hero-stat-val"><span class="green" id="heroTotalPool">$0</span></span>
+          <span class="hero-stat-label">Volumen apostado</span>
+        </div>
+        <div class="hero-stat">
+          <span class="hero-stat-val"><span class="green">11 Jun</span></span>
+          <span class="hero-stat-label">Fecha del partido</span>
+        </div>
+        <div class="hero-stat">
+          <span class="hero-stat-val"><span class="green">2%</span></span>
+          <span class="hero-stat-label">Comisión</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right column: Hero Market Card (Polymarket-style carousel) -->
+    <div class="hmc" id="heroMarketCard">
+
+      <!-- Top bar: category tag + time period selector -->
+      <div class="hmc-topbar">
+        <div class="hmc-cat">
+          <div class="hmc-live-dot"></div>
+          <span id="hmcCat">⚽ Deportes · Mundial 2026</span>
+        </div>
+        <div class="hmc-timesel" id="hmcTimesel">
+          <button class="hmc-time-btn" data-period="1D">1D</button>
+          <button class="hmc-time-btn" data-period="1W">1W</button>
+          <button class="hmc-time-btn active" data-period="1M">1M</button>
+          <button class="hmc-time-btn" data-period="ALL">ALL</button>
+        </div>
+      </div>
+
+      <!-- Market question -->
+      <div class="hmc-question" id="hmcQuestion">¿México gana el partido inaugural del Mundial 2026?</div>
+
+      <!-- Price history chart (SVG) -->
+      <div class="hmc-chart-wrap">
+        <svg class="hmc-chart-svg" id="hmcChart" viewBox="0 0 420 120" preserveAspectRatio="none">
+          <defs id="hmcDefs"></defs>
+          <line x1="0" y1="10"  x2="420" y2="10"  stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
+          <line x1="0" y1="37"  x2="420" y2="37"  stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
+          <line x1="0" y1="64"  x2="420" y2="64"  stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
+          <line x1="0" y1="91"  x2="420" y2="91"  stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
+          <g id="hmcChartPaths"></g>
+        </svg>
+        <div class="hmc-y-labels">
+          <span>100%</span>
+          <span>75%</span>
+          <span>50%</span>
+          <span>25%</span>
+          <span>0%</span>
+        </div>
+      </div>
+
+      <!-- Legend -->
+      <div class="hmc-legend" id="hmcLegend"></div>
+
+      <!-- Outcome bet buttons -->
+      <div class="hmc-outcomes" id="hmcOutcomes"></div>
+
+      <!-- Footer: volume + carousel nav -->
+      <div class="hmc-footer">
+        <div class="hmc-volume">VOL <strong id="hmcVol">—</strong></div>
+        <div class="hmc-carousel-nav">
+          <button class="hmc-nav-btn" onclick="heroCarouselPrev()">&#8592;</button>
+          <div class="hmc-dots" id="hmcDots"></div>
+          <button class="hmc-nav-btn" onclick="heroCarouselNext()">&#8594;</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     4. MARKET SECTION
+============================================================ -->
+<section id="market" style="padding:60px 48px; max-width:1280px; margin:0 auto;">
+
+  <!-- Mock markets grid (rendered by app.js from markets.js data) -->
+  <div class="markets-grid" id="mockMarketsGrid"></div>
+
+  <!-- User positions on-chain (shown when wallet connected) -->
+  <div id="userPositions" style="display:none;margin-top:32px;max-width:720px;margin-left:auto;margin-right:auto">
+    <div style="font-family:var(--font-mono);font-size:11px;letter-spacing:0.12em;color:var(--text-muted);text-transform:uppercase;margin-bottom:16px">Mis apuestas</div>
+    <div id="userPositionsContent" style="background:var(--surface1);border:1px solid var(--border);border-radius:12px;padding:20px"></div>
+  </div>
+</section>
+
+<!-- ============================================================
+     5. PORTFOLIO
+============================================================ -->
+<section id="portfolio">
+  <div class="section-wrap">
+    <div class="section-header">
+      <div class="section-eyebrow">Tu actividad on-chain</div>
+      <div class="section-title">Portafolio</div>
+    </div>
+    <div id="portfolioContent" class="portfolio-content">
+      <!-- Estado: wallet no conectada -->
+      <div class="portfolio-empty" id="portfolioEmpty">
+        <div class="portfolio-empty-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+        </div>
+        <div class="portfolio-empty-title">Conecta tu wallet para ver tu portafolio</div>
+        <div class="portfolio-empty-sub">Verás aquí todas tus predicciones activas, historial y ganancias pendientes.</div>
+        <button class="btn-primary" onclick="connectWallet()" style="margin-top:20px">Conectar wallet</button>
+      </div>
+      <!-- Estado: wallet conectada, apuestas mock -->
+      <div class="portfolio-positions" id="portfolioPositions" style="display:none">
+        <div class="portfolio-stats-row">
+          <div class="portfolio-stat">
+            <div class="portfolio-stat-val" id="pfTotalBet">—</div>
+            <div class="portfolio-stat-label">Total apostado</div>
+          </div>
+          <div class="portfolio-stat">
+            <div class="portfolio-stat-val green" id="pfActiveBets">—</div>
+            <div class="portfolio-stat-label">Apuestas activas</div>
+          </div>
+          <div class="portfolio-stat">
+            <div class="portfolio-stat-val gold" id="pfPotentialWin">—</div>
+            <div class="portfolio-stat-label">Ganancia potencial</div>
+          </div>
+        </div>
+        <div class="portfolio-list" id="portfolioList"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     6. HOW IT WORKS
+============================================================ -->
+<section id="how-it-works">
+  <div class="how-inner">
+    <div class="section-header">
+      <div class="section-eyebrow">Sin fricción. Sin intermediarios.</div>
+      <div class="section-title">Cómo Funciona</div>
+    </div>
+
+    <div class="steps-grid">
+      <div class="step">
+        <div class="step-num">01</div>
+        <div class="step-icon-circle">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <div class="step-title">Conecta tu wallet</div>
+        <p class="step-desc">Acceso en un click con MetaMask o Coinbase Wallet en Base. Sin registro, sin contraseña, sin fricción.</p>
+        <div class="step-btns">
+          <button class="step-btn-wallet" onclick="connectWallet()">
+            <svg class="wallet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+            Conectar Wallet
+          </button>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">02</div>
+        <div class="step-icon-circle">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <div class="step-title">Elige tu predicción</div>
+        <p class="step-desc">México gana, empate, o Sudáfrica gana. Deposita USDC en el resultado que eliges. Las odds se actualizan en tiempo real.</p>
+        <div class="step-btns">
+          <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);letter-spacing:0.06em">🇲🇽 México · 🤝 Empate · 🇿🇦 Sudáfrica</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">03</div>
+        <div class="step-icon-circle">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        </div>
+        <div class="step-title">Cobra tus ganancias</div>
+        <p class="step-desc">Cuando el partido termina, el smart contract en Base liquida automáticamente. Tu USDC llega a tu wallet. Sin intermediarios. Sin demoras.</p>
+        <div class="step-btns">
+          <span style="font-family:var(--font-mono);font-size:11px;color:var(--green);letter-spacing:0.06em">⚡ Liquidación automática en cadena</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="tech-strip">
+      <div class="tech-pill"><span class="dot base-dot"></span>Base Network</div>
+      <div class="tech-pill"><span class="dot"></span>USDC Nativo</div>
+      <div class="tech-pill"><span class="dot"></span>Smart Contract</div>
+      <div class="tech-pill"><span class="dot"></span>Sin Custodios</div>
+      <div class="tech-pill"><span class="dot"></span>2% Comisión</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     7. PARTNERS
+============================================================ -->
+<section id="partners">
+  <div class="partners-inner">
+    <div class="partners-label">Respaldado por</div>
+    <div class="partners-row">
+      <div class="partner">
+        <div class="partner-logo">
+          <div class="partner-logo-base">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2" stroke="white" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+          </div>
+        </div>
+        <div class="partner-name">Base · Coinbase L2</div>
+      </div>
+      <div class="partner">
+        <div class="partner-logo">
+          <div class="partner-logo-mazatlan">MFC</div>
+        </div>
+        <div class="partner-name">Mazatlán F.C.</div>
+      </div>
+      <div class="partner">
+        <div class="partner-logo">
+          <div class="partner-logo-verde">MV</div>
+        </div>
+        <div class="partner-name">Marco Verde OLY</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     8. FOOTER
+============================================================ -->
+<footer id="footer">
+  <div class="footer-inner">
+    <div>
+      <div class="footer-logo">PRONOS<span class="green-dot"></span></div>
+      <div class="footer-tagline">El mercado de predicciones de Latinoamérica</div>
+    </div>
+    <div class="footer-copy">© 2026 Pronos. Todos los derechos reservados.</div>
+  </div>
+</footer>
+
+<!-- ethers.js v5.7.2 — sin dependencia de CDN -->
+<script src="js/ethers.min.js"></script>
+<!-- Datos de mercados -->
+<script src="js/markets.js"></script>
+<!-- Lógica principal -->
+<script src="js/app.js"></script>
+
+</body>
+</html>

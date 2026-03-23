@@ -1,0 +1,86 @@
+/* ============================================================
+   RESET & BASE
+============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #080808;
+  --surface1: #111111;
+  --surface2: #181818;
+  --surface3: #1e1e1e;
+  --border: rgba(255,255,255,0.07);
+  --border-active: rgba(0,232,122,0.35);
+  --green: #00E87A;
+  --green-dim: rgba(0,232,122,0.12);
+  --green-glow: rgba(0,232,122,0.18);
+  --gold: #F5C842;
+  --gold-dim: rgba(245,200,66,0.12);
+  --red: #FF4545;
+  --red-dim: rgba(255,69,69,0.12);
+  --text-primary: #F0F0F0;
+  --text-secondary: #888;
+  --text-muted: #555;
+  --base-blue: #0052FF;
+  --font-display: 'Bebas Neue', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background-color: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+a { color: inherit; text-decoration: none; }
+button { cursor: pointer; border: none; background: none; font-family: var(--font-body); }
+svg { display: block; }
+
+/* ============================================================
+   GRID TEXTURE (hero bg)
+============================================================ */
+.grid-texture {
+  background-image:
+    linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* ============================================================
+   KEYFRAMES
+============================================================ */
+@keyframes ticker-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
+@keyframes avatar-pulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(0,232,122,0.4), 0 0 50px rgba(0,232,122,0.2); }
+  50% { box-shadow: 0 0 30px rgba(0,232,122,0.6), 0 0 70px rgba(0,232,122,0.3); }
+}
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.88) translateY(16px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ============================================================
+   UTILITIES
+============================================================ */
+.gold { color: var(--gold); }
+.green { color: var(--green); }
+.red { color: var(--red); }
+
+/* Divider line between sections */
+.section-wrap {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 48px;
+}
