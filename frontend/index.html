@@ -126,6 +126,21 @@
 </nav>
 
 <!-- ============================================================
+     2b. CATEGORY BAR
+============================================================ -->
+<div class="category-bar" id="categoryBar">
+  <div class="category-bar-inner">
+    <div class="market-filters" id="marketFilters">
+      <button class="filter-btn active" data-filter="todos">Todos</button>
+      <button class="filter-btn" data-filter="musica">🎵 Música &amp; Farándula</button>
+      <button class="filter-btn" data-filter="mexico">🇲🇽 México &amp; CDMX</button>
+      <button class="filter-btn" data-filter="politica">🌎 Política Internacional</button>
+      <button class="filter-btn" data-filter="deportes">⚽ Deportes &amp; Crypto</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
      3. HERO
 ============================================================ -->
 <section id="hero">
@@ -233,96 +248,7 @@
 <!-- ============================================================
      4. MARKET SECTION
 ============================================================ -->
-<section id="market" style="padding:100px 48px; max-width:1280px; margin:0 auto;">
-  <div class="section-header">
-    <div class="section-eyebrow">Predicciones en tiempo real</div>
-    <div class="section-title">El Mercado</div>
-  </div>
-
-  <!-- Category filters -->
-  <div class="market-filters" id="marketFilters">
-    <button class="filter-btn active" data-filter="todos">Todos</button>
-    <button class="filter-btn" data-filter="musica">🎵 Música & Farándula</button>
-    <button class="filter-btn" data-filter="mexico">🇲🇽 México & CDMX</button>
-    <button class="filter-btn" data-filter="politica">🌎 Política Internacional</button>
-    <button class="filter-btn" data-filter="deportes">⚽ Deportes & Crypto</button>
-  </div>
-
-  <!-- Resolved banner (hidden until resolved) -->
-  <div class="resolved-banner" id="resolvedBanner" style="display:none">
-    <div>
-      <div class="resolved-label">✅ Mercado resuelto</div>
-      <div class="resolved-result" id="resolvedResult">—</div>
-    </div>
-    <button class="btn-claim" id="claimBtn" onclick="claimWinnings()" style="display:none">
-      Cobrar ganancias
-    </button>
-  </div>
-
-  <!-- On-chain featured market card (shown when filter = todos | deportes) -->
-  <div id="onchainMarketWrap" style="max-width:720px;margin:0 auto 32px;">
-    <div style="background:var(--surface1);border:1px solid var(--border);border-radius:16px;overflow:hidden;">
-      <div class="mc-header">
-        <span class="mc-cat">FIFA WORLD CUP 2026 · Partido Inaugural</span>
-        <span class="mc-badge live" id="marketBadge">Apuestas abiertas</span>
-      </div>
-      <div class="mc-body">
-        <div class="mc-matchup" style="margin-bottom:8px">
-          <div class="mc-team">
-            <div style="width:56px;height:56px;border-radius:50%;background:var(--surface2);border:2px solid rgba(0,232,122,0.3);display:flex;align-items:center;justify-content:center;font-size:28px">🇲🇽</div>
-            <div class="mc-team-name">México</div>
-          </div>
-          <div class="mc-match-vs">VS</div>
-          <div class="mc-team">
-            <div style="width:56px;height:56px;border-radius:50%;background:var(--surface2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:28px">🇿🇦</div>
-            <div class="mc-team-name">Sudáfrica</div>
-          </div>
-        </div>
-        <div class="mc-matchday">11 Jun 2026 · Estadio Azteca · Ciudad de México · FIFA World Cup 2026</div>
-        <div class="mc-three-outcomes" style="margin-top:16px">
-          <div class="mc-outcome win" style="cursor:pointer" onclick="openBetModal(1)">
-            <div class="mc-outcome-pct" id="market-mx-pct">—%</div>
-            <div class="mc-outcome-label">🇲🇽 México</div>
-          </div>
-          <div class="mc-outcome draw" style="cursor:pointer" onclick="openBetModal(2)">
-            <div class="mc-outcome-pct" id="market-draw-pct">—%</div>
-            <div class="mc-outcome-label">🤝 Empate</div>
-          </div>
-          <div class="mc-outcome lose" style="cursor:pointer" onclick="openBetModal(3)">
-            <div class="mc-outcome-pct" id="market-sa-pct">—%</div>
-            <div class="mc-outcome-label">🇿🇦 Sudáfrica</div>
-          </div>
-        </div>
-        <div style="margin-top:16px">
-          <div class="mc-bar-row">
-            <div class="mc-bar-label-row">
-              <span class="mc-bar-name">🇲🇽 México gana</span>
-              <span class="mc-bar-pct green" id="bar-mx-pct">—%</span>
-            </div>
-            <div class="mc-track"><div class="mc-fill green" id="bar-mx-fill" style="width:33%"></div></div>
-          </div>
-          <div class="mc-bar-row">
-            <div class="mc-bar-label-row">
-              <span class="mc-bar-name">🤝 Empate</span>
-              <span class="mc-bar-pct gold" id="bar-draw-pct">—%</span>
-            </div>
-            <div class="mc-track"><div class="mc-fill gold" id="bar-draw-fill" style="width:33%"></div></div>
-          </div>
-          <div class="mc-bar-row">
-            <div class="mc-bar-label-row">
-              <span class="mc-bar-name">🇿🇦 Sudáfrica gana</span>
-              <span class="mc-bar-pct red" id="bar-sa-pct">—%</span>
-            </div>
-            <div class="mc-track"><div class="mc-fill red" id="bar-sa-fill" style="width:33%"></div></div>
-          </div>
-        </div>
-      </div>
-      <div class="mc-footer" style="padding:14px 18px">
-        <span class="mc-vol">Pool total: <span id="marketVol">$0 USDC</span></span>
-        <button class="mc-bet-btn" id="marketBetBtn" onclick="openBetModal(1)">Apostar</button>
-      </div>
-    </div>
-  </div>
+<section id="market" style="padding:60px 48px; max-width:1280px; margin:0 auto;">
 
   <!-- Mock markets grid (rendered by app.js from markets.js data) -->
   <div class="markets-grid" id="mockMarketsGrid"></div>

@@ -996,6 +996,35 @@
 }
 
 /* ============================================================
+   CATEGORY BAR (sticky below nav)
+============================================================ */
+.category-bar {
+  position: sticky;
+  top: 64px;
+  z-index: 90;
+  width: 100%;
+  background: rgba(10, 10, 10, 0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+}
+.category-bar-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+}
+.category-bar .market-filters {
+  margin-bottom: 0;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.category-bar .market-filters::-webkit-scrollbar { display: none; }
+
+/* ============================================================
    MARKET FILTERS
 ============================================================ */
 .market-filters {
