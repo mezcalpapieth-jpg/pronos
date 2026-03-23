@@ -342,11 +342,11 @@ function renderMockMarkets(filter) {
   const onchainWrap = document.getElementById('onchainMarketWrap');
   if (!grid) return;
 
-  // Show/hide on-chain card based on filter
-  const showOnchain = filter === 'todos' || filter === 'deportes';
-  if (onchainWrap) onchainWrap.style.display = showOnchain ? '' : 'none';
+  // on-chain card is removed from HTML, guard in case element still exists
+  if (onchainWrap) onchainWrap.style.display = 'none';
 
-  const filtered = filter === 'todos'
+  const showAll = filter === 'todos' || filter === 'trending';
+  const filtered = showAll
     ? MARKETS
     : MARKETS.filter(m => m.category === filter);
 
@@ -374,15 +374,40 @@ function renderMockMarkets(filter) {
   `).join('');
 }
 
+function setHeroVisible(visible) {
+  const hero = document.getElementById('hero');
+  if (!hero) return;
+  if (visible) {
+    hero.style.display = '';
+    // restart carousel if it was paused
+    if (typeof heroCarouselStart === 'function') heroCarouselStart();
+  } else {
+    hero.style.display = 'none';
+    if (typeof heroCarouselStop === 'function') heroCarouselStop();
+  }
+}
+
 function initCategoryFilters() {
   const btns = document.querySelectorAll('#marketFilters .filter-btn');
   btns.forEach(btn => {
     btn.addEventListener('click', () => {
       btns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      renderMockMarkets(btn.dataset.filter);
+      const filter = btn.dataset.filter;
+      if (filter === 'trending') {
+        setHeroVisible(true);
+        renderMockMarkets('todos');
+      } else {
+        setHeroVisible(false);
+        renderMockMarkets(filter);
+        // scroll to market grid smoothly
+        const market = document.getElementById('market');
+        if (market) market.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     });
   });
+  // default: trending tab = show hero + all markets
+  setHeroVisible(true);
   renderMockMarkets('todos');
 }
 
@@ -695,6 +720,14 @@ function hmcBet(marketIdx, outcomeIdx) {
 function hmcResetTimer() {
   if (hmcTimer) clearInterval(hmcTimer);
   hmcTimer = setInterval(() => hmcRender((hmcIdx + 1) % HERO_MARKETS.length), 8000);
+}
+
+function heroCarouselStart() {
+  if (!hmcTimer) hmcResetTimer();
+}
+
+function heroCarouselStop() {
+  if (hmcTimer) { clearInterval(hmcTimer); hmcTimer = null; }
 }
 
 // Time selector
