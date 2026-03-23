@@ -351,7 +351,7 @@ function renderMockMarkets(filter) {
     : MARKETS.filter(m => m.category === filter);
 
   grid.innerHTML = filtered.map(m => `
-    <div class="mock-card" title="${m.title}">
+    <div class="mock-card" title="${m.title}" onclick="location.href='/market?id=${m.id}'" style="cursor:pointer">
       <div class="mock-card-header">
         <span class="mock-card-cat">${m.icon} ${m.categoryLabel}</span>
       </div>
