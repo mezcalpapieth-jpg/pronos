@@ -462,13 +462,16 @@ const HMC_COLORS = {
 };
 
 // Random walk from start→end over n steps
-function hmcGenWalk(start, end, n, noise) {
+// smoothing: how tightly the line is pulled back to the trend (lower = wilder)
+function hmcGenWalk(start, end, n, noise, smoothing = 0.75) {
   const pts = [];
   let v = start;
   for (let i = 0; i < n; i++) {
     const t      = i / Math.max(n - 1, 1);
     const target = start + (end - start) * t;
-    v = v * 0.75 + target * 0.25 + (Math.random() - 0.5) * noise;
+    // inject occasional larger spikes for realism
+    const spike  = Math.random() < 0.08 ? (Math.random() - 0.5) * noise * 3 : 0;
+    v = v * smoothing + target * (1 - smoothing) + (Math.random() - 0.5) * noise + spike;
     pts.push(Math.max(1, Math.min(99, v)));
   }
   return pts;
@@ -485,8 +488,11 @@ function hmcNormalize(seriesArr) {
   return res;
 }
 
-function hmcBuildHistory(outcomes, days) {
-  const raw = outcomes.map(o => hmcGenWalk(o.start, o.pct, days, o.noise || 3));
+// noiseMult scales the base noise; smoothing controls how tightly it tracks the trend
+function hmcBuildHistory(outcomes, days, noiseMult = 1, smoothing = 0.75) {
+  const raw = outcomes.map(o =>
+    hmcGenWalk(o.start, o.pct, days, (o.noise || 3) * noiseMult, smoothing)
+  );
   return hmcNormalize(raw);
 }
 
@@ -547,11 +553,12 @@ const HERO_MARKETS = [
 ];
 
 // Pre-build all period histories once
+// More points + more noise + less smoothing as the timeframe grows
 const HMC_HISTORIES = HERO_MARKETS.map(m => ({
-  '1D':  hmcBuildHistory(m.outcomes, 24),
-  '1W':  hmcBuildHistory(m.outcomes, 7),
-  '1M':  hmcBuildHistory(m.outcomes, 30),
-  'ALL': hmcBuildHistory(m.outcomes, 90),
+  '1D':  hmcBuildHistory(m.outcomes,  48, 1.0, 0.82),  // tight, smooth
+  '1W':  hmcBuildHistory(m.outcomes,  70, 2.2, 0.70),  // mild swings
+  '1M':  hmcBuildHistory(m.outcomes, 120, 4.5, 0.60),  // bigger moves
+  'ALL': hmcBuildHistory(m.outcomes, 200, 8.0, 0.50),  // wild, volatile
 }));
 
 let hmcIdx    = 0;
