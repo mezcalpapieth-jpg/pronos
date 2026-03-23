@@ -1558,3 +1558,72 @@
   box-shadow: 0 0 5px var(--green);
   width: 14px;
 }
+
+/* ============================================================
+   MOBILE RESPONSIVE — components
+============================================================ */
+@media (max-width: 768px) {
+
+  /* Nav */
+  #nav {
+    padding: 0 16px;
+    height: 56px;
+  }
+  .nav-links a {
+    display: none; /* hide text links on mobile */
+  }
+  .nav-links {
+    gap: 12px;
+  }
+  .btn-nav-cta {
+    font-size: 12px;
+    padding: 8px 14px;
+  }
+
+  /* Category bar */
+  .category-bar {
+    top: 56px;
+  }
+  .category-bar-inner {
+    padding: 0 12px;
+    height: 44px;
+  }
+  .filter-btn {
+    font-size: 10px;
+    padding: 6px 10px;
+    white-space: nowrap;
+  }
+
+  /* Market section */
+  #market {
+    padding: 32px 16px !important;
+  }
+  .markets-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* HMC chart card */
+  .hmc {
+    width: 100%;
+    padding: 16px;
+  }
+  .hmc-question {
+    font-size: 14px;
+  }
+  .hmc-outcomes {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* Ticker */
+  #ticker {
+    padding: 0 12px;
+  }
+
+  /* Portfolio empty state */
+  .portfolio-empty {
+    padding: 40px 16px;
+  }
+  .portfolio-stats-row {
+    gap: 12px;
+  }
+}

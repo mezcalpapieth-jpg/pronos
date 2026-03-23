@@ -411,3 +411,88 @@
   max-width: 1280px;
   margin: 0 auto;
 }
+
+/* ============================================================
+   MOBILE RESPONSIVE — sections
+============================================================ */
+@media (max-width: 768px) {
+
+  /* Hero */
+  #hero {
+    padding: 40px 16px 48px;
+    min-height: auto;
+  }
+  .hero-inner {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+  .hero-headline {
+    font-size: clamp(44px, 12vw, 64px);
+  }
+  .hero-sub {
+    font-size: 15px;
+    max-width: 100%;
+  }
+  .hero-btns {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .hero-btns .btn-primary,
+  .hero-btns .btn-ghost {
+    width: 100%;
+    text-align: center;
+  }
+  .hero-stats {
+    gap: 0;
+    flex-wrap: wrap;
+  }
+  .hero-stat {
+    padding: 0 16px 0 0;
+    margin: 0 16px 0 0;
+    font-size: 11px;
+  }
+
+  /* How it works */
+  #how-it-works {
+    padding: 60px 16px;
+  }
+  .steps-grid {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+  .tech-strip {
+    flex-wrap: wrap;
+    gap: 0;
+    justify-content: flex-start;
+  }
+  .tech-pill {
+    padding: 8px 16px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    width: 50%;
+  }
+  .tech-pill:nth-last-child(-n+2) { border-bottom: none; }
+
+  /* Partners */
+  #partners {
+    padding: 48px 16px;
+  }
+  .partners-row {
+    gap: 32px;
+  }
+
+  /* Portfolio section */
+  #portfolio {
+    padding: 60px 16px;
+  }
+
+  /* Footer */
+  #footer {
+    padding: 32px 16px;
+  }
+  .footer-inner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+}
