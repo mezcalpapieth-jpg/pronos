@@ -377,14 +377,7 @@ function renderMockMarkets(filter) {
 function setHeroVisible(visible) {
   const hero = document.getElementById('hero');
   if (!hero) return;
-  if (visible) {
-    hero.style.display = '';
-    // restart carousel if it was paused
-    if (typeof heroCarouselStart === 'function') heroCarouselStart();
-  } else {
-    hero.style.display = 'none';
-    if (typeof heroCarouselStop === 'function') heroCarouselStop();
-  }
+  hero.style.display = visible ? '' : 'none';
 }
 
 function initCategoryFilters() {
