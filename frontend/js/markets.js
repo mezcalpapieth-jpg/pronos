@@ -128,11 +128,11 @@ const MARKETS = [
     volume: '1,450',
   },
 
-  // ── DEPORTES & CRYPTO ────────────────────────────────────────────────────
+  // ── DEPORTES ─────────────────────────────────────────────────────────────
   {
     id: 'checo-puntos',
     category: 'deportes',
-    categoryLabel: 'DEPORTES & CRYPTO',
+    categoryLabel: 'DEPORTES',
     icon: '🏎️',
     title: '¿Checo Pérez suma puntos antes del 30 jun?',
     deadline: '30 Jun 2026',
@@ -143,9 +143,37 @@ const MARKETS = [
     volume: '7,300',
   },
   {
-    id: 'bitcoin-120k',
+    id: 'mundial-mexico-gana',
     category: 'deportes',
-    categoryLabel: 'DEPORTES & CRYPTO',
+    categoryLabel: 'DEPORTES',
+    icon: '⚽',
+    title: '¿México gana su primer partido del Mundial 2026?',
+    deadline: '15 Jun 2026',
+    options: [
+      { label: 'Sí', pct: 54 },
+      { label: 'No', pct: 46 },
+    ],
+    volume: '23,400',
+  },
+  {
+    id: 'sga-mvp',
+    category: 'deportes',
+    categoryLabel: 'DEPORTES',
+    icon: '🏀',
+    title: '¿SGA gana el MVP de la NBA 2025-26?',
+    deadline: '30 Jun 2026',
+    options: [
+      { label: 'Sí', pct: 71 },
+      { label: 'No', pct: 29 },
+    ],
+    volume: '18,200',
+  },
+
+  // ── CRYPTO ───────────────────────────────────────────────────────────────
+  {
+    id: 'bitcoin-120k',
+    category: 'crypto',
+    categoryLabel: 'CRYPTO',
     icon: '₿',
     title: '¿Bitcoin supera $120k USD antes del 30 jun?',
     deadline: '30 Jun 2026',
@@ -154,5 +182,31 @@ const MARKETS = [
       { label: 'No', pct: 88 },
     ],
     volume: '14,900',
+  },
+  {
+    id: 'eth-4k',
+    category: 'crypto',
+    categoryLabel: 'CRYPTO',
+    icon: '⟠',
+    title: '¿Ethereum supera $4,000 antes del 30 jun?',
+    deadline: '30 Jun 2026',
+    options: [
+      { label: 'Sí', pct: 28 },
+      { label: 'No', pct: 72 },
+    ],
+    volume: '9,600',
+  },
+  {
+    id: 'sol-300',
+    category: 'crypto',
+    categoryLabel: 'CRYPTO',
+    icon: '◎',
+    title: '¿Solana supera $300 antes del 30 jun?',
+    deadline: '30 Jun 2026',
+    options: [
+      { label: 'Sí', pct: 35 },
+      { label: 'No', pct: 65 },
+    ],
+    volume: '6,100',
   },
 ];
