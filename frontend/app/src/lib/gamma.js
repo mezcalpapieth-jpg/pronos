@@ -1,5 +1,5 @@
 // ─── POLYMARKET GAMMA API ─────────────────────────────────────────────────────
-// In the React app we always use the proxy since it's on the same domain.
+// Proxy at /api/gamma uses ?path= to forward to Gamma API (avoids Vercel routing conflicts).
 const GAMMA_BASE = '/api/gamma';
 
 // ── Category mapping ──────────────────────────────────────────────────────────
@@ -79,7 +79,7 @@ export function gmNormalize(pm) {
 
 // ── Fetch active markets ──────────────────────────────────────────────────────
 export async function gmFetchMarkets({ limit = 60 } = {}) {
-  const url = `${GAMMA_BASE}/markets?active=true&closed=false&archived=false&limit=${limit}&order=volume&ascending=false`;
+  const url = `${GAMMA_BASE}?path=/markets&active=true&closed=false&archived=false&limit=${limit}&order=volume&ascending=false`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Gamma API ${res.status}`);
   const data = await res.json();
@@ -89,7 +89,7 @@ export async function gmFetchMarkets({ limit = 60 } = {}) {
 
 // ── Fetch single market by slug ───────────────────────────────────────────────
 export async function gmFetchBySlug(slug) {
-  const url = `${GAMMA_BASE}/markets?slug=${encodeURIComponent(slug)}&limit=1`;
+  const url = `${GAMMA_BASE}?path=/markets&slug=${encodeURIComponent(slug)}&limit=1`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Gamma API ${res.status}`);
   const data = await res.json();

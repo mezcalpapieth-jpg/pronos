@@ -1,15 +1,16 @@
 // ─── Polymarket Gamma API Proxy ───────────────────────────────────────────────
 // Proxies requests to https://gamma-api.polymarket.com to avoid CORS issues.
-// Vercel route: /api/gamma?* → this function
 //
 // Usage from frontend:
-//   fetch('/api/gamma/markets?active=true&limit=60')
+//   fetch('/api/gamma?path=/markets&active=true&limit=60')
 //   → proxied to https://gamma-api.polymarket.com/markets?active=true&limit=60
+//
+// The `path` query param specifies the upstream endpoint path (e.g. /markets).
+// All other query params are forwarded to the upstream URL.
 
 const GAMMA_BASE = 'https://gamma-api.polymarket.com';
 
 export default async function handler(req, res) {
-  // Allow CORS from same origin
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -19,13 +20,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Extract the path after /api/gamma
-    // req.url will be something like /api/gamma/markets?active=true&...
-    // We need the part after /api/gamma
-    const rawUrl = req.url || '/';
-    // Remove /api/gamma prefix to get the upstream path + query
-    const upstreamPath = rawUrl.replace(/^\/api\/gamma/, '') || '/';
-    const upstreamUrl = `${GAMMA_BASE}${upstreamPath}`;
+    // Extract `path` from query params, forward the rest to upstream
+    const { path: upstreamPath = '/markets', ...rest } = req.query || {};
+
+    // Build upstream query string from remaining params
+    const qs = new URLSearchParams(rest).toString();
+    const upstreamUrl = `${GAMMA_BASE}${upstreamPath}${qs ? '?' + qs : ''}`;
 
     const upstream = await fetch(upstreamUrl, {
       method: 'GET',
