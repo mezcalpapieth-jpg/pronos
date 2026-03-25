@@ -24,7 +24,7 @@ const STEPS = {
   ERROR:    'error',
 };
 
-export default function BetModal({ open, onClose, outcome, outcomePct, marketId, marketTitle, clobTokenId }) {
+export default function BetModal({ open, onClose, outcome, outcomePct, marketId, marketTitle, clobTokenId, isNegRisk = false }) {
   const { authenticated, login } = usePrivy();
   const { wallets } = useWallets();
   const [amount, setAmount]   = useState('');
@@ -119,7 +119,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
         price,
         side:      'BUY',
         size:      numAmount,
-        isNegRisk: true,
+        isNegRisk,
       });
 
       setOrderId(result.orderID || result.id || 'OK');

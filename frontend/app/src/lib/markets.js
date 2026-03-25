@@ -7,6 +7,125 @@
 const MARKETS = [
 
   // ── REAL POLYMARKET MARKETS (live trading) ────────────────────────────────
+
+  // Liga MX — Necaxa vs Mazatlán (3 Apr 2026)
+  {
+    id: 'mex-nec-maz-2026-04-03-nec',
+    category: 'deportes',
+    categoryLabel: 'DEPORTES',
+    icon: '⚽',
+    trending: true,
+    title: '¿Necaxa gana vs Mazatlán? (3 Abr)',
+    deadline: '3 Abr 2026',
+    options: [
+      { label: 'Sí', pct: 58 },
+      { label: 'No', pct: 42 },
+    ],
+    volume: '162',
+    _polyId: '1525611',
+    _conditionId: '0x208cbe4bdcbbb28a8df7ddfb5ad699def622dacbd63a0c4cb96ff8e8df501139',
+    _clobTokenIds: [
+      '77394589314273047176568680691525543304841643154702224462193497636137007217755',
+      '41667149174398288098415469186570470697177723479335914813154161094903025174568',
+    ],
+    _acceptingOrders: true,
+    _isNegRisk: true,
+    _source: 'polymarket',
+  },
+  {
+    id: 'mex-nec-maz-2026-04-03-draw',
+    category: 'deportes',
+    categoryLabel: 'DEPORTES',
+    icon: '⚽',
+    title: '¿Empate: Necaxa vs Mazatlán? (3 Abr)',
+    deadline: '3 Abr 2026',
+    options: [
+      { label: 'Sí', pct: 23 },
+      { label: 'No', pct: 77 },
+    ],
+    volume: '162',
+    _polyId: '1525612',
+    _conditionId: '0x6d8035eeed0290f66da026af25b0de867f890a8b77a58ddf067074070ed3fe32',
+    _clobTokenIds: [
+      '83847016947771134795170932112300428979210353055426758677042559534496504011650',
+      '50201017773113644177600806769566529858789099716179820255494770424826189630279',
+    ],
+    _acceptingOrders: true,
+    _isNegRisk: true,
+    _source: 'polymarket',
+  },
+  {
+    id: 'mex-nec-maz-2026-04-03-maz',
+    category: 'deportes',
+    categoryLabel: 'DEPORTES',
+    icon: '⚽',
+    title: '¿Mazatlán gana vs Necaxa? (3 Abr)',
+    deadline: '3 Abr 2026',
+    options: [
+      { label: 'Sí', pct: 20 },
+      { label: 'No', pct: 80 },
+    ],
+    volume: '162',
+    _polyId: '1525613',
+    _conditionId: '0xb11839be7f61158c33de773cff3675fe8dfc5b493bc49692824d0aa805b2aa1d',
+    _clobTokenIds: [
+      '27037302661516870303741185014477959221601278616311836117438006929915674638424',
+      '25703172273627663511159353403914391421960710522731080286402696740151800928749',
+    ],
+    _acceptingOrders: true,
+    _isNegRisk: true,
+    _source: 'polymarket',
+  },
+
+  // México política
+  {
+    id: 'claudia-sheinbaum-out-as-president-of-mexico-by-june-30-791',
+    category: 'mexico',
+    categoryLabel: 'MÉXICO & CDMX',
+    icon: '🇲🇽',
+    trending: true,
+    title: '¿Sheinbaum deja la presidencia antes del 30 jun?',
+    deadline: '30 Jun 2026',
+    options: [
+      { label: 'Sí', pct: 5 },
+      { label: 'No', pct: 95 },
+    ],
+    volume: '120K',
+    _polyId: '648896',
+    _conditionId: '0x5649a937907e0db6814f3fcbfa68e9f78a700d8c0e38ce652a572d97e205640d',
+    _clobTokenIds: [
+      '99309837432474218579509000241868648485226597214018334052948341435179812240487',
+      '46743651657215767615101494273962569398575819779915611903531671068810271446978',
+    ],
+    _acceptingOrders: true,
+    _isNegRisk: false,
+    _source: 'polymarket',
+  },
+
+  // México inflación anual 2026 — banda más probable: 4.00–4.49%
+  {
+    id: 'will-mexicos-2026-annual-inflation-be-between-4pt00-and-4pt49',
+    category: 'mexico',
+    categoryLabel: 'MÉXICO & CDMX',
+    icon: '📈',
+    title: '¿Inflación anual de México 4.00–4.49% en 2026?',
+    deadline: '8 Ene 2027',
+    options: [
+      { label: 'Sí', pct: 33 },
+      { label: 'No', pct: 67 },
+    ],
+    volume: '685',
+    _polyId: '1353325',
+    _conditionId: '0x92db92b0c2a161440cb8500db98b5883c475e5a5e3b869990fb4276bd1f70a04',
+    _clobTokenIds: [
+      '79402468117150049985541869481803337023372823866628213782593630232147374951131',
+      '41838913932541828561897820972772297490970389046701828827596658443777194835564',
+    ],
+    _acceptingOrders: true,
+    _isNegRisk: true,
+    _source: 'polymarket',
+  },
+
   // FIFA World Cup 2026 — LATAM teams
   {
     id: 'will-argentina-win-the-2026-fifa-world-cup-245',
@@ -28,6 +147,7 @@ const MARKETS = [
       '115428153746996892211798999366308897078723117634059783423375188043903703749062',
     ],
     _acceptingOrders: true,
+    _isNegRisk: false,
     _source: 'polymarket',
   },
   {
@@ -50,6 +170,7 @@ const MARKETS = [
       '52986718774908357330412653486471347449818893503063830313445318937088822580057',
     ],
     _acceptingOrders: true,
+    _isNegRisk: false,
     _source: 'polymarket',
   },
   {
@@ -72,6 +193,7 @@ const MARKETS = [
       '89041006475364789358805026139650677807087698981377208157664917554760333198878',
     ],
     _acceptingOrders: true,
+    _isNegRisk: false,
     _source: 'polymarket',
   },
   {
@@ -94,6 +216,7 @@ const MARKETS = [
       '66826965351166675155887515167306086307412332225034738589879767944935462342380',
     ],
     _acceptingOrders: true,
+    _isNegRisk: false,
     _source: 'polymarket',
   },
   {
@@ -115,6 +238,7 @@ const MARKETS = [
       '19291692040378529618917910599727571242305935029274321291612270922648172794670',
     ],
     _acceptingOrders: true,
+    _isNegRisk: false,
     _source: 'polymarket',
   },
   {
@@ -137,6 +261,7 @@ const MARKETS = [
       '107098542201783055920424291421395338045200803098880539507226838033025467884946',
     ],
     _acceptingOrders: true,
+    _isNegRisk: false,
     _source: 'polymarket',
   },
 
@@ -161,6 +286,7 @@ const MARKETS = [
       '79191939610100241429039499950443680906623179487184628479206155805558220344190',
     ],
     _acceptingOrders: true,
+    _isNegRisk: false,
     _source: 'polymarket',
   },
 
@@ -185,6 +311,7 @@ const MARKETS = [
       '6638895201070039547671726076818069674458322142629985177641367819559425166288',
     ],
     _acceptingOrders: true,
+    _isNegRisk: false,
     _source: 'polymarket',
   },
 
@@ -209,6 +336,7 @@ const MARKETS = [
       '64087619211543545431479218048939484178441767712621033463416084593776314629222',
     ],
     _acceptingOrders: true,
+    _isNegRisk: false,
     _source: 'polymarket',
   },
 

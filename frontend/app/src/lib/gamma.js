@@ -71,6 +71,7 @@ export function gmNormalize(pm) {
     _conditionId:     pm.conditionId || null,
     _clobTokenIds:    pm.clobTokenIds || [],
     _acceptingOrders: pm.acceptingOrders !== false,
+    _isNegRisk:       !!pm.negRisk,
     _image:           pm.image || null,
     _source:          'polymarket',
   };

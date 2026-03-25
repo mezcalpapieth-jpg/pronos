@@ -65,7 +65,7 @@ export default function MarketDetail() {
 
   const [market, setMarket] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [betModal, setBetModal] = useState({ open: false, outcome: '', pct: 0, clobTokenId: null });
+  const [betModal, setBetModal] = useState({ open: false, outcome: '', pct: 0, clobTokenId: null, isNegRisk: false });
 
   useEffect(() => {
     if (!marketId) {
@@ -105,7 +105,8 @@ export default function MarketDetail() {
 
   const openBet = (outcome, pct, optionIndex) => {
     const clobTokenId = market?._clobTokenIds?.[optionIndex ?? 0] ?? null;
-    setBetModal({ open: true, outcome, pct, clobTokenId });
+    const isNegRisk = market?._isNegRisk ?? false;
+    setBetModal({ open: true, outcome, pct, clobTokenId, isNegRisk });
   };
 
   if (loading) {
@@ -276,6 +277,7 @@ export default function MarketDetail() {
         marketId={market.id}
         marketTitle={market.title}
         clobTokenId={betModal.clobTokenId}
+        isNegRisk={betModal.isNegRisk}
       />
     </>
   );
