@@ -1,0 +1,303 @@
+/* ============================================================
+   PRONOS MVP — Component-specific styles
+   (Styles not already covered by the shared CSS)
+============================================================ */
+
+/* ── MVP Banner ─────────────────────────────────────────────── */
+.mvp-banner {
+  background: rgba(0, 232, 122, 0.08);
+  border-bottom: 1px solid rgba(0, 232, 122, 0.2);
+  text-align: center;
+  padding: 7px 16px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--green);
+}
+
+/* ── Nav: authenticated user pill ───────────────────────────── */
+.nav-user-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 232, 122, 0.08);
+  border: 1px solid rgba(0, 232, 122, 0.25);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--green);
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.nav-user-pill:hover {
+  background: rgba(0, 232, 122, 0.14);
+  box-shadow: 0 0 16px rgba(0, 232, 122, 0.15);
+}
+.nav-user-pill .user-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+}
+
+/* ── Nav dropdown ────────────────────────────────────────────── */
+.nav-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  min-width: 160px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  animation: modal-in 0.18s ease;
+  z-index: 200;
+}
+.nav-dropdown-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.nav-dropdown-item:hover {
+  background: var(--surface3);
+  color: var(--text-primary);
+}
+
+/* ── MarketCard badges ───────────────────────────────────────── */
+.mock-card-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  padding: 3px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+.mock-card-badge.live {
+  background: rgba(0, 232, 122, 0.12);
+  border: 1px solid rgba(0, 232, 122, 0.3);
+  color: var(--green);
+}
+.mock-card-badge.trending {
+  background: rgba(245, 200, 66, 0.1);
+  border: 1px solid rgba(245, 200, 66, 0.25);
+  color: var(--gold);
+}
+
+/* ── MarketCard bar ──────────────────────────────────────────── */
+.mock-card-bar-wrap {
+  height: 3px;
+  background: var(--surface3);
+  border-radius: 2px;
+  margin-top: 12px;
+  overflow: hidden;
+}
+.mock-card-bar-fill {
+  height: 100%;
+  background: var(--green);
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+/* ── MarketCard option pills ─────────────────────────────────── */
+.mock-card-opt {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.mock-card-opt:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: var(--surface3);
+}
+.mock-card-opt.yes {
+  border-color: rgba(0, 232, 122, 0.2);
+  background: rgba(0, 232, 122, 0.05);
+}
+.mock-card-opt.yes:hover {
+  border-color: rgba(0, 232, 122, 0.4);
+  background: rgba(0, 232, 122, 0.1);
+}
+.mock-card-opt-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+.mock-card-opt-pct {
+  font-family: var(--font-display);
+  font-size: 22px;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+}
+.mock-card-opt.yes .mock-card-opt-pct {
+  color: var(--green);
+}
+
+/* ── Bet Modal extras ────────────────────────────────────────── */
+.bet-outcome-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 232, 122, 0.08);
+  border: 1px solid rgba(0, 232, 122, 0.25);
+  border-radius: 8px;
+  padding: 6px 12px;
+  margin-bottom: 16px;
+}
+.bet-outcome-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--green);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.bet-outcome-pct {
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--green);
+}
+
+.bet-amount-wrap {
+  margin-bottom: 12px;
+}
+.bet-amount-input {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--text-primary);
+  width: 100%;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.bet-amount-input:focus {
+  border-color: var(--border-active);
+}
+.bet-amount-input::placeholder {
+  color: var(--text-muted);
+}
+
+.bet-quick-btns {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.bet-quick-btn {
+  flex: 1;
+  padding: 8px 0;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, color 0.2s;
+}
+.bet-quick-btn:hover,
+.bet-quick-btn.active {
+  border-color: var(--border-active);
+  background: var(--green-dim);
+  color: var(--green);
+}
+
+.bet-payout-info {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 16px;
+}
+.bet-payout-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+}
+.bet-payout-row:last-child {
+  border-bottom: none;
+}
+
+/* ── WC Card extras (hero) ───────────────────────────────────── */
+.wc-odds-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.wc-odds-btn:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: var(--surface3);
+}
+.wc-odds-btn.yes {
+  border-color: rgba(0, 232, 122, 0.25);
+  background: rgba(0, 232, 122, 0.06);
+}
+.wc-odds-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+.wc-odds-val {
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: var(--text-primary);
+}
+.wc-odds-val.green {
+  color: var(--green);
+}
+.wc-vol {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+}
+
+/* ── Responsive ──────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .mvp-banner {
+    font-size: 10px;
+    padding: 6px 12px;
+  }
+
+  .nav-user-pill {
+    font-size: 10px;
+    padding: 5px 10px;
+  }
+}
