@@ -1,9 +1,11 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PRONOS — El mercado de predicciones de Latinoamérica</title>
+  <!-- Anti-flash: set theme before first paint -->
+  <script>(function(){var s=localStorage.getItem('pronos-theme');var p=window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';document.documentElement.setAttribute('data-theme',s||p);})();</script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -119,6 +121,7 @@
     <a href="#market">El mercado</a>
     <a href="/portfolio">Portafolio</a>
     <a href="#how-it-works">Cómo funciona</a>
+    <button class="btn-theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Cambiar tema"></button>
     <div id="navWalletArea">
       <button class="btn-nav-cta" onclick="connectWallet()">Conectar wallet</button>
     </div>

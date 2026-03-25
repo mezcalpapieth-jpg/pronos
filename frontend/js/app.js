@@ -1,3 +1,19 @@
+// ─── THEME ───────────────────────────────────────────────────────────────────
+function initTheme() {
+  const saved = localStorage.getItem('pronos-theme');
+  const preferred = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', saved || preferred);
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme');
+  const next = current === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('pronos-theme', next);
+}
+
+document.addEventListener('DOMContentLoaded', initTheme);
+
 // ─── CONFIG ─────────────────────────────────────────────────────────────────
 const PRONOS_BET_ADDRESS = '0x9a03F59DD857856d930b12f5da63c586d824804D';
 const USDC_ADDRESS       = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
