@@ -1,9 +1,218 @@
 // ─── MARKETS DATA ─────────────────────────────────────────────────────────────
-// Mock markets (local fallback). Used when Gamma API is unavailable.
+// Curated pinned markets — always shown even when Gamma API is unavailable.
+// Includes real Polymarket markets (with live clobTokenIds) + local-only markets.
+//
 // Categories: 'musica' | 'mexico' | 'politica' | 'deportes' | 'crypto'
 
 const MARKETS = [
-  // ── MÚSICA & FARÁNDULA ──────────────────────────────────────────────────
+
+  // ── REAL POLYMARKET MARKETS (live trading) ────────────────────────────────
+  // FIFA World Cup 2026 — LATAM teams
+  {
+    id: 'will-argentina-win-the-2026-fifa-world-cup-245',
+    category: 'deportes',
+    categoryLabel: 'DEPORTES',
+    icon: '⚽',
+    trending: true,
+    title: '¿Argentina gana el Mundial 2026?',
+    deadline: '20 Jul 2026',
+    options: [
+      { label: 'Sí', pct: 10 },
+      { label: 'No', pct: 90 },
+    ],
+    volume: '5.1M',
+    _polyId: '558938',
+    _conditionId: '0x0c4cd2055d6ea89354ffddc55d6dbcef9355748112ea952fc925f3db6a5c457f',
+    _clobTokenIds: [
+      '18812649149814341758733697580460697418474693998558159483117100240528657629879',
+      '115428153746996892211798999366308897078723117634059783423375188043903703749062',
+    ],
+    _acceptingOrders: true,
+    _source: 'polymarket',
+  },
+  {
+    id: 'will-brazil-win-the-2026-fifa-world-cup-183',
+    category: 'deportes',
+    categoryLabel: 'DEPORTES',
+    icon: '⚽',
+    trending: true,
+    title: '¿Brasil gana el Mundial 2026?',
+    deadline: '20 Jul 2026',
+    options: [
+      { label: 'Sí', pct: 9 },
+      { label: 'No', pct: 91 },
+    ],
+    volume: '5.8M',
+    _polyId: '558937',
+    _conditionId: '0x30d55d8124ee1e12dabe89201badc45669b81dff69e4ce44d961f32878ec178a',
+    _clobTokenIds: [
+      '27576533317283401577758999384642760405921738493660383550832555714312627457443',
+      '52986718774908357330412653486471347449818893503063830313445318937088822580057',
+    ],
+    _acceptingOrders: true,
+    _source: 'polymarket',
+  },
+  {
+    id: 'will-mexico-win-the-2026-fifa-world-cup-529',
+    category: 'deportes',
+    categoryLabel: 'DEPORTES',
+    icon: '⚽',
+    trending: true,
+    title: '¿México gana el Mundial 2026?',
+    deadline: '20 Jul 2026',
+    options: [
+      { label: 'Sí', pct: 1 },
+      { label: 'No', pct: 99 },
+    ],
+    volume: '6.4M',
+    _polyId: '558945',
+    _conditionId: '0x5ccfe1b69a582d2985db08a8481a0d74c314b1fce9b4711ae2efb2c6467fe6aa',
+    _clobTokenIds: [
+      '22587775301869146748237913050505932485648958481571808324285560650057390882036',
+      '89041006475364789358805026139650677807087698981377208157664917554760333198878',
+    ],
+    _acceptingOrders: true,
+    _source: 'polymarket',
+  },
+  {
+    id: 'will-colombia-win-the-2026-fifa-world-cup-734',
+    category: 'deportes',
+    categoryLabel: 'DEPORTES',
+    icon: '⚽',
+    trending: true,
+    title: '¿Colombia gana el Mundial 2026?',
+    deadline: '20 Jul 2026',
+    options: [
+      { label: 'Sí', pct: 2 },
+      { label: 'No', pct: 98 },
+    ],
+    volume: '6.7M',
+    _polyId: '558947',
+    _conditionId: '0xe99cc59f32b10d23acf196d1a0e8264ea30fca198428acadd3464b06ff60e771',
+    _clobTokenIds: [
+      '98803390175521456712653678280474920637934596234667490983228578374641217211132',
+      '66826965351166675155887515167306086307412332225034738589879767944935462342380',
+    ],
+    _acceptingOrders: true,
+    _source: 'polymarket',
+  },
+  {
+    id: 'will-uruguay-win-the-2026-fifa-world-cup-932',
+    category: 'deportes',
+    categoryLabel: 'DEPORTES',
+    icon: '⚽',
+    title: '¿Uruguay gana el Mundial 2026?',
+    deadline: '20 Jul 2026',
+    options: [
+      { label: 'Sí', pct: 1 },
+      { label: 'No', pct: 99 },
+    ],
+    volume: '6.4M',
+    _polyId: '558944',
+    _conditionId: '0x7876851632c295043c66536150a304cb785abdf712ba8489d298c6e6926be106',
+    _clobTokenIds: [
+      '97239126062673310243763617236644392945530356142765650402171508075574679292913',
+      '19291692040378529618917910599727571242305935029274321291612270922648172794670',
+    ],
+    _acceptingOrders: true,
+    _source: 'polymarket',
+  },
+  {
+    id: 'will-neymar-play-in-the-2026-fifa-world-cup-for-brazil',
+    category: 'deportes',
+    categoryLabel: 'DEPORTES',
+    icon: '⚽',
+    trending: true,
+    title: '¿Neymar juega en el Mundial 2026?',
+    deadline: '19 Jul 2026',
+    options: [
+      { label: 'Sí', pct: 33 },
+      { label: 'No', pct: 67 },
+    ],
+    volume: '52K',
+    _polyId: '1630444',
+    _conditionId: '0xb60c044bba6f7958768691345df1e102448a5b7ef16e4a08879bb10483fb4567',
+    _clobTokenIds: [
+      '80207472021384297118973019586454872993681152265019994763786199494584900056700',
+      '107098542201783055920424291421395338045200803098880539507226838033025467884946',
+    ],
+    _acceptingOrders: true,
+    _source: 'polymarket',
+  },
+
+  // Brazil 2026 Presidential Election
+  {
+    id: 'will-luiz-incio-lula-da-silva-win-the-2026-brazilian-presidential-election',
+    category: 'politica',
+    categoryLabel: 'POLÍTICA INTERNACIONAL',
+    icon: '🗳️',
+    trending: true,
+    title: '¿Lula gana la presidencia de Brasil 2026?',
+    deadline: '4 Oct 2026',
+    options: [
+      { label: 'Sí', pct: 44 },
+      { label: 'No', pct: 56 },
+    ],
+    volume: '4.1M',
+    _polyId: '601819',
+    _conditionId: '0xdf8e2dc5860027decbe6164555c3c1c9645c3bd33e16b9dc57ca87125047d4a8',
+    _clobTokenIds: [
+      '30630994248667897740988010928640156931882346081873066002335460180076741328029',
+      '79191939610100241429039499950443680906623179487184628479206155805558220344190',
+    ],
+    _acceptingOrders: true,
+    _source: 'polymarket',
+  },
+
+  // Venezuela leadership
+  {
+    id: 'will-delcy-rodrguez-be-the-leader-of-venezuela-end-of-2026',
+    category: 'politica',
+    categoryLabel: 'POLÍTICA INTERNACIONAL',
+    icon: '🇻🇪',
+    trending: true,
+    title: '¿Delcy Rodríguez lidera Venezuela a fin de 2026?',
+    deadline: '31 Dic 2026',
+    options: [
+      { label: 'Sí', pct: 64 },
+      { label: 'No', pct: 36 },
+    ],
+    volume: '1.2M',
+    _polyId: '1105742',
+    _conditionId: '0xa01d48a973e40770719dab42faf1aeae5da4376d9eca46e77265c7551d1be0f7',
+    _clobTokenIds: [
+      '38667196958602416137463628517439560119304765709104570192447644733106171420112',
+      '6638895201070039547671726076818069674458322142629985177641367819559425166288',
+    ],
+    _acceptingOrders: true,
+    _source: 'polymarket',
+  },
+
+  // Bitcoin
+  {
+    id: 'will-bitcoin-dip-to-65k-in-march-2026',
+    category: 'crypto',
+    categoryLabel: 'CRYPTO',
+    icon: '₿',
+    trending: true,
+    title: '¿Bitcoin baja a $65K en marzo 2026?',
+    deadline: '1 Abr 2026',
+    options: [
+      { label: 'Sí', pct: 17 },
+      { label: 'No', pct: 83 },
+    ],
+    volume: '7.9M',
+    _polyId: '1473072',
+    _conditionId: '0x36912c9832f0fd104d734b579fb9b3a1b31bbdc946a67356723407e3bdc96dbc',
+    _clobTokenIds: [
+      '112493481455469093769281852159558847572704253342416714876781522096078968514094',
+      '64087619211543545431479218048939484178441767712621033463416084593776314629222',
+    ],
+    _acceptingOrders: true,
+    _source: 'polymarket',
+  },
+
+  // ── LOCAL-ONLY MOCK MARKETS (no live trading yet) ─────────────────────────
   {
     id: 'bad-bunny-sencillo',
     category: 'musica',
@@ -44,34 +253,6 @@ const MARKETS = [
     ],
     volume: '3,100',
   },
-
-  // ── MÉXICO & CDMX ────────────────────────────────────────────────────────
-  {
-    id: 'sismo-cdmx',
-    category: 'mexico',
-    categoryLabel: 'MÉXICO & CDMX',
-    icon: '🌍',
-    title: '¿Sismo >5.0 en CDMX antes del 30 jun?',
-    deadline: '30 Jun 2026',
-    options: [
-      { label: 'Sí', pct: 71 },
-      { label: 'No', pct: 29 },
-    ],
-    volume: '5,600',
-  },
-  {
-    id: 'tren-maya-descarrila',
-    category: 'mexico',
-    categoryLabel: 'MÉXICO & CDMX',
-    icon: '🚂',
-    title: '¿Se descarrila el Tren Maya antes del 2027?',
-    deadline: '31 Dic 2026',
-    options: [
-      { label: 'Sí', pct: 38 },
-      { label: 'No', pct: 62 },
-    ],
-    volume: '1,900',
-  },
   {
     id: 'dolar-22-mxn',
     category: 'mexico',
@@ -86,8 +267,6 @@ const MARKETS = [
     ],
     volume: '8,400',
   },
-
-  // ── POLÍTICA INTERNACIONAL ───────────────────────────────────────────────
   {
     id: 'trump-visita-mexico',
     category: 'politica',
@@ -103,34 +282,6 @@ const MARKETS = [
     volume: '6,700',
   },
   {
-    id: 'venezuela-elecciones',
-    category: 'politica',
-    categoryLabel: 'POLÍTICA INTERNACIONAL',
-    icon: '🗳️',
-    title: '¿Venezuela celebra elecciones libres antes del 30 jun?',
-    deadline: '30 Jun 2026',
-    options: [
-      { label: 'Sí', pct: 3 },
-      { label: 'No', pct: 97 },
-    ],
-    volume: '2,100',
-  },
-  {
-    id: 'cuba-embargo',
-    category: 'politica',
-    categoryLabel: 'POLÍTICA INTERNACIONAL',
-    icon: '🇨🇺',
-    title: '¿Se levanta el embargo de Cuba antes del 30 jun?',
-    deadline: '30 Jun 2026',
-    options: [
-      { label: 'Sí', pct: 3 },
-      { label: 'No', pct: 97 },
-    ],
-    volume: '1,450',
-  },
-
-  // ── DEPORTES ─────────────────────────────────────────────────────────────
-  {
     id: 'checo-puntos',
     category: 'deportes',
     categoryLabel: 'DEPORTES',
@@ -142,20 +293,6 @@ const MARKETS = [
       { label: 'No', pct: 39 },
     ],
     volume: '7,300',
-  },
-  {
-    id: 'mundial-mexico-gana',
-    category: 'deportes',
-    categoryLabel: 'DEPORTES',
-    icon: '⚽',
-    trending: true,
-    title: '¿México gana su primer partido del Mundial 2026?',
-    deadline: '15 Jun 2026',
-    options: [
-      { label: 'Sí', pct: 54 },
-      { label: 'No', pct: 46 },
-    ],
-    volume: '23,400',
   },
   {
     id: 'sga-mvp',
@@ -171,8 +308,6 @@ const MARKETS = [
     ],
     volume: '18,200',
   },
-
-  // ── CRYPTO ───────────────────────────────────────────────────────────────
   {
     id: 'bitcoin-120k',
     category: 'crypto',
@@ -199,19 +334,6 @@ const MARKETS = [
       { label: 'No', pct: 72 },
     ],
     volume: '9,600',
-  },
-  {
-    id: 'sol-300',
-    category: 'crypto',
-    categoryLabel: 'CRYPTO',
-    icon: '◎',
-    title: '¿Solana supera $300 antes del 30 jun?',
-    deadline: '30 Jun 2026',
-    options: [
-      { label: 'Sí', pct: 35 },
-      { label: 'No', pct: 65 },
-    ],
-    volume: '6,100',
   },
 ];
 
