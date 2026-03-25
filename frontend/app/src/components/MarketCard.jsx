@@ -1,0 +1,64 @@
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+
+export default function MarketCard({ market }) {
+  const navigate = useNavigate();
+
+  const handleClick = () => {
+    navigate(`/market?id=${market.id}`);
+  };
+
+  const topOption = market.options?.[0];
+  const pct = topOption?.pct ?? 50;
+
+  return (
+    <div className="mock-card" onClick={handleClick} role="button" tabIndex={0}
+      onKeyDown={e => e.key === 'Enter' && handleClick()}
+    >
+      <div className="mock-card-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 16 }}>{market.icon}</span>
+          <span className="mock-card-cat">{market.categoryLabel}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {market.trending && (
+            <span className="mock-card-badge trending">🔥 TRENDING</span>
+          )}
+          {market._source === 'polymarket' && (
+            <span className="mock-card-badge live">LIVE</span>
+          )}
+        </div>
+      </div>
+
+      <div className="mock-card-body">
+        <p className="mock-card-title">{market.title}</p>
+
+        <div className="mock-card-opts">
+          {(market.options || []).map((opt, i) => (
+            <div key={i} className={`mock-card-opt ${i === 0 ? 'yes' : 'no'}`}>
+              <span className="mock-card-opt-label">{opt.label}</span>
+              <span className="mock-card-opt-pct">{opt.pct}%</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Probability bar */}
+        <div className="mock-card-bar-wrap">
+          <div
+            className="mock-card-bar-fill"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      </div>
+
+      <div className="mock-card-footer">
+        <div className="mock-card-vol">
+          VOL <span>${market.volume}</span>
+        </div>
+        <div className="mock-card-deadline">
+          {market.deadline}
+        </div>
+      </div>
+    </div>
+  );
+}

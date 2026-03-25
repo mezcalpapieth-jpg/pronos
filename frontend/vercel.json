@@ -1,4 +1,11 @@
 {
+  "buildCommand": "cd app && npm ci && npm run build",
+  "outputDirectory": ".",
   "cleanUrls": true,
-  "trailingSlash": false
+  "trailingSlash": false,
+  "rewrites": [
+    { "source": "/api/gamma/:path*", "destination": "https://gamma-api.polymarket.com/:path*" },
+    { "source": "/mvp/market", "destination": "/mvp/index.html" },
+    { "source": "/mvp", "destination": "/mvp/index.html" }
+  ]
 }

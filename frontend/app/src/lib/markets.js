@@ -1,8 +1,6 @@
-// ─── MARKETS DATA ────────────────────────────────────────────────────────────
-// Mercados mock (sin backend). Para agregar mercados, edita este array.
-// El mercado on-chain (México vs SA) se maneja directamente en app.js.
-//
-// Categorías: 'musica' | 'mexico' | 'politica' | 'deportes'
+// ─── MARKETS DATA ─────────────────────────────────────────────────────────────
+// Mock markets (local fallback). Used when Gamma API is unavailable.
+// Categories: 'musica' | 'mexico' | 'politica' | 'deportes' | 'crypto'
 
 const MARKETS = [
   // ── MÚSICA & FARÁNDULA ──────────────────────────────────────────────────
@@ -216,3 +214,5 @@ const MARKETS = [
     volume: '6,100',
   },
 ];
+
+export default MARKETS;

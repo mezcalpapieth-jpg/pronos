@@ -345,10 +345,11 @@ function renderMockMarkets(filter) {
   // on-chain card is removed from HTML, guard in case element still exists
   if (onchainWrap) onchainWrap.style.display = 'none';
 
-  const showAll = filter === 'todos' || filter === 'trending';
-  const filtered = showAll
+  const filtered = filter === 'todos'
     ? MARKETS
-    : MARKETS.filter(m => m.category === filter);
+    : filter === 'trending'
+      ? MARKETS.filter(m => m.trending)
+      : MARKETS.filter(m => m.category === filter);
 
   grid.innerHTML = filtered.map(m => `
     <div class="mock-card" title="${m.title}" onclick="location.href='/market?id=${m.id}'" style="cursor:pointer">
@@ -389,7 +390,7 @@ function initCategoryFilters() {
       const filter = btn.dataset.filter;
       if (filter === 'trending') {
         setHeroVisible(true);
-        renderMockMarkets('todos');
+        renderMockMarkets('trending');
       } else {
         setHeroVisible(false);
         renderMockMarkets(filter);
@@ -399,9 +400,9 @@ function initCategoryFilters() {
       }
     });
   });
-  // default: trending tab = show hero + all markets
+  // default: trending tab = show hero + trending markets
   setHeroVisible(true);
-  renderMockMarkets('todos');
+  renderMockMarkets('trending');
 }
 
 // ─── PORTFOLIO MOCK DATA ─────────────────────────────────────────────────────
