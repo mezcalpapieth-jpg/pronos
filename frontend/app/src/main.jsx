@@ -16,13 +16,12 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         appearance: {
           theme: 'dark',
           accentColor: '#00E87A',
-          logo: 'https://pronos.io/img/pronos-logo.png',
         },
         embeddedWallets: {
           createOnLogin: 'users-without-wallets',
         },
         defaultChain: polygon,
-        supportedChains: [polygon, base],
+        supportedChains: [polygon],
       }}
     >
       <App />
