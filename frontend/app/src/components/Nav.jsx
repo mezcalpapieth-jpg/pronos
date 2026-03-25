@@ -14,7 +14,6 @@ export default function Nav() {
   const [theme, setTheme] = useState(getInitialTheme);
   const dropdownRef = useRef(null);
 
-  // Apply theme to <html> on mount and on change
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('pronos-theme', theme);
@@ -38,7 +37,6 @@ export default function Nav() {
 
   const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
 
-  // Get display label from Privy user
   const userLabel = (() => {
     if (!user) return '';
     if (user.email?.address) {
@@ -71,15 +69,10 @@ export default function Nav() {
 
         <div style={{ position: 'relative' }} ref={dropdownRef}>
           {!ready ? (
-            <button className="btn-nav-cta" disabled style={{ opacity: 0.5 }}>
-              …
-            </button>
+            <button className="btn-nav-cta" disabled style={{ opacity: 0.5 }}>…</button>
           ) : authenticated ? (
             <>
-              <button
-                className="nav-user-pill"
-                onClick={() => setDropdownOpen(o => !o)}
-              >
+              <button className="nav-user-pill" onClick={() => setDropdownOpen(o => !o)}>
                 <span className="user-dot" />
                 {userLabel}
                 <span style={{ marginLeft: 4, opacity: 0.5 }}>▾</span>
@@ -96,9 +89,7 @@ export default function Nav() {
               )}
             </>
           ) : (
-            <button className="btn-nav-cta" onClick={login}>
-              Conectar
-            </button>
+            <button className="btn-nav-cta" onClick={login}>Conectar</button>
           )}
         </div>
       </div>

@@ -301,19 +301,3 @@
     padding: 5px 10px;
   }
 }
-
-/* ── Light mode MVP overrides ────────────────────────────── */
-html[data-theme="light"] .mvp-banner {
-  background: rgba(0, 168, 88, 0.08);
-  border-bottom-color: rgba(0, 168, 88, 0.2);
-}
-html[data-theme="light"] .nav-user-pill {
-  background: rgba(0, 168, 88, 0.08);
-  border-color: rgba(0, 168, 88, 0.25);
-}
-html[data-theme="light"] .nav-user-pill:hover {
-  background: rgba(0, 168, 88, 0.14);
-}
-html[data-theme="light"] .user-dot {
-  box-shadow: 0 0 6px var(--green);
-}
