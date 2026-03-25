@@ -1,1 +1,7 @@
 .vercel
+node_modules/
+app/node_modules/
+app/dist/
+mvp/dist/
+package-lock.json
+app/package-lock.json

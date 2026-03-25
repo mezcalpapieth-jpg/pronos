@@ -12,7 +12,16 @@ export default function Nav() {
   const [scrolled, setScrolled] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [theme, setTheme] = useState(getInitialTheme);
+  const [username, setUsername] = useState(null);
   const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    if (!authenticated || !user?.id) { setUsername(null); return; }
+    fetch(`/api/user?privyId=${encodeURIComponent(user.id)}`)
+      .then(r => r.json())
+      .then(d => { if (d.username) setUsername(d.username); })
+      .catch(() => {});
+  }, [authenticated, user?.id]);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -39,13 +48,10 @@ export default function Nav() {
 
   const userLabel = (() => {
     if (!user) return '';
-    if (user.email?.address) {
-      const e = user.email.address;
-      return e.length > 20 ? e.slice(0, 8) + '…' + e.slice(-8) : e;
-    }
+    if (username) return username;
     const wallet = user.wallet?.address;
     if (wallet) return wallet.slice(0, 6) + '…' + wallet.slice(-4);
-    return 'Usuario';
+    return '…';
   })();
 
   return (
@@ -56,7 +62,7 @@ export default function Nav() {
 
       <div className="nav-links">
         <a href="#markets">El mercado</a>
-        <a href="#portfolio">Portafolio</a>
+        <a href="/mvp/portfolio">Portafolio</a>
         <a href="#how-it-works">Cómo funciona</a>
       </div>
 
