@@ -28,7 +28,7 @@
       <button class="bet-modal-close" onclick="closeBetModal()">×</button>
     </div>
     <div class="bet-outcome-tag" id="betOutcomeTag">🇲🇽 México gana</div>
-    <div class="bet-input-label">MONTO A APOSTAR</div>
+    <div class="bet-input-label">MONTO A INVERTIR</div>
     <div class="bet-input-row">
       <input class="bet-input" id="betAmount" type="number" min="1" step="1" placeholder="10" oninput="updatePayoutEstimate()" />
       <div class="bet-input-suffix">USDC</div>
@@ -41,7 +41,7 @@
     </div>
     <div class="bet-payout-box">
       <div class="bet-payout-row">
-        <span class="bet-payout-label">APUESTA</span>
+        <span class="bet-payout-label">INVIERTE</span>
         <span class="bet-payout-val" id="betSummaryAmount">—</span>
       </div>
       <div class="bet-payout-row">
@@ -53,7 +53,7 @@
         <span class="bet-payout-val">ya incluida</span>
       </div>
     </div>
-    <button class="bet-submit-btn" id="betSubmitBtn" onclick="submitBet()">Confirmar apuesta</button>
+    <button class="bet-submit-btn" id="betSubmitBtn" onclick="submitBet()">Confirmar inversion</button>
     <div class="bet-warning">⚡ Transacción en Base Sepolia · Fuera de red de prueba</div>
   </div>
 </div>
@@ -174,7 +174,7 @@
       <div class="hero-stats">
         <div class="hero-stat">
           <span class="hero-stat-val"><span class="green" id="heroTotalPool">$0</span></span>
-          <span class="hero-stat-label">Volumen apostado</span>
+          <span class="hero-stat-label">Volumen invertido</span>
         </div>
         <div class="hero-stat">
           <span class="hero-stat-val"><span class="green">11 Jun</span></span>
@@ -285,11 +285,11 @@
         <div class="portfolio-stats-row">
           <div class="portfolio-stat">
             <div class="portfolio-stat-val" id="pfTotalBet">—</div>
-            <div class="portfolio-stat-label">Total apostado</div>
+            <div class="portfolio-stat-label">Total invertido</div>
           </div>
           <div class="portfolio-stat">
             <div class="portfolio-stat-val green" id="pfActiveBets">—</div>
-            <div class="portfolio-stat-label">Apuestas activas</div>
+            <div class="portfolio-stat-label">Inversiones activas</div>
           </div>
           <div class="portfolio-stat">
             <div class="portfolio-stat-val gold" id="pfPotentialWin">—</div>
