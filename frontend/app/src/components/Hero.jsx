@@ -1,12 +1,51 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
+import { useNavigate } from 'react-router-dom';
+import MARKETS from '../lib/markets.js';
+
+// Only featured real Polymarket markets in the carousel
+const FEATURED = MARKETS.filter(m => m._source === 'polymarket' && m.trending);
 
 export default function Hero() {
   const { authenticated, login } = usePrivy();
+  const navigate = useNavigate();
+  const [current, setCurrent] = useState(0);
+  const [animating, setAnimating] = useState(false);
+  const timerRef = useRef(null);
+
+  const goTo = (idx) => {
+    if (idx === current || animating) return;
+    setAnimating(true);
+    setTimeout(() => {
+      setCurrent(idx);
+      setAnimating(false);
+    }, 180);
+  };
+
+  const startTimer = () => {
+    clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setAnimating(true);
+      setTimeout(() => {
+        setCurrent(c => (c + 1) % FEATURED.length);
+        setAnimating(false);
+      }, 180);
+    }, 3800);
+  };
+
+  useEffect(() => {
+    startTimer();
+    return () => clearInterval(timerRef.current);
+  }, []);
+
+  const market = FEATURED[current] || FEATURED[0];
+
+  const handleCardClick = () => navigate(`/market?id=${market.id}`);
 
   return (
     <section id="hero">
       <div className="hero-inner">
+        {/* ── Left copy ─────────────────────────────── */}
         <div className="hero-left">
           <div className="hero-badge">
             <span className="dot" />
@@ -26,17 +65,11 @@ export default function Hero() {
 
           <div className="hero-btns">
             {authenticated ? (
-              <a href="#markets" className="btn-primary">
-                Ver Mercados
-              </a>
+              <a href="#markets" className="btn-primary">Ver Mercados</a>
             ) : (
-              <button className="btn-primary" onClick={login}>
-                Empezar a Predecir
-              </button>
+              <button className="btn-primary" onClick={login}>Empezar a Predecir</button>
             )}
-            <a href="#how-it-works" className="btn-ghost">
-              Cómo funciona
-            </a>
+            <a href="#how-it-works" className="btn-ghost">Cómo funciona</a>
           </div>
 
           <div className="hero-stats">
@@ -55,51 +88,76 @@ export default function Hero() {
           </div>
         </div>
 
-        {/* Hero right: Featured market card */}
+        {/* ── Right: live market carousel ───────────── */}
         <div className="hero-right">
-          <div className="wc-card">
-            <div className="wc-card-header">
-              <div className="wc-card-header-left">
-                <span className="dot" style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--green)', display: 'inline-block', boxShadow: '0 0 8px var(--green)', animation: 'pulse-dot 1.4s ease-in-out infinite' }} />
-                <span className="wc-card-badge">MUNDIAL 2026 · DESTACADO</span>
+          <div
+            className={`hero-carousel-card${animating ? ' hero-carousel-card--fade' : ''}`}
+            onClick={handleCardClick}
+            role="button"
+            tabIndex={0}
+            onKeyDown={e => e.key === 'Enter' && handleCardClick()}
+          >
+            {/* Header */}
+            <div className="hero-carousel-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span
+                  style={{
+                    width: 7, height: 7, borderRadius: '50%',
+                    background: 'var(--green)', display: 'inline-block',
+                    boxShadow: '0 0 8px var(--green)',
+                    animation: 'pulse-dot 1.4s ease-in-out infinite',
+                  }}
+                />
+                <span className="hero-carousel-cat">
+                  {market.icon}&nbsp;{market.categoryLabel}
+                </span>
               </div>
-              <span className="wc-card-league">11 Jun 2026</span>
+              <span className="hero-carousel-badge">LIVE · POLYMARKET</span>
             </div>
 
-            <div className="wc-teams-row">
-              <div className="wc-team">
-                <div className="wc-flag">🇲🇽</div>
-                <span className="wc-team-name">MÉXICO</span>
-                <span className="wc-team-sub">Grupo A</span>
+            {/* Question */}
+            <p className="hero-carousel-title">{market.title}</p>
+
+            {/* Odds buttons */}
+            <div className="wc-odds-three">
+              {(market.options || []).map((opt, i) => (
+                <button
+                  key={i}
+                  className={`wc-odds-btn${i === 0 ? ' yes' : ''}`}
+                  onClick={e => { e.stopPropagation(); handleCardClick(); }}
+                >
+                  <span className="wc-odds-label">{opt.label}</span>
+                  <span className={`wc-odds-val${i === 0 ? ' green' : ''}`}>{opt.pct}%</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Footer: volume + deadline + dots */}
+            <div className="hero-carousel-footer">
+              <div style={{ display: 'flex', gap: 16 }}>
+                <span className="wc-vol">VOL&nbsp;<strong style={{ color: 'var(--green)' }}>${market.volume}</strong></span>
+                <span className="wc-vol">{market.deadline}</span>
               </div>
-              <span className="wc-vs">VS</span>
-              <div className="wc-team">
-                <div className="wc-flag dim">🇿🇦</div>
-                <span className="wc-team-name">SUDÁFRICA</span>
-                <span className="wc-team-sub">Grupo A</span>
+
+              {/* Dot indicators */}
+              <div className="hero-carousel-dots">
+                {FEATURED.map((_, i) => (
+                  <button
+                    key={i}
+                    className={`carousel-dot${i === current ? ' active' : ''}`}
+                    onClick={e => { e.stopPropagation(); goTo(i); startTimer(); }}
+                    aria-label={`Mercado ${i + 1}`}
+                  />
+                ))}
               </div>
             </div>
 
-            <div className="wc-market">
-              <div className="wc-market-q">¿Quién gana el partido inaugural?</div>
-              <div className="wc-odds-three">
-                <button className="wc-odds-btn yes">
-                  <span className="wc-odds-label">México</span>
-                  <span className="wc-odds-val green">54%</span>
-                </button>
-                <button className="wc-odds-btn draw">
-                  <span className="wc-odds-label">Empate</span>
-                  <span className="wc-odds-val">24%</span>
-                </button>
-                <button className="wc-odds-btn no">
-                  <span className="wc-odds-label">Sudáfrica</span>
-                  <span className="wc-odds-val">22%</span>
-                </button>
-              </div>
-              <div className="wc-vol">
-                <span>Abre </span>
-                <span style={{ color: 'var(--green)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>Mar 2026 · USDC</span>
-              </div>
+            {/* Progress bar */}
+            <div className="hero-carousel-progress">
+              <div
+                key={current}
+                className="hero-carousel-progress-bar"
+              />
             </div>
           </div>
         </div>

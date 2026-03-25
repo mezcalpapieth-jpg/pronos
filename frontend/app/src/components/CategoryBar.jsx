@@ -3,7 +3,6 @@ import React from 'react';
 const FILTERS = [
   { id: 'trending',  label: '🔥 Trending' },
   { id: 'todos',     label: 'Todos' },
-  { id: 'musica',    label: '🎵 Música & Farándula' },
   { id: 'mexico',    label: '🇲🇽 México & CDMX' },
   { id: 'politica',  label: '🌎 Política Internacional' },
   { id: 'deportes',  label: '⚽ Deportes' },

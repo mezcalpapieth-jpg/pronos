@@ -289,6 +289,114 @@
   letter-spacing: 0.06em;
 }
 
+/* ── Hero Carousel Card ──────────────────────────────────────── */
+.hero-carousel-card {
+  background: var(--surface1);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+  position: relative;
+  overflow: hidden;
+  opacity: 1;
+  transform: translateY(0);
+}
+.hero-carousel-card:hover {
+  border-color: rgba(0, 232, 122, 0.3);
+  box-shadow: 0 8px 40px rgba(0, 232, 122, 0.08);
+  transform: translateY(-2px);
+}
+.hero-carousel-card--fade {
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.hero-carousel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.hero-carousel-cat {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+.hero-carousel-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(0, 232, 122, 0.1);
+  border: 1px solid rgba(0, 232, 122, 0.25);
+  color: var(--green);
+  text-transform: uppercase;
+}
+.hero-carousel-title {
+  font-family: var(--font-display);
+  font-size: clamp(18px, 2vw, 24px);
+  letter-spacing: 0.03em;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  line-height: 1.2;
+  margin-bottom: 20px;
+}
+
+.hero-carousel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+}
+
+/* Dot indicators */
+.hero-carousel-dots {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.carousel-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--surface3);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: background 0.2s, width 0.2s;
+}
+.carousel-dot.active {
+  background: var(--green);
+  width: 18px;
+  border-radius: 3px;
+  box-shadow: 0 0 6px rgba(0, 232, 122, 0.5);
+}
+
+/* Auto-progress bar at bottom of card */
+.hero-carousel-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--surface3);
+}
+.hero-carousel-progress-bar {
+  height: 100%;
+  background: var(--green);
+  border-radius: 0;
+  animation: carousel-progress 3.8s linear forwards;
+}
+@keyframes carousel-progress {
+  from { width: 0%; }
+  to   { width: 100%; }
+}
+
 /* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .mvp-banner {
