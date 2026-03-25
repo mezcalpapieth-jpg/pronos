@@ -65,7 +65,7 @@ export default function MarketDetail() {
 
   const [market, setMarket] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [betModal, setBetModal] = useState({ open: false, outcome: '', pct: 0 });
+  const [betModal, setBetModal] = useState({ open: false, outcome: '', pct: 0, clobTokenId: null });
 
   useEffect(() => {
     if (!marketId) {
@@ -103,8 +103,9 @@ export default function MarketDetail() {
     return () => { cancelled = true; };
   }, [marketId, navigate]);
 
-  const openBet = (outcome, pct) => {
-    setBetModal({ open: true, outcome, pct });
+  const openBet = (outcome, pct, optionIndex) => {
+    const clobTokenId = market?._clobTokenIds?.[optionIndex ?? 0] ?? null;
+    setBetModal({ open: true, outcome, pct, clobTokenId });
   };
 
   if (loading) {
@@ -213,7 +214,7 @@ export default function MarketDetail() {
                     }}
                     onMouseOver={e => e.currentTarget.style.borderColor = 'rgba(0,232,122,0.3)'}
                     onMouseOut={e => e.currentTarget.style.borderColor = 'var(--border)'}
-                    onClick={() => openBet(opt.label, opt.pct)}
+                    onClick={() => openBet(opt.label, opt.pct, i)}
                   >
                     {/* Probability bar */}
                     <div style={{ flex: 1 }}>
@@ -228,7 +229,7 @@ export default function MarketDetail() {
                       </div>
                     </div>
                     <button className="btn-primary" style={{ padding: '8px 16px', fontSize: 12, flexShrink: 0 }}
-                      onClick={e => { e.stopPropagation(); openBet(opt.label, opt.pct); }}
+                      onClick={e => { e.stopPropagation(); openBet(opt.label, opt.pct, i); }}
                     >
                       Apostar
                     </button>
@@ -253,7 +254,7 @@ export default function MarketDetail() {
                     key={i}
                     className={i === 0 ? 'btn-primary' : 'btn-ghost'}
                     style={{ width: '100%', marginBottom: 10 }}
-                    onClick={() => openBet(opt.label, opt.pct)}
+                    onClick={() => openBet(opt.label, opt.pct, i)}
                   >
                     {opt.label} · {opt.pct}%
                   </button>
@@ -274,6 +275,7 @@ export default function MarketDetail() {
         outcomePct={betModal.pct}
         marketId={market.id}
         marketTitle={market.title}
+        clobTokenId={betModal.clobTokenId}
       />
     </>
   );
