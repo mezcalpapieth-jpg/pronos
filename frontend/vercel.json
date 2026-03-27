@@ -1,4 +1,10 @@
 {
   "cleanUrls": true,
-  "trailingSlash": false
+  "trailingSlash": false,
+  "rewrites": [
+    {
+      "source": "/mvp/:path*",
+      "destination": "/mvp/index.html"
+    }
+  ]
 }

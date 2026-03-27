@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import Nav from '../components/Nav.jsx';
-import BetModal from '../components/BetModal.jsx';
 import { gmFetchBySlug } from '../lib/gamma.js';
 import MARKETS from '../lib/markets.js';
+
+const BetModal = lazy(() => import('../components/BetModal.jsx'));
 
 function ProbabilityChart({ options }) {
   if (!options || options.length === 0) return null;
@@ -104,10 +105,17 @@ export default function MarketDetail() {
   }, [marketId, navigate]);
 
   const openBet = (outcome, pct, optionIndex) => {
+    if (!tradingEnabled) return;
     const clobTokenId = market?._clobTokenIds?.[optionIndex ?? 0] ?? null;
     const isNegRisk = market?._isNegRisk ?? false;
     setBetModal({ open: true, outcome, pct, clobTokenId, isNegRisk });
   };
+
+  const tradingEnabled = !!(
+    market?._source === 'polymarket' &&
+    market?._acceptingOrders !== false &&
+    market?._clobTokenIds?.length
+  );
 
   if (loading) {
     return (
@@ -160,6 +168,11 @@ export default function MarketDetail() {
               {market._source === 'polymarket' && (
                 <span className="mock-card-badge live">LIVE</span>
               )}
+              {!tradingEnabled && (
+                <span className="mock-card-badge" style={{ background: 'var(--surface3)', color: 'var(--text-muted)' }}>
+                  SOLO INFO
+                </span>
+              )}
               {market.trending && (
                 <span className="mock-card-badge trending">🔥 TRENDING</span>
               )}
@@ -196,8 +209,22 @@ export default function MarketDetail() {
             {/* Outcomes */}
             <div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--text-muted)', marginBottom: 12 }}>
-                RESULTADOS
+                RESULTADOS {tradingEnabled ? '' : '· SIN TRADING EN VIVO'}
               </div>
+              {!tradingEnabled && (
+                <div style={{
+                  background: 'var(--surface1)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 12,
+                  padding: '14px 18px',
+                  marginBottom: 12,
+                  color: 'var(--text-muted)',
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                }}>
+                  Este mercado está visible como referencia editorial, pero todavía no tiene libro de órdenes activo en Polymarket.
+                </div>
+              )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {(market.options || []).map((opt, i) => (
                   <div
@@ -210,12 +237,13 @@ export default function MarketDetail() {
                       display: 'flex',
                       alignItems: 'center',
                       gap: 16,
-                      cursor: 'pointer',
+                      cursor: tradingEnabled ? 'pointer' : 'default',
                       transition: 'border-color 0.2s',
+                      opacity: tradingEnabled ? 1 : 0.8,
                     }}
-                    onMouseOver={e => e.currentTarget.style.borderColor = 'rgba(0,232,122,0.3)'}
+                    onMouseOver={e => tradingEnabled && (e.currentTarget.style.borderColor = 'rgba(0,232,122,0.3)')}
                     onMouseOut={e => e.currentTarget.style.borderColor = 'var(--border)'}
-                    onClick={() => openBet(opt.label, opt.pct, i)}
+                    onClick={() => tradingEnabled && openBet(opt.label, opt.pct, i)}
                   >
                     {/* Probability bar */}
                     <div style={{ flex: 1 }}>
@@ -229,10 +257,11 @@ export default function MarketDetail() {
                         <div style={{ height: '100%', width: `${opt.pct}%`, background: i === 0 ? 'var(--green)' : 'var(--text-muted)', borderRadius: 2 }} />
                       </div>
                     </div>
-                    <button className="btn-primary" style={{ padding: '8px 16px', fontSize: 12, flexShrink: 0 }}
+                    <button className={tradingEnabled ? 'btn-primary' : 'btn-ghost'} style={{ padding: '8px 16px', fontSize: 12, flexShrink: 0 }}
                       onClick={e => { e.stopPropagation(); openBet(opt.label, opt.pct, i); }}
+                      disabled={!tradingEnabled}
                     >
-                      Apostar
+                      {tradingEnabled ? 'Comprar' : 'Solo info'}
                     </button>
                   </div>
                 ))}
@@ -244,10 +273,12 @@ export default function MarketDetail() {
           <div style={{ position: 'sticky', top: 88 }}>
             <div style={{ background: 'var(--surface1)', border: '1px solid var(--border-active)', borderRadius: 16, padding: 24 }}>
               <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, letterSpacing: '0.04em', color: 'var(--text-primary)', marginBottom: 20 }}>
-                COLOCAR APUESTA
+                {tradingEnabled ? 'ENTRAR AL MERCADO' : 'MERCADO INFORMATIVO'}
               </div>
               <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
-                Elige un resultado en el panel izquierdo para abrir el formulario de apuesta.
+                {tradingEnabled
+                  ? 'Elige un resultado en el panel izquierdo para abrir el formulario de compra.'
+                  : 'Este mercado aún no tiene un token de Polymarket conectado, así que por ahora solo mostramos contexto y probabilidades.'}
               </p>
               <div style={{ borderTop: '1px solid var(--border)', paddingTop: 20 }}>
                 {(market.options || []).map((opt, i) => (
@@ -256,6 +287,7 @@ export default function MarketDetail() {
                     className={i === 0 ? 'btn-primary' : 'btn-ghost'}
                     style={{ width: '100%', marginBottom: 10 }}
                     onClick={() => openBet(opt.label, opt.pct, i)}
+                    disabled={!tradingEnabled}
                   >
                     {opt.label} · {opt.pct}%
                   </button>
@@ -269,16 +301,18 @@ export default function MarketDetail() {
         </div>
       </main>
 
-      <BetModal
-        open={betModal.open}
-        onClose={() => setBetModal(b => ({ ...b, open: false }))}
-        outcome={betModal.outcome}
-        outcomePct={betModal.pct}
-        marketId={market.id}
-        marketTitle={market.title}
-        clobTokenId={betModal.clobTokenId}
-        isNegRisk={betModal.isNegRisk}
-      />
+      <Suspense fallback={null}>
+        <BetModal
+          open={betModal.open}
+          onClose={() => setBetModal(b => ({ ...b, open: false }))}
+          outcome={betModal.outcome}
+          outcomePct={betModal.pct}
+          marketId={market.id}
+          marketTitle={market.title}
+          clobTokenId={betModal.clobTokenId}
+          isNegRisk={betModal.isNegRisk}
+        />
+      </Suspense>
     </>
   );
 }

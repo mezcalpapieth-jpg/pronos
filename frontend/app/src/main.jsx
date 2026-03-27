@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { PrivyProvider } from '@privy-io/react-auth';
-import { polygon, base } from 'viem/chains';
+import { polygon } from 'viem/chains';
 import App from './App.jsx';
 import './styles/mvp.css';
 

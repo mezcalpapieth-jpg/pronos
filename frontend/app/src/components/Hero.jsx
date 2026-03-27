@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { usePrivy } from '@privy-io/react-auth';
 import { useNavigate } from 'react-router-dom';
 import MARKETS from '../lib/markets.js';
@@ -65,11 +66,11 @@ export default function Hero() {
 
           <div className="hero-btns">
             {authenticated ? (
-              <a href="#markets" className="btn-primary">Ver Mercados</a>
+              <Link to="/#markets" className="btn-primary">Ver Mercados</Link>
             ) : (
               <button className="btn-primary" onClick={login}>Empezar a Predecir</button>
             )}
-            <a href="#how-it-works" className="btn-ghost">Cómo funciona</a>
+            <Link to="/#how-it-works" className="btn-ghost">Cómo funciona</Link>
           </div>
 
           <div className="hero-stats">
@@ -82,8 +83,8 @@ export default function Hero() {
               <span className="hero-stat-label">mercados activos</span>
             </div>
             <div className="hero-stat">
-              <span className="hero-stat-val"><span className="green">2%</span></span>
-              <span className="hero-stat-label">comisión · sin gas</span>
+              <span className="hero-stat-val"><span className="green">24/7</span></span>
+              <span className="hero-stat-label">liquidez en vivo</span>
             </div>
           </div>
         </div>

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { usePrivy } from '@privy-io/react-auth';
+import { fetchUsername } from '../lib/user.js';
 
 function getInitialTheme() {
   const saved = localStorage.getItem('pronos-theme');
@@ -17,10 +19,11 @@ export default function Nav() {
 
   useEffect(() => {
     if (!authenticated || !user?.id) { setUsername(null); return; }
-    fetch(`/api/user?privyId=${encodeURIComponent(user.id)}`)
-      .then(r => r.json())
-      .then(d => { if (d.username) setUsername(d.username); })
+    const controller = new AbortController();
+    fetchUsername(user.id, { signal: controller.signal })
+      .then((savedUsername) => { if (savedUsername) setUsername(savedUsername); })
       .catch(() => {});
+    return () => controller.abort();
   }, [authenticated, user?.id]);
 
   useEffect(() => {
@@ -56,14 +59,14 @@ export default function Nav() {
 
   return (
     <nav id="nav" className={scrolled ? 'scrolled' : ''}>
-      <a href="/" className="nav-logo">
+      <Link to="/" className="nav-logo">
         PRONOS<span className="green-dot" />
-      </a>
+      </Link>
 
       <div className="nav-links">
-        <a href="#markets">El mercado</a>
-        <a href="/mvp/portfolio">Portafolio</a>
-        <a href="#how-it-works">Cómo funciona</a>
+        <Link to="/#markets">El mercado</Link>
+        <Link to="/portfolio">Portafolio</Link>
+        <Link to="/#how-it-works">Cómo funciona</Link>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>

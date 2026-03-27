@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-
-const API = '/api/user';
+import { createUsername } from '../lib/user.js';
 
 export default function UsernameModal({ privyId, onComplete }) {
   const [username, setUsername] = useState('');
@@ -15,19 +14,10 @@ export default function UsernameModal({ privyId, onComplete }) {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ privyId, username }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || 'Error al guardar');
-      } else {
-        onComplete(data.username);
-      }
-    } catch {
-      setError('Error de conexión');
+      const savedUsername = await createUsername(privyId, username);
+      onComplete(savedUsername);
+    } catch (error) {
+      setError(error.message || 'Error de conexión');
     } finally {
       setLoading(false);
     }

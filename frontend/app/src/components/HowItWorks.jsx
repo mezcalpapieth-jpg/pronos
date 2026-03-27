@@ -12,13 +12,13 @@ const STEPS = [
     num: '02',
     icon: '🔮',
     title: 'Elige un mercado',
-    desc: 'Explora mercados de política, deportes, cultura y crypto. Elige un resultado y cuánto quieres apostar en USDC.',
+    desc: 'Explora mercados de política, deportes, cultura y crypto. Elige un resultado y entra con USDC al mejor precio disponible en el libro.',
   },
   {
     num: '03',
     icon: '💰',
-    title: 'Cobra tus ganancias',
-    desc: 'Si tu predicción es correcta, el contrato te paga automáticamente en USDC. Sin intermediarios, sin esperas.',
+    title: 'Gestiona tu salida',
+    desc: 'Puedes vender tus shares antes del cierre para asegurar ganancias o reducir riesgo, o mantener tu posición hasta la resolución.',
   },
 ];
 
@@ -60,7 +60,7 @@ export default function HowItWorks() {
 
         <div className="tech-strip">
           <div className="tech-pill"><span className="dot" />Polygon</div>
-          <div className="tech-pill"><span className="dot" />USDC Nativo</div>
+          <div className="tech-pill"><span className="dot" />USDC.e</div>
           <div className="tech-pill"><span className="dot" />Polymarket</div>
           <div className="tech-pill"><span className="dot" />Privy</div>
           <div className="tech-pill"><span className="dot" />Sin MetaMask</div>

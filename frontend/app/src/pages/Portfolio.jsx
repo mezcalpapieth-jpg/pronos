@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { ethers } from 'ethers';
 import Nav from '../components/Nav.jsx';
 import Footer from '../components/Footer.jsx';
+import BetModal from '../components/BetModal.jsx';
 import { getClobPositions, getUsdcBalance } from '../lib/clob.js';
 
-function PositionCard({ pos }) {
+function PositionCard({ pos, onSell }) {
   const value     = Number(pos.currentValue || pos.size || 0).toFixed(2);
   const size      = Number(pos.initialValue || pos.size || 0).toFixed(2);
   const pnl       = (Number(value) - Number(size)).toFixed(2);
@@ -13,6 +15,8 @@ function PositionCard({ pos }) {
   const outcome   = pos.outcome || pos.title || '—';
   const market    = pos.market?.question || pos.title || pos.marketTitle || '—';
   const pct       = pos.currentPrice != null ? Math.round(pos.currentPrice * 100) : null;
+  const marketSlug = pos.slug || pos.eventSlug || null;
+  const shares = Number(pos.size || 0);
 
   return (
     <div style={{
@@ -67,6 +71,27 @@ function PositionCard({ pos }) {
           </div>
         </div>
       </div>
+
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {marketSlug && (
+          <Link
+            to={`/market?id=${marketSlug}`}
+            className="btn-ghost"
+            style={{ textDecoration: 'none', fontSize: 12, padding: '10px 14px' }}
+          >
+            Ver mercado
+          </Link>
+        )}
+        {shares > 0 && (
+          <button
+            className="btn-primary"
+            style={{ fontSize: 12, padding: '10px 14px' }}
+            onClick={() => onSell(pos)}
+          >
+            Vender
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -79,6 +104,7 @@ export default function Portfolio() {
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState(null);
   const [address, setAddress]       = useState(null);
+  const [sellPosition, setSellPosition] = useState(null);
 
   useEffect(() => {
     if (!authenticated || !wallets?.length) return;
@@ -201,20 +227,45 @@ export default function Portfolio() {
                 <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
                   No tienes posiciones abiertas todavía.
                 </p>
-                <a href="/mvp" className="btn-primary" style={{ display: 'inline-block', marginTop: 20, textDecoration: 'none' }}>
+                <Link to="/" className="btn-primary" style={{ display: 'inline-block', marginTop: 20, textDecoration: 'none' }}>
                   Ver mercados
-                </a>
+                </Link>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {positions.map((pos, i) => (
-                  <PositionCard key={pos.id || i} pos={pos} />
+                  <PositionCard
+                    key={pos.id || i}
+                    pos={pos}
+                    onSell={(position) => setSellPosition(position)}
+                  />
                 ))}
               </div>
             )}
           </>
         )}
       </main>
+      <BetModal
+        open={!!sellPosition}
+        onClose={() => setSellPosition(null)}
+        onSuccess={() => {
+          loadData();
+        }}
+        mode="sell"
+        outcome={sellPosition?.outcome || '—'}
+        outcomePct={
+          sellPosition?.currentPrice != null
+            ? Math.round(Number(sellPosition.currentPrice) * 100)
+            : sellPosition?.curPrice != null
+              ? Math.round(Number(sellPosition.curPrice) * 100)
+              : 0
+        }
+        marketId={sellPosition?.slug || sellPosition?.eventSlug || sellPosition?.conditionId}
+        marketTitle={sellPosition?.market?.question || sellPosition?.title || sellPosition?.marketTitle || '—'}
+        clobTokenId={sellPosition?.asset || null}
+        isNegRisk={!!sellPosition?.negativeRisk}
+        positionSize={Number(sellPosition?.size || 0)}
+      />
       <Footer />
     </>
   );

@@ -14,3 +14,6 @@ scripts/dist/
 # System
 .DS_Store
 .vercel/
+
+# Local Claude Code worktrees
+.claude/worktrees/

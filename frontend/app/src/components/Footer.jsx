@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 
 export default function Footer() {
   return (
@@ -21,12 +22,12 @@ export default function Footer() {
       </div>
 
       <div style={{ display: 'flex', gap: 24 }}>
-        <a href="/" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.06em', transition: 'color 0.2s' }}
+        <Link to="/" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.06em', transition: 'color 0.2s' }}
           onMouseOver={e => e.target.style.color = 'var(--text-secondary)'}
           onMouseOut={e => e.target.style.color = 'var(--text-muted)'}
         >
           Inicio
-        </a>
+        </Link>
         <a href="mailto:hola@pronos.io" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.06em', transition: 'color 0.2s' }}
           onMouseOver={e => e.target.style.color = 'var(--text-secondary)'}
           onMouseOut={e => e.target.style.color = 'var(--text-muted)'}

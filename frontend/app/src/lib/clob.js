@@ -1,8 +1,9 @@
 import { ethers } from 'ethers';
 
-// ─── POLYGON MAINNET CONSTANTS ────────────────────────────────────────────────
+// ─── POLYMARKET CONTRACTS ─────────────────────────────────────────────────────
 export const POLYGON_CHAIN_ID = 137;
-export const USDC_ADDRESS     = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'; // native USDC
+export const USDC_ADDRESS     = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174'; // USDC.e collateral
+export const CTF              = '0x4D97DCd97eC945f40cF65F87097ACe5EA0476045';
 export const CTF_EXCHANGE     = '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E';
 export const NEG_RISK_ADAPTER = '0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296';
 export const NEG_RISK_EXCHANGE = '0xC5d563A36AE78145C45a50134d48A1215220f80a';
@@ -11,6 +12,11 @@ const USDC_ABI = [
   'function balanceOf(address) view returns (uint256)',
   'function allowance(address owner, address spender) view returns (uint256)',
   'function approve(address spender, uint256 amount) returns (bool)',
+];
+
+const CTF_ABI = [
+  'function isApprovedForAll(address owner, address operator) view returns (bool)',
+  'function setApprovalForAll(address operator, bool approved)',
 ];
 
 // EIP-712 Order types for CTF Exchange
@@ -40,12 +46,93 @@ const ORDER_TYPES = {
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
-export function usdcToRaw(amount) {
-  return BigInt(Math.round(amount * 1e6));
+function toRawUnits(amount, rounding = 'round') {
+  const scaled = Number(amount) * 1e6;
+  if (rounding === 'floor') return BigInt(Math.floor(scaled));
+  if (rounding === 'ceil') return BigInt(Math.ceil(scaled));
+  return BigInt(Math.round(scaled));
 }
 
 export function rawToUsdc(raw) {
   return Number(raw) / 1e6;
+}
+
+function normalizeBookLevels(levels = [], side) {
+  const direction = side === 'BUY' ? 1 : -1;
+  return levels
+    .map((level) => ({
+      price: Number(level.price),
+      size: Number(level.size),
+    }))
+    .filter((level) => level.price > 0 && level.size > 0)
+    .sort((a, b) => direction * (a.price - b.price));
+}
+
+export function getUsdcSpender() {
+  return CTF;
+}
+
+export function getOutcomeTokenSpender(isNegRisk = false) {
+  return isNegRisk ? NEG_RISK_EXCHANGE : CTF_EXCHANGE;
+}
+
+export function buildMarketQuote(book, side, amount) {
+  const normalizedAmount = Number(amount) || 0;
+  if (normalizedAmount <= 0) {
+    return {
+      enoughLiquidity: false,
+      averagePrice: 0,
+      limitPrice: 0,
+      proceeds: 0,
+      shares: 0,
+      spend: 0,
+    };
+  }
+
+  const levels = normalizeBookLevels(side === 'BUY' ? book?.asks : book?.bids, side);
+  let remaining = normalizedAmount;
+  let filledShares = 0;
+  let filledUsd = 0;
+  let limitPrice = 0;
+
+  for (const level of levels) {
+    if (remaining <= 0) break;
+
+    if (side === 'BUY') {
+      const maxSharesAtLevel = remaining / level.price;
+      const shares = Math.min(level.size, maxSharesAtLevel);
+      if (shares <= 0) continue;
+
+      const cost = shares * level.price;
+      filledShares += shares;
+      filledUsd += cost;
+      remaining -= cost;
+    } else {
+      const shares = Math.min(level.size, remaining);
+      if (shares <= 0) continue;
+
+      const proceeds = shares * level.price;
+      filledShares += shares;
+      filledUsd += proceeds;
+      remaining -= shares;
+    }
+
+    limitPrice = level.price;
+  }
+
+  const enoughLiquidity = remaining <= 1e-6 && limitPrice > 0;
+  const averagePrice = filledShares > 0 ? filledUsd / filledShares : 0;
+
+  return {
+    enoughLiquidity,
+    amount: normalizedAmount,
+    averagePrice,
+    limitPrice,
+    proceeds: side === 'SELL' ? filledUsd : 0,
+    remaining,
+    shares: filledShares,
+    spend: side === 'BUY' ? filledUsd : 0,
+  };
 }
 
 // ─── USDC BALANCE ─────────────────────────────────────────────────────────────
@@ -65,22 +152,34 @@ export async function getUsdcAllowance(provider, owner, spender) {
 }
 
 // ─── APPROVE USDC ─────────────────────────────────────────────────────────────
-// Approves CTF Exchange + NegRisk Adapter to spend USDC.
-// Returns tx hashes.
-
-export async function approveUsdc(signer, amount = ethers.constants.MaxUint256) {
+// Buying requires the CTF contract to have USDC.e allowance.
+export async function approveUsdc(signer, amount = ethers.constants.MaxUint256, spender = CTF) {
   const usdc = new ethers.Contract(USDC_ADDRESS, USDC_ABI, signer);
-  const txs = [];
+  const tx = await usdc.approve(spender, amount);
+  await tx.wait();
+  return tx.hash;
+}
 
-  const tx1 = await usdc.approve(CTF_EXCHANGE, amount);
-  await tx1.wait();
-  txs.push(tx1.hash);
+export async function getOutcomeTokenApproval(provider, owner, operator) {
+  const ctf = new ethers.Contract(CTF, CTF_ABI, provider);
+  return ctf.isApprovedForAll(owner, operator);
+}
 
-  const tx2 = await usdc.approve(NEG_RISK_ADAPTER, amount);
-  await tx2.wait();
-  txs.push(tx2.hash);
+export async function approveOutcomeTokens(signer, operator) {
+  const ctf = new ethers.Contract(CTF, CTF_ABI, signer);
+  const tx = await ctf.setApprovalForAll(operator, true);
+  await tx.wait();
+  return tx.hash;
+}
 
-  return txs;
+export async function getOrderBook(tokenId) {
+  const res = await fetch(`/api/clob?action=book&tokenId=${encodeURIComponent(tokenId)}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to fetch order book');
+  }
+
+  return res.json();
 }
 
 // ─── DERIVE CLOB API KEY ──────────────────────────────────────────────────────
@@ -112,14 +211,37 @@ export async function deriveClobApiKey(signer, address) {
 // Builds + signs an EIP-712 order and submits it to the CLOB.
 // side: 'BUY' | 'SELL'
 // price: 0.0–1.0 (e.g. 0.54 = 54% probability = $0.54 per share)
-// size: amount in USDC
-
-export async function placeClobOrder({ signer, address, creds, tokenId, price, side, size, isNegRisk = true }) {
+// amount:
+//   BUY  -> USDC.e to spend
+//   SELL -> shares to sell
+export async function placeClobOrder({
+  signer,
+  address,
+  creds,
+  tokenId,
+  price,
+  side,
+  amount,
+  isNegRisk = true,
+  orderType = 'FOK',
+}) {
   const exchange = isNegRisk ? NEG_RISK_EXCHANGE : CTF_EXCHANGE;
+  const normalizedPrice = Number(price);
+  const normalizedAmount = Number(amount);
+
+  if (!normalizedPrice || normalizedPrice <= 0) {
+    throw new Error('Invalid order price');
+  }
+
+  if (!normalizedAmount || normalizedAmount <= 0) {
+    throw new Error('Invalid order amount');
+  }
 
   const sideNum    = side === 'BUY' ? 0 : 1;
-  const makerAmt   = usdcToRaw(side === 'BUY' ? size : size / price);       // USDC in (buying)
-  const takerAmt   = usdcToRaw(side === 'BUY' ? size / price : size);       // shares out
+  const makerAmt   = toRawUnits(normalizedAmount, 'round');
+  const takerAmt   = side === 'BUY'
+    ? toRawUnits(normalizedAmount / normalizedPrice, 'floor')
+    : toRawUnits(normalizedAmount * normalizedPrice, 'floor');
   const salt       = BigInt(Math.floor(Math.random() * 1e15));
 
   const order = {
@@ -159,7 +281,7 @@ export async function placeClobOrder({ signer, address, creds, tokenId, price, s
     body: JSON.stringify({
       order:      signedOrder,
       owner:      address,
-      orderType:  'FOK',          // Fill-Or-Kill for market orders
+      orderType,
       apiKey:     creds.apiKey,
       secret:     creds.secret,
       passphrase: creds.passphrase,

@@ -91,5 +91,19 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── GET /api/clob?action=book&tokenId=... ─────────────────────────────────────
+  if (action === 'book' && req.method === 'GET') {
+    const { tokenId } = req.query;
+    if (!tokenId) return res.status(400).json({ error: 'tokenId required' });
+    try {
+      const r = await fetch(`${CLOB_BASE}/book?token_id=${encodeURIComponent(tokenId)}`);
+      const data = await r.json();
+      if (!r.ok) return res.status(r.status).json(data);
+      return res.status(200).json(data);
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   return res.status(404).json({ error: 'Unknown action' });
 }
