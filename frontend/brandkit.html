@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pronos — Brand Kit</title>
+  <script>(function(){var s=localStorage.getItem('pronos-theme');document.documentElement.setAttribute('data-theme',s||'light');})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --orange:    #FF5500;
+      --orange-lt: #FF7733;
+      --black:     #0d0d0d;
+      --gray-1:    #1c1c1c;
+      --gray-2:    #2e2e2e;
+      --gray-3:    #474747;
+      --gray-4:    #6e6e6e;
+      --gray-5:    #9e9e9e;
+      --gray-6:    #c8c8c8;
+      --off:       #F5F5F3;
+      --white:     #ffffff;
+      --border:    rgba(0,0,0,0.09);
+      --border-dk: rgba(0,0,0,0.14);
+      --yes:       #16a34a;
+      --no:        #dc2626;
+      --font-display: 'Bebas Neue', sans-serif;
+      --font-body: 'DM Sans', sans-serif;
+      --font-mono: 'DM Mono', monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+    body { background: var(--white); color: var(--black); font-family: var(--font-body); overflow-x: hidden; }
+    a { color: inherit; text-decoration: none; }
+    button { cursor: pointer; border: none; background: none; font-family: var(--font-body); }
+
+    /* ── NAV ─────────────────────────────────── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(255,255,255,0.94);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border-dk);
+      height: 58px;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 48px;
+    }
+    .nav-logo { font-family: var(--font-display); font-size: 26px; letter-spacing: .06em; color: var(--black); }
+    .nav-logo span { color: var(--orange); }
+    .nav-links { display: flex; align-items: center; gap: 32px; list-style: none; }
+    .nav-links a { font-size: 11px; font-weight: 600; letter-spacing: .13em; text-transform: uppercase; color: var(--gray-4); transition: color .15s; }
+    .nav-links a:hover { color: var(--black); }
+    .nav-cta { background: var(--orange); color: var(--white) !important; padding: 9px 20px; font-size: 11px !important; font-weight: 700 !important; transition: background .15s !important; }
+    .nav-cta:hover { background: var(--orange-lt) !important; }
+
+    /* ── HERO ────────────────────────────────── */
+    .bk-hero {
+      background: var(--black);
+      padding: 80px 48px;
+      position: relative;
+      overflow: hidden;
+      text-align: center;
+    }
+    .bk-hero::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: repeating-linear-gradient(90deg, var(--orange) 0, var(--orange) 20px, transparent 20px, transparent 28px);
+    }
+    .bk-hero-bg {
+      position: absolute; inset: 0;
+      background-image: linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
+      background-size: 72px 72px;
+      pointer-events: none;
+    }
+    .bk-hero-wm {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      font-family: var(--font-display); font-size: 280px; line-height: 1;
+      color: rgba(255,255,255,.025); pointer-events: none; user-select: none;
+      white-space: nowrap;
+    }
+    .bk-hero-content { position: relative; z-index: 2; }
+    .bk-hero-tag {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 10px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase;
+      color: var(--orange); border: 1px solid rgba(255,85,0,.3); padding: 5px 14px;
+      margin-bottom: 24px;
+    }
+    .bk-hero-tag-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--orange); animation: blink 1.8s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .bk-hero h1 {
+      font-family: var(--font-display); font-size: clamp(64px, 10vw, 120px);
+      letter-spacing: .03em; line-height: .9; color: var(--white); margin-bottom: 16px;
+    }
+    .bk-hero h1 span { color: var(--orange); }
+    .bk-hero p { font-size: 15px; color: var(--gray-4); max-width: 480px; margin: 0 auto; line-height: 1.65; }
+
+    /* ── SECTION WRAPPER ─────────────────────── */
+    .bk-section {
+      padding: 72px 48px;
+      border-top: 1px solid var(--border-dk);
+    }
+    .bk-section:nth-child(even) { background: var(--off); }
+    .bk-section-title {
+      font-family: var(--font-display); font-size: 42px; letter-spacing: .04em;
+      color: var(--black); margin-bottom: 8px;
+    }
+    .bk-section-sub { font-size: 13px; color: var(--gray-4); margin-bottom: 48px; line-height: 1.6; max-width: 520px; }
+
+    /* ── LOGOS ───────────────────────────────── */
+    .logo-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+    }
+    .logo-tile { display: flex; flex-direction: column; gap: 12px; }
+    .logo-preview {
+      aspect-ratio: 4/3;
+      display: flex; align-items: center; justify-content: center;
+      border: 1px solid var(--border-dk);
+      position: relative; overflow: hidden;
+    }
+    .logo-preview.bg-orange { background: var(--orange); }
+    .logo-preview.bg-white  { background: var(--white); }
+    .logo-preview.bg-black  { background: var(--black); }
+    .logo-preview.bg-off    { background: var(--off); }
+
+    .logo-svg { font-family: var(--font-display); font-size: 40px; letter-spacing: .06em; user-select: none; }
+    .logo-svg.white   { color: var(--white); }
+    .logo-svg.black   { color: var(--black); }
+    .logo-svg.orange  { color: var(--orange); }
+    .logo-svg .dot { color: var(--orange); }
+    .logo-svg.white .dot { color: var(--white); }
+    .logo-svg.on-orange .dot { color: var(--white); }
+
+    .logo-label { font-size: 11px; font-weight: 600; color: var(--gray-3); letter-spacing: .05em; }
+    .logo-btns { display: flex; flex-direction: column; gap: 6px; }
+    .logo-btn {
+      width: 100%; padding: 9px 14px; border: 1px solid var(--border-dk);
+      font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+      color: var(--gray-3); background: var(--white);
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+      cursor: pointer; transition: all .15s;
+    }
+    .logo-btn:hover { background: var(--orange); border-color: var(--orange); color: var(--white); }
+    .logo-btn svg { width: 12px; height: 12px; flex-shrink: 0; }
+
+    /* ── TYPOGRAPHY ──────────────────────────── */
+    .type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+    .type-col { }
+    .type-family { font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--orange); margin-bottom: 16px; }
+    .type-specimen-display { font-family: var(--font-display); font-size: 80px; line-height: .95; letter-spacing: .04em; color: var(--black); margin-bottom: 20px; }
+    .type-specimen-body { font-family: var(--font-body); font-size: 42px; font-weight: 300; color: var(--black); margin-bottom: 20px; line-height: 1.1; }
+    .type-specimen-mono { font-family: var(--font-mono); font-size: 32px; color: var(--black); margin-bottom: 20px; }
+    .type-meta { display: flex; flex-direction: column; gap: 8px; }
+    .type-rule {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 13px; color: var(--gray-3);
+    }
+    .type-rule-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .type-rule-dot.ok  { background: var(--yes); }
+    .type-rule-dot.no  { background: var(--no); }
+
+    .type-chars {
+      border: 1px solid var(--border-dk); padding: 28px;
+      background: var(--white);
+    }
+    .type-chars-row { margin-bottom: 12px; font-size: 18px; color: var(--gray-3); line-height: 1.8; letter-spacing: .08em; }
+    .type-chars-row:last-child { margin-bottom: 0; }
+    .type-chars-row.display { font-family: var(--font-display); font-size: 28px; letter-spacing: .04em; color: var(--black); }
+    .type-chars-row.mono    { font-family: var(--font-mono); font-size: 16px; }
+
+    .type-scale { margin-top: 32px; }
+    .type-scale-title { font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--gray-5); margin-bottom: 20px; }
+    .type-scale-row { display: flex; align-items: baseline; gap: 20px; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+    .type-scale-row:last-child { border-bottom: none; }
+    .type-scale-label { font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--gray-5); width: 80px; flex-shrink: 0; }
+    .type-scale-sample { color: var(--black); }
+
+    /* ── COLORS ──────────────────────────────── */
+    .color-group-title { font-size: 10px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--gray-4); margin-bottom: 20px; margin-top: 40px; }
+    .color-group-title:first-child { margin-top: 0; }
+    .color-grid { display: flex; flex-wrap: wrap; gap: 16px; }
+    .color-tile { display: flex; flex-direction: column; gap: 12px; width: 140px; }
+    .color-swatch { height: 100px; width: 100%; border: 1px solid var(--border-dk); }
+    .color-name { font-size: 12px; font-weight: 600; color: var(--black); }
+    .color-values { display: flex; flex-direction: column; gap: 2px; }
+    .color-hex {
+      font-family: var(--font-mono); font-size: 11px; color: var(--gray-4);
+      cursor: pointer; transition: color .15s;
+      display: flex; align-items: center; gap: 5px;
+    }
+    .color-hex:hover { color: var(--orange); }
+    .color-hex .copy-icon { opacity: 0; transition: opacity .15s; width: 10px; height: 10px; }
+    .color-hex:hover .copy-icon { opacity: 1; }
+
+    /* ── USAGE RULES ─────────────────────────── */
+    .usage-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; }
+    .usage-tile {
+      border: 1px solid var(--border-dk); overflow: hidden;
+    }
+    .usage-preview {
+      height: 160px; display: flex; align-items: center; justify-content: center;
+      position: relative; overflow: hidden;
+    }
+    .usage-preview-logo { font-family: var(--font-display); font-size: 36px; letter-spacing: .06em; }
+    .usage-badge {
+      position: absolute; top: 10px; right: 10px;
+      width: 22px; height: 22px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700;
+    }
+    .usage-badge.ok  { background: var(--yes); color: white; }
+    .usage-badge.bad { background: var(--no);  color: white; }
+    .usage-desc { padding: 14px 16px; font-size: 12px; color: var(--gray-3); line-height: 1.5; border-top: 1px solid var(--border-dk); }
+
+    /* ── COPY TOAST ──────────────────────────── */
+    .copy-toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: var(--black); color: var(--white);
+      font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+      padding: 10px 20px; z-index: 9999;
+      opacity: 0; transition: opacity .2s; pointer-events: none;
+    }
+    .copy-toast.show { opacity: 1; }
+
+    /* ── FOOTER ──────────────────────────────── */
+    footer {
+      background: var(--off); border-top: 1px solid var(--border-dk);
+      padding: 28px 48px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .footer-logo { font-family: var(--font-display); font-size: 22px; letter-spacing: .06em; color: var(--gray-3); }
+    .footer-logo span { color: var(--orange); }
+    .footer-copy { font-size: 10px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--gray-5); }
+  </style>
+</head>
+<body>
+
+<!-- COPY TOAST -->
+<div class="copy-toast" id="copyToast">Copiado al portapapeles</div>
+
+<!-- NAV -->
+<nav>
+  <a href="/" class="nav-logo">PRONOS<span>.</span></a>
+  <ul class="nav-links">
+    <li><a href="/#market">Mercados</a></li>
+    <li><a href="/#how-it-works">Cómo funciona</a></li>
+    <li><a href="#" class="nav-cta">Entrar →</a></li>
+  </ul>
+</nav>
+
+<!-- HERO -->
+<div class="bk-hero">
+  <div class="bk-hero-bg"></div>
+  <div class="bk-hero-wm">BK</div>
+  <div class="bk-hero-content">
+    <div class="bk-hero-tag">
+      <span class="bk-hero-tag-dot"></span>
+      Recursos de marca
+    </div>
+    <h1>BRAND<br><span>KIT</span></h1>
+    <p>Todos los activos visuales de Pronos — logos, colores, tipografía y guías de uso para prensa, socios y medios.</p>
+  </div>
+</div>
+
+<!-- ── 1. LOGOS ───────────────────────────────────────── -->
+<section class="bk-section">
+  <div class="bk-section-title">Logos</div>
+  <div class="bk-section-sub">Usa el logo correcto según el fondo. Descarga en SVG para uso en alta resolución.</div>
+
+  <div class="logo-grid">
+
+    <!-- On orange -->
+    <div class="logo-tile">
+      <div class="logo-preview bg-orange">
+        <span class="logo-svg on-orange">PRONOS<span class="dot">.</span></span>
+      </div>
+      <div class="logo-label">Sobre naranja (principal)</div>
+      <div class="logo-btns">
+        <button class="logo-btn" onclick="downloadLogoSVG('orange')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Descargar SVG
+        </button>
+        <button class="logo-btn" onclick="copyColor('#FF5500')">
+          Copiar color de fondo
+        </button>
+      </div>
+    </div>
+
+    <!-- On white -->
+    <div class="logo-tile">
+      <div class="logo-preview bg-white">
+        <span class="logo-svg black">PRONOS<span class="dot">.</span></span>
+      </div>
+      <div class="logo-label">Sobre blanco</div>
+      <div class="logo-btns">
+        <button class="logo-btn" onclick="downloadLogoSVG('white')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Descargar SVG
+        </button>
+        <button class="logo-btn" onclick="copyColor('#FFFFFF')">
+          Copiar color de fondo
+        </button>
+      </div>
+    </div>
+
+    <!-- Orange on off-white -->
+    <div class="logo-tile">
+      <div class="logo-preview bg-off">
+        <span class="logo-svg orange">PRONOS<span class="dot" style="color:var(--orange)">.</span></span>
+      </div>
+      <div class="logo-label">Naranja sobre claro</div>
+      <div class="logo-btns">
+        <button class="logo-btn" onclick="downloadLogoSVG('light')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Descargar SVG
+        </button>
+        <button class="logo-btn" onclick="copyColor('#F5F5F3')">
+          Copiar color de fondo
+        </button>
+      </div>
+    </div>
+
+    <!-- On black -->
+    <div class="logo-tile">
+      <div class="logo-preview bg-black">
+        <span class="logo-svg white">PRONOS<span class="dot">.</span></span>
+      </div>
+      <div class="logo-label">Sobre negro</div>
+      <div class="logo-btns">
+        <button class="logo-btn" onclick="downloadLogoSVG('black')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Descargar SVG
+        </button>
+        <button class="logo-btn" onclick="copyColor('#0d0d0d')">
+          Copiar color de fondo
+        </button>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── 2. TIPOGRAFÍA ──────────────────────────────────── -->
+<section class="bk-section">
+  <div class="bk-section-title">Tipografía</div>
+  <div class="bk-section-sub">Pronos usa tres familias tipográficas: Bebas Neue para impacto visual, DM Sans para cuerpo y DM Mono para datos y precios.</div>
+
+  <div class="type-grid">
+    <!-- Left: specimens -->
+    <div>
+      <div class="type-family">Display — Bebas Neue</div>
+      <div class="type-specimen-display">PRONOS<br>PREDICE.</div>
+      <div class="type-meta">
+        <div class="type-rule"><span class="type-rule-dot ok"></span> Usar en títulos, heroes y CTAs</div>
+        <div class="type-rule"><span class="type-rule-dot ok"></span> Siempre en mayúsculas</div>
+        <div class="type-rule"><span class="type-rule-dot no"></span> No usar en textos de cuerpo</div>
+      </div>
+
+      <div style="margin-top:36px;">
+        <div class="type-family">Body — DM Sans</div>
+        <div class="type-specimen-body">El primer mercado<br>de predicciones<br>on-chain</div>
+        <div class="type-meta">
+          <div class="type-rule"><span class="type-rule-dot ok"></span> Párrafos, labels, descripciones</div>
+          <div class="type-rule"><span class="type-rule-dot ok"></span> Weights: 400, 500, 600, 700</div>
+          <div class="type-rule"><span class="type-rule-dot no"></span> No usar en encabezados principales</div>
+        </div>
+      </div>
+
+      <div style="margin-top:36px;">
+        <div class="type-family">Mono — DM Mono</div>
+        <div class="type-specimen-mono">$23,412 USDC<br>61% · 23% · 16%</div>
+        <div class="type-meta">
+          <div class="type-rule"><span class="type-rule-dot ok"></span> Precios, porcentajes, datos</div>
+          <div class="type-rule"><span class="type-rule-dot ok"></span> Fechas, hashes, IDs</div>
+          <div class="type-rule"><span class="type-rule-dot no"></span> No usar en texto narrativo</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: characters + scale -->
+    <div>
+      <div class="type-chars">
+        <div class="type-chars-row display">ABCDEFGHIJKLMNOPQRSTUVWXYZ</div>
+        <div class="type-chars-row" style="font-family:'DM Sans',sans-serif;font-weight:600;">A B C D E F G H I J K L M N O P Q R S T U V W X Y Z</div>
+        <div class="type-chars-row" style="font-family:'DM Sans',sans-serif;">a b c d e f g h i j k l m n o p q r s t u v w x y z</div>
+        <div class="type-chars-row mono">0 1 2 3 4 5 6 7 8 9 · % $ · + - = / &amp;</div>
+      </div>
+
+      <div class="type-scale">
+        <div class="type-scale-title">Escala tipográfica</div>
+        <div class="type-scale-row">
+          <span class="type-scale-label">Hero</span>
+          <span class="type-scale-sample" style="font-family:var(--font-display);font-size:56px;line-height:1;letter-spacing:.03em;">PRONOS</span>
+        </div>
+        <div class="type-scale-row">
+          <span class="type-scale-label">H1</span>
+          <span class="type-scale-sample" style="font-family:var(--font-display);font-size:36px;letter-spacing:.03em;">MERCADOS 2026</span>
+        </div>
+        <div class="type-scale-row">
+          <span class="type-scale-label">H2</span>
+          <span class="type-scale-sample" style="font-family:var(--font-display);font-size:24px;letter-spacing:.04em;">CÓMO FUNCIONA</span>
+        </div>
+        <div class="type-scale-row">
+          <span class="type-scale-label">Label</span>
+          <span class="type-scale-sample" style="font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--orange);">EN VIVO · MUNDIAL 2026</span>
+        </div>
+        <div class="type-scale-row">
+          <span class="type-scale-label">Body</span>
+          <span class="type-scale-sample" style="font-size:14px;color:var(--gray-3);">Predice quién gana y cobra en USDC.</span>
+        </div>
+        <div class="type-scale-row">
+          <span class="type-scale-label">Mono</span>
+          <span class="type-scale-sample" style="font-family:var(--font-mono);font-size:13px;">$23,412 USDC · 61%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 3. COLORES ──────────────────────────────────────── -->
+<section class="bk-section">
+  <div class="bk-section-title">Paleta de Color</div>
+  <div class="bk-section-sub">Haz click en cualquier valor para copiarlo al portapapeles.</div>
+
+  <!-- Brand -->
+  <div class="color-group-title">Brand Principal</div>
+  <div class="color-grid">
+    <div class="color-tile">
+      <div class="color-swatch" style="background:#FF5500;"></div>
+      <div class="color-name">Orange Primary</div>
+      <div class="color-values">
+        <div class="color-hex" onclick="copyColor('#FF5500')">#FF5500 <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></div>
+        <div class="color-hex" onclick="copyColor('rgba(255,85,0,1)')">rgba(255, 85, 0, 1)</div>
+      </div>
+    </div>
+    <div class="color-tile">
+      <div class="color-swatch" style="background:#FF7733;"></div>
+      <div class="color-name">Orange Light</div>
+      <div class="color-values">
+        <div class="color-hex" onclick="copyColor('#FF7733')">#FF7733 <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></div>
+        <div class="color-hex" onclick="copyColor('rgba(255,119,51,1)')">rgba(255, 119, 51, 1)</div>
+      </div>
+    </div>
+    <div class="color-tile">
+      <div class="color-swatch" style="background:rgba(255,85,0,0.10);border:1px solid rgba(255,85,0,0.2);"></div>
+      <div class="color-name">Orange Dim</div>
+      <div class="color-values">
+        <div class="color-hex" onclick="copyColor('rgba(255,85,0,0.10)')">rgba(255, 85, 0, 0.10)</div>
+      </div>
+    </div>
+    <div class="color-tile">
+      <div class="color-swatch" style="background:#0d0d0d;"></div>
+      <div class="color-name">Black</div>
+      <div class="color-values">
+        <div class="color-hex" onclick="copyColor('#0d0d0d')">#0d0d0d <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></div>
+        <div class="color-hex" onclick="copyColor('rgba(13,13,13,1)')">rgba(13, 13, 13, 1)</div>
+      </div>
+    </div>
+    <div class="color-tile">
+      <div class="color-swatch" style="background:#ffffff;"></div>
+      <div class="color-name">White</div>
+      <div class="color-values">
+        <div class="color-hex" onclick="copyColor('#ffffff')">#ffffff <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></div>
+        <div class="color-hex" onclick="copyColor('rgba(255,255,255,1)')">rgba(255, 255, 255, 1)</div>
+      </div>
+    </div>
+    <div class="color-tile">
+      <div class="color-swatch" style="background:#F5F5F3;"></div>
+      <div class="color-name">Off White</div>
+      <div class="color-values">
+        <div class="color-hex" onclick="copyColor('#F5F5F3')">#F5F5F3 <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></div>
+        <div class="color-hex" onclick="copyColor('rgba(245,245,243,1)')">rgba(245, 245, 243, 1)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Trading -->
+  <div class="color-group-title">Mercados — Trading</div>
+  <div class="color-grid">
+    <div class="color-tile">
+      <div class="color-swatch" style="background:#16a34a;"></div>
+      <div class="color-name">Sí / Yes</div>
+      <div class="color-values">
+        <div class="color-hex" onclick="copyColor('#16a34a')">#16a34a <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></div>
+        <div class="color-hex" onclick="copyColor('rgba(22,163,74,1)')">rgba(22, 163, 74, 1)</div>
+      </div>
+    </div>
+    <div class="color-tile">
+      <div class="color-swatch" style="background:rgba(22,163,74,0.10);border:1px solid rgba(22,163,74,0.25);"></div>
+      <div class="color-name">Sí / Dim</div>
+      <div class="color-values">
+        <div class="color-hex" onclick="copyColor('rgba(22,163,74,0.10)')">rgba(22, 163, 74, 0.10)</div>
+      </div>
+    </div>
+    <div class="color-tile">
+      <div class="color-swatch" style="background:#dc2626;"></div>
+      <div class="color-name">No / No</div>
+      <div class="color-values">
+        <div class="color-hex" onclick="copyColor('#dc2626')">#dc2626 <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></div>
+        <div class="color-hex" onclick="copyColor('rgba(220,38,38,1)')">rgba(220, 38, 38, 1)</div>
+      </div>
+    </div>
+    <div class="color-tile">
+      <div class="color-swatch" style="background:rgba(220,38,38,0.10);border:1px solid rgba(220,38,38,0.25);"></div>
+      <div class="color-name">No / Dim</div>
+      <div class="color-values">
+        <div class="color-hex" onclick="copyColor('rgba(220,38,38,0.10)')">rgba(220, 38, 38, 0.10)</div>
+      </div>
+    </div>
+    <div class="color-tile">
+      <div class="color-swatch" style="background:#B8900A;"></div>
+      <div class="color-name">Gold / Ganancia</div>
+      <div class="color-values">
+        <div class="color-hex" onclick="copyColor('#B8900A')">#B8900A <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Grays -->
+  <div class="color-group-title">Grises de Sistema</div>
+  <div class="color-grid">
+    <div class="color-tile">
+      <div class="color-swatch" style="background:#1c1c1c;"></div>
+      <div class="color-name">Gray 1</div>
+      <div class="color-values"><div class="color-hex" onclick="copyColor('#1c1c1c')">#1c1c1c</div></div>
+    </div>
+    <div class="color-tile">
+      <div class="color-swatch" style="background:#474747;"></div>
+      <div class="color-name">Gray 3</div>
+      <div class="color-values"><div class="color-hex" onclick="copyColor('#474747')">#474747</div></div>
+    </div>
+    <div class="color-tile">
+      <div class="color-swatch" style="background:#6e6e6e;"></div>
+      <div class="color-name">Gray 4</div>
+      <div class="color-values"><div class="color-hex" onclick="copyColor('#6e6e6e')">#6e6e6e</div></div>
+    </div>
+    <div class="color-tile">
+      <div class="color-swatch" style="background:#9e9e9e;"></div>
+      <div class="color-name">Gray 5</div>
+      <div class="color-values"><div class="color-hex" onclick="copyColor('#9e9e9e')">#9e9e9e</div></div>
+    </div>
+    <div class="color-tile">
+      <div class="color-swatch" style="background:#c8c8c8;"></div>
+      <div class="color-name">Gray 6</div>
+      <div class="color-values"><div class="color-hex" onclick="copyColor('#c8c8c8')">#c8c8c8</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 4. USO CORRECTO ─────────────────────────────────── -->
+<section class="bk-section">
+  <div class="bk-section-title">Uso del Logo</div>
+  <div class="bk-section-sub">Guías de uso correcto e incorrecto del logotipo de Pronos.</div>
+
+  <div class="usage-grid">
+    <div class="usage-tile">
+      <div class="usage-preview" style="background:var(--orange);">
+        <span class="usage-preview-logo" style="color:white;font-family:var(--font-display);font-size:36px;letter-spacing:.06em;">PRONOS<span style="color:white">.</span></span>
+        <span class="usage-badge ok">✓</span>
+      </div>
+      <div class="usage-desc">✅ Logo blanco sobre fondo naranja — uso principal de marca</div>
+    </div>
+    <div class="usage-tile">
+      <div class="usage-preview" style="background:white;">
+        <span class="usage-preview-logo" style="color:var(--black);font-family:var(--font-display);font-size:36px;letter-spacing:.06em;">PRONOS<span style="color:var(--orange)">.</span></span>
+        <span class="usage-badge ok">✓</span>
+      </div>
+      <div class="usage-desc">✅ Logo negro con punto naranja sobre fondo blanco — uso editorial</div>
+    </div>
+    <div class="usage-tile">
+      <div class="usage-preview" style="background:var(--black);">
+        <span class="usage-preview-logo" style="color:white;font-family:var(--font-display);font-size:36px;letter-spacing:.06em;">PRONOS<span style="color:var(--orange)">.</span></span>
+        <span class="usage-badge ok">✓</span>
+      </div>
+      <div class="usage-desc">✅ Logo blanco con punto naranja sobre negro — uso en hero</div>
+    </div>
+    <div class="usage-tile">
+      <div class="usage-preview" style="background:var(--yes);">
+        <span class="usage-preview-logo" style="color:white;font-family:var(--font-display);font-size:36px;letter-spacing:.06em;">PRONOS.</span>
+        <span class="usage-badge bad">✕</span>
+      </div>
+      <div class="usage-desc">❌ No usar sobre fondos de colores distintos al naranja, negro o blanco</div>
+    </div>
+    <div class="usage-tile">
+      <div class="usage-preview" style="background:white;">
+        <span class="usage-preview-logo" style="color:var(--orange);font-family:var(--font-display);font-size:28px;letter-spacing:.06em;opacity:.3;">PRONOS.</span>
+        <span class="usage-badge bad">✕</span>
+      </div>
+      <div class="usage-desc">❌ No reducir la opacidad del logo</div>
+    </div>
+    <div class="usage-tile">
+      <div class="usage-preview" style="background:white;">
+        <span class="usage-preview-logo" style="color:var(--orange);font-family:var(--font-display);font-size:22px;letter-spacing:.06em;transform:skewX(-12deg);display:inline-block;">PRONOS.</span>
+        <span class="usage-badge bad">✕</span>
+      </div>
+      <div class="usage-desc">❌ No distorsionar, inclinar ni modificar la tipografía del logo</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 5. VOZ Y TONO ───────────────────────────────────── -->
+<section class="bk-section">
+  <div class="bk-section-title">Voz y Tono</div>
+  <div class="bk-section-sub">Cómo habla Pronos — directo, técnico-accesible, latinoamericano.</div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+
+    <div style="border:1px solid var(--border-dk);padding:28px;">
+      <div style="font-size:10px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--yes);margin-bottom:16px;">✅ Pronos SÍ dice</div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div style="padding:12px 14px;background:rgba(22,163,74,0.06);border-left:3px solid var(--yes);font-size:13px;color:var(--gray-2);">"Predice quién gana. Cobra en USDC."</div>
+        <div style="padding:12px 14px;background:rgba(22,163,74,0.06);border-left:3px solid var(--yes);font-size:13px;color:var(--gray-2);">"Mercados on-chain. Sin intermediarios."</div>
+        <div style="padding:12px 14px;background:rgba(22,163,74,0.06);border-left:3px solid var(--yes);font-size:13px;color:var(--gray-2);">"Liquidado automáticamente al cierre."</div>
+        <div style="padding:12px 14px;background:rgba(22,163,74,0.06);border-left:3px solid var(--yes);font-size:13px;color:var(--gray-2);">"El primer mercado de predicciones para LATAM."</div>
+      </div>
+    </div>
+
+    <div style="border:1px solid var(--border-dk);padding:28px;">
+      <div style="font-size:10px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--no);margin-bottom:16px;">❌ Pronos NO dice</div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div style="padding:12px 14px;background:rgba(220,38,38,0.06);border-left:3px solid var(--no);font-size:13px;color:var(--gray-2);">"¡Apuesta y gana!" — usar "predice" no "apuesta"</div>
+        <div style="padding:12px 14px;background:rgba(220,38,38,0.06);border-left:3px solid var(--no);font-size:13px;color:var(--gray-2);">"Pronos garantiza ganancias" — nunca garantías</div>
+        <div style="padding:12px 14px;background:rgba(220,38,38,0.06);border-left:3px solid var(--no);font-size:13px;color:var(--gray-2);">"Casino" o "juego de azar" — somos mercados de predicción</div>
+        <div style="padding:12px 14px;background:rgba(220,38,38,0.06);border-left:3px solid var(--no);font-size:13px;color:var(--gray-2);">"Plataforma de criptos" — somos mercados de predicción</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">PRONOS<span>.</span></div>
+  <div class="footer-copy">© 2026 Pronos · Brand Kit v1.0</div>
+</footer>
+
+<script>
+function copyColor(val) {
+  navigator.clipboard.writeText(val).then(() => {
+    const t = document.getElementById('copyToast');
+    t.textContent = val + ' — copiado';
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2000);
+  });
+}
+
+function downloadLogoSVG(variant) {
+  const configs = {
+    orange: { bg: '#FF5500', text: 'white', dot: 'white' },
+    white:  { bg: '#ffffff', text: '#0d0d0d', dot: '#FF5500' },
+    light:  { bg: '#F5F5F3', text: '#FF5500', dot: '#FF5500' },
+    black:  { bg: '#0d0d0d', text: 'white',   dot: '#FF5500' },
+  };
+  const c = configs[variant];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 100">
+  <rect width="320" height="100" fill="${c.bg}"/>
+  <text x="20" y="72" font-family="'Bebas Neue', sans-serif" font-size="64" letter-spacing="4" fill="${c.text}">PRONOS</text>
+  <circle cx="296" cy="58" r="7" fill="${c.dot}"/>
+</svg>`;
+  const blob = new Blob([svg], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `pronos-logo-${variant}.svg`;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+
+  const t = document.getElementById('copyToast');
+  t.textContent = `pronos-logo-${variant}.svg descargado`;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>
