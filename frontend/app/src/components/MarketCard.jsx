@@ -21,11 +21,15 @@ export default function MarketCard({ market }) {
           <span className="mock-card-cat">{market.categoryLabel}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {market.trending && (
-            <span className="mock-card-badge trending">🔥 TRENDING</span>
-          )}
-          {market._source === 'polymarket' && (
-            <span className="mock-card-badge live">LIVE</span>
+          {market._resolved ? (
+            <span className="mock-card-badge" style={{ background: 'rgba(184,144,10,0.1)', border: '1px solid rgba(184,144,10,0.25)', color: 'var(--gold)' }}>
+              🏆 RESUELTO
+            </span>
+          ) : (
+            <>
+              {market.trending && <span className="mock-card-badge trending">🔥 TRENDING</span>}
+              {market._source === 'polymarket' && <span className="mock-card-badge live">LIVE</span>}
+            </>
           )}
         </div>
       </div>

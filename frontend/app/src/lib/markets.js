@@ -6,6 +6,29 @@
 
 const MARKETS = [
 
+  // ── MERCADOS CERRADOS / RESUELTOS ─────────────────────────────────────────
+
+  {
+    id: 'marco-verde-vs-alexander-moreno-mar-2026',
+    category: 'deportes',
+    categoryLabel: 'DEPORTES · BOX',
+    icon: '🥊',
+    title: '¿Marco Verde gana vs Alexander Moreno?',
+    deadline: '14 Mar 2026',
+    options: [
+      { label: 'Sí — Marco Verde', pct: 82 },
+      { label: 'No — Alexander Moreno', pct: 18 },
+    ],
+    volume: '4.2K',
+    _source: 'local',
+    _resolved: true,
+    _winner: 'Sí — Marco Verde',
+    _winnerShort: 'Marco Verde',
+    _resolvedDate: '14 Mar 2026',
+    _resolvedBy: 'Decisión Unánime · 80–72',
+    _description: 'Marco Verde (5-0, 4 KOs) venció a Alexander Moreno por decisión unánime en CODE Alcalde, Guadalajara. Los tres jueces marcaron 80-72 a favor del tapatío. Verde controló el combate a las 162 libras durante los 8 rounds.',
+  },
+
   // ── REAL POLYMARKET MARKETS (live trading) ────────────────────────────────
 
   // Liga MX — Necaxa vs Mazatlán (3 Apr 2026)
