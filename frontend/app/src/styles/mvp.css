@@ -131,12 +131,12 @@
   background: var(--surface3);
 }
 .mock-card-opt.yes {
-  border-color: rgba(0, 232, 122, 0.2);
-  background: rgba(0, 232, 122, 0.05);
+  border-color: rgba(22, 163, 74, 0.2);
+  background: rgba(22, 163, 74, 0.05);
 }
 .mock-card-opt.yes:hover {
-  border-color: rgba(0, 232, 122, 0.4);
-  background: rgba(0, 232, 122, 0.1);
+  border-color: rgba(22, 163, 74, 0.4);
+  background: rgba(22, 163, 74, 0.1);
 }
 .mock-card-opt-label {
   font-family: var(--font-mono);
@@ -152,7 +152,7 @@
   color: var(--text-primary);
 }
 .mock-card-opt.yes .mock-card-opt-pct {
-  color: var(--green);
+  color: var(--yes);
 }
 
 /* ── Bet Modal extras ────────────────────────────────────────── */
@@ -160,8 +160,8 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: rgba(0, 232, 122, 0.08);
-  border: 1px solid rgba(0, 232, 122, 0.25);
+  background: rgba(22, 163, 74, 0.08);
+  border: 1px solid rgba(22, 163, 74, 0.25);
   border-radius: 8px;
   padding: 6px 12px;
   margin-bottom: 16px;
@@ -169,14 +169,14 @@
 .bet-outcome-label {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--green);
+  color: var(--yes);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 .bet-outcome-pct {
   font-family: var(--font-display);
   font-size: 18px;
-  color: var(--green);
+  color: var(--yes);
 }
 
 .bet-amount-wrap {
@@ -264,8 +264,8 @@
   background: var(--surface3);
 }
 .wc-odds-btn.yes {
-  border-color: rgba(0, 232, 122, 0.25);
-  background: rgba(0, 232, 122, 0.06);
+  border-color: rgba(22, 163, 74, 0.25);
+  background: rgba(22, 163, 74, 0.06);
 }
 .wc-odds-label {
   font-family: var(--font-mono);
@@ -280,7 +280,7 @@
   color: var(--text-primary);
 }
 .wc-odds-val.green {
-  color: var(--green);
+  color: var(--yes);
 }
 .wc-vol {
   font-family: var(--font-mono);

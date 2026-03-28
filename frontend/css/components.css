@@ -1156,8 +1156,8 @@ html[data-theme="light"] .btn-theme-toggle::before {
 }
 .mock-opt:hover { transform: translateY(-1px); }
 .mock-opt.yes {
-  background: var(--green-dim);
-  border-color: rgba(255,85,0,0.25);
+  background: var(--yes-dim);
+  border-color: rgba(22,163,74,0.25);
 }
 .mock-opt.no {
   background: rgba(255, 59, 59, 0.12);
@@ -1169,7 +1169,7 @@ html[data-theme="light"] .btn-theme-toggle::before {
   letter-spacing: 0.04em;
   line-height: 1;
 }
-.mock-opt.yes .mock-opt-pct { color: var(--green); }
+.mock-opt.yes .mock-opt-pct { color: var(--yes); }
 .mock-opt.no .mock-opt-pct { color: #ff3b3b; }
 .mock-opt-label {
   font-family: var(--font-mono);

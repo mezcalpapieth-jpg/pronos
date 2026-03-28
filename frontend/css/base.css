@@ -16,6 +16,9 @@
   --green-bright: #FF7733;
   --green-dim: rgba(255,85,0,0.10);
   --green-glow: rgba(255,85,0,0.16);
+  --yes: #16a34a;
+  --yes-dim: rgba(22,163,74,0.10);
+  --yes-glow: rgba(22,163,74,0.15);
   --gold: #B8900A;
   --gold-dim: rgba(184,144,10,0.1);
   --red: #D42020;
@@ -43,6 +46,9 @@ html[data-theme="dark"] {
   --green-bright: #FF7733;
   --green-dim: rgba(255,85,0,0.12);
   --green-glow: rgba(255,85,0,0.18);
+  --yes: #00C96B;
+  --yes-dim: rgba(0,201,107,0.12);
+  --yes-glow: rgba(0,201,107,0.18);
   --gold: #F5C842;
   --gold-dim: rgba(245,200,66,0.12);
   --red: #FF4545;
