@@ -26,7 +26,7 @@
   left: -10%;
   width: 70%;
   height: 100%;
-  background: radial-gradient(ellipse at center, rgba(0,232,122,0.07) 0%, transparent 65%);
+  background: radial-gradient(ellipse at center, rgba(255,85,0,0.07) 0%, transparent 65%);
   pointer-events: none;
 }
 
@@ -49,8 +49,8 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: rgba(0,232,122,0.08);
-  border: 1px solid rgba(0,232,122,0.2);
+  background: rgba(255,85,0,0.08);
+  border: 1px solid rgba(255,85,0,0.2);
   border-radius: 100px;
   padding: 6px 14px;
   margin-bottom: 28px;
@@ -140,7 +140,7 @@
   right: -10%;
   width: 60%;
   height: 160%;
-  background: radial-gradient(ellipse at center, rgba(0,232,122,0.05) 0%, transparent 65%);
+  background: radial-gradient(ellipse at center, rgba(255,85,0,0.05) 0%, transparent 65%);
   pointer-events: none;
 }
 
@@ -167,15 +167,15 @@
 .step-num {
   font-family: var(--font-display);
   font-size: 72px;
-  color: rgba(0,232,122,0.15);
+  color: rgba(255,85,0,0.15);
   letter-spacing: 0.04em;
   line-height: 1;
 }
 .step-icon-circle {
   width: 56px; height: 56px;
   border-radius: 50%;
-  background: rgba(0,232,122,0.08);
-  border: 1px solid rgba(0,232,122,0.2);
+  background: rgba(255,85,0,0.08);
+  border: 1px solid rgba(255,85,0,0.2);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -206,7 +206,7 @@
   gap: 8px;
   background: var(--green-dim);
   color: var(--green);
-  border: 1px solid rgba(0,232,122,0.25);
+  border: 1px solid rgba(255,85,0,0.25);
   font-weight: 600;
   font-size: 13px;
   padding: 9px 16px;
@@ -215,8 +215,8 @@
   cursor: pointer;
 }
 .step-btn-wallet:hover {
-  background: rgba(0,232,122,0.2);
-  box-shadow: 0 0 16px rgba(0,232,122,0.2);
+  background: rgba(255,85,0,0.2);
+  box-shadow: 0 0 16px rgba(255,85,0,0.2);
   transform: translateY(-1px);
 }
 .wallet-icon {
@@ -337,7 +337,7 @@
   background: var(--surface2);
   border: 2px solid var(--green);
   border-radius: 50%;
-  box-shadow: 0 0 14px rgba(0,232,122,0.25);
+  box-shadow: 0 0 14px rgba(255,85,0,0.25);
   display: flex;
   align-items: center;
   justify-content: center;

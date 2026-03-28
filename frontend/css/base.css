@@ -4,45 +4,18 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  /* ── Dark theme (default) ── */
-  --bg: #080808;
-  --bg-rgb: 8,8,8;
-  --surface1: #111111;
-  --surface2: #181818;
-  --surface3: #1e1e1e;
-  --border: rgba(255,255,255,0.07);
-  --border-active: rgba(0,232,122,0.35);
-  --green: #00E87A;
-  --green-bright: #00ff88;
-  --green-dim: rgba(0,232,122,0.12);
-  --green-glow: rgba(0,232,122,0.18);
-  --gold: #F5C842;
-  --gold-dim: rgba(245,200,66,0.12);
-  --red: #FF4545;
-  --red-dim: rgba(255,69,69,0.12);
-  --text-primary: #F0F0F0;
-  --text-secondary: #888;
-  --text-muted: #555;
-  --base-blue: #0052FF;
-  --btn-text: #000;
-  --font-display: 'Bebas Neue', sans-serif;
-  --font-body: 'DM Sans', sans-serif;
-  --font-mono: 'DM Mono', monospace;
-}
-
-/* ── Light theme overrides ── */
-html[data-theme="light"] {
+  /* ── Light theme (default) ── */
   --bg: #F5F5F3;
   --bg-rgb: 245,245,243;
   --surface1: #FFFFFF;
-  --surface2: #F0F0EE;
-  --surface3: #E4E4E1;
+  --surface2: #EEEDE9;
+  --surface3: #E4E3DF;
   --border: rgba(0,0,0,0.09);
-  --border-active: rgba(0,168,88,0.4);
-  --green: #00A858;
-  --green-bright: #00c46a;
-  --green-dim: rgba(0,168,88,0.1);
-  --green-glow: rgba(0,168,88,0.15);
+  --border-active: rgba(255,85,0,0.35);
+  --green: #FF5500;
+  --green-bright: #FF7733;
+  --green-dim: rgba(255,85,0,0.10);
+  --green-glow: rgba(255,85,0,0.16);
   --gold: #B8900A;
   --gold-dim: rgba(184,144,10,0.1);
   --red: #D42020;
@@ -51,6 +24,33 @@ html[data-theme="light"] {
   --text-secondary: #555;
   --text-muted: #999;
   --base-blue: #0047E0;
+  --btn-text: #fff;
+  --font-display: 'Bebas Neue', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+}
+
+/* ── Dark theme overrides ── */
+html[data-theme="dark"] {
+  --bg: #080808;
+  --bg-rgb: 8,8,8;
+  --surface1: #111111;
+  --surface2: #181818;
+  --surface3: #1e1e1e;
+  --border: rgba(255,255,255,0.07);
+  --border-active: rgba(255,85,0,0.35);
+  --green: #FF5500;
+  --green-bright: #FF7733;
+  --green-dim: rgba(255,85,0,0.12);
+  --green-glow: rgba(255,85,0,0.18);
+  --gold: #F5C842;
+  --gold-dim: rgba(245,200,66,0.12);
+  --red: #FF4545;
+  --red-dim: rgba(255,69,69,0.12);
+  --text-primary: #F0F0F0;
+  --text-secondary: #888;
+  --text-muted: #555;
+  --base-blue: #0052FF;
   --btn-text: #fff;
 }
 
@@ -92,8 +92,8 @@ svg { display: block; }
   50% { opacity: 0.5; transform: scale(0.8); }
 }
 @keyframes avatar-pulse {
-  0%, 100% { box-shadow: 0 0 20px rgba(0,232,122,0.4), 0 0 50px rgba(0,232,122,0.2); }
-  50% { box-shadow: 0 0 30px rgba(0,232,122,0.6), 0 0 70px rgba(0,232,122,0.3); }
+  0%, 100% { box-shadow: 0 0 20px rgba(255,85,0,0.4), 0 0 50px rgba(255,85,0,0.2); }
+  50% { box-shadow: 0 0 30px rgba(255,85,0,0.6), 0 0 70px rgba(255,85,0,0.3); }
 }
 @keyframes modal-in {
   from { opacity: 0; transform: scale(0.88) translateY(16px); }
