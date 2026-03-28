@@ -392,11 +392,32 @@
   font-size: 13px;
   color: var(--text-muted);
 }
+.footer-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
 .footer-copy {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-muted);
   letter-spacing: 0.06em;
+}
+.footer-links {
+  display: flex;
+  gap: 20px;
+}
+.footer-links a {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  transition: color 0.2s;
+}
+.footer-links a:hover {
+  color: var(--green);
 }
 
 /* ============================================================
