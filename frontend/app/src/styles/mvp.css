@@ -267,6 +267,14 @@
   border-color: rgba(22, 163, 74, 0.25);
   background: rgba(22, 163, 74, 0.06);
 }
+.wc-odds-btn.no {
+  border-color: rgba(212, 32, 32, 0.22);
+  background: rgba(212, 32, 32, 0.05);
+}
+html[data-theme="dark"] .wc-odds-btn.no {
+  border-color: rgba(255, 69, 69, 0.22);
+  background: rgba(255, 69, 69, 0.06);
+}
 .wc-odds-label {
   font-family: var(--font-mono);
   font-size: 9px;
@@ -279,8 +287,11 @@
   font-size: 22px;
   color: var(--text-primary);
 }
-.wc-odds-val.green {
+.wc-odds-val.yes-val {
   color: var(--yes);
+}
+.wc-odds-val.no-val {
+  color: var(--red);
 }
 .wc-vol {
   font-family: var(--font-mono);
@@ -390,11 +401,18 @@
   height: 100%;
   background: var(--green);
   border-radius: 0;
-  animation: carousel-progress 3.8s linear forwards;
+  animation: carousel-progress 5s linear forwards;
 }
 @keyframes carousel-progress {
   from { width: 0%; }
   to   { width: 100%; }
+}
+
+@keyframes trade-tick {
+  0%   { opacity: 0;   transform: translateX(-50%) translateY(0px)   scale(0.8); }
+  15%  { opacity: 1;   transform: translateX(-50%) translateY(-6px)  scale(1);   }
+  70%  { opacity: 0.9; transform: translateX(-50%) translateY(-28px) scale(1);   }
+  100% { opacity: 0;   transform: translateX(-50%) translateY(-48px) scale(0.9); }
 }
 
 /* ── Responsive ──────────────────────────────────────────────── */

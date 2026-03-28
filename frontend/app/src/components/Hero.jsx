@@ -1,10 +1,74 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 import { useNavigate } from 'react-router-dom';
 import MARKETS from '../lib/markets.js';
 
-// Only featured real Polymarket markets in the carousel
 const FEATURED = MARKETS.filter(m => m._source === 'polymarket' && m.trending);
+
+/* ── Live trade ticker amounts ───────────────────────── */
+const AMOUNTS = [1, 2, 3, 5, 8, 10, 15, 20, 25, 50, 64, 100, 200, 500];
+
+function LiveTrades() {
+  const [ticks, setTicks] = useState([]);
+  const idRef = useRef(0);
+
+  useEffect(() => {
+    const spawn = () => {
+      const isYes  = Math.random() > 0.45;
+      const amount = AMOUNTS[Math.floor(Math.random() * AMOUNTS.length)];
+      const left   = 8 + Math.random() * 84; // % across card
+      const id     = ++idRef.current;
+
+      setTicks(prev => [...prev.slice(-14), { id, isYes, amount, left }]);
+
+      // remove after animation
+      setTimeout(() => setTicks(prev => prev.filter(t => t.id !== id)), 2600);
+    };
+
+    // stagger initial spawns
+    const timeouts = [];
+    for (let i = 0; i < 4; i++) {
+      timeouts.push(setTimeout(spawn, i * 300));
+    }
+
+    const iv = setInterval(spawn, 520 + Math.random() * 400);
+    return () => {
+      clearInterval(iv);
+      timeouts.forEach(clearTimeout);
+    };
+  }, []);
+
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, pointerEvents: 'none',
+      overflow: 'hidden', borderRadius: 16,
+    }}>
+      {ticks.map(t => (
+        <span
+          key={t.id}
+          style={{
+            position: 'absolute',
+            bottom: '18%',
+            left: `${t.left}%`,
+            transform: 'translateX(-50%)',
+            fontFamily: 'var(--font-mono)',
+            fontWeight: 600,
+            fontSize: '12px',
+            color: t.isYes ? 'var(--yes)' : 'var(--red)',
+            textShadow: t.isYes
+              ? '0 0 10px rgba(22,163,74,0.5)'
+              : '0 0 10px rgba(212,32,32,0.5)',
+            animation: 'trade-tick 2.5s ease-out forwards',
+            whiteSpace: 'nowrap',
+            userSelect: 'none',
+          }}
+        >
+          {t.isYes ? '+' : '+'}{t.isYes ? '' : ''}${t.amount}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 export default function Hero() {
   const { authenticated, login } = usePrivy();
@@ -22,7 +86,7 @@ export default function Hero() {
     }, 180);
   };
 
-  const startTimer = () => {
+  const startTimer = useCallback(() => {
     clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
       setAnimating(true);
@@ -30,16 +94,15 @@ export default function Hero() {
         setCurrent(c => (c + 1) % FEATURED.length);
         setAnimating(false);
       }, 180);
-    }, 3800);
-  };
+    }, 5000);
+  }, []);
 
   useEffect(() => {
     startTimer();
     return () => clearInterval(timerRef.current);
-  }, []);
+  }, [startTimer]);
 
   const market = FEATURED[current] || FEATURED[0];
-
   const handleCardClick = () => navigate(`/market?id=${market.id}`);
 
   return (
@@ -97,6 +160,9 @@ export default function Hero() {
             tabIndex={0}
             onKeyDown={e => e.key === 'Enter' && handleCardClick()}
           >
+            {/* Live trades overlay */}
+            <LiveTrades />
+
             {/* Header */}
             <div className="hero-carousel-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -123,11 +189,11 @@ export default function Hero() {
               {(market.options || []).map((opt, i) => (
                 <button
                   key={i}
-                  className={`wc-odds-btn${i === 0 ? ' yes' : ''}`}
+                  className={`wc-odds-btn${i === 0 ? ' yes' : ' no'}`}
                   onClick={e => { e.stopPropagation(); handleCardClick(); }}
                 >
                   <span className="wc-odds-label">{opt.label}</span>
-                  <span className={`wc-odds-val${i === 0 ? ' green' : ''}`}>{opt.pct}%</span>
+                  <span className={`wc-odds-val${i === 0 ? ' yes-val' : ' no-val'}`}>{opt.pct}%</span>
                 </button>
               ))}
             </div>
@@ -139,7 +205,6 @@ export default function Hero() {
                 <span className="wc-vol">{market.deadline}</span>
               </div>
 
-              {/* Dot indicators */}
               <div className="hero-carousel-dots">
                 {FEATURED.map((_, i) => (
                   <button
@@ -154,10 +219,7 @@ export default function Hero() {
 
             {/* Progress bar */}
             <div className="hero-carousel-progress">
-              <div
-                key={current}
-                className="hero-carousel-progress-bar"
-              />
+              <div key={current} className="hero-carousel-progress-bar" />
             </div>
           </div>
         </div>
