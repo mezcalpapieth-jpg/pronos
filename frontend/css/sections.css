@@ -35,7 +35,7 @@
   width: 100%;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: 1fr 680px;
+  grid-template-columns: 1fr 880px;
   gap: 64px;
   align-items: center;
   position: relative;

@@ -4,43 +4,55 @@ import { useNavigate } from 'react-router-dom';
 import MARKETS from '../lib/markets.js';
 
 const FEATURED = MARKETS.filter(m => m._source === 'polymarket' && m.trending);
+const AMOUNTS   = [1, 2, 3, 5, 8, 10, 15, 20, 25, 50, 64, 100, 200, 500];
 
-/* ── Live trade ticker amounts ───────────────────────── */
-const AMOUNTS = [1, 2, 3, 5, 8, 10, 15, 20, 25, 50, 64, 100, 200, 500];
+/* ── Inject keyframe once ─────────────────────────────── */
+const STYLE_ID = 'trade-tick-kf';
+if (typeof document !== 'undefined' && !document.getElementById(STYLE_ID)) {
+  const s = document.createElement('style');
+  s.id = STYLE_ID;
+  s.textContent = `
+    @keyframes trade-tick {
+      0%   { opacity: 0;   transform: translateX(-50%) translateY(0px)   scale(0.75); }
+      12%  { opacity: 1;   transform: translateX(-50%) translateY(-8px)  scale(1.05); }
+      65%  { opacity: 0.85;transform: translateX(-50%) translateY(-34px) scale(1);    }
+      100% { opacity: 0;   transform: translateX(-50%) translateY(-56px) scale(0.9);  }
+    }
+  `;
+  document.head.appendChild(s);
+}
 
+/* ── Live trade overlay ───────────────────────────────── */
 function LiveTrades() {
   const [ticks, setTicks] = useState([]);
   const idRef = useRef(0);
 
   useEffect(() => {
+    let alive = true;
+
     const spawn = () => {
+      if (!alive) return;
       const isYes  = Math.random() > 0.45;
       const amount = AMOUNTS[Math.floor(Math.random() * AMOUNTS.length)];
-      const left   = 8 + Math.random() * 84; // % across card
+      const left   = 10 + Math.random() * 80;   // % across card width
+      const bottom = 12 + Math.random() * 55;   // % up from bottom of card
       const id     = ++idRef.current;
 
-      setTicks(prev => [...prev.slice(-14), { id, isYes, amount, left }]);
-
-      // remove after animation
-      setTimeout(() => setTicks(prev => prev.filter(t => t.id !== id)), 2600);
+      setTicks(prev => [...prev.slice(-16), { id, isYes, amount, left, bottom }]);
+      setTimeout(() => setTicks(prev => prev.filter(t => t.id !== id)), 2700);
     };
 
-    // stagger initial spawns
-    const timeouts = [];
-    for (let i = 0; i < 4; i++) {
-      timeouts.push(setTimeout(spawn, i * 300));
-    }
+    // stagger 5 initial ticks
+    [0, 250, 500, 750, 1050].forEach(d => setTimeout(spawn, d));
 
-    const iv = setInterval(spawn, 520 + Math.random() * 400);
-    return () => {
-      clearInterval(iv);
-      timeouts.forEach(clearTimeout);
-    };
+    const iv = setInterval(spawn, 480);
+    return () => { alive = false; clearInterval(iv); };
   }, []);
 
   return (
     <div style={{
-      position: 'absolute', inset: 0, pointerEvents: 'none',
+      position: 'absolute', inset: 0,
+      pointerEvents: 'none', zIndex: 20,
       overflow: 'hidden', borderRadius: 16,
     }}>
       {ticks.map(t => (
@@ -48,28 +60,30 @@ function LiveTrades() {
           key={t.id}
           style={{
             position: 'absolute',
-            bottom: '18%',
             left: `${t.left}%`,
+            bottom: `${t.bottom}%`,
             transform: 'translateX(-50%)',
             fontFamily: 'var(--font-mono)',
-            fontWeight: 600,
+            fontWeight: 700,
             fontSize: '12px',
+            lineHeight: 1,
             color: t.isYes ? 'var(--yes)' : 'var(--red)',
             textShadow: t.isYes
-              ? '0 0 10px rgba(22,163,74,0.5)'
-              : '0 0 10px rgba(212,32,32,0.5)',
+              ? '0 0 12px rgba(22,163,74,0.6)'
+              : '0 0 12px rgba(212,32,32,0.6)',
             animation: 'trade-tick 2.5s ease-out forwards',
             whiteSpace: 'nowrap',
             userSelect: 'none',
           }}
         >
-          {t.isYes ? '+' : '+'}{t.isYes ? '' : ''}${t.amount}
+          +${t.amount}
         </span>
       ))}
     </div>
   );
 }
 
+/* ── Hero ─────────────────────────────────────────────── */
 export default function Hero() {
   const { authenticated, login } = usePrivy();
   const navigate = useNavigate();
@@ -80,10 +94,7 @@ export default function Hero() {
   const goTo = (idx) => {
     if (idx === current || animating) return;
     setAnimating(true);
-    setTimeout(() => {
-      setCurrent(idx);
-      setAnimating(false);
-    }, 180);
+    setTimeout(() => { setCurrent(idx); setAnimating(false); }, 180);
   };
 
   const startTimer = useCallback(() => {
@@ -108,6 +119,7 @@ export default function Hero() {
   return (
     <section id="hero">
       <div className="hero-inner">
+
         {/* ── Left copy ─────────────────────────────── */}
         <div className="hero-left">
           <div className="hero-badge">
@@ -160,20 +172,17 @@ export default function Hero() {
             tabIndex={0}
             onKeyDown={e => e.key === 'Enter' && handleCardClick()}
           >
-            {/* Live trades overlay */}
             <LiveTrades />
 
             {/* Header */}
             <div className="hero-carousel-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span
-                  style={{
-                    width: 7, height: 7, borderRadius: '50%',
-                    background: 'var(--green)', display: 'inline-block',
-                    boxShadow: '0 0 8px var(--green)',
-                    animation: 'pulse-dot 1.4s ease-in-out infinite',
-                  }}
-                />
+                <span style={{
+                  width: 7, height: 7, borderRadius: '50%',
+                  background: 'var(--green)', display: 'inline-block',
+                  boxShadow: '0 0 8px var(--green)',
+                  animation: 'pulse-dot 1.4s ease-in-out infinite',
+                }} />
                 <span className="hero-carousel-cat">
                   {market.icon}&nbsp;{market.categoryLabel}
                 </span>
@@ -193,18 +202,21 @@ export default function Hero() {
                   onClick={e => { e.stopPropagation(); handleCardClick(); }}
                 >
                   <span className="wc-odds-label">{opt.label}</span>
-                  <span className={`wc-odds-val${i === 0 ? ' yes-val' : ' no-val'}`}>{opt.pct}%</span>
+                  <span className={`wc-odds-val${i === 0 ? ' yes-val' : ' no-val'}`}>
+                    {opt.pct}%
+                  </span>
                 </button>
               ))}
             </div>
 
-            {/* Footer: volume + deadline + dots */}
+            {/* Footer */}
             <div className="hero-carousel-footer">
               <div style={{ display: 'flex', gap: 16 }}>
-                <span className="wc-vol">VOL&nbsp;<strong style={{ color: 'var(--green)' }}>${market.volume}</strong></span>
+                <span className="wc-vol">
+                  VOL&nbsp;<strong style={{ color: 'var(--green)' }}>${market.volume}</strong>
+                </span>
                 <span className="wc-vol">{market.deadline}</span>
               </div>
-
               <div className="hero-carousel-dots">
                 {FEATURED.map((_, i) => (
                   <button
@@ -223,6 +235,7 @@ export default function Hero() {
             </div>
           </div>
         </div>
+
       </div>
     </section>
   );
