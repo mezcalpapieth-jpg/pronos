@@ -20,6 +20,8 @@
     <link rel="stylesheet" href="/css/sections.css" />
   </head>
   <body>
+    <!-- Anti-flash: apply saved theme before paint -->
+    <script>(function(){var s=localStorage.getItem('pronos-theme');document.documentElement.setAttribute('data-theme',s||'light');})();</script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

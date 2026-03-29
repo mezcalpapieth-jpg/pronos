@@ -17,7 +17,7 @@ const MARKETS = [
       { label: 'Sí', pct: 67 },
       { label: 'No', pct: 33 },
     ],
-    volume: '4,200',
+    volume: '84,000',
   },
   {
     id: 'peso-pluma-anillo',
@@ -30,7 +30,7 @@ const MARKETS = [
       { label: 'Sí', pct: 14 },
       { label: 'No', pct: 86 },
     ],
-    volume: '2,850',
+    volume: '57,000',
   },
   {
     id: 'nodal-divorcio',
@@ -43,7 +43,7 @@ const MARKETS = [
       { label: 'Sí', pct: 22 },
       { label: 'No', pct: 78 },
     ],
-    volume: '3,100',
+    volume: '62,000',
   },
 
   // ── MÉXICO & CDMX ────────────────────────────────────────────────────────
@@ -58,7 +58,7 @@ const MARKETS = [
       { label: 'Sí', pct: 71 },
       { label: 'No', pct: 29 },
     ],
-    volume: '5,600',
+    volume: '112,000',
   },
   {
     id: 'tren-maya-descarrila',
@@ -71,7 +71,7 @@ const MARKETS = [
       { label: 'Sí', pct: 38 },
       { label: 'No', pct: 62 },
     ],
-    volume: '1,900',
+    volume: '38,000',
   },
   {
     id: 'dolar-22-mxn',
@@ -84,7 +84,7 @@ const MARKETS = [
       { label: 'Sí', pct: 31 },
       { label: 'No', pct: 69 },
     ],
-    volume: '8,400',
+    volume: '168,000',
   },
 
   // ── POLÍTICA INTERNACIONAL ───────────────────────────────────────────────
@@ -99,7 +99,7 @@ const MARKETS = [
       { label: 'Sí', pct: 5 },
       { label: 'No', pct: 95 },
     ],
-    volume: '6,700',
+    volume: '134,000',
   },
   {
     id: 'venezuela-elecciones',
@@ -112,7 +112,7 @@ const MARKETS = [
       { label: 'Sí', pct: 3 },
       { label: 'No', pct: 97 },
     ],
-    volume: '2,100',
+    volume: '42,000',
   },
   {
     id: 'cuba-embargo',
@@ -125,7 +125,7 @@ const MARKETS = [
       { label: 'Sí', pct: 3 },
       { label: 'No', pct: 97 },
     ],
-    volume: '1,450',
+    volume: '29,000',
   },
 
   // ── DEPORTES ─────────────────────────────────────────────────────────────
@@ -140,7 +140,7 @@ const MARKETS = [
       { label: 'Sí', pct: 61 },
       { label: 'No', pct: 39 },
     ],
-    volume: '7,300',
+    volume: '146,000',
   },
   {
     id: 'mundial-mexico-gana',
@@ -153,7 +153,7 @@ const MARKETS = [
       { label: 'Sí', pct: 54 },
       { label: 'No', pct: 46 },
     ],
-    volume: '23,400',
+    volume: '468,000',
   },
   {
     id: 'sga-mvp',
@@ -166,7 +166,7 @@ const MARKETS = [
       { label: 'Sí', pct: 71 },
       { label: 'No', pct: 29 },
     ],
-    volume: '18,200',
+    volume: '364,000',
   },
 
   // ── CRYPTO ───────────────────────────────────────────────────────────────
@@ -181,7 +181,7 @@ const MARKETS = [
       { label: 'Sí', pct: 12 },
       { label: 'No', pct: 88 },
     ],
-    volume: '14,900',
+    volume: '298,000',
   },
   {
     id: 'eth-4k',
@@ -194,7 +194,7 @@ const MARKETS = [
       { label: 'Sí', pct: 28 },
       { label: 'No', pct: 72 },
     ],
-    volume: '9,600',
+    volume: '192,000',
   },
   {
     id: 'sol-300',
@@ -207,6 +207,6 @@ const MARKETS = [
       { label: 'Sí', pct: 35 },
       { label: 'No', pct: 65 },
     ],
-    volume: '6,100',
+    volume: '122,000',
   },
 ];

@@ -251,7 +251,7 @@ export default function MarketDetail() {
                         transition: 'border-color 0.2s',
                       }}
                       onClick={() => !resolved && openBet(opt.label, opt.pct, i)}
-                      onMouseOver={e => !resolved && (e.currentTarget.style.borderColor = 'rgba(0,232,122,0.3)')}
+                      onMouseOver={e => !resolved && (e.currentTarget.style.borderColor = 'var(--border-active)')}
                       onMouseOut={e => !resolved && (e.currentTarget.style.borderColor = 'var(--border)')}
                     >
                       <div style={{ flex: 1 }}>

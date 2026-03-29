@@ -19,7 +19,7 @@ const MARKETS = [
       { label: 'Sí — Marco Verde', pct: 82 },
       { label: 'No — Alexander Moreno', pct: 18 },
     ],
-    volume: '4.2K',
+    volume: '84K',
     _source: 'local',
     _resolved: true,
     _winner: 'Sí — Marco Verde',
@@ -44,7 +44,7 @@ const MARKETS = [
       { label: 'Sí', pct: 58 },
       { label: 'No', pct: 42 },
     ],
-    volume: '162',
+    volume: '3.2K',
     _polyId: '1525611',
     _conditionId: '0x208cbe4bdcbbb28a8df7ddfb5ad699def622dacbd63a0c4cb96ff8e8df501139',
     _clobTokenIds: [
@@ -66,7 +66,7 @@ const MARKETS = [
       { label: 'Sí', pct: 23 },
       { label: 'No', pct: 77 },
     ],
-    volume: '162',
+    volume: '3.2K',
     _polyId: '1525612',
     _conditionId: '0x6d8035eeed0290f66da026af25b0de867f890a8b77a58ddf067074070ed3fe32',
     _clobTokenIds: [
@@ -88,7 +88,7 @@ const MARKETS = [
       { label: 'Sí', pct: 20 },
       { label: 'No', pct: 80 },
     ],
-    volume: '162',
+    volume: '3.2K',
     _polyId: '1525613',
     _conditionId: '0xb11839be7f61158c33de773cff3675fe8dfc5b493bc49692824d0aa805b2aa1d',
     _clobTokenIds: [
@@ -113,7 +113,7 @@ const MARKETS = [
       { label: 'Sí', pct: 5 },
       { label: 'No', pct: 95 },
     ],
-    volume: '120K',
+    volume: '2.4M',
     _polyId: '648896',
     _conditionId: '0x5649a937907e0db6814f3fcbfa68e9f78a700d8c0e38ce652a572d97e205640d',
     _clobTokenIds: [
@@ -137,7 +137,7 @@ const MARKETS = [
       { label: 'Sí', pct: 33 },
       { label: 'No', pct: 67 },
     ],
-    volume: '685',
+    volume: '13.7K',
     _polyId: '1353325',
     _conditionId: '0x92db92b0c2a161440cb8500db98b5883c475e5a5e3b869990fb4276bd1f70a04',
     _clobTokenIds: [
@@ -162,7 +162,7 @@ const MARKETS = [
       { label: 'Sí', pct: 10 },
       { label: 'No', pct: 90 },
     ],
-    volume: '5.1M',
+    volume: '102M',
     _polyId: '558938',
     _conditionId: '0x0c4cd2055d6ea89354ffddc55d6dbcef9355748112ea952fc925f3db6a5c457f',
     _clobTokenIds: [
@@ -185,7 +185,7 @@ const MARKETS = [
       { label: 'Sí', pct: 9 },
       { label: 'No', pct: 91 },
     ],
-    volume: '5.8M',
+    volume: '116M',
     _polyId: '558937',
     _conditionId: '0x30d55d8124ee1e12dabe89201badc45669b81dff69e4ce44d961f32878ec178a',
     _clobTokenIds: [
@@ -208,7 +208,7 @@ const MARKETS = [
       { label: 'Sí', pct: 1 },
       { label: 'No', pct: 99 },
     ],
-    volume: '6.4M',
+    volume: '128M',
     _polyId: '558945',
     _conditionId: '0x5ccfe1b69a582d2985db08a8481a0d74c314b1fce9b4711ae2efb2c6467fe6aa',
     _clobTokenIds: [
@@ -231,7 +231,7 @@ const MARKETS = [
       { label: 'Sí', pct: 2 },
       { label: 'No', pct: 98 },
     ],
-    volume: '6.7M',
+    volume: '134M',
     _polyId: '558947',
     _conditionId: '0xe99cc59f32b10d23acf196d1a0e8264ea30fca198428acadd3464b06ff60e771',
     _clobTokenIds: [
@@ -253,7 +253,7 @@ const MARKETS = [
       { label: 'Sí', pct: 1 },
       { label: 'No', pct: 99 },
     ],
-    volume: '6.4M',
+    volume: '128M',
     _polyId: '558944',
     _conditionId: '0x7876851632c295043c66536150a304cb785abdf712ba8489d298c6e6926be106',
     _clobTokenIds: [
@@ -276,7 +276,7 @@ const MARKETS = [
       { label: 'Sí', pct: 33 },
       { label: 'No', pct: 67 },
     ],
-    volume: '52K',
+    volume: '1M',
     _polyId: '1630444',
     _conditionId: '0xb60c044bba6f7958768691345df1e102448a5b7ef16e4a08879bb10483fb4567',
     _clobTokenIds: [
@@ -301,7 +301,7 @@ const MARKETS = [
       { label: 'Sí', pct: 44 },
       { label: 'No', pct: 56 },
     ],
-    volume: '4.1M',
+    volume: '82M',
     _polyId: '601819',
     _conditionId: '0xdf8e2dc5860027decbe6164555c3c1c9645c3bd33e16b9dc57ca87125047d4a8',
     _clobTokenIds: [
@@ -326,7 +326,7 @@ const MARKETS = [
       { label: 'Sí', pct: 64 },
       { label: 'No', pct: 36 },
     ],
-    volume: '1.2M',
+    volume: '24M',
     _polyId: '1105742',
     _conditionId: '0xa01d48a973e40770719dab42faf1aeae5da4376d9eca46e77265c7551d1be0f7',
     _clobTokenIds: [
@@ -351,7 +351,7 @@ const MARKETS = [
       { label: 'Sí', pct: 17 },
       { label: 'No', pct: 83 },
     ],
-    volume: '7.9M',
+    volume: '158M',
     _polyId: '1473072',
     _conditionId: '0x36912c9832f0fd104d734b579fb9b3a1b31bbdc946a67356723407e3bdc96dbc',
     _clobTokenIds: [
