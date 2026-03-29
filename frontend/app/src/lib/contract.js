@@ -3,9 +3,9 @@
 
 import { ethers } from 'ethers';
 
-// Polygon USDC
-export const USDC_ADDRESS = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
-export const USDC_DECIMALS = 6;
+// Polygon MXNB
+export const MXNB_ADDRESS = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
+export const MXNB_DECIMALS = 6;
 
 // Minimal ERC-20 ABI (just what we need)
 const ERC20_ABI = [
@@ -24,26 +24,26 @@ export async function getSignerFromPrivy(wallet) {
 }
 
 /**
- * Get USDC balance for an address.
+ * Get MXNB balance for an address.
  * @param {ethers.Signer} signer
  * @param {string} address
  * @returns {Promise<string>} formatted balance (e.g. "12.50")
  */
 export async function getUsdcBalance(signer, address) {
-  const contract = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, signer);
+  const contract = new ethers.Contract(MXNB_ADDRESS, ERC20_ABI, signer);
   const raw = await contract.balanceOf(address);
-  return ethers.utils.formatUnits(raw, USDC_DECIMALS);
+  return ethers.utils.formatUnits(raw, MXNB_DECIMALS);
 }
 
 /**
- * Approve a spender to use USDC.
+ * Approve a spender to use MXNB.
  * @param {ethers.Signer} signer
  * @param {string} spender
  * @param {number} amountUsd  - human-readable USD amount
  */
 export async function approveUsdc(signer, spender, amountUsd) {
-  const contract = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, signer);
-  const amount = ethers.utils.parseUnits(String(amountUsd), USDC_DECIMALS);
+  const contract = new ethers.Contract(MXNB_ADDRESS, ERC20_ABI, signer);
+  const amount = ethers.utils.parseUnits(String(amountUsd), MXNB_DECIMALS);
   const tx = await contract.approve(spender, amount);
   await tx.wait();
   return tx;

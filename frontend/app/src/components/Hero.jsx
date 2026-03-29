@@ -135,7 +135,7 @@ export default function Hero() {
 
           <p className="hero-sub">
             Predice eventos de política, deportes, cultura y crypto en Latinoamérica.
-            Gana USDC cuando aciertas. Sin intermediarios. Sin MetaMask.
+            Gana MXNB cuando aciertas. Sin intermediarios. Sin MetaMask.
           </p>
 
           <div className="hero-btns">

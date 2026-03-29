@@ -16,7 +16,7 @@ document.addEventListener('DOMContentLoaded', initTheme);
 
 // ─── CONFIG ─────────────────────────────────────────────────────────────────
 const PRONOS_BET_ADDRESS = '0x9a03F59DD857856d930b12f5da63c586d824804D';
-const USDC_ADDRESS       = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
+const MXNB_ADDRESS       = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
 const RPC_URL            = 'https://sepolia.base.org';
 const BASE_SEPOLIA_ID    = 84532;
 
@@ -33,7 +33,7 @@ const PRONOS_ABI = [
   'function claimWinnings() external',
 ];
 
-const USDC_ABI = [
+const MXNB_ABI = [
   'function approve(address spender, uint256 amount) external returns (bool)',
   'function allowance(address owner, address spender) view returns (uint256)',
   'function balanceOf(address account) view returns (uint256)',
@@ -76,7 +76,7 @@ function updateUI(s) {
   const mxP = Number(s.mxPct) / 100;
   const drP = Number(s.drPct) / 100;
   const saP = Number(s.saPct) / 100;
-  const pool = formatUSDC(s.totalPool);
+  const pool = formatMXNB(s.totalPool);
   const fmt  = n => n.toFixed(1) + '%';
 
   ['hero-mx-pct','market-mx-pct','bar-mx-pct'].forEach(id => setId(id, fmt(mxP)));
@@ -89,7 +89,7 @@ function updateUI(s) {
 
   setId('heroVolCounter',  pool);
   setId('heroTotalPool',   pool);
-  setId('marketVol',       pool + ' USDC');
+  setId('marketVol',       pool + ' MXNB');
   setId('ticker-mx',       fmt(mxP));
   setId('ticker-draw',     fmt(drP));
   setId('ticker-sa',       fmt(saP));
@@ -121,14 +121,14 @@ async function fetchUserPositions() {
     let html = '', hasWinnable = false;
     for (const bet of bets) {
       const outcome  = Number(bet.outcome);
-      const amount   = formatUSDC(bet.amount);
+      const amount   = formatMXNB(bet.amount);
       const claimed  = bet.claimed;
       const isWinner = marketState && marketState.resolved && Number(marketState.result) === outcome;
       if (isWinner && !claimed) hasWinnable = true;
       html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
         <div>
           <div style="font-family:var(--font-mono);font-size:12px;color:var(--text-primary)">${OUTCOME_LABELS[outcome]}</div>
-          <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-top:2px">Apostado: $${amount} USDC</div>
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-top:2px">Apostado: $${amount} MXNB</div>
         </div>
         <div style="font-family:var(--font-mono);font-size:11px;text-align:right">
           ${claimed ? '<span style="color:var(--text-muted)">Cobrado ✓</span>'
@@ -227,30 +227,30 @@ window.setAmount = function(amt) {
 window.updatePayoutEstimate = async function() {
   const raw = parseFloat(document.getElementById('betAmount').value);
   if (!raw || raw <= 0) { setId('betSummaryAmount','—'); setId('betEstPayout','—'); return; }
-  setId('betSummaryAmount', '$' + raw.toFixed(2) + ' USDC');
+  setId('betSummaryAmount', '$' + raw.toFixed(2) + ' MXNB');
   try {
     const amtRaw = ethers.utils.parseUnits(raw.toString(), 6);
     const est    = await readContract.estimatePayout(selectedOutcome, amtRaw);
-    setId('betEstPayout', '~$' + formatUSDC(est) + ' USDC');
+    setId('betEstPayout', '~$' + formatMXNB(est) + ' MXNB');
   } catch { setId('betEstPayout', 'Disponible tras el deploy'); }
 };
 
 window.submitBet = async function() {
   const raw = parseFloat(document.getElementById('betAmount').value);
-  if (!raw || raw < 1) { showToast('Monto mínimo: 1 USDC', true); return; }
+  if (!raw || raw < 1) { showToast('Monto mínimo: 1 MXNB', true); return; }
   if (!signer) { showToast('Conecta tu wallet primero', true); return; }
 
   const btn = document.getElementById('betSubmitBtn');
-  btn.disabled = true; btn.textContent = 'Aprobando USDC...';
+  btn.disabled = true; btn.textContent = 'Aprobando MXNB...';
 
   try {
     const amtRaw      = ethers.utils.parseUnits(raw.toString(), 6);
-    const usdcContract = new ethers.Contract(USDC_ADDRESS, USDC_ABI, signer);
+    const usdcContract = new ethers.Contract(MXNB_ADDRESS, MXNB_ABI, signer);
     const pronoContract = new ethers.Contract(PRONOS_BET_ADDRESS, PRONOS_ABI, signer);
 
     const allowance = await usdcContract.allowance(userAddress, PRONOS_BET_ADDRESS);
     if (allowance.lt(amtRaw)) {
-      showToast('Aprobando USDC... (firma en tu wallet)');
+      showToast('Aprobando MXNB... (firma en tu wallet)');
       const approveTx = await usdcContract.approve(PRONOS_BET_ADDRESS, amtRaw);
       await approveTx.wait();
     }
@@ -282,7 +282,7 @@ window.claimWinnings = async function() {
     showToast('Firmando transacción...');
     const tx = await pronoContract.claimWinnings();
     await tx.wait();
-    showToast('✅ ¡USDC cobrado! Revisa tu wallet');
+    showToast('✅ ¡MXNB cobrado! Revisa tu wallet');
     await fetchMarketState();
   } catch (err) {
     console.error(err);
@@ -293,7 +293,7 @@ window.claimWinnings = async function() {
 };
 
 // ─── UTILITIES ───────────────────────────────────────────────────────────────
-function formatUSDC(raw) { return (Number(raw) / 1e6).toFixed(2); }
+function formatMXNB(raw) { return (Number(raw) / 1e6).toFixed(2); }
 function shortAddr(a)    { return a.slice(0,6) + '...' + a.slice(-4); }
 function setId(id, val)  { const el = document.getElementById(id); if (el) el.textContent = val; }
 function setStyle(id, p, v) { const el = document.getElementById(id); if (el) el.style[p] = v; }
@@ -383,7 +383,7 @@ function renderMockMarkets(filter) {
         </div>
       </div>
       <div class="mock-card-footer">
-        <span class="mock-card-vol">Vol: <span>$${m.volume} USDC</span></span>
+        <span class="mock-card-vol">Vol: <span>$${m.volume} MXNB</span></span>
         <span class="mock-card-deadline">Cierre: ${m.deadline}</span>
       </div>
     </div>
@@ -466,16 +466,16 @@ function renderPortfolio() {
   const pfTotalBet    = document.getElementById('pfTotalBet');
   const pfActiveBets  = document.getElementById('pfActiveBets');
   const pfPotentialWin = document.getElementById('pfPotentialWin');
-  if (pfTotalBet)    pfTotalBet.textContent    = '$' + totalBet.toFixed(2) + ' USDC';
+  if (pfTotalBet)    pfTotalBet.textContent    = '$' + totalBet.toFixed(2) + ' MXNB';
   if (pfActiveBets)  pfActiveBets.textContent  = PORTFOLIO_MOCK.length;
-  if (pfPotentialWin) pfPotentialWin.textContent = '$' + totalPot.toFixed(2) + ' USDC';
+  if (pfPotentialWin) pfPotentialWin.textContent = '$' + totalPot.toFixed(2) + ' MXNB';
 
   list.innerHTML = PORTFOLIO_MOCK.map(r => `
     <div class="portfolio-row">
       <div class="portfolio-row-market">${r.market}</div>
       <div class="portfolio-row-outcome">${r.outcome}</div>
-      <div class="portfolio-row-amount">${r.amount} USDC</div>
-      <div class="portfolio-row-payout">→ ${r.potentialPayout} USDC</div>
+      <div class="portfolio-row-amount">${r.amount} MXNB</div>
+      <div class="portfolio-row-payout">→ ${r.potentialPayout} MXNB</div>
       <div class="portfolio-row-status active">ACTIVA</div>
     </div>
   `).join('');
@@ -626,7 +626,7 @@ function hmcRender(idx) {
 
   document.getElementById('hmcCat').textContent      = m.cat;
   document.getElementById('hmcQuestion').textContent = m.question;
-  document.getElementById('hmcVol').textContent      = m.volume + ' USDC';
+  document.getElementById('hmcVol').textContent      = m.volume + ' MXNB';
 
   // ── Chart ──────────────────────────────────────────
   const ns    = 'http://www.w3.org/2000/svg';

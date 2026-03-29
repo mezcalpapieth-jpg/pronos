@@ -281,7 +281,7 @@
       'Este mercado se resuelve cuando se confirme oficialmente el resultado antes del cierre (' + market.deadline + ').',
       'La fuente principal de resolución será un proveedor de datos verificado. En caso de disputa, se tomará la segunda fuente oficial.',
       'Si el evento es cancelado o pospuesto más allá de la fecha límite, el mercado se resuelve como <strong>' + opt1 + '</strong>.',
-      'Las apuestas se pueden realizar en USDC hasta 1 hora antes del cierre del mercado.',
+      'Las apuestas se pueden realizar en MXNB hasta 1 hora antes del cierre del mercado.',
       'La liquidación se realiza automáticamente vía smart contract en Base una vez confirmada la resolución.',
       'Comisión del 2% sobre ganancias netas. Sin comisión si pierdes.',
     ];
@@ -294,7 +294,7 @@
       <div class="ai-badge">✦ Contexto generado por IA</div>
       <p>El mercado "<em>${escapeHtml(title)}</em>" forma parte de la categoría ${escapeHtml(cat)} dentro de la plataforma Pronos. Este tipo de pregunta binaria permite a los participantes tomar una posición basada en su análisis de la situación actual.</p>
       <p>Las probabilidades actuales reflejan el consenso del mercado: la opción más popular actualmente cotiza a <strong style="color:var(--green)">${market.options[0].pct}¢</strong>, lo que implica una probabilidad de mercado de ${market.options[0].pct}% de que ocurra antes del ${escapeHtml(market.deadline)}.</p>
-      <p>El volumen acumulado de <strong>$${escapeHtml(market.volume)} USDC</strong> indica un interés moderado-alto en este evento. Los movimientos de precio en las últimas horas sugieren que el mercado está incorporando nueva información relevante.</p>
+      <p>El volumen acumulado de <strong>$${escapeHtml(market.volume)} MXNB</strong> indica un interés moderado-alto en este evento. Los movimientos de precio en las últimas horas sugieren que el mercado está incorporando nueva información relevante.</p>
     `;
   }
 
@@ -374,7 +374,7 @@
           <span class="activity-text">
             <span class="username">${escapeHtml(item.user)}</span>
             &nbsp;<span class="${actionCls}">${actionWord}</span>
-            &nbsp;$${item.amount} USDC
+            &nbsp;$${item.amount} MXNB
             &nbsp;<span class="${outcomeCls}">${escapeHtml(item.outcome)}</span>
             &nbsp;a ${item.cents}¢
           </span>
@@ -405,7 +405,7 @@
             📅 Cierre: ${escapeHtml(market.deadline)}
           </span>
           <span class="mkt-pill">
-            💧 Vol: $${escapeHtml(market.volume)} USDC
+            💧 Vol: $${escapeHtml(market.volume)} MXNB
           </span>
         </div>
       </div>
@@ -483,7 +483,7 @@
             <button class="bet-panel-cta" onclick="handleConnectWallet()">
               Conectar wallet para apostar
             </button>
-            <div class="bet-panel-note">⚡ En Base · USDC · 2% comisión</div>
+            <div class="bet-panel-note">⚡ En Base · MXNB · 2% comisión</div>
           </div>
 
           <!-- RELATED MARKETS -->

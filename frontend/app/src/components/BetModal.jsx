@@ -38,7 +38,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
   const profit     = outcomePct > 0 ? (numAmount / (outcomePct / 100) - numAmount).toFixed(2) : '—';
   const isLoading  = [STEPS.CHECKING, STEPS.APPROVING, STEPS.SIGNING, STEPS.PLACING].includes(step);
 
-  // Load USDC balance when modal opens
+  // Load MXNB balance when modal opens
   useEffect(() => {
     if (!open || !authenticated) return;
     const wallet = wallets?.[0];
@@ -85,20 +85,20 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
       setBalance(bal);
       if (bal < numAmount) {
         setStep(STEPS.ERROR);
-        setStatusMsg(`Balance insuficiente. Tienes $${bal.toFixed(2)} USDC.`);
+        setStatusMsg(`Balance insuficiente. Tienes $${bal.toFixed(2)} MXNB.`);
         return;
       }
 
-      // ── 3. Check + request USDC approvals ────────────────────────────────
+      // ── 3. Check + request MXNB approvals ────────────────────────────────
       const allowance1 = await getUsdcAllowance(provider, address, CTF_EXCHANGE);
       const allowance2 = await getUsdcAllowance(provider, address, NEG_RISK_ADAPTER);
       const needsApproval = allowance1 < numAmount || allowance2 < numAmount;
 
       if (needsApproval) {
         setStep(STEPS.APPROVING);
-        setStatusMsg('Aprobando USDC… (confirma en tu wallet)');
+        setStatusMsg('Aprobando MXNB… (confirma en tu wallet)');
         await approveUsdc(signer);
-        setStatusMsg('USDC aprobado ✓');
+        setStatusMsg('MXNB aprobado ✓');
       }
 
       // ── 4. Derive CLOB API key ────────────────────────────────────────────
@@ -124,7 +124,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
 
       setOrderId(result.orderID || result.id || 'OK');
       setStep(STEPS.SUCCESS);
-      setStatusMsg(`¡Apuesta colocada! $${numAmount} USDC en "${outcome}"`);
+      setStatusMsg(`¡Apuesta colocada! $${numAmount} MXNB en "${outcome}"`);
       setAmount('');
 
     } catch (e) {
@@ -144,11 +144,11 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
   const buttonLabel = () => {
     if (!authenticated)             return 'CONECTAR PARA APOSTAR';
     if (step === STEPS.CHECKING)    return 'Verificando…';
-    if (step === STEPS.APPROVING)   return 'Aprobando USDC…';
+    if (step === STEPS.APPROVING)   return 'Aprobando MXNB…';
     if (step === STEPS.SIGNING)     return 'Firmando…';
     if (step === STEPS.PLACING)     return 'Enviando orden…';
     if (step === STEPS.SUCCESS)     return '✓ APUESTA COLOCADA';
-    if (numAmount > 0)              return `APOSTAR $${numAmount} USDC`;
+    if (numAmount > 0)              return `APOSTAR $${numAmount} MXNB`;
     return 'APOSTAR';
   };
 
@@ -172,14 +172,14 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
           </p>
         )}
 
-        {/* USDC Balance */}
+        {/* MXNB Balance */}
         {authenticated && balance !== null && (
           <div style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             padding: '8px 12px', borderRadius: 8, background: 'var(--surface2)',
             marginBottom: 16, fontFamily: 'var(--font-mono)', fontSize: 12,
           }}>
-            <span style={{ color: 'var(--text-muted)' }}>Balance USDC</span>
+            <span style={{ color: 'var(--text-muted)' }}>Balance MXNB</span>
             <span style={{ color: balance > 0 ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
               ${balance.toFixed(2)}
             </span>
@@ -189,7 +189,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
         {/* Amount input */}
         <div className="bet-amount-wrap">
           <label style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--text-muted)', display: 'block', marginBottom: 8 }}>
-            MONTO (USDC)
+            MONTO (MXNB)
           </label>
           <div style={{ position: 'relative' }}>
             <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>$</span>
@@ -224,11 +224,11 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
           <div className="bet-payout-info">
             <div className="bet-payout-row">
               <span>Pago estimado</span>
-              <span className="green">${payout} USDC</span>
+              <span className="green">${payout} MXNB</span>
             </div>
             <div className="bet-payout-row">
               <span>Ganancia potencial</span>
-              <span className="green">+${profit} USDC</span>
+              <span className="green">+${profit} MXNB</span>
             </div>
             <div className="bet-payout-row">
               <span>Probabilidad implícita</span>

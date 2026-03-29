@@ -14,7 +14,7 @@ export default function Home() {
     <>
       {/* MVP Banner */}
       <div className="mvp-banner">
-        ⚡ BETA — Mercados en vivo · Powered by Polymarket · Trading con USDC real
+        ⚡ BETA — Mercados en vivo · Powered by Polymarket · Trading con MXNB real
       </div>
 
       <Ticker />

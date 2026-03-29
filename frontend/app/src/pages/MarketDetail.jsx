@@ -328,7 +328,7 @@ export default function MarketDetail() {
                   GANANCIAS YA LIQUIDADAS
                 </button>
                 <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.06em', textAlign: 'center', marginTop: 10 }}>
-                  Liquidado on-chain · Polygon · USDC
+                  Liquidado on-chain · Polygon · MXNB
                 </p>
               </div>
             ) : (
@@ -353,7 +353,7 @@ export default function MarketDetail() {
                   ))}
                 </div>
                 <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.06em', textAlign: 'center', marginTop: 8 }}>
-                  On-chain · Polygon · USDC
+                  On-chain · Polygon · MXNB
                 </p>
               </div>
             )}

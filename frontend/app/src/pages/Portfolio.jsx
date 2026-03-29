@@ -52,7 +52,7 @@ function PositionCard({ pos }) {
             APOSTADO
           </div>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>
-            ${size} USDC
+            ${size} MXNB
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
@@ -63,7 +63,7 @@ function PositionCard({ pos }) {
             fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700,
             color: pnlPos ? 'var(--green)' : 'var(--red)',
           }}>
-            {pnlPos ? '+' : ''}{pnl} USDC
+            {pnlPos ? '+' : ''}{pnl} MXNB
           </div>
         </div>
       </div>
@@ -156,7 +156,7 @@ export default function Portfolio() {
               marginBottom: 40,
             }}>
               {[
-                { label: 'Balance USDC',    value: balance != null ? `$${balance.toFixed(2)}` : '—' },
+                { label: 'Balance MXNB',    value: balance != null ? `$${balance.toFixed(2)}` : '—' },
                 { label: 'En Posiciones',   value: `$${totalValue.toFixed(2)}` },
                 { label: 'Mercados Activos', value: positions.length.toString() },
               ].map(({ label, value }) => (

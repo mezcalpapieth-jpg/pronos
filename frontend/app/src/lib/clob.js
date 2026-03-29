@@ -2,12 +2,12 @@ import { ethers } from 'ethers';
 
 // ─── POLYGON MAINNET CONSTANTS ────────────────────────────────────────────────
 export const POLYGON_CHAIN_ID = 137;
-export const USDC_ADDRESS     = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'; // native USDC
+export const MXNB_ADDRESS     = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'; // native MXNB
 export const CTF_EXCHANGE     = '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E';
 export const NEG_RISK_ADAPTER = '0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296';
 export const NEG_RISK_EXCHANGE = '0xC5d563A36AE78145C45a50134d48A1215220f80a';
 
-const USDC_ABI = [
+const MXNB_ABI = [
   'function balanceOf(address) view returns (uint256)',
   'function allowance(address owner, address spender) view returns (uint256)',
   'function approve(address spender, uint256 amount) returns (bool)',
@@ -48,28 +48,28 @@ export function rawToUsdc(raw) {
   return Number(raw) / 1e6;
 }
 
-// ─── USDC BALANCE ─────────────────────────────────────────────────────────────
+// ─── MXNB BALANCE ─────────────────────────────────────────────────────────────
 
 export async function getUsdcBalance(provider, address) {
-  const usdc = new ethers.Contract(USDC_ADDRESS, USDC_ABI, provider);
+  const usdc = new ethers.Contract(MXNB_ADDRESS, MXNB_ABI, provider);
   const raw = await usdc.balanceOf(address);
   return rawToUsdc(raw.toBigInt());
 }
 
-// ─── USDC ALLOWANCE ───────────────────────────────────────────────────────────
+// ─── MXNB ALLOWANCE ───────────────────────────────────────────────────────────
 
 export async function getUsdcAllowance(provider, owner, spender) {
-  const usdc = new ethers.Contract(USDC_ADDRESS, USDC_ABI, provider);
+  const usdc = new ethers.Contract(MXNB_ADDRESS, MXNB_ABI, provider);
   const raw = await usdc.allowance(owner, spender);
   return rawToUsdc(raw.toBigInt());
 }
 
-// ─── APPROVE USDC ─────────────────────────────────────────────────────────────
-// Approves CTF Exchange + NegRisk Adapter to spend USDC.
+// ─── APPROVE MXNB ─────────────────────────────────────────────────────────────
+// Approves CTF Exchange + NegRisk Adapter to spend MXNB.
 // Returns tx hashes.
 
 export async function approveUsdc(signer, amount = ethers.constants.MaxUint256) {
-  const usdc = new ethers.Contract(USDC_ADDRESS, USDC_ABI, signer);
+  const usdc = new ethers.Contract(MXNB_ADDRESS, MXNB_ABI, signer);
   const txs = [];
 
   const tx1 = await usdc.approve(CTF_EXCHANGE, amount);
@@ -112,13 +112,13 @@ export async function deriveClobApiKey(signer, address) {
 // Builds + signs an EIP-712 order and submits it to the CLOB.
 // side: 'BUY' | 'SELL'
 // price: 0.0–1.0 (e.g. 0.54 = 54% probability = $0.54 per share)
-// size: amount in USDC
+// size: amount in MXNB
 
 export async function placeClobOrder({ signer, address, creds, tokenId, price, side, size, isNegRisk = true }) {
   const exchange = isNegRisk ? NEG_RISK_EXCHANGE : CTF_EXCHANGE;
 
   const sideNum    = side === 'BUY' ? 0 : 1;
-  const makerAmt   = usdcToRaw(side === 'BUY' ? size : size / price);       // USDC in (buying)
+  const makerAmt   = usdcToRaw(side === 'BUY' ? size : size / price);       // MXNB in (buying)
   const takerAmt   = usdcToRaw(side === 'BUY' ? size / price : size);       // shares out
   const salt       = BigInt(Math.floor(Math.random() * 1e15));
 
