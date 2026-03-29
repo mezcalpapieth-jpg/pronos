@@ -1511,7 +1511,7 @@ html[data-theme="light"] .btn-theme-toggle::before {
 .hmc-outcome-btn[data-color="red"] .hmc-outcome-pct     { color: #FF4545; }
 .hmc-outcome-btn[data-color="red"]:hover     { background: rgba(255,69,69,0.13); border-color: rgba(255,69,69,0.4); box-shadow: 0 4px 16px rgba(255,69,69,0.1); }
 
-/* 3+ options: position order = navy, orange, skyblue, gold */
+/* 3+ options: position order = navy, orange, gold, skyblue */
 .hmc-outcome-btn[data-color="navy"]    { border-color: rgba(26,63,143,0.30);   background: rgba(26,63,143,0.10); }
 .hmc-outcome-btn[data-color="navy"] .hmc-outcome-pct    { color: #4d7fff; }
 .hmc-outcome-btn[data-color="navy"]:hover    { background: rgba(26,63,143,0.18); border-color: rgba(26,63,143,0.5); box-shadow: 0 4px 16px rgba(26,63,143,0.15); }

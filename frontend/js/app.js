@@ -540,7 +540,7 @@ const HERO_MARKETS = [
     outcomes: [
       { label: '🇲🇽 México',    color: 'navy',    pct: 62, start: 51, noise: 3.5 },
       { label: 'Empate',        color: 'orange',  pct: 21, start: 27, noise: 2   },
-      { label: '🇿🇦 Sudáfrica', color: 'skyblue', pct: 17, start: 22, noise: 2   },
+      { label: '🇿🇦 Sudáfrica', color: 'gold', pct: 17, start: 22, noise: 2   },
     ],
   },
   {
@@ -571,7 +571,7 @@ const HERO_MARKETS = [
     outcomes: [
       { label: 'MORENA', color: 'navy',    pct: 58, start: 63, noise: 2.5 },
       { label: 'PAN',    color: 'orange',  pct: 28, start: 23, noise: 2   },
-      { label: 'PRI',    color: 'skyblue', pct: 14, start: 14, noise: 1.5 },
+      { label: 'PRI',    color: 'gold', pct: 14, start: 14, noise: 1.5 },
     ],
   },
   {
@@ -582,7 +582,7 @@ const HERO_MARKETS = [
     outcomes: [
       { label: 'Kendrick', color: 'navy',    pct: 42, start: 34, noise: 4 },
       { label: 'Sabrina',  color: 'orange',  pct: 31, start: 31, noise: 3 },
-      { label: 'Otro',     color: 'skyblue', pct: 27, start: 35, noise: 3 },
+      { label: 'Otro',     color: 'gold', pct: 27, start: 35, noise: 3 },
     ],
   },
 ];
