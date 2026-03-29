@@ -488,7 +488,7 @@ renderPortfolio();
 // ─── HERO MARKET CAROUSEL ────────────────────────────────────────────────────
 
 const HMC_COLORS = {
-  green:  '#00E87A',
+  green:  '#FF5500',
   gold:   '#F5C842',
   red:    '#FF4545',
   blue:   '#4d8bff',
