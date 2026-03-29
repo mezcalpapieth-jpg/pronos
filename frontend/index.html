@@ -310,7 +310,7 @@
 <section id="how-it-works">
   <div class="how-inner">
     <div class="section-header">
-      <div class="section-eyebrow">Sin fricción. Sin intermediarios.</div>
+      <div class="section-eyebrow">Sin wallet. Sin seed phrase. Sin fricción.</div>
       <div class="section-title">Cómo Funciona</div>
     </div>
 
@@ -318,14 +318,15 @@
       <div class="step">
         <div class="step-num">01</div>
         <div class="step-icon-circle">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <!-- person + email icon -->
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         </div>
-        <div class="step-title">Conecta tu wallet</div>
-        <p class="step-desc">Acceso en un click con MetaMask o Coinbase Wallet en Base. Sin registro, sin contraseña, sin fricción.</p>
+        <div class="step-title">Crea tu cuenta</div>
+        <p class="step-desc">Regístrate con email o Google en segundos. Pronos crea automáticamente una wallet on-chain para ti — sin extensiones, sin seed phrases, sin MetaMask.</p>
         <div class="step-btns">
-          <button class="step-btn-wallet" onclick="connectWallet()">
-            <svg class="wallet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
-            Conectar Wallet
+          <button class="step-btn-wallet" onclick="document.location='/mvp'">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+            Crear cuenta gratis
           </button>
         </div>
       </div>
@@ -333,12 +334,13 @@
       <div class="step">
         <div class="step-num">02</div>
         <div class="step-icon-circle">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <!-- chart / market icon -->
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         </div>
         <div class="step-title">Elige tu predicción</div>
-        <p class="step-desc">México gana, empate, o Sudáfrica gana. Deposita MXNB en el resultado que eliges. Las odds se actualizan en tiempo real.</p>
+        <p class="step-desc">Explora mercados de política, deportes, cultura y crypto. Elige un resultado y cuánto quieres depositar en MXNB. Las odds se actualizan en tiempo real.</p>
         <div class="step-btns">
-          <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);letter-spacing:0.06em">🇲🇽 México · 🤝 Empate · 🇿🇦 Sudáfrica</span>
+          <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);letter-spacing:0.06em">🇲🇽 Política · ⚽ Deportes · 🎵 Cultura · ₿ Crypto</span>
         </div>
       </div>
 
@@ -348,7 +350,7 @@
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
         </div>
         <div class="step-title">Cobra tus ganancias</div>
-        <p class="step-desc">Cuando el partido termina, el smart contract en Base liquida automáticamente. Tu MXNB llega a tu wallet. Sin intermediarios. Sin demoras.</p>
+        <p class="step-desc">Si aciertas, el smart contract liquida automáticamente. Tu MXNB llega directo a tu cuenta Pronos. Sin intermediarios, sin demoras, sin complicaciones.</p>
         <div class="step-btns">
           <span style="font-family:var(--font-mono);font-size:11px;color:var(--green);letter-spacing:0.06em">⚡ Liquidación automática en cadena</span>
         </div>
@@ -356,11 +358,11 @@
     </div>
 
     <div class="tech-strip">
-      <div class="tech-pill"><span class="dot base-dot"></span>Base Network</div>
+      <div class="tech-pill"><span class="dot"></span>Polygon</div>
       <div class="tech-pill"><span class="dot"></span>MXNB Nativo</div>
-      <div class="tech-pill"><span class="dot"></span>Smart Contract</div>
-      <div class="tech-pill"><span class="dot"></span>Sin Custodios</div>
-      <div class="tech-pill"><span class="dot"></span>2% Comisión</div>
+      <div class="tech-pill"><span class="dot"></span>Privy Auth</div>
+      <div class="tech-pill"><span class="dot"></span>Sin MetaMask</div>
+      <div class="tech-pill"><span class="dot"></span>Sin Seed Phrase</div>
     </div>
   </div>
 </section>
