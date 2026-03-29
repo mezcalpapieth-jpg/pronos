@@ -619,10 +619,18 @@ function hmcPointsToPath(data, W, H) {
   return d;
 }
 
-function hmcRender(idx) {
+function hmcRender(idx, dir = 'none') {
   const m   = HERO_MARKETS[idx];
   const ser = HMC_HISTORIES[idx][hmcPeriod];
   const W   = 420, H = 120;
+
+  // ── Slide animation ──────────────────────────────────
+  if (dir !== 'none') {
+    const inner = document.getElementById('hmcInner');
+    inner.classList.remove('slide-right', 'slide-left');
+    void inner.offsetWidth; // force reflow
+    inner.classList.add(dir === 'right' ? 'slide-right' : 'slide-left');
+  }
 
   document.getElementById('hmcCat').textContent      = m.cat;
   document.getElementById('hmcQuestion').textContent = m.question;
@@ -715,9 +723,9 @@ function hmcRender(idx) {
   hmcIdx = idx;
 }
 
-function heroCarouselNext() { hmcGo((hmcIdx + 1) % HERO_MARKETS.length); }
-function heroCarouselPrev() { hmcGo((hmcIdx - 1 + HERO_MARKETS.length) % HERO_MARKETS.length); }
-function hmcGo(i)           { hmcRender(i); hmcResetTimer(); }
+function heroCarouselNext() { hmcGo((hmcIdx + 1) % HERO_MARKETS.length, 'right'); }
+function heroCarouselPrev() { hmcGo((hmcIdx - 1 + HERO_MARKETS.length) % HERO_MARKETS.length, 'left'); }
+function hmcGo(i, dir)      { hmcRender(i, dir || 'right'); hmcResetTimer(); }
 
 function hmcBet(marketIdx, outcomeIdx) {
   if (marketIdx === 0) {
@@ -729,7 +737,11 @@ function hmcBet(marketIdx, outcomeIdx) {
 
 function hmcResetTimer() {
   if (hmcTimer) clearInterval(hmcTimer);
-  hmcTimer = setInterval(() => hmcRender((hmcIdx + 1) % HERO_MARKETS.length), 8000);
+  hmcTimer = setInterval(() => {
+    const next = (hmcIdx + 1) % HERO_MARKETS.length;
+    hmcRender(next, 'right');
+    hmcIdx = next;
+  }, 7000);
 }
 
 function heroCarouselStart() {
@@ -739,6 +751,45 @@ function heroCarouselStart() {
 function heroCarouselStop() {
   if (hmcTimer) { clearInterval(hmcTimer); hmcTimer = null; }
 }
+
+// ── Live trade ticks ──────────────────────────────────────────────────────────
+const HMC_TRADE_AMOUNTS = [5, 10, 25, 50, 100, 200, 500, 1000, 2500, 5000];
+let hmcTradeHandle = null;
+
+function hmcSpawnTrade() {
+  const overlay = document.getElementById('hmcTradeOverlay');
+  if (!overlay) return;
+  const m          = HERO_MARKETS[hmcIdx];
+  const oIdx       = Math.floor(Math.random() * m.outcomes.length);
+  const color      = HMC_COLORS[m.outcomes[oIdx].color];
+  const amount     = HMC_TRADE_AMOUNTS[Math.floor(Math.random() * HMC_TRADE_AMOUNTS.length)];
+  const left       = 4 + Math.random() * 84;   // % across card
+  const bottom     = 10 + Math.random() * 70;   // % up from bottom
+  const tick       = document.createElement('div');
+  tick.className   = 'hmc-trade-tick';
+  tick.style.color = color;
+  tick.style.left  = left + '%';
+  tick.style.bottom = bottom + '%';
+  tick.style.textShadow = `0 0 10px ${color}55`;
+  tick.textContent = '+$' + amount.toLocaleString();
+  overlay.appendChild(tick);
+  setTimeout(() => tick.remove(), 2500);
+}
+
+function hmcScheduleTrade() {
+  hmcSpawnTrade();
+  // occasional burst: 2 ticks close together
+  if (Math.random() > 0.55) {
+    setTimeout(hmcSpawnTrade, 180 + Math.random() * 220);
+  }
+  hmcTradeHandle = setTimeout(hmcScheduleTrade, 550 + Math.random() * 650);
+}
+
+function hmcStartTrades() {
+  if (hmcTradeHandle) clearTimeout(hmcTradeHandle);
+  hmcScheduleTrade();
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 // Time selector
 document.getElementById('hmcTimesel').addEventListener('click', e => {
@@ -753,3 +804,4 @@ document.getElementById('hmcTimesel').addEventListener('click', e => {
 // Boot
 hmcRender(0);
 hmcResetTimer();
+setTimeout(hmcStartTrades, 1200); // slight delay so page settles first

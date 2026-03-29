@@ -1325,6 +1325,46 @@ html[data-theme="light"] .btn-theme-toggle::before {
 /* ============================================================
    HERO MARKET CARD  (Polymarket-style carousel)
 ============================================================ */
+
+/* ── Slide transition keyframes ── */
+@keyframes hmcSlideInRight {
+  from { transform: translateX(52px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+@keyframes hmcSlideInLeft {
+  from { transform: translateX(-52px); opacity: 0; }
+  to   { transform: translateX(0);     opacity: 1; }
+}
+#hmcInner { overflow: hidden; }
+#hmcInner.slide-right { animation: hmcSlideInRight 0.22s cubic-bezier(0.25,0.46,0.45,0.94) both; }
+#hmcInner.slide-left  { animation: hmcSlideInLeft  0.22s cubic-bezier(0.25,0.46,0.45,0.94) both; }
+
+/* ── Live trade ticks overlay ── */
+.hmc-trade-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 3;
+}
+.hmc-trade-tick {
+  position: absolute;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: hmcTradeFly 2.4s ease-out forwards;
+}
+@keyframes hmcTradeFly {
+  0%   { opacity: 0;   transform: translateY(4px)  scale(0.75); }
+  12%  { opacity: 1;   transform: translateY(-2px) scale(1.05); }
+  25%  { opacity: 1;   transform: translateY(-6px) scale(1); }
+  75%  { opacity: 0.9; transform: translateY(-34px) scale(0.95); }
+  100% { opacity: 0;   transform: translateY(-58px) scale(0.85); }
+}
+
 .hmc {
   background: var(--surface1);
   border: 1px solid var(--border);

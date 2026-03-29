@@ -192,49 +192,56 @@
     <!-- Right column: Hero Market Card (Polymarket-style carousel) -->
     <div class="hmc" id="heroMarketCard">
 
-      <!-- Top bar: category tag + time period selector -->
-      <div class="hmc-topbar">
-        <div class="hmc-cat">
-          <div class="hmc-live-dot"></div>
-          <span id="hmcCat">⚽ Deportes · Mundial 2026</span>
+      <!-- Slide wrapper (animated on carousel change) -->
+      <div id="hmcInner">
+
+        <!-- Top bar: category tag + time period selector -->
+        <div class="hmc-topbar">
+          <div class="hmc-cat">
+            <div class="hmc-live-dot"></div>
+            <span id="hmcCat">⚽ Deportes · Mundial 2026</span>
+          </div>
+          <div class="hmc-timesel" id="hmcTimesel">
+            <button class="hmc-time-btn" data-period="1D">1D</button>
+            <button class="hmc-time-btn" data-period="1W">1W</button>
+            <button class="hmc-time-btn active" data-period="1M">1M</button>
+            <button class="hmc-time-btn" data-period="ALL">ALL</button>
+          </div>
         </div>
-        <div class="hmc-timesel" id="hmcTimesel">
-          <button class="hmc-time-btn" data-period="1D">1D</button>
-          <button class="hmc-time-btn" data-period="1W">1W</button>
-          <button class="hmc-time-btn active" data-period="1M">1M</button>
-          <button class="hmc-time-btn" data-period="ALL">ALL</button>
+
+        <!-- Market question -->
+        <div class="hmc-question" id="hmcQuestion">¿México gana el partido inaugural del Mundial 2026?</div>
+
+        <!-- Price history chart (SVG) + live trade overlay -->
+        <div class="hmc-chart-wrap">
+          <svg class="hmc-chart-svg" id="hmcChart" viewBox="0 0 420 120" preserveAspectRatio="none">
+            <defs id="hmcDefs"></defs>
+            <line x1="0" y1="10"  x2="420" y2="10"  stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
+            <line x1="0" y1="37"  x2="420" y2="37"  stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
+            <line x1="0" y1="64"  x2="420" y2="64"  stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
+            <line x1="0" y1="91"  x2="420" y2="91"  stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
+            <g id="hmcChartPaths"></g>
+          </svg>
+          <div class="hmc-y-labels">
+            <span>100%</span>
+            <span>75%</span>
+            <span>50%</span>
+            <span>25%</span>
+            <span>0%</span>
+          </div>
+          <!-- Live trade ticks overlay -->
+          <div class="hmc-trade-overlay" id="hmcTradeOverlay"></div>
         </div>
-      </div>
 
-      <!-- Market question -->
-      <div class="hmc-question" id="hmcQuestion">¿México gana el partido inaugural del Mundial 2026?</div>
+        <!-- Legend -->
+        <div class="hmc-legend" id="hmcLegend"></div>
 
-      <!-- Price history chart (SVG) -->
-      <div class="hmc-chart-wrap">
-        <svg class="hmc-chart-svg" id="hmcChart" viewBox="0 0 420 120" preserveAspectRatio="none">
-          <defs id="hmcDefs"></defs>
-          <line x1="0" y1="10"  x2="420" y2="10"  stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
-          <line x1="0" y1="37"  x2="420" y2="37"  stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
-          <line x1="0" y1="64"  x2="420" y2="64"  stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
-          <line x1="0" y1="91"  x2="420" y2="91"  stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
-          <g id="hmcChartPaths"></g>
-        </svg>
-        <div class="hmc-y-labels">
-          <span>100%</span>
-          <span>75%</span>
-          <span>50%</span>
-          <span>25%</span>
-          <span>0%</span>
-        </div>
-      </div>
+        <!-- Outcome bet buttons -->
+        <div class="hmc-outcomes" id="hmcOutcomes"></div>
 
-      <!-- Legend -->
-      <div class="hmc-legend" id="hmcLegend"></div>
+      </div><!-- /hmcInner -->
 
-      <!-- Outcome bet buttons -->
-      <div class="hmc-outcomes" id="hmcOutcomes"></div>
-
-      <!-- Footer: volume + carousel nav -->
+      <!-- Footer: volume + carousel nav (stays fixed, not part of slide) -->
       <div class="hmc-footer">
         <div class="hmc-volume">VOL <strong id="hmcVol">—</strong></div>
         <div class="hmc-carousel-nav">
