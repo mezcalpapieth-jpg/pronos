@@ -488,11 +488,12 @@ renderPortfolio();
 // ─── HERO MARKET CAROUSEL ────────────────────────────────────────────────────
 
 const HMC_COLORS = {
-  green:  '#FF5500',
-  gold:   '#F5C842',
-  red:    '#FF4545',
-  blue:   '#4d8bff',
-  purple: '#c47aff',
+  green:   '#22c55e',
+  red:     '#FF4545',
+  navy:    '#1a3f8f',
+  orange:  '#FF5500',
+  skyblue: '#38BDF8',
+  gold:    '#F5C842',
 };
 
 // Random walk from start→end over n steps
@@ -537,9 +538,9 @@ const HERO_MARKETS = [
     question: '¿México gana el partido inaugural del Mundial 2026?',
     volume: '$23,412',
     outcomes: [
-      { label: '🇲🇽 México',    color: 'green',  pct: 62, start: 51, noise: 3.5 },
-      { label: 'Empate',        color: 'gold',   pct: 21, start: 27, noise: 2   },
-      { label: '🇿🇦 Sudáfrica', color: 'red',    pct: 17, start: 22, noise: 2   },
+      { label: '🇲🇽 México',    color: 'navy',    pct: 62, start: 51, noise: 3.5 },
+      { label: 'Empate',        color: 'orange',  pct: 21, start: 27, noise: 2   },
+      { label: '🇿🇦 Sudáfrica', color: 'skyblue', pct: 17, start: 22, noise: 2   },
     ],
   },
   {
@@ -568,9 +569,9 @@ const HERO_MARKETS = [
     question: '¿Cuál partido gana más escaños en las elecciones MX 2027?',
     volume: '$87,300',
     outcomes: [
-      { label: 'MORENA', color: 'green',  pct: 58, start: 63, noise: 2.5 },
-      { label: 'PAN',    color: 'blue',   pct: 28, start: 23, noise: 2   },
-      { label: 'PRI',    color: 'red',    pct: 14, start: 14, noise: 1.5 },
+      { label: 'MORENA', color: 'navy',    pct: 58, start: 63, noise: 2.5 },
+      { label: 'PAN',    color: 'orange',  pct: 28, start: 23, noise: 2   },
+      { label: 'PRI',    color: 'skyblue', pct: 14, start: 14, noise: 1.5 },
     ],
   },
   {
@@ -579,9 +580,9 @@ const HERO_MARKETS = [
     question: '¿Quién gana el Grammy al Álbum del Año 2027?',
     volume: '$34,800',
     outcomes: [
-      { label: 'Kendrick', color: 'purple', pct: 42, start: 34, noise: 4 },
-      { label: 'Sabrina',  color: 'gold',   pct: 31, start: 31, noise: 3 },
-      { label: 'Otro',     color: 'red',    pct: 27, start: 35, noise: 3 },
+      { label: 'Kendrick', color: 'navy',    pct: 42, start: 34, noise: 4 },
+      { label: 'Sabrina',  color: 'orange',  pct: 31, start: 31, noise: 3 },
+      { label: 'Otro',     color: 'skyblue', pct: 27, start: 35, noise: 3 },
     ],
   },
 ];
