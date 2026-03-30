@@ -3,8 +3,8 @@
   "trailingSlash": false,
   "outputDirectory": "frontend",
   "rewrites": [
-    { "source": "/mvp/market", "destination": "/mvp/index.html" },
-    { "source": "/mvp/portfolio", "destination": "/mvp/index.html" },
-    { "source": "/mvp/admin", "destination": "/mvp/index.html" }
+    { "source": "/mvp/market", "destination": "/mvp/" },
+    { "source": "/mvp/portfolio", "destination": "/mvp/" },
+    { "source": "/mvp/admin", "destination": "/mvp/" }
   ]
 }
