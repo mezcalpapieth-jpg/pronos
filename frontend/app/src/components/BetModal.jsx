@@ -34,8 +34,12 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
   const [balance, setBalance] = useState(null);
 
   const numAmount  = parseFloat(amount) || 0;
-  const payout     = outcomePct > 0 ? (numAmount / (outcomePct / 100)).toFixed(2) : '—';
-  const profit     = outcomePct > 0 ? (numAmount / (outcomePct / 100) - numAmount).toFixed(2) : '—';
+  // Dynamic fee: fee% = 5 × (1 - P) where P is probability as decimal
+  const feePct     = outcomePct > 0 ? 5 * (1 - outcomePct / 100) : 0;
+  const fee        = numAmount * feePct / 100;
+  const afterFee   = numAmount - fee;
+  const payout     = outcomePct > 0 ? (afterFee / (outcomePct / 100)).toFixed(2) : '—';
+  const profit     = outcomePct > 0 ? (afterFee / (outcomePct / 100) - numAmount).toFixed(2) : '—';
   const isLoading  = [STEPS.CHECKING, STEPS.APPROVING, STEPS.SIGNING, STEPS.PLACING].includes(step);
 
   // Load MXNB balance when modal opens
@@ -222,6 +226,10 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
         {/* Payout info */}
         {numAmount > 0 && (
           <div className="bet-payout-info">
+            <div className="bet-payout-row">
+              <span>Comisión ({feePct.toFixed(2)}%)</span>
+              <span style={{ opacity: 0.6 }}>-${fee.toFixed(2)} MXNB</span>
+            </div>
             <div className="bet-payout-row">
               <span>Pago estimado</span>
               <span className="green">${payout} MXNB</span>

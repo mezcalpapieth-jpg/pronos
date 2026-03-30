@@ -65,6 +65,7 @@ export default function Nav() {
         <a href="#markets">El mercado</a>
         <a href="/mvp/portfolio">Portafolio</a>
         <a href="#how-it-works">Cómo funciona</a>
+        {isAdmin(username) && <a href="/mvp/admin">Admin</a>}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
