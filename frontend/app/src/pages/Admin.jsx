@@ -273,27 +273,9 @@ function FeeInfo({ mode }) {
   );
 }
 
-export default function Admin() {
-  const { authenticated, user } = usePrivy();
+export default function Admin({ username }) {
+  const { authenticated } = usePrivy();
   const [mode, setMode] = useState(getProtocolMode);
-  const [username, setUsername] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  // Fetch username for access check
-  useEffect(() => {
-    if (!authenticated || !user?.id) {
-      setUsername(null);
-      setLoading(false);
-      return;
-    }
-    fetch(`/api/user?privyId=${encodeURIComponent(user.id)}`)
-      .then(r => r.json())
-      .then(data => {
-        setUsername(data.username || null);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, [authenticated, user?.id]);
 
   const hasAccess = authenticated && isAdmin(username);
 
@@ -301,19 +283,6 @@ export default function Admin() {
     const next = mode === 'polymarket' ? 'own' : 'polymarket';
     setProtocolMode(next);
     setMode(next);
-  }
-
-  if (loading) {
-    return (
-      <>
-        <Nav />
-        <div className="admin-page">
-          <div className="admin-auth-wall">
-            <p>Cargando...</p>
-          </div>
-        </div>
-      </>
-    );
   }
 
   if (!authenticated || !hasAccess) {
