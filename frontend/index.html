@@ -14,6 +14,8 @@
   <link rel="stylesheet" href="css/base.css" />
   <link rel="stylesheet" href="css/components.css" />
   <link rel="stylesheet" href="css/sections.css" />
+  <!-- Tally waitlist popup -->
+  <script async src="https://tally.so/widgets/embed.js"></script>
 </head>
 <body>
 
@@ -172,7 +174,7 @@
 
       <div class="hero-btns">
         <a href="#market" class="btn-primary">Ver el mercado</a>
-        <a href="#how-it-works" class="btn-ghost">Cómo funciona</a>
+        <button class="btn-ghost" data-tally-open="1AMZDg" data-tally-emoji-text="🔔" data-tally-emoji-animation="wave">Únete a la lista</button>
       </div>
 
       <div class="hero-stats">
@@ -396,7 +398,43 @@
 </section>
 
 <!-- ============================================================
-     8. FOOTER
+     8. WAITLIST
+============================================================ -->
+<section id="waitlist" style="padding: 100px 48px; background: var(--bg); border-top: 1px solid var(--border);">
+  <div style="max-width: 680px; margin: 0 auto; text-align: center;">
+    <div style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; color: var(--green); margin-bottom: 16px;">● ACCESO ANTICIPADO</div>
+    <h2 style="font-family: var(--font-display); font-size: clamp(40px, 6vw, 72px); letter-spacing: 0.03em; color: var(--text-primary); line-height: 1; margin-bottom: 20px;">
+      SÉ EL<br><span style="color: var(--green);">PRIMERO</span>
+    </h2>
+    <p style="font-size: 16px; color: var(--text-secondary); line-height: 1.7; margin-bottom: 40px; max-width: 480px; margin-left: auto; margin-right: auto;">
+      Pronos abre en beta cerrada. Únete a la lista de espera y obtén acceso antes que nadie al primer mercado de predicciones on-chain de Latinoamérica.
+    </p>
+    <button
+      data-tally-open="1AMZDg"
+      data-tally-emoji-text="🔔"
+      data-tally-emoji-animation="wave"
+      style="
+        display: inline-flex; align-items: center; gap: 10px;
+        background: var(--green); color: #fff;
+        font-family: var(--font-display); font-size: 20px; letter-spacing: 0.06em;
+        padding: 16px 40px; border-radius: 8px; border: none; cursor: pointer;
+        transition: opacity 0.2s;
+      "
+      onmouseover="this.style.opacity='0.88'"
+      onmouseout="this.style.opacity='1'"
+    >
+      UNIRME A LA LISTA
+    </button>
+    <div style="margin-top: 24px; display: flex; justify-content: center; gap: 32px; flex-wrap: wrap;">
+      <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); letter-spacing: 0.08em;">✓ Gratis</span>
+      <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); letter-spacing: 0.08em;">✓ Sin spam</span>
+      <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); letter-spacing: 0.08em;">✓ Acceso anticipado</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     9. FOOTER
 ============================================================ -->
 <footer id="footer">
   <div class="footer-inner">
