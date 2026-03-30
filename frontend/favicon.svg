@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Dark background -->
+  <rect width="32" height="32" rx="7" fill="#0A0A0A"/>
+  <!-- Letter P — bold, condensed, Bebas-style -->
+  <text
+    x="5" y="25"
+    font-family="'Bebas Neue', 'Arial Black', sans-serif"
+    font-size="26"
+    font-weight="900"
+    fill="#FFFFFF"
+    letter-spacing="-1"
+  >P</text>
+  <!-- Orange dot (brand mark) -->
+  <circle cx="25" cy="9" r="4" fill="#FF5500"/>
+</svg>
