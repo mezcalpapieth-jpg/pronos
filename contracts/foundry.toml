@@ -6,7 +6,7 @@ test    = "test"
 script  = "script"
 
 # Solidity version
-solc    = "0.8.20"
+solc    = "0.8.24"
 
 # Optimizer
 optimizer        = true

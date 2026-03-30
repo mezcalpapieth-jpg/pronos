@@ -4,6 +4,7 @@ import { usePrivy } from '@privy-io/react-auth';
 import Home from './pages/Home.jsx';
 import MarketDetail from './pages/MarketDetail.jsx';
 import Portfolio from './pages/Portfolio.jsx';
+import Admin from './pages/Admin.jsx';
 import UsernameModal from './components/UsernameModal.jsx';
 
 export default function App() {
@@ -50,6 +51,7 @@ export default function App() {
         <Route path="/" element={<Home username={username} />} />
         <Route path="/market" element={<MarketDetail />} />
         <Route path="/portfolio" element={<Portfolio />} />
+        <Route path="/admin" element={<Admin />} />
       </Routes>
     </BrowserRouter>
   );
