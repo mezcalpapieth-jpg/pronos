@@ -51,7 +51,7 @@ export default function App() {
         <Route path="/" element={<Home username={username} />} />
         <Route path="/market" element={<MarketDetail />} />
         <Route path="/portfolio" element={<Portfolio />} />
-        <Route path="/admin" element={<Admin username={username} />} />
+        <Route path="/admin" element={<Admin username={username} loading={checkingUsername} />} />
       </Routes>
     </BrowserRouter>
   );

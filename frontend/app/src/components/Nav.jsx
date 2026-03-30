@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
+import { Link } from 'react-router-dom';
 import { isAdmin } from '../lib/protocol.js';
 
 function getInitialTheme() {
@@ -65,7 +66,7 @@ export default function Nav() {
         <a href="#markets">El mercado</a>
         <a href="/mvp/portfolio">Portafolio</a>
         <a href="#how-it-works">Cómo funciona</a>
-        {isAdmin(username) && <a href="/mvp/admin">Admin</a>}
+        {isAdmin(username) && <Link to="/admin">Admin</Link>}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -88,13 +89,13 @@ export default function Nav() {
               {dropdownOpen && (
                 <div className="nav-dropdown">
                   {isAdmin(username) && (
-                    <a
+                    <Link
                       className="nav-dropdown-item"
-                      href="/mvp/admin"
+                      to="/admin"
                       onClick={() => setDropdownOpen(false)}
                     >
                       Admin
-                    </a>
+                    </Link>
                   )}
                   <button
                     className="nav-dropdown-item"

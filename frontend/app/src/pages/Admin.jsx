@@ -273,8 +273,8 @@ function FeeInfo({ mode }) {
   );
 }
 
-export default function Admin({ username }) {
-  const { authenticated } = usePrivy();
+export default function Admin({ username, loading }) {
+  const { authenticated, ready } = usePrivy();
   const [mode, setMode] = useState(getProtocolMode);
 
   const hasAccess = authenticated && isAdmin(username);
@@ -283,6 +283,20 @@ export default function Admin({ username }) {
     const next = mode === 'polymarket' ? 'own' : 'polymarket';
     setProtocolMode(next);
     setMode(next);
+  }
+
+  // Wait for Privy + username fetch before deciding access
+  if (!ready || loading) {
+    return (
+      <>
+        <Nav />
+        <div className="admin-page">
+          <div className="admin-auth-wall">
+            <p>Cargando...</p>
+          </div>
+        </div>
+      </>
+    );
   }
 
   if (!authenticated || !hasAccess) {
