@@ -40,19 +40,44 @@ function ProbabilityChart({ options, resolved, winner }) {
   );
 }
 
-/* ── Tab bar ─────────────────────────────────────────────────── */
-const TABS = ['Reglas','Contexto','Comentarios','Top Holders','Posiciones','Actividad'];
-function TabBar({active,onChange}){
+/* ── Two-row tab system (Polymarket style) ───────────────────── */
+function TabsSection({mock,opt0,opt1,comments}){
+  const [topTab,setTopTab]   = useState('Reglas');
+  const [botTab,setBotTab]   = useState('Actividad');
+
+  const tabBtn = (label,active,onClick,count) => (
+    <button onClick={onClick} style={{
+      fontFamily:'var(--font-mono)',fontSize:12,letterSpacing:'0.04em',
+      padding:'10px 16px',background:'none',border:'none',cursor:'pointer',whiteSpace:'nowrap',
+      color:active?'var(--text-primary)':'var(--text-muted)',fontWeight:active?600:400,
+      borderBottom:active?'2px solid var(--text-primary)':'2px solid transparent',
+      transition:'color 0.15s',
+    }}>
+      {label}{count!=null?<span style={{fontFamily:'var(--font-mono)',fontSize:10,marginLeft:4,color:'var(--text-muted)'}}>({count.toLocaleString()})</span>:null}
+    </button>
+  );
+
   return(
-    <div style={{display:'flex',borderBottom:'1px solid var(--border)',marginBottom:24,overflowX:'auto',gap:0}}>
-      {TABS.map(t=>(
-        <button key={t} onClick={()=>onChange(t)} style={{fontFamily:'var(--font-mono)',fontSize:11,letterSpacing:'0.08em',
-          padding:'12px 18px',background:'none',border:'none',cursor:'pointer',whiteSpace:'nowrap',
-          color:active===t?'var(--green)':'var(--text-muted)',
-          borderBottom:active===t?'2px solid var(--green)':'2px solid transparent',transition:'color 0.15s'}}>
-          {t.toUpperCase()}
-        </button>
-      ))}
+    <div>
+      {/* Row 1: Rules | Market Context */}
+      <div style={{display:'flex',borderBottom:'1px solid var(--border)',marginBottom:24}}>
+        {tabBtn('Reglas',    topTab==='Reglas',       ()=>setTopTab('Reglas'))}
+        {tabBtn('Contexto de mercado', topTab==='Contexto', ()=>setTopTab('Contexto'))}
+      </div>
+      {topTab==='Reglas'   && <RulesTab   data={mock.rules}/>}
+      {topTab==='Contexto' && <ContextTab data={mock.context}/>}
+
+      {/* Row 2: Comments | Top Holders | Positions | Activity */}
+      <div style={{display:'flex',borderBottom:'1px solid var(--border)',margin:'40px 0 24px',overflowX:'auto'}}>
+        {tabBtn('Comentarios', botTab==='Comentarios', ()=>setBotTab('Comentarios'), comments.length*437)}
+        {tabBtn('Top Holders', botTab==='Top Holders', ()=>setBotTab('Top Holders'))}
+        {tabBtn('Posiciones',  botTab==='Posiciones',  ()=>setBotTab('Posiciones'))}
+        {tabBtn('Actividad',   botTab==='Actividad',   ()=>setBotTab('Actividad'))}
+      </div>
+      {botTab==='Comentarios' && <CommentsTab comments={comments}/>}
+      {botTab==='Top Holders' && <HoldersTab  yes={mock.yesHolders} no={mock.noHolders} opt0={opt0} opt1={opt1}/>}
+      {botTab==='Posiciones'  && <PositionsTab yes={mock.yesPositions} no={mock.noPositions} opt0={opt0} opt1={opt1}/>}
+      {botTab==='Actividad'   && <ActivityTab  activity={mock.activity} opt0={opt0} opt1={opt1}/>}
     </div>
   );
 }
@@ -60,29 +85,35 @@ function TabBar({active,onChange}){
 /* ── Rules ───────────────────────────────────────────────────── */
 function RulesTab({data}){
   return(
-    <div style={{fontSize:14,color:'var(--text-secondary)',lineHeight:1.75}}>
-      <div style={{fontFamily:'var(--font-mono)',fontSize:10,letterSpacing:'0.1em',color:'var(--text-muted)',marginBottom:12}}>RESOLUCIÓN</div>
+    <div style={{fontSize:14,color:'var(--text-secondary)',lineHeight:1.8}}>
       <p style={{marginBottom:20}}>{data.resolution}</p>
-      <div style={{background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:10,padding:16,marginBottom:20}}>
-        <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.08em',marginBottom:12}}>ℹ️ CONTEXTO ADICIONAL</div>
+      <div style={{border:'1px solid var(--border)',borderRadius:10,overflow:'hidden',marginBottom:20}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',background:'var(--surface2)',borderBottom:'1px solid var(--border)'}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,fontSize:13,fontWeight:500}}>
+            <span style={{fontSize:16}}>ℹ️</span> Contexto adicional
+          </div>
+          <span style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)'}}>Actualizado hoy</span>
+        </div>
         {data.additional.map((rule,i)=>(
-          <div key={i} style={{padding:'10px 0',borderBottom:i<data.additional.length-1?'1px solid var(--border)':'none',fontSize:13,color:'var(--text-secondary)'}}>{rule}</div>
+          <div key={i} style={{padding:'12px 16px',borderBottom:i<data.additional.length-1?'1px solid var(--border)':'none',fontSize:13,color:'var(--text-secondary)',lineHeight:1.6}}>{rule}</div>
         ))}
       </div>
-      {data.closes&&<div style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)'}}>Cierra: {data.closes}</div>}
+      <p style={{fontSize:13,color:'var(--text-secondary)',marginBottom:8}}>{data.resolution}</p>
+      {data.additional.map((r,i)=><p key={i} style={{fontSize:13,color:'var(--text-secondary)',marginBottom:8}}>{r}</p>)}
+      {data.closes&&<p style={{fontSize:12,color:'var(--text-muted)',marginTop:16}}>Mercado abierto: 1 Ene 2026, 12:00 AM · Cierra: {data.closes}</p>}
     </div>
   );
 }
 
 /* ── Context ─────────────────────────────────────────────────── */
 function ContextTab({data}){
+  const now = new Date().toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'});
   return(
     <div>
-      <div style={{background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:10,padding:20,marginBottom:16}}>
-        <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.08em',marginBottom:12}}>🤖 RESUMEN IA · Actualizado hoy</div>
-        <p style={{fontSize:14,color:'var(--text-secondary)',lineHeight:1.8}}>{data}</p>
-      </div>
-      <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.06em'}}>Resumen generado con IA basado en datos de Pronos · Experimental</p>
+      <p style={{fontSize:14,color:'var(--text-secondary)',lineHeight:1.85,marginBottom:16}}>{data}</p>
+      <p style={{fontSize:12,color:'var(--text-muted)'}}>
+        Resumen experimental generado con IA referenciando datos de Pronos · Actualizado {now}
+      </p>
     </div>
   );
 }
@@ -197,30 +228,71 @@ function PositionsTab({yes,no,opt0,opt1}){
 }
 
 /* ── Activity ────────────────────────────────────────────────── */
-function ActivityTab({activity}){
+function ActivityTab({activity, opt0, opt1}){
+  const [filter,setFilter]=useState('Todos');
+  const filtered = filter==='Todos' ? activity : activity.filter(a=> filter==='Sí' ? a.isYes : !a.isYes);
+  const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const fakeDate = (id) => { const d=new Date(2026,2+Math.floor(id/7),1+(id*13)%28); return `${months[d.getMonth()]} ${d.getDate()}`; };
+  const mxnVal = (amt,price) => Math.round(amt*parseFloat(price)).toLocaleString('es-MX');
+
   return(
     <div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 70px 80px 90px 60px',fontFamily:'var(--font-mono)',
-        fontSize:10,letterSpacing:'0.08em',color:'var(--text-muted)',padding:'8px 0',borderBottom:'1px solid var(--border)',marginBottom:4}}>
-        <span>USUARIO</span><span>ACCIÓN</span><span>RESULTADO</span><span>MONTO</span><span>PRECIO</span>
+      {/* Filters row */}
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}>
+        {['Todos','Sí','No'].map(f=>(
+          <button key={f} onClick={()=>setFilter(f)} style={{
+            padding:'6px 14px',borderRadius:20,fontFamily:'var(--font-mono)',fontSize:11,cursor:'pointer',
+            border:'1px solid var(--border)',transition:'all 0.15s',
+            background: filter===f ? 'var(--surface3)' : 'var(--surface2)',
+            color: filter===f ? 'var(--text-primary)' : 'var(--text-muted)',
+          }}>
+            {f} {f!=='Todos'&&<span style={{color:f==='Sí'?'var(--yes)':'var(--no)'}}>▾</span>}
+          </button>
+        ))}
+        <button style={{padding:'6px 14px',borderRadius:20,fontFamily:'var(--font-mono)',fontSize:11,cursor:'pointer',
+          border:'1px solid var(--border)',background:'var(--surface2)',color:'var(--text-muted)'}}>
+          Monto mín ▾
+        </button>
+        <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:6,fontFamily:'var(--font-mono)',fontSize:11}}>
+          <span style={{width:7,height:7,borderRadius:'50%',background:'#ef4444',display:'inline-block',boxShadow:'0 0 6px #ef4444'}}/>
+          <span style={{color:'var(--text-secondary)'}}>En vivo</span>
+        </div>
       </div>
-      {activity.map(a=>(
-        <div key={a.id} style={{display:'grid',gridTemplateColumns:'1fr 70px 80px 90px 60px',
-          padding:'10px 0',borderBottom:'1px solid var(--border)',alignItems:'center'}}>
-          <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <div style={{width:24,height:24,borderRadius:'50%',flexShrink:0,background:`hsl(${(a.id*97+29)%360},50%,45%)`,
-              display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,color:'#fff',fontWeight:700}}>
+
+      {/* Activity rows */}
+      {filtered.map(a=>{
+        const priceMXN = (parseFloat(a.price)*18.5).toFixed(1);
+        const totalMXN = mxnVal(a.amount, a.price);
+        return(
+          <div key={a.id} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 0',borderBottom:'1px solid var(--border)'}}>
+            {/* Avatar */}
+            <div style={{width:32,height:32,borderRadius:'50%',flexShrink:0,
+              background:`hsl(${(a.id*97+29)%360},55%,45%)`,
+              display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,color:'#fff',fontWeight:700}}>
               {a.user[0]}
             </div>
-            <span style={{fontSize:12,fontWeight:500}}>{a.user}</span>
-            <span style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)'}}>{a.time}</span>
+            {/* Text */}
+            <div style={{flex:1,fontSize:13,lineHeight:1.5}}>
+              <span style={{fontWeight:600}}>{a.user.length>12?a.user.slice(0,10)+'...':a.user}</span>
+              {' '}
+              <span style={{color:a.action==='Compró'?'var(--yes)':'var(--no)'}}>{a.action}</span>
+              {' '}
+              <span style={{fontWeight:600,color:a.isYes?'var(--yes)':'var(--no)'}}>{a.amount} {a.isYes?opt0:opt1}</span>
+              {' para '}
+              <span style={{fontWeight:600}}>{fakeDate(a.id)}</span>
+              {' a '}
+              <span style={{color:'var(--text-secondary)'}}>${priceMXN}¢</span>
+              {' '}
+              <span style={{color:'var(--text-muted)',fontSize:12}}>(${totalMXN} MXN)</span>
+            </div>
+            {/* Time + link */}
+            <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+              <span style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)'}}>{a.time} atrás</span>
+              <span style={{color:'var(--text-muted)',fontSize:14,cursor:'pointer'}}>↗</span>
+            </div>
           </div>
-          <span style={{fontFamily:'var(--font-mono)',fontSize:11,color:a.action==='Compró'?'var(--yes)':'var(--no)'}}>{a.action}</span>
-          <span style={{fontFamily:'var(--font-mono)',fontSize:11,color:a.isYes?'var(--yes)':'var(--no)'}}>{a.side}</span>
-          <span style={{fontFamily:'var(--font-mono)',fontSize:11}}>{a.amount.toLocaleString()} MXN</span>
-          <span style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)'}}>${a.price}</span>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -232,7 +304,6 @@ export default function MarketDetail() {
   const [market,setMarket]=useState(null);
   const [loading,setLoading]=useState(true);
   const [betModal,setBetModal]=useState({open:false,outcome:'',pct:0,clobTokenId:null,isNegRisk:false});
-  const [activeTab,setActiveTab]=useState('Reglas');
 
   useEffect(()=>{
     if(!marketId){navigate('/');return;}
@@ -354,13 +425,7 @@ export default function MarketDetail() {
               </div>
             </div>
 
-            <TabBar active={activeTab} onChange={setActiveTab}/>
-            {activeTab==='Reglas'      &&<RulesTab    data={mock.rules}/>}
-            {activeTab==='Contexto'    &&<ContextTab  data={mock.context}/>}
-            {activeTab==='Comentarios' &&<CommentsTab comments={mock.comments}/>}
-            {activeTab==='Top Holders' &&<HoldersTab  yes={mock.yesHolders} no={mock.noHolders} opt0={opt0} opt1={opt1}/>}
-            {activeTab==='Posiciones'  &&<PositionsTab yes={mock.yesPositions} no={mock.noPositions} opt0={opt0} opt1={opt1}/>}
-            {activeTab==='Actividad'   &&<ActivityTab  activity={mock.activity}/>}
+            <TabsSection mock={mock} opt0={opt0} opt1={opt1} comments={mock.comments}/>
           </div>
 
           <div style={{position:'sticky',top:88}}>
