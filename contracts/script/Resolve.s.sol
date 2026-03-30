@@ -44,7 +44,7 @@ contract Resolve is Script {
         require(!pronoBet.resolved(), "Market already resolved!");
 
         console.log("");
-        console.log("!! BROADCASTING RESOLUTION -- this is PERMANENT !!");
+        console.log("!! BROADCASTING RESOLUTION — this is PERMANENT !!");
         console.log("");
 
         vm.startBroadcast(deployerKey);
