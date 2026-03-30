@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
+import { isAdmin } from '../lib/protocol.js';
 
 function getInitialTheme() {
   const saved = localStorage.getItem('pronos-theme');
@@ -85,11 +86,20 @@ export default function Nav() {
               </button>
               {dropdownOpen && (
                 <div className="nav-dropdown">
+                  {isAdmin(username) && (
+                    <a
+                      className="nav-dropdown-item"
+                      href="/mvp/admin"
+                      onClick={() => setDropdownOpen(false)}
+                    >
+                      Admin
+                    </a>
+                  )}
                   <button
                     className="nav-dropdown-item"
                     onClick={() => { logout(); setDropdownOpen(false); }}
                   >
-                    Cerrar sesión
+                    Cerrar sesion
                   </button>
                 </div>
               )}
