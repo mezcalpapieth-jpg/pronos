@@ -727,12 +727,16 @@ function heroCarouselNext() { hmcGo((hmcIdx + 1) % HERO_MARKETS.length, 'right')
 function heroCarouselPrev() { hmcGo((hmcIdx - 1 + HERO_MARKETS.length) % HERO_MARKETS.length, 'left'); }
 function hmcGo(i, dir)      { hmcRender(i, dir || 'right'); hmcResetTimer(); }
 
+const HMC_MOCK_IDS = [
+  'mundial-mexico-inaugural-2026',
+  'sga-mvp',
+  'bitcoin-150k-dic-2026',
+  'elecciones-mx-2027',
+  'grammy-album-2027',
+];
 function hmcBet(marketIdx, outcomeIdx) {
-  if (marketIdx === 0) {
-    openBetModal(outcomeIdx + 1);
-  } else {
-    showToast('🔜 Mercado próximamente disponible');
-  }
+  const id = HMC_MOCK_IDS[marketIdx];
+  if (id) location.href = '/mvp/market?id=' + id;
 }
 
 function hmcResetTimer() {

@@ -6,6 +6,39 @@
 
 const MARKETS = [
 
+  // ── MERCADOS MOCK (landing page) ──────────────────────────────────────────
+
+  // Música & Farándula
+  { id:'bad-bunny-sencillo',   category:'musica',   categoryLabel:'MÚSICA & FARÁNDULA', icon:'🎵', title:'¿Bad Bunny lanza sencillo antes del 30 jun?',           deadline:'30 Jun 2026', options:[{label:'Sí',pct:67},{label:'No',pct:33}], volume:'1.68M', _source:'local' },
+  { id:'peso-pluma-anillo',    category:'musica',   categoryLabel:'MÚSICA & FARÁNDULA', icon:'💍', title:'¿Peso Pluma da anillo antes del 30 jun?',               deadline:'30 Jun 2026', options:[{label:'Sí',pct:14},{label:'No',pct:86}], volume:'1.14M', _source:'local' },
+  { id:'nodal-divorcio',       category:'musica',   categoryLabel:'MÚSICA & FARÁNDULA', icon:'💔', title:'¿Christian Nodal se divorcia antes del 30 jun?',        deadline:'30 Jun 2026', options:[{label:'Sí',pct:22},{label:'No',pct:78}], volume:'1.24M', _source:'local' },
+
+  // México & CDMX
+  { id:'sismo-cdmx',           category:'mexico',   categoryLabel:'MÉXICO & CDMX',      icon:'🌍', title:'¿Sismo >5.0 en CDMX antes del 30 jun?',                deadline:'30 Jun 2026', options:[{label:'Sí',pct:71},{label:'No',pct:29}], volume:'2.24M', _source:'local' },
+  { id:'tren-maya-descarrila', category:'mexico',   categoryLabel:'MÉXICO & CDMX',      icon:'🚂', title:'¿Se descarrila el Tren Maya antes del 2027?',          deadline:'31 Dic 2026', options:[{label:'Sí',pct:38},{label:'No',pct:62}], volume:'760K',  _source:'local' },
+  { id:'dolar-22-mxn',         category:'mexico',   categoryLabel:'MÉXICO & CDMX',      icon:'💵', title:'¿El dólar llega a $22 MXN antes del 30 jun?',          deadline:'30 Jun 2026', options:[{label:'Sí',pct:31},{label:'No',pct:69}], volume:'3.36M', _source:'local' },
+
+  // Política Internacional
+  { id:'trump-visita-mexico',  category:'politica', categoryLabel:'POLÍTICA INTERNACIONAL', icon:'🇺🇸', title:'¿Trump visita México antes del 30 jun?',         deadline:'30 Jun 2026', options:[{label:'Sí',pct:5}, {label:'No',pct:95}], volume:'2.68M', _source:'local' },
+  { id:'venezuela-elecciones', category:'politica', categoryLabel:'POLÍTICA INTERNACIONAL', icon:'🗳️', title:'¿Venezuela celebra elecciones libres antes del 30 jun?', deadline:'30 Jun 2026', options:[{label:'Sí',pct:3}, {label:'No',pct:97}], volume:'840K',  _source:'local' },
+  { id:'cuba-embargo',         category:'politica', categoryLabel:'POLÍTICA INTERNACIONAL', icon:'🇨🇺', title:'¿Se levanta el embargo de Cuba antes del 30 jun?', deadline:'30 Jun 2026', options:[{label:'Sí',pct:3}, {label:'No',pct:97}], volume:'580K',  _source:'local' },
+
+  // Deportes
+  { id:'checo-puntos',         category:'deportes', categoryLabel:'DEPORTES',           icon:'🏎️', title:'¿Checo Pérez suma puntos antes del 30 jun?',            deadline:'30 Jun 2026', options:[{label:'Sí',pct:61},{label:'No',pct:39}], volume:'2.92M', _source:'local' },
+  { id:'mundial-mexico-gana',  category:'deportes', categoryLabel:'DEPORTES',           icon:'⚽',  title:'¿México gana su primer partido del Mundial 2026?',     deadline:'15 Jun 2026', options:[{label:'Sí',pct:54},{label:'No',pct:46}], volume:'9.36M', _source:'local', trending:true },
+  { id:'sga-mvp',              category:'deportes', categoryLabel:'DEPORTES',           icon:'🏀',  title:'¿SGA gana el MVP de la NBA 2025-26?',                  deadline:'30 Jun 2026', options:[{label:'Sí',pct:71},{label:'No',pct:29}], volume:'7.28M', _source:'local', trending:true },
+
+  // Crypto
+  { id:'bitcoin-120k',         category:'crypto',   categoryLabel:'CRYPTO',             icon:'₿',   title:'¿Bitcoin supera $120k USD antes del 30 jun?',          deadline:'30 Jun 2026', options:[{label:'Sí',pct:12},{label:'No',pct:88}], volume:'5.96M', _source:'local' },
+  { id:'eth-4k',               category:'crypto',   categoryLabel:'CRYPTO',             icon:'⟠',   title:'¿Ethereum supera $4,000 antes del 30 jun?',            deadline:'30 Jun 2026', options:[{label:'Sí',pct:28},{label:'No',pct:72}], volume:'3.84M', _source:'local' },
+  { id:'sol-300',              category:'crypto',   categoryLabel:'CRYPTO',             icon:'◎',   title:'¿Solana supera $300 antes del 30 jun?',                deadline:'30 Jun 2026', options:[{label:'Sí',pct:35},{label:'No',pct:65}], volume:'2.44M', _source:'local' },
+
+  // Hero carousel markets
+  { id:'mundial-mexico-inaugural-2026', category:'deportes', categoryLabel:'DEPORTES · MUNDIAL 2026', icon:'⚽', title:'¿México gana el partido inaugural del Mundial 2026?', deadline:'12 Jun 2026', options:[{label:'🇲🇽 México',pct:62},{label:'Empate',pct:21},{label:'🇿🇦 Sudáfrica',pct:17}], volume:'468K', _source:'local', trending:true },
+  { id:'bitcoin-150k-dic-2026',         category:'crypto',   categoryLabel:'CRYPTO · BITCOIN',        icon:'₿',  title:'¿Bitcoin supera los $150,000 USD antes de dic 2026?', deadline:'31 Dic 2026', options:[{label:'Sí',pct:54},{label:'No',pct:46}], volume:'24.8M', _source:'local', trending:true },
+  { id:'elecciones-mx-2027',            category:'politica', categoryLabel:'POLÍTICA · MÉXICO 2027',  icon:'🌎', title:'¿Cuál partido gana más escaños en las elecciones MX 2027?', deadline:'1 Jul 2027', options:[{label:'MORENA',pct:58},{label:'PAN',pct:28},{label:'PRI',pct:14}], volume:'1.75M', _source:'local' },
+  { id:'grammy-album-2027',             category:'musica',   categoryLabel:'MÚSICA · GRAMMY 2027',    icon:'🎵', title:'¿Quién gana el Grammy al Álbum del Año 2027?', deadline:'5 Feb 2027', options:[{label:'Kendrick',pct:42},{label:'Sabrina Carpenter',pct:31},{label:'Otro',pct:27}], volume:'696K', _source:'local' },
+
   // ── MERCADOS CERRADOS / RESUELTOS ─────────────────────────────────────────
 
   {
