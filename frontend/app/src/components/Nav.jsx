@@ -106,7 +106,7 @@ export default function Nav() {
               )}
             </>
           ) : (
-            <button className="btn-nav-cta" onClick={login}>Conectar</button>
+            <button className="btn-nav-cta" onClick={login}>Empieza a predecir</button>
           )}
         </div>
       </div>
