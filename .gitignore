@@ -13,3 +13,4 @@ scripts/dist/
 
 # System
 .DS_Store
+.vercel/
