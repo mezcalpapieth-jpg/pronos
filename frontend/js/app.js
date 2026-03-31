@@ -430,7 +430,7 @@ function renderMockMarkets(filter) {
         <div class="mock-card-payouts">
           ${m.options.slice(0, 2).map((o, i) => {
             const payout = o.pct > 0 ? Math.round(10000 / o.pct) : 0;
-            return `<div class="mock-card-payout ${i === 0 ? 'yes' : 'no'}">
+            return `<div class="mock-card-payout">
               <span>$100</span>
               <span class="mock-card-payout-arrow">→</span>
               <span class="mock-card-payout-val">$${payout}</span>
