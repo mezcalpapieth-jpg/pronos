@@ -121,9 +121,16 @@
 ============================================================ -->
 <nav id="nav">
   <a href="#" class="nav-logo">PRONOS<span class="green-dot"></span></a>
+  <div id="navSearch" class="nav-search">
+    <div class="nav-search-input-wrap">
+      <span class="nav-search-icon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+      <input class="nav-search-input" type="text" placeholder="Buscar mercados…" oninput="navSearchFilter(this.value)" onkeydown="navSearchKey(event)" />
+    </div>
+    <div class="nav-search-dropdown" id="navSearchDropdown" style="display:none"></div>
+  </div>
   <div class="nav-links">
     <a href="#market">El mercado</a>
-    <a href="/portfolio">Portafolio</a>
+    <a href="/mvp/portfolio">Portafolio</a>
     <a href="#how-it-works">Cómo funciona</a>
     <button class="btn-theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Cambiar tema"></button>
     <div id="navWalletArea">
@@ -157,7 +164,7 @@
     <div class="hero-left">
       <div class="hero-badge">
         <div class="dot"></div>
-        <span>Mundial 2026 · Partido Inaugural</span>
+        <span>15 mercados en vivo</span>
       </div>
 
       <h1 class="hero-headline">
@@ -167,9 +174,8 @@
       </h1>
 
       <p class="hero-sub">
-        Apuesta MXNB en quién gana el partido inaugural del
-        Mundial 2026. México vs Sudáfrica. Liquidado automáticamente
-        en Base. Sin intermediarios.
+        Predice el futuro de deportes, política, entretenimiento y más.
+        Gana MXNB si aciertas. Liquidado automáticamente. Sin intermediarios.
       </p>
 
       <div class="hero-btns">
@@ -179,16 +185,16 @@
 
       <div class="hero-stats">
         <div class="hero-stat">
-          <span class="hero-stat-val"><span class="green" id="heroTotalPool">$0</span></span>
-          <span class="hero-stat-label">Volumen invertido</span>
+          <span class="hero-stat-val"><span class="green">$2.3M</span></span>
+          <span class="hero-stat-label">Ganancias totales</span>
         </div>
         <div class="hero-stat">
-          <span class="hero-stat-val"><span class="green">11 Jun</span></span>
-          <span class="hero-stat-label">Fecha del partido</span>
+          <span class="hero-stat-val"><span class="green">24,000+</span></span>
+          <span class="hero-stat-label">Predicciones realizadas</span>
         </div>
         <div class="hero-stat">
-          <span class="hero-stat-val"><span class="green">2%</span></span>
-          <span class="hero-stat-label">Comisión</span>
+          <span class="hero-stat-val"><span class="green">6,000+</span></span>
+          <span class="hero-stat-label">Usuarios registrados</span>
         </div>
       </div>
     </div>

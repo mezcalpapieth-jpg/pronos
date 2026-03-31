@@ -14,6 +14,56 @@ function toggleTheme() {
 
 document.addEventListener('DOMContentLoaded', initTheme);
 
+// ─── NAV SEARCH ────────────────────────────────────────────────────────────
+function navSearchFilter(query) {
+  const dropdown = document.getElementById('navSearchDropdown');
+  const q = query.trim().toLowerCase();
+  if (!q) { dropdown.style.display = 'none'; return; }
+  const results = MARKETS.filter(m => m.title.toLowerCase().includes(q)).slice(0, 6);
+  if (!results.length) {
+    dropdown.innerHTML = '<div class="nav-search-empty">No se encontraron mercados</div>';
+    dropdown.style.display = 'block';
+    return;
+  }
+  dropdown.innerHTML = results.map(m => `
+    <button class="nav-search-result" onclick="navSearchGo('${m.id}')">
+      <span class="nav-search-result-icon">${m.icon}</span>
+      <span class="nav-search-result-text">
+        <span class="nav-search-result-title">${m.title}</span>
+        <span class="nav-search-result-meta">${m.categoryLabel} · ${m.deadline}</span>
+      </span>
+      <span class="nav-search-result-pct">${m.options?.[0]?.pct ?? ''}%</span>
+    </button>
+  `).join('');
+  dropdown.style.display = 'block';
+}
+
+function navSearchKey(e) {
+  if (e.key === 'Escape') clearNavSearch();
+  if (e.key === 'Enter') {
+    const first = document.querySelector('.nav-search-result');
+    if (first) first.click();
+  }
+}
+
+function navSearchGo(id) {
+  clearNavSearch();
+  location.href = '/markets?id=' + id;
+}
+
+function clearNavSearch() {
+  const input = document.querySelector('.nav-search-input');
+  const dropdown = document.getElementById('navSearchDropdown');
+  if (input) input.value = '';
+  if (dropdown) dropdown.style.display = 'none';
+}
+
+// Close search on outside click
+document.addEventListener('mousedown', function(e) {
+  const search = document.getElementById('navSearch');
+  if (search && !search.contains(e.target)) clearNavSearch();
+});
+
 // ─── CONFIG ─────────────────────────────────────────────────────────────────
 const PRONOS_BET_ADDRESS = '0x9a03F59DD857856d930b12f5da63c586d824804D';
 const MXNB_ADDRESS       = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
@@ -190,11 +240,7 @@ window.connectWallet = async function() {
 };
 
 function updateWalletUI(address) {
-  const navArea = document.getElementById('navWalletArea');
-  if (navArea) navArea.innerHTML = `
-    <button class="btn-wallet-connected" onclick="window.connectWallet()">
-      <div class="wallet-dot"></div>${shortAddr(address)}
-    </button>`;
+  // Landing page nav keeps "Únete a la lista" button — don't replace it
   const heroBtn = document.getElementById('heroConnectBtn');
   if (heroBtn) { heroBtn.textContent = 'Apostar ahora'; heroBtn.onclick = () => openBetModal(1); }
   if (typeof renderPortfolio === 'function') renderPortfolio();
