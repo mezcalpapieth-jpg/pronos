@@ -130,6 +130,78 @@
 }
 .nav-links a:hover { color: var(--text-primary); }
 
+/* ── Nav search bar ──────────────────────────────────────── */
+.nav-search {
+  position: relative;
+}
+.nav-search-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0 14px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.nav-search-input-wrap:focus-within {
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px rgba(0,232,122,0.1);
+}
+.nav-search-icon {
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.nav-search-input {
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 10px 0;
+  width: 200px;
+  letter-spacing: 0.02em;
+}
+.nav-search-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+.nav-search-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px;
+  z-index: 200;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  max-height: 300px;
+  overflow-y: auto;
+}
+.nav-search-result {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.nav-search-result:hover,
+.nav-search-result.active {
+  background: var(--surface3);
+}
+
 /* ============================================================
    3. BUTTONS
 ============================================================ */
