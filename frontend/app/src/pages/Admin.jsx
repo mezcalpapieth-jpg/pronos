@@ -221,7 +221,7 @@ function ContractInfo({ mode }) {
     <div className="admin-card">
       <div className="admin-card-header">
         <h3>Contratos desplegados</h3>
-        <span className="admin-badge badge-testnet">Base Sepolia</span>
+        <span className="admin-badge badge-testnet">Arbitrum Sepolia</span>
       </div>
       <div className="admin-contracts">
         <div className="admin-contract-row">
@@ -281,8 +281,8 @@ function FeeInfo({ mode }) {
 
 function SafeManager({ mode }) {
   const { wallets } = useWallets();
-  const [chainId, setChainId] = useState(84532); // default Base Sepolia
-  const [safeAddrs, setSafeAddrs] = useState(getSafeAddresses(84532));
+  const [chainId, setChainId] = useState(421614); // default Arbitrum Sepolia
+  const [safeAddrs, setSafeAddrs] = useState(getSafeAddresses(421614));
   const [pending, setPending] = useState([]);
   const [safeInfo, setSafeInfoState] = useState({ admin: null, resolver: null });
   const [creating, setCreating] = useState(false);
@@ -405,8 +405,8 @@ function SafeManager({ mode }) {
             onChange={e => setChainId(Number(e.target.value))}
             className="admin-select-sm"
           >
-            <option value={84532}>Base Sepolia</option>
-            <option value={8453}>Base Mainnet</option>
+            <option value={421614}>Arbitrum Sepolia</option>
+            <option value={42161}>Arbitrum One</option>
           </select>
         </div>
       </div>

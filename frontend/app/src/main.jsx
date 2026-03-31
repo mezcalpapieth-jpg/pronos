@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { PrivyProvider } from '@privy-io/react-auth';
-import { polygon, base, baseSepolia } from 'viem/chains';
+import { polygon, arbitrum, arbitrumSepolia } from 'viem/chains';
 import App from './App.jsx';
 import PasswordGate from './components/PasswordGate.jsx';
 import './styles/mvp.css';
@@ -22,7 +22,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           createOnLogin: 'users-without-wallets',
         },
         defaultChain: polygon,
-        supportedChains: [polygon, base, baseSepolia],
+        supportedChains: [polygon, arbitrum, arbitrumSepolia],
       }}
     >
       {window.location.pathname.startsWith('/markets') ? (

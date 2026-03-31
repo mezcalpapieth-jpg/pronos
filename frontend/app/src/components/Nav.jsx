@@ -15,8 +15,8 @@ const MXNB_ABI = ['function balanceOf(address) view returns (uint256)'];
 
 const CHAIN_NAMES = {
   137: 'Polygon',
-  8453: 'Base',
-  84532: 'Base Sepolia',
+  42161: 'Arbitrum',
+  421614: 'Arb Sepolia',
 };
 
 export default function Nav() {

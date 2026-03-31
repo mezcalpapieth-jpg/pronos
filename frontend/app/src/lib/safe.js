@@ -17,17 +17,17 @@ import { ethers } from 'ethers';
 // ─── Chain Configuration ─────────────────────────────────────────────────
 
 const CHAIN_CONFIG = {
-  // Base Sepolia (testnet)
-  84532: {
-    chainId: 84532n,
-    txServiceUrl: 'https://safe-transaction-base-sepolia.safe.global',
-    name: 'Base Sepolia',
+  // Arbitrum Sepolia (testnet)
+  421614: {
+    chainId: 421614n,
+    txServiceUrl: 'https://safe-transaction-arbitrum-sepolia.safe.global',
+    name: 'Arbitrum Sepolia',
   },
-  // Base Mainnet
-  8453: {
-    chainId: 8453n,
-    txServiceUrl: 'https://safe-transaction-base.safe.global',
-    name: 'Base',
+  // Arbitrum One (mainnet)
+  42161: {
+    chainId: 42161n,
+    txServiceUrl: 'https://safe-transaction-arbitrum.safe.global',
+    name: 'Arbitrum',
   },
 };
 

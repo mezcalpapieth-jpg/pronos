@@ -35,17 +35,17 @@ export function isAdmin(adminFlag) {
 // ─── Contract addresses per chain ─────────────────────────────────────────
 
 const CONTRACTS = {
-  // Base Sepolia (testnet)
-  84532: {
+  // Arbitrum Sepolia (testnet)
+  421614: {
     factory: null,  // Set after deployment
     token: null,
-    usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+    usdc: '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d',
   },
-  // Base Mainnet
-  8453: {
+  // Arbitrum One (mainnet)
+  42161: {
     factory: null,
     token: null,
-    usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+    usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
   },
 };
 
@@ -71,18 +71,18 @@ export function isPolymarket(market) {
 
 const CHAIN_IDS = {
   polygon: 137,
-  base: 8453,
-  baseSepolia: 84532,
+  arbitrum: 42161,
+  arbitrumSepolia: 421614,
 };
 
 /**
  * Get the required chain ID based on current protocol mode.
- * Polymarket → Polygon, Own protocol → Base (or Base Sepolia for testnet)
+ * Polymarket → Polygon, Own protocol → Arbitrum (or Arbitrum Sepolia for testnet)
  */
 export function getRequiredChainId(testnet = true) {
   const mode = getProtocolMode();
   if (mode === 'own') {
-    return testnet ? CHAIN_IDS.baseSepolia : CHAIN_IDS.base;
+    return testnet ? CHAIN_IDS.arbitrumSepolia : CHAIN_IDS.arbitrum;
   }
   return CHAIN_IDS.polygon;
 }
