@@ -42,6 +42,9 @@
 
 ### 1.5 Safe Multisig
 - [x] ~~Setup guide created (`scripts/setup-safe.md`) with step-by-step instructions~~
+- [x] ~~Safe SDK integrated in admin panel (`lib/safe.js` — protocol-kit + api-kit)~~
+- [x] ~~Admin UI: create Safe, connect existing, propose/sign/execute transactions~~
+- [x] ~~Supports Base Sepolia + Base Mainnet (chain selector in UI)~~
 - [ ] Create Safe multisig on Base Sepolia (3/5 admin, 2/3 resolution)
 - [ ] Transfer contract ownership to Safe
 - [ ] Test resolution flow through multisig
@@ -160,7 +163,8 @@
 | 2026-03-29 | Analyzed codebase vs $30K proposal. Created roadmap. |
 | 2026-03-29 | Built core contracts: PronosToken (ERC-1155), PronosAMM (CPMM + dynamic fees), MarketFactory. 43 tests passing. Deploy script ready. |
 | 2026-03-30 | Admin panel at /mvp/admin — protocol switch, market CRUD, fee display. Access restricted to Mezcal & frmm usernames. Safe multisig setup guide. |
+| 2026-03-31 | Fixed Vercel deploy (submodule broke site). Dynamic fee display in bet slip. Safe SDK integration in admin panel (create/connect/propose/sign/execute). Fixed admin auth race condition. |
 
 ---
 
-*Last updated: 2026-03-29*
+*Last updated: 2026-03-31*
