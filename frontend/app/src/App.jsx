@@ -10,14 +10,16 @@ import UsernameModal from './components/UsernameModal.jsx';
 export default function App() {
   const { authenticated, user } = usePrivy();
   const [username, setUsername] = useState(null);
+  const [userIsAdmin, setUserIsAdmin] = useState(false);
   const [checkingUsername, setCheckingUsername] = useState(false);
   const [needsUsername, setNeedsUsername] = useState(false);
 
-  // Check if logged-in user already has a username
+  // Check if logged-in user already has a username + admin status
   useEffect(() => {
     if (!authenticated || !user?.id) {
       setNeedsUsername(false);
       setUsername(null);
+      setUserIsAdmin(false);
       return;
     }
     setCheckingUsername(true);
@@ -26,6 +28,7 @@ export default function App() {
       .then(data => {
         if (data.username) {
           setUsername(data.username);
+          setUserIsAdmin(data.isAdmin === true);
           setNeedsUsername(false);
         } else {
           setNeedsUsername(true);
@@ -37,6 +40,11 @@ export default function App() {
 
   function handleUsernameCreated(uname) {
     setUsername(uname);
+    // Re-check admin status after username creation
+    fetch(`/api/user?privyId=${encodeURIComponent(user.id)}`)
+      .then(r => r.json())
+      .then(data => setUserIsAdmin(data.isAdmin === true))
+      .catch(() => {});
     setNeedsUsername(false);
   }
 
@@ -48,10 +56,10 @@ export default function App() {
       )}
 
       <Routes>
-        <Route path="/" element={<Home username={username} />} />
+        <Route path="/" element={<Home username={username} userIsAdmin={userIsAdmin} />} />
         <Route path="/market" element={<MarketDetail />} />
         <Route path="/portfolio" element={<Portfolio />} />
-        <Route path="/admin" element={<Admin username={username} loading={checkingUsername} />} />
+        <Route path="/admin" element={<Admin username={username} userIsAdmin={userIsAdmin} loading={checkingUsername} />} />
       </Routes>
     </BrowserRouter>
   );

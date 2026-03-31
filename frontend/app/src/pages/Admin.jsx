@@ -553,11 +553,11 @@ function SafeManager({ mode }) {
   );
 }
 
-export default function Admin({ username, loading }) {
+export default function Admin({ username, userIsAdmin, loading }) {
   const { authenticated, ready } = usePrivy();
   const [mode, setMode] = useState(getProtocolMode);
 
-  const hasAccess = authenticated && isAdmin(username);
+  const hasAccess = authenticated && isAdmin(userIsAdmin);
 
   function handleToggle() {
     const next = mode === 'polymarket' ? 'own' : 'polymarket';

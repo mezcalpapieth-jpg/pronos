@@ -6,9 +6,6 @@
  * to the on-chain AMM instead of Polymarket CLOB.
  */
 
-// Usernames that can access the admin panel
-const ADMIN_USERNAMES = ['mezcal', 'frmm'];
-
 const PROTOCOL_KEY = 'pronos-protocol-mode';
 
 export function getProtocolMode() {
@@ -27,11 +24,12 @@ export function isOwnProtocol() {
 }
 
 /**
- * Check if a username has admin access.
+ * Check if user has admin access.
+ * Now uses the isAdmin flag from the server response, not a client-side list.
+ * Pass the flag directly from the /api/user response.
  */
-export function isAdmin(username) {
-  if (!username) return false;
-  return ADMIN_USERNAMES.includes(username.toLowerCase());
+export function isAdmin(adminFlag) {
+  return adminFlag === true;
 }
 
 // ─── Contract addresses per chain ─────────────────────────────────────────

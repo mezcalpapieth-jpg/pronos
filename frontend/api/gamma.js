@@ -11,7 +11,9 @@
 const GAMMA_BASE = 'https://gamma-api.polymarket.com';
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin;
+  const allowed = origin === 'https://pronos.io' || origin === 'http://localhost:3333';
+  res.setHeader('Access-Control-Allow-Origin', allowed ? origin : 'https://pronos.io');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 

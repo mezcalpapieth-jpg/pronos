@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { ethers } from 'ethers';
 import { Link } from 'react-router-dom';
-import { isAdmin } from '../lib/protocol.js';
 import { MXNB_ADDRESS } from '../lib/clob.js';
 
 function getInitialTheme() {
@@ -26,15 +25,19 @@ export default function Nav() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [theme, setTheme] = useState(getInitialTheme);
   const [username, setUsername] = useState(null);
+  const [adminFlag, setAdminFlag] = useState(false);
   const [balance, setBalance] = useState(null);
   const [chainId, setChainId] = useState(null);
   const dropdownRef = useRef(null);
 
   useEffect(() => {
-    if (!authenticated || !user?.id) { setUsername(null); return; }
+    if (!authenticated || !user?.id) { setUsername(null); setAdminFlag(false); return; }
     fetch(`/api/user?privyId=${encodeURIComponent(user.id)}`)
       .then(r => r.json())
-      .then(d => { if (d.username) setUsername(d.username); })
+      .then(d => {
+        if (d.username) setUsername(d.username);
+        setAdminFlag(d.isAdmin === true);
+      })
       .catch(() => {});
   }, [authenticated, user?.id]);
 
@@ -99,7 +102,7 @@ export default function Nav() {
         <a href="#markets">El mercado</a>
         <a href="/mvp/portfolio">Portafolio</a>
         <a href="#how-it-works">Cómo funciona</a>
-        {isAdmin(username) && <Link to="/admin">Admin</Link>}
+        {adminFlag && <Link to="/admin">Admin</Link>}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -132,7 +135,7 @@ export default function Nav() {
                       {CHAIN_NAMES[chainId] || `Chain ${chainId}`}
                     </div>
                   )}
-                  {isAdmin(username) && (
+                  {adminFlag && (
                     <Link
                       className="nav-dropdown-item"
                       to="/admin"

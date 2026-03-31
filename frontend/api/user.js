@@ -2,19 +2,27 @@ import { neon } from '@neondatabase/serverless';
 
 const sql = neon(process.env.DATABASE_URL);
 
+// Admin usernames — server-side only, never sent to client bundle
+const ADMIN_USERNAMES = (process.env.ADMIN_USERNAMES || 'mezcal,frmm')
+  .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin;
+  const allowed = origin === 'https://pronos.io' || origin === 'http://localhost:3333';
+  res.setHeader('Access-Control-Allow-Origin', allowed ? origin : 'https://pronos.io');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // GET /api/user?privyId=xxx — check if user has username
+  // GET /api/user?privyId=xxx — check if user has username + admin status
   if (req.method === 'GET') {
     const { privyId } = req.query;
     if (!privyId) return res.status(400).json({ error: 'privyId required' });
     const rows = await sql`SELECT username FROM users WHERE privy_id = ${privyId}`;
-    if (rows.length === 0) return res.status(404).json({ username: null });
-    return res.status(200).json({ username: rows[0].username });
+    if (rows.length === 0) return res.status(404).json({ username: null, isAdmin: false });
+    const username = rows[0].username;
+    const isAdmin = ADMIN_USERNAMES.includes((username || '').toLowerCase());
+    return res.status(200).json({ username, isAdmin });
   }
 
   // POST /api/user — create username
