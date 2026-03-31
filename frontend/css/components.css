@@ -1199,7 +1199,7 @@ html[data-theme="light"] .btn-theme-toggle::before {
 }
 .mock-card-payout-val,
 .mock-card-payout .mock-card-payout-val {
-  color: var(--green) !important;
+  color: var(--yes) !important;
   font-weight: 700;
 }
 
