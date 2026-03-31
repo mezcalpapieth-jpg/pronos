@@ -43,6 +43,38 @@
   box-shadow: 0 0 6px var(--green);
 }
 
+/* ── Nav balance ─────────────────────────────────────────────── */
+.nav-balance {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--green);
+  font-weight: 600;
+  margin-right: 4px;
+}
+.nav-balance-label {
+  font-size: 10px;
+  opacity: 0.6;
+  font-weight: 400;
+}
+.nav-chain-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  margin-right: 6px;
+  box-shadow: 0 0 4px var(--green);
+}
+.nav-dropdown-info {
+  padding: 6px 14px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+}
+
 /* ── Nav dropdown ────────────────────────────────────────────── */
 .nav-dropdown {
   position: absolute;

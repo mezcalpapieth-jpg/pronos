@@ -68,3 +68,38 @@ export function isProtocolMarket(market) {
 export function isPolymarket(market) {
   return !market || market.source !== 'protocol';
 }
+
+// ─── Network switching ───────────────────────────────────────────────────
+
+const CHAIN_IDS = {
+  polygon: 137,
+  base: 8453,
+  baseSepolia: 84532,
+};
+
+/**
+ * Get the required chain ID based on current protocol mode.
+ * Polymarket → Polygon, Own protocol → Base (or Base Sepolia for testnet)
+ */
+export function getRequiredChainId(testnet = true) {
+  const mode = getProtocolMode();
+  if (mode === 'own') {
+    return testnet ? CHAIN_IDS.baseSepolia : CHAIN_IDS.base;
+  }
+  return CHAIN_IDS.polygon;
+}
+
+/**
+ * Switch the wallet to the required chain for the current protocol mode.
+ * @param {object} wallet - Privy wallet object (from useWallets)
+ */
+export async function switchToRequiredChain(wallet, testnet = true) {
+  const requiredChainId = getRequiredChainId(testnet);
+  const currentChainId = await wallet.getChainId?.();
+  if (currentChainId !== `eip155:${requiredChainId}`) {
+    await wallet.switchChain(requiredChainId);
+  }
+  return requiredChainId;
+}
+
+export { CHAIN_IDS };

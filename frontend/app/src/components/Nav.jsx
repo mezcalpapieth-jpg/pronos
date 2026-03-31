@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { usePrivy } from '@privy-io/react-auth';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { ethers } from 'ethers';
 import { Link } from 'react-router-dom';
 import { isAdmin } from '../lib/protocol.js';
+import { MXNB_ADDRESS } from '../lib/clob.js';
 
 function getInitialTheme() {
   const saved = localStorage.getItem('pronos-theme');
@@ -9,12 +11,23 @@ function getInitialTheme() {
   return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
 }
 
+const MXNB_ABI = ['function balanceOf(address) view returns (uint256)'];
+
+const CHAIN_NAMES = {
+  137: 'Polygon',
+  8453: 'Base',
+  84532: 'Base Sepolia',
+};
+
 export default function Nav() {
   const { ready, authenticated, user, login, logout } = usePrivy();
+  const { wallets } = useWallets();
   const [scrolled, setScrolled] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [theme, setTheme] = useState(getInitialTheme);
   const [username, setUsername] = useState(null);
+  const [balance, setBalance] = useState(null);
+  const [chainId, setChainId] = useState(null);
   const dropdownRef = useRef(null);
 
   useEffect(() => {
@@ -24,6 +37,26 @@ export default function Nav() {
       .then(d => { if (d.username) setUsername(d.username); })
       .catch(() => {});
   }, [authenticated, user?.id]);
+
+  // Fetch MXNB balance + chain ID
+  useEffect(() => {
+    if (!authenticated) { setBalance(null); setChainId(null); return; }
+    const wallet = wallets?.[0];
+    if (!wallet) return;
+    wallet.getEthereumProvider().then(async (prov) => {
+      try {
+        const provider = new ethers.providers.Web3Provider(prov);
+        const network = await provider.getNetwork();
+        setChainId(network.chainId);
+        const addr = await provider.getSigner().getAddress();
+        const mxnb = new ethers.Contract(MXNB_ADDRESS, MXNB_ABI, provider);
+        const raw = await mxnb.balanceOf(addr);
+        setBalance(Number(ethers.utils.formatUnits(raw, 6)));
+      } catch {
+        setBalance(null);
+      }
+    });
+  }, [authenticated, wallets]);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -81,6 +114,11 @@ export default function Nav() {
             <button className="btn-nav-cta" disabled style={{ opacity: 0.5 }}>…</button>
           ) : authenticated ? (
             <>
+              {balance !== null && (
+                <span className="nav-balance">
+                  ${balance.toFixed(2)} <span className="nav-balance-label">MXNB</span>
+                </span>
+              )}
               <button className="nav-user-pill" onClick={() => setDropdownOpen(o => !o)}>
                 <span className="user-dot" />
                 {userLabel}
@@ -88,6 +126,12 @@ export default function Nav() {
               </button>
               {dropdownOpen && (
                 <div className="nav-dropdown">
+                  {chainId && (
+                    <div className="nav-dropdown-info">
+                      <span className="nav-chain-dot" />
+                      {CHAIN_NAMES[chainId] || `Chain ${chainId}`}
+                    </div>
+                  )}
                   {isAdmin(username) && (
                     <Link
                       className="nav-dropdown-item"

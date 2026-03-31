@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { PrivyProvider } from '@privy-io/react-auth';
-import { polygon, base } from 'viem/chains';
+import { polygon, base, baseSepolia } from 'viem/chains';
 import App from './App.jsx';
 import './styles/mvp.css';
 
@@ -21,7 +21,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           createOnLogin: 'users-without-wallets',
         },
         defaultChain: polygon,
-        supportedChains: [polygon],
+        supportedChains: [polygon, base, baseSepolia],
       }}
     >
       <App />
