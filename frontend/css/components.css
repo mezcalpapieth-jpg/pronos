@@ -1660,6 +1660,21 @@ html[data-theme="light"] .btn-theme-toggle::before {
 }
 
 /* ============================================================
+   TABLET RESPONSIVE — components
+============================================================ */
+@media (max-width: 1024px) {
+  .nav-links a {
+    display: none; /* hide text links on tablet and below */
+  }
+  .nav-links {
+    gap: 12px;
+  }
+  .nav-search-input {
+    width: 180px;
+  }
+}
+
+/* ============================================================
    MOBILE RESPONSIVE — components
 ============================================================ */
 @media (max-width: 768px) {
@@ -1669,11 +1684,8 @@ html[data-theme="light"] .btn-theme-toggle::before {
     padding: 0 16px;
     height: 56px;
   }
-  .nav-links a {
-    display: none; /* hide text links on mobile */
-  }
-  .nav-links {
-    gap: 12px;
+  .nav-search-input {
+    width: 140px;
   }
   .btn-nav-cta {
     font-size: 12px;
