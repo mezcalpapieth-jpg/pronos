@@ -1178,6 +1178,30 @@ html[data-theme="light"] .btn-theme-toggle::before {
   letter-spacing: 0.06em;
 }
 
+/* Payout preview ($100 → $X) */
+.mock-card-payouts {
+  display: flex;
+  gap: 16px;
+  padding: 8px 0 4px;
+  justify-content: center;
+}
+.mock-card-payout {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.mock-card-payout-arrow {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+.mock-card-payout-val {
+  color: var(--green) !important;
+  font-weight: 700;
+}
+
 .mock-card-footer {
   display: flex;
   align-items: center;

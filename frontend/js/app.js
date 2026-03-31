@@ -427,6 +427,16 @@ function renderMockMarkets(filter) {
             </div>
           `).join('')}
         </div>
+        <div class="mock-card-payouts">
+          ${m.options.slice(0, 2).map((o, i) => {
+            const payout = o.pct > 0 ? Math.round(10000 / o.pct) : 0;
+            return `<div class="mock-card-payout ${i === 0 ? 'yes' : 'no'}">
+              <span>$100</span>
+              <span class="mock-card-payout-arrow">→</span>
+              <span class="mock-card-payout-val">$${payout}</span>
+            </div>`;
+          }).join('')}
+        </div>
       </div>
       <div class="mock-card-footer">
         <span class="mock-card-vol">Vol: <span>$${m.volume} MXNB</span></span>
