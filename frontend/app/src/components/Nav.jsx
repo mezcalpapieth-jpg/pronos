@@ -3,6 +3,7 @@ import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { ethers } from 'ethers';
 import { Link } from 'react-router-dom';
 import { MXNB_ADDRESS } from '../lib/clob.js';
+import MARKETS from '../lib/markets.js';
 
 function getInitialTheme() {
   const saved = localStorage.getItem('pronos-theme');
@@ -29,6 +30,12 @@ export default function Nav() {
   const [balance, setBalance] = useState(null);
   const [chainId, setChainId] = useState(null);
   const dropdownRef = useRef(null);
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchRef = useRef(null);
 
   useEffect(() => {
     if (!authenticated || !user?.id) { setUsername(null); setAdminFlag(false); return; }
@@ -82,6 +89,30 @@ export default function Nav() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  // Search: filter markets
+  useEffect(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) { setSearchResults([]); setSearchOpen(false); return; }
+    const results = MARKETS.filter(m => m.title.toLowerCase().includes(q)).slice(0, 6);
+    setSearchResults(results);
+    setSearchOpen(true);
+  }, [searchQuery]);
+
+  // Search: close on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (searchRef.current && !searchRef.current.contains(e.target)) setSearchOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleSearchSelect = (market) => {
+    setSearchQuery('');
+    setSearchOpen(false);
+    window.location.href = `/markets?id=${market.id}`;
+  };
+
   const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
 
   const userLabel = (() => {
@@ -97,6 +128,49 @@ export default function Nav() {
       <a href="/" className="nav-logo">
         PRONOS<span className="green-dot" />
       </a>
+
+      {/* Search bar */}
+      <div className="nav-search" ref={searchRef}>
+        <div className="nav-search-input-wrap">
+          <span className="nav-search-icon">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.5"/><path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </span>
+          <input
+            className="nav-search-input"
+            type="text"
+            placeholder="Buscar mercados…"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            onFocus={() => searchQuery.trim() && setSearchOpen(true)}
+            onKeyDown={e => {
+              if (e.key === 'Escape') { setSearchOpen(false); setSearchQuery(''); }
+              if (e.key === 'Enter' && searchResults.length > 0) handleSearchSelect(searchResults[0]);
+            }}
+          />
+          {searchQuery && (
+            <button className="nav-search-clear" onClick={() => { setSearchQuery(''); setSearchOpen(false); }}>×</button>
+          )}
+        </div>
+        {searchOpen && searchResults.length > 0 && (
+          <div className="nav-search-dropdown">
+            {searchResults.map(m => (
+              <button key={m.id} className="nav-search-result" onClick={() => handleSearchSelect(m)}>
+                <span className="nav-search-result-icon">{m.icon}</span>
+                <span className="nav-search-result-text">
+                  <span className="nav-search-result-title">{m.title}</span>
+                  <span className="nav-search-result-meta">{m.categoryLabel} · {m.deadline}</span>
+                </span>
+                <span className="nav-search-result-pct">{m.options?.[0]?.pct}%</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {searchOpen && searchQuery.trim() && searchResults.length === 0 && (
+          <div className="nav-search-dropdown">
+            <div className="nav-search-empty">No se encontraron mercados</div>
+          </div>
+        )}
+      </div>
 
       <div className="nav-links">
         <a href="#markets">El mercado</a>

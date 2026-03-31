@@ -7,6 +7,8 @@ import Portfolio from './pages/Portfolio.jsx';
 import Admin from './pages/Admin.jsx';
 import UsernameModal from './components/UsernameModal.jsx';
 
+const IS_PUBLIC_MARKETS = window.location.pathname.startsWith('/markets');
+
 export default function App() {
   const { authenticated, user } = usePrivy();
   const [username, setUsername] = useState(null);
@@ -46,6 +48,17 @@ export default function App() {
       .then(data => setUserIsAdmin(data.isAdmin === true))
       .catch(() => {});
     setNeedsUsername(false);
+  }
+
+  /* Public /markets route — no password, just market detail */
+  if (IS_PUBLIC_MARKETS) {
+    return (
+      <BrowserRouter basename="/">
+        <Routes>
+          <Route path="/markets" element={<MarketDetail />} />
+        </Routes>
+      </BrowserRouter>
+    );
   }
 
   return (

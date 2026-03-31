@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { PrivyProvider } from '@privy-io/react-auth';
 import { polygon, base, baseSepolia } from 'viem/chains';
 import App from './App.jsx';
+import PasswordGate from './components/PasswordGate.jsx';
 import './styles/mvp.css';
 
 const PRIVY_APP_ID = 'cmmy28vhi00pe0cladoexcy0o';
@@ -24,7 +25,13 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         supportedChains: [polygon, base, baseSepolia],
       }}
     >
-      <App />
+      {window.location.pathname.startsWith('/markets') ? (
+        <App />
+      ) : (
+        <PasswordGate>
+          <App />
+        </PasswordGate>
+      )}
     </PrivyProvider>
   </React.StrictMode>
 );

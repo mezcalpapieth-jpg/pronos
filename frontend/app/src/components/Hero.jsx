@@ -114,7 +114,7 @@ export default function Hero() {
   }, [startTimer]);
 
   const market = FEATURED[current] || FEATURED[0];
-  const handleCardClick = () => navigate(`/market?id=${market.id}`);
+  const handleCardClick = () => { window.location.href = `/markets?id=${market.id}`; };
 
   return (
     <section id="hero">

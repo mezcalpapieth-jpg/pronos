@@ -367,7 +367,7 @@ function renderMockMarkets(filter) {
     : MARKETS.filter(m => m.category === filter);
 
   grid.innerHTML = filtered.map(m => `
-    <div class="mock-card" title="${m.title}" onclick="location.href='/mvp/market?id=${m.id}'" style="cursor:pointer">
+    <div class="mock-card" title="${m.title}" onclick="location.href='/markets?id=${m.id}'" style="cursor:pointer">
       <div class="mock-card-header">
         <span class="mock-card-cat">${m.icon} ${m.categoryLabel}</span>
       </div>
@@ -736,7 +736,7 @@ const HMC_MOCK_IDS = [
 ];
 function hmcBet(marketIdx, outcomeIdx) {
   const id = HMC_MOCK_IDS[marketIdx];
-  if (id) location.href = '/mvp/market?id=' + id;
+  if (id) location.href = '/markets?id=' + id;
 }
 
 function hmcResetTimer() {
