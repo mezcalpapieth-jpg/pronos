@@ -447,7 +447,7 @@ export default function MarketDetail() {
                   ))}
                 </div>
                 <button disabled style={{width:'100%',marginTop:20,padding:'12px 0',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)',letterSpacing:'0.08em',cursor:'not-allowed'}}>GANANCIAS YA LIQUIDADAS</button>
-                <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',textAlign:'center',marginTop:10}}>Liquidado on-chain · Polygon · MXNB</p>
+                <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',textAlign:'center',marginTop:10}}>Liquidado on-chain · MXNB</p>
               </div>
             ):(
               <div style={{background:'var(--surface1)',border:'1px solid var(--border-active)',borderRadius:16,padding:24}}>
@@ -460,7 +460,7 @@ export default function MarketDetail() {
                     </button>
                   ))}
                 </div>
-                <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',textAlign:'center',marginTop:8}}>On-chain · Polygon · MXNB</p>
+                <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',textAlign:'center',marginTop:8}}>On-chain · MXNB</p>
               </div>
             )}
           </div>

@@ -61,7 +61,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
 
   // ── Main bet handler ────────────────────────────────────────────────────────
   const handleBet = async () => {
-    if (!authenticated) { login(); return; }
+    if (!authenticated) { window.open('https://tally.so/r/1AMZDg', '_blank'); return; }
     if (numAmount <= 0) {
       setStep(STEPS.ERROR);
       setStatusMsg('Ingresa un monto válido.');
@@ -146,7 +146,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
 
   // ── Step label shown in button ──────────────────────────────────────────────
   const buttonLabel = () => {
-    if (!authenticated)             return 'CONECTAR PARA APOSTAR';
+    if (!authenticated)             return 'ÚNETE A LA LISTA';
     if (step === STEPS.CHECKING)    return 'Verificando…';
     if (step === STEPS.APPROVING)   return 'Aprobando MXNB…';
     if (step === STEPS.SIGNING)     return 'Firmando…';
@@ -283,9 +283,6 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
           {buttonLabel()}
         </button>
 
-        <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-muted)', marginTop: 12, fontFamily: 'var(--font-mono)' }}>
-          Powered by Polymarket · Polygon
-        </p>
       </div>
     </div>
   );
