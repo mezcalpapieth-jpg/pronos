@@ -130,7 +130,7 @@
   </div>
   <div class="nav-links">
     <a href="#market">El mercado</a>
-    <a href="/mvp/portfolio">Portafolio</a>
+    <a href="#how-it-works">Aprende más</a>
     <a href="#how-it-works">Cómo funciona</a>
     <button class="btn-theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Cambiar tema"></button>
     <div id="navWalletArea">
@@ -280,46 +280,6 @@
   </div>
 </section>
 
-<!-- ============================================================
-     5. PORTFOLIO
-============================================================ -->
-<section id="portfolio">
-  <div class="section-wrap">
-    <div class="section-header">
-      <div class="section-eyebrow">Tu actividad on-chain</div>
-      <div class="section-title">Portafolio</div>
-    </div>
-    <div id="portfolioContent" class="portfolio-content">
-      <!-- Estado: wallet no conectada -->
-      <div class="portfolio-empty" id="portfolioEmpty">
-        <div class="portfolio-empty-icon">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
-        </div>
-        <div class="portfolio-empty-title">Conecta tu wallet para ver tu portafolio</div>
-        <div class="portfolio-empty-sub">Verás aquí todas tus predicciones activas, historial y ganancias pendientes.</div>
-        <button class="btn-primary" onclick="connectWallet()" style="margin-top:20px">Conectar wallet</button>
-      </div>
-      <!-- Estado: wallet conectada, apuestas mock -->
-      <div class="portfolio-positions" id="portfolioPositions" style="display:none">
-        <div class="portfolio-stats-row">
-          <div class="portfolio-stat">
-            <div class="portfolio-stat-val" id="pfTotalBet">—</div>
-            <div class="portfolio-stat-label">Total invertido</div>
-          </div>
-          <div class="portfolio-stat">
-            <div class="portfolio-stat-val green" id="pfActiveBets">—</div>
-            <div class="portfolio-stat-label">Inversiones activas</div>
-          </div>
-          <div class="portfolio-stat">
-            <div class="portfolio-stat-val gold" id="pfPotentialWin">—</div>
-            <div class="portfolio-stat-label">Ganancia potencial</div>
-          </div>
-        </div>
-        <div class="portfolio-list" id="portfolioList"></div>
-      </div>
-    </div>
-  </div>
-</section>
 
 <!-- ============================================================
      6. HOW IT WORKS
