@@ -662,6 +662,34 @@ html[data-theme="dark"] .wc-odds-btn.no {
 .admin-form input::placeholder {
   color: var(--text-muted);
 }
+.admin-form textarea {
+  background: var(--surface1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--text-primary);
+  width: 100%;
+  resize: vertical;
+}
+.admin-form textarea:focus {
+  outline: none;
+  border-color: var(--green);
+}
+.admin-form h4 {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.admin-select-sm {
+  background: var(--surface1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
 
 .btn-admin-primary {
   background: var(--green);
