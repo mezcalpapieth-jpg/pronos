@@ -112,7 +112,36 @@
 - [ ] Frontend points to mainnet contracts
 - [ ] Seed liquidity for 5-10 launch markets (USDC)
 
-### 3.2 Security Hardening
+### 3.2 Security Hardening (Audit 2026-03-31)
+
+#### CRITICAL — Must fix before mainnet
+- [ ] **C1** Admin auth is 100% client-side (`isAdmin` in browser) — move verification to backend by privyId
+- [ ] **C2** CLOB credentials in POST body (visible in Network tab) — only send signature, derive credentials server-side
+- [ ] **C3** DATABASE_URL exposed from frontend API — separate database tier / use edge functions with secrets
+- [ ] **C4** Admin usernames hardcoded in public bundle — remove from frontend, check server-side only
+
+#### HIGH — Fix before launch
+- [ ] **H1** No CSP (Content-Security-Policy) — Tally/ethers/Privy scripts unrestricted
+- [ ] **H2** No X-Frame-Options — clickjacking possible (critical for Web3)
+- [ ] **H3** `/mvp/admin` has no server-side auth
+- [ ] **H4** `/api/user` enumerable without authentication
+
+#### MEDIUM — Fix during hardening
+- [ ] **M1** HSTS missing `includeSubDomains` and `preload`
+- [ ] **M2** No `Permissions-Policy` header
+- [ ] **M3** No `Referrer-Policy` header
+- [ ] **M4** No `X-Content-Type-Options: nosniff` header
+- [ ] **M5** CORS wildcard `*` on API endpoints — restrict to pronos.io
+- [ ] **M6** No SRI (Subresource Integrity) on Tally.so script
+- [ ] **M7** No CSRF protection on POST requests
+- [ ] **M8** `localStorage` as source of truth for protocol mode
+- [ ] **M9** Vite dev proxy pointing to production
+- [ ] **M10** ethers.js v5.7.2 outdated — upgrade to v6
+
+#### Passed
+- ~~No XSS~~ ~~No eval()~~ ~~HTTPS forced (308)~~ ~~No mixed content~~ ~~No X-Powered-By~~ ~~Privy handles sessions correctly~~
+
+#### Legacy items
 - [ ] Manual security review of all contracts (reentrancy, overflow, access control)
 - [ ] Fuzz testing on AMM edge cases
 - [ ] Emergency pause mechanism tested
@@ -164,6 +193,7 @@
 | 2026-03-29 | Built core contracts: PronosToken (ERC-1155), PronosAMM (CPMM + dynamic fees), MarketFactory. 43 tests passing. Deploy script ready. |
 | 2026-03-30 | Admin panel at /mvp/admin — protocol switch, market CRUD, fee display. Access restricted to Mezcal & frmm usernames. Safe multisig setup guide. |
 | 2026-03-31 | Fixed Vercel deploy (submodule broke site). Dynamic fee display in bet slip. Safe SDK integration in admin panel (create/connect/propose/sign/execute). Fixed admin auth race condition. |
+| 2026-03-31 | Wallet & onboarding: MXNB balance in nav, multi-chain Privy (Polygon+Base), network switching util. Security audit: 4 critical, 4 high, 10 medium findings added to roadmap. |
 
 ---
 
