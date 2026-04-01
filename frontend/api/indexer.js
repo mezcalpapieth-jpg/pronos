@@ -136,7 +136,7 @@ export default async function handler(req, res) {
         `;
 
         // Update position
-        await upsertPosition(pool.id, buyer.toLowerCase(), isYes, shares, collateral, 'buy');
+        await upsertPosition(pool.id, buyer.toLowerCase(), isYes, shares, collateral);
         processed.trades++;
       }
 
@@ -157,7 +157,7 @@ export default async function handler(req, res) {
           ON CONFLICT (tx_hash, log_index) DO NOTHING
         `;
 
-        await upsertPosition(pool.id, seller.toLowerCase(), isYes, -shares, -collateral, 'sell');
+        await upsertPosition(pool.id, seller.toLowerCase(), isYes, -shares, -collateral);
         processed.trades++;
       }
 
@@ -198,10 +198,7 @@ export default async function handler(req, res) {
   }
 }
 
-async function upsertPosition(marketId, userAddress, isYes, sharesDelta, costDelta, side) {
-  const yesCol = isYes ? 'yes_shares' : 'yes_shares';
-  const noCol = isYes ? 'no_shares' : 'no_shares';
-
+async function upsertPosition(marketId, userAddress, isYes, sharesDelta, costDelta) {
   if (isYes) {
     await sql`
       INSERT INTO positions (market_id, user_address, yes_shares, total_cost)

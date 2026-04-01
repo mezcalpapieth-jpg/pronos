@@ -40,8 +40,8 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
   const feePct     = outcomePct > 0 ? 5 * (1 - outcomePct / 100) : 0;
   const fee        = numAmount * feePct / 100;
   const afterFee   = numAmount - fee;
-  const payout     = outcomePct > 0 ? (afterFee / (outcomePct / 100)).toFixed(2) : '—';
-  const profit     = outcomePct > 0 ? (afterFee / (outcomePct / 100) - numAmount).toFixed(2) : '—';
+  const payout     = outcomePct > 0 && numAmount > 0 ? (afterFee / (outcomePct / 100)).toFixed(2) : '—';
+  const profit     = outcomePct > 0 && numAmount > 0 ? (afterFee / (outcomePct / 100) - numAmount).toFixed(2) : '—';
   const isLoading  = [STEPS.CHECKING, STEPS.APPROVING, STEPS.SIGNING, STEPS.PLACING].includes(step);
 
   // Load MXNB balance when modal opens

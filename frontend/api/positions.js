@@ -54,12 +54,21 @@ export default async function handler(req, res) {
     `;
 
     const positions = rows.map(r => {
-      const currentPrice = parseFloat(r.current_price || 0.5);
       const yesShares = parseFloat(r.yes_shares);
       const noShares = parseFloat(r.no_shares);
       const totalCost = parseFloat(r.total_cost);
 
-      // Current value based on latest price
+      // For resolved markets, use outcome to determine value
+      // outcome: 1 = YES won, 2 = NO won
+      let currentPrice;
+      if (r.status === 'resolved' && r.outcome === 1) {
+        currentPrice = 1.0; // YES won
+      } else if (r.status === 'resolved' && r.outcome === 2) {
+        currentPrice = 0.0; // NO won
+      } else {
+        currentPrice = parseFloat(r.current_price || 0.5);
+      }
+
       const currentValue = yesShares * currentPrice + noShares * (1 - currentPrice);
       const pnl = currentValue - totalCost;
 
