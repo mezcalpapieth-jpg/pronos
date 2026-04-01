@@ -87,11 +87,14 @@
 - [x] ~~Onboarding: skip username button (auto-generate), showWalletUIs enabled~~
 
 ### 2.4 Backend & Indexing
-- [ ] Index on-chain events (MarketCreated, SharesBought, SharesSold, MarketResolved)
-- [ ] Cache market state (prices, volume, liquidity) in Neon PostgreSQL
-- [ ] API endpoint: `/api/markets` — list all own protocol markets
-- [ ] API endpoint: `/api/market/:id` — market detail + price history
-- [ ] API endpoint: `/api/positions/:address` — user positions on own protocol
+- [x] ~~Database schema: protocol_markets, trades, positions, price_snapshots, indexer_state~~
+- [x] ~~Migration endpoint (`/api/migrate`) — creates all tables + indexes~~
+- [x] ~~Event indexer (`/api/indexer`) — MarketCreated, SharesBought, SharesSold, MarketResolved~~
+- [x] ~~Price snapshots from AMM reserves (CPMM: price = opposite_reserve / total)~~
+- [x] ~~Vercel Cron: indexer runs every minute~~
+- [x] ~~API endpoint: `/api/markets` — list own protocol markets with latest price~~
+- [x] ~~API endpoint: `/api/market?id=` — market detail + 50 price snapshots + 20 recent trades~~
+- [x] ~~API endpoint: `/api/positions?address=` — user positions with P&L calculation~~
 
 ### 2.5 Monitoring & Quality
 - [ ] Sentry integration (frontend errors)
@@ -206,6 +209,7 @@
 | 2026-04-01 | (Mezcal) OG metadata + Twitter cards, favicon, nav responsiveness, search bar styling, removed Polymarket branding, waitlist gate on bet button, removed landing page portfolio section. |
 | 2026-04-01 | Updated roadmap: checked off completed items, fixed Base→Arbitrum references. Continuing 2.3 wallet & onboarding. |
 | 2026-04-01 | Completed 2.3: auto chain switch (BetModal + Nav), chain-aware USDC balance, deposit links, gasless helper, onboarding skip-username. Protocol mode reactive across components via custom event. |
+| 2026-04-01 | Completed 2.4: DB schema (5 tables), migration endpoint, event indexer (Vercel Cron), /api/markets + /api/market + /api/positions endpoints with P&L. |
 
 ---
 

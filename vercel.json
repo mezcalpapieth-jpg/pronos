@@ -26,5 +26,11 @@
     { "source": "/mvp/market", "destination": "/mvp/" },
     { "source": "/mvp/portfolio", "destination": "/mvp/" },
     { "source": "/mvp/admin", "destination": "/mvp/" }
+  ],
+  "crons": [
+    {
+      "path": "/api/indexer",
+      "schedule": "*/1 * * * *"
+    }
   ]
 }
