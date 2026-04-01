@@ -97,9 +97,9 @@
 - [x] ~~API endpoint: `/api/positions?address=` — user positions with P&L calculation~~
 
 ### 2.5 Monitoring & Quality
-- [ ] Sentry integration (frontend errors)
-- [ ] API error logging
-- [ ] Bitso stub endpoint (mock MXN↔USDC for future integration)
+- [x] ~~Sentry integration (`@sentry/react` + ErrorBoundary, privacy-safe, prod-only)~~
+- [x] ~~API error logging (structured JSON logger + `withLogging` wrapper)~~
+- [x] ~~Bitso stub endpoint (`/api/bitso` — mock ticker + quote for MXN↔USDC)~~
 
 ### 2.6 E2E Testing (Testnet)
 - [ ] Full flow: register → buy shares → sell shares → resolution → redemption
@@ -210,6 +210,7 @@
 | 2026-04-01 | Updated roadmap: checked off completed items, fixed Base→Arbitrum references. Continuing 2.3 wallet & onboarding. |
 | 2026-04-01 | Completed 2.3: auto chain switch (BetModal + Nav), chain-aware USDC balance, deposit links, gasless helper, onboarding skip-username. Protocol mode reactive across components via custom event. |
 | 2026-04-01 | Completed 2.4: DB schema (5 tables), migration endpoint, event indexer (Vercel Cron), /api/markets + /api/market + /api/positions endpoints with P&L. |
+| 2026-04-01 | Completed 2.5: Sentry integration (ErrorBoundary, privacy-safe), structured API logger, Bitso mock endpoint (ticker + quotes). |
 
 ---
 
