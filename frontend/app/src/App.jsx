@@ -65,7 +65,12 @@ export default function App() {
     <BrowserRouter basename="/mvp">
       {/* Show username modal after first login */}
       {authenticated && !checkingUsername && needsUsername && (
-        <UsernameModal privyId={user.id} onComplete={handleUsernameCreated} />
+        <UsernameModal
+          privyId={user.id}
+          onComplete={handleUsernameCreated}
+          email={user?.email?.address}
+          walletAddress={user?.wallet?.address}
+        />
       )}
 
       <Routes>

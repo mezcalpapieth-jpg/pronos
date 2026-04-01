@@ -56,6 +56,16 @@
   opacity: 0.6;
   font-weight: 400;
 }
+.nav-deposit-link {
+  font-size: 10px;
+  color: var(--green);
+  margin-left: 6px;
+  text-decoration: none;
+  border-bottom: 1px dotted rgba(0,232,122,0.4);
+}
+.nav-deposit-link:hover {
+  border-bottom-style: solid;
+}
 .nav-chain-dot {
   display: inline-block;
   width: 6px;
@@ -73,6 +83,23 @@
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.nav-dropdown-switch {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--green);
+  background: rgba(0,232,122,0.08);
+  border: 1px solid rgba(0,232,122,0.2);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: background 0.15s;
+}
+.nav-dropdown-switch:hover {
+  background: rgba(0,232,122,0.15);
 }
 
 /* ── Nav dropdown ────────────────────────────────────────────── */

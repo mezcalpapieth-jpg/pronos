@@ -17,6 +17,7 @@ export function setProtocolMode(mode) {
     throw new Error('Invalid protocol mode: ' + mode);
   }
   localStorage.setItem(PROTOCOL_KEY, mode);
+  window.dispatchEvent(new CustomEvent('pronos-protocol-change', { detail: mode }));
 }
 
 export function isOwnProtocol() {
@@ -35,6 +36,12 @@ export function isAdmin(adminFlag) {
 // ─── Contract addresses per chain ─────────────────────────────────────────
 
 const CONTRACTS = {
+  // Polygon (Polymarket)
+  137: {
+    factory: null,
+    token: null,
+    usdc: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
+  },
   // Arbitrum Sepolia (testnet)
   421614: {
     factory: null,  // Set after deployment
@@ -51,6 +58,10 @@ const CONTRACTS = {
 
 export function getContracts(chainId) {
   return CONTRACTS[chainId] || null;
+}
+
+export function getUsdcAddress(chainId) {
+  return CONTRACTS[chainId]?.usdc || null;
 }
 
 // ─── Market source detection ──────────────────────────────────────────────

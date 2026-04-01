@@ -35,7 +35,7 @@
 
 ### 1.4 Deployment (Testnet)
 - [x] ~~Reproducible deploy script (`DeployProtocol.s.sol`)~~
-- [ ] Deploy all contracts to Base Sepolia
+- [ ] Deploy all contracts to Arbitrum Sepolia
 - [ ] Create 1 test market via Factory
 - [ ] Verify AMM receives liquidity and calculates prices correctly
 - [ ] Document deployed addresses in `deployments.json`
@@ -44,8 +44,8 @@
 - [x] ~~Setup guide created (`scripts/setup-safe.md`) with step-by-step instructions~~
 - [x] ~~Safe SDK integrated in admin panel (`lib/safe.js` — protocol-kit + api-kit)~~
 - [x] ~~Admin UI: create Safe, connect existing, propose/sign/execute transactions~~
-- [x] ~~Supports Base Sepolia + Base Mainnet (chain selector in UI)~~
-- [ ] Create Safe multisig on Base Sepolia (3/5 admin, 2/3 resolution)
+- [x] ~~Supports Arbitrum Sepolia + Arbitrum One (chain selector in UI)~~
+- [ ] Create Safe multisig on Arbitrum Sepolia (3/5 admin, 2/3 resolution)
 - [ ] Transfer contract ownership to Safe
 - [ ] Test resolution flow through multisig
 
@@ -77,10 +77,14 @@
 - [ ] Load 5-10 curated LATAM markets (Liga MX, elections, inflation, World Cup)
 
 ### 2.3 Wallet & Onboarding
-- [ ] Gasless transactions on Base (Privy paymaster or Biconomy)
-- [ ] Onboarding flow < 3 minutes (email → wallet → first trade)
-- [ ] USDC balance display + deposit flow on Base
-- [ ] Network switching (Polygon for Polymarket, Base for own markets)
+- [x] ~~MXNB balance display in nav bar and bet slip~~
+- [x] ~~Multi-chain Privy config (Polygon + Arbitrum + Arbitrum Sepolia)~~
+- [x] ~~Network switching utilities (`getRequiredChainId`, `switchToRequiredChain`)~~
+- [x] ~~Chain indicator in user dropdown (Polygon / Arbitrum / Arb Sepolia)~~
+- [x] ~~Auto network switch when user trades on wrong chain (BetModal + Nav dropdown)~~
+- [x] ~~USDC balance display (chain-aware) + deposit link (Polygon bridge / Arbitrum bridge)~~
+- [x] ~~Gasless transaction helper (`lib/gasless.js`) — ready for Privy paymaster activation~~
+- [x] ~~Onboarding: skip username button (auto-generate), showWalletUIs enabled~~
 
 ### 2.4 Backend & Indexing
 - [ ] Index on-chain events (MarketCreated, SharesBought, SharesSold, MarketResolved)
@@ -106,32 +110,32 @@
 **Target: May 31, 2026**
 
 ### 3.1 Mainnet Deployment
-- [ ] Deploy all contracts to Base mainnet
+- [ ] Deploy all contracts to Arbitrum One
 - [ ] Transfer ownership to production Safe multisig
-- [ ] Verify all contracts on BaseScan
+- [ ] Verify all contracts on Arbiscan
 - [ ] Frontend points to mainnet contracts
 - [ ] Seed liquidity for 5-10 launch markets (USDC)
 
 ### 3.2 Security Hardening (Audit 2026-03-31)
 
 #### CRITICAL — Must fix before mainnet
-- [ ] **C1** Admin auth is 100% client-side (`isAdmin` in browser) — move verification to backend by privyId
+- [x] ~~**C1** Admin auth moved to server-side (`/api/user` returns `isAdmin` flag)~~
 - [ ] **C2** CLOB credentials in POST body (visible in Network tab) — only send signature, derive credentials server-side
 - [ ] **C3** DATABASE_URL exposed from frontend API — separate database tier / use edge functions with secrets
-- [ ] **C4** Admin usernames hardcoded in public bundle — remove from frontend, check server-side only
+- [x] ~~**C4** Admin usernames removed from frontend bundle, checked server-side only~~
 
 #### HIGH — Fix before launch
 - [ ] **H1** No CSP (Content-Security-Policy) — Tally/ethers/Privy scripts unrestricted
-- [ ] **H2** No X-Frame-Options — clickjacking possible (critical for Web3)
+- [x] ~~**H2** X-Frame-Options: DENY added via vercel.json~~
 - [ ] **H3** `/mvp/admin` has no server-side auth
 - [ ] **H4** `/api/user` enumerable without authentication
 
 #### MEDIUM — Fix during hardening
-- [ ] **M1** HSTS missing `includeSubDomains` and `preload`
-- [ ] **M2** No `Permissions-Policy` header
-- [ ] **M3** No `Referrer-Policy` header
-- [ ] **M4** No `X-Content-Type-Options: nosniff` header
-- [ ] **M5** CORS wildcard `*` on API endpoints — restrict to pronos.io
+- [x] ~~**M1** HSTS with `includeSubDomains` and `preload` added~~
+- [x] ~~**M2** `Permissions-Policy` header added~~
+- [x] ~~**M3** `Referrer-Policy: strict-origin-when-cross-origin` added~~
+- [x] ~~**M4** `X-Content-Type-Options: nosniff` added~~
+- [x] ~~**M5** CORS restricted to pronos.io + localhost on API endpoints~~
 - [ ] **M6** No SRI (Subresource Integrity) on Tally.so script
 - [ ] **M7** No CSRF protection on POST requests
 - [ ] **M8** `localStorage` as source of truth for protocol mode
@@ -168,6 +172,10 @@
 - [ ] 5-10 curated markets live and tradeable
 - [ ] World Cup 2026 markets ready (Mexico, Argentina, Brazil, Colombia)
 - [ ] Landing page (pronos.io) updated to point to live product
+- [x] ~~OG metadata, Twitter cards, favicon added~~
+- [x] ~~Nav responsive on tablet (≤1024px) and mobile~~
+- [x] ~~Waitlist button on public-facing bet slip (Tally form)~~
+- [x] ~~Polymarket/Polygon branding removed from MVP~~
 - [ ] Mobile responsiveness final check
 
 ---
@@ -194,7 +202,11 @@
 | 2026-03-30 | Admin panel at /mvp/admin — protocol switch, market CRUD, fee display. Access restricted to Mezcal & frmm usernames. Safe multisig setup guide. |
 | 2026-03-31 | Fixed Vercel deploy (submodule broke site). Dynamic fee display in bet slip. Safe SDK integration in admin panel (create/connect/propose/sign/execute). Fixed admin auth race condition. |
 | 2026-03-31 | Wallet & onboarding: MXNB balance in nav, multi-chain Privy (Polygon+Base), network switching util. Security audit: 4 critical, 4 high, 10 medium findings added to roadmap. |
+| 2026-03-31 | Fixed security: C1 (server-side admin auth), C4 (removed admin list from bundle), H2 (X-Frame-Options), M1-M5 (headers + CORS). Switched chain from Base to Arbitrum across codebase. |
+| 2026-04-01 | (Mezcal) OG metadata + Twitter cards, favicon, nav responsiveness, search bar styling, removed Polymarket branding, waitlist gate on bet button, removed landing page portfolio section. |
+| 2026-04-01 | Updated roadmap: checked off completed items, fixed Base→Arbitrum references. Continuing 2.3 wallet & onboarding. |
+| 2026-04-01 | Completed 2.3: auto chain switch (BetModal + Nav), chain-aware USDC balance, deposit links, gasless helper, onboarding skip-username. Protocol mode reactive across components via custom event. |
 
 ---
 
-*Last updated: 2026-03-31*
+*Last updated: 2026-04-01*

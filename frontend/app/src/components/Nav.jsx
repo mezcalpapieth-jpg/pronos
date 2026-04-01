@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { ethers } from 'ethers';
 import { Link } from 'react-router-dom';
-import { MXNB_ADDRESS } from '../lib/clob.js';
+import { POLYGON_CHAIN_ID } from '../lib/clob.js';
+import { getProtocolMode, getUsdcAddress, getRequiredChainId } from '../lib/protocol.js';
 import MARKETS from '../lib/markets.js';
 
 function getInitialTheme() {
@@ -29,6 +30,7 @@ export default function Nav() {
   const [adminFlag, setAdminFlag] = useState(false);
   const [balance, setBalance] = useState(null);
   const [chainId, setChainId] = useState(null);
+  const [protocolMode, setProtocolModeState] = useState(getProtocolMode);
   const dropdownRef = useRef(null);
 
   // Search state
@@ -48,7 +50,7 @@ export default function Nav() {
       .catch(() => {});
   }, [authenticated, user?.id]);
 
-  // Fetch MXNB balance + chain ID
+  // Fetch USDC balance + chain ID (chain-aware)
   useEffect(() => {
     if (!authenticated) { setBalance(null); setChainId(null); return; }
     const wallet = wallets?.[0];
@@ -58,9 +60,11 @@ export default function Nav() {
         const provider = new ethers.providers.Web3Provider(prov);
         const network = await provider.getNetwork();
         setChainId(network.chainId);
+        const usdcAddr = getUsdcAddress(network.chainId);
+        if (!usdcAddr) { setBalance(null); return; }
         const addr = await provider.getSigner().getAddress();
-        const mxnb = new ethers.Contract(MXNB_ADDRESS, MXNB_ABI, provider);
-        const raw = await mxnb.balanceOf(addr);
+        const usdc = new ethers.Contract(usdcAddr, MXNB_ABI, provider);
+        const raw = await usdc.balanceOf(addr);
         setBalance(Number(ethers.utils.formatUnits(raw, 6)));
       } catch {
         setBalance(null);
@@ -97,6 +101,21 @@ export default function Nav() {
     setSearchResults(results);
     setSearchOpen(true);
   }, [searchQuery]);
+
+  // Listen for protocol mode changes (from admin panel toggle)
+  useEffect(() => {
+    const handler = (e) => {
+      setProtocolModeState(e.detail);
+      // Auto-switch chain when protocol mode changes
+      const wallet = wallets?.[0];
+      if (wallet) {
+        const targetChain = e.detail === 'own' ? getRequiredChainId() : POLYGON_CHAIN_ID;
+        wallet.switchChain(targetChain).then(() => setChainId(targetChain)).catch(() => {});
+      }
+    };
+    window.addEventListener('pronos-protocol-change', handler);
+    return () => window.removeEventListener('pronos-protocol-change', handler);
+  }, [wallets]);
 
   // Search: close on outside click
   useEffect(() => {
@@ -193,7 +212,17 @@ export default function Nav() {
             <>
               {balance !== null && (
                 <span className="nav-balance">
-                  ${balance.toFixed(2)} <span className="nav-balance-label">MXNB</span>
+                  ${balance.toFixed(2)} <span className="nav-balance-label">USDC</span>
+                  {balance === 0 && (
+                    <a
+                      href={protocolMode === 'own' ? 'https://bridge.arbitrum.io/' : 'https://wallet.polygon.technology/zkEVM-Bridge/bridge'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="nav-deposit-link"
+                    >
+                      Depositar
+                    </a>
+                  )}
                 </span>
               )}
               <button className="nav-user-pill" onClick={() => setDropdownOpen(o => !o)}>
@@ -203,12 +232,31 @@ export default function Nav() {
               </button>
               {dropdownOpen && (
                 <div className="nav-dropdown">
-                  {chainId && (
-                    <div className="nav-dropdown-info">
-                      <span className="nav-chain-dot" />
-                      {CHAIN_NAMES[chainId] || `Chain ${chainId}`}
-                    </div>
-                  )}
+                  {chainId && (() => {
+                    const expectedChain = protocolMode === 'own' ? getRequiredChainId() : POLYGON_CHAIN_ID;
+                    const wrongChain = chainId !== expectedChain;
+                    const targetName = protocolMode === 'own' ? 'Arbitrum' : 'Polygon';
+                    return (
+                      <div className="nav-dropdown-info">
+                        <span className="nav-chain-dot" style={wrongChain ? { background: 'var(--red)' } : {}} />
+                        {CHAIN_NAMES[chainId] || `Chain ${chainId}`}
+                        {wrongChain && (
+                          <button
+                            className="nav-dropdown-switch"
+                            onClick={async () => {
+                              const w = wallets?.[0];
+                              if (w) {
+                                await w.switchChain(expectedChain);
+                                setChainId(expectedChain);
+                              }
+                            }}
+                          >
+                            Cambiar a {targetName}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
                   {adminFlag && (
                     <Link
                       className="nav-dropdown-item"

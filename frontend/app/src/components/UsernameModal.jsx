@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 
 const API = '/api/user';
 
-export default function UsernameModal({ privyId, onComplete }) {
+export default function UsernameModal({ privyId, onComplete, email, walletAddress }) {
   const [username, setUsername] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [skipping, setSkipping] = useState(false);
 
   const isValid = /^[a-zA-Z0-9_]{3,20}$/.test(username);
 
@@ -155,7 +156,7 @@ export default function UsernameModal({ privyId, onComplete }) {
           {/* Submit */}
           <button
             type="submit"
-            disabled={!isValid || loading}
+            disabled={!isValid || loading || skipping}
             style={{
               width: '100%',
               padding: '15px 24px',
@@ -174,6 +175,54 @@ export default function UsernameModal({ privyId, onComplete }) {
             }}
           >
             {loading ? 'Guardando...' : 'Entrar a Pronos →'}
+          </button>
+
+          <button
+            type="button"
+            disabled={loading || skipping}
+            onClick={async () => {
+              setSkipping(true);
+              setError('');
+              // Generate username from email prefix or wallet
+              const base = email
+                ? email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '').slice(0, 14)
+                : walletAddress
+                  ? walletAddress.slice(2, 8).toLowerCase()
+                  : 'user';
+              const autoName = base + '_' + Math.random().toString(36).slice(2, 6);
+              try {
+                const res = await fetch(API, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ privyId, username: autoName }),
+                });
+                const data = await res.json();
+                if (res.ok) {
+                  onComplete(data.username);
+                } else {
+                  setError(data.error || 'Error al generar username');
+                }
+              } catch {
+                setError('Error de conexión');
+              } finally {
+                setSkipping(false);
+              }
+            }}
+            style={{
+              width: '100%',
+              padding: '12px 24px',
+              borderRadius: 12,
+              background: 'transparent',
+              color: 'var(--text-muted)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 13,
+              border: '1px solid var(--border)',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              marginTop: 10,
+            }}
+          >
+            {skipping ? 'Generando...' : 'Saltar — generar automáticamente'}
           </button>
         </form>
       </div>

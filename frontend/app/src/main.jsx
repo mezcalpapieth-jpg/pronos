@@ -20,6 +20,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         },
         embeddedWallets: {
           createOnLogin: 'users-without-wallets',
+          showWalletUIs: true,
         },
         defaultChain: polygon,
         supportedChains: [polygon, arbitrum, arbitrumSepolia],

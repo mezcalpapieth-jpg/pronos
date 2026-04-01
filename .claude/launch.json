@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "pronos-frontend",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["serve", "frontend", "-l", "3333"],
+      "runtimeExecutable": "/opt/homebrew/bin/node",
+      "runtimeArgs": ["/Users/Fran/pronos/frontend/app/node_modules/vite/bin/vite.js", "--port", "3333", "--config", "/Users/Fran/pronos/frontend/app/vite.config.js", "/Users/Fran/pronos/frontend/app"],
       "port": 3333
     }
   ]

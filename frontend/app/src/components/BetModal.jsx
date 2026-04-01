@@ -9,7 +9,9 @@ import {
   placeClobOrder,
   CTF_EXCHANGE,
   NEG_RISK_ADAPTER,
+  POLYGON_CHAIN_ID,
 } from '../lib/clob.js';
+import { isProtocolMarket, getRequiredChainId, CHAIN_IDS } from '../lib/protocol.js';
 
 const QUICK_AMOUNTS = [5, 10, 25, 50];
 
@@ -24,7 +26,7 @@ const STEPS = {
   ERROR:    'error',
 };
 
-export default function BetModal({ open, onClose, outcome, outcomePct, marketId, marketTitle, clobTokenId, isNegRisk = false }) {
+export default function BetModal({ open, onClose, outcome, outcomePct, marketId, marketTitle, clobTokenId, isNegRisk = false, market = null }) {
   const { authenticated, login } = usePrivy();
   const { wallets } = useWallets();
   const [amount, setAmount]   = useState('');
@@ -80,9 +82,30 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
       setStep(STEPS.CHECKING);
       setStatusMsg('Verificando balance y permisos…');
       const ethProvider = await wallet.getEthereumProvider();
-      const provider    = new ethers.providers.Web3Provider(ethProvider);
-      const signer      = provider.getSigner();
+      let provider      = new ethers.providers.Web3Provider(ethProvider);
+      let signer        = provider.getSigner();
       const address     = await signer.getAddress();
+
+      // ── 1b. Check chain + auto-switch ──────────────────────────────────
+      const requiredChainId = isProtocolMarket(market) ? getRequiredChainId() : POLYGON_CHAIN_ID;
+      const network = await provider.getNetwork();
+      if (network.chainId !== requiredChainId) {
+        setStatusMsg('Cambiando de red…');
+        try {
+          await wallet.switchChain(requiredChainId);
+          // Re-create provider after chain switch
+          const newProv = await wallet.getEthereumProvider();
+          provider = new ethers.providers.Web3Provider(newProv);
+          signer = provider.getSigner();
+        } catch (switchErr) {
+          const chainName = requiredChainId === POLYGON_CHAIN_ID ? 'Polygon'
+            : requiredChainId === CHAIN_IDS.arbitrum ? 'Arbitrum'
+            : 'Arbitrum Sepolia';
+          setStep(STEPS.ERROR);
+          setStatusMsg(`Cambia a ${chainName} para continuar.`);
+          return;
+        }
+      }
 
       // ── 2. Check balance ─────────────────────────────────────────────────
       const bal = await getUsdcBalance(provider, address);
@@ -183,7 +206,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
             padding: '8px 12px', borderRadius: 8, background: 'var(--surface2)',
             marginBottom: 16, fontFamily: 'var(--font-mono)', fontSize: 12,
           }}>
-            <span style={{ color: 'var(--text-muted)' }}>Balance MXNB</span>
+            <span style={{ color: 'var(--text-muted)' }}>Balance USDC</span>
             <span style={{ color: balance > 0 ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
               ${balance.toFixed(2)}
             </span>
@@ -283,6 +306,11 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
           {buttonLabel()}
         </button>
 
+        {authenticated && (
+          <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-muted)', marginTop: 12, fontFamily: 'var(--font-mono)' }}>
+            {isProtocolMarket(market) ? 'Pronos Protocol · Arbitrum' : 'Polymarket · Polygon'}
+          </p>
+        )}
       </div>
     </div>
   );
