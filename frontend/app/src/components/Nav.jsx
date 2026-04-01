@@ -192,9 +192,9 @@ export default function Nav() {
       </div>
 
       <div className="nav-links">
-        <a href="#markets">El mercado</a>
-        <a href="/mvp/portfolio">Portafolio</a>
-        <a href="#how-it-works">Cómo funciona</a>
+        <Link to="/#markets">El mercado</Link>
+        <Link to="/portfolio">Portafolio</Link>
+        <Link to="/#how-it-works">Cómo funciona</Link>
         {adminFlag && <Link to="/admin">Admin</Link>}
       </div>
 
