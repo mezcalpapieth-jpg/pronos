@@ -469,7 +469,7 @@ export default function MarketDetail() {
 
       <BetModal open={betModal.open} onClose={()=>setBetModal(b=>({...b,open:false}))}
         outcome={betModal.outcome} outcomePct={betModal.pct} marketId={market.id}
-        marketTitle={market.title} clobTokenId={betModal.clobTokenId} isNegRisk={betModal.isNegRisk}/>
+        marketTitle={market.title} clobTokenId={betModal.clobTokenId} isNegRisk={betModal.isNegRisk} market={market}/>
     </>
   );
 }

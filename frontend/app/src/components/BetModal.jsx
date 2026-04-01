@@ -56,7 +56,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
         const bal  = await getUsdcBalance(provider, addr);
         setBalance(bal);
       } catch (_) {}
-    });
+    }).catch(() => {});
   }, [open, authenticated, wallets]);
 
   if (!open) return null;
