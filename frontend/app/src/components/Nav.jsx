@@ -192,9 +192,15 @@ export default function Nav() {
       </div>
 
       <div className="nav-links">
-        <Link to="/#markets">El mercado</Link>
+        <a href="/mvp/#markets" onClick={e => {
+          const el = document.getElementById('markets');
+          if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth' }); }
+        }}>El mercado</a>
         <Link to="/portfolio">Portafolio</Link>
-        <Link to="/#how-it-works">Cómo funciona</Link>
+        <a href="/mvp/#how-it-works" onClick={e => {
+          const el = document.getElementById('how-it-works');
+          if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth' }); }
+        }}>Cómo funciona</a>
         {adminFlag && <Link to="/admin">Admin</Link>}
       </div>
 
