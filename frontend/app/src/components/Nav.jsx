@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { ethers } from 'ethers';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { POLYGON_CHAIN_ID } from '../lib/clob.js';
 import { getProtocolMode, getUsdcAddress, getRequiredChainId } from '../lib/protocol.js';
 import MARKETS from '../lib/markets.js';
@@ -21,6 +21,7 @@ const CHAIN_NAMES = {
 };
 
 export default function Nav() {
+  const navigate = useNavigate();
   const { ready, authenticated, user, login, logout } = usePrivy();
   const { wallets } = useWallets();
   const [scrolled, setScrolled] = useState(false);
@@ -129,7 +130,7 @@ export default function Nav() {
   const handleSearchSelect = (market) => {
     setSearchQuery('');
     setSearchOpen(false);
-    window.location.href = `/markets?id=${market.id}`;
+    navigate(`/market?id=${market.id}`);
   };
 
   const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');

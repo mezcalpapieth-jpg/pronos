@@ -5,7 +5,7 @@ export default function MarketCard({ market }) {
   const navigate = useNavigate();
 
   const handleClick = () => {
-    window.location.href = `/markets?id=${market.id}`;
+    navigate(`/market?id=${market.id}`);
   };
 
   const topOption = market.options?.[0];
