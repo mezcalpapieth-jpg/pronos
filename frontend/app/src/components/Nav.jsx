@@ -38,7 +38,9 @@ export default function Nav() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const searchRef = useRef(null);
+  const mobileSearchInputRef = useRef(null);
 
   useEffect(() => {
     if (!authenticated || !user?.id) { setUsername(null); setAdminFlag(false); return; }
@@ -144,13 +146,14 @@ export default function Nav() {
   })();
 
   return (
+    <>
     <nav id="nav" className={scrolled ? 'scrolled' : ''}>
       <a href="/" className="nav-logo">
         PRONOS<span className="green-dot" />
       </a>
 
-      {/* Search bar */}
-      <div className="nav-search" ref={searchRef}>
+      {/* Search bar — desktop */}
+      <div className="nav-search nav-search-desktop" ref={searchRef}>
         <div className="nav-search-input-wrap">
           <span className="nav-search-icon">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.5"/><path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
@@ -205,7 +208,15 @@ export default function Nav() {
         {adminFlag && <Link to="/admin">Admin</Link>}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {/* Mobile search icon */}
+        <button
+          className="nav-search-mobile-btn"
+          onClick={() => { setMobileSearchOpen(o => !o); setTimeout(() => mobileSearchInputRef.current?.focus(), 50); }}
+          aria-label="Buscar"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.5"/><path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+        </button>
         <button
           className="btn-theme-toggle"
           onClick={toggleTheme}
@@ -283,10 +294,50 @@ export default function Nav() {
               )}
             </>
           ) : (
-            <button className="btn-nav-cta" onClick={login}>Empieza a predecir</button>
+            <button className="btn-nav-cta" onClick={login}>Predecir</button>
           )}
         </div>
       </div>
     </nav>
+
+    {/* Mobile search bar — slides below nav */}
+    {mobileSearchOpen && (
+      <div className="nav-search-mobile-bar" ref={searchRef}>
+        <div className="nav-search-input-wrap" style={{width:'100%'}}>
+          <span className="nav-search-icon">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.5"/><path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </span>
+          <input
+            ref={mobileSearchInputRef}
+            className="nav-search-input"
+            type="text"
+            placeholder="Buscar mercados…"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Escape') { setMobileSearchOpen(false); setSearchQuery(''); setSearchOpen(false); }
+              if (e.key === 'Enter' && searchResults.length > 0) { handleSearchSelect(searchResults[0]); setMobileSearchOpen(false); }
+            }}
+            style={{width:'100%'}}
+          />
+          <button className="nav-search-clear" onClick={() => { setMobileSearchOpen(false); setSearchQuery(''); setSearchOpen(false); }}>✕</button>
+        </div>
+        {searchOpen && searchResults.length > 0 && (
+          <div className="nav-search-dropdown" style={{position:'static',marginTop:4,borderRadius:8}}>
+            {searchResults.map(m => (
+              <button key={m.id} className="nav-search-result" onClick={() => { handleSearchSelect(m); setMobileSearchOpen(false); }}>
+                <span className="nav-search-result-icon">{m.icon}</span>
+                <span className="nav-search-result-text">
+                  <span className="nav-search-result-title">{m.title}</span>
+                  <span className="nav-search-result-meta">{m.categoryLabel}</span>
+                </span>
+                <span className="nav-search-result-pct">{m.options?.[0]?.pct}%</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    )}
+    </>
   );
 }

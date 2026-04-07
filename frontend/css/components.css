@@ -1789,13 +1789,22 @@ html[data-theme="light"] .btn-theme-toggle::before {
   #nav {
     padding: 0 16px;
     height: 56px;
+    gap: 8px;
   }
-  .nav-search-input {
-    width: 140px;
+  /* Hide search bar on mobile landing page */
+  .nav-search {
+    display: none;
+  }
+  .nav-links {
+    gap: 8px;
+  }
+  .nav-links a {
+    display: none;
   }
   .btn-nav-cta {
     font-size: 12px;
     padding: 8px 14px;
+    white-space: nowrap;
   }
 
   /* Category bar */

@@ -516,4 +516,57 @@
     align-items: flex-start;
     gap: 12px;
   }
+
+  /* Hero right column (carousel) — hide on mobile */
+  .hero-right {
+    display: none;
+  }
+  .hero-inner {
+    grid-template-columns: 1fr;
+  }
+  .hero-headline {
+    font-size: clamp(36px, 10vw, 52px);
+    line-height: 1.1;
+  }
+  .hero-badge {
+    font-size: 11px;
+  }
+  .hero-sub {
+    font-size: 14px;
+  }
+  #hero {
+    padding: 32px 16px 40px;
+    min-height: auto;
+  }
+}
+
+/* ── Extra small mobile ──────────────────────────────────────── */
+@media (max-width: 480px) {
+  /* Ticker: smaller text */
+  #ticker {
+    padding: 0 8px;
+  }
+  .ticker-item {
+    font-size: 10px;
+    padding: 0 12px;
+    gap: 6px;
+  }
+
+  /* Category bar */
+  .category-bar-inner {
+    height: 40px;
+    padding: 0 8px;
+  }
+  .filter-btn {
+    font-size: 9px;
+    padding: 5px 8px;
+  }
+
+  /* Markets section */
+  #market {
+    padding: 24px 12px !important;
+  }
+  .markets-section-title {
+    font-size: 20px;
+  }
 }

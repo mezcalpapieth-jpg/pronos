@@ -479,6 +479,35 @@ html[data-theme="dark"] .wc-odds-btn.no {
   100% { opacity: 0;   transform: translateX(-50%) translateY(-48px) scale(0.9); }
 }
 
+/* ── Mobile search toggle button (hidden on desktop) ────────── */
+.nav-search-mobile-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  padding: 7px 9px;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+.nav-search-mobile-btn:hover {
+  border-color: var(--border-active);
+  color: var(--text-primary);
+}
+
+/* ── Mobile search bar (slides under nav) ────────────────────── */
+.nav-search-mobile-bar {
+  display: none;
+  padding: 8px 16px 10px;
+  background: var(--surface1);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 56px;
+  z-index: 99;
+}
+
 /* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .mvp-banner {
@@ -489,6 +518,41 @@ html[data-theme="dark"] .wc-odds-btn.no {
   .nav-user-pill {
     font-size: 10px;
     padding: 5px 10px;
+  }
+
+  /* Nav mobile layout */
+  #nav {
+    padding: 0 16px;
+    height: 56px;
+    gap: 8px;
+  }
+
+  /* Hide desktop search, show mobile icon */
+  .nav-search-desktop {
+    display: none !important;
+  }
+  .nav-search-mobile-btn {
+    display: flex;
+  }
+  .nav-search-mobile-bar {
+    display: block;
+  }
+
+  /* Compact CTA button */
+  .btn-nav-cta {
+    font-size: 12px;
+    padding: 8px 14px;
+    white-space: nowrap;
+  }
+
+  /* Balance — hide on mobile to save space */
+  .nav-balance {
+    display: none;
+  }
+
+  /* Nav links — already hidden at 1024px, ensure here too */
+  .nav-links {
+    display: none;
   }
 }
 
