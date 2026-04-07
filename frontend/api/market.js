@@ -7,7 +7,7 @@ import { neon } from '@neondatabase/serverless';
  * and the 20 most recent trades.
  */
 
-const sql = neon(process.env.DATABASE_URL);
+const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 
 export default async function handler(req, res) {
   const origin = req.headers.origin;
