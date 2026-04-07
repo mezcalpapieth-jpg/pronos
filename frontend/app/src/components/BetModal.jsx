@@ -174,9 +174,9 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
     if (step === STEPS.APPROVING)   return 'Aprobando MXNB…';
     if (step === STEPS.SIGNING)     return 'Firmando…';
     if (step === STEPS.PLACING)     return 'Enviando orden…';
-    if (step === STEPS.SUCCESS)     return '✓ APUESTA COLOCADA';
-    if (numAmount > 0)              return `APOSTAR $${numAmount} MXNB`;
-    return 'APOSTAR';
+    if (step === STEPS.SUCCESS)     return '✓ COMPRA REALIZADA';
+    if (numAmount > 0)              return `COMPRAR $${numAmount} MXNB`;
+    return 'COMPRAR';
   };
 
   return (

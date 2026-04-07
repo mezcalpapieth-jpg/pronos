@@ -304,6 +304,8 @@ export default function MarketDetail() {
   const [market,setMarket]=useState(null);
   const [loading,setLoading]=useState(true);
   const [betModal,setBetModal]=useState({open:false,outcome:'',pct:0,clobTokenId:null,isNegRisk:false});
+  const [isMobile,setIsMobile]=useState(()=>window.innerWidth<768);
+  useEffect(()=>{const h=()=>setIsMobile(window.innerWidth<768);window.addEventListener('resize',h);return()=>window.removeEventListener('resize',h);},[]);
 
   useEffect(()=>{
     if(!marketId){navigate('/');return;}
@@ -331,7 +333,7 @@ export default function MarketDetail() {
   return(
     <>
       <Nav/>
-      <main style={{maxWidth:1100,margin:'0 auto',padding:'40px 48px'}}>
+      <main style={{maxWidth:1100,margin:'0 auto',padding:isMobile?'24px 16px':'40px 48px'}}>
         <button onClick={()=>navigate('/')} style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)',letterSpacing:'0.06em',background:'none',border:'none',cursor:'pointer',marginBottom:28,display:'flex',alignItems:'center',gap:6}}>
           ← MERCADOS
         </button>
@@ -350,7 +352,7 @@ export default function MarketDetail() {
           </div>
         )}
 
-        <div style={{display:'grid',gridTemplateColumns:'1fr 360px',gap:48,alignItems:'start'}}>
+        <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 360px',gap:isMobile?24:48,alignItems:'start'}}>
           <div>
             <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}>
               <span style={{fontSize:18}}>{market.icon}</span>
@@ -368,16 +370,16 @@ export default function MarketDetail() {
               <p style={{fontSize:14,color:'var(--text-secondary)',lineHeight:1.7,marginBottom:28,borderLeft:'3px solid var(--yes)',paddingLeft:16}}>{market._description}</p>
             )}
 
-            <div style={{display:'flex',gap:0,borderTop:'1px solid var(--border)',borderBottom:'1px solid var(--border)',marginBottom:36}}>
-              <div style={{padding:'16px 24px 16px 0',marginRight:24,borderRight:'1px solid var(--border)'}}>
+            <div style={{display:'flex',flexWrap:'wrap',gap:0,borderTop:'1px solid var(--border)',borderBottom:'1px solid var(--border)',marginBottom:36}}>
+              <div style={{padding:'12px 16px 12px 0',marginRight:16,borderRight:'1px solid var(--border)'}}>
                 <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.1em',marginBottom:4}}>VOLUMEN</div>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:16,color:'var(--text-primary)'}}>${market.volume}</div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:isMobile?13:16,color:'var(--text-primary)'}}>${market.volume}</div>
               </div>
-              <div style={{padding:'16px 24px 16px 0',marginRight:24,borderRight:'1px solid var(--border)'}}>
+              <div style={{padding:'12px 16px 12px 0',marginRight:16,borderRight:'1px solid var(--border)'}}>
                 <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.1em',marginBottom:4}}>{resolved?'CERRÓ':'CIERRA'}</div>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:16,color:'var(--text-primary)'}}>{market.deadline}</div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:isMobile?13:16,color:'var(--text-primary)'}}>{market.deadline}</div>
               </div>
-              <div style={{padding:'16px 0'}}>
+              <div style={{padding:'12px 0'}}>
                 <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.1em',marginBottom:4}}>ESTADO</div>
                 <div style={{fontFamily:'var(--font-mono)',fontSize:13,color:resolved?'var(--gold)':'var(--green)'}}>{resolved?'CERRADO':'ACTIVO'}</div>
               </div>
@@ -397,26 +399,26 @@ export default function MarketDetail() {
                   const isWinner=resolved&&opt.label===market._winner;
                   const isLoser=resolved&&opt.label!==market._winner;
                   return(
-                    <div key={i} style={{background:isWinner?'rgba(22,163,74,0.06)':'var(--surface1)',border:`1px solid ${isWinner?'rgba(22,163,74,0.3)':'var(--border)'}`,borderRadius:12,padding:'16px 20px',display:'flex',alignItems:'center',gap:16,opacity:isLoser?0.45:1,cursor:resolved?'default':'pointer',transition:'border-color 0.2s'}}
+                    <div key={i} style={{background:isWinner?'rgba(22,163,74,0.06)':i===0?'rgba(0,232,122,0.04)':'rgba(255,59,59,0.04)',border:`1px solid ${isWinner?'rgba(22,163,74,0.3)':i===0?'rgba(0,232,122,0.2)':'rgba(255,59,59,0.2)'}`,borderRadius:12,padding:'16px 20px',display:'flex',alignItems:'center',gap:16,opacity:isLoser?0.45:1,cursor:resolved?'default':'pointer',transition:'border-color 0.2s'}}
                       onClick={()=>!resolved&&openBet(opt.label,opt.pct,i)}
-                      onMouseOver={e=>!resolved&&(e.currentTarget.style.borderColor='var(--border-active)')}
-                      onMouseOut={e=>!resolved&&(e.currentTarget.style.borderColor=isWinner?'rgba(22,163,74,0.3)':'var(--border)')}>
+                      onMouseOver={e=>!resolved&&(e.currentTarget.style.borderColor=i===0?'rgba(0,232,122,0.5)':'rgba(255,59,59,0.5)')}
+                      onMouseOut={e=>!resolved&&(e.currentTarget.style.borderColor=isWinner?'rgba(22,163,74,0.3)':i===0?'rgba(0,232,122,0.2)':'rgba(255,59,59,0.2)')}>
                       <div style={{flex:1}}>
                         <div style={{display:'flex',justifyContent:'space-between',marginBottom:8,alignItems:'center'}}>
                           <div style={{display:'flex',alignItems:'center',gap:8}}>
                             {isWinner&&<span style={{fontSize:16}}>🏆</span>}
-                            <span style={{fontWeight:600,fontSize:15,color:isWinner?'var(--yes)':'inherit'}}>{opt.label}</span>
+                            <span style={{fontWeight:600,fontSize:15,color:isWinner?'var(--yes)':i===0?'var(--green)':'var(--red)'}}>{opt.label}</span>
                           </div>
-                          <span style={{fontFamily:'var(--font-mono)',fontSize:15,fontWeight:500,color:isWinner?'var(--yes)':i===0?'var(--green)':'var(--text-secondary)'}}>{opt.pct}%</span>
+                          <span style={{fontFamily:'var(--font-mono)',fontSize:15,fontWeight:500,color:isWinner?'var(--yes)':i===0?'var(--green)':'var(--red)'}}>{opt.pct}%</span>
                         </div>
                         <div style={{height:4,background:'var(--surface3)',borderRadius:2,overflow:'hidden'}}>
-                          <div style={{height:'100%',width:`${opt.pct}%`,background:isWinner?'var(--yes)':i===0?'var(--green)':'var(--text-muted)',borderRadius:2}}/>
+                          <div style={{height:'100%',width:`${opt.pct}%`,background:isWinner?'var(--yes)':i===0?'var(--green)':'var(--red)',borderRadius:2}}/>
                         </div>
                       </div>
                       {!resolved&&(
-                        <button className="btn-primary" style={{padding:'8px 16px',fontSize:12,flexShrink:0}}
+                        <button className={i===0?'btn-primary':'btn-danger'} style={{padding:'8px 16px',fontSize:12,flexShrink:0,whiteSpace:'nowrap'}}
                           onClick={e=>{e.stopPropagation();openBet(opt.label,opt.pct,i);}}>
-                          Apostar
+                          Comprar
                         </button>
                       )}
                     </div>
@@ -428,7 +430,7 @@ export default function MarketDetail() {
             <TabsSection mock={mock} opt0={opt0} opt1={opt1} comments={mock.comments}/>
           </div>
 
-          <div style={{position:'sticky',top:88}}>
+          <div style={{position:isMobile?'static':'sticky',top:88}}>
             {resolved?(
               <div style={{background:'var(--surface1)',border:'1px solid rgba(22,163,74,0.3)',borderRadius:16,padding:24}}>
                 <div style={{fontFamily:'var(--font-display)',fontSize:20,letterSpacing:'0.04em',color:'var(--yes)',marginBottom:8}}>MERCADO RESUELTO</div>
@@ -451,11 +453,11 @@ export default function MarketDetail() {
               </div>
             ):(
               <div style={{background:'var(--surface1)',border:'1px solid var(--border-active)',borderRadius:16,padding:24}}>
-                <div style={{fontFamily:'var(--font-display)',fontSize:20,letterSpacing:'0.04em',color:'var(--text-primary)',marginBottom:20}}>COLOCAR APUESTA</div>
-                <p style={{fontSize:13,color:'var(--text-muted)',marginBottom:20}}>Elige un resultado en el panel izquierdo para abrir el formulario de apuesta.</p>
+                <div style={{fontFamily:'var(--font-display)',fontSize:20,letterSpacing:'0.04em',color:'var(--text-primary)',marginBottom:20}}>COMPRAR</div>
+                <p style={{fontSize:13,color:'var(--text-muted)',marginBottom:20}}>Elige un resultado para comprar tu posición.</p>
                 <div style={{borderTop:'1px solid var(--border)',paddingTop:20}}>
                   {(market.options||[]).map((opt,i)=>(
-                    <button key={i} className={i===0?'btn-primary':'btn-ghost'} style={{width:'100%',marginBottom:10}} onClick={()=>openBet(opt.label,opt.pct,i)}>
+                    <button key={i} className={i===0?'btn-primary':'btn-danger'} style={{width:'100%',marginBottom:10}} onClick={()=>openBet(opt.label,opt.pct,i)}>
                       {opt.label} · {opt.pct}%
                     </button>
                   ))}

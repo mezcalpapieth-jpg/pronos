@@ -281,6 +281,23 @@ html[data-theme="light"] .btn-theme-toggle::before {
   background: rgba(255,255,255,0.05);
   transform: translateY(-2px);
 }
+.btn-danger {
+  background: #ff3b3b;
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+  padding: 14px 28px;
+  border-radius: 8px;
+  border: none;
+  transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+}
+.btn-danger:hover {
+  background: #ff1a1a;
+  box-shadow: 0 0 24px rgba(255,59,59,0.4);
+  transform: translateY(-2px);
+}
 
 /* ============================================================
    4. FIGHT CARD / WC CARD
