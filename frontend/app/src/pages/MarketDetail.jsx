@@ -11,7 +11,7 @@ function ProbabilityChart({ options, resolved, winner }) {
   if (!options?.length) return null;
   const top=options[0], pct=resolved?(top.label===winner?100:0):top.pct;
   const radius=54, circ=2*Math.PI*radius, dash=(pct/100)*circ;
-  const color=resolved?'var(--yes)':'var(--green)';
+  const color='var(--yes)';
   return (
     <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:16,padding:'24px 0'}}>
       <svg width="140" height="140" viewBox="0 0 140 140">
@@ -31,7 +31,7 @@ function ProbabilityChart({ options, resolved, winner }) {
         {options.map((opt,i)=>(
           <div key={i} style={{display:'flex',alignItems:'center',gap:6,fontFamily:'var(--font-mono)',fontSize:12,
             color:resolved&&opt.label===winner?'var(--yes)':'var(--text-secondary)'}}>
-            <span style={{width:8,height:8,borderRadius:'50%',display:'inline-block',background:i===0?(resolved?'var(--yes)':'var(--green)'):'var(--text-muted)'}}/>
+            <span style={{width:8,height:8,borderRadius:'50%',display:'inline-block',background:i===0?'var(--yes)':'var(--red)'}}/>
             {opt.label} · {opt.pct}%
           </div>
         ))}
@@ -399,24 +399,24 @@ export default function MarketDetail() {
                   const isWinner=resolved&&opt.label===market._winner;
                   const isLoser=resolved&&opt.label!==market._winner;
                   return(
-                    <div key={i} style={{background:isWinner?'rgba(22,163,74,0.06)':i===0?'rgba(0,232,122,0.04)':'rgba(255,59,59,0.04)',border:`1px solid ${isWinner?'rgba(22,163,74,0.3)':i===0?'rgba(0,232,122,0.2)':'rgba(255,59,59,0.2)'}`,borderRadius:12,padding:'16px 20px',display:'flex',alignItems:'center',gap:16,opacity:isLoser?0.45:1,cursor:resolved?'default':'pointer',transition:'border-color 0.2s'}}
+                    <div key={i} style={{background:isWinner?'rgba(22,163,74,0.06)':i===0?'rgba(0,201,107,0.05)':'rgba(255,59,59,0.04)',border:`1px solid ${isWinner?'rgba(22,163,74,0.3)':i===0?'rgba(0,201,107,0.25)':'rgba(255,59,59,0.2)'}`,borderRadius:12,padding:'16px 20px',display:'flex',alignItems:'center',gap:16,opacity:isLoser?0.45:1,cursor:resolved?'default':'pointer',transition:'border-color 0.2s'}}
                       onClick={()=>!resolved&&openBet(opt.label,opt.pct,i)}
-                      onMouseOver={e=>!resolved&&(e.currentTarget.style.borderColor=i===0?'rgba(0,232,122,0.5)':'rgba(255,59,59,0.5)')}
-                      onMouseOut={e=>!resolved&&(e.currentTarget.style.borderColor=isWinner?'rgba(22,163,74,0.3)':i===0?'rgba(0,232,122,0.2)':'rgba(255,59,59,0.2)')}>
+                      onMouseOver={e=>!resolved&&(e.currentTarget.style.borderColor=i===0?'rgba(0,201,107,0.6)':'rgba(255,59,59,0.5)')}
+                      onMouseOut={e=>!resolved&&(e.currentTarget.style.borderColor=isWinner?'rgba(22,163,74,0.3)':i===0?'rgba(0,201,107,0.25)':'rgba(255,59,59,0.2)')}>
                       <div style={{flex:1}}>
                         <div style={{display:'flex',justifyContent:'space-between',marginBottom:8,alignItems:'center'}}>
                           <div style={{display:'flex',alignItems:'center',gap:8}}>
                             {isWinner&&<span style={{fontSize:16}}>🏆</span>}
-                            <span style={{fontWeight:600,fontSize:15,color:isWinner?'var(--yes)':i===0?'var(--green)':'var(--red)'}}>{opt.label}</span>
+                            <span style={{fontWeight:600,fontSize:15,color:isWinner?'var(--yes)':i===0?'var(--yes)':'var(--red)'}}>{opt.label}</span>
                           </div>
-                          <span style={{fontFamily:'var(--font-mono)',fontSize:15,fontWeight:500,color:isWinner?'var(--yes)':i===0?'var(--green)':'var(--red)'}}>{opt.pct}%</span>
+                          <span style={{fontFamily:'var(--font-mono)',fontSize:15,fontWeight:500,color:isWinner?'var(--yes)':i===0?'var(--yes)':'var(--red)'}}>{opt.pct}%</span>
                         </div>
                         <div style={{height:4,background:'var(--surface3)',borderRadius:2,overflow:'hidden'}}>
-                          <div style={{height:'100%',width:`${opt.pct}%`,background:isWinner?'var(--yes)':i===0?'var(--green)':'var(--red)',borderRadius:2}}/>
+                          <div style={{height:'100%',width:`${opt.pct}%`,background:isWinner?'var(--yes)':i===0?'var(--yes)':'var(--red)',borderRadius:2}}/>
                         </div>
                       </div>
                       {!resolved&&(
-                        <button className={i===0?'btn-primary':'btn-danger'} style={{padding:'8px 16px',fontSize:12,flexShrink:0,whiteSpace:'nowrap'}}
+                        <button className={i===0?'btn-yes':'btn-danger'} style={{padding:'8px 16px',fontSize:12,flexShrink:0,whiteSpace:'nowrap'}}
                           onClick={e=>{e.stopPropagation();openBet(opt.label,opt.pct,i);}}>
                           Comprar
                         </button>
@@ -457,7 +457,7 @@ export default function MarketDetail() {
                 <p style={{fontSize:13,color:'var(--text-muted)',marginBottom:20}}>Elige un resultado para comprar tu posición.</p>
                 <div style={{borderTop:'1px solid var(--border)',paddingTop:20}}>
                   {(market.options||[]).map((opt,i)=>(
-                    <button key={i} className={i===0?'btn-primary':'btn-danger'} style={{width:'100%',marginBottom:10}} onClick={()=>openBet(opt.label,opt.pct,i)}>
+                    <button key={i} className={i===0?'btn-yes':'btn-danger'} style={{width:'100%',marginBottom:10}} onClick={()=>openBet(opt.label,opt.pct,i)}>
                       {opt.label} · {opt.pct}%
                     </button>
                   ))}
