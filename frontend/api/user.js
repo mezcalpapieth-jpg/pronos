@@ -1,6 +1,8 @@
 import { neon } from '@neondatabase/serverless';
 
-const sql = neon(process.env.DATABASE_URL);
+// Separate read-only and read-write connections
+const sqlRead  = neon(process.env.DATABASE_READ_URL  || process.env.DATABASE_URL);
+const sqlWrite = neon(process.env.DATABASE_WRITE_URL || process.env.DATABASE_URL);
 
 // Admin usernames — server-side only, never sent to client bundle
 const ADMIN_USERNAMES = (process.env.ADMIN_USERNAMES || 'mezcal,frmm')
@@ -18,7 +20,7 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     const { privyId } = req.query;
     if (!privyId) return res.status(400).json({ error: 'privyId required' });
-    const rows = await sql`SELECT username FROM users WHERE privy_id = ${privyId}`;
+    const rows = await sqlRead`SELECT username FROM users WHERE privy_id = ${privyId}`;
     if (rows.length === 0) return res.status(404).json({ username: null, isAdmin: false });
     const username = rows[0].username;
     const isAdmin = ADMIN_USERNAMES.includes((username || '').toLowerCase());
@@ -36,7 +38,7 @@ export default async function handler(req, res) {
     }
 
     try {
-      await sql`INSERT INTO users (privy_id, username) VALUES (${privyId}, ${username.toLowerCase()})`;
+      await sqlWrite`INSERT INTO users (privy_id, username) VALUES (${privyId}, ${username.toLowerCase()})`;
       return res.status(201).json({ username: username.toLowerCase() });
     } catch (e) {
       if (e.message?.includes('unique') || e.code === '23505') {
