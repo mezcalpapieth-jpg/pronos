@@ -2,8 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 import { useNavigate } from 'react-router-dom';
 import MARKETS from '../lib/markets.js';
-
-const FEATURED = MARKETS.filter(m => m._source === 'polymarket' && m.trending);
+import { fetchResolutions } from '../lib/resolutions.js';
 const AMOUNTS   = [1, 2, 3, 5, 8, 10, 15, 20, 25, 50, 64, 100, 200, 500];
 
 /* ── Inject keyframe once ─────────────────────────────── */
@@ -90,6 +89,20 @@ export default function Hero() {
   const [current, setCurrent] = useState(0);
   const [animating, setAnimating] = useState(false);
   const timerRef = useRef(null);
+  const [featured, setFeatured] = useState(() =>
+    MARKETS.filter(m => m._source === 'polymarket' && m.trending && !m._resolved)
+  );
+
+  // Load resolutions and filter out resolved markets
+  useEffect(() => {
+    fetchResolutions().then(resolutions => {
+      const resolvedIds = new Set(resolutions.map(r => r.market_id));
+      const filtered = MARKETS.filter(m =>
+        m._source === 'polymarket' && m.trending && !m._resolved && !resolvedIds.has(m.id)
+      );
+      if (filtered.length > 0) setFeatured(filtered);
+    }).catch(() => {});
+  }, []);
 
   const goTo = (idx) => {
     if (idx === current || animating) return;
@@ -102,7 +115,7 @@ export default function Hero() {
     timerRef.current = setInterval(() => {
       setAnimating(true);
       setTimeout(() => {
-        setCurrent(c => (c + 1) % FEATURED.length);
+        setCurrent(c => (c + 1) % featured.length);
         setAnimating(false);
       }, 180);
     }, 5000);
@@ -113,7 +126,7 @@ export default function Hero() {
     return () => clearInterval(timerRef.current);
   }, [startTimer]);
 
-  const market = FEATURED[current] || FEATURED[0];
+  const market = featured[current] || featured[0];
   const handleCardClick = () => { navigate(`/market?id=${market.id}`); };
 
   return (
@@ -218,7 +231,7 @@ export default function Hero() {
                 <span className="wc-vol">{market.deadline}</span>
               </div>
               <div className="hero-carousel-dots">
-                {FEATURED.map((_, i) => (
+                {featured.map((_, i) => (
                   <button
                     key={i}
                     className={`carousel-dot${i === current ? ' active' : ''}`}
