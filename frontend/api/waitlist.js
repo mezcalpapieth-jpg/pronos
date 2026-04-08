@@ -1,6 +1,7 @@
 import { neon } from '@neondatabase/serverless';
 
-const sqlWrite = neon(process.env.DATABASE_URL);
+const sql      = neon(process.env.DATABASE_URL);
+const sqlWrite = sql;
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = 'Simon <simon@pronos.io>';
@@ -74,6 +75,20 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
+
+  // GET /api/waitlist?key=<MIGRATE_KEY> — view all signups
+  if (req.method === 'GET') {
+    const key = req.query.key;
+    if (key !== process.env.MIGRATE_KEY) {
+      return res.status(403).json({ error: 'Invalid key' });
+    }
+    try {
+      const rows = await sql`SELECT id, email, name, source, email_sent, created_at FROM waitlist ORDER BY created_at DESC`;
+      return res.status(200).json({ total: rows.length, signups: rows });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'POST only' });
