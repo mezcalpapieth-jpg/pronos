@@ -88,6 +88,17 @@ const MIGRATIONS = [
     last_block      BIGINT NOT NULL DEFAULT 0,
     updated_at      TIMESTAMPTZ DEFAULT NOW()
   )`,
+
+  // Waitlist signups
+  `CREATE TABLE IF NOT EXISTS waitlist (
+    id              SERIAL PRIMARY KEY,
+    email           TEXT NOT NULL UNIQUE,
+    name            TEXT,
+    source          TEXT DEFAULT 'landing',
+    email_sent      BOOLEAN DEFAULT FALSE,
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_waitlist_email ON waitlist(email)`,
 ];
 
 export default async function handler(req, res) {

@@ -63,7 +63,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
 
   // ── Main bet handler ────────────────────────────────────────────────────────
   const handleBet = async () => {
-    if (!authenticated) { window.open('https://tally.so/r/1AMZDg', '_blank'); return; }
+    if (!authenticated) { window.open('/#waitlist', '_blank'); return; }
     if (numAmount <= 0) {
       setStep(STEPS.ERROR);
       setStatusMsg('Ingresa un monto válido.');

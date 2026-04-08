@@ -36,8 +36,7 @@
   <link rel="stylesheet" href="css/base.css" />
   <link rel="stylesheet" href="css/components.css" />
   <link rel="stylesheet" href="css/sections.css" />
-  <!-- Tally waitlist popup -->
-  <script async src="https://tally.so/widgets/embed.js"></script>
+
 </head>
 <body>
 
@@ -156,7 +155,7 @@
     <a href="#how-it-works">Cómo funciona</a>
     <button class="btn-theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Cambiar tema"></button>
     <div id="navWalletArea">
-      <button class="btn-nav-cta" data-tally-open="1AMZDg" data-tally-emoji-text="🔔" data-tally-emoji-animation="wave">Únete a la lista</button>
+      <button class="btn-nav-cta" onclick="openWaitlistModal()">Únete a la lista</button>
     </div>
   </div>
 </nav>
@@ -202,7 +201,7 @@
 
       <div class="hero-btns">
         <a href="#market" class="btn-primary">Ver el mercado</a>
-        <button class="btn-ghost" data-tally-open="1AMZDg" data-tally-emoji-text="🔔" data-tally-emoji-animation="wave">Únete a la lista</button>
+        <button class="btn-ghost" onclick="openWaitlistModal()">Únete a la lista</button>
       </div>
 
       <div class="hero-stats">
@@ -398,9 +397,7 @@
       Pronos abre en beta cerrada. Únete a la lista de espera y obtén acceso antes que nadie al primer mercado de predicciones on-chain de Latinoamérica.
     </p>
     <button
-      data-tally-open="1AMZDg"
-      data-tally-emoji-text="🔔"
-      data-tally-emoji-animation="wave"
+      onclick="openWaitlistModal()"
       style="
         display: inline-flex; align-items: center; gap: 10px;
         background: var(--green); color: #fff;
@@ -438,6 +435,81 @@
     </div>
   </div>
 </footer>
+
+<!-- ============================================================
+     WAITLIST MODAL
+============================================================ -->
+<div id="waitlistOverlay" class="wl-overlay" onclick="if(event.target===this)closeWaitlistModal()">
+  <div class="wl-modal">
+    <button class="wl-close" onclick="closeWaitlistModal()" aria-label="Cerrar">&times;</button>
+    <div class="wl-header">
+      <div class="wl-badge">● ACCESO ANTICIPADO</div>
+      <h2 class="wl-title">ÚNETE A LA<br><span class="wl-accent">LISTA</span></h2>
+      <p class="wl-desc">Sé de los primeros en probar el mercado de predicciones on-chain de Latinoamérica.</p>
+    </div>
+    <form id="waitlistForm" class="wl-form" onsubmit="return submitWaitlist(event)">
+      <input type="text" id="wlName" class="wl-input" placeholder="Tu nombre (opcional)" autocomplete="given-name" />
+      <input type="email" id="wlEmail" class="wl-input" placeholder="Tu email" required autocomplete="email" />
+      <button type="submit" class="wl-submit" id="wlSubmitBtn">UNIRME A LA LISTA</button>
+      <div id="wlMessage" class="wl-message"></div>
+      <div class="wl-tags">
+        <span>✓ Gratis</span>
+        <span>✓ Sin spam</span>
+        <span>✓ Acceso anticipado</span>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openWaitlistModal() {
+  document.getElementById('waitlistOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => document.getElementById('wlEmail').focus(), 200);
+}
+function closeWaitlistModal() {
+  document.getElementById('waitlistOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+async function submitWaitlist(e) {
+  e.preventDefault();
+  const btn = document.getElementById('wlSubmitBtn');
+  const msg = document.getElementById('wlMessage');
+  const email = document.getElementById('wlEmail').value;
+  const name = document.getElementById('wlName').value;
+  btn.disabled = true;
+  btn.textContent = 'ENVIANDO...';
+  msg.textContent = '';
+  msg.className = 'wl-message';
+  try {
+    const res = await fetch('/api/waitlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, name }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      msg.textContent = data.message;
+      msg.classList.add('wl-success');
+      document.getElementById('waitlistForm').reset();
+      setTimeout(closeWaitlistModal, 2500);
+    } else {
+      msg.textContent = data.error || 'Error al registrarte.';
+      msg.classList.add('wl-error');
+    }
+  } catch {
+    msg.textContent = 'Error de conexión. Intenta de nuevo.';
+    msg.classList.add('wl-error');
+  }
+  btn.disabled = false;
+  btn.textContent = 'UNIRME A LA LISTA';
+  return false;
+}
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeWaitlistModal();
+});
+if (window.location.hash === '#waitlist') openWaitlistModal();
+</script>
 
 <!-- ethers.js v5.7.2 — sin dependencia de CDN -->
 <script src="js/ethers.min.js"></script>
