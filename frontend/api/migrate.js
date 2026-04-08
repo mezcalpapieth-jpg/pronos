@@ -111,7 +111,7 @@ export default async function handler(req, res) {
   const results = [];
   for (const migration of MIGRATIONS) {
     try {
-      await sql(migration);
+      await sql.query(migration);
       results.push({ sql: migration.slice(0, 60) + '…', ok: true });
     } catch (e) {
       results.push({ sql: migration.slice(0, 60) + '…', ok: false, error: e.message });
