@@ -46,7 +46,7 @@ async function sendWelcomeEmail(email, name) {
   </div>
 </div>`;
 
-  const res = await fetch('https://api.resend.com/emails', {
+  const r = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${RESEND_API_KEY}`,
@@ -60,7 +60,11 @@ async function sendWelcomeEmail(email, name) {
     }),
   });
 
-  return res.ok;
+  if (!r.ok) {
+    const err = await r.text().catch(() => 'unknown');
+    console.error('Resend error:', r.status, err);
+  }
+  return r.ok;
 }
 
 export default async function handler(req, res) {
@@ -92,9 +96,10 @@ export default async function handler(req, res) {
 
     const isNew = rows.length > 0;
 
+    let emailSent = false;
     if (isNew) {
-      const sent = await sendWelcomeEmail(email, name?.trim());
-      if (sent) {
+      emailSent = await sendWelcomeEmail(email, name?.trim());
+      if (emailSent) {
         await sqlWrite`UPDATE waitlist SET email_sent = true WHERE email = ${email.toLowerCase().trim()}`;
       }
     }
@@ -102,6 +107,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       ok: true,
       new: isNew,
+      emailSent,
       message: isNew ? '¡Te has unido a la lista!' : 'Ya estás en la lista de espera.',
     });
   } catch (e) {
