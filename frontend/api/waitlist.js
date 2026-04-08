@@ -1,6 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 
-const sqlWrite = neon(process.env.DATABASE_WRITE_URL || process.env.DATABASE_URL);
+const sqlWrite = neon(process.env.DATABASE_URL);
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = 'Simon <simon@pronos.io>';
