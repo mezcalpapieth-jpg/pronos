@@ -69,8 +69,11 @@ export default function MarketsGrid({ activeFilter }) {
     return () => { cancelled = true; };
   }, []);
 
-  // Filter logic
+  // Filter logic — resolved markets only show in "Resueltos" tab
   const filtered = markets.filter(m => {
+    if (activeFilter === 'resueltos') return !!m._resolved;
+    // Hide resolved from all other tabs
+    if (m._resolved) return false;
     if (!activeFilter || activeFilter === 'todos') return true;
     if (activeFilter === 'trending') return m.trending;
     return m.category === activeFilter;

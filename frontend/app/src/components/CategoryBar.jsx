@@ -7,6 +7,7 @@ const FILTERS = [
   { id: 'politica',  label: '🌎 Política Internacional' },
   { id: 'deportes',  label: '⚽ Deportes' },
   { id: 'crypto',    label: '₿ Crypto' },
+  { id: 'resueltos', label: '🏆 Resueltos' },
 ];
 
 export default function CategoryBar({ activeFilter, onFilter }) {
