@@ -12,11 +12,15 @@ solc    = "0.8.24"
 optimizer        = true
 optimizer_runs   = 200
 
-# Chain config for Base Sepolia (testnet)
+# Chain config
 [profile.default.rpc_endpoints]
-base_sepolia = "${BASE_SEPOLIA_RPC}"
-base         = "https://mainnet.base.org"
+arbitrum_sepolia = "${ARB_SEPOLIA_RPC}"
+arbitrum         = "https://arb1.arbitrum.io/rpc"
+base_sepolia     = "${BASE_SEPOLIA_RPC}"
+base             = "https://mainnet.base.org"
 
 [profile.default.etherscan]
-base_sepolia = { key = "${BASESCAN_API_KEY}", url = "https://api-sepolia.basescan.org/api" }
-base         = { key = "${BASESCAN_API_KEY}", url = "https://api.basescan.org/api" }
+arbitrum_sepolia = { key = "${ARBISCAN_API_KEY}", url = "https://api-sepolia.arbiscan.io/api" }
+arbitrum         = { key = "${ARBISCAN_API_KEY}", url = "https://api.arbiscan.io/api" }
+base_sepolia     = { key = "${BASESCAN_API_KEY}", url = "https://api-sepolia.basescan.org/api" }
+base             = { key = "${BASESCAN_API_KEY}", url = "https://api.basescan.org/api" }

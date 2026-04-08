@@ -186,6 +186,7 @@
 ## POST-MVP (After World Cup Launch)
 > Not in scope now, but planned for later
 
+- [ ] MoonPay integration (USDC on-ramp: Apple Pay, Google Pay, cards + KYC) — partner account needed
 - [ ] Bitso real integration (MXN on/off ramp) — est. $10-15K if outsourced
 - [ ] UMA oracle integration (decentralized resolution) — est. $15-20K
 - [ ] Security audit by external firm — est. $25-50K

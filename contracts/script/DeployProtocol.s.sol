@@ -10,7 +10,7 @@ import {MarketFactory} from "../src/MarketFactory.sol";
  * @notice Deploys the full Pronos protocol: PronosToken + MarketFactory
  *
  * Usage:
- *   forge script script/DeployProtocol.s.sol --rpc-url base_sepolia --broadcast
+ *   forge script script/DeployProtocol.s.sol --rpc-url arbitrum_sepolia --broadcast --verify
  *
  * Required env vars:
  *   DEPLOYER_PRIVATE_KEY - Private key of deployer (becomes initial owner)
