@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import Nav from '../components/Nav.jsx';
 import BetModal from '../components/BetModal.jsx';
 import { gmFetchBySlug } from '../lib/gamma.js';
+import { fetchResolutions } from '../lib/resolutions.js';
 import MARKETS from '../lib/markets.js';
 import { generateMockData } from '../lib/mockTabData.js';
 
@@ -312,7 +313,24 @@ export default function MarketDetail() {
     let cancelled=false;
     async function load(){
       setLoading(true);
-      try{const live=await gmFetchBySlug(marketId);if(!cancelled)setMarket(live||MARKETS.find(m=>m.id===marketId)||null);}
+      try{
+        const [live, resolutions] = await Promise.all([
+          gmFetchBySlug(marketId).catch(()=>null),
+          fetchResolutions().catch(()=>[]),
+        ]);
+        if(cancelled) return;
+        let m = live || MARKETS.find(m=>m.id===marketId) || null;
+        // Apply resolution data if exists
+        if(m){
+          const r = resolutions.find(r=>r.market_id===m.id);
+          if(r){
+            m = {...m, _resolved:true, _winner:r.winner, _winnerShort:r.winner_short||r.winner,
+              _resolvedDate:new Date(r.resolved_at).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'}),
+              _resolvedBy:r.resolved_by, _description:r.description};
+          }
+        }
+        setMarket(m);
+      }
       catch(_){if(!cancelled)setMarket(MARKETS.find(m=>m.id===marketId)||null);}
       finally{if(!cancelled)setLoading(false);}
     }

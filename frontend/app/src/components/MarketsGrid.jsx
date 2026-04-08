@@ -1,7 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import MarketCard from './MarketCard.jsx';
 import { gmFetchMarkets } from '../lib/gamma.js';
+import { fetchResolutions } from '../lib/resolutions.js';
 import MARKETS from '../lib/markets.js';
+
+function applyResolutions(markets, resolutions) {
+  if (!resolutions || resolutions.length === 0) return markets;
+  const map = Object.fromEntries(resolutions.map(r => [r.market_id, r]));
+  return markets.map(m => {
+    const r = map[m.id];
+    if (!r) return m;
+    return {
+      ...m,
+      _resolved: true,
+      _winner: r.winner,
+      _winnerShort: r.winner_short || r.winner,
+      _resolvedDate: new Date(r.resolved_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }),
+      _resolvedBy: r.resolved_by,
+      _description: r.description,
+    };
+  });
+}
 
 export default function MarketsGrid({ activeFilter }) {
   const [markets, setMarkets] = useState([]);
@@ -15,15 +34,28 @@ export default function MarketsGrid({ activeFilter }) {
       setLoading(true);
       setError(null);
       try {
-        const live = await gmFetchMarkets({ limit: 60 });
-        if (!cancelled) {
-          // Merge: live Polymarket markets + local markets (de-dupe by id)
+        // Fetch live markets and resolutions in parallel
+        const [live, resolutions] = await Promise.all([
+          gmFetchMarkets({ limit: 60 }).catch(() => null),
+          fetchResolutions().catch(() => []),
+        ]);
+
+        if (cancelled) return;
+
+        let allMarkets;
+        if (live) {
           const liveIds = new Set(live.map(m => m.id));
           const local = MARKETS.filter(m => !liveIds.has(m.id));
-          setMarkets([...live, ...local]);
+          allMarkets = [...live, ...local];
+        } else {
+          allMarkets = MARKETS;
+          setError('Usando datos locales — API no disponible.');
         }
+
+        // Apply resolution data from our DB
+        setMarkets(applyResolutions(allMarkets, resolutions));
       } catch (err) {
-        console.warn('Gamma API unavailable, using local markets:', err.message);
+        console.warn('Error loading markets:', err.message);
         if (!cancelled) {
           setMarkets(MARKETS);
           setError('Usando datos locales — API no disponible.');

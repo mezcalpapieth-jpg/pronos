@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import Nav from '../components/Nav.jsx';
 import { getProtocolMode, setProtocolMode, isAdmin, getContracts } from '../lib/protocol.js';
+import { resolveMarket, fetchResolutions } from '../lib/resolutions.js';
 import {
   getSafeAddresses, setSafeAddresses,
   createSafe, proposeTransaction, confirmTransaction, executeTransaction,
@@ -133,26 +134,131 @@ function CreateMarketForm({ mode }) {
   );
 }
 
-function MarketsList({ mode }) {
+function ResolveModal({ market, onClose, onResolved, privyId }) {
+  const [outcome, setOutcome] = useState('');
+  const [winner, setWinner] = useState('');
+  const [winnerShort, setWinnerShort] = useState('');
+  const [resolvedBy, setResolvedBy] = useState('');
+  const [description, setDescription] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  if (!market) return null;
+
+  const options = market.options || [];
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!outcome || !winner) { setError('Selecciona un resultado'); return; }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await resolveMarket(privyId, {
+        marketId: market.id,
+        outcome,
+        winner,
+        winnerShort: winnerShort || winner,
+        resolvedBy: resolvedBy || 'Admin multisig',
+        description,
+      });
+      onResolved(market.id);
+      onClose();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function selectOption(opt) {
+    setOutcome(opt.label);
+    setWinner(opt.label);
+    setWinnerShort(opt.label.length > 20 ? opt.label.slice(0, 20) : opt.label);
+  }
+
+  return (
+    <div style={{ position:'fixed',inset:0,zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.7)',backdropFilter:'blur(6px)' }} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background:'var(--surface1)',border:'1px solid var(--border)',borderRadius:16,padding:'32px 28px',width:'90%',maxWidth:480,boxShadow:'0 24px 80px rgba(0,0,0,0.5)' }}>
+        <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20 }}>
+          <h3 style={{ fontFamily:'var(--font-display)',fontSize:24,letterSpacing:'0.03em',color:'var(--text-primary)' }}>RESOLVER MERCADO</h3>
+          <button onClick={onClose} style={{ background:'none',border:'none',color:'var(--text-muted)',fontSize:22,cursor:'pointer' }}>&times;</button>
+        </div>
+
+        <p style={{ fontSize:14,color:'var(--text-secondary)',marginBottom:20,lineHeight:1.5 }}>{market.title}</p>
+
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom:16 }}>
+            <label style={{ fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)',letterSpacing:'0.1em',display:'block',marginBottom:8 }}>RESULTADO GANADOR</label>
+            <div style={{ display:'flex',flexDirection:'column',gap:8 }}>
+              {options.map((opt, i) => (
+                <button key={i} type="button" onClick={() => selectOption(opt)}
+                  style={{
+                    padding:'12px 16px',borderRadius:8,border:'1px solid',cursor:'pointer',textAlign:'left',
+                    fontFamily:'var(--font-body)',fontSize:14,transition:'all 0.2s',
+                    background: outcome === opt.label ? 'var(--green-dim)' : 'var(--surface2)',
+                    borderColor: outcome === opt.label ? 'var(--green)' : 'var(--border)',
+                    color: outcome === opt.label ? 'var(--green)' : 'var(--text-primary)',
+                  }}>
+                  <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center' }}>
+                    <span>{outcome === opt.label ? '✓ ' : ''}{opt.label}</span>
+                    <span style={{ fontFamily:'var(--font-mono)',fontSize:12,opacity:0.6 }}>{opt.pct}%</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ marginBottom:12 }}>
+            <label style={{ fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)',letterSpacing:'0.1em',display:'block',marginBottom:4 }}>RESUELTO POR</label>
+            <input type="text" value={resolvedBy} onChange={e => setResolvedBy(e.target.value)} placeholder="Ej: Resultados oficiales FIFA"
+              style={{ width:'100%',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,padding:'10px 14px',color:'var(--text-primary)',fontFamily:'var(--font-body)',fontSize:13 }} />
+          </div>
+
+          <div style={{ marginBottom:20 }}>
+            <label style={{ fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)',letterSpacing:'0.1em',display:'block',marginBottom:4 }}>DESCRIPCION (OPCIONAL)</label>
+            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} placeholder="Detalles adicionales sobre la resolución..."
+              style={{ width:'100%',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,padding:'10px 14px',color:'var(--text-primary)',fontFamily:'var(--font-body)',fontSize:13,resize:'vertical' }} />
+          </div>
+
+          {error && <div style={{ color:'var(--red)',fontSize:13,marginBottom:12 }}>{error}</div>}
+
+          <div style={{ display:'flex',gap:12 }}>
+            <button type="button" onClick={onClose} style={{ flex:1,padding:'12px',borderRadius:8,border:'1px solid var(--border)',background:'var(--surface2)',color:'var(--text-secondary)',cursor:'pointer',fontFamily:'var(--font-body)',fontSize:14 }}>
+              Cancelar
+            </button>
+            <button type="submit" disabled={submitting || !outcome} style={{ flex:1,padding:'12px',borderRadius:8,border:'none',background:'var(--green)',color:'#fff',cursor:'pointer',fontFamily:'var(--font-display)',fontSize:16,letterSpacing:'0.04em',opacity:(!outcome||submitting)?0.5:1 }}>
+              {submitting ? 'RESOLVIENDO...' : 'CONFIRMAR'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function MarketsList({ mode, privyId }) {
   const [markets, setMarkets] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [resolvedIds, setResolvedIds] = useState(new Set());
+  const [resolveTarget, setResolveTarget] = useState(null);
 
   useEffect(() => {
-    // Fetch curated markets from lib/markets.js
-    import('../lib/markets.js').then(mod => {
-      const all = mod.PINNED_MARKETS || mod.default || [];
+    async function load() {
+      const [marketsModule, resolutions] = await Promise.all([
+        import('../lib/markets.js'),
+        fetchResolutions().catch(() => []),
+      ]);
+      const all = marketsModule.PINNED_MARKETS || marketsModule.default || [];
+      const rIds = new Set(resolutions.map(r => r.market_id));
+      setResolvedIds(rIds);
       setMarkets(all);
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }
+    load();
   }, []);
 
-  function handleAction(market, action) {
-    if (mode === 'polymarket') {
-      alert('Acciones de mercado solo disponibles en modo protocolo propio');
-      return;
-    }
-    // TODO: Call contract functions
-    alert(`${action} mercado: ${market.title || market.question} (pendiente)`);
+  function handleResolved(marketId) {
+    setResolvedIds(prev => new Set([...prev, marketId]));
   }
 
   if (loading) return <div className="admin-card"><p>Cargando mercados...</p></div>;
@@ -160,7 +266,7 @@ function MarketsList({ mode }) {
   return (
     <div className="admin-card">
       <div className="admin-card-header">
-        <h3>Mercados activos</h3>
+        <h3>Mercados</h3>
         <span className="admin-count">{markets.length}</span>
       </div>
       <div className="admin-table-wrap">
@@ -169,47 +275,51 @@ function MarketsList({ mode }) {
             <tr>
               <th>Mercado</th>
               <th>Categoria</th>
+              <th>Fecha limite</th>
               <th>Estado</th>
               <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {markets.map((m, i) => (
-              <tr key={m.slug || i}>
-                <td className="admin-market-title">{m.title || m.question}</td>
-                <td>
-                  <span className="admin-cat-badge">{m.category || '-'}</span>
-                </td>
-                <td>
-                  <span className={`admin-badge ${m._resolved ? 'badge-resolved' : m.active === false ? 'badge-paused' : 'badge-active'}`}>
-                    {m._resolved ? 'Resuelto' : m.active === false ? 'Pausado' : 'Activo'}
-                  </span>
-                </td>
-                <td className="admin-actions">
-                  {!m._resolved && (
-                    <>
-                      <button
-                        className="btn-admin-sm"
-                        onClick={() => handleAction(m, 'pausar')}
-                        disabled={mode === 'polymarket'}
-                      >
-                        Pausar
-                      </button>
+            {markets.map((m, i) => {
+              const isResolved = m._resolved || resolvedIds.has(m.id);
+              return (
+                <tr key={m.id || i}>
+                  <td className="admin-market-title">{m.title || m.question}</td>
+                  <td>
+                    <span className="admin-cat-badge">{m.category || '-'}</span>
+                  </td>
+                  <td style={{ fontFamily:'var(--font-mono)',fontSize:12,color:'var(--text-muted)',whiteSpace:'nowrap' }}>{m.deadline || '—'}</td>
+                  <td>
+                    <span className={`admin-badge ${isResolved ? 'badge-resolved' : 'badge-active'}`}>
+                      {isResolved ? 'Resuelto' : 'Activo'}
+                    </span>
+                  </td>
+                  <td className="admin-actions">
+                    {!isResolved && (
                       <button
                         className="btn-admin-sm btn-admin-resolve"
-                        onClick={() => handleAction(m, 'resolver')}
-                        disabled={mode === 'polymarket'}
+                        onClick={() => setResolveTarget(m)}
                       >
                         Resolver
                       </button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
+
+      {resolveTarget && (
+        <ResolveModal
+          market={resolveTarget}
+          privyId={privyId}
+          onClose={() => setResolveTarget(null)}
+          onResolved={handleResolved}
+        />
+      )}
     </div>
   );
 }
@@ -554,8 +664,9 @@ function SafeManager({ mode }) {
 }
 
 export default function Admin({ username, userIsAdmin, loading }) {
-  const { authenticated, ready } = usePrivy();
+  const { authenticated, ready, user } = usePrivy();
   const [mode, setMode] = useState(getProtocolMode);
+  const privyId = user?.id;
 
   const hasAccess = authenticated && isAdmin(userIsAdmin);
 
@@ -615,7 +726,7 @@ export default function Admin({ username, userIsAdmin, loading }) {
           <FeeInfo mode={mode} />
           <ContractInfo mode={mode} />
           <CreateMarketForm mode={mode} />
-          <MarketsList mode={mode} />
+          <MarketsList mode={mode} privyId={privyId} />
         </div>
       </div>
     </>

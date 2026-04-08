@@ -89,6 +89,19 @@ const MIGRATIONS = [
     updated_at      TIMESTAMPTZ DEFAULT NOW()
   )`,
 
+  // Market resolutions (admin-driven, works before on-chain contracts)
+  `CREATE TABLE IF NOT EXISTS market_resolutions (
+    id              SERIAL PRIMARY KEY,
+    market_id       TEXT NOT NULL UNIQUE,
+    outcome         TEXT NOT NULL,
+    winner          TEXT NOT NULL,
+    winner_short    TEXT,
+    resolved_by     TEXT,
+    description     TEXT,
+    resolved_at     TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_resolutions_market ON market_resolutions(market_id)`,
+
   // Waitlist signups
   `CREATE TABLE IF NOT EXISTS waitlist (
     id              SERIAL PRIMARY KEY,
