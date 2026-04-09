@@ -47,9 +47,27 @@ export default function MarketCard({ market }) {
           ))}
         </div>
 
-        {/* Sparkline chart */}
-        <div style={{ margin: '6px 0 2px', opacity: 0.8 }}>
-          <Sparkline width={280} height={40} color="var(--yes)" strokeWidth={1.2} fill={true} />
+        {/* Sparkline charts — one per option */}
+        <div style={{ margin: '6px 0 2px', opacity: 0.8, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {(market.options || []).map((opt, i) => {
+            const colors = ['var(--yes)', 'var(--red)', 'var(--gold)', '#8b5cf6'];
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: colors[i] || 'var(--text-muted)', width: 28, textAlign: 'right', flexShrink: 0 }}>
+                  {opt.pct}%
+                </span>
+                <Sparkline
+                  width={240}
+                  height={market.options.length > 2 ? 24 : 32}
+                  color={colors[i] || 'var(--text-muted)'}
+                  strokeWidth={1.2}
+                  fill={i === 0}
+                  targetPct={opt.pct}
+                  seed={`${market.id}-${opt.label}`}
+                />
+              </div>
+            );
+          })}
         </div>
       </div>
 

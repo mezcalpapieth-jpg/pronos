@@ -1,18 +1,22 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 import { useNavigate } from 'react-router-dom';
 import MARKETS from '../lib/markets.js';
 import { fetchResolutions } from '../lib/resolutions.js';
 import Sparkline from './Sparkline.jsx';
 
+const OPTION_COLORS = ['var(--yes)', 'var(--red)', 'var(--gold)', '#8b5cf6'];
+const AUTO_INTERVAL = 6000; // ms
+
 /* ── Hero ─────────────────────────────────────────────── */
 export default function Hero() {
   const { authenticated, login } = usePrivy();
   const navigate = useNavigate();
-  const scrollRef = useRef(null);
   const [featured, setFeatured] = useState(() =>
     MARKETS.filter(m => m._source === 'polymarket' && m.trending && !m._resolved)
   );
+  const [active, setActive] = useState(0);
+  const timerRef = useRef(null);
 
   // Load resolutions and filter out resolved markets
   useEffect(() => {
@@ -25,28 +29,29 @@ export default function Hero() {
     }).catch(() => {});
   }, []);
 
-  // Drag-to-scroll
-  const [isDragging, setIsDragging] = useState(false);
-  const dragState = useRef({ startX: 0, scrollLeft: 0 });
+  // Auto-rotate
+  const resetTimer = useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setActive(prev => (prev + 1) % featured.length);
+    }, AUTO_INTERVAL);
+  }, [featured.length]);
 
-  const onMouseDown = (e) => {
-    setIsDragging(true);
-    dragState.current.startX = e.pageX - scrollRef.current.offsetLeft;
-    dragState.current.scrollLeft = scrollRef.current.scrollLeft;
-  };
-  const onMouseMove = (e) => {
-    if (!isDragging) return;
-    e.preventDefault();
-    const x = e.pageX - scrollRef.current.offsetLeft;
-    const walk = (x - dragState.current.startX) * 1.5;
-    scrollRef.current.scrollLeft = dragState.current.scrollLeft - walk;
-  };
-  const onMouseUp = () => setIsDragging(false);
+  useEffect(() => {
+    if (featured.length < 2) return;
+    resetTimer();
+    return () => clearInterval(timerRef.current);
+  }, [featured.length, resetTimer]);
 
-  const scroll = (dir) => {
-    if (!scrollRef.current) return;
-    scrollRef.current.scrollBy({ left: dir * 320, behavior: 'smooth' });
+  const goTo = (idx) => {
+    setActive(idx);
+    resetTimer();
   };
+  const goPrev = () => goTo((active - 1 + featured.length) % featured.length);
+  const goNext = () => goTo((active + 1) % featured.length);
+
+  const market = featured[active] || featured[0];
+  if (!market) return null;
 
   return (
     <section id="hero">
@@ -95,71 +100,91 @@ export default function Hero() {
           </div>
         </div>
 
-        {/* ── Right: scrollable featured markets ───── */}
+        {/* ── Right: single featured card with nav ───── */}
         <div className="hero-right">
-          {/* Scroll arrows */}
-          <div className="hero-scroll-nav">
-            <button className="hero-scroll-btn" onClick={() => scroll(-1)} aria-label="Anterior">&#8249;</button>
+          {/* Navigation header */}
+          <div className="hero-carousel-nav">
+            <button className="hero-nav-btn" onClick={goPrev} aria-label="Anterior">&#8249;</button>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em' }}>
               DESTACADOS
             </span>
-            <button className="hero-scroll-btn" onClick={() => scroll(1)} aria-label="Siguiente">&#8250;</button>
+            <button className="hero-nav-btn" onClick={goNext} aria-label="Siguiente">&#8250;</button>
           </div>
 
-          {/* Scrollable track */}
+          {/* Single card */}
           <div
-            className={`hero-scroll-track${isDragging ? ' grabbing' : ''}`}
-            ref={scrollRef}
-            onMouseDown={onMouseDown}
-            onMouseMove={onMouseMove}
-            onMouseUp={onMouseUp}
-            onMouseLeave={onMouseUp}
+            className="hero-featured-card"
+            onClick={() => navigate(`/market?id=${market.id}`)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={e => e.key === 'Enter' && navigate(`/market?id=${market.id}`)}
           >
-            {featured.map((market) => (
-              <div
-                key={market.id}
-                className="hero-featured-card"
-                onClick={() => !isDragging && navigate(`/market?id=${market.id}`)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={e => e.key === 'Enter' && navigate(`/market?id=${market.id}`)}
-              >
-                {/* Header */}
-                <div className="hfc-header">
-                  <span className="hfc-cat">{market.icon} {market.categoryLabel}</span>
-                  <span className="hfc-live">LIVE</span>
-                </div>
+            {/* Header */}
+            <div className="hfc-header">
+              <span className="hfc-cat">{market.icon} {market.categoryLabel}</span>
+              <span className="hfc-live">LIVE</span>
+            </div>
 
-                {/* Title */}
-                <p className="hfc-title">{market.title}</p>
+            {/* Title */}
+            <p className="hfc-title">{market.title}</p>
 
-                {/* Chart */}
-                <div className="hfc-chart">
+            {/* Charts — one per option */}
+            <div className="hfc-chart">
+              {(market.options || []).map((opt, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 9, width: 40, textAlign: 'right',
+                    color: OPTION_COLORS[i] || 'var(--text-muted)', flexShrink: 0
+                  }}>
+                    {opt.label.length > 8 ? opt.label.slice(0, 7) + '…' : opt.label}
+                  </span>
                   <Sparkline
-                    width={260}
-                    height={60}
-                    color="var(--yes)"
+                    width={200}
+                    height={market.options.length > 2 ? 28 : 40}
+                    color={OPTION_COLORS[i] || 'var(--text-muted)'}
                     strokeWidth={1.5}
+                    fill={i === 0}
+                    targetPct={opt.pct}
+                    seed={`${market.id}-${opt.label}`}
                   />
                 </div>
+              ))}
+            </div>
 
-                {/* Odds */}
-                <div className="hfc-odds">
-                  {(market.options || []).map((opt, i) => (
-                    <div key={i} className={`hfc-odd ${i === 0 ? 'yes' : 'no'}`}>
-                      <span className="hfc-odd-label">{opt.label}</span>
-                      <span className="hfc-odd-val">{opt.pct}%</span>
-                    </div>
-                  ))}
+            {/* Odds */}
+            <div className="hfc-odds">
+              {(market.options || []).map((opt, i) => (
+                <div key={i} className={`hfc-odd ${i === 0 ? 'yes' : i === 1 ? 'no' : ''}`}>
+                  <span className="hfc-odd-label">{opt.label}</span>
+                  <span className="hfc-odd-val">{opt.pct}%</span>
                 </div>
+              ))}
+            </div>
 
-                {/* Footer */}
-                <div className="hfc-footer">
-                  <span>VOL <strong>${market.volume}</strong></span>
-                  <span>{market.deadline}</span>
-                </div>
-              </div>
-            ))}
+            {/* Footer */}
+            <div className="hfc-footer">
+              <span>VOL <strong>${market.volume}</strong></span>
+              <span>{market.deadline}</span>
+            </div>
+          </div>
+
+          {/* Dot indicators */}
+          {featured.length > 1 && (
+            <div className="hero-dots">
+              {featured.map((_, i) => (
+                <button
+                  key={i}
+                  className={`hero-dot${i === active ? ' active' : ''}`}
+                  onClick={() => goTo(i)}
+                  aria-label={`Mercado ${i + 1}`}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Progress bar */}
+          <div className="hero-progress">
+            <div className="hero-progress-bar" key={active} />
           </div>
         </div>
 

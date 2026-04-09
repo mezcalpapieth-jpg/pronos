@@ -2,9 +2,11 @@ import React, { useMemo } from 'react';
 
 /**
  * SVG sparkline chart for market probability history.
- * Generates mock price data if none provided.
+ * Generates mock price data seeded from targetPct if none provided.
  *
  * @param {number[]} data - Array of probability values (0-100)
+ * @param {number} targetPct - Target percentage the line should end near (0-100)
+ * @param {string} seed - Deterministic seed string (e.g. market id + option label)
  * @param {number} width - SVG width
  * @param {number} height - SVG height
  * @param {string} color - Line color (CSS var or hex)
@@ -13,6 +15,8 @@ import React, { useMemo } from 'react';
  */
 export default function Sparkline({
   data,
+  targetPct,
+  seed = '',
   width = 200,
   height = 50,
   color = 'var(--yes)',
@@ -20,20 +24,40 @@ export default function Sparkline({
   strokeWidth = 1.5,
   style = {},
 }) {
-  // Generate mock data if not provided, seeded by data length or random
+  // Simple seeded PRNG so each market+option gets a stable chart
+  const seededRandom = (s) => {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) {
+      h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+    }
+    return () => {
+      h = (h * 1664525 + 1013904223) | 0;
+      return ((h >>> 0) / 4294967296);
+    };
+  };
+
   const points = useMemo(() => {
     if (data && data.length > 1) return data;
-    // Generate realistic-looking price movement
+
+    const rng = seed ? seededRandom(seed) : Math.random.bind(Math);
+    const target = typeof targetPct === 'number' ? Math.max(2, Math.min(98, targetPct)) : 50;
     const len = 30;
-    const start = 40 + Math.random() * 30;
+
+    // Start somewhere plausible, drift toward target
+    const start = Math.max(5, Math.min(95, target + (rng() - 0.5) * 30));
     const pts = [start];
     for (let i = 1; i < len; i++) {
-      const drift = (Math.random() - 0.48) * 6;
-      const next = Math.max(2, Math.min(98, pts[i - 1] + drift));
+      const progress = i / (len - 1);
+      // Pull toward target more strongly as we approach the end
+      const pull = (target - pts[i - 1]) * 0.08 * (1 + progress * 2);
+      const noise = (rng() - 0.5) * 5;
+      const next = Math.max(2, Math.min(98, pts[i - 1] + pull + noise));
       pts.push(next);
     }
+    // Ensure last point is very close to target
+    pts[len - 1] = target + (rng() - 0.5) * 2;
     return pts;
-  }, [data]);
+  }, [data, targetPct, seed]);
 
   const padding = 2;
   const w = width - padding * 2;

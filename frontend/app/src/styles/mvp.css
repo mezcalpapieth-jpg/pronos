@@ -359,15 +359,15 @@ html[data-theme="dark"] .wc-odds-btn.no {
   letter-spacing: 0.06em;
 }
 
-/* ── Hero Scrollable Featured Cards ─────────────────────────── */
-.hero-scroll-nav {
+/* ── Hero Featured Card Carousel (single card at a time) ───── */
+.hero-carousel-nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 12px;
   padding: 0 4px;
 }
-.hero-scroll-btn {
+.hero-nav-btn {
   width: 32px;
   height: 32px;
   border-radius: 50%;
@@ -381,31 +381,13 @@ html[data-theme="dark"] .wc-odds-btn.no {
   justify-content: center;
   transition: background 0.2s, border-color 0.2s;
 }
-.hero-scroll-btn:hover {
+.hero-nav-btn:hover {
   background: var(--surface3);
   border-color: var(--green);
   color: var(--green);
 }
 
-.hero-scroll-track {
-  display: flex;
-  gap: 16px;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  scroll-behavior: smooth;
-  -webkit-overflow-scrolling: touch;
-  padding-bottom: 8px;
-  cursor: grab;
-  /* Hide scrollbar */
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.hero-scroll-track::-webkit-scrollbar { display: none; }
-.hero-scroll-track.grabbing { cursor: grabbing; }
-
 .hero-featured-card {
-  flex: 0 0 280px;
-  scroll-snap-align: start;
   background: var(--surface1);
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -416,6 +398,11 @@ html[data-theme="dark"] .wc-odds-btn.no {
   flex-direction: column;
   gap: 10px;
   user-select: none;
+  animation: heroFadeIn 0.35s ease-out;
+}
+@keyframes heroFadeIn {
+  from { opacity: 0; transform: translateX(12px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
 .hero-featured-card:hover {
   border-color: rgba(0, 232, 122, 0.3);
@@ -457,8 +444,11 @@ html[data-theme="dark"] .wc-odds-btn.no {
 }
 
 .hfc-chart {
-  margin: 2px 0;
+  margin: 4px 0;
   opacity: 0.85;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .hfc-odds {
@@ -506,6 +496,52 @@ html[data-theme="dark"] .hfc-odd.no  { border-color: rgba(255,69,69,0.2); backgr
   letter-spacing: 0.06em;
 }
 .hfc-footer strong { color: var(--green); }
+
+/* Dot indicators */
+.hero-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+.hero-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.2s, border-color 0.2s, transform 0.2s;
+}
+.hero-dot.active {
+  background: var(--green);
+  border-color: var(--green);
+  transform: scale(1.2);
+  box-shadow: 0 0 8px rgba(0, 232, 122, 0.4);
+}
+.hero-dot:hover:not(.active) {
+  border-color: var(--green);
+  background: var(--surface3);
+}
+
+/* Progress bar under card */
+.hero-progress {
+  height: 2px;
+  background: var(--surface3);
+  border-radius: 1px;
+  margin-top: 10px;
+  overflow: hidden;
+}
+.hero-progress-bar {
+  height: 100%;
+  background: var(--green);
+  border-radius: 1px;
+  animation: heroTimer 6s linear;
+}
+@keyframes heroTimer {
+  from { width: 0; }
+  to   { width: 100%; }
 }
 
 /* ── Mobile search toggle button (hidden on desktop) ────────── */
