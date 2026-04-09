@@ -404,44 +404,63 @@ export default function MarketDetail() {
               </div>
             </div>
 
-            {/* Price history chart — one line per option */}
+            {/* Price history chart — single for yes/no, multi for 3+ options */}
             <div style={{background:'var(--surface1)',border:'1px solid var(--border)',borderRadius:16,marginBottom:24}}>
               <div style={{padding:'16px 20px',borderBottom:'1px solid var(--border)',fontFamily:'var(--font-mono)',fontSize:10,letterSpacing:'0.1em',color:'var(--text-muted)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                 <span>{resolved?'HISTORIAL DE PRECIO':'PRECIO EN TIEMPO REAL'}</span>
-                <div style={{display:'flex',gap:12}}>
-                  {(market.options||[]).map((opt,i)=>{
-                    const colors=['var(--yes)','var(--red)','var(--gold)','#8b5cf6'];
-                    return(<span key={i} style={{display:'flex',alignItems:'center',gap:4}}>
-                      <span style={{width:8,height:3,borderRadius:2,background:colors[i]||'var(--text-muted)',display:'inline-block'}}/>
-                      <span style={{color:colors[i]||'var(--text-muted)',fontSize:10}}>{opt.label} {opt.pct}%</span>
-                    </span>);
-                  })}
-                </div>
+                {(market.options||[]).length<=2?(
+                  <span style={{color:'var(--yes)',fontSize:12,fontWeight:600}}>{market.options?.[0]?.pct}%</span>
+                ):(
+                  <div style={{display:'flex',gap:12}}>
+                    {(market.options||[]).map((opt,i)=>{
+                      const colors=['var(--yes)','var(--red)','var(--gold)','#8b5cf6'];
+                      return(<span key={i} style={{display:'flex',alignItems:'center',gap:4}}>
+                        <span style={{width:8,height:3,borderRadius:2,background:colors[i]||'var(--text-muted)',display:'inline-block'}}/>
+                        <span style={{color:colors[i]||'var(--text-muted)',fontSize:10}}>{opt.label} {opt.pct}%</span>
+                      </span>);
+                    })}
+                  </div>
+                )}
               </div>
-              <div style={{padding:'20px 20px 16px',display:'flex',flexDirection:'column',gap:4}}>
-                {(market.options||[]).map((opt,i)=>{
-                  const colors=['var(--yes)','var(--red)','var(--gold)','#8b5cf6'];
-                  return(
-                    <div key={i} style={{display:'flex',alignItems:'center',gap:10}}>
-                      <span style={{fontFamily:'var(--font-mono)',fontSize:10,color:colors[i]||'var(--text-muted)',width:50,textAlign:'right',flexShrink:0}}>
-                        {opt.label.length>10?opt.label.slice(0,9)+'…':opt.label}
-                      </span>
-                      <Sparkline
-                        width={isMobile?240:510}
-                        height={market.options.length>2?50:70}
-                        color={colors[i]||'var(--text-muted)'}
-                        strokeWidth={2}
-                        fill={i===0}
-                        targetPct={opt.pct}
-                        seed={`${market.id}-${opt.label}`}
-                        style={{width:'100%'}}
-                      />
-                      <span style={{fontFamily:'var(--font-mono)',fontSize:12,color:colors[i]||'var(--text-muted)',fontWeight:600,flexShrink:0}}>
-                        {opt.pct}%
-                      </span>
-                    </div>
-                  );
-                })}
+              <div style={{padding:'20px 20px 16px'}}>
+                {(market.options||[]).length<=2?(
+                  <Sparkline
+                    width={isMobile?300:580}
+                    height={120}
+                    color="var(--yes)"
+                    strokeWidth={2}
+                    fill={true}
+                    targetPct={market.options?.[0]?.pct??50}
+                    seed={`${market.id}-${market.options?.[0]?.label}`}
+                    style={{width:'100%'}}
+                  />
+                ):(
+                  <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                    {(market.options||[]).map((opt,i)=>{
+                      const colors=['var(--yes)','var(--red)','var(--gold)','#8b5cf6'];
+                      return(
+                        <div key={i} style={{display:'flex',alignItems:'center',gap:10}}>
+                          <span style={{fontFamily:'var(--font-mono)',fontSize:10,color:colors[i]||'var(--text-muted)',width:50,textAlign:'right',flexShrink:0}}>
+                            {opt.label.length>10?opt.label.slice(0,9)+'…':opt.label}
+                          </span>
+                          <Sparkline
+                            width={isMobile?200:440}
+                            height={50}
+                            color={colors[i]||'var(--text-muted)'}
+                            strokeWidth={2}
+                            fill={i===0}
+                            targetPct={opt.pct}
+                            seed={`${market.id}-${opt.label}`}
+                            style={{width:'100%'}}
+                          />
+                          <span style={{fontFamily:'var(--font-mono)',fontSize:12,color:colors[i]||'var(--text-muted)',fontWeight:600,flexShrink:0}}>
+                            {opt.pct}%
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 
