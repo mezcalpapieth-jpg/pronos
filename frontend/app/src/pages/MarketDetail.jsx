@@ -99,8 +99,6 @@ function RulesTab({data}){
           <div key={i} style={{padding:'12px 16px',borderBottom:i<data.additional.length-1?'1px solid var(--border)':'none',fontSize:13,color:'var(--text-secondary)',lineHeight:1.6}}>{rule}</div>
         ))}
       </div>
-      <p style={{fontSize:13,color:'var(--text-secondary)',marginBottom:8}}>{data.resolution}</p>
-      {data.additional.map((r,i)=><p key={i} style={{fontSize:13,color:'var(--text-secondary)',marginBottom:8}}>{r}</p>)}
       {data.closes&&<p style={{fontSize:12,color:'var(--text-muted)',marginTop:16}}>Mercado abierto: 1 Ene 2026, 12:00 AM · Cierra: {data.closes}</p>}
     </div>
   );
