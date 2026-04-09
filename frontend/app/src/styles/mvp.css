@@ -359,124 +359,153 @@ html[data-theme="dark"] .wc-odds-btn.no {
   letter-spacing: 0.06em;
 }
 
-/* ── Hero Carousel Card ──────────────────────────────────────── */
-.hero-carousel-card {
-  background: var(--surface1);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 28px;
-  cursor: pointer;
-  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
-  position: relative;
-  overflow: hidden;
-  opacity: 1;
-  transform: translateY(0);
-  min-height: 380px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 16px;
-}
-.hero-carousel-card:hover {
-  border-color: rgba(0, 232, 122, 0.3);
-  box-shadow: 0 8px 40px rgba(0, 232, 122, 0.08);
-  transform: translateY(-2px);
-}
-.hero-carousel-card--fade {
-  opacity: 0;
-  transform: translateY(6px);
-  transition: opacity 0.15s ease, transform 0.15s ease;
-}
-
-.hero-carousel-header {
+/* ── Hero Scrollable Featured Cards ─────────────────────────── */
+.hero-scroll-nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
+  padding: 0 4px;
 }
-.hero-carousel-cat {
+.hero-scroll-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, border-color 0.2s;
+}
+.hero-scroll-btn:hover {
+  background: var(--surface3);
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.hero-scroll-track {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 8px;
+  cursor: grab;
+  /* Hide scrollbar */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.hero-scroll-track::-webkit-scrollbar { display: none; }
+.hero-scroll-track.grabbing { cursor: grabbing; }
+
+.hero-featured-card {
+  flex: 0 0 280px;
+  scroll-snap-align: start;
+  background: var(--surface1);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  user-select: none;
+}
+.hero-featured-card:hover {
+  border-color: rgba(0, 232, 122, 0.3);
+  box-shadow: 0 6px 32px rgba(0, 232, 122, 0.08);
+  transform: translateY(-2px);
+}
+
+.hfc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.hfc-cat {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9px;
   letter-spacing: 0.1em;
   color: var(--text-muted);
   text-transform: uppercase;
 }
-.hero-carousel-badge {
+.hfc-live {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 8px;
   letter-spacing: 0.1em;
-  padding: 3px 8px;
-  border-radius: 4px;
+  padding: 2px 6px;
+  border-radius: 3px;
   background: rgba(0, 232, 122, 0.1);
   border: 1px solid rgba(0, 232, 122, 0.25);
   color: var(--green);
-  text-transform: uppercase;
 }
-.hero-carousel-title {
+
+.hfc-title {
   font-family: var(--font-display);
-  font-size: clamp(18px, 2vw, 24px);
+  font-size: 17px;
   letter-spacing: 0.03em;
   color: var(--text-primary);
   text-transform: uppercase;
   line-height: 1.2;
-  margin-bottom: 20px;
+  min-height: 42px;
 }
 
-.hero-carousel-footer {
+.hfc-chart {
+  margin: 2px 0;
+  opacity: 0.85;
+}
+
+.hfc-odds {
   display: flex;
+  gap: 8px;
+}
+.hfc-odd {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   align-items: center;
+  gap: 2px;
+  padding: 8px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  transition: border-color 0.2s;
+}
+.hfc-odd.yes { border-color: rgba(22,163,74,0.2); background: rgba(22,163,74,0.05); }
+.hfc-odd.no  { border-color: rgba(212,32,32,0.2); background: rgba(212,32,32,0.05); }
+html[data-theme="dark"] .hfc-odd.yes { border-color: rgba(0,201,107,0.2); background: rgba(0,201,107,0.06); }
+html[data-theme="dark"] .hfc-odd.no  { border-color: rgba(255,69,69,0.2); background: rgba(255,69,69,0.06); }
+
+.hfc-odd-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.hfc-odd-val {
+  font-family: var(--font-display);
+  font-size: 22px;
+  letter-spacing: 0.02em;
+}
+.hfc-odd.yes .hfc-odd-val { color: var(--yes); }
+.hfc-odd.no .hfc-odd-val  { color: var(--red); }
+
+.hfc-footer {
+  display: flex;
   justify-content: space-between;
-  margin-top: 16px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
 }
-
-/* Dot indicators */
-.hero-carousel-dots {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-.carousel-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--surface3);
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  transition: background 0.2s, width 0.2s;
-}
-.carousel-dot.active {
-  background: var(--green);
-  width: 18px;
-  border-radius: 3px;
-  box-shadow: 0 0 6px rgba(0, 232, 122, 0.5);
-}
-
-/* Auto-progress bar at bottom of card */
-.hero-carousel-progress {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--surface3);
-}
-.hero-carousel-progress-bar {
-  height: 100%;
-  background: var(--green);
-  border-radius: 0;
-  animation: carousel-progress 5s linear forwards;
-}
-@keyframes carousel-progress {
-  from { width: 0%; }
-  to   { width: 100%; }
-}
-
-@keyframes trade-tick {
-  0%   { opacity: 0;   transform: translateX(-50%) translateY(0px)   scale(0.8); }
-  15%  { opacity: 1;   transform: translateX(-50%) translateY(-6px)  scale(1);   }
-  70%  { opacity: 0.9; transform: translateX(-50%) translateY(-28px) scale(1);   }
-  100% { opacity: 0;   transform: translateX(-50%) translateY(-48px) scale(0.9); }
+.hfc-footer strong { color: var(--green); }
 }
 
 /* ── Mobile search toggle button (hidden on desktop) ────────── */

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import Sparkline from './Sparkline.jsx';
 
 export default function MarketCard({ market }) {
   const navigate = useNavigate();
@@ -46,12 +47,9 @@ export default function MarketCard({ market }) {
           ))}
         </div>
 
-        {/* Probability bar */}
-        <div className="mock-card-bar-wrap">
-          <div
-            className="mock-card-bar-fill"
-            style={{ width: `${pct}%` }}
-          />
+        {/* Sparkline chart */}
+        <div style={{ margin: '6px 0 2px', opacity: 0.8 }}>
+          <Sparkline width={280} height={40} color="var(--yes)" strokeWidth={1.2} fill={true} />
         </div>
       </div>
 

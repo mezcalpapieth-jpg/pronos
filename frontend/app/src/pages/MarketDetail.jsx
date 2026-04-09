@@ -4,6 +4,7 @@ import Nav from '../components/Nav.jsx';
 import BetModal from '../components/BetModal.jsx';
 import { gmFetchBySlug } from '../lib/gamma.js';
 import { fetchResolutions } from '../lib/resolutions.js';
+import Sparkline from '../components/Sparkline.jsx';
 import MARKETS from '../lib/markets.js';
 import { generateMockData } from '../lib/mockTabData.js';
 
@@ -99,6 +100,8 @@ function RulesTab({data}){
           <div key={i} style={{padding:'12px 16px',borderBottom:i<data.additional.length-1?'1px solid var(--border)':'none',fontSize:13,color:'var(--text-secondary)',lineHeight:1.6}}>{rule}</div>
         ))}
       </div>
+      <p style={{fontSize:13,color:'var(--text-secondary)',marginBottom:8}}>{data.resolution}</p>
+      {data.additional.map((r,i)=><p key={i} style={{fontSize:13,color:'var(--text-secondary)',marginBottom:8}}>{r}</p>)}
       {data.closes&&<p style={{fontSize:12,color:'var(--text-muted)',marginTop:16}}>Mercado abierto: 1 Ene 2026, 12:00 AM · Cierra: {data.closes}</p>}
     </div>
   );
@@ -398,6 +401,17 @@ export default function MarketDetail() {
               <div style={{padding:'12px 0'}}>
                 <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.1em',marginBottom:4}}>ESTADO</div>
                 <div style={{fontFamily:'var(--font-mono)',fontSize:13,color:resolved?'var(--gold)':'var(--green)'}}>{resolved?'CERRADO':'ACTIVO'}</div>
+              </div>
+            </div>
+
+            {/* Price history chart */}
+            <div style={{background:'var(--surface1)',border:'1px solid var(--border)',borderRadius:16,marginBottom:24}}>
+              <div style={{padding:'16px 20px',borderBottom:'1px solid var(--border)',fontFamily:'var(--font-mono)',fontSize:10,letterSpacing:'0.1em',color:'var(--text-muted)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <span>{resolved?'HISTORIAL DE PRECIO':'PRECIO EN TIEMPO REAL'}</span>
+                <span style={{color:'var(--yes)',fontSize:12,fontWeight:600}}>{market.options?.[0]?.pct}%</span>
+              </div>
+              <div style={{padding:'20px 20px 16px'}}>
+                <Sparkline width={isMobile?300:580} height={120} color="var(--yes)" strokeWidth={2} fill={true} style={{width:'100%'}} />
               </div>
             </div>
 
