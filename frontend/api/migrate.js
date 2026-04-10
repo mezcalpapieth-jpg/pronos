@@ -138,6 +138,10 @@ const MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_gen_markets_status ON generated_markets(status)`,
   `CREATE INDEX IF NOT EXISTS idx_gen_markets_region ON generated_markets(region)`,
+
+  // Case-insensitive usernames: normalize existing rows and enforce uniqueness on LOWER(username)
+  `UPDATE users SET username = LOWER(username) WHERE username IS NOT NULL AND username <> LOWER(username)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower ON users (LOWER(username))`,
 ];
 
 export default async function handler(req, res) {

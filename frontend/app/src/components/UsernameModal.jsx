@@ -101,7 +101,7 @@ export default function UsernameModal({ privyId, onComplete, email, walletAddres
             <input
               type="text"
               value={username}
-              onChange={e => { setUsername(e.target.value); setError(''); }}
+              onChange={e => { setUsername(e.target.value.toLowerCase()); setError(''); }}
               placeholder="tu_username"
               maxLength={20}
               autoFocus

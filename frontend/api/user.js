@@ -37,9 +37,20 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Username must be 3-20 characters (letters, numbers, underscore)' });
     }
 
+    // Always normalize to lowercase — usernames are case-insensitive
+    const normalized = username.toLowerCase();
+
     try {
-      await sqlWrite`INSERT INTO users (privy_id, username) VALUES (${privyId}, ${username.toLowerCase()})`;
-      return res.status(201).json({ username: username.toLowerCase() });
+      // Case-insensitive duplicate check
+      const existing = await sqlRead`
+        SELECT privy_id FROM users WHERE LOWER(username) = ${normalized} LIMIT 1
+      `;
+      if (existing.length > 0 && existing[0].privy_id !== privyId) {
+        return res.status(409).json({ error: 'Username already taken' });
+      }
+
+      await sqlWrite`INSERT INTO users (privy_id, username) VALUES (${privyId}, ${normalized})`;
+      return res.status(201).json({ username: normalized });
     } catch (e) {
       if (e.message?.includes('unique') || e.code === '23505') {
         return res.status(409).json({ error: 'Username already taken' });
