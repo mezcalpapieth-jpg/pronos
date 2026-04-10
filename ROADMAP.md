@@ -6,6 +6,62 @@
 
 ---
 
+## 🚧 WHAT'S STILL MISSING (as of 2026-04-11)
+
+**T-minus 64 days to World Cup kickoff.**
+
+### 🔴 BLOCKED (waiting on external input)
+- **Resend domain verification** — needs Mezcal/GoDaddy DNS access to finish SPF/DKIM. Blocks waitlist emails and any transactional mail.
+- **Chain decision** — Arbitrum Sepolia contracts are ready but we haven't pulled the trigger on mainnet. Blocks everything in Phase 3.
+- **Anthropic API key** — the daily AI market generation cron is built and live at `/api/cron/generate-markets` but no-ops until the key is activated in Vercel env vars.
+
+### 🟠 HIGH PRIORITY — PRODUCT POLISH (unblocked, can ship now)
+- **World Cup hub page** — `/mundial` with all FIFA 2026 markets, bracket viz, custom hero. Launch-defining.
+- **Portfolio / "Mis Apuestas" page** — users currently have no way to see their own bets. Critical for retention.
+- **Search bar with fuzzy matching** — 60+ markets and growing, no search. Quick win.
+- **Per-market OG / share cards** — dynamic preview images with title, odds, sparkline. Huge for WhatsApp-driven LATAM virality.
+- **Leaderboard** — top predictors by volume / win rate / P&L. Social proof + gamification.
+
+### 🟡 MEDIUM PRIORITY — PROTOCOL WIRING (unblocked but needs testnet testing)
+- **Wire create-market admin form** → `MarketFactory` contract calls
+- **Wire pause/resolve admin buttons** → contract calls via Safe
+- **Contract interaction library** (`lib/contracts.js`) for own AMM
+- **Dual-mode market detail page** — detect Polymarket vs own protocol, render accordingly
+- **Buy/sell panel routing** → own AMM for protocol markets
+- **Real-time AMM price display** (x·y=k calculation) + slippage preview
+- **Portfolio merge** — positions from both Polymarket and own protocol
+
+### 🟢 SECURITY REMEDIATION (remaining from 2026-03-31 audit)
+- **C2** CLOB credentials in POST body — derive server-side
+- **C3** DATABASE_URL exposed from frontend API — separate tier or edge functions with secrets
+- **H1** No CSP (Content-Security-Policy)
+- **H3** `/mvp/admin` has no server-side auth (only client-side check)
+- **H4** `/api/user` enumerable without authentication
+- **M6** No SRI on Tally.so script
+- **M7** No CSRF protection on POST requests
+- **M8** `localStorage` as source of truth for protocol mode
+- **M9** Vite dev proxy pointing to production
+- **M10** ethers.js v5.7.2 → upgrade to v6
+- Manual security review of all contracts (reentrancy, overflow, access control)
+- Fuzz testing on AMM edge cases
+- Rate limiting on API routes
+- Input validation on all user-facing endpoints
+
+### 🔵 MAINNET LAUNCH SEQUENCE (blocked by chain decision above)
+- Deploy all contracts to Arbitrum One
+- Transfer ownership to production Safe multisig
+- Verify contracts on Arbiscan
+- Seed liquidity for 5–10 launch markets (USDC)
+- Create Safe multisig on Arbitrum Sepolia (3/5 admin, 2/3 resolution)
+- Transfer contract ownership to Safe
+- Test resolution flow through multisig
+- 48h stability test
+- E2E testnet flow: register → buy → sell → resolve → redeem
+- Full mobile responsiveness pass
+- Operations runbook + incident response playbook
+
+---
+
 ## PHASE 1: FOUNDATION & CORE CONTRACTS
 **Target: April 14, 2026**
 
@@ -100,6 +156,34 @@
 - [x] ~~Sentry integration (`@sentry/react` + ErrorBoundary, privacy-safe, prod-only)~~
 - [x] ~~API error logging (structured JSON logger + `withLogging` wrapper)~~
 - [x] ~~Bitso stub endpoint (`/api/bitso` — mock ticker + quote for MXN↔USDC)~~
+
+### 2.7 Market Content & Resolution (new since 2026-04-01)
+- [x] ~~`market_resolutions` table + `/api/resolutions` endpoint (admin-driven, works pre-contracts)~~
+- [x] ~~Admin "Resolver" UI in `/mvp/admin` to set winners manually~~
+- [x] ~~"Resueltos" tab on main grid + "RESUELTO" badge on resolved cards~~
+- [x] ~~Resolved-state detail page: banner, winner card, greyed-out losers~~
+- [x] ~~Resolved markets show 100/0 instead of pre-cierre percentages (card + detail)~~
+- [x] ~~Auto-resolve cron (`/api/cron/auto-resolve`, every 30 min) — queries Polymarket Gamma for closed markets and writes winners automatically; falls back to "Pendiente de resolución" placeholder for local/AI markets without an oracle~~
+- [x] ~~Client-side expiration filter — markets past their deadline disappear from active tabs instantly via `lib/deadline.js` (`isExpired()`)~~
+- [x] ~~Expired-but-unresolved markets lock the detail page: `🔒 POR RESOLVER` banner, disabled Comprar buttons, closed-state sidebar~~
+- [x] ~~Daily AI market generation pipeline: `/api/cron/generate-markets` (Claude Sonnet 4.5, Google News RSS, no-op without API key)~~
+- [x] ~~`generated_markets` table + `/api/generated-markets` admin review endpoint~~
+- [x] ~~Admin review UI with Pendientes / Aprobados / Rechazados tabs~~
+- [x] ~~Approved AI markets mix into the main grid alongside live Polymarket markets~~
+
+### 2.8 Graphs & Price History (new since 2026-04-01)
+- [x] ~~`/api/price-history` batch proxy for Polymarket CLOB `prices-history` (edge-cached 5 min)~~
+- [x] ~~`lib/priceHistory.js` frontend client: `fetchPriceHistory`, `extractSeries`, `collectTokenIds`~~
+- [x] ~~Sparkline component rewrite: left label / middle SVG / right value, Catmull-Rom smoothing, glow filter, hover tooltip, HTML overlay end-dot~~
+- [x] ~~Real CLOB price history wired into MarketsGrid (batched), MarketDetail, and Hero carousel~~
+- [x] ~~Sparklines reflect real pct targets when no history is available (seeded deterministic mock)~~
+- [x] ~~Single chart for yes/no markets, multi-line for 3+ options~~
+- [x] ~~Hero carousel: single featured card with 6s auto-rotation, prev/next arrows, dot indicators, progress bar, click-to-navigate~~
+
+### 2.9 Accounts & Admin (new since 2026-04-01)
+- [x] ~~Case-insensitive usernames (normalized at insert, `CREATE UNIQUE INDEX ON users (LOWER(username))`)~~
+- [x] ~~Added "alex" to admin usernames~~
+- [x] ~~Admin fallback list centralized (`ADMIN_USERNAMES || 'mezcal,frmm,alex'`) across `/api/user`, `/api/resolutions`, `/api/generated-markets`~~
 
 ### 2.6 E2E Testing (Testnet)
 - [ ] Full flow: register → buy shares → sell shares → resolution → redemption
@@ -212,7 +296,14 @@
 | 2026-04-01 | Completed 2.3: auto chain switch (BetModal + Nav), chain-aware USDC balance, deposit links, gasless helper, onboarding skip-username. Protocol mode reactive across components via custom event. |
 | 2026-04-01 | Completed 2.4: DB schema (5 tables), migration endpoint, event indexer (Vercel Cron), /api/markets + /api/market + /api/positions endpoints with P&L. |
 | 2026-04-01 | Completed 2.5: Sentry integration (ErrorBoundary, privacy-safe), structured API logger, Bitso mock endpoint (ticker + quotes). |
+| 2026-04-05 | Market resolutions v1: `market_resolutions` table, admin "Resolver" UI, "Resueltos" tab, resolved-state card and detail page with winner banner. |
+| 2026-04-07 | Hero carousel v2: single featured card with 6s auto-rotate, prev/next, dots, progress bar. Sparkline rewrite: right-side value, hover tooltip, glow, smooth Catmull-Rom curves. Single vs multi chart based on option count. |
+| 2026-04-08 | Daily AI market generation pipeline: `/api/cron/generate-markets` (Claude Sonnet 4.5 + Google News RSS), `generated_markets` table, admin review UI. No-op until `ANTHROPIC_API_KEY` is activated. |
+| 2026-04-09 | Case-insensitive usernames (`LOWER(username)` unique index, normalized inserts, lowercase input). Added "alex" admin. |
+| 2026-04-10 | Real Polymarket CLOB price history for all sparklines: `/api/price-history` batch proxy (edge-cached 5 min), `lib/priceHistory.js`, wired into MarketsGrid, MarketDetail, and Hero. |
+| 2026-04-11 | Auto-resolve cron `/api/cron/auto-resolve` (every 30 min): queries Gamma for expired Polymarket markets and writes winners automatically. Client-side `isExpired()` hides dead markets instantly. |
+| 2026-04-11 | Closed markets lock the detail page (`🔒 POR RESOLVER` banner, disabled Comprar). Resolved markets show 100/0 instead of stale pre-cierre percentages on cards and detail page. |
 
 ---
 
-*Last updated: 2026-04-01*
+*Last updated: 2026-04-11*
