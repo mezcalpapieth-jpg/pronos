@@ -5,14 +5,24 @@ import BetModal from '../components/BetModal.jsx';
 import { gmFetchBySlug } from '../lib/gamma.js';
 import { fetchResolutions } from '../lib/resolutions.js';
 import { fetchPriceHistory, extractSeries } from '../lib/priceHistory.js';
+import { isExpired } from '../lib/deadline.js';
 import Sparkline from '../components/Sparkline.jsx';
 import MARKETS from '../lib/markets.js';
 import { generateMockData } from '../lib/mockTabData.js';
 
+// Final-outcome percentage for a given option on a resolved market:
+// winner → 100, everything else → 0. Used everywhere we previously showed
+// `opt.pct` so closed markets don't display stale pre-cierre prices.
+function finalPct(opt, market) {
+  if (!market?._resolved) return opt.pct;
+  return opt.label === market._winner ? 100 : 0;
+}
+
 /* ── Ring chart ─────────────────────────────────────────────── */
-function ProbabilityChart({ options, resolved, winner }) {
+function ProbabilityChart({ options, resolved, winner, awaiting }) {
   if (!options?.length) return null;
-  const top=options[0], pct=resolved?(top.label===winner?100:0):top.pct;
+  const top=options[0];
+  const pct=resolved?(top.label===winner?100:0):top.pct;
   const radius=54, circ=2*Math.PI*radius, dash=(pct/100)*circ;
   const color='var(--yes)';
   return (
@@ -25,19 +35,26 @@ function ProbabilityChart({ options, resolved, winner }) {
         {resolved?(<>
           <text x="70" y="63" textAnchor="middle" fill="var(--yes)" fontSize="26" fontFamily="var(--font-display)">✓</text>
           <text x="70" y="82" textAnchor="middle" fill="var(--text-muted)" fontSize="8" fontFamily="var(--font-mono)" letterSpacing="0.1em">GANADOR</text>
+        </>):awaiting?(<>
+          <text x="70" y="66" textAnchor="middle" fill="var(--text-muted)" fontSize="18" fontFamily="var(--font-display)">CERRADO</text>
+          <text x="70" y="84" textAnchor="middle" fill="var(--text-muted)" fontSize="8" fontFamily="var(--font-mono)" letterSpacing="0.1em">POR RESOLVER</text>
         </>):(<>
           <text x="70" y="66" textAnchor="middle" fill="var(--text-primary)" fontSize="22" fontFamily="var(--font-display)">{pct}%</text>
           <text x="70" y="84" textAnchor="middle" fill="var(--text-muted)" fontSize="9" fontFamily="var(--font-mono)" letterSpacing="0.1em">{top.label}</text>
         </>)}
       </svg>
       <div style={{display:'flex',gap:12,flexWrap:'wrap',justifyContent:'center'}}>
-        {options.map((opt,i)=>(
-          <div key={i} style={{display:'flex',alignItems:'center',gap:6,fontFamily:'var(--font-mono)',fontSize:12,
-            color:resolved&&opt.label===winner?'var(--yes)':'var(--text-secondary)'}}>
-            <span style={{width:8,height:8,borderRadius:'50%',display:'inline-block',background:i===0?'var(--yes)':'var(--red)'}}/>
-            {opt.label} · {opt.pct}%
-          </div>
-        ))}
+        {options.map((opt,i)=>{
+          const isWinner = resolved && opt.label === winner;
+          const display  = resolved ? (isWinner ? 100 : 0) : opt.pct;
+          return (
+            <div key={i} style={{display:'flex',alignItems:'center',gap:6,fontFamily:'var(--font-mono)',fontSize:12,
+              color:isWinner?'var(--yes)':'var(--text-secondary)'}}>
+              <span style={{width:8,height:8,borderRadius:'50%',display:'inline-block',background:i===0?'var(--yes)':'var(--red)'}}/>
+              {opt.label} · {display}%
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -330,6 +347,11 @@ export default function MarketDetail() {
             m = {...m, _resolved:true, _winner:r.winner, _winnerShort:r.winner_short||r.winner,
               _resolvedDate:new Date(r.resolved_at).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'}),
               _resolvedBy:r.resolved_by, _description:r.description};
+          } else if (isExpired(m)) {
+            // Deadline passed but the auto-resolve cron hasn't written a
+            // winner yet — mark as closed so the detail page doesn't show
+            // "Comprar" buttons or treat it as active.
+            m = {...m, _awaitingResolution:true};
           }
         }
         setMarket(m);
@@ -353,6 +375,8 @@ export default function MarketDetail() {
   if(!market)return(<><Nav/><div style={{textAlign:'center',padding:'100px 48px'}}><h2 style={{fontFamily:'var(--font-display)',fontSize:32,color:'var(--text-primary)',marginBottom:16}}>Mercado no encontrado</h2><button className="btn-ghost" onClick={()=>navigate('/')}>← Volver</button></div></>);
 
   const resolved=!!market._resolved;
+  const awaiting=!resolved && !!market._awaitingResolution;
+  const locked=resolved || awaiting; // no bets allowed
   const mock=generateMockData(market);
   const opt0=market.options?.[0]?.label??'Sí';
   const opt1=market.options?.[1]?.label??'No';
@@ -378,6 +402,19 @@ export default function MarketDetail() {
             <span style={{fontFamily:'var(--font-mono)',fontSize:10,letterSpacing:'0.1em',padding:'6px 14px',borderRadius:6,background:'rgba(22,163,74,0.12)',border:'1px solid rgba(22,163,74,0.3)',color:'var(--yes)'}}>RESUELTO</span>
           </div>
         )}
+        {awaiting&&(
+          <div style={{background:'rgba(148,163,184,0.06)',border:'1px solid rgba(148,163,184,0.25)',borderRadius:14,padding:'18px 24px',marginBottom:32,display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
+            <div style={{display:'flex',alignItems:'center',gap:14}}>
+              <span style={{fontSize:28}}>🔒</span>
+              <div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.12em',marginBottom:4}}>MERCADO CERRADO · {market.deadline}</div>
+                <div style={{fontFamily:'var(--font-display)',fontSize:22,color:'var(--text-primary)',letterSpacing:'0.04em'}}>Esperando resolución oficial</div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-secondary)',marginTop:3}}>El resultado se publicará automáticamente cuando esté disponible</div>
+              </div>
+            </div>
+            <span style={{fontFamily:'var(--font-mono)',fontSize:10,letterSpacing:'0.1em',padding:'6px 14px',borderRadius:6,background:'rgba(148,163,184,0.1)',border:'1px solid rgba(148,163,184,0.3)',color:'var(--text-muted)'}}>POR RESOLVER</span>
+          </div>
+        )}
 
         <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 360px',gap:isMobile?24:48,alignItems:'start'}}>
           <div>
@@ -386,6 +423,8 @@ export default function MarketDetail() {
               <span style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.1em'}}>{market.categoryLabel}</span>
               {resolved?(
                 <span style={{fontFamily:'var(--font-mono)',fontSize:9,letterSpacing:'0.1em',padding:'3px 8px',borderRadius:4,background:'rgba(184,144,10,0.1)',border:'1px solid rgba(184,144,10,0.25)',color:'var(--gold)'}}>CERRADO</span>
+              ):awaiting?(
+                <span style={{fontFamily:'var(--font-mono)',fontSize:9,letterSpacing:'0.1em',padding:'3px 8px',borderRadius:4,background:'rgba(148,163,184,0.1)',border:'1px solid rgba(148,163,184,0.3)',color:'var(--text-muted)'}}>🔒 CERRADO</span>
               ):(
                 <>{market._source==='polymarket'&&<span className="mock-card-badge live">LIVE</span>}{market.trending&&<span className="mock-card-badge trending">🔥 TRENDING</span>}</>
               )}
@@ -403,19 +442,19 @@ export default function MarketDetail() {
                 <div style={{fontFamily:'var(--font-mono)',fontSize:isMobile?13:16,color:'var(--text-primary)'}}>${market.volume}</div>
               </div>
               <div style={{padding:'12px 16px 12px 0',marginRight:16,borderRight:'1px solid var(--border)'}}>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.1em',marginBottom:4}}>{resolved?'CERRÓ':'CIERRA'}</div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.1em',marginBottom:4}}>{locked?'CERRÓ':'CIERRA'}</div>
                 <div style={{fontFamily:'var(--font-mono)',fontSize:isMobile?13:16,color:'var(--text-primary)'}}>{market.deadline}</div>
               </div>
               <div style={{padding:'12px 0'}}>
                 <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.1em',marginBottom:4}}>ESTADO</div>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:13,color:resolved?'var(--gold)':'var(--green)'}}>{resolved?'CERRADO':'ACTIVO'}</div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:13,color:resolved?'var(--gold)':awaiting?'var(--text-muted)':'var(--green)'}}>{resolved?'CERRADO':awaiting?'POR RESOLVER':'ACTIVO'}</div>
               </div>
             </div>
 
             {/* Price history chart — single for yes/no, multi for 3+ options */}
             <div style={{background:'var(--surface1)',border:'1px solid var(--border)',borderRadius:16,marginBottom:24}}>
               <div style={{padding:'16px 20px',borderBottom:'1px solid var(--border)',fontFamily:'var(--font-mono)',fontSize:10,letterSpacing:'0.1em',color:'var(--text-muted)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                <span>{resolved?'HISTORIAL DE PRECIO':'PRECIO EN TIEMPO REAL'}</span>
+                <span>{locked?'HISTORIAL DE PRECIO':'PRECIO EN TIEMPO REAL'}</span>
                 <span style={{color:'var(--text-muted)',fontSize:10,letterSpacing:'0.08em'}}>ÚLT. 30 DÍAS</span>
               </div>
               <div style={{padding:'24px 24px 20px'}}>
@@ -459,9 +498,9 @@ export default function MarketDetail() {
 
             <div style={{background:'var(--surface1)',border:'1px solid var(--border)',borderRadius:16,marginBottom:24}}>
               <div style={{padding:'16px 20px',borderBottom:'1px solid var(--border)',fontFamily:'var(--font-mono)',fontSize:10,letterSpacing:'0.1em',color:'var(--text-muted)'}}>
-                {resolved?'PROBABILIDADES FINALES':'PROBABILIDAD ACTUAL'}
+                {resolved?'PROBABILIDADES FINALES':awaiting?'CERRADO · ESPERANDO RESULTADO':'PROBABILIDAD ACTUAL'}
               </div>
-              <ProbabilityChart options={market.options} resolved={resolved} winner={market._winner}/>
+              <ProbabilityChart options={market.options} resolved={resolved} winner={market._winner} awaiting={awaiting}/>
             </div>
 
             <div style={{marginBottom:40}}>
@@ -470,24 +509,25 @@ export default function MarketDetail() {
                 {(market.options||[]).map((opt,i)=>{
                   const isWinner=resolved&&opt.label===market._winner;
                   const isLoser=resolved&&opt.label!==market._winner;
+                  const displayPct=finalPct(opt,market); // 100/0 when resolved, else opt.pct
                   return(
-                    <div key={i} style={{background:isWinner?'rgba(22,163,74,0.06)':i===0?'rgba(0,201,107,0.05)':'rgba(255,59,59,0.04)',border:`1px solid ${isWinner?'rgba(22,163,74,0.3)':i===0?'rgba(0,201,107,0.25)':'rgba(255,59,59,0.2)'}`,borderRadius:12,padding:'16px 20px',display:'flex',alignItems:'center',gap:16,opacity:isLoser?0.45:1,cursor:resolved?'default':'pointer',transition:'border-color 0.2s'}}
-                      onClick={()=>!resolved&&openBet(opt.label,opt.pct,i)}
-                      onMouseOver={e=>!resolved&&(e.currentTarget.style.borderColor=i===0?'rgba(0,201,107,0.6)':'rgba(255,59,59,0.5)')}
-                      onMouseOut={e=>!resolved&&(e.currentTarget.style.borderColor=isWinner?'rgba(22,163,74,0.3)':i===0?'rgba(0,201,107,0.25)':'rgba(255,59,59,0.2)')}>
+                    <div key={i} style={{background:isWinner?'rgba(22,163,74,0.06)':i===0?'rgba(0,201,107,0.05)':'rgba(255,59,59,0.04)',border:`1px solid ${isWinner?'rgba(22,163,74,0.3)':i===0?'rgba(0,201,107,0.25)':'rgba(255,59,59,0.2)'}`,borderRadius:12,padding:'16px 20px',display:'flex',alignItems:'center',gap:16,opacity:isLoser?0.45:1,cursor:locked?'default':'pointer',transition:'border-color 0.2s'}}
+                      onClick={()=>!locked&&openBet(opt.label,opt.pct,i)}
+                      onMouseOver={e=>!locked&&(e.currentTarget.style.borderColor=i===0?'rgba(0,201,107,0.6)':'rgba(255,59,59,0.5)')}
+                      onMouseOut={e=>!locked&&(e.currentTarget.style.borderColor=isWinner?'rgba(22,163,74,0.3)':i===0?'rgba(0,201,107,0.25)':'rgba(255,59,59,0.2)')}>
                       <div style={{flex:1}}>
                         <div style={{display:'flex',justifyContent:'space-between',marginBottom:8,alignItems:'center'}}>
                           <div style={{display:'flex',alignItems:'center',gap:8}}>
                             {isWinner&&<span style={{fontSize:16}}>🏆</span>}
                             <span style={{fontWeight:600,fontSize:15,color:isWinner?'var(--yes)':i===0?'var(--yes)':'var(--red)'}}>{opt.label}</span>
                           </div>
-                          <span style={{fontFamily:'var(--font-mono)',fontSize:15,fontWeight:500,color:isWinner?'var(--yes)':i===0?'var(--yes)':'var(--red)'}}>{opt.pct}%</span>
+                          <span style={{fontFamily:'var(--font-mono)',fontSize:15,fontWeight:500,color:isWinner?'var(--yes)':i===0?'var(--yes)':'var(--red)'}}>{displayPct}%</span>
                         </div>
                         <div style={{height:4,background:'var(--surface3)',borderRadius:2,overflow:'hidden'}}>
-                          <div style={{height:'100%',width:`${opt.pct}%`,background:isWinner?'var(--yes)':i===0?'var(--yes)':'var(--red)',borderRadius:2}}/>
+                          <div style={{height:'100%',width:`${displayPct}%`,background:isWinner?'var(--yes)':i===0?'var(--yes)':'var(--red)',borderRadius:2}}/>
                         </div>
                       </div>
-                      {!resolved&&(
+                      {!locked&&(
                         <button className={i===0?'btn-yes':'btn-danger'} style={{padding:'8px 16px',fontSize:12,flexShrink:0,whiteSpace:'nowrap'}}
                           onClick={e=>{e.stopPropagation();openBet(opt.label,opt.pct,i);}}>
                           Comprar
@@ -513,15 +553,29 @@ export default function MarketDetail() {
                   <div style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-secondary)'}}>{market._resolvedBy}</div>
                 </div>
                 <div style={{borderTop:'1px solid var(--border)',paddingTop:16}}>
-                  {(market.options||[]).map((opt,i)=>(
-                    <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid var(--border)',fontFamily:'var(--font-mono)',fontSize:12}}>
-                      <span style={{color:opt.label===market._winner?'var(--yes)':'var(--text-muted)'}}>{opt.label===market._winner?'✓':'✗'} {opt.label}</span>
-                      <span style={{color:'var(--text-secondary)'}}>{opt.pct}% pre-cierre</span>
-                    </div>
-                  ))}
+                  {(market.options||[]).map((opt,i)=>{
+                    const isWinner=opt.label===market._winner;
+                    return (
+                      <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid var(--border)',fontFamily:'var(--font-mono)',fontSize:12}}>
+                        <span style={{color:isWinner?'var(--yes)':'var(--text-muted)'}}>{isWinner?'✓':'✗'} {opt.label}</span>
+                        <span style={{color:isWinner?'var(--yes)':'var(--text-muted)',fontWeight:isWinner?600:400}}>{isWinner?100:0}%</span>
+                      </div>
+                    );
+                  })}
                 </div>
                 <button disabled style={{width:'100%',marginTop:20,padding:'12px 0',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)',letterSpacing:'0.08em',cursor:'not-allowed'}}>GANANCIAS YA LIQUIDADAS</button>
                 <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',textAlign:'center',marginTop:10}}>Liquidado on-chain · MXNB</p>
+              </div>
+            ):awaiting?(
+              <div style={{background:'var(--surface1)',border:'1px solid rgba(148,163,184,0.3)',borderRadius:16,padding:24}}>
+                <div style={{fontFamily:'var(--font-display)',fontSize:20,letterSpacing:'0.04em',color:'var(--text-primary)',marginBottom:8}}>MERCADO CERRADO</div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.08em',marginBottom:20}}>Cerró el {market.deadline}</div>
+                <div style={{background:'var(--surface2)',borderRadius:10,padding:16,marginBottom:20,textAlign:'center'}}>
+                  <div style={{fontSize:32,marginBottom:8}}>🔒</div>
+                  <div style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-secondary)',lineHeight:1.5}}>El resultado oficial se publicará automáticamente en los próximos minutos.</div>
+                </div>
+                <button disabled style={{width:'100%',padding:'12px 0',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)',letterSpacing:'0.08em',cursor:'not-allowed'}}>ESPERANDO RESULTADO</button>
+                <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',textAlign:'center',marginTop:10}}>Las apuestas ya están cerradas</p>
               </div>
             ):(
               <div style={{background:'var(--surface1)',border:'1px solid var(--border-active)',borderRadius:16,padding:24}}>

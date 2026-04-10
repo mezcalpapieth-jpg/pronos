@@ -44,12 +44,16 @@ export default function MarketCard({ market, history }) {
         <p className="mock-card-title">{market.title}</p>
 
         <div className="mock-card-opts">
-          {(market.options || []).map((opt, i) => (
-            <div key={i} className={`mock-card-opt ${i === 0 ? 'yes' : 'no'}`}>
-              <span className="mock-card-opt-label">{opt.label}</span>
-              <span className="mock-card-opt-pct">{opt.pct}%</span>
-            </div>
-          ))}
+          {(market.options || []).map((opt, i) => {
+            const isWinner = market._resolved && opt.label === market._winner;
+            const pct = market._resolved ? (isWinner ? 100 : 0) : opt.pct;
+            return (
+              <div key={i} className={`mock-card-opt ${i === 0 ? 'yes' : 'no'}`}>
+                <span className="mock-card-opt-label">{isWinner ? '🏆 ' : ''}{opt.label}</span>
+                <span className="mock-card-opt-pct">{pct}%</span>
+              </div>
+            );
+          })}
         </div>
 
         {/* Sparkline chart(s) — single for yes/no, multi for 3+ options */}
