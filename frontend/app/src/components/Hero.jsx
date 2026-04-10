@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import MARKETS from '../lib/markets.js';
 import { fetchResolutions } from '../lib/resolutions.js';
 import { fetchPriceHistory, extractSeries } from '../lib/priceHistory.js';
+import { isExpired } from '../lib/deadline.js';
 import Sparkline from './Sparkline.jsx';
 
 const OPTION_COLORS = ['var(--yes)', 'var(--red)', 'var(--gold)', '#8b5cf6'];
@@ -14,7 +15,7 @@ export default function Hero() {
   const { authenticated, login } = usePrivy();
   const navigate = useNavigate();
   const [featured, setFeatured] = useState(() =>
-    MARKETS.filter(m => m._source === 'polymarket' && m.trending && !m._resolved)
+    MARKETS.filter(m => m._source === 'polymarket' && m.trending && !m._resolved && !isExpired(m))
   );
   const [active, setActive] = useState(0);
   const [history, setHistory] = useState({});
@@ -25,7 +26,7 @@ export default function Hero() {
     fetchResolutions().then(resolutions => {
       const resolvedIds = new Set(resolutions.map(r => r.market_id));
       const filtered = MARKETS.filter(m =>
-        m._source === 'polymarket' && m.trending && !m._resolved && !resolvedIds.has(m.id)
+        m._source === 'polymarket' && m.trending && !m._resolved && !resolvedIds.has(m.id) && !isExpired(m)
       );
       if (filtered.length > 0) setFeatured(filtered);
     }).catch(() => {});

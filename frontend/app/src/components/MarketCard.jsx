@@ -27,6 +27,10 @@ export default function MarketCard({ market, history }) {
             <span className="mock-card-badge" style={{ background: 'rgba(184,144,10,0.1)', border: '1px solid rgba(184,144,10,0.25)', color: 'var(--gold)' }}>
               🏆 RESUELTO
             </span>
+          ) : market._awaitingResolution ? (
+            <span className="mock-card-badge" style={{ background: 'rgba(148,163,184,0.1)', border: '1px solid rgba(148,163,184,0.3)', color: 'var(--text-muted)' }}>
+              🔒 CERRADO
+            </span>
           ) : (
             <>
               {market.trending && <span className="mock-card-badge trending">🔥 TRENDING</span>}

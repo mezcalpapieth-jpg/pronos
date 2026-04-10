@@ -4,6 +4,7 @@ import { gmFetchMarkets } from '../lib/gamma.js';
 import { fetchResolutions } from '../lib/resolutions.js';
 import { fetchGeneratedMarkets } from '../lib/generatedMarkets.js';
 import { fetchPriceHistory, collectTokenIds } from '../lib/priceHistory.js';
+import { isExpired } from '../lib/deadline.js';
 import MARKETS from '../lib/markets.js';
 
 function applyResolutions(markets, resolutions) {
@@ -82,11 +83,19 @@ export default function MarketsGrid({ activeFilter }) {
     return () => { cancelled = true; };
   }, []);
 
-  // Filter logic — resolved markets only show in "Resueltos" tab
-  const filtered = markets.filter(m => {
-    if (activeFilter === 'resueltos') return !!m._resolved;
-    // Hide resolved from all other tabs
-    if (m._resolved) return false;
+  // Annotate expired-but-not-yet-resolved markets so MarketCard can render
+  // a distinct "CERRADO" badge while we wait for the auto-resolve cron.
+  const annotated = markets.map(m => {
+    if (m._resolved) return m;
+    return isExpired(m) ? { ...m, _awaitingResolution: true } : m;
+  });
+
+  // Filter logic — resolved + expired markets only show in "Resueltos" tab.
+  // The auto-resolve cron promotes _awaitingResolution → _resolved once a
+  // winner is known; until then the market is hidden from active tabs.
+  const filtered = annotated.filter(m => {
+    if (activeFilter === 'resueltos') return !!m._resolved || !!m._awaitingResolution;
+    if (m._resolved || m._awaitingResolution) return false;
     if (!activeFilter || activeFilter === 'todos') return true;
     if (activeFilter === 'trending') return m.trending;
     return m.category === activeFilter;

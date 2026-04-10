@@ -74,6 +74,7 @@ export function gmNormalize(pm) {
     _isNegRisk:       !!pm.negRisk,
     _image:           pm.image || null,
     _source:          'polymarket',
+    _endDate:         pm.endDate || null, // raw ISO so client can auto-expire
   };
 }
 
