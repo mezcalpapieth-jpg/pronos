@@ -3,7 +3,7 @@ import { neon } from '@neondatabase/serverless';
 const sql = neon(process.env.DATABASE_URL);
 
 // Admin usernames — must match /api/user
-const ADMIN_USERNAMES = (process.env.ADMIN_USERNAMES || 'mezcal,frmm')
+const ADMIN_USERNAMES = (process.env.ADMIN_USERNAMES || 'mezcal,frmm,alex')
   .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 
 export default async function handler(req, res) {

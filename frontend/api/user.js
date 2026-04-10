@@ -5,7 +5,7 @@ const sqlRead  = neon(process.env.DATABASE_READ_URL  || process.env.DATABASE_URL
 const sqlWrite = neon(process.env.DATABASE_WRITE_URL || process.env.DATABASE_URL);
 
 // Admin usernames — server-side only, never sent to client bundle
-const ADMIN_USERNAMES = (process.env.ADMIN_USERNAMES || 'mezcal,frmm')
+const ADMIN_USERNAMES = (process.env.ADMIN_USERNAMES || 'mezcal,frmm,alex')
   .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 
 export default async function handler(req, res) {
