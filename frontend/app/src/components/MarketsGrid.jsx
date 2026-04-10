@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import MarketCard from './MarketCard.jsx';
 import { gmFetchMarkets } from '../lib/gamma.js';
 import { fetchResolutions } from '../lib/resolutions.js';
+import { fetchGeneratedMarkets } from '../lib/generatedMarkets.js';
 import MARKETS from '../lib/markets.js';
 
 function applyResolutions(markets, resolutions) {
@@ -34,9 +35,10 @@ export default function MarketsGrid({ activeFilter }) {
       setLoading(true);
       setError(null);
       try {
-        // Fetch live markets and resolutions in parallel
-        const [live, resolutions] = await Promise.all([
+        // Fetch live markets, AI-generated markets, and resolutions in parallel
+        const [live, generated, resolutions] = await Promise.all([
           gmFetchMarkets({ limit: 60 }).catch(() => null),
+          fetchGeneratedMarkets('approved').catch(() => []),
           fetchResolutions().catch(() => []),
         ]);
 
@@ -46,9 +48,9 @@ export default function MarketsGrid({ activeFilter }) {
         if (live) {
           const liveIds = new Set(live.map(m => m.id));
           const local = MARKETS.filter(m => !liveIds.has(m.id));
-          allMarkets = [...live, ...local];
+          allMarkets = [...live, ...generated, ...local];
         } else {
-          allMarkets = MARKETS;
+          allMarkets = [...generated, ...MARKETS];
           setError('Usando datos locales — API no disponible.');
         }
 

@@ -112,6 +112,32 @@ const MIGRATIONS = [
     created_at      TIMESTAMPTZ DEFAULT NOW()
   )`,
   `CREATE INDEX IF NOT EXISTS idx_waitlist_email ON waitlist(email)`,
+
+  // AI-generated markets (daily pipeline)
+  // status: pending | approved | rejected | live
+  `CREATE TABLE IF NOT EXISTS generated_markets (
+    id              SERIAL PRIMARY KEY,
+    slug            TEXT NOT NULL UNIQUE,
+    title           TEXT NOT NULL,
+    category        TEXT NOT NULL,
+    category_label  TEXT,
+    icon            TEXT,
+    deadline        TEXT,
+    deadline_date   DATE,
+    options         JSONB NOT NULL,
+    volume          TEXT,
+    region          TEXT,
+    reasoning       TEXT,
+    source_headlines JSONB,
+    model           TEXT,
+    raw_response    JSONB,
+    status          TEXT NOT NULL DEFAULT 'pending',
+    generated_at    TIMESTAMPTZ DEFAULT NOW(),
+    reviewed_at     TIMESTAMPTZ,
+    reviewed_by     TEXT
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_gen_markets_status ON generated_markets(status)`,
+  `CREATE INDEX IF NOT EXISTS idx_gen_markets_region ON generated_markets(region)`,
 ];
 
 export default async function handler(req, res) {

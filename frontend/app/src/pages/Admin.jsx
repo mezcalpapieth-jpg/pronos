@@ -3,6 +3,7 @@ import { usePrivy, useWallets } from '@privy-io/react-auth';
 import Nav from '../components/Nav.jsx';
 import { getProtocolMode, setProtocolMode, isAdmin, getContracts } from '../lib/protocol.js';
 import { resolveMarket, fetchResolutions } from '../lib/resolutions.js';
+import { fetchGeneratedMarkets, updateGeneratedMarket } from '../lib/generatedMarkets.js';
 import {
   getSafeAddresses, setSafeAddresses,
   createSafe, proposeTransaction, confirmTransaction, executeTransaction,
@@ -663,6 +664,211 @@ function SafeManager({ mode }) {
   );
 }
 
+// ── Generated Markets Review ───────────────────────────────────
+function GeneratedMarketsReview({ privyId }) {
+  const [tab, setTab] = useState('pending');
+  const [markets, setMarkets] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+
+  async function load() {
+    setLoading(true);
+    setError(null);
+    try {
+      const rows = await fetchGeneratedMarkets(tab, tab === 'pending' ? privyId : undefined);
+      setMarkets(rows);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [tab]);
+
+  async function act(id, action) {
+    setBusyId(id);
+    try {
+      await updateGeneratedMarket({ privyId, id, action });
+      setMarkets(prev => prev.filter(m => m._dbId !== id));
+    } catch (e) {
+      alert('Error: ' + e.message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function runCronNow() {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/cron/generate-markets');
+      const data = await res.json();
+      if (data.ok) {
+        alert(`Pipeline completado: ${data.inserted} nuevos mercados generados.`);
+        load();
+      } else {
+        alert(data.reason || 'Pipeline no pudo correr. Revisa ANTHROPIC_API_KEY.');
+      }
+    } catch (e) {
+      alert('Error: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const tabs = [
+    { id: 'pending',  label: 'Pendientes' },
+    { id: 'approved', label: 'Aprobados' },
+    { id: 'rejected', label: 'Rechazados' },
+  ];
+
+  return (
+    <div className="admin-card" style={{ gridColumn: '1 / -1' }}>
+      <div className="admin-card-header">
+        <h3>Mercados generados por IA</h3>
+        <button
+          onClick={runCronNow}
+          disabled={loading}
+          style={{
+            padding: '6px 12px', fontSize: 11, fontFamily: 'var(--font-mono)', letterSpacing: '0.04em',
+            background: 'var(--surface2)', border: '1px solid var(--green)', color: 'var(--green)',
+            borderRadius: 6, cursor: loading ? 'wait' : 'pointer',
+          }}
+        >
+          ▶ Ejecutar ahora
+        </button>
+      </div>
+      <p className="admin-desc">
+        Pipeline diario: RSS de noticias → Claude → mercados sugeridos. Requiere <code>ANTHROPIC_API_KEY</code> en Vercel.
+      </p>
+
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16, borderBottom: '1px solid var(--border)' }}>
+        {tabs.map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            style={{
+              padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer',
+              fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
+              color: tab === t.id ? 'var(--text-primary)' : 'var(--text-muted)',
+              borderBottom: tab === t.id ? '2px solid var(--green)' : '2px solid transparent',
+              marginBottom: -1,
+            }}
+          >
+            {t.label.toUpperCase()}
+          </button>
+        ))}
+      </div>
+
+      {loading && <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>Cargando…</p>}
+      {error && <p style={{ color: 'var(--red)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>Error: {error}</p>}
+      {!loading && markets.length === 0 && (
+        <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 12, padding: '24px 0', textAlign: 'center' }}>
+          No hay mercados {tab === 'pending' ? 'pendientes de revisión' : tab === 'approved' ? 'aprobados' : 'rechazados'}.
+        </p>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {markets.map(m => (
+          <div
+            key={m._dbId}
+            style={{
+              border: '1px solid var(--border)', borderRadius: 10, padding: 16,
+              background: 'var(--surface1)', display: 'flex', flexDirection: 'column', gap: 10,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+              <span style={{ fontSize: 24 }}>{m.icon}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.1em', color: 'var(--text-muted)', marginBottom: 4 }}>
+                  {m.categoryLabel} · {(m._region || '').toUpperCase()} · {new Date(m._generatedAt).toLocaleDateString('es-MX')}
+                </div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>
+                  {m.title}
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
+                  Cierra: {m.deadline || 'sin fecha'}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {(m.options || []).map((opt, i) => (
+                <div key={i} style={{
+                  padding: '6px 10px', borderRadius: 6,
+                  background: i === 0 ? 'rgba(0,201,107,0.1)' : 'rgba(255,69,69,0.08)',
+                  border: `1px solid ${i === 0 ? 'rgba(0,201,107,0.3)' : 'rgba(255,69,69,0.25)'}`,
+                  fontFamily: 'var(--font-mono)', fontSize: 11,
+                }}>
+                  <span style={{ color: i === 0 ? 'var(--yes)' : 'var(--red)' }}>{opt.label}: {opt.pct}%</span>
+                </div>
+              ))}
+            </div>
+
+            {m._reasoning && (
+              <div style={{
+                padding: '10px 12px', borderRadius: 6, background: 'var(--surface2)',
+                fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5,
+                borderLeft: '2px solid var(--green)',
+              }}>
+                <strong style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em' }}>RAZONAMIENTO · </strong>
+                {m._reasoning}
+              </div>
+            )}
+
+            {tab === 'pending' && (
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => act(m._dbId, 'reject')}
+                  disabled={busyId === m._dbId}
+                  className="btn-danger"
+                  style={{ padding: '8px 14px', fontSize: 12 }}
+                >
+                  Rechazar
+                </button>
+                <button
+                  onClick={() => act(m._dbId, 'approve')}
+                  disabled={busyId === m._dbId}
+                  className="btn-yes"
+                  style={{ padding: '8px 14px', fontSize: 12 }}
+                >
+                  Aprobar
+                </button>
+              </div>
+            )}
+            {tab === 'approved' && (
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => act(m._dbId, 'reject')}
+                  disabled={busyId === m._dbId}
+                  className="btn-ghost"
+                  style={{ padding: '8px 14px', fontSize: 12 }}
+                >
+                  Revertir
+                </button>
+              </div>
+            )}
+            {tab === 'rejected' && (
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => act(m._dbId, 'approve')}
+                  disabled={busyId === m._dbId}
+                  className="btn-ghost"
+                  style={{ padding: '8px 14px', fontSize: 12 }}
+                >
+                  Restaurar
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Admin({ username, userIsAdmin, loading }) {
   const { authenticated, ready, user } = usePrivy();
   const [mode, setMode] = useState(getProtocolMode);
@@ -727,6 +933,7 @@ export default function Admin({ username, userIsAdmin, loading }) {
           <ContractInfo mode={mode} />
           <CreateMarketForm mode={mode} />
           <MarketsList mode={mode} privyId={privyId} />
+          <GeneratedMarketsReview privyId={privyId} />
         </div>
       </div>
     </>

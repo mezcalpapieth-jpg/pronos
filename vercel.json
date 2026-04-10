@@ -4,6 +4,10 @@
     {
       "path": "/api/indexer",
       "schedule": "*/1 * * * *"
+    },
+    {
+      "path": "/api/cron/generate-markets",
+      "schedule": "0 13 * * *"
     }
   ]
 }
