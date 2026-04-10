@@ -1,8 +1,9 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sparkline from './Sparkline.jsx';
+import { extractSeries } from '../lib/priceHistory.js';
 
-export default function MarketCard({ market }) {
+export default function MarketCard({ market, history }) {
   const navigate = useNavigate();
 
   const handleClick = () => {
@@ -57,6 +58,7 @@ export default function MarketCard({ market }) {
               fill={true}
               showValue={true}
               valueWidth={40}
+              data={extractSeries(market, history, 0)}
               targetPct={market.options[0]?.pct ?? 50}
               seed={`${market.id}-${market.options[0]?.label}`}
             />
@@ -75,6 +77,7 @@ export default function MarketCard({ market }) {
                     labelWidth={54}
                     showValue={true}
                     valueWidth={38}
+                    data={extractSeries(market, history, i)}
                     targetPct={opt.pct}
                     seed={`${market.id}-${opt.label}`}
                   />

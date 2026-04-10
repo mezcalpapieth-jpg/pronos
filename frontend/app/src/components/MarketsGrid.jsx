@@ -3,6 +3,7 @@ import MarketCard from './MarketCard.jsx';
 import { gmFetchMarkets } from '../lib/gamma.js';
 import { fetchResolutions } from '../lib/resolutions.js';
 import { fetchGeneratedMarkets } from '../lib/generatedMarkets.js';
+import { fetchPriceHistory, collectTokenIds } from '../lib/priceHistory.js';
 import MARKETS from '../lib/markets.js';
 
 function applyResolutions(markets, resolutions) {
@@ -25,6 +26,7 @@ function applyResolutions(markets, resolutions) {
 
 export default function MarketsGrid({ activeFilter }) {
   const [markets, setMarkets] = useState([]);
+  const [history, setHistory] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -55,15 +57,24 @@ export default function MarketsGrid({ activeFilter }) {
         }
 
         // Apply resolution data from our DB
-        setMarkets(applyResolutions(allMarkets, resolutions));
+        const withResolutions = applyResolutions(allMarkets, resolutions);
+        setMarkets(withResolutions);
+        setLoading(false);
+
+        // Then batch-fetch real price history for all markets with clobTokenIds
+        // (runs after initial render so the grid shows instantly with mock data)
+        const tokenIds = collectTokenIds(withResolutions);
+        if (tokenIds.length > 0) {
+          const hist = await fetchPriceHistory(tokenIds, { interval: '1w', fidelity: 60 });
+          if (!cancelled) setHistory(hist);
+        }
       } catch (err) {
         console.warn('Error loading markets:', err.message);
         if (!cancelled) {
           setMarkets(MARKETS);
           setError('Usando datos locales — API no disponible.');
+          setLoading(false);
         }
-      } finally {
-        if (!cancelled) setLoading(false);
       }
     }
 
@@ -103,7 +114,7 @@ export default function MarketsGrid({ activeFilter }) {
       ) : (
         <div className="markets-grid">
           {filtered.map(market => (
-            <MarketCard key={market.id} market={market} />
+            <MarketCard key={market.id} market={market} history={history} />
           ))}
         </div>
       )}

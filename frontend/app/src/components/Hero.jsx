@@ -3,6 +3,7 @@ import { usePrivy } from '@privy-io/react-auth';
 import { useNavigate } from 'react-router-dom';
 import MARKETS from '../lib/markets.js';
 import { fetchResolutions } from '../lib/resolutions.js';
+import { fetchPriceHistory, extractSeries } from '../lib/priceHistory.js';
 import Sparkline from './Sparkline.jsx';
 
 const OPTION_COLORS = ['var(--yes)', 'var(--red)', 'var(--gold)', '#8b5cf6'];
@@ -16,6 +17,7 @@ export default function Hero() {
     MARKETS.filter(m => m._source === 'polymarket' && m.trending && !m._resolved)
   );
   const [active, setActive] = useState(0);
+  const [history, setHistory] = useState({});
   const timerRef = useRef(null);
 
   // Load resolutions and filter out resolved markets
@@ -28,6 +30,20 @@ export default function Hero() {
       if (filtered.length > 0) setFeatured(filtered);
     }).catch(() => {});
   }, []);
+
+  // Batch-fetch real CLOB price history for every featured market's clobTokenIds
+  useEffect(() => {
+    let cancelled = false;
+    const ids = [];
+    for (const m of featured) {
+      if (Array.isArray(m?._clobTokenIds)) ids.push(...m._clobTokenIds.filter(Boolean));
+    }
+    if (ids.length === 0) return;
+    fetchPriceHistory(Array.from(new Set(ids)), { interval: '1w', fidelity: 60 })
+      .then(hist => { if (!cancelled) setHistory(hist); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [featured]);
 
   // Auto-rotate
   const resetTimer = useCallback(() => {
@@ -138,6 +154,7 @@ export default function Hero() {
                   fill={true}
                   showValue={true}
                   valueWidth={50}
+                  data={extractSeries(market, history, 0)}
                   targetPct={market.options[0]?.pct ?? 50}
                   seed={`${market.id}-${market.options[0]?.label}`}
                 />
@@ -153,6 +170,7 @@ export default function Hero() {
                     labelWidth={60}
                     showValue={true}
                     valueWidth={42}
+                    data={extractSeries(market, history, i)}
                     targetPct={opt.pct}
                     seed={`${market.id}-${opt.label}`}
                   />

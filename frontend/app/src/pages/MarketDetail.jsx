@@ -4,6 +4,7 @@ import Nav from '../components/Nav.jsx';
 import BetModal from '../components/BetModal.jsx';
 import { gmFetchBySlug } from '../lib/gamma.js';
 import { fetchResolutions } from '../lib/resolutions.js';
+import { fetchPriceHistory, extractSeries } from '../lib/priceHistory.js';
 import Sparkline from '../components/Sparkline.jsx';
 import MARKETS from '../lib/markets.js';
 import { generateMockData } from '../lib/mockTabData.js';
@@ -304,6 +305,7 @@ export default function MarketDetail() {
   const [searchParams]=useSearchParams(), navigate=useNavigate();
   const marketId=searchParams.get('id');
   const [market,setMarket]=useState(null);
+  const [history,setHistory]=useState({});
   const [loading,setLoading]=useState(true);
   const [betModal,setBetModal]=useState({open:false,outcome:'',pct:0,clobTokenId:null,isNegRisk:false});
   const [isMobile,setIsMobile]=useState(()=>window.innerWidth<768);
@@ -331,9 +333,15 @@ export default function MarketDetail() {
           }
         }
         setMarket(m);
+        setLoading(false);
+        // Then batch-fetch real CLOB price history so the chart renders real data
+        const ids = m?._clobTokenIds;
+        if(Array.isArray(ids)&&ids.length>0){
+          const hist=await fetchPriceHistory(ids,{interval:'1w',fidelity:60});
+          if(!cancelled) setHistory(hist);
+        }
       }
-      catch(_){if(!cancelled)setMarket(MARKETS.find(m=>m.id===marketId)||null);}
-      finally{if(!cancelled)setLoading(false);}
+      catch(_){if(!cancelled){setMarket(MARKETS.find(m=>m.id===marketId)||null);setLoading(false);}}
     }
     load();
     return()=>{cancelled=true;};
@@ -419,6 +427,7 @@ export default function MarketDetail() {
                     fill={true}
                     showValue={true}
                     valueWidth={60}
+                    data={extractSeries(market,history,0)}
                     targetPct={market.options?.[0]?.pct??50}
                     seed={`${market.id}-${market.options?.[0]?.label}`}
                   />
@@ -437,6 +446,7 @@ export default function MarketDetail() {
                           labelWidth={isMobile?60:90}
                           showValue={true}
                           valueWidth={52}
+                          data={extractSeries(market,history,i)}
                           targetPct={opt.pct}
                           seed={`${market.id}-${opt.label}`}
                         />
