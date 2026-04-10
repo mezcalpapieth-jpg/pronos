@@ -131,38 +131,31 @@ export default function Hero() {
             {/* Chart(s) — single for yes/no, multi for 3+ options */}
             <div className="hfc-chart">
               {(market.options || []).length <= 2 ? (
-                /* Yes/No: single full-width chart */
                 <Sparkline
-                  width={400}
-                  height={80}
+                  height={90}
                   color="var(--yes)"
-                  strokeWidth={2}
+                  strokeWidth={2.2}
                   fill={true}
+                  showValue={true}
+                  valueWidth={50}
                   targetPct={market.options[0]?.pct ?? 50}
                   seed={`${market.id}-${market.options[0]?.label}`}
-                  style={{ width: '100%' }}
                 />
               ) : (
-                /* 3+ options: one line per option */
                 (market.options || []).map((opt, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{
-                      fontFamily: 'var(--font-mono)', fontSize: 9, width: 48, textAlign: 'right',
-                      color: OPTION_COLORS[i] || 'var(--text-muted)', flexShrink: 0
-                    }}>
-                      {opt.label.length > 8 ? opt.label.slice(0, 7) + '…' : opt.label}
-                    </span>
-                    <Sparkline
-                      width={340}
-                      height={30}
-                      color={OPTION_COLORS[i] || 'var(--text-muted)'}
-                      strokeWidth={1.5}
-                      fill={i === 0}
-                      targetPct={opt.pct}
-                      seed={`${market.id}-${opt.label}`}
-                      style={{ width: '100%' }}
-                    />
-                  </div>
+                  <Sparkline
+                    key={i}
+                    height={32}
+                    color={OPTION_COLORS[i] || 'var(--text-muted)'}
+                    strokeWidth={1.8}
+                    fill={i === 0}
+                    label={opt.label.length > 9 ? opt.label.slice(0, 8) + '…' : opt.label}
+                    labelWidth={60}
+                    showValue={true}
+                    valueWidth={42}
+                    targetPct={opt.pct}
+                    seed={`${market.id}-${opt.label}`}
+                  />
                 ))
               )}
             </div>

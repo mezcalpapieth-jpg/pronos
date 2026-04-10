@@ -48,37 +48,36 @@ export default function MarketCard({ market }) {
         </div>
 
         {/* Sparkline chart(s) — single for yes/no, multi for 3+ options */}
-        <div style={{ margin: '6px 0 2px', opacity: 0.8 }}>
+        <div style={{ margin: '6px 0 2px' }}>
           {(market.options || []).length <= 2 ? (
             <Sparkline
-              width={280}
-              height={40}
+              height={48}
               color="var(--yes)"
-              strokeWidth={1.2}
+              strokeWidth={1.8}
               fill={true}
+              showValue={true}
+              valueWidth={40}
               targetPct={market.options[0]?.pct ?? 50}
               seed={`${market.id}-${market.options[0]?.label}`}
-              style={{ width: '100%' }}
             />
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               {(market.options || []).map((opt, i) => {
                 const colors = ['var(--yes)', 'var(--red)', 'var(--gold)', '#8b5cf6'];
                 return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: colors[i] || 'var(--text-muted)', width: 28, textAlign: 'right', flexShrink: 0 }}>
-                      {opt.pct}%
-                    </span>
-                    <Sparkline
-                      width={240}
-                      height={24}
-                      color={colors[i] || 'var(--text-muted)'}
-                      strokeWidth={1.2}
-                      fill={i === 0}
-                      targetPct={opt.pct}
-                      seed={`${market.id}-${opt.label}`}
-                    />
-                  </div>
+                  <Sparkline
+                    key={i}
+                    height={28}
+                    color={colors[i] || 'var(--text-muted)'}
+                    strokeWidth={1.5}
+                    fill={i === 0}
+                    label={opt.label.length > 8 ? opt.label.slice(0, 7) + '…' : opt.label}
+                    labelWidth={54}
+                    showValue={true}
+                    valueWidth={38}
+                    targetPct={opt.pct}
+                    seed={`${market.id}-${opt.label}`}
+                  />
                 );
               })}
             </div>
