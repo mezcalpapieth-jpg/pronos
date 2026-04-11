@@ -80,6 +80,25 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── GET /api/clob?action=book&token_id=… ─────────────────────────────────────
+  // Returns the Polymarket CLOB order book for a token so the client can
+  // estimate slippage before placing a bet. Short edge cache to avoid
+  // hammering the CLOB when the user is tweaking the amount field.
+  if (action === 'book' && req.method === 'GET') {
+    const tokenId = req.query.token_id || req.query.tokenId;
+    if (!tokenId) return res.status(400).json({ error: 'token_id required' });
+    try {
+      const r = await fetch(`${CLOB_BASE}/book?token_id=${encodeURIComponent(tokenId)}`, {
+        headers: { 'Accept': 'application/json', 'User-Agent': 'pronos.io/1.0' },
+      });
+      const data = await r.json();
+      res.setHeader('Cache-Control', 's-maxage=5, stale-while-revalidate=15');
+      return res.status(r.status).json(data);
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   // ── GET /api/clob?action=positions&address=0x... ──────────────────────────────
   if (action === 'positions' && req.method === 'GET') {
     const { address } = req.query;

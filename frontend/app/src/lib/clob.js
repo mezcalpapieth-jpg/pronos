@@ -181,3 +181,86 @@ export async function getClobPositions(address) {
   if (!res.ok) throw new Error('Failed to fetch positions');
   return res.json();
 }
+
+// ─── ORDER BOOK + SLIPPAGE SIMULATION ─────────────────────────────────────────
+// Used by BetModal to preview the post-trade price so users know how much the
+// price will drift before they submit a market order.
+
+/**
+ * Fetch the raw CLOB order book for a token.
+ * Returns `{ asks: [{price, size}], bids: [{price, size}] }` with numeric
+ * prices and sizes, sorted so position 0 is always the BEST level (lowest
+ * ask, highest bid) — Polymarket's raw payload sorts descending, so we
+ * normalize here.
+ */
+export async function fetchOrderBook(tokenId) {
+  if (!tokenId) return null;
+  const res = await fetch(`/api/clob?action=book&token_id=${encodeURIComponent(tokenId)}`);
+  if (!res.ok) return null;
+  const data = await res.json();
+  const parseLevels = (arr) => (Array.isArray(arr) ? arr : [])
+    .map(l => ({ price: parseFloat(l.price), size: parseFloat(l.size) }))
+    .filter(l => Number.isFinite(l.price) && Number.isFinite(l.size) && l.size > 0);
+  const asks = parseLevels(data.asks).sort((a, b) => a.price - b.price); // best (lowest) first
+  const bids = parseLevels(data.bids).sort((a, b) => b.price - a.price); // best (highest) first
+  return { asks, bids };
+}
+
+/**
+ * Simulate a market BUY against an order book.
+ *
+ * Walks the ask ladder from best to worst, consuming depth with the user's
+ * `usdcAmount`. Returns:
+ *   - shares:        total outcome tokens received
+ *   - avgPrice:      volume-weighted average execution price (0-1)
+ *   - lastFillPrice: price of the last consumed level — the new post-trade
+ *                    best ask, i.e. what the market moves to
+ *   - startPrice:    best ask before the trade (0-1)
+ *   - filled:        usdc actually used (may be < amount if book is too thin)
+ *   - remaining:     usdc left unfilled (0 when book has enough depth)
+ *   - slippagePct:   (lastFillPrice - startPrice) / startPrice × 100
+ *
+ * Returns null when the book is empty.
+ */
+export function simulateMarketBuy(book, usdcAmount) {
+  if (!book || !Array.isArray(book.asks) || book.asks.length === 0) return null;
+  const asks = book.asks;
+  const startPrice = asks[0].price;
+  let remaining = usdcAmount;
+  let shares = 0;
+  let spent = 0;
+  let lastFillPrice = startPrice;
+
+  for (const level of asks) {
+    if (remaining <= 0) break;
+    const levelCost = level.price * level.size; // USDC needed to clear this level
+    if (remaining >= levelCost) {
+      shares += level.size;
+      spent += levelCost;
+      remaining -= levelCost;
+      lastFillPrice = level.price;
+    } else {
+      const partialShares = remaining / level.price;
+      shares += partialShares;
+      spent += remaining;
+      lastFillPrice = level.price;
+      remaining = 0;
+      break;
+    }
+  }
+
+  const avgPrice = shares > 0 ? spent / shares : startPrice;
+  const slippagePct = startPrice > 0
+    ? ((lastFillPrice - startPrice) / startPrice) * 100
+    : 0;
+
+  return {
+    shares,
+    avgPrice,
+    lastFillPrice,
+    startPrice,
+    filled: spent,
+    remaining,
+    slippagePct,
+  };
+}

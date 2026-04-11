@@ -7,6 +7,8 @@ import {
   approveUsdc,
   deriveClobApiKey,
   placeClobOrder,
+  fetchOrderBook,
+  simulateMarketBuy,
   CTF_EXCHANGE,
   NEG_RISK_ADAPTER,
   POLYGON_CHAIN_ID,
@@ -34,6 +36,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
   const [statusMsg, setStatusMsg] = useState('');
   const [orderId, setOrderId] = useState(null);
   const [balance, setBalance] = useState(null);
+  const [book, setBook]       = useState(null);
 
   const numAmount  = parseFloat(amount) || 0;
   // Dynamic fee: fee% = 5 × (1 - P) where P is probability as decimal
@@ -43,6 +46,14 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
   const payout     = outcomePct > 0 && numAmount > 0 ? (afterFee / (outcomePct / 100)).toFixed(2) : '—';
   const profit     = outcomePct > 0 && numAmount > 0 ? (afterFee / (outcomePct / 100) - numAmount).toFixed(2) : '—';
   const isLoading  = [STEPS.CHECKING, STEPS.APPROVING, STEPS.SIGNING, STEPS.PLACING].includes(step);
+
+  // Slippage simulation: walk the ask ladder with the user's post-fee MXNB.
+  // Returns null when the book hasn't loaded or the user hasn't typed an amount.
+  const sim = (book && afterFee > 0) ? simulateMarketBuy(book, afterFee) : null;
+  const slippagePct    = sim ? sim.slippagePct : 0;
+  const postTradePct   = sim ? Math.round(sim.lastFillPrice * 100) : null;
+  const highSlippage   = slippagePct >= 5;
+  const partialFill    = sim && sim.remaining > 0.01;
 
   // Load MXNB balance when modal opens
   useEffect(() => {
@@ -58,6 +69,21 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
       } catch (_) {}
     }).catch(() => {});
   }, [open, authenticated, wallets]);
+
+  // Fetch order book when modal opens so we can preview slippage in real time.
+  // Refresh every 15s while the modal stays open to keep the simulation close
+  // to live market depth without hammering the CLOB.
+  useEffect(() => {
+    if (!open || !clobTokenId) { setBook(null); return; }
+    let alive = true;
+    const load = async () => {
+      const b = await fetchOrderBook(clobTokenId);
+      if (alive) setBook(b);
+    };
+    load();
+    const iv = setInterval(load, 15000);
+    return () => { alive = false; clearInterval(iv); };
+  }, [open, clobTokenId]);
 
   if (!open) return null;
 
@@ -265,6 +291,57 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
               <span>Probabilidad implícita</span>
               <span>{outcomePct}%</span>
             </div>
+            {sim && postTradePct !== null && (
+              <div className="bet-payout-row">
+                <span>Precio tras tu compra</span>
+                <span style={{ color: highSlippage ? 'var(--red)' : 'var(--text-secondary)' }}>
+                  {postTradePct}%
+                </span>
+              </div>
+            )}
+            {sim && (
+              <div className="bet-payout-row">
+                <span>Slippage</span>
+                <span style={{
+                  color: highSlippage ? 'var(--red)' : 'var(--text-secondary)',
+                  fontWeight: highSlippage ? 700 : 400,
+                }}>
+                  {slippagePct >= 0 ? '+' : ''}{slippagePct.toFixed(2)}%
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* High slippage warning — volume too low, price will drift > 5% */}
+        {numAmount > 0 && highSlippage && (
+          <div style={{
+            padding: '10px 14px', borderRadius: 8, marginBottom: 16,
+            background: 'rgba(255,69,69,0.08)',
+            border: '1px solid rgba(255,69,69,0.3)',
+            color: 'var(--red)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            lineHeight: 1.5,
+          }}>
+            ⚠️ <strong>Volumen bajo:</strong> tu compra mueve el precio {slippagePct.toFixed(1)}%
+            (de {Math.round(sim.startPrice * 100)}% a {postTradePct}%). Considera reducir el monto.
+          </div>
+        )}
+
+        {/* Partial fill warning — book doesn't have enough depth */}
+        {numAmount > 0 && partialFill && (
+          <div style={{
+            padding: '10px 14px', borderRadius: 8, marginBottom: 16,
+            background: 'rgba(255,165,0,0.08)',
+            border: '1px solid rgba(255,165,0,0.3)',
+            color: 'var(--gold)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            lineHeight: 1.5,
+          }}>
+            ⚠️ <strong>Liquidez insuficiente:</strong> solo ${sim.filled.toFixed(2)} MXNB pueden
+            ejecutarse al precio actual. La orden podría fallar.
           </div>
         )}
 
