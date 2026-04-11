@@ -63,11 +63,33 @@ export default function MarketsGrid({ activeFilter }) {
         setLoading(false);
 
         // Then batch-fetch real price history for all markets with clobTokenIds
-        // (runs after initial render so the grid shows instantly with mock data)
+        // (runs after initial render so the grid shows instantly with mock data).
+        // The last point of each token's series is also the current live
+        // probability — use it to refresh options[i].pct on hardcoded markets
+        // whose baked-in percentages would otherwise stay stale.
         const tokenIds = collectTokenIds(withResolutions);
         if (tokenIds.length > 0) {
           const hist = await fetchPriceHistory(tokenIds, { interval: '1w', fidelity: 60 });
-          if (!cancelled) setHistory(hist);
+          if (cancelled) return;
+          setHistory(hist);
+
+          const refreshed = withResolutions.map(m => {
+            const ids = m?._clobTokenIds;
+            if (!Array.isArray(ids) || ids.length === 0) return m;
+            if (!Array.isArray(m.options)) return m;
+            let changed = false;
+            const nextOpts = m.options.map((opt, i) => {
+              const tid = ids[i];
+              const pts = tid && hist[tid];
+              if (!Array.isArray(pts) || pts.length === 0) return opt;
+              const livePct = Math.round(Number(pts[pts.length - 1].p));
+              if (!Number.isFinite(livePct) || livePct === opt.pct) return opt;
+              changed = true;
+              return { ...opt, pct: livePct };
+            });
+            return changed ? { ...m, options: nextOpts } : m;
+          });
+          setMarkets(refreshed);
         }
       } catch (err) {
         console.warn('Error loading markets:', err.message);

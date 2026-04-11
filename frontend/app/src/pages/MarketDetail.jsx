@@ -356,11 +356,34 @@ export default function MarketDetail() {
         }
         setMarket(m);
         setLoading(false);
-        // Then batch-fetch real CLOB price history so the chart renders real data
+        // Then batch-fetch real CLOB price history so the chart renders real
+        // data. The last point of each token's series is also the *current*
+        // live probability, so we use it to refresh market.options[i].pct —
+        // otherwise hardcoded markets (whose local id isn't a Polymarket
+        // slug, so gmFetchBySlug returned null) would render live sparklines
+        // with stale button percentages.
         const ids = m?._clobTokenIds;
         if(Array.isArray(ids)&&ids.length>0){
           const hist=await fetchPriceHistory(ids,{interval:'1w',fidelity:60});
-          if(!cancelled) setHistory(hist);
+          if(cancelled) return;
+          setHistory(hist);
+
+          // Refresh option pcts from the latest history point
+          if (m && Array.isArray(m.options)) {
+            const updated = m.options.map((opt, i) => {
+              const tid = ids[i];
+              const pts = tid && hist[tid];
+              if (!Array.isArray(pts) || pts.length === 0) return opt;
+              const last = pts[pts.length - 1];
+              const livePct = Math.round(Number(last.p));
+              if (!Number.isFinite(livePct)) return opt;
+              return { ...opt, pct: livePct };
+            });
+            // Only re-set when something actually changed to avoid a
+            // redundant render.
+            const changed = updated.some((o, i) => o.pct !== m.options[i].pct);
+            if (changed) setMarket({ ...m, options: updated });
+          }
         }
       }
       catch(_){if(!cancelled){setMarket(MARKETS.find(m=>m.id===marketId)||null);setLoading(false);}}
