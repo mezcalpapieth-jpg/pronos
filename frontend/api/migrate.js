@@ -149,9 +149,14 @@ const MIGRATIONS = [
     title_es      TEXT,
     options_es    JSONB,
     approved_at   TIMESTAMPTZ DEFAULT NOW(),
-    approved_by   TEXT
+    approved_by   TEXT,
+    status        TEXT NOT NULL DEFAULT 'approved'
   )`,
+  // Status column was added in a follow-up; ensure it exists for installs
+  // that already created the table without it.
+  `ALTER TABLE polymarket_approved ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'approved'`,
   `CREATE INDEX IF NOT EXISTS idx_polymarket_approved_at ON polymarket_approved(approved_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_polymarket_approved_status ON polymarket_approved(status)`,
 
   // Case-insensitive usernames: normalize existing rows and enforce uniqueness on LOWER(username)
   `UPDATE users SET username = LOWER(username) WHERE username IS NOT NULL AND username <> LOWER(username)`,

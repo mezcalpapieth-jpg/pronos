@@ -12,12 +12,27 @@ function isLocal() {
 const base = isLocal() ? 'https://pronos.io' : '';
 
 /**
- * Fetch the entire approval list. Returns rows shaped:
- *   { slug, title_es, options_es, approved_at, approved_by }
+ * Fetch only approved polymarket rows (default — used by the public site).
+ * Rows shape: { slug, title_es, options_es, approved_at, approved_by, status }
  */
 export async function fetchApprovedPolymarket() {
   try {
     const res = await fetch(`${base}${API}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.approved || [];
+  } catch (_) {
+    return [];
+  }
+}
+
+/**
+ * Fetch every decision row (approved + rejected) — used by the admin so it
+ * can hide rejected markets from the queue without re-fetching them.
+ */
+export async function fetchAllPolymarketDecisions() {
+  try {
+    const res = await fetch(`${base}${API}?status=all`);
     if (!res.ok) return [];
     const data = await res.json();
     return data.approved || [];
@@ -34,11 +49,28 @@ export async function approvePolymarketMarket(privyId, { slug, title, options, a
   const res = await fetch(`${base}${API}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ privyId, slug, title, options, autoTranslate }),
+    body: JSON.stringify({ privyId, slug, title, options, autoTranslate, status: 'approved' }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'No se pudo aprobar el mercado');
+  }
+  return (await res.json()).approved;
+}
+
+/**
+ * Persistently reject a polymarket market (admin only). The slug stays in the
+ * decisions table with status='rejected' so future admin loads filter it out.
+ */
+export async function rejectPolymarketMarket(privyId, { slug }) {
+  const res = await fetch(`${base}${API}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ privyId, slug, status: 'rejected', autoTranslate: false }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'No se pudo rechazar el mercado');
   }
   return (await res.json()).approved;
 }

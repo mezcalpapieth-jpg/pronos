@@ -1,16 +1,20 @@
 import { neon } from '@neondatabase/serverless';
 
 /**
- * Polymarket approval allow-list with on-the-fly Spanish translation.
+ * Polymarket approval / rejection list with on-the-fly Spanish translation.
  *
  * Live Polymarket markets do NOT appear on the public site unless their slug
- * exists in `polymarket_approved`. The public site reads this table on load
- * and uses it both as an allow-list and as a translation cache.
+ * has an `approved` row in this table. Admins can also explicitly `reject` a
+ * market so it disappears from the admin queue and never re-surfaces on the
+ * next refresh of the live Gamma feed.
  *
- * GET    /api/polymarket-approved              → public list (slug + es fields)
- * POST   /api/polymarket-approved              → admin: approve a slug
- *          body: { privyId, slug, title, options, autoTranslate? }
- * DELETE /api/polymarket-approved?slug=...     → admin: revoke approval
+ * GET    /api/polymarket-approved              → only approved (default)
+ * GET    /api/polymarket-approved?status=all   → both approved + rejected
+ * POST   /api/polymarket-approved              → admin: approve or reject
+ *          body: { privyId, slug, title, options, status?, autoTranslate? }
+ *          status defaults to 'approved'. When status='rejected' translation
+ *          is skipped (we don't need a Spanish title for hidden markets).
+ * DELETE /api/polymarket-approved?slug=...     → admin: drop the row
  *
  * If `autoTranslate` is true (or omitted) and ANTHROPIC_API_KEY is set, the
  * endpoint translates `title` and `options[].label` to Spanish before storing.
@@ -95,11 +99,19 @@ export default async function handler(req, res) {
   // ── GET ───────────────────────────────────────────────
   if (req.method === 'GET') {
     try {
-      const rows = await sql`
-        SELECT slug, title_es, options_es, approved_at, approved_by
-          FROM polymarket_approved
-         ORDER BY approved_at DESC
-      `;
+      const statusFilter = req.query.status || 'approved';
+      const rows = statusFilter === 'all'
+        ? await sql`
+            SELECT slug, title_es, options_es, approved_at, approved_by, status
+              FROM polymarket_approved
+             ORDER BY approved_at DESC
+          `
+        : await sql`
+            SELECT slug, title_es, options_es, approved_at, approved_by, status
+              FROM polymarket_approved
+             WHERE status = ${statusFilter}
+             ORDER BY approved_at DESC
+          `;
       return res.status(200).json({ approved: rows });
     } catch (e) {
       return res.status(500).json({ error: e.message });
@@ -108,11 +120,12 @@ export default async function handler(req, res) {
 
   // ── POST ──────────────────────────────────────────────
   if (req.method === 'POST') {
-    const { privyId, slug, title, options, autoTranslate } = req.body || {};
+    const { privyId, slug, title, options, autoTranslate, status } = req.body || {};
     if (!(await isAdmin(privyId))) {
       return res.status(403).json({ error: 'No autorizado' });
     }
     if (!slug) return res.status(400).json({ error: 'slug requerido' });
+    const decisionStatus = status === 'rejected' ? 'rejected' : 'approved';
 
     try {
       const userRows = await sql`SELECT username FROM users WHERE privy_id = ${privyId}`;
@@ -120,8 +133,9 @@ export default async function handler(req, res) {
 
       let titleEs = null;
       let optionsEs = null;
-      // Default to translating unless explicitly disabled.
-      if (autoTranslate !== false && title) {
+      // Translate only when approving — rejected rows never render publicly,
+      // so spending an Anthropic call on them is wasted.
+      if (decisionStatus === 'approved' && autoTranslate !== false && title) {
         const tr = await translateToSpanish({ title, options });
         if (tr) {
           titleEs = tr.titleEs;
@@ -130,13 +144,14 @@ export default async function handler(req, res) {
       }
 
       const rows = await sql`
-        INSERT INTO polymarket_approved (slug, title_es, options_es, approved_by)
-        VALUES (${slug}, ${titleEs}, ${optionsEs ? JSON.stringify(optionsEs) : null}, ${reviewer})
+        INSERT INTO polymarket_approved (slug, title_es, options_es, approved_by, status)
+        VALUES (${slug}, ${titleEs}, ${optionsEs ? JSON.stringify(optionsEs) : null}, ${reviewer}, ${decisionStatus})
         ON CONFLICT (slug) DO UPDATE
           SET title_es     = COALESCE(EXCLUDED.title_es, polymarket_approved.title_es),
               options_es   = COALESCE(EXCLUDED.options_es, polymarket_approved.options_es),
               approved_at  = NOW(),
-              approved_by  = EXCLUDED.approved_by
+              approved_by  = EXCLUDED.approved_by,
+              status       = EXCLUDED.status
         RETURNING *
       `;
       return res.status(200).json({ ok: true, approved: rows[0] });

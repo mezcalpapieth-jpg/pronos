@@ -984,6 +984,13 @@ html[data-theme="dark"] .hfc-odd.no  { border-color: rgba(255,69,69,0.2); backgr
 .btn-admin-resolve:hover:not(:disabled) {
   background: rgba(0, 232, 122, 0.08);
 }
+.btn-admin-sm.btn-danger {
+  border-color: rgba(255, 69, 69, 0.35);
+  color: var(--red);
+}
+.btn-admin-sm.btn-danger:hover:not(:disabled) {
+  background: rgba(255, 69, 69, 0.08);
+}
 
 /* ── Contract info ─────────────────────────────────────────── */
 .admin-contracts {
