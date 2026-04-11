@@ -102,6 +102,19 @@ export async function gmFetchMarkets({ limit = 60 } = {}) {
   return arr.map(gmNormalize);
 }
 
+// ── Fetch recently closed markets ─────────────────────────────────────────────
+// Used by the admin to surface markets that have already been resolved on
+// Polymarket so they can be mirrored into market_resolutions instead of
+// silently disappearing from the live `closed=false` feed.
+export async function gmFetchClosedMarkets({ limit = 100 } = {}) {
+  const url = `${GAMMA_BASE}?path=/markets&closed=true&archived=false&limit=${limit}&order=endDate&ascending=false`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Gamma API ${res.status}`);
+  const data = await res.json();
+  const arr  = Array.isArray(data) ? data : (data.markets || []);
+  return arr.map(pm => ({ ...gmNormalize(pm), _closed: true }));
+}
+
 // ── Fetch single market by slug ───────────────────────────────────────────────
 export async function gmFetchBySlug(slug) {
   const url = `${GAMMA_BASE}?path=/markets&slug=${encodeURIComponent(slug)}&limit=1`;

@@ -87,10 +87,17 @@ async function loadCandidates() {
   const out = [];
   const now = Date.now();
 
-  // Local hardcoded markets
+  // Local hardcoded markets:
+  //   - Past-deadline (any source) → candidate for resolution.
+  //   - Polymarket-linked even if deadline is still in the future → candidate
+  //     too, because Polymarket can settle a market early (e.g. a sports
+  //     match finishing before the listed end date). The Gamma lookup short-
+  //     circuits when `closed=false`, so live markets cost only one fetch.
   for (const m of MARKETS) {
     const end = resolveEndDate(m);
-    if (!end || end.getTime() >= now) continue;
+    const past = end && end.getTime() < now;
+    const polyLinked = !!(m._polyId || m._conditionId);
+    if (!past && !polyLinked) continue;
     out.push({
       id: m.id,
       source: m._source || 'local',
@@ -99,6 +106,7 @@ async function loadCandidates() {
       slug: m.id,
       options: m.options || [],
       endDate: end,
+      pastDeadline: !!past,
     });
   }
 
@@ -120,6 +128,7 @@ async function loadCandidates() {
         slug: row.slug,
         options: Array.isArray(row.options) ? row.options : JSON.parse(row.options || '[]'),
         endDate: end,
+        pastDeadline: true,
       });
     }
   } catch (e) {
@@ -188,10 +197,19 @@ export default async function handler(req, res) {
             report.resolved.push({ id: cand.id, winner: winner.winner, source: 'polymarket' });
             continue;
           }
+          // Polymarket says it's not closed yet — leave it alone. We only
+          // mark "awaiting" for markets whose own deadline has actually
+          // passed; otherwise a Polymarket market with a future deadline
+          // would get prematurely flagged as closed.
+          if (!cand.pastDeadline) {
+            report.skipped = (report.skipped || 0) + 1;
+            continue;
+          }
         }
 
         // Fallback: mark as closed pending manual resolution so the UI
         // doesn't keep it in active tabs. Admin can override via /api/resolutions.
+        if (!cand.pastDeadline) continue;
         if (!dryRun) {
           await insertResolution({
             marketId: cand.id,

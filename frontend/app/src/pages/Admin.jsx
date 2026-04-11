@@ -4,7 +4,8 @@ import Nav from '../components/Nav.jsx';
 import { getProtocolMode, setProtocolMode, isAdmin, getContracts } from '../lib/protocol.js';
 import { resolveMarket, fetchResolutions } from '../lib/resolutions.js';
 import { fetchGeneratedMarkets, updateGeneratedMarket } from '../lib/generatedMarkets.js';
-import { gmFetchMarkets } from '../lib/gamma.js';
+import { gmFetchMarkets, gmFetchClosedMarkets } from '../lib/gamma.js';
+import { resolveEndDate, isExpired } from '../lib/deadline.js';
 import {
   getSafeAddresses, setSafeAddresses,
   createSafe, proposeTransaction, confirmTransaction, executeTransaction,
@@ -238,64 +239,260 @@ function ResolveModal({ market, onClose, onResolved, privyId }) {
   );
 }
 
+// ── Status / sorting helpers ───────────────────────────────────────────────
+// "Pending" resolutions are rows the auto-resolver inserts when a market's
+// deadline has passed but no winner could be derived from Polymarket. They
+// belong in the Closed tab, not the Resolved one — only rows with a real
+// outcome are truly resolved.
+function isPendingResolution(r) {
+  return !!r && (r.outcome === 'pending' || r.winner === 'Pendiente de resolución');
+}
+
+function classifyMarket(market, resolution) {
+  // Hardcoded markets can flag themselves as resolved with a baked-in winner
+  // (e.g. the Marco Verde fight). Treat that as authoritative even when no
+  // matching market_resolutions row exists yet.
+  if (market?._resolved) return 'resolved';
+  if (resolution && !isPendingResolution(resolution)) return 'resolved';
+  if (resolution && isPendingResolution(resolution)) return 'closed';
+  if (isExpired(market)) return 'closed';
+  return 'open';
+}
+
+// Sort by closure date, most recent first. Resolved markets prefer the
+// `resolved_at` timestamp (when we marked them) over the market deadline
+// because that's when they actually became resolved.
+function closureSortKey(market, resolution) {
+  if (resolution?.resolved_at) {
+    const t = new Date(resolution.resolved_at).getTime();
+    if (!isNaN(t)) return t;
+  }
+  const end = resolveEndDate(market);
+  return end ? end.getTime() : 0;
+}
+
+// Pull the leading outcome from a Polymarket-fetched closed market so we can
+// auto-record it as a resolution. We look at options[i].pct because gmNormalize
+// already converts outcomePrices into percentages.
+function pickPolymarketWinner(market) {
+  const opts = Array.isArray(market?.options) ? market.options : [];
+  if (opts.length === 0) return null;
+  let bestIdx = -1;
+  let bestPct = -1;
+  for (let i = 0; i < opts.length; i++) {
+    const pct = Number(opts[i]?.pct);
+    if (Number.isFinite(pct) && pct > bestPct) { bestPct = pct; bestIdx = i; }
+  }
+  // Require a clear winner (≥97%) before claiming a resolution. Anything less
+  // and we let the admin make the call manually.
+  if (bestIdx === -1 || bestPct < 97) return null;
+  return {
+    label: opts[bestIdx].label,
+    pct: bestPct,
+    outcome: bestPct >= 99 ? 'confirmed' : 'settled',
+  };
+}
+
 function MarketsList({ mode, privyId }) {
   const [markets, setMarkets] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [resolvedIds, setResolvedIds] = useState(new Set());
+  const [resolutions, setResolutions] = useState([]);   // raw rows from API
   const [resolveTarget, setResolveTarget] = useState(null);
+  const [tab, setTab] = useState('open');               // open | closed | resolved
   const [sourceFilter, setSourceFilter] = useState('all'); // all | local | polymarket
+  const [autoResolveBusy, setAutoResolveBusy] = useState(false);
+  const [autoResolveStatus, setAutoResolveStatus] = useState(null);
 
-  useEffect(() => {
-    async function load() {
-      // Load every source the public site shows so the admin sees the full
-      // catalogue (including English-titled live Polymarket markets that
-      // used to be invisible because admin only loaded the hardcoded list).
-      const [marketsModule, live, resolutions] = await Promise.all([
-        import('../lib/markets.js'),
-        gmFetchMarkets({ limit: 100 }).catch(() => []),
-        fetchResolutions().catch(() => []),
-      ]);
-      const local = marketsModule.PINNED_MARKETS || marketsModule.default || [];
-      // Dedup: hardcoded entries that already exist on Polymarket (matched
-      // by slug/id) defer to the live version so the admin doesn't see two
-      // rows for the same market.
-      const liveIds = new Set((live || []).map(m => m.id));
-      const localOnly = local.filter(m => !liveIds.has(m.id));
-      const all = [...(live || []), ...localOnly];
-      const rIds = new Set(resolutions.map(r => r.market_id));
-      setResolvedIds(rIds);
-      setMarkets(all);
-      setLoading(false);
+  async function load() {
+    setLoading(true);
+    // Fetch every source the admin can possibly care about, in parallel:
+    //   - hardcoded local markets (catalog backbone)
+    //   - live open Polymarket markets (active trading)
+    //   - recently closed Polymarket markets (so closed-on-Polymarket ones
+    //     don't disappear from the admin once they leave the open feed)
+    //   - market_resolutions DB rows (the source of truth for "resolved")
+    const [marketsModule, liveOpen, liveClosed, resos] = await Promise.all([
+      import('../lib/markets.js'),
+      gmFetchMarkets({ limit: 100 }).catch(() => []),
+      gmFetchClosedMarkets({ limit: 100 }).catch(() => []),
+      fetchResolutions().catch(() => []),
+    ]);
+    const local = marketsModule.PINNED_MARKETS || marketsModule.default || [];
+
+    // Dedupe by slug/id. Live data wins over hardcoded; closed-feed entries
+    // win over open-feed ones (they carry the final resolved state).
+    const map = new Map();
+    for (const m of local)     map.set(m.id, m);
+    for (const m of liveOpen)  map.set(m.id, { ...map.get(m.id), ...m });
+    for (const m of liveClosed) map.set(m.id, { ...map.get(m.id), ...m, _polymarketClosed: true });
+
+    const all = Array.from(map.values());
+    setMarkets(all);
+    setResolutions(resos);
+    setLoading(false);
+
+    // Mirror Polymarket-resolved closures into market_resolutions so the
+    // public site picks them up too. We only do this for closed entries that
+    // aren't already in resolutions, and only when we can identify a clear
+    // winner. Failures are logged but don't block the UI.
+    autoMirrorPolymarketResolutions(all, resos, privyId);
+  }
+
+  async function autoMirrorPolymarketResolutions(allMarkets, resos, pid) {
+    if (!pid) return;
+    const resolvedIds = new Set(resos.filter(r => !isPendingResolution(r)).map(r => r.market_id));
+    const candidates = allMarkets.filter(m =>
+      m._polymarketClosed && !resolvedIds.has(m.id)
+    );
+    if (candidates.length === 0) return;
+
+    const inserted = [];
+    for (const cand of candidates) {
+      const winner = pickPolymarketWinner(cand);
+      if (!winner) continue;
+      try {
+        await resolveMarket(pid, {
+          marketId: cand.id,
+          outcome: winner.outcome,
+          winner: winner.label,
+          winnerShort: winner.label.length > 20 ? winner.label.slice(0, 20) : winner.label,
+          resolvedBy: 'Polymarket UMA',
+          description: `Resuelto automáticamente por Polymarket: "${winner.label}" ganó con ${winner.pct}%.`,
+        });
+        inserted.push(cand.id);
+      } catch (e) {
+        // Most likely failure: a race against the cron inserting it first.
+        // Silently ignore — fetchResolutions on next load will pick it up.
+      }
     }
-    load();
-  }, []);
+    if (inserted.length > 0) {
+      // Refresh resolutions so the UI flips them into the Resolved tab.
+      try {
+        const fresh = await fetchResolutions();
+        setResolutions(fresh);
+      } catch (_) {}
+    }
+  }
 
-  // Source filter — flips the table between hardcoded local markets and
-  // live Polymarket so admins can find what they're looking for.
-  const filtered = markets.filter(m => {
-    if (sourceFilter === 'all') return true;
-    if (sourceFilter === 'local') return m._source !== 'polymarket' || !m._polyId;
-    if (sourceFilter === 'polymarket') return m._source === 'polymarket' && m._polyId;
-    return true;
-  });
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
 
-  function handleResolved(marketId) {
-    setResolvedIds(prev => new Set([...prev, marketId]));
+  function handleResolved(_marketId) {
+    // Reload resolutions so the new row shows up in the Resolved tab.
+    fetchResolutions().then(setResolutions).catch(() => {});
+  }
+
+  async function runAutoResolveCron() {
+    setAutoResolveBusy(true);
+    setAutoResolveStatus(null);
+    try {
+      const res = await fetch('/api/cron/auto-resolve');
+      const data = await res.json();
+      if (data.ok) {
+        setAutoResolveStatus({
+          type: 'success',
+          msg: `OK · ${data.resolved?.length || 0} resueltos · ${data.awaiting?.length || 0} cerrados pendientes`,
+        });
+        await load();
+      } else {
+        setAutoResolveStatus({ type: 'error', msg: data.error || 'Cron falló' });
+      }
+    } catch (e) {
+      setAutoResolveStatus({ type: 'error', msg: e.message });
+    } finally {
+      setAutoResolveBusy(false);
+    }
   }
 
   if (loading) return <div className="admin-card"><p>Cargando mercados...</p></div>;
 
+  // Build a quick resolution lookup once.
+  const resByMarket = Object.fromEntries(resolutions.map(r => [r.market_id, r]));
+
+  // Annotate every market with its derived status + resolution row so we can
+  // tab/filter/sort without re-running classify on every render.
+  const annotated = markets.map(m => {
+    const r = resByMarket[m.id] || null;
+    return { market: m, resolution: r, status: classifyMarket(m, r) };
+  });
+
+  // Tab + source filter
+  const inTab = annotated.filter(({ status }) => status === tab);
+  const filtered = inTab.filter(({ market: m }) => {
+    if (sourceFilter === 'all') return true;
+    const isPoly = m._source === 'polymarket' && m._polyId;
+    if (sourceFilter === 'local') return !isPoly;
+    if (sourceFilter === 'polymarket') return isPoly;
+    return true;
+  });
+
+  // Sort by closure date (most recent first for closed/resolved, soonest
+  // upcoming first for open).
+  filtered.sort((a, b) => {
+    const ka = closureSortKey(a.market, a.resolution);
+    const kb = closureSortKey(b.market, b.resolution);
+    if (tab === 'open') return ka - kb; // soonest deadline first
+    return kb - ka;                     // most recent closure first
+  });
+
+  const tabCounts = {
+    open:     annotated.filter(a => a.status === 'open').length,
+    closed:   annotated.filter(a => a.status === 'closed').length,
+    resolved: annotated.filter(a => a.status === 'resolved').length,
+  };
+
   const sourceCounts = {
-    all: markets.length,
-    polymarket: markets.filter(m => m._source === 'polymarket' && m._polyId).length,
-    local: markets.filter(m => m._source !== 'polymarket' || !m._polyId).length,
+    all: inTab.length,
+    polymarket: inTab.filter(({ market: m }) => m._source === 'polymarket' && m._polyId).length,
+    local: inTab.filter(({ market: m }) => !(m._source === 'polymarket' && m._polyId)).length,
   };
 
   return (
     <div className="admin-card">
       <div className="admin-card-header">
         <h3>Mercados</h3>
-        <span className="admin-count">{filtered.length}</span>
+        <button
+          onClick={runAutoResolveCron}
+          disabled={autoResolveBusy}
+          style={{
+            padding: '6px 12px', fontSize: 11, fontFamily: 'var(--font-mono)', letterSpacing: '0.04em',
+            background: 'var(--surface2)', border: '1px solid var(--green)', color: 'var(--green)',
+            borderRadius: 6, cursor: autoResolveBusy ? 'wait' : 'pointer',
+          }}
+        >
+          {autoResolveBusy ? '⟳ CORRIENDO…' : '▶ AUTO-RESOLVER AHORA'}
+        </button>
+      </div>
+      <p className="admin-desc" style={{ marginBottom: 14 }}>
+        Cierra automáticamente los mercados que pasaron su fecha límite y resuelve los de Polymarket cuyo resultado ya está confirmado.
+      </p>
+
+      {autoResolveStatus && (
+        <div className={`admin-status admin-status-${autoResolveStatus.type}`} style={{ marginBottom: 12 }}>
+          {autoResolveStatus.msg}
+        </div>
+      )}
+
+      {/* ── Status tabs (open / closed / resolved) ─────────────────────── */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, borderBottom: '1px solid var(--border)' }}>
+        {[
+          { id: 'open',     label: `ABIERTOS (${tabCounts.open})` },
+          { id: 'closed',   label: `CERRADOS (${tabCounts.closed})` },
+          { id: 'resolved', label: `RESUELTOS (${tabCounts.resolved})` },
+        ].map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            style={{
+              padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer',
+              fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
+              color: tab === t.id ? 'var(--text-primary)' : 'var(--text-muted)',
+              borderBottom: tab === t.id ? '2px solid var(--green)' : '2px solid transparent',
+              marginBottom: -1,
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
       {/* Source filter — admins can flip between live Polymarket and local */}
@@ -329,12 +526,35 @@ function MarketsList({ mode, privyId }) {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((m, i) => {
-              const isResolved = m._resolved || resolvedIds.has(m.id);
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={6} style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                  No hay mercados en esta categoría.
+                </td>
+              </tr>
+            )}
+            {filtered.map(({ market: m, resolution: r, status }, i) => {
               const isPoly = m._source === 'polymarket' && m._polyId;
+              const statusBadge = (
+                status === 'resolved' ? { cls: 'badge-resolved', label: 'Resuelto' } :
+                status === 'closed'   ? { cls: 'badge-closed',   label: 'Cerrado' } :
+                                        { cls: 'badge-active',   label: 'Activo' }
+              );
               return (
                 <tr key={m.id || i}>
-                  <td className="admin-market-title">{m.title || m.question}</td>
+                  <td className="admin-market-title">
+                    {m.title || m.question}
+                    {status === 'resolved' && (() => {
+                      const winner = r?.winner_short || r?.winner || m._winnerShort || m._winner;
+                      const by     = r?.resolved_by || m._resolvedBy;
+                      if (!winner) return null;
+                      return (
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--green)', marginTop: 4, letterSpacing: '0.04em' }}>
+                          🏆 {winner}{by ? ` · ${by}` : ''}
+                        </div>
+                      );
+                    })()}
+                  </td>
                   <td>
                     <span className={`admin-badge ${isPoly ? 'badge-poly' : 'badge-own'}`}>
                       {isPoly ? 'Polymarket' : 'Local'}
@@ -345,12 +565,10 @@ function MarketsList({ mode, privyId }) {
                   </td>
                   <td style={{ fontFamily:'var(--font-mono)',fontSize:12,color:'var(--text-muted)',whiteSpace:'nowrap' }}>{m.deadline || '—'}</td>
                   <td>
-                    <span className={`admin-badge ${isResolved ? 'badge-resolved' : 'badge-active'}`}>
-                      {isResolved ? 'Resuelto' : 'Activo'}
-                    </span>
+                    <span className={`admin-badge ${statusBadge.cls}`}>{statusBadge.label}</span>
                   </td>
                   <td className="admin-actions">
-                    {!isResolved && (
+                    {status !== 'resolved' && (
                       <button
                         className="btn-admin-sm btn-admin-resolve"
                         onClick={() => setResolveTarget(m)}
