@@ -44,13 +44,27 @@ function gmFmtDate(iso) {
   } catch (_) { return iso.slice(0, 10); }
 }
 
+// Gamma API quirk: `outcomes`, `outcomePrices`, and `clobTokenIds` all come
+// back as JSON-encoded strings rather than real arrays (e.g.
+// `'["0.0335","0.9665"]'`). Parse defensively so callers always see an array.
+function gmParseArray(val) {
+  if (Array.isArray(val)) return val;
+  if (typeof val === 'string' && val.trim().startsWith('[')) {
+    try { const p = JSON.parse(val); return Array.isArray(p) ? p : []; }
+    catch (_) { return []; }
+  }
+  return [];
+}
+
 // ── Normalize a raw Polymarket market → Pronos market object ──────────────────
 export function gmNormalize(pm) {
-  const prices   = (pm.outcomePrices || []).map(Number);
-  const outcomes = pm.outcomes || ['Sí', 'No'];
-  const category = gmMapCategory(pm);
-  const meta     = CATEGORY_META[category] || CATEGORY_META.politica;
-  const vol      = Number(pm.volume || pm.volumeNum || 0);
+  const outcomes     = gmParseArray(pm.outcomes);
+  const safeOutcomes = outcomes.length > 0 ? outcomes : ['Sí', 'No'];
+  const prices       = gmParseArray(pm.outcomePrices).map(Number);
+  const clobTokenIds = gmParseArray(pm.clobTokenIds);
+  const category     = gmMapCategory(pm);
+  const meta         = CATEGORY_META[category] || CATEGORY_META.politica;
+  const vol          = Number(pm.volume || pm.volumeNum || 0);
 
   return {
     id:            pm.slug || pm.id,
@@ -61,15 +75,15 @@ export function gmNormalize(pm) {
     title:         pm.question,
     deadline:      gmFmtDate(pm.endDate),
     volume:        gmFmtVolume(vol),
-    options:       outcomes.map((label, i) => ({
+    options:       safeOutcomes.map((label, i) => ({
       label,
-      pct: Math.round((prices[i] || (1 / outcomes.length)) * 100),
+      pct: Math.round((prices[i] || (1 / safeOutcomes.length)) * 100),
     })),
 
     // Polymarket-specific fields
     _polyId:          pm.id,
     _conditionId:     pm.conditionId || null,
-    _clobTokenIds:    pm.clobTokenIds || [],
+    _clobTokenIds:    clobTokenIds,
     _acceptingOrders: pm.acceptingOrders !== false,
     _isNegRisk:       !!pm.negRisk,
     _image:           pm.image || null,
