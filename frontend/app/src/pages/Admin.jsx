@@ -11,6 +11,7 @@ import {
   approvePolymarketMarket,
   rejectPolymarketMarket,
   unapprovePolymarketMarket,
+  bulkTranslatePolymarket,
 } from '../lib/polymarketApproved.js';
 import {
   getSafeAddresses, setSafeAddresses,
@@ -314,6 +315,7 @@ function MarketsList({ mode, privyId }) {
   const [autoResolveBusy, setAutoResolveBusy] = useState(false);
   const [autoResolveStatus, setAutoResolveStatus] = useState(null);
   const [approvalBusy, setApprovalBusy] = useState(null); // slug currently being approved/rejected/revoked
+  const [translateStatus, setTranslateStatus] = useState(null); // { busy, translated, remaining }
 
   async function load() {
     setLoading(true);
@@ -347,11 +349,56 @@ function MarketsList({ mode, privyId }) {
     setDecisions(decisionRows);
     setLoading(false);
 
+    // Auto-translate every Polymarket market we don't yet have a Spanish
+    // cache for. The endpoint creates `pending` rows so the admin can see
+    // EN + ES side-by-side without clicking anything. Approving later just
+    // flips status from pending → approved (no extra translation cost).
+    autoTranslateNewPolymarket(all, decisionRows);
+
     // Mirror Polymarket-resolved closures into market_resolutions so the
     // public site picks them up too. We only do this for closed entries that
     // aren't already in resolutions, and only when we can identify a clear
     // winner. Failures are logged but don't block the UI.
     autoMirrorPolymarketResolutions(all, resos, privyId);
+  }
+
+  async function autoTranslateNewPolymarket(allMarkets, currentDecisions) {
+    if (!privyId) return;
+    const have = new Set((currentDecisions || []).map(d => d.slug));
+    const polyMarkets = allMarkets
+      .filter(m => m._source === 'polymarket' && m._polyId && m.title && !have.has(m.id))
+      .map(m => ({ slug: m.id, title: m.title, options: m.options }));
+    if (polyMarkets.length === 0) {
+      setTranslateStatus(null);
+      return;
+    }
+    setTranslateStatus({ busy: true, translated: 0, remaining: polyMarkets.length });
+
+    // Drain the queue. The server caps each call at 20 to fit the function
+    // timeout, so we loop until it reports nothing left or hits the safety
+    // cap. Each call is a fresh DB scan, so already-cached slugs are skipped.
+    let totalTranslated = 0;
+    let safety = 8; // 8 × 20 = 160 markets max per page load
+    while (safety-- > 0) {
+      const result = await bulkTranslatePolymarket(privyId, polyMarkets);
+      if (!result?.ok) break;
+      if (Array.isArray(result.rows) && result.rows.length > 0) {
+        totalTranslated += result.rows.length;
+        // Merge new pending rows into the decisions state.
+        setDecisions(prev => {
+          const map = new Map(prev.map(r => [r.slug, r]));
+          for (const r of result.rows) map.set(r.slug, r);
+          return Array.from(map.values());
+        });
+      }
+      setTranslateStatus({
+        busy: result.remaining > 0,
+        translated: totalTranslated,
+        remaining: result.remaining,
+      });
+      if (!result.remaining) break;
+    }
+    setTranslateStatus(prev => prev ? { ...prev, busy: false } : null);
   }
 
   // Approve / reject / revoke a polymarket slug.
@@ -364,10 +411,14 @@ function MarketsList({ mode, privyId }) {
     if (!privyId) return;
     setApprovalBusy(market.id);
     try {
+      // If we already have a cached translation (pending row), skip the
+      // Anthropic call — the server keeps the existing title_es via COALESCE.
+      const cached = decisions.find(d => d.slug === market.id);
       const row = await approvePolymarketMarket(privyId, {
         slug: market.id,
         title: market.title,
         options: market.options,
+        autoTranslate: !cached?.title_es,
       });
       setDecisions(prev => {
         const next = prev.filter(r => r.slug !== market.id);
@@ -484,10 +535,18 @@ function MarketsList({ mode, privyId }) {
   // Build a quick resolution lookup once.
   const resByMarket = Object.fromEntries(resolutions.map(r => [r.market_id, r]));
 
-  // Split polymarket decisions into approved + rejected sets so the table
-  // can flip its action buttons and the filter can drop rejected slugs.
-  const approvedSet = new Set(decisions.filter(d => d.status !== 'rejected').map(d => d.slug));
+  // Split polymarket decisions into three buckets:
+  //   - approved: visible on the public site
+  //   - rejected: dropped from the admin queue entirely
+  //   - pending : auto-translated but waiting for an approve/reject decision
+  // The translation map lets the table render ES titles next to the EN
+  // originals for any cached row, regardless of status.
+  const approvedSet = new Set(decisions.filter(d => d.status === 'approved').map(d => d.slug));
   const rejectedSet = new Set(decisions.filter(d => d.status === 'rejected').map(d => d.slug));
+  const translationMap = new Map();
+  for (const d of decisions) {
+    if (d.title_es) translationMap.set(d.slug, d);
+  }
 
   // Annotate every market with its derived status + resolution row so we can
   // tab/filter/sort without re-running classify on every render. Rejected
@@ -560,6 +619,20 @@ function MarketsList({ mode, privyId }) {
       {autoResolveStatus && (
         <div className={`admin-status admin-status-${autoResolveStatus.type}`} style={{ marginBottom: 12 }}>
           {autoResolveStatus.msg}
+        </div>
+      )}
+
+      {translateStatus && (translateStatus.busy || translateStatus.translated > 0) && (
+        <div
+          style={{
+            marginBottom: 12, padding: '8px 12px', borderRadius: 6,
+            background: 'rgba(96, 165, 250, 0.08)', border: '1px solid rgba(96, 165, 250, 0.3)',
+            color: '#60a5fa', fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
+          }}
+        >
+          {translateStatus.busy
+            ? `🌐 Traduciendo mercados al español… (${translateStatus.translated} listos${translateStatus.remaining ? `, ${translateStatus.remaining} pendientes` : ''})`
+            : `✓ ${translateStatus.translated} mercado${translateStatus.translated === 1 ? '' : 's'} traducido${translateStatus.translated === 1 ? '' : 's'} al español`}
         </div>
       )}
 
@@ -646,10 +719,27 @@ function MarketsList({ mode, privyId }) {
               );
               const isApproved = isPoly && approvedSet.has(m.id);
               const busy       = approvalBusy === m.id;
+              const cachedTr = isPoly ? translationMap.get(m.id) : null;
+              const titleEs  = cachedTr?.title_es || null;
+              const titleEn  = m.title || m.question || '';
               return (
                 <tr key={m.id || i}>
                   <td className="admin-market-title">
-                    {m.title || m.question}
+                    {titleEs ? (
+                      <>
+                        <div>{titleEs}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, fontStyle: 'italic' }}>
+                          {titleEn}
+                        </div>
+                      </>
+                    ) : (
+                      titleEn
+                    )}
+                    {isPoly && !titleEs && translateStatus?.busy && (
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2, fontFamily: 'var(--font-mono)' }}>
+                        traduciendo…
+                      </div>
+                    )}
                     {status === 'resolved' && (() => {
                       const winner = r?.winner_short || r?.winner || m._winnerShort || m._winner;
                       const by     = r?.resolved_by || m._resolvedBy;

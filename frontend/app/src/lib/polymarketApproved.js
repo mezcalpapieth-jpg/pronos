@@ -76,6 +76,28 @@ export async function rejectPolymarketMarket(privyId, { slug }) {
 }
 
 /**
+ * Bulk-translate Polymarket markets to Spanish and store as 'pending' rows
+ * in `polymarket_approved`. Used by the admin page on load so every fetched
+ * market shows in both languages without waiting for an admin click.
+ *
+ * The server caps each call at 20 translations, so callers should drain by
+ * looping until `remaining === 0`.
+ */
+export async function bulkTranslatePolymarket(privyId, markets) {
+  try {
+    const res = await fetch(`${base}/api/polymarket-translate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ privyId, markets }),
+    });
+    if (!res.ok) return { ok: false, rows: [], remaining: 0 };
+    return await res.json();
+  } catch (_) {
+    return { ok: false, rows: [], remaining: 0 };
+  }
+}
+
+/**
  * Revoke approval for a slug (admin only).
  */
 export async function unapprovePolymarketMarket(privyId, slug) {
