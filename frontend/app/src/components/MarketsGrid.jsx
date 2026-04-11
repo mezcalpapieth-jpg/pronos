@@ -5,6 +5,7 @@ import { fetchResolutions } from '../lib/resolutions.js';
 import { fetchGeneratedMarkets } from '../lib/generatedMarkets.js';
 import { fetchPriceHistory, collectTokenIds } from '../lib/priceHistory.js';
 import { isExpired } from '../lib/deadline.js';
+import { useT } from '../lib/i18n.js';
 import MARKETS from '../lib/markets.js';
 
 function applyResolutions(markets, resolutions) {
@@ -26,6 +27,7 @@ function applyResolutions(markets, resolutions) {
 }
 
 export default function MarketsGrid({ activeFilter }) {
+  const t = useT();
   const [markets, setMarkets] = useState([]);
   const [history, setHistory] = useState({});
   const [loading, setLoading] = useState(true);
@@ -95,7 +97,7 @@ export default function MarketsGrid({ activeFilter }) {
         console.warn('Error loading markets:', err.message);
         if (!cancelled) {
           setMarkets(MARKETS);
-          setError('Usando datos locales — API no disponible.');
+          setError('fallback');
           setLoading(false);
         }
       }
@@ -126,7 +128,7 @@ export default function MarketsGrid({ activeFilter }) {
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.1em' }}>
-        CARGANDO MERCADOS…
+        {t('grid.loading')}
       </div>
     );
   }
@@ -135,12 +137,12 @@ export default function MarketsGrid({ activeFilter }) {
     <div>
       {error && (
         <div style={{ textAlign: 'center', marginBottom: 16, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.06em' }}>
-          {error}
+          {t('grid.fallback')}
         </div>
       )}
       {filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-          No hay mercados en esta categoría.
+          {t('grid.empty')}
         </div>
       ) : (
         <div className="markets-grid">

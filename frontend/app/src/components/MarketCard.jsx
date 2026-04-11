@@ -2,8 +2,10 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sparkline from './Sparkline.jsx';
 import { extractSeries } from '../lib/priceHistory.js';
+import { useT } from '../lib/i18n.js';
 
 export default function MarketCard({ market, history }) {
+  const t = useT();
   const navigate = useNavigate();
 
   const handleClick = () => {
@@ -25,16 +27,16 @@ export default function MarketCard({ market, history }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {market._resolved ? (
             <span className="mock-card-badge" style={{ background: 'rgba(184,144,10,0.1)', border: '1px solid rgba(184,144,10,0.25)', color: 'var(--gold)' }}>
-              🏆 RESUELTO
+              {t('card.resolved')}
             </span>
           ) : market._awaitingResolution ? (
             <span className="mock-card-badge" style={{ background: 'rgba(148,163,184,0.1)', border: '1px solid rgba(148,163,184,0.3)', color: 'var(--text-muted)' }}>
-              🔒 CERRADO
+              {t('card.closed')}
             </span>
           ) : (
             <>
-              {market.trending && <span className="mock-card-badge trending">🔥 TRENDING</span>}
-              {market._source === 'polymarket' && <span className="mock-card-badge live">LIVE</span>}
+              {market.trending && <span className="mock-card-badge trending">{t('card.trending')}</span>}
+              {market._source === 'polymarket' && <span className="mock-card-badge live">{t('card.live')}</span>}
             </>
           )}
         </div>
@@ -98,7 +100,7 @@ export default function MarketCard({ market, history }) {
 
       <div className="mock-card-footer">
         <div className="mock-card-vol">
-          VOL <span>${market.volume}</span>
+          {t('detail.volume')} <span>${market.volume}</span>
         </div>
         <div className="mock-card-deadline">
           {market.deadline}

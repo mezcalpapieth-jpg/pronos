@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useT } from '../lib/i18n.js';
 
 const CORRECT = 'mezcal';
 const STORAGE_KEY = 'pronos-mvp-access';
 
 export default function PasswordGate({ children }) {
+  const t = useT();
   const [unlocked, setUnlocked] = useState(false);
   const [input, setInput] = useState('');
   const [error, setError] = useState(false);
@@ -38,17 +40,17 @@ export default function PasswordGate({ children }) {
           <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#FF5500', display: 'inline-block', marginBottom: '-12px' }} />
         </div>
         <div style={{ fontSize: '11px', fontFamily: "'DM Mono', monospace", letterSpacing: '0.15em', color: 'rgba(255,255,255,0.3)', marginBottom: '40px' }}>
-          BETA · ACCESO ANTICIPADO
+          {t('gate.badge')}
         </div>
 
-        <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.4)' }}>Ingresa la contraseña para continuar</div>
+        <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.4)' }}>{t('gate.title')}</div>
         <div style={{ height: '16px' }} />
 
         <input
           type="password"
           value={input}
           onChange={e => setInput(e.target.value)}
-          placeholder="Contraseña"
+          placeholder={t('gate.password')}
           autoFocus
           style={{
             width: '100%', padding: '14px 18px',
@@ -62,7 +64,7 @@ export default function PasswordGate({ children }) {
 
         {error && (
           <div style={{ color: '#ef4444', fontSize: '13px', marginTop: '10px' }}>
-            Contraseña incorrecta
+            {t('gate.wrong')}
           </div>
         )}
 
@@ -72,7 +74,7 @@ export default function PasswordGate({ children }) {
           borderRadius: '12px', fontSize: '15px', fontWeight: 600,
           cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
         }}>
-          Entrar
+          {t('gate.enter')}
         </button>
       </form>
     </div>

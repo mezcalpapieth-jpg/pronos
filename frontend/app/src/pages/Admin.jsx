@@ -4,6 +4,7 @@ import Nav from '../components/Nav.jsx';
 import { getProtocolMode, setProtocolMode, isAdmin, getContracts } from '../lib/protocol.js';
 import { resolveMarket, fetchResolutions } from '../lib/resolutions.js';
 import { fetchGeneratedMarkets, updateGeneratedMarket } from '../lib/generatedMarkets.js';
+import { gmFetchMarkets } from '../lib/gamma.js';
 import {
   getSafeAddresses, setSafeAddresses,
   createSafe, proposeTransaction, confirmTransaction, executeTransaction,
@@ -242,14 +243,25 @@ function MarketsList({ mode, privyId }) {
   const [loading, setLoading] = useState(true);
   const [resolvedIds, setResolvedIds] = useState(new Set());
   const [resolveTarget, setResolveTarget] = useState(null);
+  const [sourceFilter, setSourceFilter] = useState('all'); // all | local | polymarket
 
   useEffect(() => {
     async function load() {
-      const [marketsModule, resolutions] = await Promise.all([
+      // Load every source the public site shows so the admin sees the full
+      // catalogue (including English-titled live Polymarket markets that
+      // used to be invisible because admin only loaded the hardcoded list).
+      const [marketsModule, live, resolutions] = await Promise.all([
         import('../lib/markets.js'),
+        gmFetchMarkets({ limit: 100 }).catch(() => []),
         fetchResolutions().catch(() => []),
       ]);
-      const all = marketsModule.PINNED_MARKETS || marketsModule.default || [];
+      const local = marketsModule.PINNED_MARKETS || marketsModule.default || [];
+      // Dedup: hardcoded entries that already exist on Polymarket (matched
+      // by slug/id) defer to the live version so the admin doesn't see two
+      // rows for the same market.
+      const liveIds = new Set((live || []).map(m => m.id));
+      const localOnly = local.filter(m => !liveIds.has(m.id));
+      const all = [...(live || []), ...localOnly];
       const rIds = new Set(resolutions.map(r => r.market_id));
       setResolvedIds(rIds);
       setMarkets(all);
@@ -258,23 +270,58 @@ function MarketsList({ mode, privyId }) {
     load();
   }, []);
 
+  // Source filter — flips the table between hardcoded local markets and
+  // live Polymarket so admins can find what they're looking for.
+  const filtered = markets.filter(m => {
+    if (sourceFilter === 'all') return true;
+    if (sourceFilter === 'local') return m._source !== 'polymarket' || !m._polyId;
+    if (sourceFilter === 'polymarket') return m._source === 'polymarket' && m._polyId;
+    return true;
+  });
+
   function handleResolved(marketId) {
     setResolvedIds(prev => new Set([...prev, marketId]));
   }
 
   if (loading) return <div className="admin-card"><p>Cargando mercados...</p></div>;
 
+  const sourceCounts = {
+    all: markets.length,
+    polymarket: markets.filter(m => m._source === 'polymarket' && m._polyId).length,
+    local: markets.filter(m => m._source !== 'polymarket' || !m._polyId).length,
+  };
+
   return (
     <div className="admin-card">
       <div className="admin-card-header">
         <h3>Mercados</h3>
-        <span className="admin-count">{markets.length}</span>
+        <span className="admin-count">{filtered.length}</span>
       </div>
+
+      {/* Source filter — admins can flip between live Polymarket and local */}
+      <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>
+        {[
+          { key: 'all',        label: `Todos (${sourceCounts.all})` },
+          { key: 'polymarket', label: `Polymarket (${sourceCounts.polymarket})` },
+          { key: 'local',      label: `Locales (${sourceCounts.local})` },
+        ].map(f => (
+          <button
+            key={f.key}
+            onClick={() => setSourceFilter(f.key)}
+            className={`btn-admin-sm ${sourceFilter === f.key ? 'btn-admin-resolve' : ''}`}
+            style={{ fontSize: 11 }}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
       <div className="admin-table-wrap">
         <table className="admin-table">
           <thead>
             <tr>
               <th>Mercado</th>
+              <th>Fuente</th>
               <th>Categoria</th>
               <th>Fecha limite</th>
               <th>Estado</th>
@@ -282,11 +329,17 @@ function MarketsList({ mode, privyId }) {
             </tr>
           </thead>
           <tbody>
-            {markets.map((m, i) => {
+            {filtered.map((m, i) => {
               const isResolved = m._resolved || resolvedIds.has(m.id);
+              const isPoly = m._source === 'polymarket' && m._polyId;
               return (
                 <tr key={m.id || i}>
                   <td className="admin-market-title">{m.title || m.question}</td>
+                  <td>
+                    <span className={`admin-badge ${isPoly ? 'badge-poly' : 'badge-own'}`}>
+                      {isPoly ? 'Polymarket' : 'Local'}
+                    </span>
+                  </td>
                   <td>
                     <span className="admin-cat-badge">{m.category || '-'}</span>
                   </td>

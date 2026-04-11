@@ -5,6 +5,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { POLYGON_CHAIN_ID } from '../lib/clob.js';
 import { getProtocolMode, getUsdcAddress, getRequiredChainId } from '../lib/protocol.js';
 import MARKETS from '../lib/markets.js';
+import { useT, useLang, setLang } from '../lib/i18n.js';
 
 function getInitialTheme() {
   const saved = localStorage.getItem('pronos-theme');
@@ -22,6 +23,8 @@ const CHAIN_NAMES = {
 
 export default function Nav() {
   const navigate = useNavigate();
+  const t = useT();
+  const lang = useLang();
   const { ready, authenticated, user, login, logout } = usePrivy();
   const { wallets } = useWallets();
   const [scrolled, setScrolled] = useState(false);
@@ -161,7 +164,7 @@ export default function Nav() {
           <input
             className="nav-search-input"
             type="text"
-            placeholder="Buscar mercados…"
+            placeholder={t('nav.search.placeholder')}
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             onFocus={() => searchQuery.trim() && setSearchOpen(true)}
@@ -190,7 +193,7 @@ export default function Nav() {
         )}
         {searchOpen && searchQuery.trim() && searchResults.length === 0 && (
           <div className="nav-search-dropdown">
-            <div className="nav-search-empty">No se encontraron mercados</div>
+            <div className="nav-search-empty">{t('nav.search.empty')}</div>
           </div>
         )}
       </div>
@@ -199,28 +202,49 @@ export default function Nav() {
         <a href="/mvp/#markets" onClick={e => {
           const el = document.getElementById('markets');
           if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth' }); }
-        }}>El mercado</a>
-        <Link to="/portfolio">Portafolio</Link>
+        }}>{t('nav.market')}</a>
+        <Link to="/portfolio">{t('nav.portfolio')}</Link>
         <a href="/mvp/#how-it-works" onClick={e => {
           const el = document.getElementById('how-it-works');
           if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth' }); }
-        }}>Cómo funciona</a>
-        {adminFlag && <Link to="/admin">Admin</Link>}
+        }}>{t('nav.howItWorks')}</a>
+        {adminFlag && <Link to="/admin">{t('nav.admin')}</Link>}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {/* Language toggle — flips ES ↔ EN, persists in localStorage */}
+        <button
+          className="nav-lang-toggle"
+          onClick={() => setLang(lang === 'es' ? 'en' : 'es')}
+          aria-label={lang === 'es' ? 'Switch to English' : 'Cambiar a Español'}
+          title={lang === 'es' ? 'Switch to English' : 'Cambiar a Español'}
+          style={{
+            background: 'transparent',
+            border: '1px solid var(--border)',
+            color: 'var(--text-secondary)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            letterSpacing: '0.08em',
+            padding: '6px 10px',
+            borderRadius: 6,
+            cursor: 'pointer',
+            fontWeight: 600,
+          }}
+        >
+          {lang === 'es' ? 'ES · EN' : 'EN · ES'}
+        </button>
         {/* Mobile search icon */}
         <button
           className="nav-search-mobile-btn"
           onClick={() => { setMobileSearchOpen(o => !o); setTimeout(() => mobileSearchInputRef.current?.focus(), 50); }}
-          aria-label="Buscar"
+          aria-label={t('nav.search.aria')}
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.5"/><path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
         </button>
         <button
           className="btn-theme-toggle"
           onClick={toggleTheme}
-          title="Cambiar tema"
+          title={t('nav.theme')}
         />
 
         <div style={{ position: 'relative' }} ref={dropdownRef}>
@@ -238,7 +262,7 @@ export default function Nav() {
                       rel="noopener noreferrer"
                       className="nav-deposit-link"
                     >
-                      Depositar
+                      {t('nav.deposit')}
                     </a>
                   )}
                 </span>
@@ -269,7 +293,7 @@ export default function Nav() {
                               }
                             }}
                           >
-                            Cambiar a {targetName}
+                            {t('nav.switchTo', { chain: targetName })}
                           </button>
                         )}
                       </div>
@@ -281,20 +305,20 @@ export default function Nav() {
                       to="/admin"
                       onClick={() => setDropdownOpen(false)}
                     >
-                      Admin
+                      {t('nav.admin')}
                     </Link>
                   )}
                   <button
                     className="nav-dropdown-item"
                     onClick={() => { logout(); setDropdownOpen(false); }}
                   >
-                    Cerrar sesion
+                    {t('nav.signOut')}
                   </button>
                 </div>
               )}
             </>
           ) : (
-            <button className="btn-nav-cta" onClick={login}>Predecir</button>
+            <button className="btn-nav-cta" onClick={login}>{t('nav.predict')}</button>
           )}
         </div>
       </div>
@@ -311,7 +335,7 @@ export default function Nav() {
             ref={mobileSearchInputRef}
             className="nav-search-input"
             type="text"
-            placeholder="Buscar mercados…"
+            placeholder={t('nav.search.placeholder')}
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             onKeyDown={e => {

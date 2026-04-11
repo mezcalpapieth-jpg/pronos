@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import { useT } from '../lib/i18n.js';
 
 const API = '/api/user';
 
 export default function UsernameModal({ privyId, onComplete, email, walletAddress }) {
+  const t = useT();
   const [username, setUsername] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -74,7 +76,7 @@ export default function UsernameModal({ privyId, onComplete, email, walletAddres
           letterSpacing: '0.04em',
           textTransform: 'uppercase',
         }}>
-          Elige tu username
+          {t('um.title')}
         </h2>
 
         <p style={{
@@ -83,8 +85,8 @@ export default function UsernameModal({ privyId, onComplete, email, walletAddres
           lineHeight: 1.6,
           marginBottom: 36,
         }}>
-          Este será tu identidad en Pronos.<br />
-          No lo podrás cambiar después.
+          {t('um.subtitle1')}<br />
+          {t('um.subtitle2')}
         </p>
 
         <form onSubmit={handleSubmit}>
@@ -102,7 +104,7 @@ export default function UsernameModal({ privyId, onComplete, email, walletAddres
               type="text"
               value={username}
               onChange={e => { setUsername(e.target.value.toLowerCase()); setError(''); }}
-              placeholder="tu_username"
+              placeholder={t('um.placeholder')}
               maxLength={20}
               autoFocus
               style={{
@@ -133,7 +135,7 @@ export default function UsernameModal({ privyId, onComplete, email, walletAddres
             textAlign: 'left',
             fontFamily: 'var(--font-mono)',
           }}>
-            3–20 caracteres · letras, números y _
+            {t('um.help')}
           </p>
 
           {/* Error */}
@@ -148,8 +150,8 @@ export default function UsernameModal({ privyId, onComplete, email, walletAddres
               fontFamily: 'var(--font-mono)',
             }}>
               {error === 'Username already taken'
-                ? '❌ Ese username ya está en uso'
-                : `❌ ${error}`}
+                ? t('um.taken')
+                : t('um.error', { msg: error })}
             </div>
           )}
 
@@ -174,7 +176,7 @@ export default function UsernameModal({ privyId, onComplete, email, walletAddres
               marginTop: 4,
             }}
           >
-            {loading ? 'Guardando...' : 'Entrar a Pronos →'}
+            {loading ? t('um.saving') : t('um.enter')}
           </button>
 
           <button
@@ -222,7 +224,7 @@ export default function UsernameModal({ privyId, onComplete, email, walletAddres
               marginTop: 10,
             }}
           >
-            {skipping ? 'Generando...' : 'Saltar — generar automáticamente'}
+            {skipping ? t('um.generating') : t('um.skip')}
           </button>
         </form>
       </div>

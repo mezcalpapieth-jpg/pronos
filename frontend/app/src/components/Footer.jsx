@@ -1,6 +1,8 @@
 import React from 'react';
+import { useT } from '../lib/i18n.js';
 
 export default function Footer() {
+  const t = useT();
   return (
     <footer style={{
       borderTop: '1px solid var(--border)',
@@ -17,7 +19,7 @@ export default function Footer() {
       </div>
 
       <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.06em', textAlign: 'center' }}>
-        © 2026 Pronos · El primer mercado de predicciones on-chain para LATAM
+        {t('footer.copyright')}
       </div>
 
       <div style={{ display: 'flex', gap: 24 }}>
@@ -25,13 +27,13 @@ export default function Footer() {
           onMouseOver={e => e.target.style.color = 'var(--text-secondary)'}
           onMouseOut={e => e.target.style.color = 'var(--text-muted)'}
         >
-          Inicio
+          {t('footer.home')}
         </a>
         <a href="mailto:hola@pronos.io" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.06em', transition: 'color 0.2s' }}
           onMouseOver={e => e.target.style.color = 'var(--text-secondary)'}
           onMouseOut={e => e.target.style.color = 'var(--text-muted)'}
         >
-          Contacto
+          {t('footer.contact')}
         </a>
       </div>
     </footer>

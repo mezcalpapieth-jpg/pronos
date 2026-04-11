@@ -14,6 +14,7 @@ import {
   POLYGON_CHAIN_ID,
 } from '../lib/clob.js';
 import { isProtocolMarket, getRequiredChainId, CHAIN_IDS } from '../lib/protocol.js';
+import { useT } from '../lib/i18n.js';
 
 const QUICK_AMOUNTS = [5, 10, 25, 50];
 
@@ -29,6 +30,7 @@ const STEPS = {
 };
 
 export default function BetModal({ open, onClose, outcome, outcomePct, marketId, marketTitle, clobTokenId, isNegRisk = false, market = null }) {
+  const t = useT();
   const { authenticated, login } = usePrivy();
   const { wallets } = useWallets();
   const [amount, setAmount]   = useState('');
@@ -99,21 +101,21 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
     if (!authenticated) { window.open('/#waitlist', '_blank'); return; }
     if (numAmount <= 0) {
       setStep(STEPS.ERROR);
-      setStatusMsg('Ingresa un monto válido.');
+      setStatusMsg(t('bet.invalidAmount'));
       return;
     }
 
     const wallet = wallets?.[0];
     if (!wallet) {
       setStep(STEPS.ERROR);
-      setStatusMsg('No se encontró wallet. Reconecta tu cuenta.');
+      setStatusMsg(t('bet.noWallet'));
       return;
     }
 
     try {
       // ── 1. Get provider + signer ──────────────────────────────────────────
       setStep(STEPS.CHECKING);
-      setStatusMsg('Verificando balance y permisos…');
+      setStatusMsg(t('bet.checking'));
       const ethProvider = await wallet.getEthereumProvider();
       let provider      = new ethers.providers.Web3Provider(ethProvider);
       let signer        = provider.getSigner();
@@ -123,7 +125,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
       const requiredChainId = isProtocolMarket(market) ? getRequiredChainId() : POLYGON_CHAIN_ID;
       const network = await provider.getNetwork();
       if (network.chainId !== requiredChainId) {
-        setStatusMsg('Cambiando de red…');
+        setStatusMsg(t('bet.switchingChain'));
         try {
           await wallet.switchChain(requiredChainId);
           // Re-create provider after chain switch
@@ -135,7 +137,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
             : requiredChainId === CHAIN_IDS.arbitrum ? 'Arbitrum'
             : 'Arbitrum Sepolia';
           setStep(STEPS.ERROR);
-          setStatusMsg(`Cambia a ${chainName} para continuar.`);
+          setStatusMsg(t('bet.switchChain', { chain: chainName }));
           return;
         }
       }
@@ -145,7 +147,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
       setBalance(bal);
       if (bal < numAmount) {
         setStep(STEPS.ERROR);
-        setStatusMsg(`Balance insuficiente. Tienes $${bal.toFixed(2)} MXNB.`);
+        setStatusMsg(t('bet.insufficient', { bal: bal.toFixed(2) }));
         return;
       }
 
@@ -156,19 +158,19 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
 
       if (needsApproval) {
         setStep(STEPS.APPROVING);
-        setStatusMsg('Aprobando MXNB… (confirma en tu wallet)');
+        setStatusMsg(t('bet.approving'));
         await approveUsdc(signer);
-        setStatusMsg('MXNB aprobado ✓');
+        setStatusMsg(t('bet.approved'));
       }
 
       // ── 4. Derive CLOB API key ────────────────────────────────────────────
       setStep(STEPS.SIGNING);
-      setStatusMsg('Firmando autenticación… (1 firma)');
+      setStatusMsg(t('bet.signing'));
       const creds = await deriveClobApiKey(signer, address);
 
       // ── 5. Place order ────────────────────────────────────────────────────
       setStep(STEPS.PLACING);
-      setStatusMsg('Enviando orden a Polymarket…');
+      setStatusMsg(t('bet.placing'));
       const price  = outcomePct / 100;
       const token  = clobTokenId || marketId;
       const result = await placeClobOrder({
@@ -184,7 +186,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
 
       setOrderId(result.orderID || result.id || 'OK');
       setStep(STEPS.SUCCESS);
-      setStatusMsg(`¡Apuesta colocada! $${numAmount} MXNB en "${outcome}"`);
+      setStatusMsg(t('bet.placed', { amt: numAmount, outcome }));
       setAmount('');
 
     } catch (e) {
@@ -202,21 +204,21 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
 
   // ── Step label shown in button ──────────────────────────────────────────────
   const buttonLabel = () => {
-    if (!authenticated)             return 'ÚNETE A LA LISTA';
-    if (step === STEPS.CHECKING)    return 'Verificando…';
-    if (step === STEPS.APPROVING)   return 'Aprobando MXNB…';
-    if (step === STEPS.SIGNING)     return 'Firmando…';
-    if (step === STEPS.PLACING)     return 'Enviando orden…';
-    if (step === STEPS.SUCCESS)     return '✓ COMPRA REALIZADA';
-    if (numAmount > 0)              return `COMPRAR $${numAmount} MXNB`;
-    return 'COMPRAR';
+    if (!authenticated)             return t('bet.btn.join');
+    if (step === STEPS.CHECKING)    return t('bet.btn.checking');
+    if (step === STEPS.APPROVING)   return t('bet.btn.approving');
+    if (step === STEPS.SIGNING)     return t('bet.btn.signing');
+    if (step === STEPS.PLACING)     return t('bet.btn.placing');
+    if (step === STEPS.SUCCESS)     return t('bet.btn.success');
+    if (numAmount > 0)              return t('bet.btn.buyAmount', { amt: numAmount });
+    return t('bet.btn.buy');
   };
 
   return (
     <div className="bet-modal-overlay show" onClick={e => e.target === e.currentTarget && handleClose()}>
       <div className="bet-modal-box">
         <div className="bet-modal-header">
-          <span className="bet-modal-title">COLOCAR APUESTA</span>
+          <span className="bet-modal-title">{t('bet.title')}</span>
           <button className="bet-modal-close" onClick={handleClose}>✕</button>
         </div>
 
@@ -239,7 +241,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
             padding: '8px 12px', borderRadius: 8, background: 'var(--surface2)',
             marginBottom: 16, fontFamily: 'var(--font-mono)', fontSize: 12,
           }}>
-            <span style={{ color: 'var(--text-muted)' }}>Balance USDC</span>
+            <span style={{ color: 'var(--text-muted)' }}>{t('bet.balance')}</span>
             <span style={{ color: balance > 0 ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
               ${balance.toFixed(2)}
             </span>
@@ -249,7 +251,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
         {/* Amount input */}
         <div className="bet-amount-wrap">
           <label style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--text-muted)', display: 'block', marginBottom: 8 }}>
-            MONTO (MXNB)
+            {t('bet.amount')}
           </label>
           <div style={{ position: 'relative' }}>
             <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>$</span>
@@ -283,24 +285,24 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
         {numAmount > 0 && (
           <div className="bet-payout-info">
             <div className="bet-payout-row">
-              <span>Comisión ({feePct.toFixed(2)}%)</span>
+              <span>{t('bet.fee', { pct: feePct.toFixed(2) })}</span>
               <span style={{ opacity: 0.6 }}>-${fee.toFixed(2)} MXNB</span>
             </div>
             <div className="bet-payout-row">
-              <span>Pago estimado</span>
+              <span>{t('bet.estimatedPayout')}</span>
               <span className="green">${payout} MXNB</span>
             </div>
             <div className="bet-payout-row">
-              <span>Ganancia potencial</span>
+              <span>{t('bet.profit')}</span>
               <span className="green">+${profit} MXNB</span>
             </div>
             <div className="bet-payout-row">
-              <span>Probabilidad implícita</span>
+              <span>{t('bet.implied')}</span>
               <span>{outcomePct}%</span>
             </div>
             {sim && postTradePct !== null && (
               <div className="bet-payout-row">
-                <span>Precio tras tu compra</span>
+                <span>{t('bet.priceAfter')}</span>
                 <span style={{ color: highSlippage ? 'var(--red)' : 'var(--text-secondary)' }}>
                   {startPct}% → {postTradePct}%
                 </span>
@@ -308,7 +310,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
             )}
             {sim && (
               <div className="bet-payout-row">
-                <span>Slippage</span>
+                <span>{t('bet.slippage')}</span>
                 <span style={{
                   color: highSlippage ? 'var(--red)' : 'var(--text-secondary)',
                   fontWeight: highSlippage ? 700 : 400,
@@ -319,9 +321,9 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
             )}
             {noLiveBook && (
               <div className="bet-payout-row">
-                <span>Slippage</span>
+                <span>{t('bet.slippage')}</span>
                 <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
-                  Vista previa no disponible
+                  {t('bet.previewUnavailable')}
                 </span>
               </div>
             )}
@@ -339,8 +341,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
             fontSize: 11,
             lineHeight: 1.5,
           }}>
-            ⚠️ <strong>Volumen bajo:</strong> tu compra mueve el precio de {startPct}% a {postTradePct}%
-            (+{slippagePts.toFixed(1)} pts). Considera reducir el monto.
+            {t('bet.warn.lowVolume', { start: startPct, end: postTradePct, pts: slippagePts.toFixed(1) })}
           </div>
         )}
 
@@ -355,8 +356,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
             fontSize: 11,
             lineHeight: 1.5,
           }}>
-            ⚠️ <strong>Liquidez insuficiente:</strong> solo ${sim.filled.toFixed(2)} MXNB pueden
-            ejecutarse al precio actual. La orden podría fallar.
+            {t('bet.warn.lowLiquidity', { filled: sim.filled.toFixed(2) })}
           </div>
         )}
 
@@ -371,8 +371,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
             fontSize: 11,
             lineHeight: 1.5,
           }}>
-            📊 <strong>Mercado demo:</strong> sin libro de órdenes en vivo, no podemos
-            previsualizar slippage para este mercado.
+            {t('bet.warn.demoMarket')}
           </div>
         )}
 
@@ -416,7 +415,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
 
         {authenticated && (
           <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-muted)', marginTop: 12, fontFamily: 'var(--font-mono)' }}>
-            {isProtocolMarket(market) ? 'Pronos Protocol · Arbitrum' : 'Polymarket · Polygon'}
+            {isProtocolMarket(market) ? t('bet.protocol.own') : t('bet.protocol.poly')}
           </p>
         )}
       </div>

@@ -1,16 +1,18 @@
 import React from 'react';
-
-const FILTERS = [
-  { id: 'trending',  label: '🔥 Trending' },
-  { id: 'todos',     label: 'Todos' },
-  { id: 'mexico',    label: '🇲🇽 México & CDMX' },
-  { id: 'politica',  label: '🌎 Política Internacional' },
-  { id: 'deportes',  label: '⚽ Deportes' },
-  { id: 'crypto',    label: '₿ Crypto' },
-  { id: 'resueltos', label: '🏆 Resueltos' },
-];
+import { useT } from '../lib/i18n.js';
 
 export default function CategoryBar({ activeFilter, onFilter }) {
+  const t = useT();
+  const FILTERS = [
+    { id: 'trending',  label: t('cat.trending') },
+    { id: 'todos',     label: t('cat.all') },
+    { id: 'mexico',    label: t('cat.mexico') },
+    { id: 'politica',  label: t('cat.politica') },
+    { id: 'deportes',  label: t('cat.deportes') },
+    { id: 'crypto',    label: t('cat.crypto') },
+    { id: 'resueltos', label: t('cat.resueltos') },
+  ];
+
   return (
     <div className="category-bar">
       <div className="category-bar-inner">

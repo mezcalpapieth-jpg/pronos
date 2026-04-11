@@ -9,6 +9,7 @@ import { isExpired } from '../lib/deadline.js';
 import Sparkline from '../components/Sparkline.jsx';
 import MARKETS from '../lib/markets.js';
 import { generateMockData } from '../lib/mockTabData.js';
+import { useT } from '../lib/i18n.js';
 
 // Final-outcome percentage for a given option on a resolved market:
 // winner → 100, everything else → 0. Used everywhere we previously showed
@@ -319,6 +320,7 @@ function ActivityTab({activity, opt0, opt1}){
 
 /* ── Main ────────────────────────────────────────────────────── */
 export default function MarketDetail() {
+  const t = useT();
   const [searchParams]=useSearchParams(), navigate=useNavigate();
   const marketId=searchParams.get('id');
   const [market,setMarket]=useState(null);
@@ -394,8 +396,8 @@ export default function MarketDetail() {
 
   const openBet=(outcome,pct,idx)=>setBetModal({open:true,outcome,pct,clobTokenId:market?._clobTokenIds?.[idx??0]??null,isNegRisk:market?._isNegRisk??false});
 
-  if(loading)return(<><Nav/><div style={{textAlign:'center',padding:'100px 48px',fontFamily:'var(--font-mono)',fontSize:12,color:'var(--text-muted)',letterSpacing:'0.1em'}}>CARGANDO MERCADO…</div></>);
-  if(!market)return(<><Nav/><div style={{textAlign:'center',padding:'100px 48px'}}><h2 style={{fontFamily:'var(--font-display)',fontSize:32,color:'var(--text-primary)',marginBottom:16}}>Mercado no encontrado</h2><button className="btn-ghost" onClick={()=>navigate('/')}>← Volver</button></div></>);
+  if(loading)return(<><Nav/><div style={{textAlign:'center',padding:'100px 48px',fontFamily:'var(--font-mono)',fontSize:12,color:'var(--text-muted)',letterSpacing:'0.1em'}}>{t('detail.loading')}</div></>);
+  if(!market)return(<><Nav/><div style={{textAlign:'center',padding:'100px 48px'}}><h2 style={{fontFamily:'var(--font-display)',fontSize:32,color:'var(--text-primary)',marginBottom:16}}>{t('detail.notFound')}</h2><button className="btn-ghost" onClick={()=>navigate('/')}>{t('detail.back')}</button></div></>);
 
   const resolved=!!market._resolved;
   const awaiting=!resolved && !!market._awaitingResolution;
@@ -409,7 +411,7 @@ export default function MarketDetail() {
       <Nav/>
       <main style={{maxWidth:1100,margin:'0 auto',padding:isMobile?'24px 16px':'40px 48px'}}>
         <button onClick={()=>navigate('/')} style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)',letterSpacing:'0.06em',background:'none',border:'none',cursor:'pointer',marginBottom:28,display:'flex',alignItems:'center',gap:6}}>
-          ← MERCADOS
+          {t('detail.markets')}
         </button>
 
         {resolved&&(
@@ -417,12 +419,12 @@ export default function MarketDetail() {
             <div style={{display:'flex',alignItems:'center',gap:14}}>
               <span style={{fontSize:28}}>{market.icon}</span>
               <div>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.12em',marginBottom:4}}>MERCADO CERRADO · {market._resolvedDate}</div>
-                <div style={{fontFamily:'var(--font-display)',fontSize:22,color:'var(--yes)',letterSpacing:'0.04em'}}>🏆 {market._winnerShort} — Ganador</div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.12em',marginBottom:4}}>{t('detail.resolvedDate', { date: market._resolvedDate })}</div>
+                <div style={{fontFamily:'var(--font-display)',fontSize:22,color:'var(--yes)',letterSpacing:'0.04em'}}>🏆 {market._winnerShort} — {t('detail.winner')}</div>
                 <div style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-secondary)',marginTop:3}}>{market._resolvedBy}</div>
               </div>
             </div>
-            <span style={{fontFamily:'var(--font-mono)',fontSize:10,letterSpacing:'0.1em',padding:'6px 14px',borderRadius:6,background:'rgba(22,163,74,0.12)',border:'1px solid rgba(22,163,74,0.3)',color:'var(--yes)'}}>RESUELTO</span>
+            <span style={{fontFamily:'var(--font-mono)',fontSize:10,letterSpacing:'0.1em',padding:'6px 14px',borderRadius:6,background:'rgba(22,163,74,0.12)',border:'1px solid rgba(22,163,74,0.3)',color:'var(--yes)'}}>{t('detail.resolved')}</span>
           </div>
         )}
         {awaiting&&(
@@ -430,12 +432,12 @@ export default function MarketDetail() {
             <div style={{display:'flex',alignItems:'center',gap:14}}>
               <span style={{fontSize:28}}>🔒</span>
               <div>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.12em',marginBottom:4}}>MERCADO CERRADO · {market.deadline}</div>
-                <div style={{fontFamily:'var(--font-display)',fontSize:22,color:'var(--text-primary)',letterSpacing:'0.04em'}}>Esperando resolución oficial</div>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-secondary)',marginTop:3}}>El resultado se publicará automáticamente cuando esté disponible</div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.12em',marginBottom:4}}>{t('detail.resolvedDate', { date: market.deadline })}</div>
+                <div style={{fontFamily:'var(--font-display)',fontSize:22,color:'var(--text-primary)',letterSpacing:'0.04em'}}>{t('detail.awaitingTitle')}</div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-secondary)',marginTop:3}}>{t('detail.awaitingSub')}</div>
               </div>
             </div>
-            <span style={{fontFamily:'var(--font-mono)',fontSize:10,letterSpacing:'0.1em',padding:'6px 14px',borderRadius:6,background:'rgba(148,163,184,0.1)',border:'1px solid rgba(148,163,184,0.3)',color:'var(--text-muted)'}}>POR RESOLVER</span>
+            <span style={{fontFamily:'var(--font-mono)',fontSize:10,letterSpacing:'0.1em',padding:'6px 14px',borderRadius:6,background:'rgba(148,163,184,0.1)',border:'1px solid rgba(148,163,184,0.3)',color:'var(--text-muted)'}}>{t('detail.toResolve')}</span>
           </div>
         )}
 
@@ -445,11 +447,11 @@ export default function MarketDetail() {
               <span style={{fontSize:18}}>{market.icon}</span>
               <span style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.1em'}}>{market.categoryLabel}</span>
               {resolved?(
-                <span style={{fontFamily:'var(--font-mono)',fontSize:9,letterSpacing:'0.1em',padding:'3px 8px',borderRadius:4,background:'rgba(184,144,10,0.1)',border:'1px solid rgba(184,144,10,0.25)',color:'var(--gold)'}}>CERRADO</span>
+                <span style={{fontFamily:'var(--font-mono)',fontSize:9,letterSpacing:'0.1em',padding:'3px 8px',borderRadius:4,background:'rgba(184,144,10,0.1)',border:'1px solid rgba(184,144,10,0.25)',color:'var(--gold)'}}>{t('detail.closed')}</span>
               ):awaiting?(
-                <span style={{fontFamily:'var(--font-mono)',fontSize:9,letterSpacing:'0.1em',padding:'3px 8px',borderRadius:4,background:'rgba(148,163,184,0.1)',border:'1px solid rgba(148,163,184,0.3)',color:'var(--text-muted)'}}>🔒 CERRADO</span>
+                <span style={{fontFamily:'var(--font-mono)',fontSize:9,letterSpacing:'0.1em',padding:'3px 8px',borderRadius:4,background:'rgba(148,163,184,0.1)',border:'1px solid rgba(148,163,184,0.3)',color:'var(--text-muted)'}}>{t('detail.lockedClosed')}</span>
               ):(
-                <>{market._source==='polymarket'&&<span className="mock-card-badge live">LIVE</span>}{market.trending&&<span className="mock-card-badge trending">🔥 TRENDING</span>}</>
+                <>{market._source==='polymarket'&&<span className="mock-card-badge live">{t('card.live')}</span>}{market.trending&&<span className="mock-card-badge trending">{t('card.trending')}</span>}</>
               )}
             </div>
 
@@ -461,24 +463,24 @@ export default function MarketDetail() {
 
             <div style={{display:'flex',flexWrap:'wrap',gap:0,borderTop:'1px solid var(--border)',borderBottom:'1px solid var(--border)',marginBottom:36}}>
               <div style={{padding:'12px 16px 12px 0',marginRight:16,borderRight:'1px solid var(--border)'}}>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.1em',marginBottom:4}}>VOLUMEN</div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.1em',marginBottom:4}}>{t('detail.volume')}</div>
                 <div style={{fontFamily:'var(--font-mono)',fontSize:isMobile?13:16,color:'var(--text-primary)'}}>${market.volume}</div>
               </div>
               <div style={{padding:'12px 16px 12px 0',marginRight:16,borderRight:'1px solid var(--border)'}}>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.1em',marginBottom:4}}>{locked?'CERRÓ':'CIERRA'}</div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.1em',marginBottom:4}}>{locked?t('detail.closedOn'):t('detail.closesOn')}</div>
                 <div style={{fontFamily:'var(--font-mono)',fontSize:isMobile?13:16,color:'var(--text-primary)'}}>{market.deadline}</div>
               </div>
               <div style={{padding:'12px 0'}}>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.1em',marginBottom:4}}>ESTADO</div>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:13,color:resolved?'var(--gold)':awaiting?'var(--text-muted)':'var(--green)'}}>{resolved?'CERRADO':awaiting?'POR RESOLVER':'ACTIVO'}</div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.1em',marginBottom:4}}>{t('detail.status')}</div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:13,color:resolved?'var(--gold)':awaiting?'var(--text-muted)':'var(--green)'}}>{resolved?t('detail.statusClosed'):awaiting?t('detail.statusToResolve'):t('detail.statusActive')}</div>
               </div>
             </div>
 
             {/* Price history chart — single for yes/no, multi for 3+ options */}
             <div style={{background:'var(--surface1)',border:'1px solid var(--border)',borderRadius:16,marginBottom:24}}>
               <div style={{padding:'16px 20px',borderBottom:'1px solid var(--border)',fontFamily:'var(--font-mono)',fontSize:10,letterSpacing:'0.1em',color:'var(--text-muted)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                <span>{locked?'HISTORIAL DE PRECIO':'PRECIO EN TIEMPO REAL'}</span>
-                <span style={{color:'var(--text-muted)',fontSize:10,letterSpacing:'0.08em'}}>ÚLT. 30 DÍAS</span>
+                <span>{locked?t('detail.priceHistory'):t('detail.realtime')}</span>
+                <span style={{color:'var(--text-muted)',fontSize:10,letterSpacing:'0.08em'}}>{t('detail.last30days')}</span>
               </div>
               <div style={{padding:'24px 24px 20px'}}>
                 {(market.options||[]).length<=2?(
@@ -521,13 +523,13 @@ export default function MarketDetail() {
 
             <div style={{background:'var(--surface1)',border:'1px solid var(--border)',borderRadius:16,marginBottom:24}}>
               <div style={{padding:'16px 20px',borderBottom:'1px solid var(--border)',fontFamily:'var(--font-mono)',fontSize:10,letterSpacing:'0.1em',color:'var(--text-muted)'}}>
-                {resolved?'PROBABILIDADES FINALES':awaiting?'CERRADO · ESPERANDO RESULTADO':'PROBABILIDAD ACTUAL'}
+                {resolved?t('detail.finalProbs'):awaiting?t('detail.closedAwaiting'):t('detail.currentProb')}
               </div>
               <ProbabilityChart options={market.options} resolved={resolved} winner={market._winner} awaiting={awaiting}/>
             </div>
 
             <div style={{marginBottom:40}}>
-              <div style={{fontFamily:'var(--font-mono)',fontSize:10,letterSpacing:'0.1em',color:'var(--text-muted)',marginBottom:12}}>{resolved?'RESULTADOS FINALES':'RESULTADOS'}</div>
+              <div style={{fontFamily:'var(--font-mono)',fontSize:10,letterSpacing:'0.1em',color:'var(--text-muted)',marginBottom:12}}>{resolved?t('detail.finalResults'):t('detail.results')}</div>
               <div style={{display:'flex',flexDirection:'column',gap:10}}>
                 {(market.options||[]).map((opt,i)=>{
                   const isWinner=resolved&&opt.label===market._winner;
@@ -553,7 +555,7 @@ export default function MarketDetail() {
                       {!locked&&(
                         <button className={i===0?'btn-yes':'btn-danger'} style={{padding:'8px 16px',fontSize:12,flexShrink:0,whiteSpace:'nowrap'}}
                           onClick={e=>{e.stopPropagation();openBet(opt.label,opt.pct,i);}}>
-                          Comprar
+                          {t('detail.buy')}
                         </button>
                       )}
                     </div>
@@ -568,10 +570,10 @@ export default function MarketDetail() {
           <div style={{position:isMobile?'static':'sticky',top:88}}>
             {resolved?(
               <div style={{background:'var(--surface1)',border:'1px solid rgba(22,163,74,0.3)',borderRadius:16,padding:24}}>
-                <div style={{fontFamily:'var(--font-display)',fontSize:20,letterSpacing:'0.04em',color:'var(--yes)',marginBottom:8}}>MERCADO RESUELTO</div>
+                <div style={{fontFamily:'var(--font-display)',fontSize:20,letterSpacing:'0.04em',color:'var(--yes)',marginBottom:8}}>{t('detail.marketResolved')}</div>
                 <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.08em',marginBottom:20}}>{market._resolvedDate} · {market._resolvedBy}</div>
                 <div style={{background:'var(--surface2)',borderRadius:10,padding:16,marginBottom:20}}>
-                  <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.1em',marginBottom:10}}>GANADOR OFICIAL</div>
+                  <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.1em',marginBottom:10}}>{t('detail.officialWinner')}</div>
                   <div style={{fontFamily:'var(--font-display)',fontSize:24,color:'var(--yes)',letterSpacing:'0.04em',marginBottom:4}}>🏆 {market._winnerShort}</div>
                   <div style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-secondary)'}}>{market._resolvedBy}</div>
                 </div>
@@ -586,24 +588,24 @@ export default function MarketDetail() {
                     );
                   })}
                 </div>
-                <button disabled style={{width:'100%',marginTop:20,padding:'12px 0',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)',letterSpacing:'0.08em',cursor:'not-allowed'}}>GANANCIAS YA LIQUIDADAS</button>
-                <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',textAlign:'center',marginTop:10}}>Liquidado on-chain · MXNB</p>
+                <button disabled style={{width:'100%',marginTop:20,padding:'12px 0',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)',letterSpacing:'0.08em',cursor:'not-allowed'}}>{t('detail.winningsPaid')}</button>
+                <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',textAlign:'center',marginTop:10}}>{t('detail.settledOnchain')}</p>
               </div>
             ):awaiting?(
               <div style={{background:'var(--surface1)',border:'1px solid rgba(148,163,184,0.3)',borderRadius:16,padding:24}}>
-                <div style={{fontFamily:'var(--font-display)',fontSize:20,letterSpacing:'0.04em',color:'var(--text-primary)',marginBottom:8}}>MERCADO CERRADO</div>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.08em',marginBottom:20}}>Cerró el {market.deadline}</div>
+                <div style={{fontFamily:'var(--font-display)',fontSize:20,letterSpacing:'0.04em',color:'var(--text-primary)',marginBottom:8}}>{t('detail.marketClosed')}</div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.08em',marginBottom:20}}>{t('detail.closedAt', { date: market.deadline })}</div>
                 <div style={{background:'var(--surface2)',borderRadius:10,padding:16,marginBottom:20,textAlign:'center'}}>
                   <div style={{fontSize:32,marginBottom:8}}>🔒</div>
-                  <div style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-secondary)',lineHeight:1.5}}>El resultado oficial se publicará automáticamente en los próximos minutos.</div>
+                  <div style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-secondary)',lineHeight:1.5}}>{t('detail.officialSoon')}</div>
                 </div>
-                <button disabled style={{width:'100%',padding:'12px 0',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)',letterSpacing:'0.08em',cursor:'not-allowed'}}>ESPERANDO RESULTADO</button>
-                <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',textAlign:'center',marginTop:10}}>Las apuestas ya están cerradas</p>
+                <button disabled style={{width:'100%',padding:'12px 0',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)',letterSpacing:'0.08em',cursor:'not-allowed'}}>{t('detail.waitingResult')}</button>
+                <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',textAlign:'center',marginTop:10}}>{t('detail.betsClosed')}</p>
               </div>
             ):(
               <div style={{background:'var(--surface1)',border:'1px solid var(--border-active)',borderRadius:16,padding:24}}>
-                <div style={{fontFamily:'var(--font-display)',fontSize:20,letterSpacing:'0.04em',color:'var(--text-primary)',marginBottom:20}}>COMPRAR</div>
-                <p style={{fontSize:13,color:'var(--text-muted)',marginBottom:20}}>Elige un resultado para comprar tu posición.</p>
+                <div style={{fontFamily:'var(--font-display)',fontSize:20,letterSpacing:'0.04em',color:'var(--text-primary)',marginBottom:20}}>{t('detail.buyTitle')}</div>
+                <p style={{fontSize:13,color:'var(--text-muted)',marginBottom:20}}>{t('detail.pickOutcome')}</p>
                 <div style={{borderTop:'1px solid var(--border)',paddingTop:20}}>
                   {(market.options||[]).map((opt,i)=>(
                     <button key={i} className={i===0?'btn-yes':'btn-danger'} style={{width:'100%',marginBottom:10}} onClick={()=>openBet(opt.label,opt.pct,i)}>
@@ -611,7 +613,7 @@ export default function MarketDetail() {
                     </button>
                   ))}
                 </div>
-                <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',textAlign:'center',marginTop:8}}>On-chain · MXNB</p>
+                <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',textAlign:'center',marginTop:8}}>{t('detail.onchain')}</p>
               </div>
             )}
           </div>

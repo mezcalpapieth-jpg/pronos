@@ -4,8 +4,10 @@ import { ethers } from 'ethers';
 import Nav from '../components/Nav.jsx';
 import Footer from '../components/Footer.jsx';
 import { getClobPositions, getUsdcBalance } from '../lib/clob.js';
+import { useT } from '../lib/i18n.js';
 
 function PositionCard({ pos }) {
+  const t = useT();
   const value     = Number(pos.currentValue || pos.size || 0).toFixed(2);
   const size      = Number(pos.initialValue || pos.size || 0).toFixed(2);
   const pnl       = (Number(value) - Number(size)).toFixed(2);
@@ -49,7 +51,7 @@ function PositionCard({ pos }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 2, letterSpacing: '0.08em' }}>
-            APOSTADO
+            {t('pf.staked')}
           </div>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>
             ${size} MXNB
@@ -57,7 +59,7 @@ function PositionCard({ pos }) {
         </div>
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 2, letterSpacing: '0.08em' }}>
-            GANANCIA / PÉRDIDA
+            {t('pf.pnl')}
           </div>
           <div style={{
             fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700,
@@ -72,6 +74,7 @@ function PositionCard({ pos }) {
 }
 
 export default function Portfolio() {
+  const t = useT();
   const { authenticated, login, user } = usePrivy();
   const { wallets } = useWallets();
   const [positions, setPositions]   = useState([]);
@@ -127,10 +130,10 @@ export default function Portfolio() {
             color: 'var(--text-primary)',
             marginBottom: 8,
           }}>
-            Portafolio
+            {t('pf.title')}
           </h1>
           <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
-            Tus posiciones activas en Polymarket
+            {t('pf.subtitle')}
           </p>
         </div>
 
@@ -140,10 +143,10 @@ export default function Portfolio() {
             border: '1px dashed var(--border)', borderRadius: 16,
           }}>
             <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>
-              Conecta tu cuenta para ver tus posiciones
+              {t('pf.connect')}
             </p>
             <button className="btn-primary" onClick={login}>
-              Conectar
+              {t('pf.connectBtn')}
             </button>
           </div>
         ) : (
@@ -156,9 +159,9 @@ export default function Portfolio() {
               marginBottom: 40,
             }}>
               {[
-                { label: 'Balance MXNB',    value: balance != null ? `$${balance.toFixed(2)}` : '—' },
-                { label: 'En Posiciones',   value: `$${totalValue.toFixed(2)}` },
-                { label: 'Mercados Activos', value: positions.length.toString() },
+                { label: t('pf.balanceMxnb'),  value: balance != null ? `$${balance.toFixed(2)}` : '—' },
+                { label: t('pf.inPositions'),  value: `$${totalValue.toFixed(2)}` },
+                { label: t('pf.activeMarkets'), value: positions.length.toString() },
               ].map(({ label, value }) => (
                 <div key={label} style={{
                   background: 'var(--surface1)',
@@ -186,11 +189,11 @@ export default function Portfolio() {
             {/* Positions */}
             {loading ? (
               <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                Cargando posiciones…
+                {t('pf.loading')}
               </div>
             ) : error ? (
               <div style={{ color: 'var(--red)', fontFamily: 'var(--font-mono)', fontSize: 13, padding: '20px', background: 'var(--red-dim)', borderRadius: 10 }}>
-                Error: {error}
+                {t('pf.error', { msg: error })}
               </div>
             ) : positions.length === 0 ? (
               <div style={{
@@ -199,10 +202,10 @@ export default function Portfolio() {
               }}>
                 <p style={{ fontSize: 32, marginBottom: 12 }}>🎯</p>
                 <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
-                  No tienes posiciones abiertas todavía.
+                  {t('pf.empty')}
                 </p>
                 <a href="/mvp" className="btn-primary" style={{ display: 'inline-block', marginTop: 20, textDecoration: 'none' }}>
-                  Ver mercados
+                  {t('pf.viewMarkets')}
                 </a>
               </div>
             ) : (

@@ -5,6 +5,7 @@ import MARKETS from '../lib/markets.js';
 import { fetchResolutions } from '../lib/resolutions.js';
 import { fetchPriceHistory, extractSeries } from '../lib/priceHistory.js';
 import { isExpired } from '../lib/deadline.js';
+import { useT } from '../lib/i18n.js';
 import Sparkline from './Sparkline.jsx';
 
 const OPTION_COLORS = ['var(--yes)', 'var(--red)', 'var(--gold)', '#8b5cf6'];
@@ -12,6 +13,7 @@ const AUTO_INTERVAL = 6000; // ms
 
 /* ── Hero ─────────────────────────────────────────────── */
 export default function Hero() {
+  const t = useT();
   const { authenticated, login } = usePrivy();
   const navigate = useNavigate();
   const [featured, setFeatured] = useState(() =>
@@ -32,7 +34,11 @@ export default function Hero() {
     }).catch(() => {});
   }, []);
 
-  // Batch-fetch real CLOB price history for every featured market's clobTokenIds
+  // Batch-fetch real CLOB price history for every featured market's clobTokenIds.
+  // We also use the *last* point of each token's series as the live probability
+  // and patch it back into featured[i].options[j].pct so the colored odds row
+  // under each Sparkline reflects current depth instead of the stale value
+  // baked in at hardcoded-markets time.
   useEffect(() => {
     let cancelled = false;
     const ids = [];
@@ -41,7 +47,31 @@ export default function Hero() {
     }
     if (ids.length === 0) return;
     fetchPriceHistory(Array.from(new Set(ids)), { interval: '1w', fidelity: 60 })
-      .then(hist => { if (!cancelled) setHistory(hist); })
+      .then(hist => {
+        if (cancelled) return;
+        setHistory(hist);
+
+        // Refresh per-option pct from latest series point. Only re-set the
+        // featured array if at least one number actually changed, to avoid a
+        // useless render loop.
+        let changed = false;
+        const updated = featured.map(m => {
+          const tokenIds = m?._clobTokenIds;
+          if (!Array.isArray(tokenIds) || !Array.isArray(m.options)) return m;
+          const newOptions = m.options.map((opt, i) => {
+            const tid = tokenIds[i];
+            const pts = tid && hist[tid];
+            if (!Array.isArray(pts) || pts.length === 0) return opt;
+            const last = pts[pts.length - 1];
+            const livePct = Math.round(Number(last.p));
+            if (!Number.isFinite(livePct) || livePct === opt.pct) return opt;
+            changed = true;
+            return { ...opt, pct: livePct };
+          });
+          return changed ? { ...m, options: newOptions } : m;
+        });
+        if (changed) setFeatured(updated);
+      })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [featured]);
@@ -78,41 +108,38 @@ export default function Hero() {
         <div className="hero-left">
           <div className="hero-badge">
             <span className="dot" />
-            <span>Beta · Powered by Polymarket</span>
+            <span>{t('hero.badge')}</span>
           </div>
 
           <h1 className="hero-headline">
-            El primer mercado<br />
-            de predicciones<br />
-            <span className="accent">on-chain</span>
+            {t('hero.headline.line1')}<br />
+            {t('hero.headline.line2')}<br />
+            <span className="accent">{t('hero.headline.line3')}</span>
           </h1>
 
-          <p className="hero-sub">
-            Predice eventos de política, deportes, cultura y crypto en Latinoamérica.
-            Gana MXNB cuando aciertas. Sin intermediarios. Sin MetaMask.
-          </p>
+          <p className="hero-sub">{t('hero.sub')}</p>
 
           <div className="hero-btns">
             {authenticated ? (
-              <a href="#markets" className="btn-primary">Ver Mercados</a>
+              <a href="#markets" className="btn-primary">{t('hero.cta.viewMarkets')}</a>
             ) : (
-              <button className="btn-primary" onClick={login}>Empezar a Predecir</button>
+              <button className="btn-primary" onClick={login}>{t('hero.cta.start')}</button>
             )}
-            <a href="#how-it-works" className="btn-ghost">Cómo funciona</a>
+            <a href="#how-it-works" className="btn-ghost">{t('hero.cta.howItWorks')}</a>
           </div>
 
           <div className="hero-stats">
             <div className="hero-stat">
               <span className="hero-stat-val"><span className="green">$1.2B+</span></span>
-              <span className="hero-stat-label">volumen Polymarket</span>
+              <span className="hero-stat-label">{t('hero.stats.volumeLabel')}</span>
             </div>
             <div className="hero-stat">
               <span className="hero-stat-val">60+</span>
-              <span className="hero-stat-label">mercados activos</span>
+              <span className="hero-stat-label">{t('hero.stats.activeLabel')}</span>
             </div>
             <div className="hero-stat">
               <span className="hero-stat-val"><span className="green">2%</span></span>
-              <span className="hero-stat-label">comisión · sin gas</span>
+              <span className="hero-stat-label">{t('hero.stats.feeLabel')}</span>
             </div>
           </div>
         </div>
@@ -123,7 +150,7 @@ export default function Hero() {
           <div className="hero-carousel-nav">
             <button className="hero-nav-btn" onClick={goPrev} aria-label="Anterior">&#8249;</button>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em' }}>
-              DESTACADOS
+              {t('hero.featured')}
             </span>
             <button className="hero-nav-btn" onClick={goNext} aria-label="Siguiente">&#8250;</button>
           </div>
@@ -139,7 +166,7 @@ export default function Hero() {
             {/* Header */}
             <div className="hfc-header">
               <span className="hfc-cat">{market.icon} {market.categoryLabel}</span>
-              <span className="hfc-live">LIVE</span>
+              <span className="hfc-live">{t('hero.live')}</span>
             </div>
 
             {/* Title */}
