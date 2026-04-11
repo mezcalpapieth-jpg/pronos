@@ -48,12 +48,19 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
   const isLoading  = [STEPS.CHECKING, STEPS.APPROVING, STEPS.SIGNING, STEPS.PLACING].includes(step);
 
   // Slippage simulation: walk the ask ladder with the user's post-fee MXNB.
-  // Returns null when the book hasn't loaded or the user hasn't typed an amount.
+  // `slippagePoints` is expressed in percentage points of implied probability
+  // (e.g. market moved from 54% to 56% = "+2 pts"). We use the same unit in
+  // the row, the warning and the threshold so nothing contradicts anything.
   const sim = (book && afterFee > 0) ? simulateMarketBuy(book, afterFee) : null;
-  const slippagePct    = sim ? sim.slippagePct : 0;
+  const slippagePts    = sim ? sim.slippagePoints : 0;
+  const startPct       = sim ? Math.round(sim.startPrice * 100) : null;
   const postTradePct   = sim ? Math.round(sim.lastFillPrice * 100) : null;
-  const highSlippage   = slippagePct >= 5;
+  const highSlippage   = slippagePts >= 5;
   const partialFill    = sim && sim.remaining > 0.01;
+  // Slippage preview is only meaningful when we have a live book. Local/demo
+  // markets without a `clobTokenId` can't be simulated — show a hint instead
+  // of silently hiding the section so the user knows why numbers are missing.
+  const noLiveBook     = !clobTokenId;
 
   // Load MXNB balance when modal opens
   useEffect(() => {
@@ -295,7 +302,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
               <div className="bet-payout-row">
                 <span>Precio tras tu compra</span>
                 <span style={{ color: highSlippage ? 'var(--red)' : 'var(--text-secondary)' }}>
-                  {postTradePct}%
+                  {startPct}% → {postTradePct}%
                 </span>
               </div>
             )}
@@ -306,14 +313,22 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
                   color: highSlippage ? 'var(--red)' : 'var(--text-secondary)',
                   fontWeight: highSlippage ? 700 : 400,
                 }}>
-                  {slippagePct >= 0 ? '+' : ''}{slippagePct.toFixed(2)}%
+                  +{slippagePts.toFixed(1)} pts
+                </span>
+              </div>
+            )}
+            {noLiveBook && (
+              <div className="bet-payout-row">
+                <span>Slippage</span>
+                <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                  Vista previa no disponible
                 </span>
               </div>
             )}
           </div>
         )}
 
-        {/* High slippage warning — volume too low, price will drift > 5% */}
+        {/* High slippage warning — book is thin, price drifts ≥5 points */}
         {numAmount > 0 && highSlippage && (
           <div style={{
             padding: '10px 14px', borderRadius: 8, marginBottom: 16,
@@ -324,8 +339,8 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
             fontSize: 11,
             lineHeight: 1.5,
           }}>
-            ⚠️ <strong>Volumen bajo:</strong> tu compra mueve el precio {slippagePct.toFixed(1)}%
-            (de {Math.round(sim.startPrice * 100)}% a {postTradePct}%). Considera reducir el monto.
+            ⚠️ <strong>Volumen bajo:</strong> tu compra mueve el precio de {startPct}% a {postTradePct}%
+            (+{slippagePts.toFixed(1)} pts). Considera reducir el monto.
           </div>
         )}
 
@@ -342,6 +357,22 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
           }}>
             ⚠️ <strong>Liquidez insuficiente:</strong> solo ${sim.filled.toFixed(2)} MXNB pueden
             ejecutarse al precio actual. La orden podría fallar.
+          </div>
+        )}
+
+        {/* Demo market — no live order book to simulate against */}
+        {numAmount > 0 && noLiveBook && (
+          <div style={{
+            padding: '10px 14px', borderRadius: 8, marginBottom: 16,
+            background: 'rgba(148,163,184,0.06)',
+            border: '1px solid rgba(148,163,184,0.2)',
+            color: 'var(--text-muted)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            lineHeight: 1.5,
+          }}>
+            📊 <strong>Mercado demo:</strong> sin libro de órdenes en vivo, no podemos
+            previsualizar slippage para este mercado.
           </div>
         )}
 

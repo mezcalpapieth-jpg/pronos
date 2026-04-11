@@ -211,14 +211,19 @@ export async function fetchOrderBook(tokenId) {
  *
  * Walks the ask ladder from best to worst, consuming depth with the user's
  * `usdcAmount`. Returns:
- *   - shares:        total outcome tokens received
- *   - avgPrice:      volume-weighted average execution price (0-1)
- *   - lastFillPrice: price of the last consumed level — the new post-trade
- *                    best ask, i.e. what the market moves to
- *   - startPrice:    best ask before the trade (0-1)
- *   - filled:        usdc actually used (may be < amount if book is too thin)
- *   - remaining:     usdc left unfilled (0 when book has enough depth)
- *   - slippagePct:   (lastFillPrice - startPrice) / startPrice × 100
+ *   - shares:         total outcome tokens received
+ *   - avgPrice:       volume-weighted average execution price (0-1)
+ *   - lastFillPrice:  price of the last consumed level — the new post-trade
+ *                     best ask, i.e. what the market moves to
+ *   - startPrice:     best ask before the trade (0-1)
+ *   - filled:         usdc actually used (may be < amount if book is too thin)
+ *   - remaining:      usdc left unfilled (0 when book has enough depth)
+ *   - slippagePoints: (lastFillPrice - startPrice) × 100 — drift measured in
+ *                     percentage points of implied probability, which is how
+ *                     prediction-market users think about price changes
+ *                     (a market going from 54% to 56% drifted "2 points").
+ *                     Capped at [0, 100] since a single outcome can't move
+ *                     the probability more than 100 points.
  *
  * Returns null when the book is empty.
  */
@@ -250,9 +255,10 @@ export function simulateMarketBuy(book, usdcAmount) {
   }
 
   const avgPrice = shares > 0 ? spent / shares : startPrice;
-  const slippagePct = startPrice > 0
-    ? ((lastFillPrice - startPrice) / startPrice) * 100
-    : 0;
+  // Percentage-point drift — matches how the UI renders outcome probabilities,
+  // clamped so we never display nonsensical values like 137%.
+  const rawDrift = (lastFillPrice - startPrice) * 100;
+  const slippagePoints = Math.max(0, Math.min(100, rawDrift));
 
   return {
     shares,
@@ -261,6 +267,6 @@ export function simulateMarketBuy(book, usdcAmount) {
     startPrice,
     filled: spent,
     remaining,
-    slippagePct,
+    slippagePoints,
   };
 }
