@@ -3,6 +3,7 @@ import MarketCard from './MarketCard.jsx';
 import { gmFetchMarkets } from '../lib/gamma.js';
 import { fetchResolutions } from '../lib/resolutions.js';
 import { fetchGeneratedMarkets } from '../lib/generatedMarkets.js';
+import { fetchApprovedPolymarket, applyApprovals } from '../lib/polymarketApproved.js';
 import { fetchPriceHistory, collectTokenIds } from '../lib/priceHistory.js';
 import { isExpired } from '../lib/deadline.js';
 import { useT } from '../lib/i18n.js';
@@ -40,20 +41,26 @@ export default function MarketsGrid({ activeFilter }) {
       setLoading(true);
       setError(null);
       try {
-        // Fetch live markets, AI-generated markets, and resolutions in parallel
-        const [live, generated, resolutions] = await Promise.all([
+        // Fetch live markets, AI-generated, resolutions, and the polymarket
+        // approval allow-list in parallel.
+        const [live, generated, resolutions, approved] = await Promise.all([
           gmFetchMarkets({ limit: 60 }).catch(() => null),
           fetchGeneratedMarkets('approved').catch(() => []),
           fetchResolutions().catch(() => []),
+          fetchApprovedPolymarket().catch(() => []),
         ]);
 
         if (cancelled) return;
 
         let allMarkets;
         if (live) {
-          const liveIds = new Set(live.map(m => m.id));
+          // Gate live polymarket markets behind admin approval. Only those with
+          // a row in `polymarket_approved` survive — and they get their title +
+          // option labels swapped to the cached Spanish translation.
+          const filteredLive = applyApprovals(live, approved);
+          const liveIds = new Set(filteredLive.map(m => m.id));
           const local = MARKETS.filter(m => !liveIds.has(m.id));
-          allMarkets = [...live, ...generated, ...local];
+          allMarkets = [...filteredLive, ...generated, ...local];
         } else {
           allMarkets = [...generated, ...MARKETS];
           setError('Usando datos locales — API no disponible.');

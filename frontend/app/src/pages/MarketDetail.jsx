@@ -4,6 +4,7 @@ import Nav from '../components/Nav.jsx';
 import BetModal from '../components/BetModal.jsx';
 import { gmFetchBySlug } from '../lib/gamma.js';
 import { fetchResolutions } from '../lib/resolutions.js';
+import { fetchApprovedPolymarket } from '../lib/polymarketApproved.js';
 import { fetchPriceHistory, extractSeries } from '../lib/priceHistory.js';
 import { isExpired } from '../lib/deadline.js';
 import Sparkline from '../components/Sparkline.jsx';
@@ -336,12 +337,30 @@ export default function MarketDetail() {
     async function load(){
       setLoading(true);
       try{
-        const [live, resolutions] = await Promise.all([
+        const [live, resolutions, approved] = await Promise.all([
           gmFetchBySlug(marketId).catch(()=>null),
           fetchResolutions().catch(()=>[]),
+          fetchApprovedPolymarket().catch(()=>[]),
         ]);
         if(cancelled) return;
-        let m = live || MARKETS.find(m=>m.id===marketId) || null;
+
+        // Hardcoded markets always render. Live polymarket markets only render
+        // if their slug is in the approval list — otherwise we treat the URL
+        // as not found so unapproved Gamma slugs aren't reachable directly.
+        const localHit = MARKETS.find(m => m.id === marketId) || null;
+        const approval = approved.find(a => a.slug === marketId) || null;
+        let liveAllowed = null;
+        if (live && approval) {
+          liveAllowed = { ...live };
+          if (approval.title_es) liveAllowed.title = approval.title_es;
+          if (Array.isArray(approval.options_es) && approval.options_es.length > 0) {
+            liveAllowed.options = liveAllowed.options.map((opt, i) => ({
+              ...opt,
+              label: approval.options_es[i]?.label || opt.label,
+            }));
+          }
+        }
+        let m = liveAllowed || localHit;
         // Apply resolution data if exists
         if(m){
           const r = resolutions.find(r=>r.market_id===m.id);

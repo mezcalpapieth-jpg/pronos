@@ -7,6 +7,11 @@ import { fetchGeneratedMarkets, updateGeneratedMarket } from '../lib/generatedMa
 import { gmFetchMarkets, gmFetchClosedMarkets } from '../lib/gamma.js';
 import { resolveEndDate, isExpired } from '../lib/deadline.js';
 import {
+  fetchApprovedPolymarket,
+  approvePolymarketMarket,
+  unapprovePolymarketMarket,
+} from '../lib/polymarketApproved.js';
+import {
   getSafeAddresses, setSafeAddresses,
   createSafe, proposeTransaction, confirmTransaction, executeTransaction,
   getPendingTransactions, getSafeInfo,
@@ -255,6 +260,10 @@ function classifyMarket(market, resolution) {
   if (market?._resolved) return 'resolved';
   if (resolution && !isPendingResolution(resolution)) return 'resolved';
   if (resolution && isPendingResolution(resolution)) return 'closed';
+  // Polymarket may settle a market early — gmFetchClosedMarkets stamps these
+  // entries with `_polymarketClosed`, which is authoritative regardless of
+  // the listed deadline (so they don't get misclassified as 'open').
+  if (market?._polymarketClosed) return 'closed';
   if (isExpired(market)) return 'closed';
   return 'open';
 }
@@ -297,11 +306,13 @@ function MarketsList({ mode, privyId }) {
   const [markets, setMarkets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [resolutions, setResolutions] = useState([]);   // raw rows from API
+  const [approved, setApproved] = useState([]);         // polymarket allow-list rows
   const [resolveTarget, setResolveTarget] = useState(null);
   const [tab, setTab] = useState('open');               // open | closed | resolved
   const [sourceFilter, setSourceFilter] = useState('all'); // all | local | polymarket
   const [autoResolveBusy, setAutoResolveBusy] = useState(false);
   const [autoResolveStatus, setAutoResolveStatus] = useState(null);
+  const [approvalBusy, setApprovalBusy] = useState(null); // slug currently being approved/revoked
 
   async function load() {
     setLoading(true);
@@ -311,11 +322,13 @@ function MarketsList({ mode, privyId }) {
     //   - recently closed Polymarket markets (so closed-on-Polymarket ones
     //     don't disappear from the admin once they leave the open feed)
     //   - market_resolutions DB rows (the source of truth for "resolved")
-    const [marketsModule, liveOpen, liveClosed, resos] = await Promise.all([
+    //   - polymarket_approved DB rows (allow-list for the public site)
+    const [marketsModule, liveOpen, liveClosed, resos, approvedRows] = await Promise.all([
       import('../lib/markets.js'),
       gmFetchMarkets({ limit: 100 }).catch(() => []),
       gmFetchClosedMarkets({ limit: 100 }).catch(() => []),
       fetchResolutions().catch(() => []),
+      fetchApprovedPolymarket().catch(() => []),
     ]);
     const local = marketsModule.PINNED_MARKETS || marketsModule.default || [];
 
@@ -329,6 +342,7 @@ function MarketsList({ mode, privyId }) {
     const all = Array.from(map.values());
     setMarkets(all);
     setResolutions(resos);
+    setApproved(approvedRows);
     setLoading(false);
 
     // Mirror Polymarket-resolved closures into market_resolutions so the
@@ -336,6 +350,42 @@ function MarketsList({ mode, privyId }) {
     // aren't already in resolutions, and only when we can identify a clear
     // winner. Failures are logged but don't block the UI.
     autoMirrorPolymarketResolutions(all, resos, privyId);
+  }
+
+  // Approve / revoke a polymarket slug. Approval triggers an Anthropic-powered
+  // Spanish translation server-side; revocation only removes the row.
+  async function handleApprove(market) {
+    if (!privyId) return;
+    setApprovalBusy(market.id);
+    try {
+      const row = await approvePolymarketMarket(privyId, {
+        slug: market.id,
+        title: market.title,
+        options: market.options,
+      });
+      setApproved(prev => {
+        const next = prev.filter(r => r.slug !== market.id);
+        next.unshift(row);
+        return next;
+      });
+    } catch (e) {
+      alert('Error: ' + e.message);
+    } finally {
+      setApprovalBusy(null);
+    }
+  }
+
+  async function handleRevoke(slug) {
+    if (!privyId) return;
+    setApprovalBusy(slug);
+    try {
+      await unapprovePolymarketMarket(privyId, slug);
+      setApproved(prev => prev.filter(r => r.slug !== slug));
+    } catch (e) {
+      alert('Error: ' + e.message);
+    } finally {
+      setApprovalBusy(null);
+    }
   }
 
   async function autoMirrorPolymarketResolutions(allMarkets, resos, pid) {
@@ -425,14 +475,19 @@ function MarketsList({ mode, privyId }) {
     return true;
   });
 
-  // Sort by closure date (most recent first for closed/resolved, soonest
-  // upcoming first for open).
+  // Sort by closure date — earliest first across every tab. For "open" that
+  // means the next markets to expire surface first; for "closed/resolved" it
+  // means the oldest entries appear first, so the newest results live at the
+  // bottom of the list (chronological order, requested explicitly).
   filtered.sort((a, b) => {
     const ka = closureSortKey(a.market, a.resolution);
     const kb = closureSortKey(b.market, b.resolution);
-    if (tab === 'open') return ka - kb; // soonest deadline first
-    return kb - ka;                     // most recent closure first
+    return ka - kb;
   });
+
+  // Quick lookup so the table can show "Aprobado" status without scanning
+  // the approval list per row.
+  const approvedSet = new Set(approved.map(r => r.slug));
 
   const tabCounts = {
     open:     annotated.filter(a => a.status === 'open').length,
@@ -445,6 +500,12 @@ function MarketsList({ mode, privyId }) {
     polymarket: inTab.filter(({ market: m }) => m._source === 'polymarket' && m._polyId).length,
     local: inTab.filter(({ market: m }) => !(m._source === 'polymarket' && m._polyId)).length,
   };
+
+  // Count of polymarket markets across ALL tabs that are still pending
+  // approval — surfaced as a top-of-card banner so admins notice them.
+  const pendingApprovalCount = annotated.filter(({ market: m, status: s }) =>
+    s !== 'resolved' && m._source === 'polymarket' && m._polyId && !approvedSet.has(m.id)
+  ).length;
 
   return (
     <div className="admin-card">
@@ -469,6 +530,19 @@ function MarketsList({ mode, privyId }) {
       {autoResolveStatus && (
         <div className={`admin-status admin-status-${autoResolveStatus.type}`} style={{ marginBottom: 12 }}>
           {autoResolveStatus.msg}
+        </div>
+      )}
+
+      {pendingApprovalCount > 0 && (
+        <div
+          className="admin-status admin-status-info"
+          style={{
+            marginBottom: 12, padding: '10px 12px', borderRadius: 6,
+            background: 'rgba(251, 191, 36, 0.08)', border: '1px solid rgba(251, 191, 36, 0.3)',
+            color: '#fbbf24', fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
+          }}
+        >
+          ⚠️ {pendingApprovalCount} mercado{pendingApprovalCount === 1 ? '' : 's'} de Polymarket esperando aprobación · No aparecen en pronos.io hasta que los apruebes
         </div>
       )}
 
@@ -540,6 +614,8 @@ function MarketsList({ mode, privyId }) {
                 status === 'closed'   ? { cls: 'badge-closed',   label: 'Cerrado' } :
                                         { cls: 'badge-active',   label: 'Activo' }
               );
+              const isApproved = isPoly && approvedSet.has(m.id);
+              const busy       = approvalBusy === m.id;
               return (
                 <tr key={m.id || i}>
                   <td className="admin-market-title">
@@ -559,6 +635,19 @@ function MarketsList({ mode, privyId }) {
                     <span className={`admin-badge ${isPoly ? 'badge-poly' : 'badge-own'}`}>
                       {isPoly ? 'Polymarket' : 'Local'}
                     </span>
+                    {isPoly && (
+                      <div style={{ marginTop: 4 }}>
+                        <span
+                          className={`admin-badge ${isApproved ? 'badge-resolved' : 'badge-closed'}`}
+                          title={isApproved
+                            ? 'Visible en pronos.io con título traducido'
+                            : 'Oculto del público hasta que un admin lo apruebe'}
+                          style={{ fontSize: 9 }}
+                        >
+                          {isApproved ? '✓ Aprobado' : '○ Sin aprobar'}
+                        </span>
+                      </div>
+                    )}
                   </td>
                   <td>
                     <span className="admin-cat-badge">{m.category || '-'}</span>
@@ -568,6 +657,28 @@ function MarketsList({ mode, privyId }) {
                     <span className={`admin-badge ${statusBadge.cls}`}>{statusBadge.label}</span>
                   </td>
                   <td className="admin-actions">
+                    {/* Polymarket approval flow — only relevant for live polymarket entries */}
+                    {isPoly && status !== 'resolved' && (
+                      isApproved ? (
+                        <button
+                          className="btn-admin-sm"
+                          disabled={busy}
+                          onClick={() => handleRevoke(m.id)}
+                          title="Quitar del público"
+                        >
+                          {busy ? '…' : 'Revocar'}
+                        </button>
+                      ) : (
+                        <button
+                          className="btn-admin-sm btn-admin-resolve"
+                          disabled={busy}
+                          onClick={() => handleApprove(m)}
+                          title="Aprobar y traducir al español"
+                        >
+                          {busy ? 'Traduciendo…' : 'Aprobar'}
+                        </button>
+                      )
+                    )}
                     {status !== 'resolved' && (
                       <button
                         className="btn-admin-sm btn-admin-resolve"
