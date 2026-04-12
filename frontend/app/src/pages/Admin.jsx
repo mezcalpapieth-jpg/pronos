@@ -6,6 +6,7 @@ import { resolveMarket, fetchResolutions } from '../lib/resolutions.js';
 import { fetchGeneratedMarkets, updateGeneratedMarket, createGeneratedMarket } from '../lib/generatedMarkets.js';
 import { gmFetchMarkets, gmFetchClosedMarkets } from '../lib/gamma.js';
 import { resolveEndDate, isExpired } from '../lib/deadline.js';
+import { useT } from '../lib/i18n.js';
 import {
   fetchAllPolymarketDecisions,
   approvePolymarketMarket,
@@ -58,6 +59,7 @@ function ProtocolSwitch({ mode, onToggle }) {
 }
 
 function CreateMarketForm({ privyId }) {
+  const t = useT();
   const [question, setQuestion] = useState('');
   const [category, setCategory] = useState('deportes');
   const [endDate, setEndDate] = useState('');
@@ -85,7 +87,7 @@ function CreateMarketForm({ privyId }) {
     e.preventDefault();
     if (!question.trim() || !endDate) return;
     const emptyLabel = options.some(o => !o.label.trim());
-    if (emptyLabel) { setStatus({ type: 'error', msg: 'Todas las opciones necesitan un nombre.' }); return; }
+    if (emptyLabel) { setStatus({ type: 'error', msg: t('admin.optionsNeedName') }); return; }
 
     setSubmitting(true);
     setStatus(null);
@@ -103,7 +105,7 @@ function CreateMarketForm({ privyId }) {
         deadline,
         options: options.map(o => ({ label: o.label.trim(), pct: o.pct || 50 })),
       });
-      setStatus({ type: 'success', msg: `Mercado creado: "${question.trim()}" — aparecerá en la página principal.` });
+      setStatus({ type: 'success', msg: `${t('admin.created')}` });
       setQuestion('');
       setEndDate('');
       setOptions([{ label: 'Sí', pct: 50 }, { label: 'No', pct: 50 }]);
@@ -117,22 +119,22 @@ function CreateMarketForm({ privyId }) {
   return (
     <div className="admin-card">
       <div className="admin-card-header">
-        <h3>Crear mercado</h3>
+        <h3>{t('admin.createMarket')}</h3>
       </div>
       <form onSubmit={handleSubmit} className="admin-form">
         <label>
-          <span>Pregunta</span>
+          <span>{t('admin.question')}</span>
           <input
             type="text"
             value={question}
             onChange={e => setQuestion(e.target.value)}
-            placeholder="Ej: ¿México gana el Mundial 2026?"
+            placeholder={t('admin.questionPh')}
             required
           />
         </label>
         <div style={{ display: 'flex', gap: 12 }}>
           <label style={{ flex: 1 }}>
-            <span>Categoria</span>
+            <span>{t('admin.category')}</span>
             <select value={category} onChange={e => setCategory(e.target.value)}>
               {MARKET_CATEGORIES.map(c => (
                 <option key={c.value} value={c.value}>{c.label}</option>
@@ -140,7 +142,7 @@ function CreateMarketForm({ privyId }) {
             </select>
           </label>
           <label style={{ width: 70 }}>
-            <span>Icono</span>
+            <span>{t('admin.icon')}</span>
             <input
               type="text"
               value={icon}
@@ -150,7 +152,7 @@ function CreateMarketForm({ privyId }) {
           </label>
         </div>
         <label>
-          <span>Fecha de cierre</span>
+          <span>{t('admin.closeDate')}</span>
           <input
             type="datetime-local"
             value={endDate}
@@ -163,11 +165,11 @@ function CreateMarketForm({ privyId }) {
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
-              OPCIONES ({options.length})
+              {t('admin.options')} ({options.length})
             </span>
             {options.length < 6 && (
               <button type="button" onClick={addOption} className="btn-admin-sm" style={{ fontSize: 11, padding: '4px 10px' }}>
-                + Agregar
+                {t('admin.addOption')}
               </button>
             )}
           </div>
@@ -177,7 +179,7 @@ function CreateMarketForm({ privyId }) {
                 type="text"
                 value={opt.label}
                 onChange={e => updateOption(i, 'label', e.target.value)}
-                placeholder={`Opción ${i + 1}`}
+                placeholder={`${t('admin.optionPh')} ${i + 1}`}
                 style={{ flex: 1, padding: '8px 10px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 12 }}
                 required
               />
@@ -202,7 +204,7 @@ function CreateMarketForm({ privyId }) {
         </div>
 
         <button type="submit" className="btn-admin-primary" disabled={submitting}>
-          {submitting ? 'Creando…' : 'Crear mercado'}
+          {submitting ? t('admin.creating') : t('admin.createBtn')}
         </button>
         {status && (
           <div className={`admin-status admin-status-${status.type}`}>
@@ -215,6 +217,7 @@ function CreateMarketForm({ privyId }) {
 }
 
 function ResolveModal({ market, onClose, onResolved, privyId }) {
+  const t = useT();
   const [outcome, setOutcome] = useState('');
   const [winner, setWinner] = useState('');
   const [winnerShort, setWinnerShort] = useState('');
@@ -229,7 +232,7 @@ function ResolveModal({ market, onClose, onResolved, privyId }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!outcome || !winner) { setError('Selecciona un resultado'); return; }
+    if (!outcome || !winner) { setError(t('admin.selectOutcome')); return; }
     setSubmitting(true);
     setError(null);
     try {
@@ -260,7 +263,7 @@ function ResolveModal({ market, onClose, onResolved, privyId }) {
     <div style={{ position:'fixed',inset:0,zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.7)',backdropFilter:'blur(6px)' }} onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={{ background:'var(--surface1)',border:'1px solid var(--border)',borderRadius:16,padding:'32px 28px',width:'90%',maxWidth:480,boxShadow:'0 24px 80px rgba(0,0,0,0.5)' }}>
         <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20 }}>
-          <h3 style={{ fontFamily:'var(--font-display)',fontSize:24,letterSpacing:'0.03em',color:'var(--text-primary)' }}>RESOLVER MERCADO</h3>
+          <h3 style={{ fontFamily:'var(--font-display)',fontSize:24,letterSpacing:'0.03em',color:'var(--text-primary)' }}>{t('admin.resolveTitle')}</h3>
           <button onClick={onClose} style={{ background:'none',border:'none',color:'var(--text-muted)',fontSize:22,cursor:'pointer' }}>&times;</button>
         </div>
 
@@ -268,7 +271,7 @@ function ResolveModal({ market, onClose, onResolved, privyId }) {
 
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom:16 }}>
-            <label style={{ fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)',letterSpacing:'0.1em',display:'block',marginBottom:8 }}>RESULTADO GANADOR</label>
+            <label style={{ fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)',letterSpacing:'0.1em',display:'block',marginBottom:8 }}>{t('admin.winnerOutcome')}</label>
             <div style={{ display:'flex',flexDirection:'column',gap:8 }}>
               {options.map((opt, i) => (
                 <button key={i} type="button" onClick={() => selectOption(opt)}
@@ -289,13 +292,13 @@ function ResolveModal({ market, onClose, onResolved, privyId }) {
           </div>
 
           <div style={{ marginBottom:12 }}>
-            <label style={{ fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)',letterSpacing:'0.1em',display:'block',marginBottom:4 }}>RESUELTO POR</label>
+            <label style={{ fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)',letterSpacing:'0.1em',display:'block',marginBottom:4 }}>{t('admin.resolvedBy')}</label>
             <input type="text" value={resolvedBy} onChange={e => setResolvedBy(e.target.value)} placeholder="Ej: Resultados oficiales FIFA"
               style={{ width:'100%',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,padding:'10px 14px',color:'var(--text-primary)',fontFamily:'var(--font-body)',fontSize:13 }} />
           </div>
 
           <div style={{ marginBottom:20 }}>
-            <label style={{ fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)',letterSpacing:'0.1em',display:'block',marginBottom:4 }}>DESCRIPCION (OPCIONAL)</label>
+            <label style={{ fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)',letterSpacing:'0.1em',display:'block',marginBottom:4 }}>{t('admin.descOptional')}</label>
             <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} placeholder="Detalles adicionales sobre la resolución..."
               style={{ width:'100%',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,padding:'10px 14px',color:'var(--text-primary)',fontFamily:'var(--font-body)',fontSize:13,resize:'vertical' }} />
           </div>
@@ -304,10 +307,10 @@ function ResolveModal({ market, onClose, onResolved, privyId }) {
 
           <div style={{ display:'flex',gap:12 }}>
             <button type="button" onClick={onClose} style={{ flex:1,padding:'12px',borderRadius:8,border:'1px solid var(--border)',background:'var(--surface2)',color:'var(--text-secondary)',cursor:'pointer',fontFamily:'var(--font-body)',fontSize:14 }}>
-              Cancelar
+              {t('admin.cancel')}
             </button>
             <button type="submit" disabled={submitting || !outcome} style={{ flex:1,padding:'12px',borderRadius:8,border:'none',background:'var(--green)',color:'#fff',cursor:'pointer',fontFamily:'var(--font-display)',fontSize:16,letterSpacing:'0.04em',opacity:(!outcome||submitting)?0.5:1 }}>
-              {submitting ? 'RESOLVIENDO...' : 'CONFIRMAR'}
+              {submitting ? t('admin.resolving') : t('admin.confirm')}
             </button>
           </div>
         </form>
@@ -375,6 +378,7 @@ function pickPolymarketWinner(market) {
 }
 
 function MarketsList({ mode, privyId }) {
+  const t = useT();
   const [markets, setMarkets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [resolutions, setResolutions] = useState([]);   // raw rows from API
@@ -669,7 +673,7 @@ function MarketsList({ mode, privyId }) {
   return (
     <div className="admin-card">
       <div className="admin-card-header">
-        <h3>Mercados</h3>
+        <h3>{t('admin.markets')}</h3>
         <button
           onClick={runAutoResolveCron}
           disabled={autoResolveBusy}
@@ -679,11 +683,11 @@ function MarketsList({ mode, privyId }) {
             borderRadius: 6, cursor: autoResolveBusy ? 'wait' : 'pointer',
           }}
         >
-          {autoResolveBusy ? '⟳ CORRIENDO…' : '▶ AUTO-RESOLVER AHORA'}
+          {autoResolveBusy ? t('admin.running') : t('admin.autoResolve')}
         </button>
       </div>
       <p className="admin-desc" style={{ marginBottom: 14 }}>
-        Cierra automáticamente los mercados que pasaron su fecha límite y resuelve los de Polymarket cuyo resultado ya está confirmado.
+        {t('admin.autoDesc')}
       </p>
 
       {autoResolveStatus && (
@@ -722,9 +726,9 @@ function MarketsList({ mode, privyId }) {
       {/* ── Status tabs (open / closed / resolved) ─────────────────────── */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 12, borderBottom: '1px solid var(--border)' }}>
         {[
-          { id: 'open',     label: `ABIERTOS (${tabCounts.open})` },
-          { id: 'closed',   label: `CERRADOS (${tabCounts.closed})` },
-          { id: 'resolved', label: `RESUELTOS (${tabCounts.resolved})` },
+          { id: 'open',     label: `${t('admin.open')} (${tabCounts.open})` },
+          { id: 'closed',   label: `${t('admin.closed')} (${tabCounts.closed})` },
+          { id: 'resolved', label: `${t('admin.resolved')} (${tabCounts.resolved})` },
         ].map(t => (
           <button
             key={t.id}
@@ -745,9 +749,9 @@ function MarketsList({ mode, privyId }) {
       {/* Source filter — admins can flip between live Polymarket and local */}
       <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>
         {[
-          { key: 'all',        label: `Todos (${sourceCounts.all})` },
+          { key: 'all',        label: `${t('admin.all')} (${sourceCounts.all})` },
           { key: 'polymarket', label: `Polymarket (${sourceCounts.polymarket})` },
-          { key: 'local',      label: `Locales (${sourceCounts.local})` },
+          { key: 'local',      label: `${t('admin.local')} (${sourceCounts.local})` },
         ].map(f => (
           <button
             key={f.key}
@@ -764,28 +768,28 @@ function MarketsList({ mode, privyId }) {
         <table className="admin-table">
           <thead>
             <tr>
-              <th>Mercado</th>
-              <th>Fuente</th>
-              <th>Categoria</th>
-              <th>Fecha limite</th>
-              <th>Estado</th>
-              <th>Acciones</th>
+              <th>{t('admin.market')}</th>
+              <th>{t('admin.source')}</th>
+              <th>{t('admin.category')}</th>
+              <th>{t('admin.deadline')}</th>
+              <th>{t('admin.status')}</th>
+              <th>{t('admin.actions')}</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={6} style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-                  No hay mercados en esta categoría.
+                  {t('admin.noMarkets')}
                 </td>
               </tr>
             )}
             {filtered.map(({ market: m, resolution: r, status }, i) => {
               const isPoly = m._source === 'polymarket' && m._polyId;
               const statusBadge = (
-                status === 'resolved' ? { cls: 'badge-resolved', label: 'Resuelto' } :
-                status === 'closed'   ? { cls: 'badge-closed',   label: 'Cerrado' } :
-                                        { cls: 'badge-active',   label: 'Activo' }
+                status === 'resolved' ? { cls: 'badge-resolved', label: t('detail.resolved') } :
+                status === 'closed'   ? { cls: 'badge-closed',   label: t('detail.statusClosed') } :
+                                        { cls: 'badge-active',   label: t('admin.active') }
               );
               const isApproved = isPoly && approvedSet.has(m.id);
               const busy       = approvalBusy === m.id;
@@ -834,7 +838,7 @@ function MarketsList({ mode, privyId }) {
                             : 'Oculto del público hasta que un admin lo apruebe'}
                           style={{ fontSize: 9, padding: '2px 6px', whiteSpace: 'nowrap' }}
                         >
-                          {isApproved ? '✓ Aprobado' : '○ Pendiente'}
+                          {isApproved ? t('admin.approved') : t('admin.pending')}
                         </span>
                       </div>
                     )}
@@ -860,7 +864,7 @@ function MarketsList({ mode, privyId }) {
                           onClick={() => handleApprove(m)}
                           title="Aprobar y traducir al español"
                         >
-                          {busy ? 'Traduciendo…' : 'Aprobar'}
+                          {busy ? t('admin.translating') : t('admin.approve')}
                         </button>
                         <button
                           className="btn-admin-sm btn-danger"
@@ -868,7 +872,7 @@ function MarketsList({ mode, privyId }) {
                           onClick={() => handleReject(m)}
                           title="Rechazar y ocultar del admin permanentemente"
                         >
-                          {busy ? '…' : 'Rechazar'}
+                          {busy ? '…' : t('admin.reject')}
                         </button>
                       </>
                     )}
@@ -880,13 +884,13 @@ function MarketsList({ mode, privyId }) {
                           onClick={() => handleRevoke(m.id)}
                           title="Quitar del público"
                         >
-                          {busy ? '…' : 'Revocar'}
+                          {busy ? '…' : t('admin.revoke')}
                         </button>
                         <button
                           className="btn-admin-sm btn-admin-resolve"
                           onClick={() => setResolveTarget(m)}
                         >
-                          Resolver
+                          {t('admin.resolve')}
                         </button>
                       </>
                     )}
@@ -895,7 +899,7 @@ function MarketsList({ mode, privyId }) {
                         className="btn-admin-sm btn-admin-resolve"
                         onClick={() => setResolveTarget(m)}
                       >
-                        Resolver
+                        {t('admin.resolve')}
                       </button>
                     )}
                   </td>

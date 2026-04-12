@@ -362,14 +362,16 @@ export default function MarketDetail() {
           if (Array.isArray(liveAllowed.options)) {
             liveAllowed.options_en = liveAllowed.options.map(opt => ({ ...opt }));
           }
-          if (Array.isArray(approval.options_es) && approval.options_es.length > 0) {
+          let optsEs = approval.options_es;
+          if (typeof optsEs === 'string') { try { optsEs = JSON.parse(optsEs); } catch (_) { optsEs = null; } }
+          if (Array.isArray(optsEs) && optsEs.length > 0) {
             liveAllowed.options_es = liveAllowed.options.map((opt, i) => ({
               ...opt,
-              label: approval.options_es[i]?.label || opt.label,
+              label: optsEs[i]?.label || opt.label,
             }));
             liveAllowed.options = liveAllowed.options.map((opt, i) => ({
               ...opt,
-              label: approval.options_es[i]?.label || opt.label,
+              label: optsEs[i]?.label || opt.label,
             }));
           }
         }

@@ -141,15 +141,18 @@ export function applyApprovals(allMarkets, approvedRows) {
     if (Array.isArray(next.options)) {
       next.options_en = next.options.map(opt => ({ ...opt }));
     }
-    if (Array.isArray(approval.options_es) && approval.options_es.length > 0) {
+    // options_es may arrive as a JSON string from Neon (JSONB edge case).
+    let optsEs = approval.options_es;
+    if (typeof optsEs === 'string') { try { optsEs = JSON.parse(optsEs); } catch (_) { optsEs = null; } }
+    if (Array.isArray(optsEs) && optsEs.length > 0) {
       next.options_es = next.options.map((opt, i) => ({
         ...opt,
-        label: approval.options_es[i]?.label || opt.label,
+        label: optsEs[i]?.label || opt.label,
       }));
       // Default display = Spanish labels (backward compat).
       next.options = next.options.map((opt, i) => ({
         ...opt,
-        label: approval.options_es[i]?.label || opt.label,
+        label: optsEs[i]?.label || opt.label,
       }));
     }
     next._approvedAt = approval.approved_at;

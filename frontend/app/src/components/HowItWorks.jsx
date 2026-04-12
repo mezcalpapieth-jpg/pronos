@@ -52,6 +52,18 @@ export default function HowItWorks() {
           <div className="tech-pill"><span className="dot" />Privy</div>
           <div className="tech-pill"><span className="dot" />Sin MetaMask</div>
         </div>
+
+        <div style={{ textAlign: 'center', marginTop: 28 }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', letterSpacing: '0.02em' }}>
+            {t('how.quiz')}{' '}
+            <a
+              href="/que-son-los-mercados-de-predicciones"
+              style={{ color: 'var(--green)', textDecoration: 'underline', fontWeight: 600 }}
+            >
+              {t('how.quizLink')}
+            </a>
+          </span>
+        </div>
       </div>
     </section>
   );
