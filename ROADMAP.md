@@ -15,6 +15,21 @@
 - **Chain decision** — Arbitrum Sepolia contracts are ready but we haven't pulled the trigger on mainnet. Blocks everything in Phase 3.
 - **Anthropic API key** — the daily AI market generation cron is built and live at `/api/cron/generate-markets` but no-ops until the key is activated in Vercel env vars.
 
+### 🔴 VERCEL ENV VARS NEEDED BEFORE DEPLOY
+These must be set in Vercel project settings → Environment Variables:
+
+| Variable | Purpose | Required? |
+|----------|---------|-----------|
+| `PRIVY_JWT_VERIFICATION_KEY` | ES256 public key (PEM) from Privy dashboard → Settings → Verification keys. Enables server-side JWT auth on all API endpoints. Without it, auth is **bypassed** in dev but **blocks requests** in production. | **Yes for prod** |
+| `CLOB_SESSION_SECRET` | HMAC secret for signing Polymarket CLOB session cookies. Used by `/api/clob` for order placement. | **Yes for trading** |
+| `MVP_ACCESS_PASSWORD` | Password for the MVP access gate (`/api/mvp-access`). Falls back to `mezcal` in dev; **no fallback in production** — gate returns 500 without it. | **Yes for prod** |
+| `MVP_ACCESS_SECRET` | Separate HMAC key for signing access cookies. Falls back to `CLOB_SESSION_SECRET` → `MVP_ACCESS_PASSWORD` if absent. Better security to set a dedicated one. | Recommended |
+| `VITE_PRONOS_ARB_SEPOLIA_FACTORY` | MarketFactory contract address on Arbitrum Sepolia. Needed for own-protocol market creation. | For Phase 3 |
+| `VITE_PRONOS_ARB_SEPOLIA_TOKEN` | PronosToken (ERC-1155) contract address on Arbitrum Sepolia. Needed for own-protocol trading. | For Phase 3 |
+| `VITE_PRONOS_ARB_SEPOLIA_AMM` | PronosAMM contract address on Arbitrum Sepolia. Needed for own-protocol trading. | For Phase 3 |
+
+Already set (verify): `DATABASE_URL`, `PRIVY_APP_ID`, `ADMIN_USERNAMES`, `ANTHROPIC_API_KEY`, `MIGRATE_KEY`
+
 ### 🟠 HIGH PRIORITY — PRODUCT POLISH (unblocked, can ship now)
 - **World Cup hub page** — `/mundial` with all FIFA 2026 markets, bracket viz, custom hero. Launch-defining.
 - **Portfolio / "Mis Apuestas" page** — users currently have no way to see their own bets. Critical for retention.
@@ -214,8 +229,8 @@
 #### HIGH — Fix before launch
 - [ ] **H1** No CSP (Content-Security-Policy) — Tally/ethers/Privy scripts unrestricted
 - [x] ~~**H2** X-Frame-Options: DENY added via vercel.json~~
-- [ ] **H3** `/mvp/admin` has no server-side auth
-- [ ] **H4** `/api/user` enumerable without authentication
+- [x] ~~**H3** `/mvp/admin` server-side auth — Privy JWT verification on all admin API calls~~
+- [x] ~~**H4** `/api/user` requires Privy JWT Bearer token in production~~
 
 #### MEDIUM — Fix during hardening
 - [x] ~~**M1** HSTS with `includeSubDomains` and `preload` added~~
@@ -303,7 +318,13 @@
 | 2026-04-10 | Real Polymarket CLOB price history for all sparklines: `/api/price-history` batch proxy (edge-cached 5 min), `lib/priceHistory.js`, wired into MarketsGrid, MarketDetail, and Hero. |
 | 2026-04-11 | Auto-resolve cron `/api/cron/auto-resolve` (every 30 min): queries Gamma for expired Polymarket markets and writes winners automatically. Client-side `isExpired()` hides dead markets instantly. |
 | 2026-04-11 | Closed markets lock the detail page (`🔒 POR RESOLVER` banner, disabled Comprar). Resolved markets show 100/0 instead of stale pre-cierre percentages on cards and detail page. |
+| 2026-04-12 | Admin: open/closed/resolved tabs, Polymarket approval gate (approve/reject/revoke), auto-translate via Anthropic Haiku (bulk on load), EN+ES side-by-side in admin table. |
+| 2026-04-12 | EN/ES language toggle works across ALL market sources: hardcoded markets got `title_en`/`options_en`, Polymarket markets get `title_en` from Gamma + `title_es` from approval cache, `localizedTitle()`/`localizedOptions()` helpers in i18n.js. |
+| 2026-04-12 | Interactive sparkline hover: `extractSeries` returns `{t,p}` tuples, mouse-anywhere crosshair + dot + timestamp tooltip ("12 abr, 14:00 · 65%"). |
+| 2026-04-12 | Admin market creation form actually saves to DB (POST `/api/generated-markets` with `action=create`), supports 2-6 dynamic options, auto-approved. |
+| 2026-04-12 | Admin fully translated to English (50+ `admin.*` i18n keys), quiz link added to HowItWorks section. |
+| 2026-04-12 | Security hardening: Privy JWT auth (`_lib/auth.js`), shared admin/CORS helpers, cookie-based MVP access gate (`/api/mvp-access`), lazy route loading, authFetch wrapper. Closes H3, H4 from audit. |
 
 ---
 
-*Last updated: 2026-04-11*
+*Last updated: 2026-04-12*
