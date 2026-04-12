@@ -5,10 +5,10 @@ import { requireAdmin } from './_lib/admin.js';
 /**
  * Bulk Spanish translation for live Polymarket markets.
  *
- * The admin page calls this on load with every Polymarket market it just
- * fetched. For any slug that doesn't already exist in `polymarket_approved`
- * (any status — approved / rejected / pending), we translate it via
- * Anthropic Haiku and INSERT a row with status='pending'. This means:
+ * The admin page calls this on load with every relevant Polymarket market it
+ * just fetched. New slugs are translated and inserted as status='pending';
+ * approved/pending rows that already exist but are missing Spanish text are
+ * backfilled. This means:
  *   - The admin sees both EN (Polymarket original) and ES (cached) for
  *     every market without having to click anything.
  *   - When the admin later clicks Aprobar, the server already has the
@@ -27,6 +27,18 @@ import { requireAdmin } from './_lib/admin.js';
  */
 
 const sql = neon(process.env.DATABASE_URL);
+
+function hasSpanishOptions(row) {
+  if (Array.isArray(row?.options_es)) return row.options_es.length > 0;
+  if (typeof row?.options_es === 'string') return row.options_es.trim() && row.options_es !== 'null';
+  return !!row?.options_es;
+}
+
+function needsTranslation(row) {
+  if (!row) return true;
+  if (row.status === 'rejected') return false;
+  return !row.title_es || !hasSpanishOptions(row);
+}
 
 // Single-market translation. Returns { titleEs, optionsEs } or null.
 async function translateOne({ title, options }) {
@@ -85,15 +97,30 @@ export default async function handler(req, res) {
   if (!Array.isArray(markets)) {
     return res.status(400).json({ error: 'markets array requerido' });
   }
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(200).json({
+      ok: false,
+      error: 'ANTHROPIC_API_KEY is not configured',
+      translated: 0,
+      cached: 0,
+      remaining: 0,
+      rows: [],
+    });
+  }
 
   try {
     // Find every slug we already have a decision row for (any status). We
-    // skip those entirely so we never re-translate something that's already
-    // cached, approved, or rejected.
-    const existing = await sql`SELECT slug FROM polymarket_approved`;
-    const have = new Set(existing.map(r => r.slug));
+    // skip cached/rejected rows, but backfill approved/pending rows that were
+    // created while translation was misconfigured and still have no Spanish.
+    const existing = await sql`
+      SELECT slug, title_es, options_es, approved_by, status
+        FROM polymarket_approved
+    `;
+    const existingBySlug = new Map(existing.map(r => [r.slug, r]));
 
-    const todo = markets.filter(m => m && m.slug && m.title && !have.has(m.slug));
+    const todo = markets.filter(m =>
+      m && m.slug && m.title && needsTranslation(existingBySlug.get(m.slug))
+    );
 
     // Per-call cap so we don't blow the 10s Vercel function timeout.
     const CAP = 20;
@@ -111,10 +138,13 @@ export default async function handler(req, res) {
       const tr = translations[i];
       if (!tr) continue;
       try {
+        const existingRow = existingBySlug.get(m.slug);
         const rows = await sql`
           INSERT INTO polymarket_approved (slug, title_es, options_es, approved_by, status)
-          VALUES (${m.slug}, ${tr.titleEs}, ${JSON.stringify(tr.optionsEs)}, 'auto', 'pending')
-          ON CONFLICT (slug) DO NOTHING
+          VALUES (${m.slug}, ${tr.titleEs}, ${JSON.stringify(tr.optionsEs)}, ${existingRow?.approved_by || 'auto'}, ${existingRow?.status || 'pending'})
+          ON CONFLICT (slug) DO UPDATE
+            SET title_es = EXCLUDED.title_es,
+                options_es = EXCLUDED.options_es
           RETURNING slug, title_es, options_es, approved_at, approved_by, status
         `;
         if (rows[0]) newRows.push(rows[0]);
@@ -126,8 +156,9 @@ export default async function handler(req, res) {
     return res.status(200).json({
       ok: true,
       translated: newRows.length,
-      cached: have.size,
-      remaining: Math.max(0, todo.length - batch.length),
+      failed: Math.max(0, batch.length - newRows.length),
+      cached: Math.max(0, markets.length - todo.length),
+      remaining: newRows.length > 0 ? Math.max(0, todo.length - batch.length) : 0,
       rows: newRows,
     });
   } catch (e) {

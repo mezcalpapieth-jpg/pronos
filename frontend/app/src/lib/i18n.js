@@ -158,9 +158,10 @@ const STRINGS = {
   // ── Categories ────────────────────────────────────────────────────────────
   'cat.trending':             { es: '🔥 Trending',          en: '🔥 Trending' },
   'cat.all':                  { es: 'Todos',                en: 'All' },
-  'cat.mexico':               { es: '🇲🇽 México & CDMX',    en: '🇲🇽 Mexico' },
+  'cat.mexico':               { es: '🇲🇽 México & LATAM',   en: '🇲🇽 Mexico & LATAM' },
   'cat.politica':             { es: '🌎 Política Internacional', en: '🌎 World Politics' },
   'cat.deportes':             { es: '⚽ Deportes',          en: '⚽ Sports' },
+  'cat.finanzas':             { es: '$ Finanzas',           en: '$ Finance' },
   'cat.crypto':               { es: '₿ Crypto',             en: '₿ Crypto' },
   'cat.musica':               { es: '🎵 Música & Farándula', en: '🎵 Music & Pop Culture' },
   'cat.resueltos':            { es: '🏆 Resueltos',         en: '🏆 Resolved' },

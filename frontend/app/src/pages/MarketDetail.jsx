@@ -4,7 +4,7 @@ import Nav from '../components/Nav.jsx';
 import BetModal from '../components/BetModal.jsx';
 import { gmFetchBySlug } from '../lib/gamma.js';
 import { fetchResolutions } from '../lib/resolutions.js';
-import { fetchApprovedPolymarket } from '../lib/polymarketApproved.js';
+import { fetchApprovedPolymarket, applyPolymarketApproval, polymarketApprovalKey } from '../lib/polymarketApproved.js';
 import { fetchPriceHistory, extractSeries } from '../lib/priceHistory.js';
 import { isExpired } from '../lib/deadline.js';
 import Sparkline from '../components/Sparkline.jsx';
@@ -351,31 +351,11 @@ export default function MarketDetail() {
         // if their slug is in the approval list — otherwise we treat the URL
         // as not found so unapproved Gamma slugs aren't reachable directly.
         const localHit = MARKETS.find(m => m.id === marketId) || null;
-        const approval = approved.find(a => a.slug === marketId) || null;
+        const approvalKey = live ? polymarketApprovalKey(live) : marketId;
+        const approval = approved.find(a => a.slug === approvalKey || a.slug === marketId) || null;
         let liveAllowed = null;
         if (live && approval) {
-          liveAllowed = { ...live };
-          // Preserve both language variants so the EN/ES toggle can swap live.
-          liveAllowed.title_en = live.title;
-          if (approval.title_es) {
-            liveAllowed.title_es = approval.title_es;
-            liveAllowed.title    = approval.title_es;
-          }
-          if (Array.isArray(liveAllowed.options)) {
-            liveAllowed.options_en = liveAllowed.options.map(opt => ({ ...opt }));
-          }
-          let optsEs = approval.options_es;
-          if (typeof optsEs === 'string') { try { optsEs = JSON.parse(optsEs); } catch (_) { optsEs = null; } }
-          if (Array.isArray(optsEs) && optsEs.length > 0) {
-            liveAllowed.options_es = liveAllowed.options.map((opt, i) => ({
-              ...opt,
-              label: optsEs[i]?.label || opt.label,
-            }));
-            liveAllowed.options = liveAllowed.options.map((opt, i) => ({
-              ...opt,
-              label: optsEs[i]?.label || opt.label,
-            }));
-          }
+          liveAllowed = applyPolymarketApproval(live, approval);
         }
         let m = protocolMarket || liveAllowed || localHit;
         // Apply resolution data if exists

@@ -9,6 +9,7 @@ export default function CategoryBar({ activeFilter, onFilter }) {
     { id: 'mexico',    label: t('cat.mexico') },
     { id: 'politica',  label: t('cat.politica') },
     { id: 'deportes',  label: t('cat.deportes') },
+    { id: 'finanzas',  label: t('cat.finanzas') },
     { id: 'crypto',    label: t('cat.crypto') },
     { id: 'resueltos', label: t('cat.resueltos') },
   ];

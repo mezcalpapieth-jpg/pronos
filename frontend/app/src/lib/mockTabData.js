@@ -38,6 +38,7 @@ export function generateMockData(market) {
     musica:   `Este mercado captura el sentimiento del ecosistema de predicciones sobre entretenimiento. Las probabilidades reflejan información pública, rumores verificados y patrones históricos del artista. La actividad reciente muestra movimiento hacia el lado ${opt0} conforme se acerca la fecha límite.`,
     mexico:   `Mercado de predicción sobre eventos en México. Las probabilidades son determinadas por la oferta y demanda, incorporando información de fuentes oficiales, medios de comunicación y análisis político. Históricamente este tipo de mercado correlaciona bien con resultados reales.`,
     politica: `Los mercados políticos en Pronos son indicadores adelantados con alta correlación histórica. Los traders incorporan encuestas, análisis de gabinetes y señales de mercado global. El volumen indica fuerte convicción de los participantes.`,
+    finanzas: `Mercado financiero donde las probabilidades se mueven con datos macro, tasas, resultados corporativos y liquidez global. Los traders suelen reaccionar rápido a noticias de bancos centrales, inflación y movimientos de divisas.`,
     crypto:   `Mercado de predicción sobre activos digitales. Los precios de resolución se determinarán usando el precio de cierre en exchanges de referencia. Los traders consideran datos on-chain, flujos de exchanges y movimientos de ballenas para sus posiciones.`,
   };
   const context = ctxMap[market.category] || ctxMap['mexico'];

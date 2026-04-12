@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import MarketCard from './MarketCard.jsx';
-import { gmFetchMarkets } from '../lib/gamma.js';
+import { gmFetchMarkets, gmFetchMarketsBySlugs } from '../lib/gamma.js';
 import { fetchResolutions } from '../lib/resolutions.js';
 import { fetchGeneratedMarkets } from '../lib/generatedMarkets.js';
 import { fetchApprovedPolymarket, applyApprovals } from '../lib/polymarketApproved.js';
@@ -27,6 +27,23 @@ function applyResolutions(markets, resolutions) {
       _description: r.description,
     };
   });
+}
+
+async function includeApprovedPolymarketSlugs(liveMarkets, approvedRows) {
+  const map = new Map();
+  for (const market of liveMarkets || []) {
+    if (market?.id) map.set(market.id, market);
+  }
+  const missingSlugs = (approvedRows || [])
+    .map(row => row?.slug)
+    .filter(slug => slug && !map.has(slug));
+  if (missingSlugs.length > 0) {
+    const fetched = await gmFetchMarketsBySlugs(missingSlugs, { relevantOnly: true });
+    for (const market of fetched) {
+      if (market?.id) map.set(market.id, market);
+    }
+  }
+  return Array.from(map.values());
 }
 
 export default function MarketsGrid({ activeFilter }) {
@@ -67,7 +84,9 @@ export default function MarketsGrid({ activeFilter }) {
           // Gate live polymarket markets behind admin approval. Only those with
           // a row in `polymarket_approved` survive — and they get their title +
           // option labels swapped to the cached Spanish translation.
-          const filteredLive = applyApprovals(live, approved);
+          const liveWithApprovedSlugs = await includeApprovedPolymarketSlugs(live, approved);
+          if (cancelled) return;
+          const filteredLive = applyApprovals(liveWithApprovedSlugs, approved);
           const liveIds = new Set(filteredLive.map(m => m.id));
           const local = MARKETS.filter(m => !liveIds.has(m.id));
           allMarkets = [...protocolMarkets, ...filteredLive, ...generated, ...local];

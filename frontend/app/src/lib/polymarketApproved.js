@@ -13,6 +13,10 @@ function isLocal() {
 }
 const base = isLocal() ? 'https://pronos.io' : '';
 
+export function polymarketApprovalKey(market) {
+  return market?.slug || market?._slug || market?.id || market?._polyId || null;
+}
+
 /**
  * Fetch only approved polymarket rows (default — used by the public site).
  * Rows shape: { slug, title_es, options_es, approved_at, approved_by, status }
@@ -93,10 +97,13 @@ export async function bulkTranslatePolymarket(privyId, markets, getAccessToken) 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ privyId, markets }),
     });
-    if (!res.ok) return { ok: false, rows: [], remaining: 0 };
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      return { ok: false, rows: [], remaining: 0, error: err.error || 'No se pudo traducir' };
+    }
     return await res.json();
-  } catch (_) {
-    return { ok: false, rows: [], remaining: 0 };
+  } catch (e) {
+    return { ok: false, rows: [], remaining: 0, error: e.message };
   }
 }
 
@@ -121,6 +128,38 @@ export async function unapprovePolymarketMarket(privyId, slug, getAccessToken) {
  * Local hardcoded markets (anything without `_source === 'polymarket'`) pass
  * through unchanged so the curated catalog isn't gated by approval.
  */
+export function applyPolymarketApproval(market, approval) {
+  if (!market || !approval) return null;
+  const next = { ...market };
+  next.slug = next.slug || approval.slug || next.id;
+  // Preserve both language variants so the EN/ES toggle can swap live.
+  next.title_en = market.title_en || market.title;
+  if (approval.title_es) {
+    next.title_es = approval.title_es;
+    next.title = approval.title_es; // default display = Spanish
+  }
+  // Snapshot English options before overwriting with Spanish labels.
+  if (Array.isArray(next.options) && !Array.isArray(next.options_en)) {
+    next.options_en = next.options.map(opt => ({ ...opt }));
+  }
+  // options_es may arrive as a JSON string from Neon (JSONB edge case).
+  let optsEs = approval.options_es;
+  if (typeof optsEs === 'string') { try { optsEs = JSON.parse(optsEs); } catch (_) { optsEs = null; } }
+  if (Array.isArray(next.options) && Array.isArray(optsEs) && optsEs.length > 0) {
+    next.options_es = next.options.map((opt, i) => ({
+      ...opt,
+      label: optsEs[i]?.label || opt.label,
+    }));
+    // Default display = Spanish labels (backward compat).
+    next.options = next.options.map((opt, i) => ({
+      ...opt,
+      label: optsEs[i]?.label || opt.label,
+    }));
+  }
+  next._approvedAt = approval.approved_at;
+  return next;
+}
+
 export function applyApprovals(allMarkets, approvedRows) {
   const map = new Map();
   for (const row of approvedRows || []) {
@@ -131,34 +170,9 @@ export function applyApprovals(allMarkets, approvedRows) {
   for (const m of allMarkets || []) {
     const isPoly = m && m._source === 'polymarket';
     if (!isPoly) { out.push(m); continue; }
-    const approval = map.get(m.id);
+    const approval = map.get(polymarketApprovalKey(m));
     if (!approval) continue; // not approved → drop from public list
-    const next = { ...m };
-    // Preserve both language variants so the EN/ES toggle can swap live.
-    next.title_en = m.title;                           // original English from Gamma
-    if (approval.title_es) {
-      next.title_es = approval.title_es;
-      next.title    = approval.title_es;               // default display = Spanish
-    }
-    // Snapshot English options before overwriting with Spanish labels.
-    if (Array.isArray(next.options)) {
-      next.options_en = next.options.map(opt => ({ ...opt }));
-    }
-    // options_es may arrive as a JSON string from Neon (JSONB edge case).
-    let optsEs = approval.options_es;
-    if (typeof optsEs === 'string') { try { optsEs = JSON.parse(optsEs); } catch (_) { optsEs = null; } }
-    if (Array.isArray(optsEs) && optsEs.length > 0) {
-      next.options_es = next.options.map((opt, i) => ({
-        ...opt,
-        label: optsEs[i]?.label || opt.label,
-      }));
-      // Default display = Spanish labels (backward compat).
-      next.options = next.options.map((opt, i) => ({
-        ...opt,
-        label: optsEs[i]?.label || opt.label,
-      }));
-    }
-    next._approvedAt = approval.approved_at;
+    const next = applyPolymarketApproval(m, approval);
     out.push(next);
   }
   return out;

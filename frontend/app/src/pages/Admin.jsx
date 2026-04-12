@@ -14,6 +14,7 @@ import {
   rejectPolymarketMarket,
   unapprovePolymarketMarket,
   bulkTranslatePolymarket,
+  polymarketApprovalKey,
 } from '../lib/polymarketApproved.js';
 import {
   getSafeAddresses, setSafeAddresses,
@@ -25,6 +26,7 @@ import {
 const MARKET_CATEGORIES = [
   { value: 'deportes', label: 'Deportes' },
   { value: 'politica', label: 'Politica' },
+  { value: 'finanzas', label: 'Finanzas' },
   { value: 'crypto', label: 'Crypto' },
   { value: 'mexico', label: 'Mexico' },
   { value: 'musica', label: 'Musica' },
@@ -380,6 +382,18 @@ function pickPolymarketWinner(market) {
   };
 }
 
+function hasSpanishOptions(row) {
+  if (Array.isArray(row?.options_es)) return row.options_es.length > 0;
+  if (typeof row?.options_es === 'string') return row.options_es.trim() && row.options_es !== 'null';
+  return !!row?.options_es;
+}
+
+function needsSpanishTranslation(row) {
+  if (!row) return true;
+  if (row.status === 'rejected') return false;
+  return !row.title_es || !hasSpanishOptions(row);
+}
+
 function MarketsList({ mode, privyId, getAccessToken }) {
   const t = useT();
   const [markets, setMarkets] = useState([]);
@@ -440,10 +454,13 @@ function MarketsList({ mode, privyId, getAccessToken }) {
 
   async function autoTranslateNewPolymarket(allMarkets, currentDecisions) {
     if (!privyId) return;
-    const have = new Set((currentDecisions || []).map(d => d.slug));
+    const decisionsBySlug = new Map((currentDecisions || []).map(d => [d.slug, d]));
     const polyMarkets = allMarkets
-      .filter(m => m._source === 'polymarket' && m._polyId && m.title && !have.has(m.id))
-      .map(m => ({ slug: m.id, title: m.title, options: m.options }));
+      .filter(m => {
+        const slug = polymarketApprovalKey(m);
+        return m._source === 'polymarket' && m._polyId && m.title && slug && needsSpanishTranslation(decisionsBySlug.get(slug));
+      })
+      .map(m => ({ slug: polymarketApprovalKey(m), title: m.title, options: m.options }));
     if (polyMarkets.length === 0) {
       setTranslateStatus(null);
       return;
@@ -457,7 +474,15 @@ function MarketsList({ mode, privyId, getAccessToken }) {
     let safety = 8; // 8 × 20 = 160 markets max per page load
     while (safety-- > 0) {
       const result = await bulkTranslatePolymarket(privyId, polyMarkets, getAccessToken);
-      if (!result?.ok) break;
+      if (!result?.ok) {
+        setTranslateStatus({
+          busy: false,
+          translated: totalTranslated,
+          remaining: 0,
+          error: result?.error || 'No se pudo traducir. Revisa ANTHROPIC_API_KEY.',
+        });
+        break;
+      }
       if (Array.isArray(result.rows) && result.rows.length > 0) {
         totalTranslated += result.rows.length;
         // Merge new pending rows into the decisions state.
@@ -472,6 +497,7 @@ function MarketsList({ mode, privyId, getAccessToken }) {
         translated: totalTranslated,
         remaining: result.remaining,
       });
+      if (!result.rows?.length) break;
       if (!result.remaining) break;
     }
     setTranslateStatus(prev => prev ? { ...prev, busy: false } : null);
@@ -485,20 +511,21 @@ function MarketsList({ mode, privyId, getAccessToken }) {
   // - Revoke:  hard-deletes the decision row (un-approve).
   async function handleApprove(market) {
     if (!privyId) return;
-    setApprovalBusy(market.id);
+    const slug = polymarketApprovalKey(market);
+    setApprovalBusy(slug);
     try {
       // If we already have a cached translation (pending row), skip the
       // Anthropic call — the server keeps the existing title_es via COALESCE.
-      const cached = decisions.find(d => d.slug === market.id);
+      const cached = decisions.find(d => d.slug === slug);
       const row = await approvePolymarketMarket(privyId, {
-        slug: market.id,
+        slug,
         title: market.title,
         options: market.options,
-        autoTranslate: !cached?.title_es,
+        autoTranslate: needsSpanishTranslation(cached),
         getAccessToken,
       });
       setDecisions(prev => {
-        const next = prev.filter(r => r.slug !== market.id);
+        const next = prev.filter(r => r.slug !== slug);
         next.unshift(row);
         return next;
       });
@@ -511,17 +538,18 @@ function MarketsList({ mode, privyId, getAccessToken }) {
 
   async function handleReject(market) {
     if (!privyId) return;
-    setApprovalBusy(market.id);
+    const slug = polymarketApprovalKey(market);
+    setApprovalBusy(slug);
     try {
-      const row = await rejectPolymarketMarket(privyId, { slug: market.id, getAccessToken });
+      const row = await rejectPolymarketMarket(privyId, { slug, getAccessToken });
       // Persist the rejection AND drop it from the local markets list so the
       // user sees it disappear immediately.
       setDecisions(prev => {
-        const next = prev.filter(r => r.slug !== market.id);
+        const next = prev.filter(r => r.slug !== slug);
         next.unshift(row);
         return next;
       });
-      setMarkets(prev => prev.filter(m => m.id !== market.id));
+      setMarkets(prev => prev.filter(m => polymarketApprovalKey(m) !== slug));
     } catch (e) {
       alert('Error: ' + e.message);
     } finally {
@@ -630,7 +658,7 @@ function MarketsList({ mode, privyId, getAccessToken }) {
   // tab/filter/sort without re-running classify on every render. Rejected
   // polymarket slugs are dropped here so they never appear in any tab.
   const annotated = markets
-    .filter(m => !rejectedSet.has(m.id))
+    .filter(m => !rejectedSet.has(polymarketApprovalKey(m)))
     .map(m => {
       const r = resByMarket[m.id] || null;
       return { market: m, resolution: r, status: classifyMarket(m, r) };
@@ -671,7 +699,7 @@ function MarketsList({ mode, privyId, getAccessToken }) {
   // Count of polymarket markets across ALL tabs that are still pending
   // approval — surfaced as a top-of-card banner so admins notice them.
   const pendingApprovalCount = annotated.filter(({ market: m, status: s }) =>
-    s !== 'resolved' && m._source === 'polymarket' && m._polyId && !approvedSet.has(m.id)
+    s !== 'resolved' && m._source === 'polymarket' && m._polyId && !approvedSet.has(polymarketApprovalKey(m))
   ).length;
 
   return (
@@ -700,15 +728,19 @@ function MarketsList({ mode, privyId, getAccessToken }) {
         </div>
       )}
 
-      {translateStatus && (translateStatus.busy || translateStatus.translated > 0) && (
+      {translateStatus && (translateStatus.busy || translateStatus.translated > 0 || translateStatus.error) && (
         <div
           style={{
             marginBottom: 12, padding: '8px 12px', borderRadius: 6,
-            background: 'rgba(96, 165, 250, 0.08)', border: '1px solid rgba(96, 165, 250, 0.3)',
-            color: '#60a5fa', fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
+            background: translateStatus.error ? 'rgba(248, 113, 113, 0.08)' : 'rgba(96, 165, 250, 0.08)',
+            border: translateStatus.error ? '1px solid rgba(248, 113, 113, 0.3)' : '1px solid rgba(96, 165, 250, 0.3)',
+            color: translateStatus.error ? '#f87171' : '#60a5fa',
+            fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
           }}
         >
-          {translateStatus.busy
+          {translateStatus.error
+            ? `No se pudieron traducir mercados: ${translateStatus.error}`
+            : translateStatus.busy
             ? `🌐 Traduciendo mercados al español… (${translateStatus.translated} listos${translateStatus.remaining ? `, ${translateStatus.remaining} pendientes` : ''})`
             : `✓ ${translateStatus.translated} mercado${translateStatus.translated === 1 ? '' : 's'} traducido${translateStatus.translated === 1 ? '' : 's'} al español`}
         </div>
@@ -790,14 +822,15 @@ function MarketsList({ mode, privyId, getAccessToken }) {
             )}
             {filtered.map(({ market: m, resolution: r, status }, i) => {
               const isPoly = m._source === 'polymarket' && m._polyId;
+              const polySlug = isPoly ? polymarketApprovalKey(m) : null;
               const statusBadge = (
                 status === 'resolved' ? { cls: 'badge-resolved', label: t('detail.resolved') } :
                 status === 'closed'   ? { cls: 'badge-closed',   label: t('detail.statusClosed') } :
                                         { cls: 'badge-active',   label: t('admin.active') }
               );
-              const isApproved = isPoly && approvedSet.has(m.id);
-              const busy       = approvalBusy === m.id;
-              const cachedTr = isPoly ? translationMap.get(m.id) : null;
+              const isApproved = isPoly && approvedSet.has(polySlug);
+              const busy       = approvalBusy === polySlug;
+              const cachedTr = isPoly ? translationMap.get(polySlug) : null;
               const titleEs  = cachedTr?.title_es || null;
               const titleEn  = m.title || m.question || '';
               return (
@@ -885,7 +918,7 @@ function MarketsList({ mode, privyId, getAccessToken }) {
                         <button
                           className="btn-admin-sm"
                           disabled={busy}
-                          onClick={() => handleRevoke(m.id)}
+                          onClick={() => handleRevoke(polySlug)}
                           title="Quitar del público"
                         >
                           {busy ? '…' : t('admin.revoke')}
