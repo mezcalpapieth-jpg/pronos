@@ -37,6 +37,23 @@ export async function updateGeneratedMarket({ privyId, id, action, patch }) {
 }
 
 /**
+ * Create a brand-new market (admin only). Auto-approved so it appears
+ * on the public grid immediately.
+ */
+export async function createGeneratedMarket({ privyId, title, category, icon, deadline, options }) {
+  const res = await fetch(`${base}${API}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ privyId, action: 'create', title, category, icon, deadline, options }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Error al crear el mercado');
+  }
+  return res.json();
+}
+
+/**
  * Normalize a DB row into the shape used by MarketCard / MarketsGrid / MarketDetail.
  * Mimics the static MARKETS array format so it can be mixed freely.
  */

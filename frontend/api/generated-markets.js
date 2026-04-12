@@ -70,6 +70,46 @@ export default async function handler(req, res) {
     if (!(await isAdmin(privyId))) {
       return res.status(403).json({ error: 'No autorizado' });
     }
+
+    // ── CREATE — insert a brand-new market ──────────────
+    if (action === 'create') {
+      const { title, title_en, category, icon, deadline, options, options_en } = req.body;
+      if (!title || !category || !deadline || !Array.isArray(options) || options.length < 2) {
+        return res.status(400).json({ error: 'Campos requeridos: title, category, deadline, options (min 2)' });
+      }
+      try {
+        const userRows = await sql`SELECT username FROM users WHERE privy_id = ${privyId}`;
+        const reviewer = userRows[0]?.username || 'admin';
+
+        // Generate a URL-safe slug from the title
+        const slug = title
+          .toLowerCase()
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+          .slice(0, 80)
+          + '-' + Date.now().toString(36);
+
+        const CATEGORY_LABELS = {
+          deportes: 'DEPORTES', politica: 'POLÍTICA INTERNACIONAL',
+          crypto: 'CRYPTO', mexico: 'MÉXICO & CDMX',
+          musica: 'MÚSICA & FARÁNDULA', general: 'GENERAL',
+        };
+
+        const rows = await sql`
+          INSERT INTO generated_markets
+            (slug, title, category, category_label, icon, deadline, options, volume, status, reviewed_at, reviewed_by)
+          VALUES
+            (${slug}, ${title}, ${category}, ${CATEGORY_LABELS[category] || category.toUpperCase()},
+             ${icon || '📰'}, ${deadline}, ${JSON.stringify(options)}, '0', 'approved', NOW(), ${reviewer})
+          RETURNING *
+        `;
+        return res.status(201).json({ ok: true, market: rows[0] });
+      } catch (e) {
+        return res.status(500).json({ error: e.message });
+      }
+    }
+
+    // ── STATUS CHANGE — approve / reject / live ──────────
     if (!id || !action) {
       return res.status(400).json({ error: 'Campos requeridos: id, action' });
     }

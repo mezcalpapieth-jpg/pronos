@@ -84,13 +84,19 @@ export function localizedTitle(market, lang) {
 }
 
 /**
- * Pick the language-appropriate options array.
+ * Pick the language-appropriate options array. Merges localized labels onto
+ * the base `market.options` so live `pct` values are always preserved.
  */
 export function localizedOptions(market, lang) {
   if (!market || !Array.isArray(market.options)) return market?.options || [];
-  if (lang === 'en' && Array.isArray(market.options_en)) return market.options_en;
-  if (lang === 'es' && Array.isArray(market.options_es)) return market.options_es;
-  return market.options;
+  const alt = lang === 'en' ? market.options_en
+            : lang === 'es' ? market.options_es
+            : null;
+  if (!Array.isArray(alt)) return market.options;
+  return market.options.map((opt, i) => ({
+    ...opt,
+    label: alt[i]?.label ?? opt.label,
+  }));
 }
 
 // Pure translator — usable outside React components if needed.

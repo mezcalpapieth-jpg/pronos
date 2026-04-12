@@ -3,7 +3,7 @@ import { usePrivy, useWallets } from '@privy-io/react-auth';
 import Nav from '../components/Nav.jsx';
 import { getProtocolMode, setProtocolMode, isAdmin, getContracts } from '../lib/protocol.js';
 import { resolveMarket, fetchResolutions } from '../lib/resolutions.js';
-import { fetchGeneratedMarkets, updateGeneratedMarket } from '../lib/generatedMarkets.js';
+import { fetchGeneratedMarkets, updateGeneratedMarket, createGeneratedMarket } from '../lib/generatedMarkets.js';
 import { gmFetchMarkets, gmFetchClosedMarkets } from '../lib/gamma.js';
 import { resolveEndDate, isExpired } from '../lib/deadline.js';
 import {
@@ -57,22 +57,61 @@ function ProtocolSwitch({ mode, onToggle }) {
   );
 }
 
-function CreateMarketForm({ mode }) {
+function CreateMarketForm({ privyId }) {
   const [question, setQuestion] = useState('');
   const [category, setCategory] = useState('deportes');
   const [endDate, setEndDate] = useState('');
-  const [resolutionSource, setResolutionSource] = useState('');
-  const [seedAmount, setSeedAmount] = useState('');
+  const [icon, setIcon] = useState('📰');
+  const [options, setOptions] = useState([
+    { label: 'Sí', pct: 50 },
+    { label: 'No', pct: 50 },
+  ]);
+  const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState(null);
 
-  function handleSubmit(e) {
+  function addOption() {
+    if (options.length >= 6) return;
+    setOptions(prev => [...prev, { label: '', pct: 0 }]);
+  }
+  function removeOption(idx) {
+    if (options.length <= 2) return;
+    setOptions(prev => prev.filter((_, i) => i !== idx));
+  }
+  function updateOption(idx, field, value) {
+    setOptions(prev => prev.map((o, i) => i === idx ? { ...o, [field]: field === 'pct' ? Number(value) : value } : o));
+  }
+
+  async function handleSubmit(e) {
     e.preventDefault();
-    if (mode === 'polymarket') {
-      setStatus({ type: 'info', msg: 'En modo Polymarket, los mercados se agregan en lib/markets.js. Cambia a protocolo propio para crear mercados on-chain.' });
-      return;
+    if (!question.trim() || !endDate) return;
+    const emptyLabel = options.some(o => !o.label.trim());
+    if (emptyLabel) { setStatus({ type: 'error', msg: 'Todas las opciones necesitan un nombre.' }); return; }
+
+    setSubmitting(true);
+    setStatus(null);
+    try {
+      // Format deadline for display: "30 Jun 2026"
+      const d = new Date(endDate);
+      const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+      const deadline = `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+
+      await createGeneratedMarket({
+        privyId,
+        title: question.trim(),
+        category,
+        icon,
+        deadline,
+        options: options.map(o => ({ label: o.label.trim(), pct: o.pct || 50 })),
+      });
+      setStatus({ type: 'success', msg: `Mercado creado: "${question.trim()}" — aparecerá en la página principal.` });
+      setQuestion('');
+      setEndDate('');
+      setOptions([{ label: 'Sí', pct: 50 }, { label: 'No', pct: 50 }]);
+    } catch (err) {
+      setStatus({ type: 'error', msg: err.message });
+    } finally {
+      setSubmitting(false);
     }
-    // TODO: Call MarketFactory.createMarket() via ethers
-    setStatus({ type: 'success', msg: `Mercado creado: "${question}" (pendiente integracion con contrato)` });
   }
 
   return (
@@ -87,18 +126,29 @@ function CreateMarketForm({ mode }) {
             type="text"
             value={question}
             onChange={e => setQuestion(e.target.value)}
-            placeholder="Ej: Mexico ganara el Mundial 2026?"
+            placeholder="Ej: ¿México gana el Mundial 2026?"
             required
           />
         </label>
-        <label>
-          <span>Categoria</span>
-          <select value={category} onChange={e => setCategory(e.target.value)}>
-            {MARKET_CATEGORIES.map(c => (
-              <option key={c.value} value={c.value}>{c.label}</option>
-            ))}
-          </select>
-        </label>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <label style={{ flex: 1 }}>
+            <span>Categoria</span>
+            <select value={category} onChange={e => setCategory(e.target.value)}>
+              {MARKET_CATEGORIES.map(c => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
+            </select>
+          </label>
+          <label style={{ width: 70 }}>
+            <span>Icono</span>
+            <input
+              type="text"
+              value={icon}
+              onChange={e => setIcon(e.target.value)}
+              style={{ textAlign: 'center', fontSize: 18 }}
+            />
+          </label>
+        </div>
         <label>
           <span>Fecha de cierre</span>
           <input
@@ -108,31 +158,51 @@ function CreateMarketForm({ mode }) {
             required
           />
         </label>
-        <label>
-          <span>Fuente de resolucion</span>
-          <input
-            type="text"
-            value={resolutionSource}
-            onChange={e => setResolutionSource(e.target.value)}
-            placeholder="Ej: Resultados oficiales FIFA"
-            required
-          />
-        </label>
-        {mode === 'own' && (
-          <label>
-            <span>Liquidez inicial (USDC)</span>
-            <input
-              type="number"
-              value={seedAmount}
-              onChange={e => setSeedAmount(e.target.value)}
-              placeholder="Ej: 10000"
-              min="100"
-              required
-            />
-          </label>
-        )}
-        <button type="submit" className="btn-admin-primary">
-          {mode === 'own' ? 'Crear mercado on-chain' : 'Agregar mercado curado'}
+
+        {/* Dynamic options */}
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
+              OPCIONES ({options.length})
+            </span>
+            {options.length < 6 && (
+              <button type="button" onClick={addOption} className="btn-admin-sm" style={{ fontSize: 11, padding: '4px 10px' }}>
+                + Agregar
+              </button>
+            )}
+          </div>
+          {options.map((opt, i) => (
+            <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6, alignItems: 'center' }}>
+              <input
+                type="text"
+                value={opt.label}
+                onChange={e => updateOption(i, 'label', e.target.value)}
+                placeholder={`Opción ${i + 1}`}
+                style={{ flex: 1, padding: '8px 10px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 12 }}
+                required
+              />
+              <input
+                type="number"
+                value={opt.pct}
+                onChange={e => updateOption(i, 'pct', e.target.value)}
+                min={0} max={100}
+                style={{ width: 60, padding: '8px 6px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 12, textAlign: 'center' }}
+              />
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>%</span>
+              {options.length > 2 && (
+                <button type="button" onClick={() => removeOption(i)}
+                  style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: 16, padding: '0 4px' }}
+                  title="Eliminar opción"
+                >
+                  &times;
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <button type="submit" className="btn-admin-primary" disabled={submitting}>
+          {submitting ? 'Creando…' : 'Crear mercado'}
         </button>
         {status && (
           <div className={`admin-status admin-status-${status.type}`}>
@@ -1454,7 +1524,7 @@ export default function Admin({ username, userIsAdmin, loading }) {
           <SafeManager mode={mode} />
           <FeeInfo mode={mode} />
           <ContractInfo mode={mode} />
-          <CreateMarketForm mode={mode} />
+          <CreateMarketForm privyId={privyId} />
           <MarketsList mode={mode} privyId={privyId} />
           <GeneratedMarketsReview privyId={privyId} />
         </div>

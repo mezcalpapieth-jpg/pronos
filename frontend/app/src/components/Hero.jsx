@@ -5,7 +5,7 @@ import MARKETS from '../lib/markets.js';
 import { fetchResolutions } from '../lib/resolutions.js';
 import { fetchPriceHistory, extractSeries } from '../lib/priceHistory.js';
 import { isExpired } from '../lib/deadline.js';
-import { useT } from '../lib/i18n.js';
+import { useT, useLang, localizedTitle, localizedOptions } from '../lib/i18n.js';
 import Sparkline from './Sparkline.jsx';
 
 const OPTION_COLORS = ['var(--yes)', 'var(--red)', 'var(--gold)', '#8b5cf6'];
@@ -14,6 +14,7 @@ const AUTO_INTERVAL = 6000; // ms
 /* ── Hero ─────────────────────────────────────────────── */
 export default function Hero() {
   const t = useT();
+  const lang = useLang();
   const { authenticated, login } = usePrivy();
   const navigate = useNavigate();
   const [featured, setFeatured] = useState(() =>
@@ -170,7 +171,7 @@ export default function Hero() {
             </div>
 
             {/* Title */}
-            <p className="hfc-title">{market.title}</p>
+            <p className="hfc-title">{localizedTitle(market, lang)}</p>
 
             {/* Chart(s) — single for yes/no, multi for 3+ options */}
             <div className="hfc-chart">
@@ -187,7 +188,7 @@ export default function Hero() {
                   seed={`${market.id}-${market.options[0]?.label}`}
                 />
               ) : (
-                (market.options || []).map((opt, i) => (
+                localizedOptions(market, lang).map((opt, i) => (
                   <Sparkline
                     key={i}
                     height={32}
@@ -208,7 +209,7 @@ export default function Hero() {
 
             {/* Odds */}
             <div className="hfc-odds">
-              {(market.options || []).map((opt, i) => (
+              {localizedOptions(market, lang).map((opt, i) => (
                 <div key={i} className={`hfc-odd ${i === 0 ? 'yes' : i === 1 ? 'no' : ''}`}>
                   <span className="hfc-odd-label">{opt.label}</span>
                   <span className="hfc-odd-val">{opt.pct}%</span>
