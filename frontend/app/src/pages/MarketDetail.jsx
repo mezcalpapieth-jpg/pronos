@@ -347,9 +347,8 @@ export default function MarketDetail() {
         ]);
         if(cancelled) return;
 
-        // Hardcoded markets always render. Live polymarket markets only render
-        // if their slug is in the approval list — otherwise we treat the URL
-        // as not found so unapproved Gamma slugs aren't reachable directly.
+        // ALL polymarket markets (live AND hardcoded) must be in the approval
+        // list. Local-only markets (no _polyId) render unconditionally.
         const localHit = MARKETS.find(m => m.id === marketId) || null;
         const approvalKey = live ? polymarketApprovalKey(live) : marketId;
         const approval = approved.find(a => a.slug === approvalKey || a.slug === marketId) || null;
@@ -357,7 +356,12 @@ export default function MarketDetail() {
         if (live && approval) {
           liveAllowed = applyPolymarketApproval(live, approval);
         }
-        let m = protocolMarket || liveAllowed || localHit;
+        // Hardcoded polymarket markets also need approval
+        let localAllowed = localHit;
+        if (localHit && localHit._source === 'polymarket' && localHit._polyId) {
+          localAllowed = approval ? applyPolymarketApproval(localHit, approval) : null;
+        }
+        let m = protocolMarket || liveAllowed || localAllowed;
         // Apply resolution data if exists
         if(m){
           const r = resolutions.find(r=>r.market_id===m.id);

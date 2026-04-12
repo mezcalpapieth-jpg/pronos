@@ -339,13 +339,14 @@ function classifyMarket(market, resolution, approvedSet) {
   // matching market_resolutions row exists yet.
   if (market?._resolved) return 'resolved';
   if (resolution && !isPendingResolution(resolution)) return 'resolved';
+  // Unapproved Polymarket markets ALWAYS go to the Pending tab, even if
+  // they've expired or closed — the admin must approve them first before
+  // they move to open/closed/resolved.
+  const isPoly = market?._source === 'polymarket' && market?._polyId;
+  if (isPoly && approvedSet && !approvedSet.has(polymarketApprovalKey(market))) return 'pending';
   if (resolution && isPendingResolution(resolution)) return 'closed';
   if (market?._polymarketClosed) return 'closed';
   if (isExpired(market)) return 'closed';
-  // Unapproved Polymarket markets go to the Pending tab — they only move
-  // to Open after an admin clicks Aprobar.
-  const isPoly = market?._source === 'polymarket' && market?._polyId;
-  if (isPoly && approvedSet && !approvedSet.has(polymarketApprovalKey(market))) return 'pending';
   return 'open';
 }
 

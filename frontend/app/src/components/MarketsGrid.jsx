@@ -88,10 +88,23 @@ export default function MarketsGrid({ activeFilter }) {
           if (cancelled) return;
           const filteredLive = applyApprovals(liveWithApprovedSlugs, approved);
           const liveIds = new Set(filteredLive.map(m => m.id));
-          const local = MARKETS.filter(m => !liveIds.has(m.id));
-          allMarkets = [...protocolMarkets, ...filteredLive, ...generated, ...local];
+          // Hardcoded polymarket markets must ALSO pass the approval gate.
+          // Without this, markets.js entries with _source='polymarket' would
+          // appear on the public site even if no admin approved them.
+          const approvedSlugs = new Set((approved || []).map(a => a.slug));
+          const local = MARKETS.filter(m => {
+            if (liveIds.has(m.id)) return false; // already in live list
+            if (m._source === 'polymarket' && m._polyId) return approvedSlugs.has(m.id);
+            return true;
+          });
+          // Apply translations to approved hardcoded polymarket markets too
+          const localApproved = applyApprovals(local.filter(m => m._source === 'polymarket' && m._polyId), approved);
+          const localOther = local.filter(m => !(m._source === 'polymarket' && m._polyId));
+          allMarkets = [...protocolMarkets, ...filteredLive, ...generated, ...localApproved, ...localOther];
         } else {
-          allMarkets = [...protocolMarkets, ...generated, ...MARKETS];
+          // Fallback: only show local non-polymarket markets (polymarket ones need approval)
+          const localOnly = MARKETS.filter(m => !(m._source === 'polymarket' && m._polyId));
+          allMarkets = [...protocolMarkets, ...generated, ...localOnly];
           setError('Usando datos locales — API no disponible.');
         }
 

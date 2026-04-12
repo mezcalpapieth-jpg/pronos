@@ -83,19 +83,35 @@ export function localizedTitle(market, lang) {
   return market.title || '';
 }
 
+// Common option labels that should auto-translate even when no explicit
+// options_en / options_es exists (e.g. Polymarket markets whose translation
+// failed or wasn't cached yet).
+const LABEL_EN_TO_ES = { 'Yes': 'Sí', 'yes': 'sí', 'Draw': 'Empate', 'Other': 'Otro' };
+const LABEL_ES_TO_EN = { 'Sí': 'Yes', 'sí': 'yes', 'Empate': 'Draw', 'Otro': 'Other' };
+
 /**
  * Pick the language-appropriate options array. Merges localized labels onto
  * the base `market.options` so live `pct` values are always preserved.
+ * When no explicit alt array exists, common labels (Yes/No, Sí/No) are
+ * auto-translated so markets never show mixed-language labels.
  */
 export function localizedOptions(market, lang) {
   if (!market || !Array.isArray(market.options)) return market?.options || [];
   const alt = lang === 'en' ? market.options_en
             : lang === 'es' ? market.options_es
             : null;
-  if (!Array.isArray(alt)) return market.options;
-  return market.options.map((opt, i) => ({
+  if (Array.isArray(alt)) {
+    return market.options.map((opt, i) => ({
+      ...opt,
+      label: alt[i]?.label ?? opt.label,
+    }));
+  }
+  // Fallback: auto-translate common labels when no explicit alt exists
+  const fallback = lang === 'es' ? LABEL_EN_TO_ES : lang === 'en' ? LABEL_ES_TO_EN : null;
+  if (!fallback) return market.options;
+  return market.options.map(opt => ({
     ...opt,
-    label: alt[i]?.label ?? opt.label,
+    label: fallback[opt.label] ?? opt.label,
   }));
 }
 
