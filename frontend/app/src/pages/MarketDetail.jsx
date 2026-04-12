@@ -11,6 +11,7 @@ import Sparkline from '../components/Sparkline.jsx';
 import MARKETS from '../lib/markets.js';
 import { generateMockData } from '../lib/mockTabData.js';
 import { useT, useLang, localizedTitle, localizedOptions } from '../lib/i18n.js';
+import { fetchProtocolMarket, protocolRouteIdToDbId } from '../lib/protocolMarkets.js';
 
 // Final-outcome percentage for a given option on a resolved market:
 // winner → 100, everything else → 0. Used everywhere we previously showed
@@ -338,10 +339,11 @@ export default function MarketDetail() {
     async function load(){
       setLoading(true);
       try{
-        const [live, resolutions, approved] = await Promise.all([
+        const [live, resolutions, approved, protocolMarket] = await Promise.all([
           gmFetchBySlug(marketId).catch(()=>null),
           fetchResolutions().catch(()=>[]),
           fetchApprovedPolymarket().catch(()=>[]),
+          protocolRouteIdToDbId(marketId) ? fetchProtocolMarket(marketId).catch(()=>null) : Promise.resolve(null),
         ]);
         if(cancelled) return;
 
@@ -375,7 +377,7 @@ export default function MarketDetail() {
             }));
           }
         }
-        let m = liveAllowed || localHit;
+        let m = protocolMarket || liveAllowed || localHit;
         // Apply resolution data if exists
         if(m){
           const r = resolutions.find(r=>r.market_id===m.id);

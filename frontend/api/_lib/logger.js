@@ -1,3 +1,5 @@
+import { applyCors } from './cors.js';
+
 /**
  * Shared API logger for Vercel serverless functions.
  *
@@ -51,12 +53,8 @@ export const logger = {
 export function withLogging(service, handler) {
   return async (req, res) => {
     const start = Date.now();
-    const origin = req.headers.origin;
-    const allowed = origin === 'https://pronos.io' || origin === 'http://localhost:3333';
-    res.setHeader('Access-Control-Allow-Origin', allowed ? origin : 'https://pronos.io');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    if (req.method === 'OPTIONS') return res.status(200).end();
+    const cors = applyCors(req, res);
+    if (cors) return cors;
 
     try {
       await handler(req, res);

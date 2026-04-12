@@ -46,8 +46,8 @@ export const AMM_ABI = [
   'function outcome() view returns (uint8)',
   'function paused() view returns (bool)',
   'function initialized() view returns (bool)',
-  'event SharesBought(address indexed buyer, bool buyYes, uint256 collateral, uint256 shares, uint256 fee)',
-  'event SharesSold(address indexed seller, bool sellYes, uint256 shares, uint256 collateral)',
+  'event SharesBought(address indexed buyer, bool isYes, uint256 collateralIn, uint256 fee, uint256 sharesOut)',
+  'event SharesSold(address indexed seller, bool isYes, uint256 sharesIn, uint256 collateralOut, uint256 fee)',
 ];
 
 export const TOKEN_ABI = [

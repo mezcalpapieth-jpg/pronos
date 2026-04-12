@@ -7,6 +7,7 @@ import { fetchGeneratedMarkets, updateGeneratedMarket, createGeneratedMarket } f
 import { gmFetchMarkets, gmFetchClosedMarkets } from '../lib/gamma.js';
 import { resolveEndDate, isExpired } from '../lib/deadline.js';
 import { useT } from '../lib/i18n.js';
+import MARKETS from '../lib/markets.js';
 import {
   fetchAllPolymarketDecisions,
   approvePolymarketMarket,
@@ -40,8 +41,8 @@ function ProtocolSwitch({ mode, onToggle }) {
       </div>
       <p className="admin-desc">
         {mode === 'polymarket'
-          ? 'Los mercados se enrutan a traves de Polymarket CLOB. Cambiar a protocolo propio para usar tus contratos en Base.'
-          : 'Los mercados usan tus contratos AMM en Base. Cambiar a Polymarket para el modo agregador.'}
+          ? 'Los mercados se enrutan a traves de Polymarket CLOB. Cambiar a protocolo propio para usar tus contratos en Arbitrum.'
+          : 'Los mercados usan tus contratos AMM en Arbitrum. Cambiar a Polymarket para el modo agregador.'}
       </p>
       <div className="admin-switch-row">
         <span className={mode === 'polymarket' ? 'switch-label-active' : 'switch-label'}>Polymarket</span>
@@ -58,7 +59,7 @@ function ProtocolSwitch({ mode, onToggle }) {
   );
 }
 
-function CreateMarketForm({ privyId }) {
+function CreateMarketForm({ privyId, getAccessToken }) {
   const t = useT();
   const [question, setQuestion] = useState('');
   const [category, setCategory] = useState('deportes');
@@ -104,6 +105,7 @@ function CreateMarketForm({ privyId }) {
         icon,
         deadline,
         options: options.map(o => ({ label: o.label.trim(), pct: o.pct || 50 })),
+        getAccessToken,
       });
       setStatus({ type: 'success', msg: `${t('admin.created')}` });
       setQuestion('');
@@ -216,7 +218,7 @@ function CreateMarketForm({ privyId }) {
   );
 }
 
-function ResolveModal({ market, onClose, onResolved, privyId }) {
+function ResolveModal({ market, onClose, onResolved, privyId, getAccessToken }) {
   const t = useT();
   const [outcome, setOutcome] = useState('');
   const [winner, setWinner] = useState('');
@@ -243,6 +245,7 @@ function ResolveModal({ market, onClose, onResolved, privyId }) {
         winnerShort: winnerShort || winner,
         resolvedBy: resolvedBy || 'Admin multisig',
         description,
+        getAccessToken,
       });
       onResolved(market.id);
       onClose();
@@ -377,7 +380,7 @@ function pickPolymarketWinner(market) {
   };
 }
 
-function MarketsList({ mode, privyId }) {
+function MarketsList({ mode, privyId, getAccessToken }) {
   const t = useT();
   const [markets, setMarkets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -401,14 +404,13 @@ function MarketsList({ mode, privyId }) {
     //   - market_resolutions DB rows (the source of truth for "resolved")
     //   - polymarket_approved DB rows (both approved AND rejected so we can
     //     hide rejected markets from the queue)
-    const [marketsModule, liveOpen, liveClosed, resos, decisionRows] = await Promise.all([
-      import('../lib/markets.js'),
+    const [liveOpen, liveClosed, resos, decisionRows] = await Promise.all([
       gmFetchMarkets({ limit: 100 }).catch(() => []),
       gmFetchClosedMarkets({ limit: 100 }).catch(() => []),
       fetchResolutions().catch(() => []),
-      fetchAllPolymarketDecisions().catch(() => []),
+      fetchAllPolymarketDecisions(privyId, getAccessToken).catch(() => []),
     ]);
-    const local = marketsModule.PINNED_MARKETS || marketsModule.default || [];
+    const local = MARKETS;
 
     // Dedupe by slug/id. Live data wins over hardcoded; closed-feed entries
     // win over open-feed ones (they carry the final resolved state).
@@ -454,7 +456,7 @@ function MarketsList({ mode, privyId }) {
     let totalTranslated = 0;
     let safety = 8; // 8 × 20 = 160 markets max per page load
     while (safety-- > 0) {
-      const result = await bulkTranslatePolymarket(privyId, polyMarkets);
+      const result = await bulkTranslatePolymarket(privyId, polyMarkets, getAccessToken);
       if (!result?.ok) break;
       if (Array.isArray(result.rows) && result.rows.length > 0) {
         totalTranslated += result.rows.length;
@@ -493,6 +495,7 @@ function MarketsList({ mode, privyId }) {
         title: market.title,
         options: market.options,
         autoTranslate: !cached?.title_es,
+        getAccessToken,
       });
       setDecisions(prev => {
         const next = prev.filter(r => r.slug !== market.id);
@@ -510,7 +513,7 @@ function MarketsList({ mode, privyId }) {
     if (!privyId) return;
     setApprovalBusy(market.id);
     try {
-      const row = await rejectPolymarketMarket(privyId, { slug: market.id });
+      const row = await rejectPolymarketMarket(privyId, { slug: market.id, getAccessToken });
       // Persist the rejection AND drop it from the local markets list so the
       // user sees it disappear immediately.
       setDecisions(prev => {
@@ -530,7 +533,7 @@ function MarketsList({ mode, privyId }) {
     if (!privyId) return;
     setApprovalBusy(slug);
     try {
-      await unapprovePolymarketMarket(privyId, slug);
+      await unapprovePolymarketMarket(privyId, slug, getAccessToken);
       setDecisions(prev => prev.filter(r => r.slug !== slug));
     } catch (e) {
       alert('Error: ' + e.message);
@@ -559,6 +562,7 @@ function MarketsList({ mode, privyId }) {
           winnerShort: winner.label.length > 20 ? winner.label.slice(0, 20) : winner.label,
           resolvedBy: 'Polymarket UMA',
           description: `Resuelto automáticamente por Polymarket: "${winner.label}" ganó con ${winner.pct}%.`,
+          getAccessToken,
         });
         inserted.push(cand.id);
       } catch (e) {
@@ -914,6 +918,7 @@ function MarketsList({ mode, privyId }) {
         <ResolveModal
           market={resolveTarget}
           privyId={privyId}
+          getAccessToken={getAccessToken}
           onClose={() => setResolveTarget(null)}
           onResolved={handleResolved}
         />
@@ -924,6 +929,8 @@ function MarketsList({ mode, privyId }) {
 
 function ContractInfo({ mode }) {
   if (mode !== 'own') return null;
+  const contracts = getContracts(421614);
+  const shortAddress = (addr) => addr ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : 'Pendiente de deploy';
 
   return (
     <div className="admin-card">
@@ -934,15 +941,15 @@ function ContractInfo({ mode }) {
       <div className="admin-contracts">
         <div className="admin-contract-row">
           <span className="contract-label">MarketFactory</span>
-          <span className="contract-addr">Pendiente de deploy</span>
+          <span className="contract-addr">{shortAddress(contracts?.factory)}</span>
         </div>
         <div className="admin-contract-row">
           <span className="contract-label">PronosToken (ERC-1155)</span>
-          <span className="contract-addr">Pendiente de deploy</span>
+          <span className="contract-addr">{shortAddress(contracts?.token)}</span>
         </div>
         <div className="admin-contract-row">
           <span className="contract-label">USDC</span>
-          <code className="contract-addr">0x036C...3dCF7e</code>
+          <code className="contract-addr">{shortAddress(contracts?.usdc)}</code>
         </div>
       </div>
       <div className="admin-info-box">
@@ -959,19 +966,19 @@ function FeeInfo({ mode }) {
         <h3>Comisiones</h3>
       </div>
       <div className="admin-fee-formula">
-        <div className="fee-equation">fee = 5 &times; (1 - P) %</div>
+        <div className="fee-equation">fee = 2% fijo · antes del pool</div>
         <div className="fee-examples">
           <div className="fee-example">
             <span>50/50</span>
-            <strong>2.5%</strong>
+            <strong>2%</strong>
           </div>
           <div className="fee-example">
             <span>90/10</span>
-            <strong>0.5%</strong>
+            <strong>2%</strong>
           </div>
           <div className="fee-example">
             <span>99/1</span>
-            <strong>0.05%</strong>
+            <strong>2%</strong>
           </div>
         </div>
       </div>
@@ -1262,7 +1269,7 @@ function SafeManager({ mode }) {
 }
 
 // ── Generated Markets Review ───────────────────────────────────
-function GeneratedMarketsReview({ privyId }) {
+function GeneratedMarketsReview({ privyId, getAccessToken }) {
   const [tab, setTab] = useState('pending');
   const [markets, setMarkets] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -1273,7 +1280,8 @@ function GeneratedMarketsReview({ privyId }) {
     setLoading(true);
     setError(null);
     try {
-      const rows = await fetchGeneratedMarkets(tab, tab === 'pending' ? privyId : undefined);
+      const needsAdmin = tab !== 'approved' && tab !== 'live';
+      const rows = await fetchGeneratedMarkets(tab, needsAdmin ? privyId : undefined, getAccessToken);
       setMarkets(rows);
     } catch (e) {
       setError(e.message);
@@ -1287,7 +1295,7 @@ function GeneratedMarketsReview({ privyId }) {
   async function act(id, action) {
     setBusyId(id);
     try {
-      await updateGeneratedMarket({ privyId, id, action });
+      await updateGeneratedMarket({ privyId, id, action, getAccessToken });
       setMarkets(prev => prev.filter(m => m._dbId !== id));
     } catch (e) {
       alert('Error: ' + e.message);
@@ -1467,7 +1475,7 @@ function GeneratedMarketsReview({ privyId }) {
 }
 
 export default function Admin({ username, userIsAdmin, loading }) {
-  const { authenticated, ready, user } = usePrivy();
+  const { authenticated, ready, user, getAccessToken } = usePrivy();
   const [mode, setMode] = useState(getProtocolMode);
   const privyId = user?.id;
 
@@ -1528,9 +1536,9 @@ export default function Admin({ username, userIsAdmin, loading }) {
           <SafeManager mode={mode} />
           <FeeInfo mode={mode} />
           <ContractInfo mode={mode} />
-          <CreateMarketForm privyId={privyId} />
-          <MarketsList mode={mode} privyId={privyId} />
-          <GeneratedMarketsReview privyId={privyId} />
+          <CreateMarketForm privyId={privyId} getAccessToken={getAccessToken} />
+          <MarketsList mode={mode} privyId={privyId} getAccessToken={getAccessToken} />
+          <GeneratedMarketsReview privyId={privyId} getAccessToken={getAccessToken} />
         </div>
       </div>
     </>

@@ -1,4 +1,5 @@
 import { neon } from '@neondatabase/serverless';
+import { applyCors } from './_lib/cors.js';
 
 const sql      = neon(process.env.DATABASE_URL);
 const sqlWrite = sql;
@@ -69,12 +70,8 @@ async function sendWelcomeEmail(email, name) {
 }
 
 export default async function handler(req, res) {
-  const origin = req.headers.origin;
-  const allowed = origin === 'https://pronos.io' || origin === 'http://localhost:3333';
-  res.setHeader('Access-Control-Allow-Origin', allowed ? origin : 'https://pronos.io');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  const cors = applyCors(req, res, { methods: 'GET, POST, OPTIONS' });
+  if (cors) return cors;
 
   // GET /api/waitlist?key=<MIGRATE_KEY> — view all signups
   if (req.method === 'GET') {

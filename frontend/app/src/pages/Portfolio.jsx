@@ -4,9 +4,72 @@ import { ethers } from 'ethers';
 import Nav from '../components/Nav.jsx';
 import Footer from '../components/Footer.jsx';
 import { getClobPositions, getUsdcBalance } from '../lib/clob.js';
+import { ERC20_ABI, sellShares } from '../lib/contracts.js';
+import { CHAIN_IDS, CONTRACTS, getUsdcAddress } from '../lib/protocol.js';
 import { useT } from '../lib/i18n.js';
 
-function PositionCard({ pos }) {
+function formatTokenAmount(value) {
+  return Number(value || 0).toFixed(6).replace(/\.?0+$/, '') || '0';
+}
+
+async function getChainAwareUsdcBalance(provider, address) {
+  const network = await provider.getNetwork();
+  if (network.chainId === CHAIN_IDS.polygon) {
+    return getUsdcBalance(provider, address);
+  }
+
+  const usdcAddress = getUsdcAddress(network.chainId);
+  if (!usdcAddress) return null;
+  const usdc = new ethers.Contract(usdcAddress, ERC20_ABI, provider);
+  const raw = await usdc.balanceOf(address);
+  return Number(ethers.utils.formatUnits(raw, 6));
+}
+
+function normalizeProtocolPositions(pos) {
+  const yesShares = Number(pos.yesShares || 0);
+  const noShares = Number(pos.noShares || 0);
+  const currentPrice = Number(pos.currentPrice ?? 0.5);
+  const yesValue = yesShares * currentPrice;
+  const noValue = noShares * (1 - currentPrice);
+  const totalValue = yesValue + noValue;
+  const totalCost = Number(pos.totalCost || 0);
+  const costFor = (value) => totalValue > 0 ? totalCost * (value / totalValue) : 0;
+  const base = {
+    title: pos.question,
+    marketTitle: pos.question,
+    protocolDbId: pos.marketId,
+    protocolMarketId: pos.protocolMarketId,
+    poolAddress: pos.poolAddress,
+    chainId: Number(pos.chainId || CHAIN_IDS.arbitrumSepolia),
+    status: pos.status,
+    source: 'protocol',
+  };
+
+  return [
+    yesShares > 0 ? {
+      ...base,
+      id: `protocol-${pos.marketId}-yes`,
+      outcome: 'Sí',
+      sellYes: true,
+      shares: yesShares,
+      initialValue: costFor(yesValue),
+      currentValue: yesValue,
+      currentPrice,
+    } : null,
+    noShares > 0 ? {
+      ...base,
+      id: `protocol-${pos.marketId}-no`,
+      outcome: 'No',
+      sellYes: false,
+      shares: noShares,
+      initialValue: costFor(noValue),
+      currentValue: noValue,
+      currentPrice: 1 - currentPrice,
+    } : null,
+  ].filter(Boolean);
+}
+
+function PositionCard({ pos, onSell, selling }) {
   const t = useT();
   const value     = Number(pos.currentValue || pos.size || 0).toFixed(2);
   const size      = Number(pos.initialValue || pos.size || 0).toFixed(2);
@@ -15,6 +78,7 @@ function PositionCard({ pos }) {
   const outcome   = pos.outcome || pos.title || '—';
   const market    = pos.market?.question || pos.title || pos.marketTitle || '—';
   const pct       = pos.currentPrice != null ? Math.round(pos.currentPrice * 100) : null;
+  const canSell   = pos.source === 'protocol' && pos.status === 'active' && pos.poolAddress && Number(pos.shares) > 0;
 
   return (
     <div style={{
@@ -54,7 +118,7 @@ function PositionCard({ pos }) {
             {t('pf.staked')}
           </div>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>
-            ${size} MXNB
+            ${size} USDC
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
@@ -65,10 +129,41 @@ function PositionCard({ pos }) {
             fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700,
             color: pnlPos ? 'var(--green)' : 'var(--red)',
           }}>
-            {pnlPos ? '+' : ''}{pnl} MXNB
+            {pnlPos ? '+' : ''}{pnl} USDC
           </div>
         </div>
       </div>
+
+      {pos.source === 'protocol' && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 12,
+          paddingTop: 10,
+          borderTop: '1px solid var(--border)',
+        }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
+            {t('pf.shares', { n: formatTokenAmount(pos.shares) })}
+            <span style={{ display: 'block', marginTop: 3 }}>
+              {t('pf.currentValue', { v: value })}
+            </span>
+          </div>
+          <button
+            className="btn-ghost"
+            onClick={() => onSell(pos)}
+            disabled={!canSell || selling}
+            style={{
+              padding: '8px 12px',
+              fontSize: 11,
+              opacity: canSell && !selling ? 1 : 0.5,
+              cursor: canSell && !selling ? 'pointer' : 'not-allowed',
+            }}
+          >
+            {selling ? t('pf.exiting') : t('pf.exit')}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -82,6 +177,8 @@ export default function Portfolio() {
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState(null);
   const [address, setAddress]       = useState(null);
+  const [sellingId, setSellingId]   = useState(null);
+  const [tradeStatus, setTradeStatus] = useState(null);
 
   useEffect(() => {
     if (!authenticated || !wallets?.length) return;
@@ -100,17 +197,60 @@ export default function Portfolio() {
       const addr    = await signer.getAddress();
       setAddress(addr);
 
-      const [bal, pos] = await Promise.all([
-        getUsdcBalance(provider, addr),
-        getClobPositions(addr),
+      const [bal, clobPos, protocolData] = await Promise.all([
+        getChainAwareUsdcBalance(provider, addr),
+        getClobPositions(addr).catch(() => []),
+        fetch(`/api/positions?address=${encodeURIComponent(addr)}`).then(r => r.ok ? r.json() : null).catch(() => null),
       ]);
 
+      const protocolPos = (protocolData?.positions || []).flatMap(normalizeProtocolPositions);
       setBalance(bal);
-      setPositions(Array.isArray(pos) ? pos : []);
+      setPositions([...(Array.isArray(clobPos) ? clobPos : []), ...protocolPos]);
     } catch (e) {
       setError(e.message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleSellPosition(pos) {
+    const wallet = wallets?.[0];
+    if (!wallet || pos.source !== 'protocol') return;
+
+    const chainId = Number(pos.chainId || CHAIN_IDS.arbitrumSepolia);
+    const tokenAddress = CONTRACTS[chainId]?.token;
+    if (!tokenAddress || !pos.poolAddress) {
+      setTradeStatus({ type: 'error', msg: t('pf.protocolConfigMissing') });
+      return;
+    }
+
+    setSellingId(pos.id);
+    setTradeStatus({ type: 'info', msg: t('pf.exiting') });
+    try {
+      const ethProvider = await wallet.getEthereumProvider();
+      let provider = new ethers.providers.Web3Provider(ethProvider);
+      let network = await provider.getNetwork();
+      if (network.chainId !== chainId) {
+        setTradeStatus({ type: 'info', msg: t('pf.switchingChain') });
+        await wallet.switchChain(chainId);
+        provider = new ethers.providers.Web3Provider(await wallet.getEthereumProvider());
+      }
+
+      const signer = provider.getSigner();
+      const receipt = await sellShares(
+        signer,
+        pos.poolAddress,
+        tokenAddress,
+        pos.sellYes,
+        formatTokenAmount(pos.shares),
+      );
+      const tx = receipt.transactionHash || receipt.hash || 'OK';
+      setTradeStatus({ type: 'success', msg: t('pf.exitSuccess', { tx: `${tx.slice(0, 10)}…` }) });
+      await loadData();
+    } catch (e) {
+      setTradeStatus({ type: 'error', msg: t('pf.exitError', { msg: e.message || 'Unknown error' }) });
+    } finally {
+      setSellingId(null);
     }
   }
 
@@ -186,6 +326,21 @@ export default function Portfolio() {
               </div>
             )}
 
+            {tradeStatus && (
+              <div style={{
+                color: tradeStatus.type === 'error' ? 'var(--red)' : tradeStatus.type === 'success' ? 'var(--green)' : 'var(--text-secondary)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 12,
+                padding: '12px 14px',
+                marginBottom: 20,
+                background: tradeStatus.type === 'error' ? 'var(--red-dim)' : 'var(--surface1)',
+                border: '1px solid var(--border)',
+                borderRadius: 10,
+              }}>
+                {tradeStatus.msg}
+              </div>
+            )}
+
             {/* Positions */}
             {loading ? (
               <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
@@ -211,7 +366,12 @@ export default function Portfolio() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {positions.map((pos, i) => (
-                  <PositionCard key={pos.id || i} pos={pos} />
+                  <PositionCard
+                    key={pos.id || i}
+                    pos={pos}
+                    onSell={handleSellPosition}
+                    selling={sellingId === pos.id}
+                  />
                 ))}
               </div>
             )}

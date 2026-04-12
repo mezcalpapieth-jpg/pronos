@@ -1,4 +1,6 @@
 import { neon } from '@neondatabase/serverless';
+import { applyCors } from './_lib/cors.js';
+import { requireAdmin } from './_lib/admin.js';
 
 /**
  * Bulk Spanish translation for live Polymarket markets.
@@ -25,21 +27,6 @@ import { neon } from '@neondatabase/serverless';
  */
 
 const sql = neon(process.env.DATABASE_URL);
-
-const ADMIN_USERNAMES = (process.env.ADMIN_USERNAMES || 'mezcal,frmm,alex')
-  .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-
-async function isAdmin(privyId) {
-  if (!privyId) return false;
-  try {
-    const rows = await sql`SELECT username FROM users WHERE privy_id = ${privyId}`;
-    if (rows.length === 0) return false;
-    const u = rows[0].username?.toLowerCase();
-    return ADMIN_USERNAMES.includes(u);
-  } catch (_) {
-    return false;
-  }
-}
 
 // Single-market translation. Returns { titleEs, optionsEs } or null.
 async function translateOne({ title, options }) {
@@ -88,18 +75,13 @@ Respond with ONLY valid JSON in this exact format (no markdown, no commentary):
 }
 
 export default async function handler(req, res) {
-  const origin = req.headers.origin;
-  const allowed = origin === 'https://pronos.io' || origin === 'http://localhost:3333';
-  res.setHeader('Access-Control-Allow-Origin', allowed ? origin : 'https://pronos.io');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  const cors = applyCors(req, res, { methods: 'POST, OPTIONS' });
+  if (cors) return cors;
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
   const { privyId, markets } = req.body || {};
-  if (!(await isAdmin(privyId))) {
-    return res.status(403).json({ error: 'No autorizado' });
-  }
+  const admin = await requireAdmin(req, res, sql, privyId);
+  if (!admin.ok) return;
   if (!Array.isArray(markets)) {
     return res.status(400).json({ error: 'markets array requerido' });
   }

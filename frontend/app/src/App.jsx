@@ -1,16 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { usePrivy } from '@privy-io/react-auth';
-import Home from './pages/Home.jsx';
-import MarketDetail from './pages/MarketDetail.jsx';
-import Portfolio from './pages/Portfolio.jsx';
-import Admin from './pages/Admin.jsx';
 import UsernameModal from './components/UsernameModal.jsx';
+import { authFetch } from './lib/apiAuth.js';
 
 const IS_PUBLIC_MARKETS = window.location.pathname.startsWith('/markets');
+const Home = lazy(() => import('./pages/Home.jsx'));
+const MarketDetail = lazy(() => import('./pages/MarketDetail.jsx'));
+const Portfolio = lazy(() => import('./pages/Portfolio.jsx'));
+const Admin = lazy(() => import('./pages/Admin.jsx'));
+
+function RouteFallback() {
+  return (
+    <div style={{ textAlign: 'center', padding: '100px 48px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', letterSpacing: '0.1em' }}>
+      Cargando...
+    </div>
+  );
+}
 
 export default function App() {
-  const { authenticated, user } = usePrivy();
+  const { authenticated, user, getAccessToken } = usePrivy();
   const [username, setUsername] = useState(null);
   const [userIsAdmin, setUserIsAdmin] = useState(false);
   const [checkingUsername, setCheckingUsername] = useState(false);
@@ -25,7 +34,7 @@ export default function App() {
       return;
     }
     setCheckingUsername(true);
-    fetch(`/api/user?privyId=${encodeURIComponent(user.id)}`)
+    authFetch(getAccessToken, `/api/user?privyId=${encodeURIComponent(user.id)}`)
       .then(r => r.json())
       .then(data => {
         if (data.username) {
@@ -38,12 +47,12 @@ export default function App() {
       })
       .catch(() => setNeedsUsername(true))
       .finally(() => setCheckingUsername(false));
-  }, [authenticated, user?.id]);
+  }, [authenticated, user?.id, getAccessToken]);
 
   function handleUsernameCreated(uname) {
     setUsername(uname);
     // Re-check admin status after username creation
-    fetch(`/api/user?privyId=${encodeURIComponent(user.id)}`)
+    authFetch(getAccessToken, `/api/user?privyId=${encodeURIComponent(user.id)}`)
       .then(r => r.json())
       .then(data => setUserIsAdmin(data.isAdmin === true))
       .catch(() => {});
@@ -54,9 +63,11 @@ export default function App() {
   if (IS_PUBLIC_MARKETS) {
     return (
       <BrowserRouter basename="/">
-        <Routes>
-          <Route path="/markets" element={<MarketDetail />} />
-        </Routes>
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
+            <Route path="/markets" element={<MarketDetail />} />
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     );
   }
@@ -70,15 +81,18 @@ export default function App() {
           onComplete={handleUsernameCreated}
           email={user?.email?.address}
           walletAddress={user?.wallet?.address}
+          getAccessToken={getAccessToken}
         />
       )}
 
-      <Routes>
-        <Route path="/" element={<Home username={username} userIsAdmin={userIsAdmin} />} />
-        <Route path="/market" element={<MarketDetail />} />
-        <Route path="/portfolio" element={<Portfolio />} />
-        <Route path="/admin" element={<Admin username={username} userIsAdmin={userIsAdmin} loading={checkingUsername} />} />
-      </Routes>
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
+          <Route path="/" element={<Home username={username} userIsAdmin={userIsAdmin} />} />
+          <Route path="/market" element={<MarketDetail />} />
+          <Route path="/portfolio" element={<Portfolio />} />
+          <Route path="/admin" element={<Admin username={username} userIsAdmin={userIsAdmin} loading={checkingUsername} />} />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }

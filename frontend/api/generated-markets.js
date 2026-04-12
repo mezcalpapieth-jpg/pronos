@@ -1,4 +1,6 @@
 import { neon } from '@neondatabase/serverless';
+import { applyCors } from './_lib/cors.js';
+import { requireAdmin } from './_lib/admin.js';
 
 /**
  * Generated markets CRUD.
@@ -11,28 +13,9 @@ import { neon } from '@neondatabase/serverless';
 
 const sql = neon(process.env.DATABASE_URL);
 
-const ADMIN_USERNAMES = (process.env.ADMIN_USERNAMES || 'mezcal,frmm,alex')
-  .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-
-async function isAdmin(privyId) {
-  if (!privyId) return false;
-  try {
-    const rows = await sql`SELECT username FROM users WHERE privy_id = ${privyId}`;
-    if (rows.length === 0) return false;
-    const u = rows[0].username?.toLowerCase();
-    return ADMIN_USERNAMES.includes(u);
-  } catch (_) {
-    return false;
-  }
-}
-
 export default async function handler(req, res) {
-  const origin = req.headers.origin;
-  const allowed = origin === 'https://pronos.io' || origin === 'http://localhost:3333';
-  res.setHeader('Access-Control-Allow-Origin', allowed ? origin : 'https://pronos.io');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  const cors = applyCors(req, res, { methods: 'GET, POST, OPTIONS' });
+  if (cors) return cors;
 
   // ── GET ───────────────────────────────────────────────
   if (req.method === 'GET') {
@@ -42,9 +25,8 @@ export default async function handler(req, res) {
       // Admin viewing pending/rejected
       if (statusFilter !== 'approved' && statusFilter !== 'live') {
         const privyId = req.query.privyId;
-        if (!(await isAdmin(privyId))) {
-          return res.status(403).json({ error: 'No autorizado' });
-        }
+        const admin = await requireAdmin(req, res, sql, privyId);
+        if (!admin.ok) return;
       }
 
       const rows = await sql`
@@ -67,9 +49,8 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     const { privyId, id, action, patch } = req.body || {};
 
-    if (!(await isAdmin(privyId))) {
-      return res.status(403).json({ error: 'No autorizado' });
-    }
+    const admin = await requireAdmin(req, res, sql, privyId);
+    if (!admin.ok) return;
 
     // ── CREATE — insert a brand-new market ──────────────
     if (action === 'create') {
@@ -78,8 +59,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Campos requeridos: title, category, deadline, options (min 2)' });
       }
       try {
-        const userRows = await sql`SELECT username FROM users WHERE privy_id = ${privyId}`;
-        const reviewer = userRows[0]?.username || 'admin';
+        const reviewer = admin.username || 'admin';
 
         // Generate a URL-safe slug from the title
         const slug = title
@@ -122,8 +102,7 @@ export default async function handler(req, res) {
 
     try {
       // Get admin username for audit
-      const userRows = await sql`SELECT username FROM users WHERE privy_id = ${privyId}`;
-      const reviewer = userRows[0]?.username || 'admin';
+      const reviewer = admin.username || 'admin';
 
       // Optional edits before approval
       if (patch && typeof patch === 'object') {

@@ -2,6 +2,8 @@
 // Fetches and submits market resolutions from our backend DB.
 // Works independently of on-chain contracts — will layer on top later.
 
+import { authFetch } from './apiAuth.js';
+
 const API_BASE = '/api/resolutions';
 
 /**
@@ -21,8 +23,8 @@ export async function fetchResolutions() {
  * @param {object} params - { marketId, outcome, winner, winnerShort, resolvedBy, description }
  * @returns {Promise<object>} The created resolution
  */
-export async function resolveMarket(privyId, { marketId, outcome, winner, winnerShort, resolvedBy, description }) {
-  const res = await fetch(API_BASE, {
+export async function resolveMarket(privyId, { marketId, outcome, winner, winnerShort, resolvedBy, description, getAccessToken }) {
+  const res = await authFetch(getAccessToken, API_BASE, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

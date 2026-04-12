@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useT } from '../lib/i18n.js';
+import { authFetch } from '../lib/apiAuth.js';
 
 const API = '/api/user';
 
-export default function UsernameModal({ privyId, onComplete, email, walletAddress }) {
+export default function UsernameModal({ privyId, onComplete, email, walletAddress, getAccessToken }) {
   const t = useT();
   const [username, setUsername] = useState('');
   const [error, setError] = useState('');
@@ -18,7 +19,7 @@ export default function UsernameModal({ privyId, onComplete, email, walletAddres
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(API, {
+      const res = await authFetch(getAccessToken, API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ privyId, username }),
@@ -193,7 +194,7 @@ export default function UsernameModal({ privyId, onComplete, email, walletAddres
                   : 'user';
               const autoName = base + '_' + Math.random().toString(36).slice(2, 6);
               try {
-                const res = await fetch(API, {
+                const res = await authFetch(getAccessToken, API, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ privyId, username: autoName }),

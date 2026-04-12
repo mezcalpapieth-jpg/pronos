@@ -8,18 +8,13 @@
 // The `path` query param specifies the upstream endpoint path (e.g. /markets).
 // All other query params are forwarded to the upstream URL.
 
+import { applyCors } from './_lib/cors.js';
+
 const GAMMA_BASE = 'https://gamma-api.polymarket.com';
 
 export default async function handler(req, res) {
-  const origin = req.headers.origin;
-  const allowed = origin === 'https://pronos.io' || origin === 'http://localhost:3333';
-  res.setHeader('Access-Control-Allow-Origin', allowed ? origin : 'https://pronos.io');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  const cors = applyCors(req, res, { methods: 'GET, OPTIONS' });
+  if (cors) return cors;
 
   try {
     // Extract `path` from query params, forward the rest to upstream

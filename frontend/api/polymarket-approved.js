@@ -1,4 +1,6 @@
 import { neon } from '@neondatabase/serverless';
+import { applyCors } from './_lib/cors.js';
+import { requireAdmin } from './_lib/admin.js';
 
 /**
  * Polymarket approval / rejection list with on-the-fly Spanish translation.
@@ -23,21 +25,6 @@ import { neon } from '@neondatabase/serverless';
  */
 
 const sql = neon(process.env.DATABASE_URL);
-
-const ADMIN_USERNAMES = (process.env.ADMIN_USERNAMES || 'mezcal,frmm,alex')
-  .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-
-async function isAdmin(privyId) {
-  if (!privyId) return false;
-  try {
-    const rows = await sql`SELECT username FROM users WHERE privy_id = ${privyId}`;
-    if (rows.length === 0) return false;
-    const u = rows[0].username?.toLowerCase();
-    return ADMIN_USERNAMES.includes(u);
-  } catch (_) {
-    return false;
-  }
-}
 
 // ── Anthropic translation ──────────────────────────────────────────────────
 // Translates a market title + option labels in a single API call. Returns
@@ -89,17 +76,17 @@ Respond with ONLY valid JSON in this exact format (no markdown, no commentary):
 }
 
 export default async function handler(req, res) {
-  const origin = req.headers.origin;
-  const allowed = origin === 'https://pronos.io' || origin === 'http://localhost:3333';
-  res.setHeader('Access-Control-Allow-Origin', allowed ? origin : 'https://pronos.io');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  const cors = applyCors(req, res, { methods: 'GET, POST, DELETE, OPTIONS' });
+  if (cors) return cors;
 
   // ── GET ───────────────────────────────────────────────
   if (req.method === 'GET') {
     try {
       const statusFilter = req.query.status || 'approved';
+      if (statusFilter !== 'approved') {
+        const admin = await requireAdmin(req, res, sql, req.query.privyId);
+        if (!admin.ok) return;
+      }
       const rows = statusFilter === 'all'
         ? await sql`
             SELECT slug, title_es, options_es, approved_at, approved_by, status
@@ -121,15 +108,13 @@ export default async function handler(req, res) {
   // ── POST ──────────────────────────────────────────────
   if (req.method === 'POST') {
     const { privyId, slug, title, options, autoTranslate, status } = req.body || {};
-    if (!(await isAdmin(privyId))) {
-      return res.status(403).json({ error: 'No autorizado' });
-    }
+    const admin = await requireAdmin(req, res, sql, privyId);
+    if (!admin.ok) return;
     if (!slug) return res.status(400).json({ error: 'slug requerido' });
     const decisionStatus = status === 'rejected' ? 'rejected' : 'approved';
 
     try {
-      const userRows = await sql`SELECT username FROM users WHERE privy_id = ${privyId}`;
-      const reviewer = userRows[0]?.username || 'admin';
+      const reviewer = admin.username || 'admin';
 
       let titleEs = null;
       let optionsEs = null;
@@ -164,9 +149,8 @@ export default async function handler(req, res) {
   if (req.method === 'DELETE') {
     const slug = req.query.slug || (req.body && req.body.slug);
     const privyId = req.query.privyId || (req.body && req.body.privyId);
-    if (!(await isAdmin(privyId))) {
-      return res.status(403).json({ error: 'No autorizado' });
-    }
+    const admin = await requireAdmin(req, res, sql, privyId);
+    if (!admin.ok) return;
     if (!slug) return res.status(400).json({ error: 'slug requerido' });
     try {
       await sql`DELETE FROM polymarket_approved WHERE slug = ${slug}`;

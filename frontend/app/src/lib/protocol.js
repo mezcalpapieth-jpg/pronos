@@ -7,6 +7,10 @@
  */
 
 const PROTOCOL_KEY = 'pronos-protocol-mode';
+const envAddress = (name) => {
+  const value = import.meta.env[name];
+  return value && value !== '0x0000000000000000000000000000000000000000' ? value : null;
+};
 
 export function getProtocolMode() {
   return localStorage.getItem(PROTOCOL_KEY) || 'polymarket';
@@ -35,7 +39,7 @@ export function isAdmin(adminFlag) {
 
 // ─── Contract addresses per chain ─────────────────────────────────────────
 
-const CONTRACTS = {
+export const CONTRACTS = {
   // Polygon (Polymarket)
   137: {
     factory: null,
@@ -44,15 +48,15 @@ const CONTRACTS = {
   },
   // Arbitrum Sepolia (testnet)
   421614: {
-    factory: null,  // Set after deployment
-    token: null,
-    usdc: '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d',
+    factory: envAddress('VITE_PRONOS_ARB_SEPOLIA_FACTORY'),
+    token: envAddress('VITE_PRONOS_ARB_SEPOLIA_TOKEN'),
+    usdc: envAddress('VITE_PRONOS_ARB_SEPOLIA_USDC') || '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d',
   },
   // Arbitrum One (mainnet)
   42161: {
-    factory: null,
-    token: null,
-    usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+    factory: envAddress('VITE_PRONOS_ARBITRUM_FACTORY'),
+    token: envAddress('VITE_PRONOS_ARBITRUM_TOKEN'),
+    usdc: envAddress('VITE_PRONOS_ARBITRUM_USDC') || '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
   },
 };
 

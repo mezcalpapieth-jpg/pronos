@@ -8,6 +8,8 @@ import { fetchPriceHistory, collectTokenIds } from '../lib/priceHistory.js';
 import { isExpired } from '../lib/deadline.js';
 import { useT } from '../lib/i18n.js';
 import MARKETS from '../lib/markets.js';
+import { getProtocolMode } from '../lib/protocol.js';
+import { fetchProtocolMarkets } from '../lib/protocolMarkets.js';
 
 function applyResolutions(markets, resolutions) {
   if (!resolutions || resolutions.length === 0) return markets;
@@ -33,6 +35,13 @@ export default function MarketsGrid({ activeFilter }) {
   const [history, setHistory] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [protocolMode, setProtocolModeState] = useState(getProtocolMode);
+
+  useEffect(() => {
+    const handler = (e) => setProtocolModeState(e.detail);
+    window.addEventListener('pronos-protocol-change', handler);
+    return () => window.removeEventListener('pronos-protocol-change', handler);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,11 +52,12 @@ export default function MarketsGrid({ activeFilter }) {
       try {
         // Fetch live markets, AI-generated, resolutions, and the polymarket
         // approval allow-list in parallel.
-        const [live, generated, resolutions, approved] = await Promise.all([
+        const [live, generated, resolutions, approved, protocolMarkets] = await Promise.all([
           gmFetchMarkets({ limit: 60 }).catch(() => null),
           fetchGeneratedMarkets('approved').catch(() => []),
           fetchResolutions().catch(() => []),
           fetchApprovedPolymarket().catch(() => []),
+          protocolMode === 'own' ? fetchProtocolMarkets().catch(() => []) : Promise.resolve([]),
         ]);
 
         if (cancelled) return;
@@ -60,9 +70,9 @@ export default function MarketsGrid({ activeFilter }) {
           const filteredLive = applyApprovals(live, approved);
           const liveIds = new Set(filteredLive.map(m => m.id));
           const local = MARKETS.filter(m => !liveIds.has(m.id));
-          allMarkets = [...filteredLive, ...generated, ...local];
+          allMarkets = [...protocolMarkets, ...filteredLive, ...generated, ...local];
         } else {
-          allMarkets = [...generated, ...MARKETS];
+          allMarkets = [...protocolMarkets, ...generated, ...MARKETS];
           setError('Usando datos locales — API no disponible.');
         }
 
@@ -112,7 +122,7 @@ export default function MarketsGrid({ activeFilter }) {
 
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [protocolMode]);
 
   // Annotate expired-but-not-yet-resolved markets so MarketCard can render
   // a distinct "CERRADO" badge while we wait for the auto-resolve cron.

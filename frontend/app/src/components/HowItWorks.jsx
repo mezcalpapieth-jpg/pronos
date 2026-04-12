@@ -47,7 +47,7 @@ export default function HowItWorks() {
 
         <div className="tech-strip">
           <div className="tech-pill"><span className="dot" />Polygon</div>
-          <div className="tech-pill"><span className="dot" />MXNB Nativo</div>
+          <div className="tech-pill"><span className="dot" />USDC Nativo</div>
           <div className="tech-pill"><span className="dot" />Polymarket</div>
           <div className="tech-pill"><span className="dot" />Privy</div>
           <div className="tech-pill"><span className="dot" />Sin MetaMask</div>

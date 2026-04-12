@@ -13,10 +13,12 @@ import {
   NEG_RISK_ADAPTER,
   POLYGON_CHAIN_ID,
 } from '../lib/clob.js';
-import { isProtocolMarket, getRequiredChainId, CHAIN_IDS } from '../lib/protocol.js';
+import { buyShares } from '../lib/contracts.js';
+import { isProtocolMarket, getUsdcAddress, CHAIN_IDS } from '../lib/protocol.js';
 import { useT } from '../lib/i18n.js';
 
 const QUICK_AMOUNTS = [5, 10, 25, 50];
+const ERC20_BALANCE_ABI = ['function balanceOf(address) view returns (uint256)'];
 
 // Steps shown in the UI during the betting flow
 const STEPS = {
@@ -41,15 +43,16 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
   const [book, setBook]       = useState(null);
 
   const numAmount  = parseFloat(amount) || 0;
-  // Dynamic fee: fee% = 5 × (1 - P) where P is probability as decimal
-  const feePct     = outcomePct > 0 ? 5 * (1 - outcomePct / 100) : 0;
+  const protocolMarket = isProtocolMarket(market);
+  const protocolChainId = Number(market?.chainId || CHAIN_IDS.arbitrumSepolia);
+  const feePct     = protocolMarket ? 2 : 0;
   const fee        = numAmount * feePct / 100;
   const afterFee   = numAmount - fee;
   const payout     = outcomePct > 0 && numAmount > 0 ? (afterFee / (outcomePct / 100)).toFixed(2) : '—';
   const profit     = outcomePct > 0 && numAmount > 0 ? (afterFee / (outcomePct / 100) - numAmount).toFixed(2) : '—';
   const isLoading  = [STEPS.CHECKING, STEPS.APPROVING, STEPS.SIGNING, STEPS.PLACING].includes(step);
 
-  // Slippage simulation: walk the ask ladder with the user's post-fee MXNB.
+  // Slippage simulation: walk the ask ladder with the user's post-fee USDC.
   // `slippagePoints` is expressed in percentage points of implied probability
   // (e.g. market moved from 54% to 56% = "+2 pts"). We use the same unit in
   // the row, the warning and the threshold so nothing contradicts anything.
@@ -62,9 +65,19 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
   // Slippage preview is only meaningful when we have a live book. Local/demo
   // markets without a `clobTokenId` can't be simulated — show a hint instead
   // of silently hiding the section so the user knows why numbers are missing.
-  const noLiveBook     = !clobTokenId;
+  const noLiveBook     = !clobTokenId && !protocolMarket;
+  const liveTradingUnavailable = protocolMarket ? !market?.poolAddress : !clobTokenId;
 
-  // Load MXNB balance when modal opens
+  async function getWalletUsdcBalance(provider, address, chainId) {
+    if (!protocolMarket) return getUsdcBalance(provider, address);
+    const usdcAddress = getUsdcAddress(chainId);
+    if (!usdcAddress) throw new Error('USDC is not configured for this chain');
+    const usdc = new ethers.Contract(usdcAddress, ERC20_BALANCE_ABI, provider);
+    const raw = await usdc.balanceOf(address);
+    return Number(ethers.utils.formatUnits(raw, 6));
+  }
+
+  // Load USDC balance when modal opens
   useEffect(() => {
     if (!open || !authenticated) return;
     const wallet = wallets?.[0];
@@ -73,7 +86,8 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
       try {
         const provider = new ethers.providers.Web3Provider(prov);
         const addr = await provider.getSigner().getAddress();
-        const bal  = await getUsdcBalance(provider, addr);
+        const network = await provider.getNetwork();
+        const bal  = await getWalletUsdcBalance(provider, addr, network.chainId);
         setBalance(bal);
       } catch (_) {}
     }).catch(() => {});
@@ -99,6 +113,11 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
   // ── Main bet handler ────────────────────────────────────────────────────────
   const handleBet = async () => {
     if (!authenticated) { window.open('/#waitlist', '_blank'); return; }
+    if (liveTradingUnavailable) {
+      setStep(STEPS.ERROR);
+      setStatusMsg(isProtocolMarket(market) ? t('bet.protocolUnavailable') : t('bet.noLiveTrading'));
+      return;
+    }
     if (numAmount <= 0) {
       setStep(STEPS.ERROR);
       setStatusMsg(t('bet.invalidAmount'));
@@ -122,7 +141,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
       const address     = await signer.getAddress();
 
       // ── 1b. Check chain + auto-switch ──────────────────────────────────
-      const requiredChainId = isProtocolMarket(market) ? getRequiredChainId() : POLYGON_CHAIN_ID;
+      const requiredChainId = protocolMarket ? protocolChainId : POLYGON_CHAIN_ID;
       const network = await provider.getNetwork();
       if (network.chainId !== requiredChainId) {
         setStatusMsg(t('bet.switchingChain'));
@@ -143,7 +162,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
       }
 
       // ── 2. Check balance ─────────────────────────────────────────────────
-      const bal = await getUsdcBalance(provider, address);
+      const bal = await getWalletUsdcBalance(provider, address, requiredChainId);
       setBalance(bal);
       if (bal < numAmount) {
         setStep(STEPS.ERROR);
@@ -151,7 +170,27 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
         return;
       }
 
-      // ── 3. Check + request MXNB approvals ────────────────────────────────
+      if (protocolMarket) {
+        const usdcAddress = getUsdcAddress(requiredChainId);
+        if (!usdcAddress || !market?.poolAddress) {
+          setStep(STEPS.ERROR);
+          setStatusMsg(t('bet.protocolUnavailable'));
+          return;
+        }
+        setStep(STEPS.APPROVING);
+        setStatusMsg(t('bet.approving'));
+        const buyYes = outcome === market.options?.[0]?.label;
+        setStep(STEPS.PLACING);
+        setStatusMsg(t('bet.placingProtocol'));
+        const receipt = await buyShares(signer, market.poolAddress, usdcAddress, buyYes, amount);
+        setOrderId(receipt.transactionHash || receipt.hash || 'OK');
+        setStep(STEPS.SUCCESS);
+        setStatusMsg(t('bet.placed', { amt: numAmount, outcome }));
+        setAmount('');
+        return;
+      }
+
+      // ── 3. Check + request USDC approvals ────────────────────────────────
       const allowance1 = await getUsdcAllowance(provider, address, CTF_EXCHANGE);
       const allowance2 = await getUsdcAllowance(provider, address, NEG_RISK_ADAPTER);
       const needsApproval = allowance1 < numAmount || allowance2 < numAmount;
@@ -205,6 +244,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
   // ── Step label shown in button ──────────────────────────────────────────────
   const buttonLabel = () => {
     if (!authenticated)             return t('bet.btn.join');
+    if (liveTradingUnavailable)     return t('bet.btn.unavailable');
     if (step === STEPS.CHECKING)    return t('bet.btn.checking');
     if (step === STEPS.APPROVING)   return t('bet.btn.approving');
     if (step === STEPS.SIGNING)     return t('bet.btn.signing');
@@ -234,7 +274,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
           </p>
         )}
 
-        {/* MXNB Balance */}
+        {/* USDC Balance */}
         {authenticated && balance !== null && (
           <div style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -286,15 +326,15 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
           <div className="bet-payout-info">
             <div className="bet-payout-row">
               <span>{t('bet.fee', { pct: feePct.toFixed(2) })}</span>
-              <span style={{ opacity: 0.6 }}>-${fee.toFixed(2)} MXNB</span>
+              <span style={{ opacity: 0.6 }}>-${fee.toFixed(2)} USDC</span>
             </div>
             <div className="bet-payout-row">
               <span>{t('bet.estimatedPayout')}</span>
-              <span className="green">${payout} MXNB</span>
+              <span className="green">${payout} USDC</span>
             </div>
             <div className="bet-payout-row">
               <span>{t('bet.profit')}</span>
-              <span className="green">+${profit} MXNB</span>
+              <span className="green">+${profit} USDC</span>
             </div>
             <div className="bet-payout-row">
               <span>{t('bet.implied')}</span>
@@ -406,9 +446,9 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
 
         <button
           className="btn-primary"
-          style={{ width: '100%', opacity: step === STEPS.SUCCESS ? 0.7 : 1 }}
+          style={{ width: '100%', opacity: step === STEPS.SUCCESS || (authenticated && liveTradingUnavailable) ? 0.7 : 1 }}
           onClick={step === STEPS.SUCCESS ? handleClose : handleBet}
-          disabled={isLoading}
+          disabled={isLoading || (authenticated && liveTradingUnavailable)}
         >
           {buttonLabel()}
         </button>

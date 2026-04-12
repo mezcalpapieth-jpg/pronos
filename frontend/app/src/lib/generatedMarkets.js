@@ -1,4 +1,6 @@
 // ── Client for /api/generated-markets ──────────────────────────
+import { authFetch } from './apiAuth.js';
+
 const API = '/api/generated-markets';
 
 function isLocal() {
@@ -11,10 +13,10 @@ const base = isLocal() ? 'https://pronos.io' : '';
  * Default returns only approved markets (public).
  * Pass 'pending' with privyId to retrieve pending (admin only).
  */
-export async function fetchGeneratedMarkets(status = 'approved', privyId) {
+export async function fetchGeneratedMarkets(status = 'approved', privyId, getAccessToken) {
   const q = new URLSearchParams({ status });
   if (privyId) q.set('privyId', privyId);
-  const res = await fetch(`${base}${API}?${q.toString()}`);
+  const res = await authFetch(getAccessToken, `${base}${API}?${q.toString()}`);
   if (!res.ok) return [];
   const data = await res.json();
   return (data.markets || []).map(normalize);
@@ -23,8 +25,8 @@ export async function fetchGeneratedMarkets(status = 'approved', privyId) {
 /**
  * Approve, reject, or mark a generated market as live (admin only).
  */
-export async function updateGeneratedMarket({ privyId, id, action, patch }) {
-  const res = await fetch(`${base}${API}`, {
+export async function updateGeneratedMarket({ privyId, id, action, patch, getAccessToken }) {
+  const res = await authFetch(getAccessToken, `${base}${API}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ privyId, id, action, patch }),
@@ -40,8 +42,8 @@ export async function updateGeneratedMarket({ privyId, id, action, patch }) {
  * Create a brand-new market (admin only). Auto-approved so it appears
  * on the public grid immediately.
  */
-export async function createGeneratedMarket({ privyId, title, category, icon, deadline, options }) {
-  const res = await fetch(`${base}${API}`, {
+export async function createGeneratedMarket({ privyId, title, category, icon, deadline, options, getAccessToken }) {
+  const res = await authFetch(getAccessToken, `${base}${API}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ privyId, action: 'create', title, category, icon, deadline, options }),

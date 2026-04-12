@@ -1,26 +1,60 @@
 import React, { useState, useEffect } from 'react';
 import { useT } from '../lib/i18n.js';
 
-const CORRECT = 'mezcal';
 const STORAGE_KEY = 'pronos-mvp-access';
 
 export default function PasswordGate({ children }) {
   const t = useT();
   const [unlocked, setUnlocked] = useState(false);
+  const [checking, setChecking] = useState(true);
   const [input, setInput] = useState('');
   const [error, setError] = useState(false);
+  const [serverError, setServerError] = useState('');
 
   useEffect(() => {
-    if (sessionStorage.getItem(STORAGE_KEY) === '1') setUnlocked(true);
+    let cancelled = false;
+    fetch('/api/mvp-access', { credentials: 'same-origin' })
+      .then(r => r.ok ? r.json() : { ok: false })
+      .then(data => {
+        if (cancelled) return;
+        if (data.ok) {
+          sessionStorage.setItem(STORAGE_KEY, '1');
+          setUnlocked(true);
+        } else {
+          sessionStorage.removeItem(STORAGE_KEY);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) sessionStorage.removeItem(STORAGE_KEY);
+      })
+      .finally(() => {
+        if (!cancelled) setChecking(false);
+      });
+    return () => { cancelled = true; };
   }, []);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (input.trim().toLowerCase() === CORRECT) {
-      sessionStorage.setItem(STORAGE_KEY, '1');
-      setUnlocked(true);
-    } else {
+    setServerError('');
+    try {
+      const res = await fetch('/api/mvp-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ password: input }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        sessionStorage.setItem(STORAGE_KEY, '1');
+        setUnlocked(true);
+        return;
+      }
       setError(true);
+      setServerError(data.error || '');
+      setTimeout(() => setError(false), 1500);
+    } catch {
+      setError(true);
+      setServerError('No se pudo verificar el acceso.');
       setTimeout(() => setError(false), 1500);
     }
   };
@@ -43,7 +77,9 @@ export default function PasswordGate({ children }) {
           {t('gate.badge')}
         </div>
 
-        <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.4)' }}>{t('gate.title')}</div>
+        <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.4)' }}>
+          {checking ? 'Verificando acceso...' : t('gate.title')}
+        </div>
         <div style={{ height: '16px' }} />
 
         <input
@@ -52,6 +88,7 @@ export default function PasswordGate({ children }) {
           onChange={e => setInput(e.target.value)}
           placeholder={t('gate.password')}
           autoFocus
+          disabled={checking}
           style={{
             width: '100%', padding: '14px 18px',
             background: 'rgba(255,255,255,0.04)',
@@ -64,17 +101,17 @@ export default function PasswordGate({ children }) {
 
         {error && (
           <div style={{ color: '#ef4444', fontSize: '13px', marginTop: '10px' }}>
-            {t('gate.wrong')}
+            {serverError || t('gate.wrong')}
           </div>
         )}
 
-        <button type="submit" style={{
+        <button type="submit" disabled={checking} style={{
           marginTop: '20px', width: '100%', padding: '14px',
-          background: '#FF5500', color: '#fff', border: 'none',
+          background: checking ? '#333' : '#FF5500', color: '#fff', border: 'none',
           borderRadius: '12px', fontSize: '15px', fontWeight: 600,
-          cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
+          cursor: checking ? 'wait' : 'pointer', fontFamily: "'DM Sans', sans-serif",
         }}>
-          {t('gate.enter')}
+          {checking ? '...' : t('gate.enter')}
         </button>
       </form>
     </div>

@@ -127,7 +127,8 @@ export default async function handler(req, res) {
         const collateral = parseFloat(ethers.utils.formatUnits(collateralIn, 6));
         const feeAmt = parseFloat(ethers.utils.formatUnits(fee, 6));
         const shares = parseFloat(ethers.utils.formatUnits(sharesOut, 6));
-        const price = collateral > 0 ? collateral / shares : 0;
+        const netCollateral = Math.max(0, collateral - feeAmt);
+        const price = shares > 0 ? netCollateral / shares : 0;
 
         await sql`
           INSERT INTO trades (market_id, trader, side, is_yes, collateral_amt, shares_amt, fee_amt, price_at_trade, tx_hash, block_number, log_index)

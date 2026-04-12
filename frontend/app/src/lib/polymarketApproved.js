@@ -4,6 +4,8 @@
 // (generated at approval time via Anthropic) so the public site can render
 // markets in Spanish without re-translating on the fly.
 
+import { authFetch } from './apiAuth.js';
+
 const API = '/api/polymarket-approved';
 
 function isLocal() {
@@ -30,9 +32,10 @@ export async function fetchApprovedPolymarket() {
  * Fetch every decision row (approved + rejected) — used by the admin so it
  * can hide rejected markets from the queue without re-fetching them.
  */
-export async function fetchAllPolymarketDecisions() {
+export async function fetchAllPolymarketDecisions(privyId, getAccessToken) {
   try {
-    const res = await fetch(`${base}${API}?status=all`);
+    const q = privyId ? `?status=all&privyId=${encodeURIComponent(privyId)}` : '?status=all';
+    const res = await authFetch(getAccessToken, `${base}${API}${q}`);
     if (!res.ok) return [];
     const data = await res.json();
     return data.approved || [];
@@ -45,8 +48,8 @@ export async function fetchAllPolymarketDecisions() {
  * Approve a polymarket market (admin only). Sends the original title + options
  * so the server can translate to Spanish via Anthropic before storing.
  */
-export async function approvePolymarketMarket(privyId, { slug, title, options, autoTranslate = true }) {
-  const res = await fetch(`${base}${API}`, {
+export async function approvePolymarketMarket(privyId, { slug, title, options, autoTranslate = true, getAccessToken }) {
+  const res = await authFetch(getAccessToken, `${base}${API}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ privyId, slug, title, options, autoTranslate, status: 'approved' }),
@@ -62,8 +65,8 @@ export async function approvePolymarketMarket(privyId, { slug, title, options, a
  * Persistently reject a polymarket market (admin only). The slug stays in the
  * decisions table with status='rejected' so future admin loads filter it out.
  */
-export async function rejectPolymarketMarket(privyId, { slug }) {
-  const res = await fetch(`${base}${API}`, {
+export async function rejectPolymarketMarket(privyId, { slug, getAccessToken } = {}) {
+  const res = await authFetch(getAccessToken, `${base}${API}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ privyId, slug, status: 'rejected', autoTranslate: false }),
@@ -83,9 +86,9 @@ export async function rejectPolymarketMarket(privyId, { slug }) {
  * The server caps each call at 20 translations, so callers should drain by
  * looping until `remaining === 0`.
  */
-export async function bulkTranslatePolymarket(privyId, markets) {
+export async function bulkTranslatePolymarket(privyId, markets, getAccessToken) {
   try {
-    const res = await fetch(`${base}/api/polymarket-translate`, {
+    const res = await authFetch(getAccessToken, `${base}/api/polymarket-translate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ privyId, markets }),
@@ -100,9 +103,9 @@ export async function bulkTranslatePolymarket(privyId, markets) {
 /**
  * Revoke approval for a slug (admin only).
  */
-export async function unapprovePolymarketMarket(privyId, slug) {
+export async function unapprovePolymarketMarket(privyId, slug, getAccessToken) {
   const url = `${base}${API}?slug=${encodeURIComponent(slug)}&privyId=${encodeURIComponent(privyId)}`;
-  const res = await fetch(url, { method: 'DELETE' });
+  const res = await authFetch(getAccessToken, url, { method: 'DELETE' });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'No se pudo eliminar la aprobación');

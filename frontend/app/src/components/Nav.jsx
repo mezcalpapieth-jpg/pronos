@@ -6,6 +6,7 @@ import { POLYGON_CHAIN_ID } from '../lib/clob.js';
 import { getProtocolMode, getUsdcAddress, getRequiredChainId } from '../lib/protocol.js';
 import MARKETS from '../lib/markets.js';
 import { useT, useLang, setLang } from '../lib/i18n.js';
+import { authFetch } from '../lib/apiAuth.js';
 
 function getInitialTheme() {
   const saved = localStorage.getItem('pronos-theme');
@@ -13,7 +14,7 @@ function getInitialTheme() {
   return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
 }
 
-const MXNB_ABI = ['function balanceOf(address) view returns (uint256)'];
+const ERC20_ABI = ['function balanceOf(address) view returns (uint256)'];
 
 const CHAIN_NAMES = {
   137: 'Polygon',
@@ -25,7 +26,7 @@ export default function Nav() {
   const navigate = useNavigate();
   const t = useT();
   const lang = useLang();
-  const { ready, authenticated, user, login, logout } = usePrivy();
+  const { ready, authenticated, user, login, logout, getAccessToken } = usePrivy();
   const { wallets } = useWallets();
   const [scrolled, setScrolled] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -47,14 +48,14 @@ export default function Nav() {
 
   useEffect(() => {
     if (!authenticated || !user?.id) { setUsername(null); setAdminFlag(false); return; }
-    fetch(`/api/user?privyId=${encodeURIComponent(user.id)}`)
+    authFetch(getAccessToken, `/api/user?privyId=${encodeURIComponent(user.id)}`)
       .then(r => r.json())
       .then(d => {
         if (d.username) setUsername(d.username);
         setAdminFlag(d.isAdmin === true);
       })
       .catch(() => {});
-  }, [authenticated, user?.id]);
+  }, [authenticated, user?.id, getAccessToken]);
 
   // Fetch USDC balance + chain ID (chain-aware)
   useEffect(() => {
@@ -69,7 +70,7 @@ export default function Nav() {
         const usdcAddr = getUsdcAddress(network.chainId);
         if (!usdcAddr) { setBalance(null); return; }
         const addr = await provider.getSigner().getAddress();
-        const usdc = new ethers.Contract(usdcAddr, MXNB_ABI, provider);
+        const usdc = new ethers.Contract(usdcAddr, ERC20_ABI, provider);
         const raw = await usdc.balanceOf(addr);
         setBalance(Number(ethers.utils.formatUnits(raw, 6)));
       } catch {

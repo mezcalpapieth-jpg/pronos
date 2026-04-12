@@ -2,12 +2,13 @@ import { ethers } from 'ethers';
 
 // ─── POLYGON MAINNET CONSTANTS ────────────────────────────────────────────────
 export const POLYGON_CHAIN_ID = 137;
-export const MXNB_ADDRESS     = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'; // native MXNB
+export const USDC_ADDRESS     = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'; // Polygon native USDC
+export const MXNB_ADDRESS     = USDC_ADDRESS; // Backward-compatible alias for older imports.
 export const CTF_EXCHANGE     = '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E';
 export const NEG_RISK_ADAPTER = '0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296';
 export const NEG_RISK_EXCHANGE = '0xC5d563A36AE78145C45a50134d48A1215220f80a';
 
-const MXNB_ABI = [
+const ERC20_ABI = [
   'function balanceOf(address) view returns (uint256)',
   'function allowance(address owner, address spender) view returns (uint256)',
   'function approve(address spender, uint256 amount) returns (bool)',
@@ -48,28 +49,28 @@ export function rawToUsdc(raw) {
   return Number(raw) / 1e6;
 }
 
-// ─── MXNB BALANCE ─────────────────────────────────────────────────────────────
+// ─── USDC BALANCE ─────────────────────────────────────────────────────────────
 
 export async function getUsdcBalance(provider, address) {
-  const usdc = new ethers.Contract(MXNB_ADDRESS, MXNB_ABI, provider);
+  const usdc = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, provider);
   const raw = await usdc.balanceOf(address);
   return rawToUsdc(raw.toBigInt());
 }
 
-// ─── MXNB ALLOWANCE ───────────────────────────────────────────────────────────
+// ─── USDC ALLOWANCE ───────────────────────────────────────────────────────────
 
 export async function getUsdcAllowance(provider, owner, spender) {
-  const usdc = new ethers.Contract(MXNB_ADDRESS, MXNB_ABI, provider);
+  const usdc = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, provider);
   const raw = await usdc.allowance(owner, spender);
   return rawToUsdc(raw.toBigInt());
 }
 
-// ─── APPROVE MXNB ─────────────────────────────────────────────────────────────
-// Approves CTF Exchange + NegRisk Adapter to spend MXNB.
+// ─── APPROVE USDC ─────────────────────────────────────────────────────────────
+// Approves CTF Exchange + NegRisk Adapter to spend USDC.
 // Returns tx hashes.
 
 export async function approveUsdc(signer, amount = ethers.constants.MaxUint256) {
-  const usdc = new ethers.Contract(MXNB_ADDRESS, MXNB_ABI, signer);
+  const usdc = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, signer);
   const txs = [];
 
   const tx1 = await usdc.approve(CTF_EXCHANGE, amount);
@@ -97,6 +98,7 @@ export async function deriveClobApiKey(signer, address) {
   const res = await fetch(`/api/clob?action=derive-key`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
     body: JSON.stringify({ address, signature, timestamp, nonce }),
   });
 
@@ -105,20 +107,27 @@ export async function deriveClobApiKey(signer, address) {
     throw new Error(err.error || 'Failed to derive API key');
   }
 
-  return res.json(); // { apiKey, secret, passphrase }
+  return res.json(); // { ok, apiKey }; credentials are stored in an HTTP-only API cookie
 }
 
 // ─── PLACE ORDER ─────────────────────────────────────────────────────────────
 // Builds + signs an EIP-712 order and submits it to the CLOB.
 // side: 'BUY' | 'SELL'
 // price: 0.0–1.0 (e.g. 0.54 = 54% probability = $0.54 per share)
-// size: amount in MXNB
+// size: amount in USDC
 
 export async function placeClobOrder({ signer, address, creds, tokenId, price, side, size, isNegRisk = true }) {
+  if (!/^\d+$/.test(String(tokenId))) {
+    throw new Error('Invalid CLOB token id');
+  }
+  if (!Number.isFinite(Number(price)) || Number(price) <= 0 || Number(price) >= 1) {
+    throw new Error('Invalid CLOB price');
+  }
+
   const exchange = isNegRisk ? NEG_RISK_EXCHANGE : CTF_EXCHANGE;
 
   const sideNum    = side === 'BUY' ? 0 : 1;
-  const makerAmt   = usdcToRaw(side === 'BUY' ? size : size / price);       // MXNB in (buying)
+  const makerAmt   = usdcToRaw(side === 'BUY' ? size : size / price);       // USDC in (buying)
   const takerAmt   = usdcToRaw(side === 'BUY' ? size / price : size);       // shares out
   const salt       = BigInt(Math.floor(Math.random() * 1e15));
 
@@ -153,17 +162,17 @@ export async function placeClobOrder({ signer, address, creds, tokenId, price, s
   const signature = await signer._signTypedData(domain, ORDER_TYPES, typedOrder);
   const signedOrder = { ...order, signature };
 
+  const body = {
+    order:     signedOrder,
+    owner:     address,
+    orderType: 'FOK',          // Fill-Or-Kill for market orders
+  };
+
   const res = await fetch(`/api/clob?action=place-order`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      order:      signedOrder,
-      owner:      address,
-      orderType:  'FOK',          // Fill-Or-Kill for market orders
-      apiKey:     creds.apiKey,
-      secret:     creds.secret,
-      passphrase: creds.passphrase,
-    }),
+    credentials: 'same-origin',
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {

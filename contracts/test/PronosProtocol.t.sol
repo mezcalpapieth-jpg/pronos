@@ -448,20 +448,20 @@ contract PronosProtocolTest is Test {
         pool.buy(true, 1_000 * ONE_USDC);
         vm.stopPrank();
 
-        // At 50/50, fee = 2.5% of 1000 = 25 USDC
+        // Fixed 2% fee of 1000 = 20 USDC
         uint256 feeCollAfter = usdc.balanceOf(feeColl);
-        assertEq(feeCollAfter - feeCollBefore, 25 * ONE_USDC);
-        assertEq(pool.totalFeesCollected(), 25 * ONE_USDC);
+        assertEq(feeCollAfter - feeCollBefore, 20 * ONE_USDC);
+        assertEq(pool.totalFeesCollected(), 20 * ONE_USDC);
     }
 
-    function test_dynamic_fee_decreases_with_probability() public {
+    function test_fee_stays_fixed_when_probability_changes() public {
         _createTestMarket(10_000 * ONE_USDC);
         (address poolAddr,,,,, ) = factory.getMarket(0);
         PronosAMM pool = PronosAMM(poolAddr);
 
-        // At 50/50: fee should be ~2.5%
+        // Fixed 2% fee no matter where the odds move.
         uint256 feeAt50 = pool.currentFeeBps(true);
-        assertEq(feeAt50, 250); // 2.5%
+        assertEq(feeAt50, 200);
 
         // Buy a lot of YES to push price up
         vm.startPrank(alice);
@@ -469,9 +469,8 @@ contract PronosProtocolTest is Test {
         pool.buy(true, 50_000 * ONE_USDC);
         vm.stopPrank();
 
-        // Now YES price is high, fee for buying YES should be lower
         uint256 feeAfterBuy = pool.currentFeeBps(true);
-        assertTrue(feeAfterBuy < feeAt50, "Fee should decrease as probability increases");
+        assertEq(feeAfterBuy, feeAt50);
     }
 
     function test_fee_distribution_70_20_10() public {

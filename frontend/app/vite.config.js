@@ -8,7 +8,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   plugins: [react()],
   base: '/mvp/',
-  build: { outDir: '../mvp', emptyOutDir: true },
+  build: {
+    outDir: '../mvp',
+    emptyOutDir: true,
+  },
   resolve: {
     alias: {
       '/css': path.resolve(__dirname, '../css'),

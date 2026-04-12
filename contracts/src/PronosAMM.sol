@@ -9,13 +9,7 @@ import "./PronosToken.sol";
  * @title PronosAMM
  * @notice CPMM (x*y=k) automated market maker for a single binary market.
  *
- * Dynamic fee formula: fee% = 5 * (1 - P) where P is the probability of the
- * side being bought. This means fees are higher when markets are uncertain
- * and lower when they're decisive:
- *   At 50/50: 2.5%
- *   At 90/10: 0.5%
- *   At 99/1:  0.05%
- *
+ * Fixed 2% protocol fee.
  * Fees are deducted BEFORE entering the pool and sent to the fee collector.
  * They never touch the AMM reserves.
  */
@@ -35,6 +29,7 @@ contract PronosAMM is ERC1155Holder {
 
     address public feeCollector;
     uint256 public totalFeesCollected;
+    uint256 public constant FEE_BPS = 200; // 2%
 
     bool public initialized;
     bool public paused;
@@ -84,37 +79,13 @@ contract PronosAMM is ERC1155Holder {
         _;
     }
 
-    // ─── Dynamic Fee Calculation ─────────────────────────────────────────────
+    // ─── Fee Calculation ─────────────────────────────────────────────────────
 
     /**
-     * @notice Calculate dynamic fee: fee% = 5 * (1 - P)
-     *         P = probability of the side being bought (0 to 1, scaled to 1e6)
-     *         Returns fee amount in collateral units.
-     *
-     *         fee = amount * 5 * (1e6 - P) / (100 * 1e6)
-     *             = amount * 5 * (1e6 - P) / 1e8
+     * @notice Calculate the fixed 2% protocol fee in collateral units.
      */
-    function calculateFee(uint256 amount, bool buyYes) public view returns (uint256) {
-        uint256 totalReserves = reserveYes + reserveNo;
-        if (totalReserves == 0) return (amount * 25) / 1000; // 2.5% default at 50/50
-
-        // P = probability of the side being bought (scaled to 1e6)
-        uint256 p;
-        if (buyYes) {
-            p = (reserveNo * 1e6) / totalReserves; // price of YES
-        } else {
-            p = (reserveYes * 1e6) / totalReserves; // price of NO
-        }
-
-        // fee = amount * 5 * (1e6 - p) / 1e8
-        // At P=0.5: fee = amount * 5 * 500000 / 1e8 = amount * 0.025 = 2.5%
-        // At P=0.9: fee = amount * 5 * 100000 / 1e8 = amount * 0.005 = 0.5%
-        // At P=0.99: fee = amount * 5 * 10000 / 1e8 = amount * 0.0005 = 0.05%
-        uint256 fee = (amount * 5 * (1e6 - p)) / 1e8;
-
-        // Minimum fee of 1 unit to avoid zero-fee trades
-        if (fee == 0 && amount > 0) fee = 1;
-        return fee;
+    function calculateFee(uint256 amount, bool) public pure returns (uint256) {
+        return (amount * FEE_BPS) / 10_000;
     }
 
     // ─── Initialize (seed liquidity) ─────────────────────────────────────────
@@ -270,18 +241,9 @@ contract PronosAMM is ERC1155Holder {
         return (reserveYes * 1e6) / (reserveYes + reserveNo);
     }
 
-    /// @notice Current dynamic fee percentage (scaled to 1e4, e.g. 250 = 2.5%)
-    function currentFeeBps(bool buyYes) external view returns (uint256) {
-        uint256 totalReserves = reserveYes + reserveNo;
-        if (totalReserves == 0) return 250;
-        uint256 p;
-        if (buyYes) {
-            p = (reserveNo * 1e6) / totalReserves;
-        } else {
-            p = (reserveYes * 1e6) / totalReserves;
-        }
-        // feeBps = 500 * (1e6 - p) / 1e6
-        return (500 * (1e6 - p)) / 1e6;
+    /// @notice Current fee percentage in basis points.
+    function currentFeeBps(bool) external pure returns (uint256) {
+        return FEE_BPS;
     }
 
     /// @notice Estimate shares out for a given collateral input (after fees)
