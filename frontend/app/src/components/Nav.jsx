@@ -22,6 +22,8 @@ const CHAIN_NAMES = {
   421614: 'Arb Sepolia',
 };
 
+const isPublicMarkets = typeof window !== 'undefined' && window.location.pathname.startsWith('/markets');
+
 export default function Nav() {
   const navigate = useNavigate();
   const t = useT();
@@ -152,7 +154,7 @@ export default function Nav() {
   return (
     <>
     <nav id="nav" className={scrolled ? 'scrolled' : ''}>
-      <a href="/" className="nav-logo">
+      <a href={isPublicMarkets ? 'https://pronos.io' : '/'} className="nav-logo">
         PRONOS<span className="green-dot" />
       </a>
 
@@ -199,18 +201,20 @@ export default function Nav() {
         )}
       </div>
 
-      <div className="nav-links">
-        <a href="/mvp/#markets" onClick={e => {
-          const el = document.getElementById('markets');
-          if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth' }); }
-        }}>{t('nav.market')}</a>
-        <Link to="/portfolio">{t('nav.portfolio')}</Link>
-        <a href="/mvp/#how-it-works" onClick={e => {
-          const el = document.getElementById('how-it-works');
-          if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth' }); }
-        }}>{t('nav.howItWorks')}</a>
-        {adminFlag && <Link to="/admin">{t('nav.admin')}</Link>}
-      </div>
+      {!isPublicMarkets && (
+        <div className="nav-links">
+          <a href="#markets" onClick={e => {
+            const el = document.getElementById('markets');
+            if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth' }); }
+          }}>{t('nav.market')}</a>
+          <Link to="/portfolio">{t('nav.portfolio')}</Link>
+          <a href="#how-it-works" onClick={e => {
+            const el = document.getElementById('how-it-works');
+            if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth' }); }
+          }}>{t('nav.howItWorks')}</a>
+          {adminFlag && <Link to="/admin">{t('nav.admin')}</Link>}
+        </div>
+      )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         {/* Language toggle — flips ES ↔ EN, persists in localStorage */}

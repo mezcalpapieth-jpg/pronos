@@ -359,7 +359,7 @@ export default function Portfolio() {
                 <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
                   {t('pf.empty')}
                 </p>
-                <a href="/mvp" className="btn-primary" style={{ display: 'inline-block', marginTop: 20, textDecoration: 'none' }}>
+                <a href="/" className="btn-primary" style={{ display: 'inline-block', marginTop: 20, textDecoration: 'none' }}>
                   {t('pf.viewMarkets')}
                 </a>
               </div>

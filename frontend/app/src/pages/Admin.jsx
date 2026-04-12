@@ -1528,7 +1528,7 @@ export default function Admin({ username, userIsAdmin, loading }) {
           <div className="admin-auth-wall">
             <h2>Pagina no encontrada</h2>
             <p>La pagina que buscas no existe.</p>
-            <a href="/mvp/" style={{ color: 'var(--green)', fontFamily: 'var(--font-mono)', fontSize: '13px' }}>
+            <a href="/" style={{ color: 'var(--green)', fontFamily: 'var(--font-mono)', fontSize: '13px' }}>
               Volver al inicio
             </a>
           </div>
