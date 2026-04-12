@@ -4,7 +4,7 @@ import Nav from '../components/Nav.jsx';
 import { getProtocolMode, setProtocolMode, isAdmin, getContracts } from '../lib/protocol.js';
 import { resolveMarket, fetchResolutions } from '../lib/resolutions.js';
 import { fetchGeneratedMarkets, updateGeneratedMarket, createGeneratedMarket } from '../lib/generatedMarkets.js';
-import { gmFetchMarkets, gmFetchClosedMarkets } from '../lib/gamma.js';
+import { gmFetchMarkets } from '../lib/gamma.js';
 import { resolveEndDate, isExpired } from '../lib/deadline.js';
 import { useT } from '../lib/i18n.js';
 import MARKETS from '../lib/markets.js';
@@ -333,18 +333,19 @@ function isPendingResolution(r) {
   return !!r && (r.outcome === 'pending' || r.winner === 'Pendiente de resolución');
 }
 
-function classifyMarket(market, resolution) {
+function classifyMarket(market, resolution, approvedSet) {
   // Hardcoded markets can flag themselves as resolved with a baked-in winner
   // (e.g. the Marco Verde fight). Treat that as authoritative even when no
   // matching market_resolutions row exists yet.
   if (market?._resolved) return 'resolved';
   if (resolution && !isPendingResolution(resolution)) return 'resolved';
   if (resolution && isPendingResolution(resolution)) return 'closed';
-  // Polymarket may settle a market early — gmFetchClosedMarkets stamps these
-  // entries with `_polymarketClosed`, which is authoritative regardless of
-  // the listed deadline (so they don't get misclassified as 'open').
   if (market?._polymarketClosed) return 'closed';
   if (isExpired(market)) return 'closed';
+  // Unapproved Polymarket markets go to the Pending tab — they only move
+  // to Open after an admin clicks Aprobar.
+  const isPoly = market?._source === 'polymarket' && market?._polyId;
+  if (isPoly && approvedSet && !approvedSet.has(polymarketApprovalKey(market))) return 'pending';
   return 'open';
 }
 
@@ -401,7 +402,7 @@ function MarketsList({ mode, privyId, getAccessToken }) {
   const [resolutions, setResolutions] = useState([]);   // raw rows from API
   const [decisions, setDecisions] = useState([]);       // polymarket approved + rejected rows
   const [resolveTarget, setResolveTarget] = useState(null);
-  const [tab, setTab] = useState('open');               // open | closed | resolved
+  const [tab, setTab] = useState('pending');             // pending | open | closed | resolved
   const [sourceFilter, setSourceFilter] = useState('all'); // all | local | polymarket
   const [autoResolveBusy, setAutoResolveBusy] = useState(false);
   const [autoResolveStatus, setAutoResolveStatus] = useState(null);
@@ -412,26 +413,22 @@ function MarketsList({ mode, privyId, getAccessToken }) {
     setLoading(true);
     // Fetch every source the admin can possibly care about, in parallel:
     //   - hardcoded local markets (catalog backbone)
-    //   - live open Polymarket markets (active trading)
-    //   - recently closed Polymarket markets (so closed-on-Polymarket ones
-    //     don't disappear from the admin once they leave the open feed)
+    //   - live OPEN Polymarket markets only (no closed ones — those belong
+    //     in closed/resolved tabs only if they were already approved)
     //   - market_resolutions DB rows (the source of truth for "resolved")
     //   - polymarket_approved DB rows (both approved AND rejected so we can
     //     hide rejected markets from the queue)
-    const [liveOpen, liveClosed, resos, decisionRows] = await Promise.all([
+    const [liveOpen, resos, decisionRows] = await Promise.all([
       gmFetchMarkets({ limit: 100 }).catch(() => []),
-      gmFetchClosedMarkets({ limit: 100 }).catch(() => []),
       fetchResolutions().catch(() => []),
       fetchAllPolymarketDecisions(privyId, getAccessToken).catch(() => []),
     ]);
     const local = MARKETS;
 
-    // Dedupe by slug/id. Live data wins over hardcoded; closed-feed entries
-    // win over open-feed ones (they carry the final resolved state).
+    // Dedupe by slug/id. Live data wins over hardcoded.
     const map = new Map();
     for (const m of local)     map.set(m.id, m);
     for (const m of liveOpen)  map.set(m.id, { ...map.get(m.id), ...m });
-    for (const m of liveClosed) map.set(m.id, { ...map.get(m.id), ...m, _polymarketClosed: true });
 
     const all = Array.from(map.values());
     setMarkets(all);
@@ -661,7 +658,7 @@ function MarketsList({ mode, privyId, getAccessToken }) {
     .filter(m => !rejectedSet.has(polymarketApprovalKey(m)))
     .map(m => {
       const r = resByMarket[m.id] || null;
-      return { market: m, resolution: r, status: classifyMarket(m, r) };
+      return { market: m, resolution: r, status: classifyMarket(m, r, approvedSet) };
     });
 
   // Tab + source filter
@@ -685,6 +682,7 @@ function MarketsList({ mode, privyId, getAccessToken }) {
   });
 
   const tabCounts = {
+    pending:  annotated.filter(a => a.status === 'pending').length,
     open:     annotated.filter(a => a.status === 'open').length,
     closed:   annotated.filter(a => a.status === 'closed').length,
     resolved: annotated.filter(a => a.status === 'resolved').length,
@@ -696,11 +694,7 @@ function MarketsList({ mode, privyId, getAccessToken }) {
     local: inTab.filter(({ market: m }) => !(m._source === 'polymarket' && m._polyId)).length,
   };
 
-  // Count of polymarket markets across ALL tabs that are still pending
-  // approval — surfaced as a top-of-card banner so admins notice them.
-  const pendingApprovalCount = annotated.filter(({ market: m, status: s }) =>
-    s !== 'resolved' && m._source === 'polymarket' && m._polyId && !approvedSet.has(polymarketApprovalKey(m))
-  ).length;
+  // pendingApprovalCount is now just tabCounts.pending — shown in the tab label.
 
   return (
     <div className="admin-card">
@@ -746,22 +740,12 @@ function MarketsList({ mode, privyId, getAccessToken }) {
         </div>
       )}
 
-      {pendingApprovalCount > 0 && (
-        <div
-          className="admin-status admin-status-info"
-          style={{
-            marginBottom: 12, padding: '10px 12px', borderRadius: 6,
-            background: 'rgba(251, 191, 36, 0.08)', border: '1px solid rgba(251, 191, 36, 0.3)',
-            color: '#fbbf24', fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
-          }}
-        >
-          ⚠️ {pendingApprovalCount} mercado{pendingApprovalCount === 1 ? '' : 's'} de Polymarket esperando aprobación · No aparecen en pronos.io hasta que los apruebes
-        </div>
-      )}
+      {/* Pending count is now in the tab label — no separate banner needed */}
 
       {/* ── Status tabs (open / closed / resolved) ─────────────────────── */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 12, borderBottom: '1px solid var(--border)' }}>
         {[
+          { id: 'pending',  label: `${t('admin.pendingTab')} (${tabCounts.pending})` },
           { id: 'open',     label: `${t('admin.open')} (${tabCounts.open})` },
           { id: 'closed',   label: `${t('admin.closed')} (${tabCounts.closed})` },
           { id: 'resolved', label: `${t('admin.resolved')} (${tabCounts.resolved})` },

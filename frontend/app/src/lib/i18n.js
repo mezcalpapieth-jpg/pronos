@@ -301,6 +301,7 @@ const STRINGS = {
   'admin.createBtn':          { es: 'Crear mercado',         en: 'Create market' },
   'admin.created':            { es: 'Mercado creado — aparecerá en la página principal.', en: 'Market created — will appear on the main page.' },
   'admin.optionsNeedName':    { es: 'Todas las opciones necesitan un nombre.', en: 'All options need a name.' },
+  'admin.pendingTab':         { es: 'PENDIENTES',            en: 'PENDING' },
   'admin.open':               { es: 'ABIERTOS',              en: 'OPEN' },
   'admin.closed':             { es: 'CERRADOS',              en: 'CLOSED' },
   'admin.resolved':           { es: 'RESUELTOS',             en: 'RESOLVED' },
