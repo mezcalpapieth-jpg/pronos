@@ -7,14 +7,14 @@ const TICKER_ITEMS = [
   { label: 'PRÓXIMO DESTACADO', val: 'México vs Sudáfrica · 11 Jun 2026' },
   { label: 'RED', val: 'POLYGON · SIN GAS', green: true },
   { label: 'AUTH', val: 'EMAIL · GOOGLE · WALLET' },
-  { label: 'COMISIÓN', val: '2%' },
+  { label: 'COMISIÓN', val: '≤2.5%' },
   { label: 'POWERED BY', val: 'POLYMARKET' },
   { label: 'MERCADOS ACTIVOS', val: '60+', green: true },
   { label: 'LIQUIDITY', val: '$1.2B+ USDC' },
   { label: 'PRÓXIMO DESTACADO', val: 'México vs Sudáfrica · 11 Jun 2026' },
   { label: 'RED', val: 'POLYGON · SIN GAS', green: true },
   { label: 'AUTH', val: 'EMAIL · GOOGLE · WALLET' },
-  { label: 'COMISIÓN', val: '2%' },
+  { label: 'COMISIÓN', val: '≤2.5%' },
 ];
 
 export default function Ticker() {

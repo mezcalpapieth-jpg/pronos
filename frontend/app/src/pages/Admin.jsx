@@ -983,19 +983,19 @@ function FeeInfo({ mode }) {
         <h3>Comisiones</h3>
       </div>
       <div className="admin-fee-formula">
-        <div className="fee-equation">fee = 2% fijo · antes del pool</div>
+        <div className="fee-equation">fee = 5 &times; (1 - P) %</div>
         <div className="fee-examples">
           <div className="fee-example">
             <span>50/50</span>
-            <strong>2%</strong>
+            <strong>2.5%</strong>
           </div>
           <div className="fee-example">
             <span>90/10</span>
-            <strong>2%</strong>
+            <strong>0.5%</strong>
           </div>
           <div className="fee-example">
             <span>99/1</span>
-            <strong>2%</strong>
+            <strong>0.05%</strong>
           </div>
         </div>
       </div>

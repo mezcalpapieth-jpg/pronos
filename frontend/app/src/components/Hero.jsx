@@ -139,7 +139,7 @@ export default function Hero() {
               <span className="hero-stat-label">{t('hero.stats.activeLabel')}</span>
             </div>
             <div className="hero-stat">
-              <span className="hero-stat-val"><span className="green">2%</span></span>
+              <span className="hero-stat-val"><span className="green">≤2.5%</span></span>
               <span className="hero-stat-label">{t('hero.stats.feeLabel')}</span>
             </div>
           </div>

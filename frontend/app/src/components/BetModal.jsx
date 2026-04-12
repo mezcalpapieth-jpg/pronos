@@ -45,7 +45,9 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
   const numAmount  = parseFloat(amount) || 0;
   const protocolMarket = isProtocolMarket(market);
   const protocolChainId = Number(market?.chainId || CHAIN_IDS.arbitrumSepolia);
-  const feePct     = protocolMarket ? 2 : 0;
+  // Dynamic fee: fee% = 5 * (1 - P), where P is probability of the side being bought.
+  // At 50/50: 2.5%, at 90/10: 0.5%, at 99/1: 0.05%. Polymarket handles its own fees.
+  const feePct     = protocolMarket ? 5 * (1 - (outcomePct || 50) / 100) : 0;
   const fee        = numAmount * feePct / 100;
   const afterFee   = numAmount - fee;
   const payout     = outcomePct > 0 && numAmount > 0 ? (afterFee / (outcomePct / 100)).toFixed(2) : '—';
