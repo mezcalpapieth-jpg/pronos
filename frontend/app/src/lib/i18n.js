@@ -68,6 +68,31 @@ export function useLang() {
   return lang;
 }
 
+// ─── Market title / option localization ─────────────────────────────────────
+// Polymarket markets carry both `title_en` (Gamma original) and `title_es`
+// (admin-approved Spanish translation). These helpers pick the right one based
+// on the active language, falling back to whatever `title` holds.
+
+/**
+ * Pick the language-appropriate title for a market object.
+ */
+export function localizedTitle(market, lang) {
+  if (!market) return '';
+  if (lang === 'en' && market.title_en) return market.title_en;
+  if (lang === 'es' && market.title_es) return market.title_es;
+  return market.title || '';
+}
+
+/**
+ * Pick the language-appropriate options array.
+ */
+export function localizedOptions(market, lang) {
+  if (!market || !Array.isArray(market.options)) return market?.options || [];
+  if (lang === 'en' && Array.isArray(market.options_en)) return market.options_en;
+  if (lang === 'es' && Array.isArray(market.options_es)) return market.options_es;
+  return market.options;
+}
+
 // Pure translator — usable outside React components if needed.
 export function translate(key, lang, vars) {
   const entry = STRINGS[key];

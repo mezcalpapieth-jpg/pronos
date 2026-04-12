@@ -42,9 +42,9 @@ export async function fetchPriceHistory(tokenIds, opts = {}) {
 
 /**
  * Given a market (with `_clobTokenIds`) and a history map, return the price
- * series for a specific option index as an array of numbers (0–100). Returns
- * null when there's no history available, so callers can fall back to the
- * seeded mock in <Sparkline>.
+ * series for a specific option index as an array of `{t, p}` tuples (t = unix
+ * seconds, p = 0–100). Returns null when there's no history available, so
+ * callers can fall back to the seeded mock in <Sparkline>.
  *
  * Polymarket usually has two clobTokenIds per market: [YES, NO]. For binary
  * markets the "No" series is just `100 - p` of the "Yes" series, but we keep
@@ -55,7 +55,7 @@ export function extractSeries(market, historyMap, optionIndex = 0) {
   if (!tokenId || !historyMap) return null;
   const points = historyMap[tokenId];
   if (!Array.isArray(points) || points.length < 2) return null;
-  return points.map(pt => pt.p);
+  return points.map(pt => ({ t: pt.t, p: pt.p }));
 }
 
 /**

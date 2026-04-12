@@ -2,10 +2,11 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sparkline from './Sparkline.jsx';
 import { extractSeries } from '../lib/priceHistory.js';
-import { useT } from '../lib/i18n.js';
+import { useT, useLang, localizedTitle, localizedOptions } from '../lib/i18n.js';
 
 export default function MarketCard({ market, history }) {
   const t = useT();
+  const lang = useLang();
   const navigate = useNavigate();
 
   const handleClick = () => {
@@ -43,10 +44,10 @@ export default function MarketCard({ market, history }) {
       </div>
 
       <div className="mock-card-body">
-        <p className="mock-card-title">{market.title}</p>
+        <p className="mock-card-title">{localizedTitle(market, lang)}</p>
 
         <div className="mock-card-opts">
-          {(market.options || []).map((opt, i) => {
+          {localizedOptions(market, lang).map((opt, i) => {
             const isWinner = market._resolved && opt.label === market._winner;
             const pct = market._resolved ? (isWinner ? 100 : 0) : opt.pct;
             return (
@@ -74,7 +75,7 @@ export default function MarketCard({ market, history }) {
             />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              {(market.options || []).map((opt, i) => {
+              {localizedOptions(market, lang).map((opt, i) => {
                 const colors = ['var(--yes)', 'var(--red)', 'var(--gold)', '#8b5cf6'];
                 return (
                   <Sparkline

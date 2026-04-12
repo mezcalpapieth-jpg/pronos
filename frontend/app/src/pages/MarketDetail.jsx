@@ -10,7 +10,7 @@ import { isExpired } from '../lib/deadline.js';
 import Sparkline from '../components/Sparkline.jsx';
 import MARKETS from '../lib/markets.js';
 import { generateMockData } from '../lib/mockTabData.js';
-import { useT } from '../lib/i18n.js';
+import { useT, useLang, localizedTitle, localizedOptions } from '../lib/i18n.js';
 
 // Final-outcome percentage for a given option on a resolved market:
 // winner → 100, everything else → 0. Used everywhere we previously showed
@@ -322,6 +322,7 @@ function ActivityTab({activity, opt0, opt1}){
 /* ── Main ────────────────────────────────────────────────────── */
 export default function MarketDetail() {
   const t = useT();
+  const lang = useLang();
   const [searchParams]=useSearchParams(), navigate=useNavigate();
   const marketId=searchParams.get('id');
   const [market,setMarket]=useState(null);
@@ -352,8 +353,20 @@ export default function MarketDetail() {
         let liveAllowed = null;
         if (live && approval) {
           liveAllowed = { ...live };
-          if (approval.title_es) liveAllowed.title = approval.title_es;
+          // Preserve both language variants so the EN/ES toggle can swap live.
+          liveAllowed.title_en = live.title;
+          if (approval.title_es) {
+            liveAllowed.title_es = approval.title_es;
+            liveAllowed.title    = approval.title_es;
+          }
+          if (Array.isArray(liveAllowed.options)) {
+            liveAllowed.options_en = liveAllowed.options.map(opt => ({ ...opt }));
+          }
           if (Array.isArray(approval.options_es) && approval.options_es.length > 0) {
+            liveAllowed.options_es = liveAllowed.options.map((opt, i) => ({
+              ...opt,
+              label: approval.options_es[i]?.label || opt.label,
+            }));
             liveAllowed.options = liveAllowed.options.map((opt, i) => ({
               ...opt,
               label: approval.options_es[i]?.label || opt.label,
@@ -422,8 +435,9 @@ export default function MarketDetail() {
   const awaiting=!resolved && !!market._awaitingResolution;
   const locked=resolved || awaiting; // no bets allowed
   const mock=generateMockData(market);
-  const opt0=market.options?.[0]?.label??'Sí';
-  const opt1=market.options?.[1]?.label??'No';
+  const lOpts = localizedOptions(market, lang);
+  const opt0=lOpts?.[0]?.label??'Sí';
+  const opt1=lOpts?.[1]?.label??'No';
 
   return(
     <>
@@ -474,7 +488,7 @@ export default function MarketDetail() {
               )}
             </div>
 
-            <h1 style={{fontFamily:'var(--font-display)',fontSize:'clamp(28px,3.5vw,44px)',letterSpacing:'0.03em',color:'var(--text-primary)',marginBottom:24,lineHeight:1.15}}>{market.title}</h1>
+            <h1 style={{fontFamily:'var(--font-display)',fontSize:'clamp(28px,3.5vw,44px)',letterSpacing:'0.03em',color:'var(--text-primary)',marginBottom:24,lineHeight:1.15}}>{localizedTitle(market, lang)}</h1>
 
             {resolved&&market._description&&(
               <p style={{fontSize:14,color:'var(--text-secondary)',lineHeight:1.7,marginBottom:28,borderLeft:'3px solid var(--yes)',paddingLeft:16}}>{market._description}</p>
@@ -516,7 +530,7 @@ export default function MarketDetail() {
                   />
                 ):(
                   <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                    {(market.options||[]).map((opt,i)=>{
+                    {localizedOptions(market, lang).map((opt,i)=>{
                       const colors=['var(--yes)','var(--red)','var(--gold)','#8b5cf6'];
                       return(
                         <Sparkline
@@ -544,13 +558,13 @@ export default function MarketDetail() {
               <div style={{padding:'16px 20px',borderBottom:'1px solid var(--border)',fontFamily:'var(--font-mono)',fontSize:10,letterSpacing:'0.1em',color:'var(--text-muted)'}}>
                 {resolved?t('detail.finalProbs'):awaiting?t('detail.closedAwaiting'):t('detail.currentProb')}
               </div>
-              <ProbabilityChart options={market.options} resolved={resolved} winner={market._winner} awaiting={awaiting}/>
+              <ProbabilityChart options={localizedOptions(market, lang)} resolved={resolved} winner={market._winner} awaiting={awaiting}/>
             </div>
 
             <div style={{marginBottom:40}}>
               <div style={{fontFamily:'var(--font-mono)',fontSize:10,letterSpacing:'0.1em',color:'var(--text-muted)',marginBottom:12}}>{resolved?t('detail.finalResults'):t('detail.results')}</div>
               <div style={{display:'flex',flexDirection:'column',gap:10}}>
-                {(market.options||[]).map((opt,i)=>{
+                {localizedOptions(market, lang).map((opt,i)=>{
                   const isWinner=resolved&&opt.label===market._winner;
                   const isLoser=resolved&&opt.label!==market._winner;
                   const displayPct=finalPct(opt,market); // 100/0 when resolved, else opt.pct
@@ -597,7 +611,7 @@ export default function MarketDetail() {
                   <div style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-secondary)'}}>{market._resolvedBy}</div>
                 </div>
                 <div style={{borderTop:'1px solid var(--border)',paddingTop:16}}>
-                  {(market.options||[]).map((opt,i)=>{
+                  {localizedOptions(market, lang).map((opt,i)=>{
                     const isWinner=opt.label===market._winner;
                     return (
                       <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid var(--border)',fontFamily:'var(--font-mono)',fontSize:12}}>
@@ -626,7 +640,7 @@ export default function MarketDetail() {
                 <div style={{fontFamily:'var(--font-display)',fontSize:20,letterSpacing:'0.04em',color:'var(--text-primary)',marginBottom:20}}>{t('detail.buyTitle')}</div>
                 <p style={{fontSize:13,color:'var(--text-muted)',marginBottom:20}}>{t('detail.pickOutcome')}</p>
                 <div style={{borderTop:'1px solid var(--border)',paddingTop:20}}>
-                  {(market.options||[]).map((opt,i)=>(
+                  {localizedOptions(market, lang).map((opt,i)=>(
                     <button key={i} className={i===0?'btn-yes':'btn-danger'} style={{width:'100%',marginBottom:10}} onClick={()=>openBet(opt.label,opt.pct,i)}>
                       {opt.label} · {opt.pct}%
                     </button>
@@ -641,7 +655,7 @@ export default function MarketDetail() {
 
       <BetModal open={betModal.open} onClose={()=>setBetModal(b=>({...b,open:false}))}
         outcome={betModal.outcome} outcomePct={betModal.pct} marketId={market.id}
-        marketTitle={market.title} clobTokenId={betModal.clobTokenId} isNegRisk={betModal.isNegRisk} market={market}/>
+        marketTitle={localizedTitle(market, lang)} clobTokenId={betModal.clobTokenId} isNegRisk={betModal.isNegRisk} market={market}/>
     </>
   );
 }

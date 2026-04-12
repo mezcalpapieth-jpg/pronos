@@ -4,10 +4,11 @@ import React, { useMemo, useState, useId } from 'react';
  * SVG sparkline chart for market probability history.
  * - Seeded mock data drifting toward targetPct
  * - Optional right-side percentage label
- * - Hover-to-reveal value tooltip on the end dot
+ * - Hover anywhere on the chart to see timestamp + value tooltip
  * - Smooth curve with gradient fill and glowing end dot
+ * - Supports both `number[]` (mock) and `{t, p}[]` (real CLOB history)
  *
- * @param {number[]} data - Array of probability values (0-100)
+ * @param {number[]|{t:number,p:number}[]} data - Probability values (0-100)
  * @param {number} targetPct - Target percentage the line should end near (0-100)
  * @param {string} seed - Deterministic seed string (e.g. market id + option label)
  * @param {number} width - SVG width
@@ -20,6 +21,18 @@ import React, { useMemo, useState, useId } from 'react';
  * @param {string} label - Optional left-side label (e.g. option name)
  * @param {number} labelWidth - Width reserved for the left-side label
  */
+
+function formatTimestamp(unixSeconds) {
+  if (!unixSeconds) return '';
+  const d = new Date(unixSeconds * 1000);
+  const months = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const day = d.getDate();
+  const mon = months[d.getMonth()];
+  const hour = d.getHours().toString().padStart(2, '0');
+  const min = d.getMinutes().toString().padStart(2, '0');
+  return `${day} ${mon}, ${hour}:${min}`;
+}
+
 export default function Sparkline({
   data,
   targetPct,
@@ -36,7 +49,7 @@ export default function Sparkline({
   style = {},
 }) {
   const uid = useId().replace(/:/g, '');
-  const [hover, setHover] = useState(false);
+  const [hoveredIdx, setHoveredIdx] = useState(null);
 
   // Seeded PRNG — stable chart per market + option
   const points = useMemo(() => {
@@ -69,6 +82,15 @@ export default function Sparkline({
     return pts;
   }, [data, targetPct, seed]);
 
+  // Normalize: extract numeric values and detect timestamps
+  const values = useMemo(() =>
+    points.map(pt => (typeof pt === 'object' && pt !== null && 'p' in pt) ? pt.p : pt),
+  [points]);
+
+  const hasTimestamps = useMemo(() =>
+    points.length > 0 && typeof points[0] === 'object' && points[0] !== null && 't' in points[0],
+  [points]);
+
   const chartWidth = Math.max(20, width - labelWidth - (showValue ? valueWidth : 0));
   const padX = 3;
   const padY = 4;
@@ -76,19 +98,19 @@ export default function Sparkline({
   const h = height - padY * 2;
 
   // Normalize to visual range — give some breathing room
-  const min = Math.min(...points);
-  const max = Math.max(...points);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
   const visMin = Math.max(0, min - 3);
   const visMax = Math.min(100, max + 3);
   const range = visMax - visMin || 1;
 
-  const coords = points.map((v, i) => ({
-    x: padX + (i / (points.length - 1)) * w,
+  const coords = values.map((v, i) => ({
+    x: padX + (i / (values.length - 1)) * w,
     y: padY + h - ((v - visMin) / range) * h,
     v,
   }));
 
-  // Smooth curve using cubic Bezier (Catmull-Rom → cubic)
+  // Smooth curve using cubic Bezier (Catmull-Rom -> cubic)
   const smoothPath = (pts) => {
     if (pts.length < 2) return '';
     let d = `M${pts[0].x.toFixed(2)},${pts[0].y.toFixed(2)}`;
@@ -110,10 +132,25 @@ export default function Sparkline({
   const pathD = smoothPath(coords);
   const lastPt = coords[coords.length - 1];
   const fillD = `${pathD} L${lastPt.x.toFixed(2)},${height} L${coords[0].x.toFixed(2)},${height} Z`;
-  const lastVal = Math.round(points[points.length - 1]);
+  const lastVal = Math.round(values[values.length - 1]);
 
   const gradientId = `sg-${uid}`;
   const glowId = `gl-${uid}`;
+
+  // Hover tracking — map mouse X to nearest data index
+  function handleMouseMove(e) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const relX = (e.clientX - rect.left) / rect.width;
+    const idx = Math.round(relX * (values.length - 1));
+    setHoveredIdx(Math.max(0, Math.min(values.length - 1, idx)));
+  }
+
+  const hPt = hoveredIdx !== null ? coords[hoveredIdx] : null;
+  const hVal = hoveredIdx !== null ? Math.round(values[hoveredIdx]) : null;
+  const hTime = hoveredIdx !== null && hasTimestamps ? formatTimestamp(points[hoveredIdx].t) : null;
+
+  // Tooltip horizontal clamping (% of chart width)
+  const tooltipLeftPct = hPt ? Math.max(12, Math.min(88, (hPt.x / chartWidth) * 100)) : 0;
 
   return (
     <div
@@ -144,7 +181,11 @@ export default function Sparkline({
         </span>
       )}
 
-      <div style={{ position: 'relative', flex: 1, minWidth: 0, height }}>
+      <div
+        style={{ position: 'relative', flex: 1, minWidth: 0, height }}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => setHoveredIdx(null)}
+      >
       <svg
         width="100%"
         height={height}
@@ -179,58 +220,63 @@ export default function Sparkline({
           vectorEffect="non-scaling-stroke"
           filter={`url(#${glowId})`}
         />
+
+        {/* Hovered crosshair + dot */}
+        {hPt && (
+          <>
+            <line
+              x1={hPt.x} y1={0}
+              x2={hPt.x} y2={height}
+              stroke={color}
+              strokeWidth={0.7}
+              strokeDasharray="3,3"
+              opacity={0.45}
+            />
+            <circle
+              cx={hPt.x} cy={hPt.y} r={3.5}
+              fill={color}
+              stroke="#fff"
+              strokeWidth={1.5}
+            />
+          </>
+        )}
       </svg>
 
       {/* End dot — HTML overlay so it stays perfectly circular */}
-      <div
-        style={{
-          position: 'absolute',
-          left: `${(lastPt.x / chartWidth) * 100}%`,
-          top: `${(lastPt.y / height) * 100}%`,
-          transform: 'translate(-50%, -50%)',
-          width: 10,
-          height: 10,
-          borderRadius: '50%',
-          background: color,
-          boxShadow: `0 0 12px ${color}, 0 0 4px ${color}`,
-          pointerEvents: 'none',
-          zIndex: 2,
-        }}
-      >
-        <div
-          style={{
-            position: 'absolute',
-            inset: 3,
-            borderRadius: '50%',
-            background: '#fff',
-          }}
-        />
-      </div>
-
-      {/* Invisible hover target over the end dot */}
-      <div
-        onMouseEnter={() => setHover(true)}
-        onMouseLeave={() => setHover(false)}
-        style={{
-          position: 'absolute',
-          left: `${(lastPt.x / chartWidth) * 100}%`,
-          top: `${(lastPt.y / height) * 100}%`,
-          transform: 'translate(-50%, -50%)',
-          width: 32,
-          height: 32,
-          borderRadius: '50%',
-          cursor: 'pointer',
-          zIndex: 3,
-        }}
-      />
-
-      {/* Hover tooltip inside chart area so it floats over the dot */}
-      {hover && (
+      {hoveredIdx === null && (
         <div
           style={{
             position: 'absolute',
             left: `${(lastPt.x / chartWidth) * 100}%`,
-            top: `calc(${(lastPt.y / height) * 100}% - 30px)`,
+            top: `${(lastPt.y / height) * 100}%`,
+            transform: 'translate(-50%, -50%)',
+            width: 10,
+            height: 10,
+            borderRadius: '50%',
+            background: color,
+            boxShadow: `0 0 12px ${color}, 0 0 4px ${color}`,
+            pointerEvents: 'none',
+            zIndex: 2,
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              inset: 3,
+              borderRadius: '50%',
+              background: '#fff',
+            }}
+          />
+        </div>
+      )}
+
+      {/* Hover tooltip */}
+      {hPt && (
+        <div
+          style={{
+            position: 'absolute',
+            left: `${tooltipLeftPct}%`,
+            top: `calc(${(hPt.y / height) * 100}% - 34px)`,
             transform: 'translateX(-50%)',
             background: 'var(--surface2)',
             border: `1px solid ${color}`,
@@ -246,7 +292,7 @@ export default function Sparkline({
             zIndex: 10,
           }}
         >
-          {lastVal}%
+          {hTime ? `${hTime} · ` : ''}{hVal}%
           <div
             style={{
               position: 'absolute',
@@ -277,7 +323,7 @@ export default function Sparkline({
             textShadow: `0 0 8px ${color}40`,
           }}
         >
-          {lastVal}%
+          {hoveredIdx !== null ? `${hVal}%` : `${lastVal}%`}
         </span>
       )}
 

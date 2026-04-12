@@ -131,9 +131,22 @@ export function applyApprovals(allMarkets, approvedRows) {
     const approval = map.get(m.id);
     if (!approval) continue; // not approved → drop from public list
     const next = { ...m };
-    if (approval.title_es) next.title = approval.title_es;
+    // Preserve both language variants so the EN/ES toggle can swap live.
+    next.title_en = m.title;                           // original English from Gamma
+    if (approval.title_es) {
+      next.title_es = approval.title_es;
+      next.title    = approval.title_es;               // default display = Spanish
+    }
+    // Snapshot English options before overwriting with Spanish labels.
+    if (Array.isArray(next.options)) {
+      next.options_en = next.options.map(opt => ({ ...opt }));
+    }
     if (Array.isArray(approval.options_es) && approval.options_es.length > 0) {
-      // Merge translated labels into existing options (preserves pct).
+      next.options_es = next.options.map((opt, i) => ({
+        ...opt,
+        label: approval.options_es[i]?.label || opt.label,
+      }));
+      // Default display = Spanish labels (backward compat).
       next.options = next.options.map((opt, i) => ({
         ...opt,
         label: approval.options_es[i]?.label || opt.label,
