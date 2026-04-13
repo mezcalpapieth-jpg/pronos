@@ -1,5 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from './_lib/cors.js';
+import { requireAdmin } from './_lib/admin.js';
 
 /**
  * /api/market?id=<market_id> — Market detail + price history + recent trades.
@@ -8,13 +9,13 @@ import { applyCors } from './_lib/cors.js';
  * and the 20 most recent trades.
  */
 
-const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
+const sql = neon(process.env.DATABASE_URL || process.env.DATABASE_READ_URL);
 
 export default async function handler(req, res) {
-  const cors = applyCors(req, res, { methods: 'GET, OPTIONS' });
+  const cors = applyCors(req, res, { methods: 'GET, DELETE, OPTIONS' });
   if (cors) return cors;
 
-  if (req.method !== 'GET') {
+  if (req.method !== 'GET' && req.method !== 'DELETE') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
@@ -24,10 +25,32 @@ export default async function handler(req, res) {
   const marketId = parseInt(id);
   if (isNaN(marketId)) return res.status(400).json({ error: 'Invalid id' });
 
+  if (req.method === 'DELETE') {
+    const privyId = req.query.privyId || req.body?.privyId;
+    const admin = await requireAdmin(req, res, sql, privyId);
+    if (!admin.ok) return;
+
+    try {
+      const rows = await sql`
+        UPDATE protocol_markets
+        SET status = 'removed'
+        WHERE id = ${marketId}
+        RETURNING id
+      `;
+      if (rows.length === 0) {
+        return res.status(404).json({ error: 'Market not found' });
+      }
+      return res.status(200).json({ ok: true, id: rows[0].id });
+    } catch (e) {
+      console.error('Market remove API error:', e);
+      return res.status(500).json({ error: 'Server error' });
+    }
+  }
+
   try {
     // Fetch market
     const marketRows = await sql`
-      SELECT * FROM protocol_markets WHERE id = ${marketId}
+      SELECT * FROM protocol_markets WHERE id = ${marketId} AND status <> 'removed'
     `;
     if (marketRows.length === 0) {
       return res.status(404).json({ error: 'Market not found' });

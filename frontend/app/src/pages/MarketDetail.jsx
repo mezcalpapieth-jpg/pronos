@@ -339,11 +339,12 @@ export default function MarketDetail() {
     async function load(){
       setLoading(true);
       try{
+        const protocolDbId = protocolRouteIdToDbId(marketId);
         const [live, resolutions, approved, protocolMarket] = await Promise.all([
-          gmFetchBySlug(marketId).catch(()=>null),
+          protocolDbId ? Promise.resolve(null) : gmFetchBySlug(marketId).catch(()=>null),
           fetchResolutions().catch(()=>[]),
           fetchApprovedPolymarket().catch(()=>[]),
-          protocolRouteIdToDbId(marketId) ? fetchProtocolMarket(marketId).catch(()=>null) : Promise.resolve(null),
+          protocolDbId ? fetchProtocolMarket(marketId).catch(()=>null) : Promise.resolve(null),
         ]);
         if(cancelled) return;
 

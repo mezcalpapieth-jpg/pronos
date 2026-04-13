@@ -17,6 +17,7 @@ import { fetchGeneratedMarkets, updateGeneratedMarket, createGeneratedMarket } f
 import { gmFetchMarkets } from '../lib/gamma.js';
 import { resolveEndDate, isExpired } from '../lib/deadline.js';
 import { useT } from '../lib/i18n.js';
+import { removeProtocolMarket } from '../lib/protocolMarkets.js';
 import MARKETS from '../lib/markets.js';
 import {
   fetchAllPolymarketDecisions,
@@ -140,7 +141,7 @@ function CreateMarketForm({ mode, privyId, getAccessToken }) {
         setStatus({ type: 'info', msg: `Cambiando a ${getChainDisplayName(targetChain)}...` });
         await switchWalletChain(wallet, targetChain);
 
-        setStatus({ type: 'info', msg: 'Creando mercado on-chain y aprobando USDC si hace falta...' });
+        setStatus({ type: 'info', msg: `Aprobando exactamente ${seedLiquidity} USDC si hace falta y creando mercado on-chain...` });
         const provider = new ethers.providers.Web3Provider(await wallet.getEthereumProvider());
         const signer = provider.getSigner();
         const result = await createProtocolMarket(signer, targetChain, {
@@ -257,7 +258,7 @@ function CreateMarketForm({ mode, privyId, getAccessToken }) {
               />
             </label>
             <div className="admin-info-box">
-              Se creara en {getChainDisplayName(CHAIN_IDS.arbitrumSepolia)} usando MarketFactory. Estos mercados del protocolo son binarios: Si / No.
+              Se creara en {getChainDisplayName(CHAIN_IDS.arbitrumSepolia)} usando MarketFactory. El contrato propio v1 es binario: Si / No. Los mercados multi-opcion requieren un contrato v2 y redeploy.
             </div>
           </>
         )}
@@ -495,6 +496,14 @@ function needsSpanishTranslation(row) {
   return !row.title_es || !hasSpanishOptions(row);
 }
 
+function removableMarketKey(market) {
+  if (!market) return null;
+  if (market._source === 'polymarket' && market._polyId) return `poly:${polymarketApprovalKey(market)}`;
+  if (market.source === 'protocol' && market.protocolDbId) return `protocol:${market.protocolDbId}`;
+  if (market._source === 'ai' && market._dbId) return `ai:${market._dbId}`;
+  return null;
+}
+
 function MarketsList({ mode, privyId, getAccessToken }) {
   const t = useT();
   const [markets, setMarkets] = useState([]);
@@ -507,6 +516,8 @@ function MarketsList({ mode, privyId, getAccessToken }) {
   const [autoResolveBusy, setAutoResolveBusy] = useState(false);
   const [autoResolveStatus, setAutoResolveStatus] = useState(null);
   const [approvalBusy, setApprovalBusy] = useState(null); // slug currently being approved/rejected/revoked
+  const [removeConfirmKey, setRemoveConfirmKey] = useState(null);
+  const [removeBusyKey, setRemoveBusyKey] = useState(null);
   const [translateStatus, setTranslateStatus] = useState(null); // { busy, translated, remaining }
 
   async function load() {
@@ -668,6 +679,42 @@ function MarketsList({ mode, privyId, getAccessToken }) {
       alert('Error: ' + e.message);
     } finally {
       setApprovalBusy(null);
+    }
+  }
+
+  async function handleRemoveMarket(market) {
+    if (!privyId) return;
+    const key = removableMarketKey(market);
+    if (!key) return;
+
+    const isPoly = market._source === 'polymarket' && market._polyId;
+    const isProtocol = market.source === 'protocol' && market.protocolDbId;
+    const isGenerated = market._source === 'ai' && market._dbId;
+    const slug = isPoly ? polymarketApprovalKey(market) : null;
+
+    setRemoveBusyKey(key);
+    if (slug) setApprovalBusy(slug);
+    try {
+      if (isPoly) {
+        const row = await rejectPolymarketMarket(privyId, { slug, getAccessToken });
+        setDecisions(prev => {
+          const next = prev.filter(r => r.slug !== slug);
+          next.unshift(row);
+          return next;
+        });
+      } else if (isProtocol) {
+        await removeProtocolMarket({ privyId, id: market.protocolDbId, getAccessToken });
+      } else if (isGenerated) {
+        await updateGeneratedMarket({ privyId, id: market._dbId, action: 'reject', getAccessToken });
+      }
+
+      setMarkets(prev => prev.filter(m => m.id !== market.id));
+      setRemoveConfirmKey(null);
+    } catch (e) {
+      alert('Error: ' + e.message);
+    } finally {
+      setRemoveBusyKey(null);
+      if (slug) setApprovalBusy(null);
     }
   }
 
@@ -921,6 +968,45 @@ function MarketsList({ mode, privyId, getAccessToken }) {
               const cachedTr = isPoly ? translationMap.get(polySlug) : null;
               const titleEs  = cachedTr?.title_es || null;
               const titleEn  = m.title || m.question || '';
+              const removeKey = removableMarketKey(m);
+              const removeBusy = removeBusyKey === removeKey;
+              const removeAction = !removeKey ? (
+                <button
+                  className="btn-admin-sm btn-danger"
+                  disabled
+                  title="Este mercado base vive en el codigo. Para quitarlo permanentemente hay que removerlo del catalogo."
+                >
+                  Remove
+                </button>
+              ) : removeConfirmKey === removeKey ? (
+                <>
+                  <button
+                    className="btn-admin-sm"
+                    disabled={removeBusy}
+                    onClick={() => setRemoveConfirmKey(null)}
+                    title="Cancelar"
+                  >
+                    X
+                  </button>
+                  <button
+                    className="btn-admin-sm btn-danger"
+                    disabled={removeBusy}
+                    onClick={() => handleRemoveMarket(m)}
+                    title="Confirmar remove"
+                  >
+                    {removeBusy ? '…' : '✓'}
+                  </button>
+                </>
+              ) : (
+                <button
+                  className="btn-admin-sm btn-danger"
+                  disabled={removeBusy}
+                  onClick={() => setRemoveConfirmKey(removeKey)}
+                  title="Remover del MVP"
+                >
+                  {removeBusy ? '…' : 'Remove'}
+                </button>
+              );
               return (
                 <tr key={m.id || i}>
                   <td className="admin-market-title">
@@ -1017,15 +1103,19 @@ function MarketsList({ mode, privyId, getAccessToken }) {
                         >
                           {t('admin.resolve')}
                         </button>
+                        {removeAction}
                       </>
                     )}
                     {status !== 'resolved' && !isPoly && (
-                      <button
-                        className="btn-admin-sm btn-admin-resolve"
-                        onClick={() => setResolveTarget(m)}
-                      >
-                        {t('admin.resolve')}
-                      </button>
+                      <>
+                        <button
+                          className="btn-admin-sm btn-admin-resolve"
+                          onClick={() => setResolveTarget(m)}
+                        >
+                          {t('admin.resolve')}
+                        </button>
+                        {removeAction}
+                      </>
                     )}
                   </td>
                 </tr>

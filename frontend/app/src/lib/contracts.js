@@ -211,7 +211,7 @@ export async function buyShares(signer, poolAddress, usdcAddress, buyYes, amount
   const addr = await signer.getAddress();
   const allowance = await usdc.allowance(addr, poolAddress);
   if (allowance.lt(raw)) {
-    const approveTx = await usdc.approve(poolAddress, ethers.constants.MaxUint256);
+    const approveTx = await usdc.approve(poolAddress, raw);
     await approveTx.wait();
   }
 
@@ -283,7 +283,7 @@ export async function createProtocolMarket(signer, chainId, market) {
 
   const allowance = await usdc.allowance(admin, factory.address);
   if (allowance.lt(seedRaw)) {
-    const approveTx = await usdc.approve(factory.address, ethers.constants.MaxUint256);
+    const approveTx = await usdc.approve(factory.address, seedRaw);
     await approveTx.wait();
   }
 
