@@ -34,20 +34,48 @@ const CHAIN_CONFIG = {
 // ─── Safe addresses (set after creation) ─────────────────────────────────
 
 const SAFE_KEY = 'pronos-safe-config';
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
+function envAddress(name) {
+  const value = import.meta.env?.[name];
+  return value && value !== ZERO_ADDRESS ? value : null;
+}
+
+function getDefaultSafeAddresses(chainId) {
+  if (Number(chainId) === 421614) {
+    const admin = envAddress('VITE_PRONOS_ARB_SEPOLIA_ADMIN_SAFE');
+    const resolver = envAddress('VITE_PRONOS_ARB_SEPOLIA_RESOLVER_SAFE') || admin;
+    return { admin, resolver };
+  }
+  if (Number(chainId) === 42161) {
+    return {
+      admin: envAddress('VITE_PRONOS_ARBITRUM_ADMIN_SAFE'),
+      resolver: envAddress('VITE_PRONOS_ARBITRUM_RESOLVER_SAFE'),
+    };
+  }
+  return { admin: null, resolver: null };
+}
 
 function loadSafeConfig() {
   try {
+    if (typeof localStorage === 'undefined') return {};
     return JSON.parse(localStorage.getItem(SAFE_KEY)) || {};
   } catch { return {}; }
 }
 
 function saveSafeConfig(config) {
+  if (typeof localStorage === 'undefined') return;
   localStorage.setItem(SAFE_KEY, JSON.stringify(config));
 }
 
 export function getSafeAddresses(chainId) {
   const config = loadSafeConfig();
-  return config[chainId] || { admin: null, resolver: null };
+  const defaults = getDefaultSafeAddresses(chainId);
+  const stored = config[chainId] || {};
+  return {
+    admin: stored.admin || defaults.admin,
+    resolver: stored.resolver || defaults.resolver,
+  };
 }
 
 export function setSafeAddresses(chainId, admin, resolver) {

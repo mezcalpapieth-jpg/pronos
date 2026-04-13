@@ -1141,6 +1141,9 @@ function SafeManager({ mode }) {
   const isTestnetSafe = chainId === CHAIN_IDS.arbitrumSepolia;
   const hasAdminSafe = !!safeAddrs.admin;
   const hasResolverSafe = !!safeAddrs.resolver;
+  const needsSafeConfig = !hasAdminSafe || !hasResolverSafe;
+  const showCreateSafeForm = !isTestnetSafe && needsSafeConfig;
+  const showManualSafeConnect = needsSafeConfig;
 
   useEffect(() => {
     setNewThreshold(defaultSafeThreshold(chainId, safeType));
@@ -1295,7 +1298,7 @@ function SafeManager({ mode }) {
       </div>
 
       {/* Create Safe form */}
-      {(!hasAdminSafe || !hasResolverSafe) && (
+      {showCreateSafeForm && (
         <div className="admin-form" style={{ marginTop: 16 }}>
           <h4>Crear nuevo Safe</h4>
           <label>
@@ -1335,11 +1338,30 @@ function SafeManager({ mode }) {
       )}
 
       {/* Manual Safe address input (for existing Safes) */}
-      {(!hasAdminSafe || !hasResolverSafe) && (
+      {showManualSafeConnect && (
         <div style={{ marginTop: 12, padding: '12px 0', borderTop: '1px solid var(--border)' }}>
-          <p style={{ fontSize: 12, opacity: 0.6, marginBottom: 8 }}>O conecta un Safe existente:</p>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {!hasAdminSafe && (
+          <p style={{ fontSize: 12, opacity: 0.6, marginBottom: 8 }}>
+            {isTestnetSafe
+              ? 'Conecta tu Safe testnet 1/1 existente:'
+              : 'O conecta un Safe existente:'}
+          </p>
+          {isTestnetSafe ? (
+            <input
+              type="text"
+              placeholder="Safe testnet 1/1 address (0x...)"
+              onBlur={e => {
+                const addr = e.target.value.trim();
+                if (addr && addr.startsWith('0x') && addr.length === 42) {
+                  setSafeAddresses(chainId, addr, addr);
+                  setSafeAddrs(getSafeAddresses(chainId));
+                  setStatus({ type: 'success', msg: 'Safe testnet conectado como admin + resolver' });
+                }
+              }}
+              style={{ fontFamily: 'var(--font-mono)', fontSize: 12, width: '100%' }}
+            />
+          ) : (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {!hasAdminSafe && (
               <input
                 type="text"
                 placeholder="Admin Safe address (0x...)"
@@ -1353,8 +1375,8 @@ function SafeManager({ mode }) {
                 }}
                 style={{ fontFamily: 'var(--font-mono)', fontSize: 12, flex: 1, minWidth: 200 }}
               />
-            )}
-            {!hasResolverSafe && (
+              )}
+              {!hasResolverSafe && (
               <input
                 type="text"
                 placeholder="Resolver Safe address (0x...)"
@@ -1368,8 +1390,9 @@ function SafeManager({ mode }) {
                 }}
                 style={{ fontFamily: 'var(--font-mono)', fontSize: 12, flex: 1, minWidth: 200 }}
               />
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
