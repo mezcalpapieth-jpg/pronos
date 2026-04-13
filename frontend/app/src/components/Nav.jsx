@@ -209,12 +209,12 @@ export default function Nav() {
           </>
         ) : (
           <>
-            <a href="#markets" onClick={e => {
+            <a href="/mvp/#markets" onClick={e => {
               const el = document.getElementById('markets');
               if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth' }); }
             }}>{t('nav.market')}</a>
             <Link to="/portfolio">{t('nav.portfolio')}</Link>
-            <a href="#how-it-works" onClick={e => {
+            <a href="/mvp/#how-it-works" onClick={e => {
               const el = document.getElementById('how-it-works');
               if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth' }); }
             }}>{t('nav.howItWorks')}</a>
