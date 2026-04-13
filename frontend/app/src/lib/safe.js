@@ -181,6 +181,23 @@ export async function createSafe(provider, owners, threshold) {
  * @param {string} [value='0'] - ETH value to send
  */
 export async function proposeTransaction(provider, chainId, safeAddress, to, data, value = '0') {
+  return proposeTransactions(provider, chainId, safeAddress, [{ to, data, value }]);
+}
+
+/**
+ * Propose a batch transaction to the Safe Transaction Service.
+ * Useful when the Safe must approve funds and then call the protocol in one
+ * executable Safe action.
+ *
+ * @param {object} provider - EIP-1193 provider
+ * @param {number} chainId - Chain ID
+ * @param {string} safeAddress - Safe multisig address
+ * @param {{ to: string, data: string, value?: string }[]} transactions - Safe calls
+ */
+export async function proposeTransactions(provider, chainId, safeAddress, transactions) {
+  if (!Array.isArray(transactions) || transactions.length === 0) {
+    throw new Error('Safe transaction batch is empty');
+  }
   const protocolKit = await getSafeSDK(provider, safeAddress);
   const apiKit = getApiKit(chainId);
 
@@ -189,11 +206,11 @@ export async function proposeTransaction(provider, chainId, safeAddress, to, dat
 
   // Create the Safe transaction
   const safeTransaction = await protocolKit.createTransaction({
-    transactions: [{
-      to,
-      data,
-      value,
-    }],
+    transactions: transactions.map((tx) => ({
+      to: tx.to,
+      data: tx.data,
+      value: String(tx.value ?? '0'),
+    })),
   });
 
   // Sign it

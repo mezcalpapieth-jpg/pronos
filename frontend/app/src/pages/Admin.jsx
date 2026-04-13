@@ -11,7 +11,7 @@ import {
   getContracts,
   switchWalletChain,
 } from '../lib/protocol.js';
-import { createProtocolMarket } from '../lib/contracts.js';
+import { ERC20_ABI } from '../lib/contracts.js';
 import { resolveMarket, fetchResolutions } from '../lib/resolutions.js';
 import { fetchGeneratedMarkets, updateGeneratedMarket, createGeneratedMarket } from '../lib/generatedMarkets.js';
 import { gmFetchMarkets } from '../lib/gamma.js';
@@ -29,9 +29,9 @@ import {
 } from '../lib/polymarketApproved.js';
 import {
   getSafeAddresses, setSafeAddresses,
-  createSafe, proposeTransaction, confirmTransaction, executeTransaction,
+  createSafe, proposeTransaction, proposeTransactions, confirmTransaction, executeTransaction,
   getPendingTransactions, getSafeInfo,
-  encodeResolveMarket, encodePauseMarket, encodeDistributeFees,
+  encodeResolveMarket, encodePauseMarket, encodeDistributeFees, encodeCreateMarket,
 } from '../lib/safe.js';
 
 const MARKET_CATEGORIES = [
@@ -126,8 +126,13 @@ function CreateMarketForm({ mode, privyId, getAccessToken }) {
         const seed = Number(seedLiquidity);
         const targetChain = CHAIN_IDS.arbitrumSepolia;
         const contracts = getContracts(targetChain);
-        if (!contracts?.factory || !contracts?.token) {
-          throw new Error('Faltan VITE_PRONOS_ARB_SEPOLIA_FACTORY o VITE_PRONOS_ARB_SEPOLIA_TOKEN en Vercel.');
+        const safeAddrs = getSafeAddresses(targetChain);
+        const safeAddress = safeAddrs.admin;
+        if (!contracts?.factory || !contracts?.usdc) {
+          throw new Error('Faltan VITE_PRONOS_ARB_SEPOLIA_FACTORY o VITE_PRONOS_ARB_SEPOLIA_USDC en Vercel.');
+        }
+        if (!safeAddress) {
+          throw new Error('Configura VITE_PRONOS_ARB_SEPOLIA_ADMIN_SAFE o conecta el Safe admin antes de crear mercados.');
         }
         if (!Number.isFinite(seed) || seed <= 0) {
           throw new Error('La liquidez inicial debe ser mayor a 0 USDC.');
@@ -135,27 +140,31 @@ function CreateMarketForm({ mode, privyId, getAccessToken }) {
         if (!resolutionSource.trim()) {
           throw new Error('Agrega una fuente de resolución antes de crear el mercado.');
         }
+        const seedRaw = ethers.utils.parseUnits(String(seedLiquidity), 6);
 
         const wallet = wallets?.[0];
         if (!wallet) throw new Error('Conecta una wallet admin primero.');
         setStatus({ type: 'info', msg: `Cambiando a ${getChainDisplayName(targetChain)}...` });
         await switchWalletChain(wallet, targetChain);
 
-        setStatus({ type: 'info', msg: `Aprobando exactamente ${seedLiquidity} USDC si hace falta y creando mercado on-chain...` });
-        const provider = new ethers.providers.Web3Provider(await wallet.getEthereumProvider());
-        const signer = provider.getSigner();
-        const result = await createProtocolMarket(signer, targetChain, {
-          question: question.trim(),
+        setStatus({ type: 'info', msg: `Proponiendo al Safe approve + createMarket por ${seedLiquidity} USDC...` });
+        const ethereumProvider = await wallet.getEthereumProvider();
+        const usdcInterface = new ethers.utils.Interface(ERC20_ABI);
+        const approveData = usdcInterface.encodeFunctionData('approve', [contracts.factory, seedRaw]);
+        const createData = encodeCreateMarket(
+          question.trim(),
           category,
-          endTime: Math.floor(endTimeMs / 1000),
-          resolutionSource: resolutionSource.trim(),
-          seedAmount: seedLiquidity,
-        });
-        const txHash = result.receipt.transactionHash || result.receipt.hash || 'OK';
-        const marketId = result.marketId != null ? ` #${result.marketId}` : '';
+          Math.floor(endTimeMs / 1000),
+          resolutionSource.trim(),
+          seedRaw,
+        );
+        const { safeTxHash } = await proposeTransactions(ethereumProvider, targetChain, safeAddress, [
+          { to: contracts.usdc, data: approveData, value: '0' },
+          { to: contracts.factory, data: createData, value: '0' },
+        ]);
         setStatus({
           type: 'success',
-          msg: `Mercado on-chain${marketId} creado. Tx: ${txHash.slice(0, 10)}... El indexer lo publicara en la grilla en breve.`,
+          msg: `Transaccion propuesta al Safe: ${safeTxHash.slice(0, 10)}... Ejecutala en Safe Multisig. El Safe debe tener ${seedLiquidity} USDC; despues corre el indexer para verla en la grilla.`,
         });
         setQuestion('');
         setEndDate('');
@@ -258,7 +267,7 @@ function CreateMarketForm({ mode, privyId, getAccessToken }) {
               />
             </label>
             <div className="admin-info-box">
-              Se creara en {getChainDisplayName(CHAIN_IDS.arbitrumSepolia)} usando MarketFactory. El contrato propio v1 es binario: Si / No. Los mercados multi-opcion requieren un contrato v2 y redeploy.
+              Se propondra al Safe admin en {getChainDisplayName(CHAIN_IDS.arbitrumSepolia)}. La liquidez inicial debe estar en el Safe, no en tu wallet. El contrato propio v1 es binario: Si / No. Los mercados multi-opcion requieren un contrato v2 y redeploy.
             </div>
           </>
         )}
