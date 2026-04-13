@@ -88,6 +88,7 @@ function CreateMarketForm({ privyId, getAccessToken }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (submitting) return; // prevent double-submit
     if (!question.trim() || !endDate) return;
     const emptyLabel = options.some(o => !o.label.trim());
     if (emptyLabel) { setStatus({ type: 'error', msg: t('admin.optionsNeedName') }); return; }
@@ -419,17 +420,20 @@ function MarketsList({ mode, privyId, getAccessToken }) {
     //   - market_resolutions DB rows (the source of truth for "resolved")
     //   - polymarket_approved DB rows (both approved AND rejected so we can
     //     hide rejected markets from the queue)
-    const [liveOpen, resos, decisionRows] = await Promise.all([
+    const [liveOpen, generated, resos, decisionRows] = await Promise.all([
       gmFetchMarkets({ limit: 100 }).catch(() => []),
+      fetchGeneratedMarkets('approved').catch(() => []),
       fetchResolutions().catch(() => []),
       fetchAllPolymarketDecisions(privyId, getAccessToken).catch(() => []),
     ]);
     const local = MARKETS;
 
-    // Dedupe by slug/id. Live data wins over hardcoded.
+    // Dedupe by slug/id. Live data wins over hardcoded; generated (admin-created)
+    // markets are included so they appear in the admin table.
     const map = new Map();
-    for (const m of local)     map.set(m.id, m);
-    for (const m of liveOpen)  map.set(m.id, { ...map.get(m.id), ...m });
+    for (const m of local)      map.set(m.id, m);
+    for (const m of generated)  map.set(m.id, m);
+    for (const m of liveOpen)   map.set(m.id, { ...map.get(m.id), ...m });
 
     const all = Array.from(map.values());
     setMarkets(all);
