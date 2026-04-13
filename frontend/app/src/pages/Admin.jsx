@@ -149,6 +149,12 @@ function CreateMarketForm({ mode, privyId, getAccessToken }) {
 
         setStatus({ type: 'info', msg: `Proponiendo al Safe approve + createMarket por ${seedLiquidity} USDC...` });
         const ethereumProvider = await wallet.getEthereumProvider();
+        const chainProvider = new ethers.providers.Web3Provider(ethereumProvider);
+        const usdc = new ethers.Contract(contracts.usdc, ERC20_ABI, chainProvider);
+        const safeBalance = await usdc.balanceOf(safeAddress);
+        if (safeBalance.lt(seedRaw)) {
+          throw new Error(`El Safe admin tiene ${ethers.utils.formatUnits(safeBalance, 6)} USDC. Envia al menos ${seedLiquidity} USDC al Safe ${safeAddress} y vuelve a intentar.`);
+        }
         const usdcInterface = new ethers.utils.Interface(ERC20_ABI);
         const approveData = usdcInterface.encodeFunctionData('approve', [contracts.factory, seedRaw]);
         const createData = encodeCreateMarket(

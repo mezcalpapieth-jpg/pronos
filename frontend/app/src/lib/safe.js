@@ -123,7 +123,7 @@ export async function getSafeSDK(provider, safeAddress) {
   const signer = ethersProvider.getSigner();
   const signerAddress = await signer.getAddress();
 
-  return Safe.default.init({
+  return Safe.init({
     provider,
     signer: signerAddress,
     safeAddress,
@@ -144,7 +144,7 @@ export async function createSafe(provider, owners, threshold) {
   const signer = ethersProvider.getSigner();
   const signerAddress = await signer.getAddress();
 
-  const protocolKit = await Safe.default.init({
+  const protocolKit = await Safe.init({
     provider,
     signer: signerAddress,
     predictedSafe: {
