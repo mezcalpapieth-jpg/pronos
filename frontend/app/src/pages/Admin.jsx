@@ -458,7 +458,7 @@ function MarketsList({ mode, privyId, getAccessToken }) {
         const slug = polymarketApprovalKey(m);
         return m._source === 'polymarket' && m._polyId && m.title && slug && needsSpanishTranslation(decisionsBySlug.get(slug));
       })
-      .map(m => ({ slug: polymarketApprovalKey(m), title: m.title, options: m.options }));
+      .map(m => ({ slug: polymarketApprovalKey(m), eventSlug: m._eventSlug, title: m.title, options: m.options }));
     if (polyMarkets.length === 0) {
       setTranslateStatus(null);
       return;
@@ -477,7 +477,7 @@ function MarketsList({ mode, privyId, getAccessToken }) {
           busy: false,
           translated: totalTranslated,
           remaining: 0,
-          error: result?.error || 'No se pudo traducir. Revisa ANTHROPIC_API_KEY.',
+          error: result?.error || 'No se pudo traducir desde Polymarket ni con el fallback configurado.',
         });
         break;
       }
@@ -502,8 +502,8 @@ function MarketsList({ mode, privyId, getAccessToken }) {
   }
 
   // Approve / reject / revoke a polymarket slug.
-  // - Approve: triggers an Anthropic-powered Spanish translation server-side
-  //   so the market can be rendered in es on pronos.io.
+  // - Approve: caches Spanish text server-side (Polymarket ES first,
+  //   Anthropic fallback when configured) so the market can render in Spanish.
   // - Reject:  marks the slug as rejected so it disappears from the admin
   //   queue and won't reappear next time the live Gamma feed reloads.
   // - Revoke:  hard-deletes the decision row (un-approve).
@@ -513,10 +513,11 @@ function MarketsList({ mode, privyId, getAccessToken }) {
     setApprovalBusy(slug);
     try {
       // If we already have a cached translation (pending row), skip the
-      // Anthropic call — the server keeps the existing title_es via COALESCE.
+      // external call — the server keeps the existing title_es via COALESCE.
       const cached = decisions.find(d => d.slug === slug);
       const row = await approvePolymarketMarket(privyId, {
         slug,
+        eventSlug: market._eventSlug,
         title: market.title,
         options: market.options,
         autoTranslate: needsSpanishTranslation(cached),

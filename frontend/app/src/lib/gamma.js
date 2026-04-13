@@ -66,6 +66,11 @@ function gmParseArray(val) {
   return [];
 }
 
+function gmEventSlug(pm) {
+  const event = pm?.event || (Array.isArray(pm?.events) ? pm.events[0] : null);
+  return pm?.eventSlug || pm?.event_slug || event?.slug || pm?.groupSlug || pm?.groupItemSlug || null;
+}
+
 // ── Normalize a raw Polymarket market → Pronos market object ──────────────────
 export function gmNormalize(pm) {
   const outcomes     = gmParseArray(pm.outcomes);
@@ -104,6 +109,7 @@ export function gmNormalize(pm) {
     _image:           pm.image || null,
     _source:          'polymarket',
     _endDate:         pm.endDate || null, // raw ISO so client can auto-expire
+    _eventSlug:       gmEventSlug(pm),
     _categoryRaw:     pm.category || null,
     _description:     pm.description || null,
     _tags:            rawTags,

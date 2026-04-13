@@ -1,8 +1,8 @@
 // ── Client for /api/polymarket-approved ───────────────────────────────────
 // Live Polymarket markets only appear publicly once a slug is in this table.
 // The endpoint also caches a Spanish translation of the title + option labels
-// (generated at approval time via Anthropic) so the public site can render
-// markets in Spanish without re-translating on the fly.
+// (pulled from Polymarket Spanish first, Anthropic fallback when configured)
+// so the public site can render markets in Spanish without re-translating.
 
 import { authFetch } from './apiAuth.js';
 
@@ -50,13 +50,13 @@ export async function fetchAllPolymarketDecisions(privyId, getAccessToken) {
 
 /**
  * Approve a polymarket market (admin only). Sends the original title + options
- * so the server can translate to Spanish via Anthropic before storing.
+ * so the server can cache Spanish text before storing.
  */
-export async function approvePolymarketMarket(privyId, { slug, title, options, autoTranslate = true, getAccessToken }) {
+export async function approvePolymarketMarket(privyId, { slug, eventSlug, title, options, autoTranslate = true, getAccessToken }) {
   const res = await authFetch(getAccessToken, `${base}${API}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ privyId, slug, title, options, autoTranslate, status: 'approved' }),
+    body: JSON.stringify({ privyId, slug, eventSlug, title, options, autoTranslate, status: 'approved' }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

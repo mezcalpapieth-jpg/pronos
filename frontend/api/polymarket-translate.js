@@ -1,14 +1,15 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from './_lib/cors.js';
 import { requireAdmin } from './_lib/admin.js';
+import { translateMarketToSpanish } from './_lib/polymarket-translation.js';
 
 /**
  * Bulk Spanish translation for live Polymarket markets.
  *
  * The admin page calls this on load with every relevant Polymarket market it
- * just fetched. New slugs are translated and inserted as status='pending';
- * approved/pending rows that already exist but are missing Spanish text are
- * backfilled. This means:
+ * just fetched. New slugs are translated using Polymarket's Spanish page
+ * copy first, then Anthropic as fallback when configured. Approved/pending
+ * rows that already exist but are missing Spanish text are backfilled. This means:
  *   - The admin sees both EN (Polymarket original) and ES (cached) for
  *     every market without having to click anything.
  *   - When the admin later clicks Aprobar, the server already has the
@@ -17,7 +18,7 @@ import { requireAdmin } from './_lib/admin.js';
  *     filters by status='approved' only).
  *
  * POST /api/polymarket-translate
- *   body: { privyId, markets: [{ slug, title, options }] }
+ *   body: { privyId, markets: [{ slug, eventSlug?, title, options }] }
  *
  * Returns: { ok, translated, cached, remaining, rows }
  *
@@ -40,52 +41,6 @@ function needsTranslation(row) {
   return !row.title_es || !hasSpanishOptions(row);
 }
 
-// Single-market translation. Returns { titleEs, optionsEs } or null.
-async function translateOne({ title, options }) {
-  if (!process.env.ANTHROPIC_API_KEY) return null;
-  const safeOptions = Array.isArray(options) ? options : [];
-  const labels = safeOptions.map(o => o?.label || '').filter(Boolean);
-
-  const prompt = `Translate this Polymarket prediction market question and its outcome labels to natural, conversational Spanish (Mexican Spanish preferred). Preserve names of people, teams, and places — only translate the surrounding text. Keep the question concise.
-
-Question: ${title}
-Options: ${JSON.stringify(labels)}
-
-Respond with ONLY valid JSON in this exact format (no markdown, no commentary):
-{"title": "<spanish question>", "options": ["<opt1>", "<opt2>", ...]}`;
-
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 400,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const text = data.content?.[0]?.text || '';
-    const match = text.match(/\{[\s\S]*\}/);
-    if (!match) return null;
-    const parsed = JSON.parse(match[0]);
-    if (!parsed.title || !Array.isArray(parsed.options)) return null;
-
-    const optionsEs = safeOptions.map((opt, i) => ({
-      ...opt,
-      label: parsed.options[i] || opt.label,
-    }));
-    return { titleEs: parsed.title, optionsEs };
-  } catch (_) {
-    return null;
-  }
-}
-
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'POST, OPTIONS' });
   if (cors) return cors;
@@ -96,16 +51,6 @@ export default async function handler(req, res) {
   if (!admin.ok) return;
   if (!Array.isArray(markets)) {
     return res.status(400).json({ error: 'markets array requerido' });
-  }
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return res.status(200).json({
-      ok: false,
-      error: 'ANTHROPIC_API_KEY is not configured',
-      translated: 0,
-      cached: 0,
-      remaining: 0,
-      rows: [],
-    });
   }
 
   try {
@@ -122,14 +67,14 @@ export default async function handler(req, res) {
       m && m.slug && m.title && needsTranslation(existingBySlug.get(m.slug))
     );
 
-    // Per-call cap so we don't blow the 10s Vercel function timeout.
-    const CAP = 20;
+    // Fetching Polymarket pages is heavier than calling Gamma, so keep the
+    // per-call cap modest and let the frontend drain the queue over loops.
+    const configuredCap = Number(process.env.POLYMARKET_TRANSLATION_BATCH_SIZE);
+    const CAP = Math.min(Math.max(Number.isFinite(configuredCap) && configuredCap > 0 ? configuredCap : 8, 1), 20);
     const batch = todo.slice(0, CAP);
 
-    // Run translations in parallel — Haiku is fast and Anthropic handles
-    // 20 concurrent calls comfortably.
     const translations = await Promise.all(
-      batch.map(m => translateOne({ title: m.title, options: m.options }))
+      batch.map(m => translateMarketToSpanish({ slug: m.slug, eventSlug: m.eventSlug, title: m.title, options: m.options }))
     );
 
     const newRows = [];
@@ -153,12 +98,18 @@ export default async function handler(req, res) {
       }
     }
 
+    const failed = Math.max(0, batch.length - newRows.length);
+    const error = failed > 0 && newRows.length === 0
+      ? 'No se pudo obtener traduccion de Polymarket en espanol' + (process.env.ANTHROPIC_API_KEY ? ' ni de Anthropic.' : ' y ANTHROPIC_API_KEY no esta configurada.')
+      : null;
+
     return res.status(200).json({
-      ok: true,
+      ok: !error,
       translated: newRows.length,
-      failed: Math.max(0, batch.length - newRows.length),
+      failed,
       cached: Math.max(0, markets.length - todo.length),
       remaining: newRows.length > 0 ? Math.max(0, todo.length - batch.length) : 0,
+      error,
       rows: newRows,
     });
   } catch (e) {

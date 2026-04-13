@@ -1,6 +1,7 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from './_lib/cors.js';
 import { requireAdmin } from './_lib/admin.js';
+import { translateMarketToSpanish } from './_lib/polymarket-translation.js';
 
 /**
  * Polymarket approval / rejection list with on-the-fly Spanish translation.
@@ -13,67 +14,18 @@ import { requireAdmin } from './_lib/admin.js';
  * GET    /api/polymarket-approved              → only approved (default)
  * GET    /api/polymarket-approved?status=all   → both approved + rejected
  * POST   /api/polymarket-approved              → admin: approve or reject
- *          body: { privyId, slug, title, options, status?, autoTranslate? }
+ *          body: { privyId, slug, eventSlug?, title, options, status?, autoTranslate? }
  *          status defaults to 'approved'. When status='rejected' translation
  *          is skipped (we don't need a Spanish title for hidden markets).
  * DELETE /api/polymarket-approved?slug=...     → admin: drop the row
  *
- * If `autoTranslate` is true (or omitted) and ANTHROPIC_API_KEY is set, the
- * endpoint translates `title` and `options[].label` to Spanish before storing.
- * If translation fails, we still insert the row with the originals so the
- * approval succeeds — translation can be retried later via re-approval.
+ * If `autoTranslate` is true (or omitted), the endpoint first tries to reuse
+ * Polymarket's Spanish page copy, then falls back to Anthropic when configured.
+ * If translation fails, we still insert the row so approval succeeds —
+ * translation can be retried later via the admin backfill.
  */
 
 const sql = neon(process.env.DATABASE_URL);
-
-// ── Anthropic translation ──────────────────────────────────────────────────
-// Translates a market title + option labels in a single API call. Returns
-// `{ titleEs, optionsEs }` or null if the API key isn't set / call fails.
-async function translateToSpanish({ title, options }) {
-  if (!process.env.ANTHROPIC_API_KEY) return null;
-  const safeOptions = Array.isArray(options) ? options : [];
-  const labels = safeOptions.map(o => o?.label || '').filter(Boolean);
-
-  const prompt = `Translate this Polymarket prediction market question and its outcome labels to natural, conversational Spanish (Mexican Spanish preferred). Preserve names of people, teams, and places — only translate the surrounding text. Keep the question concise.
-
-Question: ${title}
-Options: ${JSON.stringify(labels)}
-
-Respond with ONLY valid JSON in this exact format (no markdown, no commentary):
-{"title": "<spanish question>", "options": ["<opt1>", "<opt2>", ...]}`;
-
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 400,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const text = data.content?.[0]?.text || '';
-    const match = text.match(/\{[\s\S]*\}/);
-    if (!match) return null;
-    const parsed = JSON.parse(match[0]);
-    if (!parsed.title || !Array.isArray(parsed.options)) return null;
-
-    // Re-attach pct/etc. by zipping translated labels back over original options.
-    const optionsEs = safeOptions.map((opt, i) => ({
-      ...opt,
-      label: parsed.options[i] || opt.label,
-    }));
-    return { titleEs: parsed.title, optionsEs };
-  } catch (e) {
-    return null;
-  }
-}
 
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'GET, POST, DELETE, OPTIONS' });
@@ -107,7 +59,7 @@ export default async function handler(req, res) {
 
   // ── POST ──────────────────────────────────────────────
   if (req.method === 'POST') {
-    const { privyId, slug, title, options, autoTranslate, status } = req.body || {};
+    const { privyId, slug, eventSlug, title, options, autoTranslate, status } = req.body || {};
     const admin = await requireAdmin(req, res, sql, privyId);
     if (!admin.ok) return;
     if (!slug) return res.status(400).json({ error: 'slug requerido' });
@@ -119,9 +71,9 @@ export default async function handler(req, res) {
       let titleEs = null;
       let optionsEs = null;
       // Translate only when approving — rejected rows never render publicly,
-      // so spending an Anthropic call on them is wasted.
+      // so spending external calls on them is wasted.
       if (decisionStatus === 'approved' && autoTranslate !== false && title) {
-        const tr = await translateToSpanish({ title, options });
+        const tr = await translateMarketToSpanish({ slug, eventSlug, title, options });
         if (tr) {
           titleEs = tr.titleEs;
           optionsEs = tr.optionsEs;
