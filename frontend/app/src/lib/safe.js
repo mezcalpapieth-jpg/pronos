@@ -131,7 +131,7 @@ export async function getSafeSDK(provider, safeAddress, expectedChainId = null) 
   const code = await ethersProvider.getCode(safeAddress);
   if (!code || code === '0x') {
     const chainName = CHAIN_CONFIG[actualChainId]?.name || `chain ${actualChainId}`;
-    throw new Error(`No encuentro el Safe ${safeAddress} desplegado en ${chainName}. Revisa la red y la direccion del Safe admin.`);
+    throw new Error(`No encuentro el Safe ${safeAddress} desplegado en ${chainName}. Revisa la red y la direccion del Safe admin. Si el factory ya pertenece a este address, despliega ese Safe exacto o redeploya el protocolo.`);
   }
 
   const signer = ethersProvider.getSigner();

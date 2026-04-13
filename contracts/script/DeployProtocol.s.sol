@@ -40,6 +40,9 @@ contract DeployProtocol is Script {
         console.log("Treasury:", treasury);
         console.log("Fee collector:", feeCollector);
 
+        requireSafeDeployed("ADMIN_SAFE_ADDRESS", adminSafe);
+        requireSafeDeployed("RESOLVER_SAFE_ADDRESS", resolverSafe);
+
         vm.startBroadcast(deployerKey);
 
         // 1. Deploy PronosToken (ERC-1155)
@@ -84,5 +87,10 @@ contract DeployProtocol is Script {
         console.log("  1. Add the Vercel env vars above");
         console.log("  2. Run /api/migrate if needed");
         console.log("  3. Create first market with seed liquidity from /mvp/admin");
+    }
+
+    function requireSafeDeployed(string memory label, address safe) internal view {
+        if (safe == address(0)) return;
+        require(safe.code.length > 0, string.concat(label, " is not deployed on this chain"));
     }
 }

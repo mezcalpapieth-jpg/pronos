@@ -15,6 +15,12 @@ Use one single-owner Safe and reuse the same address as both `ADMIN_SAFE` and `R
 4. Set threshold to **1 of 1**
 5. Deploy the Safe
 6. Copy the Safe address
+7. Confirm the Safe is deployed on Arbitrum Sepolia before transferring any roles:
+
+```bash
+cast code $TESTNET_SAFE --rpc-url $ARB_SEPOLIA_RPC
+# Must return contract bytecode, not: 0x
+```
 
 ### Step 2: Transfer ownership and resolver role
 
@@ -26,6 +32,10 @@ export TESTNET_SAFE=0x...    # The 1/1 Safe address
 export ADMIN_SAFE=$TESTNET_SAFE
 export RESOLVER_SAFE=$TESTNET_SAFE
 export FACTORY=0x...         # MarketFactory address on Arbitrum Sepolia
+
+# Safety check: never transfer to an undeployed Safe.
+cast code $ADMIN_SAFE --rpc-url $ARB_SEPOLIA_RPC
+# Must return contract bytecode, not: 0x
 
 # Transfer factory ownership to Admin Safe
 cast send $FACTORY "transferOwnership(address)" $ADMIN_SAFE \
