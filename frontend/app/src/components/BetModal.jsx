@@ -14,7 +14,7 @@ import {
   POLYGON_CHAIN_ID,
 } from '../lib/clob.js';
 import { buyShares } from '../lib/contracts.js';
-import { isProtocolMarket, getUsdcAddress, CHAIN_IDS } from '../lib/protocol.js';
+import { isProtocolMarket, getUsdcAddress, CHAIN_IDS, getChainDisplayName, switchWalletChain } from '../lib/protocol.js';
 import { useT } from '../lib/i18n.js';
 
 const QUICK_AMOUNTS = [5, 10, 25, 50];
@@ -148,17 +148,14 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
       if (network.chainId !== requiredChainId) {
         setStatusMsg(t('bet.switchingChain'));
         try {
-          await wallet.switchChain(requiredChainId);
+          await switchWalletChain(wallet, requiredChainId);
           // Re-create provider after chain switch
           const newProv = await wallet.getEthereumProvider();
           provider = new ethers.providers.Web3Provider(newProv);
           signer = provider.getSigner();
         } catch (switchErr) {
-          const chainName = requiredChainId === POLYGON_CHAIN_ID ? 'Polygon'
-            : requiredChainId === CHAIN_IDS.arbitrum ? 'Arbitrum'
-            : 'Arbitrum Sepolia';
           setStep(STEPS.ERROR);
-          setStatusMsg(t('bet.switchChain', { chain: chainName }));
+          setStatusMsg(t('bet.switchChain', { chain: getChainDisplayName(requiredChainId) }));
           return;
         }
       }

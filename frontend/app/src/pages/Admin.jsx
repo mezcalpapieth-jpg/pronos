@@ -1,7 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { ethers } from 'ethers';
 import Nav from '../components/Nav.jsx';
-import { getProtocolMode, setProtocolMode, isAdmin, getContracts } from '../lib/protocol.js';
+import {
+  CHAIN_IDS,
+  getChainDisplayName,
+  getProtocolMode,
+  setProtocolMode,
+  isAdmin,
+  getContracts,
+  switchWalletChain,
+} from '../lib/protocol.js';
+import { createProtocolMarket } from '../lib/contracts.js';
 import { resolveMarket, fetchResolutions } from '../lib/resolutions.js';
 import { fetchGeneratedMarkets, updateGeneratedMarket, createGeneratedMarket } from '../lib/generatedMarkets.js';
 import { gmFetchMarkets } from '../lib/gamma.js';
@@ -43,8 +53,8 @@ function ProtocolSwitch({ mode, onToggle }) {
       </div>
       <p className="admin-desc">
         {mode === 'polymarket'
-          ? 'Los mercados se enrutan a traves de Polymarket CLOB. Cambiar a protocolo propio para usar tus contratos en Arbitrum.'
-          : 'Los mercados usan tus contratos AMM en Arbitrum. Cambiar a Polymarket para el modo agregador.'}
+          ? 'Los mercados se enrutan a traves de Polymarket CLOB. Cambiar a protocolo propio para usar tus contratos en Arbitrum Sepolia.'
+          : 'Los mercados usan tus contratos AMM en Arbitrum Sepolia. Cambiar a Polymarket para el modo agregador.'}
       </p>
       <div className="admin-switch-row">
         <span className={mode === 'polymarket' ? 'switch-label-active' : 'switch-label'}>Polymarket</span>
@@ -61,25 +71,34 @@ function ProtocolSwitch({ mode, onToggle }) {
   );
 }
 
-function CreateMarketForm({ privyId, getAccessToken }) {
+function CreateMarketForm({ mode, privyId, getAccessToken }) {
   const t = useT();
+  const { wallets } = useWallets();
   const [question, setQuestion] = useState('');
   const [category, setCategory] = useState('deportes');
   const [endDate, setEndDate] = useState('');
   const [icon, setIcon] = useState('📰');
+  const [resolutionSource, setResolutionSource] = useState('');
+  const [seedLiquidity, setSeedLiquidity] = useState('100');
   const [options, setOptions] = useState([
     { label: 'Sí', pct: 50 },
     { label: 'No', pct: 50 },
   ]);
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState(null);
+  const ownMode = mode === 'own';
+
+  useEffect(() => {
+    if (!ownMode) return;
+    setOptions([{ label: 'Sí', pct: 50 }, { label: 'No', pct: 50 }]);
+  }, [ownMode]);
 
   function addOption() {
-    if (options.length >= 6) return;
+    if (ownMode || options.length >= 6) return;
     setOptions(prev => [...prev, { label: '', pct: 0 }]);
   }
   function removeOption(idx) {
-    if (options.length <= 2) return;
+    if (ownMode || options.length <= 2) return;
     setOptions(prev => prev.filter((_, i) => i !== idx));
   }
   function updateOption(idx, field, value) {
@@ -91,11 +110,59 @@ function CreateMarketForm({ privyId, getAccessToken }) {
     if (submitting) return; // prevent double-submit
     if (!question.trim() || !endDate) return;
     const emptyLabel = options.some(o => !o.label.trim());
-    if (emptyLabel) { setStatus({ type: 'error', msg: t('admin.optionsNeedName') }); return; }
+    if (!ownMode && emptyLabel) { setStatus({ type: 'error', msg: t('admin.optionsNeedName') }); return; }
+
+    const endTimeMs = new Date(endDate).getTime();
+    if (!Number.isFinite(endTimeMs) || endTimeMs <= Date.now()) {
+      setStatus({ type: 'error', msg: 'La fecha de cierre debe estar en el futuro.' });
+      return;
+    }
 
     setSubmitting(true);
     setStatus(null);
     try {
+      if (ownMode) {
+        const seed = Number(seedLiquidity);
+        const targetChain = CHAIN_IDS.arbitrumSepolia;
+        const contracts = getContracts(targetChain);
+        if (!contracts?.factory || !contracts?.token) {
+          throw new Error('Faltan VITE_PRONOS_ARB_SEPOLIA_FACTORY o VITE_PRONOS_ARB_SEPOLIA_TOKEN en Vercel.');
+        }
+        if (!Number.isFinite(seed) || seed <= 0) {
+          throw new Error('La liquidez inicial debe ser mayor a 0 USDC.');
+        }
+        if (!resolutionSource.trim()) {
+          throw new Error('Agrega una fuente de resolución antes de crear el mercado.');
+        }
+
+        const wallet = wallets?.[0];
+        if (!wallet) throw new Error('Conecta una wallet admin primero.');
+        setStatus({ type: 'info', msg: `Cambiando a ${getChainDisplayName(targetChain)}...` });
+        await switchWalletChain(wallet, targetChain);
+
+        setStatus({ type: 'info', msg: 'Creando mercado on-chain y aprobando USDC si hace falta...' });
+        const provider = new ethers.providers.Web3Provider(await wallet.getEthereumProvider());
+        const signer = provider.getSigner();
+        const result = await createProtocolMarket(signer, targetChain, {
+          question: question.trim(),
+          category,
+          endTime: Math.floor(endTimeMs / 1000),
+          resolutionSource: resolutionSource.trim(),
+          seedAmount: seedLiquidity,
+        });
+        const txHash = result.receipt.transactionHash || result.receipt.hash || 'OK';
+        const marketId = result.marketId != null ? ` #${result.marketId}` : '';
+        setStatus({
+          type: 'success',
+          msg: `Mercado on-chain${marketId} creado. Tx: ${txHash.slice(0, 10)}... El indexer lo publicara en la grilla en breve.`,
+        });
+        setQuestion('');
+        setEndDate('');
+        setResolutionSource('');
+        setOptions([{ label: 'Sí', pct: 50 }, { label: 'No', pct: 50 }]);
+        return;
+      }
+
       // Format deadline for display: "30 Jun 2026"
       const d = new Date(endDate);
       const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -124,7 +191,7 @@ function CreateMarketForm({ privyId, getAccessToken }) {
   return (
     <div className="admin-card">
       <div className="admin-card-header">
-        <h3>{t('admin.createMarket')}</h3>
+        <h3>{ownMode ? 'Crear mercado on-chain' : t('admin.createMarket')}</h3>
       </div>
       <form onSubmit={handleSubmit} className="admin-form">
         <label>
@@ -166,7 +233,37 @@ function CreateMarketForm({ privyId, getAccessToken }) {
           />
         </label>
 
+        {ownMode && (
+          <>
+            <label>
+              <span>Fuente de resolución</span>
+              <input
+                type="text"
+                value={resolutionSource}
+                onChange={e => setResolutionSource(e.target.value)}
+                placeholder="Ej: Resultados oficiales FIFA, INE, exchange oficial"
+                required
+              />
+            </label>
+            <label>
+              <span>Liquidez inicial (USDC)</span>
+              <input
+                type="number"
+                value={seedLiquidity}
+                onChange={e => setSeedLiquidity(e.target.value)}
+                min="1"
+                step="0.01"
+                required
+              />
+            </label>
+            <div className="admin-info-box">
+              Se creara en {getChainDisplayName(CHAIN_IDS.arbitrumSepolia)} usando MarketFactory. Estos mercados del protocolo son binarios: Si / No.
+            </div>
+          </>
+        )}
+
         {/* Dynamic options */}
+        {!ownMode && (
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
@@ -207,9 +304,10 @@ function CreateMarketForm({ privyId, getAccessToken }) {
             </div>
           ))}
         </div>
+        )}
 
         <button type="submit" className="btn-admin-primary" disabled={submitting}>
-          {submitting ? t('admin.creating') : t('admin.createBtn')}
+          {submitting ? t('admin.creating') : ownMode ? 'Crear en Arbitrum Sepolia' : t('admin.createBtn')}
         </button>
         {status && (
           <div className={`admin-status admin-status-${status.type}`}>
@@ -976,7 +1074,7 @@ function ContractInfo({ mode }) {
         </div>
       </div>
       <div className="admin-info-box">
-        <strong>Safe Multisig:</strong> Pendiente de configuracion (3/5 admin, 2/3 resolucion)
+        <strong>Safe:</strong> Testnet usa 1/1. Mainnet mantiene 3/5 admin y 2/3 resolucion.
       </div>
     </div>
   );
@@ -1017,6 +1115,18 @@ function FeeInfo({ mode }) {
   );
 }
 
+function defaultSafeThreshold(chainId, safeType) {
+  if (chainId === CHAIN_IDS.arbitrumSepolia) return 1;
+  return safeType === 'resolver' ? 2 : 3;
+}
+
+function safeTypeOptionLabel(chainId, safeType) {
+  if (chainId === CHAIN_IDS.arbitrumSepolia) {
+    return safeType === 'resolver' ? 'Resolver (mismo 1/1)' : 'Admin + Resolver (1/1)';
+  }
+  return safeType === 'resolver' ? 'Resolver (2/3)' : 'Admin (3/5)';
+}
+
 function SafeManager({ mode }) {
   const { wallets } = useWallets();
   const [chainId, setChainId] = useState(421614); // default Arbitrum Sepolia
@@ -1026,8 +1136,20 @@ function SafeManager({ mode }) {
   const [creating, setCreating] = useState(false);
   const [status, setStatus] = useState(null);
   const [newOwners, setNewOwners] = useState('');
-  const [newThreshold, setNewThreshold] = useState(3);
+  const [newThreshold, setNewThreshold] = useState(1);
   const [safeType, setSafeType] = useState('admin'); // 'admin' or 'resolver'
+  const isTestnetSafe = chainId === CHAIN_IDS.arbitrumSepolia;
+  const hasAdminSafe = !!safeAddrs.admin;
+  const hasResolverSafe = !!safeAddrs.resolver;
+
+  useEffect(() => {
+    setNewThreshold(defaultSafeThreshold(chainId, safeType));
+  }, [chainId, safeType]);
+
+  useEffect(() => {
+    if (safeType === 'admin' && hasAdminSafe && !hasResolverSafe) setSafeType('resolver');
+    if (safeType === 'resolver' && hasResolverSafe && !hasAdminSafe) setSafeType('admin');
+  }, [safeType, hasAdminSafe, hasResolverSafe]);
 
   // Load Safe info + pending txs
   useEffect(() => {
@@ -1071,12 +1193,17 @@ function SafeManager({ mode }) {
       const { safeAddress, txHash } = await createSafe(provider, owners, newThreshold);
       const current = getSafeAddresses(chainId);
       if (safeType === 'admin') {
-        setSafeAddresses(chainId, safeAddress, current.resolver);
+        setSafeAddresses(chainId, safeAddress, isTestnetSafe ? safeAddress : current.resolver);
       } else {
-        setSafeAddresses(chainId, current.admin, safeAddress);
+        setSafeAddresses(chainId, isTestnetSafe ? safeAddress : current.admin, safeAddress);
       }
       setSafeAddrs(getSafeAddresses(chainId));
-      setStatus({ type: 'success', msg: `Safe ${safeType} creado: ${safeAddress}` });
+      setStatus({
+        type: 'success',
+        msg: isTestnetSafe
+          ? `Safe testnet 1/1 creado y guardado como admin + resolver: ${safeAddress}`
+          : `Safe ${safeType} creado: ${safeAddress}`,
+      });
     } catch (e) {
       setStatus({ type: 'error', msg: `Error: ${e.message}` });
     } finally {
@@ -1130,9 +1257,6 @@ function SafeManager({ mode }) {
     }
   }
 
-  const hasAdminSafe = !!safeAddrs.admin;
-  const hasResolverSafe = !!safeAddrs.resolver;
-
   return (
     <div className="admin-card">
       <div className="admin-card-header">
@@ -1147,6 +1271,11 @@ function SafeManager({ mode }) {
             <option value={42161}>Arbitrum One</option>
           </select>
         </div>
+      </div>
+      <div className="admin-info-box" style={{ marginTop: 12 }}>
+        {isTestnetSafe
+          ? 'Testnet: usa un Safe 1/1 y guardalo como admin + resolver para poder probar rapido.'
+          : 'Mainnet: usa Safes separados, admin 3/5 y resolver 2/3.'}
       </div>
 
       {/* Current Safes */}
@@ -1172,8 +1301,8 @@ function SafeManager({ mode }) {
           <label>
             <span>Tipo</span>
             <select value={safeType} onChange={e => setSafeType(e.target.value)}>
-              {!hasAdminSafe && <option value="admin">Admin (3/5)</option>}
-              {!hasResolverSafe && <option value="resolver">Resolver (2/3)</option>}
+              {!hasAdminSafe && <option value="admin">{safeTypeOptionLabel(chainId, 'admin')}</option>}
+              {!hasResolverSafe && <option value="resolver">{safeTypeOptionLabel(chainId, 'resolver')}</option>}
             </select>
           </label>
           <label>
@@ -1217,9 +1346,9 @@ function SafeManager({ mode }) {
                 onBlur={e => {
                   const addr = e.target.value.trim();
                   if (addr && addr.startsWith('0x') && addr.length === 42) {
-                    setSafeAddresses(chainId, addr, safeAddrs.resolver);
+                    setSafeAddresses(chainId, addr, isTestnetSafe ? addr : safeAddrs.resolver);
                     setSafeAddrs(getSafeAddresses(chainId));
-                    setStatus({ type: 'success', msg: 'Admin Safe conectado' });
+                    setStatus({ type: 'success', msg: isTestnetSafe ? 'Safe testnet conectado como admin + resolver' : 'Admin Safe conectado' });
                   }
                 }}
                 style={{ fontFamily: 'var(--font-mono)', fontSize: 12, flex: 1, minWidth: 200 }}
@@ -1232,9 +1361,9 @@ function SafeManager({ mode }) {
                 onBlur={e => {
                   const addr = e.target.value.trim();
                   if (addr && addr.startsWith('0x') && addr.length === 42) {
-                    setSafeAddresses(chainId, safeAddrs.admin, addr);
+                    setSafeAddresses(chainId, isTestnetSafe ? addr : safeAddrs.admin, addr);
                     setSafeAddrs(getSafeAddresses(chainId));
-                    setStatus({ type: 'success', msg: 'Resolver Safe conectado' });
+                    setStatus({ type: 'success', msg: isTestnetSafe ? 'Safe testnet conectado como admin + resolver' : 'Resolver Safe conectado' });
                   }
                 }}
                 style={{ fontFamily: 'var(--font-mono)', fontSize: 12, flex: 1, minWidth: 200 }}
@@ -1559,7 +1688,7 @@ export default function Admin({ username, userIsAdmin, loading }) {
           <SafeManager mode={mode} />
           <FeeInfo mode={mode} />
           <ContractInfo mode={mode} />
-          <CreateMarketForm privyId={privyId} getAccessToken={getAccessToken} />
+          <CreateMarketForm mode={mode} privyId={privyId} getAccessToken={getAccessToken} />
           <MarketsList mode={mode} privyId={privyId} getAccessToken={getAccessToken} />
           <GeneratedMarketsReview privyId={privyId} getAccessToken={getAccessToken} />
         </div>

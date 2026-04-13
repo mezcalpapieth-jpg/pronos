@@ -9,10 +9,16 @@ import { ethers } from 'ethers';
  * from the MarketFactory and AMM contracts, writes to Neon PostgreSQL.
  *
  * Environment variables required:
- *   DATABASE_URL     — Neon PostgreSQL connection
- *   INDEXER_KEY      — Auth key for manual triggers
- *   ARB_RPC_URL      — Arbitrum RPC endpoint (Sepolia or mainnet)
- *   FACTORY_ADDRESS  — Deployed MarketFactory address
+ *   DATABASE_URL       — Neon PostgreSQL connection
+ *   INDEXER_KEY        — Auth key for manual triggers
+ *   FACTORY_ADDRESS    — Deployed MarketFactory address
+ *   ARB_RPC_URL        — Arbitrum RPC endpoint
+ *
+ * Supported aliases for Arbitrum Sepolia deployments:
+ *   PROTOCOL_CHAIN_ID / CHAIN_ID
+ *   PRONOS_FACTORY_ADDRESS / VITE_PRONOS_ARB_SEPOLIA_FACTORY
+ *   ARB_SEPOLIA_RPC / ARBITRUM_SEPOLIA_RPC_URL
+ *   INDEXER_START_BLOCK (optional; first run only)
  */
 
 const sql = neon(process.env.DATABASE_URL);
@@ -34,8 +40,36 @@ const AMM_ABI = [
   'function reserveNo() view returns (uint256)',
 ];
 
-const CHAIN_ID = parseInt(process.env.CHAIN_ID || '421614');
 const BLOCK_BATCH = 2000; // Process 2000 blocks at a time
+const CHAIN_ID = parseInteger(process.env.CHAIN_ID) || parseInteger(process.env.PROTOCOL_CHAIN_ID) || 421614;
+
+function parseInteger(value) {
+  const n = Number.parseInt(value, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function firstEnv(names) {
+  for (const name of names) {
+    const value = process.env[name];
+    if (value) return value;
+  }
+  return null;
+}
+
+function getIndexerConfig() {
+  const factoryAddress = firstEnv([
+    'FACTORY_ADDRESS',
+    'PRONOS_FACTORY_ADDRESS',
+    CHAIN_ID === 421614 ? 'VITE_PRONOS_ARB_SEPOLIA_FACTORY' : 'VITE_PRONOS_ARBITRUM_FACTORY',
+  ]);
+  const rpcUrl = firstEnv([
+    'ARB_RPC_URL',
+    CHAIN_ID === 421614 ? 'ARB_SEPOLIA_RPC' : 'ARB_MAINNET_RPC',
+    CHAIN_ID === 421614 ? 'ARBITRUM_SEPOLIA_RPC_URL' : 'ARBITRUM_RPC_URL',
+  ]);
+  const startBlock = parseInteger(process.env.INDEXER_START_BLOCK);
+  return { factoryAddress, rpcUrl, startBlock };
+}
 
 export default async function handler(req, res) {
   // Auth: Vercel Cron sends Authorization header, manual calls use ?key=
@@ -46,18 +80,17 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'Unauthorized' });
   }
 
-  const factoryAddress = process.env.FACTORY_ADDRESS;
-  const rpcUrl = process.env.ARB_RPC_URL;
+  const { factoryAddress, rpcUrl, startBlock } = getIndexerConfig();
 
   if (!factoryAddress || !rpcUrl) {
     return res.status(200).json({
       status: 'skipped',
-      reason: 'FACTORY_ADDRESS or ARB_RPC_URL not configured',
+      reason: 'MarketFactory address or Arbitrum RPC URL not configured',
     });
   }
 
   try {
-    const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+    const provider = new ethers.providers.StaticJsonRpcProvider(rpcUrl, CHAIN_ID);
     const factory = new ethers.Contract(factoryAddress, FACTORY_ABI, provider);
 
     // Get last indexed block
@@ -69,7 +102,7 @@ export default async function handler(req, res) {
     // If first run and no state, start from deploy block (or recent)
     if (fromBlock === 0) {
       const currentBlock = await provider.getBlockNumber();
-      fromBlock = Math.max(0, currentBlock - 10000); // Last ~10k blocks
+      fromBlock = startBlock != null ? startBlock : Math.max(0, currentBlock - 10000); // Last ~10k blocks
     }
 
     const currentBlock = await provider.getBlockNumber();
@@ -112,7 +145,9 @@ export default async function handler(req, res) {
     // ── Index trades from all known AMM pools ───────────────────────────────
     const pools = await sql`
       SELECT id, pool_address, market_id FROM protocol_markets
-      WHERE chain_id = ${CHAIN_ID} AND status = 'active'
+      WHERE chain_id = ${CHAIN_ID}
+        AND LOWER(factory_address) = LOWER(${factoryAddress})
+        AND status = 'active'
     `;
 
     for (const pool of pools) {

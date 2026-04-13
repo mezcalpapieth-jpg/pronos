@@ -234,7 +234,7 @@ const STRINGS = {
   'bet.protocolUnavailable':  { es: 'Este mercado del protocolo todavía no tiene pool o contratos configurados.',
                                 en: 'This protocol market does not have a configured pool or contracts yet.' },
   'bet.protocol.poly':        { es: 'Polymarket · Polygon', en: 'Polymarket · Polygon' },
-  'bet.protocol.own':         { es: 'Pronos Protocol · Arbitrum', en: 'Pronos Protocol · Arbitrum' },
+  'bet.protocol.own':         { es: 'Pronos Protocol · Arbitrum Sepolia', en: 'Pronos Protocol · Arbitrum Sepolia' },
 
   // ── MarketDetail ──────────────────────────────────────────────────────────
   'detail.loading':           { es: 'CARGANDO MERCADO…',    en: 'LOADING MARKET…' },

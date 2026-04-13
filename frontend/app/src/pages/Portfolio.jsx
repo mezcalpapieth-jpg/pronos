@@ -5,7 +5,7 @@ import Nav from '../components/Nav.jsx';
 import Footer from '../components/Footer.jsx';
 import { getClobPositions, getUsdcBalance } from '../lib/clob.js';
 import { ERC20_ABI, sellShares } from '../lib/contracts.js';
-import { CHAIN_IDS, CONTRACTS, getUsdcAddress } from '../lib/protocol.js';
+import { CHAIN_IDS, CONTRACTS, getUsdcAddress, switchWalletChain } from '../lib/protocol.js';
 import { useT } from '../lib/i18n.js';
 
 function formatTokenAmount(value) {
@@ -232,7 +232,7 @@ export default function Portfolio() {
       let network = await provider.getNetwork();
       if (network.chainId !== chainId) {
         setTradeStatus({ type: 'info', msg: t('pf.switchingChain') });
-        await wallet.switchChain(chainId);
+        await switchWalletChain(wallet, chainId);
         provider = new ethers.providers.Web3Provider(await wallet.getEthereumProvider());
       }
 

@@ -267,6 +267,44 @@ export async function redeemShares(signer, poolAddress, amount) {
 }
 
 /**
+ * Create a binary market on the Pronos protocol and seed its first liquidity.
+ * The MarketFactory pulls seed USDC from the admin, so approval goes to the
+ * factory before calling createMarket.
+ *
+ * @param {ethers.Signer} signer
+ * @param {number} chainId
+ * @param {{ question: string, category: string, endTime: number, resolutionSource: string, seedAmount: string }} market
+ * @returns {Promise<{ receipt: ethers.TransactionReceipt, marketId?: number, poolAddress?: string }>}
+ */
+export async function createProtocolMarket(signer, chainId, market) {
+  const { factory, usdc } = getProtocolContracts(signer, chainId);
+  const seedRaw = ethers.utils.parseUnits(String(market.seedAmount), 6);
+  const admin = await signer.getAddress();
+
+  const allowance = await usdc.allowance(admin, factory.address);
+  if (allowance.lt(seedRaw)) {
+    const approveTx = await usdc.approve(factory.address, ethers.constants.MaxUint256);
+    await approveTx.wait();
+  }
+
+  const tx = await factory.createMarket(
+    market.question,
+    market.category,
+    market.endTime,
+    market.resolutionSource,
+    seedRaw,
+  );
+  const receipt = await tx.wait();
+  const createdEvent = receipt.events?.find((event) => event.event === 'MarketCreated');
+
+  return {
+    receipt,
+    marketId: createdEvent?.args?.marketId?.toNumber?.(),
+    poolAddress: createdEvent?.args?.pool,
+  };
+}
+
+/**
  * Get all market info from the factory.
  * @param {ethers.Provider} provider
  * @param {string} factoryAddress

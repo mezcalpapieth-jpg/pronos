@@ -3,7 +3,7 @@ import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { ethers } from 'ethers';
 import { Link, useNavigate } from 'react-router-dom';
 import { POLYGON_CHAIN_ID } from '../lib/clob.js';
-import { getProtocolMode, getUsdcAddress, getRequiredChainId } from '../lib/protocol.js';
+import { getProtocolMode, getUsdcAddress, getRequiredChainId, getChainDisplayName, switchWalletChain } from '../lib/protocol.js';
 import MARKETS from '../lib/markets.js';
 import { useT, useLang, setLang } from '../lib/i18n.js';
 import { authFetch } from '../lib/apiAuth.js';
@@ -15,12 +15,6 @@ function getInitialTheme() {
 }
 
 const ERC20_ABI = ['function balanceOf(address) view returns (uint256)'];
-
-const CHAIN_NAMES = {
-  137: 'Polygon',
-  42161: 'Arbitrum',
-  421614: 'Arb Sepolia',
-};
 
 const isPublicMarkets = typeof window !== 'undefined' && window.location.pathname.startsWith('/markets');
 
@@ -119,7 +113,7 @@ export default function Nav() {
       const wallet = wallets?.[0];
       if (wallet) {
         const targetChain = e.detail === 'own' ? getRequiredChainId() : POLYGON_CHAIN_ID;
-        wallet.switchChain(targetChain).then(() => setChainId(targetChain)).catch(() => {});
+        switchWalletChain(wallet, targetChain).then(() => setChainId(targetChain)).catch(() => {});
       }
     };
     window.addEventListener('pronos-protocol-change', handler);
@@ -289,18 +283,18 @@ export default function Nav() {
                   {chainId && (() => {
                     const expectedChain = protocolMode === 'own' ? getRequiredChainId() : POLYGON_CHAIN_ID;
                     const wrongChain = chainId !== expectedChain;
-                    const targetName = protocolMode === 'own' ? 'Arbitrum' : 'Polygon';
+                    const targetName = getChainDisplayName(expectedChain);
                     return (
                       <div className="nav-dropdown-info">
                         <span className="nav-chain-dot" style={wrongChain ? { background: 'var(--red)' } : {}} />
-                        {CHAIN_NAMES[chainId] || `Chain ${chainId}`}
+                        {getChainDisplayName(chainId)}
                         {wrongChain && (
                           <button
                             className="nav-dropdown-switch"
                             onClick={async () => {
                               const w = wallets?.[0];
                               if (w) {
-                                await w.switchChain(expectedChain);
+                                await switchWalletChain(w, expectedChain);
                                 setChainId(expectedChain);
                               }
                             }}
