@@ -140,12 +140,37 @@ export function getRequiredChainId(testnet = true) {
   return CHAIN_IDS.polygon;
 }
 
-function normalizeWalletChainId(chainId) {
+export function normalizeWalletChainId(chainId) {
   if (typeof chainId === 'number') return chainId;
   if (typeof chainId !== 'string') return null;
   if (chainId.startsWith('eip155:')) return Number(chainId.slice('eip155:'.length));
   if (chainId.startsWith('0x')) return Number.parseInt(chainId, 16);
   return Number(chainId);
+}
+
+async function getProviderChainId(provider) {
+  if (!provider?.request) return null;
+  try {
+    return normalizeWalletChainId(await provider.request({ method: 'eth_chainId' }));
+  } catch {
+    return null;
+  }
+}
+
+async function waitForWalletProviderChain(wallet, chainId) {
+  for (let i = 0; i < 10; i++) {
+    const provider = await wallet.getEthereumProvider?.();
+    const providerChainId = await getProviderChainId(provider);
+    if (providerChainId === chainId) return true;
+
+    if (providerChainId == null) {
+      const walletChainId = normalizeWalletChainId(await wallet.getChainId?.());
+      if (walletChainId === chainId) return true;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 150));
+  }
+  return false;
 }
 
 function isUnknownChainError(err) {
@@ -164,20 +189,24 @@ function isUnknownChainError(err) {
  */
 export async function switchWalletChain(wallet, chainId) {
   const numericChainId = Number(chainId);
-  const currentChainId = normalizeWalletChainId(await wallet.getChainId?.());
+  let provider = await wallet.getEthereumProvider?.();
+  const currentChainId = (await getProviderChainId(provider)) ?? normalizeWalletChainId(await wallet.getChainId?.());
   if (currentChainId === numericChainId) return numericChainId;
 
   try {
     await wallet.switchChain(numericChainId);
-    return numericChainId;
+    if (await waitForWalletProviderChain(wallet, numericChainId)) return numericChainId;
   } catch (err) {
     if (!isUnknownChainError(err)) throw err;
   }
 
   const config = getChainConfig(numericChainId);
-  const provider = await wallet.getEthereumProvider?.();
+  provider = await wallet.getEthereumProvider?.();
   if (!config || !provider?.request) {
     await wallet.switchChain(numericChainId);
+    if (!(await waitForWalletProviderChain(wallet, numericChainId))) {
+      throw new Error(`La wallet no cambio a ${getChainDisplayName(numericChainId)}. Cambia la red manualmente y vuelve a intentar.`);
+    }
     return numericChainId;
   }
 
@@ -203,6 +232,10 @@ export async function switchWalletChain(wallet, chainId) {
       method: 'wallet_switchEthereumChain',
       params: [{ chainId: hexChainId }],
     });
+  }
+
+  if (!(await waitForWalletProviderChain(wallet, numericChainId))) {
+    throw new Error(`La wallet no cambio a ${getChainDisplayName(numericChainId)}. Cambia la red manualmente y vuelve a intentar.`);
   }
 
   return numericChainId;

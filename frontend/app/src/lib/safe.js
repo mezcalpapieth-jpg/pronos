@@ -118,8 +118,22 @@ export function getApiKit(chainId) {
  * @param {object} provider - EIP-1193 provider (from Privy wallet)
  * @param {string} safeAddress - The Safe address to connect to
  */
-export async function getSafeSDK(provider, safeAddress) {
+export async function getSafeSDK(provider, safeAddress, expectedChainId = null) {
   const ethersProvider = new ethers.providers.Web3Provider(provider);
+  const network = await ethersProvider.getNetwork();
+  const actualChainId = Number(network.chainId);
+  if (expectedChainId != null && actualChainId !== Number(expectedChainId)) {
+    const expectedName = CHAIN_CONFIG[Number(expectedChainId)]?.name || `chain ${expectedChainId}`;
+    const actualName = CHAIN_CONFIG[actualChainId]?.name || `chain ${actualChainId}`;
+    throw new Error(`Tu wallet esta en ${actualName}. Cambiala a ${expectedName} y vuelve a intentar.`);
+  }
+
+  const code = await ethersProvider.getCode(safeAddress);
+  if (!code || code === '0x') {
+    const chainName = CHAIN_CONFIG[actualChainId]?.name || `chain ${actualChainId}`;
+    throw new Error(`No encuentro el Safe ${safeAddress} desplegado en ${chainName}. Revisa la red y la direccion del Safe admin.`);
+  }
+
   const signer = ethersProvider.getSigner();
   const signerAddress = await signer.getAddress();
 
@@ -198,7 +212,7 @@ export async function proposeTransactions(provider, chainId, safeAddress, transa
   if (!Array.isArray(transactions) || transactions.length === 0) {
     throw new Error('Safe transaction batch is empty');
   }
-  const protocolKit = await getSafeSDK(provider, safeAddress);
+  const protocolKit = await getSafeSDK(provider, safeAddress, chainId);
   const apiKit = getApiKit(chainId);
 
   const ethersProvider = new ethers.providers.Web3Provider(provider);
@@ -235,7 +249,7 @@ export async function proposeTransactions(provider, chainId, safeAddress, transa
  * Add a confirmation signature to a pending Safe transaction.
  */
 export async function confirmTransaction(provider, chainId, safeAddress, safeTxHash) {
-  const protocolKit = await getSafeSDK(provider, safeAddress);
+  const protocolKit = await getSafeSDK(provider, safeAddress, chainId);
   const apiKit = getApiKit(chainId);
 
   const signature = await protocolKit.signHash(safeTxHash);
@@ -251,7 +265,7 @@ export async function confirmTransaction(provider, chainId, safeAddress, safeTxH
  * Execute a Safe transaction that has enough confirmations.
  */
 export async function executeTransaction(provider, chainId, safeAddress, safeTxHash) {
-  const protocolKit = await getSafeSDK(provider, safeAddress);
+  const protocolKit = await getSafeSDK(provider, safeAddress, chainId);
   const apiKit = getApiKit(chainId);
 
   const safeTransaction = await apiKit.getTransaction(safeTxHash);
