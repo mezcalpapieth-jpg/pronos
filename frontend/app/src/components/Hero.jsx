@@ -3,6 +3,7 @@ import { usePrivy } from '@privy-io/react-auth';
 import { useNavigate } from 'react-router-dom';
 import MARKETS from '../lib/markets.js';
 import { fetchResolutions } from '../lib/resolutions.js';
+import { fetchApprovedPolymarket } from '../lib/polymarketApproved.js';
 import { fetchPriceHistory, extractSeries } from '../lib/priceHistory.js';
 import { isExpired } from '../lib/deadline.js';
 import { useT, useLang, localizedTitle, localizedOptions } from '../lib/i18n.js';
@@ -17,22 +18,30 @@ export default function Hero() {
   const lang = useLang();
   const { authenticated, login } = usePrivy();
   const navigate = useNavigate();
-  const [featured, setFeatured] = useState(() =>
-    MARKETS.filter(m => m._source === 'polymarket' && m.trending && !m._resolved && !isExpired(m))
-  );
+  const [featured, setFeatured] = useState([]);
   const [active, setActive] = useState(0);
   const [history, setHistory] = useState({});
   const timerRef = useRef(null);
 
-  // Load resolutions and filter out resolved markets
+  // Load resolutions + approvals so the Hero only shows approved, unresolved,
+  // unexpired polymarket markets. Unapproved ones (like Sheinbaum before admin
+  // approves it) won't appear in the carousel.
   useEffect(() => {
-    fetchResolutions().then(resolutions => {
+    Promise.all([
+      fetchResolutions().catch(() => []),
+      fetchApprovedPolymarket().catch(() => []),
+    ]).then(([resolutions, approved]) => {
       const resolvedIds = new Set(resolutions.map(r => r.market_id));
-      const filtered = MARKETS.filter(m =>
-        m._source === 'polymarket' && m.trending && !m._resolved && !resolvedIds.has(m.id) && !isExpired(m)
-      );
+      const approvedSlugs = new Set(approved.map(a => a.slug));
+      const filtered = MARKETS.filter(m => {
+        if (!m.trending || m._resolved || isExpired(m)) return false;
+        if (resolvedIds.has(m.id)) return false;
+        // Polymarket markets require approval; local-only markets pass through
+        if (m._source === 'polymarket' && m._polyId) return approvedSlugs.has(m.id);
+        return true;
+      });
       if (filtered.length > 0) setFeatured(filtered);
-    }).catch(() => {});
+    });
   }, []);
 
   // Batch-fetch real CLOB price history for every featured market's clobTokenIds.

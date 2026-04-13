@@ -201,20 +201,27 @@ export default function Nav() {
         )}
       </div>
 
-      {!isPublicMarkets && (
-        <div className="nav-links">
-          <a href="#markets" onClick={e => {
-            const el = document.getElementById('markets');
-            if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth' }); }
-          }}>{t('nav.market')}</a>
-          <Link to="/portfolio">{t('nav.portfolio')}</Link>
-          <a href="#how-it-works" onClick={e => {
-            const el = document.getElementById('how-it-works');
-            if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth' }); }
-          }}>{t('nav.howItWorks')}</a>
-          {adminFlag && <Link to="/admin">{t('nav.admin')}</Link>}
-        </div>
-      )}
+      <div className="nav-links">
+        {isPublicMarkets ? (
+          <>
+            <a href="https://pronos.io">{t('nav.market')}</a>
+            <a href="https://pronos.io">{t('nav.howItWorks')}</a>
+          </>
+        ) : (
+          <>
+            <a href="#markets" onClick={e => {
+              const el = document.getElementById('markets');
+              if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth' }); }
+            }}>{t('nav.market')}</a>
+            <Link to="/portfolio">{t('nav.portfolio')}</Link>
+            <a href="#how-it-works" onClick={e => {
+              const el = document.getElementById('how-it-works');
+              if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth' }); }
+            }}>{t('nav.howItWorks')}</a>
+            {adminFlag && <Link to="/admin">{t('nav.admin')}</Link>}
+          </>
+        )}
+      </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         {/* Language toggle — flips ES ↔ EN, persists in localStorage */}
