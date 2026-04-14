@@ -427,4 +427,13 @@ const STRINGS = {
   'home.live':                { es: 'EN VIVO',              en: 'LIVE' },
   'home.subtitle':            { es: 'Predicciones en tiempo real de Polymarket + mercados locales.',
                                 en: 'Real-time predictions from Polymarket + local markets.' },
+
+  // ── Leaderboard ───────────────────────────────────────────────────────────
+  'lb.campaign':              { es: 'COMPETENCIA MXNP',     en: 'MXNP COMPETITION' },
+  'lb.cycle':                 { es: 'CICLO 1',              en: 'CYCLE 1' },
+  'lb.title':                 { es: 'MXNP POINTS',          en: 'MXNP POINTS' },
+  'lb.prize':                 { es: 'Premio: $500 USD · Top 10 sorpresas', en: 'Prize: $500 USD · Top 10 surprises' },
+  'lb.ends':                  { es: 'FIN DE CICLO',         en: 'CYCLE ENDS' },
+  'lb.demo':                  { es: 'DATOS DE DEMOSTRACIÓN', en: 'DEMO DATA' },
+  'lb.earn':                  { es: 'GANAR MXNP',           en: 'EARN MXNP' },
 };

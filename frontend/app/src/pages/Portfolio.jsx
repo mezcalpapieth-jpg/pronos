@@ -3,6 +3,7 @@ import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { ethers } from 'ethers';
 import Nav from '../components/Nav.jsx';
 import Footer from '../components/Footer.jsx';
+import EarnMXNP from '../components/EarnMXNP.jsx';
 import { getClobPositions, getUsdcBalance } from '../lib/clob.js';
 import { ERC20_ABI, sellShares } from '../lib/contracts.js';
 import { CHAIN_IDS, CONTRACTS, getUsdcAddress, switchWalletChain } from '../lib/protocol.js';
@@ -399,6 +400,9 @@ async function handleSellPosition(pos) {
                 ))}
               </div>
             )}
+
+            {/* ── Earn MXNP campaign section ── */}
+            <EarnMXNP address={address} />
           </>
         )}
       </main>

@@ -1092,3 +1092,29 @@ html[data-theme="dark"] .hfc-odd.no  { border-color: rgba(255,69,69,0.2); backgr
   .admin-actions { flex-direction: column; }
   .admin-market-title { max-width: 160px; }
 }
+
+/* ── Home: markets + leaderboard layout ────────────────────── */
+.home-markets-layout {
+  display: flex;
+  gap: 40px;
+  align-items: flex-start;
+}
+
+.home-leaderboard-col {
+  width: 340px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 80px;
+}
+
+/* Collapse leaderboard below markets on narrow viewports */
+@media (max-width: 1024px) {
+  .home-markets-layout {
+    flex-direction: column;
+  }
+  .home-leaderboard-col {
+    width: 100%;
+    position: static;
+    order: -1; /* show leaderboard above markets on mobile */
+  }
+}
