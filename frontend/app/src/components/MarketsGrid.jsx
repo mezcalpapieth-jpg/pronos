@@ -74,7 +74,7 @@ export default function MarketsGrid({ activeFilter }) {
           fetchGeneratedMarkets('approved').catch(() => []),
           fetchResolutions().catch(() => []),
           fetchApprovedPolymarket().catch(() => []),
-          protocolMode === 'own' ? fetchProtocolMarkets().catch(() => []) : Promise.resolve([]),
+          fetchProtocolMarkets().catch(() => []),
         ]);
 
         if (cancelled) return;
