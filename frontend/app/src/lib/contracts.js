@@ -280,6 +280,15 @@ export async function createProtocolMarket(signer, chainId, market) {
   const { factory, usdc } = getProtocolContracts(signer, chainId);
   const seedRaw = ethers.utils.parseUnits(String(market.seedAmount), 6);
   const admin = await signer.getAddress();
+  const owner = await factory.owner();
+  if (owner.toLowerCase() !== admin.toLowerCase()) {
+    throw new Error(`Esta wallet no es owner del MarketFactory. Conecta ${owner} o redeploya el protocolo con tu wallet como ADMIN_ADDRESS.`);
+  }
+
+  const balance = await usdc.balanceOf(admin);
+  if (balance.lt(seedRaw)) {
+    throw new Error(`Tu wallet admin tiene ${ethers.utils.formatUnits(balance, 6)} USDC. Necesitas al menos ${market.seedAmount} USDC en ${admin}.`);
+  }
 
   const allowance = await usdc.allowance(admin, factory.address);
   if (allowance.lt(seedRaw)) {

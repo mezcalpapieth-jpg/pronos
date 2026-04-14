@@ -1,49 +1,25 @@
 # Safe Multisig Setup Guide for Pronos
 
 ## Overview
-For testnet we keep operations simple. For mainnet we keep the stronger multisig split.
+For Arbitrum Sepolia testnet we keep operations simple and use the admin wallet directly. Safe UI does not support Arbitrum Sepolia as a hosted network, so the real Safe setup is reserved for Arbitrum One mainnet.
 
-## Testnet: Arbitrum Sepolia 1/1
+## Testnet: Arbitrum Sepolia EOA Admin
 
-Use one single-owner Safe and reuse the same address as both `ADMIN_SAFE` and `RESOLVER_SAFE`.
+Use the deployer/admin wallet as both `ADMIN_ADDRESS` and `RESOLVER_ADDRESS`.
 
-### Step 1: Create one testnet Safe
-
-1. Go to [Safe on Arbitrum Sepolia](https://app.safe.global/new-safe/create?chain=arbsep)
-2. Connect your wallet
-3. Add 1 owner address, your testnet admin wallet
-4. Set threshold to **1 of 1**
-5. Deploy the Safe
-6. Copy the Safe address
-7. Confirm the Safe is deployed on Arbitrum Sepolia before transferring any roles:
+### Step 1: Configure testnet admin
 
 ```bash
-cast code $TESTNET_SAFE --rpc-url $ARB_SEPOLIA_RPC
-# Must return contract bytecode, not: 0x
+export ADMIN_ADDRESS=0xa8eE70541d537389ed287d204efC5297569321d5
+export RESOLVER_ADDRESS=0xa8eE70541d537389ed287d204efC5297569321d5
 ```
 
-### Step 2: Transfer ownership and resolver role
+### Step 2: Deploy the Pronos contracts
 
-After deploying the Pronos contracts:
+Deploy with `DeployProtocol.s.sol`. The deploy script will transfer owner and resolver roles to the wallet above during deployment:
 
 ```bash
-# Set env vars
-export TESTNET_SAFE=0x...    # The 1/1 Safe address
-export ADMIN_SAFE=$TESTNET_SAFE
-export RESOLVER_SAFE=$TESTNET_SAFE
-export FACTORY=0x...         # MarketFactory address on Arbitrum Sepolia
-
-# Safety check: never transfer to an undeployed Safe.
-cast code $ADMIN_SAFE --rpc-url $ARB_SEPOLIA_RPC
-# Must return contract bytecode, not: 0x
-
-# Transfer factory ownership to Admin Safe
-cast send $FACTORY "transferOwnership(address)" $ADMIN_SAFE \
-  --rpc-url $ARB_SEPOLIA_RPC --private-key $DEPLOYER_PRIVATE_KEY
-
-# Set resolver to Resolver Safe
-cast send $FACTORY "setResolver(address)" $RESOLVER_SAFE \
-  --rpc-url $ARB_SEPOLIA_RPC --private-key $DEPLOYER_PRIVATE_KEY
+forge script script/DeployProtocol.s.sol --rpc-url arbitrum_sepolia --broadcast
 ```
 
 ### Step 3: Verify
@@ -51,21 +27,18 @@ cast send $FACTORY "setResolver(address)" $RESOLVER_SAFE \
 ```bash
 # Check owner
 cast call $FACTORY "owner()(address)" --rpc-url $ARB_SEPOLIA_RPC
-# Should return: $ADMIN_SAFE
+# Should return: 0xa8eE70541d537389ed287d204efC5297569321d5
 
 # Check resolver
 cast call $FACTORY "resolver()(address)" --rpc-url $ARB_SEPOLIA_RPC
-# Should return: $RESOLVER_SAFE
+# Should return: 0xa8eE70541d537389ed287d204efC5297569321d5
 ```
 
-### Step 4: Test Resolution Flow
+### Step 4: Test Market Creation
 
-1. Create a test market (via Admin Safe transaction in Safe UI)
-2. Go to Safe UI > New Transaction > Transaction Builder
-3. Enter MarketFactory address
-4. Call `resolveMarket(uint256 marketId, uint8 outcome)`
-5. The single testnet owner signs
-6. Execute transaction
+1. Add the new factory/token addresses to Vercel.
+2. Put testnet ETH and seed USDC in the admin wallet.
+3. Create markets from `/mvp/admin`; the wallet will approve USDC and call `createMarket` directly.
 
 ## Mainnet: Arbitrum One
 
@@ -84,7 +57,7 @@ Mainnet creation steps:
 6. Set the factory resolver to `RESOLVER_SAFE`
 
 ## Notes
-- Testnet: one 1/1 Safe is fine so we can move fast.
+- Testnet: use the direct admin wallet so we can move fast on Arbitrum Sepolia.
 - Mainnet: keep separate 3/5 admin and 2/3 resolver Safes.
 - Arbitrum Sepolia USDC: `0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d`
 - Arbitrum One USDC: `0xaf88d065e77c8cC2239327C5EDb3A432268e5831`

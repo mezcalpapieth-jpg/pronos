@@ -11,7 +11,7 @@ import {
   getContracts,
   switchWalletChain,
 } from '../lib/protocol.js';
-import { ERC20_ABI } from '../lib/contracts.js';
+import { createProtocolMarket } from '../lib/contracts.js';
 import { resolveMarket, fetchResolutions } from '../lib/resolutions.js';
 import { fetchGeneratedMarkets, updateGeneratedMarket, createGeneratedMarket } from '../lib/generatedMarkets.js';
 import { gmFetchMarkets } from '../lib/gamma.js';
@@ -30,9 +30,9 @@ import {
 } from '../lib/polymarketApproved.js';
 import {
   getSafeAddresses, setSafeAddresses,
-  createSafe, proposeTransaction, proposeTransactions, confirmTransaction, executeTransaction,
+  createSafe, proposeTransaction, confirmTransaction, executeTransaction,
   getPendingTransactions, getSafeInfo,
-  encodeResolveMarket, encodePauseMarket, encodeDistributeFees, encodeCreateMarket,
+  encodeResolveMarket, encodePauseMarket, encodeDistributeFees,
 } from '../lib/safe.js';
 
 const MARKET_CATEGORIES = [
@@ -127,13 +127,8 @@ function CreateMarketForm({ mode, privyId, getAccessToken }) {
         const seed = Number(seedLiquidity);
         const targetChain = CHAIN_IDS.arbitrumSepolia;
         const contracts = getContracts(targetChain);
-        const safeAddrs = getSafeAddresses(targetChain);
-        const safeAddress = safeAddrs.admin;
         if (!contracts?.factory || !contracts?.usdc) {
           throw new Error('Faltan VITE_PRONOS_ARB_SEPOLIA_FACTORY o VITE_PRONOS_ARB_SEPOLIA_USDC en Vercel.');
-        }
-        if (!safeAddress) {
-          throw new Error('Configura VITE_PRONOS_ARB_SEPOLIA_ADMIN_SAFE o conecta el Safe admin antes de crear mercados.');
         }
         if (!Number.isFinite(seed) || seed <= 0) {
           throw new Error('La liquidez inicial debe ser mayor a 0 USDC.');
@@ -141,37 +136,26 @@ function CreateMarketForm({ mode, privyId, getAccessToken }) {
         if (!resolutionSource.trim()) {
           throw new Error('Agrega una fuente de resolución antes de crear el mercado.');
         }
-        const seedRaw = ethers.utils.parseUnits(String(seedLiquidity), 6);
 
         const wallet = wallets?.[0];
         if (!wallet) throw new Error('Conecta una wallet admin primero.');
         setStatus({ type: 'info', msg: `Cambiando a ${getChainDisplayName(targetChain)}...` });
         await switchWalletChain(wallet, targetChain);
 
-        setStatus({ type: 'info', msg: `Proponiendo al Safe approve + createMarket por ${seedLiquidity} USDC...` });
+        setStatus({ type: 'info', msg: `Creando mercado con tu wallet admin por ${seedLiquidity} USDC...` });
         const ethereumProvider = await wallet.getEthereumProvider();
         const chainProvider = new ethers.providers.Web3Provider(ethereumProvider);
-        const usdc = new ethers.Contract(contracts.usdc, ERC20_ABI, chainProvider);
-        const safeBalance = await usdc.balanceOf(safeAddress);
-        if (safeBalance.lt(seedRaw)) {
-          throw new Error(`El Safe admin tiene ${ethers.utils.formatUnits(safeBalance, 6)} USDC. Envia al menos ${seedLiquidity} USDC al Safe ${safeAddress} y vuelve a intentar.`);
-        }
-        const usdcInterface = new ethers.utils.Interface(ERC20_ABI);
-        const approveData = usdcInterface.encodeFunctionData('approve', [contracts.factory, seedRaw]);
-        const createData = encodeCreateMarket(
-          question.trim(),
+        const signer = chainProvider.getSigner();
+        const { receipt, marketId, poolAddress } = await createProtocolMarket(signer, targetChain, {
+          question: question.trim(),
           category,
-          Math.floor(endTimeMs / 1000),
-          resolutionSource.trim(),
-          seedRaw,
-        );
-        const { safeTxHash } = await proposeTransactions(ethereumProvider, targetChain, safeAddress, [
-          { to: contracts.usdc, data: approveData, value: '0' },
-          { to: contracts.factory, data: createData, value: '0' },
-        ]);
+          endTime: Math.floor(endTimeMs / 1000),
+          resolutionSource: resolutionSource.trim(),
+          seedAmount: seedLiquidity,
+        });
         setStatus({
           type: 'success',
-          msg: `Transaccion propuesta al Safe: ${safeTxHash.slice(0, 10)}... Ejecutala en Safe Multisig. El Safe debe tener ${seedLiquidity} USDC; despues corre el indexer para verla en la grilla.`,
+          msg: `Mercado creado en testnet: market #${marketId ?? '?'}${poolAddress ? ` (${poolAddress.slice(0, 10)}...)` : ''}. Tx: ${receipt.transactionHash.slice(0, 10)}... Despues corre el indexer para verlo en la grilla.`,
         });
         setQuestion('');
         setEndDate('');
@@ -274,7 +258,7 @@ function CreateMarketForm({ mode, privyId, getAccessToken }) {
               />
             </label>
             <div className="admin-info-box">
-              Se propondra al Safe admin en {getChainDisplayName(CHAIN_IDS.arbitrumSepolia)}. La liquidez inicial debe estar en el Safe, no en tu wallet. El contrato propio v1 es binario: Si / No. Los mercados multi-opcion requieren un contrato v2 y redeploy.
+              Testnet usa tu wallet admin directamente en {getChainDisplayName(CHAIN_IDS.arbitrumSepolia)}. La liquidez inicial debe estar en tu wallet, no en un Safe. El contrato propio v1 es binario: Si / No. Los mercados multi-opcion requieren un contrato v2 y redeploy.
             </div>
           </>
         )}
@@ -1248,7 +1232,7 @@ function ContractInfo({ mode }) {
         </div>
       </div>
       <div className="admin-info-box">
-        <strong>Safe:</strong> Testnet usa 1/1. Mainnet mantiene 3/5 admin y 2/3 resolucion.
+        <strong>Testnet admin:</strong> Arbitrum Sepolia usa tu wallet directamente. Mainnet mantiene Safe 3/5 admin y 2/3 resolucion.
       </div>
     </div>
   );
@@ -1317,7 +1301,7 @@ function SafeManager({ mode }) {
   const hasResolverSafe = !!safeAddrs.resolver;
   const needsSafeConfig = !hasAdminSafe || !hasResolverSafe;
   const showCreateSafeForm = !isTestnetSafe && needsSafeConfig;
-  const showManualSafeConnect = needsSafeConfig;
+  const showManualSafeConnect = !isTestnetSafe && needsSafeConfig;
 
   useEffect(() => {
     setNewThreshold(defaultSafeThreshold(chainId, safeType));
@@ -1333,6 +1317,11 @@ function SafeManager({ mode }) {
     async function load() {
       const addrs = getSafeAddresses(chainId);
       setSafeAddrs(addrs);
+      if (chainId === CHAIN_IDS.arbitrumSepolia) {
+        setSafeInfoState({ admin: null, resolver: null });
+        setPending([]);
+        return;
+      }
       try {
         if (addrs.admin) {
           const info = await getSafeInfo(chainId, addrs.admin);
@@ -1377,9 +1366,7 @@ function SafeManager({ mode }) {
       setSafeAddrs(getSafeAddresses(chainId));
       setStatus({
         type: 'success',
-        msg: isTestnetSafe
-          ? `Safe testnet 1/1 creado y guardado como admin + resolver: ${safeAddress}`
-          : `Safe ${safeType} creado: ${safeAddress}`,
+        msg: `Safe ${safeType} creado: ${safeAddress}`,
       });
     } catch (e) {
       setStatus({ type: 'error', msg: `Error: ${e.message}` });
@@ -1451,25 +1438,38 @@ function SafeManager({ mode }) {
       </div>
       <div className="admin-info-box" style={{ marginTop: 12 }}>
         {isTestnetSafe
-          ? 'Testnet: usa un Safe 1/1 y guardalo como admin + resolver para poder probar rapido.'
+          ? 'Testnet: Safe esta desactivado para Arbitrum Sepolia. Usamos tu wallet admin directamente; mainnet mantiene multisig real.'
           : 'Mainnet: usa Safes separados, admin 3/5 y resolver 2/3.'}
       </div>
 
       {/* Current Safes */}
-      <div className="admin-contracts">
-        <div className="admin-contract-row">
-          <span className="contract-label">Admin Safe ({safeInfo.admin ? `${safeInfo.admin.threshold}/${safeInfo.admin.owners?.length}` : '—'})</span>
-          <code className="contract-addr">
-            {hasAdminSafe ? `${safeAddrs.admin.slice(0, 6)}...${safeAddrs.admin.slice(-4)}` : 'No configurado'}
-          </code>
+      {isTestnetSafe ? (
+        <div className="admin-contracts">
+          <div className="admin-contract-row">
+            <span className="contract-label">Admin testnet</span>
+            <code className="contract-addr">Wallet conectada</code>
+          </div>
+          <div className="admin-contract-row">
+            <span className="contract-label">Safe</span>
+            <code className="contract-addr">Reservado para mainnet</code>
+          </div>
         </div>
-        <div className="admin-contract-row">
-          <span className="contract-label">Resolver Safe ({safeInfo.resolver ? `${safeInfo.resolver.threshold}/${safeInfo.resolver.owners?.length}` : '—'})</span>
-          <code className="contract-addr">
-            {hasResolverSafe ? `${safeAddrs.resolver.slice(0, 6)}...${safeAddrs.resolver.slice(-4)}` : 'No configurado'}
-          </code>
+      ) : (
+        <div className="admin-contracts">
+          <div className="admin-contract-row">
+            <span className="contract-label">Admin Safe ({safeInfo.admin ? `${safeInfo.admin.threshold}/${safeInfo.admin.owners?.length}` : '—'})</span>
+            <code className="contract-addr">
+              {hasAdminSafe ? `${safeAddrs.admin.slice(0, 6)}...${safeAddrs.admin.slice(-4)}` : 'No configurado'}
+            </code>
+          </div>
+          <div className="admin-contract-row">
+            <span className="contract-label">Resolver Safe ({safeInfo.resolver ? `${safeInfo.resolver.threshold}/${safeInfo.resolver.owners?.length}` : '—'})</span>
+            <code className="contract-addr">
+              {hasResolverSafe ? `${safeAddrs.resolver.slice(0, 6)}...${safeAddrs.resolver.slice(-4)}` : 'No configurado'}
+            </code>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Create Safe form */}
       {showCreateSafeForm && (
@@ -1515,20 +1515,18 @@ function SafeManager({ mode }) {
       {showManualSafeConnect && (
         <div style={{ marginTop: 12, padding: '12px 0', borderTop: '1px solid var(--border)' }}>
           <p style={{ fontSize: 12, opacity: 0.6, marginBottom: 8 }}>
-            {isTestnetSafe
-              ? 'Conecta tu Safe testnet 1/1 existente:'
-              : 'O conecta un Safe existente:'}
+            O conecta un Safe existente:
           </p>
           {isTestnetSafe ? (
             <input
               type="text"
-              placeholder="Safe testnet 1/1 address (0x...)"
+              placeholder="Safe address (0x...)"
               onBlur={e => {
                 const addr = e.target.value.trim();
                 if (addr && addr.startsWith('0x') && addr.length === 42) {
                   setSafeAddresses(chainId, addr, addr);
                   setSafeAddrs(getSafeAddresses(chainId));
-                  setStatus({ type: 'success', msg: 'Safe testnet conectado como admin + resolver' });
+                  setStatus({ type: 'success', msg: 'Safe conectado como admin + resolver' });
                 }
               }}
               style={{ fontFamily: 'var(--font-mono)', fontSize: 12, width: '100%' }}
@@ -1544,7 +1542,7 @@ function SafeManager({ mode }) {
                   if (addr && addr.startsWith('0x') && addr.length === 42) {
                     setSafeAddresses(chainId, addr, isTestnetSafe ? addr : safeAddrs.resolver);
                     setSafeAddrs(getSafeAddresses(chainId));
-                    setStatus({ type: 'success', msg: isTestnetSafe ? 'Safe testnet conectado como admin + resolver' : 'Admin Safe conectado' });
+                    setStatus({ type: 'success', msg: 'Admin Safe conectado' });
                   }
                 }}
                 style={{ fontFamily: 'var(--font-mono)', fontSize: 12, flex: 1, minWidth: 200 }}
@@ -1559,7 +1557,7 @@ function SafeManager({ mode }) {
                   if (addr && addr.startsWith('0x') && addr.length === 42) {
                     setSafeAddresses(chainId, isTestnetSafe ? addr : safeAddrs.admin, addr);
                     setSafeAddrs(getSafeAddresses(chainId));
-                    setStatus({ type: 'success', msg: isTestnetSafe ? 'Safe testnet conectado como admin + resolver' : 'Resolver Safe conectado' });
+                    setStatus({ type: 'success', msg: 'Resolver Safe conectado' });
                   }
                 }}
                 style={{ fontFamily: 'var(--font-mono)', fontSize: 12, flex: 1, minWidth: 200 }}
@@ -1571,7 +1569,7 @@ function SafeManager({ mode }) {
       )}
 
       {/* Quick actions */}
-      {hasAdminSafe && mode === 'own' && (
+      {!isTestnetSafe && hasAdminSafe && mode === 'own' && (
         <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn-admin-sm" onClick={handleDistributeFees}>
             Distribuir fees
@@ -1580,7 +1578,7 @@ function SafeManager({ mode }) {
       )}
 
       {/* Pending transactions */}
-      {pending.length > 0 && (
+      {!isTestnetSafe && pending.length > 0 && (
         <div style={{ marginTop: 16 }}>
           <h4>Transacciones pendientes ({pending.length})</h4>
           {pending.map(tx => (

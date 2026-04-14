@@ -21,8 +21,10 @@ import {MarketFactory} from "../src/MarketFactory.sol";
  *
  * Optional env vars:
  *   FEE_COLLECTOR_ADDRESS - Wallet that receives fees upfront (defaults to treasury)
- *   ADMIN_SAFE_ADDRESS    - If set, ownership transfers to this Safe during deploy
- *   RESOLVER_SAFE_ADDRESS - If set, resolver role transfers to this Safe during deploy
+ *   ADMIN_ADDRESS         - If set, ownership transfers to this address during deploy
+ *   RESOLVER_ADDRESS      - If set, resolver role transfers to this address during deploy
+ *   ADMIN_SAFE_ADDRESS    - Mainnet-safe alias for ADMIN_ADDRESS; must be deployed
+ *   RESOLVER_SAFE_ADDRESS - Mainnet-safe alias for RESOLVER_ADDRESS; must be deployed
  */
 contract DeployProtocol is Script {
     function run() external {
@@ -32,16 +34,25 @@ contract DeployProtocol is Script {
         address liquidityReserve = vm.envAddress("LIQUIDITY_RESERVE");
         address emergencyReserve = vm.envAddress("EMERGENCY_RESERVE");
         address feeCollector = vm.envOr("FEE_COLLECTOR_ADDRESS", treasury);
+        address adminAddress = vm.envOr("ADMIN_ADDRESS", address(0));
+        address resolverAddress = vm.envOr("RESOLVER_ADDRESS", address(0));
         address adminSafe = vm.envOr("ADMIN_SAFE_ADDRESS", address(0));
         address resolverSafe = vm.envOr("RESOLVER_SAFE_ADDRESS", address(0));
+
+        if (adminAddress == address(0) && adminSafe != address(0)) {
+            requireDeployed("ADMIN_SAFE_ADDRESS", adminSafe);
+            adminAddress = adminSafe;
+        }
+
+        if (resolverAddress == address(0) && resolverSafe != address(0)) {
+            requireDeployed("RESOLVER_SAFE_ADDRESS", resolverSafe);
+            resolverAddress = resolverSafe;
+        }
 
         console.log("=== Deploying Pronos Protocol ===");
         console.log("USDC:", usdc);
         console.log("Treasury:", treasury);
         console.log("Fee collector:", feeCollector);
-
-        requireSafeDeployed("ADMIN_SAFE_ADDRESS", adminSafe);
-        requireSafeDeployed("RESOLVER_SAFE_ADDRESS", resolverSafe);
 
         vm.startBroadcast(deployerKey);
 
@@ -64,14 +75,14 @@ contract DeployProtocol is Script {
             console.log("Fee collector updated:", feeCollector);
         }
 
-        if (resolverSafe != address(0)) {
-            factory.setResolver(resolverSafe);
-            console.log("Resolver transferred to Safe:", resolverSafe);
+        if (resolverAddress != address(0)) {
+            factory.setResolver(resolverAddress);
+            console.log("Resolver transferred to:", resolverAddress);
         }
 
-        if (adminSafe != address(0)) {
-            factory.transferOwnership(adminSafe);
-            console.log("Factory ownership transferred to Safe:", adminSafe);
+        if (adminAddress != address(0)) {
+            factory.transferOwnership(adminAddress);
+            console.log("Factory ownership transferred to:", adminAddress);
         }
 
         vm.stopBroadcast();
@@ -89,8 +100,7 @@ contract DeployProtocol is Script {
         console.log("  3. Create first market with seed liquidity from /mvp/admin");
     }
 
-    function requireSafeDeployed(string memory label, address safe) internal view {
-        if (safe == address(0)) return;
-        require(safe.code.length > 0, string.concat(label, " is not deployed on this chain"));
+    function requireDeployed(string memory label, address account) internal view {
+        require(account.code.length > 0, string.concat(label, " is not deployed on this chain"));
     }
 }
