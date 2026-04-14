@@ -46,8 +46,12 @@ export function protocolRouteIdToDbId(id) {
   return match ? match[1] : null;
 }
 
-export async function fetchProtocolMarkets({ status = 'active' } = {}) {
-  const q = new URLSearchParams({ status });
+export async function fetchProtocolMarkets({ status = 'active', category, limit, offset } = {}) {
+  const q = new URLSearchParams();
+  if (status) q.set('status', status);
+  if (category) q.set('category', category);
+  if (limit != null) q.set('limit', String(limit));
+  if (offset != null) q.set('offset', String(offset));
   const res = await fetch(`/api/markets?${q.toString()}`);
   if (!res.ok) return [];
   const data = await res.json();
@@ -65,7 +69,7 @@ export async function fetchProtocolMarket(routeId) {
 
   // If the detail endpoint lags or is misconfigured, fall back to the list
   // endpoint so a card that appears in the grid can still open.
-  const markets = await fetchProtocolMarkets({ status: 'active' }).catch(() => []);
+  const markets = await fetchProtocolMarkets({ status: 'all' }).catch(() => []);
   return markets.find(m => String(m.protocolDbId) === String(dbId)) || null;
 }
 

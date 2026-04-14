@@ -50,7 +50,7 @@ export default async function handler(req, res) {
   try {
     // Fetch market
     const marketRows = await sql`
-      SELECT * FROM protocol_markets WHERE id = ${marketId} AND status <> 'removed'
+      SELECT * FROM protocol_markets WHERE id = ${marketId} AND COALESCE(status, 'active') <> 'removed'
     `;
     if (marketRows.length === 0) {
       return res.status(404).json({ error: 'Market not found' });

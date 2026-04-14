@@ -5,6 +5,7 @@ import { applyCors } from './_lib/cors.js';
  * /api/markets — List all markets (own protocol).
  *
  * GET /api/markets                  → all active markets
+ * GET /api/markets?status=all       → all non-removed markets (admin)
  * GET /api/markets?status=resolved  → resolved markets
  * GET /api/markets?category=deporte → filter by category
  * GET /api/markets?limit=20&offset=0
@@ -30,10 +31,12 @@ export default async function handler(req, res) {
 
     const lim = Math.min(parseInt(limit) || 50, 100);
     const off = parseInt(offset) || 0;
+    const statusFilter = String(status || 'active');
+    const includeAllStatuses = statusFilter === 'all' || statusFilter === 'admin';
 
     let rows;
 
-    if (category) {
+    if (category && includeAllStatuses) {
       rows = await sql`
         SELECT m.*,
           (SELECT json_build_object('yes_price', yes_price, 'no_price', no_price, 'prices', prices, 'volume_24h', volume_24h, 'liquidity', liquidity)
@@ -41,7 +44,31 @@ export default async function handler(req, res) {
           ) as latest_price,
           (SELECT COALESCE(SUM(collateral_amt), 0) FROM trades t WHERE t.market_id = m.id) as total_volume
         FROM protocol_markets m
-        WHERE m.status = ${status} AND m.category = ${category}
+        WHERE COALESCE(m.status, 'active') <> 'removed' AND m.category = ${category}
+        ORDER BY m.created_at DESC
+        LIMIT ${lim} OFFSET ${off}
+      `;
+    } else if (category) {
+      rows = await sql`
+        SELECT m.*,
+          (SELECT json_build_object('yes_price', yes_price, 'no_price', no_price, 'prices', prices, 'volume_24h', volume_24h, 'liquidity', liquidity)
+           FROM price_snapshots ps WHERE ps.market_id = m.id ORDER BY ps.snapshot_at DESC LIMIT 1
+          ) as latest_price,
+          (SELECT COALESCE(SUM(collateral_amt), 0) FROM trades t WHERE t.market_id = m.id) as total_volume
+        FROM protocol_markets m
+        WHERE m.status = ${statusFilter} AND m.category = ${category}
+        ORDER BY m.created_at DESC
+        LIMIT ${lim} OFFSET ${off}
+      `;
+    } else if (includeAllStatuses) {
+      rows = await sql`
+        SELECT m.*,
+          (SELECT json_build_object('yes_price', yes_price, 'no_price', no_price, 'prices', prices, 'volume_24h', volume_24h, 'liquidity', liquidity)
+           FROM price_snapshots ps WHERE ps.market_id = m.id ORDER BY ps.snapshot_at DESC LIMIT 1
+          ) as latest_price,
+          (SELECT COALESCE(SUM(collateral_amt), 0) FROM trades t WHERE t.market_id = m.id) as total_volume
+        FROM protocol_markets m
+        WHERE COALESCE(m.status, 'active') <> 'removed'
         ORDER BY m.created_at DESC
         LIMIT ${lim} OFFSET ${off}
       `;
@@ -53,16 +80,23 @@ export default async function handler(req, res) {
           ) as latest_price,
           (SELECT COALESCE(SUM(collateral_amt), 0) FROM trades t WHERE t.market_id = m.id) as total_volume
         FROM protocol_markets m
-        WHERE m.status = ${status}
+        WHERE m.status = ${statusFilter}
         ORDER BY m.created_at DESC
         LIMIT ${lim} OFFSET ${off}
       `;
     }
 
     // Get total count
-    const countResult = category
-      ? await sql`SELECT COUNT(*) as total FROM protocol_markets WHERE status = ${status} AND category = ${category}`
-      : await sql`SELECT COUNT(*) as total FROM protocol_markets WHERE status = ${status}`;
+    let countResult;
+    if (category && includeAllStatuses) {
+      countResult = await sql`SELECT COUNT(*) as total FROM protocol_markets WHERE COALESCE(status, 'active') <> 'removed' AND category = ${category}`;
+    } else if (category) {
+      countResult = await sql`SELECT COUNT(*) as total FROM protocol_markets WHERE status = ${statusFilter} AND category = ${category}`;
+    } else if (includeAllStatuses) {
+      countResult = await sql`SELECT COUNT(*) as total FROM protocol_markets WHERE COALESCE(status, 'active') <> 'removed'`;
+    } else {
+      countResult = await sql`SELECT COUNT(*) as total FROM protocol_markets WHERE status = ${statusFilter}`;
+    }
 
     return res.status(200).json({
       markets: rows.map(formatMarket),

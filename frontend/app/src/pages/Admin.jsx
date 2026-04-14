@@ -14,7 +14,7 @@ import {
 import { createProtocolMarket } from '../lib/contracts.js';
 import { resolveMarket, fetchResolutions } from '../lib/resolutions.js';
 import { fetchGeneratedMarkets, updateGeneratedMarket, createGeneratedMarket } from '../lib/generatedMarkets.js';
-import { gmFetchMarkets } from '../lib/gamma.js';
+import { gmFetchMarkets, gmFetchMarketsBySlugs } from '../lib/gamma.js';
 import { resolveEndDate, isExpired } from '../lib/deadline.js';
 import { useT } from '../lib/i18n.js';
 import { fetchProtocolMarkets, removeProtocolMarket } from '../lib/protocolMarkets.js';
@@ -454,7 +454,7 @@ function classifyMarket(market, resolution, approvedSet) {
   // Unapproved Polymarket markets ALWAYS go to the Pending tab, even if
   // they've expired or closed — the admin must approve them first before
   // they move to open/closed/resolved.
-  const isPoly = market?._source === 'polymarket' && market?._polyId;
+  const isPoly = isPolymarketMarket(market);
   if (isPoly && approvedSet && !approvedSet.has(polymarketApprovalKey(market))) return 'pending';
   if (resolution && isPendingResolution(resolution)) return 'closed';
   if (market?._polymarketClosed) return 'closed';
@@ -508,12 +508,47 @@ function needsSpanishTranslation(row) {
   return !row.title_es || !hasSpanishOptions(row);
 }
 
+function isPolymarketMarket(market) {
+  return market?._source === 'polymarket' && market?._polyId;
+}
+
+function isProtocolMarket(market) {
+  return market?.source === 'protocol' || market?._source === 'protocol';
+}
+
 function removableMarketKey(market) {
   if (!market) return null;
-  if (market._source === 'polymarket' && market._polyId) return `poly:${polymarketApprovalKey(market)}`;
-  if (market.source === 'protocol' && market.protocolDbId) return `protocol:${market.protocolDbId}`;
+  if (isPolymarketMarket(market)) return `poly:${polymarketApprovalKey(market)}`;
+  if (isProtocolMarket(market) && market.protocolDbId) return `protocol:${market.protocolDbId}`;
   if (market._source === 'ai' && market._dbId) return `ai:${market._dbId}`;
   return null;
+}
+
+async function includePersistedAdminPolymarkets(liveMarkets, decisionRows) {
+  const live = Array.isArray(liveMarkets) ? liveMarkets : [];
+  const output = [];
+  const seenSlugs = new Set();
+
+  for (const market of live) {
+    const slug = polymarketApprovalKey(market);
+    if (slug) seenSlugs.add(slug);
+    output.push(market);
+  }
+
+  const missingSlugs = Array.from(new Set((decisionRows || [])
+    .filter(row => row?.slug && (row.status === 'approved' || row.status === 'pending') && !seenSlugs.has(row.slug))
+    .map(row => row.slug)));
+
+  if (missingSlugs.length === 0) return output;
+
+  const restored = await gmFetchMarketsBySlugs(missingSlugs, { relevantOnly: false }).catch(() => []);
+  for (const market of restored) {
+    const slug = polymarketApprovalKey(market);
+    if (!slug || seenSlugs.has(slug)) continue;
+    seenSlugs.add(slug);
+    output.push(market);
+  }
+  return output;
 }
 
 function MarketsList({ mode, privyId, getAccessToken }) {
@@ -524,7 +559,7 @@ function MarketsList({ mode, privyId, getAccessToken }) {
   const [decisions, setDecisions] = useState([]);       // polymarket approved + rejected rows
   const [resolveTarget, setResolveTarget] = useState(null);
   const [tab, setTab] = useState('pending');             // pending | open | closed | resolved
-  const [sourceFilter, setSourceFilter] = useState('all'); // all | local | polymarket
+  const [sourceFilter, setSourceFilter] = useState('all'); // all | local | protocol | polymarket
   const [autoResolveBusy, setAutoResolveBusy] = useState(false);
   const [autoResolveStatus, setAutoResolveStatus] = useState(null);
   const [approvalBusy, setApprovalBusy] = useState(null); // slug currently being approved/rejected/revoked
@@ -539,18 +574,18 @@ function MarketsList({ mode, privyId, getAccessToken }) {
     setLoading(true);
     // Fetch every source the admin can possibly care about, in parallel:
     //   - hardcoded local markets (catalog backbone)
-    //   - live OPEN Polymarket markets only (no closed ones — those belong
-    //     in closed/resolved tabs only if they were already approved)
+    //   - live OPEN Polymarket markets plus saved pending/approved slugs
+    //     restored by slug so refreshes/redeploys do not hide admin decisions
     //   - market_resolutions DB rows (the source of truth for "resolved")
-    //   - polymarket_approved DB rows (both approved AND rejected so we can
-    //     hide rejected markets from the queue)
+    //   - polymarket_approved DB rows (pending, approved, and rejected)
     const [liveOpen, generated, resos, decisionRows, protocolMkts] = await Promise.all([
       gmFetchMarkets({ limit: 100 }).catch(() => []),
       fetchGeneratedMarkets('approved').catch(() => []),
       fetchResolutions().catch(() => []),
       fetchAllPolymarketDecisions(privyId, getAccessToken).catch(() => []),
-      fetchProtocolMarkets().catch(() => []),
+      fetchProtocolMarkets({ status: 'all', limit: 100 }).catch(() => []),
     ]);
+    const liveWithPersisted = await includePersistedAdminPolymarkets(liveOpen, decisionRows);
     const local = MARKETS;
 
     // Dedupe by slug/id. Live data wins over hardcoded; generated (admin-created)
@@ -559,7 +594,7 @@ function MarketsList({ mode, privyId, getAccessToken }) {
     for (const m of local)        map.set(m.id, m);
     for (const m of generated)    map.set(m.id, m);
     for (const m of protocolMkts) map.set(m.id, m);
-    for (const m of liveOpen)     map.set(m.id, { ...map.get(m.id), ...m });
+    for (const m of liveWithPersisted) map.set(m.id, { ...map.get(m.id), ...m });
 
     const all = Array.from(map.values());
     setMarkets(all);
@@ -586,7 +621,7 @@ function MarketsList({ mode, privyId, getAccessToken }) {
     const polyMarkets = allMarkets
       .filter(m => {
         const slug = polymarketApprovalKey(m);
-        return m._source === 'polymarket' && m._polyId && m.title && slug && needsSpanishTranslation(decisionsBySlug.get(slug));
+        return isPolymarketMarket(m) && m.title && slug && needsSpanishTranslation(decisionsBySlug.get(slug));
       })
       .map(m => ({ slug: polymarketApprovalKey(m), eventSlug: m._eventSlug, title: m.title, options: m.options }));
     if (polyMarkets.length === 0) {
@@ -704,8 +739,8 @@ function MarketsList({ mode, privyId, getAccessToken }) {
     const key = removableMarketKey(market);
     if (!key) return;
 
-    const isPoly = market._source === 'polymarket' && market._polyId;
-    const isProtocol = market.source === 'protocol' && market.protocolDbId;
+    const isPoly = isPolymarketMarket(market);
+    const isProtocol = isProtocolMarket(market) && market.protocolDbId;
     const isGenerated = market._source === 'ai' && market._dbId;
     const slug = isPoly ? polymarketApprovalKey(market) : null;
 
@@ -848,8 +883,10 @@ function MarketsList({ mode, privyId, getAccessToken }) {
   const inTab = annotated.filter(({ status }) => status === tab);
   const filtered = inTab.filter(({ market: m }) => {
     if (sourceFilter === 'all') return true;
-    const isPoly = m._source === 'polymarket' && m._polyId;
-    if (sourceFilter === 'local') return !isPoly;
+    const isPoly = isPolymarketMarket(m);
+    const isProtocol = isProtocolMarket(m);
+    if (sourceFilter === 'local') return !isPoly && !isProtocol;
+    if (sourceFilter === 'protocol') return isProtocol;
     if (sourceFilter === 'polymarket') return isPoly;
     return true;
   });
@@ -873,8 +910,9 @@ function MarketsList({ mode, privyId, getAccessToken }) {
 
   const sourceCounts = {
     all: inTab.length,
-    polymarket: inTab.filter(({ market: m }) => m._source === 'polymarket' && m._polyId).length,
-    local: inTab.filter(({ market: m }) => !(m._source === 'polymarket' && m._polyId)).length,
+    polymarket: inTab.filter(({ market: m }) => isPolymarketMarket(m)).length,
+    protocol: inTab.filter(({ market: m }) => isProtocolMarket(m)).length,
+    local: inTab.filter(({ market: m }) => !isPolymarketMarket(m) && !isProtocolMarket(m)).length,
   };
 
   // pendingApprovalCount is now just tabCounts.pending — shown in the tab label.
@@ -949,11 +987,12 @@ function MarketsList({ mode, privyId, getAccessToken }) {
         ))}
       </div>
 
-      {/* Source filter — admins can flip between live Polymarket and local */}
+      {/* Source filter — admins can flip between Polymarket, protocol, and local */}
       <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>
         {[
           { key: 'all',        label: `${t('admin.all')} (${sourceCounts.all})` },
           { key: 'polymarket', label: `Polymarket (${sourceCounts.polymarket})` },
+          { key: 'protocol',   label: `Protocol (${sourceCounts.protocol})` },
           { key: 'local',      label: `${t('admin.local')} (${sourceCounts.local})` },
         ].map(f => (
           <button
@@ -988,7 +1027,8 @@ function MarketsList({ mode, privyId, getAccessToken }) {
               </tr>
             )}
             {filtered.map(({ market: m, resolution: r, status }, i) => {
-              const isPoly = m._source === 'polymarket' && m._polyId;
+              const isPoly = isPolymarketMarket(m);
+              const isProtocol = isProtocolMarket(m);
               const polySlug = isPoly ? polymarketApprovalKey(m) : null;
               const statusBadge = (
                 status === 'resolved' ? { cls: 'badge-resolved', label: t('detail.resolved') } :
@@ -1120,7 +1160,7 @@ function MarketsList({ mode, privyId, getAccessToken }) {
                   </td>
                   <td>
                     <span className={`admin-badge ${isPoly ? 'badge-poly' : 'badge-own'}`}>
-                      {isPoly ? 'Polymarket' : 'Local'}
+                      {isPoly ? 'Polymarket' : isProtocol ? 'Protocol' : 'Local'}
                     </span>
                     {isPoly && (
                       <div style={{ marginTop: 4 }}>
