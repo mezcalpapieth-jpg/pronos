@@ -25,6 +25,7 @@ import {
   rejectPolymarketMarket,
   unapprovePolymarketMarket,
   bulkTranslatePolymarket,
+  editPolymarketTranslation,
   polymarketApprovalKey,
 } from '../lib/polymarketApproved.js';
 import {
@@ -533,6 +534,9 @@ function MarketsList({ mode, privyId, getAccessToken }) {
   const [approvalBusy, setApprovalBusy] = useState(null); // slug currently being approved/rejected/revoked
   const [removeConfirmKey, setRemoveConfirmKey] = useState(null);
   const [removeBusyKey, setRemoveBusyKey] = useState(null);
+  const [editingSlug, setEditingSlug] = useState(null);     // slug being edited
+  const [editValue, setEditValue] = useState('');            // current input value
+  const [editBusy, setEditBusy] = useState(false);
   const [translateStatus, setTranslateStatus] = useState(null); // { busy, translated, remaining }
 
   async function load() {
@@ -730,6 +734,21 @@ function MarketsList({ mode, privyId, getAccessToken }) {
     } finally {
       setRemoveBusyKey(null);
       if (slug) setApprovalBusy(null);
+    }
+  }
+
+  async function handleEditTranslation(slug) {
+    if (!privyId || !editValue.trim()) return;
+    setEditBusy(true);
+    try {
+      const row = await editPolymarketTranslation(privyId, { slug, title_es: editValue.trim(), getAccessToken });
+      setDecisions(prev => prev.map(d => d.slug === slug ? { ...d, title_es: row.title_es } : d));
+      setEditingSlug(null);
+      setEditValue('');
+    } catch (e) {
+      alert('Error: ' + e.message);
+    } finally {
+      setEditBusy(false);
     }
   }
 
@@ -1025,9 +1044,59 @@ function MarketsList({ mode, privyId, getAccessToken }) {
               return (
                 <tr key={m.id || i}>
                   <td className="admin-market-title">
-                    {titleEs ? (
+                    {editingSlug === polySlug ? (
+                      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          value={editValue}
+                          onChange={e => setEditValue(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') handleEditTranslation(polySlug);
+                            if (e.key === 'Escape') { setEditingSlug(null); setEditValue(''); }
+                          }}
+                          autoFocus
+                          style={{
+                            flex: 1, padding: '6px 8px', fontSize: 12,
+                            background: 'var(--surface2)', border: '1px solid var(--border)',
+                            borderRadius: 4, color: 'var(--text-primary)',
+                            fontFamily: 'var(--font-body)',
+                          }}
+                        />
+                        <button
+                          className="btn-admin-sm btn-admin-resolve"
+                          disabled={editBusy}
+                          onClick={() => handleEditTranslation(polySlug)}
+                          style={{ padding: '4px 8px', fontSize: 11 }}
+                        >
+                          {editBusy ? '…' : '✓'}
+                        </button>
+                        <button
+                          className="btn-admin-sm"
+                          disabled={editBusy}
+                          onClick={() => { setEditingSlug(null); setEditValue(''); }}
+                          style={{ padding: '4px 8px', fontSize: 11 }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : titleEs ? (
                       <>
-                        <div>{titleEs}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span>{titleEs}</span>
+                          {isPoly && polySlug && (
+                            <button
+                              onClick={() => { setEditingSlug(polySlug); setEditValue(titleEs); }}
+                              style={{
+                                background: 'none', border: 'none', cursor: 'pointer',
+                                color: 'var(--text-muted)', fontSize: 12, padding: '0 2px',
+                                flexShrink: 0, opacity: 0.6,
+                              }}
+                              title="Editar traducción"
+                            >
+                              ✏️
+                            </button>
+                          )}
+                        </div>
                         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, fontStyle: 'italic' }}>
                           {titleEn}
                         </div>

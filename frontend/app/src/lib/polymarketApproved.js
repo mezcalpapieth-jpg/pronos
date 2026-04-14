@@ -83,6 +83,22 @@ export async function rejectPolymarketMarket(privyId, { slug, getAccessToken } =
 }
 
 /**
+ * Edit the cached Spanish translation for a polymarket market (admin only).
+ */
+export async function editPolymarketTranslation(privyId, { slug, title_es, getAccessToken }) {
+  const res = await authFetch(getAccessToken, `${base}${API}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ privyId, slug, title_es }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'No se pudo editar la traducción');
+  }
+  return (await res.json()).approved;
+}
+
+/**
  * Bulk-translate Polymarket markets to Spanish and store as 'pending' rows
  * in `polymarket_approved`. Used by the admin page on load so every fetched
  * market shows in both languages without waiting for an admin click.

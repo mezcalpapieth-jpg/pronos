@@ -28,7 +28,7 @@ import { translateMarketToSpanish } from './_lib/polymarket-translation.js';
 const sql = neon(process.env.DATABASE_URL);
 
 export default async function handler(req, res) {
-  const cors = applyCors(req, res, { methods: 'GET, POST, DELETE, OPTIONS' });
+  const cors = applyCors(req, res, { methods: 'GET, POST, PATCH, DELETE, OPTIONS' });
   if (cors) return cors;
 
   // ── GET ───────────────────────────────────────────────
@@ -91,6 +91,30 @@ export default async function handler(req, res) {
               status       = EXCLUDED.status
         RETURNING *
       `;
+      return res.status(200).json({ ok: true, approved: rows[0] });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  // ── PATCH — edit translation directly ──────────────────
+  if (req.method === 'PATCH') {
+    const { privyId, slug, title_es } = req.body || {};
+    const admin = await requireAdmin(req, res, sql, privyId);
+    if (!admin.ok) return;
+    if (!slug) return res.status(400).json({ error: 'slug requerido' });
+    if (!title_es || !title_es.trim()) return res.status(400).json({ error: 'title_es requerido' });
+
+    try {
+      const rows = await sql`
+        UPDATE polymarket_approved
+           SET title_es = ${title_es.trim()},
+               approved_at = NOW(),
+               approved_by = ${admin.username || 'admin'}
+         WHERE slug = ${slug}
+         RETURNING *
+      `;
+      if (rows.length === 0) return res.status(404).json({ error: 'Slug no encontrado' });
       return res.status(200).json({ ok: true, approved: rows[0] });
     } catch (e) {
       return res.status(500).json({ error: e.message });
