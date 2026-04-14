@@ -17,7 +17,7 @@ import { fetchGeneratedMarkets, updateGeneratedMarket, createGeneratedMarket } f
 import { gmFetchMarkets } from '../lib/gamma.js';
 import { resolveEndDate, isExpired } from '../lib/deadline.js';
 import { useT } from '../lib/i18n.js';
-import { removeProtocolMarket } from '../lib/protocolMarkets.js';
+import { fetchProtocolMarkets, removeProtocolMarket } from '../lib/protocolMarkets.js';
 import MARKETS from '../lib/markets.js';
 import {
   fetchAllPolymarketDecisions,
@@ -90,21 +90,21 @@ function CreateMarketForm({ mode, privyId, getAccessToken }) {
   const [status, setStatus] = useState(null);
   const ownMode = mode === 'own';
 
-  useEffect(() => {
-    if (!ownMode) return;
-    setOptions([{ label: 'Sí', pct: 50 }, { label: 'No', pct: 50 }]);
-  }, [ownMode]);
-
   function addOption() {
-    if (ownMode || options.length >= 6) return;
+    if (options.length >= 6) return;
     setOptions(prev => [...prev, { label: '', pct: 0 }]);
   }
   function removeOption(idx) {
-    if (ownMode || options.length <= 2) return;
+    if (options.length <= 2) return;
     setOptions(prev => prev.filter((_, i) => i !== idx));
   }
   function updateOption(idx, field, value) {
     setOptions(prev => prev.map((o, i) => i === idx ? { ...o, [field]: field === 'pct' ? Number(value) : value } : o));
+  }
+  function ownMarketProtocolVersion() {
+    const labels = options.map(o => o.label.trim().toLowerCase());
+    const defaultBinary = labels.length === 2 && labels[0] === 'sí' && labels[1] === 'no';
+    return defaultBinary ? 'v1' : 'v2';
   }
 
   async function handleSubmit(e) {
@@ -112,7 +112,7 @@ function CreateMarketForm({ mode, privyId, getAccessToken }) {
     if (submitting) return; // prevent double-submit
     if (!question.trim() || !endDate) return;
     const emptyLabel = options.some(o => !o.label.trim());
-    if (!ownMode && emptyLabel) { setStatus({ type: 'error', msg: t('admin.optionsNeedName') }); return; }
+    if (emptyLabel) { setStatus({ type: 'error', msg: t('admin.optionsNeedName') }); return; }
 
     const endTimeMs = new Date(endDate).getTime();
     if (!Number.isFinite(endTimeMs) || endTimeMs <= Date.now()) {
@@ -127,8 +127,11 @@ function CreateMarketForm({ mode, privyId, getAccessToken }) {
         const seed = Number(seedLiquidity);
         const targetChain = CHAIN_IDS.arbitrumSepolia;
         const contracts = getContracts(targetChain);
-        if (!contracts?.factory || !contracts?.usdc) {
-          throw new Error('Faltan VITE_PRONOS_ARB_SEPOLIA_FACTORY o VITE_PRONOS_ARB_SEPOLIA_USDC en Vercel.');
+        const protocolVersion = ownMarketProtocolVersion();
+        if (!contracts?.usdc || (protocolVersion === 'v1' && !contracts?.factory) || (protocolVersion === 'v2' && !contracts?.factoryV2)) {
+          throw new Error(protocolVersion === 'v2'
+            ? 'Faltan VITE_PRONOS_ARB_SEPOLIA_FACTORY_V2, VITE_PRONOS_ARB_SEPOLIA_TOKEN_V2 o VITE_PRONOS_ARB_SEPOLIA_USDC en Vercel.'
+            : 'Faltan VITE_PRONOS_ARB_SEPOLIA_FACTORY o VITE_PRONOS_ARB_SEPOLIA_USDC en Vercel.');
         }
         if (!Number.isFinite(seed) || seed <= 0) {
           throw new Error('La liquidez inicial debe ser mayor a 0 USDC.');
@@ -142,7 +145,7 @@ function CreateMarketForm({ mode, privyId, getAccessToken }) {
         setStatus({ type: 'info', msg: `Cambiando a ${getChainDisplayName(targetChain)}...` });
         await switchWalletChain(wallet, targetChain);
 
-        setStatus({ type: 'info', msg: `Creando mercado con tu wallet admin por ${seedLiquidity} USDC...` });
+        setStatus({ type: 'info', msg: `Creando mercado ${protocolVersion} con tu wallet admin por ${seedLiquidity} USDC...` });
         const ethereumProvider = await wallet.getEthereumProvider();
         const chainProvider = new ethers.providers.Web3Provider(ethereumProvider);
         const signer = chainProvider.getSigner();
@@ -152,10 +155,12 @@ function CreateMarketForm({ mode, privyId, getAccessToken }) {
           endTime: Math.floor(endTimeMs / 1000),
           resolutionSource: resolutionSource.trim(),
           seedAmount: seedLiquidity,
+          outcomes: options.map(o => o.label.trim()),
+          protocolVersion,
         });
         setStatus({
           type: 'success',
-          msg: `Mercado creado en testnet: market #${marketId ?? '?'}${poolAddress ? ` (${poolAddress.slice(0, 10)}...)` : ''}. Tx: ${receipt.transactionHash.slice(0, 10)}... Despues corre el indexer para verlo en la grilla.`,
+          msg: `Mercado ${protocolVersion} creado en testnet: market #${marketId ?? '?'}${poolAddress ? ` (${poolAddress.slice(0, 10)}...)` : ''}. Tx: ${receipt.transactionHash.slice(0, 10)}... Despues corre el indexer para verlo en la grilla.`,
         });
         setQuestion('');
         setEndDate('');
@@ -258,13 +263,12 @@ function CreateMarketForm({ mode, privyId, getAccessToken }) {
               />
             </label>
             <div className="admin-info-box">
-              Testnet usa tu wallet admin directamente en {getChainDisplayName(CHAIN_IDS.arbitrumSepolia)}. La liquidez inicial debe estar en tu wallet, no en un Safe. El contrato propio v1 es binario: Si / No. Los mercados multi-opcion requieren un contrato v2 y redeploy.
+              Testnet usa tu wallet admin directamente en {getChainDisplayName(CHAIN_IDS.arbitrumSepolia)}. La liquidez inicial debe estar en tu wallet, no en un Safe. Si dejas las opciones como Si / No se usa v1; si agregas o renombras opciones se usa el protocolo v2 multi-opcion.
             </div>
           </>
         )}
 
         {/* Dynamic options */}
-        {!ownMode && (
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
@@ -286,14 +290,18 @@ function CreateMarketForm({ mode, privyId, getAccessToken }) {
                 style={{ flex: 1, padding: '8px 10px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 12 }}
                 required
               />
-              <input
-                type="number"
-                value={opt.pct}
-                onChange={e => updateOption(i, 'pct', e.target.value)}
-                min={0} max={100}
-                style={{ width: 60, padding: '8px 6px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 12, textAlign: 'center' }}
-              />
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>%</span>
+              {!ownMode && (
+                <>
+                  <input
+                    type="number"
+                    value={opt.pct}
+                    onChange={e => updateOption(i, 'pct', e.target.value)}
+                    min={0} max={100}
+                    style={{ width: 60, padding: '8px 6px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 12, textAlign: 'center' }}
+                  />
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>%</span>
+                </>
+              )}
               {options.length > 2 && (
                 <button type="button" onClick={() => removeOption(i)}
                   style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: 16, padding: '0 4px' }}
@@ -304,8 +312,12 @@ function CreateMarketForm({ mode, privyId, getAccessToken }) {
               )}
             </div>
           ))}
+          {ownMode && (
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginTop: 6 }}>
+              En protocolo propio, todas las opciones empiezan con la misma probabilidad inicial.
+            </div>
+          )}
         </div>
-        )}
 
         <button type="submit" className="btn-admin-primary" disabled={submitting}>
           {submitting ? t('admin.creating') : ownMode ? 'Crear en Arbitrum Sepolia' : t('admin.createBtn')}
@@ -532,20 +544,22 @@ function MarketsList({ mode, privyId, getAccessToken }) {
     //   - market_resolutions DB rows (the source of truth for "resolved")
     //   - polymarket_approved DB rows (both approved AND rejected so we can
     //     hide rejected markets from the queue)
-    const [liveOpen, generated, resos, decisionRows] = await Promise.all([
+    const [liveOpen, generated, resos, decisionRows, protocolMkts] = await Promise.all([
       gmFetchMarkets({ limit: 100 }).catch(() => []),
       fetchGeneratedMarkets('approved').catch(() => []),
       fetchResolutions().catch(() => []),
       fetchAllPolymarketDecisions(privyId, getAccessToken).catch(() => []),
+      fetchProtocolMarkets().catch(() => []),
     ]);
     const local = MARKETS;
 
     // Dedupe by slug/id. Live data wins over hardcoded; generated (admin-created)
-    // markets are included so they appear in the admin table.
+    // and on-chain protocol markets are included so they appear in the admin table.
     const map = new Map();
-    for (const m of local)      map.set(m.id, m);
-    for (const m of generated)  map.set(m.id, m);
-    for (const m of liveOpen)   map.set(m.id, { ...map.get(m.id), ...m });
+    for (const m of local)        map.set(m.id, m);
+    for (const m of generated)    map.set(m.id, m);
+    for (const m of protocolMkts) map.set(m.id, m);
+    for (const m of liveOpen)     map.set(m.id, { ...map.get(m.id), ...m });
 
     const all = Array.from(map.values());
     setMarkets(all);

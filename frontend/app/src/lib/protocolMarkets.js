@@ -12,7 +12,12 @@ function categoryLabel(category) {
 }
 
 export function normalizeProtocolMarket(row) {
-  const yesPct = Math.round(Number(row.options?.[0]?.pct ?? 50));
+  const baseOptions = Array.isArray(row.options) && row.options.length > 0
+    ? row.options
+    : [
+        { label: 'Sí', pct: Math.round(Number(row.options?.[0]?.pct ?? 50)) },
+        { label: 'No', pct: Math.round(100 - Number(row.options?.[0]?.pct ?? 50)) },
+      ];
   return {
     ...row,
     id: `protocol-${row.id}`,
@@ -24,13 +29,15 @@ export function normalizeProtocolMarket(row) {
     categoryLabel: categoryLabel(row.category),
     icon: 'P',
     deadline: formatDeadline(row.endTime),
-    options: [
-      { label: 'Sí', pct: yesPct },
-      { label: 'No', pct: Math.max(0, 100 - yesPct) },
-    ],
+    options: baseOptions.map((opt, i) => ({
+      label: opt.label || `Opción ${i + 1}`,
+      pct: Math.round(Number(opt.pct ?? 0)),
+    })),
     volume: row.totalVolume || row.volume || '0',
     poolAddress: row.poolAddress,
     protocolMarketId: row.marketId,
+    protocolVersion: row.protocolVersion || 'v1',
+    outcomeCount: row.outcomeCount || baseOptions.length,
   };
 }
 

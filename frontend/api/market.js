@@ -60,7 +60,7 @@ export default async function handler(req, res) {
 
     // Fetch price history (last 50 snapshots)
     const priceHistory = await sql`
-      SELECT yes_price, no_price, volume_24h, liquidity, snapshot_at
+      SELECT yes_price, no_price, prices, volume_24h, liquidity, snapshot_at
       FROM price_snapshots
       WHERE market_id = ${marketId}
       ORDER BY snapshot_at DESC
@@ -69,7 +69,7 @@ export default async function handler(req, res) {
 
     // Fetch recent trades (last 20)
     const recentTrades = await sql`
-      SELECT trader, side, is_yes, collateral_amt, shares_amt, fee_amt,
+      SELECT trader, side, is_yes, outcome_index, collateral_amt, shares_amt, fee_amt,
              price_at_trade, tx_hash, block_number, created_at
       FROM trades
       WHERE market_id = ${marketId}
@@ -84,7 +84,7 @@ export default async function handler(req, res) {
     `;
 
     const latestPrice = priceHistory[0] || { yes_price: 0.5, no_price: 0.5 };
-    const yesPct = Math.round(latestPrice.yes_price * 100);
+    const options = buildOptions(market, latestPrice);
     const tradeVolume = Number(totalVolume[0].total || 0);
     const seedLiquidity = Number(market.seed_liquidity || 0) || Number(latestPrice.liquidity || 0) / 2;
     const displayVolume = tradeVolume > 0 ? tradeVolume : seedLiquidity;
@@ -103,13 +103,12 @@ export default async function handler(req, res) {
         resolutionSource: market.resolution_src,
         status: market.status,
         outcome: market.outcome,
+        protocolVersion: market.protocol_version || 'v1',
+        outcomeCount: market.outcome_count || options.length,
         seedLiquidity: market.seed_liquidity,
         createdAt: market.created_at,
         resolvedAt: market.resolved_at,
-        options: [
-          { label: 'Sí', pct: yesPct },
-          { label: 'No', pct: 100 - yesPct },
-        ],
+        options,
         totalVolume: displayVolume,
         tradeVolume,
         liquidity: latestPrice.liquidity || '0',
@@ -117,6 +116,7 @@ export default async function handler(req, res) {
       priceHistory: priceHistory.reverse().map(p => ({
         yes: parseFloat(p.yes_price),
         no: parseFloat(p.no_price),
+        prices: parseJson(p.prices, null),
         volume: parseFloat(p.volume_24h),
         liquidity: parseFloat(p.liquidity),
         time: p.snapshot_at,
@@ -125,6 +125,7 @@ export default async function handler(req, res) {
         trader: t.trader,
         side: t.side,
         isYes: t.is_yes,
+        outcomeIndex: t.outcome_index,
         amount: parseFloat(t.collateral_amt),
         shares: parseFloat(t.shares_amt),
         fee: parseFloat(t.fee_amt),
@@ -138,4 +139,30 @@ export default async function handler(req, res) {
     console.error('Market detail API error:', e);
     return res.status(500).json({ error: 'Server error' });
   }
+}
+
+function parseJson(value, fallback) {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === 'object') return value;
+  if (typeof value !== 'string') return fallback;
+  try { return JSON.parse(value); } catch (_) { return fallback; }
+}
+
+function buildOptions(market, price) {
+  const outcomes = parseJson(market.outcomes, null);
+  const labels = Array.isArray(outcomes) && outcomes.length > 0
+    ? outcomes
+    : ['Sí', 'No'];
+  const prices = parseJson(price.prices, null);
+  if (Array.isArray(prices) && prices.length >= labels.length) {
+    return labels.map((label, i) => ({ label, pct: Math.round(Number(prices[i] || 0) * 100) }));
+  }
+  const yesPct = price.yes_price ? Math.round(Number(price.yes_price) * 100) : Math.round(100 / labels.length);
+  if (labels.length === 2) {
+    return [
+      { label: labels[0], pct: yesPct },
+      { label: labels[1], pct: Math.max(0, 100 - yesPct) },
+    ];
+  }
+  return labels.map(label => ({ label, pct: Math.round(100 / labels.length) }));
 }

@@ -31,7 +31,7 @@ const STEPS = {
   ERROR:    'error',
 };
 
-export default function BetModal({ open, onClose, outcome, outcomePct, marketId, marketTitle, clobTokenId, isNegRisk = false, market = null }) {
+export default function BetModal({ open, onClose, outcome, outcomePct, outcomeIndex = 0, marketId, marketTitle, clobTokenId, isNegRisk = false, market = null }) {
   const t = useT();
   const { authenticated, login } = usePrivy();
   const { wallets } = useWallets();
@@ -45,9 +45,10 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
   const numAmount  = parseFloat(amount) || 0;
   const protocolMarket = isProtocolMarket(market);
   const protocolChainId = Number(market?.chainId || CHAIN_IDS.arbitrumSepolia);
-  // Dynamic fee: fee% = 5 * (1 - P), where P is probability of the side being bought.
-  // At 50/50: 2.5%, at 90/10: 0.5%, at 99/1: 0.05%. Applies to all markets.
-  const feePct     = 5 * (1 - (outcomePct || 50) / 100);
+  const protocolVersion = market?.protocolVersion || 'v1';
+  // v1 still uses the deployed dynamic fee. v2 uses the requested fixed 2%
+  // upfront fee that never enters the liquidity pool.
+  const feePct     = protocolMarket && protocolVersion === 'v2' ? 2 : 5 * (1 - (outcomePct || 50) / 100);
   const fee        = numAmount * feePct / 100;
   const afterFee   = numAmount - fee;
   const payout     = outcomePct > 0 && numAmount > 0 ? (afterFee / (outcomePct / 100)).toFixed(2) : '—';
@@ -178,10 +179,12 @@ export default function BetModal({ open, onClose, outcome, outcomePct, marketId,
         }
         setStep(STEPS.APPROVING);
         setStatusMsg(t('bet.approving'));
-        const buyYes = outcome === market.options?.[0]?.label;
+        const buyOutcome = protocolVersion === 'v2'
+          ? Number(outcomeIndex)
+          : outcome === market.options?.[0]?.label;
         setStep(STEPS.PLACING);
         setStatusMsg(t('bet.placingProtocol'));
-        const receipt = await buyShares(signer, market.poolAddress, usdcAddress, buyYes, amount);
+        const receipt = await buyShares(signer, market.poolAddress, usdcAddress, buyOutcome, amount, { protocolVersion });
         setOrderId(receipt.transactionHash || receipt.hash || 'OK');
         setStep(STEPS.SUCCESS);
         setStatusMsg(t('bet.placed', { amt: numAmount, outcome }));

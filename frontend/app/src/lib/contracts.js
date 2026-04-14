@@ -10,7 +10,7 @@
  */
 
 import { ethers } from 'ethers';
-import { CONTRACTS, getRequiredChainId } from './protocol.js';
+import { CONTRACTS } from './protocol.js';
 
 // ─── ABIs ─────────────────────────────────────────────────────────────────────
 
@@ -28,6 +28,24 @@ export const FACTORY_ABI = [
   'function token() view returns (address)',
   'function collateral() view returns (address)',
   'event MarketCreated(uint256 indexed marketId, address pool, string question, string category, uint256 endTime)',
+  'event MarketResolved(uint256 indexed marketId, uint8 outcome)',
+];
+
+export const FACTORY_V2_ABI = [
+  'function createMarket(string question, string category, uint256 endTime, string resolutionSource, string[] outcomes, uint256 seedAmount) external returns (uint256)',
+  'function resolveMarket(uint256 marketId, uint8 outcome) external',
+  'function pauseMarket(uint256 marketId, bool paused) external',
+  'function distributeFees() external',
+  'function transferOwnership(address newOwner) external',
+  'function setResolver(address newResolver) external',
+  'function owner() view returns (address)',
+  'function resolver() view returns (address)',
+  'function marketCount() view returns (uint256)',
+  'function markets(uint256) view returns (address pool, string question, string category, uint256 endTime, string resolutionSource, uint8 outcomeCount, bool active)',
+  'function getOutcomes(uint256 marketId) view returns (string[])',
+  'function token() view returns (address)',
+  'function collateral() view returns (address)',
+  'event MarketCreated(uint256 indexed marketId, address pool, string question, string category, uint256 endTime, string resolutionSource, string[] outcomes)',
   'event MarketResolved(uint256 indexed marketId, uint8 outcome)',
 ];
 
@@ -50,10 +68,31 @@ export const AMM_ABI = [
   'event SharesSold(address indexed seller, bool isYes, uint256 sharesIn, uint256 collateralOut, uint256 fee)',
 ];
 
+export const AMM_MULTI_ABI = [
+  'function buy(uint8 outcomeIndex, uint256 collateralAmount) external returns (uint256 sharesOut)',
+  'function sell(uint8 outcomeIndex, uint256 sharesAmount) external returns (uint256 collateralOut)',
+  'function redeem(uint256 amount) external',
+  'function price(uint8 outcomeIndex) view returns (uint256)',
+  'function prices() view returns (uint256[])',
+  'function currentFeeBps(uint8 outcomeIndex) view returns (uint256)',
+  'function estimateBuy(uint8 outcomeIndex, uint256 collateralAmount) view returns (uint256)',
+  'function estimateSell(uint8 outcomeIndex, uint256 sharesAmount) view returns (uint256)',
+  'function calculateFee(uint256 amount, uint8 outcomeIndex) view returns (uint256)',
+  'function reserves(uint256) view returns (uint256)',
+  'function getReserves() view returns (uint256[])',
+  'function outcomeCount() view returns (uint8)',
+  'function outcome() view returns (uint8)',
+  'function paused() view returns (bool)',
+  'function initialized() view returns (bool)',
+  'event SharesBought(address indexed buyer, uint8 indexed outcomeIndex, uint256 collateralIn, uint256 fee, uint256 sharesOut)',
+  'event SharesSold(address indexed seller, uint8 indexed outcomeIndex, uint256 sharesIn, uint256 collateralOut, uint256 fee)',
+];
+
 export const TOKEN_ABI = [
   'function balanceOf(address account, uint256 id) view returns (uint256)',
   'function balanceOfBatch(address[] accounts, uint256[] ids) view returns (uint256[])',
   'function nextMarketId() view returns (uint256)',
+  'function tokenId(uint256 marketId, uint8 outcomeIndex) view returns (uint256)',
 ];
 
 export const ERC20_ABI = [
@@ -73,10 +112,11 @@ export const ERC20_ABI = [
  */
 export function getProtocolContracts(signer, chainId) {
   const addrs = CONTRACTS[chainId];
-  if (!addrs?.factory) throw new Error(`No contract addresses for chain ${chainId}`);
+  if (!addrs?.factory && !addrs?.factoryV2) throw new Error(`No contract addresses for chain ${chainId}`);
 
   return {
-    factory: new ethers.Contract(addrs.factory, FACTORY_ABI, signer),
+    factory: addrs.factory ? new ethers.Contract(addrs.factory, FACTORY_ABI, signer) : null,
+    factoryV2: addrs.factoryV2 ? new ethers.Contract(addrs.factoryV2, FACTORY_V2_ABI, signer) : null,
     usdc: new ethers.Contract(addrs.usdc, ERC20_ABI, signer),
   };
 }
@@ -89,6 +129,10 @@ export function getProtocolContracts(signer, chainId) {
  */
 export function getAMMContract(poolAddress, signer) {
   return new ethers.Contract(poolAddress, AMM_ABI, signer);
+}
+
+export function getAMMMultiContract(poolAddress, signer) {
+  return new ethers.Contract(poolAddress, AMM_MULTI_ABI, signer);
 }
 
 /**
@@ -112,10 +156,9 @@ export function getTokenContract(tokenAddress, signerOrProvider) {
 export async function getPoolPrices(provider, poolAddress) {
   const amm = new ethers.Contract(poolAddress, AMM_ABI, provider);
   const [yesRaw, noRaw] = await Promise.all([amm.priceYes(), amm.priceNo()]);
-  // Prices are in 1e18 format
   return {
-    yes: parseFloat(ethers.utils.formatEther(yesRaw)),
-    no: parseFloat(ethers.utils.formatEther(noRaw)),
+    yes: Number(yesRaw) / 1e6,
+    no: Number(noRaw) / 1e6,
   };
 }
 
@@ -199,12 +242,14 @@ export async function getShareBalances(provider, tokenAddress, userAddress, mark
  * @param {ethers.Signer} signer
  * @param {string} poolAddress
  * @param {string} usdcAddress
- * @param {boolean} buyYes
+ * @param {boolean|number} outcome — v1: true for YES; v2: outcome index
  * @param {string} amount — USDC amount (human-readable)
+ * @param {{ protocolVersion?: string }} opts
  * @returns {Promise<ethers.TransactionReceipt>}
  */
-export async function buyShares(signer, poolAddress, usdcAddress, buyYes, amount) {
+export async function buyShares(signer, poolAddress, usdcAddress, outcome, amount, opts = {}) {
   const raw = ethers.utils.parseUnits(amount, 6);
+  const protocolVersion = opts.protocolVersion || 'v1';
 
   // 1. Approve USDC spend
   const usdc = new ethers.Contract(usdcAddress, ERC20_ABI, signer);
@@ -216,8 +261,11 @@ export async function buyShares(signer, poolAddress, usdcAddress, buyYes, amount
   }
 
   // 2. Execute buy
-  const amm = new ethers.Contract(poolAddress, AMM_ABI, signer);
-  const tx = await amm.buy(buyYes, raw);
+  const isV2 = protocolVersion === 'v2';
+  const amm = new ethers.Contract(poolAddress, isV2 ? AMM_MULTI_ABI : AMM_ABI, signer);
+  const tx = isV2
+    ? await amm.buy(Number(outcome), raw)
+    : await amm.buy(Boolean(outcome), raw);
   return tx.wait();
 }
 
@@ -226,12 +274,14 @@ export async function buyShares(signer, poolAddress, usdcAddress, buyYes, amount
  * @param {ethers.Signer} signer
  * @param {string} poolAddress
  * @param {string} tokenAddress — PronosToken address
- * @param {boolean} sellYes
+ * @param {boolean|number} outcome — v1: true for YES; v2: outcome index
  * @param {string} sharesAmount
+ * @param {{ protocolVersion?: string }} opts
  * @returns {Promise<ethers.TransactionReceipt>}
  */
-export async function sellShares(signer, poolAddress, tokenAddress, sellYes, sharesAmount) {
+export async function sellShares(signer, poolAddress, tokenAddress, outcome, sharesAmount, opts = {}) {
   const raw = ethers.utils.parseUnits(sharesAmount, 6);
+  const protocolVersion = opts.protocolVersion || 'v1';
 
   // 1. Approve ERC-1155 transfer (setApprovalForAll if not already)
   const token = new ethers.Contract(tokenAddress, [
@@ -247,8 +297,11 @@ export async function sellShares(signer, poolAddress, tokenAddress, sellYes, sha
   }
 
   // 2. Execute sell
-  const amm = new ethers.Contract(poolAddress, AMM_ABI, signer);
-  const tx = await amm.sell(sellYes, raw);
+  const isV2 = protocolVersion === 'v2';
+  const amm = new ethers.Contract(poolAddress, isV2 ? AMM_MULTI_ABI : AMM_ABI, signer);
+  const tx = isV2
+    ? await amm.sell(Number(outcome), raw)
+    : await amm.sell(Boolean(outcome), raw);
   return tx.wait();
 }
 
@@ -273,16 +326,28 @@ export async function redeemShares(signer, poolAddress, amount) {
  *
  * @param {ethers.Signer} signer
  * @param {number} chainId
- * @param {{ question: string, category: string, endTime: number, resolutionSource: string, seedAmount: string }} market
+ * @param {{ question: string, category: string, endTime: number, resolutionSource: string, seedAmount: string, outcomes?: string[], protocolVersion?: string }} market
  * @returns {Promise<{ receipt: ethers.TransactionReceipt, marketId?: number, poolAddress?: string }>}
  */
 export async function createProtocolMarket(signer, chainId, market) {
-  const { factory, usdc } = getProtocolContracts(signer, chainId);
+  const { factory, factoryV2, usdc } = getProtocolContracts(signer, chainId);
+  const outcomes = (market.outcomes || []).map(o => String(o || '').trim()).filter(Boolean);
+  const protocolVersion = market.protocolVersion || (outcomes.length > 2 ? 'v2' : 'v1');
+  const activeFactory = protocolVersion === 'v2' ? factoryV2 : factory;
+  if (!activeFactory) {
+    throw new Error(protocolVersion === 'v2'
+      ? 'Falta configurar VITE_PRONOS_ARB_SEPOLIA_FACTORY_V2 para crear mercados multi-opcion.'
+      : 'Falta configurar VITE_PRONOS_ARB_SEPOLIA_FACTORY para crear mercados binarios.');
+  }
+  if (protocolVersion === 'v2' && (outcomes.length < 2 || outcomes.length > 8)) {
+    throw new Error('Los mercados multi-opcion necesitan entre 2 y 8 resultados.');
+  }
+
   const seedRaw = ethers.utils.parseUnits(String(market.seedAmount), 6);
   const admin = await signer.getAddress();
-  const owner = await factory.owner();
+  const owner = await activeFactory.owner();
   if (owner.toLowerCase() !== admin.toLowerCase()) {
-    throw new Error(`Esta wallet no es owner del MarketFactory. Conecta ${owner} o redeploya el protocolo con tu wallet como ADMIN_ADDRESS.`);
+    throw new Error(`Esta wallet no es owner del MarketFactory ${protocolVersion}. Conecta ${owner} o redeploya el protocolo con tu wallet como ADMIN_ADDRESS.`);
   }
 
   const balance = await usdc.balanceOf(admin);
@@ -290,19 +355,28 @@ export async function createProtocolMarket(signer, chainId, market) {
     throw new Error(`Tu wallet admin tiene ${ethers.utils.formatUnits(balance, 6)} USDC. Necesitas al menos ${market.seedAmount} USDC en ${admin}.`);
   }
 
-  const allowance = await usdc.allowance(admin, factory.address);
+  const allowance = await usdc.allowance(admin, activeFactory.address);
   if (allowance.lt(seedRaw)) {
-    const approveTx = await usdc.approve(factory.address, seedRaw);
+    const approveTx = await usdc.approve(activeFactory.address, seedRaw);
     await approveTx.wait();
   }
 
-  const tx = await factory.createMarket(
-    market.question,
-    market.category,
-    market.endTime,
-    market.resolutionSource,
-    seedRaw,
-  );
+  const tx = protocolVersion === 'v2'
+    ? await activeFactory.createMarket(
+        market.question,
+        market.category,
+        market.endTime,
+        market.resolutionSource,
+        outcomes,
+        seedRaw,
+      )
+    : await activeFactory.createMarket(
+        market.question,
+        market.category,
+        market.endTime,
+        market.resolutionSource,
+        seedRaw,
+      );
   const receipt = await tx.wait();
   const createdEvent = receipt.events?.find((event) => event.event === 'MarketCreated');
 
@@ -310,6 +384,7 @@ export async function createProtocolMarket(signer, chainId, market) {
     receipt,
     marketId: createdEvent?.args?.marketId?.toNumber?.(),
     poolAddress: createdEvent?.args?.pool,
+    protocolVersion,
   };
 }
 

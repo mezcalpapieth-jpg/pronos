@@ -74,11 +74,38 @@ const MIGRATIONS = [
     snapshot_at     TIMESTAMPTZ DEFAULT NOW()
   )`,
 
+  // V2 multi-outcome protocol compatibility. V1 rows keep defaults.
+  `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS protocol_version TEXT NOT NULL DEFAULT 'v1'`,
+  `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS outcome_count INTEGER NOT NULL DEFAULT 2`,
+  `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS outcomes JSONB`,
+  `UPDATE protocol_markets SET factory_address = LOWER(factory_address), pool_address = LOWER(pool_address)`,
+  `ALTER TABLE protocol_markets DROP CONSTRAINT IF EXISTS protocol_markets_chain_id_market_id_key`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_protocol_markets_chain_factory_market ON protocol_markets(chain_id, factory_address, market_id)`,
+  `ALTER TABLE trades ADD COLUMN IF NOT EXISTS outcome_index SMALLINT`,
+  `ALTER TABLE trades ALTER COLUMN is_yes DROP NOT NULL`,
+  `ALTER TABLE price_snapshots ADD COLUMN IF NOT EXISTS prices JSONB`,
+
+  // V2 positions, one row per outcome held by a user.
+  `CREATE TABLE IF NOT EXISTS outcome_positions (
+    id              SERIAL PRIMARY KEY,
+    market_id       INTEGER NOT NULL REFERENCES protocol_markets(id),
+    user_address    TEXT NOT NULL,
+    outcome_index   SMALLINT NOT NULL,
+    shares          NUMERIC(20,6) DEFAULT 0,
+    total_cost      NUMERIC(20,6) DEFAULT 0,
+    redeemed        BOOLEAN DEFAULT FALSE,
+    payout          NUMERIC(20,6) DEFAULT 0,
+    updated_at      TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(market_id, user_address, outcome_index)
+  )`,
+
   // Index for fast queries
   `CREATE INDEX IF NOT EXISTS idx_trades_market ON trades(market_id)`,
   `CREATE INDEX IF NOT EXISTS idx_trades_trader ON trades(trader)`,
   `CREATE INDEX IF NOT EXISTS idx_positions_user ON positions(user_address)`,
   `CREATE INDEX IF NOT EXISTS idx_positions_market ON positions(market_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_outcome_positions_user ON outcome_positions(user_address)`,
+  `CREATE INDEX IF NOT EXISTS idx_outcome_positions_market ON outcome_positions(market_id)`,
   `CREATE INDEX IF NOT EXISTS idx_snapshots_market ON price_snapshots(market_id, snapshot_at)`,
   `CREATE INDEX IF NOT EXISTS idx_markets_status ON protocol_markets(status)`,
 

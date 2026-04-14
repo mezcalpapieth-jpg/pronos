@@ -26,6 +26,27 @@ async function getChainAwareUsdcBalance(provider, address) {
 }
 
 function normalizeProtocolPositions(pos) {
+  if (pos.protocolVersion === 'v2' || pos.outcomeIndex != null) {
+    return [{
+      id: `protocol-${pos.marketId}-${pos.outcomeIndex}`,
+      title: pos.question,
+      marketTitle: pos.question,
+      protocolDbId: pos.marketId,
+      protocolMarketId: pos.protocolMarketId,
+      poolAddress: pos.poolAddress,
+      chainId: Number(pos.chainId || CHAIN_IDS.arbitrumSepolia),
+      status: pos.status,
+      source: 'protocol',
+      protocolVersion: 'v2',
+      outcome: pos.outcomeLabel || `Opción ${Number(pos.outcomeIndex) + 1}`,
+      outcomeIndex: Number(pos.outcomeIndex),
+      shares: Number(pos.shares || 0),
+      initialValue: Number(pos.totalCost || 0),
+      currentValue: Number(pos.currentValue || 0),
+      currentPrice: Number(pos.currentPrice ?? 0),
+    }].filter(p => p.shares > 0);
+  }
+
   const yesShares = Number(pos.yesShares || 0);
   const noShares = Number(pos.noShares || 0);
   const currentPrice = Number(pos.currentPrice ?? 0.5);
@@ -213,12 +234,14 @@ export default function Portfolio() {
     }
   }
 
-  async function handleSellPosition(pos) {
+async function handleSellPosition(pos) {
     const wallet = wallets?.[0];
     if (!wallet || pos.source !== 'protocol') return;
 
     const chainId = Number(pos.chainId || CHAIN_IDS.arbitrumSepolia);
-    const tokenAddress = CONTRACTS[chainId]?.token;
+    const tokenAddress = pos.protocolVersion === 'v2'
+      ? CONTRACTS[chainId]?.tokenV2
+      : CONTRACTS[chainId]?.token;
     if (!tokenAddress || !pos.poolAddress) {
       setTradeStatus({ type: 'error', msg: t('pf.protocolConfigMissing') });
       return;
@@ -241,8 +264,9 @@ export default function Portfolio() {
         signer,
         pos.poolAddress,
         tokenAddress,
-        pos.sellYes,
+        pos.protocolVersion === 'v2' ? pos.outcomeIndex : pos.sellYes,
         formatTokenAmount(pos.shares),
+        { protocolVersion: pos.protocolVersion || 'v1' },
       );
       const tx = receipt.transactionHash || receipt.hash || 'OK';
       setTradeStatus({ type: 'success', msg: t('pf.exitSuccess', { tx: `${tx.slice(0, 10)}…` }) });

@@ -329,7 +329,7 @@ export default function MarketDetail() {
   const [market,setMarket]=useState(null);
   const [history,setHistory]=useState({});
   const [loading,setLoading]=useState(true);
-  const [betModal,setBetModal]=useState({open:false,outcome:'',pct:0,clobTokenId:null,isNegRisk:false});
+  const [betModal,setBetModal]=useState({open:false,outcome:'',pct:0,outcomeIndex:0,clobTokenId:null,isNegRisk:false});
   const [isMobile,setIsMobile]=useState(()=>window.innerWidth<768);
   useEffect(()=>{const h=()=>setIsMobile(window.innerWidth<768);window.addEventListener('resize',h);return()=>window.removeEventListener('resize',h);},[]);
 
@@ -415,7 +415,7 @@ export default function MarketDetail() {
     return()=>{cancelled=true;};
   },[marketId,navigate]);
 
-  const openBet=(outcome,pct,idx)=>setBetModal({open:true,outcome,pct,clobTokenId:market?._clobTokenIds?.[idx??0]??null,isNegRisk:market?._isNegRisk??false});
+  const openBet=(outcome,pct,idx)=>setBetModal({open:true,outcome,pct,outcomeIndex:idx??0,clobTokenId:market?._clobTokenIds?.[idx??0]??null,isNegRisk:market?._isNegRisk??false});
 
   if(loading)return(<><Nav/><div style={{textAlign:'center',padding:'100px 48px',fontFamily:'var(--font-mono)',fontSize:12,color:'var(--text-muted)',letterSpacing:'0.1em'}}>{t('detail.loading')}</div></>);
   if(!market)return(<><Nav/><div style={{textAlign:'center',padding:'100px 48px'}}><h2 style={{fontFamily:'var(--font-display)',fontSize:32,color:'var(--text-primary)',marginBottom:16}}>{t('detail.notFound')}</h2><button className="btn-ghost" onClick={()=>navigate('/')}>{t('detail.back')}</button></div></>);
@@ -643,7 +643,7 @@ export default function MarketDetail() {
       </main>
 
       <BetModal open={betModal.open} onClose={()=>setBetModal(b=>({...b,open:false}))}
-        outcome={betModal.outcome} outcomePct={betModal.pct} marketId={market.id}
+        outcome={betModal.outcome} outcomePct={betModal.pct} outcomeIndex={betModal.outcomeIndex} marketId={market.id}
         marketTitle={localizedTitle(market, lang)} clobTokenId={betModal.clobTokenId} isNegRisk={betModal.isNegRisk} market={market}/>
     </>
   );

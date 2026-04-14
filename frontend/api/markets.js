@@ -36,7 +36,7 @@ export default async function handler(req, res) {
     if (category) {
       rows = await sql`
         SELECT m.*,
-          (SELECT json_build_object('yes_price', yes_price, 'no_price', no_price, 'volume_24h', volume_24h, 'liquidity', liquidity)
+          (SELECT json_build_object('yes_price', yes_price, 'no_price', no_price, 'prices', prices, 'volume_24h', volume_24h, 'liquidity', liquidity)
            FROM price_snapshots ps WHERE ps.market_id = m.id ORDER BY ps.snapshot_at DESC LIMIT 1
           ) as latest_price,
           (SELECT COALESCE(SUM(collateral_amt), 0) FROM trades t WHERE t.market_id = m.id) as total_volume
@@ -48,7 +48,7 @@ export default async function handler(req, res) {
     } else {
       rows = await sql`
         SELECT m.*,
-          (SELECT json_build_object('yes_price', yes_price, 'no_price', no_price, 'volume_24h', volume_24h, 'liquidity', liquidity)
+          (SELECT json_build_object('yes_price', yes_price, 'no_price', no_price, 'prices', prices, 'volume_24h', volume_24h, 'liquidity', liquidity)
            FROM price_snapshots ps WHERE ps.market_id = m.id ORDER BY ps.snapshot_at DESC LIMIT 1
           ) as latest_price,
           (SELECT COALESCE(SUM(collateral_amt), 0) FROM trades t WHERE t.market_id = m.id) as total_volume
@@ -78,7 +78,7 @@ export default async function handler(req, res) {
 
 function formatMarket(row) {
   const price = row.latest_price || {};
-  const yesPct = price.yes_price ? Math.round(price.yes_price * 100) : 50;
+  const options = buildOptions(row, price);
   const totalVolume = Number(row.total_volume || price.volume_24h || 0);
   const seedLiquidity = Number(row.seed_liquidity || 0) || Number(price.liquidity || 0) / 2;
   const displayVolume = totalVolume > 0 ? totalVolume : seedLiquidity;
@@ -95,15 +95,40 @@ function formatMarket(row) {
     resolutionSource: row.resolution_src,
     status: row.status,
     outcome: row.outcome,
+    protocolVersion: row.protocol_version || 'v1',
+    outcomeCount: row.outcome_count || options.length,
     seedLiquidity: row.seed_liquidity,
     createdAt: row.created_at,
     resolvedAt: row.resolved_at,
-    options: [
-      { label: 'Sí', pct: yesPct },
-      { label: 'No', pct: 100 - yesPct },
-    ],
+    options,
     volume: displayVolume,
     totalVolume,
     liquidity: price.liquidity || '0',
   };
+}
+
+function parseJson(value, fallback) {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === 'object') return value;
+  if (typeof value !== 'string') return fallback;
+  try { return JSON.parse(value); } catch (_) { return fallback; }
+}
+
+function buildOptions(row, price) {
+  const outcomes = parseJson(row.outcomes, null);
+  const labels = Array.isArray(outcomes) && outcomes.length > 0
+    ? outcomes
+    : ['Sí', 'No'];
+  const prices = parseJson(price.prices, null);
+  if (Array.isArray(prices) && prices.length >= labels.length) {
+    return labels.map((label, i) => ({ label, pct: Math.round(Number(prices[i] || 0) * 100) }));
+  }
+  const yesPct = price.yes_price ? Math.round(Number(price.yes_price) * 100) : Math.round(100 / labels.length);
+  if (labels.length === 2) {
+    return [
+      { label: labels[0], pct: yesPct },
+      { label: labels[1], pct: Math.max(0, 100 - yesPct) },
+    ];
+  }
+  return labels.map(label => ({ label, pct: Math.round(100 / labels.length) }));
 }

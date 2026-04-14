@@ -79,19 +79,25 @@ export const CONTRACTS = {
   // Polygon (Polymarket)
   [CHAIN_IDS.polygon]: {
     factory: null,
+    factoryV2: null,
     token: null,
+    tokenV2: null,
     usdc: CHAIN_CONFIGS[CHAIN_IDS.polygon].usdc,
   },
   // Arbitrum Sepolia (testnet)
   [CHAIN_IDS.arbitrumSepolia]: {
     factory: envAddress('VITE_PRONOS_ARB_SEPOLIA_FACTORY'),
+    factoryV2: envAddress('VITE_PRONOS_ARB_SEPOLIA_FACTORY_V2'),
     token: envAddress('VITE_PRONOS_ARB_SEPOLIA_TOKEN'),
+    tokenV2: envAddress('VITE_PRONOS_ARB_SEPOLIA_TOKEN_V2'),
     usdc: envAddress('VITE_PRONOS_ARB_SEPOLIA_USDC') || CHAIN_CONFIGS[CHAIN_IDS.arbitrumSepolia].usdc,
   },
   // Arbitrum One (mainnet)
   [CHAIN_IDS.arbitrum]: {
     factory: envAddress('VITE_PRONOS_ARBITRUM_FACTORY'),
+    factoryV2: envAddress('VITE_PRONOS_ARBITRUM_FACTORY_V2'),
     token: envAddress('VITE_PRONOS_ARBITRUM_TOKEN'),
+    tokenV2: envAddress('VITE_PRONOS_ARBITRUM_TOKEN_V2'),
     usdc: envAddress('VITE_PRONOS_ARBITRUM_USDC') || CHAIN_CONFIGS[CHAIN_IDS.arbitrum].usdc,
   },
 };
