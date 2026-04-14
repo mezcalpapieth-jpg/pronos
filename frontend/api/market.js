@@ -1,6 +1,7 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from './_lib/cors.js';
 import { requireAdmin } from './_lib/admin.js';
+import { ensureProtocolSchema } from './_lib/protocol-schema.js';
 
 /**
  * /api/market?id=<market_id> — Market detail + price history + recent trades.
@@ -48,6 +49,8 @@ export default async function handler(req, res) {
   }
 
   try {
+    await ensureProtocolSchema(sql);
+
     // Fetch market
     const marketRows = await sql`
       SELECT * FROM protocol_markets WHERE id = ${marketId} AND COALESCE(status, 'active') <> 'removed'

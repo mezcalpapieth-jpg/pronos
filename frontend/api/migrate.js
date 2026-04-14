@@ -115,6 +115,13 @@ const MIGRATIONS = [
     last_block      BIGINT NOT NULL DEFAULT 0,
     updated_at      TIMESTAMPTZ DEFAULT NOW()
   )`,
+  `CREATE TABLE IF NOT EXISTS indexer_factory_state (
+    chain_id        INTEGER NOT NULL,
+    factory_address TEXT NOT NULL,
+    last_block      BIGINT NOT NULL DEFAULT 0,
+    updated_at      TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (chain_id, factory_address)
+  )`,
 
   // Market resolutions (admin-driven, works before on-chain contracts)
   `CREATE TABLE IF NOT EXISTS market_resolutions (

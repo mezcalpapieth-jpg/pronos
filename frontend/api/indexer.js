@@ -1,5 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import { ethers } from 'ethers';
+import { ensureProtocolSchema } from './_lib/protocol-schema.js';
 
 /**
  * /api/indexer — On-chain event indexer for Pronos protocol.
@@ -19,6 +20,8 @@ import { ethers } from 'ethers';
  *   PRONOS_FACTORY_ADDRESS / VITE_PRONOS_ARB_SEPOLIA_FACTORY
  *   ARB_SEPOLIA_RPC / ARBITRUM_SEPOLIA_RPC_URL
  *   INDEXER_START_BLOCK (optional; first run only)
+ *   INDEXER_LOOKBACK_BLOCKS (optional; first per-factory run lookback)
+ *   INDEXER_MAX_BATCHES (optional; batches processed per invocation)
  */
 
 const sql = neon(process.env.DATABASE_URL);
@@ -58,6 +61,8 @@ const AMM_MULTI_ABI = [
 ];
 
 const BLOCK_BATCH = 2000; // Process 2000 blocks at a time
+const DEFAULT_LOOKBACK_BLOCKS = 250000;
+const DEFAULT_MAX_BATCHES = 5;
 const CHAIN_ID = parseInteger(process.env.CHAIN_ID) || parseInteger(process.env.PROTOCOL_CHAIN_ID) || 421614;
 
 function parseInteger(value) {
@@ -102,7 +107,9 @@ function getIndexerConfig() {
     CHAIN_ID === 421614 ? 'ARBITRUM_SEPOLIA_RPC_URL' : 'ARBITRUM_RPC_URL',
   ]);
   const startBlock = parseInteger(process.env.INDEXER_START_BLOCK);
-  return { factories: getFactoryConfigs(), rpcUrl, startBlock };
+  const lookbackBlocks = parseInteger(process.env.INDEXER_LOOKBACK_BLOCKS) || DEFAULT_LOOKBACK_BLOCKS;
+  const maxBatches = parseInteger(process.env.INDEXER_MAX_BATCHES) || DEFAULT_MAX_BATCHES;
+  return { factories: getFactoryConfigs(), rpcUrl, startBlock, lookbackBlocks, maxBatches };
 }
 
 export default async function handler(req, res) {
@@ -119,7 +126,7 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'Unauthorized' });
   }
 
-  const { factories, rpcUrl, startBlock } = getIndexerConfig();
+  const { factories, rpcUrl, startBlock, lookbackBlocks, maxBatches: configuredMaxBatches } = getIndexerConfig();
 
   if (!factories.length || !rpcUrl) {
     return res.status(200).json({
@@ -130,115 +137,177 @@ export default async function handler(req, res) {
 
   try {
     const provider = new ethers.providers.StaticJsonRpcProvider(rpcUrl, CHAIN_ID);
-
-    // Get last indexed block
-    const stateRows = await sql`
-      SELECT last_block FROM indexer_state WHERE chain_id = ${CHAIN_ID}
-    `;
-    let fromBlock = stateRows.length > 0 ? parseInt(stateRows[0].last_block) + 1 : 0;
-
-    // If first run and no state, start from deploy block (or recent)
-    if (fromBlock === 0) {
-      const currentBlock = await provider.getBlockNumber();
-      fromBlock = startBlock != null ? startBlock : Math.max(0, currentBlock - 10000); // Last ~10k blocks
-    }
+    await ensureProtocolSchema(sql);
+    await ensureFactoryStateTable();
 
     const currentBlock = await provider.getBlockNumber();
-    const toBlock = Math.min(fromBlock + BLOCK_BATCH, currentBlock);
-
-    if (fromBlock > currentBlock) {
-      return res.status(200).json({ status: 'up_to_date', block: currentBlock });
-    }
-
+    const manualFromBlock = isManual ? parseInteger(req.query.fromBlock) : null;
+    const manualToBlock = isManual ? parseInteger(req.query.toBlock) : null;
+    const maxBatches = Math.min(Math.max(parseInteger(req.query.maxBatches) || configuredMaxBatches, 1), 25);
     let processed = { markets: 0, liquidity: 0, trades: 0, resolutions: 0 };
+    const factoryRuns = [];
 
     for (const factoryConfig of factories) {
-      const factory = new ethers.Contract(factoryConfig.address, factoryConfig.abi, provider);
+      let fromBlock = manualFromBlock ?? await getFactoryFromBlock(factoryConfig.address, startBlock, currentBlock, lookbackBlocks);
+      const targetBlock = Math.min(manualToBlock ?? currentBlock, currentBlock);
+      let batches = 0;
 
-      const createEvents = await factory.queryFilter(factory.filters.MarketCreated(), fromBlock, toBlock);
-      for (const event of createEvents) {
-        const { marketId, pool, question, category, endTime } = event.args;
-        const outcomes = factoryConfig.version === 'v2'
-          ? Array.from(event.args.outcomes || [])
-          : ['Sí', 'No'];
-        const resolutionSource = factoryConfig.version === 'v2' ? event.args.resolutionSource : null;
-        const poolAddress = pool.toLowerCase();
-        const seedLiquidity = await readPoolSeedLiquidity(provider, poolAddress, event.blockNumber, factoryConfig.version);
-        await sql`
-          INSERT INTO protocol_markets (
-            chain_id, factory_address, pool_address, market_id, question, category,
-            end_time, resolution_src, tx_hash, seed_liquidity, protocol_version,
-            outcome_count, outcomes
-          )
-          VALUES (
-            ${CHAIN_ID}, ${factoryConfig.address}, ${poolAddress}, ${marketId.toNumber()},
-            ${question}, ${category}, ${new Date(endTime.toNumber() * 1000).toISOString()},
-            ${resolutionSource}, ${event.transactionHash}, ${seedLiquidity}, ${factoryConfig.version},
-            ${outcomes.length}, ${JSON.stringify(outcomes)}::jsonb
-          )
-          ON CONFLICT (chain_id, factory_address, market_id) DO UPDATE SET
-            pool_address = EXCLUDED.pool_address,
-            question = EXCLUDED.question,
-            category = EXCLUDED.category,
-            end_time = EXCLUDED.end_time,
-            resolution_src = EXCLUDED.resolution_src,
-            protocol_version = EXCLUDED.protocol_version,
-            outcome_count = EXCLUDED.outcome_count,
-            outcomes = EXCLUDED.outcomes,
-            seed_liquidity = CASE
-              WHEN COALESCE(protocol_markets.seed_liquidity, 0) = 0 THEN EXCLUDED.seed_liquidity
-              ELSE protocol_markets.seed_liquidity
-            END
-        `;
-        processed.markets++;
+      if (fromBlock > targetBlock) {
+        factoryRuns.push({
+          version: factoryConfig.version,
+          address: factoryConfig.address,
+          status: 'up_to_date',
+          fromBlock,
+          toBlock: targetBlock,
+        });
+        continue;
       }
 
-      const resolveEvents = await factory.queryFilter(factory.filters.MarketResolved(), fromBlock, toBlock);
-      for (const event of resolveEvents) {
-        const { marketId, outcome } = event.args;
-        await sql`
-          UPDATE protocol_markets
-          SET status = 'resolved', outcome = ${outcome}, resolved_at = NOW()
-          WHERE chain_id = ${CHAIN_ID}
-            AND factory_address = ${factoryConfig.address}
-            AND market_id = ${marketId.toNumber()}
-        `;
-        processed.resolutions++;
-      }
-
-      const pools = await sql`
-        SELECT id, pool_address, market_id, protocol_version, outcome_count
-        FROM protocol_markets
-        WHERE chain_id = ${CHAIN_ID}
-          AND factory_address = ${factoryConfig.address}
-          AND status = 'active'
-      `;
-
-      for (const pool of pools) {
-        if (pool.protocol_version === 'v2') {
-          await indexV2Pool(provider, pool, fromBlock, toBlock, processed);
-        } else {
-          await indexV1Pool(provider, pool, fromBlock, toBlock, processed);
-        }
+      while (fromBlock <= targetBlock && batches < maxBatches) {
+        const toBlock = Math.min(fromBlock + BLOCK_BATCH - 1, targetBlock);
+        const before = { ...processed };
+        await indexFactoryRange(provider, factoryConfig, fromBlock, toBlock, processed);
+        await updateFactoryState(factoryConfig.address, toBlock);
+        factoryRuns.push({
+          version: factoryConfig.version,
+          address: factoryConfig.address,
+          status: 'ok',
+          fromBlock,
+          toBlock,
+          processed: {
+            markets: processed.markets - before.markets,
+            liquidity: processed.liquidity - before.liquidity,
+            trades: processed.trades - before.trades,
+            resolutions: processed.resolutions - before.resolutions,
+          },
+        });
+        fromBlock = toBlock + 1;
+        batches++;
       }
     }
 
-    // ── Update indexer state ────────────────────────────────────────────────
+    // Keep the legacy chain-level state moving for existing dashboards/scripts.
+    const highestBlock = factoryRuns.reduce((max, run) => Math.max(max, run.toBlock || 0), 0);
     await sql`
       INSERT INTO indexer_state (chain_id, last_block, updated_at)
-      VALUES (${CHAIN_ID}, ${toBlock}, NOW())
-      ON CONFLICT (chain_id) DO UPDATE SET last_block = ${toBlock}, updated_at = NOW()
+      VALUES (${CHAIN_ID}, ${highestBlock}, NOW())
+      ON CONFLICT (chain_id) DO UPDATE SET last_block = GREATEST(indexer_state.last_block, EXCLUDED.last_block), updated_at = NOW()
     `;
 
     return res.status(200).json({
       status: 'ok',
-      fromBlock,
-      toBlock,
+      block: currentBlock,
+      factories: factoryRuns,
       processed,
     });
   } catch (e) {
     console.error('Indexer error:', e);
     return res.status(500).json({ error: 'Indexer failed', detail: e.message });
+  }
+}
+
+async function ensureFactoryStateTable() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS indexer_factory_state (
+      chain_id INTEGER NOT NULL,
+      factory_address TEXT NOT NULL,
+      last_block BIGINT NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (chain_id, factory_address)
+    )
+  `;
+}
+
+async function getFactoryFromBlock(factoryAddress, startBlock, currentBlock, lookbackBlocks) {
+  const stateRows = await sql`
+    SELECT last_block
+    FROM indexer_factory_state
+    WHERE chain_id = ${CHAIN_ID}
+      AND factory_address = ${factoryAddress}
+  `;
+  if (stateRows.length > 0) return parseInt(stateRows[0].last_block, 10) + 1;
+  if (startBlock != null) return startBlock;
+  return Math.max(0, currentBlock - lookbackBlocks);
+}
+
+async function updateFactoryState(factoryAddress, toBlock) {
+  await sql`
+    INSERT INTO indexer_factory_state (chain_id, factory_address, last_block, updated_at)
+    VALUES (${CHAIN_ID}, ${factoryAddress}, ${toBlock}, NOW())
+    ON CONFLICT (chain_id, factory_address) DO UPDATE SET
+      last_block = GREATEST(indexer_factory_state.last_block, EXCLUDED.last_block),
+      updated_at = NOW()
+  `;
+}
+
+async function indexFactoryRange(provider, factoryConfig, fromBlock, toBlock, processed) {
+  const factory = new ethers.Contract(factoryConfig.address, factoryConfig.abi, provider);
+
+  const createEvents = await factory.queryFilter(factory.filters.MarketCreated(), fromBlock, toBlock);
+  for (const event of createEvents) {
+    const { marketId, pool, question, category, endTime } = event.args;
+    const outcomes = factoryConfig.version === 'v2'
+      ? Array.from(event.args.outcomes || [])
+      : ['Sí', 'No'];
+    const resolutionSource = factoryConfig.version === 'v2' ? event.args.resolutionSource : null;
+    const poolAddress = pool.toLowerCase();
+    const seedLiquidity = await readPoolSeedLiquidity(provider, poolAddress, event.blockNumber, factoryConfig.version);
+    await sql`
+      INSERT INTO protocol_markets (
+        chain_id, factory_address, pool_address, market_id, question, category,
+        end_time, resolution_src, tx_hash, seed_liquidity, protocol_version,
+        outcome_count, outcomes
+      )
+      VALUES (
+        ${CHAIN_ID}, ${factoryConfig.address}, ${poolAddress}, ${marketId.toNumber()},
+        ${question}, ${category}, ${new Date(endTime.toNumber() * 1000).toISOString()},
+        ${resolutionSource}, ${event.transactionHash}, ${seedLiquidity}, ${factoryConfig.version},
+        ${outcomes.length}, ${JSON.stringify(outcomes)}::jsonb
+      )
+      ON CONFLICT (chain_id, factory_address, market_id) DO UPDATE SET
+        pool_address = EXCLUDED.pool_address,
+        question = EXCLUDED.question,
+        category = EXCLUDED.category,
+        end_time = EXCLUDED.end_time,
+        resolution_src = EXCLUDED.resolution_src,
+        protocol_version = EXCLUDED.protocol_version,
+        outcome_count = EXCLUDED.outcome_count,
+        outcomes = EXCLUDED.outcomes,
+        seed_liquidity = CASE
+          WHEN COALESCE(protocol_markets.seed_liquidity, 0) = 0 THEN EXCLUDED.seed_liquidity
+          ELSE protocol_markets.seed_liquidity
+        END
+    `;
+    processed.markets++;
+  }
+
+  const resolveEvents = await factory.queryFilter(factory.filters.MarketResolved(), fromBlock, toBlock);
+  for (const event of resolveEvents) {
+    const { marketId, outcome } = event.args;
+    await sql`
+      UPDATE protocol_markets
+      SET status = 'resolved', outcome = ${outcome}, resolved_at = NOW()
+      WHERE chain_id = ${CHAIN_ID}
+        AND factory_address = ${factoryConfig.address}
+        AND market_id = ${marketId.toNumber()}
+    `;
+    processed.resolutions++;
+  }
+
+  const pools = await sql`
+    SELECT id, pool_address, market_id, protocol_version, outcome_count
+    FROM protocol_markets
+    WHERE chain_id = ${CHAIN_ID}
+      AND factory_address = ${factoryConfig.address}
+      AND COALESCE(status, 'active') = 'active'
+  `;
+
+  for (const pool of pools) {
+    if (pool.protocol_version === 'v2') {
+      await indexV2Pool(provider, pool, fromBlock, toBlock, processed);
+    } else {
+      await indexV1Pool(provider, pool, fromBlock, toBlock, processed);
+    }
   }
 }
 

@@ -1,5 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from './_lib/cors.js';
+import { ensureProtocolSchema } from './_lib/protocol-schema.js';
 
 /**
  * /api/markets — List all markets (own protocol).
@@ -22,6 +23,8 @@ export default async function handler(req, res) {
   }
 
   try {
+    await ensureProtocolSchema(sql);
+
     const {
       status = 'active',
       category,

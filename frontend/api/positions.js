@@ -1,5 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from './_lib/cors.js';
+import { ensureProtocolSchema } from './_lib/protocol-schema.js';
 
 /**
  * /api/positions?address=0x... — User positions on own protocol.
@@ -8,6 +9,7 @@ import { applyCors } from './_lib/cors.js';
  */
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
+const schemaSql = neon(process.env.DATABASE_URL || process.env.DATABASE_READ_URL);
 
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'GET, OPTIONS' });
@@ -24,6 +26,8 @@ export default async function handler(req, res) {
   const addr = address.toLowerCase();
 
   try {
+    await ensureProtocolSchema(schemaSql);
+
     const rows = await sql`
       SELECT
         p.yes_shares,
