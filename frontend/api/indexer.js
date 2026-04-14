@@ -73,8 +73,13 @@ function getIndexerConfig() {
 
 export default async function handler(req, res) {
   // Auth: Vercel Cron sends Authorization header, manual calls use ?key=
-  const isVercelCron = req.headers.authorization === `Bearer ${process.env.CRON_SECRET}`;
-  const isManual = req.query.key === process.env.INDEXER_KEY;
+  const cronSecret = process.env.CRON_SECRET;
+  const indexerKey = process.env.INDEXER_KEY;
+  const userAgent = req.headers['user-agent'] || '';
+  const isVercelCron = cronSecret
+    ? req.headers.authorization === `Bearer ${cronSecret}`
+    : userAgent.includes('vercel-cron');
+  const isManual = Boolean(indexerKey) && req.query.key === indexerKey;
 
   if (!isVercelCron && !isManual) {
     return res.status(403).json({ error: 'Unauthorized' });
@@ -112,7 +117,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ status: 'up_to_date', block: currentBlock });
     }
 
-    let processed = { markets: 0, trades: 0, resolutions: 0 };
+    let processed = { markets: 0, liquidity: 0, trades: 0, resolutions: 0 };
 
     // ── Index MarketCreated events ──────────────────────────────────────────
     const createFilter = factory.filters.MarketCreated();
@@ -120,10 +125,17 @@ export default async function handler(req, res) {
 
     for (const event of createEvents) {
       const { marketId, pool, question, category, endTime } = event.args;
+      const seedLiquidity = await readPoolSeedLiquidity(provider, pool, event.blockNumber);
       await sql`
-        INSERT INTO protocol_markets (chain_id, factory_address, pool_address, market_id, question, category, end_time, tx_hash)
-        VALUES (${CHAIN_ID}, ${factoryAddress}, ${pool}, ${marketId.toNumber()}, ${question}, ${category}, ${new Date(endTime.toNumber() * 1000).toISOString()}, ${event.transactionHash})
-        ON CONFLICT (chain_id, market_id) DO NOTHING
+        INSERT INTO protocol_markets (chain_id, factory_address, pool_address, market_id, question, category, end_time, tx_hash, seed_liquidity)
+        VALUES (${CHAIN_ID}, ${factoryAddress}, ${pool}, ${marketId.toNumber()}, ${question}, ${category}, ${new Date(endTime.toNumber() * 1000).toISOString()}, ${event.transactionHash}, ${seedLiquidity})
+        ON CONFLICT (chain_id, market_id) DO UPDATE SET
+          pool_address = EXCLUDED.pool_address,
+          factory_address = EXCLUDED.factory_address,
+          seed_liquidity = CASE
+            WHEN COALESCE(protocol_markets.seed_liquidity, 0) = 0 THEN EXCLUDED.seed_liquidity
+            ELSE protocol_markets.seed_liquidity
+          END
       `;
       processed.markets++;
     }
@@ -152,6 +164,25 @@ export default async function handler(req, res) {
 
     for (const pool of pools) {
       const amm = new ethers.Contract(pool.pool_address, AMM_ABI, provider);
+
+      // Seed liquidity is emitted by the pool during factory.createMarket().
+      // The factory emits MarketCreated after that, so we index it here once
+      // the pool address is known.
+      const liquidityFilter = amm.filters.LiquidityAdded();
+      const liquidityEvents = await amm.queryFilter(liquidityFilter, fromBlock, toBlock);
+
+      for (const event of liquidityEvents) {
+        const amount = parseFloat(ethers.utils.formatUnits(event.args.amount, 6));
+        await sql`
+          UPDATE protocol_markets
+          SET seed_liquidity = CASE
+            WHEN COALESCE(seed_liquidity, 0) = 0 THEN ${amount}
+            ELSE seed_liquidity
+          END
+          WHERE id = ${pool.id}
+        `;
+        processed.liquidity++;
+      }
 
       // SharesBought events
       const buyFilter = amm.filters.SharesBought();
@@ -199,15 +230,22 @@ export default async function handler(req, res) {
 
       // Snapshot current price from AMM reserves
       try {
-        const reserveYes = parseFloat(ethers.utils.formatUnits(await amm.reserveYes(), 6));
-        const reserveNo = parseFloat(ethers.utils.formatUnits(await amm.reserveNo(), 6));
+        const reserveYes = parseFloat(ethers.utils.formatUnits(await amm.reserveYes({ blockTag: toBlock }), 6));
+        const reserveNo = parseFloat(ethers.utils.formatUnits(await amm.reserveNo({ blockTag: toBlock }), 6));
         const total = reserveYes + reserveNo;
         if (total > 0) {
           const yesPrice = reserveNo / total; // CPMM: price = opposite_reserve / total
           const noPrice = reserveYes / total;
+          const volumeRows = await sql`
+            SELECT COALESCE(SUM(collateral_amt), 0) as total
+            FROM trades
+            WHERE market_id = ${pool.id}
+              AND created_at >= NOW() - INTERVAL '24 hours'
+          `;
+          const volume24h = Number(volumeRows[0]?.total || 0);
           await sql`
-            INSERT INTO price_snapshots (market_id, yes_price, no_price, liquidity)
-            VALUES (${pool.id}, ${yesPrice}, ${noPrice}, ${total})
+            INSERT INTO price_snapshots (market_id, yes_price, no_price, volume_24h, liquidity)
+            VALUES (${pool.id}, ${yesPrice}, ${noPrice}, ${volume24h}, ${total})
           `;
         }
       } catch (_) {
@@ -231,6 +269,16 @@ export default async function handler(req, res) {
   } catch (e) {
     console.error('Indexer error:', e);
     return res.status(500).json({ error: 'Indexer failed', detail: e.message });
+  }
+}
+
+async function readPoolSeedLiquidity(provider, poolAddress, blockNumber) {
+  try {
+    const amm = new ethers.Contract(poolAddress, AMM_ABI, provider);
+    const reserveYes = await amm.reserveYes({ blockTag: blockNumber });
+    return parseFloat(ethers.utils.formatUnits(reserveYes, 6));
+  } catch (_) {
+    return 0;
   }
 }
 

@@ -1028,7 +1028,7 @@ function MarketsList({ mode, privyId, getAccessToken }) {
               return (
                 <tr key={m.id || i}>
                   <td className="admin-market-title">
-                    {editingSlug === polySlug ? (
+                    {editingSlug && editingSlug === polySlug ? (
                       <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                         <input
                           type="text"

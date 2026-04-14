@@ -85,6 +85,9 @@ export default async function handler(req, res) {
 
     const latestPrice = priceHistory[0] || { yes_price: 0.5, no_price: 0.5 };
     const yesPct = Math.round(latestPrice.yes_price * 100);
+    const tradeVolume = Number(totalVolume[0].total || 0);
+    const seedLiquidity = Number(market.seed_liquidity || 0) || Number(latestPrice.liquidity || 0) / 2;
+    const displayVolume = tradeVolume > 0 ? tradeVolume : seedLiquidity;
 
     return res.status(200).json({
       market: {
@@ -107,7 +110,8 @@ export default async function handler(req, res) {
           { label: 'Sí', pct: yesPct },
           { label: 'No', pct: 100 - yesPct },
         ],
-        totalVolume: totalVolume[0].total,
+        totalVolume: displayVolume,
+        tradeVolume,
         liquidity: latestPrice.liquidity || '0',
       },
       priceHistory: priceHistory.reverse().map(p => ({
