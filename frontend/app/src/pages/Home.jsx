@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import Ticker from '../components/Ticker.jsx';
 import Nav from '../components/Nav.jsx';
 import Hero from '../components/Hero.jsx';
-import FeaturedStrip from '../components/FeaturedStrip.jsx';
 import CategoryBar from '../components/CategoryBar.jsx';
 import MarketsGrid from '../components/MarketsGrid.jsx';
 import HowItWorks from '../components/HowItWorks.jsx';
@@ -24,12 +23,9 @@ export default function Home() {
       <Nav />
 
       <main>
-        {/* Featured markets carousel — top of the page */}
-        <FeaturedStrip />
-
         <Hero />
 
-        <section id="markets" style={{ padding: '48px 48px 60px', maxWidth: 1280, margin: '0 auto' }}>
+        <section id="markets" style={{ padding: '60px 48px', maxWidth: 1280, margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginBottom: 8 }}>
             <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(28px, 3vw, 40px)', letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-primary)' }}>
               {t('home.markets')}
@@ -40,7 +36,9 @@ export default function Home() {
             {t('home.subtitle')}
           </p>
 
-          <CategoryBar activeFilter={activeFilter} onFilter={setActiveFilter} />
+          <div className="category-bar-sticky">
+            <CategoryBar activeFilter={activeFilter} onFilter={setActiveFilter} />
+          </div>
 
           <div style={{ marginTop: 32 }}>
             <MarketsGrid activeFilter={activeFilter} />
