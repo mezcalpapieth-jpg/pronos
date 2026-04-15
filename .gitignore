@@ -6,6 +6,10 @@
 contracts/out/
 contracts/cache/
 contracts/lib/
+contracts/broadcast/
+
+# Claude Code worktrees
+.claude/worktrees/
 
 # Node
 scripts/node_modules/
