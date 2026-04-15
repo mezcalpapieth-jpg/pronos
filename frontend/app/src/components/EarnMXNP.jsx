@@ -177,7 +177,24 @@ function ConnectRow({ icon, label, mxnp, connected, connectedLabel, onConnect, d
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function EarnMXNP({ address }) {
   const { user } = usePrivy();
-  const { linkTwitter, linkInstagram, linkTikTok } = useLinkAccount();
+
+  // useLinkAccount with onError callback so failures surface to the user.
+  // If Twitter/Instagram/TikTok OAuth aren't enabled in the Privy dashboard
+  // the call throws silently — this catches it and shows a toast.
+  const { linkTwitter, linkInstagram, linkTikTok } = useLinkAccount({
+    onError: (err) => {
+      console.warn('[EarnMXNP] link error:', err);
+      const msg = err?.message || String(err);
+      if (msg.includes('not configured') || msg.includes('not enabled') || msg.includes('exited'))  {
+        showToast('⚠️ Proveedor no configurado aún — contacta al equipo Pronos');
+      } else {
+        showToast(`⚠️ Error al conectar: ${msg.slice(0, 80)}`);
+      }
+    },
+    onSuccess: () => {
+      showToast('✓ Cuenta conectada exitosamente');
+    },
+  });
 
   // ── Privy-verified connection state ────────────────────────────
   const linked = user?.linkedAccounts || [];
@@ -257,6 +274,18 @@ export default function EarnMXNP({ address }) {
 
   function credit(amount) {
     setBalanceState(prev => { const n = prev + amount; lsSet('balance', n); return n; });
+  }
+
+  // ── Safe Privy link wrapper ──────────────────────────────────────
+  // Catches synchronous throws (e.g. provider not configured) and
+  // surfaces them in a toast so the user isn't left guessing.
+  function safeLink(fn, providerName) {
+    try {
+      fn();
+    } catch (err) {
+      console.warn(`[EarnMXNP] ${providerName} link error:`, err);
+      showToast(`⚠️ No se pudo conectar ${providerName} — activa el proveedor en Privy Dashboard`);
+    }
   }
 
   // ── Daily claim ─────────────────────────────────────────────────
@@ -429,7 +458,7 @@ export default function EarnMXNP({ address }) {
             mxnp={5}
             connected={isXConnected}
             connectedLabel={xLabel}
-            onConnect={linkTwitter}
+            onConnect={() => safeLink(linkTwitter, 'X')}
             done={!!tasks.x_connect}
             onClaim={() => handleConnectClaim('x_connect', 5)}
           />
@@ -452,7 +481,7 @@ export default function EarnMXNP({ address }) {
             mxnp={5}
             connected={isIGConnected}
             connectedLabel={igLabel}
-            onConnect={linkInstagram}
+            onConnect={() => safeLink(linkInstagram, 'Instagram')}
             done={!!tasks.ig_connect}
             onClaim={() => handleConnectClaim('ig_connect', 5)}
           />
@@ -475,7 +504,7 @@ export default function EarnMXNP({ address }) {
             mxnp={5}
             connected={isTTConnected}
             connectedLabel={ttLabel}
-            onConnect={linkTikTok}
+            onConnect={() => safeLink(linkTikTok, 'TikTok')}
             done={!!tasks.tt_connect}
             onClaim={() => handleConnectClaim('tt_connect', 5)}
           />
