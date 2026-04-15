@@ -11,6 +11,18 @@ import { neon } from '@neondatabase/serverless';
 const sql = neon(process.env.DATABASE_URL);
 
 const MIGRATIONS = [
+  // Users / Privy auth
+  `CREATE TABLE IF NOT EXISTS users (
+    id              SERIAL PRIMARY KEY,
+    privy_id        TEXT NOT NULL UNIQUE,
+    username        TEXT,
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS privy_id TEXT`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_privy_id ON users (privy_id)`,
+
   // Own protocol markets
   `CREATE TABLE IF NOT EXISTS protocol_markets (
     id              SERIAL PRIMARY KEY,

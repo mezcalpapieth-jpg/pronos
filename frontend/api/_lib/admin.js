@@ -1,4 +1,5 @@
 import { requirePrivyUser } from './auth.js';
+import { ensureUserSchema } from './user-schema.js';
 
 const ADMIN_USERNAMES = (process.env.ADMIN_USERNAMES || 'mezcal,frmm,alex')
   .split(',')
@@ -7,6 +8,7 @@ const ADMIN_USERNAMES = (process.env.ADMIN_USERNAMES || 'mezcal,frmm,alex')
 
 export async function getUserByPrivyId(sql, privyId) {
   if (!privyId) return null;
+  await ensureUserSchema(sql);
   const rows = await sql`SELECT username FROM users WHERE privy_id = ${privyId}`;
   return rows[0] || null;
 }

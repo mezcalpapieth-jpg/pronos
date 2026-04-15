@@ -1,6 +1,7 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from './_lib/cors.js';
 import { requirePrivyUser } from './_lib/auth.js';
+import { ensureUserSchema } from './_lib/user-schema.js';
 
 // Separate read-only and read-write connections
 const sqlRead  = neon(process.env.DATABASE_READ_URL  || process.env.DATABASE_URL);
@@ -20,12 +21,22 @@ export default async function handler(req, res) {
     if (!privyId) return res.status(400).json({ error: 'privyId required' });
     const auth = await requirePrivyUser(req, res, privyId);
     if (!auth.ok) return;
-    const rows = await sqlRead`SELECT username FROM users WHERE privy_id = ${privyId}`;
-    if (rows.length === 0) return res.status(404).json({ username: null, isAdmin: false });
-    const username = rows[0].username;
-    if (!username) return res.status(404).json({ username: null, isAdmin: false });
-    const isAdmin = ADMIN_USERNAMES.includes((username || '').toLowerCase());
-    return res.status(200).json({ username, isAdmin });
+    try {
+      await ensureUserSchema(sqlWrite);
+      const rows = await sqlRead`SELECT username FROM users WHERE privy_id = ${privyId}`;
+      if (rows.length === 0) return res.status(404).json({ username: null, isAdmin: false });
+      const username = rows[0].username;
+      if (!username) return res.status(404).json({ username: null, isAdmin: false });
+      const isAdmin = ADMIN_USERNAMES.includes((username || '').toLowerCase());
+      return res.status(200).json({ username, isAdmin });
+    } catch (e) {
+      console.error('GET /api/user failed', {
+        message: e?.message,
+        code: e?.code,
+        detail: e?.detail,
+      });
+      return res.status(500).json({ error: 'Server error' });
+    }
   }
 
   // POST /api/user — create username
@@ -44,6 +55,8 @@ export default async function handler(req, res) {
     const normalized = username.toLowerCase();
 
     try {
+      await ensureUserSchema(sqlWrite);
+
       // Case-insensitive duplicate check
       const existing = await sqlRead`
         SELECT privy_id FROM users WHERE LOWER(username) = ${normalized} LIMIT 1
@@ -61,6 +74,11 @@ export default async function handler(req, res) {
       `;
       return res.status(201).json({ username: rows[0]?.username || normalized });
     } catch (e) {
+      console.error('POST /api/user failed', {
+        message: e?.message,
+        code: e?.code,
+        detail: e?.detail,
+      });
       if (e.message?.includes('unique') || e.code === '23505') {
         return res.status(409).json({ error: 'Username already taken' });
       }
