@@ -6,79 +6,99 @@
 
 ---
 
-## 🚧 WHAT'S STILL MISSING (as of 2026-04-11)
+## 🚧 WHAT'S STILL MISSING (as of 2026-04-15)
 
-**T-minus 64 days to World Cup kickoff.**
+**T-minus 60 days to World Cup kickoff.**
 
 ### 🔴 BLOCKED (waiting on external input)
 - **Resend domain verification** — needs Mezcal/GoDaddy DNS access to finish SPF/DKIM. Blocks waitlist emails and any transactional mail.
 - **Chain decision** — Arbitrum Sepolia contracts are ready but we haven't pulled the trigger on mainnet. Blocks everything in Phase 3.
-- **Anthropic API key** — the daily AI market generation cron is built and live at `/api/cron/generate-markets` but no-ops until the key is activated in Vercel env vars.
+- **Privy OAuth providers** — Twitter/Instagram/TikTok OAuth apps need to be configured in dashboard.privy.io for social connect buttons to work. Currently they fail with a toast error.
 
 ### 🔴 VERCEL ENV VARS NEEDED BEFORE DEPLOY
 These must be set in Vercel project settings → Environment Variables:
 
 | Variable | Purpose | Required? |
 |----------|---------|-----------|
-| `PRIVY_JWT_VERIFICATION_KEY` | ES256 public key (PEM) from Privy dashboard → Settings → Verification keys. Enables server-side JWT auth on all API endpoints. Without it, auth is **bypassed** in dev but **blocks requests** in production. | **Yes for prod** |
-| `CLOB_SESSION_SECRET` | HMAC secret for signing Polymarket CLOB session cookies. Used by `/api/clob` for order placement. | **Yes for trading** |
-| `MVP_ACCESS_PASSWORD` | Password for the MVP access gate (`/api/mvp-access`). Falls back to `mezcal` in dev; **no fallback in production** — gate returns 500 without it. | **Yes for prod** |
-| `MVP_ACCESS_SECRET` | Separate HMAC key for signing access cookies. Falls back to `CLOB_SESSION_SECRET` → `MVP_ACCESS_PASSWORD` if absent. Better security to set a dedicated one. | Recommended |
-| `VITE_PRONOS_ARB_SEPOLIA_FACTORY` | MarketFactory contract address on Arbitrum Sepolia. Needed for own-protocol market creation. | For Phase 3 |
-| `VITE_PRONOS_ARB_SEPOLIA_TOKEN` | PronosToken (ERC-1155) contract address on Arbitrum Sepolia. Needed for own-protocol trading. | For Phase 3 |
-| `VITE_PRONOS_ARB_SEPOLIA_AMM` | PronosAMM contract address on Arbitrum Sepolia. Needed for own-protocol trading. | For Phase 3 |
+| `PRIVY_JWT_VERIFICATION_KEY` | ES256 public key (PEM) from Privy dashboard. Without it, auth is **bypassed** on non-production deploys. | **Yes for prod** |
+| `CRON_SECRET` | Bearer token for cron endpoints. Without it, indexer/auto-resolve accept any `User-Agent: vercel-cron` request. | **Yes for prod** |
+| `CLOB_SESSION_SECRET` | HMAC secret for Polymarket CLOB session cookies. | **Yes for trading** |
+| `MVP_ACCESS_PASSWORD` | Password for beta access gate. No fallback in production. | **Yes for prod** |
+| `MVP_ACCESS_SECRET` | HMAC key for access cookies. Falls back to CLOB_SESSION_SECRET. | Recommended |
+| `VITE_PRONOS_ARB_SEPOLIA_FACTORY` | MarketFactory v1 address. | Set ✓ |
+| `VITE_PRONOS_ARB_SEPOLIA_FACTORY_V2` | MarketFactoryV2 address. | Set ✓ |
+| `VITE_PRONOS_ARB_SEPOLIA_TOKEN` | PronosToken v1 (ERC-1155) address. | Set ✓ |
+| `VITE_PRONOS_ARB_SEPOLIA_TOKEN_V2` | PronosTokenV2 (ERC-1155) address. | Set ✓ |
+| `VITE_PRONOS_ARB_SEPOLIA_USDC` | USDC address on Arbitrum Sepolia. | Set ✓ |
 
-Already set (verify): `DATABASE_URL`, `PRIVY_APP_ID`, `ADMIN_USERNAMES`, `ANTHROPIC_API_KEY`, `MIGRATE_KEY`
+Already set (verify): `DATABASE_URL`, `DATABASE_READ_URL`, `PRIVY_APP_ID`, `ADMIN_USERNAMES`, `ANTHROPIC_API_KEY`, `MIGRATE_KEY`
 
-### 🟠 HIGH PRIORITY — PRODUCT POLISH (unblocked, can ship now)
+### 🟠 HIGH PRIORITY — PRODUCT POLISH
 - **World Cup hub page** — `/mundial` with all FIFA 2026 markets, bracket viz, custom hero. Launch-defining.
-- **Portfolio / "Mis Apuestas" page** — users currently have no way to see their own bets. Critical for retention.
-- **Search bar with fuzzy matching** — 60+ markets and growing, no search. Quick win.
 - **Per-market OG / share cards** — dynamic preview images with title, odds, sparkline. Huge for WhatsApp-driven LATAM virality.
-- **Leaderboard** — top predictors by volume / win rate / P&L. Social proof + gamification.
+- **Search across all sources** — currently only searches hardcoded MARKETS. Need: protocol + generated + live Polymarket.
+- **MXNP points backend** — leaderboard currently uses mock data; need real DB-backed points, referral tracking, social task verification queue.
+- ~~**Portfolio / "Mis Apuestas" page**~~ — Done. Full positions, PnL, sell flow with exit preview modal.
+- ~~**Leaderboard**~~ — Done (mock data, right sidebar in Portfolio). Needs backend.
 
-### 🟡 MEDIUM PRIORITY — PROTOCOL WIRING (unblocked but needs testnet testing)
-- **Wire create-market admin form** → `MarketFactory` contract calls
-- **Wire pause/resolve admin buttons** → contract calls via Safe
-- **Contract interaction library** (`lib/contracts.js`) for own AMM
-- **Dual-mode market detail page** — detect Polymarket vs own protocol, render accordingly
-- **Buy/sell panel routing** → own AMM for protocol markets
-- **Real-time AMM price display** (x·y=k calculation) + slippage preview
-- **Portfolio merge** — positions from both Polymarket and own protocol
+### 🟡 MEDIUM PRIORITY — PROTOCOL WIRING
+- ~~**Wire create-market admin form → MarketFactory contract calls**~~ — Done (v1 binary + v2 multi-outcome).
+- ~~**Contract interaction library (`lib/contracts.js`) for own AMM**~~ — Done (buy/sell/redeem, v1+v2, pre-flight balance check).
+- ~~**Dual-mode market detail page**~~ — Done. Detects Polymarket vs own protocol automatically.
+- ~~**Buy/sell panel routing → own AMM**~~ — Done. BetModal routes to protocol buy, Portfolio has sell flow.
+- ~~**Real-time AMM price display + slippage preview**~~ — Done. On-chain quote via `protocolPricing.js`.
+- ~~**Portfolio merge — positions from both Polymarket and own protocol**~~ — Done. Aggregated from trades table.
+- **Wire pause/resolve admin buttons → contract calls via Safe** — Pending (Safe disabled for testnet, direct EOA used).
 
-### 🟢 SECURITY REMEDIATION (remaining from 2026-03-31 audit)
+### 🟢 SECURITY REMEDIATION
+
+#### From 2026-03-31 audit
 - **C2** CLOB credentials in POST body — derive server-side
 - **C3** DATABASE_URL exposed from frontend API — separate tier or edge functions with secrets
 - **H1** No CSP (Content-Security-Policy)
-- **H3** `/mvp/admin` has no server-side auth (only client-side check)
-- **H4** `/api/user` enumerable without authentication
+- ~~**H3** `/mvp/admin` server-side auth~~ — Fixed. Privy JWT on all admin API calls.
+- ~~**H4** `/api/user` requires Privy JWT~~ — Fixed. Bearer token required in production.
 - **M6** No SRI on Tally.so script
 - **M7** No CSRF protection on POST requests
 - **M8** `localStorage` as source of truth for protocol mode
 - **M9** Vite dev proxy pointing to production
 - **M10** ethers.js v5.7.2 → upgrade to v6
-- Manual security review of all contracts (reentrancy, overflow, access control)
-- Fuzz testing on AMM edge cases
-- Rate limiting on API routes
-- Input validation on all user-facing endpoints
+- **Rate limiting** on API routes — none on any endpoint
+- **Input validation** on all user-facing endpoints
+- **Fuzz testing** on AMM edge cases
 
-### 🔵 MAINNET LAUNCH SEQUENCE (blocked by chain decision above)
-- Deploy all contracts to Arbitrum One
+#### From 2026-04-15 audit (new findings)
+- **Gamma proxy SSRF** — `path` query param unsanitized to upstream URL. Needs allowlist.
+- **Auth bypass on preview deploys** — `PRIVY_JWT_VERIFICATION_KEY` unset skips all auth.
+- **Admin auth = username match only** — no crypto binding; default hardcoded names.
+- **CRON_SECRET fallback** — accepts User-Agent spoofing when env var unset.
+- **Migration key in query string** — appears in server logs. Should use Authorization header.
+- **Error messages leak DB internals** — PostgreSQL details in 500 responses.
+- **No reentrancy guards** on PronosAMM/PronosAMMMulti buy/sell/redeem.
+- **PronoBet emergencyWithdraw** — instant drain, no timelock/multisig.
+- **PronoBet collectFee** — repeatable call drains unclaimed winnings.
+- **Floating-point financial math** — indexer uses parseFloat on chain values before DB storage.
+- **ensureProtocolSchema** — full-table UPDATE on every serverless cold start.
+- **price-history** — allows 120 concurrent upstream fetches per request.
+
+### 🔵 MAINNET LAUNCH SEQUENCE (blocked by chain decision)
+- Deploy all contracts to Arbitrum One (with reentrancy guards added)
+- Third-party contract audit
 - Transfer ownership to production Safe multisig
 - Verify contracts on Arbiscan
-- Seed liquidity for 5–10 launch markets (USDC)
-- Create Safe multisig on Arbitrum Sepolia (3/5 admin, 2/3 resolution)
-- Transfer contract ownership to Safe
+- Seed liquidity for 5-10 launch markets (USDC)
 - Test resolution flow through multisig
 - 48h stability test
-- E2E testnet flow: register → buy → sell → resolve → redeem
+- E2E flow: register → buy → sell → resolve → redeem
 - Full mobile responsiveness pass
 - Operations runbook + incident response playbook
+- Terms of service + privacy policy
+- KYC / phone verification for prize eligibility
 
 ---
 
 ## PHASE 1: FOUNDATION & CORE CONTRACTS
-**Target: April 14, 2026**
+**Target: April 14, 2026** ✅ COMPLETE
 
 ### 1.1 Architecture & Setup
 - [x] ~~Define final architecture: hybrid (Polymarket aggregator + own protocol with admin switch)~~
@@ -88,8 +108,11 @@ Already set (verify): `DATABASE_URL`, `PRIVY_APP_ID`, `ADMIN_USERNAMES`, `ANTHRO
 
 ### 1.2 Core Smart Contracts
 - [x] ~~`MarketFactory.sol` — Factory to create binary markets, manage lifecycle, fee distribution~~
+- [x] ~~`MarketFactoryV2.sol` — Factory for multi-outcome markets (N outcomes)~~
 - [x] ~~`PronosToken.sol` — ERC-1155 outcome tokens (YES/NO shares per market)~~
+- [x] ~~`PronosTokenV2.sol` — ERC-1155 for multi-outcome markets~~
 - [x] ~~`PronosAMM.sol` — CPMM (x*y=k) with dynamic fees: fee% = 5*(1-P)~~
+- [x] ~~`PronosAMMMulti.sol` — Multi-outcome CPMM with fixed 2% fee~~
 - [x] ~~Dynamic fee formula: 2.5% at 50/50, 0.5% at 90/10, 0.05% at 99/1~~
 - [x] ~~Fees deducted upfront, sent to separate feeCollector wallet (never enter pool)~~
 - [x] ~~Fee distribution: 70% treasury, 20% liquidity, 10% emergency reserve~~
@@ -105,10 +128,11 @@ Already set (verify): `DATABASE_URL`, `PRIVY_APP_ID`, `ADMIN_USERNAMES`, `ANTHRO
 - [x] ~~43 tests passing, >75% coverage (Token:100%, Factory:87%, AMM:82%)~~
 
 ### 1.4 Deployment (Testnet)
-- [x] ~~Reproducible deploy script (`DeployProtocol.s.sol`)~~
-- [ ] Deploy all contracts to Arbitrum Sepolia
-- [ ] Create 1 test market via Factory
-- [ ] Verify AMM receives liquidity and calculates prices correctly
+- [x] ~~Reproducible deploy script (`DeployProtocol.s.sol` + `DeployProtocolV2.s.sol`)~~
+- [x] ~~Deploy v1 contracts to Arbitrum Sepolia~~
+- [x] ~~Deploy v2 contracts to Arbitrum Sepolia~~
+- [x] ~~Create test markets via Factory (Bayern Munich, Atletico vs Barcelona, etc.)~~
+- [x] ~~Verify AMM receives liquidity and calculates prices correctly~~
 - [ ] Document deployed addresses in `deployments.json`
 
 ### 1.5 Safe Multisig
@@ -123,84 +147,105 @@ Already set (verify): `DATABASE_URL`, `PRIVY_APP_ID`, `ADMIN_USERNAMES`, `ANTHRO
 ---
 
 ## PHASE 2: FEATURES & UI
-**Target: May 5, 2026**
+**Target: May 5, 2026** — ~90% complete
 
 ### 2.1 Frontend — Connect to Own Contracts
 - [x] ~~Create protocol switch library (`lib/protocol.js`) — toggle Polymarket vs own protocol~~
-- [ ] Create contract interaction library (`lib/contracts.js`) for own AMM
-- [ ] Dual-mode: support both Polymarket markets AND own protocol markets
-- [ ] Market detail page — detect source (Polymarket vs own) and render accordingly
-- [ ] Buy/sell panel — route to own AMM for protocol markets
-- [ ] Show real-time price from AMM pool (x·y=k calculation)
-- [ ] Slippage preview + simulation before trade
-- [ ] Portfolio — merge positions from both Polymarket and own protocol
+- [x] ~~Contract interaction library (`lib/contracts.js`) — buy/sell/redeem, v1+v2, ABI definitions~~
+- [x] ~~Protocol pricing library (`lib/protocolPricing.js`) — on-chain buy/sell quotes with BigInt math~~
+- [x] ~~Dual-mode: support both Polymarket markets AND own protocol markets~~
+- [x] ~~Market detail page — detect source (Polymarket vs own) and render accordingly~~
+- [x] ~~Buy panel — route to own AMM for protocol markets with on-chain slippage preview~~
+- [x] ~~Sell panel — exit preview modal with spot value, fee, impact, price after trade~~
+- [x] ~~Pre-flight share balance validation before sell (user-friendly Spanish error)~~
+- [x] ~~Show real-time price from AMM pool (CPMM calculation) + slippage preview~~
+- [x] ~~Portfolio — merge positions from both Polymarket and own protocol~~
+- [x] ~~Positions aggregated from deduped trades table (not materialized views)~~
 
 ### 2.2 Market Management (Admin)
-- [x] ~~Admin panel web UI (`/mvp/admin`) — restricted to usernames Mezcal & frmm~~
-- [x] ~~Protocol switch toggle (Polymarket vs own contracts) in admin panel~~
-- [x] ~~Create market form (question, category, end date, resolution source, seed liquidity)~~
-- [x] ~~Markets list with pause/resolve actions (wired for own protocol mode)~~
+- [x] ~~Admin panel web UI (`/mvp/admin`) — restricted to admin usernames~~
+- [x] ~~4 admin tabs: Pending → Open → Closed → Resolved~~
+- [x] ~~Polymarket approval gate (approve/reject/revoke with auto-translate)~~
+- [x] ~~Create market form: v1 binary (Sí/No) + v2 multi-outcome (2-6 options)~~
+- [x] ~~Protocol markets created on-chain via MarketFactory/MarketFactoryV2~~
+- [x] ~~Markets list with resolve actions~~
+- [x] ~~Edit Spanish translations inline for approved markets~~
 - [x] ~~Fee formula display + distribution breakdown (70/20/10)~~
 - [x] ~~Contract deployment status panel (shows deployed addresses)~~
-- [x] ~~Non-admins see 404 page — admin route is undiscoverable~~
-- [ ] Wire create market form to MarketFactory contract
+- [x] ~~Auto-resolve cron (Polymarket outcome sync + deadline enforcement)~~
+- [x] ~~Missing env var error messages list exactly which vars are needed~~
 - [ ] Wire pause/resolve buttons to contract calls via Safe
-- [ ] Load 5-10 curated LATAM markets (Liga MX, elections, inflation, World Cup)
+- [x] ~~Load curated LATAM markets (Liga MX, World Cup, crypto, politics)~~
 
 ### 2.3 Wallet & Onboarding
-- [x] ~~MXNB balance display in nav bar and bet slip~~
+- [x] ~~USDC balance display in nav bar (chain-aware)~~
 - [x] ~~Multi-chain Privy config (Polygon + Arbitrum + Arbitrum Sepolia)~~
 - [x] ~~Network switching utilities (`getRequiredChainId`, `switchToRequiredChain`)~~
 - [x] ~~Chain indicator in user dropdown (Polygon / Arbitrum / Arb Sepolia)~~
-- [x] ~~Auto network switch when user trades on wrong chain (BetModal + Nav dropdown)~~
-- [x] ~~USDC balance display (chain-aware) + deposit link (Polygon bridge / Arbitrum bridge)~~
+- [x] ~~Auto network switch when user trades on wrong chain~~
+- [x] ~~Deposit links (Polygon bridge / Arbitrum bridge)~~
 - [x] ~~Gasless transaction helper (`lib/gasless.js`) — ready for Privy paymaster activation~~
 - [x] ~~Onboarding: skip username button (auto-generate), showWalletUIs enabled~~
+- [x] ~~Wallet linking UI in nav dropdown (show address, linked status, link button)~~
+- [x] ~~Username upsert on conflict (re-registering updates instead of crashing)~~
 
 ### 2.4 Backend & Indexing
-- [x] ~~Database schema: protocol_markets, trades, positions, price_snapshots, indexer_state~~
+- [x] ~~Database schema: users, protocol_markets, trades, positions, price_snapshots, indexer_factory_state~~
+- [x] ~~Auto-schema: `ensureProtocolSchema()` + `ensureUserSchema()` self-heal on cold start~~
 - [x] ~~Migration endpoint (`/api/migrate`) — creates all tables + indexes~~
-- [x] ~~Event indexer (`/api/indexer`) — MarketCreated, SharesBought, SharesSold, MarketResolved~~
-- [x] ~~Price snapshots from AMM reserves (CPMM: price = opposite_reserve / total)~~
+- [x] ~~Event indexer (`/api/indexer`) — per-factory block state, v1+v2 event processing~~
+- [x] ~~Indexer dedup: `insertTrade()` with RETURNING id skips duplicate events~~
+- [x] ~~Batched indexing: 5×2000 blocks per cron run~~
+- [x] ~~Price snapshots from AMM reserves~~
 - [x] ~~Vercel Cron: indexer runs every minute~~
-- [x] ~~API endpoint: `/api/markets` — list own protocol markets with latest price~~
-- [x] ~~API endpoint: `/api/market?id=` — market detail + 50 price snapshots + 20 recent trades~~
-- [x] ~~API endpoint: `/api/positions?address=` — user positions with P&L calculation~~
+- [x] ~~API: `/api/markets` — list protocol markets with latest price + trade volume~~
+- [x] ~~API: `/api/market?id=` — detail + 50 price snapshots + 20 recent trades~~
+- [x] ~~API: `/api/positions?address=` — positions aggregated from trades with P&L~~
+- [x] ~~API: `/api/user` — GET + POST with auto-schema, error logging~~
 
 ### 2.5 Monitoring & Quality
 - [x] ~~Sentry integration (`@sentry/react` + ErrorBoundary, privacy-safe, prod-only)~~
 - [x] ~~API error logging (structured JSON logger + `withLogging` wrapper)~~
 - [x] ~~Bitso stub endpoint (`/api/bitso` — mock ticker + quote for MXN↔USDC)~~
 
-### 2.7 Market Content & Resolution (new since 2026-04-01)
-- [x] ~~`market_resolutions` table + `/api/resolutions` endpoint (admin-driven, works pre-contracts)~~
-- [x] ~~Admin "Resolver" UI in `/mvp/admin` to set winners manually~~
-- [x] ~~"Resueltos" tab on main grid + "RESUELTO" badge on resolved cards~~
+### 2.6 Onboarding Campaign (new since 2026-04-15)
+- [x] ~~Leaderboard widget (mock top-10, medals, streak, prizes, cycle countdown)~~
+- [x] ~~EarnMXNP section: daily claim + streak bonus (+20/day), signup bonus (250 MXNP)~~
+- [x] ~~Social connect tasks via Privy useLinkAccount (Twitter/Instagram/TikTok OAuth)~~
+- [x] ~~Follow tasks locked until account connected (verified via user.linkedAccounts)~~
+- [x] ~~Referral link with copy button + functional WhatsApp/Twitter/Telegram share URLs~~
+- [x] ~~Social handles: @pronos.latam (IG), @pronos.io (TikTok), @pronos_io (X)~~
+- [x] ~~Toast notifications for MXNP credits~~
+- [x] ~~All state persisted in localStorage (visual-only, no real money)~~
+- [ ] Backend: real MXNP points DB, leaderboard API, referral tracking
+- [ ] Admin: social task verification queue
+- [ ] Prize distribution workflow
+
+### 2.7 Market Content & Resolution
+- [x] ~~`market_resolutions` table + `/api/resolutions` endpoint~~
+- [x] ~~Admin "Resolver" UI to set winners~~
+- [x] ~~"Resueltos" tab + badges on resolved cards~~
 - [x] ~~Resolved-state detail page: banner, winner card, greyed-out losers~~
-- [x] ~~Resolved markets show 100/0 instead of pre-cierre percentages (card + detail)~~
-- [x] ~~Auto-resolve cron (`/api/cron/auto-resolve`, every 30 min) — queries Polymarket Gamma for closed markets and writes winners automatically; falls back to "Pendiente de resolución" placeholder for local/AI markets without an oracle~~
-- [x] ~~Client-side expiration filter — markets past their deadline disappear from active tabs instantly via `lib/deadline.js` (`isExpired()`)~~
-- [x] ~~Expired-but-unresolved markets lock the detail page: `🔒 POR RESOLVER` banner, disabled Comprar buttons, closed-state sidebar~~
-- [x] ~~Daily AI market generation pipeline: `/api/cron/generate-markets` (Claude Sonnet 4.5, Google News RSS, no-op without API key)~~
-- [x] ~~`generated_markets` table + `/api/generated-markets` admin review endpoint~~
-- [x] ~~Admin review UI with Pendientes / Aprobados / Rechazados tabs~~
-- [x] ~~Approved AI markets mix into the main grid alongside live Polymarket markets~~
+- [x] ~~Resolved markets show 100/0 instead of stale percentages~~
+- [x] ~~Auto-resolve cron (every 30 min): Gamma query + auto-close expired~~
+- [x] ~~Client-side `isExpired()` hides dead markets instantly~~
+- [x] ~~Daily AI market generation pipeline (Claude Sonnet 4.5 + Google News RSS)~~
+- [x] ~~Admin review UI: Pendientes / Aprobados / Rechazados tabs~~
 
-### 2.8 Graphs & Price History (new since 2026-04-01)
-- [x] ~~`/api/price-history` batch proxy for Polymarket CLOB `prices-history` (edge-cached 5 min)~~
-- [x] ~~`lib/priceHistory.js` frontend client: `fetchPriceHistory`, `extractSeries`, `collectTokenIds`~~
-- [x] ~~Sparkline component rewrite: left label / middle SVG / right value, Catmull-Rom smoothing, glow filter, hover tooltip, HTML overlay end-dot~~
-- [x] ~~Real CLOB price history wired into MarketsGrid (batched), MarketDetail, and Hero carousel~~
-- [x] ~~Sparklines reflect real pct targets when no history is available (seeded deterministic mock)~~
-- [x] ~~Single chart for yes/no markets, multi-line for 3+ options~~
-- [x] ~~Hero carousel: single featured card with 6s auto-rotation, prev/next arrows, dot indicators, progress bar, click-to-navigate~~
+### 2.8 Graphs & Price History
+- [x] ~~`/api/price-history` batch proxy (edge-cached 5 min)~~
+- [x] ~~Sparkline rewrite: Catmull-Rom smoothing, glow, hover tooltip with timestamp~~
+- [x] ~~Real CLOB price history wired into MarketsGrid, MarketDetail, Hero~~
+- [x] ~~Interactive hover: crosshair + dot + "12 abr, 14:00 · 65%" tooltip~~
 
-### 2.9 Accounts & Admin (new since 2026-04-01)
-- [x] ~~Case-insensitive usernames (normalized at insert, `CREATE UNIQUE INDEX ON users (LOWER(username))`)~~
-- [x] ~~Added "alex" to admin usernames~~
-- [x] ~~Admin fallback list centralized (`ADMIN_USERNAMES || 'mezcal,frmm,alex'`) across `/api/user`, `/api/resolutions`, `/api/generated-markets`~~
+### 2.9 i18n & Translation
+- [x] ~~EN/ES toggle across entire UI (430+ i18n keys)~~
+- [x] ~~`localizedTitle()` / `localizedOptions()` helpers~~
+- [x] ~~Polymarket market translation via Anthropic Haiku + scraping fallback~~
+- [x] ~~Admin inline translation editing~~
+- [x] ~~Common label auto-translate (Yes/Sí, Draw/Empate, Other/Otro)~~
 
-### 2.6 E2E Testing (Testnet)
+### 2.10 E2E Testing (Testnet)
 - [ ] Full flow: register → buy shares → sell shares → resolution → redemption
 - [ ] Embedded wallet transactions work without errors
 - [ ] Prices and slippage calculate correctly
@@ -212,25 +257,33 @@ Already set (verify): `DATABASE_URL`, `PRIVY_APP_ID`, `ADMIN_USERNAMES`, `ANTHRO
 **Target: May 31, 2026**
 
 ### 3.1 Mainnet Deployment
+- [ ] Add reentrancy guards to PronosAMM + PronosAMMMulti
 - [ ] Deploy all contracts to Arbitrum One
 - [ ] Transfer ownership to production Safe multisig
 - [ ] Verify all contracts on Arbiscan
 - [ ] Frontend points to mainnet contracts
 - [ ] Seed liquidity for 5-10 launch markets (USDC)
 
-### 3.2 Security Hardening (Audit 2026-03-31)
+### 3.2 Security Hardening
 
 #### CRITICAL — Must fix before mainnet
 - [x] ~~**C1** Admin auth moved to server-side (`/api/user` returns `isAdmin` flag)~~
-- [ ] **C2** CLOB credentials in POST body (visible in Network tab) — only send signature, derive credentials server-side
-- [ ] **C3** DATABASE_URL exposed from frontend API — separate database tier / use edge functions with secrets
+- [ ] **C2** CLOB credentials in POST body — derive server-side
+- [ ] **C3** DATABASE_URL exposed from frontend API — separate database tier
 - [x] ~~**C4** Admin usernames removed from frontend bundle, checked server-side only~~
+- [ ] **NEW** Gamma proxy SSRF — path allowlist
+- [ ] **NEW** Auth bypass on preview deploys — enforce auth on all envs
+- [ ] **NEW** Admin auth strengthening — crypto binding beyond username match
+- [ ] **NEW** CRON_SECRET must be mandatory (no User-Agent fallback)
 
 #### HIGH — Fix before launch
-- [ ] **H1** No CSP (Content-Security-Policy) — Tally/ethers/Privy scripts unrestricted
+- [ ] **H1** No CSP (Content-Security-Policy)
 - [x] ~~**H2** X-Frame-Options: DENY added via vercel.json~~
-- [x] ~~**H3** `/mvp/admin` server-side auth — Privy JWT verification on all admin API calls~~
+- [x] ~~**H3** `/mvp/admin` server-side auth — Privy JWT on all admin API calls~~
 - [x] ~~**H4** `/api/user` requires Privy JWT Bearer token in production~~
+- [ ] **NEW** Rate limiting on all API endpoints
+- [ ] **NEW** Error message sanitization (remove DB details from 500s)
+- [ ] **NEW** Migration key → Authorization header (not query string)
 
 #### MEDIUM — Fix during hardening
 - [x] ~~**M1** HSTS with `includeSubDomains` and `preload` added~~
@@ -243,19 +296,22 @@ Already set (verify): `DATABASE_URL`, `PRIVY_APP_ID`, `ADMIN_USERNAMES`, `ANTHRO
 - [ ] **M8** `localStorage` as source of truth for protocol mode
 - [ ] **M9** Vite dev proxy pointing to production
 - [ ] **M10** ethers.js v5.7.2 outdated — upgrade to v6
+- [ ] **NEW** Float → BigInt financial math in indexer
+- [ ] **NEW** ensureProtocolSchema: conditional UPDATE (skip if already lowercase)
 
 #### Passed
 - ~~No XSS~~ ~~No eval()~~ ~~HTTPS forced (308)~~ ~~No mixed content~~ ~~No X-Powered-By~~ ~~Privy handles sessions correctly~~
 
-#### Legacy items
-- [ ] Manual security review of all contracts (reentrancy, overflow, access control)
+#### Smart Contract
+- [ ] Reentrancy guards on buy/sell/redeem (all contracts)
+- [ ] PronoBet: add timelock to emergencyWithdraw or deprecate
+- [ ] PronoBet: fix collectFee repeatable-call drain
+- [ ] Event emissions for feeCollector changes
+- [ ] Third-party audit
 - [ ] Fuzz testing on AMM edge cases
-- [ ] Emergency pause mechanism tested
-- [ ] Rate limiting on API routes
-- [ ] Input validation on all user-facing endpoints
 
 ### 3.3 Operations
-- [ ] Fee system operational (2% collected, distributed 70/20/10)
+- [ ] Fee system operational (dynamic fees collected, distributed 70/20/10)
 - [ ] Multisig resolution tested on mainnet
 - [ ] Automatic redemption for winning positions
 - [ ] Market lifecycle: create → fund → trade → resolve → redeem — works end-to-end
@@ -268,7 +324,6 @@ Already set (verify): `DATABASE_URL`, `PRIVY_APP_ID`, `ADMIN_USERNAMES`, `ANTHRO
 - [ ] Operations manual (create markets, resolve, monitor)
 - [ ] Incident response playbook (pause, diagnose, resume)
 - [ ] Environment variables documentation
-- [ ] UMA preparation (interfaces + comments in code, no integration)
 
 ### 3.5 Launch Prep
 - [ ] 5-10 curated markets live and tradeable
@@ -276,9 +331,11 @@ Already set (verify): `DATABASE_URL`, `PRIVY_APP_ID`, `ADMIN_USERNAMES`, `ANTHRO
 - [ ] Landing page (pronos.io) updated to point to live product
 - [x] ~~OG metadata, Twitter cards, favicon added~~
 - [x] ~~Nav responsive on tablet (≤1024px) and mobile~~
-- [x] ~~Waitlist button on public-facing bet slip (Tally form)~~
+- [x] ~~Waitlist button on public-facing bet slip~~
 - [x] ~~Polymarket/Polygon branding removed from MVP~~
 - [ ] Mobile responsiveness final check
+- [ ] Terms of service + privacy policy
+- [ ] KYC / phone verification for prize eligibility
 
 ---
 
@@ -293,6 +350,7 @@ Already set (verify): `DATABASE_URL`, `PRIVY_APP_ID`, `ADMIN_USERNAMES`, `ANTHRO
 - [ ] User-created markets
 - [ ] Market making bot / algorithmic liquidity
 - [ ] iOS/Android native apps
+- [ ] Analytics (user funnel, trade volume, retention)
 
 ---
 
@@ -324,7 +382,15 @@ Already set (verify): `DATABASE_URL`, `PRIVY_APP_ID`, `ADMIN_USERNAMES`, `ANTHRO
 | 2026-04-12 | Admin market creation form actually saves to DB (POST `/api/generated-markets` with `action=create`), supports 2-6 dynamic options, auto-approved. |
 | 2026-04-12 | Admin fully translated to English (50+ `admin.*` i18n keys), quiz link added to HowItWorks section. |
 | 2026-04-12 | Security hardening: Privy JWT auth (`_lib/auth.js`), shared admin/CORS helpers, cookie-based MVP access gate (`/api/mvp-access`), lazy route loading, authFetch wrapper. Closes H3, H4 from audit. |
+| 2026-04-15 | **Onboarding campaign UI:** Leaderboard widget (mock top-10, prizes, countdown) in Portfolio sidebar. EarnMXNP section with daily claim + streak, social connect via Privy OAuth (X/IG/TikTok), referral link + WhatsApp/Twitter/Telegram share. |
+| 2026-04-15 | **Layout restructure:** Category bar sticky below nav (like pronos.io). Portfolio two-column layout (positions left, leaderboard right). Social handles fixed (@pronos.latam, @pronos.io, @pronos_io). |
+| 2026-04-15 | **Protocol v2:** MarketFactoryV2 + PronosAMMMulti + PronosTokenV2 deployed to Arbitrum Sepolia. Admin creates v2 multi-outcome markets. |
+| 2026-04-15 | **Indexer hardening:** Per-factory block state, insertTrade with RETURNING id (dedup), positions aggregated from trades table. |
+| 2026-04-15 | **Sell flow:** Exit preview modal with spot value, fee, slippage, price impact. Pre-flight ERC-1155 balance validation. `protocolPricing.js` for on-chain buy/sell quotes. |
+| 2026-04-15 | **User API:** Auto-schema for users table, upsert on conflict, error logging, null username handling. Wallet linking UI in nav dropdown. |
+| 2026-04-15 | **BetModal fix:** Removed `t` from useEffect deps — was causing infinite loop that prevented slippage from ever loading. |
+| 2026-04-15 | **Security audit:** Full codebase review — 3 critical, 10 high, 7 medium, 10 low findings documented. |
 
 ---
 
-*Last updated: 2026-04-12*
+*Last updated: 2026-04-15*

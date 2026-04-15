@@ -108,7 +108,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, outcomeIn
     if (!provider) {
       setProtocolQuote(null);
       setProtocolQuoteState('error');
-      setProtocolQuoteError(t('bet.previewUnavailable'));
+      setProtocolQuoteError('Vista previa no disponible');
       return;
     }
 
@@ -129,12 +129,16 @@ export default function BetModal({ open, onClose, outcome, outcomePct, outcomeIn
         if (!alive) return;
         setProtocolQuote(null);
         setProtocolQuoteState('error');
-        setProtocolQuoteError(err.message || t('bet.previewUnavailable'));
+        setProtocolQuoteError(err.message || 'Vista previa no disponible');
       });
 
     return () => {
       alive = false;
     };
+    // NOTE: `t` intentionally excluded — useT() returns a new reference every
+    // render which would cause an infinite re-fire loop, cancelling every
+    // in-flight RPC call before it completes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     amount,
     market?.options?.[0]?.label,
@@ -146,7 +150,6 @@ export default function BetModal({ open, onClose, outcome, outcomePct, outcomeIn
     protocolChainId,
     protocolMarket,
     protocolVersion,
-    t,
   ]);
 
   async function getWalletUsdcBalance(provider, address, chainId) {
