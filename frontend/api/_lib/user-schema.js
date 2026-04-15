@@ -37,3 +37,25 @@ export async function ensureUserSchema(sql) {
   }
   userSchemaReady = true;
 }
+
+export function isUserSchemaError(error) {
+  const message = error?.message || '';
+  return (
+    error?.code === '42P01' || // undefined_table
+    error?.code === '42703' || // undefined_column
+    /relation ["']?users["']? does not exist/i.test(message) ||
+    /column .* does not exist/i.test(message)
+  );
+}
+
+export function formatUserSchemaError(context, error) {
+  return [
+    context,
+    error?.message ? `message=${error.message}` : null,
+    error?.code ? `code=${error.code}` : null,
+    error?.detail ? `detail=${error.detail}` : null,
+    error?.hint ? `hint=${error.hint}` : null,
+  ]
+    .filter(Boolean)
+    .join(' | ');
+}

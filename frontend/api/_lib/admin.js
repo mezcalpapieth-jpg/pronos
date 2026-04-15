@@ -1,5 +1,5 @@
 import { requirePrivyUser } from './auth.js';
-import { ensureUserSchema } from './user-schema.js';
+import { ensureUserSchema, formatUserSchemaError, isUserSchemaError } from './user-schema.js';
 
 const ADMIN_USERNAMES = (process.env.ADMIN_USERNAMES || 'mezcal,frmm,alex')
   .split(',')
@@ -8,9 +8,15 @@ const ADMIN_USERNAMES = (process.env.ADMIN_USERNAMES || 'mezcal,frmm,alex')
 
 export async function getUserByPrivyId(sql, privyId) {
   if (!privyId) return null;
-  await ensureUserSchema(sql);
-  const rows = await sql`SELECT username FROM users WHERE privy_id = ${privyId}`;
-  return rows[0] || null;
+  try {
+    const rows = await sql`SELECT username FROM users WHERE privy_id = ${privyId}`;
+    return rows[0] || null;
+  } catch (error) {
+    if (!isUserSchemaError(error)) throw error;
+    await ensureUserSchema(sql);
+    const rows = await sql`SELECT username FROM users WHERE privy_id = ${privyId}`;
+    return rows[0] || null;
+  }
 }
 
 export async function isAdminUser(sql, privyId) {
@@ -35,6 +41,7 @@ export async function requireAdmin(req, res, sql, privyId) {
     }
     return { ok: true, username };
   } catch (e) {
+    console.error(formatUserSchemaError('requireAdmin failed', e));
     res.status(500).json({ error: 'Error verificando admin' });
     return { ok: false };
   }
