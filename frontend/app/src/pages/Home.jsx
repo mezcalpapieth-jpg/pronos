@@ -22,27 +22,16 @@ export default function Home() {
       <Ticker />
       <Nav />
 
+      {/* Category bar — sticky right below the nav, like pronos.io */}
+      <div className="category-bar-sticky">
+        <CategoryBar activeFilter={activeFilter} onFilter={setActiveFilter} />
+      </div>
+
       <main>
         <Hero />
 
-        <section id="markets" style={{ padding: '60px 48px', maxWidth: 1280, margin: '0 auto' }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginBottom: 8 }}>
-            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(28px, 3vw, 40px)', letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-primary)' }}>
-              {t('home.markets')}
-            </h2>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.1em' }}>{t('home.live')}</span>
-          </div>
-          <p style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 32 }}>
-            {t('home.subtitle')}
-          </p>
-
-          <div className="category-bar-sticky">
-            <CategoryBar activeFilter={activeFilter} onFilter={setActiveFilter} />
-          </div>
-
-          <div style={{ marginTop: 32 }}>
-            <MarketsGrid activeFilter={activeFilter} />
-          </div>
+        <section id="markets" style={{ padding: '40px 48px 60px', maxWidth: 1280, margin: '0 auto' }}>
+          <MarketsGrid activeFilter={activeFilter} />
         </section>
 
         <HowItWorks />
