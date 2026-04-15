@@ -1,0 +1,2071 @@
+{\rtf1\ansi\deff0{\fonttbl{\f0 Aptos;}{\f1 Helvetica;}{\f2 Courier New;}}\paperw12240\paperh15840\margl900\margr900\margt900\margb900
+\pard\sa140\sl300\slmult1\f0\fs40\b PRONOS\b0\par
+\pagebb
+\pard\sa140\sl300\slmult1\f0\fs30\b Web3 Prediction Markets Platform\b0\par
+\pard\sa140\sl300\slmult1\f0\fs22 Product Requirements Document (PRD)\line Version 2.0 - April 2026\line Confidential\par
+\pard\sa140\brdrb\brdrs\brdrw10\par
+\pard\li720\sa140\sl300\slmult1\f0\fs22\i About this document\line This PRD describes the full PRONOS vision, what has already been built internally, and what we need from an external development team to reach mainnet. Sections clearly mark what already exists (\line BUILT\line ) versus what still needs to be delivered (\line TO BUILD\line ).\line The document intentionally keeps strategic roadmap items such as UMA and MoonPay in scope even when they are not yet implemented. Some items are launch-critical, while others are included as optional or nice-to-have future work so they remain visible in planning conversations.\i0\par
+\pard\sa140\brdrb\brdrs\brdrw10\par
+\pagebb
+\pard\sa140\sl300\slmult1\f0\fs30\b 01. General Information and Scope\b0\par
+\pard\sa140\sl300\slmult1\f0\fs26\b Project Name\b0\par
+\pard\sa140\sl300\slmult1\f0\fs22 PRONOS - The first on-chain prediction market focused on Latin America.\par
+\pard\sa140\sl300\slmult1\f0\fs26\b Vision\b0\par
+\pard\sa140\sl300\slmult1\f0\fs22 Build the most accessible prediction platform for the Latin American market, where anyone can bet on sports, politics, and culture without needing crypto knowledge, complex wallets, or currency conversion expertise.\par
+\pard\sa140\sl300\slmult1\f0\fs26\b Launch Goal\b0\par
+\pard\sa140\sl300\slmult1\f0\fs22 Mainnet live before the 2026 FIFA World Cup (June 14, 2026).\line Allocated budget: $30,000 USD.\par
+\pard\sa140\sl300\slmult1\f0\fs26\b Current Product URL\b0\par
+\pard\sa140\sl300\slmult1\f0\fs22 https://pronos.io/mvp/ - password protected staging environment.\par
+\pard\sa140\sl300\slmult1\f0\fs26\b Blockchain Network: Arbitrum (Ethereum Layer 2)\b0\par
+\pard\sa140\sl300\slmult1\f0\fs22 The selected deployment network is Arbitrum, Ethereum's optimistic rollup Layer 2.\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b CriterionDetails\b0\cell
+\pard\intbl\f0\fs20\b CriterionDetails\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 GasAbout $0.01 USD per transaction, which makes micro-bets viable\cell
+\pard\intbl\f0\fs20 GasAbout $0.01 USD per transaction, which makes micro-bets viable\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 SpeedConfirmation in about 250ms\cell
+\pard\intbl\f0\fs20 SpeedConfirmation in about 250ms\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 CompatibilityFully EVM-compatible, so OpenZeppelin contracts do not need to be rewritten\cell
+\pard\intbl\f0\fs20 CompatibilityFully EVM-compatible, so OpenZeppelin contracts do not need to be rewritten\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 EcosystemNative USDC (Circle), full Privy support, Safe multisig available\cell
+\pard\intbl\f0\fs20 EcosystemNative USDC (Circle), full Privy support, Safe multisig available\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 LiquiditySecond-largest L2 by TVL (about $20B+) with broad USDC availability\cell
+\pard\intbl\f0\fs20 LiquiditySecond-largest L2 by TVL (about $20B+) with broad USDC availability\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs22 Note: The original draft proposed Base because of MXNB availability through Bitso. The plan was later migrated to Arbitrum because of a more mature ecosystem, better tooling support (Safe SDK, Privy), and direct USDC availability as collateral.\par
+\pard\sa140\sl300\slmult1\f0\fs26\b Collateral Asset\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b ParameterSpecification\b0\cell
+\pard\intbl\f0\fs20\b ParameterSpecification\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Primary assetUSDC - Circle stablecoin deployed natively on Arbitrum\cell
+\pard\intbl\f0\fs20 Primary assetUSDC - Circle stablecoin deployed natively on Arbitrum\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Multi-asset supportNot required in v1. The architecture can support adding assets such as MXNB or DAI without redeploying core contracts\cell
+\pard\intbl\f0\fs20 Multi-asset supportNot required in v1. The architecture can support adding assets such as MXNB or DAI without redeploying core contracts\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs26\b On-Ramps (Funding Methods)\b0\par
+\pard\sa140\sl300\slmult1\f0\fs22 Several deposit paths are planned so users can fund the platform easily:\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx2340
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx7020
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b PathMethodStatusPriority\b0\cell
+\pard\intbl\f0\fs20\b PathMethodStatusPriority\b0\cell
+\pard\intbl\f0\fs20\b PathMethodStatusPriority\b0\cell
+\pard\intbl\f0\fs20\b PathMethodStatusPriority\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx2340
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx7020
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 MoonPayApple Pay, Google Pay, credit and debit cardsTO BUILDHigh - MVP\cell
+\pard\intbl\f0\fs20 MoonPayApple Pay, Google Pay, credit and debit cardsTO BUILDHigh - MVP\cell
+\pard\intbl\f0\fs20 MoonPayApple Pay, Google Pay, credit and debit cardsTO BUILDHigh - MVP\cell
+\pard\intbl\f0\fs20 MoonPayApple Pay, Google Pay, credit and debit cardsTO BUILDHigh - MVP\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx2340
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx7020
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 SPEIMXN bank transfer via Bitso or a similar providerTO BUILDHigh - MVP\cell
+\pard\intbl\f0\fs20 SPEIMXN bank transfer via Bitso or a similar providerTO BUILDHigh - MVP\cell
+\pard\intbl\f0\fs20 SPEIMXN bank transfer via Bitso or a similar providerTO BUILDHigh - MVP\cell
+\pard\intbl\f0\fs20 SPEIMXN bank transfer via Bitso or a similar providerTO BUILDHigh - MVP\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx2340
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx7020
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Native bridgeArbitrum Bridge for crypto-native usersBUILT (link only)Medium\cell
+\pard\intbl\f0\fs20 Native bridgeArbitrum Bridge for crypto-native usersBUILT (link only)Medium\cell
+\pard\intbl\f0\fs20 Native bridgeArbitrum Bridge for crypto-native usersBUILT (link only)Medium\cell
+\pard\intbl\f0\fs20 Native bridgeArbitrum Bridge for crypto-native usersBUILT (link only)Medium\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx2340
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx7020
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Direct Bitso flowBuy USDC in Bitso and send it to the walletUnder evaluationPost-MVP\cell
+\pard\intbl\f0\fs20 Direct Bitso flowBuy USDC in Bitso and send it to the walletUnder evaluationPost-MVP\cell
+\pard\intbl\f0\fs20 Direct Bitso flowBuy USDC in Bitso and send it to the walletUnder evaluationPost-MVP\cell
+\pard\intbl\f0\fs20 Direct Bitso flowBuy USDC in Bitso and send it to the walletUnder evaluationPost-MVP\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs22 Target flow for non-crypto users:\line Open app -> log in with email -> deposit with card / Apple Pay / SPEI -> place a prediction. Total time under 3 minutes.\par
+\pard\sa140\sl300\slmult1\f0\fs22 MoonPay handles the full KYC process (ID verification with national ID or passport), payment processing, and delivery of USDC directly into the user's Arbitrum wallet. The user never needs to understand blockchain mechanics.\par
+\pard\sa140\brdrb\brdrs\brdrw10\par
+\pagebb
+\pard\sa140\sl300\slmult1\f0\fs30\b 02. Smart Contract Architecture\b0\par
+\pard\sa140\sl300\slmult1\f0\fs26\b BUILT - Contract System\b0\par
+\pard\sa140\sl300\slmult1\f0\fs22 Custom contracts were built from scratch using Solidity 0.8.24, Foundry, and OpenZeppelin v5.6.1. The architecture is original and optimized for binary markets with dynamic fees.\par
+\pard\sa140\sl300\slmult1\f0\fs24\b PronosToken.sol - Conditional Tokens (ERC-1155)\b0\par
+\pard\sa140\sl300\slmult1\f0\fs22 Each market creates two tokens: YES (`marketId * 2`) and NO (`marketId * 2 + 1`).\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab ERC-1155 standard for gas-efficient multi-market support\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Only authorized pools (minters) can mint or burn tokens\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab `mintPair()`: deposit collateral and receive YES + NO in a 1:1 ratio\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab `burnPair()`: return YES + NO and recover collateral\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab `burn()`: burn winning tokens during redemption\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Ownership transferred to `MarketFactory` after deployment\par
+\pard\sa140\sl300\slmult1\f0\fs24\b MarketFactory.sol - Market Factory\b0\par
+\pard\sa140\sl300\slmult1\f0\fs22 This is the central hub for creating and managing prediction markets.\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab `createMarket()`: deploys a new AMM pool with seed liquidity\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab `resolveMarket()`: declares the winning outcome (YES = 1, NO = 2)\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab `pauseMarket()`: suspends or resumes trading\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab `distributeFees()`: distributes accumulated fees under the 70 / 20 / 10 split\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Access control: owner (Safe multisig) and resolver (can be a separate multisig)\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Configurable addresses: treasury, liquidity reserve, emergency reserve, fee collector\par
+\pard\sa140\sl300\slmult1\f0\fs24\b PronosAMM.sol - Automated Market Maker (CPMM)\b0\par
+\pard\sa140\sl300\slmult1\f0\fs22 An AMM using the constant product formula ( x * y = k ) with dynamic fees.\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Base formula: `x * y = k`, where `x` and `y` are YES / NO reserves\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Buy: user deposits USDC, the pool mints YES + NO pairs, and the CPMM computes output tokens\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Sell: user returns tokens, a quadratic formula computes collateral out, and the pool burns pairs\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Redeem: after resolution, winning tokens are redeemed 1:1 for USDC\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab On-chain estimate functions: `estimateBuy()`, `estimateSell()`, `priceYes()`, `priceNo()`\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab All market logic lives on-chain, with no off-chain matching engine\par
+\pard\sa140\sl300\slmult1\f0\fs24\b Testing\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b MetricStatus\b0\cell
+\pard\intbl\f0\fs20\b MetricStatus\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Total tests43 passing\cell
+\pard\intbl\f0\fs20 Total tests43 passing\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 `PronosToken` coverage100%\cell
+\pard\intbl\f0\fs20 `PronosToken` coverage100%\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 `MarketFactory` coverage87%\cell
+\pard\intbl\f0\fs20 `MarketFactory` coverage87%\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 `PronosAMM` coverage82%\cell
+\pard\intbl\f0\fs20 `PronosAMM` coverage82%\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Full cycle testBuilt: create -> fund -> trade -> resolve -> redeem\cell
+\pard\intbl\f0\fs20 Full cycle testBuilt: create -> fund -> trade -> resolve -> redeem\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 FrameworkFoundry (`forge test`)\cell
+\pard\intbl\f0\fs20 FrameworkFoundry (`forge test`)\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs26\b Dynamic Fee Model\b0\par
+\pard\sa140\sl300\slmult1\f0\fs22 The fee formula adjusts automatically according to implied market probability:\par
+\pard\li360\ri360\sa140\f2\fs20 fee% = 5 * (1 - P)\par
+\pard\sa140\sl300\slmult1\f0\fs22 Where `P` is the implied probability of the side being bought.\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b Market probabilityFee per trade\b0\cell
+\pard\intbl\f0\fs20\b Market probabilityFee per trade\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 50 / 50 (maximum uncertainty)2.5%\cell
+\pard\intbl\f0\fs20 50 / 50 (maximum uncertainty)2.5%\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 70 / 301.5%\cell
+\pard\intbl\f0\fs20 70 / 301.5%\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 90 / 100.5%\cell
+\pard\intbl\f0\fs20 90 / 100.5%\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 99 / 1 (nearly decided)0.05%\cell
+\pard\intbl\f0\fs20 99 / 1 (nearly decided)0.05%\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs22 Principle: charge more when risk and uncertainty are higher, and less when the market has already formed a strong consensus. Fees are deducted before funds enter the pool and are sent directly to the `feeCollector`; they never touch AMM reserves.\par
+\pard\sa140\sl300\slmult1\f0\fs26\b Revenue Distribution\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b DestinationPercentage\b0\cell
+\pard\intbl\f0\fs20\b DestinationPercentage\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Treasury (operations and development)70%\cell
+\pard\intbl\f0\fs20 Treasury (operations and development)70%\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Liquidity fund (LP incentives)20%\cell
+\pard\intbl\f0\fs20 Liquidity fund (LP incentives)20%\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Reserve fund (security / emergencies)10%\cell
+\pard\intbl\f0\fs20 Reserve fund (security / emergencies)10%\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs26\b Market Types\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b TypeStatusDescription\b0\cell
+\pard\intbl\f0\fs20\b TypeStatusDescription\b0\cell
+\pard\intbl\f0\fs20\b TypeStatusDescription\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Binary (Yes / No)BuiltCovers sports, politics, and culture. Example: "Will Mexico beat Argentina?"\cell
+\pard\intbl\f0\fs20 Binary (Yes / No)BuiltCovers sports, politics, and culture. Example: "Will Mexico beat Argentina?"\cell
+\pard\intbl\f0\fs20 Binary (Yes / No)BuiltCovers sports, politics, and culture. Example: "Will Mexico beat Argentina?"\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Categorical (multiple outcomes)Planned for v2Example: "Who wins La Casa de los Famosos?" with 5+ candidates. Requires AMM extension\cell
+\pard\intbl\f0\fs20 Categorical (multiple outcomes)Planned for v2Example: "Who wins La Casa de los Famosos?" with 5+ candidates. Requires AMM extension\cell
+\pard\intbl\f0\fs20 Categorical (multiple outcomes)Planned for v2Example: "Who wins La Casa de los Famosos?" with 5+ candidates. Requires AMM extension\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Scalar (numeric range)Planned for v2Economic markets such as exchange rate or inflation\cell
+\pard\intbl\f0\fs20 Scalar (numeric range)Planned for v2Economic markets such as exchange rate or inflation\cell
+\pard\intbl\f0\fs20 Scalar (numeric range)Planned for v2Economic markets such as exchange rate or inflation\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs26\b TO BUILD - Contracts\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b ItemDetail\b0\cell
+\pard\intbl\f0\fs20\b ItemDetail\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Deploy to Arbitrum SepoliaScript is ready (`DeployProtocol.s.sol`), but still needs RPC and deployer execution\cell
+\pard\intbl\f0\fs20 Deploy to Arbitrum SepoliaScript is ready (`DeployProtocol.s.sol`), but still needs RPC and deployer execution\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Deploy to Arbitrum OneSame script, with mainnet RPC and Arbiscan verification\cell
+\pard\intbl\f0\fs20 Deploy to Arbitrum OneSame script, with mainnet RPC and Arbiscan verification\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Fuzz testingAMM edge cases such as extreme amounts, reentrancy, overflow\cell
+\pard\intbl\f0\fs20 Fuzz testingAMM edge cases such as extreme amounts, reentrancy, overflow\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 UMA integrationConnect market resolution to UMA Optimistic Oracle\cell
+\pard\intbl\f0\fs20 UMA integrationConnect market resolution to UMA Optimistic Oracle\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Categorical marketsExtend the AMM to support 3+ outcomes\cell
+\pard\intbl\f0\fs20 Categorical marketsExtend the AMM to support 3+ outcomes\cell
+\row
+\pard\sa120\par
+\pard\sa140\brdrb\brdrs\brdrw10\par
+\pagebb
+\pard\sa140\sl300\slmult1\f0\fs30\b 03. Resolution and Oracles\b0\par
+\pard\sa140\sl300\slmult1\f0\fs26\b Dual Resolution Mechanism\b0\par
+\pard\sa140\sl300\slmult1\f0\fs22 The platform will use two different resolution mechanisms depending on the market category:\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b CategoryMechanismRationale\b0\cell
+\pard\intbl\f0\fs20\b CategoryMechanismRationale\b0\cell
+\pard\intbl\f0\fs20\b CategoryMechanismRationale\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Sports / Reality TV (Liga MX, FIFA, Exatlon, La Casa de los Famosos)Custodial multisig oracle (2-of-3)Results are public and easy to verify via broadcasts and official sources\cell
+\pard\intbl\f0\fs20 Sports / Reality TV (Liga MX, FIFA, Exatlon, La Casa de los Famosos)Custodial multisig oracle (2-of-3)Results are public and easy to verify via broadcasts and official sources\cell
+\pard\intbl\f0\fs20 Sports / Reality TV (Liga MX, FIFA, Exatlon, La Casa de los Famosos)Custodial multisig oracle (2-of-3)Results are public and easy to verify via broadcasts and official sources\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Politics / Economy (elections, legislation, appointments, macro data)UMA Optimistic OracleHandles arbitrary real-world events with on-chain dispute resolution\cell
+\pard\intbl\f0\fs20 Politics / Economy (elections, legislation, appointments, macro data)UMA Optimistic OracleHandles arbitrary real-world events with on-chain dispute resolution\cell
+\pard\intbl\f0\fs20 Politics / Economy (elections, legislation, appointments, macro data)UMA Optimistic OracleHandles arbitrary real-world events with on-chain dispute resolution\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Special marketsCase by caseMultisig or UMA depending on event complexity\cell
+\pard\intbl\f0\fs20 Special marketsCase by caseMultisig or UMA depending on event complexity\cell
+\pard\intbl\f0\fs20 Special marketsCase by caseMultisig or UMA depending on event complexity\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs26\b BUILT - Multisig Resolution\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b ComponentSpecification\b0\cell
+\pard\intbl\f0\fs20\b ComponentSpecification\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 TypeGnosis Safe multisig (2-of-3 or 3-of-5)\cell
+\pard\intbl\f0\fs20 TypeGnosis Safe multisig (2-of-3 or 3-of-5)\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 SignersFounder, co-founder, trusted third party\cell
+\pard\intbl\f0\fs20 SignersFounder, co-founder, trusted third party\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 ProcessResolver proposes a result, required signatures are collected, then `resolveMarket()` executes\cell
+\pard\intbl\f0\fs20 ProcessResolver proposes a result, required signatures are collected, then `resolveMarket()` executes\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 ToolingSafe SDK integrated into the admin panel (`protocol-kit` + `api-kit`)\cell
+\pard\intbl\f0\fs20 ToolingSafe SDK integrated into the admin panel (`protocol-kit` + `api-kit`)\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Supported chainsArbitrum Sepolia and Arbitrum One\cell
+\pard\intbl\f0\fs20 Supported chainsArbitrum Sepolia and Arbitrum One\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Admin UICreate Safe, connect existing Safe, propose / sign / execute directly from `/mvp/admin`\cell
+\pard\intbl\f0\fs20 Admin UICreate Safe, connect existing Safe, propose / sign / execute directly from `/mvp/admin`\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs26\b TO BUILD - UMA Optimistic Oracle\b0\par
+\pard\sa140\sl300\slmult1\f0\fs22 UMA should be integrated for political and complex markets where resolution is not obviously mechanical.\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b ComponentRequirement\b0\cell
+\pard\intbl\f0\fs20\b ComponentRequirement\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 UMA interfaceAdapter contract connecting `MarketFactory` to UMA `OptimisticOracleV3`\cell
+\pard\intbl\f0\fs20 UMA interfaceAdapter contract connecting `MarketFactory` to UMA `OptimisticOracleV3`\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Result proposalAnyone can propose an outcome by posting a USDC bond\cell
+\pard\intbl\f0\fs20 Result proposalAnyone can propose an outcome by posting a USDC bond\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Dispute window48 hours; if no one disputes, the result stands\cell
+\pard\intbl\f0\fs20 Dispute window48 hours; if no one disputes, the result stands\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 EscalationIf disputed, it escalates to UMA's DVM, where UMA token holders vote on-chain\cell
+\pard\intbl\f0\fs20 EscalationIf disputed, it escalates to UMA's DVM, where UMA token holders vote on-chain\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Auto-resolutionAfter the dispute window ends without challenge, `resolveMarket()` runs automatically\cell
+\pard\intbl\f0\fs20 Auto-resolutionAfter the dispute window ends without challenge, `resolveMarket()` runs automatically\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Resolution rulesRules are defined when the market is created, using UMA ancillary data\cell
+\pard\intbl\f0\fs20 Resolution rulesRules are defined when the market is created, using UMA ancillary data\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs22 Note: UMA interfaces and comments are already scaffolded in the contract code. What remains is the adapter contract and callback wiring.\par
+\pard\sa140\sl300\slmult1\f0\fs26\b Dispute Process\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b OracleProcess\b0\cell
+\pard\intbl\f0\fs20\b OracleProcess\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Multisig (sports / TV)If an error is detected, signers deliberate and correct it by majority vote. The curation committee is the final arbiter\cell
+\pard\intbl\f0\fs20 Multisig (sports / TV)If an error is detected, signers deliberate and correct it by majority vote. The curation committee is the final arbiter\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 UMA (politics)Any token holder can dispute during the dispute window. The dispute escalates to UMA's DVM, and the majority determines the final result\cell
+\pard\intbl\f0\fs20 UMA (politics)Any token holder can dispute during the dispute window. The dispute escalates to UMA's DVM, and the majority determines the final result\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs22 Ambiguous cases such as cancellations, technical ties, or postponed events must be handled according to the pre-defined resolution rules stored with the market.\par
+\pard\sa140\sl300\slmult1\f0\fs26\b Execution Timelines\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b PhaseMultisigUMA\b0\cell
+\pard\intbl\f0\fs20\b PhaseMultisigUMA\b0\cell
+\pard\intbl\f0\fs20\b PhaseMultisigUMA\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Reporting period24h after event24h after event\cell
+\pard\intbl\f0\fs20 Reporting period24h after event24h after event\cell
+\pard\intbl\f0\fs20 Reporting period24h after event24h after event\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Dispute periodNot applicable48h after proposal\cell
+\pard\intbl\f0\fs20 Dispute periodNot applicable48h after proposal\cell
+\pard\intbl\f0\fs20 Dispute periodNot applicable48h after proposal\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Resolution with no dispute24-48hAutomatic at dispute-window close\cell
+\pard\intbl\f0\fs20 Resolution with no dispute24-48hAutomatic at dispute-window close\cell
+\pard\intbl\f0\fs20 Resolution with no dispute24-48hAutomatic at dispute-window close\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Resolution with dispute24-48h (multisig deliberation)5-7 business days (DVM voting)\cell
+\pard\intbl\f0\fs20 Resolution with dispute24-48h (multisig deliberation)5-7 business days (DVM voting)\cell
+\pard\intbl\f0\fs20 Resolution with dispute24-48h (multisig deliberation)5-7 business days (DVM voting)\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Fund releaseImmediate after resolutionImmediate after resolution\cell
+\pard\intbl\f0\fs20 Fund releaseImmediate after resolutionImmediate after resolution\cell
+\pard\intbl\f0\fs20 Fund releaseImmediate after resolutionImmediate after resolution\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Oracle feeNoneAbout 1.5% of market value, paid by the protocol\cell
+\pard\intbl\f0\fs20 Oracle feeNoneAbout 1.5% of market value, paid by the protocol\cell
+\pard\intbl\f0\fs20 Oracle feeNoneAbout 1.5% of market value, paid by the protocol\cell
+\row
+\pard\sa120\par
+\pard\sa140\brdrb\brdrs\brdrw10\par
+\pagebb
+\pard\sa140\sl300\slmult1\f0\fs30\b 04. Frontend and User Experience\b0\par
+\pard\sa140\sl300\slmult1\f0\fs26\b BUILT - Technical Stack\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b LayerTechnology\b0\cell
+\pard\intbl\f0\fs20\b LayerTechnology\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 FrameworkReact 18 + Vite 5 (SPA, mobile-first)\cell
+\pard\intbl\f0\fs20 FrameworkReact 18 + Vite 5 (SPA, mobile-first)\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 RoutingReact Router v6 with basename `/mvp`\cell
+\pard\intbl\f0\fs20 RoutingReact Router v6 with basename `/mvp`\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Auth / WalletPrivy (`@privy-io/react-auth`)\cell
+\pard\intbl\f0\fs20 Auth / WalletPrivy (`@privy-io/react-auth`)\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Blockchain library`ethers.js` v5.7.2\cell
+\pard\intbl\f0\fs20 Blockchain library`ethers.js` v5.7.2\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 StylingCustom CSS, proprietary design system, dark theme, responsive\cell
+\pard\intbl\f0\fs20 StylingCustom CSS, proprietary design system, dark theme, responsive\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 MonitoringSentry (`@sentry/react`, `ErrorBoundary`, privacy-safe)\cell
+\pard\intbl\f0\fs20 MonitoringSentry (`@sentry/react`, `ErrorBoundary`, privacy-safe)\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 HostingVercel (static + serverless functions)\cell
+\pard\intbl\f0\fs20 HostingVercel (static + serverless functions)\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 LanguageSpanish only\cell
+\pard\intbl\f0\fs20 LanguageSpanish only\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs26\b BUILT - Pages and Components\b0\par
+\pard\sa140\sl300\slmult1\f0\fs24\b Home ( /mvp/ )\b0\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Hero carousel with featured markets\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Market grid with live data (Polymarket Gamma API + internal markets)\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab "How it works" visual section\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Animated market ticker\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Search bar and filtering\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Footer links\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Responsive tablet and mobile layouts\par
+\pard\sa140\sl300\slmult1\f0\fs24\b Market Page ( /mvp/market?id= )\b0\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Ring-chart probability visualization\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Trading panel with outcome and amount selection\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Payout preview with real-time dynamic fee calculation\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Tabs for Rules, Market Context, Comments, Top Holders, Positions, and Activity\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Sticky sidebar for quick trading\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Support for resolved markets with final winner state\par
+\pard\sa140\sl300\slmult1\f0\fs24\b Portfolio ( /mvp/portfolio )\b0\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Chain-aware user USDC balance\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Open positions list with individual P&L\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Summary of total invested, current value, and profit / loss\par
+\pard\sa140\sl300\slmult1\f0\fs24\b Admin Panel ( /mvp/admin )\b0\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Restricted access with server-side auth through `/api/user`\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Protocol mode toggle (Polymarket <-> Internal protocol)\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Market creation form (question, category, date, oracle, liquidity)\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Market list with pause and resolve actions\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Fee-formula and 70 / 20 / 10 distribution display\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Deployed-contract status panel\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Full Safe SDK integration for create / connect / propose / sign / execute\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Non-admin users receive a 404 page, making the route undiscoverable\par
+\pard\sa140\sl300\slmult1\f0\fs24\b Bet Slip (Trade Modal)\b0\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Quick amount selectors ($5, $10, $25, $50) plus custom entry\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Dynamic calculation of fee, estimated payout, potential profit, and implied probability\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Auto network switching when user is on the wrong chain\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Full flow: check balance -> approve USDC -> sign -> place order\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Unauthenticated users see a "Join the waitlist" action via Tally\par
+\pard\sa140\sl300\slmult1\f0\fs26\b BUILT - Authentication and Onboarding\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b CapabilityStatus\b0\cell
+\pard\intbl\f0\fs20\b CapabilityStatus\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Email loginBuilt via Privy\cell
+\pard\intbl\f0\fs20 Email loginBuilt via Privy\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Google loginBuilt via Privy\cell
+\pard\intbl\f0\fs20 Google loginBuilt via Privy\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Wallet login (MetaMask, Coinbase Wallet, etc.)Built via Privy\cell
+\pard\intbl\f0\fs20 Wallet login (MetaMask, Coinbase Wallet, etc.)Built via Privy\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Auto-created embedded wallet (ERC-4337)Built and invisible to user\cell
+\pard\intbl\f0\fs20 Auto-created embedded wallet (ERC-4337)Built and invisible to user\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Username registrationBuilt with "Skip" option and auto-generated fallback\cell
+\pard\intbl\f0\fs20 Username registrationBuilt with "Skip" option and auto-generated fallback\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Persistent sessionsBuilt via Privy embedded wallets\cell
+\pard\intbl\f0\fs20 Persistent sessionsBuilt via Privy embedded wallets\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Multi-chainPolygon + Arbitrum + Arbitrum Sepolia\cell
+\pard\intbl\f0\fs20 Multi-chainPolygon + Arbitrum + Arbitrum Sepolia\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Auto network switchBuilt\cell
+\pard\intbl\f0\fs20 Auto network switchBuilt\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Chain-aware USDC balanceBuilt\cell
+\pard\intbl\f0\fs20 Chain-aware USDC balanceBuilt\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Deposit linkBuilt according to active protocol mode\cell
+\pard\intbl\f0\fs20 Deposit linkBuilt according to active protocol mode\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs26\b BUILT - Dual Mode: Polymarket + Internal Protocol\b0\par
+\pard\sa140\sl300\slmult1\f0\fs22 The platform currently operates in two modes, controlled from the admin panel:\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b ModeDescription\b0\cell
+\pard\intbl\f0\fs20\b ModeDescription\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 PolymarketShows Polymarket markets from Gamma and routes trades through the Polygon CLOB\cell
+\pard\intbl\f0\fs20 PolymarketShows Polymarket markets from Gamma and routes trades through the Polygon CLOB\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Internal protocolShows admin-created markets and routes trades through `PronosAMM` on Arbitrum\cell
+\pard\intbl\f0\fs20 Internal protocolShows admin-created markets and routes trades through `PronosAMM` on Arbitrum\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs22 The switch is reactive across the app through a custom event. At the current stage, Polymarket mode is used to validate UX on real markets while the internal contracts are being prepared for deployment.\par
+\pard\sa140\sl300\slmult1\f0\fs26\b TO BUILD - Frontend\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b ItemDetailPriority\b0\cell
+\pard\intbl\f0\fs20\b ItemDetailPriority\b0\cell
+\pard\intbl\f0\fs20\b ItemDetailPriority\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Connect frontend to internal contracts`contracts.js` library for `PronosAMM` buy / sell / redeemHigh\cell
+\pard\intbl\f0\fs20 Connect frontend to internal contracts`contracts.js` library for `PronosAMM` buy / sell / redeemHigh\cell
+\pard\intbl\f0\fs20 Connect frontend to internal contracts`contracts.js` library for `PronosAMM` buy / sell / redeemHigh\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Buy / sell panel for internal protocolDetect market type and route to the right AMM flowHigh\cell
+\pard\intbl\f0\fs20 Buy / sell panel for internal protocolDetect market type and route to the right AMM flowHigh\cell
+\pard\intbl\f0\fs20 Buy / sell panel for internal protocolDetect market type and route to the right AMM flowHigh\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Real-time AMM pricingRead `priceYes()` and `priceNo()` from contracts and show them in UIHigh\cell
+\pard\intbl\f0\fs20 Real-time AMM pricingRead `priceYes()` and `priceNo()` from contracts and show them in UIHigh\cell
+\pard\intbl\f0\fs20 Real-time AMM pricingRead `priceYes()` and `priceNo()` from contracts and show them in UIHigh\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Slippage previewUse `estimateBuy()` and `estimateSell()` before confirming tradeHigh\cell
+\pard\intbl\f0\fs20 Slippage previewUse `estimateBuy()` and `estimateSell()` before confirming tradeHigh\cell
+\pard\intbl\f0\fs20 Slippage previewUse `estimateBuy()` and `estimateSell()` before confirming tradeHigh\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Unified portfolioMerge Polymarket and internal protocol positions into one viewMedium\cell
+\pard\intbl\f0\fs20 Unified portfolioMerge Polymarket and internal protocol positions into one viewMedium\cell
+\pard\intbl\f0\fs20 Unified portfolioMerge Polymarket and internal protocol positions into one viewMedium\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Historical price chartLine or OHLC chart using `price_snapshots` tableMedium\cell
+\pard\intbl\f0\fs20 Historical price chartLine or OHLC chart using `price_snapshots` tableMedium\cell
+\pard\intbl\f0\fs20 Historical price chartLine or OHLC chart using `price_snapshots` tableMedium\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 MoonPay widgetEmbedded card / Apple Pay / Google Pay funding flowHigh\cell
+\pard\intbl\f0\fs20 MoonPay widgetEmbedded card / Apple Pay / Google Pay funding flowHigh\cell
+\pard\intbl\f0\fs20 MoonPay widgetEmbedded card / Apple Pay / Google Pay funding flowHigh\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Push notificationsMarket opening and resolution alerts via WhatsApp / SMS / pushLow\cell
+\pard\intbl\f0\fs20 Push notificationsMarket opening and resolution alerts via WhatsApp / SMS / pushLow\cell
+\pard\intbl\f0\fs20 Push notificationsMarket opening and resolution alerts via WhatsApp / SMS / pushLow\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Gas sponsoringTurn on Privy paymaster so users do not pay gas directlyMedium\cell
+\pard\intbl\f0\fs20 Gas sponsoringTurn on Privy paymaster so users do not pay gas directlyMedium\cell
+\pard\intbl\f0\fs20 Gas sponsoringTurn on Privy paymaster so users do not pay gas directlyMedium\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Final responsive passMobile and tablet reviewMedium\cell
+\pard\intbl\f0\fs20 Final responsive passMobile and tablet reviewMedium\cell
+\pard\intbl\f0\fs20 Final responsive passMobile and tablet reviewMedium\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 PWAService worker and app-like mobile install experienceLow\cell
+\pard\intbl\f0\fs20 PWAService worker and app-like mobile install experienceLow\cell
+\pard\intbl\f0\fs20 PWAService worker and app-like mobile install experienceLow\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs26\b Full Visualization Vision\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b ComponentStatusDescription\b0\cell
+\pard\intbl\f0\fs20\b ComponentStatusDescription\b0\cell
+\pard\intbl\f0\fs20\b ComponentStatusDescription\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Real-time probability visualizationBuilt (ring chart)Visual chart showing YES / NO movement from market open\cell
+\pard\intbl\f0\fs20 Real-time probability visualizationBuilt (ring chart)Visual chart showing YES / NO movement from market open\cell
+\pard\intbl\f0\fs20 Real-time probability visualizationBuilt (ring chart)Visual chart showing YES / NO movement from market open\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Price historyTo buildHourly / daily OHLC view for market trend analysis\cell
+\pard\intbl\f0\fs20 Price historyTo buildHourly / daily OHLC view for market trend analysis\cell
+\pard\intbl\f0\fs20 Price historyTo buildHourly / daily OHLC view for market trend analysis\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Position panel (P&L)Built (basic)Dashboard with active markets, invested amount, current value, unrealized P&L\cell
+\pard\intbl\f0\fs20 Position panel (P&L)Built (basic)Dashboard with active markets, invested amount, current value, unrealized P&L\cell
+\pard\intbl\f0\fs20 Position panel (P&L)Built (basic)Dashboard with active markets, invested amount, current value, unrealized P&L\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Active market feedBuiltFilterable list by category, volume, and close date\cell
+\pard\intbl\f0\fs20 Active market feedBuiltFilterable list by category, volume, and close date\cell
+\pard\intbl\f0\fs20 Active market feedBuiltFilterable list by category, volume, and close date\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Individual market viewBuiltDetail view with rules, oracle, activity, comments\cell
+\pard\intbl\f0\fs20 Individual market viewBuiltDetail view with rules, oracle, activity, comments\cell
+\pard\intbl\f0\fs20 Individual market viewBuiltDetail view with rules, oracle, activity, comments\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Push notificationsTo buildAlerts for market open, near resolution, and final result\cell
+\pard\intbl\f0\fs20 Push notificationsTo buildAlerts for market open, near resolution, and final result\cell
+\pard\intbl\f0\fs20 Push notificationsTo buildAlerts for market open, near resolution, and final result\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 LeaderboardTo buildPublic ranking by user P&L and volume\cell
+\pard\intbl\f0\fs20 LeaderboardTo buildPublic ranking by user P&L and volume\cell
+\pard\intbl\f0\fs20 LeaderboardTo buildPublic ranking by user P&L and volume\cell
+\row
+\pard\sa120\par
+\pard\sa140\brdrb\brdrs\brdrw10\par
+\pagebb
+\pard\sa140\sl300\slmult1\f0\fs30\b 05. Backend and Infrastructure\b0\par
+\pard\sa140\sl300\slmult1\f0\fs26\b BUILT - Serverless API (Vercel Functions)\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b EndpointFunction\b0\cell
+\pard\intbl\f0\fs20\b EndpointFunction\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 `GET /api/markets`List internal protocol markets with current price\cell
+\pard\intbl\f0\fs20 `GET /api/markets`List internal protocol markets with current price\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 `GET /api/market?id=`Market detail plus 50 price snapshots, 20 recent trades, and total volume\cell
+\pard\intbl\f0\fs20 `GET /api/market?id=`Market detail plus 50 price snapshots, 20 recent trades, and total volume\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 `GET /api/positions?address=`User positions with P&L calculation for active and resolved markets\cell
+\pard\intbl\f0\fs20 `GET /api/positions?address=`User positions with P&L calculation for active and resolved markets\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 `GET /api/user?privyId=`User profile plus admin flag, evaluated server-side\cell
+\pard\intbl\f0\fs20 `GET /api/user?privyId=`User profile plus admin flag, evaluated server-side\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 `GET /api/indexer`On-chain event indexer (Vercel Cron, every minute)\cell
+\pard\intbl\f0\fs20 `GET /api/indexer`On-chain event indexer (Vercel Cron, every minute)\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 `GET /api/migrate?key=`Database migration endpoint protected by key\cell
+\pard\intbl\f0\fs20 `GET /api/migrate?key=`Database migration endpoint protected by key\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 `GET /api/bitso?action=`MXN <-> USDC quote stub prepared for a real integration\cell
+\pard\intbl\f0\fs20 `GET /api/bitso?action=`MXN <-> USDC quote stub prepared for a real integration\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs26\b BUILT - Database (Neon PostgreSQL)\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b TablePurpose\b0\cell
+\pard\intbl\f0\fs20\b TablePurpose\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 `users`Registered users (`privyId`, username, admin flag)\cell
+\pard\intbl\f0\fs20 `users`Registered users (`privyId`, username, admin flag)\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 `protocol_markets`Internal protocol markets (`chain_id`, `pool_address`, question, status, outcome)\cell
+\pard\intbl\f0\fs20 `protocol_markets`Internal protocol markets (`chain_id`, `pool_address`, question, status, outcome)\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 `trades`Indexed trade history, deduplicated by `tx_hash + log_index`\cell
+\pard\intbl\f0\fs20 `trades`Indexed trade history, deduplicated by `tx_hash + log_index`\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 `positions`Materialized user positions by market\cell
+\pard\intbl\f0\fs20 `positions`Materialized user positions by market\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 `price_snapshots`AMM price snapshots for charts\cell
+\pard\intbl\f0\fs20 `price_snapshots`AMM price snapshots for charts\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 `indexer_state`Last processed block by chain\cell
+\pard\intbl\f0\fs20 `indexer_state`Last processed block by chain\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs22 There are six indices for fast queries, and migrations can be run through a protected endpoint.\par
+\pard\sa140\sl300\slmult1\f0\fs26\b BUILT - On-Chain Indexer\b0\par
+\pard\sa140\sl300\slmult1\f0\fs22 The indexer reads blockchain events and writes data into PostgreSQL:\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab `MarketCreated` -> register market\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab `SharesBought` / `SharesSold` -> store trade and update user position\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab `MarketResolved` -> update market status\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Price snapshots -> read `reserveYes()` / `reserveNo()` and derive CPMM pricing\par
+\pard\sa140\sl300\slmult1\f0\fs22 This runs through Vercel Cron every minute or via an authenticated manual trigger.\par
+\pard\sa140\sl300\slmult1\f0\fs26\b BUILT - Monitoring\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b ToolUse\b0\cell
+\pard\intbl\f0\fs20\b ToolUse\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 SentryFrontend error tracking with privacy-safe setup\cell
+\pard\intbl\f0\fs20 SentryFrontend error tracking with privacy-safe setup\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Structured loggerJSON logging in API routes with duration, CORS, and stack traces\cell
+\pard\intbl\f0\fs20 Structured loggerJSON logging in API routes with duration, CORS, and stack traces\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs26\b TO BUILD - Backend\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b ItemDetailPriority\b0\cell
+\pard\intbl\f0\fs20\b ItemDetailPriority\b0\cell
+\pard\intbl\f0\fs20\b ItemDetailPriority\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Real Bitso APIReplace stub with production MXN <-> USDC quotes and SPEI funding integrationMedium\cell
+\pard\intbl\f0\fs20 Real Bitso APIReplace stub with production MXN <-> USDC quotes and SPEI funding integrationMedium\cell
+\pard\intbl\f0\fs20 Real Bitso APIReplace stub with production MXN <-> USDC quotes and SPEI funding integrationMedium\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 MoonPay webhookReceive deposit confirmations and update DB stateHigh\cell
+\pard\intbl\f0\fs20 MoonPay webhookReceive deposit confirmations and update DB stateHigh\cell
+\pard\intbl\f0\fs20 MoonPay webhookReceive deposit confirmations and update DB stateHigh\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Rate limitingProtect public endpoints from abuseHigh\cell
+\pard\intbl\f0\fs20 Rate limitingProtect public endpoints from abuseHigh\cell
+\pard\intbl\f0\fs20 Rate limitingProtect public endpoints from abuseHigh\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Input validationSanitize all user-provided inputs in API routesHigh\cell
+\pard\intbl\f0\fs20 Input validationSanitize all user-provided inputs in API routesHigh\cell
+\pard\intbl\f0\fs20 Input validationSanitize all user-provided inputs in API routesHigh\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 CSRF protectionAdd tokens to POST endpointsMedium\cell
+\pard\intbl\f0\fs20 CSRF protectionAdd tokens to POST endpointsMedium\cell
+\pard\intbl\f0\fs20 CSRF protectionAdd tokens to POST endpointsMedium\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Leaderboard APIPublic ranking endpoint by P&L / volumeLow\cell
+\pard\intbl\f0\fs20 Leaderboard APIPublic ranking endpoint by P&L / volumeLow\cell
+\pard\intbl\f0\fs20 Leaderboard APIPublic ranking endpoint by P&L / volumeLow\cell
+\row
+\pard\sa120\par
+\pard\sa140\brdrb\brdrs\brdrw10\par
+\pagebb
+\pard\sa140\sl300\slmult1\f0\fs30\b 06. Security\b0\par
+\pard\sa140\sl300\slmult1\f0\fs26\b BUILT - Security Headers\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b HeaderValueStatus\b0\cell
+\pard\intbl\f0\fs20\b HeaderValueStatus\b0\cell
+\pard\intbl\f0\fs20\b HeaderValueStatus\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 `X-Frame-Options``DENY`Built\cell
+\pard\intbl\f0\fs20 `X-Frame-Options``DENY`Built\cell
+\pard\intbl\f0\fs20 `X-Frame-Options``DENY`Built\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 `X-Content-Type-Options``nosniff`Built\cell
+\pard\intbl\f0\fs20 `X-Content-Type-Options``nosniff`Built\cell
+\pard\intbl\f0\fs20 `X-Content-Type-Options``nosniff`Built\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 `Referrer-Policy``strict-origin-when-cross-origin`Built\cell
+\pard\intbl\f0\fs20 `Referrer-Policy``strict-origin-when-cross-origin`Built\cell
+\pard\intbl\f0\fs20 `Referrer-Policy``strict-origin-when-cross-origin`Built\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 `Permissions-Policy``camera=(), microphone=(), geolocation=(), payment=(), usb=()`Built\cell
+\pard\intbl\f0\fs20 `Permissions-Policy``camera=(), microphone=(), geolocation=(), payment=(), usb=()`Built\cell
+\pard\intbl\f0\fs20 `Permissions-Policy``camera=(), microphone=(), geolocation=(), payment=(), usb=()`Built\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 `Strict-Transport-Security``max-age=63072000; includeSubDomains; preload`Built\cell
+\pard\intbl\f0\fs20 `Strict-Transport-Security``max-age=63072000; includeSubDomains; preload`Built\cell
+\pard\intbl\f0\fs20 `Strict-Transport-Security``max-age=63072000; includeSubDomains; preload`Built\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 `CORS`Restricted to `pronos.io` and localhostBuilt\cell
+\pard\intbl\f0\fs20 `CORS`Restricted to `pronos.io` and localhostBuilt\cell
+\pard\intbl\f0\fs20 `CORS`Restricted to `pronos.io` and localhostBuilt\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 `X-XSS-Protection``0` (disabled, replaced by CSP)Built\cell
+\pard\intbl\f0\fs20 `X-XSS-Protection``0` (disabled, replaced by CSP)Built\cell
+\pard\intbl\f0\fs20 `X-XSS-Protection``0` (disabled, replaced by CSP)Built\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs26\b Internal Security Audit - Findings\b0\par
+\pard\sa140\sl300\slmult1\f0\fs24\b Resolved\b0\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab C1: Admin authentication moved server-side\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab C4: Admin allowlist removed from frontend bundle\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab H2: `X-Frame-Options: DENY`\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab M1-M5: Security headers completed plus restrictive CORS\par
+\pard\sa140\sl300\slmult1\f0\fs24\b Still Open\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b IDSeverityDescription\b0\cell
+\pard\intbl\f0\fs20\b IDSeverityDescription\b0\cell
+\pard\intbl\f0\fs20\b IDSeverityDescription\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 C2CriticalCLOB credentials are passed in POST body instead of being derived server-side\cell
+\pard\intbl\f0\fs20 C2CriticalCLOB credentials are passed in POST body instead of being derived server-side\cell
+\pard\intbl\f0\fs20 C2CriticalCLOB credentials are passed in POST body instead of being derived server-side\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 C3Critical`DATABASE_URL` is reachable from frontend API layer; infrastructure tiers need separation\cell
+\pard\intbl\f0\fs20 C3Critical`DATABASE_URL` is reachable from frontend API layer; infrastructure tiers need separation\cell
+\pard\intbl\f0\fs20 C3Critical`DATABASE_URL` is reachable from frontend API layer; infrastructure tiers need separation\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 H1HighMissing Content-Security-Policy\cell
+\pard\intbl\f0\fs20 H1HighMissing Content-Security-Policy\cell
+\pard\intbl\f0\fs20 H1HighMissing Content-Security-Policy\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 H3High`/mvp/admin` still lacks fully hardened server-side auth\cell
+\pard\intbl\f0\fs20 H3High`/mvp/admin` still lacks fully hardened server-side auth\cell
+\pard\intbl\f0\fs20 H3High`/mvp/admin` still lacks fully hardened server-side auth\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 H4High`/api/user` can be enumerated without authentication\cell
+\pard\intbl\f0\fs20 H4High`/api/user` can be enumerated without authentication\cell
+\pard\intbl\f0\fs20 H4High`/api/user` can be enumerated without authentication\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 M6MediumNo SRI on external scripts\cell
+\pard\intbl\f0\fs20 M6MediumNo SRI on external scripts\cell
+\pard\intbl\f0\fs20 M6MediumNo SRI on external scripts\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 M7MediumNo CSRF protection on POST requests\cell
+\pard\intbl\f0\fs20 M7MediumNo CSRF protection on POST requests\cell
+\pard\intbl\f0\fs20 M7MediumNo CSRF protection on POST requests\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 M8Medium`localStorage` acts as the source of truth for protocol mode\cell
+\pard\intbl\f0\fs20 M8Medium`localStorage` acts as the source of truth for protocol mode\cell
+\pard\intbl\f0\fs20 M8Medium`localStorage` acts as the source of truth for protocol mode\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 M9MediumVite dev proxy points to production\cell
+\pard\intbl\f0\fs20 M9MediumVite dev proxy points to production\cell
+\pard\intbl\f0\fs20 M9MediumVite dev proxy points to production\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 M10Medium`ethers.js` v5.7.2 is outdated; upgrade to v6\cell
+\pard\intbl\f0\fs20 M10Medium`ethers.js` v5.7.2 is outdated; upgrade to v6\cell
+\pard\intbl\f0\fs20 M10Medium`ethers.js` v5.7.2 is outdated; upgrade to v6\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs26\b Admin Roles and Multisig\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b RoleControlImplementation\b0\cell
+\pard\intbl\f0\fs20\b RoleControlImplementation\b0\cell
+\pard\intbl\f0\fs20\b RoleControlImplementation\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Owner (Safe 3-of-5)Pause contracts, create markets, distribute fees, update protocol addressesGnosis Safe on Arbitrum\cell
+\pard\intbl\f0\fs20 Owner (Safe 3-of-5)Pause contracts, create markets, distribute fees, update protocol addressesGnosis Safe on Arbitrum\cell
+\pard\intbl\f0\fs20 Owner (Safe 3-of-5)Pause contracts, create markets, distribute fees, update protocol addressesGnosis Safe on Arbitrum\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Resolver (Safe 2-of-3)Resolve markets and set the winning outcomeSame Safe or a separate Safe\cell
+\pard\intbl\f0\fs20 Resolver (Safe 2-of-3)Resolve markets and set the winning outcomeSame Safe or a separate Safe\cell
+\pard\intbl\f0\fs20 Resolver (Safe 2-of-3)Resolve markets and set the winning outcomeSame Safe or a separate Safe\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Admin UIWeb management through `/mvp/admin`Server-side auth, username-based\cell
+\pard\intbl\f0\fs20 Admin UIWeb management through `/mvp/admin`Server-side auth, username-based\cell
+\pard\intbl\f0\fs20 Admin UIWeb management through `/mvp/admin`Server-side auth, username-based\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs22 There is no arbitrary upgradeability. Any change in contract logic requires multisig approval. Contracts are intended to be immutable, so logic changes require a new deployment and migration.\par
+\pard\sa140\sl300\slmult1\f0\fs26\b TO BUILD - Security\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b ItemDetailPriority\b0\cell
+\pard\intbl\f0\fs20\b ItemDetailPriority\b0\cell
+\pard\intbl\f0\fs20\b ItemDetailPriority\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Resolve C2 and C3Separate CLOB credentials and DB access from frontend-exposed layersCritical\cell
+\pard\intbl\f0\fs20 Resolve C2 and C3Separate CLOB credentials and DB access from frontend-exposed layersCritical\cell
+\pard\intbl\f0\fs20 Resolve C2 and C3Separate CLOB credentials and DB access from frontend-exposed layersCritical\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 CSP headersAdd a restrictive Content-Security-PolicyHigh\cell
+\pard\intbl\f0\fs20 CSP headersAdd a restrictive Content-Security-PolicyHigh\cell
+\pard\intbl\f0\fs20 CSP headersAdd a restrictive Content-Security-PolicyHigh\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Complete admin authAdd true server-side middleware, not just username checksHigh\cell
+\pard\intbl\f0\fs20 Complete admin authAdd true server-side middleware, not just username checksHigh\cell
+\pard\intbl\f0\fs20 Complete admin authAdd true server-side middleware, not just username checksHigh\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Rate limitingAcross all API routesHigh\cell
+\pard\intbl\f0\fs20 Rate limitingAcross all API routesHigh\cell
+\pard\intbl\f0\fs20 Rate limitingAcross all API routesHigh\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Contract fuzz testingReentrancy, overflow, and extreme-amount edge casesHigh\cell
+\pard\intbl\f0\fs20 Contract fuzz testingReentrancy, overflow, and extreme-amount edge casesHigh\cell
+\pard\intbl\f0\fs20 Contract fuzz testingReentrancy, overflow, and extreme-amount edge casesHigh\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 External auditSpecialized third-party audit before high-value mainnet usePost-launch\cell
+\pard\intbl\f0\fs20 External auditSpecialized third-party audit before high-value mainnet usePost-launch\cell
+\pard\intbl\f0\fs20 External auditSpecialized third-party audit before high-value mainnet usePost-launch\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Bug bountyLaunch a public bug bounty after go-livePost-launch\cell
+\pard\intbl\f0\fs20 Bug bountyLaunch a public bug bounty after go-livePost-launch\cell
+\pard\intbl\f0\fs20 Bug bountyLaunch a public bug bounty after go-livePost-launch\cell
+\row
+\pard\sa120\par
+\pard\sa140\brdrb\brdrs\brdrw10\par
+\pagebb
+\pard\sa140\sl300\slmult1\f0\fs30\b 07. Market Curation\b0\par
+\pard\sa140\sl300\slmult1\f0\fs26\b v1 - Admin-Managed Markets\b0\par
+\pard\sa140\sl300\slmult1\f0\fs22 In v1, market creation is restricted to administrators with access to the control panel. User-generated markets are planned for v2 only.\par
+\pard\sa140\sl300\slmult1\f0\fs24\b BUILT - Admin Panel\b0\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Create market: question, options, closing date, oracle, initial liquidity, and resolution rules\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Pause / resume market when unexpected events happen\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Resolve market by selecting the winning outcome\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Display fee metrics, distribution, and contract status\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Safe integration for propose / sign / execute directly in UI\par
+\pard\sa140\sl300\slmult1\f0\fs24\b TO BUILD\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b ItemDetailPriority\b0\cell
+\pard\intbl\f0\fs20\b ItemDetailPriority\b0\cell
+\pard\intbl\f0\fs20\b ItemDetailPriority\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Wire forms to contractsConnect market creation form to `MarketFactory.createMarket()` via SafeHigh\cell
+\pard\intbl\f0\fs20 Wire forms to contractsConnect market creation form to `MarketFactory.createMarket()` via SafeHigh\cell
+\pard\intbl\f0\fs20 Wire forms to contractsConnect market creation form to `MarketFactory.createMarket()` via SafeHigh\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Wire resolve / pauseMake admin buttons execute Safe multisig transactionsHigh\cell
+\pard\intbl\f0\fs20 Wire resolve / pauseMake admin buttons execute Safe multisig transactionsHigh\cell
+\pard\intbl\f0\fs20 Wire resolve / pauseMake admin buttons execute Safe multisig transactionsHigh\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Metrics dashboardVolume, participants, accumulated fees, and liquidity by marketMedium\cell
+\pard\intbl\f0\fs20 Metrics dashboardVolume, participants, accumulated fees, and liquidity by marketMedium\cell
+\pard\intbl\f0\fs20 Metrics dashboardVolume, participants, accumulated fees, and liquidity by marketMedium\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 User managementPause accounts for suspicious behaviorLow\cell
+\pard\intbl\f0\fs20 User managementPause accounts for suspicious behaviorLow\cell
+\pard\intbl\f0\fs20 User managementPause accounts for suspicious behaviorLow\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 User-generated marketsAllow moderated market proposals in v2Post-MVP\cell
+\pard\intbl\f0\fs20 User-generated marketsAllow moderated market proposals in v2Post-MVP\cell
+\pard\intbl\f0\fs20 User-generated marketsAllow moderated market proposals in v2Post-MVP\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs26\b Launch Market Set (Target: FIFA World Cup 2026)\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b CategoryExample markets\b0\cell
+\pard\intbl\f0\fs20\b CategoryExample markets\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 FIFA World CupWill Mexico reach the Round of 16? Who wins the group? Will Argentina repeat?\cell
+\pard\intbl\f0\fs20 FIFA World CupWill Mexico reach the Round of 16? Who wins the group? Will Argentina repeat?\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Liga MXWho wins Clausura 2026? Relegation outcome?\cell
+\pard\intbl\f0\fs20 Liga MXWho wins Clausura 2026? Relegation outcome?\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Mexico politicsMidterm elections, reforms, appointments\cell
+\pard\intbl\f0\fs20 Mexico politicsMidterm elections, reforms, appointments\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Reality TVLa Casa de los Famosos, Exatlon, La Academia\cell
+\pard\intbl\f0\fs20 Reality TVLa Casa de los Famosos, Exatlon, La Academia\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Crypto / EconomyBitcoin price, exchange rate, inflation\cell
+\pard\intbl\f0\fs20 Crypto / EconomyBitcoin price, exchange rate, inflation\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs22 The launch plan is to curate 5 to 10 markets with seed liquidity in USDC.\par
+\pard\sa140\brdrb\brdrs\brdrw10\par
+\pagebb
+\pard\sa140\sl300\slmult1\f0\fs30\b 08. Roadmap and Current Status\b0\par
+\pard\sa140\sl300\slmult1\f0\fs26\b Phase 1: Foundation and Contracts - About 85% Complete\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b ItemStatus\b0\cell
+\pard\intbl\f0\fs20\b ItemStatus\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Hybrid architecture defined (Polymarket + internal protocol)Built\cell
+\pard\intbl\f0\fs20 Hybrid architecture defined (Polymarket + internal protocol)Built\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Core contracts: `PronosToken`, `PronosAMM`, `MarketFactory`Built\cell
+\pard\intbl\f0\fs20 Core contracts: `PronosToken`, `PronosAMM`, `MarketFactory`Built\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 43 Foundry tests passingBuilt\cell
+\pard\intbl\f0\fs20 43 Foundry tests passingBuilt\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Reproducible deployment script (`DeployProtocol.s.sol`)Built\cell
+\pard\intbl\f0\fs20 Reproducible deployment script (`DeployProtocol.s.sol`)Built\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Safe SDK integrated in admin panelBuilt\cell
+\pard\intbl\f0\fs20 Safe SDK integrated in admin panelBuilt\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Arbitrum Sepolia config in `foundry.toml`Built\cell
+\pard\intbl\f0\fs20 Arbitrum Sepolia config in `foundry.toml`Built\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Deploy to Arbitrum SepoliaTo build\cell
+\pard\intbl\f0\fs20 Deploy to Arbitrum SepoliaTo build\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Create Safe multisig in testnetTo build\cell
+\pard\intbl\f0\fs20 Create Safe multisig in testnetTo build\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Transfer ownership to SafeTo build\cell
+\pard\intbl\f0\fs20 Transfer ownership to SafeTo build\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs26\b Phase 2: Features and UI - About 75% Complete\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b ItemStatus\b0\cell
+\pard\intbl\f0\fs20\b ItemStatus\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Full frontend (Home, Market, Portfolio, Admin)Built\cell
+\pard\intbl\f0\fs20 Full frontend (Home, Market, Portfolio, Admin)Built\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Polymarket integration (Gamma + CLOB)Built\cell
+\pard\intbl\f0\fs20 Polymarket integration (Gamma + CLOB)Built\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Admin panel with market CRUD + Safe SDKBuilt\cell
+\pard\intbl\f0\fs20 Admin panel with market CRUD + Safe SDKBuilt\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Wallet and onboarding (Privy, multi-chain, auto-switch)Built\cell
+\pard\intbl\f0\fs20 Wallet and onboarding (Privy, multi-chain, auto-switch)Built\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Backend: schema, indexer, APIs, price snapshotsBuilt\cell
+\pard\intbl\f0\fs20 Backend: schema, indexer, APIs, price snapshotsBuilt\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Monitoring: Sentry and structured loggingBuilt\cell
+\pard\intbl\f0\fs20 Monitoring: Sentry and structured loggingBuilt\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Bet slip with dynamic fee and previewBuilt\cell
+\pard\intbl\f0\fs20 Bet slip with dynamic fee and previewBuilt\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Responsive tablet + mobileBuilt\cell
+\pard\intbl\f0\fs20 Responsive tablet + mobileBuilt\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 OG metadata, Twitter cards, faviconBuilt\cell
+\pard\intbl\f0\fs20 OG metadata, Twitter cards, faviconBuilt\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Waitlist gate (Tally)Built\cell
+\pard\intbl\f0\fs20 Waitlist gate (Tally)Built\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Connect frontend to internal contractsTo build\cell
+\pard\intbl\f0\fs20 Connect frontend to internal contractsTo build\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Wire admin forms to contracts via SafeTo build\cell
+\pard\intbl\f0\fs20 Wire admin forms to contracts via SafeTo build\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Integrate MoonPayTo build\cell
+\pard\intbl\f0\fs20 Integrate MoonPayTo build\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Integrate UMA OracleTo build\cell
+\pard\intbl\f0\fs20 Integrate UMA OracleTo build\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Load 5 to 10 curated marketsTo build\cell
+\pard\intbl\f0\fs20 Load 5 to 10 curated marketsTo build\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 End-to-end testing in testnetBlocked by deploy\cell
+\pard\intbl\f0\fs20 End-to-end testing in testnetBlocked by deploy\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs26\b Phase 3: Hardening and Mainnet - Target: May 31, 2026\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b ItemPriority\b0\cell
+\pard\intbl\f0\fs20\b ItemPriority\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Deploy to Arbitrum One (mainnet)Critical\cell
+\pard\intbl\f0\fs20 Deploy to Arbitrum One (mainnet)Critical\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Verify contracts on ArbiscanCritical\cell
+\pard\intbl\f0\fs20 Verify contracts on ArbiscanCritical\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Resolve critical and high security findings (C2, C3, H1, H3, H4)Critical\cell
+\pard\intbl\f0\fs20 Resolve critical and high security findings (C2, C3, H1, H3, H4)Critical\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Seed liquidity for launch marketsCritical\cell
+\pard\intbl\f0\fs20 Seed liquidity for launch marketsCritical\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 World Cup 2026 markets readyCritical\cell
+\pard\intbl\f0\fs20 World Cup 2026 markets readyCritical\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 48-hour stability test with no interventionHigh\cell
+\pard\intbl\f0\fs20 48-hour stability test with no interventionHigh\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Technical documentation and runbookHigh\cell
+\pard\intbl\f0\fs20 Technical documentation and runbookHigh\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Rate limiting + input validationHigh\cell
+\pard\intbl\f0\fs20 Rate limiting + input validationHigh\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Final mobile responsive checkMedium\cell
+\pard\intbl\f0\fs20 Final mobile responsive checkMedium\cell
+\row
+\pard\sa120\par
+\pard\sa140\sl300\slmult1\f0\fs26\b Post-MVP - Full Product Vision\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b ItemDescriptionEstimate\b0\cell
+\pard\intbl\f0\fs20\b ItemDescriptionEstimate\b0\cell
+\pard\intbl\f0\fs20\b ItemDescriptionEstimate\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Direct BitsoMXN on / off ramp via SPEI with in-app USDC buy / sell$10K - $15K\cell
+\pard\intbl\f0\fs20 Direct BitsoMXN on / off ramp via SPEI with in-app USDC buy / sell$10K - $15K\cell
+\pard\intbl\f0\fs20 Direct BitsoMXN on / off ramp via SPEI with in-app USDC buy / sell$10K - $15K\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Categorical markets3+ outcomes in extended AMM$10K - $15K\cell
+\pard\intbl\f0\fs20 Categorical markets3+ outcomes in extended AMM$10K - $15K\cell
+\pard\intbl\f0\fs20 Categorical markets3+ outcomes in extended AMM$10K - $15K\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Scalar marketsNumeric-range markets like FX and inflation$10K - $15K\cell
+\pard\intbl\f0\fs20 Scalar marketsNumeric-range markets like FX and inflation$10K - $15K\cell
+\pard\intbl\f0\fs20 Scalar marketsNumeric-range markets like FX and inflation$10K - $15K\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 External auditThird-party audit firm$25K - $50K\cell
+\pard\intbl\f0\fs20 External auditThird-party audit firm$25K - $50K\cell
+\pard\intbl\f0\fs20 External auditThird-party audit firm$25K - $50K\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Market-making botAlgorithmic liquidity management to keep spreads tight$5K - $10K\cell
+\pard\intbl\f0\fs20 Market-making botAlgorithmic liquidity management to keep spreads tight$5K - $10K\cell
+\pard\intbl\f0\fs20 Market-making botAlgorithmic liquidity management to keep spreads tight$5K - $10K\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Push notificationsWhatsApp / SMS / push alerts$3K - $5K\cell
+\pard\intbl\f0\fs20 Push notificationsWhatsApp / SMS / push alerts$3K - $5K\cell
+\pard\intbl\f0\fs20 Push notificationsWhatsApp / SMS / push alerts$3K - $5K\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 User-generated marketsModerated user-submitted markets$10K - $15K\cell
+\pard\intbl\f0\fs20 User-generated marketsModerated user-submitted markets$10K - $15K\cell
+\pard\intbl\f0\fs20 User-generated marketsModerated user-submitted markets$10K - $15K\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 LeaderboardPublic user ranking by P&L and volume$3K - $5K\cell
+\pard\intbl\f0\fs20 LeaderboardPublic user ranking by P&L and volume$3K - $5K\cell
+\pard\intbl\f0\fs20 LeaderboardPublic user ranking by P&L and volume$3K - $5K\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Native mobile appsiOS / Android via React Native or advanced PWA$15K - $25K\cell
+\pard\intbl\f0\fs20 Native mobile appsiOS / Android via React Native or advanced PWA$15K - $25K\cell
+\pard\intbl\f0\fs20 Native mobile appsiOS / Android via React Native or advanced PWA$15K - $25K\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Referral programGrowth incentives for invited users$5K - $8K\cell
+\pard\intbl\f0\fs20 Referral programGrowth incentives for invited users$5K - $8K\cell
+\pard\intbl\f0\fs20 Referral programGrowth incentives for invited users$5K - $8K\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Analytics dashboardPublic protocol metrics dashboard (TVL, volume, users)$5K - $8K\cell
+\pard\intbl\f0\fs20 Analytics dashboardPublic protocol metrics dashboard (TVL, volume, users)$5K - $8K\cell
+\pard\intbl\f0\fs20 Analytics dashboardPublic protocol metrics dashboard (TVL, volume, users)$5K - $8K\cell
+\row
+\pard\sa120\par
+\pard\sa140\brdrb\brdrs\brdrw10\par
+\pagebb
+\pard\sa140\sl300\slmult1\f0\fs30\b 09. Technical Stack Summary\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b LayerTechnologyWhy it was chosen\b0\cell
+\pard\intbl\f0\fs20\b LayerTechnologyWhy it was chosen\b0\cell
+\pard\intbl\f0\fs20\b LayerTechnologyWhy it was chosen\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 BlockchainArbitrumLow gas, EVM-compatible, native USDC, mature ecosystem\cell
+\pard\intbl\f0\fs20 BlockchainArbitrumLow gas, EVM-compatible, native USDC, mature ecosystem\cell
+\pard\intbl\f0\fs20 BlockchainArbitrumLow gas, EVM-compatible, native USDC, mature ecosystem\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 ContractsSolidity 0.8.24 + OpenZeppelin + FoundryCustom architecture, ERC-1155, CPMM AMM with dynamic fees\cell
+\pard\intbl\f0\fs20 ContractsSolidity 0.8.24 + OpenZeppelin + FoundryCustom architecture, ERC-1155, CPMM AMM with dynamic fees\cell
+\pard\intbl\f0\fs20 ContractsSolidity 0.8.24 + OpenZeppelin + FoundryCustom architecture, ERC-1155, CPMM AMM with dynamic fees\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Tokens`PronosToken` (ERC-1155)One contract for all markets, gas efficient\cell
+\pard\intbl\f0\fs20 Tokens`PronosToken` (ERC-1155)One contract for all markets, gas efficient\cell
+\pard\intbl\f0\fs20 Tokens`PronosToken` (ERC-1155)One contract for all markets, gas efficient\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 AMM`PronosAMM` (`x * y = k`)No off-chain engine, automatic liquidity, dynamic fees\cell
+\pard\intbl\f0\fs20 AMM`PronosAMM` (`x * y = k`)No off-chain engine, automatic liquidity, dynamic fees\cell
+\pard\intbl\f0\fs20 AMM`PronosAMM` (`x * y = k`)No off-chain engine, automatic liquidity, dynamic fees\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Sports oracleCustodial multisig via Safe 2-of-3Public results, direct control, fast resolution\cell
+\pard\intbl\f0\fs20 Sports oracleCustodial multisig via Safe 2-of-3Public results, direct control, fast resolution\cell
+\pard\intbl\f0\fs20 Sports oracleCustodial multisig via Safe 2-of-3Public results, direct control, fast resolution\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Political oracleUMA Optimistic OracleIndustry standard, on-chain dispute process\cell
+\pard\intbl\f0\fs20 Political oracleUMA Optimistic OracleIndustry standard, on-chain dispute process\cell
+\pard\intbl\f0\fs20 Political oracleUMA Optimistic OracleIndustry standard, on-chain dispute process\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 CollateralUSDC (Circle)Most liquid stablecoin on Arbitrum\cell
+\pard\intbl\f0\fs20 CollateralUSDC (Circle)Most liquid stablecoin on Arbitrum\cell
+\pard\intbl\f0\fs20 CollateralUSDC (Circle)Most liquid stablecoin on Arbitrum\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 On-rampMoonPay + SPEIApple Pay, Google Pay, cards, and MXN bank transfer\cell
+\pard\intbl\f0\fs20 On-rampMoonPay + SPEIApple Pay, Google Pay, cards, and MXN bank transfer\cell
+\pard\intbl\f0\fs20 On-rampMoonPay + SPEIApple Pay, Google Pay, cards, and MXN bank transfer\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Wallet / AuthPrivy (EIP-4337 account abstraction)Email / Google / wallet with no seed phrases\cell
+\pard\intbl\f0\fs20 Wallet / AuthPrivy (EIP-4337 account abstraction)Email / Google / wallet with no seed phrases\cell
+\pard\intbl\f0\fs20 Wallet / AuthPrivy (EIP-4337 account abstraction)Email / Google / wallet with no seed phrases\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 FrontendReact 18 + Vite 5Fast iteration, SPA, mobile-first\cell
+\pard\intbl\f0\fs20 FrontendReact 18 + Vite 5Fast iteration, SPA, mobile-first\cell
+\pard\intbl\f0\fs20 FrontendReact 18 + Vite 5Fast iteration, SPA, mobile-first\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 BackendVercel Serverless FunctionsZero-config deployment, autoscaling, built-in cron\cell
+\pard\intbl\f0\fs20 BackendVercel Serverless FunctionsZero-config deployment, autoscaling, built-in cron\cell
+\pard\intbl\f0\fs20 BackendVercel Serverless FunctionsZero-config deployment, autoscaling, built-in cron\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 DatabaseNeon PostgreSQLServerless Postgres that pairs well with Vercel\cell
+\pard\intbl\f0\fs20 DatabaseNeon PostgreSQLServerless Postgres that pairs well with Vercel\cell
+\pard\intbl\f0\fs20 DatabaseNeon PostgreSQLServerless Postgres that pairs well with Vercel\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 MonitoringSentry + structured loggingPrivacy-safe error tracking\cell
+\pard\intbl\f0\fs20 MonitoringSentry + structured loggingPrivacy-safe error tracking\cell
+\pard\intbl\f0\fs20 MonitoringSentry + structured loggingPrivacy-safe error tracking\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 MultisigGnosis SafeIndustry-standard treasury and admin control\cell
+\pard\intbl\f0\fs20 MultisigGnosis SafeIndustry-standard treasury and admin control\cell
+\pard\intbl\f0\fs20 MultisigGnosis SafeIndustry-standard treasury and admin control\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3120
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx6240
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 TestingFoundry (`forge test`)43 tests, >75% coverage\cell
+\pard\intbl\f0\fs20 TestingFoundry (`forge test`)43 tests, >75% coverage\cell
+\pard\intbl\f0\fs20 TestingFoundry (`forge test`)43 tests, >75% coverage\cell
+\row
+\pard\sa120\par
+\pard\sa140\brdrb\brdrs\brdrw10\par
+\pagebb
+\pard\sa140\sl300\slmult1\f0\fs30\b 10. Competitive Differentiators\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx2340
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx7020
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b FeaturePolymarketMyriad MarketsPronos\b0\cell
+\pard\intbl\f0\fs20\b FeaturePolymarketMyriad MarketsPronos\b0\cell
+\pard\intbl\f0\fs20\b FeaturePolymarketMyriad MarketsPronos\b0\cell
+\pard\intbl\f0\fs20\b FeaturePolymarketMyriad MarketsPronos\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx2340
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx7020
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Curated LATAM marketsNoNoYes - Liga MX, Mexico politics, culture, FIFA\cell
+\pard\intbl\f0\fs20 Curated LATAM marketsNoNoYes - Liga MX, Mexico politics, culture, FIFA\cell
+\pard\intbl\f0\fs20 Curated LATAM marketsNoNoYes - Liga MX, Mexico politics, culture, FIFA\cell
+\pard\intbl\f0\fs20 Curated LATAM marketsNoNoYes - Liga MX, Mexico politics, culture, FIFA\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx2340
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx7020
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 LanguageEnglishEnglishNative Spanish\cell
+\pard\intbl\f0\fs20 LanguageEnglishEnglishNative Spanish\cell
+\pard\intbl\f0\fs20 LanguageEnglishEnglishNative Spanish\cell
+\pard\intbl\f0\fs20 LanguageEnglishEnglishNative Spanish\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx2340
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx7020
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Crypto-free onboardingNo, requires wallet and bridgingPartialYes - email / Google -> embedded wallet\cell
+\pard\intbl\f0\fs20 Crypto-free onboardingNo, requires wallet and bridgingPartialYes - email / Google -> embedded wallet\cell
+\pard\intbl\f0\fs20 Crypto-free onboardingNo, requires wallet and bridgingPartialYes - email / Google -> embedded wallet\cell
+\pard\intbl\f0\fs20 Crypto-free onboardingNo, requires wallet and bridgingPartialYes - email / Google -> embedded wallet\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx2340
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx7020
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 MXN on-rampNoNoYes - MoonPay + SPEI\cell
+\pard\intbl\f0\fs20 MXN on-rampNoNoYes - MoonPay + SPEI\cell
+\pard\intbl\f0\fs20 MXN on-rampNoNoYes - MoonPay + SPEI\cell
+\pard\intbl\f0\fs20 MXN on-rampNoNoYes - MoonPay + SPEI\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx2340
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx7020
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Transparent fees0% with hidden spreadVariableExplicit dynamic fee (0.05% - 2.5%)\cell
+\pard\intbl\f0\fs20 Transparent fees0% with hidden spreadVariableExplicit dynamic fee (0.05% - 2.5%)\cell
+\pard\intbl\f0\fs20 Transparent fees0% with hidden spreadVariableExplicit dynamic fee (0.05% - 2.5%)\cell
+\pard\intbl\f0\fs20 Transparent fees0% with hidden spreadVariableExplicit dynamic fee (0.05% - 2.5%)\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx2340
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx7020
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 ResolutionUMA (slow)CentralizedFast multisig (24-48h) + UMA for politics\cell
+\pard\intbl\f0\fs20 ResolutionUMA (slow)CentralizedFast multisig (24-48h) + UMA for politics\cell
+\pard\intbl\f0\fs20 ResolutionUMA (slow)CentralizedFast multisig (24-48h) + UMA for politics\cell
+\pard\intbl\f0\fs20 ResolutionUMA (slow)CentralizedFast multisig (24-48h) + UMA for politics\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx2340
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx7020
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Target userGlobal crypto tradersGlobalLATAM and non-crypto users\cell
+\pard\intbl\f0\fs20 Target userGlobal crypto tradersGlobalLATAM and non-crypto users\cell
+\pard\intbl\f0\fs20 Target userGlobal crypto tradersGlobalLATAM and non-crypto users\cell
+\pard\intbl\f0\fs20 Target userGlobal crypto tradersGlobalLATAM and non-crypto users\cell
+\row
+\pard\sa120\par
+\pard\sa140\brdrb\brdrs\brdrw10\par
+\pagebb
+\pard\sa140\sl300\slmult1\f0\fs30\b 11. What We Need From a Dev Shop\b0\par
+\pard\sa140\sl300\slmult1\f0\fs26\b Executive Summary\b0\par
+\pard\sa140\sl300\slmult1\f0\fs22 About 75% of the product is already built. The smart contracts exist and are tested. The frontend is functional with active Polymarket mode. The backend, including indexer, APIs, and database, is operational.\par
+\pard\sa140\sl300\slmult1\f0\fs22 What is still needed to reach mainnet:\par
+\pard\sa140\sl300\slmult1\f0\fs24\b Critical Priority (before June 14)\b0\par
+\pard\li720\tx720\sa80\f0\fs22 1.\tab Deploy contracts to Arbitrum Sepolia, test them, then deploy to Arbitrum One\par
+\pard\li720\tx720\sa80\f0\fs22 2.\tab Connect the frontend to the internal contracts (`PronosAMM` buy / sell / redeem)\par
+\pard\li720\tx720\sa80\f0\fs22 3.\tab Wire the admin panel to contracts via Safe multisig\par
+\pard\li720\tx720\sa80\f0\fs22 4.\tab Integrate MoonPay for deposits (Apple Pay, Google Pay, cards)\par
+\pard\li720\tx720\sa80\f0\fs22 5.\tab Integrate UMA Optimistic Oracle for political markets\par
+\pard\li720\tx720\sa80\f0\fs22 6.\tab Resolve critical and high security issues (C2, C3, H1, H3, H4)\par
+\pard\li720\tx720\sa80\f0\fs22 7.\tab Run end-to-end testing of the full flow on testnet\par
+\pard\li720\tx720\sa80\f0\fs22 8.\tab Load 5 to 10 curated launch markets (World Cup, Liga MX, politics)\par
+\pard\sa140\sl300\slmult1\f0\fs24\b Medium Priority (can be post-launch)\b0\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Gas sponsoring through Privy paymaster\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Historical price chart (OHLC)\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Unified portfolio (Polymarket + internal protocol)\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Rate limiting and input validation on APIs\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Final responsive pass\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab SPEI on-ramp\par
+\pard\sa140\sl300\slmult1\f0\fs24\b Nice to Have (post-MVP)\b0\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Categorical markets (3+ outcomes)\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Push notifications\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Leaderboard\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Market-making bot\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab User-generated markets\par
+\pard\li720\tx720\sa80\f0\fs22 -\tab Native apps\par
+\pard\sa140\sl300\slmult1\f0\fs26\b Repository and Access\b0\par
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20\b ResourceURL / Location\b0\cell
+\pard\intbl\f0\fs20\b ResourceURL / Location\b0\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 GitHub repository`github.com/mezcalpapieth-jpg/pronos` (private)\cell
+\pard\intbl\f0\fs20 GitHub repository`github.com/mezcalpapieth-jpg/pronos` (private)\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Staging frontend`pronos.io/mvp/`\cell
+\pard\intbl\f0\fs20 Staging frontend`pronos.io/mvp/`\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Contracts`contracts/src/`\cell
+\pard\intbl\f0\fs20 Contracts`contracts/src/`\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Deploy scripts`contracts/script/DeployProtocol.s.sol`\cell
+\pard\intbl\f0\fs20 Deploy scripts`contracts/script/DeployProtocol.s.sol`\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Serverless API`frontend/api/`\cell
+\pard\intbl\f0\fs20 Serverless API`frontend/api/`\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 DatabaseNeon PostgreSQL (connection string in Vercel env vars)\cell
+\pard\intbl\f0\fs20 DatabaseNeon PostgreSQL (connection string in Vercel env vars)\cell
+\row
+\trowd\trgaph108\trleft0
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx4680
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9360
+\pard\intbl\f0\fs20 Tests`contracts/test/` - 43 tests, run with `forge test`\cell
+\pard\intbl\f0\fs20 Tests`contracts/test/` - 43 tests, run with `forge test`\cell
+\row
+\pard\sa120\par
+\pard\sa140\brdrb\brdrs\brdrw10\par
+\pard\sa140\sl300\slmult1\f0\fs22 Prepared by Simon Lacy - Founder, PRONOS\line Last updated: April 2026\line Confidential - For development evaluation only. Do not distribute.\par
+}

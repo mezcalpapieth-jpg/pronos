@@ -1,0 +1,1771 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PRONOS PRD - English Version</title>
+  <style>
+@page {
+  size: A4;
+  margin: 20mm 18mm 22mm 18mm;
+}
+
+:root {
+  --ink: #15202b;
+  --muted: #5b6571;
+  --line: #d6dde5;
+  --line-dark: #aeb9c5;
+  --panel: #f7f9fb;
+  --accent: #0f4c81;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #eef3f7;
+  color: var(--ink);
+  font-family: "Aptos", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  line-height: 1.55;
+}
+
+body {
+  padding: 24px 0;
+}
+
+main {
+  width: min(920px, calc(100vw - 48px));
+  margin: 0 auto;
+  background: #fff;
+  box-shadow: 0 18px 45px rgba(20, 37, 53, 0.08);
+  border-radius: 16px;
+  padding: 56px 64px 72px;
+}
+
+h1, h2, h3, h4 {
+  color: #102a43;
+  line-height: 1.18;
+  margin-top: 1.25em;
+  margin-bottom: 0.55em;
+}
+
+h1 {
+  font-size: 34px;
+  margin-top: 0;
+  padding-bottom: 14px;
+  border-bottom: 3px solid var(--accent);
+}
+
+h2 {
+  font-size: 24px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+h3 {
+  font-size: 18px;
+}
+
+h4 {
+  font-size: 16px;
+}
+
+p, li {
+  font-size: 14px;
+}
+
+blockquote {
+  margin: 18px 0;
+  padding: 12px 18px;
+  background: var(--panel);
+  border-left: 4px solid var(--accent);
+  color: var(--muted);
+}
+
+code, pre {
+  font-family: "SFMono-Regular", "Menlo", "Consolas", monospace;
+}
+
+pre {
+  background: #0f1720;
+  color: #e8edf2;
+  padding: 14px 16px;
+  overflow: auto;
+  border-radius: 10px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 18px 0 24px;
+  font-size: 13px;
+}
+
+th, td {
+  border: 1px solid var(--line);
+  padding: 8px 10px;
+  vertical-align: top;
+  text-align: left;
+}
+
+th {
+  background: #f2f6fa;
+  color: #102a43;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid var(--line-dark);
+  margin: 28px 0;
+}
+
+strong {
+  color: #0b2b40;
+}
+
+ul, ol {
+  margin-top: 10px;
+  margin-bottom: 14px;
+}
+
+@media print {
+  html, body {
+    background: #fff;
+  }
+
+  body {
+    padding: 0;
+  }
+
+  main {
+    width: auto;
+    margin: 0;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 0;
+  }
+}
+</style>
+</head>
+<body>
+  <main>
+    <h1>PRONOS</h1>
+<h2>Web3 Prediction Markets Platform</h2>
+<p><strong>Product Requirements Document (PRD)</strong><br>
+Version 2.0 - April 2026<br>
+Confidential</p>
+<hr>
+<blockquote>
+<p><strong>About this document</strong></p>
+<p>This PRD describes the full PRONOS vision, what has already been built internally, and what we need from an external development team to reach mainnet. Sections clearly mark what already exists (<code>BUILT</code>) versus what still needs to be delivered (<code>TO BUILD</code>).</p>
+<p>The document intentionally keeps strategic roadmap items such as UMA and MoonPay in scope even when they are not yet implemented. Some items are launch-critical, while others are included as optional or nice-to-have future work so they remain visible in planning conversations.</p>
+</blockquote>
+<hr>
+<h2>01. General Information and Scope</h2>
+<h3>Project Name</h3>
+<p><strong>PRONOS</strong> - The first on-chain prediction market focused on Latin America.</p>
+<h3>Vision</h3>
+<p>Build the most accessible prediction platform for the Latin American market, where anyone can bet on sports, politics, and culture without needing crypto knowledge, complex wallets, or currency conversion expertise.</p>
+<h3>Launch Goal</h3>
+<p><strong>Mainnet live before the 2026 FIFA World Cup (June 14, 2026).</strong><br>
+Allocated budget: <strong>$30,000 USD</strong>.</p>
+<h3>Current Product URL</h3>
+<p><strong>https://pronos.io/mvp/</strong> - password protected staging environment.</p>
+<h3>Blockchain Network: Arbitrum (Ethereum Layer 2)</h3>
+<p>The selected deployment network is <strong>Arbitrum</strong>, Ethereum's optimistic rollup Layer 2.</p>
+<table>
+<thead>
+<tr>
+<th>Criterion</th>
+<th>Details</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Gas</td>
+<td>About $0.01 USD per transaction, which makes micro-bets viable</td>
+</tr>
+<tr>
+<td>Speed</td>
+<td>Confirmation in about 250ms</td>
+</tr>
+<tr>
+<td>Compatibility</td>
+<td>Fully EVM-compatible, so OpenZeppelin contracts do not need to be rewritten</td>
+</tr>
+<tr>
+<td>Ecosystem</td>
+<td>Native USDC (Circle), full Privy support, Safe multisig available</td>
+</tr>
+<tr>
+<td>Liquidity</td>
+<td>Second-largest L2 by TVL (about $20B+) with broad USDC availability</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Note:</strong> The original draft proposed Base because of MXNB availability through Bitso. The plan was later migrated to Arbitrum because of a more mature ecosystem, better tooling support (Safe SDK, Privy), and direct USDC availability as collateral.</p>
+<h3>Collateral Asset</h3>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Specification</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Primary asset</td>
+<td>USDC - Circle stablecoin deployed natively on Arbitrum</td>
+</tr>
+<tr>
+<td>Multi-asset support</td>
+<td>Not required in v1. The architecture can support adding assets such as MXNB or DAI without redeploying core contracts</td>
+</tr>
+</tbody>
+</table>
+<h3>On-Ramps (Funding Methods)</h3>
+<p>Several deposit paths are planned so users can fund the platform easily:</p>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Method</th>
+<th>Status</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MoonPay</td>
+<td>Apple Pay, Google Pay, credit and debit cards</td>
+<td>TO BUILD</td>
+<td>High - MVP</td>
+</tr>
+<tr>
+<td>SPEI</td>
+<td>MXN bank transfer via Bitso or a similar provider</td>
+<td>TO BUILD</td>
+<td>High - MVP</td>
+</tr>
+<tr>
+<td>Native bridge</td>
+<td>Arbitrum Bridge for crypto-native users</td>
+<td>BUILT (link only)</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Direct Bitso flow</td>
+<td>Buy USDC in Bitso and send it to the wallet</td>
+<td>Under evaluation</td>
+<td>Post-MVP</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Target flow for non-crypto users:</strong><br>
+Open app -&gt; log in with email -&gt; deposit with card / Apple Pay / SPEI -&gt; place a prediction. Total time under 3 minutes.</p>
+<p>MoonPay handles the full KYC process (ID verification with national ID or passport), payment processing, and delivery of USDC directly into the user's Arbitrum wallet. The user never needs to understand blockchain mechanics.</p>
+<hr>
+<h2>02. Smart Contract Architecture</h2>
+<h3>BUILT - Contract System</h3>
+<p>Custom contracts were built from scratch using <strong>Solidity 0.8.24</strong>, <strong>Foundry</strong>, and <strong>OpenZeppelin v5.6.1</strong>. The architecture is original and optimized for binary markets with dynamic fees.</p>
+<h4><code>PronosToken.sol</code> - Conditional Tokens (ERC-1155)</h4>
+<p>Each market creates two tokens: <strong>YES</strong> (<code>marketId * 2</code>) and <strong>NO</strong> (<code>marketId * 2 + 1</code>).</p>
+<ul>
+<li>ERC-1155 standard for gas-efficient multi-market support</li>
+<li>Only authorized pools (minters) can mint or burn tokens</li>
+<li><code>mintPair()</code>: deposit collateral and receive YES + NO in a 1:1 ratio</li>
+<li><code>burnPair()</code>: return YES + NO and recover collateral</li>
+<li><code>burn()</code>: burn winning tokens during redemption</li>
+<li>Ownership transferred to <code>MarketFactory</code> after deployment</li>
+</ul>
+<h4><code>MarketFactory.sol</code> - Market Factory</h4>
+<p>This is the central hub for creating and managing prediction markets.</p>
+<ul>
+<li><code>createMarket()</code>: deploys a new AMM pool with seed liquidity</li>
+<li><code>resolveMarket()</code>: declares the winning outcome (YES = 1, NO = 2)</li>
+<li><code>pauseMarket()</code>: suspends or resumes trading</li>
+<li><code>distributeFees()</code>: distributes accumulated fees under the 70 / 20 / 10 split</li>
+<li>Access control: <strong>owner</strong> (Safe multisig) and <strong>resolver</strong> (can be a separate multisig)</li>
+<li>Configurable addresses: treasury, liquidity reserve, emergency reserve, fee collector</li>
+</ul>
+<h4><code>PronosAMM.sol</code> - Automated Market Maker (CPMM)</h4>
+<p>An AMM using the <strong>constant product formula (<code>x * y = k</code>)</strong> with dynamic fees.</p>
+<ul>
+<li><strong>Base formula:</strong> <code>x * y = k</code>, where <code>x</code> and <code>y</code> are YES / NO reserves</li>
+<li><strong>Buy:</strong> user deposits USDC, the pool mints YES + NO pairs, and the CPMM computes output tokens</li>
+<li><strong>Sell:</strong> user returns tokens, a quadratic formula computes collateral out, and the pool burns pairs</li>
+<li><strong>Redeem:</strong> after resolution, winning tokens are redeemed 1:1 for USDC</li>
+<li>On-chain estimate functions: <code>estimateBuy()</code>, <code>estimateSell()</code>, <code>priceYes()</code>, <code>priceNo()</code></li>
+<li>All market logic lives on-chain, with no off-chain matching engine</li>
+</ul>
+<h4>Testing</h4>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Total tests</td>
+<td><strong>43 passing</strong></td>
+</tr>
+<tr>
+<td><code>PronosToken</code> coverage</td>
+<td>100%</td>
+</tr>
+<tr>
+<td><code>MarketFactory</code> coverage</td>
+<td>87%</td>
+</tr>
+<tr>
+<td><code>PronosAMM</code> coverage</td>
+<td>82%</td>
+</tr>
+<tr>
+<td>Full cycle test</td>
+<td>Built: create -&gt; fund -&gt; trade -&gt; resolve -&gt; redeem</td>
+</tr>
+<tr>
+<td>Framework</td>
+<td>Foundry (<code>forge test</code>)</td>
+</tr>
+</tbody>
+</table>
+<h3>Dynamic Fee Model</h3>
+<p>The fee formula adjusts automatically according to implied market probability:</p>
+<pre><code class="language-text">fee% = 5 * (1 - P)
+</code></pre>
+<p>Where <code>P</code> is the implied probability of the side being bought.</p>
+<table>
+<thead>
+<tr>
+<th>Market probability</th>
+<th>Fee per trade</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>50 / 50 (maximum uncertainty)</td>
+<td>2.5%</td>
+</tr>
+<tr>
+<td>70 / 30</td>
+<td>1.5%</td>
+</tr>
+<tr>
+<td>90 / 10</td>
+<td>0.5%</td>
+</tr>
+<tr>
+<td>99 / 1 (nearly decided)</td>
+<td>0.05%</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Principle:</strong> charge more when risk and uncertainty are higher, and less when the market has already formed a strong consensus. Fees are deducted <strong>before</strong> funds enter the pool and are sent directly to the <code>feeCollector</code>; they never touch AMM reserves.</p>
+<h3>Revenue Distribution</h3>
+<table>
+<thead>
+<tr>
+<th>Destination</th>
+<th>Percentage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Treasury (operations and development)</td>
+<td>70%</td>
+</tr>
+<tr>
+<td>Liquidity fund (LP incentives)</td>
+<td>20%</td>
+</tr>
+<tr>
+<td>Reserve fund (security / emergencies)</td>
+<td>10%</td>
+</tr>
+</tbody>
+</table>
+<h3>Market Types</h3>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Status</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Binary (Yes / No)</td>
+<td>Built</td>
+<td>Covers sports, politics, and culture. Example: "Will Mexico beat Argentina?"</td>
+</tr>
+<tr>
+<td>Categorical (multiple outcomes)</td>
+<td>Planned for v2</td>
+<td>Example: "Who wins La Casa de los Famosos?" with 5+ candidates. Requires AMM extension</td>
+</tr>
+<tr>
+<td>Scalar (numeric range)</td>
+<td>Planned for v2</td>
+<td>Economic markets such as exchange rate or inflation</td>
+</tr>
+</tbody>
+</table>
+<h3>TO BUILD - Contracts</h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Deploy to Arbitrum Sepolia</td>
+<td>Script is ready (<code>DeployProtocol.s.sol</code>), but still needs RPC and deployer execution</td>
+</tr>
+<tr>
+<td>Deploy to Arbitrum One</td>
+<td>Same script, with mainnet RPC and Arbiscan verification</td>
+</tr>
+<tr>
+<td>Fuzz testing</td>
+<td>AMM edge cases such as extreme amounts, reentrancy, overflow</td>
+</tr>
+<tr>
+<td>UMA integration</td>
+<td>Connect market resolution to UMA Optimistic Oracle</td>
+</tr>
+<tr>
+<td>Categorical markets</td>
+<td>Extend the AMM to support 3+ outcomes</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>03. Resolution and Oracles</h2>
+<h3>Dual Resolution Mechanism</h3>
+<p>The platform will use <strong>two different resolution mechanisms</strong> depending on the market category:</p>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Mechanism</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sports / Reality TV (Liga MX, FIFA, Exatlon, La Casa de los Famosos)</td>
+<td>Custodial multisig oracle (2-of-3)</td>
+<td>Results are public and easy to verify via broadcasts and official sources</td>
+</tr>
+<tr>
+<td>Politics / Economy (elections, legislation, appointments, macro data)</td>
+<td>UMA Optimistic Oracle</td>
+<td>Handles arbitrary real-world events with on-chain dispute resolution</td>
+</tr>
+<tr>
+<td>Special markets</td>
+<td>Case by case</td>
+<td>Multisig or UMA depending on event complexity</td>
+</tr>
+</tbody>
+</table>
+<h3>BUILT - Multisig Resolution</h3>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Specification</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Type</td>
+<td>Gnosis Safe multisig (2-of-3 or 3-of-5)</td>
+</tr>
+<tr>
+<td>Signers</td>
+<td>Founder, co-founder, trusted third party</td>
+</tr>
+<tr>
+<td>Process</td>
+<td>Resolver proposes a result, required signatures are collected, then <code>resolveMarket()</code> executes</td>
+</tr>
+<tr>
+<td>Tooling</td>
+<td>Safe SDK integrated into the admin panel (<code>protocol-kit</code> + <code>api-kit</code>)</td>
+</tr>
+<tr>
+<td>Supported chains</td>
+<td>Arbitrum Sepolia and Arbitrum One</td>
+</tr>
+<tr>
+<td>Admin UI</td>
+<td>Create Safe, connect existing Safe, propose / sign / execute directly from <code>/mvp/admin</code></td>
+</tr>
+</tbody>
+</table>
+<h3>TO BUILD - UMA Optimistic Oracle</h3>
+<p>UMA should be integrated for political and complex markets where resolution is not obviously mechanical.</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Requirement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>UMA interface</td>
+<td>Adapter contract connecting <code>MarketFactory</code> to UMA <code>OptimisticOracleV3</code></td>
+</tr>
+<tr>
+<td>Result proposal</td>
+<td>Anyone can propose an outcome by posting a USDC bond</td>
+</tr>
+<tr>
+<td>Dispute window</td>
+<td>48 hours; if no one disputes, the result stands</td>
+</tr>
+<tr>
+<td>Escalation</td>
+<td>If disputed, it escalates to UMA's DVM, where UMA token holders vote on-chain</td>
+</tr>
+<tr>
+<td>Auto-resolution</td>
+<td>After the dispute window ends without challenge, <code>resolveMarket()</code> runs automatically</td>
+</tr>
+<tr>
+<td>Resolution rules</td>
+<td>Rules are defined when the market is created, using UMA ancillary data</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Note:</strong> UMA interfaces and comments are already scaffolded in the contract code. What remains is the adapter contract and callback wiring.</p>
+<h3>Dispute Process</h3>
+<table>
+<thead>
+<tr>
+<th>Oracle</th>
+<th>Process</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Multisig (sports / TV)</td>
+<td>If an error is detected, signers deliberate and correct it by majority vote. The curation committee is the final arbiter</td>
+</tr>
+<tr>
+<td>UMA (politics)</td>
+<td>Any token holder can dispute during the dispute window. The dispute escalates to UMA's DVM, and the majority determines the final result</td>
+</tr>
+</tbody>
+</table>
+<p>Ambiguous cases such as cancellations, technical ties, or postponed events must be handled according to the pre-defined resolution rules stored with the market.</p>
+<h3>Execution Timelines</h3>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Multisig</th>
+<th>UMA</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Reporting period</td>
+<td>24h after event</td>
+<td>24h after event</td>
+</tr>
+<tr>
+<td>Dispute period</td>
+<td>Not applicable</td>
+<td>48h after proposal</td>
+</tr>
+<tr>
+<td>Resolution with no dispute</td>
+<td>24-48h</td>
+<td>Automatic at dispute-window close</td>
+</tr>
+<tr>
+<td>Resolution with dispute</td>
+<td>24-48h (multisig deliberation)</td>
+<td>5-7 business days (DVM voting)</td>
+</tr>
+<tr>
+<td>Fund release</td>
+<td>Immediate after resolution</td>
+<td>Immediate after resolution</td>
+</tr>
+<tr>
+<td>Oracle fee</td>
+<td>None</td>
+<td>About 1.5% of market value, paid by the protocol</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>04. Frontend and User Experience</h2>
+<h3>BUILT - Technical Stack</h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Technology</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Framework</td>
+<td>React 18 + Vite 5 (SPA, mobile-first)</td>
+</tr>
+<tr>
+<td>Routing</td>
+<td>React Router v6 with basename <code>/mvp</code></td>
+</tr>
+<tr>
+<td>Auth / Wallet</td>
+<td>Privy (<code>@privy-io/react-auth</code>)</td>
+</tr>
+<tr>
+<td>Blockchain library</td>
+<td><code>ethers.js</code> v5.7.2</td>
+</tr>
+<tr>
+<td>Styling</td>
+<td>Custom CSS, proprietary design system, dark theme, responsive</td>
+</tr>
+<tr>
+<td>Monitoring</td>
+<td>Sentry (<code>@sentry/react</code>, <code>ErrorBoundary</code>, privacy-safe)</td>
+</tr>
+<tr>
+<td>Hosting</td>
+<td>Vercel (static + serverless functions)</td>
+</tr>
+<tr>
+<td>Language</td>
+<td>Spanish only</td>
+</tr>
+</tbody>
+</table>
+<h3>BUILT - Pages and Components</h3>
+<h4>Home (<code>/mvp/</code>)</h4>
+<ul>
+<li>Hero carousel with featured markets</li>
+<li>Market grid with live data (Polymarket Gamma API + internal markets)</li>
+<li>"How it works" visual section</li>
+<li>Animated market ticker</li>
+<li>Search bar and filtering</li>
+<li>Footer links</li>
+<li>Responsive tablet and mobile layouts</li>
+</ul>
+<h4>Market Page (<code>/mvp/market?id=</code>)</h4>
+<ul>
+<li>Ring-chart probability visualization</li>
+<li>Trading panel with outcome and amount selection</li>
+<li>Payout preview with real-time dynamic fee calculation</li>
+<li>Tabs for Rules, Market Context, Comments, Top Holders, Positions, and Activity</li>
+<li>Sticky sidebar for quick trading</li>
+<li>Support for resolved markets with final winner state</li>
+</ul>
+<h4>Portfolio (<code>/mvp/portfolio</code>)</h4>
+<ul>
+<li>Chain-aware user USDC balance</li>
+<li>Open positions list with individual P&amp;L</li>
+<li>Summary of total invested, current value, and profit / loss</li>
+</ul>
+<h4>Admin Panel (<code>/mvp/admin</code>)</h4>
+<ul>
+<li>Restricted access with server-side auth through <code>/api/user</code></li>
+<li>Protocol mode toggle (Polymarket &lt;-&gt; Internal protocol)</li>
+<li>Market creation form (question, category, date, oracle, liquidity)</li>
+<li>Market list with pause and resolve actions</li>
+<li>Fee-formula and 70 / 20 / 10 distribution display</li>
+<li>Deployed-contract status panel</li>
+<li>Full Safe SDK integration for create / connect / propose / sign / execute</li>
+<li>Non-admin users receive a 404 page, making the route undiscoverable</li>
+</ul>
+<h4>Bet Slip (Trade Modal)</h4>
+<ul>
+<li>Quick amount selectors ($5, $10, $25, $50) plus custom entry</li>
+<li>Dynamic calculation of fee, estimated payout, potential profit, and implied probability</li>
+<li>Auto network switching when user is on the wrong chain</li>
+<li>Full flow: check balance -&gt; approve USDC -&gt; sign -&gt; place order</li>
+<li>Unauthenticated users see a "Join the waitlist" action via Tally</li>
+</ul>
+<h3>BUILT - Authentication and Onboarding</h3>
+<table>
+<thead>
+<tr>
+<th>Capability</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Email login</td>
+<td>Built via Privy</td>
+</tr>
+<tr>
+<td>Google login</td>
+<td>Built via Privy</td>
+</tr>
+<tr>
+<td>Wallet login (MetaMask, Coinbase Wallet, etc.)</td>
+<td>Built via Privy</td>
+</tr>
+<tr>
+<td>Auto-created embedded wallet (ERC-4337)</td>
+<td>Built and invisible to user</td>
+</tr>
+<tr>
+<td>Username registration</td>
+<td>Built with "Skip" option and auto-generated fallback</td>
+</tr>
+<tr>
+<td>Persistent sessions</td>
+<td>Built via Privy embedded wallets</td>
+</tr>
+<tr>
+<td>Multi-chain</td>
+<td>Polygon + Arbitrum + Arbitrum Sepolia</td>
+</tr>
+<tr>
+<td>Auto network switch</td>
+<td>Built</td>
+</tr>
+<tr>
+<td>Chain-aware USDC balance</td>
+<td>Built</td>
+</tr>
+<tr>
+<td>Deposit link</td>
+<td>Built according to active protocol mode</td>
+</tr>
+</tbody>
+</table>
+<h3>BUILT - Dual Mode: Polymarket + Internal Protocol</h3>
+<p>The platform currently operates in two modes, controlled from the admin panel:</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Polymarket</td>
+<td>Shows Polymarket markets from Gamma and routes trades through the Polygon CLOB</td>
+</tr>
+<tr>
+<td>Internal protocol</td>
+<td>Shows admin-created markets and routes trades through <code>PronosAMM</code> on Arbitrum</td>
+</tr>
+</tbody>
+</table>
+<p>The switch is reactive across the app through a custom event. At the current stage, Polymarket mode is used to validate UX on real markets while the internal contracts are being prepared for deployment.</p>
+<h3>TO BUILD - Frontend</h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Connect frontend to internal contracts</td>
+<td><code>contracts.js</code> library for <code>PronosAMM</code> buy / sell / redeem</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Buy / sell panel for internal protocol</td>
+<td>Detect market type and route to the right AMM flow</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Real-time AMM pricing</td>
+<td>Read <code>priceYes()</code> and <code>priceNo()</code> from contracts and show them in UI</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Slippage preview</td>
+<td>Use <code>estimateBuy()</code> and <code>estimateSell()</code> before confirming trade</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Unified portfolio</td>
+<td>Merge Polymarket and internal protocol positions into one view</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Historical price chart</td>
+<td>Line or OHLC chart using <code>price_snapshots</code> table</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>MoonPay widget</td>
+<td>Embedded card / Apple Pay / Google Pay funding flow</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Push notifications</td>
+<td>Market opening and resolution alerts via WhatsApp / SMS / push</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>Gas sponsoring</td>
+<td>Turn on Privy paymaster so users do not pay gas directly</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Final responsive pass</td>
+<td>Mobile and tablet review</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>PWA</td>
+<td>Service worker and app-like mobile install experience</td>
+<td>Low</td>
+</tr>
+</tbody>
+</table>
+<h3>Full Visualization Vision</h3>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Status</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Real-time probability visualization</td>
+<td>Built (ring chart)</td>
+<td>Visual chart showing YES / NO movement from market open</td>
+</tr>
+<tr>
+<td>Price history</td>
+<td>To build</td>
+<td>Hourly / daily OHLC view for market trend analysis</td>
+</tr>
+<tr>
+<td>Position panel (P&amp;L)</td>
+<td>Built (basic)</td>
+<td>Dashboard with active markets, invested amount, current value, unrealized P&amp;L</td>
+</tr>
+<tr>
+<td>Active market feed</td>
+<td>Built</td>
+<td>Filterable list by category, volume, and close date</td>
+</tr>
+<tr>
+<td>Individual market view</td>
+<td>Built</td>
+<td>Detail view with rules, oracle, activity, comments</td>
+</tr>
+<tr>
+<td>Push notifications</td>
+<td>To build</td>
+<td>Alerts for market open, near resolution, and final result</td>
+</tr>
+<tr>
+<td>Leaderboard</td>
+<td>To build</td>
+<td>Public ranking by user P&amp;L and volume</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>05. Backend and Infrastructure</h2>
+<h3>BUILT - Serverless API (Vercel Functions)</h3>
+<table>
+<thead>
+<tr>
+<th>Endpoint</th>
+<th>Function</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /api/markets</code></td>
+<td>List internal protocol markets with current price</td>
+</tr>
+<tr>
+<td><code>GET /api/market?id=</code></td>
+<td>Market detail plus 50 price snapshots, 20 recent trades, and total volume</td>
+</tr>
+<tr>
+<td><code>GET /api/positions?address=</code></td>
+<td>User positions with P&amp;L calculation for active and resolved markets</td>
+</tr>
+<tr>
+<td><code>GET /api/user?privyId=</code></td>
+<td>User profile plus admin flag, evaluated server-side</td>
+</tr>
+<tr>
+<td><code>GET /api/indexer</code></td>
+<td>On-chain event indexer (Vercel Cron, every minute)</td>
+</tr>
+<tr>
+<td><code>GET /api/migrate?key=</code></td>
+<td>Database migration endpoint protected by key</td>
+</tr>
+<tr>
+<td><code>GET /api/bitso?action=</code></td>
+<td>MXN &lt;-&gt; USDC quote stub prepared for a real integration</td>
+</tr>
+</tbody>
+</table>
+<h3>BUILT - Database (Neon PostgreSQL)</h3>
+<table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>users</code></td>
+<td>Registered users (<code>privyId</code>, username, admin flag)</td>
+</tr>
+<tr>
+<td><code>protocol_markets</code></td>
+<td>Internal protocol markets (<code>chain_id</code>, <code>pool_address</code>, question, status, outcome)</td>
+</tr>
+<tr>
+<td><code>trades</code></td>
+<td>Indexed trade history, deduplicated by <code>tx_hash + log_index</code></td>
+</tr>
+<tr>
+<td><code>positions</code></td>
+<td>Materialized user positions by market</td>
+</tr>
+<tr>
+<td><code>price_snapshots</code></td>
+<td>AMM price snapshots for charts</td>
+</tr>
+<tr>
+<td><code>indexer_state</code></td>
+<td>Last processed block by chain</td>
+</tr>
+</tbody>
+</table>
+<p>There are six indices for fast queries, and migrations can be run through a protected endpoint.</p>
+<h3>BUILT - On-Chain Indexer</h3>
+<p>The indexer reads blockchain events and writes data into PostgreSQL:</p>
+<ul>
+<li><code>MarketCreated</code> -&gt; register market</li>
+<li><code>SharesBought</code> / <code>SharesSold</code> -&gt; store trade and update user position</li>
+<li><code>MarketResolved</code> -&gt; update market status</li>
+<li>Price snapshots -&gt; read <code>reserveYes()</code> / <code>reserveNo()</code> and derive CPMM pricing</li>
+</ul>
+<p>This runs through Vercel Cron every minute or via an authenticated manual trigger.</p>
+<h3>BUILT - Monitoring</h3>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sentry</td>
+<td>Frontend error tracking with privacy-safe setup</td>
+</tr>
+<tr>
+<td>Structured logger</td>
+<td>JSON logging in API routes with duration, CORS, and stack traces</td>
+</tr>
+</tbody>
+</table>
+<h3>TO BUILD - Backend</h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Real Bitso API</td>
+<td>Replace stub with production MXN &lt;-&gt; USDC quotes and SPEI funding integration</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>MoonPay webhook</td>
+<td>Receive deposit confirmations and update DB state</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Rate limiting</td>
+<td>Protect public endpoints from abuse</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Input validation</td>
+<td>Sanitize all user-provided inputs in API routes</td>
+<td>High</td>
+</tr>
+<tr>
+<td>CSRF protection</td>
+<td>Add tokens to POST endpoints</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Leaderboard API</td>
+<td>Public ranking endpoint by P&amp;L / volume</td>
+<td>Low</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>06. Security</h2>
+<h3>BUILT - Security Headers</h3>
+<table>
+<thead>
+<tr>
+<th>Header</th>
+<th>Value</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>X-Frame-Options</code></td>
+<td><code>DENY</code></td>
+<td>Built</td>
+</tr>
+<tr>
+<td><code>X-Content-Type-Options</code></td>
+<td><code>nosniff</code></td>
+<td>Built</td>
+</tr>
+<tr>
+<td><code>Referrer-Policy</code></td>
+<td><code>strict-origin-when-cross-origin</code></td>
+<td>Built</td>
+</tr>
+<tr>
+<td><code>Permissions-Policy</code></td>
+<td><code>camera=(), microphone=(), geolocation=(), payment=(), usb=()</code></td>
+<td>Built</td>
+</tr>
+<tr>
+<td><code>Strict-Transport-Security</code></td>
+<td><code>max-age=63072000; includeSubDomains; preload</code></td>
+<td>Built</td>
+</tr>
+<tr>
+<td><code>CORS</code></td>
+<td>Restricted to <code>pronos.io</code> and localhost</td>
+<td>Built</td>
+</tr>
+<tr>
+<td><code>X-XSS-Protection</code></td>
+<td><code>0</code> (disabled, replaced by CSP)</td>
+<td>Built</td>
+</tr>
+</tbody>
+</table>
+<h3>Internal Security Audit - Findings</h3>
+<h4>Resolved</h4>
+<ul>
+<li>C1: Admin authentication moved server-side</li>
+<li>C4: Admin allowlist removed from frontend bundle</li>
+<li>H2: <code>X-Frame-Options: DENY</code></li>
+<li>M1-M5: Security headers completed plus restrictive CORS</li>
+</ul>
+<h4>Still Open</h4>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Severity</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C2</td>
+<td>Critical</td>
+<td>CLOB credentials are passed in POST body instead of being derived server-side</td>
+</tr>
+<tr>
+<td>C3</td>
+<td>Critical</td>
+<td><code>DATABASE_URL</code> is reachable from frontend API layer; infrastructure tiers need separation</td>
+</tr>
+<tr>
+<td>H1</td>
+<td>High</td>
+<td>Missing Content-Security-Policy</td>
+</tr>
+<tr>
+<td>H3</td>
+<td>High</td>
+<td><code>/mvp/admin</code> still lacks fully hardened server-side auth</td>
+</tr>
+<tr>
+<td>H4</td>
+<td>High</td>
+<td><code>/api/user</code> can be enumerated without authentication</td>
+</tr>
+<tr>
+<td>M6</td>
+<td>Medium</td>
+<td>No SRI on external scripts</td>
+</tr>
+<tr>
+<td>M7</td>
+<td>Medium</td>
+<td>No CSRF protection on POST requests</td>
+</tr>
+<tr>
+<td>M8</td>
+<td>Medium</td>
+<td><code>localStorage</code> acts as the source of truth for protocol mode</td>
+</tr>
+<tr>
+<td>M9</td>
+<td>Medium</td>
+<td>Vite dev proxy points to production</td>
+</tr>
+<tr>
+<td>M10</td>
+<td>Medium</td>
+<td><code>ethers.js</code> v5.7.2 is outdated; upgrade to v6</td>
+</tr>
+</tbody>
+</table>
+<h3>Admin Roles and Multisig</h3>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Control</th>
+<th>Implementation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Owner (Safe 3-of-5)</td>
+<td>Pause contracts, create markets, distribute fees, update protocol addresses</td>
+<td>Gnosis Safe on Arbitrum</td>
+</tr>
+<tr>
+<td>Resolver (Safe 2-of-3)</td>
+<td>Resolve markets and set the winning outcome</td>
+<td>Same Safe or a separate Safe</td>
+</tr>
+<tr>
+<td>Admin UI</td>
+<td>Web management through <code>/mvp/admin</code></td>
+<td>Server-side auth, username-based</td>
+</tr>
+</tbody>
+</table>
+<p>There is <strong>no arbitrary upgradeability</strong>. Any change in contract logic requires multisig approval. Contracts are intended to be immutable, so logic changes require a new deployment and migration.</p>
+<h3>TO BUILD - Security</h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Resolve C2 and C3</td>
+<td>Separate CLOB credentials and DB access from frontend-exposed layers</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>CSP headers</td>
+<td>Add a restrictive Content-Security-Policy</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Complete admin auth</td>
+<td>Add true server-side middleware, not just username checks</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Rate limiting</td>
+<td>Across all API routes</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Contract fuzz testing</td>
+<td>Reentrancy, overflow, and extreme-amount edge cases</td>
+<td>High</td>
+</tr>
+<tr>
+<td>External audit</td>
+<td>Specialized third-party audit before high-value mainnet use</td>
+<td>Post-launch</td>
+</tr>
+<tr>
+<td>Bug bounty</td>
+<td>Launch a public bug bounty after go-live</td>
+<td>Post-launch</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>07. Market Curation</h2>
+<h3>v1 - Admin-Managed Markets</h3>
+<p>In v1, market creation is restricted to administrators with access to the control panel. User-generated markets are planned for v2 only.</p>
+<h4>BUILT - Admin Panel</h4>
+<ul>
+<li>Create market: question, options, closing date, oracle, initial liquidity, and resolution rules</li>
+<li>Pause / resume market when unexpected events happen</li>
+<li>Resolve market by selecting the winning outcome</li>
+<li>Display fee metrics, distribution, and contract status</li>
+<li>Safe integration for propose / sign / execute directly in UI</li>
+</ul>
+<h4>TO BUILD</h4>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Wire forms to contracts</td>
+<td>Connect market creation form to <code>MarketFactory.createMarket()</code> via Safe</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Wire resolve / pause</td>
+<td>Make admin buttons execute Safe multisig transactions</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Metrics dashboard</td>
+<td>Volume, participants, accumulated fees, and liquidity by market</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>User management</td>
+<td>Pause accounts for suspicious behavior</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>User-generated markets</td>
+<td>Allow moderated market proposals in v2</td>
+<td>Post-MVP</td>
+</tr>
+</tbody>
+</table>
+<h3>Launch Market Set (Target: FIFA World Cup 2026)</h3>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Example markets</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>FIFA World Cup</td>
+<td>Will Mexico reach the Round of 16? Who wins the group? Will Argentina repeat?</td>
+</tr>
+<tr>
+<td>Liga MX</td>
+<td>Who wins Clausura 2026? Relegation outcome?</td>
+</tr>
+<tr>
+<td>Mexico politics</td>
+<td>Midterm elections, reforms, appointments</td>
+</tr>
+<tr>
+<td>Reality TV</td>
+<td>La Casa de los Famosos, Exatlon, La Academia</td>
+</tr>
+<tr>
+<td>Crypto / Economy</td>
+<td>Bitcoin price, exchange rate, inflation</td>
+</tr>
+</tbody>
+</table>
+<p>The launch plan is to curate <strong>5 to 10 markets</strong> with seed liquidity in USDC.</p>
+<hr>
+<h2>08. Roadmap and Current Status</h2>
+<h3>Phase 1: Foundation and Contracts - About 85% Complete</h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Hybrid architecture defined (Polymarket + internal protocol)</td>
+<td>Built</td>
+</tr>
+<tr>
+<td>Core contracts: <code>PronosToken</code>, <code>PronosAMM</code>, <code>MarketFactory</code></td>
+<td>Built</td>
+</tr>
+<tr>
+<td>43 Foundry tests passing</td>
+<td>Built</td>
+</tr>
+<tr>
+<td>Reproducible deployment script (<code>DeployProtocol.s.sol</code>)</td>
+<td>Built</td>
+</tr>
+<tr>
+<td>Safe SDK integrated in admin panel</td>
+<td>Built</td>
+</tr>
+<tr>
+<td>Arbitrum Sepolia config in <code>foundry.toml</code></td>
+<td>Built</td>
+</tr>
+<tr>
+<td>Deploy to Arbitrum Sepolia</td>
+<td>To build</td>
+</tr>
+<tr>
+<td>Create Safe multisig in testnet</td>
+<td>To build</td>
+</tr>
+<tr>
+<td>Transfer ownership to Safe</td>
+<td>To build</td>
+</tr>
+</tbody>
+</table>
+<h3>Phase 2: Features and UI - About 75% Complete</h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Full frontend (Home, Market, Portfolio, Admin)</td>
+<td>Built</td>
+</tr>
+<tr>
+<td>Polymarket integration (Gamma + CLOB)</td>
+<td>Built</td>
+</tr>
+<tr>
+<td>Admin panel with market CRUD + Safe SDK</td>
+<td>Built</td>
+</tr>
+<tr>
+<td>Wallet and onboarding (Privy, multi-chain, auto-switch)</td>
+<td>Built</td>
+</tr>
+<tr>
+<td>Backend: schema, indexer, APIs, price snapshots</td>
+<td>Built</td>
+</tr>
+<tr>
+<td>Monitoring: Sentry and structured logging</td>
+<td>Built</td>
+</tr>
+<tr>
+<td>Bet slip with dynamic fee and preview</td>
+<td>Built</td>
+</tr>
+<tr>
+<td>Responsive tablet + mobile</td>
+<td>Built</td>
+</tr>
+<tr>
+<td>OG metadata, Twitter cards, favicon</td>
+<td>Built</td>
+</tr>
+<tr>
+<td>Waitlist gate (Tally)</td>
+<td>Built</td>
+</tr>
+<tr>
+<td>Connect frontend to internal contracts</td>
+<td>To build</td>
+</tr>
+<tr>
+<td>Wire admin forms to contracts via Safe</td>
+<td>To build</td>
+</tr>
+<tr>
+<td>Integrate MoonPay</td>
+<td>To build</td>
+</tr>
+<tr>
+<td>Integrate UMA Oracle</td>
+<td>To build</td>
+</tr>
+<tr>
+<td>Load 5 to 10 curated markets</td>
+<td>To build</td>
+</tr>
+<tr>
+<td>End-to-end testing in testnet</td>
+<td>Blocked by deploy</td>
+</tr>
+</tbody>
+</table>
+<h3>Phase 3: Hardening and Mainnet - Target: May 31, 2026</h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Deploy to Arbitrum One (mainnet)</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Verify contracts on Arbiscan</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Resolve critical and high security findings (C2, C3, H1, H3, H4)</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>Seed liquidity for launch markets</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>World Cup 2026 markets ready</td>
+<td>Critical</td>
+</tr>
+<tr>
+<td>48-hour stability test with no intervention</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Technical documentation and runbook</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Rate limiting + input validation</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Final mobile responsive check</td>
+<td>Medium</td>
+</tr>
+</tbody>
+</table>
+<h3>Post-MVP - Full Product Vision</h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Description</th>
+<th>Estimate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Direct Bitso</td>
+<td>MXN on / off ramp via SPEI with in-app USDC buy / sell</td>
+<td>$10K - $15K</td>
+</tr>
+<tr>
+<td>Categorical markets</td>
+<td>3+ outcomes in extended AMM</td>
+<td>$10K - $15K</td>
+</tr>
+<tr>
+<td>Scalar markets</td>
+<td>Numeric-range markets like FX and inflation</td>
+<td>$10K - $15K</td>
+</tr>
+<tr>
+<td>External audit</td>
+<td>Third-party audit firm</td>
+<td>$25K - $50K</td>
+</tr>
+<tr>
+<td>Market-making bot</td>
+<td>Algorithmic liquidity management to keep spreads tight</td>
+<td>$5K - $10K</td>
+</tr>
+<tr>
+<td>Push notifications</td>
+<td>WhatsApp / SMS / push alerts</td>
+<td>$3K - $5K</td>
+</tr>
+<tr>
+<td>User-generated markets</td>
+<td>Moderated user-submitted markets</td>
+<td>$10K - $15K</td>
+</tr>
+<tr>
+<td>Leaderboard</td>
+<td>Public user ranking by P&amp;L and volume</td>
+<td>$3K - $5K</td>
+</tr>
+<tr>
+<td>Native mobile apps</td>
+<td>iOS / Android via React Native or advanced PWA</td>
+<td>$15K - $25K</td>
+</tr>
+<tr>
+<td>Referral program</td>
+<td>Growth incentives for invited users</td>
+<td>$5K - $8K</td>
+</tr>
+<tr>
+<td>Analytics dashboard</td>
+<td>Public protocol metrics dashboard (TVL, volume, users)</td>
+<td>$5K - $8K</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>09. Technical Stack Summary</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Technology</th>
+<th>Why it was chosen</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Blockchain</td>
+<td>Arbitrum</td>
+<td>Low gas, EVM-compatible, native USDC, mature ecosystem</td>
+</tr>
+<tr>
+<td>Contracts</td>
+<td>Solidity 0.8.24 + OpenZeppelin + Foundry</td>
+<td>Custom architecture, ERC-1155, CPMM AMM with dynamic fees</td>
+</tr>
+<tr>
+<td>Tokens</td>
+<td><code>PronosToken</code> (ERC-1155)</td>
+<td>One contract for all markets, gas efficient</td>
+</tr>
+<tr>
+<td>AMM</td>
+<td><code>PronosAMM</code> (<code>x * y = k</code>)</td>
+<td>No off-chain engine, automatic liquidity, dynamic fees</td>
+</tr>
+<tr>
+<td>Sports oracle</td>
+<td>Custodial multisig via Safe 2-of-3</td>
+<td>Public results, direct control, fast resolution</td>
+</tr>
+<tr>
+<td>Political oracle</td>
+<td>UMA Optimistic Oracle</td>
+<td>Industry standard, on-chain dispute process</td>
+</tr>
+<tr>
+<td>Collateral</td>
+<td>USDC (Circle)</td>
+<td>Most liquid stablecoin on Arbitrum</td>
+</tr>
+<tr>
+<td>On-ramp</td>
+<td>MoonPay + SPEI</td>
+<td>Apple Pay, Google Pay, cards, and MXN bank transfer</td>
+</tr>
+<tr>
+<td>Wallet / Auth</td>
+<td>Privy (EIP-4337 account abstraction)</td>
+<td>Email / Google / wallet with no seed phrases</td>
+</tr>
+<tr>
+<td>Frontend</td>
+<td>React 18 + Vite 5</td>
+<td>Fast iteration, SPA, mobile-first</td>
+</tr>
+<tr>
+<td>Backend</td>
+<td>Vercel Serverless Functions</td>
+<td>Zero-config deployment, autoscaling, built-in cron</td>
+</tr>
+<tr>
+<td>Database</td>
+<td>Neon PostgreSQL</td>
+<td>Serverless Postgres that pairs well with Vercel</td>
+</tr>
+<tr>
+<td>Monitoring</td>
+<td>Sentry + structured logging</td>
+<td>Privacy-safe error tracking</td>
+</tr>
+<tr>
+<td>Multisig</td>
+<td>Gnosis Safe</td>
+<td>Industry-standard treasury and admin control</td>
+</tr>
+<tr>
+<td>Testing</td>
+<td>Foundry (<code>forge test</code>)</td>
+<td>43 tests, &gt;75% coverage</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>10. Competitive Differentiators</h2>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Polymarket</th>
+<th>Myriad Markets</th>
+<th>Pronos</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Curated LATAM markets</td>
+<td>No</td>
+<td>No</td>
+<td>Yes - Liga MX, Mexico politics, culture, FIFA</td>
+</tr>
+<tr>
+<td>Language</td>
+<td>English</td>
+<td>English</td>
+<td>Native Spanish</td>
+</tr>
+<tr>
+<td>Crypto-free onboarding</td>
+<td>No, requires wallet and bridging</td>
+<td>Partial</td>
+<td>Yes - email / Google -&gt; embedded wallet</td>
+</tr>
+<tr>
+<td>MXN on-ramp</td>
+<td>No</td>
+<td>No</td>
+<td>Yes - MoonPay + SPEI</td>
+</tr>
+<tr>
+<td>Transparent fees</td>
+<td>0% with hidden spread</td>
+<td>Variable</td>
+<td>Explicit dynamic fee (0.05% - 2.5%)</td>
+</tr>
+<tr>
+<td>Resolution</td>
+<td>UMA (slow)</td>
+<td>Centralized</td>
+<td>Fast multisig (24-48h) + UMA for politics</td>
+</tr>
+<tr>
+<td>Target user</td>
+<td>Global crypto traders</td>
+<td>Global</td>
+<td>LATAM and non-crypto users</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>11. What We Need From a Dev Shop</h2>
+<h3>Executive Summary</h3>
+<p>About 75% of the product is already built. The smart contracts exist and are tested. The frontend is functional with active Polymarket mode. The backend, including indexer, APIs, and database, is operational.</p>
+<p><strong>What is still needed to reach mainnet:</strong></p>
+<h4>Critical Priority (before June 14)</h4>
+<ol>
+<li>Deploy contracts to Arbitrum Sepolia, test them, then deploy to Arbitrum One</li>
+<li>Connect the frontend to the internal contracts (<code>PronosAMM</code> buy / sell / redeem)</li>
+<li>Wire the admin panel to contracts via Safe multisig</li>
+<li>Integrate MoonPay for deposits (Apple Pay, Google Pay, cards)</li>
+<li>Integrate UMA Optimistic Oracle for political markets</li>
+<li>Resolve critical and high security issues (C2, C3, H1, H3, H4)</li>
+<li>Run end-to-end testing of the full flow on testnet</li>
+<li>Load 5 to 10 curated launch markets (World Cup, Liga MX, politics)</li>
+</ol>
+<h4>Medium Priority (can be post-launch)</h4>
+<ul>
+<li>Gas sponsoring through Privy paymaster</li>
+<li>Historical price chart (OHLC)</li>
+<li>Unified portfolio (Polymarket + internal protocol)</li>
+<li>Rate limiting and input validation on APIs</li>
+<li>Final responsive pass</li>
+<li>SPEI on-ramp</li>
+</ul>
+<h4>Nice to Have (post-MVP)</h4>
+<ul>
+<li>Categorical markets (3+ outcomes)</li>
+<li>Push notifications</li>
+<li>Leaderboard</li>
+<li>Market-making bot</li>
+<li>User-generated markets</li>
+<li>Native apps</li>
+</ul>
+<h3>Repository and Access</h3>
+<table>
+<thead>
+<tr>
+<th>Resource</th>
+<th>URL / Location</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GitHub repository</td>
+<td><code>github.com/mezcalpapieth-jpg/pronos</code> (private)</td>
+</tr>
+<tr>
+<td>Staging frontend</td>
+<td><code>pronos.io/mvp/</code></td>
+</tr>
+<tr>
+<td>Contracts</td>
+<td><code>contracts/src/</code></td>
+</tr>
+<tr>
+<td>Deploy scripts</td>
+<td><code>contracts/script/DeployProtocol.s.sol</code></td>
+</tr>
+<tr>
+<td>Serverless API</td>
+<td><code>frontend/api/</code></td>
+</tr>
+<tr>
+<td>Database</td>
+<td>Neon PostgreSQL (connection string in Vercel env vars)</td>
+</tr>
+<tr>
+<td>Tests</td>
+<td><code>contracts/test/</code> - 43 tests, run with <code>forge test</code></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<p><em>Prepared by Simon Lacy - Founder, PRONOS</em><br>
+<em>Last updated: April 2026</em><br>
+<em>Confidential - For development evaluation only. Do not distribute.</em></p>
+  </main>
+</body>
+</html>

@@ -53,6 +53,8 @@ export const AMM_ABI = [
   'function buy(bool buyYes, uint256 collateralAmount) external returns (uint256 sharesOut)',
   'function sell(bool sellYes, uint256 sharesAmount) external returns (uint256 collateralOut)',
   'function redeem(uint256 amount) external',
+  'function yesId() view returns (uint256)',
+  'function noId() view returns (uint256)',
   'function priceYes() view returns (uint256)',
   'function priceNo() view returns (uint256)',
   'function currentFeeBps(bool buyYes) view returns (uint256)',
@@ -72,6 +74,7 @@ export const AMM_MULTI_ABI = [
   'function buy(uint8 outcomeIndex, uint256 collateralAmount) external returns (uint256 sharesOut)',
   'function sell(uint8 outcomeIndex, uint256 sharesAmount) external returns (uint256 collateralOut)',
   'function redeem(uint256 amount) external',
+  'function marketId() view returns (uint256)',
   'function price(uint8 outcomeIndex) view returns (uint256)',
   'function prices() view returns (uint256[])',
   'function currentFeeBps(uint8 outcomeIndex) view returns (uint256)',
@@ -282,6 +285,7 @@ export async function buyShares(signer, poolAddress, usdcAddress, outcome, amoun
 export async function sellShares(signer, poolAddress, tokenAddress, outcome, sharesAmount, opts = {}) {
   const raw = ethers.utils.parseUnits(sharesAmount, 6);
   const protocolVersion = opts.protocolVersion || 'v1';
+  const isV2 = protocolVersion === 'v2';
 
   // 1. Approve ERC-1155 transfer (setApprovalForAll if not already)
   const token = new ethers.Contract(tokenAddress, [
@@ -290,6 +294,16 @@ export async function sellShares(signer, poolAddress, tokenAddress, outcome, sha
     'function setApprovalForAll(address operator, bool approved)',
   ], signer);
   const addr = await signer.getAddress();
+  const amm = new ethers.Contract(poolAddress, isV2 ? AMM_MULTI_ABI : AMM_ABI, signer);
+  const tokenId = isV2
+    ? await token.tokenId(await amm.marketId(), Number(outcome))
+    : (Boolean(outcome) ? await amm.yesId() : await amm.noId());
+  const walletBalance = await token.balanceOf(addr, tokenId);
+  if (walletBalance.lt(raw)) {
+    const available = ethers.utils.formatUnits(walletBalance, 6).replace(/\.?0+$/, '') || '0';
+    throw new Error(`Tu wallet solo tiene ${available} shares disponibles para retirar. Refresca el portafolio e intenta otra vez.`);
+  }
+
   const approved = await token.isApprovedForAll(addr, poolAddress);
   if (!approved) {
     const approveTx = await token.setApprovalForAll(poolAddress, true);
@@ -297,8 +311,6 @@ export async function sellShares(signer, poolAddress, tokenAddress, outcome, sha
   }
 
   // 2. Execute sell
-  const isV2 = protocolVersion === 'v2';
-  const amm = new ethers.Contract(poolAddress, isV2 ? AMM_MULTI_ABI : AMM_ABI, signer);
   const tx = isV2
     ? await amm.sell(Number(outcome), raw)
     : await amm.sell(Boolean(outcome), raw);

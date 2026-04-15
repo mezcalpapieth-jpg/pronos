@@ -331,11 +331,21 @@ async function indexV1Pool(provider, pool, fromBlock, toBlock, processed) {
     const price = shares > 0 ? netCollateral / shares : 0;
     const outcomeIndex = isYes ? 0 : 1;
 
-    await sql`
-      INSERT INTO trades (market_id, trader, side, is_yes, outcome_index, collateral_amt, shares_amt, fee_amt, price_at_trade, tx_hash, block_number, log_index)
-      VALUES (${pool.id}, ${buyer.toLowerCase()}, 'buy', ${isYes}, ${outcomeIndex}, ${collateral}, ${shares}, ${feeAmt}, ${price}, ${event.transactionHash}, ${event.blockNumber}, ${event.logIndex})
-      ON CONFLICT (tx_hash, log_index) DO NOTHING
-    `;
+    const inserted = await insertTrade({
+      marketId: pool.id,
+      trader: buyer.toLowerCase(),
+      side: 'buy',
+      isYes,
+      outcomeIndex,
+      collateral,
+      shares,
+      feeAmt,
+      price,
+      txHash: event.transactionHash,
+      blockNumber: event.blockNumber,
+      logIndex: event.logIndex,
+    });
+    if (!inserted) continue;
 
     await upsertPosition(pool.id, buyer.toLowerCase(), isYes, shares, collateral);
     processed.trades++;
@@ -350,11 +360,21 @@ async function indexV1Pool(provider, pool, fromBlock, toBlock, processed) {
     const price = shares > 0 ? collateral / shares : 0;
     const outcomeIndex = isYes ? 0 : 1;
 
-    await sql`
-      INSERT INTO trades (market_id, trader, side, is_yes, outcome_index, collateral_amt, shares_amt, fee_amt, price_at_trade, tx_hash, block_number, log_index)
-      VALUES (${pool.id}, ${seller.toLowerCase()}, 'sell', ${isYes}, ${outcomeIndex}, ${collateral}, ${shares}, ${feeAmt}, ${price}, ${event.transactionHash}, ${event.blockNumber}, ${event.logIndex})
-      ON CONFLICT (tx_hash, log_index) DO NOTHING
-    `;
+    const inserted = await insertTrade({
+      marketId: pool.id,
+      trader: seller.toLowerCase(),
+      side: 'sell',
+      isYes,
+      outcomeIndex,
+      collateral,
+      shares,
+      feeAmt,
+      price,
+      txHash: event.transactionHash,
+      blockNumber: event.blockNumber,
+      logIndex: event.logIndex,
+    });
+    if (!inserted) continue;
 
     await upsertPosition(pool.id, seller.toLowerCase(), isYes, -shares, -collateral);
     processed.trades++;
@@ -396,11 +416,21 @@ async function indexV2Pool(provider, pool, fromBlock, toBlock, processed) {
     const netCollateral = Math.max(0, collateral - feeAmt);
     const price = shares > 0 ? netCollateral / shares : 0;
 
-    await sql`
-      INSERT INTO trades (market_id, trader, side, is_yes, outcome_index, collateral_amt, shares_amt, fee_amt, price_at_trade, tx_hash, block_number, log_index)
-      VALUES (${pool.id}, ${buyer.toLowerCase()}, 'buy', ${index === 0}, ${index}, ${collateral}, ${shares}, ${feeAmt}, ${price}, ${event.transactionHash}, ${event.blockNumber}, ${event.logIndex})
-      ON CONFLICT (tx_hash, log_index) DO NOTHING
-    `;
+    const inserted = await insertTrade({
+      marketId: pool.id,
+      trader: buyer.toLowerCase(),
+      side: 'buy',
+      isYes: index === 0,
+      outcomeIndex: index,
+      collateral,
+      shares,
+      feeAmt,
+      price,
+      txHash: event.transactionHash,
+      blockNumber: event.blockNumber,
+      logIndex: event.logIndex,
+    });
+    if (!inserted) continue;
 
     await upsertOutcomePosition(pool.id, buyer.toLowerCase(), index, shares, collateral);
     processed.trades++;
@@ -415,11 +445,21 @@ async function indexV2Pool(provider, pool, fromBlock, toBlock, processed) {
     const shares = parseFloat(ethers.utils.formatUnits(sharesIn, 6));
     const price = shares > 0 ? collateral / shares : 0;
 
-    await sql`
-      INSERT INTO trades (market_id, trader, side, is_yes, outcome_index, collateral_amt, shares_amt, fee_amt, price_at_trade, tx_hash, block_number, log_index)
-      VALUES (${pool.id}, ${seller.toLowerCase()}, 'sell', ${index === 0}, ${index}, ${collateral}, ${shares}, ${feeAmt}, ${price}, ${event.transactionHash}, ${event.blockNumber}, ${event.logIndex})
-      ON CONFLICT (tx_hash, log_index) DO NOTHING
-    `;
+    const inserted = await insertTrade({
+      marketId: pool.id,
+      trader: seller.toLowerCase(),
+      side: 'sell',
+      isYes: index === 0,
+      outcomeIndex: index,
+      collateral,
+      shares,
+      feeAmt,
+      price,
+      txHash: event.transactionHash,
+      blockNumber: event.blockNumber,
+      logIndex: event.logIndex,
+    });
+    if (!inserted) continue;
 
     await upsertOutcomePosition(pool.id, seller.toLowerCase(), index, -shares, -collateral);
     processed.trades++;
@@ -475,6 +515,29 @@ async function readPoolSeedLiquidity(provider, poolAddress, blockNumber, version
   } catch (_) {
     return 0;
   }
+}
+
+async function insertTrade({
+  marketId,
+  trader,
+  side,
+  isYes,
+  outcomeIndex,
+  collateral,
+  shares,
+  feeAmt,
+  price,
+  txHash,
+  blockNumber,
+  logIndex,
+}) {
+  const rows = await sql`
+    INSERT INTO trades (market_id, trader, side, is_yes, outcome_index, collateral_amt, shares_amt, fee_amt, price_at_trade, tx_hash, block_number, log_index)
+    VALUES (${marketId}, ${trader}, ${side}, ${isYes}, ${outcomeIndex}, ${collateral}, ${shares}, ${feeAmt}, ${price}, ${txHash}, ${blockNumber}, ${logIndex})
+    ON CONFLICT (tx_hash, log_index) DO NOTHING
+    RETURNING id
+  `;
+  return rows.length > 0;
 }
 
 async function upsertPosition(marketId, userAddress, isYes, sharesDelta, costDelta) {

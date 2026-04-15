@@ -5,7 +5,9 @@ import { ensureProtocolSchema } from './_lib/protocol-schema.js';
 /**
  * /api/positions?address=0x... — User positions on own protocol.
  *
- * Returns all positions for a wallet address, with market info joined.
+ * We aggregate from deduped trades instead of the materialized positions
+ * tables, because overlapping historical indexer runs can otherwise drift
+ * the cached share counts.
  */
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -22,90 +24,139 @@ export default async function handler(req, res) {
   const { address } = req.query;
   if (!address) return res.status(400).json({ error: 'address required' });
 
-  // Normalize to lowercase
   const addr = address.toLowerCase();
 
   try {
     await ensureProtocolSchema(schemaSql);
 
-    const rows = await sql`
-      SELECT
-        p.yes_shares,
-        p.no_shares,
-        p.total_cost,
-        p.redeemed,
-        p.payout,
-        p.updated_at,
-        m.id as market_id,
-        m.question,
-        m.category,
-        m.chain_id,
-        m.market_id as protocol_market_id,
-        m.protocol_version,
-        m.status,
-        m.outcome,
-        m.end_time,
-        m.pool_address,
-        (SELECT yes_price FROM price_snapshots ps
-         WHERE ps.market_id = m.id ORDER BY ps.snapshot_at DESC LIMIT 1
-        ) as current_price
-      FROM positions p
-      JOIN protocol_markets m ON m.id = p.market_id
-      WHERE p.user_address = ${addr}
-      ORDER BY
-        CASE m.status WHEN 'active' THEN 0 WHEN 'paused' THEN 1 ELSE 2 END,
-        p.updated_at DESC
-    `;
-
-    let v2Rows = [];
-    try {
-      v2Rows = await sql`
+    const [v1Rows, v2Rows] = await Promise.all([
+      sql`
+        WITH aggregates AS (
+          SELECT
+            t.market_id,
+            COALESCE(SUM(
+              CASE
+                WHEN COALESCE(t.outcome_index, CASE WHEN t.is_yes THEN 0 ELSE 1 END) = 0
+                  THEN CASE WHEN t.side = 'buy' THEN t.shares_amt ELSE -t.shares_amt END
+                ELSE 0
+              END
+            ), 0) AS yes_shares,
+            COALESCE(SUM(
+              CASE
+                WHEN COALESCE(t.outcome_index, CASE WHEN t.is_yes THEN 0 ELSE 1 END) = 1
+                  THEN CASE WHEN t.side = 'buy' THEN t.shares_amt ELSE -t.shares_amt END
+                ELSE 0
+              END
+            ), 0) AS no_shares,
+            COALESCE(SUM(
+              CASE
+                WHEN t.side = 'buy' THEN t.collateral_amt
+                ELSE -t.collateral_amt
+              END
+            ), 0) AS total_cost,
+            MAX(t.created_at) AS updated_at
+          FROM trades t
+          JOIN protocol_markets m ON m.id = t.market_id
+          WHERE t.trader = ${addr}
+            AND COALESCE(m.protocol_version, 'v1') = 'v1'
+          GROUP BY t.market_id
+        )
         SELECT
-          op.outcome_index,
-          op.shares,
-          op.total_cost,
-          op.redeemed,
-          op.payout,
-          op.updated_at,
-          m.id as market_id,
+          a.yes_shares,
+          a.no_shares,
+          a.total_cost,
+          a.updated_at,
+          m.id AS market_id,
           m.question,
           m.category,
           m.chain_id,
-          m.market_id as protocol_market_id,
+          m.market_id AS protocol_market_id,
+          m.protocol_version,
+          m.status,
+          m.outcome,
+          m.end_time,
+          m.pool_address,
+          (
+            SELECT yes_price
+            FROM price_snapshots ps
+            WHERE ps.market_id = m.id
+            ORDER BY ps.snapshot_at DESC
+            LIMIT 1
+          ) AS current_price
+        FROM aggregates a
+        JOIN protocol_markets m ON m.id = a.market_id
+        ORDER BY
+          CASE m.status WHEN 'active' THEN 0 WHEN 'paused' THEN 1 ELSE 2 END,
+          a.updated_at DESC
+      `,
+      sql`
+        WITH aggregates AS (
+          SELECT
+            t.market_id,
+            t.outcome_index,
+            COALESCE(SUM(
+              CASE
+                WHEN t.side = 'buy' THEN t.shares_amt
+                ELSE -t.shares_amt
+              END
+            ), 0) AS shares,
+            COALESCE(SUM(
+              CASE
+                WHEN t.side = 'buy' THEN t.collateral_amt
+                ELSE -t.collateral_amt
+              END
+            ), 0) AS total_cost,
+            MAX(t.created_at) AS updated_at
+          FROM trades t
+          JOIN protocol_markets m ON m.id = t.market_id
+          WHERE t.trader = ${addr}
+            AND COALESCE(m.protocol_version, 'v1') = 'v2'
+            AND t.outcome_index IS NOT NULL
+          GROUP BY t.market_id, t.outcome_index
+        )
+        SELECT
+          a.outcome_index,
+          a.shares,
+          a.total_cost,
+          a.updated_at,
+          m.id AS market_id,
+          m.question,
+          m.category,
+          m.chain_id,
+          m.market_id AS protocol_market_id,
           m.protocol_version,
           m.status,
           m.outcome,
           m.end_time,
           m.pool_address,
           m.outcomes,
-          (SELECT prices FROM price_snapshots ps
-           WHERE ps.market_id = m.id ORDER BY ps.snapshot_at DESC LIMIT 1
-          ) as current_prices
-        FROM outcome_positions op
-        JOIN protocol_markets m ON m.id = op.market_id
-        WHERE op.user_address = ${addr}
+          (
+            SELECT prices
+            FROM price_snapshots ps
+            WHERE ps.market_id = m.id
+            ORDER BY ps.snapshot_at DESC
+            LIMIT 1
+          ) AS current_prices
+        FROM aggregates a
+        JOIN protocol_markets m ON m.id = a.market_id
         ORDER BY
           CASE m.status WHEN 'active' THEN 0 WHEN 'paused' THEN 1 ELSE 2 END,
-          op.updated_at DESC
-      `;
-    } catch (e) {
-      if (!String(e.message || '').includes('outcome_positions')) throw e;
-    }
+          a.updated_at DESC
+      `,
+    ]);
 
-    const v1Positions = rows.map(r => {
-      const yesShares = parseFloat(r.yes_shares);
-      const noShares = parseFloat(r.no_shares);
-      const totalCost = parseFloat(r.total_cost);
+    const v1Positions = v1Rows.map((r) => {
+      const yesShares = clampToZero(r.yes_shares);
+      const noShares = clampToZero(r.no_shares);
+      const totalCost = clampToZero(r.total_cost);
 
-      // For resolved markets, use outcome to determine value
-      // outcome: 1 = YES won, 2 = NO won
       let currentPrice;
-      if (r.status === 'resolved' && r.outcome === 1) {
-        currentPrice = 1.0; // YES won
-      } else if (r.status === 'resolved' && r.outcome === 2) {
-        currentPrice = 0.0; // NO won
+      if (r.status === 'resolved' && Number(r.outcome) === 1) {
+        currentPrice = 1.0;
+      } else if (r.status === 'resolved' && Number(r.outcome) === 2) {
+        currentPrice = 0.0;
       } else {
-        currentPrice = parseFloat(r.current_price || 0.5);
+        currentPrice = parseNumber(r.current_price, 0.5);
       }
 
       const currentValue = yesShares * currentPrice + noShares * (1 - currentPrice);
@@ -125,26 +176,28 @@ export default async function handler(req, res) {
         noShares,
         totalCost,
         currentPrice,
-        currentValue: Math.round(currentValue * 100) / 100,
-        pnl: Math.round(pnl * 100) / 100,
-        redeemed: r.redeemed,
-        payout: parseFloat(r.payout),
+        currentValue: roundMoney(currentValue),
+        pnl: roundMoney(pnl),
+        redeemed: false,
+        payout: 0,
         updatedAt: r.updated_at,
       };
-    });
+    }).filter((position) => position.yesShares > 0 || position.noShares > 0);
 
-    const v2Positions = v2Rows.map(r => {
-      const shares = parseFloat(r.shares);
-      const totalCost = parseFloat(r.total_cost);
+    const v2Positions = v2Rows.map((r) => {
+      const shares = clampToZero(r.shares);
+      const totalCost = clampToZero(r.total_cost);
       const outcomeIndex = Number(r.outcome_index);
       const labels = parseJson(r.outcomes, []);
       const prices = parseJson(r.current_prices, []);
+
       let currentPrice;
       if (r.status === 'resolved') {
         currentPrice = Number(r.outcome) === outcomeIndex ? 1.0 : 0.0;
       } else {
-        currentPrice = Number(prices[outcomeIndex] ?? (labels.length ? 1 / labels.length : 0));
+        currentPrice = parseNumber(prices[outcomeIndex], labels.length ? 1 / labels.length : 0);
       }
+
       const currentValue = shares * currentPrice;
       const pnl = currentValue - totalCost;
 
@@ -158,26 +211,24 @@ export default async function handler(req, res) {
         status: r.status,
         outcome: r.outcome,
         outcomeIndex,
-        outcomeLabel: labels[outcomeIndex] || `Opción ${outcomeIndex + 1}`,
+        outcomeLabel: labels[outcomeIndex] || `Opcion ${outcomeIndex + 1}`,
         endTime: r.end_time,
         poolAddress: r.pool_address,
         shares,
         totalCost,
         currentPrice,
-        currentValue: Math.round(currentValue * 100) / 100,
-        pnl: Math.round(pnl * 100) / 100,
-        redeemed: r.redeemed,
-        payout: parseFloat(r.payout),
+        currentValue: roundMoney(currentValue),
+        pnl: roundMoney(pnl),
+        redeemed: false,
+        payout: 0,
         updatedAt: r.updated_at,
       };
-    });
+    }).filter((position) => position.shares > 0);
 
     const positions = [...v1Positions, ...v2Positions];
-
-    // Summary stats
-    const active = positions.filter(p => p.status === 'active');
-    const totalInvested = active.reduce((s, p) => s + p.totalCost, 0);
-    const totalValue = active.reduce((s, p) => s + p.currentValue, 0);
+    const active = positions.filter((position) => position.status === 'active');
+    const totalInvested = active.reduce((sum, position) => sum + position.totalCost, 0);
+    const totalValue = active.reduce((sum, position) => sum + position.currentValue, 0);
     const totalPnl = totalValue - totalInvested;
 
     return res.status(200).json({
@@ -186,9 +237,9 @@ export default async function handler(req, res) {
       summary: {
         totalPositions: positions.length,
         activePositions: active.length,
-        totalInvested: Math.round(totalInvested * 100) / 100,
-        currentValue: Math.round(totalValue * 100) / 100,
-        pnl: Math.round(totalPnl * 100) / 100,
+        totalInvested: roundMoney(totalInvested),
+        currentValue: roundMoney(totalValue),
+        pnl: roundMoney(totalPnl),
       },
     });
   } catch (e) {
@@ -201,5 +252,22 @@ function parseJson(value, fallback) {
   if (Array.isArray(value)) return value;
   if (value && typeof value === 'object') return value;
   if (typeof value !== 'string') return fallback;
-  try { return JSON.parse(value); } catch (_) { return fallback; }
+  try {
+    return JSON.parse(value);
+  } catch (_) {
+    return fallback;
+  }
+}
+
+function parseNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function clampToZero(value) {
+  return Math.max(0, parseNumber(value, 0));
+}
+
+function roundMoney(value) {
+  return Math.round(parseNumber(value, 0) * 100) / 100;
 }

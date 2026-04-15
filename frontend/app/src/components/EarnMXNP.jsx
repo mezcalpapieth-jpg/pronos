@@ -55,7 +55,7 @@ function SectionLabel({ children }) {
   );
 }
 
-function TaskRow({ icon, label, sub, mxnp, done, locked, lockMsg, onClaim, isLoading }) {
+function TaskRow({ icon, label, sub, mxnp, done, locked, lockMsg, onClaim, isLoading, href }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10,
@@ -71,6 +71,26 @@ function TaskRow({ icon, label, sub, mxnp, done, locked, lockMsg, onClaim, isLoa
           <div style={{ fontSize: 10, color: locked ? 'var(--red, #ef4444)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 1 }}>
             {locked ? (lockMsg || '🔒 Conecta la cuenta primero') : sub}
           </div>
+        )}
+        {href && (
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              marginTop: 6,
+              fontSize: 10,
+              color: 'var(--green)',
+              fontFamily: 'var(--font-mono)',
+              textDecoration: 'none',
+              letterSpacing: '0.04em',
+            }}
+          >
+            VER PERFIL ↗
+          </a>
         )}
       </div>
       <div style={{ textAlign: 'right', flexShrink: 0, marginRight: 4 }}>
@@ -422,6 +442,7 @@ export default function EarnMXNP({ address }) {
             locked={!isXConnected}
             lockMsg="🔒 Conecta tu cuenta X primero"
             onClaim={() => handleTask('x_follow', 25, X_PROFILE)}
+            href={X_PROFILE}
           />
 
           {/* ── Instagram ── */}
@@ -444,6 +465,7 @@ export default function EarnMXNP({ address }) {
             locked={!isIGConnected}
             lockMsg="🔒 Conecta tu cuenta Instagram primero"
             onClaim={() => handleTask('ig_follow', 25, IG_PROFILE)}
+            href={IG_PROFILE}
           />
 
           {/* ── TikTok ── */}
@@ -466,6 +488,7 @@ export default function EarnMXNP({ address }) {
             locked={!isTTConnected}
             lockMsg="🔒 Conecta tu cuenta TikTok primero"
             onClaim={() => handleTask('tt_follow', 25, TT_PROFILE)}
+            href={TT_PROFILE}
           />
 
           <div style={{ paddingTop: 10, fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>

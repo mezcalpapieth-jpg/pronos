@@ -128,10 +128,25 @@ function CreateMarketForm({ mode, privyId, getAccessToken }) {
         const targetChain = CHAIN_IDS.arbitrumSepolia;
         const contracts = getContracts(targetChain);
         const protocolVersion = ownMarketProtocolVersion();
-        if (!contracts?.usdc || (protocolVersion === 'v1' && !contracts?.factory) || (protocolVersion === 'v2' && !contracts?.factoryV2)) {
-          throw new Error(protocolVersion === 'v2'
-            ? 'Faltan VITE_PRONOS_ARB_SEPOLIA_FACTORY_V2, VITE_PRONOS_ARB_SEPOLIA_TOKEN_V2 o VITE_PRONOS_ARB_SEPOLIA_USDC en Vercel.'
-            : 'Faltan VITE_PRONOS_ARB_SEPOLIA_FACTORY o VITE_PRONOS_ARB_SEPOLIA_USDC en Vercel.');
+        const requiredContracts = protocolVersion === 'v2'
+          ? [
+              ['VITE_PRONOS_ARB_SEPOLIA_FACTORY_V2', contracts?.factoryV2],
+              ['VITE_PRONOS_ARB_SEPOLIA_TOKEN_V2', contracts?.tokenV2],
+              ['VITE_PRONOS_ARB_SEPOLIA_USDC', contracts?.usdc],
+            ]
+          : [
+              ['VITE_PRONOS_ARB_SEPOLIA_FACTORY', contracts?.factory],
+              ['VITE_PRONOS_ARB_SEPOLIA_TOKEN', contracts?.token],
+              ['VITE_PRONOS_ARB_SEPOLIA_USDC', contracts?.usdc],
+            ];
+        const missingContracts = requiredContracts
+          .filter(([, value]) => !value)
+          .map(([name]) => name);
+        if (missingContracts.length > 0) {
+          const binaryHint = protocolVersion === 'v2'
+            ? ' Si querias un mercado binario v1, deja las opciones exactamente como "Sí" y "No".'
+            : '';
+          throw new Error(`Faltan ${missingContracts.join(', ')} en Vercel.${binaryHint}`);
         }
         if (!Number.isFinite(seed) || seed <= 0) {
           throw new Error('La liquidez inicial debe ser mayor a 0 USDC.');
