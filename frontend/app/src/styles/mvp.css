@@ -1093,11 +1093,9 @@ html[data-theme="dark"] .hfc-odd.no  { border-color: rgba(255,69,69,0.2); backgr
   .admin-market-title { max-width: 160px; }
 }
 
-/* ── Featured markets strip (sticky carousel) ───────────────── */
+/* ── Featured markets strip (top carousel) ───────────────────── */
 .featured-strip-outer {
-  position: sticky;
-  top: 64px; /* matches #nav height */
-  z-index: 90;
+  position: relative;
   background: var(--surface1);
   border-bottom: 1px solid var(--border);
   display: flex;

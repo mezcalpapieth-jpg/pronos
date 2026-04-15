@@ -24,10 +24,10 @@ export default function Home() {
       <Nav />
 
       <main>
-        <Hero />
-
-        {/* Featured markets carousel — sticky just below the nav */}
+        {/* Featured markets carousel — top of the page */}
         <FeaturedStrip />
+
+        <Hero />
 
         <section id="markets" style={{ padding: '48px 48px 60px', maxWidth: 1280, margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginBottom: 8 }}>
