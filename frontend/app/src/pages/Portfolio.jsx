@@ -4,6 +4,7 @@ import { ethers } from 'ethers';
 import Nav from '../components/Nav.jsx';
 import Footer from '../components/Footer.jsx';
 import EarnMXNP from '../components/EarnMXNP.jsx';
+import Leaderboard from '../components/Leaderboard.jsx';
 import { getClobPositions, getUsdcBalance } from '../lib/clob.js';
 import { ERC20_ABI, sellShares } from '../lib/contracts.js';
 import { CHAIN_IDS, CONTRACTS, getUsdcAddress, switchWalletChain } from '../lib/protocol.js';
@@ -284,8 +285,9 @@ async function handleSellPosition(pos) {
   return (
     <>
       <Nav />
-      <main style={{ maxWidth: 800, margin: '0 auto', padding: '80px 24px 60px' }}>
+      <main style={{ maxWidth: 1160, margin: '0 auto', padding: '80px 24px 60px' }}>
 
+        {/* ── Page title ── */}
         <div style={{ marginBottom: 40 }}>
           <h1 style={{
             fontFamily: 'var(--font-display)',
@@ -315,95 +317,107 @@ async function handleSellPosition(pos) {
             </button>
           </div>
         ) : (
-          <>
-            {/* Stats bar */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: 16,
-              marginBottom: 40,
-            }}>
-              {[
-                { label: t('pf.balanceMxnb'),  value: balance != null ? `$${balance.toFixed(2)}` : '—' },
-                { label: t('pf.inPositions'),  value: `$${totalValue.toFixed(2)}` },
-                { label: t('pf.activeMarkets'), value: positions.length.toString() },
-              ].map(({ label, value }) => (
-                <div key={label} style={{
-                  background: 'var(--surface1)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 12, padding: '20px',
-                  textAlign: 'center',
-                }}>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 8 }}>
-                    {label.toUpperCase()}
-                  </div>
-                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--text-primary)', letterSpacing: '0.02em' }}>
-                    {loading ? '…' : value}
-                  </div>
-                </div>
-              ))}
-            </div>
+          /* ── Two-column layout when authenticated ── */
+          <div className="portfolio-layout">
 
-            {/* Wallet address */}
-            {address && (
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', marginBottom: 24 }}>
-                Wallet: {address.slice(0, 6)}…{address.slice(-4)}
-              </div>
-            )}
-
-            {tradeStatus && (
+            {/* ── Left: positions + earn section ── */}
+            <div className="portfolio-main">
+              {/* Stats bar */}
               <div style={{
-                color: tradeStatus.type === 'error' ? 'var(--red)' : tradeStatus.type === 'success' ? 'var(--green)' : 'var(--text-secondary)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 12,
-                padding: '12px 14px',
-                marginBottom: 20,
-                background: tradeStatus.type === 'error' ? 'var(--red-dim)' : 'var(--surface1)',
-                border: '1px solid var(--border)',
-                borderRadius: 10,
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: 16,
+                marginBottom: 40,
               }}>
-                {tradeStatus.msg}
-              </div>
-            )}
-
-            {/* Positions */}
-            {loading ? (
-              <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                {t('pf.loading')}
-              </div>
-            ) : error ? (
-              <div style={{ color: 'var(--red)', fontFamily: 'var(--font-mono)', fontSize: 13, padding: '20px', background: 'var(--red-dim)', borderRadius: 10 }}>
-                {t('pf.error', { msg: error })}
-              </div>
-            ) : positions.length === 0 ? (
-              <div style={{
-                textAlign: 'center', padding: '60px 24px',
-                border: '1px dashed var(--border)', borderRadius: 16,
-              }}>
-                <p style={{ fontSize: 32, marginBottom: 12 }}>🎯</p>
-                <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
-                  {t('pf.empty')}
-                </p>
-                <a href="/" className="btn-primary" style={{ display: 'inline-block', marginTop: 20, textDecoration: 'none' }}>
-                  {t('pf.viewMarkets')}
-                </a>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {positions.map((pos, i) => (
-                  <PositionCard
-                    key={pos.id || i}
-                    pos={pos}
-                    onSell={handleSellPosition}
-                    selling={sellingId === pos.id}
-                  />
+                {[
+                  { label: t('pf.balanceMxnb'),   value: balance != null ? `$${balance.toFixed(2)}` : '—' },
+                  { label: t('pf.inPositions'),    value: `$${totalValue.toFixed(2)}` },
+                  { label: t('pf.activeMarkets'),  value: positions.length.toString() },
+                ].map(({ label, value }) => (
+                  <div key={label} style={{
+                    background: 'var(--surface1)', border: '1px solid var(--border)',
+                    borderRadius: 12, padding: '20px', textAlign: 'center',
+                  }}>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 8 }}>
+                      {label.toUpperCase()}
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--text-primary)', letterSpacing: '0.02em' }}>
+                      {loading ? '…' : value}
+                    </div>
+                  </div>
                 ))}
               </div>
-            )}
 
-            {/* ── Earn MXNP campaign section ── */}
-            <EarnMXNP address={address} />
-          </>
+              {/* Wallet address */}
+              {address && (
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', marginBottom: 24 }}>
+                  Wallet: {address.slice(0, 6)}…{address.slice(-4)}
+                </div>
+              )}
+
+              {tradeStatus && (
+                <div style={{
+                  color: tradeStatus.type === 'error' ? 'var(--red)' : tradeStatus.type === 'success' ? 'var(--green)' : 'var(--text-secondary)',
+                  fontFamily: 'var(--font-mono)', fontSize: 12,
+                  padding: '12px 14px', marginBottom: 20,
+                  background: tradeStatus.type === 'error' ? 'var(--red-dim)' : 'var(--surface1)',
+                  border: '1px solid var(--border)', borderRadius: 10,
+                }}>
+                  {tradeStatus.msg}
+                </div>
+              )}
+
+              {/* Positions */}
+              {loading ? (
+                <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                  {t('pf.loading')}
+                </div>
+              ) : error ? (
+                <div style={{ color: 'var(--red)', fontFamily: 'var(--font-mono)', fontSize: 13, padding: '20px', background: 'var(--red-dim)', borderRadius: 10 }}>
+                  {t('pf.error', { msg: error })}
+                </div>
+              ) : positions.length === 0 ? (
+                <div style={{
+                  textAlign: 'center', padding: '60px 24px',
+                  border: '1px dashed var(--border)', borderRadius: 16,
+                }}>
+                  <p style={{ fontSize: 32, marginBottom: 12 }}>🎯</p>
+                  <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
+                    {t('pf.empty')}
+                  </p>
+                  <a href="/" className="btn-primary" style={{ display: 'inline-block', marginTop: 20, textDecoration: 'none' }}>
+                    {t('pf.viewMarkets')}
+                  </a>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {positions.map((pos, i) => (
+                    <PositionCard
+                      key={pos.id || i}
+                      pos={pos}
+                      onSell={handleSellPosition}
+                      selling={sellingId === pos.id}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* ── Earn MXNP campaign section ── */}
+              <EarnMXNP address={address} />
+            </div>
+
+            {/* ── Right: leaderboard (sticky) ── */}
+            <aside className="portfolio-sidebar">
+              <div style={{
+                fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)',
+                letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 10,
+              }}>
+                Competencia MXNP
+              </div>
+              <Leaderboard />
+            </aside>
+
+          </div>
         )}
       </main>
       <Footer />
