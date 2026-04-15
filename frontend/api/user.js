@@ -23,6 +23,7 @@ export default async function handler(req, res) {
     const rows = await sqlRead`SELECT username FROM users WHERE privy_id = ${privyId}`;
     if (rows.length === 0) return res.status(404).json({ username: null, isAdmin: false });
     const username = rows[0].username;
+    if (!username) return res.status(404).json({ username: null, isAdmin: false });
     const isAdmin = ADMIN_USERNAMES.includes((username || '').toLowerCase());
     return res.status(200).json({ username, isAdmin });
   }
@@ -51,8 +52,14 @@ export default async function handler(req, res) {
         return res.status(409).json({ error: 'Username already taken' });
       }
 
-      await sqlWrite`INSERT INTO users (privy_id, username) VALUES (${privyId}, ${normalized})`;
-      return res.status(201).json({ username: normalized });
+      const rows = await sqlWrite`
+        INSERT INTO users (privy_id, username)
+        VALUES (${privyId}, ${normalized})
+        ON CONFLICT (privy_id) DO UPDATE
+        SET username = EXCLUDED.username
+        RETURNING username
+      `;
+      return res.status(201).json({ username: rows[0]?.username || normalized });
     } catch (e) {
       if (e.message?.includes('unique') || e.code === '23505') {
         return res.status(409).json({ error: 'Username already taken' });

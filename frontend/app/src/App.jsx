@@ -35,17 +35,29 @@ export default function App() {
     }
     setCheckingUsername(true);
     authFetch(getAccessToken, `/api/user?privyId=${encodeURIComponent(user.id)}`)
-      .then(r => r.json())
-      .then(data => {
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
+        if (r.status === 404) {
+          return { username: null, isAdmin: false, missing: true };
+        }
+        if (!r.ok) {
+          throw new Error(data.error || 'Could not load user profile');
+        }
+        if (!data.username) {
+          return { username: null, isAdmin: false, missing: true };
+        }
+        return data;
+      })
+      .then((data) => {
         if (data.username) {
           setUsername(data.username);
           setUserIsAdmin(data.isAdmin === true);
           setNeedsUsername(false);
-        } else {
+        } else if (data.missing) {
           setNeedsUsername(true);
         }
       })
-      .catch(() => setNeedsUsername(true))
+      .catch(() => setNeedsUsername(false))
       .finally(() => setCheckingUsername(false));
   }, [authenticated, user?.id, getAccessToken]);
 
@@ -53,8 +65,12 @@ export default function App() {
     setUsername(uname);
     // Re-check admin status after username creation
     authFetch(getAccessToken, `/api/user?privyId=${encodeURIComponent(user.id)}`)
-      .then(r => r.json())
-      .then(data => setUserIsAdmin(data.isAdmin === true))
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || 'Could not load user profile');
+        return data;
+      })
+      .then((data) => setUserIsAdmin(data.isAdmin === true))
       .catch(() => {});
     setNeedsUsername(false);
   }
