@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { usePrivy, useWallets, useLinkAccount } from '@privy-io/react-auth';
 import { ethers } from 'ethers';
 import { Link, useNavigate } from 'react-router-dom';
 import { POLYGON_CHAIN_ID } from '../lib/clob.js';
@@ -24,6 +24,8 @@ export default function Nav() {
   const lang = useLang();
   const { ready, authenticated, user, login, logout, getAccessToken } = usePrivy();
   const { wallets } = useWallets();
+  const [linkingWallet, setLinkingWallet] = useState(false);
+  const [walletLinkStatus, setWalletLinkStatus] = useState(null);
   const [scrolled, setScrolled] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [theme, setTheme] = useState(getInitialTheme);
@@ -41,17 +43,57 @@ export default function Nav() {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const searchRef = useRef(null);
   const mobileSearchInputRef = useRef(null);
+  const linkedAccounts = user?.linkedAccounts || [];
+  const linkedWalletAccount = useMemo(
+    () => linkedAccounts.find(account => account.type === 'wallet' || account.type === 'smart_wallet'),
+    [linkedAccounts],
+  );
+  const currentWallet = wallets?.[0] || null;
+  const walletAddress = currentWallet?.address || user?.wallet?.address || linkedWalletAccount?.address || null;
+  const walletLinked = currentWallet ? currentWallet.linked : Boolean(linkedWalletAccount);
+
+  const { linkWallet } = useLinkAccount({
+    onSuccess: () => {
+      setLinkingWallet(false);
+      setWalletLinkStatus({
+        type: 'success',
+        msg: 'Wallet vinculada. Si sigues viendo la cuenta equivocada, cierra sesión y vuelve a entrar.',
+      });
+    },
+    onError: (err) => {
+      const msg = err?.message || String(err);
+      const lower = msg.toLowerCase();
+      setLinkingWallet(false);
+      setWalletLinkStatus({
+        type: 'error',
+        msg: lower.includes('another user') || lower.includes('already linked')
+          ? 'Esta wallet ya está vinculada a otra cuenta de Privy. Entra con tu login original de frmm y usa este botón desde esa sesión para moverla.'
+          : `No se pudo vincular la wallet: ${msg.slice(0, 100)}`,
+      });
+    },
+  });
 
   useEffect(() => {
     if (!authenticated || !user?.id) { setUsername(null); setAdminFlag(false); return; }
     authFetch(getAccessToken, `/api/user?privyId=${encodeURIComponent(user.id)}`)
-      .then(r => r.json())
-      .then(d => {
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) return { username: null, isAdmin: false };
+        return data;
+      })
+      .then((d) => {
         if (d.username) setUsername(d.username);
         setAdminFlag(d.isAdmin === true);
       })
       .catch(() => {});
   }, [authenticated, user?.id, getAccessToken]);
+
+  useEffect(() => {
+    if (!authenticated) {
+      setWalletLinkStatus(null);
+      setLinkingWallet(false);
+    }
+  }, [authenticated]);
 
   // Fetch USDC balance + chain ID (chain-aware)
   useEffect(() => {
@@ -140,10 +182,39 @@ export default function Nav() {
   const userLabel = (() => {
     if (!user) return '';
     if (username) return username;
-    const wallet = user.wallet?.address;
-    if (wallet) return wallet.slice(0, 6) + '…' + wallet.slice(-4);
+    if (walletAddress) return walletAddress.slice(0, 6) + '…' + walletAddress.slice(-4);
     return '…';
   })();
+
+  async function handleLinkWallet() {
+    setWalletLinkStatus(null);
+    if (currentWallet && currentWallet.linked === false && typeof currentWallet.loginOrLink === 'function') {
+      setLinkingWallet(true);
+      try {
+        await currentWallet.loginOrLink();
+        setWalletLinkStatus({
+          type: 'success',
+          msg: 'Wallet vinculada. Si el admin todavía no aparece, cierra sesión y vuelve a entrar.',
+        });
+      } catch (err) {
+        const msg = err?.message || String(err);
+        const lower = msg.toLowerCase();
+        setWalletLinkStatus({
+          type: 'error',
+          msg: lower.includes('another user') || lower.includes('already linked')
+            ? 'Esta wallet ya está vinculada a otra cuenta de Privy. Entra con tu login original de frmm y usa este botón desde esa sesión para moverla.'
+            : `No se pudo vincular la wallet: ${msg.slice(0, 100)}`,
+        });
+      } finally {
+        setLinkingWallet(false);
+      }
+      return;
+    }
+
+    setWalletLinkStatus({ type: 'info', msg: 'Completa la vinculación en la ventana de Privy.' });
+    setLinkingWallet(true);
+    linkWallet();
+  }
 
   return (
     <>
@@ -305,6 +376,52 @@ export default function Nav() {
                       </div>
                     );
                   })()}
+                  <div className="nav-dropdown-info" style={{ display: 'block' }}>
+                    <span style={{ display: 'block', marginBottom: 4, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                      Wallet
+                    </span>
+                    <span style={{ display: 'block', color: 'var(--text-primary)' }}>
+                      {walletAddress ? `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}` : 'Sin wallet vinculada'}
+                    </span>
+                    <span style={{ display: 'block', marginTop: 4, fontSize: 11, color: walletLinked ? 'var(--green)' : 'var(--text-muted)' }}>
+                      {walletLinked ? 'Vinculada a esta cuenta' : 'No vinculada a esta cuenta'}
+                    </span>
+                  </div>
+                  {!walletLinked && (
+                    <button
+                      className="nav-dropdown-item"
+                      onClick={handleLinkWallet}
+                      disabled={linkingWallet}
+                      style={{ opacity: linkingWallet ? 0.6 : 1, cursor: linkingWallet ? 'wait' : 'pointer' }}
+                    >
+                      {linkingWallet ? 'Vinculando wallet…' : 'Vincular wallet'}
+                    </button>
+                  )}
+                  {walletLinked && !username && (
+                    <div
+                      className="nav-dropdown-info"
+                      style={{ whiteSpace: 'normal', lineHeight: 1.45, color: 'var(--text-secondary)' }}
+                    >
+                      Si esta no es tu cuenta original, cierra sesión y entra con tu login original de frmm. Desde ahí podrás vincular esta wallet a esa cuenta.
+                    </div>
+                  )}
+                  {walletLinkStatus && (
+                    <div
+                      className="nav-dropdown-info"
+                      style={{
+                        color:
+                          walletLinkStatus.type === 'error'
+                            ? 'var(--red)'
+                            : walletLinkStatus.type === 'success'
+                              ? 'var(--green)'
+                              : 'var(--text-secondary)',
+                        whiteSpace: 'normal',
+                        lineHeight: 1.45,
+                      }}
+                    >
+                      {walletLinkStatus.msg}
+                    </div>
+                  )}
                   {adminFlag && (
                     <Link
                       className="nav-dropdown-item"
