@@ -11,6 +11,12 @@ function categoryLabel(category) {
   return String(category || 'general').toUpperCase();
 }
 
+function formatUsdDisplay(value) {
+  const amount = Math.max(0, Number(value || 0));
+  if (!Number.isFinite(amount)) return '0';
+  return amount.toFixed(2).replace(/\.00$/, '');
+}
+
 export function normalizeProtocolMarket(row) {
   const baseOptions = Array.isArray(row.options) && row.options.length > 0
     ? row.options
@@ -33,7 +39,9 @@ export function normalizeProtocolMarket(row) {
       label: opt.label || `Opción ${i + 1}`,
       pct: Math.round(Number(opt.pct ?? 0)),
     })),
-    volume: row.totalVolume || row.volume || '0',
+    volume: formatUsdDisplay(row.liquidity ?? row.volume),
+    liquidity: Number(row.liquidity || 0),
+    tradeVolume: Number(row.tradeVolume ?? row.totalVolume ?? 0),
     poolAddress: row.poolAddress,
     protocolMarketId: row.marketId,
     protocolVersion: row.protocolVersion || 'v1',

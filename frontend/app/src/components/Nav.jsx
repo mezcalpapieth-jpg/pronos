@@ -57,7 +57,7 @@ export default function Nav() {
       setLinkingWallet(false);
       setWalletLinkStatus({
         type: 'success',
-        msg: 'Wallet vinculada. Si sigues viendo la cuenta equivocada, cierra sesión y vuelve a entrar.',
+        msg: 'Wallet vinculada. Si el username no aparece todavía, cierra sesión y vuelve a entrar.',
       });
     },
     onError: (err) => {
@@ -67,7 +67,7 @@ export default function Nav() {
       setWalletLinkStatus({
         type: 'error',
         msg: lower.includes('another user') || lower.includes('already linked')
-          ? 'Esta wallet ya está vinculada a otra cuenta de Privy. Entra con tu login original de frmm y usa este botón desde esa sesión para moverla.'
+          ? 'Esta wallet ya está vinculada a otra cuenta de Privy.'
           : `No se pudo vincular la wallet: ${msg.slice(0, 100)}`,
       });
     },
@@ -194,7 +194,7 @@ export default function Nav() {
         await currentWallet.loginOrLink();
         setWalletLinkStatus({
           type: 'success',
-          msg: 'Wallet vinculada. Si el admin todavía no aparece, cierra sesión y vuelve a entrar.',
+          msg: 'Wallet vinculada. Si el username o el admin no aparecen todavía, cierra sesión y vuelve a entrar.',
         });
       } catch (err) {
         const msg = err?.message || String(err);
@@ -202,7 +202,7 @@ export default function Nav() {
         setWalletLinkStatus({
           type: 'error',
           msg: lower.includes('another user') || lower.includes('already linked')
-            ? 'Esta wallet ya está vinculada a otra cuenta de Privy. Entra con tu login original de frmm y usa este botón desde esa sesión para moverla.'
+            ? 'Esta wallet ya está vinculada a otra cuenta de Privy.'
             : `No se pudo vincular la wallet: ${msg.slice(0, 100)}`,
         });
       } finally {
@@ -396,14 +396,6 @@ export default function Nav() {
                     >
                       {linkingWallet ? 'Vinculando wallet…' : 'Vincular wallet'}
                     </button>
-                  )}
-                  {walletLinked && !username && (
-                    <div
-                      className="nav-dropdown-info"
-                      style={{ whiteSpace: 'normal', lineHeight: 1.45, color: 'var(--text-secondary)' }}
-                    >
-                      Si esta no es tu cuenta original, cierra sesión y entra con tu login original de frmm. Desde ahí podrás vincular esta wallet a esa cuenta.
-                    </div>
                   )}
                   {walletLinkStatus && (
                     <div

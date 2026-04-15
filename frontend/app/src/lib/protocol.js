@@ -1,3 +1,5 @@
+import { ethers } from 'ethers';
+
 /**
  * Protocol Switch — Toggle between Polymarket aggregator and own Pronos protocol.
  *
@@ -7,6 +9,7 @@
  */
 
 const PROTOCOL_KEY = 'pronos-protocol-mode';
+const READ_PROVIDERS = new Map();
 const envAddress = (name) => {
   const value = import.meta.env[name];
   return value && value !== '0x0000000000000000000000000000000000000000' ? value : null;
@@ -116,6 +119,20 @@ export function getChainConfig(chainId) {
 
 export function getChainDisplayName(chainId) {
   return getChainConfig(chainId)?.name || `Chain ${chainId}`;
+}
+
+export function getChainReadProvider(chainId) {
+  const numericChainId = Number(chainId);
+  const cached = READ_PROVIDERS.get(numericChainId);
+  if (cached) return cached;
+
+  const config = getChainConfig(numericChainId);
+  const rpcUrl = config?.rpcUrls?.[0];
+  if (!rpcUrl) return null;
+
+  const provider = new ethers.providers.StaticJsonRpcProvider(rpcUrl, numericChainId);
+  READ_PROVIDERS.set(numericChainId, provider);
+  return provider;
 }
 
 // ─── Market source detection ──────────────────────────────────────────────

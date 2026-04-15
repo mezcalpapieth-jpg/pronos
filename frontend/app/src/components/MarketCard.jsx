@@ -15,6 +15,7 @@ export default function MarketCard({ market, history }) {
 
   const topOption = market.options?.[0];
   const pct = topOption?.pct ?? 50;
+  const volumeLabel = market.source === 'protocol' ? t('detail.liquidity') : t('detail.volume');
 
   return (
     <div className="mock-card" onClick={handleClick} role="button" tabIndex={0}
@@ -101,7 +102,7 @@ export default function MarketCard({ market, history }) {
 
       <div className="mock-card-footer">
         <div className="mock-card-vol">
-          {t('detail.volume')} <span>${market.volume}</span>
+          {volumeLabel} <span>${market.volume}</span>
         </div>
         <div className="mock-card-deadline">
           {market.deadline}

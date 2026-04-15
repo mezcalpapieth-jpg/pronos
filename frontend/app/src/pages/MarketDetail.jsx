@@ -332,6 +332,7 @@ export default function MarketDetail() {
   const [betModal,setBetModal]=useState({open:false,outcome:'',pct:0,outcomeIndex:0,clobTokenId:null,isNegRisk:false});
   const [isMobile,setIsMobile]=useState(()=>window.innerWidth<768);
   useEffect(()=>{const h=()=>setIsMobile(window.innerWidth<768);window.addEventListener('resize',h);return()=>window.removeEventListener('resize',h);},[]);
+  const volumeLabel = market?.source === 'protocol' ? t('detail.liquidity') : t('detail.volume');
 
   useEffect(()=>{
     if(!marketId){navigate('/');return;}
@@ -485,7 +486,7 @@ export default function MarketDetail() {
 
             <div style={{display:'flex',flexWrap:'wrap',gap:0,borderTop:'1px solid var(--border)',borderBottom:'1px solid var(--border)',marginBottom:36}}>
               <div style={{padding:'12px 16px 12px 0',marginRight:16,borderRight:'1px solid var(--border)'}}>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.1em',marginBottom:4}}>{t('detail.volume')}</div>
+                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.1em',marginBottom:4}}>{volumeLabel}</div>
                 <div style={{fontFamily:'var(--font-mono)',fontSize:isMobile?13:16,color:'var(--text-primary)'}}>${market.volume}</div>
               </div>
               <div style={{padding:'12px 16px 12px 0',marginRight:16,borderRight:'1px solid var(--border)'}}>

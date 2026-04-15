@@ -80,17 +80,27 @@ export default async function handler(req, res) {
       LIMIT 20
     `;
 
-    // Compute volume from trades
-    const totalVolume = await sql`
-      SELECT COALESCE(SUM(collateral_amt), 0) as total
+    // Compute current liquidity from the actual collateral path and keep
+    // cumulative traded volume as a separate metric.
+    const totals = await sql`
+      SELECT
+        COALESCE(SUM(collateral_amt), 0) as total_volume,
+        COALESCE(
+          ${Number(market.seed_liquidity || 0)} + SUM(
+            CASE
+              WHEN side = 'buy' THEN COALESCE(collateral_amt, 0) - COALESCE(fee_amt, 0)
+              ELSE -(COALESCE(collateral_amt, 0) + COALESCE(fee_amt, 0))
+            END
+          ),
+          ${Number(market.seed_liquidity || 0)}
+        ) as current_liquidity
       FROM trades WHERE market_id = ${marketId}
     `;
 
     const latestPrice = priceHistory[0] || { yes_price: 0.5, no_price: 0.5 };
     const options = buildOptions(market, latestPrice);
-    const tradeVolume = Number(totalVolume[0].total || 0);
-    const seedLiquidity = Number(market.seed_liquidity || 0) || Number(latestPrice.liquidity || 0) / 2;
-    const displayVolume = tradeVolume > 0 ? tradeVolume : seedLiquidity;
+    const tradeVolume = Math.max(0, Number(totals[0]?.total_volume || 0));
+    const liquidity = Math.max(0, Number(totals[0]?.current_liquidity ?? market.seed_liquidity ?? latestPrice.liquidity ?? 0));
 
     return res.status(200).json({
       market: {
@@ -112,9 +122,9 @@ export default async function handler(req, res) {
         createdAt: market.created_at,
         resolvedAt: market.resolved_at,
         options,
-        totalVolume: displayVolume,
+        totalVolume: tradeVolume,
         tradeVolume,
-        liquidity: latestPrice.liquidity || '0',
+        liquidity,
       },
       priceHistory: priceHistory.reverse().map(p => ({
         yes: parseFloat(p.yes_price),

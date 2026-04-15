@@ -45,7 +45,16 @@ export default async function handler(req, res) {
           (SELECT json_build_object('yes_price', yes_price, 'no_price', no_price, 'prices', prices, 'volume_24h', volume_24h, 'liquidity', liquidity)
            FROM price_snapshots ps WHERE ps.market_id = m.id ORDER BY ps.snapshot_at DESC LIMIT 1
           ) as latest_price,
-          (SELECT COALESCE(SUM(collateral_amt), 0) FROM trades t WHERE t.market_id = m.id) as total_volume
+          (SELECT COALESCE(SUM(collateral_amt), 0) FROM trades t WHERE t.market_id = m.id) as total_volume,
+          (SELECT COALESCE(
+            COALESCE(m.seed_liquidity, 0) + SUM(
+              CASE
+                WHEN t.side = 'buy' THEN COALESCE(t.collateral_amt, 0) - COALESCE(t.fee_amt, 0)
+                ELSE -(COALESCE(t.collateral_amt, 0) + COALESCE(t.fee_amt, 0))
+              END
+            ),
+            COALESCE(m.seed_liquidity, 0)
+          ) FROM trades t WHERE t.market_id = m.id) as current_liquidity
         FROM protocol_markets m
         WHERE COALESCE(m.status, 'active') <> 'removed' AND m.category = ${category}
         ORDER BY m.created_at DESC
@@ -57,7 +66,16 @@ export default async function handler(req, res) {
           (SELECT json_build_object('yes_price', yes_price, 'no_price', no_price, 'prices', prices, 'volume_24h', volume_24h, 'liquidity', liquidity)
            FROM price_snapshots ps WHERE ps.market_id = m.id ORDER BY ps.snapshot_at DESC LIMIT 1
           ) as latest_price,
-          (SELECT COALESCE(SUM(collateral_amt), 0) FROM trades t WHERE t.market_id = m.id) as total_volume
+          (SELECT COALESCE(SUM(collateral_amt), 0) FROM trades t WHERE t.market_id = m.id) as total_volume,
+          (SELECT COALESCE(
+            COALESCE(m.seed_liquidity, 0) + SUM(
+              CASE
+                WHEN t.side = 'buy' THEN COALESCE(t.collateral_amt, 0) - COALESCE(t.fee_amt, 0)
+                ELSE -(COALESCE(t.collateral_amt, 0) + COALESCE(t.fee_amt, 0))
+              END
+            ),
+            COALESCE(m.seed_liquidity, 0)
+          ) FROM trades t WHERE t.market_id = m.id) as current_liquidity
         FROM protocol_markets m
         WHERE m.status = ${statusFilter} AND m.category = ${category}
         ORDER BY m.created_at DESC
@@ -69,7 +87,16 @@ export default async function handler(req, res) {
           (SELECT json_build_object('yes_price', yes_price, 'no_price', no_price, 'prices', prices, 'volume_24h', volume_24h, 'liquidity', liquidity)
            FROM price_snapshots ps WHERE ps.market_id = m.id ORDER BY ps.snapshot_at DESC LIMIT 1
           ) as latest_price,
-          (SELECT COALESCE(SUM(collateral_amt), 0) FROM trades t WHERE t.market_id = m.id) as total_volume
+          (SELECT COALESCE(SUM(collateral_amt), 0) FROM trades t WHERE t.market_id = m.id) as total_volume,
+          (SELECT COALESCE(
+            COALESCE(m.seed_liquidity, 0) + SUM(
+              CASE
+                WHEN t.side = 'buy' THEN COALESCE(t.collateral_amt, 0) - COALESCE(t.fee_amt, 0)
+                ELSE -(COALESCE(t.collateral_amt, 0) + COALESCE(t.fee_amt, 0))
+              END
+            ),
+            COALESCE(m.seed_liquidity, 0)
+          ) FROM trades t WHERE t.market_id = m.id) as current_liquidity
         FROM protocol_markets m
         WHERE COALESCE(m.status, 'active') <> 'removed'
         ORDER BY m.created_at DESC
@@ -81,7 +108,16 @@ export default async function handler(req, res) {
           (SELECT json_build_object('yes_price', yes_price, 'no_price', no_price, 'prices', prices, 'volume_24h', volume_24h, 'liquidity', liquidity)
            FROM price_snapshots ps WHERE ps.market_id = m.id ORDER BY ps.snapshot_at DESC LIMIT 1
           ) as latest_price,
-          (SELECT COALESCE(SUM(collateral_amt), 0) FROM trades t WHERE t.market_id = m.id) as total_volume
+          (SELECT COALESCE(SUM(collateral_amt), 0) FROM trades t WHERE t.market_id = m.id) as total_volume,
+          (SELECT COALESCE(
+            COALESCE(m.seed_liquidity, 0) + SUM(
+              CASE
+                WHEN t.side = 'buy' THEN COALESCE(t.collateral_amt, 0) - COALESCE(t.fee_amt, 0)
+                ELSE -(COALESCE(t.collateral_amt, 0) + COALESCE(t.fee_amt, 0))
+              END
+            ),
+            COALESCE(m.seed_liquidity, 0)
+          ) FROM trades t WHERE t.market_id = m.id) as current_liquidity
         FROM protocol_markets m
         WHERE m.status = ${statusFilter}
         ORDER BY m.created_at DESC
@@ -116,9 +152,8 @@ export default async function handler(req, res) {
 function formatMarket(row) {
   const price = row.latest_price || {};
   const options = buildOptions(row, price);
-  const totalVolume = Number(row.total_volume || price.volume_24h || 0);
-  const seedLiquidity = Number(row.seed_liquidity || 0) || Number(price.liquidity || 0) / 2;
-  const displayVolume = totalVolume > 0 ? totalVolume : seedLiquidity;
+  const tradeVolume = Math.max(0, Number(row.total_volume || price.volume_24h || 0));
+  const liquidity = Math.max(0, Number(row.current_liquidity ?? row.seed_liquidity ?? price.liquidity ?? 0));
   return {
     id: row.id,
     source: 'protocol',
@@ -138,9 +173,10 @@ function formatMarket(row) {
     createdAt: row.created_at,
     resolvedAt: row.resolved_at,
     options,
-    volume: displayVolume,
-    totalVolume,
-    liquidity: price.liquidity || '0',
+    volume: liquidity,
+    totalVolume: tradeVolume,
+    tradeVolume,
+    liquidity,
   };
 }
 

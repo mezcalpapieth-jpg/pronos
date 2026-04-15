@@ -11,6 +11,28 @@ import MARKETS from '../lib/markets.js';
 import { getProtocolMode } from '../lib/protocol.js';
 import { fetchProtocolMarkets } from '../lib/protocolMarkets.js';
 
+const GRID_CACHE_KEY = 'pronos-markets-grid-cache-v1';
+
+function readCachedMarkets(mode) {
+  try {
+    const raw = localStorage.getItem(`${GRID_CACHE_KEY}:${mode}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed?.markets) ? parsed.markets : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function writeCachedMarkets(mode, markets) {
+  try {
+    localStorage.setItem(`${GRID_CACHE_KEY}:${mode}`, JSON.stringify({
+      savedAt: Date.now(),
+      markets,
+    }));
+  } catch (_) {}
+}
+
 function applyResolutions(markets, resolutions) {
   if (!resolutions || resolutions.length === 0) return markets;
   const map = Object.fromEntries(resolutions.map(r => [r.market_id, r]));
@@ -62,9 +84,16 @@ export default function MarketsGrid({ activeFilter }) {
 
   useEffect(() => {
     let cancelled = false;
+    const cachedMarkets = readCachedMarkets(protocolMode);
+
+    if (cachedMarkets?.length) {
+      setMarkets(cachedMarkets);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
 
     async function load() {
-      setLoading(true);
       setError(null);
       try {
         // Fetch live markets, AI-generated, resolutions, and the polymarket
@@ -111,6 +140,7 @@ export default function MarketsGrid({ activeFilter }) {
         // Apply resolution data from our DB
         const withResolutions = applyResolutions(allMarkets, resolutions);
         setMarkets(withResolutions);
+        writeCachedMarkets(protocolMode, withResolutions);
         setLoading(false);
 
         // Then batch-fetch real price history for all markets with clobTokenIds
@@ -141,11 +171,12 @@ export default function MarketsGrid({ activeFilter }) {
             return changed ? { ...m, options: nextOpts } : m;
           });
           setMarkets(refreshed);
+          writeCachedMarkets(protocolMode, refreshed);
         }
       } catch (err) {
         console.warn('Error loading markets:', err.message);
         if (!cancelled) {
-          setMarkets(MARKETS);
+          setMarkets(cachedMarkets?.length ? cachedMarkets : MARKETS);
           setError('fallback');
           setLoading(false);
         }

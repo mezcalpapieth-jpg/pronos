@@ -7,7 +7,8 @@ import EarnMXNP from '../components/EarnMXNP.jsx';
 import Leaderboard from '../components/Leaderboard.jsx';
 import { getClobPositions, getUsdcBalance } from '../lib/clob.js';
 import { ERC20_ABI, sellShares } from '../lib/contracts.js';
-import { CHAIN_IDS, CONTRACTS, getUsdcAddress, switchWalletChain } from '../lib/protocol.js';
+import { getProtocolSellQuote } from '../lib/protocolPricing.js';
+import { CHAIN_IDS, CONTRACTS, getChainReadProvider, getUsdcAddress, switchWalletChain } from '../lib/protocol.js';
 import { useT } from '../lib/i18n.js';
 
 function formatTokenAmount(value) {
@@ -90,6 +91,34 @@ function normalizeProtocolPositions(pos) {
       currentPrice: 1 - currentPrice,
     } : null,
   ].filter(Boolean);
+}
+
+async function enrichProtocolPosition(pos) {
+  if (pos.source !== 'protocol' || pos.status !== 'active' || !pos.poolAddress || Number(pos.shares) <= 0) {
+    return pos;
+  }
+
+  const provider = getChainReadProvider(pos.chainId || CHAIN_IDS.arbitrumSepolia);
+  if (!provider) return pos;
+
+  try {
+    const quote = await getProtocolSellQuote(
+      provider,
+      pos.poolAddress,
+      pos.protocolVersion === 'v2' ? pos.outcomeIndex : pos.sellYes,
+      formatTokenAmount(pos.shares),
+      { protocolVersion: pos.protocolVersion || 'v1' },
+    );
+    if (!quote) return pos;
+    return {
+      ...pos,
+      currentValue: quote.collateralOut,
+      currentPrice: quote.currentPrice,
+      exitQuote: quote,
+    };
+  } catch (_) {
+    return pos;
+  }
 }
 
 function PositionCard({ pos, onSell, selling }) {
@@ -191,6 +220,132 @@ function PositionCard({ pos, onSell, selling }) {
   );
 }
 
+function ExitPreviewModal({ preview, onClose, onConfirm, confirming }) {
+  const t = useT();
+  if (!preview) return null;
+
+  const { pos, loading, error, quote } = preview;
+  const impactColor = quote && quote.priceImpactPts <= -5 ? 'var(--red)' : 'var(--text-secondary)';
+
+  return (
+    <div className="bet-modal-overlay show" onClick={loading || confirming ? undefined : (e) => e.target === e.currentTarget && onClose()}>
+      <div className="bet-modal-box" style={{ maxWidth: 520 }}>
+        <div className="bet-modal-header">
+          <span className="bet-modal-title">{t('pf.exitPreview')}</span>
+          <button className="bet-modal-close" onClick={onClose} disabled={loading || confirming}>✕</button>
+        </div>
+
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20, lineHeight: 1.5 }}>
+          {pos?.marketTitle || pos?.title || '—'}
+        </p>
+
+        {loading && (
+          <div style={{
+            padding: '18px 16px',
+            borderRadius: 12,
+            border: '1px solid var(--border)',
+            background: 'var(--surface2)',
+            color: 'var(--text-muted)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 12,
+            lineHeight: 1.6,
+            marginBottom: 20,
+          }}>
+            {t('pf.exitLoading')}
+          </div>
+        )}
+
+        {!loading && error && (
+          <div style={{
+            padding: '18px 16px',
+            borderRadius: 12,
+            border: '1px solid rgba(255,69,69,0.3)',
+            background: 'rgba(255,69,69,0.08)',
+            color: 'var(--red)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 12,
+            lineHeight: 1.6,
+            marginBottom: 20,
+          }}>
+            {error}
+          </div>
+        )}
+
+        {!loading && !error && quote && (
+          <>
+            <div className="bet-payout-info" style={{ marginBottom: 16 }}>
+              <div className="bet-payout-row">
+                <span>{t('pf.shares', { n: formatTokenAmount(pos.shares) })}</span>
+                <span>{pos.outcome}</span>
+              </div>
+              <div className="bet-payout-row">
+                <span>{t('pf.exitEstimate')}</span>
+                <span className="green">${quote.collateralOut.toFixed(2)} USDC</span>
+              </div>
+              <div className="bet-payout-row">
+                <span>{t('pf.exitSpot')}</span>
+                <span>${quote.spotValue.toFixed(2)} USDC</span>
+              </div>
+              {quote.fee > 0 && (
+                <div className="bet-payout-row">
+                  <span>{t('pf.exitFee', { pct: quote.feePct.toFixed(2) })}</span>
+                  <span style={{ opacity: 0.65 }}>-${quote.fee.toFixed(2)} USDC</span>
+                </div>
+              )}
+              <div className="bet-payout-row">
+                <span>{t('pf.exitImpact')}</span>
+                <span style={{ color: impactColor }}>
+                  {quote.priceImpactPts >= 0 ? '+' : ''}{quote.priceImpactPts.toFixed(1)} pts
+                  {quote.slippageAmount > 0 ? ` · -$${quote.slippageAmount.toFixed(2)}` : ''}
+                </span>
+              </div>
+              <div className="bet-payout-row">
+                <span>{t('pf.exitAfterPrice')}</span>
+                <span style={{ color: impactColor }}>
+                  {Math.round(quote.currentPrice * 100)}% → {Math.round(quote.postTradePrice * 100)}%
+                </span>
+              </div>
+            </div>
+
+            <div style={{
+              padding: '12px 14px',
+              borderRadius: 10,
+              marginBottom: 20,
+              background: 'rgba(148,163,184,0.06)',
+              border: '1px solid rgba(148,163,184,0.2)',
+              color: 'var(--text-muted)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              lineHeight: 1.6,
+            }}>
+              {t('pf.exitWarning')}
+            </div>
+          </>
+        )}
+
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button
+            className="btn-ghost"
+            onClick={onClose}
+            disabled={confirming}
+            style={{ flex: 1, padding: '12px 16px' }}
+          >
+            {t('admin.cancel')}
+          </button>
+          <button
+            className="btn-primary"
+            onClick={onConfirm}
+            disabled={loading || !!error || confirming}
+            style={{ flex: 1, padding: '12px 16px' }}
+          >
+            {confirming ? t('pf.exiting') : t('pf.exitConfirm')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Portfolio() {
   const t = useT();
   const { authenticated, login, user } = usePrivy();
@@ -202,6 +357,7 @@ export default function Portfolio() {
   const [address, setAddress]       = useState(null);
   const [sellingId, setSellingId]   = useState(null);
   const [tradeStatus, setTradeStatus] = useState(null);
+  const [sellPreview, setSellPreview] = useState(null);
 
   useEffect(() => {
     if (!authenticated || !wallets?.length) return;
@@ -226,7 +382,11 @@ export default function Portfolio() {
         fetch(`/api/positions?address=${encodeURIComponent(addr)}`).then(r => r.ok ? r.json() : null).catch(() => null),
       ]);
 
-      const protocolPos = (protocolData?.positions || []).flatMap(normalizeProtocolPositions);
+      const protocolPos = await Promise.all(
+        (protocolData?.positions || [])
+          .flatMap(normalizeProtocolPositions)
+          .map(enrichProtocolPosition),
+      );
       setBalance(bal);
       setPositions([...(Array.isArray(clobPos) ? clobPos : []), ...protocolPos]);
     } catch (e) {
@@ -236,7 +396,29 @@ export default function Portfolio() {
     }
   }
 
-async function handleSellPosition(pos) {
+  async function handleSellClick(pos) {
+    if (!pos || pos.source !== 'protocol') return;
+
+    setTradeStatus(null);
+    setSellPreview({ pos, quote: pos.exitQuote || null, loading: true, error: null });
+    try {
+      const provider = getChainReadProvider(pos.chainId || CHAIN_IDS.arbitrumSepolia);
+      if (!provider) throw new Error(t('pf.protocolConfigMissing'));
+
+      const quote = await getProtocolSellQuote(
+        provider,
+        pos.poolAddress,
+        pos.protocolVersion === 'v2' ? pos.outcomeIndex : pos.sellYes,
+        formatTokenAmount(pos.shares),
+        { protocolVersion: pos.protocolVersion || 'v1' },
+      );
+      setSellPreview({ pos, quote, loading: false, error: null });
+    } catch (e) {
+      setSellPreview({ pos, quote: null, loading: false, error: e.message || t('pf.exitPreviewError') });
+    }
+  }
+
+  async function handleSellPosition(pos) {
     const wallet = wallets?.[0];
     if (!wallet || pos.source !== 'protocol') return;
 
@@ -272,6 +454,7 @@ async function handleSellPosition(pos) {
       );
       const tx = receipt.transactionHash || receipt.hash || 'OK';
       setTradeStatus({ type: 'success', msg: t('pf.exitSuccess', { tx: `${tx.slice(0, 10)}…` }) });
+      setSellPreview(null);
       await loadData();
     } catch (e) {
       setTradeStatus({ type: 'error', msg: t('pf.exitError', { msg: e.message || 'Unknown error' }) });
@@ -395,7 +578,7 @@ async function handleSellPosition(pos) {
                     <PositionCard
                       key={pos.id || i}
                       pos={pos}
-                      onSell={handleSellPosition}
+                      onSell={handleSellClick}
                       selling={sellingId === pos.id}
                     />
                   ))}
@@ -421,6 +604,12 @@ async function handleSellPosition(pos) {
         )}
       </main>
       <Footer />
+      <ExitPreviewModal
+        preview={sellPreview}
+        onClose={() => !sellingId && setSellPreview(null)}
+        onConfirm={() => sellPreview?.pos && handleSellPosition(sellPreview.pos)}
+        confirming={Boolean(sellingId)}
+      />
     </>
   );
 }
