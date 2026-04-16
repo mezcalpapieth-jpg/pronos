@@ -14,7 +14,7 @@
  * same class names so the look matches pixel-for-pixel.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchMarkets, fetchPriceHistory, fetchCurrentCycle } from '../lib/pointsApi.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import PointsMarketCard from '../components/PointsMarketCard.jsx';
@@ -46,14 +46,19 @@ const CATEGORIES = [
 export default function PointsHome({ onOpenLogin }) {
   const navigate = useNavigate();
   const { authenticated } = usePointsAuth();
+  const [searchParams] = useSearchParams();
   const [markets, setMarkets] = useState([]);
   const [history, setHistory] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeCategory, setActiveCategory] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
   const [cycle, setCycle] = useState(null);
   const [cycleTick, setCycleTick] = useState(0); // forces re-render each minute
+
+  // Search value comes from the nav input (mirrored to ?q=<text>). Living
+  // in the URL keeps deep-links work and lets the nav share state without
+  // a React context.
+  const searchQuery = searchParams.get('q') || '';
 
   // Load the current cycle once on mount. The countdown updates each
   // minute via a local interval — cheaper than refetching and responsive
@@ -144,13 +149,8 @@ export default function PointsHome({ onOpenLogin }) {
           landing's layout where the category pills are always visible
           without needing to scroll past the hero first. */}
       <div className="category-bar">
-        <div className="category-bar-inner" style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          flexWrap: 'wrap',
-        }}>
-          <div className="market-filters" style={{ flex: '1 1 auto', minWidth: 0 }}>
+        <div className="category-bar-inner">
+          <div className="market-filters">
             {CATEGORIES.map(cat => (
               <button
                 key={cat.key}
@@ -160,41 +160,6 @@ export default function PointsHome({ onOpenLogin }) {
                 {cat.label}
               </button>
             ))}
-          </div>
-
-          {/* Search bar — lives inside the sticky category bar so it's
-              always reachable without scrolling. Filters on top of the
-              active category tab. */}
-          <div style={{ position: 'relative', flex: '0 0 260px', minWidth: 180 }}>
-            <span style={{
-              position: 'absolute',
-              left: 12,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              fontSize: 13,
-              color: 'var(--text-muted)',
-              pointerEvents: 'none',
-            }}>
-              ⌕
-            </span>
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar mercado…"
-              aria-label="Buscar mercados"
-              style={{
-                width: '100%',
-                padding: '8px 12px 8px 30px',
-                background: 'var(--surface1)',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
-                fontFamily: 'var(--font-body)',
-                fontSize: 12,
-                color: 'var(--text-primary)',
-                outline: 'none',
-              }}
-            />
           </div>
         </div>
       </div>

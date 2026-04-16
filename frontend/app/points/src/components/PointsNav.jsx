@@ -10,7 +10,7 @@
  * No wallet-chain UI, no RPC, no Privy — this is an off-chain points app.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 
 // Public info page on pronos.io that explains prediction markets. The MVP
@@ -30,11 +30,31 @@ function getInitialTheme() {
 
 export default function PointsNav({ onOpenLogin, isAdmin }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { authenticated, user, logout } = usePointsAuth();
   const [scrolled, setScrolled] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [theme, setTheme] = useState(getInitialTheme);
   const dropdownRef = useRef(null);
+
+  // Search state is mirrored to URL (?q=foo) so it survives refreshes and
+  // stays in sync with whatever the home page is reading. Typing from any
+  // page that isn't home jumps to home with the query applied.
+  const searchValue = searchParams.get('q') || '';
+  function handleSearchChange(e) {
+    const value = e.target.value;
+    if (location.pathname !== '/') {
+      // Off the home page — navigate there with the query so the grid
+      // shows the filtered results.
+      navigate(value ? `/?q=${encodeURIComponent(value)}` : '/');
+      return;
+    }
+    const next = new URLSearchParams(searchParams);
+    if (value) next.set('q', value);
+    else next.delete('q');
+    setSearchParams(next, { replace: true });
+  }
 
   // Apply theme to <html data-theme> so the shared CSS variables cascade.
   useEffect(() => {
@@ -76,7 +96,46 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
         PRONOS<span className="green-dot" />
       </Link>
 
-      <div style={{ flex: 1 }} />
+      {/* Search — sits right next to the logo, expands to fill
+          available horizontal space up to the nav-links row. Typing
+          updates ?q=<text> in the URL; PointsHome reads that param. */}
+      <div style={{
+        position: 'relative',
+        flex: '1 1 auto',
+        maxWidth: 420,
+        margin: '0 16px',
+        minWidth: 0,
+      }}>
+        <span style={{
+          position: 'absolute',
+          left: 12,
+          top: '50%',
+          transform: 'translateY(-50%)',
+          fontSize: 13,
+          color: 'var(--text-muted)',
+          pointerEvents: 'none',
+        }}>
+          ⌕
+        </span>
+        <input
+          type="search"
+          value={searchValue}
+          onChange={handleSearchChange}
+          placeholder="Buscar mercado…"
+          aria-label="Buscar mercados"
+          style={{
+            width: '100%',
+            padding: '8px 12px 8px 30px',
+            background: 'var(--surface1)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            fontFamily: 'var(--font-body)',
+            fontSize: 12,
+            color: 'var(--text-primary)',
+            outline: 'none',
+          }}
+        />
+      </div>
 
       <div className="nav-links">
         <Link to="/" style={navLinkStyle}>El mercado</Link>
