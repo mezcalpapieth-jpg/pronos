@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="refresh" content="0; url=/points/" />
+    <title>Pronos</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="shortcut icon" href="/favicon.svg" />
+    <script>
+      // JS redirect as a fallback if meta-refresh is blocked (some
+      // ad-blockers, Lynx, etc.). Server-side we prefer the vercel.json
+      // rewrite `/` → `/points/index.html`; this file only runs when
+      // Vercel serves static files over rewrites (older configurations).
+      window.location.replace('/points/');
+    </script>
+  </head>
+  <body>
+    <noscript>
+      <p style="font-family:sans-serif;text-align:center;padding:40px">
+        Abre <a href="/points/">Pronos Points</a>.
+      </p>
+    </noscript>
+  </body>
+</html>
