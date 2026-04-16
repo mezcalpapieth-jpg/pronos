@@ -22,6 +22,7 @@
 // Edge-cached for 5 minutes so MarketsGrid's initial fetch doesn't hammer CLOB.
 
 import { applyCors } from './_lib/cors.js';
+import { rateLimit, clientIp } from './_lib/rate-limit.js';
 
 const CLOB_BASE = 'https://clob.polymarket.com';
 
@@ -52,6 +53,17 @@ export default async function handler(req, res) {
   if (cors) return cors;
   if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
 
+  // Rate limit upstream fanout. A single request with 120 tokenIds creates
+  // 120 concurrent fetches to CLOB — a handful of those per second from the
+  // same IP can easily trip Polymarket's rate limits and hurt every Pronos
+  // user. 30/min/IP is plenty for normal browsing.
+  const limited = rateLimit(req, res, {
+    key: `price-history:${clientIp(req)}`,
+    limit: 30,
+    windowMs: 60_000,
+  });
+  if (limited) return;
+
   const raw = (req.query.clobTokenIds || '').trim();
   if (!raw) return res.status(400).json({ error: 'clobTokenIds required' });
 
@@ -63,14 +75,22 @@ export default async function handler(req, res) {
   const fidelity = Math.min(Math.max(parseInt(req.query.fidelity, 10) || 60, 1), 1440);
 
   try {
-    const results = await Promise.all(ids.map(id => fetchOne(id, interval, fidelity)));
+    // Batch upstream fetches so we don't open 120 parallel connections to
+    // CLOB at once — that trips their per-IP rate limit and can return
+    // 429s for every token. 10 parallel at a time is fast and polite.
+    const BATCH_SIZE = 10;
     const history = {};
-    for (const r of results) history[r.tokenId] = r.points;
+    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+      const batch = ids.slice(i, i + BATCH_SIZE);
+      const results = await Promise.all(batch.map(id => fetchOne(id, interval, fidelity)));
+      for (const r of results) history[r.tokenId] = r.points;
+    }
 
     // Edge cache — prices move, but 5 min is fine for sparklines
     res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
     return res.status(200).json({ ok: true, interval, fidelity, history });
   } catch (e) {
-    return res.status(500).json({ ok: false, error: e.message });
+    console.error('price-history error:', { message: e?.message });
+    return res.status(500).json({ ok: false, error: 'Upstream unavailable' });
   }
 }

@@ -2,6 +2,7 @@ import { neon } from '@neondatabase/serverless';
 import { applyCors } from './_lib/cors.js';
 import { requireAdmin } from './_lib/admin.js';
 import { translateMarketToSpanish } from './_lib/polymarket-translation.js';
+import { rateLimit, clientIp } from './_lib/rate-limit.js';
 
 /**
  * Bulk Spanish translation for live Polymarket markets.
@@ -45,6 +46,16 @@ export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'POST, OPTIONS' });
   if (cors) return cors;
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+
+  // Rate limit before checking admin — this endpoint fans out to the
+  // Anthropic API and burns credits per call. Even admin-only traffic
+  // should be capped at a sane ceiling per instance.
+  const limited = rateLimit(req, res, {
+    key: `translate:${clientIp(req)}`,
+    limit: 30,          // 30 requests per window per IP (≈ one admin refresh cycle)
+    windowMs: 60_000,   // 1 minute
+  });
+  if (limited) return;
 
   const { privyId, markets } = req.body || {};
   const admin = await requireAdmin(req, res, sql, privyId);

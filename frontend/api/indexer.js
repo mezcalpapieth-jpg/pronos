@@ -217,8 +217,12 @@ export default async function handler(req, res) {
       processed,
     });
   } catch (e) {
-    console.error('Indexer error:', e);
-    return res.status(500).json({ error: 'Indexer failed', detail: e.message });
+    console.error('Indexer error:', {
+      message: e?.message,
+      code: e?.code,
+      stack: e?.stack?.split('\n').slice(0, 5).join('\n'),
+    });
+    return res.status(500).json({ error: 'Indexer failed' });
   }
 }
 

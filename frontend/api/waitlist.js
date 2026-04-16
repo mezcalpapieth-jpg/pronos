@@ -1,5 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from './_lib/cors.js';
+import { rateLimit, clientIp } from './_lib/rate-limit.js';
 
 const sql      = neon(process.env.DATABASE_URL);
 const sqlWrite = sql;
@@ -73,23 +74,39 @@ export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'GET, POST, OPTIONS' });
   if (cors) return cors;
 
-  // GET /api/waitlist?key=<MIGRATE_KEY> — view all signups
+  // GET /api/waitlist — view all signups. Requires the migrate key, passed
+  // via Authorization: Bearer (preferred) or legacy ?key= query param.
   if (req.method === 'GET') {
-    const key = req.query.key;
-    if (key !== process.env.MIGRATE_KEY) {
+    const expected = process.env.MIGRATE_KEY;
+    if (!expected) {
+      return res.status(500).json({ error: 'Waitlist admin not configured' });
+    }
+    const authHeader = (req.headers.authorization || '').match(/^Bearer\s+(.+)$/i);
+    const provided = authHeader ? authHeader[1] : req.query.key;
+    if (provided !== expected) {
       return res.status(403).json({ error: 'Invalid key' });
     }
     try {
       const rows = await sql`SELECT id, email, name, source, email_sent, created_at FROM waitlist ORDER BY created_at DESC`;
       return res.status(200).json({ total: rows.length, signups: rows });
     } catch (e) {
-      return res.status(500).json({ error: e.message });
+      console.error('waitlist GET error:', { message: e.message, code: e.code });
+      return res.status(500).json({ error: 'Error interno' });
     }
   }
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'POST only' });
   }
+
+  // Rate limit signup spam: 5 submissions per IP per minute. Legit users
+  // never hit this; spammers get 429 after the 5th attempt.
+  const limited = rateLimit(req, res, {
+    key: `waitlist:${clientIp(req)}`,
+    limit: 5,
+    windowMs: 60_000,
+  });
+  if (limited) return;
 
   const { email, name } = req.body || {};
 
@@ -123,7 +140,10 @@ export default async function handler(req, res) {
       message: isNew ? '¡Te has unido a la lista!' : 'Ya estás en la lista de espera.',
     });
   } catch (e) {
-    console.error('waitlist error:', e);
-    return res.status(500).json({ error: 'Error interno', debug: e.message });
+    // Log internals server-side; don't leak them to the client — PostgreSQL
+    // errors contain table/column/constraint names that help attackers map
+    // the schema.
+    console.error('waitlist POST error:', { message: e.message, code: e.code, detail: e.detail });
+    return res.status(500).json({ error: 'Error interno' });
   }
 }

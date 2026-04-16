@@ -43,7 +43,12 @@ export default async function handler(req, res) {
     // parallel. Redemptions come from the `redemptions` table populated by
     // the indexer watching WinningsRedeemed events — they're authoritative
     // on-chain payouts, used to override our share×$1 estimate when available.
-    const [rows, redemptionRows] = await Promise.all([
+    //
+    // We catch redemption query errors independently so that if the table
+    // doesn't exist yet (e.g. a deploy where /api/migrate hasn't run) the
+    // whole endpoint doesn't 500 — we just fall back to estimating payouts
+    // from the trades table like before.
+    const [tradesResult, redemptionsResult] = await Promise.allSettled([
       sql`
         SELECT
           t.id              AS trade_id,
@@ -88,6 +93,17 @@ export default async function handler(req, res) {
         WHERE r.user_address = ${addr}
       `,
     ]);
+
+    if (tradesResult.status === 'rejected') {
+      throw tradesResult.reason;
+    }
+    const rows = tradesResult.value;
+    const redemptionRows = redemptionsResult.status === 'fulfilled'
+      ? redemptionsResult.value
+      : [];
+    if (redemptionsResult.status === 'rejected') {
+      console.warn('[history] redemptions query failed, falling back to estimates:', redemptionsResult.reason?.message);
+    }
 
     // Build a lookup: market_id → total on-chain payout + per-market detail.
     // A single user could redeem multiple times (partial redemption) so we sum.
@@ -336,7 +352,13 @@ export default async function handler(req, res) {
       },
     });
   } catch (e) {
-    console.error('History API error:', e);
+    console.error('History API error:', {
+      message: e?.message,
+      code: e?.code,
+      detail: e?.detail,
+      hint: e?.hint,
+      stack: e?.stack?.split('\n').slice(0, 5).join('\n'),
+    });
     return res.status(500).json({ error: 'Server error' });
   }
 }

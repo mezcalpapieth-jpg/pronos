@@ -13,5 +13,16 @@
       "path": "/api/cron/auto-resolve",
       "schedule": "*/30 * * * *"
     }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy-Report-Only",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://tally.so https://*.tally.so https://*.privy.io https://auth.privy.io; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.privy.io https://auth.privy.io https://pronos.io https://gamma-api.polymarket.com https://clob.polymarket.com https://polymarket.com https://polygon-rpc.com https://arb1.arbitrum.io https://sepolia-rollup.arbitrum.io https://*.infura.io https://*.alchemy.com https://*.ankr.com https://safe-transaction-arbitrum.safe.global https://safe-transaction-arbitrum-sepolia.safe.global https://*.sentry.io wss://*.privy.io wss://*.walletconnect.com wss://*.walletconnect.org https://*.walletconnect.com https://*.walletconnect.org; frame-src 'self' https://tally.so https://*.tally.so https://*.privy.io https://auth.privy.io; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self';"
+        }
+      ]
+    }
   ]
 }

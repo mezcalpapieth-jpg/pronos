@@ -227,10 +227,28 @@ const MIGRATIONS = [
 ];
 
 export default async function handler(req, res) {
-  // Simple auth to prevent accidental runs
-  const key = req.query.key;
-  if (key !== process.env.MIGRATE_KEY) {
+  // Auth: accept the migrate key from either Authorization header
+  // ("Authorization: Bearer <key>") or the legacy ?key= query param.
+  // Prefer the header — query strings end up in server logs / browser
+  // history / Referrer headers and should not carry secrets. The query
+  // param is kept only for backward compatibility with any existing
+  // tooling; warn when it's used so we can phase it out.
+  const expected = process.env.MIGRATE_KEY;
+  if (!expected) {
+    return res.status(500).json({ error: 'Migration not configured' });
+  }
+
+  const authHeader = (req.headers.authorization || '').match(/^Bearer\s+(.+)$/i);
+  const headerKey = authHeader ? authHeader[1] : null;
+  const queryKey = req.query.key;
+  const provided = headerKey || queryKey || null;
+
+  if (provided !== expected) {
     return res.status(403).json({ error: 'Invalid key' });
+  }
+
+  if (!headerKey && queryKey) {
+    console.warn('[migrate] key passed via query string — prefer Authorization: Bearer header');
   }
 
   const results = [];
