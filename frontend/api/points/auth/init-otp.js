@@ -46,7 +46,27 @@ export default async function handler(req, res) {
     const { otpId } = await sendOtp(email);
     return res.status(200).json({ otpId, suborgId });
   } catch (e) {
-    console.error('[auth/init-otp] failed', { message: e?.message, code: e?.code });
-    return res.status(502).json({ error: 'turnkey_unavailable' });
+    // Log full detail server-side; surface a sanitized hint to the client
+    // so we can triage preview-deploy failures without Vercel log access.
+    const turnkeyError = e?.response?.data || e?.cause || null;
+    console.error('[auth/init-otp] failed', {
+      message: e?.message,
+      code: e?.code,
+      turnkeyError,
+      stack: e?.stack?.split('\n').slice(0, 5).join('\n'),
+    });
+    // If the error is about configuration (missing env vars, bad key
+    // format), say so explicitly. Otherwise bubble the first line of the
+    // Turnkey error message so the UI can show something useful.
+    let hint = null;
+    const msg = (e?.message || '').toLowerCase();
+    if (msg.includes('not configured')) hint = 'env_vars_missing';
+    else if (msg.includes('invalid') && msg.includes('key')) hint = 'invalid_api_key';
+    else if (msg.includes('organization')) hint = 'org_not_found';
+    return res.status(502).json({
+      error: 'turnkey_unavailable',
+      hint,
+      detail: e?.message?.slice(0, 240) || null,
+    });
   }
 }

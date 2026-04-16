@@ -66,6 +66,8 @@ export async function initOtp(email) {
   if (!ok) {
     const err = new Error(data?.error || `HTTP ${status}`);
     err.code = data?.error;
+    err.detail = data?.detail || null;
+    err.hint = data?.hint || null;
     throw err;
   }
   return data; // { otpId, suborgId }
@@ -93,6 +95,8 @@ export async function verifyOtp({ otpId, suborgId, code, email }) {
   if (!ok) {
     const err = new Error(data?.error || `HTTP ${status}`);
     err.code = data?.error;
+    err.detail = data?.detail || null;
+    err.hint = data?.hint || null;
     throw err;
   }
   return data; // { ok, needsUsername, suborgId, walletAddress, username, session }
@@ -103,6 +107,8 @@ export async function setUsername(username) {
   if (!ok) {
     const err = new Error(data?.error || `HTTP ${status}`);
     err.code = data?.error;
+    err.detail = data?.detail || null;
+    err.hint = data?.hint || null;
     throw err;
   }
   return data; // { ok, username }

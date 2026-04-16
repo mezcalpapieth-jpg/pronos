@@ -48,29 +48,15 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
 
   return (
     <nav id="nav" className={scrolled ? 'scrolled' : ''}>
-      {/* Logo */}
-      <Link to="/" style={{
+      {/* Logo — matches the main pronos.io landing (plain PRONOS wordmark) */}
+      <Link to="/" className="brand" style={{
         fontFamily: 'var(--font-display)',
         fontSize: 22,
         letterSpacing: '0.08em',
         color: 'var(--text-primary)',
         textDecoration: 'none',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
       }}>
         PRONOS
-        <span style={{
-          fontSize: 9,
-          padding: '3px 7px',
-          borderRadius: 4,
-          background: 'rgba(0,232,122,0.12)',
-          color: 'var(--green)',
-          letterSpacing: '0.1em',
-          textTransform: 'uppercase',
-        }}>
-          POINTS
-        </span>
       </Link>
 
       {/* Spacer pushes nav links + auth to the right */}

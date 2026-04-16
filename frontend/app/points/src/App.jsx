@@ -12,10 +12,11 @@
  * opens automatically in the username step.
  */
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import PointsLoginModal from '@app/components/PointsLoginModal.jsx';
 import PointsNav from './components/PointsNav.jsx';
+import PointsTicker from './components/PointsTicker.jsx';
 import PointsHome from './pages/PointsHome.jsx';
 import PointsMarketDetail from './pages/PointsMarketDetail.jsx';
 import PointsPortfolio from './pages/PointsPortfolio.jsx';
@@ -48,22 +49,34 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <PointsNav
+      <Shell
         onOpenLogin={() => setLoginOpen(true)}
         isAdmin={isAdmin}
       />
-
-      <Routes>
-        <Route path="/" element={<PointsHome onOpenLogin={() => setLoginOpen(true)} />} />
-        <Route path="/market" element={<PointsMarketDetail onOpenLogin={() => setLoginOpen(true)} />} />
-        <Route path="/portfolio" element={<PointsPortfolio />} />
-        <Route path="/admin" element={<PointsAdmin isAdmin={isAdmin} />} />
-      </Routes>
-
       <PointsLoginModal
         open={loginOpen}
         onClose={() => setLoginOpen(false)}
       />
     </BrowserRouter>
+  );
+}
+
+// Separate component so it has access to the router hooks (useLocation).
+// Renders the ticker only on the Home page to match the landing's layout.
+function Shell({ onOpenLogin, isAdmin }) {
+  const location = useLocation();
+  const isHome = location.pathname === '/';
+
+  return (
+    <>
+      {isHome && <PointsTicker />}
+      <PointsNav onOpenLogin={onOpenLogin} isAdmin={isAdmin} />
+      <Routes>
+        <Route path="/" element={<PointsHome onOpenLogin={onOpenLogin} />} />
+        <Route path="/market" element={<PointsMarketDetail onOpenLogin={onOpenLogin} />} />
+        <Route path="/portfolio" element={<PointsPortfolio />} />
+        <Route path="/admin" element={<PointsAdmin isAdmin={isAdmin} />} />
+      </Routes>
+    </>
   );
 }

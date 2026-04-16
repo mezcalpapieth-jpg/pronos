@@ -11,6 +11,8 @@ async function handle(res) {
   if (!res.ok) {
     const err = new Error(data?.error || `HTTP ${res.status}`);
     err.code = data?.error;
+    err.detail = data?.detail || null;
+    err.hint = data?.hint || null;
     err.status = res.status;
     throw err;
   }

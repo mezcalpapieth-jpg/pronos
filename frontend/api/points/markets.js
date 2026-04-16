@@ -88,7 +88,16 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ markets });
   } catch (e) {
-    console.error('[points/markets] db error', { message: e?.message, code: e?.code });
-    return res.status(500).json({ error: 'db_unavailable' });
+    console.error('[points/markets] db error', {
+      message: e?.message,
+      code: e?.code,
+      detail: e?.detail,
+      hint: e?.hint,
+    });
+    return res.status(500).json({
+      error: 'db_unavailable',
+      detail: e?.message?.slice(0, 240) || null,
+      code: e?.code || null,
+    });
   }
 }

@@ -33,9 +33,14 @@ const ERRORS = {
   default:               'Algo salió mal. Intenta de nuevo.',
 };
 
-function humanError(code) {
-  if (!code) return ERRORS.default;
-  return ERRORS[code] || `${ERRORS.default} (${code})`;
+function humanError(code, detail) {
+  const base = code && ERRORS[code]
+    ? ERRORS[code]
+    : (code ? `${ERRORS.default} (${code})` : ERRORS.default);
+  // Append server-provided detail when present (preview debugging aid;
+  // strip this once we're confident in the flow).
+  if (detail) return `${base}\n\n${detail}`;
+  return base;
 }
 
 export default function PointsLoginModal({ open, onClose }) {
@@ -90,7 +95,7 @@ export default function PointsLoginModal({ open, onClose }) {
       setStep('code');
       setTimeout(() => firstFieldRef.current?.focus(), 50);
     } catch (e) {
-      setErr(humanError(e.code || e.message));
+      setErr(humanError(e.code || e.message, e.detail));
     } finally {
       setPending(false);
     }
@@ -111,7 +116,7 @@ export default function PointsLoginModal({ open, onClose }) {
         onClose?.();
       }
     } catch (e) {
-      setErr(humanError(e.code || e.message));
+      setErr(humanError(e.code || e.message, e.detail));
     } finally {
       setPending(false);
     }
@@ -127,7 +132,7 @@ export default function PointsLoginModal({ open, onClose }) {
       setStep('done');
       onClose?.();
     } catch (e) {
-      setErr(humanError(e.code || e.message));
+      setErr(humanError(e.code || e.message, e.detail));
     } finally {
       setPending(false);
     }
