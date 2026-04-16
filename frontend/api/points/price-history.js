@@ -1,9 +1,13 @@
 /**
- * GET /api/points/markets/price-history?ids=1,2,3&days=30
+ * GET /api/points/price-history?ids=1,2,3&days=30
  *
  * Returns the hourly price snapshots for one or more markets over the
  * last `days` days (default 30, max 60). Used by the home grid and market
  * detail page to render sparkline charts without replaying every trade.
+ *
+ * NB: path is flat (not nested under `markets/`) because Vercel's
+ * filesystem routing treats `markets/` as a directory and shadows the
+ * sibling `markets.js` list endpoint when both exist at the same depth.
  *
  * Response shape — one entry per requested market id:
  *   {

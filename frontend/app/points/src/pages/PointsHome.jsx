@@ -208,9 +208,9 @@ export default function PointsHome({ onOpenLogin }) {
               </div>
               <div className="hero-stat">
                 <span className="hero-stat-val">
-                  <span className="green">+20</span>/día
+                  <span className="green">100</span>+20/día
                 </span>
-                <span className="hero-stat-label">bono por racha</span>
+                <span className="hero-stat-label">reclamo diario + racha</span>
               </div>
               <div className="hero-stat">
                 <span className="hero-stat-val">

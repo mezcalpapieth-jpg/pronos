@@ -30,54 +30,71 @@ function pricesFromReserves(reserves, outcomeCount) {
 }
 
 export default async function handler(req, res) {
-  const cors = applyCors(req, res, { methods: 'GET, OPTIONS', credentials: true });
-  if (cors) return cors;
-  if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
-
-  const id = parseInt(req.query.id, 10);
-  if (!Number.isInteger(id) || id <= 0) {
-    return res.status(400).json({ error: 'invalid_id' });
-  }
-
+  // Top-level try/catch guarantees JSON output — see markets.js for
+  // details on why this matters.
   try {
-    await ensurePointsSchema(schemaSql);
+    const cors = applyCors(req, res, { methods: 'GET, OPTIONS', credentials: true });
+    if (cors) return cors;
+    if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
 
-    const rows = await sql`
-      SELECT m.*,
-        (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
-      FROM points_markets m
-      WHERE m.id = ${id}
-      LIMIT 1
-    `;
-    if (rows.length === 0) {
-      return res.status(404).json({ error: 'market_not_found' });
+    const id = parseInt(req.query.id, 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: 'invalid_id' });
     }
-    const r = rows[0];
-    const outcomes = parseJsonb(r.outcomes, ['Sí', 'No']);
-    const reserves = parseJsonb(r.reserves, []).map(Number);
-    const prices = pricesFromReserves(reserves, outcomes.length);
 
-    return res.status(200).json({
-      market: {
-        id: r.id,
-        question: r.question,
-        category: r.category,
-        icon: r.icon,
-        outcomes,
-        reserves,
-        prices,
-        seedLiquidity: Number(r.seed_liquidity || 0),
-        volume: Number(r.seed_liquidity || 0),
-        tradeVolume: Number(r.trade_volume || 0),
-        endTime: r.end_time,
-        status: r.status,
-        outcome: r.outcome,
-        resolvedAt: r.resolved_at,
-        createdAt: r.created_at,
-      },
-    });
+    try {
+      await ensurePointsSchema(schemaSql);
+
+      const rows = await sql`
+        SELECT m.*,
+          (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
+        FROM points_markets m
+        WHERE m.id = ${id}
+        LIMIT 1
+      `;
+      if (rows.length === 0) {
+        return res.status(404).json({ error: 'market_not_found' });
+      }
+      const r = rows[0];
+      const outcomes = parseJsonb(r.outcomes, ['Sí', 'No']);
+      const reserves = parseJsonb(r.reserves, []).map(Number);
+      const prices = pricesFromReserves(reserves, outcomes.length);
+
+      return res.status(200).json({
+        market: {
+          id: r.id,
+          question: r.question,
+          category: r.category,
+          icon: r.icon,
+          outcomes,
+          reserves,
+          prices,
+          seedLiquidity: Number(r.seed_liquidity || 0),
+          volume: Number(r.seed_liquidity || 0),
+          tradeVolume: Number(r.trade_volume || 0),
+          endTime: r.end_time,
+          status: r.status,
+          outcome: r.outcome,
+          resolvedAt: r.resolved_at,
+          createdAt: r.created_at,
+        },
+      });
+    } catch (e) {
+      console.error('[points/market] db error', { message: e?.message, code: e?.code });
+      return res.status(500).json({
+        error: 'db_unavailable',
+        detail: e?.message?.slice(0, 240) || null,
+      });
+    }
   } catch (e) {
-    console.error('[points/market] db error', { message: e?.message, code: e?.code });
-    return res.status(500).json({ error: 'db_unavailable' });
+    console.error('[points/market] unhandled error', {
+      message: e?.message,
+      code: e?.code,
+      stack: e?.stack?.split('\n').slice(0, 5).join('\n'),
+    });
+    return res.status(500).json({
+      error: 'server_error',
+      detail: e?.message?.slice(0, 240) || null,
+    });
   }
 }

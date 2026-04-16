@@ -64,7 +64,10 @@ export async function fetchPriceHistory(ids, { days = 30, outcome = 0 } = {}) {
     outcome: String(outcome),
   });
   try {
-    const { history = {} } = await getJson(`/api/points/markets/price-history?${q}`);
+    // Path kept flat (`/api/points/price-history`) to avoid Vercel's
+    // filesystem-routing conflict where a `markets/` directory would
+    // shadow the sibling `markets.js` file.
+    const { history = {} } = await getJson(`/api/points/price-history?${q}`);
     return history;
   } catch {
     // Price history is a nice-to-have — don't break the UI if the snapshot

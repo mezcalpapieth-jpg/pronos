@@ -35,6 +35,10 @@ function pricesFromReserves(reserves, outcomeCount) {
 }
 
 export default async function handler(req, res) {
+  // Top-level try/catch: the home page renders "HTTP 500" raw when this
+  // endpoint ever returns non-JSON, so guarantee JSON output no matter
+  // what throws. Inner try/catch still handles the specific DB path.
+  try {
   const cors = applyCors(req, res, { methods: 'GET, OPTIONS', credentials: true });
   if (cors) return cors;
   if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
@@ -98,6 +102,17 @@ export default async function handler(req, res) {
       error: 'db_unavailable',
       detail: e?.message?.slice(0, 240) || null,
       code: e?.code || null,
+    });
+  }
+  } catch (e) {
+    console.error('[points/markets] unhandled error', {
+      message: e?.message,
+      code: e?.code,
+      stack: e?.stack?.split('\n').slice(0, 5).join('\n'),
+    });
+    return res.status(500).json({
+      error: 'server_error',
+      detail: e?.message?.slice(0, 240) || null,
     });
   }
 }

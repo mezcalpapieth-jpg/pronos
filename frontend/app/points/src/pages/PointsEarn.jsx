@@ -50,10 +50,10 @@ function DailyClaimCard({ onClaimed }) {
   return (
     <section style={panelStyle}>
       <div style={eyebrowStyle}>⚡ Reclamo diario</div>
-      <h3 style={panelTitleStyle}>100 MXNP cada día, +20 por cada día consecutivo</h3>
+      <h3 style={panelTitleStyle}>100 MXNP hoy, +20 MXNP por cada día consecutivo</h3>
       <p style={panelBodyStyle}>
-        Entra todos los días para construir tu racha. El bono crece +20 MXNP cada día
-        que no te saltes. Fallar un día resetea la racha a día 1.
+        Día 1 = 100 MXNP. Día 2 = 120. Día 3 = 140. Y así sucesivamente. Entra todos
+        los días para mantener la racha — si te saltas un día, vuelves al día 1.
       </p>
       {state.msg && (
         <div style={{ ...noticeStyle, color: 'var(--green)' }}>{state.msg}</div>
