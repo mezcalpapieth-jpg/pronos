@@ -81,7 +81,10 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
       <div className="nav-links">
         <Link to="/" style={navLinkStyle}>El mercado</Link>
         {authenticated && (
-          <Link to="/portfolio" style={navLinkStyle}>Portafolio</Link>
+          <>
+            <Link to="/portfolio" style={navLinkStyle}>Portafolio</Link>
+            <Link to="/earn" style={navLinkStyle}>Ganar MXNP</Link>
+          </>
         )}
         <a
           href={COMO_FUNCIONA_URL}

@@ -20,7 +20,9 @@ import PointsTicker from './components/PointsTicker.jsx';
 import PointsHome from './pages/PointsHome.jsx';
 import PointsMarketDetail from './pages/PointsMarketDetail.jsx';
 import PointsPortfolio from './pages/PointsPortfolio.jsx';
+import PointsEarn from './pages/PointsEarn.jsx';
 import PointsAdmin from './pages/PointsAdmin.jsx';
+import PointsReferralLanding from './pages/PointsReferralLanding.jsx';
 
 // Admin usernames live in env var VITE_POINTS_ADMIN_USERNAMES so the client
 // can hide the admin nav link without needing a server round-trip. The real
@@ -75,7 +77,9 @@ function Shell({ onOpenLogin, isAdmin }) {
         <Route path="/" element={<PointsHome onOpenLogin={onOpenLogin} />} />
         <Route path="/market" element={<PointsMarketDetail onOpenLogin={onOpenLogin} />} />
         <Route path="/portfolio" element={<PointsPortfolio />} />
+        <Route path="/earn" element={<PointsEarn onOpenLogin={onOpenLogin} />} />
         <Route path="/admin" element={<PointsAdmin isAdmin={isAdmin} />} />
+        <Route path="/r/:username" element={<PointsReferralLanding onOpenLogin={onOpenLogin} />} />
       </Routes>
     </>
   );

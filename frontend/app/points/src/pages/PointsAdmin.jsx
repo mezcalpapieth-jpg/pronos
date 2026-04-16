@@ -12,7 +12,12 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
-import { getJson, postJson } from '../lib/pointsApi.js';
+import {
+  getJson,
+  postJson,
+  adminListSocialTasks,
+  adminReviewSocialTask,
+} from '../lib/pointsApi.js';
 
 const CATEGORIES = [
   { key: 'general',  label: 'General' },
@@ -65,6 +70,7 @@ export default function PointsAdmin({ isAdmin }) {
         {[
           { id: 'create',  label: 'Crear mercado' },
           { id: 'markets', label: 'Mercados' },
+          { id: 'social',  label: 'Tareas sociales' },
           { id: 'stats',   label: 'Estadísticas' },
         ].map(t => {
           const active = tab === t.id;
@@ -89,8 +95,136 @@ export default function PointsAdmin({ isAdmin }) {
 
       {tab === 'create' && <CreateMarketForm />}
       {tab === 'markets' && <MarketsTable />}
+      {tab === 'social' && <SocialTasksQueue />}
       {tab === 'stats' && <StatsPanel />}
     </main>
+  );
+}
+
+// ─── Social tasks queue ────────────────────────────────────────────────────
+function SocialTasksQueue() {
+  const [status, setStatus] = useState('pending');
+  const [tasks, setTasks] = useState(null);
+  const [working, setWorking] = useState(null); // id of the task being reviewed
+
+  async function load() {
+    setTasks(null);
+    try {
+      const r = await adminListSocialTasks(status);
+      setTasks(r.tasks || []);
+    } catch (e) {
+      setTasks([]);
+    }
+  }
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [status]);
+
+  async function review(id, action) {
+    let note = null;
+    if (action === 'reject') {
+      // Browser-native prompt keeps the admin UI lean; swap for a proper
+      // modal if we ever support bulk rejection with canned reasons.
+      note = window.prompt('Motivo del rechazo (mostrado al usuario):');
+      if (!note || !note.trim()) return;
+    }
+    setWorking(id);
+    try {
+      await adminReviewSocialTask(id, action, note);
+      await load();
+    } catch (e) {
+      alert(`No se pudo ${action === 'approve' ? 'aprobar' : 'rechazar'}: ${e.code || e.message}`);
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        {['pending', 'approved', 'rejected'].map(s => (
+          <button
+            key={s}
+            onClick={() => setStatus(s)}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 16,
+              border: `1px solid ${status === s ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
+              background: status === s ? 'rgba(0,232,122,0.1)' : 'transparent',
+              color: status === s ? 'var(--green)' : 'var(--text-secondary)',
+              fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer',
+              letterSpacing: '0.06em', textTransform: 'uppercase',
+            }}
+          >
+            {s === 'pending' ? 'Pendientes' : s === 'approved' ? 'Aprobadas' : 'Rechazadas'}
+          </button>
+        ))}
+      </div>
+
+      {tasks === null && (
+        <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Cargando…</p>
+      )}
+      {tasks && tasks.length === 0 && (
+        <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+          Sin tareas en esta categoría.
+        </p>
+      )}
+      {tasks && tasks.map(t => (
+        <div key={t.id} style={{
+          background: 'var(--surface1)',
+          border: '1px solid var(--border)',
+          borderRadius: 10,
+          padding: '14px 18px',
+          marginBottom: 10,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>
+              #{t.id} · @{t.username} · {t.task_key} · +{t.reward} MXNP
+            </div>
+            {t.proof_url && (
+              <a
+                href={t.proof_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--green)', textDecoration: 'underline' }}
+              >
+                Ver prueba ↗
+              </a>
+            )}
+            {t.rejection_note && (
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--red, #ef4444)', marginTop: 4 }}>
+                Rechazo: {t.rejection_note}
+              </div>
+            )}
+          </div>
+          {t.status === 'pending' ? (
+            <>
+              <button
+                onClick={() => review(t.id, 'approve')}
+                disabled={working === t.id}
+                className="btn-primary"
+                style={{ padding: '6px 12px', fontSize: 11 }}
+              >
+                Aprobar
+              </button>
+              <button
+                onClick={() => review(t.id, 'reject')}
+                disabled={working === t.id}
+                className="btn-ghost"
+                style={{ padding: '6px 12px', fontSize: 11 }}
+              >
+                Rechazar
+              </button>
+            </>
+          ) : (
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
+              Revisada por @{t.reviewer} · {new Date(t.reviewed_at).toLocaleDateString('es-MX')}
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
   );
 }
 

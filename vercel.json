@@ -17,7 +17,9 @@
   "rewrites": [
     { "source": "/market",    "destination": "/index.html" },
     { "source": "/portfolio", "destination": "/index.html" },
-    { "source": "/admin",     "destination": "/index.html" }
+    { "source": "/admin",     "destination": "/index.html" },
+    { "source": "/earn",      "destination": "/index.html" },
+    { "source": "/r/:username", "destination": "/index.html" }
   ],
   "headers": [
     {

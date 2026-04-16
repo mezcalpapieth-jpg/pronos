@@ -86,3 +86,30 @@ export async function fetchLeaderboard() {
 export async function claimDaily() {
   return postJson('/api/points/claim-daily', {});
 }
+
+// ─── Referrals ──────────────────────────────────────────────────────────────
+export async function fetchReferralStats() {
+  return getJson('/api/points/referrals/stats');
+}
+
+export async function claimPendingReferral(referrer) {
+  return postJson('/api/points/referrals/claim-pending', { referrer });
+}
+
+// ─── Social tasks ───────────────────────────────────────────────────────────
+export async function fetchSocialTaskCatalog() {
+  return getJson('/api/points/social-tasks/catalog');
+}
+
+export async function submitSocialTask(taskKey, proofUrl) {
+  return postJson('/api/points/social-tasks/submit', { taskKey, proofUrl });
+}
+
+// ─── Admin — social task queue ──────────────────────────────────────────────
+export async function adminListSocialTasks(status = 'pending') {
+  return getJson(`/api/points/admin/social-tasks?status=${encodeURIComponent(status)}`);
+}
+
+export async function adminReviewSocialTask(id, action, note) {
+  return postJson('/api/points/admin/social-tasks', { id, action, note });
+}

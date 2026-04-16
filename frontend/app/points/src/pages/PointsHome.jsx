@@ -77,6 +77,27 @@ export default function PointsHome({ onOpenLogin }) {
 
   return (
     <>
+      {/* ── Category bar ─────────────────────────────────────
+          Rendered BEFORE the hero so it sits immediately under the
+          sticky nav (top: 64px). That matches the main pronos.io
+          landing's layout where the category pills are always visible
+          without needing to scroll past the hero first. */}
+      <div className="category-bar">
+        <div className="category-bar-inner">
+          <div className="market-filters">
+            {CATEGORIES.map(cat => (
+              <button
+                key={cat.key}
+                className={`filter-btn${activeCategory === cat.key ? ' active' : ''}`}
+                onClick={() => setActiveCategory(cat.key)}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* ── Hero ───────────────────────────────────────────────
           Grid layout mirrors #hero > .hero-inner from the main site:
           left column = copy + stats, right column = a compact featured
@@ -210,25 +231,6 @@ export default function PointsHome({ onOpenLogin }) {
           </aside>
         </div>
       </section>
-
-      {/* ── Category bar ─────────────────────────────────────
-          Same shell classes the landing uses so the pill styles + horizontal
-          scroll behavior on mobile match. */}
-      <div className="category-bar">
-        <div className="category-bar-inner">
-          <div className="market-filters">
-            {CATEGORIES.map(cat => (
-              <button
-                key={cat.key}
-                className={`filter-btn${activeCategory === cat.key ? ' active' : ''}`}
-                onClick={() => setActiveCategory(cat.key)}
-              >
-                {cat.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
 
       {/* ── Markets grid ──────────────────────────────────── */}
       <section id="market" style={{ padding: '36px 48px 60px', maxWidth: 1280, margin: '0 auto' }}>

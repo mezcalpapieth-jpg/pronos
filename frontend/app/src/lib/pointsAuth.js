@@ -111,7 +111,32 @@ export async function setUsername(username) {
     err.hint = data?.hint || null;
     throw err;
   }
+
+  // After the username is claimed successfully, consume any pending
+  // referrer stashed from a /r/<username> landing. Ignore errors here —
+  // the signup itself succeeded; a missing/invalid referrer shouldn't
+  // block the user.
+  try {
+    const pending = readPendingReferrer();
+    if (pending && pending !== String(username || '').toLowerCase()) {
+      await postJson('/api/points/referrals/claim-pending', { referrer: pending });
+    }
+    if (pending) clearPendingReferrer();
+  } catch { /* silent — pending-referrer is best-effort */ }
+
   return data; // { ok, username }
+}
+
+// Shared referrer stash helpers — duplicated lightly here so the module
+// doesn't need to pull in the components file (keeps auth lib tree-shakeable).
+const REFERRER_KEY = 'pronos-points-pending-referrer';
+
+function readPendingReferrer() {
+  try { return localStorage.getItem(REFERRER_KEY); } catch { return null; }
+}
+
+function clearPendingReferrer() {
+  try { localStorage.removeItem(REFERRER_KEY); } catch { /* ignore */ }
 }
 
 export async function fetchMe() {
