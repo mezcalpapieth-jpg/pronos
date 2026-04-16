@@ -12,6 +12,7 @@ import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { readSession, createSessionToken, setSessionCookie } from '../../_lib/session.js';
 import { withTransaction } from '../../_lib/db-tx.js';
+import { sendPointsWelcomeEmail } from '../../_lib/welcome-email.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -71,7 +72,8 @@ export default async function handler(req, res) {
            RETURNING balance`,
           [username, SIGNUP_BONUS],
         );
-        if (bal.rows.length > 0) {
+        const isFirstTime = bal.rows.length > 0;
+        if (isFirstTime) {
           await client.query(
             `INSERT INTO points_distributions (username, amount, kind, reason)
              VALUES ($1, $2, 'signup_bonus', 'Bono de bienvenida')`,
@@ -79,8 +81,23 @@ export default async function handler(req, res) {
           );
         }
 
-        return { username };
+        return { username, isFirstTime };
       });
+
+      // Fire-and-forget welcome email on first signup. Uses Resend via
+      // the shared helper; silently no-ops if RESEND_API_KEY isn't set.
+      // Wrapped in Promise.resolve so a slow email provider never blocks
+      // the response — the UI should feel snappy even if SMTP hiccups.
+      if (claimed.isFirstTime && session.email) {
+        Promise.resolve(sendPointsWelcomeEmail({
+          email: session.email,
+          username: claimed.username,
+        })).catch(err => {
+          console.error('[auth/username] welcome email failed', {
+            message: err?.message,
+          });
+        });
+      }
 
       let token;
       try {
