@@ -1,36 +1,36 @@
 /**
  * Server-side Turnkey client for the points-app.
  *
- * Wraps @turnkey/sdk-server with the specific flows we need:
- *   - getOrCreateSuborg(email)       → find existing user or create a new
- *                                      sub-organization with a fresh wallet
- *   - sendOtp(email, suborgId)       → emit a one-time code to the user's email
- *   - verifyOtp(otpId, code)         → exchange the code for a verification token
- *   - otpLogin(suborgId, token, pub) → finalize the OTP flow and issue a Turnkey
- *                                      session keyed to the client's ephemeral pubkey
+ * Uses the raw `apiClient()` methods from @turnkey/sdk-server. The
+ * higher-level `server.*` helpers in that package build their own
+ * client from NEXT_PUBLIC_* env vars — Next.js convention that doesn't
+ * fit our Vercel serverless setup, so we instantiate directly.
  *
- * All secrets come from env vars (never hardcoded):
+ * Env vars (all required in production, log-only fallback in dev):
  *   TURNKEY_ORGANIZATION_ID   — parent org UUID
  *   TURNKEY_API_PUBLIC_KEY    — hex-encoded P-256 public key registered with Turnkey
- *   TURNKEY_API_PRIVATE_KEY   — hex-encoded P-256 private key used to stamp requests
- *   TURNKEY_APP_NAME          — optional, falls back to 'Pronos Points'
+ *   TURNKEY_API_PRIVATE_KEY   — hex-encoded P-256 private key for stamping
+ *   TURNKEY_APP_NAME          — optional, defaults to 'Pronos Points'
+ *   TURNKEY_API_BASE_URL      — optional, defaults to https://api.turnkey.com
  */
 
 import { Turnkey } from '@turnkey/sdk-server';
 
 let cachedClient = null;
+let cachedApi = null;
 
 function missing(name) {
   return !process.env[name] || process.env[name].trim() === '';
 }
 
 function getEnv() {
-  const orgId = process.env.TURNKEY_ORGANIZATION_ID;
-  const pubKey = process.env.TURNKEY_API_PUBLIC_KEY;
-  const privKey = process.env.TURNKEY_API_PRIVATE_KEY;
-  const appName = process.env.TURNKEY_APP_NAME || 'Pronos Points';
-  const apiBase = process.env.TURNKEY_API_BASE_URL || 'https://api.turnkey.com';
-  return { orgId, pubKey, privKey, appName, apiBase };
+  return {
+    orgId: process.env.TURNKEY_ORGANIZATION_ID,
+    pubKey: process.env.TURNKEY_API_PUBLIC_KEY,
+    privKey: process.env.TURNKEY_API_PRIVATE_KEY,
+    appName: process.env.TURNKEY_APP_NAME || 'Pronos Points',
+    apiBase: process.env.TURNKEY_API_BASE_URL || 'https://api.turnkey.com',
+  };
 }
 
 export function isTurnkeyConfigured() {
@@ -39,7 +39,7 @@ export function isTurnkeyConfigured() {
       && !missing('TURNKEY_API_PRIVATE_KEY');
 }
 
-export function turnkeyClient() {
+function turnkeyClient() {
   if (cachedClient) return cachedClient;
   const { orgId, pubKey, privKey, apiBase } = getEnv();
   if (!orgId || !pubKey || !privKey) {
@@ -54,47 +54,79 @@ export function turnkeyClient() {
   return cachedClient;
 }
 
-/**
- * Look up the sub-organization for an email, creating one if it doesn't
- * exist. The sub-org holds exactly one root user (the caller) with their
- * email tagged for OTP delivery, and one Ethereum wallet we'll use as
- * the stable off-chain identifier.
- *
- * Turnkey's getOrCreateSuborg is idempotent on the filterValue + filterType
- * combination, so calling it twice with the same email is safe and cheap.
- */
-export async function getOrCreateSuborg(email) {
-  const tk = turnkeyClient();
-  const { orgId } = getEnv();
-  const result = await tk.apiClient().getOrCreateSuborg({
-    organizationId: orgId,
-    filterType: 'EMAIL',
-    filterValue: email.toLowerCase().trim(),
-    additionalData: {
-      email: email.toLowerCase().trim(),
-    },
-  });
-  if (!result) throw new Error('getOrCreateSuborg returned no result');
-  // Response shape: { subOrganizationIds, wallet?: { ... } } — we want the first id.
-  const suborgId = Array.isArray(result.subOrganizationIds)
-    ? result.subOrganizationIds[0]
-    : result.subOrganizationIds;
-  if (!suborgId) throw new Error('getOrCreateSuborg returned empty subOrganizationIds');
-  return {
-    suborgId,
-    wallet: result.wallet || null,
-  };
+function api() {
+  if (cachedApi) return cachedApi;
+  cachedApi = turnkeyClient().apiClient();
+  return cachedApi;
 }
 
 /**
- * Send an OTP code to the user's email. `suborgId` is optional; when
- * present it scopes the OTP activity to that sub-org, which makes the
- * later verify step faster and less ambiguous.
+ * Find an existing sub-organization for an email, or create one.
+ * Email-verified sub-orgs are preferred when present; unverified ones
+ * are only returned if explicitly requested. Idempotent on email.
  */
-export async function sendOtp(email, { otpLength = 6, expirationSeconds = 300 } = {}) {
-  const tk = turnkeyClient();
+export async function getOrCreateSuborg(email) {
+  const { orgId } = getEnv();
+  const normalized = email.toLowerCase().trim();
+
+  // Step 1 — look up existing sub-orgs keyed to this email.
+  let lookup;
+  try {
+    lookup = await api().getVerifiedSubOrgIds({
+      organizationId: orgId,
+      filterType: 'EMAIL',
+      filterValue: normalized,
+    });
+  } catch (e) {
+    // Fall back to unverified lookup — Turnkey can return an error when
+    // the filter matches nothing on the verified view.
+    lookup = await api().getSubOrgIds({
+      organizationId: orgId,
+      filterType: 'EMAIL',
+      filterValue: normalized,
+    });
+  }
+  const existing = lookup?.organizationIds?.[0];
+  if (existing) {
+    return { suborgId: existing };
+  }
+
+  // Step 2 — no match, create a fresh sub-org with one root user whose
+  // userEmail is this address. Email OTP works against that email.
+  const created = await api().createSubOrganization({
+    subOrganizationName: `points-${Date.now()}`,
+    rootQuorumThreshold: 1,
+    rootUsers: [{
+      userName: normalized,
+      userEmail: normalized,
+      apiKeys: [],
+      authenticators: [],
+      oauthProviders: [],
+    }],
+    wallet: {
+      walletName: 'Wallet 1',
+      accounts: [{
+        curve: 'CURVE_SECP256K1',
+        pathFormat: 'PATH_FORMAT_BIP32',
+        path: "m/44'/60'/0'/0/0",
+        addressFormat: 'ADDRESS_FORMAT_ETHEREUM',
+      }],
+    },
+  });
+  if (!created?.subOrganizationId) {
+    throw new Error('createSubOrganization returned no subOrganizationId');
+  }
+  return { suborgId: created.subOrganizationId };
+}
+
+/**
+ * Send an OTP code to the user's email. Turnkey returns an `otpId` we
+ * echo back to the client — verify-otp passes it back to complete the
+ * flow. `appName` is mandatory in emailCustomization as of Dec 2025.
+ */
+export async function sendOtp(email, { otpLength = 6 } = {}) {
   const { appName } = getEnv();
-  const result = await tk.apiClient().sendOtp({
+  const result = await api().initOtp({
     otpType: 'OTP_TYPE_EMAIL',
     contact: email.toLowerCase().trim(),
     appName,
@@ -102,64 +134,44 @@ export async function sendOtp(email, { otpLength = 6, expirationSeconds = 300 } 
     alphanumeric: false,
     emailCustomization: { appName },
   });
-  if (!result || !result.otpId) throw new Error('sendOtp returned no otpId');
+  if (!result?.otpId) throw new Error('initOtp returned no otpId');
   return { otpId: result.otpId };
 }
 
-/**
- * Exchange the 6-digit code for a verificationToken that can be passed
- * to otpLogin. The token expires after sessionLengthSeconds (default 1h).
- */
 export async function verifyOtp(otpId, otpCode) {
-  const tk = turnkeyClient();
-  const result = await tk.apiClient().verifyOtp({
-    otpId,
-    otpCode,
-  });
-  if (!result || !result.verificationToken) {
+  const result = await api().verifyOtp({ otpId, otpCode });
+  if (!result?.verificationToken) {
     throw new Error('verifyOtp returned no verificationToken');
   }
   return { verificationToken: result.verificationToken };
 }
 
 /**
- * Finalize the OTP flow by minting a Turnkey session JWT keyed to the
- * client's ephemeral P-256 public key. The client uses this JWT +
- * private key to stamp subsequent Turnkey API calls (e.g. sign a
- * transaction) without ever asking us to touch user funds.
- *
- * For the points app we mostly use the sub-org ID as a stable identity
- * and don't actually sign anything on-chain — but we still exchange the
- * session to complete the auth flow and pin the user's credential.
+ * Mint a Turnkey session JWT keyed to the client's ephemeral P-256
+ * public key. The field is called `organizationId` at the API layer —
+ * it's the sub-org ID the session belongs to.
  */
 export async function otpLogin({ suborgId, verificationToken, publicKey, sessionLengthSeconds = 3600 }) {
-  const tk = turnkeyClient();
-  const result = await tk.apiClient().otpLogin({
-    suborgID: suborgId,
+  const result = await api().otpLogin({
+    organizationId: suborgId,
     verificationToken,
     publicKey,
-    sessionLengthSeconds,
+    expirationSeconds: String(sessionLengthSeconds),
   });
-  if (!result || !result.session) {
-    throw new Error('otpLogin returned no session');
-  }
+  if (!result?.session) throw new Error('otpLogin returned no session');
   return { session: result.session };
 }
 
 /**
- * Retrieve the wallet and its first Ethereum account for a sub-org.
- * We use this to populate `points_users.wallet_address` after account
- * creation. It's a best-effort read: if the wallet isn't visible yet
- * (can happen immediately after create), we return null and the UI
- * falls back to showing the username only.
+ * Best-effort: fetch the first Ethereum address on the sub-org's first
+ * wallet. Used to populate points_users.wallet_address after signup.
  */
 export async function getSuborgWalletAddress(suborgId) {
   try {
-    const tk = turnkeyClient();
-    const wallets = await tk.apiClient().getWallets({ organizationId: suborgId });
+    const wallets = await api().getWallets({ organizationId: suborgId });
     const wallet = wallets?.wallets?.[0];
     if (!wallet?.walletId) return null;
-    const accounts = await tk.apiClient().getWalletAccounts({
+    const accounts = await api().getWalletAccounts({
       organizationId: suborgId,
       walletId: wallet.walletId,
     });
