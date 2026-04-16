@@ -4,7 +4,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && mkdir -p ../markets && cp ../mvp/index.html ../markets/index.html",
+    "build:mvp": "vite build && mkdir -p ../markets && cp ../mvp/index.html ../markets/index.html",
+    "build:points": "BUILD_TARGET=points vite build",
+    "build": "npm run build:mvp && npm run build:points",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -12,6 +14,7 @@
     "@safe-global/api-kit": "^4.1.0",
     "@safe-global/protocol-kit": "^7.0.0",
     "@sentry/react": "^10.47.0",
+    "@turnkey/sdk-browser": "^5.16.1",
     "ethers": "^5.7.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

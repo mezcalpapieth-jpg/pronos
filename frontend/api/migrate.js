@@ -224,6 +224,134 @@ const MIGRATIONS = [
   // Case-insensitive usernames: normalize existing rows and enforce uniqueness on LOWER(username)
   `UPDATE users SET username = LOWER(username) WHERE username IS NOT NULL AND username <> LOWER(username)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower ON users (LOWER(username))`,
+
+  // ── Points-app tables (off-chain, points-app branch only) ─────────────
+  // These live in the same Neon database as the MVP's protocol_* tables
+  // but share zero state with them. The points-app uses Turnkey for auth
+  // (separate user table) and runs the AMM math server-side (no on-chain
+  // events, no indexer). Full schema and indexes mirror _lib/points-schema.js.
+  `CREATE TABLE IF NOT EXISTS points_users (
+    id                   SERIAL PRIMARY KEY,
+    turnkey_sub_org_id   TEXT UNIQUE NOT NULL,
+    wallet_address       TEXT,
+    username             TEXT UNIQUE,
+    email                TEXT,
+    created_at           TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_points_users_username_lower ON points_users (LOWER(username))`,
+  `CREATE INDEX IF NOT EXISTS idx_points_users_wallet ON points_users(wallet_address)`,
+
+  `CREATE TABLE IF NOT EXISTS points_markets (
+    id              SERIAL PRIMARY KEY,
+    question        TEXT NOT NULL,
+    category        TEXT NOT NULL DEFAULT 'general',
+    icon            TEXT,
+    outcomes        JSONB NOT NULL,
+    reserves        JSONB NOT NULL,
+    seed_liquidity  NUMERIC(20,6) NOT NULL DEFAULT 500,
+    end_time        TIMESTAMPTZ NOT NULL,
+    resolution_src  TEXT,
+    status          TEXT NOT NULL DEFAULT 'active',
+    outcome         SMALLINT,
+    created_by      TEXT,
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    resolved_at     TIMESTAMPTZ,
+    resolved_by     TEXT
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_status ON points_markets(status)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_end_time ON points_markets(end_time)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_category ON points_markets(category)`,
+
+  `CREATE TABLE IF NOT EXISTS points_balances (
+    username     TEXT PRIMARY KEY,
+    balance      NUMERIC(20,6) NOT NULL DEFAULT 0,
+    updated_at   TIMESTAMPTZ DEFAULT NOW()
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS points_trades (
+    id              SERIAL PRIMARY KEY,
+    market_id       INTEGER NOT NULL REFERENCES points_markets(id),
+    username        TEXT NOT NULL,
+    side            TEXT NOT NULL CHECK (side IN ('buy', 'sell', 'redeem')),
+    outcome_index   SMALLINT NOT NULL,
+    shares          NUMERIC(30,18) NOT NULL,
+    collateral      NUMERIC(20,6) NOT NULL,
+    fee             NUMERIC(20,6) NOT NULL DEFAULT 0,
+    price_at_trade  NUMERIC(10,6) NOT NULL,
+    reserves_before JSONB,
+    reserves_after  JSONB,
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_trades_user ON points_trades(username)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_trades_market ON points_trades(market_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_trades_user_market ON points_trades(username, market_id)`,
+
+  `CREATE TABLE IF NOT EXISTS points_positions (
+    market_id       INTEGER NOT NULL REFERENCES points_markets(id),
+    username        TEXT NOT NULL,
+    outcome_index   SMALLINT NOT NULL,
+    shares          NUMERIC(30,18) NOT NULL DEFAULT 0,
+    cost_basis      NUMERIC(20,6) NOT NULL DEFAULT 0,
+    realized_pnl    NUMERIC(20,6) NOT NULL DEFAULT 0,
+    updated_at      TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (market_id, username, outcome_index)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_positions_user ON points_positions(username)`,
+
+  `CREATE TABLE IF NOT EXISTS daily_claims (
+    username      TEXT NOT NULL,
+    claim_date    DATE NOT NULL,
+    amount        NUMERIC(20,6) NOT NULL,
+    streak_day    INTEGER NOT NULL,
+    claimed_at    TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (username, claim_date)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_daily_claims_user ON daily_claims(username, claim_date DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS points_streaks (
+    username        TEXT PRIMARY KEY,
+    current_streak  INTEGER NOT NULL DEFAULT 0,
+    last_claim_date DATE,
+    best_streak     INTEGER NOT NULL DEFAULT 0,
+    updated_at      TIMESTAMPTZ DEFAULT NOW()
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS points_distributions (
+    id             SERIAL PRIMARY KEY,
+    username       TEXT NOT NULL,
+    amount         NUMERIC(20,6) NOT NULL,
+    kind           TEXT NOT NULL,
+    reference_id   INTEGER,
+    reason         TEXT,
+    created_at     TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_distributions_user ON points_distributions(username, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_distributions_kind ON points_distributions(kind, created_at DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS points_referrals (
+    id             SERIAL PRIMARY KEY,
+    referrer       TEXT NOT NULL,
+    referred       TEXT UNIQUE NOT NULL,
+    rewarded       BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at     TIMESTAMPTZ DEFAULT NOW(),
+    rewarded_at    TIMESTAMPTZ
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_referrals_referrer ON points_referrals(referrer)`,
+
+  `CREATE TABLE IF NOT EXISTS social_tasks (
+    id             SERIAL PRIMARY KEY,
+    username       TEXT NOT NULL,
+    task_key       TEXT NOT NULL,
+    status         TEXT NOT NULL DEFAULT 'pending',
+    reward         NUMERIC(20,6) NOT NULL DEFAULT 0,
+    proof_url      TEXT,
+    reviewer       TEXT,
+    reviewed_at    TIMESTAMPTZ,
+    rejection_note TEXT,
+    created_at     TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(username, task_key)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_social_tasks_status ON social_tasks(status, created_at DESC)`,
 ];
 
 export default async function handler(req, res) {

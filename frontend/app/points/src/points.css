@@ -1,0 +1,118 @@
+/* ============================================================
+   PRONOS POINTS — app-specific styles
+   Shares base/components/sections CSS with the MVP and landing.
+   This file only carries deltas unique to the points app.
+============================================================ */
+
+/* Top banner for points-app: replaces MVP's USDC banner */
+.points-banner {
+  background: rgba(0, 232, 122, 0.08);
+  border-bottom: 1px solid rgba(0, 232, 122, 0.2);
+  text-align: center;
+  padding: 7px 16px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--green);
+}
+.points-banner strong {
+  color: var(--green);
+  font-weight: 600;
+}
+
+/* Nav CTA for logged-out users */
+.nav-signup-cta {
+  background: var(--green);
+  color: #000;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 18px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+.nav-signup-cta:hover {
+  filter: brightness(1.1);
+}
+
+/* User pill — logged-in state */
+.nav-user-pill-points {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(0, 232, 122, 0.08);
+  border: 1px solid rgba(0, 232, 122, 0.25);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--green);
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.nav-user-pill-points:hover {
+  background: rgba(0, 232, 122, 0.14);
+  box-shadow: 0 0 16px rgba(0, 232, 122, 0.15);
+}
+.nav-user-pill-points .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+}
+.nav-user-pill-points .balance {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+/* Dropdown attached to user pill */
+.nav-dropdown-points {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  min-width: 220px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  z-index: 200;
+}
+.nav-dropdown-points button,
+.nav-dropdown-points a {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+.nav-dropdown-points button:hover,
+.nav-dropdown-points a:hover {
+  background: var(--surface3);
+  color: var(--text-primary);
+}
+.nav-dropdown-points .info-row {
+  padding: 10px 16px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+.nav-dropdown-points .info-row strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
