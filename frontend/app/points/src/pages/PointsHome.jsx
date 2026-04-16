@@ -144,8 +144,13 @@ export default function PointsHome({ onOpenLogin }) {
           landing's layout where the category pills are always visible
           without needing to scroll past the hero first. */}
       <div className="category-bar">
-        <div className="category-bar-inner">
-          <div className="market-filters">
+        <div className="category-bar-inner" style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          flexWrap: 'wrap',
+        }}>
+          <div className="market-filters" style={{ flex: '1 1 auto', minWidth: 0 }}>
             {CATEGORIES.map(cat => (
               <button
                 key={cat.key}
@@ -155,6 +160,41 @@ export default function PointsHome({ onOpenLogin }) {
                 {cat.label}
               </button>
             ))}
+          </div>
+
+          {/* Search bar — lives inside the sticky category bar so it's
+              always reachable without scrolling. Filters on top of the
+              active category tab. */}
+          <div style={{ position: 'relative', flex: '0 0 260px', minWidth: 180 }}>
+            <span style={{
+              position: 'absolute',
+              left: 12,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              fontSize: 13,
+              color: 'var(--text-muted)',
+              pointerEvents: 'none',
+            }}>
+              ⌕
+            </span>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar mercado…"
+              aria-label="Buscar mercados"
+              style={{
+                width: '100%',
+                padding: '8px 12px 8px 30px',
+                background: 'var(--surface1)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                fontFamily: 'var(--font-body)',
+                fontSize: 12,
+                color: 'var(--text-primary)',
+                outline: 'none',
+              }}
+            />
           </div>
         </div>
       </div>
@@ -306,69 +346,6 @@ export default function PointsHome({ onOpenLogin }) {
 
       {/* ── Markets grid ──────────────────────────────────── */}
       <section id="market" style={{ padding: '36px 48px 60px', maxWidth: 1280, margin: '0 auto' }}>
-
-        {/* Search bar — filters the grid client-side by question text. The
-            filter applies on top of whatever category tab is active, so
-            users can search within a category or across all of them. */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          marginBottom: 24,
-          maxWidth: 520,
-        }}>
-          <div style={{ position: 'relative', flex: 1 }}>
-            <span style={{
-              position: 'absolute',
-              left: 14,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              fontSize: 14,
-              color: 'var(--text-muted)',
-              pointerEvents: 'none',
-            }}>
-              ⌕
-            </span>
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar mercado…"
-              aria-label="Buscar mercados"
-              style={{
-                width: '100%',
-                padding: '10px 14px 10px 34px',
-                background: 'var(--surface1)',
-                border: '1px solid var(--border)',
-                borderRadius: 10,
-                fontFamily: 'var(--font-body)',
-                fontSize: 13,
-                color: 'var(--text-primary)',
-                outline: 'none',
-              }}
-            />
-          </div>
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              style={{
-                padding: '8px 12px',
-                background: 'var(--surface2)',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
-                fontFamily: 'var(--font-mono)',
-                fontSize: 10,
-                color: 'var(--text-muted)',
-                cursor: 'pointer',
-                letterSpacing: '0.06em',
-                textTransform: 'uppercase',
-              }}
-            >
-              Limpiar
-            </button>
-          )}
-        </div>
-
         {loading && (
           <div style={{
             textAlign: 'center',

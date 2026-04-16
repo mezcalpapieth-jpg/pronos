@@ -9,8 +9,26 @@ import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { binaryPrices } from '../_lib/amm-math.js';
 
-const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
-const schemaSql = neon(process.env.DATABASE_URL);
+// Lazy neon client init — defer until the first request so a missing
+// DATABASE_URL at module-load time surfaces as a structured JSON error
+// from inside the handler, not an uncaught exception during Vercel's
+// Lambda bootstrap (which produces an unparseable 500).
+let _sql = null;
+let _schemaSql = null;
+function getSql() {
+  if (_sql) return _sql;
+  const cs = process.env.DATABASE_READ_URL || process.env.DATABASE_URL;
+  if (!cs) throw new Error('DATABASE_URL not configured');
+  _sql = neon(cs);
+  return _sql;
+}
+function getSchemaSql() {
+  if (_schemaSql) return _schemaSql;
+  const cs = process.env.DATABASE_URL;
+  if (!cs) throw new Error('DATABASE_URL not configured');
+  _schemaSql = neon(cs);
+  return _schemaSql;
+}
 
 function parseJsonb(value, fallback) {
   if (Array.isArray(value)) return value;
@@ -47,6 +65,8 @@ export default async function handler(req, res) {
   const category = typeof req.query.category === 'string' ? req.query.category : null;
 
   try {
+    const schemaSql = getSchemaSql();
+    const sql = getSql();
     await ensurePointsSchema(schemaSql);
 
     const rows = category
