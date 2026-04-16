@@ -8,7 +8,7 @@
 import React from 'react';
 
 const ITEMS = [
-  { label: 'BETA',             val: 'PRONOS POINTS', green: true },
+  { label: 'BETA',             val: 'PRONOS',         green: true },
   { label: 'MONEDA',           val: 'MXNP · PUNTOS' },
   { label: 'BONO INICIAL',     val: '500 MXNP',       green: true },
   { label: 'CICLO',            val: '2 SEMANAS' },
@@ -19,7 +19,7 @@ const ITEMS = [
   { label: 'COMISIÓN',         val: 'SOLO EN COMPRAS' },
   // Duplicated so the CSS animation is seamless (the track is twice the
   // width of the viewport).
-  { label: 'BETA',             val: 'PRONOS POINTS', green: true },
+  { label: 'BETA',             val: 'PRONOS',         green: true },
   { label: 'MONEDA',           val: 'MXNP · PUNTOS' },
   { label: 'BONO INICIAL',     val: '500 MXNP',       green: true },
   { label: 'CICLO',            val: '2 SEMANAS' },

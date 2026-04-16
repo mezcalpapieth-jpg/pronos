@@ -28,7 +28,7 @@ function getEnv() {
     orgId: process.env.TURNKEY_ORGANIZATION_ID,
     pubKey: process.env.TURNKEY_API_PUBLIC_KEY,
     privKey: process.env.TURNKEY_API_PRIVATE_KEY,
-    appName: process.env.TURNKEY_APP_NAME || 'Pronos Points',
+    appName: process.env.TURNKEY_APP_NAME || 'Pronos',
     apiBase: process.env.TURNKEY_API_BASE_URL || 'https://api.turnkey.com',
   };
 }

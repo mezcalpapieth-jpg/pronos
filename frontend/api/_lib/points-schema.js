@@ -159,6 +159,51 @@ const POINTS_SCHEMA_MIGRATIONS = [
     UNIQUE(username, task_key)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_social_tasks_status ON social_tasks(status, created_at DESC)`,
+
+  // ── Price history snapshots (one row per market per hour) ──────────────
+  // Built by /api/cron/points-snapshot-prices. Lets the UI render a
+  // sparkline per market without having to replay every trade. Prices
+  // and reserves are stored as JSONB arrays so multi-outcome markets fit
+  // the same shape.
+  `CREATE TABLE IF NOT EXISTS points_price_snapshots (
+    id            SERIAL PRIMARY KEY,
+    market_id     INTEGER NOT NULL REFERENCES points_markets(id) ON DELETE CASCADE,
+    prices        JSONB NOT NULL,
+    reserves      JSONB NOT NULL,
+    snapshotted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_price_snapshots_market_time
+    ON points_price_snapshots(market_id, snapshotted_at DESC)`,
+
+  // ── Competition cycles (2-week leaderboard periods) ────────────────────
+  // One active cycle at a time. Admin can close a cycle (snapshots the
+  // leaderboard into points_cycle_snapshots) and automatically opens the
+  // next 2-week window. Closed cycles stay queryable for historical
+  // winners pages.
+  `CREATE TABLE IF NOT EXISTS points_cycles (
+    id            SERIAL PRIMARY KEY,
+    label         TEXT,
+    started_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    ends_at       TIMESTAMPTZ NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'active',
+    created_at    TIMESTAMPTZ DEFAULT NOW(),
+    closed_at     TIMESTAMPTZ
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_cycles_status ON points_cycles(status, ends_at DESC)`,
+
+  // ── Cycle leaderboard snapshots (immutable after rollover) ─────────────
+  `CREATE TABLE IF NOT EXISTS points_cycle_snapshots (
+    id             SERIAL PRIMARY KEY,
+    cycle_id       INTEGER NOT NULL REFERENCES points_cycles(id) ON DELETE CASCADE,
+    username       TEXT NOT NULL,
+    final_balance  NUMERIC(20,6) NOT NULL,
+    final_pnl      NUMERIC(20,6) NOT NULL DEFAULT 0,
+    rank           INTEGER NOT NULL,
+    created_at     TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(cycle_id, username)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_cycle_snapshots_cycle_rank
+    ON points_cycle_snapshots(cycle_id, rank ASC)`,
 ];
 
 export async function ensurePointsSchema(sql) {

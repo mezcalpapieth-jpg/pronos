@@ -95,12 +95,12 @@ function ReferralCard() {
     const link = data?.link;
     if (!link) return;
     const msg = encodeURIComponent(
-      `¡Únete a Pronos Points y gana MXNP prediciendo eventos reales! 🎯\n${link}`,
+      `¡Únete a Pronos y gana MXNP prediciendo eventos reales! 🎯\n${link}`,
     );
     const urls = {
       whatsapp: `https://wa.me/?text=${msg}`,
       twitter:  `https://twitter.com/intent/tweet?text=${msg}`,
-      telegram: `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent('¡Únete a Pronos Points!')}`,
+      telegram: `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent('¡Únete a Pronos!')}`,
     };
     window.open(urls[platform], '_blank', 'noopener,noreferrer');
   }

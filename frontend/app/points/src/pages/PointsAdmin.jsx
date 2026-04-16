@@ -17,6 +17,8 @@ import {
   postJson,
   adminListSocialTasks,
   adminReviewSocialTask,
+  adminListCycles,
+  adminRolloverCycle,
 } from '../lib/pointsApi.js';
 
 const CATEGORIES = [
@@ -66,11 +68,12 @@ export default function PointsAdmin({ isAdmin }) {
         Gestiona mercados y premios del app de puntos.
       </p>
 
-      <div style={{ display: 'flex', gap: 4, marginBottom: 28, borderBottom: '1px solid var(--border)' }}>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 28, borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
         {[
           { id: 'create',  label: 'Crear mercado' },
           { id: 'markets', label: 'Mercados' },
           { id: 'social',  label: 'Tareas sociales' },
+          { id: 'cycles',  label: 'Ciclos' },
           { id: 'stats',   label: 'Estadísticas' },
         ].map(t => {
           const active = tab === t.id;
@@ -96,8 +99,156 @@ export default function PointsAdmin({ isAdmin }) {
       {tab === 'create' && <CreateMarketForm />}
       {tab === 'markets' && <MarketsTable />}
       {tab === 'social' && <SocialTasksQueue />}
+      {tab === 'cycles' && <CyclesPanel />}
       {tab === 'stats' && <StatsPanel />}
     </main>
+  );
+}
+
+// ─── Competition cycles ───────────────────────────────────────────────────
+// Admin tool for closing the current 2-week cycle: snapshots the top-100
+// leaderboard, marks the cycle closed, and opens a new 14-day window.
+// Users keep their MXNP — the rollover is just a checkpoint for
+// distributing off-platform prize payouts.
+function CyclesPanel() {
+  const [data, setData] = useState(null);
+  const [working, setWorking] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [err, setErr] = useState(null);
+
+  async function load() {
+    setData(null);
+    setErr(null);
+    try {
+      const r = await adminListCycles();
+      setData(r);
+    } catch (e) {
+      setErr(e.code || e.message);
+    }
+  }
+  useEffect(() => { load(); }, []);
+
+  async function rollover() {
+    // Double-confirm because this is destructive-adjacent: it closes the
+    // active cycle and snapshots immutable leaderboard positions. Running
+    // it too early means you miss late trades; running it late means the
+    // UI shows "cierre pendiente" for longer than ideal.
+    const ok = window.confirm(
+      '¿Cerrar el ciclo actual y abrir uno nuevo?\n\n' +
+      'Esto guarda un snapshot del top-100 y empieza el siguiente ciclo de 14 días. ' +
+      'Los balances de los usuarios NO se reinician.'
+    );
+    if (!ok) return;
+    setWorking(true);
+    setMsg(null);
+    setErr(null);
+    try {
+      const r = await adminRolloverCycle();
+      setMsg(
+        `✓ Ciclo #${r.closedCycleId} cerrado — ${r.snapshotted} snapshots guardados. ` +
+        (r.winners?.[0] ? `🥇 ${r.winners[0].username} (${Math.round(r.winners[0].finalBalance)} MXNP)` : '')
+      );
+      await load();
+    } catch (e) {
+      setErr(`${e.code || e.message}${e.detail ? ' · ' + e.detail : ''}`);
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  if (!data && !err) {
+    return <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', padding: 20 }}>Cargando ciclos…</div>;
+  }
+
+  const current = data?.current;
+  const closed = data?.closed || [];
+
+  return (
+    <div>
+      <section style={{
+        background: 'var(--surface1)',
+        border: '1px solid var(--border)',
+        borderRadius: 12,
+        padding: 20,
+        marginBottom: 24,
+      }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--text-muted)', marginBottom: 8 }}>
+          CICLO ACTIVO
+        </div>
+        {current ? (
+          <>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, marginBottom: 8 }}>
+              {current.label || `Ciclo #${current.id}`}
+            </div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+              Inicio: {new Date(current.startedAt).toLocaleString('es-MX')} ·
+              Cierra: {new Date(current.endsAt).toLocaleString('es-MX')}
+              {current.pastDeadline && <span style={{ color: '#f59e0b', marginLeft: 8 }}>⏳ DEADLINE PASADO</span>}
+            </div>
+            <button
+              onClick={rollover}
+              disabled={working}
+              style={{
+                padding: '10px 18px',
+                background: current.pastDeadline ? 'var(--green)' : 'var(--surface2)',
+                color: current.pastDeadline ? '#000' : 'var(--text-primary)',
+                border: `1px solid ${current.pastDeadline ? 'var(--green)' : 'var(--border)'}`,
+                borderRadius: 8,
+                fontFamily: 'var(--font-mono)',
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                cursor: working ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {working ? 'Cerrando ciclo…' : '▶ Cerrar ciclo y abrir siguiente'}
+            </button>
+            {msg && <div style={{ marginTop: 12, color: 'var(--green)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{msg}</div>}
+            {err && <div style={{ marginTop: 12, color: 'var(--red, #ef4444)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>Error: {err}</div>}
+          </>
+        ) : (
+          <div style={{ color: 'var(--text-muted)' }}>No hay ciclo activo (visita /api/points/cycles/current para crear uno).</div>
+        )}
+      </section>
+
+      <section>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--text-muted)', marginBottom: 8 }}>
+          CICLOS CERRADOS
+        </div>
+        {closed.length === 0 ? (
+          <div style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 12, padding: 12 }}>
+            Todavía no hay ciclos cerrados. El primer rollover creará el historial.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {closed.map(c => (
+              <div key={c.id} style={{
+                padding: '12px 16px',
+                background: 'var(--surface1)',
+                border: '1px solid var(--border)',
+                borderRadius: 10,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 12,
+              }}>
+                <span>
+                  <strong>{c.label || `Ciclo #${c.id}`}</strong>
+                  <span style={{ color: 'var(--text-muted)', marginLeft: 10 }}>
+                    cerrado {new Date(c.closedAt).toLocaleDateString('es-MX')}
+                  </span>
+                </span>
+                <span style={{ color: 'var(--text-muted)' }}>
+                  {c.snapshotCount} snapshots
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
   );
 }
 

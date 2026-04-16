@@ -10,8 +10,9 @@
  */
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { fetchMarket } from '../lib/pointsApi.js';
+import { fetchMarket, fetchPriceHistory } from '../lib/pointsApi.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
+import Sparkline from '@app/components/Sparkline.jsx';
 import PointsBuyModal from '../components/PointsBuyModal.jsx';
 
 function formatDeadline(endTime) {
@@ -78,6 +79,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   const { authenticated } = usePointsAuth();
 
   const [market, setMarket] = useState(null);
+  const [history, setHistory] = useState(null); // [{t, p}] for outcome 0
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [buyState, setBuyState] = useState(null); // { outcomeIndex, outcomeLabel }
@@ -88,7 +90,18 @@ export default function PointsMarketDetail({ onOpenLogin }) {
     setLoading(true);
     setError(null);
     fetchMarket(id)
-      .then(m => { if (!cancelled) { setMarket(m); setLoading(false); } })
+      .then(m => {
+        if (cancelled) return;
+        setMarket(m);
+        setLoading(false);
+        // Fire-and-forget history fetch. Failures are swallowed inside
+        // fetchPriceHistory so they never block the detail page.
+        if (m?.id) {
+          fetchPriceHistory([m.id], { days: 30, outcome: 0 }).then(h => {
+            if (!cancelled) setHistory(h[m.id] || []);
+          });
+        }
+      })
       .catch(e => { if (!cancelled) { setError(e.code || e.message); setLoading(false); } });
     return () => { cancelled = true; };
   }, [id]);
@@ -231,6 +244,46 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 </div>
               </div>
             )}
+
+            {/* Price history chart — shows the outcome-0 ("Sí/YES")
+                probability trajectory over the last 30 days. Hourly
+                resolution, filled under the curve, hover for exact
+                timestamp + percentage at each snapshot. Falls back to
+                a seeded mock when no snapshots exist yet. */}
+            <div style={{
+              background: 'var(--surface1)',
+              border: '1px solid var(--border)',
+              borderRadius: 14,
+              marginBottom: 24,
+            }}>
+              <div style={{
+                padding: '14px 20px',
+                borderBottom: '1px solid var(--border)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                letterSpacing: '0.1em',
+                color: 'var(--text-muted)',
+              }}>
+                <span>{isResolved ? 'HISTORIAL DE PRECIO' : 'PRECIO EN TIEMPO REAL'}</span>
+                <span>ÚLT. 30 DÍAS</span>
+              </div>
+              <div style={{ padding: '20px 20px 18px' }}>
+                <Sparkline
+                  height={140}
+                  color="var(--yes)"
+                  strokeWidth={2.4}
+                  fill={true}
+                  showValue={true}
+                  valueWidth={60}
+                  data={Array.isArray(history) && history.length > 1 ? history : null}
+                  targetPct={Math.round((prices[0] ?? 0.5) * 100)}
+                  seed={`points-detail-${market.id}-${outcomes[0] || 'yes'}`}
+                />
+              </div>
+            </div>
 
             {/* Multi-outcome: list all options */}
             {outcomes.length > 2 && (

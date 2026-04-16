@@ -15,9 +15,23 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchMarkets } from '../lib/pointsApi.js';
+import { fetchMarkets, fetchPriceHistory, fetchCurrentCycle } from '../lib/pointsApi.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import PointsMarketCard from '../components/PointsMarketCard.jsx';
+
+// Human-readable "2d 14h 37m" style countdown for the cycle deadline.
+// Lives at the module scope so React doesn't recreate it each render.
+function formatCountdown(totalSeconds) {
+  if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) return 'ciclo terminó';
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const parts = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0 || days > 0) parts.push(`${hours}h`);
+  parts.push(`${minutes}m`);
+  return parts.join(' ');
+}
 
 const CATEGORIES = [
   { key: 'all',       label: '🔥 Trending' },
@@ -33,9 +47,36 @@ export default function PointsHome({ onOpenLogin }) {
   const navigate = useNavigate();
   const { authenticated } = usePointsAuth();
   const [markets, setMarkets] = useState([]);
+  const [history, setHistory] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeCategory, setActiveCategory] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [cycle, setCycle] = useState(null);
+  const [cycleTick, setCycleTick] = useState(0); // forces re-render each minute
+
+  // Load the current cycle once on mount. The countdown updates each
+  // minute via a local interval — cheaper than refetching and responsive
+  // enough for a 2-week window. When the browser tab is backgrounded,
+  // setInterval may fire less often, but re-fetching on mount still gives
+  // us a fresh deadline if the admin rolled over while the tab was idle.
+  useEffect(() => {
+    let cancelled = false;
+    fetchCurrentCycle()
+      .then(c => { if (!cancelled) setCycle(c); })
+      .catch(() => { /* non-critical — home still works without the badge */ });
+    const id = setInterval(() => setCycleTick(t => t + 1), 60_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
+  // Compute remaining time fresh each render tick so the countdown
+  // visibly ticks down without extra server calls.
+  const cycleCountdown = useMemo(() => {
+    if (!cycle?.endsAt) return null;
+    const sec = Math.max(0, Math.floor((new Date(cycle.endsAt).getTime() - Date.now()) / 1000));
+    return { seconds: sec, label: formatCountdown(sec) };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cycle, cycleTick]);
 
   useEffect(() => {
     let cancelled = false;
@@ -45,9 +86,18 @@ export default function PointsHome({ onOpenLogin }) {
       try {
         const status = activeCategory === 'resueltos' ? 'resolved' : 'active';
         const m = await fetchMarkets({ status });
-        if (!cancelled) {
-          setMarkets(m);
-          setLoading(false);
+        if (cancelled) return;
+        setMarkets(m);
+        setLoading(false);
+
+        // Batch-fetch price history for all visible markets in one call.
+        // This is best-effort — the sparkline falls back to a seeded mock
+        // when the snapshot table hasn't been populated yet, so failures
+        // here are silently tolerated by fetchPriceHistory.
+        const ids = m.map(x => x.id).filter(Boolean);
+        if (ids.length > 0) {
+          const h = await fetchPriceHistory(ids, { days: 30, outcome: 0 });
+          if (!cancelled) setHistory(h);
         }
       } catch (e) {
         if (!cancelled) {
@@ -62,10 +112,21 @@ export default function PointsHome({ onOpenLogin }) {
     return () => { cancelled = true; };
   }, [activeCategory]);
 
+  // Two filter layers: category tab + free-text search. Search is
+  // case-insensitive and matches against the question text. "Trending"
+  // and "Resueltos" tabs bypass category filtering; the search still
+  // applies on top.
   const filtered = useMemo(() => {
-    if (activeCategory === 'all' || activeCategory === 'resueltos') return markets;
-    return markets.filter(m => (m.category || '').toLowerCase() === activeCategory);
-  }, [markets, activeCategory]);
+    const q = searchQuery.trim().toLowerCase();
+    let out = markets;
+    if (activeCategory !== 'all' && activeCategory !== 'resueltos') {
+      out = out.filter(m => (m.category || '').toLowerCase() === activeCategory);
+    }
+    if (q) {
+      out = out.filter(m => (m.question || '').toLowerCase().includes(q));
+    }
+    return out;
+  }, [markets, activeCategory, searchQuery]);
 
   // Derived stats for the hero — pulled live from the markets list so they
   // stay honest. Falls back to friendly defaults when markets are loading.
@@ -170,8 +231,19 @@ export default function PointsHome({ onOpenLogin }) {
             <div className="hmc-topbar" style={{ marginBottom: 18 }}>
               <div className="hmc-cat">
                 <div className="hmc-live-dot" />
-                <span>CICLO ACTUAL · PREMIOS</span>
+                <span>{cycle?.label ? cycle.label.toUpperCase() : 'CICLO ACTUAL · PREMIOS'}</span>
               </div>
+              {cycleCountdown && (
+                <span style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  letterSpacing: '0.08em',
+                  color: cycleCountdown.seconds === 0 ? '#f59e0b' : 'var(--green)',
+                  textTransform: 'uppercase',
+                }}>
+                  {cycleCountdown.seconds === 0 ? '⏳ Cierre pendiente' : `⏳ ${cycleCountdown.label}`}
+                </span>
+              )}
             </div>
 
             <div className="hmc-question" style={{ marginBottom: 22 }}>
@@ -234,6 +306,69 @@ export default function PointsHome({ onOpenLogin }) {
 
       {/* ── Markets grid ──────────────────────────────────── */}
       <section id="market" style={{ padding: '36px 48px 60px', maxWidth: 1280, margin: '0 auto' }}>
+
+        {/* Search bar — filters the grid client-side by question text. The
+            filter applies on top of whatever category tab is active, so
+            users can search within a category or across all of them. */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          marginBottom: 24,
+          maxWidth: 520,
+        }}>
+          <div style={{ position: 'relative', flex: 1 }}>
+            <span style={{
+              position: 'absolute',
+              left: 14,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              fontSize: 14,
+              color: 'var(--text-muted)',
+              pointerEvents: 'none',
+            }}>
+              ⌕
+            </span>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar mercado…"
+              aria-label="Buscar mercados"
+              style={{
+                width: '100%',
+                padding: '10px 14px 10px 34px',
+                background: 'var(--surface1)',
+                border: '1px solid var(--border)',
+                borderRadius: 10,
+                fontFamily: 'var(--font-body)',
+                fontSize: 13,
+                color: 'var(--text-primary)',
+                outline: 'none',
+              }}
+            />
+          </div>
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              style={{
+                padding: '8px 12px',
+                background: 'var(--surface2)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+              }}
+            >
+              Limpiar
+            </button>
+          )}
+        </div>
+
         {loading && (
           <div style={{
             textAlign: 'center',
@@ -266,13 +401,15 @@ export default function PointsHome({ onOpenLogin }) {
             fontSize: 13,
             color: 'var(--text-muted)',
           }}>
-            🎯 No hay mercados en esta categoría todavía.
+            {searchQuery
+              ? `🔍 No hay resultados para "${searchQuery}".`
+              : '🎯 No hay mercados en esta categoría todavía.'}
           </div>
         )}
         {!loading && !error && filtered.length > 0 && (
           <div className="markets-grid">
             {filtered.map(m => (
-              <PointsMarketCard key={m.id} market={m} />
+              <PointsMarketCard key={m.id} market={m} history={history[m.id]} />
             ))}
           </div>
         )}

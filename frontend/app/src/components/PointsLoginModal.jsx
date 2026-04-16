@@ -19,18 +19,20 @@ import React, { useEffect, useRef, useState } from 'react';
 import { usePointsAuth } from '../lib/pointsAuth.js';
 
 const ERRORS = {
-  invalid_email:         'Ingresa un correo válido.',
-  rate_limited:          'Demasiados intentos. Espera un minuto e intenta de nuevo.',
-  turnkey_unavailable:   'Servicio de autenticación no disponible. Intenta más tarde.',
-  invalid_code:          'Código incorrecto o expirado. Revisa tu correo.',
-  session_failed:        'No se pudo establecer la sesión. Intenta de nuevo.',
-  invalid_input:         'Datos inválidos. Refresca e intenta de nuevo.',
-  db_unavailable:        'Error del servidor. Intenta más tarde.',
-  invalid_username:      'Usuario inválido. 3–20 letras/números, debe empezar con letra.',
-  username_taken:        'Ese usuario ya está en uso.',
-  already_set:           'Ya tienes un usuario asignado.',
-  not_authenticated:     'Tu sesión expiró. Vuelve a iniciar sesión.',
-  default:               'Algo salió mal. Intenta de nuevo.',
+  invalid_email:          'Ingresa un correo válido.',
+  rate_limited:           'Demasiados intentos. Espera un minuto e intenta de nuevo.',
+  turnkey_unavailable:    'Servicio de autenticación no disponible. Intenta más tarde.',
+  invalid_code:           'Código incorrecto o expirado. Revisa tu correo.',
+  session_failed:         'No se pudo establecer la sesión. Intenta de nuevo.',
+  session_config_missing: 'Falta configurar el servidor. Avisa al equipo de Pronos.',
+  invalid_input:          'Datos inválidos. Refresca e intenta de nuevo.',
+  db_unavailable:         'Error del servidor. Intenta más tarde.',
+  server_error:           'Error del servidor. Intenta más tarde.',
+  invalid_username:       'Usuario inválido. 3–20 letras/números, debe empezar con letra.',
+  username_taken:         'Ese usuario ya está en uso.',
+  already_set:            'Ya tienes un usuario asignado.',
+  not_authenticated:      'Tu sesión expiró. Vuelve a iniciar sesión.',
+  default:                'Algo salió mal. Intenta de nuevo.',
 };
 
 function humanError(code, detail) {
@@ -160,7 +162,7 @@ export default function PointsLoginModal({ open, onClose }) {
           fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em',
           color: 'var(--green)', textTransform: 'uppercase', marginBottom: 6,
         }}>
-          PRONOS POINTS
+          PRONOS
         </div>
         <h2 style={{
           fontFamily: 'var(--font-display)', fontSize: 24,

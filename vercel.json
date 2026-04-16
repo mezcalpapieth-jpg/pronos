@@ -12,6 +12,10 @@
     {
       "path": "/api/cron/auto-resolve",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/points-snapshot-prices",
+      "schedule": "0 * * * *"
     }
   ],
   "rewrites": [

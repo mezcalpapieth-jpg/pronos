@@ -5,9 +5,17 @@
  * MVP so the visual style stays consistent across the site. Clicking
  * anywhere on the card navigates to /market?id=<id> — the actual
  * buy UI lives on the detail page.
+ *
+ * Props:
+ *   market  — row from /api/points/markets
+ *   history — optional `[{t, p}]` tuples from
+ *             /api/points/markets/price-history (outcome 0). When present,
+ *             the sparkline renders real snapshots; when absent, it falls
+ *             back to its seeded mock curve so every card still has a chart.
  */
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import Sparkline from '@app/components/Sparkline.jsx';
 
 function formatDeadline(endTime) {
   if (!endTime) return '';
@@ -22,7 +30,7 @@ function formatVolume(n) {
   return v.toFixed(0);
 }
 
-export default function PointsMarketCard({ market }) {
+export default function PointsMarketCard({ market, history }) {
   const navigate = useNavigate();
   const outcomes = Array.isArray(market.outcomes) ? market.outcomes : ['Sí', 'No'];
   const prices = Array.isArray(market.prices) && market.prices.length === outcomes.length
@@ -73,6 +81,25 @@ export default function PointsMarketCard({ market }) {
               <span className="mock-opt-label">{label}</span>
             </div>
           ))}
+        </div>
+
+        {/* Sparkline showing the "Sí/YES" probability over the last 30
+            days. Real data comes from /api/points/markets/price-history
+            when the hourly snapshot cron has populated rows for this
+            market; otherwise the Sparkline falls back to a seeded mock
+            so the card layout stays consistent. */}
+        <div style={{ margin: '8px 0 2px' }}>
+          <Sparkline
+            height={44}
+            color="var(--yes)"
+            strokeWidth={1.8}
+            fill={true}
+            showValue={true}
+            valueWidth={40}
+            data={Array.isArray(history) && history.length > 1 ? history : null}
+            targetPct={Math.round(prices[0] * 100)}
+            seed={`points-${market.id}-${outcomes[0] || 'yes'}`}
+          />
         </div>
       </div>
 

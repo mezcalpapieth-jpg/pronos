@@ -23,49 +23,63 @@ import { rateLimit, clientIp } from '../../_lib/rate-limit.js';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default async function handler(req, res) {
-  const cors = applyCors(req, res, { methods: 'POST, OPTIONS', credentials: true });
-  if (cors) return cors;
-  if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
-
-  // 3 OTP requests per minute per IP is plenty for a real user who mistyped
-  // their email once or twice. Beyond that it's abuse.
-  const limited = rateLimit(req, res, {
-    key: `init-otp:${clientIp(req)}`,
-    limit: 3,
-    windowMs: 60_000,
-  });
-  if (limited) return;
-
-  const { email } = req.body || {};
-  if (!email || typeof email !== 'string' || !EMAIL_RE.test(email)) {
-    return res.status(400).json({ error: 'invalid_email' });
-  }
-
+  // Top-level try/catch guarantees JSON output — prevents "HTTP 500" from
+  // reaching the UI when something throws outside the inner handlers.
   try {
-    const { suborgId } = await getOrCreateSuborg(email);
-    const { otpId } = await sendOtp(email);
-    return res.status(200).json({ otpId, suborgId });
+    const cors = applyCors(req, res, { methods: 'POST, OPTIONS', credentials: true });
+    if (cors) return cors;
+    if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
+
+    // 3 OTP requests per minute per IP is plenty for a real user who mistyped
+    // their email once or twice. Beyond that it's abuse.
+    const limited = rateLimit(req, res, {
+      key: `init-otp:${clientIp(req)}`,
+      limit: 3,
+      windowMs: 60_000,
+    });
+    if (limited) return;
+
+    const { email } = req.body || {};
+    if (!email || typeof email !== 'string' || !EMAIL_RE.test(email)) {
+      return res.status(400).json({ error: 'invalid_email' });
+    }
+
+    try {
+      const { suborgId } = await getOrCreateSuborg(email);
+      const { otpId } = await sendOtp(email);
+      return res.status(200).json({ otpId, suborgId });
+    } catch (e) {
+      // Log full detail server-side; surface a sanitized hint to the client
+      // so we can triage preview-deploy failures without Vercel log access.
+      const turnkeyError = e?.response?.data || e?.cause || null;
+      console.error('[auth/init-otp] failed', {
+        message: e?.message,
+        code: e?.code,
+        turnkeyError,
+        stack: e?.stack?.split('\n').slice(0, 5).join('\n'),
+      });
+      // If the error is about configuration (missing env vars, bad key
+      // format), say so explicitly. Otherwise bubble the first line of the
+      // Turnkey error message so the UI can show something useful.
+      let hint = null;
+      const msg = (e?.message || '').toLowerCase();
+      if (msg.includes('not configured')) hint = 'env_vars_missing';
+      else if (msg.includes('invalid') && msg.includes('key')) hint = 'invalid_api_key';
+      else if (msg.includes('organization')) hint = 'org_not_found';
+      return res.status(502).json({
+        error: 'turnkey_unavailable',
+        hint,
+        detail: e?.message?.slice(0, 240) || null,
+      });
+    }
   } catch (e) {
-    // Log full detail server-side; surface a sanitized hint to the client
-    // so we can triage preview-deploy failures without Vercel log access.
-    const turnkeyError = e?.response?.data || e?.cause || null;
-    console.error('[auth/init-otp] failed', {
+    console.error('[auth/init-otp] unhandled error', {
       message: e?.message,
       code: e?.code,
-      turnkeyError,
       stack: e?.stack?.split('\n').slice(0, 5).join('\n'),
     });
-    // If the error is about configuration (missing env vars, bad key
-    // format), say so explicitly. Otherwise bubble the first line of the
-    // Turnkey error message so the UI can show something useful.
-    let hint = null;
-    const msg = (e?.message || '').toLowerCase();
-    if (msg.includes('not configured')) hint = 'env_vars_missing';
-    else if (msg.includes('invalid') && msg.includes('key')) hint = 'invalid_api_key';
-    else if (msg.includes('organization')) hint = 'org_not_found';
-    return res.status(502).json({
-      error: 'turnkey_unavailable',
-      hint,
+    return res.status(500).json({
+      error: 'server_error',
       detail: e?.message?.slice(0, 240) || null,
     });
   }

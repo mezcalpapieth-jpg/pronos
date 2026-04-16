@@ -48,6 +48,32 @@ export async function fetchMarket(id) {
   return market;
 }
 
+/**
+ * Batch-fetch the last-N-days price history for one or more market ids.
+ * Returns a map of `{ [marketId]: [{t, p}] }` — `p` is the probability
+ * 0-100, `t` is a unix-seconds timestamp. Usable directly as the `data`
+ * prop on the shared Sparkline component.
+ */
+export async function fetchPriceHistory(ids, { days = 30, outcome = 0 } = {}) {
+  const list = Array.isArray(ids) ? ids : [ids];
+  const cleaned = list.filter(n => Number.isInteger(n) || (typeof n === 'string' && n.length > 0));
+  if (cleaned.length === 0) return {};
+  const q = new URLSearchParams({
+    ids: cleaned.join(','),
+    days: String(days),
+    outcome: String(outcome),
+  });
+  try {
+    const { history = {} } = await getJson(`/api/points/markets/price-history?${q}`);
+    return history;
+  } catch {
+    // Price history is a nice-to-have — don't break the UI if the snapshot
+    // table is empty or the endpoint hiccups. The Sparkline will fall back
+    // to its seeded mock curve.
+    return {};
+  }
+}
+
 // ─── Trading ────────────────────────────────────────────────────────────────
 export async function quoteBuy({ marketId, outcomeIndex, collateral }) {
   return postJson('/api/points/quote-buy', { marketId, outcomeIndex, collateral });
@@ -112,4 +138,26 @@ export async function adminListSocialTasks(status = 'pending') {
 
 export async function adminReviewSocialTask(id, action, note) {
   return postJson('/api/points/admin/social-tasks', { id, action, note });
+}
+
+// ─── Cycles (2-week leaderboard windows) ────────────────────────────────────
+export async function fetchCurrentCycle() {
+  const { cycle } = await getJson('/api/points/cycles/current');
+  return cycle;
+}
+
+export async function fetchCycleHistory(limit = 10) {
+  const { cycles = [] } = await getJson(`/api/points/cycles/history?limit=${limit}`);
+  return cycles;
+}
+
+export async function adminListCycles() {
+  return getJson('/api/points/admin/cycles');
+}
+
+export async function adminRolloverCycle(nextCycleLabel) {
+  return postJson('/api/points/admin/cycles', {
+    action: 'rollover',
+    nextCycleLabel: nextCycleLabel || null,
+  });
 }
