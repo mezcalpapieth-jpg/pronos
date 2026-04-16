@@ -159,7 +159,7 @@ export default async function handler(req, res) {
     const manualFromBlock = isManual ? parseInteger(req.query.fromBlock) : null;
     const manualToBlock = isManual ? parseInteger(req.query.toBlock) : null;
     const maxBatches = Math.min(Math.max(parseInteger(req.query.maxBatches) || configuredMaxBatches, 1), 25);
-    let processed = { markets: 0, liquidity: 0, trades: 0, resolutions: 0 };
+    let processed = { markets: 0, liquidity: 0, trades: 0, resolutions: 0, redemptions: 0 };
     const factoryRuns = [];
 
     for (const factoryConfig of factories) {
@@ -194,6 +194,7 @@ export default async function handler(req, res) {
             liquidity: processed.liquidity - before.liquidity,
             trades: processed.trades - before.trades,
             resolutions: processed.resolutions - before.resolutions,
+            redemptions: processed.redemptions - before.redemptions,
           },
         });
         fromBlock = toBlock + 1;
@@ -395,6 +396,27 @@ async function indexV1Pool(provider, pool, fromBlock, toBlock, processed) {
     processed.trades++;
   }
 
+  // WinningsRedeemed: user called redeem() after market resolved, burning
+  // winning shares 1:1 for USDC. We store the authoritative on-chain payout
+  // so the Historial tab can show exact win amounts instead of estimating.
+  const redeemEvents = await amm.queryFilter(amm.filters.WinningsRedeemed(), fromBlock, toBlock);
+  for (const event of redeemEvents) {
+    const { user, shares: sharesRaw, payout: payoutRaw } = event.args;
+    const shares = parseFloat(ethers.utils.formatUnits(sharesRaw, 6));
+    const payout = parseFloat(ethers.utils.formatUnits(payoutRaw, 6));
+    const inserted = await insertRedemption({
+      marketId: pool.id,
+      userAddress: user.toLowerCase(),
+      outcomeIndex: null, // v1 has a single winning side per market
+      shares,
+      payout,
+      txHash: event.transactionHash,
+      blockNumber: event.blockNumber,
+      logIndex: event.logIndex,
+    });
+    if (inserted) processed.redemptions++;
+  }
+
   try {
     const reserveYes = parseFloat(ethers.utils.formatUnits(await amm.reserveYes({ blockTag: toBlock }), 6));
     const reserveNo = parseFloat(ethers.utils.formatUnits(await amm.reserveNo({ blockTag: toBlock }), 6));
@@ -485,6 +507,27 @@ async function indexV2Pool(provider, pool, fromBlock, toBlock, processed) {
     processed.trades++;
   }
 
+  // v2 redemptions include outcomeIndex so we can attribute the payout to
+  // the specific winning outcome (important for markets with 3+ options).
+  const redeemEvents = await amm.queryFilter(amm.filters.WinningsRedeemed(), fromBlock, toBlock);
+  for (const event of redeemEvents) {
+    const { user, outcomeIndex, shares: sharesRaw, payout: payoutRaw } = event.args;
+    const index = outcomeIndex.toNumber?.() ?? Number(outcomeIndex);
+    const shares = parseFloat(ethers.utils.formatUnits(sharesRaw, 6));
+    const payout = parseFloat(ethers.utils.formatUnits(payoutRaw, 6));
+    const inserted = await insertRedemption({
+      marketId: pool.id,
+      userAddress: user.toLowerCase(),
+      outcomeIndex: index,
+      shares,
+      payout,
+      txHash: event.transactionHash,
+      blockNumber: event.blockNumber,
+      logIndex: event.logIndex,
+    });
+    if (inserted) processed.redemptions++;
+  }
+
   try {
     const count = Number(pool.outcome_count || await amm.outcomeCount({ blockTag: toBlock }));
     const priceRaw = await amm.prices({ blockTag: toBlock });
@@ -559,6 +602,25 @@ async function insertTrade({
   const rows = await sql`
     INSERT INTO trades (market_id, trader, side, is_yes, outcome_index, collateral_amt, shares_amt, fee_amt, price_at_trade, tx_hash, block_number, log_index)
     VALUES (${marketId}, ${trader}, ${side}, ${isYes}, ${outcomeIndex}, ${collateral}, ${shares}, ${feeAmt}, ${price}, ${txHash}, ${blockNumber}, ${logIndex})
+    ON CONFLICT (tx_hash, log_index) DO NOTHING
+    RETURNING id
+  `;
+  return rows.length > 0;
+}
+
+async function insertRedemption({
+  marketId,
+  userAddress,
+  outcomeIndex,
+  shares,
+  payout,
+  txHash,
+  blockNumber,
+  logIndex,
+}) {
+  const rows = await sql`
+    INSERT INTO redemptions (market_id, user_address, outcome_index, shares, payout, tx_hash, block_number, log_index)
+    VALUES (${marketId}, ${userAddress}, ${outcomeIndex}, ${shares}, ${payout}, ${txHash}, ${blockNumber}, ${logIndex})
     ON CONFLICT (tx_hash, log_index) DO NOTHING
     RETURNING id
   `;

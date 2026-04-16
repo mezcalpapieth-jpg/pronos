@@ -97,6 +97,24 @@ const PROTOCOL_SCHEMA_MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_outcome_positions_market ON outcome_positions(market_id)`,
   `CREATE INDEX IF NOT EXISTS idx_snapshots_market ON price_snapshots(market_id, snapshot_at)`,
   `CREATE INDEX IF NOT EXISTS idx_markets_status ON protocol_markets(status)`,
+  // ── Redemptions table: on-chain WinningsRedeemed events ────────────────
+  // Lets us show an authoritative payout in the Portfolio history instead
+  // of estimating from winning-share count.
+  `CREATE TABLE IF NOT EXISTS redemptions (
+    id              SERIAL PRIMARY KEY,
+    market_id       INTEGER NOT NULL REFERENCES protocol_markets(id),
+    user_address    TEXT NOT NULL,
+    outcome_index   SMALLINT,
+    shares          NUMERIC(20,6) NOT NULL,
+    payout          NUMERIC(20,6) NOT NULL,
+    tx_hash         TEXT NOT NULL,
+    block_number    BIGINT NOT NULL,
+    log_index       INTEGER NOT NULL,
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(tx_hash, log_index)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_redemptions_user ON redemptions(user_address)`,
+  `CREATE INDEX IF NOT EXISTS idx_redemptions_market ON redemptions(market_id)`,
 ];
 
 export async function ensureProtocolSchema(sql) {

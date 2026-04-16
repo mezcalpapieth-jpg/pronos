@@ -39,37 +39,79 @@ export default async function handler(req, res) {
   try {
     await ensureProtocolSchema(schemaSql);
 
-    // Pull every trade for this wallet joined with its market.
-    const rows = await sql`
-      SELECT
-        t.id              AS trade_id,
-        t.market_id,
-        t.side,
-        t.is_yes,
-        t.outcome_index,
-        t.collateral_amt,
-        t.shares_amt,
-        t.fee_amt,
-        t.price_at_trade,
-        t.tx_hash,
-        t.block_number,
-        t.created_at,
-        m.question,
-        m.category,
-        m.chain_id,
-        m.market_id       AS protocol_market_id,
-        m.protocol_version,
-        m.status,
-        m.outcome,
-        m.outcomes,
-        m.end_time,
-        m.pool_address,
-        m.resolved_at
-      FROM trades t
-      JOIN protocol_markets m ON m.id = t.market_id
-      WHERE t.trader = ${addr}
-      ORDER BY t.created_at ASC
-    `;
+    // Pull every trade AND every on-chain redemption for this wallet in
+    // parallel. Redemptions come from the `redemptions` table populated by
+    // the indexer watching WinningsRedeemed events — they're authoritative
+    // on-chain payouts, used to override our share×$1 estimate when available.
+    const [rows, redemptionRows] = await Promise.all([
+      sql`
+        SELECT
+          t.id              AS trade_id,
+          t.market_id,
+          t.side,
+          t.is_yes,
+          t.outcome_index,
+          t.collateral_amt,
+          t.shares_amt,
+          t.fee_amt,
+          t.price_at_trade,
+          t.tx_hash,
+          t.block_number,
+          t.created_at,
+          m.question,
+          m.category,
+          m.chain_id,
+          m.market_id       AS protocol_market_id,
+          m.protocol_version,
+          m.status,
+          m.outcome,
+          m.outcomes,
+          m.end_time,
+          m.pool_address,
+          m.resolved_at
+        FROM trades t
+        JOIN protocol_markets m ON m.id = t.market_id
+        WHERE t.trader = ${addr}
+        ORDER BY t.created_at ASC
+      `,
+      sql`
+        SELECT
+          r.id              AS redemption_id,
+          r.market_id,
+          r.outcome_index,
+          r.shares,
+          r.payout,
+          r.tx_hash,
+          r.block_number,
+          r.created_at
+        FROM redemptions r
+        WHERE r.user_address = ${addr}
+      `,
+    ]);
+
+    // Build a lookup: market_id → total on-chain payout + per-market detail.
+    // A single user could redeem multiple times (partial redemption) so we sum.
+    const redemptionsByMarket = new Map();
+    for (const r of redemptionRows || []) {
+      const mid = r.market_id;
+      if (!redemptionsByMarket.has(mid)) {
+        redemptionsByMarket.set(mid, { totalPayout: 0, totalShares: 0, events: [] });
+      }
+      const bucket = redemptionsByMarket.get(mid);
+      const payout = Number(r.payout || 0);
+      const shares = Number(r.shares || 0);
+      bucket.totalPayout += payout;
+      bucket.totalShares += shares;
+      bucket.events.push({
+        id: r.redemption_id,
+        outcomeIndex: r.outcome_index,
+        shares,
+        payout,
+        txHash: r.tx_hash,
+        blockNumber: r.block_number,
+        createdAt: r.created_at,
+      });
+    }
 
     // Group by market_id → per-market summary + transaction list
     const markets = new Map();
@@ -77,6 +119,7 @@ export default async function handler(req, res) {
     for (const r of rows) {
       const marketId = r.market_id;
       if (!markets.has(marketId)) {
+        const redemptionInfo = redemptionsByMarket.get(marketId);
         markets.set(marketId, {
           marketId,
           question: r.question,
@@ -93,6 +136,10 @@ export default async function handler(req, res) {
           transactions: [],
           // Per-outcome accumulators for resolved-market PnL attribution
           byOutcome: new Map(),
+          // On-chain redemption data for this market (authoritative payout)
+          redemptionPayout: redemptionInfo ? redemptionInfo.totalPayout : 0,
+          redemptionShares: redemptionInfo ? redemptionInfo.totalShares : 0,
+          redemptionEvents: redemptionInfo ? redemptionInfo.events : [],
         });
       }
 
@@ -164,28 +211,69 @@ export default async function handler(req, res) {
         }
       }
 
-      // Redemption payout: resolved winning shares redeem 1:1 for USDC.
-      // We can't yet read the WinningsRedeemed event reliably so we estimate
-      // from held shares × 1.00 — which matches the on-chain AMM's
-      // redemption (each winning share = $1 collateral).
-      let redemptionPayout = 0;
-      let outcomeStatus = 'open'; // open | exited | won | lost
+      // Redemption payout: if the indexer already saw a WinningsRedeemed
+      // event for this user in this market, use the on-chain payout
+      // amount (authoritative). Otherwise estimate from held winning
+      // shares × $1 — each winning share in a resolved market redeems
+      // 1:1 for USDC via PronosAMM.redeem().
+      let redemptionPayout = m.redemptionPayout || 0; // injected below from redemptions table
+      const redemptionOnChain = redemptionPayout > 0;
+      let outcomeStatus = 'open'; // open | exited | pending | won | lost
+
       if (m.status === 'resolved' && normalizedWinIdx != null) {
-        redemptionPayout = winningOutcomeShares;
+        // Market is fully resolved on-chain.
+        if (!redemptionOnChain && winningOutcomeShares > 0.000001) {
+          // User hasn't redeemed yet but has winning shares; estimate
+          // the payout so PnL still reflects the win.
+          redemptionPayout = winningOutcomeShares;
+        }
         totalReceived += redemptionPayout;
-        if (winningOutcomeShares > 0.000001) {
+        if (winningOutcomeShares > 0.000001 || redemptionOnChain) {
           outcomeStatus = 'won';
         } else {
           outcomeStatus = 'lost';
         }
       } else if (!stillHeld) {
-        // User exited all positions before resolution
+        // User fully exited before the market resolved.
         outcomeStatus = 'exited';
       } else {
-        outcomeStatus = 'open';
+        // User still holds shares in an unresolved market.
+        // If the market's end_time has passed we call it "pendiente"
+        // (awaiting oracle/admin resolution). Otherwise it's "open".
+        const now = Date.now();
+        const endMs = m.endTime ? new Date(m.endTime).getTime() : null;
+        if (endMs && endMs <= now) {
+          outcomeStatus = 'pending';
+        } else {
+          outcomeStatus = 'open';
+        }
       }
 
       const netPnl = totalReceived - totalInvested;
+
+      return {
+      // Merge on-chain redemption events into the transaction list so
+      // the UI shows them alongside buys/sells. Each redeem event renders
+      // as a "redeem" row with the authoritative on-chain payout.
+      const allTransactions = [...m.transactions];
+      for (const evt of (m.redemptionEvents || [])) {
+        const evtOutcomeIdx = evt.outcomeIndex != null ? Number(evt.outcomeIndex) : normalizedWinIdx;
+        allTransactions.push({
+          id: `redeem-${evt.id}`,
+          side: 'redeem',
+          outcomeIndex: evtOutcomeIdx,
+          outcomeLabel: labelFor(m.outcomes, evtOutcomeIdx, m.protocolVersion),
+          shares: roundToken(evt.shares),
+          collateral: roundMoney(evt.payout),
+          fee: 0,
+          priceAtTrade: 1,
+          txHash: evt.txHash,
+          blockNumber: evt.blockNumber,
+          createdAt: evt.createdAt,
+        });
+      }
+      // Keep transactions in chronological order
+      allTransactions.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
       return {
         marketId: m.marketId,
@@ -204,17 +292,19 @@ export default async function handler(req, res) {
         totalInvested: roundMoney(totalInvested),
         totalReceived: roundMoney(totalReceived),
         redemptionPayout: roundMoney(redemptionPayout),
+        redemptionOnChain,
         netPnl: roundMoney(netPnl),
         stillHeld,
-        transactions: m.transactions,
+        transactions: allTransactions,
       };
     });
 
-    // Sort: open positions first, then newest closed
+    // Sort: active first (open/pending), then newest closed
+    const statusPriority = { open: 0, pending: 1, won: 2, lost: 2, exited: 2 };
     history.sort((a, b) => {
-      const aOpen = a.outcomeStatus === 'open' ? 0 : 1;
-      const bOpen = b.outcomeStatus === 'open' ? 0 : 1;
-      if (aOpen !== bOpen) return aOpen - bOpen;
+      const aPri = statusPriority[a.outcomeStatus] ?? 3;
+      const bPri = statusPriority[b.outcomeStatus] ?? 3;
+      if (aPri !== bPri) return aPri - bPri;
       const aTime = a.resolvedAt || a.transactions[a.transactions.length - 1]?.createdAt || 0;
       const bTime = b.resolvedAt || b.transactions[b.transactions.length - 1]?.createdAt || 0;
       return new Date(bTime) - new Date(aTime);
@@ -229,6 +319,7 @@ export default async function handler(req, res) {
     const marketsLost = history.filter(m => m.outcomeStatus === 'lost').length;
     const marketsExited = history.filter(m => m.outcomeStatus === 'exited').length;
     const marketsOpen = history.filter(m => m.outcomeStatus === 'open').length;
+    const marketsPending = history.filter(m => m.outcomeStatus === 'pending').length;
 
     return res.status(200).json({
       address: addr,
@@ -241,6 +332,7 @@ export default async function handler(req, res) {
         marketsLost,
         marketsExited,
         marketsOpen,
+        marketsPending,
       },
     });
   } catch (e) {

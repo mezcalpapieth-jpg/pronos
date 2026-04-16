@@ -121,6 +121,23 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_snapshots_market ON price_snapshots(market_id, snapshot_at)`,
   `CREATE INDEX IF NOT EXISTS idx_markets_status ON protocol_markets(status)`,
 
+  // Redemptions (WinningsRedeemed events on-chain)
+  `CREATE TABLE IF NOT EXISTS redemptions (
+    id              SERIAL PRIMARY KEY,
+    market_id       INTEGER NOT NULL REFERENCES protocol_markets(id),
+    user_address    TEXT NOT NULL,
+    outcome_index   SMALLINT,
+    shares          NUMERIC(20,6) NOT NULL,
+    payout          NUMERIC(20,6) NOT NULL,
+    tx_hash         TEXT NOT NULL,
+    block_number    BIGINT NOT NULL,
+    log_index       INTEGER NOT NULL,
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(tx_hash, log_index)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_redemptions_user ON redemptions(user_address)`,
+  `CREATE INDEX IF NOT EXISTS idx_redemptions_market ON redemptions(market_id)`,
+
   // Indexer state (tracks last processed block per chain)
   `CREATE TABLE IF NOT EXISTS indexer_state (
     chain_id        INTEGER PRIMARY KEY,

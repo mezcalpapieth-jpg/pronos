@@ -30,7 +30,7 @@ function fmtMoney(n) {
 
 // Per-market status pill + PnL chip
 function MarketOutcomeBadge({ market }) {
-  const { outcomeStatus, netPnl, winningOutcomeLabel } = market;
+  const { outcomeStatus, netPnl } = market;
 
   if (outcomeStatus === 'won') {
     return (
@@ -88,7 +88,22 @@ function MarketOutcomeBadge({ market }) {
     );
   }
 
-  // open
+  if (outcomeStatus === 'pending') {
+    // Market deadline passed but oracle/admin hasn't resolved yet.
+    // Show orange "pendiente" — never "perdido" until resolution lands.
+    return (
+      <span style={{
+        fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em',
+        background: 'rgba(245,158,11,0.1)', color: '#f59e0b',
+        border: '1px solid rgba(245,158,11,0.3)',
+        padding: '3px 8px', borderRadius: 4, textTransform: 'uppercase',
+      }}>
+        ⏳ PENDIENTE
+      </span>
+    );
+  }
+
+  // open — user still holds, deadline in the future
   return (
     <span style={{
       fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em',
@@ -103,11 +118,33 @@ function MarketOutcomeBadge({ market }) {
 
 function TransactionRow({ tx }) {
   const isBuy = tx.side === 'buy';
+  const isSell = tx.side === 'sell';
+  const isRedeem = tx.side === 'redeem';
   const pct = Math.round((tx.priceAtTrade ?? 0) * 100);
+
+  let label, labelColor, amountColor, amountPrefix;
+  if (isBuy) {
+    label = '↓ Compra';
+    labelColor = 'var(--green)';
+    amountColor = 'var(--text-primary)';
+    amountPrefix = '-';
+  } else if (isSell) {
+    label = '↑ Venta';
+    labelColor = 'var(--text-secondary)';
+    amountColor = 'var(--green)';
+    amountPrefix = '+';
+  } else {
+    // redeem
+    label = '🏆 Cobro';
+    labelColor = 'var(--green)';
+    amountColor = 'var(--green)';
+    amountPrefix = '+';
+  }
+
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: 'minmax(70px, 80px) 1fr minmax(90px, 110px) minmax(90px, 110px)',
+      gridTemplateColumns: 'minmax(80px, 90px) 1fr minmax(90px, 110px) minmax(90px, 110px)',
       alignItems: 'center',
       gap: 10,
       padding: '8px 14px',
@@ -116,16 +153,17 @@ function TransactionRow({ tx }) {
       fontSize: 11,
     }}>
       <span style={{
-        color: isBuy ? 'var(--green)' : 'var(--text-secondary)',
+        color: labelColor,
         fontWeight: 600,
         letterSpacing: '0.06em',
         textTransform: 'uppercase',
       }}>
-        {isBuy ? '↓ Compra' : '↑ Venta'}
+        {label}
       </span>
       <span style={{ color: 'var(--text-muted)' }}>
         <span style={{ color: 'var(--text-primary)', marginRight: 6 }}>{tx.outcomeLabel || '—'}</span>
-        · {pct}%
+        {!isRedeem && <>· {pct}%</>}
+        {isRedeem && <span style={{ opacity: 0.8 }}>· redención on-chain</span>}
         <span style={{ marginLeft: 6, opacity: 0.7 }}>
           · {formatDate(tx.createdAt)}
         </span>
@@ -134,11 +172,11 @@ function TransactionRow({ tx }) {
         {Number(tx.shares || 0).toFixed(2)} shs
       </span>
       <span style={{
-        color: isBuy ? 'var(--text-primary)' : 'var(--green)',
+        color: amountColor,
         textAlign: 'right',
         fontWeight: 600,
       }}>
-        {isBuy ? '-' : '+'}{fmtMoney(tx.collateral)}
+        {amountPrefix}{fmtMoney(tx.collateral)}
       </span>
     </div>
   );
@@ -310,15 +348,16 @@ export default function HistoryTab({ address }) {
       {/* Quick stats row */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
+        gridTemplateColumns: 'repeat(5, 1fr)',
         gap: 10,
         marginBottom: 18,
       }}>
         {[
-          { label: 'Mercados',  value: summary.marketsTotal ?? 0, color: 'var(--text-primary)' },
-          { label: 'Ganados',   value: summary.marketsWon ?? 0,  color: 'var(--green)' },
-          { label: 'Perdidos',  value: summary.marketsLost ?? 0, color: 'var(--red, #ef4444)' },
-          { label: 'Retirados', value: summary.marketsExited ?? 0, color: 'var(--text-secondary)' },
+          { label: 'Mercados',   value: summary.marketsTotal ?? 0,   color: 'var(--text-primary)' },
+          { label: 'Ganados',    value: summary.marketsWon ?? 0,     color: 'var(--green)' },
+          { label: 'Perdidos',   value: summary.marketsLost ?? 0,    color: 'var(--red, #ef4444)' },
+          { label: 'Pendientes', value: summary.marketsPending ?? 0, color: '#f59e0b' },
+          { label: 'Retirados',  value: summary.marketsExited ?? 0,  color: 'var(--text-secondary)' },
         ].map(({ label, value, color }) => (
           <div key={label} style={{
             background: 'var(--surface1)',
