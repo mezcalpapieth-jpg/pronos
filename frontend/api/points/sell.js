@@ -2,15 +2,14 @@
  * POST /api/points/sell
  * Body: { marketId, outcomeIndex, shares }
  *
- * Atomic early exit. The user sells `shares` of the given outcome back
- * to the pool and receives collateralOut MXNP. We update:
- *   - market reserves
- *   - user balance (credit)
- *   - points_trades (immutable log, side = 'sell')
- *   - points_positions (reduce shares; attribute sell to realized_pnl)
+ * Atomic early exit. User sells `shares` of their held outcome back to
+ * the pool. Runs inside a single Postgres transaction so reserve /
+ * balance / position / trade / distribution all commit together.
  *
- * Average-cost accounting: when selling N of M held shares, we keep
- * (M − N) at the original avg cost. realized_pnl += proceeds − avg_cost × N.
+ * Average-cost accounting for realized PnL:
+ *   avgCost          = costBasis / sharesHeld
+ *   soldCostBasis    = avgCost × sharesSold
+ *   addedRealizedPnl = proceeds − soldCostBasis
  */
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
@@ -18,8 +17,9 @@ import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { binarySellQuote } from '../_lib/amm-math.js';
 import { requireSession } from '../_lib/session.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
+import { withTransaction } from '../_lib/db-tx.js';
 
-const sql = neon(process.env.DATABASE_URL);
+const schemaSql = neon(process.env.DATABASE_URL);
 
 function parseJsonb(value, fallback) {
   if (Array.isArray(value)) return value;
@@ -46,147 +46,142 @@ export default async function handler(req, res) {
 
   const { marketId, outcomeIndex, shares } = req.body || {};
   const mid = parseInt(marketId, 10);
-  const oi = parseInt(outcomeIndex, 10);
-  const n = Number(shares);
+  const oi  = parseInt(outcomeIndex, 10);
+  const n   = Number(shares);
   if (!Number.isInteger(mid) || mid <= 0) return res.status(400).json({ error: 'invalid_market_id' });
-  if (![0, 1].includes(oi)) return res.status(400).json({ error: 'invalid_outcome_index' });
-  if (!Number.isFinite(n) || n <= 0) return res.status(400).json({ error: 'invalid_shares' });
+  if (![0, 1].includes(oi))                return res.status(400).json({ error: 'invalid_outcome_index' });
+  if (!Number.isFinite(n) || n <= 0)       return res.status(400).json({ error: 'invalid_shares' });
 
   const username = session.username;
 
   try {
-    await ensurePointsSchema(sql);
-    await sql.query('BEGIN');
+    await ensurePointsSchema(schemaSql);
 
-    const marketRows = await sql`
-      SELECT id, status, reserves, end_time
-      FROM points_markets
-      WHERE id = ${mid}
-      FOR UPDATE
-    `;
-    if (marketRows.length === 0) {
-      await sql.query('ROLLBACK');
-      return res.status(404).json({ error: 'market_not_found' });
-    }
-    const m = marketRows[0];
-    if (m.status !== 'active') {
-      await sql.query('ROLLBACK');
-      return res.status(400).json({ error: 'market_closed' });
-    }
-    if (m.end_time && new Date(m.end_time) <= new Date()) {
-      await sql.query('ROLLBACK');
-      return res.status(400).json({ error: 'market_expired' });
-    }
+    const result = await withTransaction(async (client) => {
+      const marketResult = await client.query(
+        `SELECT id, status, reserves, end_time
+         FROM points_markets
+         WHERE id = $1
+         FOR UPDATE`,
+        [mid],
+      );
+      if (marketResult.rows.length === 0) {
+        const err = new Error('market_not_found'); err.status = 404; throw err;
+      }
+      const m = marketResult.rows[0];
+      if (m.status !== 'active') {
+        const err = new Error('market_closed'); err.status = 400; throw err;
+      }
+      if (m.end_time && new Date(m.end_time) <= new Date()) {
+        const err = new Error('market_expired'); err.status = 400; throw err;
+      }
+      const reserves = parseJsonb(m.reserves, []).map(Number);
+      if (reserves.length !== 2) {
+        const err = new Error('only_binary_supported'); err.status = 400; throw err;
+      }
 
-    const reserves = parseJsonb(m.reserves, []).map(Number);
-    if (reserves.length !== 2) {
-      await sql.query('ROLLBACK');
-      return res.status(400).json({ error: 'only_binary_supported' });
-    }
+      const positionResult = await client.query(
+        `SELECT shares, cost_basis, realized_pnl
+         FROM points_positions
+         WHERE market_id = $1 AND username = $2 AND outcome_index = $3
+         FOR UPDATE`,
+        [mid, username, oi],
+      );
+      if (positionResult.rows.length === 0) {
+        const err = new Error('no_position'); err.status = 400; throw err;
+      }
+      const p = positionResult.rows[0];
+      const held = Number(p.shares);
+      const costBasis = Number(p.cost_basis);
+      const realized = Number(p.realized_pnl || 0);
+      if (held < n) {
+        const err = new Error('insufficient_shares'); err.status = 400; throw err;
+      }
 
-    // Lock the position row so a racing sell can't over-withdraw.
-    const positionRows = await sql`
-      SELECT shares, cost_basis, realized_pnl
-      FROM points_positions
-      WHERE market_id = ${mid} AND username = ${username} AND outcome_index = ${oi}
-      FOR UPDATE
-    `;
-    if (positionRows.length === 0) {
-      await sql.query('ROLLBACK');
-      return res.status(400).json({ error: 'no_position' });
-    }
-    const p = positionRows[0];
-    const held = Number(p.shares);
-    const costBasis = Number(p.cost_basis);
-    const realized = Number(p.realized_pnl || 0);
-    if (held < n) {
-      await sql.query('ROLLBACK');
-      return res.status(400).json({ error: 'insufficient_shares' });
-    }
+      let quote;
+      try {
+        quote = binarySellQuote(reserves, oi, n);
+      } catch (e) {
+        const err = new Error('invalid_quote'); err.status = 400; err.detail = e.message; throw err;
+      }
 
-    // Execute the AMM math
-    let quote;
-    try {
-      quote = binarySellQuote(reserves, oi, n);
-    } catch (e) {
-      await sql.query('ROLLBACK');
-      return res.status(400).json({ error: 'invalid_quote', detail: e.message });
-    }
+      // Reserves + balance
+      await client.query(
+        `UPDATE points_markets SET reserves = $1::jsonb WHERE id = $2`,
+        [JSON.stringify(quote.reservesAfter), mid],
+      );
 
-    // Update reserves + balance
-    await sql`
-      UPDATE points_markets
-      SET reserves = ${JSON.stringify(quote.reservesAfter)}::jsonb
-      WHERE id = ${mid}
-    `;
+      const balanceResult = await client.query(
+        `SELECT balance FROM points_balances WHERE username = $1 FOR UPDATE`,
+        [username],
+      );
+      const currentBalance = balanceResult.rows.length > 0 ? Number(balanceResult.rows[0].balance) : 0;
+      const newBalance = currentBalance + quote.collateralOut;
+      if (balanceResult.rows.length === 0) {
+        await client.query(
+          `INSERT INTO points_balances (username, balance) VALUES ($1, $2)`,
+          [username, newBalance],
+        );
+      } else {
+        await client.query(
+          `UPDATE points_balances SET balance = $1, updated_at = NOW() WHERE username = $2`,
+          [newBalance, username],
+        );
+      }
 
-    const balanceRows = await sql`
-      SELECT balance FROM points_balances WHERE username = ${username} FOR UPDATE
-    `;
-    const currentBalance = balanceRows.length > 0 ? Number(balanceRows[0].balance) : 0;
-    const newBalance = currentBalance + quote.collateralOut;
-    if (balanceRows.length === 0) {
-      await sql`INSERT INTO points_balances (username, balance) VALUES (${username}, ${newBalance})`;
-    } else {
-      await sql`UPDATE points_balances SET balance = ${newBalance}, updated_at = NOW() WHERE username = ${username}`;
-    }
+      // Average-cost realized PnL
+      const avgCost = held > 0 ? costBasis / held : 0;
+      const soldCostBasis = avgCost * n;
+      const addedRealized = quote.collateralOut - soldCostBasis;
+      const newShares = held - n;
+      const newCostBasis = newShares > 0 ? costBasis - soldCostBasis : 0;
+      const newRealized = realized + addedRealized;
 
-    // Average-cost PnL attribution on the sold portion
-    const avgCost = held > 0 ? costBasis / held : 0;
-    const soldCostBasis = avgCost * n;
-    const addedRealized = quote.collateralOut - soldCostBasis;
-    const newShares = held - n;
-    const newCostBasis = newShares > 0 ? costBasis - soldCostBasis : 0;
-    const newRealized = realized + addedRealized;
+      await client.query(
+        `UPDATE points_positions
+         SET shares       = $1,
+             cost_basis   = $2,
+             realized_pnl = $3,
+             updated_at   = NOW()
+         WHERE market_id = $4 AND username = $5 AND outcome_index = $6`,
+        [newShares, newCostBasis, newRealized, mid, username, oi],
+      );
 
-    if (newShares <= 0) {
-      // Fully exited the position — keep the row so realized_pnl sticks
-      // around for reporting, but zero out shares + cost_basis.
-      await sql`
-        UPDATE points_positions
-        SET shares = 0, cost_basis = 0, realized_pnl = ${newRealized}, updated_at = NOW()
-        WHERE market_id = ${mid} AND username = ${username} AND outcome_index = ${oi}
-      `;
-    } else {
-      await sql`
-        UPDATE points_positions
-        SET shares = ${newShares}, cost_basis = ${newCostBasis},
-            realized_pnl = ${newRealized}, updated_at = NOW()
-        WHERE market_id = ${mid} AND username = ${username} AND outcome_index = ${oi}
-      `;
-    }
+      await client.query(
+        `INSERT INTO points_trades (
+           market_id, username, side, outcome_index,
+           shares, collateral, fee, price_at_trade,
+           reserves_before, reserves_after
+         ) VALUES ($1, $2, 'sell', $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb)`,
+        [
+          mid, username, oi,
+          n, quote.collateralOut, quote.fee, quote.priceBefore || 0,
+          JSON.stringify(reserves),
+          JSON.stringify(quote.reservesAfter),
+        ],
+      );
 
-    await sql`
-      INSERT INTO points_trades (
-        market_id, username, side, outcome_index,
-        shares, collateral, fee, price_at_trade,
-        reserves_before, reserves_after
-      ) VALUES (
-        ${mid}, ${username}, 'sell', ${oi},
-        ${n}, ${quote.collateralOut}, ${quote.fee}, ${quote.priceBefore || 0},
-        ${JSON.stringify(reserves)}::jsonb,
-        ${JSON.stringify(quote.reservesAfter)}::jsonb
-      )
-    `;
+      await client.query(
+        `INSERT INTO points_distributions (username, amount, kind, reference_id, reason)
+         VALUES ($1, $2, 'trade_sell', $3, $4)`,
+        [username, quote.collateralOut, mid, `Venta anticipada de ${n.toFixed(2)} acciones`],
+      );
 
-    await sql`
-      INSERT INTO points_distributions (username, amount, kind, reference_id, reason)
-      VALUES (${username}, ${quote.collateralOut}, 'trade_sell', ${mid}, 'Venta anticipada de ' || ${String(n.toFixed(2))} || ' acciones')
-    `;
-
-    await sql.query('COMMIT');
-
-    return res.status(200).json({
-      ok: true,
-      balance: newBalance,
-      collateralOut: quote.collateralOut,
-      sharesSold: n,
-      realizedPnl: addedRealized,
-      priceBefore: quote.priceBefore,
-      priceAfter: quote.priceAfter,
+      return {
+        balance: newBalance,
+        collateralOut: quote.collateralOut,
+        sharesSold: n,
+        realizedPnl: addedRealized,
+        priceBefore: quote.priceBefore,
+        priceAfter: quote.priceAfter,
+      };
     });
+
+    return res.status(200).json({ ok: true, ...result });
   } catch (e) {
-    try { await sql.query('ROLLBACK'); } catch {}
+    if (e?.status && typeof e?.message === 'string') {
+      return res.status(e.status).json({ error: e.message, detail: e.detail });
+    }
     console.error('[points/sell] failed', { message: e?.message, code: e?.code });
     return res.status(500).json({ error: 'sell_failed' });
   }

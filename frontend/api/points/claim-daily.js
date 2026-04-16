@@ -1,29 +1,26 @@
 /**
  * POST /api/points/claim-daily
  *
- * Daily MXNP drip. First claim of the day credits the user based on
- * their current streak:
- *   streak 1 → 100, streak 2 → 120, streak 3 → 140, +20/day...
+ * Daily MXNP drip with streak bonus (+20 per consecutive day). Atomic:
+ * the claim insert, streak update, balance credit, and audit entry all
+ * commit together.
  *
- * Missing a day resets the streak to 1 (100 MXNP). The claim is
- * idempotent per (username, calendar-date) — double-tap doesn't
- * double-credit.
+ * Idempotency: primary key on (username, claim_date) means a double-tap
+ * on the same day can't double-credit.
  */
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { requireSession } from '../_lib/session.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
+import { withTransaction } from '../_lib/db-tx.js';
 
-const sql = neon(process.env.DATABASE_URL);
+const schemaSql = neon(process.env.DATABASE_URL);
 
 const BASE_REWARD = 100;
 const STREAK_BONUS = 20;
 
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
-
+function todayIso() { return new Date().toISOString().slice(0, 10); }
 function yesterdayIso() {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() - 1);
@@ -50,98 +47,95 @@ export default async function handler(req, res) {
   const today = todayIso();
 
   try {
-    await ensurePointsSchema(sql);
-    await sql.query('BEGIN');
+    await ensurePointsSchema(schemaSql);
 
-    // Idempotency: if the user already claimed today, return the existing row.
-    const existing = await sql`
-      SELECT amount, streak_day FROM daily_claims
-      WHERE username = ${username} AND claim_date = ${today}
-    `;
-    if (existing.length > 0) {
-      await sql.query('ROLLBACK');
-      return res.status(200).json({
-        ok: true,
-        alreadyClaimedToday: true,
-        amount: Number(existing[0].amount),
-        streakDay: existing[0].streak_day,
-      });
-    }
+    const result = await withTransaction(async (client) => {
+      const existingResult = await client.query(
+        `SELECT amount, streak_day FROM daily_claims
+         WHERE username = $1 AND claim_date = $2`,
+        [username, today],
+      );
+      if (existingResult.rows.length > 0) {
+        const row = existingResult.rows[0];
+        return {
+          alreadyClaimedToday: true,
+          amount: Number(row.amount),
+          streakDay: row.streak_day,
+        };
+      }
 
-    // Figure out streak: look at last_claim_date in points_streaks.
-    const streakRows = await sql`
-      SELECT current_streak, last_claim_date, best_streak
-      FROM points_streaks
-      WHERE username = ${username}
-      FOR UPDATE
-    `;
-    const prev = streakRows[0] || { current_streak: 0, last_claim_date: null, best_streak: 0 };
-    const prevDate = prev.last_claim_date
-      ? new Date(prev.last_claim_date).toISOString().slice(0, 10)
-      : null;
+      const streakResult = await client.query(
+        `SELECT current_streak, last_claim_date, best_streak
+         FROM points_streaks
+         WHERE username = $1
+         FOR UPDATE`,
+        [username],
+      );
+      const prev = streakResult.rows[0] || { current_streak: 0, last_claim_date: null, best_streak: 0 };
+      const prevDate = prev.last_claim_date
+        ? new Date(prev.last_claim_date).toISOString().slice(0, 10)
+        : null;
+      const streakDay = prevDate === yesterdayIso()
+        ? Number(prev.current_streak || 0) + 1
+        : 1;
+      const amount = BASE_REWARD + (streakDay - 1) * STREAK_BONUS;
+      const bestStreak = Math.max(Number(prev.best_streak || 0), streakDay);
 
-    let streakDay;
-    if (prevDate === yesterdayIso()) {
-      streakDay = Number(prev.current_streak || 0) + 1;
-    } else {
-      streakDay = 1; // gap or first-ever claim → restart
-    }
-    const amount = BASE_REWARD + (streakDay - 1) * STREAK_BONUS;
-    const bestStreak = Math.max(Number(prev.best_streak || 0), streakDay);
+      const balanceResult = await client.query(
+        `SELECT balance FROM points_balances WHERE username = $1 FOR UPDATE`,
+        [username],
+      );
+      const currentBalance = balanceResult.rows.length > 0 ? Number(balanceResult.rows[0].balance) : 0;
+      const newBalance = currentBalance + amount;
+      if (balanceResult.rows.length === 0) {
+        await client.query(
+          `INSERT INTO points_balances (username, balance) VALUES ($1, $2)`,
+          [username, newBalance],
+        );
+      } else {
+        await client.query(
+          `UPDATE points_balances SET balance = $1, updated_at = NOW() WHERE username = $2`,
+          [newBalance, username],
+        );
+      }
 
-    // Credit balance
-    const balanceRows = await sql`
-      SELECT balance FROM points_balances WHERE username = ${username} FOR UPDATE
-    `;
-    const currentBalance = balanceRows.length > 0 ? Number(balanceRows[0].balance) : 0;
-    const newBalance = currentBalance + amount;
-    if (balanceRows.length === 0) {
-      await sql`INSERT INTO points_balances (username, balance) VALUES (${username}, ${newBalance})`;
-    } else {
-      await sql`UPDATE points_balances SET balance = ${newBalance}, updated_at = NOW() WHERE username = ${username}`;
-    }
+      await client.query(
+        `INSERT INTO daily_claims (username, claim_date, amount, streak_day)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (username, claim_date) DO NOTHING`,
+        [username, today, amount, streakDay],
+      );
 
-    // Record the claim (dedupe on PK).
-    await sql`
-      INSERT INTO daily_claims (username, claim_date, amount, streak_day)
-      VALUES (${username}, ${today}, ${amount}, ${streakDay})
-      ON CONFLICT (username, claim_date) DO NOTHING
-    `;
+      if (streakResult.rows.length === 0) {
+        await client.query(
+          `INSERT INTO points_streaks (username, current_streak, last_claim_date, best_streak)
+           VALUES ($1, $2, $3, $4)`,
+          [username, streakDay, today, bestStreak],
+        );
+      } else {
+        await client.query(
+          `UPDATE points_streaks
+           SET current_streak = $1, last_claim_date = $2, best_streak = $3, updated_at = NOW()
+           WHERE username = $4`,
+          [streakDay, today, bestStreak, username],
+        );
+      }
 
-    // Update streak row
-    if (streakRows.length === 0) {
-      await sql`
-        INSERT INTO points_streaks (username, current_streak, last_claim_date, best_streak)
-        VALUES (${username}, ${streakDay}, ${today}, ${bestStreak})
-      `;
-    } else {
-      await sql`
-        UPDATE points_streaks
-        SET current_streak = ${streakDay},
-            last_claim_date = ${today},
-            best_streak = ${bestStreak},
-            updated_at = NOW()
-        WHERE username = ${username}
-      `;
-    }
+      await client.query(
+        `INSERT INTO points_distributions (username, amount, kind, reason)
+         VALUES ($1, $2, 'daily_claim', $3)`,
+        [username, amount, `Racha día ${streakDay} · +${amount} MXNP`],
+      );
 
-    await sql`
-      INSERT INTO points_distributions (username, amount, kind, reason)
-      VALUES (${username}, ${amount}, 'daily_claim',
-              'Racha día ' || ${String(streakDay)} || ' · +' || ${String(amount)} || ' MXNP')
-    `;
-
-    await sql.query('COMMIT');
-    return res.status(200).json({
-      ok: true,
-      alreadyClaimedToday: false,
-      amount,
-      streakDay,
-      balance: newBalance,
+      return { alreadyClaimedToday: false, amount, streakDay, balance: newBalance };
     });
+
+    return res.status(200).json({ ok: true, ...result });
   } catch (e) {
-    try { await sql.query('ROLLBACK'); } catch {}
-    console.error('[points/claim-daily] error', { message: e?.message, code: e?.code });
+    if (e?.status && typeof e?.message === 'string') {
+      return res.status(e.status).json({ error: e.message, detail: e.detail });
+    }
+    console.error('[points/claim-daily] failed', { message: e?.message, code: e?.code });
     return res.status(500).json({ error: 'claim_failed' });
   }
 }

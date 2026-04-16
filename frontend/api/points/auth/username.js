@@ -2,32 +2,21 @@
  * POST /api/points/auth/username
  * Body: { username }
  *
- * Claims a username for the authenticated sub-org. Also seeds the new
- * user's MXNP balance with the signup bonus (500 MXNP) and logs it as
- * an audit entry.
- *
- * Username rules (conservative — easier to open up later than tighten):
- *   - 3..20 chars
- *   - lowercase letters, digits, underscore
- *   - must start with a letter
- *
- * Error codes:
- *   invalid_username      — pattern failed
- *   username_taken        — case-insensitive collision
- *   already_set           — user already has a username on file
- *   not_authenticated     — missing/invalid session cookie
- *   db_unavailable        — Postgres call failed
+ * Claims a username for the authenticated sub-org and atomically seeds
+ * the user's MXNP balance with the signup bonus (500 MXNP) if this is
+ * their first time. Username claim, balance insert, and audit entry all
+ * commit together.
  */
-
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { readSession, createSessionToken, setSessionCookie } from '../../_lib/session.js';
+import { withTransaction } from '../../_lib/db-tx.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
 const USERNAME_RE = /^[a-z][a-z0-9_]{2,19}$/;
-const SIGNUP_BONUS = 500;   // MXNP credited on first username set
+const SIGNUP_BONUS = 500;
 
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'POST, OPTIONS', credentials: true });
@@ -46,71 +35,68 @@ export default async function handler(req, res) {
   try {
     await ensurePointsSchema(sql);
 
-    // Reject duplicates up front (case-insensitive) so we can return a
-    // specific error instead of a unique-constraint 500.
-    const existing = await sql`
+    // Uniqueness probe first: returning a targeted error is friendlier
+    // than letting the UNIQUE constraint fire inside the transaction.
+    const taken = await sql`
       SELECT turnkey_sub_org_id
       FROM points_users
       WHERE LOWER(username) = ${username}
       LIMIT 1
     `;
-    if (existing.length > 0 && existing[0].turnkey_sub_org_id !== session.sub) {
+    if (taken.length > 0 && taken[0].turnkey_sub_org_id !== session.sub) {
       return res.status(409).json({ error: 'username_taken' });
     }
 
-    // Try to claim the username. If the user already set one, bail out.
-    const claimed = await sql`
-      UPDATE points_users
-      SET username = ${username}
-      WHERE turnkey_sub_org_id = ${session.sub}
-        AND (username IS NULL OR LOWER(username) = ${username})
-      RETURNING username
-    `;
-    if (claimed.length === 0) {
-      // Either row doesn't exist (shouldn't happen — verify-otp creates it)
-      // or username is already set to something else.
-      return res.status(409).json({ error: 'already_set' });
-    }
-
-    // If this is the very first time we're seeing this user, seed their
-    // MXNP balance with the signup bonus. We detect "first time" by
-    // there being no points_balances row yet.
-    await sql.query('BEGIN');
-    try {
-      const bal = await sql`
-        INSERT INTO points_balances (username, balance)
-        VALUES (${username}, ${SIGNUP_BONUS})
-        ON CONFLICT (username) DO NOTHING
-        RETURNING balance
-      `;
-      if (bal.length > 0) {
-        await sql`
-          INSERT INTO points_distributions (username, amount, kind, reason)
-          VALUES (${username}, ${SIGNUP_BONUS}, 'signup_bonus', 'Bono de bienvenida')
-        `;
+    const claimed = await withTransaction(async (client) => {
+      const claim = await client.query(
+        `UPDATE points_users
+         SET username = $1
+         WHERE turnkey_sub_org_id = $2
+           AND (username IS NULL OR LOWER(username) = $1)
+         RETURNING username`,
+        [username, session.sub],
+      );
+      if (claim.rows.length === 0) {
+        const err = new Error('already_set'); err.status = 409; throw err;
       }
-      await sql.query('COMMIT');
-    } catch (innerErr) {
-      try { await sql.query('ROLLBACK'); } catch {}
-      throw innerErr;
-    }
+
+      // First balance row → seed signup bonus + audit. Existing users
+      // that already had a row keep their balance as-is.
+      const bal = await client.query(
+        `INSERT INTO points_balances (username, balance)
+         VALUES ($1, $2)
+         ON CONFLICT (username) DO NOTHING
+         RETURNING balance`,
+        [username, SIGNUP_BONUS],
+      );
+      if (bal.rows.length > 0) {
+        await client.query(
+          `INSERT INTO points_distributions (username, amount, kind, reason)
+           VALUES ($1, $2, 'signup_bonus', 'Bono de bienvenida')`,
+          [username, SIGNUP_BONUS],
+        );
+      }
+
+      return { username };
+    });
+
+    const token = createSessionToken({
+      suborgId: session.sub,
+      email: session.email,
+      username: claimed.username,
+    });
+    setSessionCookie(res, token);
+
+    return res.status(200).json({ ok: true, username: claimed.username });
   } catch (e) {
-    console.error('[auth/username] db error', { message: e?.message, code: e?.code });
+    if (e?.status && typeof e?.message === 'string') {
+      return res.status(e.status).json({ error: e.message });
+    }
     if (e?.code === '23505') {
-      // Unique constraint race — another request claimed it first.
+      // Race condition — another request claimed the same username first.
       return res.status(409).json({ error: 'username_taken' });
     }
+    console.error('[auth/username] error', { message: e?.message, code: e?.code });
     return res.status(500).json({ error: 'db_unavailable' });
   }
-
-  // Refresh the session cookie so subsequent requests see the username
-  // without needing to hit the DB.
-  const token = createSessionToken({
-    suborgId: session.sub,
-    email: session.email,
-    username,
-  });
-  setSessionCookie(res, token);
-
-  return res.status(200).json({ ok: true, username });
 }

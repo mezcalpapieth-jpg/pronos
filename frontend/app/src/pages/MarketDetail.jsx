@@ -63,12 +63,15 @@ function ProbabilityChart({ options, resolved, winner, awaiting }) {
   );
 }
 
-/* ── Two-row tab system (Polymarket style) ───────────────────── */
-function TabsSection({mock,opt0,opt1,comments}){
-  const [topTab,setTopTab]   = useState('Reglas');
-  const [botTab,setBotTab]   = useState('Actividad');
+/* ── Tab system: Rules + Market Context only ──────────────────
+   The lower tabs (Comentarios / Top Holders / Posiciones / Actividad)
+   used to render deterministic-seeded mock data. We removed them to
+   avoid presenting fake activity on a live product — we'll add real
+   versions back when trades can source them from the indexer. */
+function TabsSection({mock}){
+  const [topTab,setTopTab] = useState('Reglas');
 
-  const tabBtn = (label,active,onClick,count) => (
+  const tabBtn = (label,active,onClick) => (
     <button onClick={onClick} style={{
       fontFamily:'var(--font-mono)',fontSize:12,letterSpacing:'0.04em',
       padding:'10px 16px',background:'none',border:'none',cursor:'pointer',whiteSpace:'nowrap',
@@ -76,31 +79,18 @@ function TabsSection({mock,opt0,opt1,comments}){
       borderBottom:active?'2px solid var(--text-primary)':'2px solid transparent',
       transition:'color 0.15s',
     }}>
-      {label}{count!=null?<span style={{fontFamily:'var(--font-mono)',fontSize:10,marginLeft:4,color:'var(--text-muted)'}}>({count.toLocaleString()})</span>:null}
+      {label}
     </button>
   );
 
   return(
     <div>
-      {/* Row 1: Rules | Market Context */}
       <div style={{display:'flex',borderBottom:'1px solid var(--border)',marginBottom:24}}>
         {tabBtn('Reglas',    topTab==='Reglas',       ()=>setTopTab('Reglas'))}
         {tabBtn('Contexto de mercado', topTab==='Contexto', ()=>setTopTab('Contexto'))}
       </div>
       {topTab==='Reglas'   && <RulesTab   data={mock.rules}/>}
       {topTab==='Contexto' && <ContextTab data={mock.context}/>}
-
-      {/* Row 2: Comments | Top Holders | Positions | Activity */}
-      <div style={{display:'flex',borderBottom:'1px solid var(--border)',margin:'40px 0 24px',overflowX:'auto'}}>
-        {tabBtn('Comentarios', botTab==='Comentarios', ()=>setBotTab('Comentarios'), comments.length*437)}
-        {tabBtn('Top Holders', botTab==='Top Holders', ()=>setBotTab('Top Holders'))}
-        {tabBtn('Posiciones',  botTab==='Posiciones',  ()=>setBotTab('Posiciones'))}
-        {tabBtn('Actividad',   botTab==='Actividad',   ()=>setBotTab('Actividad'))}
-      </div>
-      {botTab==='Comentarios' && <CommentsTab comments={comments}/>}
-      {botTab==='Top Holders' && <HoldersTab  yes={mock.yesHolders} no={mock.noHolders} opt0={opt0} opt1={opt1}/>}
-      {botTab==='Posiciones'  && <PositionsTab yes={mock.yesPositions} no={mock.noPositions} opt0={opt0} opt1={opt1}/>}
-      {botTab==='Actividad'   && <ActivityTab  activity={mock.activity} opt0={opt0} opt1={opt1}/>}
     </div>
   );
 }
@@ -141,184 +131,6 @@ function ContextTab({data}){
   );
 }
 
-/* ── Comments ────────────────────────────────────────────────── */
-function CommentsTab({comments}){
-  const [liked,setLiked]=useState({});
-  return(
-    <div>
-      <div style={{display:'flex',gap:8,marginBottom:20,alignItems:'center'}}>
-        <div style={{flex:1,background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,
-          padding:'10px 14px',fontFamily:'var(--font-mono)',fontSize:12,color:'var(--text-muted)'}}>
-          Agrega un comentario...
-        </div>
-        <button className="btn-primary" style={{padding:'10px 18px',fontSize:12}} disabled>Publicar</button>
-      </div>
-      <div style={{display:'flex',gap:8,marginBottom:20}}>
-        {['Recientes','Top Holders','Holders'].map(f=>(
-          <button key={f} style={{padding:'6px 12px',background:'var(--surface2)',border:'1px solid var(--border)',
-            borderRadius:6,color:'var(--text-muted)',cursor:'pointer',fontFamily:'var(--font-mono)',fontSize:11}}>{f}</button>
-        ))}
-        <div style={{marginLeft:'auto',fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',display:'flex',alignItems:'center'}}>⚠️ Cuidado con links externos</div>
-      </div>
-      {comments.map(c=>(
-        <div key={c.id} style={{padding:'16px 0',borderBottom:'1px solid var(--border)'}}>
-          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
-            <div style={{width:32,height:32,borderRadius:'50%',background:`hsl(${c.id*47%360},60%,45%)`,
-              display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,color:'#fff',fontWeight:700,flexShrink:0}}>
-              {c.user[0]}
-            </div>
-            <div>
-              <span style={{fontWeight:600,fontSize:13,marginRight:8}}>{c.user}</span>
-              <span style={{fontFamily:'var(--font-mono)',fontSize:10,padding:'2px 7px',borderRadius:4,marginRight:8,
-                background:c.side==='yes'?'rgba(22,163,74,0.12)':'rgba(220,38,38,0.12)',
-                color:c.side==='yes'?'var(--yes)':'var(--no)',
-                border:`1px solid ${c.side==='yes'?'rgba(22,163,74,0.25)':'rgba(220,38,38,0.25)'}`}}>
-                {c.holding.toLocaleString()} {c.side==='yes'?'Sí':'No'}
-              </span>
-              <span style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)'}}>{c.time} atrás</span>
-            </div>
-          </div>
-          <p style={{fontSize:13,color:'var(--text-secondary)',lineHeight:1.6,marginLeft:42,marginBottom:8}}>{c.text}</p>
-          <div style={{display:'flex',gap:16,marginLeft:42}}>
-            <button onClick={()=>setLiked(p=>({...p,[c.id]:!p[c.id]}))} style={{background:'none',border:'none',cursor:'pointer',
-              display:'flex',alignItems:'center',gap:4,fontFamily:'var(--font-mono)',fontSize:11,
-              color:liked[c.id]?'var(--green)':'var(--text-muted)'}}>
-              ♥ {c.likes+(liked[c.id]?1:0)}
-            </button>
-            <button style={{background:'none',border:'none',cursor:'pointer',fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)'}}>
-              ↩ {c.replies} Respuestas
-            </button>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ── Top Holders ─────────────────────────────────────────────── */
-function HoldersTab({yes,no,opt0,opt1}){
-  return(
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:24}}>
-      {[{label:opt0,data:yes,color:'var(--yes)'},{label:opt1,data:no,color:'var(--no)'}].map(col=>(
-        <div key={col.label}>
-          <div style={{fontFamily:'var(--font-mono)',fontSize:11,letterSpacing:'0.08em',color:col.color,marginBottom:12,display:'flex',justifyContent:'space-between'}}>
-            <span>Holders {col.label}</span><span>ACCIONES</span>
-          </div>
-          {col.data.map((h,i)=>(
-            <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
-              <div style={{width:28,height:28,borderRadius:'50%',flexShrink:0,background:`hsl(${(i*61+17)%360},55%,45%)`,
-                display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,color:'#fff',fontWeight:700}}>
-                {h.user[0]}
-              </div>
-              <span style={{flex:1,fontSize:13,fontWeight:500}}>{h.user}</span>
-              <span style={{fontFamily:'var(--font-mono)',fontSize:12,color:col.color}}>{h.shares.toLocaleString()}</span>
-            </div>
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ── Positions ───────────────────────────────────────────────── */
-function PositionsTab({yes,no,opt0,opt1}){
-  return(
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:24}}>
-      {[{label:opt0,data:yes,color:'var(--yes)'},{label:opt1,data:no,color:'var(--no)'}].map(col=>(
-        <div key={col.label}>
-          <div style={{display:'flex',justifyContent:'space-between',fontFamily:'var(--font-mono)',fontSize:11,letterSpacing:'0.08em',color:'var(--text-muted)',marginBottom:12}}>
-            <span style={{color:col.color}}>{col.label}</span><span>PNL</span>
-          </div>
-          {col.data.map((p,i)=>(
-            <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
-              <div style={{width:28,height:28,borderRadius:'50%',flexShrink:0,background:`hsl(${(i*79+43)%360},55%,40%)`,
-                display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,color:'#fff',fontWeight:700}}>
-                {p.user[0]}
-              </div>
-              <div style={{flex:1}}>
-                <div style={{fontSize:13,fontWeight:500}}>{p.user}</div>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)'}}>avg {p.avg}</div>
-              </div>
-              <span style={{fontFamily:'var(--font-mono)',fontSize:12,color:col.color}}>
-                +${p.pnl.toLocaleString('es-MX',{maximumFractionDigits:2})}
-              </span>
-            </div>
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ── Activity ────────────────────────────────────────────────── */
-function ActivityTab({activity, opt0, opt1}){
-  const [filter,setFilter]=useState('Todos');
-  const filtered = filter==='Todos' ? activity : activity.filter(a=> filter==='Sí' ? a.isYes : !a.isYes);
-  const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  const fakeDate = (id) => { const d=new Date(2026,2+Math.floor(id/7),1+(id*13)%28); return `${months[d.getMonth()]} ${d.getDate()}`; };
-  const mxnVal = (amt,price) => Math.round(amt*parseFloat(price)).toLocaleString('es-MX');
-
-  return(
-    <div>
-      {/* Filters row */}
-      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}>
-        {['Todos','Sí','No'].map(f=>(
-          <button key={f} onClick={()=>setFilter(f)} style={{
-            padding:'6px 14px',borderRadius:20,fontFamily:'var(--font-mono)',fontSize:11,cursor:'pointer',
-            border:'1px solid var(--border)',transition:'all 0.15s',
-            background: filter===f ? 'var(--surface3)' : 'var(--surface2)',
-            color: filter===f ? 'var(--text-primary)' : 'var(--text-muted)',
-          }}>
-            {f} {f!=='Todos'&&<span style={{color:f==='Sí'?'var(--yes)':'var(--no)'}}>▾</span>}
-          </button>
-        ))}
-        <button style={{padding:'6px 14px',borderRadius:20,fontFamily:'var(--font-mono)',fontSize:11,cursor:'pointer',
-          border:'1px solid var(--border)',background:'var(--surface2)',color:'var(--text-muted)'}}>
-          Monto mín ▾
-        </button>
-        <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:6,fontFamily:'var(--font-mono)',fontSize:11}}>
-          <span style={{width:7,height:7,borderRadius:'50%',background:'#ef4444',display:'inline-block',boxShadow:'0 0 6px #ef4444'}}/>
-          <span style={{color:'var(--text-secondary)'}}>En vivo</span>
-        </div>
-      </div>
-
-      {/* Activity rows */}
-      {filtered.map(a=>{
-        const priceMXN = (parseFloat(a.price)*18.5).toFixed(1);
-        const totalMXN = mxnVal(a.amount, a.price);
-        return(
-          <div key={a.id} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 0',borderBottom:'1px solid var(--border)'}}>
-            {/* Avatar */}
-            <div style={{width:32,height:32,borderRadius:'50%',flexShrink:0,
-              background:`hsl(${(a.id*97+29)%360},55%,45%)`,
-              display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,color:'#fff',fontWeight:700}}>
-              {a.user[0]}
-            </div>
-            {/* Text */}
-            <div style={{flex:1,fontSize:13,lineHeight:1.5}}>
-              <span style={{fontWeight:600}}>{a.user.length>12?a.user.slice(0,10)+'...':a.user}</span>
-              {' '}
-              <span style={{color:a.action==='Compró'?'var(--yes)':'var(--no)'}}>{a.action}</span>
-              {' '}
-              <span style={{fontWeight:600,color:a.isYes?'var(--yes)':'var(--no)'}}>{a.amount} {a.isYes?opt0:opt1}</span>
-              {' para '}
-              <span style={{fontWeight:600}}>{fakeDate(a.id)}</span>
-              {' a '}
-              <span style={{color:'var(--text-secondary)'}}>${priceMXN}¢</span>
-              {' '}
-              <span style={{color:'var(--text-muted)',fontSize:12}}>(${totalMXN} MXN)</span>
-            </div>
-            {/* Time + link */}
-            <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
-              <span style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)'}}>{a.time} atrás</span>
-              <span style={{color:'var(--text-muted)',fontSize:14,cursor:'pointer'}}>↗</span>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 /* ── Main ────────────────────────────────────────────────────── */
 export default function MarketDetail() {
@@ -587,7 +399,7 @@ export default function MarketDetail() {
               </div>
             </div>
 
-            <TabsSection mock={mock} opt0={opt0} opt1={opt1} comments={mock.comments}/>
+            <TabsSection mock={mock}/>
           </div>
 
           <div style={{position:isMobile?'static':'sticky',top:88}}>

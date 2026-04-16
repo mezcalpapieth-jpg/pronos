@@ -379,15 +379,40 @@ export default async function handler(req, res) {
     console.warn('[migrate] key passed via query string — prefer Authorization: Bearer header');
   }
 
+  if (!process.env.DATABASE_URL) {
+    console.error('[migrate] DATABASE_URL is not set');
+    return res.status(500).json({ error: 'database_not_configured' });
+  }
+
   const results = [];
+  let wholeErr = null;
   for (const migration of MIGRATIONS) {
     try {
       await sql.query(migration);
       results.push({ sql: migration.slice(0, 60) + '…', ok: true });
     } catch (e) {
-      results.push({ sql: migration.slice(0, 60) + '…', ok: false, error: e.message });
+      console.error('[migrate] statement failed', {
+        head: migration.slice(0, 80),
+        message: e?.message,
+        code: e?.code,
+        detail: e?.detail,
+      });
+      results.push({
+        sql: migration.slice(0, 60) + '…',
+        ok: false,
+        error: e.message,
+        code: e.code,
+      });
+      wholeErr = wholeErr || e;
     }
   }
 
-  return res.status(200).json({ results });
+  // Return 200 if every statement succeeded, 207 (mixed) when at least one
+  // failed, so Vercel still shows a detail body instead of the generic
+  // FUNCTION_INVOCATION_FAILED crash page.
+  const anyFailed = results.some(r => !r.ok);
+  return res.status(anyFailed ? 207 : 200).json({
+    results,
+    firstError: wholeErr ? { message: wholeErr.message, code: wholeErr.code } : null,
+  });
 }
