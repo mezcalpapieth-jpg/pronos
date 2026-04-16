@@ -15,6 +15,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import {
   claimDaily,
+  fetchDailyStatus,
   fetchReferralStats,
   fetchSocialTaskCatalog,
   submitSocialTask,
@@ -26,26 +27,54 @@ function fmt(n) {
 }
 
 // ─── Daily claim card ────────────────────────────────────────────────────────
-function DailyClaimCard({ onClaimed }) {
-  const [state, setState] = useState({ loading: false, msg: null, err: null, streakDay: null });
+// Remembers if the caller already claimed today (via /api/points/history
+// response OR a claim that came back with alreadyClaimedToday=true). When
+// already claimed, the button greys out and becomes non-interactive until
+// the next server day (UTC midnight rollover).
+function DailyClaimCard({ onClaimed, alreadyClaimedToday: initialClaimed, onClaim }) {
+  const [state, setState] = useState({
+    loading: false,
+    msg: null,
+    err: null,
+    streakDay: null,
+    claimed: !!initialClaimed,
+  });
+
+  // Keep local `claimed` in sync with parent updates (e.g. after a
+  // refresh of the history list).
+  useEffect(() => {
+    if (initialClaimed && !state.claimed) {
+      setState(s => ({ ...s, claimed: true }));
+    }
+  }, [initialClaimed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handle() {
-    setState({ loading: true, msg: null, err: null });
+    if (state.claimed || state.loading) return;
+    setState(s => ({ ...s, loading: true, msg: null, err: null }));
     try {
       const r = await claimDaily();
       setState({
         loading: false,
         err: null,
         streakDay: r.streakDay,
+        claimed: true,
         msg: r.alreadyClaimedToday
           ? `Ya reclamaste hoy (+${r.amount} MXNP, racha día ${r.streakDay})`
           : `+${r.amount} MXNP — Racha día ${r.streakDay} 🔥`,
       });
       onClaimed?.(r);
+      onClaim?.(r);
     } catch (e) {
-      setState({ loading: false, msg: null, err: e.code || e.message });
+      setState(s => ({ ...s, loading: false, err: e.code || e.message }));
     }
   }
+
+  const locked = state.claimed;
+  const buttonLabel = state.loading
+    ? 'Reclamando…'
+    : locked
+    ? '✓ Ya reclamaste hoy'
+    : 'Reclamar';
 
   return (
     <section style={panelStyle}>
@@ -64,12 +93,67 @@ function DailyClaimCard({ onClaimed }) {
       <button
         className="btn-primary"
         onClick={handle}
-        disabled={state.loading}
-        style={{ width: '100%', padding: '12px 20px', marginTop: 16 }}
+        disabled={state.loading || locked}
+        style={{
+          width: '100%',
+          padding: '12px 20px',
+          marginTop: 16,
+          // Grey-locked styling when already claimed — overrides the green
+          // `.btn-primary` accent so it's visually obvious the action is
+          // unavailable until tomorrow.
+          ...(locked && {
+            background: 'var(--surface3, #2a2a2a)',
+            color: 'var(--text-muted)',
+            cursor: 'not-allowed',
+            opacity: 0.8,
+            border: '1px solid var(--border)',
+          }),
+        }}
       >
-        {state.loading ? 'Reclamando…' : 'Reclamar de hoy'}
+        {buttonLabel}
       </button>
+      {locked && (
+        <p style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          color: 'var(--text-muted)',
+          textAlign: 'center',
+          marginTop: 8,
+          letterSpacing: '0.04em',
+        }}>
+          Vuelve mañana para mantener la racha.
+        </p>
+      )}
     </section>
+  );
+}
+
+// Wrapper that hydrates `alreadyClaimedToday` on mount so the inner card
+// can render the locked state without waiting for a user click. Keeping
+// the hydration out of DailyClaimCard itself means the same card is
+// reusable in places (like PointsPortfolio) that already know the status.
+function DailyClaimCardWithStatus({ onClaimed }) {
+  const [status, setStatus] = useState(null); // null = loading, then the API payload
+  async function load() {
+    try {
+      const r = await fetchDailyStatus();
+      setStatus(r);
+    } catch {
+      // Fall back to "not claimed" — worst case the user clicks and the
+      // server tells them they already claimed today.
+      setStatus({ alreadyClaimedToday: false });
+    }
+  }
+  useEffect(() => { load(); }, []);
+
+  return (
+    <DailyClaimCard
+      alreadyClaimedToday={!!status?.alreadyClaimedToday}
+      onClaimed={(r) => {
+        onClaimed?.(r);
+        load();
+      }}
+    />
   );
 }
 
@@ -398,7 +482,7 @@ export default function PointsEarn({ onOpenLogin }) {
         gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
         gap: 24,
       }}>
-        <DailyClaimCard onClaimed={refresh} />
+        <DailyClaimCardWithStatus onClaimed={refresh} />
         <ReferralCard />
       </div>
 

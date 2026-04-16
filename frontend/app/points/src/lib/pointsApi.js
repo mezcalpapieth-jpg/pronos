@@ -116,6 +116,15 @@ export async function claimDaily() {
   return postJson('/api/points/claim-daily', {});
 }
 
+/**
+ * Read-only check: has the authenticated user already claimed today?
+ * Lets the UI render a greyed-out "Ya reclamaste hoy" state on mount
+ * without needing to POST.
+ */
+export async function fetchDailyStatus() {
+  return getJson('/api/points/daily-status');
+}
+
 // ─── Referrals ──────────────────────────────────────────────────────────────
 export async function fetchReferralStats() {
   return getJson('/api/points/referrals/stats');

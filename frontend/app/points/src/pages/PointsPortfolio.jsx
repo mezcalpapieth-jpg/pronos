@@ -20,6 +20,7 @@ import {
   executeSell,
   redeemWinnings,
   claimDaily,
+  fetchDailyStatus,
 } from '../lib/pointsApi.js';
 
 function fmt(n) {
@@ -126,8 +127,27 @@ function PositionCard({ position, onSell, onRedeem, selling, redeeming }) {
 }
 
 // ─── Daily claim card ────────────────────────────────────────────────────────
+// Hydrates claim status on mount via /api/points/daily-status so when the
+// user already claimed today the card hides itself entirely — per Fran's
+// request, we want the sidebar to feel "done" after claiming rather than
+// showing a disabled button. The claim card still appears on /earn with a
+// greyed-out locked state, so the user can see the streak progression.
 function DailyClaimCard({ onClaimed }) {
+  // `status` = null → still loading, undefined payload → no check ran yet,
+  // `{ alreadyClaimedToday: true, ... }` → already claimed (card hidden).
+  const [status, setStatus] = useState(null);
   const [state, setState] = useState({ loading: false, msg: null, err: null });
+
+  async function refreshStatus() {
+    try {
+      const r = await fetchDailyStatus();
+      setStatus(r);
+    } catch {
+      setStatus({ alreadyClaimedToday: false });
+    }
+  }
+  useEffect(() => { refreshStatus(); }, []);
+
   async function handle() {
     setState({ loading: true, msg: null, err: null });
     try {
@@ -136,10 +156,23 @@ function DailyClaimCard({ onClaimed }) {
         ? `Ya reclamaste hoy (+${r.amount} MXNP, racha ${r.streakDay})`
         : `+${r.amount} MXNP — Racha día ${r.streakDay} 🔥`, err: null });
       onClaimed?.(r);
+      await refreshStatus(); // hides the card
     } catch (e) {
       setState({ loading: false, msg: null, err: e.code || e.message });
     }
   }
+
+  // Hide the whole card once today's claim is locked in. The user can
+  // still see their streak + history on /earn.
+  if (status === null) {
+    // Status probe still in flight — render a slim placeholder so the
+    // sidebar doesn't flash-empty then flash-full.
+    return (
+      <div style={{ height: 4, marginBottom: 20 }} aria-hidden="true" />
+    );
+  }
+  if (status.alreadyClaimedToday) return null;
+
   return (
     <div style={{
       background: 'rgba(0,232,122,0.05)',
@@ -170,7 +203,7 @@ function DailyClaimCard({ onClaimed }) {
         disabled={state.loading}
         style={{ width: '100%', padding: '11px 20px' }}
       >
-        {state.loading ? 'Reclamando…' : 'Reclamar hoy'}
+        {state.loading ? 'Reclamando…' : 'Reclamar'}
       </button>
     </div>
   );

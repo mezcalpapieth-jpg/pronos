@@ -206,10 +206,41 @@ const POINTS_SCHEMA_MIGRATIONS = [
     ON points_cycle_snapshots(cycle_id, rank ASC)`,
 ];
 
+// PostgreSQL error codes we treat as idempotent no-ops during migration.
+// `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX IF NOT EXISTS` are racy:
+// two concurrent requests can both pass the existence check and one
+// ends up throwing 42P07 / 42710 / etc. even though the end state is
+// correct. Swallowing these codes makes the migration safe under
+// concurrent cold starts (common on Vercel serverless, where a burst
+// of requests can spin up multiple Lambdas simultaneously).
+const IDEMPOTENT_ERROR_CODES = new Set([
+  '42P06', // duplicate_schema
+  '42P07', // duplicate_table
+  '42710', // duplicate_object (index, constraint, trigger)
+  '42701', // duplicate_column
+  '42P16', // invalid_table_definition (seen when column already exists)
+]);
+
+function isIdempotentError(err) {
+  if (!err) return false;
+  if (IDEMPOTENT_ERROR_CODES.has(err.code)) return true;
+  const msg = (err.message || '').toLowerCase();
+  return msg.includes('already exists');
+}
+
 export async function ensurePointsSchema(sql) {
   if (pointsSchemaReady) return;
   for (const migration of POINTS_SCHEMA_MIGRATIONS) {
-    await sql.query(migration);
+    try {
+      await sql.query(migration);
+    } catch (err) {
+      if (isIdempotentError(err)) {
+        // Another concurrent cold-start already created this object —
+        // end state is correct, keep going.
+        continue;
+      }
+      throw err;
+    }
   }
   pointsSchemaReady = true;
 }

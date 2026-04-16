@@ -650,6 +650,7 @@ function MarketsTable() {
 
 // ─── Stats panel ─────────────────────────────────────────────────────────────
 function StatsPanel() {
+  const { user } = usePointsAuth();
   const [stats, setStats] = useState(null);
   useEffect(() => {
     getJson('/api/points/admin/stats').then(setStats).catch(() => setStats(null));
@@ -657,6 +658,40 @@ function StatsPanel() {
   if (!stats) return <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Cargando…</p>;
   return (
     <div>
+      {/* "Signed in as @username" banner — Fran asked for the username
+          at the top of the stats tab so admins can confirm which account
+          they're viewing the dashboard as. */}
+      {user?.username && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '10px 16px',
+          background: 'var(--surface1)',
+          border: '1px solid var(--border)',
+          borderRadius: 10,
+          marginBottom: 16,
+          fontFamily: 'var(--font-mono)',
+          fontSize: 12,
+          color: 'var(--text-muted)',
+        }}>
+          <span style={{
+            display: 'inline-block',
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            background: 'var(--green)',
+            boxShadow: '0 0 8px var(--green)',
+          }} />
+          Sesión admin: <strong style={{ color: 'var(--text-primary)' }}>@{user.username}</strong>
+          {user.balance != null && (
+            <span style={{ marginLeft: 'auto', color: 'var(--green)' }}>
+              {Number(user.balance).toLocaleString('es-MX')} MXNP
+            </span>
+          )}
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 24 }}>
         <StatCard label="Usuarios" value={stats.users.toLocaleString('es-MX')} />
         <StatCard label="MXNP en circulación" value={`${Number(stats.totalSupply).toLocaleString('es-MX')} MXNP`} />
