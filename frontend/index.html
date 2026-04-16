@@ -2,23 +2,27 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="refresh" content="0; url=/points/" />
-    <title>Pronos</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pronos Points — Juega y Gana</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="shortcut icon" href="/favicon.svg" />
-    <script>
-      // JS redirect as a fallback if meta-refresh is blocked (some
-      // ad-blockers, Lynx, etc.). Server-side we prefer the vercel.json
-      // rewrite `/` → `/points/index.html`; this file only runs when
-      // Vercel serves static files over rewrites (older configurations).
-      window.location.replace('/points/');
-    </script>
+    <meta name="description" content="Predice eventos reales y gana MXNP — la moneda de Pronos. Los mejores del leaderboard cada quincena ganan premios reales en efectivo." />
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Shared CSS with landing + MVP -->
+    <script type="module" crossorigin src="/assets/index-CJQ2F2Fl.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CA5B46sM.css">
   </head>
   <body>
-    <noscript>
-      <p style="font-family:sans-serif;text-align:center;padding:40px">
-        Abre <a href="/points/">Pronos Points</a>.
-      </p>
-    </noscript>
+    <!-- Anti-flash: apply saved theme before first paint -->
+    <script>(function(){var s=localStorage.getItem('pronos-theme');document.documentElement.setAttribute('data-theme',s||'light');})();</script>
+    <div id="root"></div>
   </body>
 </html>

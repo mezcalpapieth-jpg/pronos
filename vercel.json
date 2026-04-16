@@ -15,10 +15,9 @@
     }
   ],
   "rewrites": [
-    { "source": "/market",    "destination": "/points/index.html" },
-    { "source": "/portfolio", "destination": "/points/index.html" },
-    { "source": "/admin",     "destination": "/points/index.html" },
-    { "source": "/",          "destination": "/points/index.html" }
+    { "source": "/market",    "destination": "/index.html" },
+    { "source": "/portfolio", "destination": "/index.html" },
+    { "source": "/admin",     "destination": "/index.html" }
   ],
   "headers": [
     {
