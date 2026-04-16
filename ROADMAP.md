@@ -6,7 +6,7 @@
 
 ---
 
-## 🚧 WHAT'S STILL MISSING (as of 2026-04-15)
+## 🚧 WHAT'S STILL MISSING (as of 2026-04-16)
 
 **T-minus 60 days to World Cup kickoff.**
 
@@ -14,6 +14,11 @@
 - **Resend domain verification** — needs Mezcal/GoDaddy DNS access to finish SPF/DKIM. Blocks waitlist emails and any transactional mail.
 - **Chain decision** — Arbitrum Sepolia contracts are ready but we haven't pulled the trigger on mainnet. Blocks everything in Phase 3.
 - **Privy OAuth providers** — Twitter/Instagram/TikTok OAuth apps need to be configured in dashboard.privy.io for social connect buttons to work. Currently they fail with a toast error.
+- **Safe on Arbitrum Sepolia** — Safe contracts exist, but hosted Safe UI/backend do not fully support this network. Current testnet path uses direct owner EOA, not multisig execution.
+
+### 📊 READINESS SNAPSHOT (2026-04-16)
+- **Testnet readiness: 78%** — good enough for a closed/internal pilot. Core flows exist: create markets, buy, early exit, portfolio, indexer, admin approval, and Privy auth. Biggest blockers before a broader testnet push: tighten auth/cron security, fix liquidity and portfolio accounting, clean stale deployment docs, and run end-to-end smoke tests.
+- **Mainnet readiness: 42%** — architecture is taking shape, but hardening is not there yet. Missing: reentrancy + slippage protection, Safe-owned production flow, rate limiting/CSP/CSRF, external audit, mainnet deployment runbook, and launch operations/legal prep.
 
 ### 🔴 VERCEL ENV VARS NEEDED BEFORE DEPLOY
 These must be set in Vercel project settings → Environment Variables:
@@ -53,7 +58,7 @@ Already set (verify): `DATABASE_URL`, `DATABASE_READ_URL`, `PRIVY_APP_ID`, `ADMI
 ### 🟢 SECURITY REMEDIATION
 
 #### From 2026-03-31 audit
-- **C2** CLOB credentials in POST body — derive server-side
+- **C2** CLOB credentials in POST body — partially fixed (secret/passphrase now sealed server-side); finish review so no credential material leaks back to client
 - **C3** DATABASE_URL exposed from frontend API — separate tier or edge functions with secrets
 - **H1** No CSP (Content-Security-Policy)
 - ~~**H3** `/mvp/admin` server-side auth~~ — Fixed. Privy JWT on all admin API calls.
@@ -80,6 +85,14 @@ Already set (verify): `DATABASE_URL`, `DATABASE_READ_URL`, `PRIVY_APP_ID`, `ADMI
 - **Floating-point financial math** — indexer uses parseFloat on chain values before DB storage.
 - **ensureProtocolSchema** — full-table UPDATE on every serverless cold start.
 - **price-history** — allows 120 concurrent upstream fetches per request.
+
+#### From 2026-04-16 audit (new findings)
+- **Indexer liquidity is overstated** — snapshots sum outcome token reserves instead of estimating redeemable collateral. This makes liquidity/TVL look too high.
+- **Portfolio cost basis drifts after partial exits** — indexer subtracts collateral received, not acquisition basis, so PnL becomes unreliable after sells.
+- **CRON_SECRET is optional on all cron endpoints** — `auto-resolve` and `generate-markets` also run without mandatory shared-secret auth.
+- **Legacy deploy docs still point to Base Sepolia + PronoBet** — `README.md` and `deployments.json` can send operators down the wrong deployment path.
+- **First-load performance is weak** — production build currently ships a ~2.7 MB main JS chunk and ~965 kB admin chunk; Safe SDK/admin code is still expensive for a testnet flow that now uses direct wallets.
+- **MVP access gate has a non-prod fallback password** — preview/dev deploys default to `mezcal` when env vars are missing.
 
 ### 🔵 MAINNET LAUNCH SEQUENCE (blocked by chain decision)
 - Deploy all contracts to Arbitrum One (with reentrancy guards added)
@@ -134,15 +147,17 @@ Already set (verify): `DATABASE_URL`, `DATABASE_READ_URL`, `PRIVY_APP_ID`, `ADMI
 - [x] ~~Create test markets via Factory (Bayern Munich, Atletico vs Barcelona, etc.)~~
 - [x] ~~Verify AMM receives liquidity and calculates prices correctly~~
 - [ ] Document deployed addresses in `deployments.json`
+- [ ] Replace stale Base Sepolia entries in `deployments.json` with current Arbitrum Sepolia v1/v2 addresses
 
 ### 1.5 Safe Multisig
 - [x] ~~Setup guide created (`scripts/setup-safe.md`) with step-by-step instructions~~
 - [x] ~~Safe SDK integrated in admin panel (`lib/safe.js` — protocol-kit + api-kit)~~
 - [x] ~~Admin UI: create Safe, connect existing, propose/sign/execute transactions~~
 - [x] ~~Supports Arbitrum Sepolia + Arbitrum One (chain selector in UI)~~
-- [ ] Create Safe multisig on Arbitrum Sepolia (3/5 admin, 2/3 resolution)
-- [ ] Transfer contract ownership to Safe
-- [ ] Test resolution flow through multisig
+- [x] ~~Decision: testnet uses direct owner EOA for now; Safe stays as a mainnet path~~
+- [ ] If desired, self-host Safe infra for Arbitrum Sepolia multisig rehearsal
+- [ ] Transfer mainnet contracts to Safe once Arbitrum One deploy exists
+- [ ] Test resolution flow through multisig on a supported network
 
 ---
 
@@ -202,11 +217,15 @@ Already set (verify): `DATABASE_URL`, `DATABASE_READ_URL`, `PRIVY_APP_ID`, `ADMI
 - [x] ~~API: `/api/market?id=` — detail + 50 price snapshots + 20 recent trades~~
 - [x] ~~API: `/api/positions?address=` — positions aggregated from trades with P&L~~
 - [x] ~~API: `/api/user` — GET + POST with auto-schema, error logging~~
+- [ ] Fix liquidity snapshot math so displayed liquidity matches redeemable collateral, not reserve sum
+- [ ] Fix position cost basis / P&L after partial sells and early exits
+- [ ] Move migration/indexer/waitlist manual auth away from query-string secrets
 
 ### 2.5 Monitoring & Quality
 - [x] ~~Sentry integration (`@sentry/react` + ErrorBoundary, privacy-safe, prod-only)~~
 - [x] ~~API error logging (structured JSON logger + `withLogging` wrapper)~~
 - [x] ~~Bitso stub endpoint (`/api/bitso` — mock ticker + quote for MXN↔USDC)~~
+- [ ] Build-size / cold-load pass: reduce initial JS, split Safe/admin dependencies, speed up first refresh
 
 ### 2.6 Onboarding Campaign (new since 2026-04-15)
 - [x] ~~Leaderboard widget (mock top-10, medals, streak, prizes, cycle countdown)~~
@@ -250,6 +269,7 @@ Already set (verify): `DATABASE_URL`, `DATABASE_READ_URL`, `PRIVY_APP_ID`, `ADMI
 - [ ] Embedded wallet transactions work without errors
 - [ ] Prices and slippage calculate correctly
 - [ ] Admin can resolve a market manually via multisig
+- [ ] Liquidity / volume / P&L stay correct after buys plus partial exits
 
 ---
 
@@ -258,6 +278,7 @@ Already set (verify): `DATABASE_URL`, `DATABASE_READ_URL`, `PRIVY_APP_ID`, `ADMI
 
 ### 3.1 Mainnet Deployment
 - [ ] Add reentrancy guards to PronosAMM + PronosAMMMulti
+- [ ] Add `minOut` / slippage protection to protocol buy + sell functions
 - [ ] Deploy all contracts to Arbitrum One
 - [ ] Transfer ownership to production Safe multisig
 - [ ] Verify all contracts on Arbiscan
@@ -268,13 +289,14 @@ Already set (verify): `DATABASE_URL`, `DATABASE_READ_URL`, `PRIVY_APP_ID`, `ADMI
 
 #### CRITICAL — Must fix before mainnet
 - [x] ~~**C1** Admin auth moved to server-side (`/api/user` returns `isAdmin` flag)~~
-- [ ] **C2** CLOB credentials in POST body — derive server-side
+- [ ] **C2** CLOB credentials review — finish server-side session flow and verify no credential material leaks to client
 - [ ] **C3** DATABASE_URL exposed from frontend API — separate database tier
 - [x] ~~**C4** Admin usernames removed from frontend bundle, checked server-side only~~
 - [ ] **NEW** Gamma proxy SSRF — path allowlist
 - [ ] **NEW** Auth bypass on preview deploys — enforce auth on all envs
 - [ ] **NEW** Admin auth strengthening — crypto binding beyond username match
 - [ ] **NEW** CRON_SECRET must be mandatory (no User-Agent fallback)
+- [ ] **NEW** Remove fallback password from `/api/mvp-access` on preview/dev deploys
 
 #### HIGH — Fix before launch
 - [ ] **H1** No CSP (Content-Security-Policy)
@@ -284,6 +306,7 @@ Already set (verify): `DATABASE_URL`, `DATABASE_READ_URL`, `PRIVY_APP_ID`, `ADMI
 - [ ] **NEW** Rate limiting on all API endpoints
 - [ ] **NEW** Error message sanitization (remove DB details from 500s)
 - [ ] **NEW** Migration key → Authorization header (not query string)
+- [ ] **NEW** Waitlist export key → Authorization header (not query string)
 
 #### MEDIUM — Fix during hardening
 - [x] ~~**M1** HSTS with `includeSubDomains` and `preload` added~~
@@ -298,12 +321,15 @@ Already set (verify): `DATABASE_URL`, `DATABASE_READ_URL`, `PRIVY_APP_ID`, `ADMI
 - [ ] **M10** ethers.js v5.7.2 outdated — upgrade to v6
 - [ ] **NEW** Float → BigInt financial math in indexer
 - [ ] **NEW** ensureProtocolSchema: conditional UPDATE (skip if already lowercase)
+- [ ] **NEW** Reduce batch pressure in `/api/price-history` (120 concurrent upstream fetches is too high)
+- [ ] **NEW** Replace stale Base Sepolia / PronoBet docs with current Arbitrum protocol docs
 
 #### Passed
 - ~~No XSS~~ ~~No eval()~~ ~~HTTPS forced (308)~~ ~~No mixed content~~ ~~No X-Powered-By~~ ~~Privy handles sessions correctly~~
 
 #### Smart Contract
 - [ ] Reentrancy guards on buy/sell/redeem (all contracts)
+- [ ] Slippage-safe contract API (`minOut`) on buy/sell
 - [ ] PronoBet: add timelock to emergencyWithdraw or deprecate
 - [ ] PronoBet: fix collectFee repeatable-call drain
 - [ ] Event emissions for feeCollector changes
@@ -324,6 +350,7 @@ Already set (verify): `DATABASE_URL`, `DATABASE_READ_URL`, `PRIVY_APP_ID`, `ADMI
 - [ ] Operations manual (create markets, resolve, monitor)
 - [ ] Incident response playbook (pause, diagnose, resume)
 - [ ] Environment variables documentation
+- [ ] Rewrite `README.md` / `deployments.json` so they describe Arbitrum v1/v2, not the old Base Sepolia `PronoBet` flow
 
 ### 3.5 Launch Prep
 - [ ] 5-10 curated markets live and tradeable
@@ -390,7 +417,8 @@ Already set (verify): `DATABASE_URL`, `DATABASE_READ_URL`, `PRIVY_APP_ID`, `ADMI
 | 2026-04-15 | **User API:** Auto-schema for users table, upsert on conflict, error logging, null username handling. Wallet linking UI in nav dropdown. |
 | 2026-04-15 | **BetModal fix:** Removed `t` from useEffect deps — was causing infinite loop that prevented slippage from ever loading. |
 | 2026-04-15 | **Security audit:** Full codebase review — 3 critical, 10 high, 7 medium, 10 low findings documented. |
+| 2026-04-16 | **Roadmap refresh + audit:** Build passes. Confirmed auth/cron hardening gaps, stale Base Sepolia docs, incorrect liquidity snapshots, drifted portfolio cost basis after partial exits, and large JS bundles. Added readiness snapshot: 78% closed-testnet, 42% mainnet. |
 
 ---
 
-*Last updated: 2026-04-15*
+*Last updated: 2026-04-16*

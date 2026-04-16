@@ -2,14 +2,14 @@ import { neon } from '@neondatabase/serverless';
 import { applyCors } from './_lib/cors.js';
 import { requirePrivyUser } from './_lib/auth.js';
 import { ensureUserSchema, formatUserSchemaError, isUserSchemaError } from './_lib/user-schema.js';
+// Single source of truth for the admin allowlist — falls closed on any Vercel
+// deploy where ADMIN_USERNAMES isn't explicitly set, rather than granting
+// admin to anyone who squats mezcal/frmm/alex on a forked preview.
+import { ADMIN_USERNAMES } from './_lib/admin.js';
 
 // Separate read-only and read-write connections
 const sqlRead  = neon(process.env.DATABASE_READ_URL  || process.env.DATABASE_URL);
 const sqlWrite = neon(process.env.DATABASE_WRITE_URL || process.env.DATABASE_URL);
-
-// Admin usernames — server-side only, never sent to client bundle
-const ADMIN_USERNAMES = (process.env.ADMIN_USERNAMES || 'mezcal,frmm,alex')
-  .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 
 async function readUserRow(privyId) {
   const rows = await sqlRead`SELECT username FROM users WHERE privy_id = ${privyId}`;

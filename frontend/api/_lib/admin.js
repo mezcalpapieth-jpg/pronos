@@ -1,10 +1,20 @@
 import { requirePrivyUser } from './auth.js';
 import { ensureUserSchema, formatUserSchemaError, isUserSchemaError } from './user-schema.js';
 
-const ADMIN_USERNAMES = (process.env.ADMIN_USERNAMES || 'mezcal,frmm,alex')
+// ADMIN_USERNAMES must be set explicitly in production. Previous default
+// of 'mezcal,frmm,alex' meant anyone who registered one of those usernames
+// got admin rights on any deploy where the env var wasn't configured.
+// Local dev keeps the fallback for convenience; prod/preview get an empty
+// list so requireAdmin() fails closed until the env var is wired up.
+const ADMIN_FALLBACK = process.env.VERCEL_ENV ? '' : 'mezcal,frmm,alex';
+const ADMIN_USERNAMES = (process.env.ADMIN_USERNAMES || ADMIN_FALLBACK)
   .split(',')
   .map(s => s.trim().toLowerCase())
   .filter(Boolean);
+
+if (process.env.VERCEL_ENV && ADMIN_USERNAMES.length === 0) {
+  console.warn('[admin] ADMIN_USERNAMES env var is not set — admin access is disabled on this deploy.');
+}
 
 export async function getUserByPrivyId(sql, privyId) {
   if (!privyId) return null;

@@ -158,9 +158,18 @@ async function insertResolution({ marketId, outcome, winner, winnerShort, resolv
 
 // ── Handler ────────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
-  // Optional secret gate (Vercel cron requests carry ?key= or the auth header)
+  // Require CRON_SECRET on every Vercel deploy. If the env var isn't set on
+  // a deploy, the endpoint is disabled until it's wired up — this prevents
+  // anyone from triggering resolution (and writing resolved_at / outcome rows)
+  // on a preview URL.
   const secret = process.env.CRON_SECRET;
-  if (secret) {
+  const isVercelDeploy = Boolean(process.env.VERCEL_ENV);
+  if (!secret) {
+    if (isVercelDeploy) {
+      return res.status(503).json({ error: 'CRON_SECRET not configured' });
+    }
+    // Local dev — allow through for testing.
+  } else {
     const provided = req.query.key || (req.headers.authorization || '').replace('Bearer ', '');
     if (provided !== secret) return res.status(401).json({ error: 'unauthorized' });
   }

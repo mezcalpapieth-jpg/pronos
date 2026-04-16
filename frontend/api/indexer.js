@@ -113,13 +113,28 @@ function getIndexerConfig() {
 }
 
 export default async function handler(req, res) {
-  // Auth: Vercel Cron sends Authorization header, manual calls use ?key=
+  // Auth: Vercel Cron sends Authorization: Bearer <CRON_SECRET>.
+  // Manual triggers use ?key=<INDEXER_KEY>.
+  //
+  // IMPORTANT: we no longer allow User-Agent: vercel-cron as a fallback when
+  // CRON_SECRET is unset — that header is trivially spoofable and was leaving
+  // the indexer fully open on any deploy where the env var wasn't configured.
+  // Local dev (no VERCEL_ENV) still accepts the UA fallback for convenience.
   const cronSecret = process.env.CRON_SECRET;
   const indexerKey = process.env.INDEXER_KEY;
   const userAgent = req.headers['user-agent'] || '';
-  const isVercelCron = cronSecret
-    ? req.headers.authorization === `Bearer ${cronSecret}`
-    : userAgent.includes('vercel-cron');
+  const isVercelDeploy = Boolean(process.env.VERCEL_ENV);
+
+  let isVercelCron = false;
+  if (cronSecret) {
+    isVercelCron = req.headers.authorization === `Bearer ${cronSecret}`;
+  } else if (!isVercelDeploy) {
+    // Local dev only — UA-based fallback so `vercel dev` works without config.
+    isVercelCron = userAgent.includes('vercel-cron');
+  }
+  // On a Vercel deploy with no CRON_SECRET set, isVercelCron stays false
+  // and the endpoint is effectively disabled until the secret is wired up.
+
   const isManual = Boolean(indexerKey) && req.query.key === indexerKey;
 
   if (!isVercelCron && !isManual) {
@@ -387,10 +402,15 @@ async function indexV1Pool(provider, pool, fromBlock, toBlock, processed) {
     if (total > 0) {
       const yesPrice = reserveNo / total;
       const noPrice = reserveYes / total;
+      // Liquidity = matched collateral (redeemable USDC). In a binary CPMM
+      // with pair-minted tokens, that's min(reserveYes, reserveNo). Using
+      // the sum here would double-count the unmatched excess that only
+      // represents IOUs to one side, inflating TVL ~2×.
+      const liquidity = Math.min(reserveYes, reserveNo);
       const volume24h = await readVolume24h(pool.id);
       await sql`
         INSERT INTO price_snapshots (market_id, yes_price, no_price, volume_24h, liquidity, prices)
-        VALUES (${pool.id}, ${yesPrice}, ${noPrice}, ${volume24h}, ${total}, ${JSON.stringify([yesPrice, noPrice])}::jsonb)
+        VALUES (${pool.id}, ${yesPrice}, ${noPrice}, ${volume24h}, ${liquidity}, ${JSON.stringify([yesPrice, noPrice])}::jsonb)
       `;
     }
   } catch (_) {}
@@ -474,7 +494,12 @@ async function indexV2Pool(provider, pool, fromBlock, toBlock, processed) {
       reserveReads.push(amm.reserves(i, { blockTag: toBlock }));
     }
     const reserveRaw = await Promise.all(reserveReads);
-    const liquidity = reserveRaw.reduce((sum, value) => sum + parseFloat(ethers.utils.formatUnits(value, 6)), 0);
+    const reserves = reserveRaw.map(value => parseFloat(ethers.utils.formatUnits(value, 6)));
+    // Liquidity = matched complete-sets redeemable for USDC. In a multi-
+    // outcome CPMM one complete set (1 token of each outcome) = 1 USDC,
+    // so the pool can redeem min(reserves) complete sets. Summing reserves
+    // here would overstate TVL by a factor of N (outcomeCount).
+    const liquidity = reserves.length > 0 ? Math.min(...reserves) : 0;
     const volume24h = await readVolume24h(pool.id);
 
     await sql`

@@ -138,9 +138,17 @@ function mapCategory(region) {
 // ── Handler ──────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
-  // Optional shared secret check (Vercel cron hits this with Authorization: Bearer <CRON_SECRET>)
+  // CRON_SECRET is mandatory on any Vercel deploy. This endpoint hits the
+  // Anthropic API (burns credits) and writes to the database, so it must not
+  // be triggerable without the shared secret.
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
+  const isVercelDeploy = Boolean(process.env.VERCEL_ENV);
+  if (!cronSecret) {
+    if (isVercelDeploy) {
+      return res.status(503).json({ error: 'CRON_SECRET not configured' });
+    }
+    // Local dev falls through.
+  } else {
     const auth = req.headers.authorization || '';
     const key = req.query.key;
     if (auth !== `Bearer ${cronSecret}` && key !== cronSecret) {

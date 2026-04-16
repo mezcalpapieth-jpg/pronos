@@ -18,7 +18,16 @@ function getBearerToken(req) {
 }
 
 function authIsRequired() {
-  return process.env.REQUIRE_PRIVY_AUTH === 'true' || process.env.VERCEL_ENV === 'production';
+  // Explicit override wins.
+  if (process.env.REQUIRE_PRIVY_AUTH === 'true') return true;
+  if (process.env.REQUIRE_PRIVY_AUTH === 'false') return false;
+  // Any Vercel deploy (preview OR production) must enforce auth.
+  // Previously only 'production' did, which left preview URLs wide open:
+  // without PRIVY_JWT_VERIFICATION_KEY set, requirePrivyUser would return
+  // { ok: true } for any privyId the client chose — including admin ones.
+  if (process.env.VERCEL_ENV) return true;
+  // Local dev (no VERCEL_ENV) stays permissive by default.
+  return false;
 }
 
 async function verifyEs256Jwt(token, publicKeyPem) {

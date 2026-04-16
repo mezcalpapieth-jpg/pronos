@@ -29,42 +29,65 @@ export default async function handler(req, res) {
   try {
     await ensureProtocolSchema(schemaSql);
 
+    // Cost basis uses average-cost accounting:
+    //   avg_cost = total_buy_cost / total_buy_shares
+    //   cost_basis_remaining = avg_cost * (buy_shares - sell_shares)
+    //   realized_pnl = sell_proceeds - avg_cost * sell_shares
+    // The previous formula (Σbuys - Σsells) went negative after a profitable
+    // sell, inflating displayed PnL. Now `totalCost` = cost basis of currently
+    // held shares only; `realizedPnl` captures the locked-in gain/loss from
+    // sells so the combined figure still matches cumulative profit.
     const [v1Rows, v2Rows] = await Promise.all([
       sql`
-        WITH aggregates AS (
+        WITH by_outcome AS (
           SELECT
             t.market_id,
-            COALESCE(SUM(
-              CASE
-                WHEN COALESCE(t.outcome_index, CASE WHEN t.is_yes THEN 0 ELSE 1 END) = 0
-                  THEN CASE WHEN t.side = 'buy' THEN t.shares_amt ELSE -t.shares_amt END
-                ELSE 0
-              END
-            ), 0) AS yes_shares,
-            COALESCE(SUM(
-              CASE
-                WHEN COALESCE(t.outcome_index, CASE WHEN t.is_yes THEN 0 ELSE 1 END) = 1
-                  THEN CASE WHEN t.side = 'buy' THEN t.shares_amt ELSE -t.shares_amt END
-                ELSE 0
-              END
-            ), 0) AS no_shares,
-            COALESCE(SUM(
-              CASE
-                WHEN t.side = 'buy' THEN t.collateral_amt
-                ELSE -t.collateral_amt
-              END
-            ), 0) AS total_cost,
+            COALESCE(t.outcome_index, CASE WHEN t.is_yes THEN 0 ELSE 1 END) AS outcome_index,
+            SUM(CASE WHEN t.side = 'buy'  THEN t.shares_amt     ELSE 0 END) AS buy_shares,
+            SUM(CASE WHEN t.side = 'buy'  THEN t.collateral_amt ELSE 0 END) AS buy_cost,
+            SUM(CASE WHEN t.side = 'sell' THEN t.shares_amt     ELSE 0 END) AS sell_shares,
+            SUM(CASE WHEN t.side = 'sell' THEN t.collateral_amt ELSE 0 END) AS sell_proceeds,
             MAX(t.created_at) AS updated_at
           FROM trades t
           JOIN protocol_markets m ON m.id = t.market_id
           WHERE t.trader = ${addr}
             AND COALESCE(m.protocol_version, 'v1') = 'v1'
-          GROUP BY t.market_id
+          GROUP BY t.market_id, outcome_index
+        ),
+        per_outcome AS (
+          SELECT
+            market_id,
+            outcome_index,
+            GREATEST(buy_shares - sell_shares, 0) AS shares_held,
+            CASE
+              WHEN buy_shares > 0
+                THEN buy_cost * GREATEST(buy_shares - sell_shares, 0) / buy_shares
+              ELSE 0
+            END AS cost_basis_remaining,
+            CASE
+              WHEN buy_shares > 0
+                THEN sell_proceeds - buy_cost * sell_shares / buy_shares
+              ELSE 0
+            END AS realized_pnl,
+            updated_at
+          FROM by_outcome
+        ),
+        aggregates AS (
+          SELECT
+            market_id,
+            COALESCE(SUM(CASE WHEN outcome_index = 0 THEN shares_held ELSE 0 END), 0) AS yes_shares,
+            COALESCE(SUM(CASE WHEN outcome_index = 1 THEN shares_held ELSE 0 END), 0) AS no_shares,
+            COALESCE(SUM(cost_basis_remaining), 0) AS total_cost,
+            COALESCE(SUM(realized_pnl), 0) AS realized_pnl,
+            MAX(updated_at) AS updated_at
+          FROM per_outcome
+          GROUP BY market_id
         )
         SELECT
           a.yes_shares,
           a.no_shares,
           a.total_cost,
+          a.realized_pnl,
           a.updated_at,
           m.id AS market_id,
           m.question,
@@ -90,22 +113,14 @@ export default async function handler(req, res) {
           a.updated_at DESC
       `,
       sql`
-        WITH aggregates AS (
+        WITH by_outcome AS (
           SELECT
             t.market_id,
             t.outcome_index,
-            COALESCE(SUM(
-              CASE
-                WHEN t.side = 'buy' THEN t.shares_amt
-                ELSE -t.shares_amt
-              END
-            ), 0) AS shares,
-            COALESCE(SUM(
-              CASE
-                WHEN t.side = 'buy' THEN t.collateral_amt
-                ELSE -t.collateral_amt
-              END
-            ), 0) AS total_cost,
+            SUM(CASE WHEN t.side = 'buy'  THEN t.shares_amt     ELSE 0 END) AS buy_shares,
+            SUM(CASE WHEN t.side = 'buy'  THEN t.collateral_amt ELSE 0 END) AS buy_cost,
+            SUM(CASE WHEN t.side = 'sell' THEN t.shares_amt     ELSE 0 END) AS sell_shares,
+            SUM(CASE WHEN t.side = 'sell' THEN t.collateral_amt ELSE 0 END) AS sell_proceeds,
             MAX(t.created_at) AS updated_at
           FROM trades t
           JOIN protocol_markets m ON m.id = t.market_id
@@ -113,11 +128,30 @@ export default async function handler(req, res) {
             AND COALESCE(m.protocol_version, 'v1') = 'v2'
             AND t.outcome_index IS NOT NULL
           GROUP BY t.market_id, t.outcome_index
+        ),
+        aggregates AS (
+          SELECT
+            market_id,
+            outcome_index,
+            GREATEST(buy_shares - sell_shares, 0) AS shares,
+            CASE
+              WHEN buy_shares > 0
+                THEN buy_cost * GREATEST(buy_shares - sell_shares, 0) / buy_shares
+              ELSE 0
+            END AS total_cost,
+            CASE
+              WHEN buy_shares > 0
+                THEN sell_proceeds - buy_cost * sell_shares / buy_shares
+              ELSE 0
+            END AS realized_pnl,
+            updated_at
+          FROM by_outcome
         )
         SELECT
           a.outcome_index,
           a.shares,
           a.total_cost,
+          a.realized_pnl,
           a.updated_at,
           m.id AS market_id,
           m.question,
@@ -148,7 +182,8 @@ export default async function handler(req, res) {
     const v1Positions = v1Rows.map((r) => {
       const yesShares = clampToZero(r.yes_shares);
       const noShares = clampToZero(r.no_shares);
-      const totalCost = clampToZero(r.total_cost);
+      const totalCost = clampToZero(r.total_cost); // cost basis of remaining shares only
+      const realizedPnl = parseNumber(r.realized_pnl, 0);
 
       let currentPrice;
       if (r.status === 'resolved' && Number(r.outcome) === 1) {
@@ -160,7 +195,8 @@ export default async function handler(req, res) {
       }
 
       const currentValue = yesShares * currentPrice + noShares * (1 - currentPrice);
-      const pnl = currentValue - totalCost;
+      const unrealizedPnl = currentValue - totalCost;
+      const pnl = unrealizedPnl + realizedPnl;
 
       return {
         marketId: r.market_id,
@@ -178,6 +214,8 @@ export default async function handler(req, res) {
         currentPrice,
         currentValue: roundMoney(currentValue),
         pnl: roundMoney(pnl),
+        unrealizedPnl: roundMoney(unrealizedPnl),
+        realizedPnl: roundMoney(realizedPnl),
         redeemed: false,
         payout: 0,
         updatedAt: r.updated_at,
@@ -186,7 +224,8 @@ export default async function handler(req, res) {
 
     const v2Positions = v2Rows.map((r) => {
       const shares = clampToZero(r.shares);
-      const totalCost = clampToZero(r.total_cost);
+      const totalCost = clampToZero(r.total_cost); // cost basis of remaining shares
+      const realizedPnl = parseNumber(r.realized_pnl, 0);
       const outcomeIndex = Number(r.outcome_index);
       const labels = parseJson(r.outcomes, []);
       const prices = parseJson(r.current_prices, []);
@@ -199,7 +238,8 @@ export default async function handler(req, res) {
       }
 
       const currentValue = shares * currentPrice;
-      const pnl = currentValue - totalCost;
+      const unrealizedPnl = currentValue - totalCost;
+      const pnl = unrealizedPnl + realizedPnl;
 
       return {
         marketId: r.market_id,
@@ -219,6 +259,8 @@ export default async function handler(req, res) {
         currentPrice,
         currentValue: roundMoney(currentValue),
         pnl: roundMoney(pnl),
+        unrealizedPnl: roundMoney(unrealizedPnl),
+        realizedPnl: roundMoney(realizedPnl),
         redeemed: false,
         payout: 0,
         updatedAt: r.updated_at,
@@ -227,9 +269,14 @@ export default async function handler(req, res) {
 
     const positions = [...v1Positions, ...v2Positions];
     const active = positions.filter((position) => position.status === 'active');
-    const totalInvested = active.reduce((sum, position) => sum + position.totalCost, 0);
-    const totalValue = active.reduce((sum, position) => sum + position.currentValue, 0);
-    const totalPnl = totalValue - totalInvested;
+    // totalCost now = cost basis of currently held shares (not buys−sells).
+    // Total PnL must add realizedPnl to capture gains/losses already locked
+    // in by prior sells — otherwise the summary only shows unrealized PnL.
+    const totalInvested  = active.reduce((sum, p) => sum + p.totalCost, 0);
+    const totalValue     = active.reduce((sum, p) => sum + p.currentValue, 0);
+    const totalUnrealized = totalValue - totalInvested;
+    const totalRealized  = positions.reduce((sum, p) => sum + (p.realizedPnl || 0), 0);
+    const totalPnl       = totalUnrealized + totalRealized;
 
     return res.status(200).json({
       address: addr,
@@ -240,6 +287,8 @@ export default async function handler(req, res) {
         totalInvested: roundMoney(totalInvested),
         currentValue: roundMoney(totalValue),
         pnl: roundMoney(totalPnl),
+        unrealizedPnl: roundMoney(totalUnrealized),
+        realizedPnl: roundMoney(totalRealized),
       },
     });
   } catch (e) {
