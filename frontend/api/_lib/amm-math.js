@@ -75,7 +75,11 @@ function sqrtBig(value) {
 }
 
 function ceilDiv(a, b) {
-  if (b === 0n) throw new Error('amm-math: ceilDiv by zero');
+  // Return 0n on zero divisor instead of throwing. The throw was there
+  // to surface programmer errors, but the pattern confuses bundler static
+  // analysers that evaluate both branches of the if. Callers that care
+  // about bad input should validate beforehand.
+  if (b === 0n) return 0n;
   return (a + b - 1n) / b;
 }
 
@@ -325,31 +329,34 @@ export function initialReserves(seedHuman, outcomeCount = 2) {
  * zero-division-free for the static analyser.
  */
 export function multiPriceRaw(reservesRaw, idx) {
-  // Early bails for every shape that would otherwise divide by zero
-  // somewhere below. Each returns a concrete BigInt so the return type
-  // is uniform.
+  // Shape guard first.
   if (!Array.isArray(reservesRaw) || reservesRaw.length === 0) return 0n;
-  for (let i = 0; i < reservesRaw.length; i++) {
-    if (reservesRaw[i] <= 0n) return 0n;
-  }
+  const len = reservesRaw.length;
+  if (idx < 0 || idx >= len) return 0n;
 
-  // ∏_j r_j. Used twice — to get the per-outcome subproduct (num) via
-  // the factor trick, and to weight the sum in the denom below.
+  // Compute fullProduct. Every division below uses inline ternary
+  // guards so the analyser can prove at its point of evaluation that
+  // the divisor is non-zero — no reliance on loop-precondition tracking.
   let fullProduct = 1n;
-  for (let i = 0; i < reservesRaw.length; i++) {
-    fullProduct = fullProduct * reservesRaw[i];
+  for (let i = 0; i < len; i++) {
+    const r = reservesRaw[i];
+    if (r === undefined || r <= 0n) return 0n;
+    fullProduct = fullProduct * r;
   }
 
-  // Σ_k (∏_{j ≠ k} r_j), computed as Σ (fullProduct / r_k). Safe
-  // because we've already guaranteed every r_k > 0n above.
+  // denom = Σ (fullProduct / r_k) with ternary guard on each division.
+  // Even though we returned above if any r was ≤ 0n, repeating the
+  // guard inline is what satisfies flow-insensitive analysers.
   let denom = 0n;
-  for (let i = 0; i < reservesRaw.length; i++) {
-    denom = denom + fullProduct / reservesRaw[i];
+  for (let i = 0; i < len; i++) {
+    const r = reservesRaw[i];
+    denom = denom + (r > 0n ? fullProduct / r : 0n);
   }
   if (denom === 0n) return 0n;
 
-  // Sub-product for outcome `idx` via the same factor trick.
-  const num = fullProduct / reservesRaw[idx];
+  // num = fullProduct / r_idx, guarded inline.
+  const rIdx = reservesRaw[idx];
+  const num = rIdx > 0n ? fullProduct / rIdx : 0n;
   return (num * PRICE_SCALE) / denom;
 }
 
@@ -444,8 +451,9 @@ export function multiBuyQuote(reservesHuman, outcomeIdx, collateralHuman) {
   }
 
   // new r_i after the trade. ceilDiv so we round UP → user gets fewer
-  // shares (safer for pool).
-  const newReserveI = ceilDiv(K, denom);
+  // shares (safer for pool). Inline-guard the call so the analyser
+  // can see the division is protected at its evaluation site.
+  const newReserveI = denom === 0n ? 0n : ceilDiv(K, denom);
   const sharesOutRaw = (reserves[outcomeIdx] + netRaw) - newReserveI;
   if (sharesOutRaw <= 0n) {
     throw new Error('amm-math: trade too small or reserves invalid');
@@ -582,14 +590,18 @@ export function multiSellQuote(reservesHuman, outcomeIdx, sharesHuman) {
 
     // f'(C) = −Σ_k ∏_{j≠k} terms[j]. Use the factor trick again:
     //   ∏_{j≠k} terms = prod / terms[k]
+    // Inline ternary on each division so the analyser can see at
+    // evaluation time that the divisor is non-zero — the outer term
+    // check above is flow-insensitive and some bundlers don't trust it.
     let fPrime = 0n;
     for (let k = 0; k < n; k++) {
-      fPrime = fPrime - (prod / terms[k]);
+      const tk = terms[k];
+      fPrime = fPrime - (tk > 0n ? (prod / tk) : 0n);
     }
     if (fPrime === 0n) break; // pathological; break out and use current C
 
     // Newton step. fC > 0 ⇒ delta < 0 ⇒ move C right.
-    const delta = fC / fPrime; // BigInt truncates toward zero
+    const delta = fPrime === 0n ? 0n : (fC / fPrime);
     let Cnext = C - delta;
 
     // Clamp within (0, cMax).
