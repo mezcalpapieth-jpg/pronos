@@ -8,7 +8,7 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
-import { binarySellQuote, multiSellQuote } from '../_lib/amm-math.js';
+import { binarySellQuote } from '../_lib/amm-math.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -49,18 +49,10 @@ export default async function handler(req, res) {
     if (r.status !== 'active') return res.status(400).json({ error: 'market_closed' });
 
     const reserves = parseJsonb(r.reserves, []).map(Number);
-    if (reserves.length < 2) return res.status(400).json({ error: 'degenerate_reserves' });
-    if (reserves.length > 3) {
-      return res.status(400).json({
-        error: 'multi_routing_not_ready',
-        detail: 'Use parallel binary event groups for N≥4 markets.',
-      });
-    }
+    if (reserves.length !== 2) return res.status(400).json({ error: 'only_binary_supported' });
     if (oi >= reserves.length) return res.status(400).json({ error: 'invalid_outcome_index' });
 
-    const q = reserves.length === 2
-      ? binarySellQuote(reserves, oi, n)
-      : multiSellQuote(reserves, oi, n);
+    const q = binarySellQuote(reserves, oi, n);
     return res.status(200).json({
       shares: q.shares,
       gross: q.gross,

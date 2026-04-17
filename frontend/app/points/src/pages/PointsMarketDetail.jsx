@@ -370,15 +370,14 @@ export default function PointsMarketDetail({ onOpenLogin }) {
             }}>
               {isResolved ? 'Mercado cerrado'
                : isPendingResolution ? 'Esperando resolución'
-               : outcomes.length > 3 ? 'Trading próximamente'
+               : outcomes.length > 2 ? 'Trading próximamente'
                : 'Elige un resultado'}
             </div>
 
-            {/* For markets with 4+ outcomes we haven't wired the parallel-
-                binary event group path yet — show a read-only notice
-                instead of buttons that would error on click. N=2 (binary)
-                and N=3 (unified CPMM) are both fully tradeable. */}
-            {!isResolved && !isPendingResolution && outcomes.length > 3 && (
+            {/* Multi-outcome trading is temporarily disabled while we
+                stabilise the deploy pipeline. Users see the market but
+                can't buy until the N>2 AMM path is re-enabled. */}
+            {!isResolved && !isPendingResolution && outcomes.length > 2 && (
               <p style={{
                 fontFamily: 'var(--font-mono)',
                 fontSize: 11,
@@ -391,24 +390,14 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 margin: 0,
               }}>
                 Este mercado tiene <strong>{outcomes.length} opciones</strong>.
-                El trading para mercados de 4+ opciones se habilita pronto —
-                por ahora puedes ver el mercado pero no comprar.
+                El trading multi-opción se habilita pronto — por ahora puedes
+                ver el mercado pero no comprar.
               </p>
             )}
 
-            {!isResolved && !isPendingResolution && outcomes.length <= 3 && outcomes.map((label, i) => {
+            {!isResolved && !isPendingResolution && outcomes.length === 2 && outcomes.map((label, i) => {
               const pct = Math.round(prices[i] * 100);
-              // Color accent rotates for 3-outcome markets so Sí/Empate/No
-              // feel visually distinct. Binary keeps the green/red pair.
-              const MULTI_ACCENTS = [
-                { border: 'rgba(22,163,74,0.25)',  bg: 'var(--yes-dim, rgba(22,163,74,0.1))', fg: 'var(--yes)' },
-                { border: 'rgba(184,144,10,0.3)',  bg: 'rgba(184,144,10,0.08)',              fg: 'var(--gold, #f59e0b)' },
-                { border: 'rgba(255,59,59,0.25)',  bg: 'rgba(255,59,59,0.08)',               fg: '#ff3b3b' },
-              ];
-              const isBinary = outcomes.length === 2;
-              const accent = isBinary
-                ? (i === 0 ? MULTI_ACCENTS[0] : MULTI_ACCENTS[2])
-                : MULTI_ACCENTS[i] || MULTI_ACCENTS[2];
+              const isYes = i === 0;
               return (
                 <button
                   key={i}
@@ -418,9 +407,9 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                     padding: '14px 16px',
                     marginBottom: 10,
                     borderRadius: 10,
-                    border: `1px solid ${accent.border}`,
-                    background: accent.bg,
-                    color: accent.fg,
+                    border: `1px solid ${isYes ? 'rgba(22,163,74,0.25)' : 'rgba(255,59,59,0.25)'}`,
+                    background: isYes ? 'var(--yes-dim, rgba(22,163,74,0.1))' : 'rgba(255,59,59,0.08)',
+                    color: isYes ? 'var(--yes)' : '#ff3b3b',
                     fontFamily: 'var(--font-mono)',
                     cursor: 'pointer',
                     display: 'flex',

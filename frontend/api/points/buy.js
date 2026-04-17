@@ -10,7 +10,7 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
-import { binaryBuyQuote, multiBuyQuote } from '../_lib/amm-math.js';
+import { binaryBuyQuote } from '../_lib/amm-math.js';
 import { requireSession } from '../_lib/session.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { withTransaction } from '../_lib/db-tx.js';
@@ -80,18 +80,11 @@ export default async function handler(req, res) {
         const err = new Error('market_expired'); err.status = 400; throw err;
       }
       const reserves = parseJsonb(m.reserves, []).map(Number);
-      // Dispatch AMM by outcome count:
-      //   N=2 → audited binary CPMM (mirrors PronosAMM.sol).
-      //   N=3 → unified multi CPMM (W/D/L markets, prices sum to 1).
-      //   N≥4 → parallel binary event groups (not this row — routed via
-      //         the event_group_id resolver, future commit).
-      if (reserves.length < 2) {
-        const err = new Error('degenerate_reserves'); err.status = 400; throw err;
-      }
-      if (reserves.length > 3) {
-        const err = new Error('multi_routing_not_ready'); err.status = 400;
-        err.detail = 'Use parallel binary event groups for N≥4 markets.';
-        throw err;
+      // Binary-only while the multi-outcome AMM path is stripped
+      // (Vercel build regression under investigation). Restore the
+      // dispatch table once the build pipeline is stable again.
+      if (reserves.length !== 2) {
+        const err = new Error('only_binary_supported'); err.status = 400; throw err;
       }
       if (oi >= reserves.length) {
         const err = new Error('invalid_outcome_index'); err.status = 400; throw err;
@@ -110,9 +103,7 @@ export default async function handler(req, res) {
 
       let quote;
       try {
-        quote = reserves.length === 2
-          ? binaryBuyQuote(reserves, oi, amt)
-          : multiBuyQuote(reserves, oi, amt);
+        quote = binaryBuyQuote(reserves, oi, amt);
       } catch (e) {
         const err = new Error('invalid_quote'); err.status = 400; err.detail = e.message; throw err;
       }
