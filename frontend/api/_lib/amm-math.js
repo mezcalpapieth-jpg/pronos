@@ -314,13 +314,12 @@ export function initialReserves(seedHuman, outcomeCount = 2) {
  * Raw (1e6-scaled BigInt) price of outcome `idx` in an N-outcome pool.
  *   P_i = (∏_{j≠i} r_j) / Σ_k (∏_{j≠k} r_j)
  *
- * Returns null when the pool is empty (caller should fall back to a
- * uniform 1/N prior). Exact BigInt arithmetic — no intermediate floats.
+ * Preconditions: `reservesRaw` is a BigInt[] with length ≥ 2 and every
+ * element > 0n. Callers MUST validate before calling. Preconditions are
+ * documented (not enforced via null/undefined sentinels) so bundler
+ * type-flow analysis never sees a BigInt|null union for this return.
  */
 export function multiPriceRaw(reservesRaw, idx) {
-  if (!Array.isArray(reservesRaw) || reservesRaw.length < 2) return null;
-  if (reservesRaw.some(r => r === 0n)) return null;
-
   // ∏_{j≠idx} r_j in (1e6)^{N-1} scale.
   let num = 1n;
   for (let j = 0; j < reservesRaw.length; j++) {
@@ -328,20 +327,19 @@ export function multiPriceRaw(reservesRaw, idx) {
   }
 
   // Σ_k (∏_{j≠k} r_j). Factor trick: each term = (∏ r) / r_k.
-  // Cheaper than recomputing, avoids overflow in the intermediate.
   let fullProduct = 1n;
   for (const r of reservesRaw) fullProduct = fullProduct * r;
   let denom = 0n;
   for (const r of reservesRaw) denom = denom + fullProduct / r;
 
-  if (denom === 0n) return null;
   return (num * PRICE_SCALE) / denom;
 }
 
 /**
  * Human-readable price vector for a multi-outcome pool. Sums to ~1.0
  * (may be off by a microprobability due to BigInt truncation on small
- * reserves, negligible in practice).
+ * reserves, negligible in practice). Falls back to a uniform 1/N prior
+ * on degenerate input so the UI never divides by zero.
  */
 export function multiPrices(reservesHuman) {
   if (!Array.isArray(reservesHuman) || reservesHuman.length < 2) {
@@ -349,10 +347,21 @@ export function multiPrices(reservesHuman) {
   }
   const n = reservesHuman.length;
   const raw = reservesHuman.map(toRaw);
-  return raw.map((_, i) => {
-    const p = multiPriceRaw(raw, i);
-    return p === null ? 1 / n : rawToProbability(p);
-  });
+
+  // Early uniform-prior return for degenerate pools. Separate branch so
+  // multiPriceRaw is only ever called with validated BigInt inputs.
+  for (let i = 0; i < n; i++) {
+    if (raw[i] <= 0n) {
+      const uniform = 1 / n;
+      return new Array(n).fill(uniform);
+    }
+  }
+
+  const out = new Array(n);
+  for (let i = 0; i < n; i++) {
+    out[i] = rawToProbability(multiPriceRaw(raw, i));
+  }
+  return out;
 }
 
 /**
@@ -362,12 +371,11 @@ export function multiPrices(reservesHuman) {
  *   N=2 → 2.50%  (matches binary)
  *   N=3 → 3.33%
  *   N=4 → 3.75%
+ *
+ * Caller guarantees valid reservesRaw (BigInt[] with all > 0n).
  */
 function calculateMultiFeeRaw(amountRaw, reservesRaw, outcomeIdx) {
   const pRaw = multiPriceRaw(reservesRaw, outcomeIdx);
-  if (pRaw === null) {
-    return (amountRaw * DEFAULT_FEE_AT_FIFTY) / SCALE;
-  }
   const feeRate = (FEE_SLOPE_BPS * (PRICE_SCALE - pRaw)) / FEE_DENOM;
   return (amountRaw * feeRate) / SCALE;
 }
@@ -430,12 +438,18 @@ export function multiBuyQuote(reservesHuman, outcomeIdx, collateralHuman) {
     j === outcomeIdx ? newReserveI : r + netRaw,
   );
 
-  const pricesBefore = reserves.map((_, i) =>
-    rawToProbability(multiPriceRaw(reserves, i) || 0n),
-  );
-  const pricesAfter = newReservesRaw.map((_, i) =>
-    rawToProbability(multiPriceRaw(newReservesRaw, i) || 0n),
-  );
+  // Both vectors are guaranteed to be fully-positive BigInt[] at this
+  // point (checked above for `reserves`; `newReserveI` is ceilDiv'd
+  // from a positive K, and other slots are `r + netRaw` where netRaw
+  // ≤ collateralRaw is non-negative), so we can call multiPriceRaw
+  // without another guard. Allocated explicitly (no `|| fallback`) to
+  // keep every intermediate typed BigInt, never BigInt|null.
+  const pricesBefore = new Array(n);
+  const pricesAfter = new Array(n);
+  for (let i = 0; i < n; i++) {
+    pricesBefore[i] = rawToProbability(multiPriceRaw(reserves, i));
+    pricesAfter[i] = rawToProbability(multiPriceRaw(newReservesRaw, i));
+  }
 
   return {
     collateral: fromRaw(collateralRaw),
@@ -496,19 +510,25 @@ export function multiSellQuote(reservesHuman, outcomeIdx, sharesHuman) {
   // Hard ceiling for C: slightly below the smallest non-sold reserve.
   // At C = min_other, one of the (r_j − C) terms hits zero, f(C) = −K.
   // We need to stay strictly below that to avoid a negative factor.
-  let minOther = null;
+  //
+  // Initialize minOther to a concrete BigInt right away (the first
+  // non-idx reserve) rather than starting with `null`. Keeping the
+  // type strictly BigInt avoids the BigInt|null union that static
+  // analyzers have trouble with around `minOther - 1n`.
+  let minOther = reserves[outcomeIdx === 0 ? 1 : 0];
   for (let j = 0; j < n; j++) {
     if (j === outcomeIdx) continue;
-    if (minOther === null || reserves[j] < minOther) minOther = reserves[j];
+    if (reserves[j] < minOther) minOther = reserves[j];
   }
   const cMax = minOther - 1n;
   if (cMax <= 0n) {
     throw new Error('amm-math: sell would drain pool');
   }
 
-  // Initial guess: α × current price of outcome i. This is a lower
-  // bound (ignores price impact) so Newton will converge upward.
-  const pInit = multiPriceRaw(reserves, outcomeIdx) || (PRICE_SCALE / BigInt(n));
+  // Initial guess: α × current price of outcome i. Inputs are validated
+  // (all reserves > 0n), so multiPriceRaw always returns a BigInt here
+  // — no `|| fallback` needed, keeping pInit strictly typed.
+  const pInit = multiPriceRaw(reserves, outcomeIdx);
   let C = (sharesRaw * pInit) / PRICE_SCALE;
   if (C <= 0n) C = 1n;
   if (C >= cMax) C = cMax / 2n;
@@ -577,12 +597,15 @@ function finalize(reservesRaw, outcomeIdx, sharesRaw, C, n) {
     throw new Error('amm-math: sell would drain pool');
   }
 
-  const pricesBefore = reservesRaw.map((_, i) =>
-    rawToProbability(multiPriceRaw(reservesRaw, i) || 0n),
-  );
-  const pricesAfter = newReservesRaw.map((_, i) =>
-    rawToProbability(multiPriceRaw(newReservesRaw, i) || 0n),
-  );
+  // Both vectors are strictly positive BigInt[] here, so multiPriceRaw
+  // is safe without a null fallback. Explicit loop keeps every slot
+  // typed BigInt-then-Number with no BigInt|null union step.
+  const pricesBefore = new Array(n);
+  const pricesAfter = new Array(n);
+  for (let i = 0; i < n; i++) {
+    pricesBefore[i] = rawToProbability(multiPriceRaw(reservesRaw, i));
+    pricesAfter[i] = rawToProbability(multiPriceRaw(newReservesRaw, i));
+  }
 
   return {
     shares: fromRaw(sharesRaw),
