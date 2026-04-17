@@ -1,0 +1,30 @@
+# Vercel deploy exclusions — files here never reach the deploy or the
+# Lambda bundler. Keep this list tight: we want source + built static
+# output + serverless functions, nothing else.
+
+# ── Tests (any naming convention) ────────────────────────────────────────
+**/*.test.js
+**/*.test.ts
+**/*.spec.js
+**/*.spec.ts
+**/__tests__/**
+
+# ── Solidity + contracts (not deployed via Vercel) ──────────────────────
+contracts/
+
+# ── Documentation and repo meta ─────────────────────────────────────────
+docs/
+README.md
+ROADMAP.md
+*.md
+!frontend/**/*.md
+
+# ── Claude Code worktrees and tooling ───────────────────────────────────
+.claude/
+
+# ── Local scripts (not Vercel-runtime) ──────────────────────────────────
+scripts/
+
+# ── Build/dev artifacts ─────────────────────────────────────────────────
+.DS_Store
+*.log
