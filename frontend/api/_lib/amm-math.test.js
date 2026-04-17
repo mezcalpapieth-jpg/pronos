@@ -438,6 +438,50 @@ test('multiBuyQuote: N=2 matches binary within tolerance', () => {
     'multi(N=2) ≈ binary priceAfter');
 });
 
+// Unified multi-outcome (N ≥ 4) — same math, just larger N.
+// If Newton diverges or BigInt overflows, these fail loudly.
+
+test('multiPrices on symmetric N=5 pool is 1/5 each', () => {
+  const ps = multiPrices([500, 500, 500, 500, 500]);
+  assert.equal(ps.length, 5);
+  for (const p of ps) approxEqual(p, 0.2, 0.001, 'symmetric 5-way prior');
+});
+
+test('multiBuyQuote (N=5): shares > 0, price increases on the bought side', () => {
+  const reserves = [500, 500, 500, 500, 500];
+  const q = multiBuyQuote(reserves, 2, 100);
+  assert.ok(q.sharesOut > 0, 'must mint shares');
+  assert.ok(q.priceAfter > q.priceBefore, 'price of bought outcome rises');
+  // Other outcomes must fall. Sum of prices still ≈ 1.
+  const sum = q.pricesAfter.reduce((s, p) => s + p, 0);
+  approxEqual(sum, 1, 0.005, 'prices sum to 1 post-trade');
+});
+
+test('multiSellQuote (N=5): round-trip recovers ~net collateral', () => {
+  // Buy outcome 3, then immediately sell the same shares back.
+  // Because there's a buy fee and no sell fee, the user recovers ~net
+  // (net = gross − buy fee). Absolute slippage should be tiny on a
+  // symmetric pool this size.
+  let reserves = [500, 500, 500, 500, 500];
+  const buy = multiBuyQuote(reserves, 3, 100);
+  reserves = buy.reservesAfter;
+  const sell = multiSellQuote(reserves, 3, buy.sharesOut);
+  const net = 100 - buy.fee;
+  approxEqual(sell.collateralOut, net, 0.5,
+    `round-trip recovers ~${net.toFixed(2)}, got ${sell.collateralOut.toFixed(2)}`);
+});
+
+test('multiBuyQuote (N=8): Newton-path stays sane on large N', () => {
+  // 8-outcome market seeded uniformly. Buy outcome 5, sell half back.
+  let reserves = [500, 500, 500, 500, 500, 500, 500, 500];
+  const buy = multiBuyQuote(reserves, 5, 200);
+  assert.ok(buy.sharesOut > 0);
+  reserves = buy.reservesAfter;
+  const sell = multiSellQuote(reserves, 5, buy.sharesOut / 2);
+  assert.ok(sell.collateralOut > 0, 'partial sell returns positive collateral');
+  assert.ok(sell.reservesAfter.every(r => r > 0), 'no drained reserve');
+});
+
 test('multi N=3 end-to-end: W/D/L soccer market, Mexico wins', () => {
   // Seeded at [500, 500, 500] for Mexico / Tie / Opponent.
   // Alice buys 100 MXNP of Mexico YES. Bob buys 60 of Tie.

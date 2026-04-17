@@ -82,16 +82,11 @@ export default async function handler(req, res) {
       const reserves = parseJsonb(m.reserves, []).map(Number);
       // Dispatch AMM by outcome count:
       //   N=2 → audited binary CPMM (mirrors PronosAMM.sol).
-      //   N=3 → unified multi CPMM (W/D/L markets, prices sum to 1).
-      //   N≥4 → parallel binary event groups (not this row — routed via
-      //         the event_group_id resolver, future commit).
+      //   N≥3 → unified multi CPMM (prices sum to 1 via the factor-trick
+      //         invariant in amm-math.js). Parallel binary event groups
+      //         are a separate amm_mode to be added later.
       if (reserves.length < 2) {
         const err = new Error('degenerate_reserves'); err.status = 400; throw err;
-      }
-      if (reserves.length > 3) {
-        const err = new Error('multi_routing_not_ready'); err.status = 400;
-        err.detail = 'Use parallel binary event groups for N≥4 markets.';
-        throw err;
       }
       if (oi >= reserves.length) {
         const err = new Error('invalid_outcome_index'); err.status = 400; throw err;

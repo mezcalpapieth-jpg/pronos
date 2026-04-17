@@ -4,11 +4,17 @@
  * Server-side equivalent of the audited on-chain PronosAMM.sol, in JS
  * with BigInt so we can run the same economic model without contracts.
  *
- * Scope: BINARY markets only (outcome_index ∈ {0, 1}). Multi-outcome
- * markets are modeled as N parallel binary markets — same pattern
- * Polymarket uses for N-candidate elections. This keeps the math
- * identical to the audited binary CPMM and avoids reimplementing a
- * multi-outcome AMM whose invariants are subtle.
+ * Scope: binary (N=2) and unified multi-outcome (N≥3) markets. N=2
+ * routes through `binaryBuyQuote`/`binarySellQuote`, which mirror the
+ * audited on-chain PronosAMM.sol. N≥3 routes through the unified
+ * `multiBuyQuote`/`multiSellQuote` below — one pool with one reserve
+ * per outcome, prices sum to 1 via the factor-trick invariant.
+ *
+ * A second AMM mode, "parallel binary event groups" (Polymarket-style
+ * where each outcome is its own binary market), is planned as a
+ * follow-up via a per-market `amm_mode` flag. It is NOT implemented
+ * in this module yet; when it lands, trading endpoints will dispatch
+ * to `binaryBuyQuote` per leg using the shared event_group_id.
  *
  * Precision:
  *   - All collateral / reserve amounts scaled by 1e6 (6 decimals, matches
@@ -276,43 +282,31 @@ export function redeemPayout(shares, outcomeIndex, winningOutcomeIndex) {
  * Initial reserves for a new market with `outcomeCount` outcomes, all
  * priced equally.
  *   - Binary (N=2): [S, S] — 50/50, matches PronosAMM.initialize().
- *   - Multi (N>2): [S, S, S, ...] — each outcome starts at 1/N implied
- *     probability under the inverse-reserve weighting used by
- *     pricesFromReserves in markets.js.
+ *   - Multi (N≥3): [S, S, S, ...] — each outcome starts at 1/N implied
+ *     probability under the factor-trick invariant used by multiPrices.
  *
- * Trading endpoints (`buy`, `sell`) still only support binary (N=2);
- * multi-outcome markets currently render as read-only in the UI until the
- * AMM math for N>2 is wired up.
+ * Trading endpoints route N=2 through the audited binary CPMM and
+ * N≥3 through the unified multi CPMM below.
  */
 export function initialReserves(seedHuman, outcomeCount = 2) {
   const n = Math.max(2, Math.min(20, Number(outcomeCount) || 2));
   return Array.from({ length: n }, () => seedHuman);
 }
 
-// ─── Multi-outcome markets ───────────────────────────────────────────────────
+// ─── Multi-outcome markets (unified pool) ────────────────────────────────────
 //
-// Product decision: we handle non-binary markets in TWO regimes based on
-// outcome count:
+// One pool with one reserve per outcome. Invariant is the product ∏ r_j.
+// Prices sum to 100% naturally by the factor trick. Buy is closed-form
+// (one BigInt division); sell is Newton on a degree-N polynomial
+// (converges in ~5-8 iters for realistic pools).
 //
-//   N = 3 (unified pool)
-//     Typical use: soccer W/D/L, three-way elections. The pool holds one
-//     reserve per outcome; invariant is the product ∏ r_j. Prices sum to
-//     100% naturally. Buy is closed-form (one BigInt division); sell is a
-//     Newton-iteration on a cubic polynomial (converges in ~5 iters).
+// Works for any N ≥ 2. Tests cross-check N=2 against binaryBuyQuote for
+// sanity, but the trading endpoints still route N=2 through the audited
+// binary path to minimize blast radius.
 //
-//   N ≥ 4 (parallel binary markets)
-//     Typical use: "who wins" among many candidates (Liga MX, Mundial
-//     brackets). Each outcome becomes its own binary market row sharing
-//     an event_group_id. Reuses the audited binary CPMM verbatim. This
-//     module does NOT implement that path — the wiring lives in
-//     create-market.js, markets.js, and resolve-market.js. The trading
-//     endpoints still dispatch to binaryBuyQuote/binarySellQuote for
-//     each leg.
-//
-// The functions below cover the N=3 unified case. They're written to work
-// for any N ≥ 2 so tests can cross-check N=2 against binaryBuyQuote for
-// mathematical sanity, but trading endpoints route N=2 through the
-// audited binary code path to minimize blast radius.
+// A future parallel-binary-event-group mode will live alongside this one
+// (dispatched via a per-market `amm_mode` flag), using the binary CPMM
+// per leg. Not implemented in this module.
 
 /**
  * Raw (1e6-scaled BigInt) price of outcome `idx` in an N-outcome pool.

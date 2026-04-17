@@ -77,16 +77,9 @@ export default async function handler(req, res) {
         const err = new Error('market_expired'); err.status = 400; throw err;
       }
       const reserves = parseJsonb(m.reserves, []).map(Number);
-      // AMM dispatch, same rules as buy.js:
-      //   N=2 → binary CPMM; N=3 → unified multi; N≥4 → reject (handled
-      //   as parallel event groups elsewhere).
+      // AMM dispatch, same rules as buy.js: N=2 binary, N≥3 unified multi.
       if (reserves.length < 2) {
         const err = new Error('degenerate_reserves'); err.status = 400; throw err;
-      }
-      if (reserves.length > 3) {
-        const err = new Error('multi_routing_not_ready'); err.status = 400;
-        err.detail = 'Use parallel binary event groups for N≥4 markets.';
-        throw err;
       }
       if (oi >= reserves.length) {
         const err = new Error('invalid_outcome_index'); err.status = 400; throw err;

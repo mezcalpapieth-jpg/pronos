@@ -60,12 +60,6 @@ export default async function handler(req, res) {
     if (reserves.length < 2) {
       return res.status(400).json({ error: 'degenerate_reserves' });
     }
-    if (reserves.length > 3) {
-      return res.status(400).json({
-        error: 'multi_routing_not_ready',
-        detail: 'Use parallel binary event groups for N≥4 markets.',
-      });
-    }
     if (oi >= reserves.length) {
       return res.status(400).json({ error: 'invalid_outcome_index' });
     }

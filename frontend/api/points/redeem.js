@@ -35,7 +35,7 @@ export default async function handler(req, res) {
   const mid = parseInt(marketId, 10);
   const oi  = parseInt(outcomeIndex, 10);
   if (!Number.isInteger(mid) || mid <= 0) return res.status(400).json({ error: 'invalid_market_id' });
-  if (![0, 1].includes(oi))                return res.status(400).json({ error: 'invalid_outcome_index' });
+  if (!Number.isInteger(oi) || oi < 0)     return res.status(400).json({ error: 'invalid_outcome_index' });
 
   const username = session.username;
 

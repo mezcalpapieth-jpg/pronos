@@ -17,7 +17,17 @@ import PointsBuyModal from '../components/PointsBuyModal.jsx';
 
 // Accent colors for the multi-line price chart. Match the buy-button
 // accents so users recognize the same color for the same outcome.
-const OUTCOME_COLORS = ['var(--yes)', 'var(--gold, #f59e0b)', '#ff3b3b'];
+// Palette wraps at N>8 (rare); adjust in tandem with BUY_ACCENTS below.
+const OUTCOME_COLORS = [
+  'var(--yes)',            // green
+  'var(--gold, #f59e0b)',  // gold
+  '#ff3b3b',               // red
+  '#3b82f6',               // blue
+  '#a855f7',               // purple
+  '#06b6d4',               // cyan
+  '#ec4899',               // pink
+  '#84cc16',               // lime
+];
 
 function formatDeadline(endTime) {
   if (!endTime) return '';
@@ -334,7 +344,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {outcomes.map((label, i) => {
-                      const color = OUTCOME_COLORS[i] || OUTCOME_COLORS[OUTCOME_COLORS.length - 1];
+                      const color = OUTCOME_COLORS[i % OUTCOME_COLORS.length];
                       const series = historyByOutcome && historyByOutcome[i];
                       return (
                         <Sparkline
@@ -550,45 +560,28 @@ export default function PointsMarketDetail({ onOpenLogin }) {
             }}>
               {isResolved ? 'Mercado cerrado'
                : isPendingResolution ? 'Esperando resolución'
-               : outcomes.length > 3 ? 'Trading próximamente'
                : 'Elige un resultado'}
             </div>
 
-            {/* For markets with 4+ outcomes we haven't wired the parallel-
-                binary event group path yet — show a read-only notice
-                instead of buttons that would error on click. N=2 (binary)
-                and N=3 (unified CPMM) are both fully tradeable. */}
-            {!isResolved && !isPendingResolution && outcomes.length > 3 && (
-              <p style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 11,
-                color: 'var(--text-muted)',
-                lineHeight: 1.6,
-                background: 'var(--surface2)',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
-                padding: '12px 14px',
-                margin: 0,
-              }}>
-                Este mercado tiene <strong>{outcomes.length} opciones</strong>.
-                El trading para mercados de 4+ opciones se habilita pronto —
-                por ahora puedes ver el mercado pero no comprar.
-              </p>
-            )}
-
-            {!isResolved && !isPendingResolution && outcomes.length <= 3 && outcomes.map((label, i) => {
+            {!isResolved && !isPendingResolution && outcomes.map((label, i) => {
               const pct = Math.round(prices[i] * 100);
-              // Color accent rotates for 3-outcome markets so Sí/Empate/No
-              // feel visually distinct. Binary keeps the green/red pair.
+              // Color accent rotates for multi-outcome markets so outcomes
+              // feel visually distinct. Binary keeps the green/red pair;
+              // N>3 cycles through the extended palette and wraps modulo.
               const MULTI_ACCENTS = [
                 { border: 'rgba(22,163,74,0.25)',  bg: 'var(--yes-dim, rgba(22,163,74,0.1))', fg: 'var(--yes)' },
                 { border: 'rgba(184,144,10,0.3)',  bg: 'rgba(184,144,10,0.08)',              fg: 'var(--gold, #f59e0b)' },
                 { border: 'rgba(255,59,59,0.25)',  bg: 'rgba(255,59,59,0.08)',               fg: '#ff3b3b' },
+                { border: 'rgba(59,130,246,0.3)',  bg: 'rgba(59,130,246,0.08)',              fg: '#3b82f6' },
+                { border: 'rgba(168,85,247,0.3)',  bg: 'rgba(168,85,247,0.08)',              fg: '#a855f7' },
+                { border: 'rgba(6,182,212,0.3)',   bg: 'rgba(6,182,212,0.08)',               fg: '#06b6d4' },
+                { border: 'rgba(236,72,153,0.3)',  bg: 'rgba(236,72,153,0.08)',              fg: '#ec4899' },
+                { border: 'rgba(132,204,22,0.3)',  bg: 'rgba(132,204,22,0.08)',              fg: '#84cc16' },
               ];
               const isBinary = outcomes.length === 2;
               const accent = isBinary
                 ? (i === 0 ? MULTI_ACCENTS[0] : MULTI_ACCENTS[2])
-                : MULTI_ACCENTS[i] || MULTI_ACCENTS[2];
+                : MULTI_ACCENTS[i % MULTI_ACCENTS.length];
               return (
                 <button
                   key={i}

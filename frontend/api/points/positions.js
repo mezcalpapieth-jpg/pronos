@@ -10,7 +10,7 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
-import { binaryPrices } from '../_lib/amm-math.js';
+import { binaryPrices, multiPrices } from '../_lib/amm-math.js';
 import { requireSession } from '../_lib/session.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -54,7 +54,11 @@ export default async function handler(req, res) {
     const positions = rows.map(r => {
       const outcomes = parseJsonb(r.outcomes, ['Sí', 'No']);
       const reserves = parseJsonb(r.reserves, []).map(Number);
-      const prices = reserves.length === 2 ? binaryPrices(reserves) : outcomes.map((_, i) => 1 / outcomes.length);
+      const prices = reserves.length === 2
+        ? binaryPrices(reserves)
+        : reserves.length >= 2
+          ? multiPrices(reserves)
+          : outcomes.map(() => 1 / (outcomes.length || 2));
       const shares = Number(r.shares);
       const costBasis = Number(r.cost_basis);
       const realized = Number(r.realized_pnl || 0);
