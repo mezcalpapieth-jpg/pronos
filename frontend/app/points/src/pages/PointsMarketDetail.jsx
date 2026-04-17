@@ -435,7 +435,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
                 {isResolved
                   ? 'Este mercado ya cerró. Los ganadores pueden reclamar su pago en el portafolio.'
-                  : 'Las apuestas están cerradas. El resultado se publicará pronto.'}
+                  : 'Las inversiones están cerradas. El resultado se publicará pronto.'}
               </p>
             )}
 

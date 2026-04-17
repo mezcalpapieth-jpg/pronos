@@ -160,12 +160,12 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
               <>
                 Estamos construyendo el primer <strong>mercado de predicciones
                 on-chain</strong> diseñado para Latinoamérica. Lo que usas ahora
-                con MXNP es el calentamiento — pronto podrás operar con{' '}
-                <strong>Pesos reales (MXN)</strong> sobre eventos reales, con
-                liquidación automática y sin intermediarios.
+                con MXNP es el calentamiento — pronto podrás invertir{' '}
+                <strong>Pesos</strong> sobre eventos reales, con liquidación
+                automática y sin intermediarios.
                 <br /><br />
                 Los competidores activos hoy tendrán <strong style={{ color: '#ff5500' }}>
-                acceso prioritario</strong> cuando abramos trading con Pesos.
+                acceso prioritario</strong> cuando abramos trading en Pesos.
               </>
             }
           />

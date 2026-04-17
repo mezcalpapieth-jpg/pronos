@@ -65,12 +65,12 @@ export async function sendPointsWelcomeEmail({ email, username }) {
       <p style="font-size:14px;color:#ccc;line-height:1.7;margin:0 0 12px;">
         Estamos construyendo el primer <strong>mercado de predicciones on-chain</strong>
         diseñado para Latinoamérica. Lo que estás usando ahora con MXNP es el calentamiento —
-        pronto podrás apostar <strong>Pesos reales (MXN)</strong> sobre eventos reales,
-        con liquidación automática y sin intermediarios.
+        pronto podrás invertir <strong>Pesos</strong> sobre eventos reales, con liquidación
+        automática y sin intermediarios.
       </p>
       <p style="font-size:14px;color:#ccc;line-height:1.7;margin:0;">
         Los usuarios activos de la competencia <strong style="color:#ff5500;">tendrán prioridad</strong>
-        cuando abramos trading con Pesos. Mientras tanto, sube en el leaderboard, comparte
+        cuando abramos trading en Pesos. Mientras tanto, sube en el leaderboard, comparte
         con amigos y gana MXNP.
       </p>
     </div>
