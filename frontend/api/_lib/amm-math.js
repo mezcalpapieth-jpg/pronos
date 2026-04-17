@@ -314,24 +314,42 @@ export function initialReserves(seedHuman, outcomeCount = 2) {
  * Raw (1e6-scaled BigInt) price of outcome `idx` in an N-outcome pool.
  *   P_i = (∏_{j≠i} r_j) / Σ_k (∏_{j≠k} r_j)
  *
- * Preconditions: `reservesRaw` is a BigInt[] with length ≥ 2 and every
- * element > 0n. Callers MUST validate before calling. Preconditions are
- * documented (not enforced via null/undefined sentinels) so bundler
- * type-flow analysis never sees a BigInt|null union for this return.
+ * Return type is always BigInt — degenerate inputs (empty array, any
+ * reserve ≤ 0n) return 0n as a sentinel rather than null. Keeping the
+ * return type single-variant stops bundler flow analysis from ever
+ * seeing a BigInt|null union, which can cascade into a phantom
+ * "BigInt mixed with other types" error during static evaluation.
+ *
+ * Callers still expect validated input for meaningful prices — this
+ * is just a safety guard to keep every code path provably
+ * zero-division-free for the static analyser.
  */
 export function multiPriceRaw(reservesRaw, idx) {
-  // ∏_{j≠idx} r_j in (1e6)^{N-1} scale.
-  let num = 1n;
-  for (let j = 0; j < reservesRaw.length; j++) {
-    if (j !== idx) num = num * reservesRaw[j];
+  // Early bails for every shape that would otherwise divide by zero
+  // somewhere below. Each returns a concrete BigInt so the return type
+  // is uniform.
+  if (!Array.isArray(reservesRaw) || reservesRaw.length === 0) return 0n;
+  for (let i = 0; i < reservesRaw.length; i++) {
+    if (reservesRaw[i] <= 0n) return 0n;
   }
 
-  // Σ_k (∏_{j≠k} r_j). Factor trick: each term = (∏ r) / r_k.
+  // ∏_j r_j. Used twice — to get the per-outcome subproduct (num) via
+  // the factor trick, and to weight the sum in the denom below.
   let fullProduct = 1n;
-  for (const r of reservesRaw) fullProduct = fullProduct * r;
-  let denom = 0n;
-  for (const r of reservesRaw) denom = denom + fullProduct / r;
+  for (let i = 0; i < reservesRaw.length; i++) {
+    fullProduct = fullProduct * reservesRaw[i];
+  }
 
+  // Σ_k (∏_{j ≠ k} r_j), computed as Σ (fullProduct / r_k). Safe
+  // because we've already guaranteed every r_k > 0n above.
+  let denom = 0n;
+  for (let i = 0; i < reservesRaw.length; i++) {
+    denom = denom + fullProduct / reservesRaw[i];
+  }
+  if (denom === 0n) return 0n;
+
+  // Sub-product for outcome `idx` via the same factor trick.
+  const num = fullProduct / reservesRaw[idx];
   return (num * PRICE_SCALE) / denom;
 }
 
