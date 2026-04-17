@@ -19,6 +19,7 @@ import {
   adminReviewSocialTask,
   adminListCycles,
   adminRolloverCycle,
+  adminEditMarket,
 } from '../lib/pointsApi.js';
 
 const CATEGORIES = [
@@ -729,6 +730,8 @@ function MarketsTable() {
   const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState(null);
+  // When non-null, render the edit modal for this market.
+  const [editing, setEditing] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -802,11 +805,31 @@ function MarketsTable() {
             </div>
           </div>
           {m.status === 'active' ? (
-            <ResolveControls
-              market={m}
-              resolving={resolving === m.id}
-              onResolve={(winnerIndex) => resolveMarket(m.id, winnerIndex)}
-            />
+            <>
+              <button
+                onClick={() => setEditing(m)}
+                title="Editar nombre o fecha de cierre"
+                style={{
+                  padding: '6px 10px',
+                  background: 'transparent',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                  color: 'var(--text-secondary)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  cursor: 'pointer',
+                  letterSpacing: '0.04em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                Editar
+              </button>
+              <ResolveControls
+                market={m}
+                resolving={resolving === m.id}
+                onResolve={(winnerIndex) => resolveMarket(m.id, winnerIndex)}
+              />
+            </>
           ) : (
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--green)' }}>
               ✓ {m.outcomes[m.outcome]}
@@ -814,6 +837,186 @@ function MarketsTable() {
           )}
         </div>
       ))}
+
+      {editing && (
+        <EditMarketModal
+          market={editing}
+          onClose={() => setEditing(null)}
+          onSaved={async () => {
+            setEditing(null);
+            await load();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Edit-market modal ──────────────────────────────────────────────────────
+// Lets an admin patch just the user-facing question text and the close
+// datetime. Reserves, outcomes, and status stay locked — mutating those
+// post-creation would desync the AMM or confuse existing holders. Wired
+// to POST /api/points/admin/edit-market.
+function EditMarketModal({ market, onClose, onSaved }) {
+  const [question, setQuestion] = useState(market.question || '');
+  // Datetime-local wants "YYYY-MM-DDTHH:mm" (no timezone). Shave the
+  // current end_time down to that shape so it pre-populates the input.
+  const initialDt = market.endTime
+    ? new Date(market.endTime).toISOString().slice(0, 16)
+    : '';
+  const [endTime, setEndTime] = useState(initialDt);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
+
+  async function save() {
+    setSaving(true);
+    setErr(null);
+    try {
+      await adminEditMarket({
+        marketId: market.id,
+        question: question.trim() !== (market.question || '').trim() ? question.trim() : undefined,
+        endTime: endTime !== initialDt ? new Date(endTime).toISOString() : undefined,
+      });
+      await onSaved?.();
+    } catch (e) {
+      setErr(`${e.code || e.message}${e.detail ? ' · ' + e.detail : ''}`);
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={(e) => { if (e.target === e.currentTarget && !saving) onClose?.(); }}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 9999,
+        background: 'rgba(0, 0, 0, 0.65)',
+        backdropFilter: 'blur(4px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '24px 16px',
+      }}
+    >
+      <div style={{
+        width: 'min(480px, 100%)',
+        background: 'var(--surface1)',
+        border: '1px solid var(--border)',
+        borderRadius: 14,
+        padding: '24px 28px',
+      }}>
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          letterSpacing: '0.12em',
+          color: 'var(--green)',
+          textTransform: 'uppercase',
+          marginBottom: 8,
+        }}>
+          Editar mercado #{market.id}
+        </div>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, marginTop: 0, marginBottom: 20 }}>
+          {market.question}
+        </h3>
+
+        <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
+          Pregunta
+        </label>
+        <textarea
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+          rows={3}
+          maxLength={500}
+          style={{
+            width: '100%',
+            background: 'var(--surface2)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            padding: '10px 12px',
+            fontFamily: 'var(--font-body)',
+            fontSize: 14,
+            color: 'var(--text-primary)',
+            outline: 'none',
+            marginBottom: 14,
+            resize: 'vertical',
+          }}
+        />
+
+        <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
+          Fecha de cierre
+        </label>
+        <input
+          type="datetime-local"
+          value={endTime}
+          onChange={(e) => setEndTime(e.target.value)}
+          style={{
+            width: '100%',
+            background: 'var(--surface2)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            padding: '10px 12px',
+            fontFamily: 'var(--font-body)',
+            fontSize: 14,
+            color: 'var(--text-primary)',
+            outline: 'none',
+            marginBottom: 14,
+          }}
+        />
+
+        <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 16 }}>
+          Solo la pregunta y la fecha de cierre son editables. Opciones,
+          categoría y reservas del AMM no se pueden cambiar después de
+          crear el mercado.
+        </p>
+
+        {err && (
+          <div style={{
+            background: 'rgba(239,68,68,0.1)',
+            border: '1px solid rgba(239,68,68,0.3)',
+            color: 'var(--red, #ef4444)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 12,
+            padding: '8px 12px',
+            borderRadius: 8,
+            marginBottom: 12,
+          }}>
+            {err}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={onClose}
+            disabled={saving}
+            style={{
+              flex: 1,
+              padding: '10px 14px',
+              background: 'transparent',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+              color: 'var(--text-secondary)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              cursor: saving ? 'not-allowed' : 'pointer',
+            }}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={save}
+            disabled={saving}
+            className="btn-primary"
+            style={{ flex: 1, padding: '10px 14px', fontSize: 11 }}
+          >
+            {saving ? 'Guardando…' : 'Guardar'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

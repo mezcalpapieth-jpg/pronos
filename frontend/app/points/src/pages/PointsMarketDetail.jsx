@@ -10,10 +10,14 @@
  */
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { fetchMarket, fetchPriceHistory } from '../lib/pointsApi.js';
+import { fetchMarket, fetchPriceHistory, fetchPositions } from '../lib/pointsApi.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import Sparkline from '@app/components/Sparkline.jsx';
 import PointsBuyModal from '../components/PointsBuyModal.jsx';
+
+// Accent colors for the multi-line price chart. Match the buy-button
+// accents so users recognize the same color for the same outcome.
+const OUTCOME_COLORS = ['var(--yes)', 'var(--gold, #f59e0b)', '#ff3b3b'];
 
 function formatDeadline(endTime) {
   if (!endTime) return '';
@@ -79,7 +83,10 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   const { authenticated } = usePointsAuth();
 
   const [market, setMarket] = useState(null);
-  const [history, setHistory] = useState(null); // [{t, p}] for outcome 0
+  // historyByOutcome[i] = [{t, p}] for outcome i. Populated for every
+  // outcome so the chart can render one line per option on multi markets.
+  const [historyByOutcome, setHistoryByOutcome] = useState(null);
+  const [userPositions, setUserPositions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [buyState, setBuyState] = useState(null); // { outcomeIndex, outcomeLabel }
@@ -94,17 +101,48 @@ export default function PointsMarketDetail({ onOpenLogin }) {
         if (cancelled) return;
         setMarket(m);
         setLoading(false);
-        // Fire-and-forget history fetch. Failures are swallowed inside
-        // fetchPriceHistory so they never block the detail page.
-        if (m?.id) {
-          fetchPriceHistory([m.id], { days: 30, outcome: 0 }).then(h => {
-            if (!cancelled) setHistory(h[m.id] || []);
+        // Fire-and-forget history fetch — one call per outcome so the
+        // chart can draw N lines. Chart gracefully handles missing /
+        // empty series (falls back to seeded mock) so a slow endpoint
+        // doesn't break the page.
+        if (m?.id && Array.isArray(m.outcomes)) {
+          const n = m.outcomes.length;
+          Promise.all(
+            Array.from({ length: n }, (_, i) =>
+              fetchPriceHistory([m.id], { days: 30, outcome: i })
+                .then(h => h[m.id] || [])
+                .catch(() => []),
+            ),
+          ).then(series => {
+            if (!cancelled) setHistoryByOutcome(series);
           });
         }
       })
       .catch(e => { if (!cancelled) { setError(e.code || e.message); setLoading(false); } });
     return () => { cancelled = true; };
   }, [id]);
+
+  // Fetch the signed-in user's positions and filter to this market.
+  // Used by the sidebar "Tu posición" panel so the user can see what
+  // they already hold and sell / buy more without a detour to the
+  // portfolio page.
+  useEffect(() => {
+    if (!authenticated || !id) {
+      setUserPositions([]);
+      return undefined;
+    }
+    let cancelled = false;
+    fetchPositions()
+      .then(r => {
+        if (cancelled) return;
+        const mid = Number(id);
+        const mine = (r.positions || [])
+          .filter(p => Number(p.marketId) === mid && Number(p.shares) > 0);
+        setUserPositions(mine);
+      })
+      .catch(() => { /* best-effort */ });
+    return () => { cancelled = true; };
+  }, [authenticated, id, buyState]);
 
   function handleBuyClick(outcomeIndex, outcomeLabel) {
     if (!authenticated) {
@@ -271,17 +309,52 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 <span>ÚLT. 30 DÍAS</span>
               </div>
               <div style={{ padding: '20px 20px 18px' }}>
-                <Sparkline
-                  height={140}
-                  color="var(--yes)"
-                  strokeWidth={2.4}
-                  fill={true}
-                  showValue={true}
-                  valueWidth={60}
-                  data={Array.isArray(history) && history.length > 1 ? history : null}
-                  targetPct={Math.round((prices[0] ?? 0.5) * 100)}
-                  seed={`points-detail-${market.id}-${outcomes[0] || 'yes'}`}
-                />
+                {/* One sparkline per outcome. For binary markets we show
+                    a taller chart with just the YES line (equivalent to
+                    the NO line mirrored, no extra info). For 3+ outcome
+                    markets we stack smaller sparklines so the user sees
+                    every curve — one color per option, matching the buy
+                    buttons below. */}
+                {outcomes.length <= 2 ? (
+                  <Sparkline
+                    height={140}
+                    color={OUTCOME_COLORS[0]}
+                    strokeWidth={2.4}
+                    fill={true}
+                    showValue={true}
+                    valueWidth={60}
+                    data={
+                      historyByOutcome && historyByOutcome[0] && historyByOutcome[0].length > 1
+                        ? historyByOutcome[0]
+                        : null
+                    }
+                    targetPct={Math.round((prices[0] ?? 0.5) * 100)}
+                    seed={`points-detail-${market.id}-${outcomes[0] || 'yes'}`}
+                  />
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {outcomes.map((label, i) => {
+                      const color = OUTCOME_COLORS[i] || OUTCOME_COLORS[OUTCOME_COLORS.length - 1];
+                      const series = historyByOutcome && historyByOutcome[i];
+                      return (
+                        <Sparkline
+                          key={i}
+                          height={48}
+                          color={color}
+                          strokeWidth={2}
+                          fill={i === 0}
+                          showValue={true}
+                          valueWidth={44}
+                          label={label.length > 10 ? label.slice(0, 9) + '…' : label}
+                          labelWidth={84}
+                          data={Array.isArray(series) && series.length > 1 ? series : null}
+                          targetPct={Math.round((prices[i] ?? 1 / outcomes.length) * 100)}
+                          seed={`points-detail-${market.id}-${label || 'opt' + i}`}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -351,10 +424,117 @@ export default function PointsMarketDetail({ onOpenLogin }) {
             </div>
           </div>
 
-          {/* Right column: buy panel */}
+          {/* Right column: user-position panel + buy panel */}
           <aside style={{
             position: 'sticky',
             top: 80,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 16,
+          }}>
+
+            {/* ── Tu posición ───────────────────────────────────────
+                Shows shares held per outcome when the user is signed in
+                and holds anything on this market. Each row has a
+                "Vender" shortcut that jumps to /portfolio where the
+                sell flow is already wired. Keeps the user from having
+                to leave the market detail to manage existing exposure.
+            */}
+            {authenticated && userPositions.length > 0 && (
+              <div style={{
+                background: 'var(--surface1)',
+                border: '1px solid rgba(0,232,122,0.25)',
+                borderRadius: 14,
+                padding: '18px 22px',
+              }}>
+                <div style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  letterSpacing: '0.12em',
+                  color: 'var(--green)',
+                  textTransform: 'uppercase',
+                  marginBottom: 12,
+                }}>
+                  Tu posición
+                </div>
+                {userPositions.map(p => {
+                  const oi = Number(p.outcomeIndex);
+                  const label = outcomes[oi] || `Opción ${oi + 1}`;
+                  const shares = Number(p.shares) || 0;
+                  const currentPrice = Number(prices[oi] || 0);
+                  const markValue = shares * currentPrice;
+                  const costBasis = Number(p.costBasis) || 0;
+                  const pnl = markValue - costBasis;
+                  const pnlPos = pnl >= 0;
+                  return (
+                    <div key={oi} style={{
+                      padding: '10px 0',
+                      borderTop: '1px solid var(--border)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                        <span style={{
+                          fontFamily: 'var(--font-body)',
+                          fontSize: 13,
+                          color: 'var(--text-primary)',
+                          fontWeight: 600,
+                        }}>
+                          {label}
+                        </span>
+                        <span style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 12,
+                          color: 'var(--text-muted)',
+                        }}>
+                          {shares.toFixed(2)} acciones
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+                        <span style={{ color: 'var(--text-muted)' }}>
+                          Valor: <span style={{ color: 'var(--text-primary)' }}>{markValue.toFixed(2)} MXNP</span>
+                        </span>
+                        <span style={{ color: pnlPos ? 'var(--green)' : 'var(--red, #ef4444)' }}>
+                          {pnlPos ? '+' : ''}{pnl.toFixed(2)} PnL
+                        </span>
+                      </div>
+                      {!isResolved && !isPendingResolution && (
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button
+                            onClick={() => handleBuyClick(oi, label)}
+                            className="btn-primary"
+                            style={{ flex: 1, padding: '8px 10px', fontSize: 11 }}
+                          >
+                            Comprar más
+                          </button>
+                          <button
+                            onClick={() => navigate('/portfolio')}
+                            style={{
+                              flex: 1,
+                              padding: '8px 10px',
+                              fontSize: 11,
+                              background: 'transparent',
+                              border: '1px solid var(--border)',
+                              borderRadius: 8,
+                              color: 'var(--text-secondary)',
+                              fontFamily: 'var(--font-mono)',
+                              letterSpacing: '0.04em',
+                              textTransform: 'uppercase',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Vender
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+          <div style={{
             background: 'var(--surface1)',
             border: '1px solid var(--border)',
             borderRadius: 14,
@@ -461,6 +641,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
             }}>
               💡 MXNP son puntos de la competencia. Los Top 10 del leaderboard quincenal reciben premios en efectivo.
             </div>
+          </div>
           </aside>
         </div>
       </main>
