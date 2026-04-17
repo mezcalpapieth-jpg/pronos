@@ -2,12 +2,16 @@
  * POST /api/points/admin/create-market
  * Body: {
  *   question, category, icon?, endTime,
- *   outcomes: [string, string],
+ *   outcomes: string[],   // 2 to 10 outcomes — 2 = binary Sí/No,
+ *                          // more = multi-outcome (Liga MX winner etc.)
  *   seedLiquidity
  * }
  *
- * Creates a new binary market. Reserves start at 50/50 with seedLiquidity
- * of each. Admin-only endpoint.
+ * Creates a new market with N equal reserves of seedLiquidity each.
+ * Binary (N=2) is fully tradeable. Multi-outcome (N>2) is created with
+ * the right reserves shape but trading stays binary-only in this release
+ * — the UI disables the buy panel for multi markets until the AMM math
+ * for N>2 is shipped. Admin-only endpoint.
  */
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
@@ -37,11 +41,18 @@ export default async function handler(req, res) {
   if (!ALLOWED_CATEGORIES.has(category)) {
     return res.status(400).json({ error: 'invalid_category' });
   }
-  if (!Array.isArray(outcomes) || outcomes.length !== 2) {
-    return res.status(400).json({ error: 'need_two_outcomes' });
+  if (!Array.isArray(outcomes) || outcomes.length < 2 || outcomes.length > 10) {
+    return res.status(400).json({ error: 'outcome_count_out_of_range' });
   }
   if (!outcomes.every(o => typeof o === 'string' && o.trim().length > 0)) {
     return res.status(400).json({ error: 'invalid_outcomes' });
+  }
+  // Reject duplicate outcome labels (case-insensitive) — they'd make the
+  // buy UI confusing and break option-index lookups.
+  const normalizedOutcomes = outcomes.map(o => o.trim());
+  const lowerSet = new Set(normalizedOutcomes.map(o => o.toLowerCase()));
+  if (lowerSet.size !== normalizedOutcomes.length) {
+    return res.status(400).json({ error: 'duplicate_outcomes' });
   }
   if (!Number.isFinite(seed) || seed < 100) {
     return res.status(400).json({ error: 'seed_too_small' });
@@ -53,7 +64,7 @@ export default async function handler(req, res) {
 
   try {
     await ensurePointsSchema(sql);
-    const reserves = initialReserves(seed);
+    const reserves = initialReserves(seed, normalizedOutcomes.length);
     const rows = await sql`
       INSERT INTO points_markets
         (question, category, icon, outcomes, reserves, seed_liquidity, end_time, status, created_by)
@@ -61,7 +72,7 @@ export default async function handler(req, res) {
         ${question.trim()},
         ${category},
         ${icon || null},
-        ${JSON.stringify(outcomes.map(o => o.trim()))}::jsonb,
+        ${JSON.stringify(normalizedOutcomes)}::jsonb,
         ${JSON.stringify(reserves)}::jsonb,
         ${seed},
         ${endDate.toISOString()},

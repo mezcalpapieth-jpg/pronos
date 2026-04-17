@@ -269,11 +269,20 @@ export function redeemPayout(shares, outcomeIndex, winningOutcomeIndex) {
 
 // ─── Utility: initial reserves for a new market ──────────────────────────────
 /**
- * A binary market with seed `S` starts at 50/50 by minting S YES and S NO,
- * exactly like PronosAMM.initialize().
+ * Initial reserves for a new market with `outcomeCount` outcomes, all
+ * priced equally.
+ *   - Binary (N=2): [S, S] — 50/50, matches PronosAMM.initialize().
+ *   - Multi (N>2): [S, S, S, ...] — each outcome starts at 1/N implied
+ *     probability under the inverse-reserve weighting used by
+ *     pricesFromReserves in markets.js.
+ *
+ * Trading endpoints (`buy`, `sell`) still only support binary (N=2);
+ * multi-outcome markets currently render as read-only in the UI until the
+ * AMM math for N>2 is wired up.
  */
-export function initialReserves(seedHuman) {
-  return [seedHuman, seedHuman];
+export function initialReserves(seedHuman, outcomeCount = 2) {
+  const n = Math.max(2, Math.min(20, Number(outcomeCount) || 2));
+  return Array.from({ length: n }, () => seedHuman);
 }
 
 // ─── Multi-outcome markets: grouped binary markets ───────────────────────────

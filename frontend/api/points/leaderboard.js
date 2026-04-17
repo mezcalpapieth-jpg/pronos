@@ -1,33 +1,37 @@
 /**
  * GET /api/points/leaderboard
  *
- * Top predictors ranked by total PnL (realized + unrealized on active
- * positions). Rewards actual prediction skill rather than hoarding
- * daily-claim bonuses — matches the product decision.
+ * Top predictors ranked by current wallet balance (MXNP). Since all
+ * balances reset to 500 MXNP on each 2-week cycle rollover, whoever has
+ * the highest balance at the end of the cycle is whoever grew their
+ * initial stake the most through trading + daily claims.
+ *
+ * Product note: this used to rank by PnL aggregated from positions, but
+ * we switched to balance-based ranking because:
+ *   1. Balance naturally includes daily-claim gains (rewards engagement).
+ *   2. Cycle rollover resets to 500, so balance *is* the per-cycle PnL.
+ *   3. Way simpler query — one SELECT instead of mark-to-market math
+ *      across every open position.
  *
  * Unauthenticated caller gets the public leaderboard. Authenticated
- * caller additionally receives their own rank + PnL.
+ * caller additionally receives their own rank + balance.
  */
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
-import { binaryPrices } from '../_lib/amm-math.js';
 import { readSession } from '../_lib/session.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
 
-function parseJsonb(value, fallback) {
-  if (Array.isArray(value)) return value;
-  if (value && typeof value === 'object') return value;
-  if (typeof value !== 'string') return fallback;
-  try { return JSON.parse(value); } catch { return fallback; }
-}
-
 function round2(n) {
   const v = Number(n);
   return Number.isFinite(v) ? Math.round(v * 100) / 100 : 0;
 }
+
+// Same amount we seed new users with; the leaderboard reports the
+// delta from this so users can see cycle-to-date growth.
+const CYCLE_STARTING_BALANCE = 500;
 
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'GET, OPTIONS', credentials: true });
@@ -37,76 +41,42 @@ export default async function handler(req, res) {
   try {
     await ensurePointsSchema(schemaSql);
 
-    // For each user, compute:
-    //   realized = Σ realized_pnl across positions
-    //   unrealized = Σ (shares × currentPrice − cost_basis) on active markets
-    //
-    // Pulled in two queries so we can compute unrealized client-side
-    // using binaryPrices on the reserves snapshot.
-    const realizedRows = await sql`
-      SELECT username, COALESCE(SUM(realized_pnl), 0) AS realized
-      FROM points_positions
-      GROUP BY username
+    // Pull every user with a balance row. LEFT JOIN on points_users so
+    // rows without a points_balances entry (edge case: user created but
+    // never claimed signup) still show up, ranked at the bottom.
+    const rows = await sql`
+      SELECT u.username, COALESCE(b.balance, 0) AS balance
+      FROM points_users u
+      LEFT JOIN points_balances b ON b.username = u.username
+      WHERE u.username IS NOT NULL
+      ORDER BY balance DESC NULLS LAST, u.username ASC
+      LIMIT 500
     `;
 
-    const activeRows = await sql`
-      SELECT p.username, p.outcome_index, p.shares, p.cost_basis,
-             m.status, m.outcome, m.reserves, m.outcomes
-      FROM points_positions p
-      JOIN points_markets m ON m.id = p.market_id
-      WHERE p.shares > 0
-    `;
+    const ranked = rows.map((r, i) => ({
+      rank: i + 1,
+      username: r.username,
+      balance: round2(r.balance),
+      cycleDelta: round2(Number(r.balance) - CYCLE_STARTING_BALANCE),
+    }));
 
-    const byUser = new Map();
-    for (const r of realizedRows) {
-      byUser.set(r.username, {
-        username: r.username,
-        realized: Number(r.realized || 0),
-        unrealized: 0,
-      });
-    }
-    for (const r of activeRows) {
-      const u = byUser.get(r.username) || {
-        username: r.username,
-        realized: 0,
-        unrealized: 0,
-      };
-      const outcomes = parseJsonb(r.outcomes, ['Sí', 'No']);
-      const reserves = parseJsonb(r.reserves, []).map(Number);
-      const prices = reserves.length === 2
-        ? binaryPrices(reserves)
-        : outcomes.map((_, i) => 1 / outcomes.length);
-      let currentPrice;
-      if (r.status === 'resolved') {
-        currentPrice = Number(r.outcome) === r.outcome_index ? 1.0 : 0.0;
-      } else {
-        currentPrice = prices[r.outcome_index] ?? 0.5;
-      }
-      const mtm = Number(r.shares) * currentPrice;
-      u.unrealized += mtm - Number(r.cost_basis);
-      byUser.set(r.username, u);
-    }
-
-    const ranked = Array.from(byUser.values())
-      .map(u => ({
-        username: u.username,
-        realizedPnl: round2(u.realized),
-        unrealizedPnl: round2(u.unrealized),
-        pnl: round2(u.realized + u.unrealized),
-      }))
-      .sort((a, b) => b.pnl - a.pnl);
-
-    const top = ranked.slice(0, 10).map((u, i) => ({ rank: i + 1, ...u }));
+    const top = ranked.slice(0, 10);
 
     // If signed in, include the caller's rank (even if outside top 10).
     let me = null;
     const session = readSession(req, res);
     if (session?.username) {
-      const idx = ranked.findIndex(u => u.username === session.username);
-      if (idx >= 0) {
-        me = { rank: idx + 1, ...ranked[idx] };
+      const hit = ranked.find(u => u.username === session.username);
+      if (hit) {
+        me = hit;
       } else {
-        me = { rank: null, username: session.username, realizedPnl: 0, unrealizedPnl: 0, pnl: 0 };
+        // Session exists but user has no balance row — report rank null.
+        me = {
+          rank: null,
+          username: session.username,
+          balance: 0,
+          cycleDelta: -CYCLE_STARTING_BALANCE,
+        };
       }
     }
 
@@ -114,6 +84,7 @@ export default async function handler(req, res) {
       top,
       me,
       totalParticipants: ranked.length,
+      startingBalance: CYCLE_STARTING_BALANCE,
     });
   } catch (e) {
     console.error('[points/leaderboard] error', { message: e?.message, code: e?.code });

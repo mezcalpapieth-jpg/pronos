@@ -233,6 +233,8 @@ function MiniLeaderboard({ currentUsername }) {
       )}
       {data.top.map(u => {
         const isMe = u.username === currentUsername;
+        const delta = Number(u.cycleDelta ?? 0);
+        const deltaPos = delta >= 0;
         return (
           <div
             key={u.username}
@@ -250,15 +252,26 @@ function MiniLeaderboard({ currentUsername }) {
             <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {isMe ? '(tú) ' : ''}{u.username}
             </span>
-            <span style={{ color: u.pnl >= 0 ? 'var(--green)' : 'var(--red, #ef4444)', fontWeight: 700 }}>
-              {u.pnl >= 0 ? '+' : ''}{fmt(u.pnl)}
+            <span
+              title={`${deltaPos ? '+' : ''}${fmt(delta)} MXNP desde el inicio del ciclo`}
+              style={{ color: 'var(--text-primary)', fontWeight: 700 }}
+            >
+              {fmt(u.balance)}
+            </span>
+            <span style={{
+              width: 56,
+              textAlign: 'right',
+              fontSize: 10,
+              color: deltaPos ? 'var(--green)' : 'var(--red, #ef4444)',
+            }}>
+              {deltaPos ? '+' : ''}{fmt(delta)}
             </span>
           </div>
         );
       })}
       {data.me && data.me.rank && data.me.rank > 10 && (
         <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--border)', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--green)' }}>
-          Tu posición: #{data.me.rank} · {fmt(data.me.pnl)} MXNP
+          Tu posición: #{data.me.rank} · {fmt(data.me.balance)} MXNP
         </div>
       )}
     </div>

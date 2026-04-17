@@ -368,10 +368,35 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               textTransform: 'uppercase',
               marginBottom: 16,
             }}>
-              {isResolved ? 'Mercado cerrado' : isPendingResolution ? 'Esperando resolución' : 'Elige un resultado'}
+              {isResolved ? 'Mercado cerrado'
+               : isPendingResolution ? 'Esperando resolución'
+               : outcomes.length > 2 ? 'Trading próximamente'
+               : 'Elige un resultado'}
             </div>
 
-            {!isResolved && !isPendingResolution && outcomes.map((label, i) => {
+            {/* Multi-outcome trading is wired in the create-market flow
+                but the buy/sell endpoints still expect N=2. Show a read-
+                only notice on multi-markets instead of buttons that would
+                error once clicked. */}
+            {!isResolved && !isPendingResolution && outcomes.length > 2 && (
+              <p style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                color: 'var(--text-muted)',
+                lineHeight: 1.6,
+                background: 'var(--surface2)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                padding: '12px 14px',
+                margin: 0,
+              }}>
+                Este mercado tiene <strong>{outcomes.length} opciones</strong>.
+                El trading multi-opción se habilita pronto — por ahora puedes
+                ver el mercado pero no comprar.
+              </p>
+            )}
+
+            {!isResolved && !isPendingResolution && outcomes.length === 2 && outcomes.map((label, i) => {
               const pct = Math.round(prices[i] * 100);
               const isYes = i === 0;
               return (

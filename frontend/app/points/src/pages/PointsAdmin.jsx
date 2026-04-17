@@ -129,14 +129,18 @@ function CyclesPanel() {
   useEffect(() => { load(); }, []);
 
   async function rollover() {
-    // Double-confirm because this is destructive-adjacent: it closes the
-    // active cycle and snapshots immutable leaderboard positions. Running
-    // it too early means you miss late trades; running it late means the
-    // UI shows "cierre pendiente" for longer than ideal.
+    // Double-confirm because this is destructive: it snapshots the
+    // leaderboard AND resets every user's balance to 500 MXNP. Running
+    // it too early means users lose late-cycle gains; running it late
+    // leaves everyone staring at "cierre pendiente" for longer than
+    // ideal.
     const ok = window.confirm(
       '¿Cerrar el ciclo actual y abrir uno nuevo?\n\n' +
-      'Esto guarda un snapshot del top-100 y empieza el siguiente ciclo de 14 días. ' +
-      'Los balances de los usuarios NO se reinician.'
+      '⚠️  Esto es DESTRUCTIVO:\n' +
+      '1. Guarda un snapshot inmutable del top-100.\n' +
+      '2. REINICIA el balance de TODOS los usuarios a 500 MXNP.\n' +
+      '3. Abre un ciclo nuevo de 14 días.\n\n' +
+      '¿Continuar?'
     );
     if (!ok) return;
     setWorking(true);
@@ -145,7 +149,7 @@ function CyclesPanel() {
     try {
       const r = await adminRolloverCycle();
       setMsg(
-        `✓ Ciclo #${r.closedCycleId} cerrado — ${r.snapshotted} snapshots guardados. ` +
+        `✓ Ciclo #${r.closedCycleId} cerrado — ${r.snapshotted} snapshots, ${r.resetCount || 0} balances reiniciados a 500 MXNP. ` +
         (r.winners?.[0] ? `🥇 ${r.winners[0].username} (${Math.round(r.winners[0].finalBalance)} MXNP)` : '')
       );
       await load();
@@ -380,20 +384,70 @@ function SocialTasksQueue() {
 }
 
 // ─── Create market form ──────────────────────────────────────────────────────
+// Two modes:
+//   - Binario: exactly 2 outcomes (default "Sí" / "No"). Fully tradeable.
+//   - Múltiple: 3–10 outcomes ("Barcelona" / "Madrid" / "Chivas"…).
+//     Creates the market with the right reserves shape, but trading is
+//     disabled in the UI until the N-outcome AMM math lands.
 function CreateMarketForm() {
+  const [mode, setMode] = useState('binary'); // 'binary' | 'multi'
   const [form, setForm] = useState({
     question: '',
     category: 'deportes',
     icon: '⚽',
     endTime: '',
-    outcomeYes: 'Sí',
-    outcomeNo: 'No',
+    outcomes: ['Sí', 'No'],
     seedLiquidity: 500,
   });
   const [state, setState] = useState({ submitting: false, msg: null, err: null });
 
+  function switchMode(next) {
+    if (next === mode) return;
+    setMode(next);
+    setForm(f => ({
+      ...f,
+      // Reset outcomes to a sane default for the chosen mode so users
+      // don't accidentally submit leftover binary labels as a multi.
+      outcomes: next === 'binary' ? ['Sí', 'No'] : ['', '', ''],
+    }));
+  }
+
+  function updateOutcome(idx, value) {
+    setForm(f => {
+      const next = [...f.outcomes];
+      next[idx] = value;
+      return { ...f, outcomes: next };
+    });
+  }
+
+  function addOutcome() {
+    setForm(f => {
+      if (f.outcomes.length >= 10) return f;
+      return { ...f, outcomes: [...f.outcomes, ''] };
+    });
+  }
+
+  function removeOutcome(idx) {
+    setForm(f => {
+      if (f.outcomes.length <= 2) return f;
+      const next = f.outcomes.filter((_, i) => i !== idx);
+      return { ...f, outcomes: next };
+    });
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
+    // Client-side guardrails so the user sees friendly errors before a
+    // round-trip to the server. Server validates these again.
+    const cleaned = form.outcomes.map(o => o.trim()).filter(Boolean);
+    if (cleaned.length < 2) {
+      setState({ submitting: false, msg: null, err: 'Al menos 2 opciones con nombre.' });
+      return;
+    }
+    if (cleaned.length > 10) {
+      setState({ submitting: false, msg: null, err: 'Máximo 10 opciones.' });
+      return;
+    }
     setState({ submitting: true, msg: null, err: null });
     try {
       const r = await postJson('/api/points/admin/create-market', {
@@ -401,11 +455,20 @@ function CreateMarketForm() {
         category: form.category,
         icon: form.icon,
         endTime: new Date(form.endTime).toISOString(),
-        outcomes: [form.outcomeYes, form.outcomeNo],
+        outcomes: cleaned,
         seedLiquidity: Number(form.seedLiquidity),
       });
-      setState({ submitting: false, msg: `Mercado creado (#${r.marketId})`, err: null });
-      setForm(f => ({ ...f, question: '', endTime: '' }));
+      setState({
+        submitting: false,
+        msg: `Mercado creado (#${r.marketId}) · ${cleaned.length} ${cleaned.length === 2 ? 'opciones (binario)' : 'opciones (múltiple)'}`,
+        err: null,
+      });
+      setForm(f => ({
+        ...f,
+        question: '',
+        endTime: '',
+        outcomes: mode === 'binary' ? ['Sí', 'No'] : ['', '', ''],
+      }));
     } catch (e) {
       setState({ submitting: false, msg: null, err: e.code || e.message });
     }
@@ -416,13 +479,65 @@ function CreateMarketForm() {
       background: 'var(--surface1)', border: '1px solid var(--border)',
       borderRadius: 14, padding: 28, maxWidth: 720,
     }}>
+      {/* ── Mode toggle ──────────────────────────────────────
+          Binary = classic Sí/No; Múltiple = N outcomes (e.g.
+          "Quién gana la Liga MX?" with 18 teams). */}
+      <Field label="Tipo de mercado">
+        <div style={{ display: 'flex', gap: 8 }}>
+          {[
+            { key: 'binary', label: 'Binario (Sí / No)' },
+            { key: 'multi',  label: 'Múltiple (3–10 opciones)' },
+          ].map(m => {
+            const active = mode === m.key;
+            return (
+              <button
+                key={m.key}
+                type="button"
+                onClick={() => switchMode(m.key)}
+                style={{
+                  flex: 1,
+                  padding: '10px 14px',
+                  background: active ? 'var(--surface3, rgba(0,232,122,0.12))' : 'var(--surface2)',
+                  border: `1px solid ${active ? 'var(--green)' : 'var(--border)'}`,
+                  borderRadius: 8,
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  fontWeight: active ? 700 : 500,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  color: active ? 'var(--green)' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                }}
+              >
+                {m.label}
+              </button>
+            );
+          })}
+        </div>
+        {mode === 'multi' && (
+          <p style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            color: 'var(--text-muted)',
+            marginTop: 8,
+            lineHeight: 1.5,
+          }}>
+            ⚠️ Los mercados múltiples se crean con la forma correcta pero el trading
+            queda deshabilitado hasta que el AMM de N&gt;2 esté listo. Los usuarios
+            verán el mercado pero no podrán comprar aún.
+          </p>
+        )}
+      </Field>
+
       <Field label="Pregunta">
         <textarea
           value={form.question}
           onChange={e => setForm(f => ({ ...f, question: e.target.value }))}
           rows={2}
           required
-          placeholder="¿Mexico gana el Mundial 2026?"
+          placeholder={mode === 'binary'
+            ? '¿Mexico gana el Mundial 2026?'
+            : '¿Quién gana la Liga MX Apertura 2026?'}
           style={{ ...inputStyle, resize: 'vertical' }}
         />
       </Field>
@@ -459,26 +574,83 @@ function CreateMarketForm() {
         />
       </Field>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <Field label='Opción "Sí"'>
-          <input
-            value={form.outcomeYes}
-            onChange={e => setForm(f => ({ ...f, outcomeYes: e.target.value }))}
-            required
-            style={inputStyle}
-          />
-        </Field>
-        <Field label='Opción "No"'>
-          <input
-            value={form.outcomeNo}
-            onChange={e => setForm(f => ({ ...f, outcomeNo: e.target.value }))}
-            required
-            style={inputStyle}
-          />
-        </Field>
-      </div>
+      {/* ── Outcome editor ──────────────────────────────────
+          Binary mode renders two side-by-side inputs, multi mode a
+          vertical stack with add/remove buttons. Keyboard-friendly:
+          focus stays on the new row after pressing "Agregar". */}
+      <Field label={mode === 'binary' ? 'Opciones' : `Opciones (${form.outcomes.length})`}>
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+        }}>
+          {form.outcomes.map((val, i) => (
+            <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                color: 'var(--text-muted)',
+                width: 24,
+                flexShrink: 0,
+                letterSpacing: '0.06em',
+              }}>
+                {String.fromCharCode(65 + i)}
+              </span>
+              <input
+                value={val}
+                onChange={e => updateOutcome(i, e.target.value)}
+                required
+                placeholder={mode === 'binary'
+                  ? (i === 0 ? 'Sí' : 'No')
+                  : `Opción ${i + 1}`}
+                style={{ ...inputStyle, flex: 1 }}
+              />
+              {mode === 'multi' && form.outcomes.length > 2 && (
+                <button
+                  type="button"
+                  onClick={() => removeOutcome(i)}
+                  aria-label={`Quitar opción ${i + 1}`}
+                  style={{
+                    padding: '8px 12px',
+                    background: 'transparent',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 12,
+                  }}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
+          {mode === 'multi' && form.outcomes.length < 10 && (
+            <button
+              type="button"
+              onClick={addOutcome}
+              style={{
+                alignSelf: 'flex-start',
+                padding: '8px 14px',
+                background: 'transparent',
+                border: '1px dashed var(--border)',
+                borderRadius: 8,
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+              }}
+            >
+              + Agregar opción
+            </button>
+          )}
+        </div>
+      </Field>
 
-      <Field label="Liquidez inicial (MXNP)">
+      <Field label="Liquidez inicial por opción (MXNP)">
         <input
           type="number"
           min="100"
