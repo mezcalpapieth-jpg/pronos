@@ -68,11 +68,16 @@ export default async function handler(req, res) {
     // Snapshot every market that's still active OR was resolved within the
     // last 24h — this gives the sparkline a "final" point to flatten against
     // right after resolution.
+    // Parallel parents have empty reserves ([]) and exist only as display
+    // containers — snapshotting them would produce garbage (uniform-prior
+    // fallback). Legs snapshot normally because they're proper binary
+    // markets (amm_mode='parallel' but parent_id IS NOT NULL).
     const markets = await sql`
       SELECT id, outcomes, reserves, status
       FROM points_markets
-      WHERE status = 'active'
-         OR (status = 'resolved' AND resolved_at > NOW() - INTERVAL '24 hours')
+      WHERE (status = 'active'
+         OR (status = 'resolved' AND resolved_at > NOW() - INTERVAL '24 hours'))
+        AND NOT (amm_mode = 'parallel' AND parent_id IS NULL)
       ORDER BY id ASC
     `;
 

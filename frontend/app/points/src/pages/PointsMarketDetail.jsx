@@ -17,7 +17,8 @@ import PointsBuyModal from '../components/PointsBuyModal.jsx';
 
 // Accent colors for the multi-line price chart. Match the buy-button
 // accents so users recognize the same color for the same outcome.
-// Palette wraps at N>8 (rare); adjust in tandem with BUY_ACCENTS below.
+// Palette wraps at N>8 (rare); MULTI_ACCENTS below is the matched
+// border / background variant for the buy buttons.
 const OUTCOME_COLORS = [
   'var(--yes)',            // green
   'var(--gold, #f59e0b)',  // gold
@@ -28,6 +29,166 @@ const OUTCOME_COLORS = [
   '#ec4899',               // pink
   '#84cc16',               // lime
 ];
+
+const MULTI_ACCENTS = [
+  { border: 'rgba(22,163,74,0.25)',  bg: 'var(--yes-dim, rgba(22,163,74,0.1))', fg: 'var(--yes)' },
+  { border: 'rgba(184,144,10,0.3)',  bg: 'rgba(184,144,10,0.08)',              fg: 'var(--gold, #f59e0b)' },
+  { border: 'rgba(255,59,59,0.25)',  bg: 'rgba(255,59,59,0.08)',               fg: '#ff3b3b' },
+  { border: 'rgba(59,130,246,0.3)',  bg: 'rgba(59,130,246,0.08)',              fg: '#3b82f6' },
+  { border: 'rgba(168,85,247,0.3)',  bg: 'rgba(168,85,247,0.08)',              fg: '#a855f7' },
+  { border: 'rgba(6,182,212,0.3)',   bg: 'rgba(6,182,212,0.08)',               fg: '#06b6d4' },
+  { border: 'rgba(236,72,153,0.3)',  bg: 'rgba(236,72,153,0.08)',              fg: '#ec4899' },
+  { border: 'rgba(132,204,22,0.3)',  bg: 'rgba(132,204,22,0.08)',              fg: '#84cc16' },
+];
+
+function accentFor(i, totalOutcomes) {
+  // Binary keeps the canonical green (YES) / red (NO) colors.
+  if (totalOutcomes === 2) return i === 0 ? MULTI_ACCENTS[0] : MULTI_ACCENTS[2];
+  return MULTI_ACCENTS[i % MULTI_ACCENTS.length];
+}
+
+// ─── Outcome pickers ────────────────────────────────────────────────────────
+// Unified: one tap-target per outcome ("Sí" / "No" / "Barcelona" …) showing
+// the current percentage. Tapping opens the buy modal for that outcome at
+// the shared pool.
+function UnifiedOutcomeList({ outcomes, prices, market, onBuyClick }) {
+  return outcomes.map((label, i) => {
+    const pct = Math.round((prices[i] ?? 0) * 100);
+    const accent = accentFor(i, outcomes.length);
+    return (
+      <button
+        key={i}
+        onClick={() => onBuyClick(market, i, label)}
+        style={{
+          width: '100%',
+          padding: '14px 16px',
+          marginBottom: 10,
+          borderRadius: 10,
+          border: `1px solid ${accent.border}`,
+          background: accent.bg,
+          color: accent.fg,
+          fontFamily: 'var(--font-mono)',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          transition: 'transform 0.15s',
+        }}
+        onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+        onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+      >
+        <span style={{ fontSize: 13, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+          {label}
+        </span>
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: 20 }}>
+          {pct}%
+        </span>
+      </button>
+    );
+  });
+}
+
+// Parallel: each row is a binary Sí/No market. Rendered Polymarket-style:
+// label + aggregated %, then compact Sí / No buttons with each side's
+// current price. Clicking either opens the buy modal against the leg.
+function ParallelLegList({ market, legs, onBuyClick }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {legs.map((leg, i) => {
+        const accent = accentFor(i, legs.length);
+        const yesPrice = leg.prices?.[0] ?? 0.5;
+        const noPrice  = leg.prices?.[1] ?? 1 - yesPrice;
+        const pct = Math.round(yesPrice * 100);
+        // Synthetic market payload for the buy modal — the modal only
+        // reads .id and .question off its `market` prop, and the trade
+        // endpoints need the leg's id, not the parent's.
+        const legMarket = {
+          id: leg.id,
+          question: `${market.question} — ${leg.label}`,
+        };
+        return (
+          <div
+            key={leg.id}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1fr) 48px auto',
+              gap: 10,
+              alignItems: 'center',
+              padding: '10px 12px',
+              borderRadius: 10,
+              border: `1px solid ${accent.border}`,
+              background: accent.bg,
+            }}
+          >
+            <div style={{
+              minWidth: 0,
+              fontFamily: 'var(--font-body)',
+              fontSize: 13,
+              fontWeight: 600,
+              color: accent.fg,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}>
+              {leg.label}
+            </div>
+            <div style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 16,
+              color: accent.fg,
+              textAlign: 'right',
+            }}>
+              {pct}%
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button
+                onClick={() => onBuyClick(legMarket, 0, `${leg.label} — Sí`)}
+                style={legButtonStyle('var(--yes)', 'rgba(22,163,74,0.15)', 'rgba(22,163,74,0.4)')}
+                onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+              >
+                Sí <span style={legPriceStyle}>{Math.round(yesPrice * 100)}¢</span>
+              </button>
+              <button
+                onClick={() => onBuyClick(legMarket, 1, `${leg.label} — No`)}
+                style={legButtonStyle('#ff3b3b', 'rgba(255,59,59,0.12)', 'rgba(255,59,59,0.4)')}
+                onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+              >
+                No <span style={legPriceStyle}>{Math.round(noPrice * 100)}¢</span>
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function legButtonStyle(fg, bg, border) {
+  return {
+    padding: '6px 10px',
+    borderRadius: 8,
+    border: `1px solid ${border}`,
+    background: bg,
+    color: fg,
+    fontFamily: 'var(--font-mono)',
+    fontSize: 11,
+    fontWeight: 600,
+    letterSpacing: '0.04em',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    gap: 6,
+    alignItems: 'center',
+    transition: 'transform 0.15s',
+    whiteSpace: 'nowrap',
+  };
+}
+const legPriceStyle = {
+  fontFamily: 'var(--font-display)',
+  fontSize: 12,
+  opacity: 0.9,
+};
 
 function formatDeadline(endTime) {
   if (!endTime) return '';
@@ -99,7 +260,11 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   const [userPositions, setUserPositions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [buyState, setBuyState] = useState(null); // { outcomeIndex, outcomeLabel }
+  // buyState.market is the effective trade target:
+  //   unified → the parent market itself
+  //   parallel → the individual leg market (so the buy endpoint hits the
+  //              leg's binary CPMM, not the aggregated parent)
+  const [buyState, setBuyState] = useState(null);
 
   useEffect(() => {
     if (!id) return;
@@ -111,11 +276,25 @@ export default function PointsMarketDetail({ onOpenLogin }) {
         if (cancelled) return;
         setMarket(m);
         setLoading(false);
-        // Fire-and-forget history fetch — one call per outcome so the
-        // chart can draw N lines. Chart gracefully handles missing /
-        // empty series (falls back to seeded mock) so a slow endpoint
-        // doesn't break the page.
-        if (m?.id && Array.isArray(m.outcomes)) {
+        if (!m) return;
+
+        // Fire-and-forget price-history fetch. Shape differs by AMM mode:
+        //   Unified: one call per outcome on the parent market id (the
+        //   snapshot job stores a price per outcome in one row).
+        //   Parallel: one call per leg — each leg is its own binary
+        //   market, snapshotted independently — and we pull the YES
+        //   (outcome 0) series to plot the per-outcome line.
+        if (m.ammMode === 'parallel' && Array.isArray(m.legs)) {
+          Promise.all(
+            m.legs.map(leg =>
+              fetchPriceHistory([leg.id], { days: 30, outcome: 0 })
+                .then(h => h[leg.id] || [])
+                .catch(() => []),
+            ),
+          ).then(series => {
+            if (!cancelled) setHistoryByOutcome(series);
+          });
+        } else if (Array.isArray(m.outcomes)) {
           const n = m.outcomes.length;
           Promise.all(
             Array.from({ length: n }, (_, i) =>
@@ -132,10 +311,9 @@ export default function PointsMarketDetail({ onOpenLogin }) {
     return () => { cancelled = true; };
   }, [id]);
 
-  // Fetch the signed-in user's positions and filter to this market.
-  // Used by the sidebar "Tu posición" panel so the user can see what
-  // they already hold and sell / buy more without a detour to the
-  // portfolio page.
+  // Fetch the signed-in user's positions. For parallel markets, positions
+  // live on leg ids but positions.js surfaces the parent id via
+  // `parentMarketId` — so we match on either to pick up both modes.
   useEffect(() => {
     if (!authenticated || !id) {
       setUserPositions([]);
@@ -146,20 +324,22 @@ export default function PointsMarketDetail({ onOpenLogin }) {
       .then(r => {
         if (cancelled) return;
         const mid = Number(id);
-        const mine = (r.positions || [])
-          .filter(p => Number(p.marketId) === mid && Number(p.shares) > 0);
+        const mine = (r.positions || []).filter(p => {
+          if (Number(p.shares) <= 0) return false;
+          return Number(p.marketId) === mid || Number(p.parentMarketId) === mid;
+        });
         setUserPositions(mine);
       })
       .catch(() => { /* best-effort */ });
     return () => { cancelled = true; };
   }, [authenticated, id, buyState]);
 
-  function handleBuyClick(outcomeIndex, outcomeLabel) {
+  function handleBuyClick(target, outcomeIndex, outcomeLabel) {
     if (!authenticated) {
       onOpenLogin?.();
       return;
     }
-    setBuyState({ outcomeIndex, outcomeLabel });
+    setBuyState({ market: target, outcomeIndex, outcomeLabel });
   }
 
   if (loading) {
@@ -469,15 +649,27 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 </div>
                 {userPositions.map(p => {
                   const oi = Number(p.outcomeIndex);
-                  const label = outcomes[oi] || `Opción ${oi + 1}`;
+                  // Prefer positions.js's composed label ("Leg — Sí/No"
+                  // for parallel, raw outcome label for unified) since
+                  // it already knows whether this sits on a leg or the
+                  // parent directly.
+                  const label = p.outcomeLabel || outcomes[oi] || `Opción ${oi + 1}`;
                   const shares = Number(p.shares) || 0;
-                  const currentPrice = Number(prices[oi] || 0);
+                  // Use the backend-computed currentPrice so parallel
+                  // leg positions get the leg's YES/NO price rather than
+                  // the parent's aggregated one.
+                  const currentPrice = Number(p.currentPrice ?? prices[oi] ?? 0);
                   const markValue = shares * currentPrice;
                   const costBasis = Number(p.costBasis) || 0;
                   const pnl = markValue - costBasis;
                   const pnlPos = pnl >= 0;
+                  // "Comprar más" opens the modal against the leg
+                  // market for parallel, parent for unified.
+                  const buyTarget = p.parentMarketId
+                    ? { id: p.marketId, question: `${market.question} — ${label}` }
+                    : market;
                   return (
-                    <div key={oi} style={{
+                    <div key={`${p.marketId}-${oi}`} style={{
                       padding: '10px 0',
                       borderTop: '1px solid var(--border)',
                       display: 'flex',
@@ -512,7 +704,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                       {!isResolved && !isPendingResolution && (
                         <div style={{ display: 'flex', gap: 6 }}>
                           <button
-                            onClick={() => handleBuyClick(oi, label)}
+                            onClick={() => handleBuyClick(buyTarget, oi, label)}
                             className="btn-primary"
                             style={{ flex: 1, padding: '8px 10px', fontSize: 11 }}
                           >
@@ -563,56 +755,23 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                : 'Elige un resultado'}
             </div>
 
-            {!isResolved && !isPendingResolution && outcomes.map((label, i) => {
-              const pct = Math.round(prices[i] * 100);
-              // Color accent rotates for multi-outcome markets so outcomes
-              // feel visually distinct. Binary keeps the green/red pair;
-              // N>3 cycles through the extended palette and wraps modulo.
-              const MULTI_ACCENTS = [
-                { border: 'rgba(22,163,74,0.25)',  bg: 'var(--yes-dim, rgba(22,163,74,0.1))', fg: 'var(--yes)' },
-                { border: 'rgba(184,144,10,0.3)',  bg: 'rgba(184,144,10,0.08)',              fg: 'var(--gold, #f59e0b)' },
-                { border: 'rgba(255,59,59,0.25)',  bg: 'rgba(255,59,59,0.08)',               fg: '#ff3b3b' },
-                { border: 'rgba(59,130,246,0.3)',  bg: 'rgba(59,130,246,0.08)',              fg: '#3b82f6' },
-                { border: 'rgba(168,85,247,0.3)',  bg: 'rgba(168,85,247,0.08)',              fg: '#a855f7' },
-                { border: 'rgba(6,182,212,0.3)',   bg: 'rgba(6,182,212,0.08)',               fg: '#06b6d4' },
-                { border: 'rgba(236,72,153,0.3)',  bg: 'rgba(236,72,153,0.08)',              fg: '#ec4899' },
-                { border: 'rgba(132,204,22,0.3)',  bg: 'rgba(132,204,22,0.08)',              fg: '#84cc16' },
-              ];
-              const isBinary = outcomes.length === 2;
-              const accent = isBinary
-                ? (i === 0 ? MULTI_ACCENTS[0] : MULTI_ACCENTS[2])
-                : MULTI_ACCENTS[i % MULTI_ACCENTS.length];
-              return (
-                <button
-                  key={i}
-                  onClick={() => handleBuyClick(i, label)}
-                  style={{
-                    width: '100%',
-                    padding: '14px 16px',
-                    marginBottom: 10,
-                    borderRadius: 10,
-                    border: `1px solid ${accent.border}`,
-                    background: accent.bg,
-                    color: accent.fg,
-                    fontFamily: 'var(--font-mono)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    transition: 'transform 0.15s',
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
-                  onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-                >
-                  <span style={{ fontSize: 13, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                    Comprar {label}
-                  </span>
-                  <span style={{ fontFamily: 'var(--font-display)', fontSize: 20 }}>
-                    {pct}%
-                  </span>
-                </button>
-              );
-            })}
+            {/* Unified: one big button per outcome. Parallel: one row per
+                leg with Sí / No buttons on the right. Same palette so the
+                chart lines match the buttons visually. */}
+            {!isResolved && !isPendingResolution && (
+              market.ammMode === 'parallel' && Array.isArray(market.legs)
+                ? <ParallelLegList
+                    market={market}
+                    legs={market.legs}
+                    onBuyClick={handleBuyClick}
+                  />
+                : <UnifiedOutcomeList
+                    outcomes={outcomes}
+                    prices={prices}
+                    market={market}
+                    onBuyClick={handleBuyClick}
+                  />
+            )}
 
             {(isResolved || isPendingResolution) && (
               <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
@@ -642,7 +801,10 @@ export default function PointsMarketDetail({ onOpenLogin }) {
       {buyState && (
         <PointsBuyModal
           open
-          market={market}
+          // buyState.market points at the leg for parallel markets and
+          // the parent otherwise, so the modal's quote/buy calls always
+          // route to the correct binary CPMM state.
+          market={buyState.market || market}
           outcomeIndex={buyState.outcomeIndex}
           outcomeLabel={buyState.outcomeLabel}
           onClose={() => setBuyState(null)}

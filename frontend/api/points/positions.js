@@ -40,11 +40,25 @@ export default async function handler(req, res) {
   const username = session.username;
   try {
     await ensurePointsSchema(schemaSql);
+    // Positions sit on leg ids for parallel markets, so we LEFT JOIN the
+    // parent row to pick up the group-level question / category for
+    // display. Unified markets have parent = NULL — the join yields NULL
+    // and we fall back to the leg row's own fields (which are the real
+    // market's fields for unified).
     const rows = await sql`
       SELECT p.market_id, p.outcome_index, p.shares, p.cost_basis, p.realized_pnl,
-             m.question, m.category, m.outcomes, m.reserves, m.status, m.outcome, m.end_time
+             m.question   AS m_question,
+             m.category   AS m_category,
+             m.outcomes   AS m_outcomes,
+             m.reserves, m.status, m.outcome, m.end_time,
+             m.amm_mode, m.parent_id, m.leg_label,
+             pm.id        AS parent_id_val,
+             pm.question  AS parent_question,
+             pm.category  AS parent_category,
+             pm.outcomes  AS parent_outcomes
       FROM points_positions p
       JOIN points_markets m ON m.id = p.market_id
+      LEFT JOIN points_markets pm ON pm.id = m.parent_id
       WHERE p.username = ${username} AND p.shares > 0
       ORDER BY
         CASE m.status WHEN 'active' THEN 0 WHEN 'resolved' THEN 1 ELSE 2 END,
@@ -52,7 +66,8 @@ export default async function handler(req, res) {
     `;
 
     const positions = rows.map(r => {
-      const outcomes = parseJsonb(r.outcomes, ['Sí', 'No']);
+      const isParallelLeg = !!r.parent_id_val;
+      const outcomes = parseJsonb(r.m_outcomes, ['Sí', 'No']);
       const reserves = parseJsonb(r.reserves, []).map(Number);
       const prices = reserves.length === 2
         ? binaryPrices(reserves)
@@ -72,12 +87,22 @@ export default async function handler(req, res) {
       const currentValue = shares * currentPrice;
       const unrealized = currentValue - costBasis;
 
+      // Display question + label:
+      //   Unified: "Question?" / outcomeLabel
+      //   Parallel leg: "Parent question?" / "<leg label> — Sí|No"
+      const question = isParallelLeg ? r.parent_question : r.m_question;
+      const category = isParallelLeg ? r.parent_category : r.m_category;
+      const outcomeLabel = isParallelLeg
+        ? `${r.leg_label || 'Opción'} — ${r.outcome_index === 0 ? 'Sí' : 'No'}`
+        : (outcomes[r.outcome_index] || `Opción ${r.outcome_index + 1}`);
+
       return {
         marketId: r.market_id,
+        parentMarketId: r.parent_id_val || null,
         outcomeIndex: r.outcome_index,
-        outcomeLabel: outcomes[r.outcome_index] || `Opción ${r.outcome_index + 1}`,
-        question: r.question,
-        category: r.category,
+        outcomeLabel,
+        question,
+        category,
         status: r.status,
         endTime: r.end_time,
         shares,

@@ -56,13 +56,70 @@ export default async function handler(req, res) {
         return res.status(404).json({ error: 'market_not_found' });
       }
       const r = rows[0];
+      // Legs are not directly addressable — always redirect through the
+      // parent so the detail page sees the full group.
+      if (r.parent_id) {
+        return res.status(404).json({ error: 'market_not_found', detail: 'leg; use parent id' });
+      }
+
       const outcomes = parseJsonb(r.outcomes, ['Sí', 'No']);
+      const ammMode = r.amm_mode || 'unified';
+
+      if (ammMode === 'parallel') {
+        const legRows = await sql`
+          SELECT l.id, l.leg_label, l.reserves, l.seed_liquidity, l.status, l.outcome,
+            (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = l.id) AS trade_volume
+          FROM points_markets l
+          WHERE l.parent_id = ${r.id}
+          ORDER BY l.id ASC
+        `;
+        const legs = legRows.map((l, i) => {
+          const lr = parseJsonb(l.reserves, []).map(Number);
+          const lp = lr.length === 2 ? binaryPrices(lr) : [1 / outcomes.length, 1 - 1 / outcomes.length];
+          return {
+            id: l.id,
+            outcomeIndex: i,
+            label: l.leg_label || outcomes[i] || `Opción ${i + 1}`,
+            reserves: lr,
+            prices: lp,                     // [YES, NO] for the leg
+            seedLiquidity: Number(l.seed_liquidity || 0),
+            tradeVolume: Number(l.trade_volume || 0),
+            status: l.status,
+            outcome: l.outcome,             // 0 if this leg's YES won, 1 if NO won
+          };
+        });
+        const seedTotal = legs.reduce((s, l) => s + l.seedLiquidity, 0);
+        const tradeTotal = legs.reduce((s, l) => s + l.tradeVolume, 0);
+        return res.status(200).json({
+          market: {
+            id: r.id,
+            ammMode: 'parallel',
+            question: r.question,
+            category: r.category,
+            icon: r.icon,
+            outcomes,
+            reserves: [],
+            prices: legs.map(l => l.prices[0] ?? 1 / outcomes.length),
+            seedLiquidity: seedTotal,
+            volume: seedTotal,
+            tradeVolume: tradeTotal,
+            endTime: r.end_time,
+            status: r.status,
+            outcome: r.outcome,
+            resolvedAt: r.resolved_at,
+            createdAt: r.created_at,
+          },
+          legs,
+        });
+      }
+
       const reserves = parseJsonb(r.reserves, []).map(Number);
       const prices = pricesFromReserves(reserves, outcomes.length);
 
       return res.status(200).json({
         market: {
           id: r.id,
+          ammMode: 'unified',
           question: r.question,
           category: r.category,
           icon: r.icon,

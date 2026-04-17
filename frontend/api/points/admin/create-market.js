@@ -2,24 +2,30 @@
  * POST /api/points/admin/create-market
  * Body: {
  *   question, category, icon?, endTime,
- *   outcomes: string[],   // 2 to 10 outcomes — 2 = binary Sí/No,
- *                          // more = multi-outcome (Liga MX winner etc.)
- *   seedLiquidity
+ *   outcomes: string[],       // 2 to 10 outcomes
+ *   seedLiquidity,
+ *   ammMode?: 'unified' | 'parallel'  // default 'unified'
  * }
  *
- * Creates a new market with N equal reserves of seedLiquidity each.
- * Binary (N=2) is fully tradeable. Multi-outcome (N>2) is created with
- * the right reserves shape but trading stays binary-only in this release
- * — the UI disables the buy panel for multi markets until the AMM math
- * for N>2 is shipped. Admin-only endpoint.
+ * 'unified' (default): one row in points_markets with N-element reserves,
+ *   priced by the unified CPMM. Works for any N ≥ 2. This is the
+ *   original behaviour.
+ *
+ * 'parallel': one "parent" row (reserves = []) plus N "leg" rows, each a
+ *   binary Sí/No market with reserves = [seed, seed]. Parent carries the
+ *   display metadata (question, outcomes as labels, end_time); legs carry
+ *   the binary CPMM state the trading endpoints operate on. Addressable
+ *   by parent id; legs are resolved via the parent's cascade on admin
+ *   resolve. Admin-only endpoint.
  */
-import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { initialReserves } from '../../_lib/amm-math.js';
+import { withTransaction } from '../../_lib/db-tx.js';
+import { neon } from '@neondatabase/serverless';
 
-const sql = neon(process.env.DATABASE_URL);
+const schemaSql = neon(process.env.DATABASE_URL);
 
 const ALLOWED_CATEGORIES = new Set([
   'general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica',
@@ -33,8 +39,9 @@ export default async function handler(req, res) {
   const admin = requirePointsAdmin(req, res);
   if (!admin) return;
 
-  const { question, category, icon, endTime, outcomes, seedLiquidity } = req.body || {};
+  const { question, category, icon, endTime, outcomes, seedLiquidity, ammMode } = req.body || {};
   const seed = Number(seedLiquidity);
+  const mode = ammMode === 'parallel' ? 'parallel' : 'unified';
   if (typeof question !== 'string' || question.trim().length < 8) {
     return res.status(400).json({ error: 'invalid_question' });
   }
@@ -63,27 +70,83 @@ export default async function handler(req, res) {
   }
 
   try {
-    await ensurePointsSchema(sql);
-    const reserves = initialReserves(seed, normalizedOutcomes.length);
-    const rows = await sql`
-      INSERT INTO points_markets
-        (question, category, icon, outcomes, reserves, seed_liquidity, end_time, status, created_by)
-      VALUES (
-        ${question.trim()},
-        ${category},
-        ${icon || null},
-        ${JSON.stringify(normalizedOutcomes)}::jsonb,
-        ${JSON.stringify(reserves)}::jsonb,
-        ${seed},
-        ${endDate.toISOString()},
-        'active',
-        ${admin.username}
-      )
-      RETURNING id
-    `;
-    return res.status(200).json({ ok: true, marketId: rows[0].id });
+    await ensurePointsSchema(schemaSql);
+
+    if (mode === 'unified') {
+      const reserves = initialReserves(seed, normalizedOutcomes.length);
+      const result = await withTransaction(async (client) => {
+        const r = await client.query(
+          `INSERT INTO points_markets
+             (question, category, icon, outcomes, reserves, seed_liquidity,
+              end_time, status, created_by, amm_mode)
+           VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, 'active', $8, 'unified')
+           RETURNING id`,
+          [
+            question.trim(),
+            category,
+            icon || null,
+            JSON.stringify(normalizedOutcomes),
+            JSON.stringify(reserves),
+            seed,
+            endDate.toISOString(),
+            admin.username,
+          ],
+        );
+        return r.rows[0].id;
+      });
+      return res.status(200).json({ ok: true, marketId: result, ammMode: 'unified' });
+    }
+
+    // Parallel: parent carries metadata, N legs carry binary CPMM state.
+    const legReserves = initialReserves(seed, 2); // always [seed, seed]
+    const result = await withTransaction(async (client) => {
+      const parent = await client.query(
+        `INSERT INTO points_markets
+           (question, category, icon, outcomes, reserves, seed_liquidity,
+            end_time, status, created_by, amm_mode)
+         VALUES ($1, $2, $3, $4::jsonb, '[]'::jsonb, $5, $6, 'active', $7, 'parallel')
+         RETURNING id`,
+        [
+          question.trim(),
+          category,
+          icon || null,
+          JSON.stringify(normalizedOutcomes),
+          seed,
+          endDate.toISOString(),
+          admin.username,
+        ],
+      );
+      const parentId = parent.rows[0].id;
+
+      for (let i = 0; i < normalizedOutcomes.length; i++) {
+        await client.query(
+          `INSERT INTO points_markets
+             (question, category, icon, outcomes, reserves, seed_liquidity,
+              end_time, status, created_by, amm_mode, parent_id, leg_label)
+           VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, 'active', $8,
+                   'parallel', $9, $10)`,
+          [
+            // Leg "question" is synthetic — positions.js + portfolio use
+            // parent.question + leg_label for display, but keeping a
+            // human-readable fallback here helps admin DB inspection.
+            `${question.trim()} — ${normalizedOutcomes[i]}`,
+            category,
+            icon || null,
+            JSON.stringify(['Sí', 'No']),
+            JSON.stringify(legReserves),
+            seed,
+            endDate.toISOString(),
+            admin.username,
+            parentId,
+            normalizedOutcomes[i],
+          ],
+        );
+      }
+      return parentId;
+    });
+    return res.status(200).json({ ok: true, marketId: result, ammMode: 'parallel' });
   } catch (e) {
     console.error('[admin/create-market] error', { message: e?.message, code: e?.code });
-    return res.status(500).json({ error: 'create_failed' });
+    return res.status(500).json({ error: 'create_failed', detail: e?.message?.slice(0, 240) });
   }
 }

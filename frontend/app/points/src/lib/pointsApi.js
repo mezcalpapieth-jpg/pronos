@@ -44,8 +44,13 @@ export async function fetchMarkets({ status = 'active', category } = {}) {
 }
 
 export async function fetchMarket(id) {
-  const { market } = await getJson(`/api/points/market?id=${encodeURIComponent(id)}`);
-  return market;
+  // For parallel (amm_mode='parallel') markets the payload also carries
+  // a `legs: [...]` array with one entry per outcome. Attach it onto the
+  // returned market object so callers can reach it without a second call.
+  const payload = await getJson(`/api/points/market?id=${encodeURIComponent(id)}`);
+  const { market, legs } = payload;
+  if (!market) return market;
+  return Array.isArray(legs) ? { ...market, legs } : market;
 }
 
 /**

@@ -43,10 +43,9 @@ function pricesFromReserves(reserves, outcomeCount) {
   }
   // Binary: use the audited helper that matches the AMM contract.
   if (reserves.length === 2) return binaryPrices(reserves);
-  // Multi: parallel-binary model assigns each outcome a YES reserve + a
-  // NO reserve. For now we model multi as inverse-reserve weighted
-  // probabilities that sum to 1 — a coarse approximation that's fine
-  // for the grid view (exact math happens on quote/buy via the backend).
+  // Multi unified: factor-trick P_i = (1/r_i)/Σ(1/r_k). Matches the
+  // amm-math.js multiPrices() formulation exactly (the two are
+  // algebraically identical — see the explanation in amm-math.js).
   const invs = reserves.map(r => (Number(r) > 0 ? 1 / Number(r) : 0));
   const total = invs.reduce((s, v) => s + v, 0) || 1;
   return invs.map(v => v / total);
@@ -69,12 +68,15 @@ export default async function handler(req, res) {
     const sql = getSql();
     await ensurePointsSchema(schemaSql);
 
+    // Only fetch parents / unified markets. Legs (parent_id IS NOT NULL)
+    // are rolled up below and never surface as standalone rows.
     const rows = category
       ? await sql`
           SELECT m.*,
             (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
           FROM points_markets m
           WHERE m.status = ${status} AND m.category = ${category}
+            AND m.parent_id IS NULL
           ORDER BY m.end_time ASC
           LIMIT 100
         `
@@ -83,16 +85,73 @@ export default async function handler(req, res) {
             (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
           FROM points_markets m
           WHERE m.status = ${status}
+            AND m.parent_id IS NULL
           ORDER BY m.end_time ASC
           LIMIT 100
         `;
 
+    // Collect parallel-parent ids so we can batch-fetch their legs in
+    // one query instead of N+1 round-trips.
+    const parallelIds = rows
+      .filter(r => r.amm_mode === 'parallel')
+      .map(r => r.id);
+    let legsByParent = new Map();
+    if (parallelIds.length > 0) {
+      const legs = await sql`
+        SELECT l.id, l.parent_id, l.leg_label, l.reserves, l.seed_liquidity, l.status, l.outcome,
+          (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = l.id) AS trade_volume
+        FROM points_markets l
+        WHERE l.parent_id = ANY(${parallelIds})
+        ORDER BY l.parent_id ASC, l.id ASC
+      `;
+      for (const leg of legs) {
+        const pid = leg.parent_id;
+        if (!legsByParent.has(pid)) legsByParent.set(pid, []);
+        legsByParent.get(pid).push(leg);
+      }
+    }
+
     const markets = rows.map(r => {
       const outcomes = parseJsonb(r.outcomes, ['Sí', 'No']);
+      const ammMode = r.amm_mode || 'unified';
+
+      if (ammMode === 'parallel') {
+        // Aggregate legs. Each leg is a binary Sí/No market; the parent
+        // outcome's "price" is that leg's YES (outcome 0) price.
+        const legs = legsByParent.get(r.id) || [];
+        const legPrices = legs.map(l => {
+          const lr = parseJsonb(l.reserves, []).map(Number);
+          return lr.length === 2 ? binaryPrices(lr)[0] : 1 / outcomes.length;
+        });
+        const seedTotal = legs.reduce((s, l) => s + Number(l.seed_liquidity || 0), 0);
+        const tradeTotal = legs.reduce((s, l) => s + Number(l.trade_volume || 0), 0);
+        return {
+          id: r.id,
+          ammMode: 'parallel',
+          question: r.question,
+          category: r.category,
+          icon: r.icon,
+          outcomes,
+          reserves: [],   // parent has no pool
+          prices: legPrices.length === outcomes.length
+            ? legPrices
+            : outcomes.map(() => 1 / outcomes.length),
+          seedLiquidity: seedTotal,
+          volume: seedTotal,
+          tradeVolume: tradeTotal,
+          endTime: r.end_time,
+          status: r.status,
+          outcome: r.outcome,
+          resolvedAt: r.resolved_at,
+          createdAt: r.created_at,
+        };
+      }
+
       const reserves = parseJsonb(r.reserves, []).map(Number);
       const prices = pricesFromReserves(reserves, outcomes.length);
       return {
         id: r.id,
+        ammMode: 'unified',
         question: r.question,
         category: r.category,
         icon: r.icon,
@@ -100,8 +159,8 @@ export default async function handler(req, res) {
         reserves,
         prices,
         seedLiquidity: Number(r.seed_liquidity || 0),
-        volume: Number(r.seed_liquidity || 0),    // tradable depth proxy
-        tradeVolume: Number(r.trade_volume || 0), // actual collateral traded
+        volume: Number(r.seed_liquidity || 0),
+        tradeVolume: Number(r.trade_volume || 0),
         endTime: r.end_time,
         status: r.status,
         outcome: r.outcome,

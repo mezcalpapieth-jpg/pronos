@@ -59,6 +59,16 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_markets_end_time ON points_markets(end_time)`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_category ON points_markets(category)`,
 
+  // amm_mode: 'unified' (default — one pool, N-outcome CPMM) or 'parallel'
+  // (Polymarket-style: each outcome is its own binary market, grouped under
+  // a parent row). parent_id links legs to their parent; leg_label stores
+  // the per-leg display label ("57°F or below", "58-59°F", …). Only legs
+  // set parent_id; parents and unified markets leave it NULL.
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS amm_mode TEXT NOT NULL DEFAULT 'unified'`,
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES points_markets(id)`,
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS leg_label TEXT`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_parent ON points_markets(parent_id)`,
+
   // ── Balances (single source of truth per user) ─────────────────────────
   `CREATE TABLE IF NOT EXISTS points_balances (
     username     TEXT PRIMARY KEY,

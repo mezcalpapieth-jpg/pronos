@@ -385,13 +385,15 @@ function SocialTasksQueue() {
 }
 
 // ─── Create market form ──────────────────────────────────────────────────────
-// Two modes:
-//   - Binario: exactly 2 outcomes (default "Sí" / "No"). Fully tradeable.
-//   - Múltiple: 3–10 outcomes ("Barcelona" / "Madrid" / "Chivas"…).
-//     Creates the market with the right reserves shape, but trading is
-//     disabled in the UI until the N-outcome AMM math lands.
+// Two mode axes:
+//   - `mode`: Binario (N=2) or Múltiple (N=3..10) — controls the outcome editor.
+//   - `ammMode`: Unificado (one pool, N-outcome CPMM) or Paralelo
+//     (Polymarket-style: one binary Sí/No market per outcome grouped under
+//     a parent row). Only meaningful for Múltiple; Binario is locked to
+//     Unificado since the two modes are equivalent at N=2.
 function CreateMarketForm() {
   const [mode, setMode] = useState('binary'); // 'binary' | 'multi'
+  const [ammMode, setAmmMode] = useState('unified'); // 'unified' | 'parallel'
   const [form, setForm] = useState({
     question: '',
     category: 'deportes',
@@ -450,6 +452,8 @@ function CreateMarketForm() {
       return;
     }
     setState({ submitting: true, msg: null, err: null });
+    // Binary markets are always unified (parallel = unified at N=2).
+    const effectiveAmmMode = mode === 'binary' ? 'unified' : ammMode;
     try {
       const r = await postJson('/api/points/admin/create-market', {
         question: form.question,
@@ -458,10 +462,12 @@ function CreateMarketForm() {
         endTime: new Date(form.endTime).toISOString(),
         outcomes: cleaned,
         seedLiquidity: Number(form.seedLiquidity),
+        ammMode: effectiveAmmMode,
       });
+      const modeLabel = effectiveAmmMode === 'parallel' ? 'paralelo' : 'unificado';
       setState({
         submitting: false,
-        msg: `Mercado creado (#${r.marketId}) · ${cleaned.length} ${cleaned.length === 2 ? 'opciones (binario)' : 'opciones (múltiple)'}`,
+        msg: `Mercado creado (#${r.marketId}) · ${cleaned.length} opciones · ${modeLabel}`,
         err: null,
       });
       setForm(f => ({
@@ -515,30 +521,6 @@ function CreateMarketForm() {
             );
           })}
         </div>
-        {mode === 'multi' && (
-          <p style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 10,
-            color: 'var(--text-muted)',
-            marginTop: 8,
-            lineHeight: 1.5,
-          }}>
-            {form.outcomes.length === 3 ? (
-              <>
-                ℹ️ <strong style={{ color: 'var(--green)' }}>3 opciones</strong> usan un pool
-                unificado con precios que suman 100% (ideal para W/E/L). Trading
-                completo (compra y venta) habilitado.
-              </>
-            ) : (
-              <>
-                ⚠️ Mercados de <strong>4+ opciones</strong> se crean con la forma
-                correcta pero el trading aún no está habilitado (se implementará
-                vía mercados binarios paralelos). Los usuarios verán el mercado
-                pero no podrán comprar aún.
-              </>
-            )}
-          </p>
-        )}
       </Field>
 
       <Field label="Pregunta">
@@ -585,6 +567,58 @@ function CreateMarketForm() {
           style={inputStyle}
         />
       </Field>
+
+      {/* ── AMM mode toggle (only meaningful for multi) ─────
+          Unificado = one pool, prices sum to 100%.
+          Paralelo  = one binary market per outcome (Polymarket-style),
+                      each pool has its own deeper liquidity. */}
+      {mode === 'multi' && (
+        <Field label="Tipo de AMM">
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[
+              { key: 'unified',  label: 'Unificado', hint: 'Un pool · precios suman 100%' },
+              { key: 'parallel', label: 'Paralelo',  hint: 'Cada opción es un mercado binario Sí/No' },
+            ].map(m => {
+              const active = ammMode === m.key;
+              return (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => setAmmMode(m.key)}
+                  style={{
+                    flex: 1,
+                    padding: '12px 14px',
+                    background: active ? 'var(--surface3, rgba(0,232,122,0.12))' : 'var(--surface2)',
+                    border: `1px solid ${active ? 'var(--green)' : 'var(--border)'}`,
+                    borderRadius: 8,
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11,
+                    fontWeight: active ? 700 : 500,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    color: active ? 'var(--green)' : 'var(--text-muted)',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {m.label}
+                  <div style={{
+                    marginTop: 4,
+                    fontSize: 9,
+                    fontWeight: 400,
+                    letterSpacing: '0.04em',
+                    textTransform: 'none',
+                    color: 'var(--text-muted)',
+                  }}>
+                    {m.hint}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </Field>
+      )}
 
       {/* ── Outcome editor ──────────────────────────────────
           Binary mode renders two side-by-side inputs, multi mode a
