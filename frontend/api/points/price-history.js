@@ -26,8 +26,8 @@
  * No auth required — this is a public read.
  */
 import { neon } from '@neondatabase/serverless';
-import { applyCors } from '../../_lib/cors.js';
-import { ensurePointsSchema } from '../../_lib/points-schema.js';
+import { applyCors } from '../_lib/cors.js';
+import { ensurePointsSchema } from '../_lib/points-schema.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
