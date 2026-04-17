@@ -15,7 +15,7 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { fetchMarkets, fetchPriceHistory, fetchCurrentCycle } from '../lib/pointsApi.js';
+import { fetchMarkets, fetchCurrentCycle, fetchPositions } from '../lib/pointsApi.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import PointsMarketCard from '../components/PointsMarketCard.jsx';
 
@@ -48,7 +48,7 @@ export default function PointsHome({ onOpenLogin }) {
   const { authenticated } = usePointsAuth();
   const [searchParams] = useSearchParams();
   const [markets, setMarkets] = useState([]);
-  const [history, setHistory] = useState({});
+  const [positionByMarket, setPositionByMarket] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeCategory, setActiveCategory] = useState('all');
@@ -95,14 +95,29 @@ export default function PointsHome({ onOpenLogin }) {
         setMarkets(m);
         setLoading(false);
 
-        // Batch-fetch price history for all visible markets in one call.
-        // This is best-effort — the sparkline falls back to a seeded mock
-        // when the snapshot table hasn't been populated yet, so failures
-        // here are silently tolerated by fetchPriceHistory.
-        const ids = m.map(x => x.id).filter(Boolean);
-        if (ids.length > 0) {
-          const h = await fetchPriceHistory(ids, { days: 30, outcome: 0 });
-          if (!cancelled) setHistory(h);
+        // If the caller is signed in, fetch their open positions and
+        // index them by market id. Cards use this to show a "Tienes
+        // posición" badge without needing to click through. Silently
+        // skipped when unauthenticated — positions endpoint 401s and
+        // we don't want to surface that on a public grid.
+        if (authenticated) {
+          try {
+            const res = await fetchPositions();
+            if (cancelled) return;
+            const idx = {};
+            for (const p of res.positions || []) {
+              // Cards only need to know "has the user bet here" — pick
+              // the largest holding in case the user split across
+              // outcomes.
+              const cur = idx[p.marketId];
+              if (!cur || Number(p.shares) > Number(cur.shares)) {
+                idx[p.marketId] = { outcomeIndex: p.outcomeIndex, shares: Number(p.shares) };
+              }
+            }
+            setPositionByMarket(idx);
+          } catch { /* silently best-effort */ }
+        } else {
+          setPositionByMarket({});
         }
       } catch (e) {
         if (!cancelled) {
@@ -115,7 +130,7 @@ export default function PointsHome({ onOpenLogin }) {
     }
     load();
     return () => { cancelled = true; };
-  }, [activeCategory]);
+  }, [activeCategory, authenticated]);
 
   // Two filter layers: category tab + free-text search. Search is
   // case-insensitive and matches against the question text. "Trending"
@@ -378,7 +393,7 @@ export default function PointsHome({ onOpenLogin }) {
         {!loading && !error && filtered.length > 0 && (
           <div className="markets-grid">
             {filtered.map(m => (
-              <PointsMarketCard key={m.id} market={m} history={history[m.id]} />
+              <PointsMarketCard key={m.id} market={m} userPosition={positionByMarket[m.id]} />
             ))}
           </div>
         )}

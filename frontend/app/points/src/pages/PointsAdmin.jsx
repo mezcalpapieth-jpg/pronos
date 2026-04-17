@@ -802,24 +802,11 @@ function MarketsTable() {
             </div>
           </div>
           {m.status === 'active' ? (
-            <>
-              <button
-                onClick={() => resolveMarket(m.id, 0)}
-                disabled={resolving === m.id}
-                className="btn-primary"
-                style={{ padding: '6px 12px', fontSize: 11 }}
-              >
-                Ganó {m.outcomes[0]}
-              </button>
-              <button
-                onClick={() => resolveMarket(m.id, 1)}
-                disabled={resolving === m.id}
-                className="btn-ghost"
-                style={{ padding: '6px 12px', fontSize: 11 }}
-              >
-                Ganó {m.outcomes[1]}
-              </button>
-            </>
+            <ResolveControls
+              market={m}
+              resolving={resolving === m.id}
+              onResolve={(winnerIndex) => resolveMarket(m.id, winnerIndex)}
+            />
           ) : (
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--green)' }}>
               ✓ {m.outcomes[m.outcome]}
@@ -828,6 +815,49 @@ function MarketsTable() {
         </div>
       ))}
     </div>
+  );
+}
+
+// ─── Resolve controls ───────────────────────────────────────────────────────
+// Compact dropdown + confirm button that works for any N outcomes. The
+// previous hardcoded "Ganó X / Ganó Y" pair of buttons only covered
+// N=2 markets, which broke resolution for 3-outcome W/D/L markets.
+function ResolveControls({ market, resolving, onResolve }) {
+  const [selected, setSelected] = useState(0);
+  const outcomes = Array.isArray(market.outcomes) ? market.outcomes : [];
+  return (
+    <>
+      <select
+        value={selected}
+        onChange={(e) => setSelected(Number(e.target.value))}
+        disabled={resolving}
+        style={{
+          padding: '6px 10px',
+          background: 'var(--surface2)',
+          border: '1px solid var(--border)',
+          borderRadius: 8,
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          color: 'var(--text-primary)',
+          cursor: 'pointer',
+          minWidth: 120,
+        }}
+      >
+        {outcomes.map((label, i) => (
+          <option key={i} value={i}>
+            {label}
+          </option>
+        ))}
+      </select>
+      <button
+        onClick={() => onResolve(selected)}
+        disabled={resolving}
+        className="btn-primary"
+        style={{ padding: '6px 12px', fontSize: 11 }}
+      >
+        {resolving ? 'Resolviendo…' : `Ganó ${outcomes[selected] || '—'}`}
+      </button>
+    </>
   );
 }
 
