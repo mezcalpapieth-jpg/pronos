@@ -9,7 +9,7 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
-import { binaryBuyQuote } from '../_lib/amm-math.js';
+import { binaryBuyQuote, multiBuyQuote } from '../_lib/amm-math.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -41,7 +41,7 @@ export default async function handler(req, res) {
   const oi = parseInt(outcomeIndex, 10);
   const amt = Number(collateral);
   if (!Number.isInteger(mid) || mid <= 0) return res.status(400).json({ error: 'invalid_market_id' });
-  if (![0, 1].includes(oi)) return res.status(400).json({ error: 'invalid_outcome_index' });
+  if (!Number.isInteger(oi) || oi < 0) return res.status(400).json({ error: 'invalid_outcome_index' });
   if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: 'invalid_amount' });
 
   try {
@@ -57,11 +57,22 @@ export default async function handler(req, res) {
     if (r.status !== 'active') return res.status(400).json({ error: 'market_closed' });
 
     const reserves = parseJsonb(r.reserves, []).map(Number);
-    if (reserves.length !== 2) {
-      return res.status(400).json({ error: 'only_binary_supported' });
+    if (reserves.length < 2) {
+      return res.status(400).json({ error: 'degenerate_reserves' });
+    }
+    if (reserves.length > 3) {
+      return res.status(400).json({
+        error: 'multi_routing_not_ready',
+        detail: 'Use parallel binary event groups for N≥4 markets.',
+      });
+    }
+    if (oi >= reserves.length) {
+      return res.status(400).json({ error: 'invalid_outcome_index' });
     }
 
-    const q = binaryBuyQuote(reserves, oi, amt);
+    const q = reserves.length === 2
+      ? binaryBuyQuote(reserves, oi, amt)
+      : multiBuyQuote(reserves, oi, amt);
     return res.status(200).json({
       collateral: q.collateral,
       fee: q.fee,

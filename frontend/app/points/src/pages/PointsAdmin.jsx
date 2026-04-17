@@ -522,9 +522,20 @@ function CreateMarketForm() {
             marginTop: 8,
             lineHeight: 1.5,
           }}>
-            ⚠️ Los mercados múltiples se crean con la forma correcta pero el trading
-            queda deshabilitado hasta que el AMM de N&gt;2 esté listo. Los usuarios
-            verán el mercado pero no podrán comprar aún.
+            {form.outcomes.length === 3 ? (
+              <>
+                ℹ️ <strong style={{ color: 'var(--green)' }}>3 opciones</strong> usan un pool
+                unificado con precios que suman 100% (ideal para W/E/L). Trading
+                completo (compra y venta) habilitado.
+              </>
+            ) : (
+              <>
+                ⚠️ Mercados de <strong>4+ opciones</strong> se crean con la forma
+                correcta pero el trading aún no está habilitado (se implementará
+                vía mercados binarios paralelos). Los usuarios verán el mercado
+                pero no podrán comprar aún.
+              </>
+            )}
           </p>
         )}
       </Field>

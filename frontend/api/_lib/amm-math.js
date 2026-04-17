@@ -285,14 +285,320 @@ export function initialReserves(seedHuman, outcomeCount = 2) {
   return Array.from({ length: n }, () => seedHuman);
 }
 
-// ─── Multi-outcome markets: grouped binary markets ───────────────────────────
-// For markets with N > 2 outcomes (e.g. "Who wins the World Cup?" with 32
-// teams), we model each candidate as a separate binary market:
-//   "Will team X win?" — YES / NO
-// This is the same pattern Polymarket uses for elections. It keeps the
-// math identical to the audited binary CPMM and lets winning shares on
-// the losing teams naturally expire worthless. The only extra logic is
-// at the UI layer: group the N binary markets under one parent "event".
+// ─── Multi-outcome markets ───────────────────────────────────────────────────
+//
+// Product decision: we handle non-binary markets in TWO regimes based on
+// outcome count:
+//
+//   N = 3 (unified pool)
+//     Typical use: soccer W/D/L, three-way elections. The pool holds one
+//     reserve per outcome; invariant is the product ∏ r_j. Prices sum to
+//     100% naturally. Buy is closed-form (one BigInt division); sell is a
+//     Newton-iteration on a cubic polynomial (converges in ~5 iters).
+//
+//   N ≥ 4 (parallel binary markets)
+//     Typical use: "who wins" among many candidates (Liga MX, Mundial
+//     brackets). Each outcome becomes its own binary market row sharing
+//     an event_group_id. Reuses the audited binary CPMM verbatim. This
+//     module does NOT implement that path — the wiring lives in
+//     create-market.js, markets.js, and resolve-market.js. The trading
+//     endpoints still dispatch to binaryBuyQuote/binarySellQuote for
+//     each leg.
+//
+// The functions below cover the N=3 unified case. They're written to work
+// for any N ≥ 2 so tests can cross-check N=2 against binaryBuyQuote for
+// mathematical sanity, but trading endpoints route N=2 through the
+// audited binary code path to minimize blast radius.
+
+/**
+ * Raw (1e6-scaled BigInt) price of outcome `idx` in an N-outcome pool.
+ *   P_i = (∏_{j≠i} r_j) / Σ_k (∏_{j≠k} r_j)
+ *
+ * Returns null when the pool is empty (caller should fall back to a
+ * uniform 1/N prior). Exact BigInt arithmetic — no intermediate floats.
+ */
+export function multiPriceRaw(reservesRaw, idx) {
+  if (!Array.isArray(reservesRaw) || reservesRaw.length < 2) return null;
+  if (reservesRaw.some(r => r === 0n)) return null;
+
+  // ∏_{j≠idx} r_j in (1e6)^{N-1} scale.
+  let num = 1n;
+  for (let j = 0; j < reservesRaw.length; j++) {
+    if (j !== idx) num = num * reservesRaw[j];
+  }
+
+  // Σ_k (∏_{j≠k} r_j). Factor trick: each term = (∏ r) / r_k.
+  // Cheaper than recomputing, avoids overflow in the intermediate.
+  let fullProduct = 1n;
+  for (const r of reservesRaw) fullProduct = fullProduct * r;
+  let denom = 0n;
+  for (const r of reservesRaw) denom = denom + fullProduct / r;
+
+  if (denom === 0n) return null;
+  return (num * PRICE_SCALE) / denom;
+}
+
+/**
+ * Human-readable price vector for a multi-outcome pool. Sums to ~1.0
+ * (may be off by a microprobability due to BigInt truncation on small
+ * reserves, negligible in practice).
+ */
+export function multiPrices(reservesHuman) {
+  if (!Array.isArray(reservesHuman) || reservesHuman.length < 2) {
+    return [0.5, 0.5];
+  }
+  const n = reservesHuman.length;
+  const raw = reservesHuman.map(toRaw);
+  return raw.map((_, i) => {
+    const p = multiPriceRaw(raw, i);
+    return p === null ? 1 / n : rawToProbability(p);
+  });
+}
+
+/**
+ * Dynamic fee on a buy in an N-outcome pool. Same shape as binary:
+ *   fee% = 5% × (1 − P_bought)
+ * At the 1/N symmetric starting price, that's 5% × (1 − 1/N):
+ *   N=2 → 2.50%  (matches binary)
+ *   N=3 → 3.33%
+ *   N=4 → 3.75%
+ */
+function calculateMultiFeeRaw(amountRaw, reservesRaw, outcomeIdx) {
+  const pRaw = multiPriceRaw(reservesRaw, outcomeIdx);
+  if (pRaw === null) {
+    return (amountRaw * DEFAULT_FEE_AT_FIFTY) / SCALE;
+  }
+  const feeRate = (FEE_SLOPE_BPS * (PRICE_SCALE - pRaw)) / FEE_DENOM;
+  return (amountRaw * feeRate) / SCALE;
+}
+
+/**
+ * Quote a buy of `collateral` MXNP on outcome `outcomeIdx` in an N-outcome
+ * pool. Closed-form solution.
+ *
+ * Math:
+ *   User pays C collateral → pool mints a complete set (all reserves +C).
+ *   Pool trades α shares of outcome i to user, preserving the invariant
+ *   from BEFORE the mint:
+ *     (r_i + C − α) · ∏_{j≠i}(r_j + C) = ∏_j r_j = K
+ *   Solve:
+ *     α = r_i + C − K / ∏_{j≠i}(r_j + C)
+ *
+ * Pool-safe rounding: new reserve i is computed via ceilDiv (rounded UP)
+ * so the user receives fewer shares if there's a fractional boundary —
+ * same convention as binaryBuyQuote.
+ */
+export function multiBuyQuote(reservesHuman, outcomeIdx, collateralHuman) {
+  if (!Array.isArray(reservesHuman) || reservesHuman.length < 2) {
+    throw new Error('amm-math: multi-outcome needs ≥ 2 reserves');
+  }
+  if (outcomeIdx < 0 || outcomeIdx >= reservesHuman.length) {
+    throw new Error('amm-math: outcome_index out of range');
+  }
+  if (collateralHuman <= 0) throw new Error('amm-math: collateral must be > 0');
+
+  const reserves = reservesHuman.map(toRaw);
+  const n = reserves.length;
+  if (reserves.some(r => r <= 0n)) {
+    throw new Error('amm-math: empty reserves');
+  }
+
+  const collateralRaw = toRaw(collateralHuman);
+  const feeRaw = calculateMultiFeeRaw(collateralRaw, reserves, outcomeIdx);
+  const netRaw = collateralRaw - feeRaw;
+
+  // K_pre = ∏_j r_j (kept from BEFORE the complete-set mint).
+  let K = 1n;
+  for (const r of reserves) K = K * r;
+
+  // Denom = ∏_{j≠i} (r_j + net)
+  let denom = 1n;
+  for (let j = 0; j < n; j++) {
+    if (j !== outcomeIdx) denom = denom * (reserves[j] + netRaw);
+  }
+
+  // new r_i after the trade. ceilDiv so we round UP → user gets fewer
+  // shares (safer for pool).
+  const newReserveI = ceilDiv(K, denom);
+  const sharesOutRaw = (reserves[outcomeIdx] + netRaw) - newReserveI;
+  if (sharesOutRaw <= 0n) {
+    throw new Error('amm-math: trade too small or reserves invalid');
+  }
+
+  // Compose the post-trade reserves vector.
+  const newReservesRaw = reserves.map((r, j) =>
+    j === outcomeIdx ? newReserveI : r + netRaw,
+  );
+
+  const pricesBefore = reserves.map((_, i) =>
+    rawToProbability(multiPriceRaw(reserves, i) || 0n),
+  );
+  const pricesAfter = newReservesRaw.map((_, i) =>
+    rawToProbability(multiPriceRaw(newReservesRaw, i) || 0n),
+  );
+
+  return {
+    collateral: fromRaw(collateralRaw),
+    fee: fromRaw(feeRaw),
+    feePct: collateralHuman > 0 ? (fromRaw(feeRaw) / collateralHuman) * 100 : 0,
+    sharesOut: fromRaw(sharesOutRaw),
+    avgPrice: sharesOutRaw === 0n ? 0 : fromRaw(netRaw) / fromRaw(sharesOutRaw),
+    priceBefore: pricesBefore[outcomeIdx],
+    priceAfter: pricesAfter[outcomeIdx],
+    priceImpactPts: (pricesAfter[outcomeIdx] - pricesBefore[outcomeIdx]) * 100,
+    pricesBefore,
+    pricesAfter,
+    reservesAfter: newReservesRaw.map(fromRaw),
+    reservesAfterRaw: newReservesRaw,
+  };
+}
+
+/**
+ * Quote a sell of `shares` tokens of outcome `outcomeIdx` back to an
+ * N-outcome pool. Solved via Newton's method on the sell polynomial.
+ *
+ * Math:
+ *   User deposits α tokens of outcome i, pool returns C collateral by
+ *   burning C of each reserve. Invariant preserved:
+ *     (r_i + α − C) · ∏_{j≠i}(r_j − C) = ∏_j r_j = K
+ *   That's a degree-N polynomial in C with no general closed form for
+ *   N ≥ 3. We solve numerically:
+ *     f(C)  = product with (r_i+α−C), (r_j−C) − K
+ *     f'(C) = -Σ_k ∏_{j≠k}(term_j)
+ *   Start from C₀ = α · p_i (a lower bound; ignores impact). Newton:
+ *     C_{n+1} = C_n − f(C_n) / f'(C_n)
+ *   Converges to ≤1 raw (1 microMXNP) in ~4–8 iterations for realistic
+ *   pools. Bounded above by min(r_j for j≠i) − 1 to keep reserves > 0.
+ *
+ * Zero sell fee (same as binary) — user receives full C.
+ */
+export function multiSellQuote(reservesHuman, outcomeIdx, sharesHuman) {
+  if (!Array.isArray(reservesHuman) || reservesHuman.length < 2) {
+    throw new Error('amm-math: multi-outcome needs ≥ 2 reserves');
+  }
+  if (outcomeIdx < 0 || outcomeIdx >= reservesHuman.length) {
+    throw new Error('amm-math: outcome_index out of range');
+  }
+  if (sharesHuman <= 0) throw new Error('amm-math: shares must be > 0');
+
+  const reserves = reservesHuman.map(toRaw);
+  const n = reserves.length;
+  if (reserves.some(r => r <= 0n)) {
+    throw new Error('amm-math: empty reserves');
+  }
+
+  const sharesRaw = toRaw(sharesHuman);
+
+  // K_pre = ∏ r_j.
+  let K = 1n;
+  for (const r of reserves) K = K * r;
+
+  // Hard ceiling for C: slightly below the smallest non-sold reserve.
+  // At C = min_other, one of the (r_j − C) terms hits zero, f(C) = −K.
+  // We need to stay strictly below that to avoid a negative factor.
+  let minOther = null;
+  for (let j = 0; j < n; j++) {
+    if (j === outcomeIdx) continue;
+    if (minOther === null || reserves[j] < minOther) minOther = reserves[j];
+  }
+  const cMax = minOther - 1n;
+  if (cMax <= 0n) {
+    throw new Error('amm-math: sell would drain pool');
+  }
+
+  // Initial guess: α × current price of outcome i. This is a lower
+  // bound (ignores price impact) so Newton will converge upward.
+  const pInit = multiPriceRaw(reserves, outcomeIdx) || (PRICE_SCALE / BigInt(n));
+  let C = (sharesRaw * pInit) / PRICE_SCALE;
+  if (C <= 0n) C = 1n;
+  if (C >= cMax) C = cMax / 2n;
+
+  const MAX_ITER = 32;
+  for (let iter = 0; iter < MAX_ITER; iter++) {
+    // Build the N term array: term_j = r_j − C  (j ≠ i),  term_i = r_i + α − C.
+    const terms = new Array(n);
+    for (let j = 0; j < n; j++) {
+      terms[j] = j === outcomeIdx ? (reserves[j] + sharesRaw - C) : (reserves[j] - C);
+      if (terms[j] <= 0n) {
+        // Newton stepped past the bound — back off halfway toward cMax/2.
+        C = C / 2n;
+        continue;
+      }
+    }
+    // Re-check after the possible back-off.
+    let anyNonPositive = false;
+    for (let j = 0; j < n; j++) {
+      const t = j === outcomeIdx ? (reserves[j] + sharesRaw - C) : (reserves[j] - C);
+      if (t <= 0n) { anyNonPositive = true; break; }
+      terms[j] = t;
+    }
+    if (anyNonPositive) continue;
+
+    // f(C) = ∏ terms − K. Positive when C is below the root.
+    let prod = 1n;
+    for (const t of terms) prod = prod * t;
+    const fC = prod - K;
+
+    // Already converged to an exact integer root.
+    if (fC === 0n) return finalize(reserves, outcomeIdx, sharesRaw, C, n);
+
+    // f'(C) = −Σ_k ∏_{j≠k} terms[j]. Use the factor trick again:
+    //   ∏_{j≠k} terms = prod / terms[k]
+    let fPrime = 0n;
+    for (let k = 0; k < n; k++) {
+      fPrime = fPrime - (prod / terms[k]);
+    }
+    if (fPrime === 0n) break; // pathological; break out and use current C
+
+    // Newton step. fC > 0 ⇒ delta < 0 ⇒ move C right.
+    const delta = fC / fPrime; // BigInt truncates toward zero
+    let Cnext = C - delta;
+
+    // Clamp within (0, cMax).
+    if (Cnext <= 0n) Cnext = 1n;
+    if (Cnext >= cMax) Cnext = (C + cMax) / 2n;
+
+    const stepSize = absDiff(Cnext, C);
+    C = Cnext;
+    if (stepSize <= 1n) break; // converged to sub-microMXNP precision
+  }
+
+  return finalize(reserves, outcomeIdx, sharesRaw, C, n);
+}
+
+// Shared tail of multiSellQuote — computes the full return shape once
+// Newton has landed on a C value.
+function finalize(reservesRaw, outcomeIdx, sharesRaw, C, n) {
+  const newReservesRaw = reservesRaw.map((r, j) =>
+    j === outcomeIdx ? (r + sharesRaw - C) : (r - C),
+  );
+
+  if (newReservesRaw.some(r => r <= 0n)) {
+    throw new Error('amm-math: sell would drain pool');
+  }
+
+  const pricesBefore = reservesRaw.map((_, i) =>
+    rawToProbability(multiPriceRaw(reservesRaw, i) || 0n),
+  );
+  const pricesAfter = newReservesRaw.map((_, i) =>
+    rawToProbability(multiPriceRaw(newReservesRaw, i) || 0n),
+  );
+
+  return {
+    shares: fromRaw(sharesRaw),
+    gross: fromRaw(C),
+    fee: 0,
+    feePct: 0,
+    collateralOut: fromRaw(C),
+    priceBefore: pricesBefore[outcomeIdx],
+    priceAfter: pricesAfter[outcomeIdx],
+    priceImpactPts: (pricesAfter[outcomeIdx] - pricesBefore[outcomeIdx]) * 100,
+    pricesBefore,
+    pricesAfter,
+    reservesAfter: newReservesRaw.map(fromRaw),
+    reservesAfterRaw: newReservesRaw,
+  };
+}
 
 // Exported for tests
 export const _internal = {

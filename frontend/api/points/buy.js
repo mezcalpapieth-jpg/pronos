@@ -10,7 +10,7 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
-import { binaryBuyQuote } from '../_lib/amm-math.js';
+import { binaryBuyQuote, multiBuyQuote } from '../_lib/amm-math.js';
 import { requireSession } from '../_lib/session.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { withTransaction } from '../_lib/db-tx.js';
@@ -47,7 +47,9 @@ export default async function handler(req, res) {
   const oi  = parseInt(outcomeIndex, 10);
   const amt = Number(collateral);
   if (!Number.isInteger(mid) || mid <= 0) return res.status(400).json({ error: 'invalid_market_id' });
-  if (![0, 1].includes(oi))                return res.status(400).json({ error: 'invalid_outcome_index' });
+  // outcome_index upper bound is validated once we have the market's
+  // reserves count (binary=2 or trinary=3). Just guard the lower bound here.
+  if (!Number.isInteger(oi) || oi < 0)    return res.status(400).json({ error: 'invalid_outcome_index' });
   if (!Number.isFinite(amt) || amt <= 0)   return res.status(400).json({ error: 'invalid_amount' });
 
   const username = session.username;
@@ -78,8 +80,21 @@ export default async function handler(req, res) {
         const err = new Error('market_expired'); err.status = 400; throw err;
       }
       const reserves = parseJsonb(m.reserves, []).map(Number);
-      if (reserves.length !== 2) {
-        const err = new Error('only_binary_supported'); err.status = 400; throw err;
+      // Dispatch AMM by outcome count:
+      //   N=2 → audited binary CPMM (mirrors PronosAMM.sol).
+      //   N=3 → unified multi CPMM (W/D/L markets, prices sum to 1).
+      //   N≥4 → parallel binary event groups (not this row — routed via
+      //         the event_group_id resolver, future commit).
+      if (reserves.length < 2) {
+        const err = new Error('degenerate_reserves'); err.status = 400; throw err;
+      }
+      if (reserves.length > 3) {
+        const err = new Error('multi_routing_not_ready'); err.status = 400;
+        err.detail = 'Use parallel binary event groups for N≥4 markets.';
+        throw err;
+      }
+      if (oi >= reserves.length) {
+        const err = new Error('invalid_outcome_index'); err.status = 400; throw err;
       }
 
       const balanceResult = await client.query(
@@ -95,7 +110,9 @@ export default async function handler(req, res) {
 
       let quote;
       try {
-        quote = binaryBuyQuote(reserves, oi, amt);
+        quote = reserves.length === 2
+          ? binaryBuyQuote(reserves, oi, amt)
+          : multiBuyQuote(reserves, oi, amt);
       } catch (e) {
         const err = new Error('invalid_quote'); err.status = 400; err.detail = e.message; throw err;
       }

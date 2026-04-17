@@ -8,8 +8,14 @@
  * of them fail, user balances will be computed incorrectly and the app must
  * not ship.
  *
- * Scope: binary markets only. Multi-outcome is modeled as parallel binary
- * markets (one per candidate), so we don't test multi-outcome math here.
+ * Scope:
+ *   - Binary (N=2): exercises the audited binary CPMM mirroring the
+ *     PronosAMM.sol contract.
+ *   - Unified multi (N=3): exercises multiBuyQuote + multiSellQuote, which
+ *     support W/D/L markets with prices summing to 100% and sell via
+ *     Newton's iteration on the cubic sell polynomial.
+ *   - N ≥ 4 is handled outside this module (parallel binary event groups),
+ *     so we don't exercise it here.
  */
 
 import test from 'node:test';
@@ -23,6 +29,9 @@ import {
   fromRaw,
   initialReserves,
   redeemPayout,
+  multiBuyQuote,
+  multiSellQuote,
+  multiPrices,
 } from './amm-math.js';
 
 // Helper: compare two numbers within a tolerance.
@@ -271,4 +280,184 @@ test('multi-outcome as N parallel binary markets works end-to-end', () => {
   const brazilWinningOutcome = 0; // YES — Brazil won
   const otherPayout = redeemPayout(otherUserBuy.sharesOut, 0, brazilWinningOutcome);
   assert.ok(otherPayout > 50, `Brazil YES bet wins — got ${otherPayout}`);
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Unified multi-outcome (N = 3) — buy + sell + prices
+// ────────────────────────────────────────────────────────────────────────────
+// These cover the path used by W/D/L sports markets where admins want
+// prices to sum to 100% and a single pool per event.
+
+test('multiPrices on symmetric 3-outcome pool is 1/3 each', () => {
+  const ps = multiPrices([500, 500, 500]);
+  approxEqual(ps[0], 1/3, 0.0001, 'P_0');
+  approxEqual(ps[1], 1/3, 0.0001, 'P_1');
+  approxEqual(ps[2], 1/3, 0.0001, 'P_2');
+  approxEqual(ps.reduce((s, p) => s + p, 0), 1, 0.0001, 'sum = 1');
+});
+
+test('multiPrices: skewed 3-outcome pool reflects implied odds', () => {
+  // Outcome 0 has been bought heavily (low reserve → expensive).
+  // Expected: P_0 > P_1 = P_2, and all sum to ~1.
+  const ps = multiPrices([100, 500, 500]);
+  assert.ok(ps[0] > ps[1], 'depleted reserve ⇒ higher price');
+  approxEqual(ps[1], ps[2], 0.0001, 'symmetric pair');
+  approxEqual(ps[0] + ps[1] + ps[2], 1, 0.0001, 'sum = 1');
+});
+
+test('multiBuyQuote (N=3): buy at symmetric pool charges 3.33% fee', () => {
+  const q = multiBuyQuote([500, 500, 500], 0, 100);
+  // fee = 5% × (1 − 1/3) = 3.333%
+  approxEqual(q.feePct, 3.3333, 0.01, 'fee% at equal reserves');
+  assert.ok(q.sharesOut > 100, 'at ~33¢ per share, 100 MXNP buys > 100 shares');
+  // Avg price below 0.5 and above 0.333 (starting price).
+  assert.ok(q.avgPrice > 0.333 && q.avgPrice < 0.5,
+    `avg price plausible — got ${q.avgPrice}`);
+  // Price of outcome 0 increases; 1 and 2 decrease.
+  assert.ok(q.priceAfter > q.priceBefore, 'buying 0 should push P_0 up');
+  approxEqual(q.pricesAfter.reduce((s, p) => s + p, 0), 1, 0.0001,
+    'post-trade prices sum to 1');
+});
+
+test('multiBuyQuote (N=3): reserves-after match invariant', () => {
+  // Buying outcome i should preserve ∏ r_j from BEFORE the complete-set
+  // mint (not from the scaled-up state). Verify with BigInt math.
+  const reserves = [500, 500, 500];
+  const q = multiBuyQuote(reserves, 1, 75);
+  // Reserves-after in raw BigInt
+  const raw = q.reservesAfterRaw;
+  const prodAfter = raw[0] * raw[1] * raw[2];
+  const prodBefore = toRaw(500) * toRaw(500) * toRaw(500);
+  // ceilDiv rounds UP → product-after is ≥ product-before by at most a few units.
+  assert.ok(prodAfter >= prodBefore,
+    `invariant preserved (≥) — after=${prodAfter} before=${prodBefore}`);
+  // Tolerance: a tiny positive drift from ceilDiv, bounded by (r_m+C)(r_n+C).
+  const maxDrift = (raw[0]) * (raw[2]);  // loose upper bound
+  assert.ok(prodAfter - prodBefore <= maxDrift, 'rounding drift bounded');
+});
+
+test('multiSellQuote (N=3): round-trip — buy then sell recovers ~net', () => {
+  // Buy 100 MXNP of outcome 0, then sell all shares back.
+  // Due to the buy fee (≈3.33% at 1/3) the user recovers only the NET
+  // collateral — the fee stays with the pool as accumulated LP value.
+  // Reserves return exactly to the pre-buy state because both operations
+  // preserve the CPMM invariant and the sell has no fee.
+  const reserves = [500, 500, 500];
+  const buy = multiBuyQuote(reserves, 0, 100);
+  const sell = multiSellQuote(buy.reservesAfter, 0, buy.sharesOut);
+
+  // Recovered collateral ≈ buy.collateral − buy.fee = 100 − 3.33 = 96.67.
+  approxEqual(sell.collateralOut, 100 - buy.fee, 0.02,
+    'sell recovers net-of-fee collateral');
+
+  // After round-trip reserves snap back to [500, 500, 500] (the fee never
+  // made it into reserves — it's held as an implicit pool-MXNP surplus
+  // not tracked in the reserves vector).
+  const postRoundTrip = sell.reservesAfter;
+  approxEqual(postRoundTrip[0], 500, 0.02, 'sold reserve returns to seed');
+  approxEqual(postRoundTrip[1], 500, 0.02, 'untouched reserves return to seed');
+  approxEqual(postRoundTrip[2], 500, 0.02, 'untouched reserves return to seed');
+});
+
+test('multiSellQuote (N=3): Newton converges on skewed pool', () => {
+  // Skewed starting pool + large sell — stresses the iteration.
+  const reserves = [120, 480, 480]; // outcome 0 is mid-price (~55%)
+  // Someone holds 200 shares of outcome 0 after heavy buying; selling them.
+  const sell = multiSellQuote(reserves, 0, 200);
+
+  assert.ok(sell.collateralOut > 0, 'sell returns positive MXNP');
+  // Sell should push the price down (outcome gets cheaper).
+  assert.ok(sell.priceAfter < sell.priceBefore,
+    `sell depresses price — before=${sell.priceBefore} after=${sell.priceAfter}`);
+  // All reserves remain positive.
+  for (const r of sell.reservesAfter) {
+    assert.ok(r > 0, `reserve stays positive — got ${r}`);
+  }
+  // Post-trade prices still sum to 1.
+  approxEqual(sell.pricesAfter.reduce((s, p) => s + p, 0), 1, 0.0001,
+    'post-sell prices sum to 1');
+});
+
+test('multiSellQuote (N=3): massive sell on shallow pool produces terrible price (never nonsense)', () => {
+  // A huge sell relative to pool depth should still solve — Newton finds
+  // a root in (0, min_other_reserve) for any positive α. The resulting
+  // price is awful (most of the shares are effectively worthless), but
+  // the math never returns invalid state. Mirrors the binary "absurdly
+  // large sell" test.
+  const sell = multiSellQuote([100, 50, 50], 0, 1000);
+
+  // Average price must be much lower than the starting ~20% — roughly
+  // 35 MXNP recovered for 1000 shares means ~3.5¢ apiece.
+  const avgPrice = sell.collateralOut / 1000;
+  assert.ok(avgPrice < 0.05,
+    `huge sell avg price should be < 5¢ — got ${avgPrice}`);
+  // Reserves still positive (sell never drains the pool as long as the
+  // root is strictly below min(other reserves)).
+  for (const r of sell.reservesAfter) {
+    assert.ok(r > 0, `reserve stays positive — got ${r}`);
+  }
+  // Prices still sum to ~1.
+  approxEqual(sell.pricesAfter.reduce((s, p) => s + p, 0), 1, 0.01,
+    'prices still sum to ~1 after extreme trade');
+});
+
+test('multiSellQuote (N=3): rejects when pool is degenerate (one reserve is zero)', () => {
+  // If somehow a reserve hits zero, the multiplicative invariant becomes
+  // singular. The math must reject rather than silently return garbage.
+  assert.throws(
+    () => multiSellQuote([500, 0, 500], 0, 10),
+    /empty reserves|drain/,
+    'degenerate pool must throw',
+  );
+});
+
+test('multiBuyQuote (N=3): fee scales inversely with outcome price', () => {
+  // At a skewed pool, buying the cheap side pays more fee %,
+  // buying the expensive side pays less.
+  const reserves = [100, 500, 500];
+  const priceCheap = multiPrices(reserves)[1]; // outcome 1 is "cheap" (~22%)
+  const priceExpensive = multiPrices(reserves)[0]; // outcome 0 is "expensive" (~55%)
+  assert.ok(priceExpensive > priceCheap);
+
+  const qCheap = multiBuyQuote(reserves, 1, 50);
+  const qExpensive = multiBuyQuote(reserves, 0, 50);
+  // fee% = 5 × (1 − P_bought).
+  assert.ok(qCheap.feePct > qExpensive.feePct,
+    `cheap outcome pays more fee% — cheap=${qCheap.feePct} exp=${qExpensive.feePct}`);
+});
+
+test('multiBuyQuote: N=2 matches binary within tolerance', () => {
+  // Sanity check: the multi code reduces to binary behavior for N=2.
+  // Binary code path remains canonical (audited), but math should agree.
+  const binary = binaryBuyQuote([500, 500], 0, 100);
+  const multi = multiBuyQuote([500, 500], 0, 100);
+  approxEqual(multi.sharesOut, binary.sharesOut, 0.001,
+    'multi(N=2) ≈ binary sharesOut');
+  approxEqual(multi.fee, binary.fee, 0.001, 'multi(N=2) ≈ binary fee');
+  approxEqual(multi.priceAfter, binary.priceAfter, 0.001,
+    'multi(N=2) ≈ binary priceAfter');
+});
+
+test('multi N=3 end-to-end: W/D/L soccer market, Mexico wins', () => {
+  // Seeded at [500, 500, 500] for Mexico / Tie / Opponent.
+  // Alice buys 100 MXNP of Mexico YES. Bob buys 60 of Tie.
+  // Market resolves: Mexico wins (outcome 0). Alice redeems, Bob loses.
+  let reserves = [500, 500, 500];
+
+  const alice = multiBuyQuote(reserves, 0, 100);
+  reserves = alice.reservesAfter;
+  console.log(`  ↳ Alice bought ${alice.sharesOut.toFixed(2)} Mexico shares @ ${alice.avgPrice.toFixed(3)}`);
+
+  const bob = multiBuyQuote(reserves, 1, 60);
+  reserves = bob.reservesAfter;
+  console.log(`  ↳ Bob bought ${bob.sharesOut.toFixed(2)} Tie shares @ ${bob.avgPrice.toFixed(3)}`);
+
+  // Resolution: Mexico wins. Alice's shares pay 1 MXNP each, Bob's pay 0.
+  const aliceWinnings = redeemPayout(alice.sharesOut, 0, 0);
+  const bobWinnings   = redeemPayout(bob.sharesOut,   1, 0);
+
+  assert.equal(bobWinnings, 0, 'Bob loses Tie bet');
+  assert.ok(aliceWinnings > 100,
+    `Alice profits on Mexico win — got ${aliceWinnings} for 100 staked`);
+  console.log(`  ↳ Alice payout: +${(aliceWinnings - 100).toFixed(2)} MXNP net`);
 });
