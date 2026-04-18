@@ -157,6 +157,29 @@ export async function adminReviewSocialTask(id, action, note) {
   return postJson('/api/points/admin/social-tasks', { id, action, note });
 }
 
+// ─── Comments ───────────────────────────────────────────────────────────────
+export async function fetchComments(marketId, { limit = 50 } = {}) {
+  const { comments = [] } = await getJson(
+    `/api/points/comments?marketId=${encodeURIComponent(marketId)}&limit=${limit}`,
+  );
+  return comments;
+}
+
+export async function postComment(marketId, body) {
+  return postJson('/api/points/comments', { marketId, body });
+}
+
+export async function deleteComment(commentId) {
+  return postJson('/api/points/comment-delete', { commentId });
+}
+
+// ─── Top holders ────────────────────────────────────────────────────────────
+export async function fetchTopHolders(marketId, { limit = 10 } = {}) {
+  return getJson(
+    `/api/points/top-holders?marketId=${encodeURIComponent(marketId)}&limit=${limit}`,
+  );
+}
+
 // ─── Admin — edit market (question + end time + category) ──────────────────
 export async function adminEditMarket({ marketId, question, endTime, category }) {
   return postJson('/api/points/admin/edit-market', { marketId, question, endTime, category });

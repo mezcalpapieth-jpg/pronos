@@ -470,6 +470,12 @@ export default function PointsHome({ onOpenLogin }) {
               href: 'https://mxnb.mx',
               description: 'Peso mexicano pegged on-chain.',
             },
+            {
+              name: 'Chainlink',
+              role: 'Oráculos & precios',
+              href: 'https://chain.link',
+              description: 'Feeds de precios y datos verificados para resolución de mercados.',
+            },
           ].map(p => (
             <a
               key={p.name}

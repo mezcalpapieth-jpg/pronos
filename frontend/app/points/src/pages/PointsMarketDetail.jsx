@@ -14,6 +14,8 @@ import { fetchMarket, fetchPriceHistory, fetchPositions } from '../lib/pointsApi
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import Sparkline from '@app/components/Sparkline.jsx';
 import PointsBuyModal from '../components/PointsBuyModal.jsx';
+import MarketComments from '../components/MarketComments.jsx';
+import TopHolders from '../components/TopHolders.jsx';
 
 // Accent colors for the multi-line price chart. Match the buy-button
 // accents so users recognize the same color for the same outcome.
@@ -309,7 +311,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const id = searchParams.get('id');
-  const { authenticated } = usePointsAuth();
+  const { authenticated, user } = usePointsAuth();
 
   const [market, setMarket] = useState(null);
   // historyByOutcome[i] = [{t, p}] for outcome i. Populated for every
@@ -665,6 +667,16 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               </div>
             )}
 
+            {/* Comments — sits between the trade area and the meta strip
+                so the discussion stays adjacent to the market but below
+                the actionable UI. */}
+            <MarketComments
+              marketId={market.id}
+              authenticated={authenticated}
+              username={user?.username}
+              onOpenLogin={onOpenLogin}
+            />
+
             {/* Meta */}
             <div style={{
               display: 'flex',
@@ -821,6 +833,11 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 })}
               </div>
             )}
+
+          {/* Top holders — read-only social-proof panel. Refreshes when
+              buyState flips so the list reflects the user's own trades
+              after closing the modal. */}
+          <TopHolders marketId={market.id} refreshKey={buyState ? 'open' : 'closed'} />
 
           <div style={{
             background: 'var(--surface1)',

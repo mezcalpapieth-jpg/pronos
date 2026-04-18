@@ -214,6 +214,23 @@ const POINTS_SCHEMA_MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_points_cycle_snapshots_cycle_rank
     ON points_cycle_snapshots(cycle_id, rank ASC)`,
+
+  // ── Comments (per-market discussion, soft-deleted) ────────────────────────
+  // Keyed on market_id. `deleted_at` = NULL means live; non-null means hidden
+  // from the feed. We keep soft-deletes so admin can audit / un-delete later
+  // without reverting from a backup.
+  `CREATE TABLE IF NOT EXISTS points_comments (
+    id           SERIAL PRIMARY KEY,
+    market_id    INTEGER NOT NULL REFERENCES points_markets(id) ON DELETE CASCADE,
+    username     TEXT NOT NULL,
+    body         TEXT NOT NULL,
+    created_at   TIMESTAMPTZ DEFAULT NOW(),
+    deleted_at   TIMESTAMPTZ
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_comments_market
+    ON points_comments(market_id, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_comments_user
+    ON points_comments(username, created_at DESC)`,
 ];
 
 // PostgreSQL error codes we treat as idempotent no-ops during migration.
