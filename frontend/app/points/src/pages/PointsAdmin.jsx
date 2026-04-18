@@ -80,6 +80,44 @@ function isoToHhMm(iso) {
     String(d.getMinutes()).padStart(2, '0'),
   ].join(':');
 }
+function isoToHourPart(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return String(d.getHours()).padStart(2, '0');
+}
+function isoToMinutePart(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return String(d.getMinutes()).padStart(2, '0');
+}
+
+// Compose `${HH}:${mm}` for partsToIso when the pieces come from two
+// separate number inputs. Tolerates single-digit input ('9' → '09').
+function composeHhMm(hourStr, minuteStr) {
+  const h = Number(hourStr);
+  const m = Number(minuteStr);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+  if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+// Label the user's current timezone so it's explicit which wall-clock
+// moment they're asking for. Example: "America/Mexico_City · UTC-06:00".
+function currentTimezoneLabel() {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'local';
+    const offsetMin = -new Date().getTimezoneOffset();
+    const sign = offsetMin >= 0 ? '+' : '-';
+    const absMin = Math.abs(offsetMin);
+    const hh = String(Math.floor(absMin / 60)).padStart(2, '0');
+    const mm = String(absMin % 60).padStart(2, '0');
+    return `${tz} · UTC${sign}${hh}:${mm}`;
+  } catch {
+    return 'hora local';
+  }
+}
 
 export default function PointsAdmin({ isAdmin }) {
   const navigate = useNavigate();
@@ -447,8 +485,9 @@ function CreateMarketForm() {
     question: '',
     category: 'deportes',
     icon: '⚽',
-    endDate: '', // dd/mm/yyyy (text)
-    endTime: '', // HH:mm  (text, 24h)
+    endDate: '',   // dd/mm/yyyy (text)
+    endHour: '',   // 0-23 (string, validated on submit)
+    endMinute: '', // 0-59 (string, validated on submit)
     outcomes: ['Sí', 'No'],
     seedLiquidity: 500,
   });
@@ -501,9 +540,14 @@ function CreateMarketForm() {
       setState({ submitting: false, msg: null, err: 'Máximo 10 opciones.' });
       return;
     }
-    const endIso = partsToIso(form.endDate, form.endTime);
+    const timeStr = composeHhMm(form.endHour, form.endMinute);
+    if (!timeStr) {
+      setState({ submitting: false, msg: null, err: 'Hora inválida. Horas 0–23, minutos 0–59.' });
+      return;
+    }
+    const endIso = partsToIso(form.endDate, timeStr);
     if (!endIso) {
-      setState({ submitting: false, msg: null, err: 'Fecha u hora inválida. Formato: dd/mm/yyyy y HH:mm (24h).' });
+      setState({ submitting: false, msg: null, err: 'Fecha inválida. Formato: dd/mm/yyyy.' });
       return;
     }
     setState({ submitting: true, msg: null, err: null });
@@ -529,7 +573,8 @@ function CreateMarketForm() {
         ...f,
         question: '',
         endDate: '',
-        endTime: '',
+        endHour: '',
+        endMinute: '',
         outcomes: mode === 'binary' ? ['Sí', 'No'] : ['', '', ''],
       }));
     } catch (e) {
@@ -614,8 +659,8 @@ function CreateMarketForm() {
         </Field>
       </div>
 
-      <Field label="Fecha de cierre · dd/mm/yyyy · HH:mm (24h)">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px', gap: 8 }}>
+      <Field label="Fecha de cierre">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 8px 70px', gap: 8, alignItems: 'center' }}>
           <input
             type="text"
             inputMode="numeric"
@@ -626,15 +671,42 @@ function CreateMarketForm() {
             style={inputStyle}
           />
           <input
-            type="text"
-            inputMode="numeric"
-            placeholder="HH:mm"
-            value={form.endTime}
-            onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))}
+            type="number"
+            min={0}
+            max={23}
+            step={1}
+            placeholder="HH"
+            value={form.endHour}
+            onChange={e => setForm(f => ({ ...f, endHour: e.target.value }))}
             required
-            style={inputStyle}
+            style={{ ...inputStyle, textAlign: 'center' }}
+          />
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            color: 'var(--text-muted)',
+            textAlign: 'center',
+          }}>:</span>
+          <input
+            type="number"
+            min={0}
+            max={59}
+            step={1}
+            placeholder="mm"
+            value={form.endMinute}
+            onChange={e => setForm(f => ({ ...f, endMinute: e.target.value }))}
+            required
+            style={{ ...inputStyle, textAlign: 'center' }}
           />
         </div>
+        <p style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          color: 'var(--text-muted)',
+          margin: '6px 0 0',
+          letterSpacing: '0.04em',
+        }}>
+          Horas 0–23, minutos 0–59. Se guarda en zona: <strong>{currentTimezoneLabel()}</strong>.
+        </p>
       </Field>
 
       {/* ── AMM mode toggle (only meaningful for multi) ─────
@@ -963,28 +1035,36 @@ function MarketsTable() {
 function EditMarketModal({ market, onClose, onSaved }) {
   const [question, setQuestion] = useState(market.question || '');
   const [category, setCategory] = useState(market.category || 'general');
-  // Split date + time into two text inputs so we can enforce dd/mm/yyyy
-  // regardless of the user's browser locale (native datetime-local defers
-  // format to the browser).
+  // Split date + time into three plain inputs so format is stable
+  // across browser locales. Hour/minute are number inputs clamped to
+  // 0-23 / 0-59 via their native min/max attributes.
   const [date, setDate] = useState(isoToDdMmYyyy(market.endTime));
-  const [time, setTime] = useState(isoToHhMm(market.endTime));
+  const [hour, setHour] = useState(isoToHourPart(market.endTime));
+  const [minute, setMinute] = useState(isoToMinutePart(market.endTime));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(null);
 
   const initialDate = isoToDdMmYyyy(market.endTime);
-  const initialTime = isoToHhMm(market.endTime);
+  const initialHour = isoToHourPart(market.endTime);
+  const initialMinute = isoToMinutePart(market.endTime);
   const initialCategory = market.category || 'general';
 
   async function save() {
     setSaving(true);
     setErr(null);
 
-    const dateTouched = date !== initialDate || time !== initialTime;
+    const dateTouched = date !== initialDate || hour !== initialHour || minute !== initialMinute;
     let nextIso;
     if (dateTouched) {
-      nextIso = partsToIso(date, time);
+      const timeStr = composeHhMm(hour, minute);
+      if (!timeStr) {
+        setErr('Hora inválida. Horas 0–23, minutos 0–59.');
+        setSaving(false);
+        return;
+      }
+      nextIso = partsToIso(date, timeStr);
       if (!nextIso) {
-        setErr('Fecha u hora inválida. Formato: dd/mm/yyyy y HH:mm.');
+        setErr('Fecha inválida. Formato: dd/mm/yyyy.');
         setSaving(false);
         return;
       }
@@ -1090,46 +1170,69 @@ function EditMarketModal({ market, onClose, onSaved }) {
         </select>
 
         <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
-          Fecha de cierre · dd/mm/yyyy · HH:mm (24h)
+          Fecha de cierre
         </label>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px', gap: 8, marginBottom: 14 }}>
-          <input
-            type="text"
-            inputMode="numeric"
-            placeholder="dd/mm/yyyy"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            style={{
-              width: '100%',
-              background: 'var(--surface2)',
-              border: '1px solid var(--border)',
-              borderRadius: 8,
-              padding: '10px 12px',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 14,
-              color: 'var(--text-primary)',
-              outline: 'none',
-            }}
-          />
-          <input
-            type="text"
-            inputMode="numeric"
-            placeholder="HH:mm"
-            value={time}
-            onChange={(e) => setTime(e.target.value)}
-            style={{
-              width: '100%',
-              background: 'var(--surface2)',
-              border: '1px solid var(--border)',
-              borderRadius: 8,
-              padding: '10px 12px',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 14,
-              color: 'var(--text-primary)',
-              outline: 'none',
-            }}
-          />
-        </div>
+        {(() => {
+          const smallInput = {
+            background: 'var(--surface2)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            padding: '10px 12px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 14,
+            color: 'var(--text-primary)',
+            outline: 'none',
+            width: '100%',
+          };
+          return (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 8px 70px', gap: 8, alignItems: 'center' }}>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="dd/mm/yyyy"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  style={smallInput}
+                />
+                <input
+                  type="number"
+                  min={0}
+                  max={23}
+                  step={1}
+                  placeholder="HH"
+                  value={hour}
+                  onChange={(e) => setHour(e.target.value)}
+                  style={{ ...smallInput, textAlign: 'center' }}
+                />
+                <span style={{
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--text-muted)',
+                  textAlign: 'center',
+                }}>:</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={59}
+                  step={1}
+                  placeholder="mm"
+                  value={minute}
+                  onChange={(e) => setMinute(e.target.value)}
+                  style={{ ...smallInput, textAlign: 'center' }}
+                />
+              </div>
+              <p style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                color: 'var(--text-muted)',
+                margin: '6px 0 14px',
+                letterSpacing: '0.04em',
+              }}>
+                Horas 0–23, minutos 0–59. Zona: <strong>{currentTimezoneLabel()}</strong>.
+              </p>
+            </>
+          );
+        })()}
 
         <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 16 }}>
           Pregunta, fecha de cierre y categoría son editables. Opciones y

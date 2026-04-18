@@ -74,7 +74,13 @@ export default async function handler(req, res) {
           transactions: [],
           totalInvested: 0,
           totalReceived: 0,
-          heldByOutcome: new Map(), // outcomeIndex -> shares
+          // heldByOutcome tracks gross exposure at resolution time —
+          // buys add, sells subtract, but redeem does NOT reset to 0.
+          // That way "did the user hold winning shares at resolution?"
+          // stays answerable after they claim. redeemedByOutcome is
+          // carried separately for computing currently-held.
+          heldByOutcome: new Map(),
+          redeemedByOutcome: new Map(),
         });
       }
       const bucket = markets.get(mid);
@@ -93,7 +99,8 @@ export default async function handler(req, res) {
         bucket.heldByOutcome.set(oi, Math.max(0, prev - shares));
       } else if (r.side === 'redeem') {
         bucket.totalReceived += collateral;
-        bucket.heldByOutcome.set(oi, 0);
+        const prev = bucket.redeemedByOutcome.get(oi) || 0;
+        bucket.redeemedByOutcome.set(oi, prev + shares);
       }
 
       bucket.transactions.push({
@@ -110,19 +117,29 @@ export default async function handler(req, res) {
     }
 
     const history = Array.from(markets.values()).map(m => {
+      // currentHeld[oi] = heldByOutcome[oi] − redeemedByOutcome[oi]. Users
+      // with no unredeemed, unsold shares have currentHeld=0 across the
+      // board — they "exited".
       let stillHeld = false;
-      for (const v of m.heldByOutcome.values()) {
-        if (v > 0.000001) { stillHeld = true; break; }
+      for (const [oi, held] of m.heldByOutcome.entries()) {
+        const net = held - (m.redeemedByOutcome.get(oi) || 0);
+        if (net > 0.000001) { stillHeld = true; break; }
       }
 
       let outcomeStatus = 'open';
       if (m.status === 'resolved') {
         const winningIdx = Number(m.outcome);
-        const winningHeld = m.heldByOutcome.get(winningIdx) || 0;
-        outcomeStatus = winningHeld > 0.000001 ? 'won' : (stillHeld ? 'lost' : (m.heldByOutcome.size > 0 ? 'lost' : 'exited'));
-        // User may have sold all winning shares before resolution → "exited"
-        // but if any trade in the winning outcome exists at all and they still
-        // hold shares, they're a winner.
+        // Did they hold winning shares at resolution time? heldByOutcome
+        // isn't zeroed on redeem so this captures both "already claimed"
+        // and "still holding" — both are wins.
+        const winningGross = m.heldByOutcome.get(winningIdx) || 0;
+        let anyGross = false;
+        for (const v of m.heldByOutcome.values()) {
+          if (v > 0.000001) { anyGross = true; break; }
+        }
+        if (winningGross > 0.000001) outcomeStatus = 'won';
+        else if (anyGross) outcomeStatus = 'lost';
+        else outcomeStatus = 'exited';
       } else if (!stillHeld) {
         outcomeStatus = 'exited';
       } else {

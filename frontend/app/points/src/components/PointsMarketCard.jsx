@@ -57,16 +57,31 @@ export default function PointsMarketCard({ market, userPosition }) {
   const isPending = market.status === 'active' && market.endTime && new Date(market.endTime) < new Date();
   const volume = market.volume ?? market.tradeVolume ?? 0;
 
-  // Tri-color accent rotation matches the detail-page buy buttons so
-  // users recognize the same color for the same outcome on both views.
+  // Accent rotation matches the detail-page buy buttons so users
+  // recognize the same color for the same outcome on both views. 8
+  // slots cycled modulo so outcomes past N=8 wrap instead of all
+  // collapsing to red — previously anything past the 3rd outcome
+  // fell back to the red accent, which left 4+ option markets with
+  // multiple identical red rows.
   const ACCENTS = [
-    { bg: 'var(--yes-dim, rgba(22,163,74,0.1))', border: 'rgba(22,163,74,0.25)', fg: 'var(--yes)' },
-    { bg: 'rgba(184,144,10,0.08)',               border: 'rgba(184,144,10,0.3)',  fg: 'var(--gold, #f59e0b)' },
-    { bg: 'rgba(255,59,59,0.08)',                border: 'rgba(255,59,59,0.25)',  fg: '#ff3b3b' },
+    { bg: 'var(--yes-dim, rgba(22,163,74,0.1))', border: 'rgba(22,163,74,0.25)', fg: 'var(--yes)' },      // green
+    { bg: 'rgba(184,144,10,0.08)',               border: 'rgba(184,144,10,0.3)',  fg: 'var(--gold, #f59e0b)' }, // gold
+    { bg: 'rgba(59,130,246,0.08)',               border: 'rgba(59,130,246,0.3)',  fg: '#3b82f6' },             // blue
+    { bg: 'rgba(168,85,247,0.08)',               border: 'rgba(168,85,247,0.3)',  fg: '#a855f7' },             // purple
+    { bg: 'rgba(6,182,212,0.08)',                border: 'rgba(6,182,212,0.3)',   fg: '#06b6d4' },             // cyan
+    { bg: 'rgba(132,204,22,0.08)',               border: 'rgba(132,204,22,0.3)',  fg: '#84cc16' },             // lime
+    { bg: 'rgba(236,72,153,0.08)',               border: 'rgba(236,72,153,0.3)',  fg: '#ec4899' },             // pink
+    { bg: 'rgba(255,59,59,0.08)',                border: 'rgba(255,59,59,0.25)',  fg: '#ff3b3b' },             // red (kept last so 3-outcome cards don't land on red-heavy palettes)
   ];
   const accentFor = (i) => {
-    if (outcomes.length === 2) return i === 0 ? ACCENTS[0] : ACCENTS[2];
-    return ACCENTS[i] || ACCENTS[2];
+    if (outcomes.length === 2) return i === 0 ? ACCENTS[0] : ACCENTS[7]; // green/red for binary
+    // 3-outcome W/D/L keeps green/gold/red for the traffic-light feel.
+    if (outcomes.length === 3) {
+      if (i === 0) return ACCENTS[0];
+      if (i === 1) return ACCENTS[1];
+      return ACCENTS[7];
+    }
+    return ACCENTS[i % ACCENTS.length];
   };
 
   return (
@@ -113,54 +128,49 @@ export default function PointsMarketCard({ market, userPosition }) {
       <div className="mock-card-body">
         <p className="mock-card-title">{market.question}</p>
 
-        {/* Outcome rows — one per outcome with price and a "si ganas"
-            payout preview for a 100 MXNP reference stake. Rows shrink
-            as N grows so every option fits inside the card without a
-            "+N más" overflow hint. Hides the per-row payout preview at
-            N≥4 to save horizontal space (still visible on the detail
-            page). */}
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: outcomes.length > 4 ? 3 : outcomes.length > 3 ? 4 : 6,
-          margin: '10px 0 4px',
-        }}>
-          {outcomes.map((label, i) => {
-            const accent = accentFor(i);
-            const pct = Math.round(prices[i] * 100);
-            const gain = previewGain(prices[i]);
-            const compact = outcomes.length > 3;
-            const ultraCompact = outcomes.length > 6;
-            const rowPadding = ultraCompact ? '4px 8px' : compact ? '5px 9px' : '8px 10px';
-            const labelFont = ultraCompact ? 10 : compact ? 11 : 12;
-            const pctFont   = ultraCompact ? 12 : compact ? 13 : 14;
-            return (
-              <div
-                key={i}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: rowPadding,
-                  background: accent.bg,
-                  border: `1px solid ${accent.border}`,
-                  borderRadius: 7,
-                }}
-              >
-                <span style={{
-                  flex: 1,
-                  minWidth: 0,
-                  fontFamily: 'var(--font-body)',
-                  fontSize: labelFont,
-                  color: accent.fg,
-                  fontWeight: 600,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}>
-                  {label}
-                </span>
-                {!compact && (
+        {/* Two layouts:
+              N ≤ 3 → original wide rows (label / +payout / %).
+              N > 3 → 2-column grid of square-ish tiles (label on top,
+                      big % below). "+MXNP si ganas" is dropped to
+                      keep each tile compact and close to square.
+        */}
+        {outcomes.length <= 3 ? (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+            margin: '10px 0 4px',
+          }}>
+            {outcomes.map((label, i) => {
+              const accent = accentFor(i);
+              const pct = Math.round(prices[i] * 100);
+              const gain = previewGain(prices[i]);
+              return (
+                <div
+                  key={i}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '8px 10px',
+                    background: accent.bg,
+                    border: `1px solid ${accent.border}`,
+                    borderRadius: 8,
+                  }}
+                >
+                  <span style={{
+                    flex: 1,
+                    minWidth: 0,
+                    fontFamily: 'var(--font-body)',
+                    fontSize: 12,
+                    color: accent.fg,
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}>
+                    {label}
+                  </span>
                   <span style={{
                     fontFamily: 'var(--font-mono)',
                     fontSize: 11,
@@ -169,20 +179,70 @@ export default function PointsMarketCard({ market, userPosition }) {
                   }}>
                     +{gain} MXNP
                   </span>
-                )}
-                <span style={{
-                  fontFamily: 'var(--font-display)',
-                  fontSize: pctFont,
-                  color: accent.fg,
-                  minWidth: ultraCompact ? 32 : 38,
-                  textAlign: 'right',
-                }}>
-                  {pct}%
-                </span>
-              </div>
-            );
-          })}
-        </div>
+                  <span style={{
+                    fontFamily: 'var(--font-display)',
+                    fontSize: 14,
+                    color: accent.fg,
+                    minWidth: 38,
+                    textAlign: 'right',
+                  }}>
+                    {pct}%
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: 6,
+            margin: '10px 0 4px',
+          }}>
+            {outcomes.map((label, i) => {
+              const accent = accentFor(i);
+              const pct = Math.round(prices[i] * 100);
+              return (
+                <div
+                  key={i}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    gap: 4,
+                    padding: '8px 10px',
+                    background: accent.bg,
+                    border: `1px solid ${accent.border}`,
+                    borderRadius: 8,
+                    minHeight: 52,
+                  }}
+                >
+                  <span style={{
+                    fontFamily: 'var(--font-body)',
+                    fontSize: 11,
+                    color: accent.fg,
+                    fontWeight: 600,
+                    lineHeight: 1.25,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}>
+                    {label}
+                  </span>
+                  <span style={{
+                    fontFamily: 'var(--font-display)',
+                    fontSize: 18,
+                    color: accent.fg,
+                    alignSelf: 'flex-end',
+                    lineHeight: 1,
+                  }}>
+                    {pct}%
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="mock-card-footer">
