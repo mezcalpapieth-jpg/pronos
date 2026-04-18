@@ -165,6 +165,64 @@ function ParallelLegList({ market, legs, onBuyClick }) {
   );
 }
 
+// Read-only price summary shown on the right side of parallel markets.
+// Each row: label on the left (swatch in the outcome's accent), % on the
+// right. No buttons — the actual buying happens in the leg list below
+// the chart. Keeps the sidebar quick to scan.
+function OddsSummary({ outcomes, prices }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {outcomes.map((label, i) => {
+        const accent = accentFor(i, outcomes.length);
+        const pct = Math.round((prices[i] ?? 0) * 100);
+        return (
+          <div
+            key={i}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 10px',
+              borderRadius: 8,
+              background: 'var(--surface2)',
+              border: '1px solid var(--border)',
+            }}
+          >
+            <span style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: accent.fg,
+              flexShrink: 0,
+            }} />
+            <span style={{
+              flex: 1,
+              minWidth: 0,
+              fontFamily: 'var(--font-body)',
+              fontSize: 12,
+              color: 'var(--text-primary)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}>
+              {label}
+            </span>
+            <span style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 14,
+              color: accent.fg,
+              minWidth: 38,
+              textAlign: 'right',
+            }}>
+              {pct}%
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function legButtonStyle(fg, bg, border) {
   return {
     padding: '6px 10px',
@@ -548,8 +606,36 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               </div>
             </div>
 
-            {/* Multi-outcome: list all options */}
-            {outcomes.length > 2 && (
+            {/* Parallel markets: voting lives here (below the chart),
+                one row per leg with Sí/No buttons — matches the
+                Polymarket-style layout. The right sidebar carries a
+                read-only odds summary to complement this. */}
+            {market.ammMode === 'parallel' && Array.isArray(market.legs) && !isResolved && !isPendingResolution && (
+              <div style={{ marginBottom: 32 }}>
+                <div style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  letterSpacing: '0.12em',
+                  color: 'var(--text-muted)',
+                  textTransform: 'uppercase',
+                  marginBottom: 12,
+                }}>
+                  Opciones · elige Sí o No
+                </div>
+                <ParallelLegList
+                  market={market}
+                  legs={market.legs}
+                  onBuyClick={handleBuyClick}
+                />
+              </div>
+            )}
+
+            {/* Unified multi (N>2): read-only option grid under the
+                chart so the user sees every outcome's percentage. The
+                actual voting happens in the right sidebar. Parallel
+                doesn't use this grid — the leg list above already
+                shows every outcome with inline buy buttons. */}
+            {outcomes.length > 2 && market.ammMode !== 'parallel' && (
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
@@ -752,19 +838,17 @@ export default function PointsMarketDetail({ onOpenLogin }) {
             }}>
               {isResolved ? 'Mercado cerrado'
                : isPendingResolution ? 'Esperando resolución'
+               : market.ammMode === 'parallel' ? 'Odds actuales'
                : 'Elige un resultado'}
             </div>
 
-            {/* Unified: one big button per outcome. Parallel: one row per
-                leg with Sí / No buttons on the right. Same palette so the
-                chart lines match the buttons visually. */}
+            {/* Unified: one big button per outcome lives in the sidebar.
+                Parallel: voting moved below the chart in the main column
+                (one row per leg with Sí/No buttons); the sidebar only
+                carries a read-only odds summary to keep scanability. */}
             {!isResolved && !isPendingResolution && (
-              market.ammMode === 'parallel' && Array.isArray(market.legs)
-                ? <ParallelLegList
-                    market={market}
-                    legs={market.legs}
-                    onBuyClick={handleBuyClick}
-                  />
+              market.ammMode === 'parallel'
+                ? <OddsSummary outcomes={outcomes} prices={prices} />
                 : <UnifiedOutcomeList
                     outcomes={outcomes}
                     prices={prices}

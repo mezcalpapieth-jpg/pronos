@@ -31,11 +31,16 @@ export default async function handler(req, res) {
 
   try {
     await ensurePointsSchema(schemaSql);
+    // Parallel legs (parent_id IS NOT NULL) are implicit children of
+    // their parent — hiding them here keeps the admin table uncluttered
+    // for markets with many outcomes. Admin resolves the parent; the
+    // resolve endpoint cascades to every leg.
     const rows = filter === 'all'
       ? await sql`
           SELECT m.*,
             (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id) AS trade_count
           FROM points_markets m
+          WHERE m.parent_id IS NULL
           ORDER BY m.created_at DESC
           LIMIT 200
         `
@@ -43,7 +48,7 @@ export default async function handler(req, res) {
           SELECT m.*,
             (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id) AS trade_count
           FROM points_markets m
-          WHERE m.status = ${filter}
+          WHERE m.status = ${filter} AND m.parent_id IS NULL
           ORDER BY m.created_at DESC
           LIMIT 200
         `;
@@ -60,6 +65,7 @@ export default async function handler(req, res) {
         endTime: r.end_time,
         status: r.status,
         outcome: r.outcome,
+        ammMode: r.amm_mode || 'unified',
         createdAt: r.created_at,
         resolvedAt: r.resolved_at,
         tradeCount: r.trade_count || 0,

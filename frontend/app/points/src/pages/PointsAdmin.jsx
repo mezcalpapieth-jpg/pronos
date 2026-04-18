@@ -32,6 +32,55 @@ const CATEGORIES = [
   { key: 'musica',   label: '🎵 Música' },
 ];
 
+// ─── Date helpers (dd/mm/yyyy + HH:mm) ──────────────────────────────────────
+// The native <input type="datetime-local"> defers format entirely to the
+// browser locale, which lets en-US users see mm/dd/yyyy against our
+// es-MX copy. Splitting into plain text inputs gives us consistent
+// dd/mm/yyyy + HH:mm across browsers.
+function parseDdMmYyyy(str) {
+  const m = String(str || '').match(/^\s*(\d{1,2})\/(\d{1,2})\/(\d{4})\s*$/);
+  if (!m) return null;
+  const day = Number(m[1]); const month = Number(m[2]); const year = Number(m[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return { day, month, year };
+}
+function parseHhMm(str) {
+  const m = String(str || '').match(/^\s*(\d{1,2}):(\d{2})\s*$/);
+  if (!m) return null;
+  const h = Number(m[1]); const min = Number(m[2]);
+  if (h > 23 || min > 59) return null;
+  return { h, min };
+}
+function partsToIso(dateStr, timeStr) {
+  const d = parseDdMmYyyy(dateStr);
+  const t = parseHhMm(timeStr);
+  if (!d || !t) return null;
+  // Build a Date in local time, then serialise as ISO (UTC). Matches what
+  // datetime-local → new Date(val).toISOString() was doing before.
+  const dt = new Date(d.year, d.month - 1, d.day, t.h, t.min, 0, 0);
+  if (Number.isNaN(dt.getTime())) return null;
+  return dt.toISOString();
+}
+function isoToDdMmYyyy(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return [
+    String(d.getDate()).padStart(2, '0'),
+    String(d.getMonth() + 1).padStart(2, '0'),
+    d.getFullYear(),
+  ].join('/');
+}
+function isoToHhMm(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return [
+    String(d.getHours()).padStart(2, '0'),
+    String(d.getMinutes()).padStart(2, '0'),
+  ].join(':');
+}
+
 export default function PointsAdmin({ isAdmin }) {
   const navigate = useNavigate();
   const { authenticated, user, loading: authLoading } = usePointsAuth();
@@ -398,7 +447,8 @@ function CreateMarketForm() {
     question: '',
     category: 'deportes',
     icon: '⚽',
-    endTime: '',
+    endDate: '', // dd/mm/yyyy (text)
+    endTime: '', // HH:mm  (text, 24h)
     outcomes: ['Sí', 'No'],
     seedLiquidity: 500,
   });
@@ -451,6 +501,11 @@ function CreateMarketForm() {
       setState({ submitting: false, msg: null, err: 'Máximo 10 opciones.' });
       return;
     }
+    const endIso = partsToIso(form.endDate, form.endTime);
+    if (!endIso) {
+      setState({ submitting: false, msg: null, err: 'Fecha u hora inválida. Formato: dd/mm/yyyy y HH:mm (24h).' });
+      return;
+    }
     setState({ submitting: true, msg: null, err: null });
     // Binary markets are always unified (parallel = unified at N=2).
     const effectiveAmmMode = mode === 'binary' ? 'unified' : ammMode;
@@ -459,7 +514,7 @@ function CreateMarketForm() {
         question: form.question,
         category: form.category,
         icon: form.icon,
-        endTime: new Date(form.endTime).toISOString(),
+        endTime: endIso,
         outcomes: cleaned,
         seedLiquidity: Number(form.seedLiquidity),
         ammMode: effectiveAmmMode,
@@ -473,6 +528,7 @@ function CreateMarketForm() {
       setForm(f => ({
         ...f,
         question: '',
+        endDate: '',
         endTime: '',
         outcomes: mode === 'binary' ? ['Sí', 'No'] : ['', '', ''],
       }));
@@ -558,14 +614,27 @@ function CreateMarketForm() {
         </Field>
       </div>
 
-      <Field label="Fecha de cierre">
-        <input
-          type="datetime-local"
-          value={form.endTime}
-          onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))}
-          required
-          style={inputStyle}
-        />
+      <Field label="Fecha de cierre · dd/mm/yyyy · HH:mm (24h)">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px', gap: 8 }}>
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="dd/mm/yyyy"
+            value={form.endDate}
+            onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
+            required
+            style={inputStyle}
+          />
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="HH:mm"
+            value={form.endTime}
+            onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))}
+            required
+            style={inputStyle}
+          />
+        </div>
       </Field>
 
       {/* ── AMM mode toggle (only meaningful for multi) ─────
@@ -887,29 +956,46 @@ function MarketsTable() {
 }
 
 // ─── Edit-market modal ──────────────────────────────────────────────────────
-// Lets an admin patch just the user-facing question text and the close
-// datetime. Reserves, outcomes, and status stay locked — mutating those
-// post-creation would desync the AMM or confuse existing holders. Wired
-// to POST /api/points/admin/edit-market.
+// Lets an admin patch the user-facing question, the close datetime, and
+// the category. Reserves, outcomes, and status stay locked — mutating
+// those post-creation would desync the AMM or confuse existing holders.
+// Wired to POST /api/points/admin/edit-market.
 function EditMarketModal({ market, onClose, onSaved }) {
   const [question, setQuestion] = useState(market.question || '');
-  // Datetime-local wants "YYYY-MM-DDTHH:mm" (no timezone). Shave the
-  // current end_time down to that shape so it pre-populates the input.
-  const initialDt = market.endTime
-    ? new Date(market.endTime).toISOString().slice(0, 16)
-    : '';
-  const [endTime, setEndTime] = useState(initialDt);
+  const [category, setCategory] = useState(market.category || 'general');
+  // Split date + time into two text inputs so we can enforce dd/mm/yyyy
+  // regardless of the user's browser locale (native datetime-local defers
+  // format to the browser).
+  const [date, setDate] = useState(isoToDdMmYyyy(market.endTime));
+  const [time, setTime] = useState(isoToHhMm(market.endTime));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(null);
+
+  const initialDate = isoToDdMmYyyy(market.endTime);
+  const initialTime = isoToHhMm(market.endTime);
+  const initialCategory = market.category || 'general';
 
   async function save() {
     setSaving(true);
     setErr(null);
+
+    const dateTouched = date !== initialDate || time !== initialTime;
+    let nextIso;
+    if (dateTouched) {
+      nextIso = partsToIso(date, time);
+      if (!nextIso) {
+        setErr('Fecha u hora inválida. Formato: dd/mm/yyyy y HH:mm.');
+        setSaving(false);
+        return;
+      }
+    }
+
     try {
       await adminEditMarket({
         marketId: market.id,
         question: question.trim() !== (market.question || '').trim() ? question.trim() : undefined,
-        endTime: endTime !== initialDt ? new Date(endTime).toISOString() : undefined,
+        endTime: nextIso,
+        category: category !== initialCategory ? category : undefined,
       });
       await onSaved?.();
     } catch (e) {
@@ -980,12 +1066,11 @@ function EditMarketModal({ market, onClose, onSaved }) {
         />
 
         <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
-          Fecha de cierre
+          Categoría
         </label>
-        <input
-          type="datetime-local"
-          value={endTime}
-          onChange={(e) => setEndTime(e.target.value)}
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
           style={{
             width: '100%',
             background: 'var(--surface2)',
@@ -998,12 +1083,57 @@ function EditMarketModal({ market, onClose, onSaved }) {
             outline: 'none',
             marginBottom: 14,
           }}
-        />
+        >
+          {CATEGORIES.map(c => (
+            <option key={c.key} value={c.key}>{c.label}</option>
+          ))}
+        </select>
+
+        <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
+          Fecha de cierre · dd/mm/yyyy · HH:mm (24h)
+        </label>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px', gap: 8, marginBottom: 14 }}>
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="dd/mm/yyyy"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            style={{
+              width: '100%',
+              background: 'var(--surface2)',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+              padding: '10px 12px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 14,
+              color: 'var(--text-primary)',
+              outline: 'none',
+            }}
+          />
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="HH:mm"
+            value={time}
+            onChange={(e) => setTime(e.target.value)}
+            style={{
+              width: '100%',
+              background: 'var(--surface2)',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+              padding: '10px 12px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 14,
+              color: 'var(--text-primary)',
+              outline: 'none',
+            }}
+          />
+        </div>
 
         <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 16 }}>
-          Solo la pregunta y la fecha de cierre son editables. Opciones,
-          categoría y reservas del AMM no se pueden cambiar después de
-          crear el mercado.
+          Pregunta, fecha de cierre y categoría son editables. Opciones y
+          reservas del AMM no se pueden cambiar después de crear el mercado.
         </p>
 
         {err && (

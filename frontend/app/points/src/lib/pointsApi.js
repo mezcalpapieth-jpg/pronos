@@ -157,9 +157,9 @@ export async function adminReviewSocialTask(id, action, note) {
   return postJson('/api/points/admin/social-tasks', { id, action, note });
 }
 
-// ─── Admin — edit market (question + end time only) ─────────────────────────
-export async function adminEditMarket({ marketId, question, endTime }) {
-  return postJson('/api/points/admin/edit-market', { marketId, question, endTime });
+// ─── Admin — edit market (question + end time + category) ──────────────────
+export async function adminEditMarket({ marketId, question, endTime, category }) {
+  return postJson('/api/points/admin/edit-market', { marketId, question, endTime, category });
 }
 
 // ─── Cycles (2-week leaderboard windows) ────────────────────────────────────

@@ -113,31 +113,45 @@ export default function PointsMarketCard({ market, userPosition }) {
       <div className="mock-card-body">
         <p className="mock-card-title">{market.question}</p>
 
-        {/* Outcome rows — one per outcome (up to 3) with price and a
-            "si ganas" payout preview for a 100 MXNP reference stake. */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, margin: '10px 0 4px' }}>
-          {outcomes.slice(0, 3).map((label, i) => {
+        {/* Outcome rows — one per outcome with price and a "si ganas"
+            payout preview for a 100 MXNP reference stake. Rows shrink
+            as N grows so every option fits inside the card without a
+            "+N más" overflow hint. Hides the per-row payout preview at
+            N≥4 to save horizontal space (still visible on the detail
+            page). */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: outcomes.length > 4 ? 3 : outcomes.length > 3 ? 4 : 6,
+          margin: '10px 0 4px',
+        }}>
+          {outcomes.map((label, i) => {
             const accent = accentFor(i);
             const pct = Math.round(prices[i] * 100);
             const gain = previewGain(prices[i]);
+            const compact = outcomes.length > 3;
+            const ultraCompact = outcomes.length > 6;
+            const rowPadding = ultraCompact ? '4px 8px' : compact ? '5px 9px' : '8px 10px';
+            const labelFont = ultraCompact ? 10 : compact ? 11 : 12;
+            const pctFont   = ultraCompact ? 12 : compact ? 13 : 14;
             return (
               <div
                 key={i}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 8,
-                  padding: '8px 10px',
+                  gap: 6,
+                  padding: rowPadding,
                   background: accent.bg,
                   border: `1px solid ${accent.border}`,
-                  borderRadius: 8,
+                  borderRadius: 7,
                 }}
               >
                 <span style={{
                   flex: 1,
                   minWidth: 0,
                   fontFamily: 'var(--font-body)',
-                  fontSize: 12,
+                  fontSize: labelFont,
                   color: accent.fg,
                   fontWeight: 600,
                   whiteSpace: 'nowrap',
@@ -146,19 +160,21 @@ export default function PointsMarketCard({ market, userPosition }) {
                 }}>
                   {label}
                 </span>
-                <span style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 11,
-                  color: 'var(--text-muted)',
-                  whiteSpace: 'nowrap',
-                }}>
-                  +{gain} MXNP
-                </span>
+                {!compact && (
+                  <span style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11,
+                    color: 'var(--text-muted)',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    +{gain} MXNP
+                  </span>
+                )}
                 <span style={{
                   fontFamily: 'var(--font-display)',
-                  fontSize: 14,
+                  fontSize: pctFont,
                   color: accent.fg,
-                  minWidth: 38,
+                  minWidth: ultraCompact ? 32 : 38,
                   textAlign: 'right',
                 }}>
                   {pct}%
@@ -167,18 +183,6 @@ export default function PointsMarketCard({ market, userPosition }) {
             );
           })}
         </div>
-
-        {outcomes.length > 3 && (
-          <p style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 10,
-            color: 'var(--text-muted)',
-            margin: '4px 0 0',
-            letterSpacing: '0.04em',
-          }}>
-            + {outcomes.length - 3} opciones más
-          </p>
-        )}
       </div>
 
       <div className="mock-card-footer">
