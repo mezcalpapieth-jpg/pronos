@@ -57,30 +57,33 @@ export default function PointsMarketCard({ market, userPosition }) {
   const isPending = market.status === 'active' && market.endTime && new Date(market.endTime) < new Date();
   const volume = market.volume ?? market.tradeVolume ?? 0;
 
-  // Accent rotation matches the detail-page buy buttons so users
-  // recognize the same color for the same outcome on both views. 8
-  // slots cycled modulo so outcomes past N=8 wrap instead of all
-  // collapsing to red — previously anything past the 3rd outcome
-  // fell back to the red accent, which left 4+ option markets with
-  // multiple identical red rows.
+  // Card palette is restricted to three hue families — green, yellow,
+  // red — with three shades each. Ordered so adjacent indices always
+  // land on a different hue (med-G, med-Y, med-R, light-G, light-Y,
+  // light-R, dark-G, dark-Y, dark-R). Detail-page buy buttons keep
+  // their wider 8-color palette; this is card-only per product
+  // feedback (traffic-light feel, no blues/purples bleeding in).
   const ACCENTS = [
-    { bg: 'var(--yes-dim, rgba(22,163,74,0.1))', border: 'rgba(22,163,74,0.25)', fg: 'var(--yes)' },      // green
-    { bg: 'rgba(184,144,10,0.08)',               border: 'rgba(184,144,10,0.3)',  fg: 'var(--gold, #f59e0b)' }, // gold
-    { bg: 'rgba(59,130,246,0.08)',               border: 'rgba(59,130,246,0.3)',  fg: '#3b82f6' },             // blue
-    { bg: 'rgba(168,85,247,0.08)',               border: 'rgba(168,85,247,0.3)',  fg: '#a855f7' },             // purple
-    { bg: 'rgba(6,182,212,0.08)',                border: 'rgba(6,182,212,0.3)',   fg: '#06b6d4' },             // cyan
-    { bg: 'rgba(132,204,22,0.08)',               border: 'rgba(132,204,22,0.3)',  fg: '#84cc16' },             // lime
-    { bg: 'rgba(236,72,153,0.08)',               border: 'rgba(236,72,153,0.3)',  fg: '#ec4899' },             // pink
-    { bg: 'rgba(255,59,59,0.08)',                border: 'rgba(255,59,59,0.25)',  fg: '#ff3b3b' },             // red (kept last so 3-outcome cards don't land on red-heavy palettes)
+    // Medium row — also the W/D/L default for 3-outcome markets.
+    { bg: 'var(--yes-dim, rgba(22,163,74,0.1))', border: 'rgba(22,163,74,0.25)', fg: 'var(--yes)' },            // green-medium
+    { bg: 'rgba(245,158,11,0.1)',                border: 'rgba(245,158,11,0.3)',  fg: 'var(--gold, #f59e0b)' }, // gold (yellow-medium)
+    { bg: 'rgba(255,59,59,0.08)',                border: 'rgba(255,59,59,0.3)',   fg: '#ff3b3b' },              // red-medium
+    // Light row
+    { bg: 'rgba(74,222,128,0.1)',                border: 'rgba(74,222,128,0.3)',  fg: '#4ade80' },              // green-light
+    { bg: 'rgba(253,224,71,0.1)',                border: 'rgba(253,224,71,0.35)', fg: '#fde047' },              // yellow-light
+    { bg: 'rgba(248,113,113,0.1)',               border: 'rgba(248,113,113,0.3)', fg: '#f87171' },              // red-light (salmon)
+    // Dark row
+    { bg: 'rgba(21,128,61,0.12)',                border: 'rgba(21,128,61,0.4)',   fg: '#16a34a' },              // green-dark
+    { bg: 'rgba(161,98,7,0.12)',                 border: 'rgba(161,98,7,0.4)',    fg: '#b45309' },              // yellow-dark (amber)
+    { bg: 'rgba(185,28,28,0.12)',                border: 'rgba(185,28,28,0.4)',   fg: '#dc2626' },              // red-dark (burgundy)
   ];
   const accentFor = (i) => {
-    if (outcomes.length === 2) return i === 0 ? ACCENTS[0] : ACCENTS[7]; // green/red for binary
-    // 3-outcome W/D/L keeps green/gold/red for the traffic-light feel.
-    if (outcomes.length === 3) {
-      if (i === 0) return ACCENTS[0];
-      if (i === 1) return ACCENTS[1];
-      return ACCENTS[7];
-    }
+    // Binary: canonical green / red pair.
+    if (outcomes.length === 2) return i === 0 ? ACCENTS[0] : ACCENTS[2];
+    // 3-outcome W/D/L: green / gold / red (traffic light).
+    if (outcomes.length === 3) return ACCENTS[i];
+    // N > 3: cycle the 9 shades modulo. Each "row" of 3 is one hue family;
+    // cycling keeps adjacent outcomes on different hues.
     return ACCENTS[i % ACCENTS.length];
   };
 
