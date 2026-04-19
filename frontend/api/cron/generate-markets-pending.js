@@ -24,6 +24,9 @@ import { generateSoccerMarkets }  from '../_lib/market-gen/soccer.js';
 import { generateCryptoMarkets }  from '../_lib/market-gen/crypto.js';
 import { generateStockMarkets }   from '../_lib/market-gen/stocks.js';
 import { generateWeatherMarkets } from '../_lib/market-gen/weather.js';
+import { generateMlbMarkets }     from '../_lib/market-gen/mlb.js';
+import { generateNbaMarkets }     from '../_lib/market-gen/nba.js';
+import { generateF1Markets }      from '../_lib/market-gen/f1.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -34,6 +37,9 @@ const GENERATORS = [
   { name: 'crypto',  run: generateCryptoMarkets  },
   { name: 'stocks',  run: generateStockMarkets   },
   { name: 'weather', run: generateWeatherMarkets },
+  { name: 'mlb',     run: generateMlbMarkets     },
+  { name: 'nba',     run: generateNbaMarkets     },
+  { name: 'f1',      run: generateF1Markets      },
 ];
 
 export default async function handler(req, res) {
