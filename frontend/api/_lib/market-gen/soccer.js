@@ -52,10 +52,57 @@ function formatDate(d) {
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
 }
 
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Parse the rate-limit headers that football-data.org returns on every
+// response. Their free tier is 10 req/min; if `remaining` falls low we
+// wait for the reset window before issuing the next request.
+function parseRateLimit(res) {
+  const reset = Number(res.headers.get('X-RequestCounter-Reset'));
+  const remaining = Number(res.headers.get('X-Requests-Available-Minute'));
+  return {
+    resetSec: Number.isFinite(reset) ? reset : null,
+    remaining: Number.isFinite(remaining) ? remaining : null,
+  };
+}
+
+/**
+ * Fetch JSON from football-data.org with auth + rate-limit awareness.
+ *   - Pre-throttles if the previous response reported low remaining budget
+ *     (we keep a module-scoped cache of the last-seen reset).
+ *   - On 429, reads Retry-After (or X-RequestCounter-Reset) and retries once.
+ */
+let lastSeenRate = { resetSec: null, remaining: null, when: 0 };
+
 async function fetchJson(url, apiKey) {
-  const res = await fetch(url, {
+  // If the previous call reported ≤1 request left, wait until the counter
+  // resets before firing another one. Caps at 65s as a safety net.
+  if (lastSeenRate.remaining !== null
+      && lastSeenRate.remaining <= 1
+      && lastSeenRate.resetSec !== null) {
+    const elapsedMs = Date.now() - lastSeenRate.when;
+    const waitMs = Math.max(0, lastSeenRate.resetSec * 1000 - elapsedMs) + 250;
+    if (waitMs > 0) await sleep(Math.min(65_000, waitMs));
+  }
+
+  let res = await fetch(url, {
     headers: { 'X-Auth-Token': apiKey, 'Accept': 'application/json' },
   });
+
+  if (res.status === 429) {
+    const retryAfter = Number(res.headers.get('Retry-After'))
+                    || parseRateLimit(res).resetSec
+                    || 30;
+    console.warn('[market-gen/soccer] 429 rate-limited; sleeping', { retryAfter });
+    await sleep(Math.min(65_000, retryAfter * 1000 + 250));
+    res = await fetch(url, {
+      headers: { 'X-Auth-Token': apiKey, 'Accept': 'application/json' },
+    });
+  }
+
+  const rate = parseRateLimit(res);
+  lastSeenRate = { ...rate, when: Date.now() };
+
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     const err = new Error(`football-data ${res.status}: ${body.slice(0, 200)}`);
