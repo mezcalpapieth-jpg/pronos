@@ -21,6 +21,7 @@
 import { neon } from '@neondatabase/serverless';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { generateSoccerMarkets } from '../_lib/market-gen/soccer.js';
+import { generateCryptoMarkets } from '../_lib/market-gen/crypto.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -28,6 +29,7 @@ const sql = neon(process.env.DATABASE_URL);
 // a one-line push; the upsert loop doesn't care where specs come from.
 const GENERATORS = [
   { name: 'soccer', run: generateSoccerMarkets },
+  { name: 'crypto', run: generateCryptoMarkets },
 ];
 
 export default async function handler(req, res) {
