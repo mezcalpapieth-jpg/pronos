@@ -448,4 +448,62 @@ const STRINGS = {
   'lb.ends':                  { es: 'FIN DE CICLO',         en: 'CYCLE ENDS' },
   'lb.demo':                  { es: 'DATOS DE DEMOSTRACIÓN', en: 'DEMO DATA' },
   'lb.earn':                  { es: 'GANAR MXNP',           en: 'EARN MXNP' },
+
+  // ── Points-app ────────────────────────────────────────────────────────────
+  // Scoped under points.* so they don't collide with MVP keys. Reuses existing
+  // nav.* / cat.* where the copy is identical (EN/ES toggle, search, category
+  // emoji pills). First-pass coverage: nav + home categories + market card +
+  // portfolio/admin/earn tab names. Longer prose stays Spanish-only for now.
+  'points.nav.markets':       { es: 'El mercado',            en: 'Markets' },
+  'points.nav.portfolio':     { es: 'Portafolio',            en: 'Portfolio' },
+  'points.nav.earn':          { es: 'Ganar MXNP',            en: 'Earn MXNP' },
+  'points.nav.admin':         { es: 'Admin',                 en: 'Admin' },
+  'points.nav.signIn':        { es: 'Iniciar sesión',        en: 'Sign in' },
+  'points.nav.signOut':       { es: 'Cerrar sesión',         en: 'Sign out' },
+  'points.nav.balance':       { es: 'Balance',               en: 'Balance' },
+  'points.nav.search':        { es: 'Buscar mercado…',       en: 'Search market…' },
+  'points.nav.theme':         { es: 'Cambiar tema',          en: 'Toggle theme' },
+  'points.nav.lang':          { es: 'Idioma',                en: 'Language' },
+
+  'points.cat.trending':      { es: '🔥 Trending',            en: '🔥 Trending' },
+  'points.cat.musica':        { es: '🎵 Música & Farándula',  en: '🎵 Music & Culture' },
+  'points.cat.mexico':        { es: '🇲🇽 México & CDMX',      en: '🇲🇽 Mexico & CDMX' },
+  'points.cat.politica':      { es: '🌎 Política Intl.',      en: '🌎 World Politics' },
+  'points.cat.deportes':      { es: '⚽ Deportes',            en: '⚽ Sports' },
+  'points.cat.crypto':        { es: '₿ Crypto',               en: '₿ Crypto' },
+  'points.cat.porresolver':   { es: '⏳ Por resolver',         en: '⏳ To resolve' },
+  'points.cat.resueltos':     { es: '🏆 Resueltos',            en: '🏆 Resolved' },
+
+  'points.card.resolved':     { es: 'RESUELTO',              en: 'RESOLVED' },
+  'points.card.pending':      { es: 'PENDIENTE',             en: 'PENDING' },
+  'points.card.yourPos':      { es: '✓ Tu posición',         en: '✓ Your position' },
+  'points.card.moreOptions':  { es: '+ {n} opciones más',    en: '+ {n} more options' },
+  'points.card.ifYouWin':     { es: 'si ganas',              en: 'if you win' },
+
+  'points.home.empty':        { es: 'No hay mercados en esta categoría.', en: 'No markets in this category.' },
+  'points.home.emptySearch':  { es: '🔍 No hay resultados para "{q}".', en: '🔍 No results for "{q}".' },
+  'points.home.emptyPending': { es: 'No hay mercados por resolver.', en: 'No markets to resolve.' },
+  'points.home.loading':      { es: 'Cargando mercados…',    en: 'Loading markets…' },
+
+  'points.detail.loading':    { es: 'Cargando mercado…',     en: 'Loading market…' },
+  'points.detail.backToMarkets': { es: '← MERCADOS',          en: '← MARKETS' },
+  'points.detail.chooseOutcome': { es: 'Elige un resultado',  en: 'Pick an outcome' },
+  'points.detail.oddsNow':    { es: 'Odds actuales',         en: 'Current odds' },
+  'points.detail.marketClosed': { es: 'Mercado cerrado',      en: 'Market closed' },
+  'points.detail.awaitingResult': { es: 'Esperando resolución', en: 'Awaiting resolution' },
+  'points.detail.yourPos':    { es: 'Tu posición',           en: 'Your position' },
+  'points.detail.topHolders': { es: 'Top holders',           en: 'Top holders' },
+  'points.detail.comments':   { es: 'Comentarios',           en: 'Comments' },
+  'points.detail.optionsVote': { es: 'Opciones · elige Sí o No', en: 'Options · pick Yes or No' },
+
+  'points.portfolio.title':   { es: 'Portafolio',            en: 'Portfolio' },
+  'points.portfolio.tab.open': { es: 'Abiertas',             en: 'Open' },
+  'points.portfolio.tab.history': { es: 'Historial',         en: 'History' },
+  'points.portfolio.tab.claim': { es: 'Reclamar',            en: 'Claim' },
+
+  'points.status.won':        { es: '🏆 GANADO',             en: '🏆 WON' },
+  'points.status.lost':       { es: 'PERDIDO',               en: 'LOST' },
+  'points.status.exited':     { es: 'SALIDO',                en: 'EXITED' },
+  'points.status.open':       { es: 'ABIERTA',               en: 'OPEN' },
+  'points.status.pending':    { es: 'PENDIENTE',             en: 'PENDING' },
 };

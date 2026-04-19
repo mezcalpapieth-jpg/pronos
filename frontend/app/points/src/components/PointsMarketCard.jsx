@@ -20,6 +20,7 @@
  */
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useT } from '@app/lib/i18n.js';
 
 const STAKE_PREVIEW = 100; // MXNP reference stake for the card payout preview
 
@@ -48,6 +49,7 @@ function previewGain(price) {
 
 export default function PointsMarketCard({ market, userPosition }) {
   const navigate = useNavigate();
+  const t = useT();
   const outcomes = Array.isArray(market.outcomes) ? market.outcomes : ['Sí', 'No'];
   const prices = Array.isArray(market.prices) && market.prices.length === outcomes.length
     ? market.prices
@@ -104,12 +106,12 @@ export default function PointsMarketCard({ market, userPosition }) {
         </span>
         {isResolved && (
           <span className="mock-card-badge live" style={{ background: 'rgba(0,232,122,0.12)', color: 'var(--green)', padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 9 }}>
-            RESUELTO
+            {t('points.card.resolved')}
           </span>
         )}
         {isPending && !isResolved && (
           <span className="mock-card-badge" style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 9 }}>
-            PENDIENTE
+            {t('points.card.pending')}
           </span>
         )}
         {userPosition && userPosition.shares > 0 && (
@@ -123,7 +125,7 @@ export default function PointsMarketCard({ market, userPosition }) {
             letterSpacing: '0.06em',
             textTransform: 'uppercase',
           }}>
-            ✓ Tu posición
+            {t('points.card.yourPos')}
           </span>
         )}
       </div>

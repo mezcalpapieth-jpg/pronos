@@ -12,6 +12,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
+import { useT, useLang, setLang } from '@app/lib/i18n.js';
 
 // Public info page on pronos.io that explains prediction markets. The MVP
 // and old landing both link here — we match so the user journey is the same.
@@ -37,6 +38,8 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [theme, setTheme] = useState(getInitialTheme);
   const dropdownRef = useRef(null);
+  const t = useT();
+  const lang = useLang();
 
   // Search state is mirrored to URL (?q=foo) so it survives refreshes and
   // stays in sync with whatever the home page is reading. Typing from any
@@ -121,8 +124,8 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
           type="search"
           value={searchValue}
           onChange={handleSearchChange}
-          placeholder="Buscar mercado…"
-          aria-label="Buscar mercados"
+          placeholder={t('points.nav.search')}
+          aria-label={t('points.nav.search')}
           style={{
             width: '100%',
             padding: '8px 12px 8px 30px',
@@ -138,11 +141,11 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
       </div>
 
       <div className="nav-links">
-        <Link to="/" style={navLinkStyle}>El mercado</Link>
+        <Link to="/" style={navLinkStyle}>{t('points.nav.markets')}</Link>
         {authenticated && (
           <>
-            <Link to="/portfolio" style={navLinkStyle}>Portafolio</Link>
-            <Link to="/earn" style={navLinkStyle}>Ganar MXNP</Link>
+            <Link to="/portfolio" style={navLinkStyle}>{t('points.nav.portfolio')}</Link>
+            <Link to="/earn" style={navLinkStyle}>{t('points.nav.earn')}</Link>
           </>
         )}
         <a
@@ -151,22 +154,34 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
           rel="noopener noreferrer"
           style={navLinkStyle}
         >
-          Cómo funciona
+          {lang === 'en' ? 'How it works' : 'Cómo funciona'}
         </a>
+
+        {/* Language toggle — EN/ES. Mirrors the MVP nav so users moving
+            between apps get the same control in the same place. */}
+        <button
+          className="btn-theme-toggle"
+          onClick={() => setLang(lang === 'es' ? 'en' : 'es')}
+          title={t('points.nav.lang')}
+          aria-label={t('points.nav.lang')}
+          style={{ fontSize: 11, letterSpacing: '0.04em', fontWeight: 700 }}
+        >
+          {lang === 'es' ? 'EN' : 'ES'}
+        </button>
 
         {/* Theme toggle — matches .btn-theme-toggle styling */}
         <button
           className="btn-theme-toggle"
-          onClick={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
-          title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-          aria-label="Cambiar tema"
+          onClick={() => setTheme(th => (th === 'dark' ? 'light' : 'dark'))}
+          title={t('points.nav.theme')}
+          aria-label={t('points.nav.theme')}
         >
           {theme === 'dark' ? '☀' : '☾'}
         </button>
 
         {!authenticated ? (
           <button className="nav-signup-cta" onClick={onOpenLogin}>
-            Crear cuenta
+            {lang === 'en' ? 'Sign up' : 'Crear cuenta'}
           </button>
         ) : (
           <div style={{ position: 'relative' }} ref={dropdownRef}>
@@ -185,21 +200,25 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
               <div className="nav-dropdown-points">
                 <div className="info-row">
                   {user?.username ? (
-                    <>Sesión iniciada como <strong>@{user.username}</strong></>
+                    lang === 'en'
+                      ? <>Signed in as <strong>@{user.username}</strong></>
+                      : <>Sesión iniciada como <strong>@{user.username}</strong></>
                   ) : (
-                    <>Elige un usuario para completar tu cuenta.</>
+                    lang === 'en'
+                      ? <>Pick a username to finish setup.</>
+                      : <>Elige un usuario para completar tu cuenta.</>
                   )}
                 </div>
                 <Link to="/portfolio" onClick={() => setDropdownOpen(false)}>
-                  Portafolio
+                  {t('points.nav.portfolio')}
                 </Link>
                 {isAdmin && (
                   <Link to="/admin" onClick={() => setDropdownOpen(false)}>
-                    Admin
+                    {t('points.nav.admin')}
                   </Link>
                 )}
                 <button onClick={handleLogout}>
-                  Cerrar sesión
+                  {t('points.nav.signOut')}
                 </button>
               </div>
             )}

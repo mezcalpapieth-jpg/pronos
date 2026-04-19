@@ -17,6 +17,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchMarkets, fetchCurrentCycle, fetchPositions } from '../lib/pointsApi.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
+import { useT } from '@app/lib/i18n.js';
 import PointsMarketCard from '../components/PointsMarketCard.jsx';
 
 // Human-readable "2d 14h 37m" style countdown for the cycle deadline.
@@ -33,19 +34,23 @@ function formatCountdown(totalSeconds) {
   return parts.join(' ');
 }
 
+// Tab key → translation key. Labels are resolved via useT() so the bar
+// flips when the user toggles EN/ES.
 const CATEGORIES = [
-  { key: 'all',       label: '🔥 Trending' },
-  { key: 'musica',    label: '🎵 Música & Farándula' },
-  { key: 'mexico',    label: '🇲🇽 México & CDMX' },
-  { key: 'politica',  label: '🌎 Política Internacional' },
-  { key: 'deportes',  label: '⚽ Deportes' },
-  { key: 'crypto',    label: '₿ Crypto' },
-  { key: 'resueltos', label: '🏆 Resueltos' },
+  { key: 'all',         tKey: 'points.cat.trending'    },
+  { key: 'musica',      tKey: 'points.cat.musica'      },
+  { key: 'mexico',      tKey: 'points.cat.mexico'      },
+  { key: 'politica',    tKey: 'points.cat.politica'    },
+  { key: 'deportes',    tKey: 'points.cat.deportes'    },
+  { key: 'crypto',      tKey: 'points.cat.crypto'      },
+  { key: 'porresolver', tKey: 'points.cat.porresolver' },
+  { key: 'resueltos',   tKey: 'points.cat.resueltos'   },
 ];
 
 export default function PointsHome({ onOpenLogin }) {
   const navigate = useNavigate();
   const { authenticated } = usePointsAuth();
+  const t = useT();
   const [searchParams] = useSearchParams();
   const [markets, setMarkets] = useState([]);
   const [positionByMarket, setPositionByMarket] = useState({});
@@ -89,6 +94,10 @@ export default function PointsHome({ onOpenLogin }) {
       setLoading(true);
       setError(null);
       try {
+        // "Por resolver" and "Trending" plus every category tab all view
+        // active rows. The DB has no separate 'pending' state — pending
+        // just means status='active' with endTime in the past, so we
+        // fetch active and slice client-side in the `filtered` memo.
         const status = activeCategory === 'resueltos' ? 'resolved' : 'active';
         const m = await fetchMarkets({ status });
         if (cancelled) return;
@@ -132,18 +141,29 @@ export default function PointsHome({ onOpenLogin }) {
     return () => { cancelled = true; };
   }, [activeCategory, authenticated]);
 
-  // Two filter layers: category tab + free-text search. Search is
-  // case-insensitive and matches against the question text. "Trending"
-  // and "Resueltos" tabs bypass category filtering; the search still
-  // applies on top.
+  // Layered filtering:
+  //   1. Search, when non-empty, bypasses the category tab — a query on
+  //      "bitcoin" should surface crypto markets even if the user is
+  //      parked on the Deportes tab, otherwise the search feels "broken"
+  //      when no results appear in the current category.
+  //   2. "Por resolver" = status='active' AND endTime < now. Pending
+  //      markets DO appear in Trending too; this tab just isolates them.
+  //   3. Regular category tabs filter by m.category.
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     let out = markets;
-    if (activeCategory !== 'all' && activeCategory !== 'resueltos') {
-      out = out.filter(m => (m.category || '').toLowerCase() === activeCategory);
-    }
+
     if (q) {
-      out = out.filter(m => (m.question || '').toLowerCase().includes(q));
+      // Global search across the loaded status bucket (active or
+      // resolved); don't also narrow by category.
+      return out.filter(m => (m.question || '').toLowerCase().includes(q));
+    }
+
+    if (activeCategory === 'porresolver') {
+      const now = Date.now();
+      out = out.filter(m => m.status === 'active' && m.endTime && new Date(m.endTime).getTime() < now);
+    } else if (activeCategory !== 'all' && activeCategory !== 'resueltos') {
+      out = out.filter(m => (m.category || '').toLowerCase() === activeCategory);
     }
     return out;
   }, [markets, activeCategory, searchQuery]);
@@ -172,7 +192,7 @@ export default function PointsHome({ onOpenLogin }) {
                 className={`filter-btn${activeCategory === cat.key ? ' active' : ''}`}
                 onClick={() => setActiveCategory(cat.key)}
               >
-                {cat.label}
+                {t(cat.tKey)}
               </button>
             ))}
           </div>
@@ -386,8 +406,10 @@ export default function PointsHome({ onOpenLogin }) {
             color: 'var(--text-muted)',
           }}>
             {searchQuery
-              ? `🔍 No hay resultados para "${searchQuery}".`
-              : '🎯 No hay mercados en esta categoría todavía.'}
+              ? t('points.home.emptySearch', { q: searchQuery })
+              : activeCategory === 'porresolver'
+                ? `🎯 ${t('points.home.emptyPending')}`
+                : `🎯 ${t('points.home.empty')}`}
           </div>
         )}
         {!loading && !error && filtered.length > 0 && (
