@@ -22,6 +22,7 @@ import {
   adminEditMarket,
   adminListPendingMarkets,
   adminReviewPendingMarket,
+  adminApproveAllPendingMarkets,
 } from '../lib/pointsApi.js';
 
 const CATEGORIES = [
@@ -1445,6 +1446,7 @@ function PendingMarketsTable() {
   const [filter, setFilter] = useState('pending');
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [err, setErr] = useState(null);
 
   async function load() {
@@ -1474,6 +1476,27 @@ function PendingMarketsTable() {
     }
   }
 
+  async function approveAll() {
+    const pendingCount = rows?.filter(r => r.status === 'pending').length || 0;
+    if (pendingCount === 0) return;
+    if (!confirm(`¿Aprobar los ${pendingCount} mercados pendientes? Se crearán todos con la seed y modo sugeridos.`)) {
+      return;
+    }
+    setBulkBusy(true);
+    try {
+      const r = await adminApproveAllPendingMarkets();
+      await load();
+      const msg = r.failedCount > 0
+        ? `Aprobados ${r.approvedCount} de ${r.checked}. ${r.failedCount} fallaron — revisa el historial.`
+        : `✓ ${r.approvedCount} mercados aprobados.`;
+      alert(msg);
+    } catch (e) {
+      alert(`Aprobar todos falló: ${e.code || e.message}`);
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   function formatWhen(iso) {
     if (!iso) return '—';
     const d = new Date(iso);
@@ -1483,9 +1506,14 @@ function PendingMarketsTable() {
     });
   }
 
+  const pendingCount = rows?.filter(r => r.status === 'pending').length || 0;
+
   return (
     <div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+      <div style={{
+        display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap',
+        alignItems: 'center',
+      }}>
         {[
           { key: 'pending',  label: 'Pendientes' },
           { key: 'approved', label: 'Aprobados' },
@@ -1508,6 +1536,32 @@ function PendingMarketsTable() {
             {s.label}
           </button>
         ))}
+
+        {/* Bulk approve — only renders on the Pending view when there's
+            something to approve. Backend processes per-row txns so one
+            bad spec doesn't undo the rest. */}
+        {filter === 'pending' && pendingCount > 0 && (
+          <button
+            onClick={approveAll}
+            disabled={bulkBusy}
+            title={`Aprobar los ${pendingCount} mercados pendientes de un jalón`}
+            style={{
+              marginLeft: 'auto',
+              padding: '6px 14px',
+              borderRadius: 16,
+              border: '1px solid rgba(0,232,122,0.45)',
+              background: 'rgba(0,232,122,0.14)',
+              color: 'var(--green)',
+              fontFamily: 'var(--font-mono)', fontSize: 11,
+              letterSpacing: '0.06em', textTransform: 'uppercase',
+              cursor: bulkBusy ? 'not-allowed' : 'pointer',
+              opacity: bulkBusy ? 0.5 : 1,
+              fontWeight: 600,
+            }}
+          >
+            {bulkBusy ? `Aprobando ${pendingCount}…` : `✓ Aprobar todos (${pendingCount})`}
+          </button>
+        )}
       </div>
 
       <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.6 }}>

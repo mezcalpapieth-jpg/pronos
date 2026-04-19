@@ -93,19 +93,16 @@ async function list(req, res) {
   });
 }
 
-async function review(req, res, admin) {
-  const { id, action, note } = req.body || {};
-  const pid = parseInt(id, 10);
-  if (!Number.isInteger(pid) || pid <= 0) {
-    return res.status(400).json({ error: 'invalid_id' });
-  }
-  if (action !== 'approve' && action !== 'reject') {
-    return res.status(400).json({ error: 'invalid_action' });
-  }
-
-  await ensurePointsSchema(schemaSql);
-
-  const result = await withTransaction(async (client) => {
+/**
+ * Approve ONE pending row — copy its spec into points_markets and flip
+ * the pending row to 'approved'. Runs inside its own withTransaction so
+ * bulk approval can call this per-row and tolerate per-row failure
+ * without rolling back earlier successes.
+ *
+ * Throws on validation / DB error. Returns { id, marketId }.
+ */
+async function approveOne(pid, reviewer, note) {
+  return withTransaction(async (client) => {
     const rowRes = await client.query(
       `SELECT * FROM points_pending_markets WHERE id = $1 FOR UPDATE`,
       [pid],
@@ -120,20 +117,6 @@ async function review(req, res, admin) {
       throw err;
     }
 
-    if (action === 'reject') {
-      await client.query(
-        `UPDATE points_pending_markets
-           SET status = 'rejected', admin_note = $1, reviewer = $2, reviewed_at = NOW()
-         WHERE id = $3`,
-        [note || null, admin.username, pid],
-      );
-      return { ok: true, action: 'reject', id: pid };
-    }
-
-    // Approve → copy into points_markets. Mirrors the unified path in
-    // admin/create-market.js so we keep validation consistent. Only the
-    // unified mode is generated today (soccer 3-way); parallel gets
-    // wired when the next generator needs it (F1 etc).
     const outcomes = parseJsonb(r.outcomes, []);
     if (!Array.isArray(outcomes) || outcomes.length < 2) {
       const err = new Error('invalid_outcomes'); err.status = 400; throw err;
@@ -169,15 +152,15 @@ async function review(req, res, admin) {
           JSON.stringify(reserves),
           seed,
           endDate.toISOString(),
-          admin.username,
+          reviewer,
           r.resolver_type || null,
           r.resolver_config ? JSON.stringify(r.resolver_config) : null,
         ],
       );
       createdMarketId = mk.rows[0].id;
     } else {
-      // Parallel — parent + N legs. Kept out of the initial soccer path
-      // but supported here so future generators (F1, golf) work too.
+      // Parallel — parent + N legs. Supports F1 / weather / future
+      // generators that ship amm_mode='parallel'.
       const legReserves = initialReserves(seed, 2);
       const parent = await client.query(
         `INSERT INTO points_markets
@@ -193,7 +176,7 @@ async function review(req, res, admin) {
           JSON.stringify(outcomes),
           seed,
           endDate.toISOString(),
-          admin.username,
+          reviewer,
           r.resolver_type || null,
           r.resolver_config ? JSON.stringify(r.resolver_config) : null,
         ],
@@ -214,7 +197,7 @@ async function review(req, res, admin) {
             JSON.stringify(legReserves),
             seed,
             endDate.toISOString(),
-            admin.username,
+            reviewer,
             createdMarketId,
             outcomes[i],
           ],
@@ -227,10 +210,87 @@ async function review(req, res, admin) {
          SET status = 'approved', admin_note = $1, reviewer = $2,
              reviewed_at = NOW(), approved_market_id = $3
        WHERE id = $4`,
-      [note || null, admin.username, createdMarketId, pid],
+      [note || null, reviewer, createdMarketId, pid],
     );
-    return { ok: true, action: 'approve', id: pid, marketId: createdMarketId };
+    return { id: pid, marketId: createdMarketId };
   });
+}
 
-  return res.status(200).json(result);
+async function review(req, res, admin) {
+  const { id, action, note } = req.body || {};
+
+  await ensurePointsSchema(schemaSql);
+
+  // Bulk approve — iterate every pending row with per-row transactions
+  // so one bad spec (e.g. end_time already in the past) doesn't undo
+  // the rows that processed cleanly before it. Returns a summary of
+  // what landed + what failed so the admin UI can show the result.
+  if (action === 'approve_all') {
+    const pending = await readSql`
+      SELECT id FROM points_pending_markets
+      WHERE status = 'pending'
+      ORDER BY id ASC
+    `;
+    const approved = [];
+    const failures = [];
+    for (const row of pending) {
+      try {
+        const result = await approveOne(row.id, admin.username, note);
+        approved.push({ pendingId: result.id, marketId: result.marketId });
+      } catch (e) {
+        failures.push({
+          pendingId: row.id,
+          error: e?.message || 'unknown',
+          detail: e?.detail || null,
+        });
+      }
+    }
+    return res.status(200).json({
+      ok: true,
+      action: 'approve_all',
+      checked: pending.length,
+      approvedCount: approved.length,
+      failedCount: failures.length,
+      approved,
+      failures,
+    });
+  }
+
+  // Single-row approve / reject — requires a valid id.
+  const pid = parseInt(id, 10);
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return res.status(400).json({ error: 'invalid_id' });
+  }
+  if (action !== 'approve' && action !== 'reject') {
+    return res.status(400).json({ error: 'invalid_action' });
+  }
+
+  if (action === 'reject') {
+    const result = await withTransaction(async (client) => {
+      const rowRes = await client.query(
+        `SELECT status FROM points_pending_markets WHERE id = $1 FOR UPDATE`,
+        [pid],
+      );
+      if (rowRes.rows.length === 0) {
+        const err = new Error('pending_not_found'); err.status = 404; throw err;
+      }
+      if (rowRes.rows[0].status !== 'pending') {
+        const err = new Error('already_reviewed'); err.status = 400;
+        err.detail = `status=${rowRes.rows[0].status}`;
+        throw err;
+      }
+      await client.query(
+        `UPDATE points_pending_markets
+           SET status = 'rejected', admin_note = $1, reviewer = $2, reviewed_at = NOW()
+         WHERE id = $3`,
+        [note || null, admin.username, pid],
+      );
+      return { ok: true, action: 'reject', id: pid };
+    });
+    return res.status(200).json(result);
+  }
+
+  // action === 'approve'
+  const approved = await approveOne(pid, admin.username, note);
+  return res.status(200).json({ ok: true, action: 'approve', ...approved });
 }
