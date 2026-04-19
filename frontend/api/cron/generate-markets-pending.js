@@ -20,16 +20,20 @@
 
 import { neon } from '@neondatabase/serverless';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
-import { generateSoccerMarkets } from '../_lib/market-gen/soccer.js';
-import { generateCryptoMarkets } from '../_lib/market-gen/crypto.js';
+import { generateSoccerMarkets }  from '../_lib/market-gen/soccer.js';
+import { generateCryptoMarkets }  from '../_lib/market-gen/crypto.js';
+import { generateStockMarkets }   from '../_lib/market-gen/stocks.js';
+import { generateWeatherMarkets } from '../_lib/market-gen/weather.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
 // Registry of source-name → generator. Adding a new pipeline later is
 // a one-line push; the upsert loop doesn't care where specs come from.
 const GENERATORS = [
-  { name: 'soccer', run: generateSoccerMarkets },
-  { name: 'crypto', run: generateCryptoMarkets },
+  { name: 'soccer',  run: generateSoccerMarkets  },
+  { name: 'crypto',  run: generateCryptoMarkets  },
+  { name: 'stocks',  run: generateStockMarkets   },
+  { name: 'weather', run: generateWeatherMarkets },
 ];
 
 export default async function handler(req, res) {

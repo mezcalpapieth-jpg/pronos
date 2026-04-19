@@ -25,6 +25,8 @@ import { neon } from '@neondatabase/serverless';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { withTransaction } from '../_lib/db-tx.js';
 import { readChainlinkPrice, comparePrice } from '../_lib/chainlink.js';
+import { readFinnhubQuote } from '../_lib/stockprice.js';
+import { fetchMaxTempC, bucketIndexFor } from '../_lib/weather.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql   = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -57,13 +59,14 @@ export default async function handler(req, res) {
     await ensurePointsSchema(schemaSql);
 
     // Only parents — parallel legs are resolved via the parent cascade
-    // path elsewhere (admin resolve on the parent fans out to legs).
-    // Chainlink-resolved markets are always unified binary today.
+    // below (weather_api). For price resolvers the market is already
+    // unified binary so there's nothing to cascade.
     const candidates = await readSql`
-      SELECT id, question, end_time, resolver_type, resolver_config, outcomes
+      SELECT id, question, end_time, resolver_type, resolver_config,
+             outcomes, amm_mode
       FROM points_markets
       WHERE status = 'active'
-        AND resolver_type = 'chainlink_price'
+        AND resolver_type IN ('chainlink_price', 'api_price', 'weather_api')
         AND end_time IS NOT NULL
         AND end_time < NOW()
         AND parent_id IS NULL
@@ -79,61 +82,111 @@ export default async function handler(req, res) {
 
     for (const m of candidates) {
       const cfg = parseJsonb(m.resolver_config, null);
-      if (!cfg?.feedAddress || !cfg?.op || cfg.threshold == null || cfg.yesOutcome == null) {
-        report.errors.push({ id: m.id, error: 'invalid_resolver_config' });
+      if (!cfg) {
+        report.errors.push({ id: m.id, error: 'missing_resolver_config' });
         continue;
       }
 
-      let price;
+      // Compute the winning outcome index per resolver type. Price
+      // resolvers hit a feed / API and compare; weather_api resolves by
+      // fetching the recorded high and picking the bucket index.
+      let winningIdx = null;
+      let resolverInfo = {};
       try {
-        price = await readChainlinkPrice({
-          feedAddress: cfg.feedAddress,
-          chainId: cfg.chainId,
-        });
+        if (m.resolver_type === 'chainlink_price') {
+          if (!cfg.feedAddress || !cfg.op || cfg.threshold == null || cfg.yesOutcome == null) {
+            throw new Error('invalid chainlink_price config');
+          }
+          const price = await readChainlinkPrice({
+            feedAddress: cfg.feedAddress,
+            chainId: cfg.chainId,
+          });
+          const yes = comparePrice(price, cfg.op, Number(cfg.threshold));
+          const yesIdx = Number(cfg.yesOutcome);
+          winningIdx = yes ? yesIdx : (1 - yesIdx);
+          resolverInfo = { priceAtResolve: price, op: cfg.op, threshold: cfg.threshold };
+        } else if (m.resolver_type === 'api_price') {
+          if (cfg.source !== 'finnhub' || !cfg.symbol || !cfg.op || cfg.threshold == null || cfg.yesOutcome == null) {
+            throw new Error(`invalid api_price config (source=${cfg.source})`);
+          }
+          const quote = await readFinnhubQuote(cfg.symbol);
+          const yes = comparePrice(quote.price, cfg.op, Number(cfg.threshold));
+          const yesIdx = Number(cfg.yesOutcome);
+          winningIdx = yes ? yesIdx : (1 - yesIdx);
+          resolverInfo = { priceAtResolve: quote.price, symbol: cfg.symbol, op: cfg.op, threshold: cfg.threshold };
+        } else if (m.resolver_type === 'weather_api') {
+          if (!cfg.lat || !cfg.lng || !cfg.forecastDateYmd || !Array.isArray(cfg.buckets)) {
+            throw new Error('invalid weather_api config');
+          }
+          const tempC = await fetchMaxTempC({
+            lat: cfg.lat,
+            lng: cfg.lng,
+            dateYmd: cfg.forecastDateYmd,
+            timezone: cfg.timezone,
+          });
+          // Bucket match — prefer the config's own ranges over the
+          // library's defaults so regenerated buckets don't desync.
+          winningIdx = cfg.buckets.findIndex(b =>
+            tempC >= Number(b.minC) && tempC < Number(b.maxC),
+          );
+          if (winningIdx < 0) winningIdx = bucketIndexFor(tempC); // fallback
+          if (winningIdx < 0) throw new Error(`temp ${tempC}°C didn't fit any bucket`);
+          resolverInfo = { recordedMaxC: tempC, forecastDateYmd: cfg.forecastDateYmd };
+        } else {
+          throw new Error(`unknown resolver_type: ${m.resolver_type}`);
+        }
       } catch (e) {
-        report.errors.push({ id: m.id, error: `feed_read_failed: ${e.message}` });
+        report.errors.push({ id: m.id, error: `resolve_failed: ${e.message}` });
         continue;
       }
 
-      const yes = comparePrice(price, cfg.op, Number(cfg.threshold));
-      const yesIdx = Number(cfg.yesOutcome);
-      const winningIdx = yes ? yesIdx : (1 - yesIdx);
+      if (winningIdx == null || !Number.isInteger(winningIdx) || winningIdx < 0) {
+        report.errors.push({ id: m.id, error: `invalid winningIdx ${winningIdx}` });
+        continue;
+      }
 
       if (dry) {
-        report.resolved.push({
-          id: m.id,
-          priceAtResolve: price,
-          op: cfg.op,
-          threshold: cfg.threshold,
-          winningIdx,
-          dry: true,
-        });
+        report.resolved.push({ id: m.id, winningIdx, ...resolverInfo, dry: true });
         continue;
       }
 
       try {
         await withTransaction(async (client) => {
-          // Guard: only flip if still active — tolerates admin resolving
-          // the market manually between our SELECT and UPDATE.
+          // Update parent first; guarded against admin races.
           const r = await client.query(
             `UPDATE points_markets
                SET status = 'resolved', outcome = $1,
-                   resolved_at = NOW(), resolved_by = 'chainlink'
-             WHERE id = $2 AND status = 'active'
-             RETURNING id`,
-            [winningIdx, m.id],
+                   resolved_at = NOW(), resolved_by = $2
+             WHERE id = $3 AND status = 'active'
+             RETURNING id, amm_mode`,
+            [winningIdx, `resolver:${m.resolver_type}`, m.id],
           );
           if (r.rows.length === 0) {
             const err = new Error('not_active_at_write'); err.benign = true; throw err;
           }
+          // Cascade to parallel legs (mirrors admin resolve-market.js):
+          // winning leg's YES side pays out; losing legs' NO side pays.
+          if (m.amm_mode === 'parallel') {
+            const legs = await client.query(
+              `SELECT id FROM points_markets
+                 WHERE parent_id = $1
+                 ORDER BY id ASC
+                 FOR UPDATE`,
+              [m.id],
+            );
+            for (let i = 0; i < legs.rows.length; i++) {
+              const legWinningOutcome = i === winningIdx ? 0 : 1;
+              await client.query(
+                `UPDATE points_markets
+                   SET status = 'resolved', outcome = $1,
+                       resolved_at = NOW(), resolved_by = $2
+                 WHERE id = $3 AND status = 'active'`,
+                [legWinningOutcome, `resolver:${m.resolver_type}`, legs.rows[i].id],
+              );
+            }
+          }
         });
-        report.resolved.push({
-          id: m.id,
-          priceAtResolve: price,
-          op: cfg.op,
-          threshold: cfg.threshold,
-          winningIdx,
-        });
+        report.resolved.push({ id: m.id, winningIdx, ...resolverInfo });
       } catch (e) {
         if (e.benign) continue; // already resolved by admin — fine
         report.errors.push({ id: m.id, error: `write_failed: ${e.message}` });
