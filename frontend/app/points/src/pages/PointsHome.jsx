@@ -210,33 +210,38 @@ export default function PointsHome({ onOpenLogin }) {
           <div className="hero-left">
             <div className="hero-badge">
               <span className="dot" />
-              <span>Beta · Competencia MXNP</span>
+              <span>{t('points.hero.badge')}</span>
             </div>
 
             <h1 className="hero-headline">
-              Predice, gana<br />
-              <span className="accent">MXNP</span>,<br />
-              compite por premios
+              {t('points.hero.headline.a')}<br />
+              <span className="accent">{t('points.hero.headline.b')}</span>,<br />
+              {t('points.hero.headline.c')}
             </h1>
 
+            {/* Hero subtitle — split on sentinel tags so the two {strong}
+                runs render as <strong> without needing dangerouslySetInnerHTML. */}
             <p className="hero-sub">
-              Compra acciones en eventos reales con MXNP — la moneda de Pronos.
-              Cada dos semanas los <strong>3 mejores</strong> del leaderboard ganan
-              <strong> $5,000, $3,000 y $2,000 MXN</strong> en efectivo.
-              Puestos 4–10 reciben premios sorpresa.
+              {(() => {
+                const raw = t('points.hero.sub');
+                const parts = raw.split(/\{\/?strong\}/g);
+                return parts.map((chunk, i) => i % 2 === 1
+                  ? <strong key={i}>{chunk}</strong>
+                  : <React.Fragment key={i}>{chunk}</React.Fragment>);
+              })()}
             </p>
 
             <div className="hero-btns">
               {!authenticated ? (
                 <button className="btn-primary" onClick={onOpenLogin}>
-                  Crear cuenta gratis
+                  {t('points.hero.cta.createAccount')}
                 </button>
               ) : (
                 <button className="btn-primary" onClick={() => navigate('/portfolio')}>
-                  Ver mi portafolio
+                  {t('points.hero.cta.myPortfolio')}
                 </button>
               )}
-              <a href="#how-it-works" className="btn-ghost">Cómo funciona</a>
+              <a href="#how-it-works" className="btn-ghost">{t('points.nav.howItWorks')}</a>
             </div>
 
             <div className="hero-stats">
@@ -244,19 +249,19 @@ export default function PointsHome({ onOpenLogin }) {
                 <span className="hero-stat-val">
                   <span className="green">500</span> MXNP
                 </span>
-                <span className="hero-stat-label">bono de bienvenida</span>
+                <span className="hero-stat-label">{t('points.hero.stats.welcomeBonus')}</span>
               </div>
               <div className="hero-stat">
                 <span className="hero-stat-val">
                   <span className="green">100</span>+20/día
                 </span>
-                <span className="hero-stat-label">reclamo diario + racha</span>
+                <span className="hero-stat-label">{t('points.hero.stats.dailyClaim')}</span>
               </div>
               <div className="hero-stat">
                 <span className="hero-stat-val">
                   <span className="green">{stats.activeCount}</span>
                 </span>
-                <span className="hero-stat-label">mercados activos</span>
+                <span className="hero-stat-label">{t('points.hero.stats.activeMarkets')}</span>
               </div>
             </div>
           </div>
@@ -271,7 +276,7 @@ export default function PointsHome({ onOpenLogin }) {
             <div className="hmc-topbar" style={{ marginBottom: 18 }}>
               <div className="hmc-cat">
                 <div className="hmc-live-dot" />
-                <span>{cycle?.label ? cycle.label.toUpperCase() : 'CICLO ACTUAL · PREMIOS'}</span>
+                <span>{cycle?.label ? cycle.label.toUpperCase() : t('points.hero.currentCycle')}</span>
               </div>
               {cycleCountdown && (
                 <span style={{
@@ -281,21 +286,21 @@ export default function PointsHome({ onOpenLogin }) {
                   color: cycleCountdown.seconds === 0 ? '#f59e0b' : 'var(--green)',
                   textTransform: 'uppercase',
                 }}>
-                  {cycleCountdown.seconds === 0 ? '⏳ Cierre pendiente' : `⏳ ${cycleCountdown.label}`}
+                  {cycleCountdown.seconds === 0 ? t('points.hero.closePending') : `⏳ ${cycleCountdown.label}`}
                 </span>
               )}
             </div>
 
             <div className="hmc-question" style={{ marginBottom: 22 }}>
-              Top 10 del leaderboard cada quincena
+              {t('points.hero.top10Text')}
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
               {[
-                { rank: '🥇 1°',    prize: '$5,000 MXN',  accent: true },
-                { rank: '🥈 2°',    prize: '$3,000 MXN',  accent: true },
-                { rank: '🥉 3°',    prize: '$2,000 MXN',  accent: true },
-                { rank: '4°–10°',    prize: '🎁 Premio sorpresa' },
+                { rank: '🥇 1°',    prize: '$5,000 MXN',         accent: true },
+                { rank: '🥈 2°',    prize: '$3,000 MXN',         accent: true },
+                { rank: '🥉 3°',    prize: '$2,000 MXN',         accent: true },
+                { rank: '4°–10°',    prize: t('points.hero.surprisePrize') },
               ].map(p => (
                 <div key={p.rank} style={{
                   display: 'flex',
@@ -348,8 +353,19 @@ export default function PointsHome({ onOpenLogin }) {
             }}>
               <span style={{ fontSize: 12, lineHeight: 1, marginTop: 1 }}>⚠️</span>
               <span>
-                Para calificar al premio debes participar en al menos{' '}
-                <strong style={{ color: '#ff5500' }}>10 mercados</strong> durante el ciclo.
+                {(() => {
+                  const raw = t('points.hero.eligibility', { n: '10' });
+                  // Highlight the "10 mercados" run by colouring the digits.
+                  // Simple split since only one number appears in the string.
+                  return raw.split('10').map((chunk, i, arr) => (
+                    <React.Fragment key={i}>
+                      {chunk}
+                      {i < arr.length - 1 && (
+                        <strong style={{ color: '#ff5500' }}>10</strong>
+                      )}
+                    </React.Fragment>
+                  ));
+                })()}
               </span>
             </div>
 
@@ -364,8 +380,8 @@ export default function PointsHome({ onOpenLogin }) {
               color: 'var(--text-muted)',
               letterSpacing: '0.04em',
             }}>
-              <span>RANKING POR CARTERA</span>
-              <span>PREMIOS EN EFECTIVO</span>
+              <span>{t('points.hero.rankBy')}</span>
+              <span>{t('points.hero.cashPrizes')}</span>
             </div>
           </aside>
         </div>
@@ -382,7 +398,7 @@ export default function PointsHome({ onOpenLogin }) {
             letterSpacing: '0.1em',
             color: 'var(--text-muted)',
           }}>
-            Cargando mercados…
+            {t('points.home.loading')}
           </div>
         )}
         {error && !loading && (
@@ -394,7 +410,7 @@ export default function PointsHome({ onOpenLogin }) {
             color: 'var(--red, #ef4444)',
             whiteSpace: 'pre-wrap',
           }}>
-            No pudimos cargar los mercados · {error}
+            {t('points.home.loadError', { err: error })}
           </div>
         )}
         {!loading && !error && filtered.length === 0 && (

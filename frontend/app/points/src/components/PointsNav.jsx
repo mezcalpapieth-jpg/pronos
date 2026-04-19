@@ -9,10 +9,11 @@
  *
  * No wallet-chain UI, no RPC, no Privy — this is an off-chain points app.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useT, useLang, setLang } from '@app/lib/i18n.js';
+import { fetchMarkets } from '../lib/pointsApi.js';
 
 // Public info page on pronos.io that explains prediction markets. The MVP
 // and old landing both link here — we match so the user journey is the same.
@@ -41,15 +42,35 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
   const t = useT();
   const lang = useLang();
 
-  // Search state is mirrored to URL (?q=foo) so it survives refreshes and
-  // stays in sync with whatever the home page is reading. Typing from any
-  // page that isn't home jumps to home with the query applied.
+  // Search: URL mirror (?q=foo) for list filtering on home, PLUS an
+  // autocomplete dropdown that navigates straight to a market detail.
+  // The dropdown is backed by a local cache of titles fetched once the
+  // user focuses the input; we filter client-side for instant results.
   const searchValue = searchParams.get('q') || '';
+  const [searchCache, setSearchCache] = useState([]);
+  const [searchCacheLoaded, setSearchCacheLoaded] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchRef = useRef(null);
+
+  async function ensureSearchCache() {
+    if (searchCacheLoaded) return;
+    try {
+      // "Active" covers Trending + category tabs + Por resolver; we
+      // intentionally don't pull resolved markets since users are
+      // almost never trying to jump into one via search. Add another
+      // fetch if that changes.
+      const rows = await fetchMarkets({ status: 'active' });
+      setSearchCache(Array.isArray(rows) ? rows : []);
+      setSearchCacheLoaded(true);
+    } catch {
+      setSearchCacheLoaded(true); // mark done so we don't retry-storm
+    }
+  }
+
   function handleSearchChange(e) {
     const value = e.target.value;
+    setSearchOpen(true);
     if (location.pathname !== '/') {
-      // Off the home page — navigate there with the query so the grid
-      // shows the filtered results.
       navigate(value ? `/?q=${encodeURIComponent(value)}` : '/');
       return;
     }
@@ -58,6 +79,36 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
     else next.delete('q');
     setSearchParams(next, { replace: true });
   }
+
+  const searchResults = useMemo(() => {
+    const q = (searchValue || '').trim().toLowerCase();
+    if (!q) return [];
+    return searchCache
+      .filter(m => (m.question || '').toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [searchCache, searchValue]);
+
+  function handleSearchSelect(market) {
+    setSearchOpen(false);
+    // Clear the URL's search so we don't navigate back into a filtered
+    // view when the user hits Back.
+    const next = new URLSearchParams(searchParams);
+    next.delete('q');
+    setSearchParams(next, { replace: true });
+    navigate(`/market?id=${encodeURIComponent(market.id)}`);
+  }
+
+  // Close dropdown on outside click.
+  useEffect(() => {
+    if (!searchOpen) return undefined;
+    const handler = (e) => {
+      if (searchRef.current && !searchRef.current.contains(e.target)) {
+        setSearchOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [searchOpen]);
 
   // Apply theme to <html data-theme> so the shared CSS variables cascade.
   useEffect(() => {
@@ -101,19 +152,23 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
 
       {/* Search — sits right next to the logo, expands to fill
           available horizontal space up to the nav-links row. Typing
-          updates ?q=<text> in the URL; PointsHome reads that param. */}
-      <div style={{
-        position: 'relative',
-        flex: '1 1 auto',
-        maxWidth: 420,
-        margin: '0 16px',
-        minWidth: 0,
-      }}>
+          updates ?q=<text> in the URL (for home-page list filtering)
+          AND opens an autocomplete dropdown that jumps straight to a
+          market detail when a result is clicked. */}
+      <div
+        ref={searchRef}
+        style={{
+          position: 'relative',
+          flex: '1 1 auto',
+          maxWidth: 420,
+          margin: '0 16px',
+          minWidth: 0,
+        }}
+      >
         <span style={{
           position: 'absolute',
           left: 12,
-          top: '50%',
-          transform: 'translateY(-50%)',
+          top: 16,
           fontSize: 13,
           color: 'var(--text-muted)',
           pointerEvents: 'none',
@@ -124,6 +179,15 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
           type="search"
           value={searchValue}
           onChange={handleSearchChange}
+          onFocus={() => { ensureSearchCache(); if (searchValue) setSearchOpen(true); }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && searchResults.length > 0) {
+              e.preventDefault();
+              handleSearchSelect(searchResults[0]);
+            } else if (e.key === 'Escape') {
+              setSearchOpen(false);
+            }
+          }}
           placeholder={t('points.nav.search')}
           aria-label={t('points.nav.search')}
           style={{
@@ -138,6 +202,85 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
             outline: 'none',
           }}
         />
+
+        {searchOpen && searchValue.trim() && (
+          <div style={{
+            position: 'absolute',
+            top: 'calc(100% + 6px)',
+            left: 0,
+            right: 0,
+            background: 'var(--surface1)',
+            border: '1px solid var(--border)',
+            borderRadius: 10,
+            boxShadow: '0 10px 32px rgba(0,0,0,0.35)',
+            maxHeight: 420,
+            overflowY: 'auto',
+            zIndex: 1000,
+          }}>
+            {searchResults.length === 0 ? (
+              <div style={{
+                padding: '14px 14px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                color: 'var(--text-muted)',
+                letterSpacing: '0.04em',
+              }}>
+                {lang === 'en' ? 'No markets match.' : 'Sin coincidencias.'}
+              </div>
+            ) : (
+              searchResults.map((m) => {
+                const prices = Array.isArray(m.prices) ? m.prices : [];
+                const topPct = prices.length > 0 ? Math.round(prices[0] * 100) : null;
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => handleSearchSelect(m)}
+                    style={{
+                      display: 'flex',
+                      width: '100%',
+                      padding: '10px 14px',
+                      background: 'transparent',
+                      border: 'none',
+                      borderBottom: '1px solid var(--border)',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      alignItems: 'center',
+                      gap: 10,
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface2)'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  >
+                    {m.icon && (
+                      <span style={{ fontSize: 16, lineHeight: 1 }}>{m.icon}</span>
+                    )}
+                    <span style={{
+                      flex: 1,
+                      minWidth: 0,
+                      fontFamily: 'var(--font-body)',
+                      fontSize: 13,
+                      color: 'var(--text-primary)',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}>
+                      {m.question}
+                    </span>
+                    {topPct !== null && (
+                      <span style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 11,
+                        color: 'var(--green)',
+                        fontWeight: 600,
+                      }}>
+                        {topPct}%
+                      </span>
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        )}
       </div>
 
       <div className="nav-links">
@@ -154,19 +297,21 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
           rel="noopener noreferrer"
           style={navLinkStyle}
         >
-          {lang === 'en' ? 'How it works' : 'Cómo funciona'}
+          {t('points.nav.howItWorks')}
         </a>
 
-        {/* Language toggle — EN/ES. Mirrors the MVP nav so users moving
-            between apps get the same control in the same place. */}
+        {/* Language toggle — flag shows the language you'd switch TO.
+            Current ES → 🇺🇸 (click to go English); current EN → 🇲🇽 (go
+            back to Spanish). Same placement as MVP so the control is
+            familiar across apps. */}
         <button
           className="btn-theme-toggle"
           onClick={() => setLang(lang === 'es' ? 'en' : 'es')}
-          title={t('points.nav.lang')}
+          title={lang === 'es' ? 'Switch to English' : 'Cambiar a español'}
           aria-label={t('points.nav.lang')}
-          style={{ fontSize: 11, letterSpacing: '0.04em', fontWeight: 700 }}
+          style={{ fontSize: 16, lineHeight: 1 }}
         >
-          {lang === 'es' ? 'EN' : 'ES'}
+          {lang === 'es' ? '🇺🇸' : '🇲🇽'}
         </button>
 
         {/* Theme toggle — matches .btn-theme-toggle styling */}

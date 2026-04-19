@@ -464,6 +464,37 @@ const STRINGS = {
   'points.nav.search':        { es: 'Buscar mercado…',       en: 'Search market…' },
   'points.nav.theme':         { es: 'Cambiar tema',          en: 'Toggle theme' },
   'points.nav.lang':          { es: 'Idioma',                en: 'Language' },
+  'points.nav.howItWorks':    { es: 'Cómo funciona',         en: 'How it works' },
+  'points.nav.signUp':        { es: 'Crear cuenta',          en: 'Sign up' },
+
+  // Hero + home copy
+  'points.hero.badge':        { es: 'Beta · Competencia MXNP', en: 'Beta · MXNP competition' },
+  'points.hero.headline.a':   { es: 'Predice, gana',         en: 'Predict, win' },
+  'points.hero.headline.b':   { es: 'MXNP',                  en: 'MXNP' },
+  'points.hero.headline.c':   { es: 'compite por premios',   en: 'compete for prizes' },
+  'points.hero.sub':          { es: 'Compra acciones en eventos reales con MXNP — la moneda de Pronos. Cada dos semanas los {strong}3 mejores{/strong} del leaderboard ganan {strong}$5,000, $3,000 y $2,000 MXN{/strong} en efectivo. Puestos 4–10 reciben premios sorpresa.',
+                                en: 'Buy shares on real events with MXNP — the Pronos currency. Every two weeks the {strong}top 3{/strong} on the leaderboard win {strong}$5,000, $3,000 and $2,000 MXN{/strong} in cash. Positions 4–10 get surprise prizes.' },
+  'points.hero.cta.createAccount': { es: 'Crear cuenta gratis', en: 'Create free account' },
+  'points.hero.cta.myPortfolio':  { es: 'Ver mi portafolio',   en: 'View my portfolio' },
+  'points.hero.stats.welcomeBonus': { es: 'bono de bienvenida', en: 'welcome bonus' },
+  'points.hero.stats.dailyClaim':   { es: 'reclamo diario + racha', en: 'daily claim + streak' },
+  'points.hero.stats.activeMarkets':{ es: 'mercados activos',  en: 'active markets' },
+  'points.hero.currentCycle': { es: 'CICLO ACTUAL · PREMIOS', en: 'CURRENT CYCLE · PRIZES' },
+  'points.hero.top10Text':    { es: 'Top 10 del leaderboard cada quincena', en: 'Leaderboard top 10 every two weeks' },
+  'points.hero.closePending': { es: '⏳ Cierre pendiente',    en: '⏳ Closing soon' },
+  'points.hero.surprisePrize':{ es: '🎁 Premio sorpresa',     en: '🎁 Surprise prize' },
+  'points.hero.eligibility':  { es: 'Para calificar al premio debes participar en al menos {n} mercados durante el ciclo.',
+                                en: 'To qualify for the prize you must participate in at least {n} markets during the cycle.' },
+  'points.hero.rankBy':       { es: 'RANKING POR CARTERA',   en: 'RANKED BY PORTFOLIO' },
+  'points.hero.cashPrizes':   { es: 'PREMIOS EN EFECTIVO',   en: 'CASH PRIZES' },
+
+  'points.home.loadError':    { es: 'No pudimos cargar los mercados · {err}', en: 'Could not load markets · {err}' },
+
+  // Admin
+  'points.admin.filter.all':       { es: 'Todos',          en: 'All' },
+  'points.admin.filter.active':    { es: 'Activos',        en: 'Active' },
+  'points.admin.filter.pending':   { es: 'Por resolver',   en: 'To resolve' },
+  'points.admin.filter.resolved':  { es: 'Resueltos',      en: 'Resolved' },
 
   'points.cat.trending':      { es: '🔥 Trending',            en: '🔥 Trending' },
   'points.cat.musica':        { es: '🎵 Música & Farándula',  en: '🎵 Music & Culture' },

@@ -27,7 +27,7 @@ export default async function handler(req, res) {
   const admin = requirePointsAdmin(req, res);
   if (!admin) return;
 
-  const filter = ['all', 'active', 'resolved'].includes(req.query.status) ? req.query.status : 'all';
+  const filter = ['all', 'active', 'pending', 'resolved'].includes(req.query.status) ? req.query.status : 'all';
 
   try {
     await ensurePointsSchema(schemaSql);
@@ -35,23 +35,42 @@ export default async function handler(req, res) {
     // their parent — hiding them here keeps the admin table uncluttered
     // for markets with many outcomes. Admin resolves the parent; the
     // resolve endpoint cascades to every leg.
-    const rows = filter === 'all'
-      ? await sql`
-          SELECT m.*,
-            (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id) AS trade_count
-          FROM points_markets m
-          WHERE m.parent_id IS NULL
-          ORDER BY m.created_at DESC
-          LIMIT 200
-        `
-      : await sql`
-          SELECT m.*,
-            (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id) AS trade_count
-          FROM points_markets m
-          WHERE m.status = ${filter} AND m.parent_id IS NULL
-          ORDER BY m.created_at DESC
-          LIMIT 200
-        `;
+    //
+    // filter=pending = markets whose trading window has closed but the
+    // outcome hasn't been set yet ("por resolver"). DB has no separate
+    // 'pending' state — it's just status='active' AND end_time < now().
+    let rows;
+    if (filter === 'all') {
+      rows = await sql`
+        SELECT m.*,
+          (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id) AS trade_count
+        FROM points_markets m
+        WHERE m.parent_id IS NULL
+        ORDER BY m.created_at DESC
+        LIMIT 200
+      `;
+    } else if (filter === 'pending') {
+      rows = await sql`
+        SELECT m.*,
+          (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id) AS trade_count
+        FROM points_markets m
+        WHERE m.status = 'active'
+          AND m.parent_id IS NULL
+          AND m.end_time IS NOT NULL
+          AND m.end_time < NOW()
+        ORDER BY m.end_time ASC
+        LIMIT 200
+      `;
+    } else {
+      rows = await sql`
+        SELECT m.*,
+          (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id) AS trade_count
+        FROM points_markets m
+        WHERE m.status = ${filter} AND m.parent_id IS NULL
+        ORDER BY m.created_at DESC
+        LIMIT 200
+      `;
+    }
 
     return res.status(200).json({
       markets: rows.map(r => ({

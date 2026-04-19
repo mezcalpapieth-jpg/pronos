@@ -938,22 +938,27 @@ function MarketsTable() {
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        {['all', 'active', 'resolved'].map(s => (
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        {[
+          { key: 'all',      label: 'Todos' },
+          { key: 'active',   label: 'Activos' },
+          { key: 'pending',  label: 'Por resolver' },
+          { key: 'resolved', label: 'Resueltos' },
+        ].map(s => (
           <button
-            key={s}
-            onClick={() => setFilter(s)}
+            key={s.key}
+            onClick={() => setFilter(s.key)}
             style={{
               padding: '6px 14px',
               borderRadius: 16,
-              border: `1px solid ${filter === s ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
-              background: filter === s ? 'rgba(0,232,122,0.1)' : 'transparent',
-              color: filter === s ? 'var(--green)' : 'var(--text-secondary)',
+              border: `1px solid ${filter === s.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
+              background: filter === s.key ? 'rgba(0,232,122,0.1)' : 'transparent',
+              color: filter === s.key ? 'var(--green)' : 'var(--text-secondary)',
               fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer',
               letterSpacing: '0.06em', textTransform: 'uppercase',
             }}
           >
-            {s === 'all' ? 'Todos' : s === 'active' ? 'Activos' : 'Resueltos'}
+            {s.label}
           </button>
         ))}
       </div>
