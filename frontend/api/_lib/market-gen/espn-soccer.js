@@ -67,7 +67,8 @@ function eventToSpec(ev, { leagueCode, leagueLabel }) {
     source: 'espn-soccer',
     // leagueCode namespaces the event id — stable across ESPN updates.
     source_event_id: `${leagueCode}:${ev.id}`,
-    question: `¿Quién gana ${homeName} vs ${awayName}?`,
+    // Match the football-data generator's bare "Home vs Away" format.
+    question: `${homeName} vs ${awayName}`,
     category: 'deportes',
     icon: '⚽',
     outcomes: [homeName, 'Empate', awayName],

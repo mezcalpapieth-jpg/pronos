@@ -156,7 +156,9 @@ function matchToMarketSpec(match, competitionCode) {
   return {
     source: 'football-data.org',
     source_event_id: String(match.id),
-    question: `¿Quién gana ${homeName} vs ${awayName}?`,
+    // Title format intentionally omits the "¿Quién gana ... ?" wrapper
+    // — teams + vs is enough, user-tested preference.
+    question: `${homeName} vs ${awayName}`,
     category: 'deportes',
     icon: '⚽',
     outcomes: [homeName, 'Empate', awayName],

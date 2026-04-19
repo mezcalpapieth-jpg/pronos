@@ -4,7 +4,10 @@
  * For each city in the whitelist we generate ONE parallel market per
  * day for tomorrow:
  *   Parent: "¿Temperatura máxima en {City} el {dd/mm/yyyy}?"
- *   Legs:   ["≤ 20°C", "21–26°C", "27–32°C", "≥ 33°C"]
+ *   Legs:   4 adaptive °C buckets centered on Open-Meteo's forecasted
+ *           high — e.g. forecast 33°C → [≤29°C / 30–31°C / 32–33°C /
+ *           ≥34°C]. Tighter spread means more balanced odds per leg
+ *           than the old fixed 6°C bands.
  *
  * Why parallel (not unified): matches the Polymarket weather pattern
  * Fran screenshotted earlier — each bucket is its own Sí/No market so
@@ -15,7 +18,7 @@
  * cron reads Open-Meteo for the forecast date, picks the matching
  * bucket, and cascades to every leg (winning bucket → Sí, others → No).
  */
-import { CITIES, BUCKETS, fetchMaxTempC } from '../weather.js';
+import { CITIES, adaptiveBuckets, fetchMaxTempC } from '../weather.js';
 
 function formatDateYmd(d) {
   const pad = (n) => String(n).padStart(2, '0');
@@ -42,11 +45,11 @@ export async function generateWeatherMarkets() {
   const endIso = end.toISOString();
 
   for (const city of CITIES) {
-    // Sanity-check the forecast is available before queuing a market.
-    // If Open-Meteo is down / returns garbage for this city, skip it so
-    // admin doesn't get a queue row we can't resolve later.
+    // Fetch the forecast both to probe availability AND to feed the
+    // adaptive bucket builder. Skip the city if Open-Meteo errors.
+    let forecastHighC;
     try {
-      await fetchMaxTempC({
+      forecastHighC = await fetchMaxTempC({
         lat: city.lat,
         lng: city.lng,
         dateYmd: forecastDateYmd,
@@ -59,13 +62,15 @@ export async function generateWeatherMarkets() {
       continue;
     }
 
+    const buckets = adaptiveBuckets(forecastHighC);
+
     specs.push({
       source: 'open-meteo',
       source_event_id: `weather:${city.key}:${forecastDateYmd}`,
       question: `¿Temperatura máxima en ${city.label} el ${forecastDateEs}?`,
       category: 'general',
       icon: '🌡️',
-      outcomes: BUCKETS.map(b => b.label),
+      outcomes: buckets.map(b => b.label),
       seed_liquidity: 1000,
       end_time: endIso,
       amm_mode: 'parallel',       // one binary per bucket
@@ -76,12 +81,14 @@ export async function generateWeatherMarkets() {
         lng: city.lng,
         timezone: city.tz,
         forecastDateYmd,
-        buckets: BUCKETS.map(b => ({ label: b.label, minC: b.minC, maxC: b.maxC })),
+        buckets: buckets.map(b => ({ label: b.label, minC: b.minC, maxC: b.maxC })),
+        forecastAtGeneration: forecastHighC,
       },
       source_data: {
         cityKey: city.key,
         cityLabel: city.label,
         forecastDateYmd,
+        forecastAtGeneration: forecastHighC,
         lat: city.lat,
         lng: city.lng,
       },
