@@ -20,26 +20,34 @@
 
 import { neon } from '@neondatabase/serverless';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
-import { generateSoccerMarkets }  from '../_lib/market-gen/soccer.js';
-import { generateCryptoMarkets }  from '../_lib/market-gen/crypto.js';
-import { generateStockMarkets }   from '../_lib/market-gen/stocks.js';
-import { generateWeatherMarkets } from '../_lib/market-gen/weather.js';
-import { generateMlbMarkets }     from '../_lib/market-gen/mlb.js';
-import { generateNbaMarkets }     from '../_lib/market-gen/nba.js';
-import { generateF1Markets }      from '../_lib/market-gen/f1.js';
+import { generateSoccerMarkets }      from '../_lib/market-gen/soccer.js';
+import { generateEspnSoccerMarkets }  from '../_lib/market-gen/espn-soccer.js';
+import { generateCryptoMarkets }      from '../_lib/market-gen/crypto.js';
+import { generateStockMarkets }       from '../_lib/market-gen/stocks.js';
+import { generateWeatherMarkets }     from '../_lib/market-gen/weather.js';
+import { generateMlbMarkets }         from '../_lib/market-gen/mlb.js';
+import { generateNbaMarkets }         from '../_lib/market-gen/nba.js';
+import { generateF1Markets }          from '../_lib/market-gen/f1.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
 // Registry of source-name → generator. Adding a new pipeline later is
 // a one-line push; the upsert loop doesn't care where specs come from.
+//
+// Note on Liga del Pacífico (baseball): lmp.mx's API path for the
+// schedule isn't guessable from the Angular bundle (routes are client-
+// side, not server). Since the LMP season runs Oct–Feb and we're past
+// it, wiring this up is deferred to October when we can open DevTools
+// on a live-game page and observe the actual XHR.
 const GENERATORS = [
-  { name: 'soccer',  run: generateSoccerMarkets  },
-  { name: 'crypto',  run: generateCryptoMarkets  },
-  { name: 'stocks',  run: generateStockMarkets   },
-  { name: 'weather', run: generateWeatherMarkets },
-  { name: 'mlb',     run: generateMlbMarkets     },
-  { name: 'nba',     run: generateNbaMarkets     },
-  { name: 'f1',      run: generateF1Markets      },
+  { name: 'soccer',       run: generateSoccerMarkets     },
+  { name: 'espn-soccer',  run: generateEspnSoccerMarkets },
+  { name: 'crypto',       run: generateCryptoMarkets     },
+  { name: 'stocks',       run: generateStockMarkets      },
+  { name: 'weather',      run: generateWeatherMarkets    },
+  { name: 'mlb',          run: generateMlbMarkets        },
+  { name: 'nba',          run: generateNbaMarkets        },
+  { name: 'f1',           run: generateF1Markets         },
 ];
 
 export default async function handler(req, res) {
