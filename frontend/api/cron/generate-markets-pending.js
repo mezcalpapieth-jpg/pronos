@@ -100,10 +100,17 @@ export default async function handler(req, res) {
       });
     }
 
-    // Upsert one row per spec. ON CONFLICT DO NOTHING keeps re-runs
-    // idempotent: same match tomorrow → noop. The unique index on
-    // (source, source_event_id) is enforced by the schema migration.
+    // Upsert one row per spec. Re-runs refresh any still-pending row
+    // in place — that way copy / bucket / end_time tweaks to generators
+    // propagate even when the admin hasn't clicked anything yet. The
+    // WHERE clause on the UPDATE path pins refresh to status='pending'
+    // so approved / rejected rows are frozen against further changes.
+    //
+    // The `xmax = 0` check in RETURNING is the canonical PG trick to
+    // tell an INSERT apart from an UPDATE — xmax is 0 for fresh rows,
+    // non-zero when the row was updated via ON CONFLICT.
     let inserted = 0;
+    let updated = 0;
     let skipped = 0;
     for (const s of allSpecs) {
       try {
@@ -126,11 +133,28 @@ export default async function handler(req, res) {
             ${s.resolver_type || null},
             ${s.resolver_config ? JSON.stringify(s.resolver_config) : null}::jsonb
           )
-          ON CONFLICT (source, source_event_id) DO NOTHING
-          RETURNING id
+          ON CONFLICT (source, source_event_id) DO UPDATE
+          SET source_data     = EXCLUDED.source_data,
+              question        = EXCLUDED.question,
+              category        = EXCLUDED.category,
+              icon            = EXCLUDED.icon,
+              outcomes        = EXCLUDED.outcomes,
+              seed_liquidity  = EXCLUDED.seed_liquidity,
+              end_time        = EXCLUDED.end_time,
+              amm_mode        = EXCLUDED.amm_mode,
+              resolver_type   = EXCLUDED.resolver_type,
+              resolver_config = EXCLUDED.resolver_config
+          WHERE points_pending_markets.status = 'pending'
+          RETURNING id, (xmax = 0) AS inserted
         `;
-        if (result.length > 0) inserted += 1;
-        else skipped += 1;
+        if (result.length > 0) {
+          if (result[0].inserted) inserted += 1;
+          else updated += 1;
+        } else {
+          // Conflict hit an approved/rejected row — WHERE blocked the
+          // update, so the row is untouched.
+          skipped += 1;
+        }
       } catch (e) {
         console.error('[cron/generate-markets-pending] insert failed', {
           source: s.source,
@@ -146,6 +170,7 @@ export default async function handler(req, res) {
       sources: sourceStats,
       total: allSpecs.length,
       inserted,
+      updated,
       skipped,
       elapsedMs: Date.now() - started,
     });
