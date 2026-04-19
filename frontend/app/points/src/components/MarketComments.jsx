@@ -10,6 +10,7 @@
  */
 import React, { useEffect, useState, useCallback } from 'react';
 import { fetchComments, postComment, deleteComment } from '../lib/pointsApi.js';
+import { useT } from '@app/lib/i18n.js';
 
 const MAX_BODY = 1000;
 
@@ -25,6 +26,7 @@ function formatAgo(iso) {
 }
 
 export default function MarketComments({ marketId, authenticated, username, onOpenLogin }) {
+  const t = useT();
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [body, setBody] = useState('');
@@ -67,12 +69,12 @@ export default function MarketComments({ marketId, authenticated, username, onOp
   }
 
   async function handleDelete(id) {
-    if (!confirm('¿Eliminar este comentario?')) return;
+    if (!confirm(t('points.comments.confirmDelete'))) return;
     try {
       await deleteComment(id);
       setComments(prev => prev.filter(c => c.id !== id));
     } catch (e) {
-      alert(`No se pudo eliminar: ${e.code || e.message}`);
+      alert(t('points.comments.deleteFail', { err: e.code || e.message }));
     }
   }
 
@@ -97,14 +99,14 @@ export default function MarketComments({ marketId, authenticated, username, onOp
           color: 'var(--text-muted)',
           textTransform: 'uppercase',
         }}>
-          Comentarios
+          {t('points.comments.title')}
         </div>
         <div style={{
           fontFamily: 'var(--font-mono)',
           fontSize: 10,
           color: 'var(--text-muted)',
         }}>
-          {loading ? '…' : `${comments.length} ${comments.length === 1 ? 'mensaje' : 'mensajes'}`}
+          {loading ? '…' : t(comments.length === 1 ? 'points.comments.one' : 'points.comments.many', { n: comments.length })}
         </div>
       </div>
 
@@ -116,8 +118,8 @@ export default function MarketComments({ marketId, authenticated, username, onOp
           rows={2}
           maxLength={MAX_BODY}
           placeholder={authenticated
-            ? 'Comparte tu análisis o pregunta…'
-            : 'Inicia sesión para comentar.'}
+            ? t('points.comments.placeholderAuth')
+            : t('points.comments.placeholderAnon')}
           disabled={!authenticated || submitting}
           style={{
             width: '100%',
@@ -153,7 +155,7 @@ export default function MarketComments({ marketId, authenticated, username, onOp
               className="btn-primary"
               style={{ padding: '8px 14px', fontSize: 11 }}
             >
-              Iniciar sesión
+              {t('points.comments.login')}
             </button>
           ) : (
             <button
@@ -162,7 +164,7 @@ export default function MarketComments({ marketId, authenticated, username, onOp
               className="btn-primary"
               style={{ padding: '8px 14px', fontSize: 11, opacity: (submitting || body.trim().length === 0) ? 0.5 : 1 }}
             >
-              {submitting ? 'Publicando…' : 'Publicar'}
+              {submitting ? t('points.comments.posting') : t('points.comments.post')}
             </button>
           )}
         </div>
@@ -181,11 +183,11 @@ export default function MarketComments({ marketId, authenticated, username, onOp
       {/* Feed */}
       {loading ? (
         <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)' }}>
-          Cargando comentarios…
+          {t('points.comments.loading')}
         </p>
       ) : comments.length === 0 ? (
         <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)' }}>
-          Aún no hay comentarios. Sé el primero.
+          {t('points.comments.empty')}
         </p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -239,9 +241,9 @@ export default function MarketComments({ marketId, authenticated, username, onOp
                       padding: 0,
                       letterSpacing: '0.04em',
                     }}
-                    title="Eliminar comentario"
+                    title={t('points.comments.confirmDelete')}
                   >
-                    eliminar
+                    {t('points.comments.delete')}
                   </button>
                 )}
               </header>

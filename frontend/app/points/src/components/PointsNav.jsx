@@ -302,14 +302,31 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
 
         {/* Language toggle — flag shows the language you'd switch TO.
             Current ES → 🇺🇸 (click to go English); current EN → 🇲🇽 (go
-            back to Spanish). Same placement as MVP so the control is
-            familiar across apps. */}
+            back to Spanish). Intentionally NOT reusing .btn-theme-toggle
+            — that class renders a ::before 🌙/☀️ pseudo-element which
+            would stack on top of the flag. Inline styles mirror the
+            theme-toggle's shape without the pseudo content. */}
         <button
-          className="btn-theme-toggle"
           onClick={() => setLang(lang === 'es' ? 'en' : 'es')}
           title={lang === 'es' ? 'Switch to English' : 'Cambiar a español'}
           aria-label={t('points.nav.lang')}
-          style={{ fontSize: 16, lineHeight: 1 }}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 34,
+            height: 34,
+            borderRadius: '50%',
+            border: '1px solid var(--border)',
+            background: 'var(--surface2)',
+            cursor: 'pointer',
+            fontSize: 16,
+            lineHeight: 1,
+            flexShrink: 0,
+            transition: 'background 0.2s, border-color 0.2s',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface3)'; e.currentTarget.style.borderColor = 'var(--border-active)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface2)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
         >
           {lang === 'es' ? '🇺🇸' : '🇲🇽'}
         </button>

@@ -7,8 +7,10 @@
  */
 import React, { useEffect, useState } from 'react';
 import { fetchTopHolders } from '../lib/pointsApi.js';
+import { useT } from '@app/lib/i18n.js';
 
 export default function TopHolders({ marketId, refreshKey }) {
+  const t = useT();
   const [holders, setHolders] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -47,12 +49,12 @@ export default function TopHolders({ marketId, refreshKey }) {
         textTransform: 'uppercase',
         marginBottom: 12,
       }}>
-        Top holders
+        {t('points.top.title')}
       </div>
 
       {loading ? (
         <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>
-          Cargando…
+          {t('points.top.loading')}
         </p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

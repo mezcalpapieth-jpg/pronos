@@ -12,6 +12,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchMarket, fetchPriceHistory, fetchPositions } from '../lib/pointsApi.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
+import { useT } from '@app/lib/i18n.js';
 import Sparkline from '@app/components/Sparkline.jsx';
 import PointsBuyModal from '../components/PointsBuyModal.jsx';
 import MarketComments from '../components/MarketComments.jsx';
@@ -312,6 +313,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   const [searchParams] = useSearchParams();
   const id = searchParams.get('id');
   const { authenticated, user } = usePointsAuth();
+  const t = useT();
 
   const [market, setMarket] = useState(null);
   // historyByOutcome[i] = [{t, p}] for outcome i. Populated for every
@@ -409,7 +411,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
         fontFamily: 'var(--font-mono)', fontSize: 12,
         letterSpacing: '0.1em', color: 'var(--text-muted)',
       }}>
-        Cargando mercado…
+        {t('points.detail.loading')}
       </div>
     );
   }
@@ -418,9 +420,9 @@ export default function PointsMarketDetail({ onOpenLogin }) {
     return (
       <div style={{ textAlign: 'center', padding: '100px 48px' }}>
         <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 32, color: 'var(--text-primary)', marginBottom: 16 }}>
-          Mercado no encontrado
+          {t('points.detail.marketNotFound')}
         </h2>
-        <button className="btn-ghost" onClick={() => navigate('/')}>← Volver</button>
+        <button className="btn-ghost" onClick={() => navigate('/')}>{t('points.detail.back')}</button>
       </div>
     );
   }
@@ -450,7 +452,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
             marginBottom: 24,
           }}
         >
-          ← MERCADOS
+          {t('points.detail.backToMarkets')}
         </button>
 
         <div style={{
@@ -471,10 +473,10 @@ export default function PointsMarketDetail({ onOpenLogin }) {
             }}>
               {market.icon && `${market.icon} `}{market.category || 'General'}
               {isResolved && (
-                <span style={{ marginLeft: 12, color: 'var(--green)' }}>· RESUELTO</span>
+                <span style={{ marginLeft: 12, color: 'var(--green)' }}>{t('points.detail.resolvedBadge')}</span>
               )}
               {isPendingResolution && !isResolved && (
-                <span style={{ marginLeft: 12, color: '#f59e0b' }}>· ⏳ PENDIENTE</span>
+                <span style={{ marginLeft: 12, color: '#f59e0b' }}>{t('points.detail.pendingBadge')}</span>
               )}
             </div>
 
@@ -510,22 +512,22 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                   {isResolved ? (
                     <>
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 8 }}>
-                        RESULTADO OFICIAL
+                        {t('points.detail.resultOfficial')}
                       </div>
                       <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--green)' }}>
                         🏆 {outcomes[winnerIndex]}
                       </div>
                       <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 8 }}>
-                        Los ganadores pueden reclamar 1 MXNP por cada acción.
+                        {t('points.detail.redeemInstructions')}
                       </p>
                     </>
                   ) : (
                     <>
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 8 }}>
-                        PROBABILIDAD ACTUAL · SÍ
+                        {t('points.detail.probNow')}
                       </div>
                       <p style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.6 }}>
-                        La probabilidad se ajusta con cada trade. Compra más barato cuando hay desacuerdo, más caro cuando hay consenso.
+                        {t('points.detail.probExplain')}
                       </p>
                     </>
                   )}
@@ -555,8 +557,8 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 letterSpacing: '0.1em',
                 color: 'var(--text-muted)',
               }}>
-                <span>{isResolved ? 'HISTORIAL DE PRECIO' : 'PRECIO EN TIEMPO REAL'}</span>
-                <span>ÚLT. 30 DÍAS</span>
+                <span>{isResolved ? t('points.detail.priceHistory') : t('points.detail.priceRealtime')}</span>
+                <span>{t('points.detail.last30d')}</span>
               </div>
               <div style={{ padding: '20px 20px 18px' }}>
                 {/* One sparkline per outcome. For binary markets we show
@@ -622,7 +624,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                   textTransform: 'uppercase',
                   marginBottom: 12,
                 }}>
-                  Opciones · elige Sí o No
+                  {t('points.detail.optionsVote')}
                 </div>
                 <ParallelLegList
                   market={market}
@@ -687,7 +689,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
             }}>
               <div>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 4 }}>
-                  {isResolved ? 'CERRÓ' : 'CIERRA'}
+                  {isResolved ? t('points.detail.closedLabel') : t('points.detail.closesLabel')}
                 </div>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-primary)' }}>
                   {formatDeadline(market.endTime)}
@@ -695,7 +697,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               </div>
               <div>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 4 }}>
-                  VOLUMEN
+                  {t('points.detail.volumeLabel')}
                 </div>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-primary)' }}>
                   {Number(market.tradeVolume || market.volume || 0).toLocaleString('es-MX')} MXNP
@@ -703,10 +705,12 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               </div>
               <div>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 4 }}>
-                  ESTADO
+                  {t('points.detail.stateLabel')}
                 </div>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: isResolved ? 'var(--green)' : isPendingResolution ? '#f59e0b' : 'var(--text-primary)' }}>
-                  {isResolved ? 'RESUELTO' : isPendingResolution ? 'PENDIENTE' : 'ACTIVO'}
+                  {isResolved ? t('points.detail.stateResolved')
+                   : isPendingResolution ? t('points.detail.statePending')
+                   : t('points.detail.stateActive')}
                 </div>
               </div>
             </div>
@@ -743,7 +747,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                   textTransform: 'uppercase',
                   marginBottom: 12,
                 }}>
-                  Tu posición
+                  {t('points.detail.yourPos')}
                 </div>
                 {userPositions.map(p => {
                   const oi = Number(p.outcomeIndex);
@@ -788,12 +792,12 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                           fontSize: 12,
                           color: 'var(--text-muted)',
                         }}>
-                          {shares.toFixed(2)} acciones
+                          {t('points.detail.shares', { n: shares.toFixed(2) })}
                         </span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
                         <span style={{ color: 'var(--text-muted)' }}>
-                          Valor: <span style={{ color: 'var(--text-primary)' }}>{markValue.toFixed(2)} MXNP</span>
+                          {t('points.detail.valueLabel')}: <span style={{ color: 'var(--text-primary)' }}>{markValue.toFixed(2)} MXNP</span>
                         </span>
                         <span style={{ color: pnlPos ? 'var(--green)' : 'var(--red, #ef4444)' }}>
                           {pnlPos ? '+' : ''}{pnl.toFixed(2)} PnL
@@ -806,7 +810,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                             className="btn-primary"
                             style={{ flex: 1, padding: '8px 10px', fontSize: 11 }}
                           >
-                            Comprar más
+                            {t('points.detail.buyMore')}
                           </button>
                           <button
                             onClick={() => navigate('/portfolio')}
@@ -824,7 +828,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                               cursor: 'pointer',
                             }}
                           >
-                            Vender
+                            {t('points.detail.sell')}
                           </button>
                         </div>
                       )}
@@ -853,10 +857,10 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               textTransform: 'uppercase',
               marginBottom: 16,
             }}>
-              {isResolved ? 'Mercado cerrado'
-               : isPendingResolution ? 'Esperando resolución'
-               : market.ammMode === 'parallel' ? 'Odds actuales'
-               : 'Elige un resultado'}
+              {isResolved ? t('points.detail.marketClosed')
+               : isPendingResolution ? t('points.detail.awaitingResult')
+               : market.ammMode === 'parallel' ? t('points.detail.oddsNow')
+               : t('points.detail.chooseOutcome')}
             </div>
 
             {/* Unified: one big button per outcome lives in the sidebar.
@@ -877,8 +881,8 @@ export default function PointsMarketDetail({ onOpenLogin }) {
             {(isResolved || isPendingResolution) && (
               <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
                 {isResolved
-                  ? 'Este mercado ya cerró. Los ganadores pueden reclamar su pago en el portafolio.'
-                  : 'Las inversiones están cerradas. El resultado se publicará pronto.'}
+                  ? t('points.detail.closedHint')
+                  : t('points.detail.pendingHint')}
               </p>
             )}
 
@@ -892,7 +896,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               letterSpacing: '0.04em',
               lineHeight: 1.6,
             }}>
-              💡 MXNP son puntos de la competencia. Los Top 10 del leaderboard quincenal reciben premios en efectivo.
+              {t('points.detail.mxnpNote')}
             </div>
           </div>
           </aside>

@@ -445,20 +445,20 @@ export default function PointsHome({ onOpenLogin }) {
         borderTop: '1px solid var(--border)',
       }}>
         <div className="section-header" style={{ textAlign: 'center', marginBottom: 48 }}>
-          <div className="section-eyebrow">Simple · Rápido · Justo</div>
-          <div className="section-title">Cómo funciona</div>
+          <div className="section-eyebrow">{t('points.how.eyebrow')}</div>
+          <div className="section-title">{t('points.how.title')}</div>
         </div>
 
         <div className="steps-grid">
           {[
-            { n: '01', t: 'Crea tu cuenta',    d: 'Email + código. Nada más. Recibes 500 MXNP de bienvenida.' },
-            { n: '02', t: 'Predice eventos',   d: 'Compra acciones en mercados de deportes, política, crypto y más. Los precios se mueven con la demanda.' },
-            { n: '03', t: 'Gana premios reales', d: 'Acumula MXNP acertando predicciones. Los Top 10 del leaderboard quincenal reciben premios en efectivo.' },
+            { n: '01', tKey: 'points.how.step1.t', dKey: 'points.how.step1.d' },
+            { n: '02', tKey: 'points.how.step2.t', dKey: 'points.how.step2.d' },
+            { n: '03', tKey: 'points.how.step3.t', dKey: 'points.how.step3.d' },
           ].map(s => (
             <div key={s.n} className="step">
               <div className="step-num">{s.n}</div>
-              <div className="step-title">{s.t}</div>
-              <p className="step-desc">{s.d}</p>
+              <div className="step-title">{t(s.tKey)}</div>
+              <p className="step-desc">{t(s.dKey)}</p>
             </div>
           ))}
         </div>
@@ -478,8 +478,8 @@ export default function PointsHome({ onOpenLogin }) {
         borderTop: '1px solid var(--border)',
       }}>
         <div className="section-header" style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div className="section-eyebrow">Construido con</div>
-          <div className="section-title">Partners</div>
+          <div className="section-eyebrow">{t('points.partners.eyebrow')}</div>
+          <div className="section-title">{t('points.partners.title')}</div>
         </div>
 
         <div style={{
@@ -490,30 +490,10 @@ export default function PointsHome({ onOpenLogin }) {
           margin: '0 auto',
         }}>
           {[
-            {
-              name: 'Turnkey',
-              role: 'Wallet & auth infra',
-              href: 'https://turnkey.com',
-              description: 'Custodia segura y auth con email.',
-            },
-            {
-              name: 'Bitso',
-              role: 'Exchange · LATAM',
-              href: 'https://bitso.com',
-              description: 'Rampa de entrada y salida en pesos.',
-            },
-            {
-              name: 'MXNB',
-              role: 'Stablecoin peso',
-              href: 'https://mxnb.mx',
-              description: 'Peso mexicano pegged on-chain.',
-            },
-            {
-              name: 'Chainlink',
-              role: 'Oráculos & precios',
-              href: 'https://chain.link',
-              description: 'Feeds de precios y datos verificados para resolución de mercados.',
-            },
+            { name: 'Turnkey',   href: 'https://turnkey.com', role: t('points.partners.turnkey.role'),   description: t('points.partners.turnkey.desc') },
+            { name: 'Bitso',     href: 'https://bitso.com',   role: t('points.partners.bitso.role'),     description: t('points.partners.bitso.desc') },
+            { name: 'MXNB',      href: 'https://mxnb.mx',     role: t('points.partners.mxnb.role'),      description: t('points.partners.mxnb.desc') },
+            { name: 'Chainlink', href: 'https://chain.link',  role: t('points.partners.chainlink.role'), description: t('points.partners.chainlink.desc') },
           ].map(p => (
             <a
               key={p.name}
