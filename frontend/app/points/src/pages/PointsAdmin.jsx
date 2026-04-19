@@ -20,6 +20,8 @@ import {
   adminListCycles,
   adminRolloverCycle,
   adminEditMarket,
+  adminListPendingMarkets,
+  adminReviewPendingMarket,
 } from '../lib/pointsApi.js';
 
 const CATEGORIES = [
@@ -159,6 +161,7 @@ export default function PointsAdmin({ isAdmin }) {
       <div style={{ display: 'flex', gap: 4, marginBottom: 28, borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
         {[
           { id: 'create',  label: 'Crear mercado' },
+          { id: 'pending', label: 'Por aprobar' },
           { id: 'markets', label: 'Mercados' },
           { id: 'social',  label: 'Tareas sociales' },
           { id: 'cycles',  label: 'Ciclos' },
@@ -185,6 +188,7 @@ export default function PointsAdmin({ isAdmin }) {
       </div>
 
       {tab === 'create' && <CreateMarketForm />}
+      {tab === 'pending' && <PendingMarketsTable />}
       {tab === 'markets' && <MarketsTable />}
       {tab === 'social' && <SocialTasksQueue />}
       {tab === 'cycles' && <CyclesPanel />}
@@ -1427,6 +1431,196 @@ function StatCard({ label, value }) {
       <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--text-primary)' }}>
         {value}
       </div>
+    </div>
+  );
+}
+
+// ─── Pending markets (agent queue) ──────────────────────────────────────────
+// Daily cron (generate-markets-pending) drops rows into
+// points_pending_markets. Admin triages them here: Aprobar copies the
+// spec into points_markets via the API; Rechazar just marks the row so
+// re-runs of the generator skip the same source_event_id.
+function PendingMarketsTable() {
+  const [rows, setRows] = useState(null);
+  const [filter, setFilter] = useState('pending');
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState(null);
+  const [err, setErr] = useState(null);
+
+  async function load() {
+    setLoading(true);
+    setErr(null);
+    try {
+      const r = await adminListPendingMarkets(filter);
+      setRows(r.pending || []);
+    } catch (e) {
+      setRows([]);
+      setErr(e.code || e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [filter]);
+
+  async function review(id, action) {
+    setBusyId(id);
+    try {
+      await adminReviewPendingMarket(id, action, null);
+      await load();
+    } catch (e) {
+      alert(`${action} falló: ${e.code || e.message}`);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function formatWhen(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleString('es-MX', {
+      day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+    });
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        {[
+          { key: 'pending',  label: 'Pendientes' },
+          { key: 'approved', label: 'Aprobados' },
+          { key: 'rejected', label: 'Rechazados' },
+          { key: 'all',      label: 'Todos' },
+        ].map(s => (
+          <button
+            key={s.key}
+            onClick={() => setFilter(s.key)}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 16,
+              border: `1px solid ${filter === s.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
+              background: filter === s.key ? 'rgba(0,232,122,0.1)' : 'transparent',
+              color: filter === s.key ? 'var(--green)' : 'var(--text-secondary)',
+              fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer',
+              letterSpacing: '0.06em', textTransform: 'uppercase',
+            }}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.6 }}>
+        El agente (cron diario <code>/api/cron/generate-markets-pending</code>) descubre eventos
+        y los deja aquí para revisión. Aprobar crea el mercado con seed 1000 MXNP usando el
+        modo AMM sugerido. Rechazar lo deja marcado — la siguiente corrida lo omite por
+        <code> (source, source_event_id)</code>.
+      </p>
+
+      {loading && <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Cargando…</p>}
+      {err && (
+        <p style={{ color: 'var(--red, #ef4444)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+          Error: {err}
+        </p>
+      )}
+      {!loading && rows?.length === 0 && (
+        <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+          Nada en esta lista.
+        </p>
+      )}
+
+      {!loading && rows?.map(r => {
+        const isPending = r.status === 'pending';
+        return (
+          <div key={r.id} style={{
+            background: 'var(--surface1)',
+            border: '1px solid var(--border)',
+            borderRadius: 10,
+            padding: '14px 18px',
+            marginBottom: 10,
+          }}>
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+              gap: 12, marginBottom: 8,
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)',
+                  letterSpacing: '0.04em', marginBottom: 4, textTransform: 'uppercase',
+                }}>
+                  #{r.id} · {r.source} · {r.category} · {r.ammMode}
+                  {r.sourceData?.competitionName && <> · {r.sourceData.competitionName}</>}
+                  {r.resolverType && <> · resolver: {r.resolverType}</>}
+                </div>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.35 }}>
+                  {r.icon && <span style={{ marginRight: 6 }}>{r.icon}</span>}
+                  {r.question}
+                </div>
+                <div style={{
+                  fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)',
+                  marginTop: 4, letterSpacing: '0.04em',
+                }}>
+                  Opciones: {Array.isArray(r.outcomes) ? r.outcomes.join(' · ') : '—'}
+                  {' · Cierra: '}{formatWhen(r.endTime)}
+                  {' · Seed: '}{r.seedLiquidity} MXNP
+                </div>
+              </div>
+
+              {isPending ? (
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    onClick={() => review(r.id, 'approve')}
+                    disabled={busyId === r.id}
+                    style={{
+                      padding: '6px 12px',
+                      background: 'rgba(0,232,122,0.12)',
+                      border: '1px solid rgba(0,232,122,0.4)',
+                      borderRadius: 8,
+                      color: 'var(--green)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 11, letterSpacing: '0.04em',
+                      textTransform: 'uppercase',
+                      cursor: busyId === r.id ? 'not-allowed' : 'pointer',
+                      opacity: busyId === r.id ? 0.5 : 1,
+                    }}
+                  >
+                    Aprobar
+                  </button>
+                  <button
+                    onClick={() => review(r.id, 'reject')}
+                    disabled={busyId === r.id}
+                    style={{
+                      padding: '6px 12px',
+                      background: 'transparent',
+                      border: '1px solid var(--border)',
+                      borderRadius: 8,
+                      color: 'var(--text-muted)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 11, letterSpacing: '0.04em',
+                      textTransform: 'uppercase',
+                      cursor: busyId === r.id ? 'not-allowed' : 'pointer',
+                      opacity: busyId === r.id ? 0.5 : 1,
+                    }}
+                  >
+                    Rechazar
+                  </button>
+                </div>
+              ) : (
+                <span style={{
+                  fontFamily: 'var(--font-mono)', fontSize: 10,
+                  color: r.status === 'approved' ? 'var(--green)' : 'var(--text-muted)',
+                  letterSpacing: '0.04em', textTransform: 'uppercase',
+                }}>
+                  {r.status === 'approved'
+                    ? `✓ Aprobado · #${r.approvedMarketId}`
+                    : '✗ Rechazado'}
+                  {r.reviewer && <> · @{r.reviewer}</>}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

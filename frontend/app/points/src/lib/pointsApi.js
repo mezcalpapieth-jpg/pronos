@@ -180,6 +180,15 @@ export async function fetchTopHolders(marketId, { limit = 10 } = {}) {
   );
 }
 
+// ─── Admin — pending markets (agent-generated queue) ───────────────────────
+export async function adminListPendingMarkets(status = 'pending') {
+  return getJson(`/api/points/admin/pending-markets?status=${encodeURIComponent(status)}`);
+}
+
+export async function adminReviewPendingMarket(id, action, note) {
+  return postJson('/api/points/admin/pending-markets', { id, action, note });
+}
+
 // ─── Admin — edit market (question + end time + category) ──────────────────
 export async function adminEditMarket({ marketId, question, endTime, category }) {
   return postJson('/api/points/admin/edit-market', { marketId, question, endTime, category });

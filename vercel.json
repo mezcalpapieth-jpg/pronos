@@ -16,6 +16,10 @@
     {
       "path": "/api/cron/points-snapshot-prices",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/generate-markets-pending",
+      "schedule": "0 15 * * *"
     }
   ],
   "rewrites": [

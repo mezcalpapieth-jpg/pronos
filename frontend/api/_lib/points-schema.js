@@ -231,6 +231,49 @@ const POINTS_SCHEMA_MIGRATIONS = [
     ON points_comments(market_id, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_points_comments_user
     ON points_comments(username, created_at DESC)`,
+
+  // ── Resolver metadata on points_markets ───────────────────────────────────
+  // resolver_type  = 'manual' (default, admin resolves) | 'chainlink_price'
+  //                  (auto-settle via a Chainlink price feed at close) |
+  //                  'sports_api' (auto-settle from the generator's source).
+  // resolver_config = opaque JSONB that varies per resolver. For
+  //   chainlink_price: { feedId, feedAddress, chainId, threshold, op: 'gt'|'lt'|'gte'|'lte' }
+  //   sports_api: { source: 'football-data.org', matchId, scorePath }
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS resolver_type TEXT`,
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS resolver_config JSONB`,
+
+  // ── Pending markets (agent-generated, awaiting admin approval) ────────────
+  // The daily generator cron writes one row here per discovered event. The
+  // admin queue UI reads live rows; approving copies the spec into
+  // points_markets (+resolver_type/resolver_config) and marks the row
+  // 'approved'. Rejecting marks 'rejected'. A UNIQUE index on (source,
+  // source_event_id) keeps re-runs idempotent — re-generating the same
+  // match tomorrow is a no-op, so the queue doesn't fill up.
+  `CREATE TABLE IF NOT EXISTS points_pending_markets (
+    id                SERIAL PRIMARY KEY,
+    source            TEXT NOT NULL,
+    source_event_id   TEXT NOT NULL,
+    source_data       JSONB,
+    question          TEXT NOT NULL,
+    category          TEXT NOT NULL,
+    icon              TEXT,
+    outcomes          JSONB NOT NULL,
+    seed_liquidity    NUMERIC(20,6) NOT NULL DEFAULT 1000,
+    end_time          TIMESTAMPTZ NOT NULL,
+    amm_mode          TEXT NOT NULL DEFAULT 'unified',
+    resolver_type     TEXT,
+    resolver_config   JSONB,
+    status            TEXT NOT NULL DEFAULT 'pending',
+    admin_note        TEXT,
+    reviewer          TEXT,
+    reviewed_at       TIMESTAMPTZ,
+    approved_market_id INTEGER REFERENCES points_markets(id),
+    created_at        TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_points_pending_source_event
+    ON points_pending_markets(source, source_event_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_pending_status
+    ON points_pending_markets(status, end_time ASC)`,
 ];
 
 // PostgreSQL error codes we treat as idempotent no-ops during migration.
