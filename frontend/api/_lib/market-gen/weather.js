@@ -68,7 +68,10 @@ export async function generateWeatherMarkets() {
       source: 'open-meteo',
       source_event_id: `weather:${city.key}:${forecastDateYmd}`,
       question: `¿Temperatura máxima en ${city.label} el ${forecastDateEs}?`,
-      category: 'general',
+      // Filed under 'mexico' so the tab on home surfaces these; the
+      // 'general' category we used earlier doesn't map to any home
+      // filter, so those markets only ever appeared under Trending.
+      category: 'mexico',
       icon: '🌡️',
       outcomes: buckets.map(b => b.label),
       seed_liquidity: 1000,
