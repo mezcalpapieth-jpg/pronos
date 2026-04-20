@@ -527,7 +527,7 @@ if (window.location.hash === '#waitlist') openWaitlistModal();
     <h2 style="font-family:var(--font-display);font-size:clamp(22px,5vw,30px);letter-spacing:0.04em;color:var(--text-primary);line-height:1.15;margin-bottom:14px;">El primer mercado de<br>predicciones de Latinoamérica.</h2>
     <p style="font-family:var(--font-body);font-size:14px;color:var(--text-muted);line-height:1.7;margin-bottom:32px;">Predice el futuro de deportes, política y cultura. Gana MXNB si aciertas — liquidado on-chain, sin intermediarios.</p>
     <!-- Primary CTA -->
-    <button onclick="window.open('https://tally.so/r/1AMZDg','_blank');document.getElementById('welcome-overlay').style.display='none';localStorage.setItem('pronos-welcomed','1');" style="width:100%;padding:15px 0;background:var(--green);color:#fff;font-family:var(--font-display);font-size:18px;letter-spacing:0.08em;border:none;border-radius:10px;cursor:pointer;margin-bottom:12px;transition:filter 0.15s;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter=''">
+    <button onclick="document.getElementById('welcome-overlay').style.display='none';localStorage.setItem('pronos-welcomed','1');openWaitlistModal();" style="width:100%;padding:15px 0;background:var(--green);color:#fff;font-family:var(--font-display);font-size:18px;letter-spacing:0.08em;border:none;border-radius:10px;cursor:pointer;margin-bottom:12px;transition:filter 0.15s;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter=''">
       ÚNETE A LA LISTA
     </button>
     <!-- Secondary CTA -->
