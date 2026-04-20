@@ -29,6 +29,8 @@ import { readFinnhubQuote } from '../_lib/stockprice.js';
 import { readBanxicoLatest } from '../_lib/banxico.js';
 import { readCreAverageFor } from '../_lib/fuel.js';
 import { fetchMaxTempC, bucketIndexFor } from '../_lib/weather.js';
+import { readAppleMxTopArtist } from '../_lib/charts.js';
+import { readYouTubeTopMxChannel } from '../_lib/youtube.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql   = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -68,7 +70,7 @@ export default async function handler(req, res) {
              outcomes, amm_mode
       FROM points_markets
       WHERE status = 'active'
-        AND resolver_type IN ('chainlink_price', 'api_price', 'weather_api')
+        AND resolver_type IN ('chainlink_price', 'api_price', 'weather_api', 'api_chart')
         AND end_time IS NOT NULL
         AND end_time < NOW()
         AND parent_id IS NULL
@@ -162,6 +164,51 @@ export default async function handler(req, res) {
           if (winningIdx < 0) winningIdx = bucketIndexFor(tempC); // fallback
           if (winningIdx < 0) throw new Error(`temp ${tempC}°C didn't fit any bucket`);
           resolverInfo = { recordedMaxC: tempC, forecastDateYmd: cfg.forecastDateYmd };
+        } else if (m.resolver_type === 'api_chart') {
+          // Parallel music / trending markets. Each leg has a match
+          // rule; the "Otro" leg's rule is all-null and wins when no
+          // listed leg matches the current #1.
+          if (!Array.isArray(cfg.legs) || cfg.legs.length === 0) {
+            throw new Error('invalid api_chart config: missing legs');
+          }
+          let pickWinnerIdx;
+          let readerEcho;
+
+          if (cfg.source === 'apple-mx-songs') {
+            const top = await readAppleMxTopArtist();
+            const needle = (top.artist || '').toLowerCase().trim();
+            pickWinnerIdx = cfg.legs.findIndex(l =>
+              l.artist && String(l.artist).toLowerCase().trim() === needle,
+            );
+            readerEcho = { topArtist: top.artist, topTrack: top.trackName };
+          } else if (cfg.source === 'youtube-trending-mx') {
+            const top = await readYouTubeTopMxChannel();
+            // Prefer channelId match (stable); fall back to display name.
+            const idNeedle = (top.channelId || '').trim();
+            const nameNeedle = (top.channel || '').toLowerCase().trim();
+            pickWinnerIdx = cfg.legs.findIndex(l => {
+              if (l.channelId && String(l.channelId).trim() === idNeedle) return true;
+              if (l.channel && String(l.channel).toLowerCase().trim() === nameNeedle) return true;
+              return false;
+            });
+            readerEcho = { topChannel: top.channel, topTitle: top.title };
+          } else {
+            throw new Error(`unsupported api_chart source: ${cfg.source}`);
+          }
+
+          if (pickWinnerIdx < 0) {
+            // Fall back to "Otro" — the first leg whose match rule is
+            // all-null. If no Otro leg exists the market is malformed
+            // and we surface that as an error rather than pick arbitrarily.
+            pickWinnerIdx = cfg.legs.findIndex(l =>
+              !l.artist && !l.channel && !l.channelId,
+            );
+            if (pickWinnerIdx < 0) {
+              throw new Error('no matching leg and no Otro fallback configured');
+            }
+          }
+          winningIdx = pickWinnerIdx;
+          resolverInfo = { source: cfg.source, ...readerEcho };
         } else {
           throw new Error(`unknown resolver_type: ${m.resolver_type}`);
         }
