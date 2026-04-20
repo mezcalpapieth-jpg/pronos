@@ -62,8 +62,13 @@ function eventToSpec(ev, { leagueCode, leagueLabel }) {
   const awayName = away?.team?.displayName;
   if (!homeName || !awayName) return null;
 
-  const endTime = new Date(new Date(kickoff).getTime() - 2 * 60_000).toISOString();
-  const dateYmd = new Date(kickoff).toISOString().slice(0, 10);
+  // 3h padding past kickoff — same rationale as the football-data
+  // generator (90' play + halftime + stoppage + buffer). Auto-resolver
+  // waits for ESPN's `completed=true` anyway.
+  const kickoffMs = new Date(kickoff).getTime();
+  const startTime = new Date(kickoffMs).toISOString();
+  const endTime   = new Date(kickoffMs + 3 * 3600_000).toISOString();
+  const dateYmd   = new Date(kickoff).toISOString().slice(0, 10);
   return {
     source: 'espn-soccer',
     // leagueCode namespaces the event id — stable across ESPN updates.
@@ -74,6 +79,7 @@ function eventToSpec(ev, { leagueCode, leagueLabel }) {
     icon: '⚽',
     outcomes: [homeName, 'Empate', awayName],
     seed_liquidity: 1000,
+    start_time: startTime,
     end_time: endTime,
     amm_mode: 'unified',          // 3-way W/D/L → unified CPMM
     resolver_type: 'sports_api',  // auto via ESPN soccer scoreboard

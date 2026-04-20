@@ -455,7 +455,21 @@ export default function PointsMarketDetail({ onOpenLogin }) {
     : outcomes.map((_, i) => (i === 0 ? 0.5 : 1 / outcomes.length));
   const winnerIndex = market.status === 'resolved' ? Number(market.outcome) : null;
   const isResolved = winnerIndex != null;
-  const isPendingResolution = market.status === 'active' && market.endTime && new Date(market.endTime) < new Date();
+  // isLive wins over isPendingResolution when start_time has passed
+  // but end_time hasn't — the game is in progress and trading stays
+  // open. Only sports markets set start_time; everything else falls
+  // back to isPendingResolution semantics.
+  const _now = new Date();
+  const isLive = !isResolved
+    && market.status === 'active'
+    && market.startTime
+    && new Date(market.startTime) <= _now
+    && (!market.endTime || new Date(market.endTime) > _now);
+  const isPendingResolution = !isResolved
+    && !isLive
+    && market.status === 'active'
+    && market.endTime
+    && new Date(market.endTime) < _now;
 
   return (
     <>
@@ -497,7 +511,18 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               {isResolved && (
                 <span style={{ marginLeft: 12, color: 'var(--green)' }}>{t('points.detail.resolvedBadge')}</span>
               )}
-              {isPendingResolution && !isResolved && (
+              {isLive && (
+                <span style={{
+                  marginLeft: 12,
+                  color: '#dc2626',
+                  fontWeight: 700,
+                  letterSpacing: '0.08em',
+                  animation: 'pronos-live-pulse 1.4s ease-in-out infinite',
+                }}>
+                  · {t('points.card.live')}
+                </span>
+              )}
+              {isPendingResolution && !isResolved && !isLive && (
                 <span style={{ marginLeft: 12, color: '#f59e0b' }}>{t('points.detail.pendingBadge')}</span>
               )}
             </div>
@@ -730,8 +755,17 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 4 }}>
                   {t('points.detail.stateLabel')}
                 </div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: isResolved ? 'var(--green)' : isPendingResolution ? '#f59e0b' : 'var(--text-primary)' }}>
+                <div style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 13,
+                  fontWeight: isLive ? 700 : 400,
+                  color: isResolved ? 'var(--green)'
+                       : isLive ? '#dc2626'
+                       : isPendingResolution ? '#f59e0b'
+                       : 'var(--text-primary)',
+                }}>
                   {isResolved ? t('points.detail.stateResolved')
+                   : isLive ? t('points.card.live')
                    : isPendingResolution ? t('points.detail.statePending')
                    : t('points.detail.stateActive')}
                 </div>

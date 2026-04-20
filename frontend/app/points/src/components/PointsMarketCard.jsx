@@ -56,7 +56,21 @@ export default function PointsMarketCard({ market, userPosition }) {
     : outcomes.map((_, i) => (i === 0 ? 0.5 : 1 / outcomes.length));
 
   const isResolved = market.status === 'resolved';
-  const isPending = market.status === 'active' && market.endTime && new Date(market.endTime) < new Date();
+  // isLive: start_time has passed but the game window hasn't closed
+  // yet — used to show a red 🔴 EN VIVO pill so users know they can
+  // trade against in-progress events. Only sports markets set
+  // start_time; everything else is isLive=false.
+  const now = new Date();
+  const isLive = !isResolved
+    && market.status === 'active'
+    && market.startTime
+    && new Date(market.startTime) <= now
+    && (!market.endTime || new Date(market.endTime) > now);
+  const isPending = !isResolved
+    && !isLive
+    && market.status === 'active'
+    && market.endTime
+    && new Date(market.endTime) < now;
   const volume = market.volume ?? market.tradeVolume ?? 0;
 
   // Card palette is restricted to three hue families — green, yellow,
@@ -109,7 +123,22 @@ export default function PointsMarketCard({ market, userPosition }) {
             {t('points.card.resolved')}
           </span>
         )}
-        {isPending && !isResolved && (
+        {isLive && (
+          <span className="mock-card-badge" style={{
+            background: 'rgba(220,38,38,0.18)',
+            color: '#dc2626',
+            padding: '2px 6px',
+            borderRadius: 4,
+            fontFamily: 'var(--font-mono)',
+            fontSize: 9,
+            fontWeight: 700,
+            letterSpacing: '0.08em',
+            animation: 'pronos-live-pulse 1.4s ease-in-out infinite',
+          }}>
+            {t('points.card.live')}
+          </span>
+        )}
+        {isPending && !isResolved && !isLive && (
           <span className="mock-card-badge" style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 9 }}>
             {t('points.card.pending')}
           </span>

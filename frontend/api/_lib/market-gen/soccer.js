@@ -149,9 +149,13 @@ function matchToMarketSpec(match, competitionCode) {
                 || 'Visitante';
   const kickoffUtc = match?.utcDate;
   if (!kickoffUtc) return null;
-  // Lock trading 2 minutes before kickoff so odds don't update mid-match
-  // while the resolver race-checks the score.
-  const endTime = new Date(new Date(kickoffUtc).getTime() - 2 * 60_000).toISOString();
+  // Trading stays open through 90 min + halftime + stoppage + buffer.
+  // 3h padding past kickoff covers all of those plus a goalless extra
+  // time edge case. Auto-resolver benign-skips until football-data
+  // returns status=FINISHED so this is just the hard close.
+  const kickoffMs = new Date(kickoffUtc).getTime();
+  const startTime = new Date(kickoffMs).toISOString();
+  const endTime   = new Date(kickoffMs + 3 * 3600_000).toISOString();
 
   return {
     source: 'football-data.org',
@@ -163,6 +167,7 @@ function matchToMarketSpec(match, competitionCode) {
     icon: '⚽',
     outcomes: [homeName, 'Empate', awayName],
     seed_liquidity: 1000,
+    start_time: startTime,
     end_time: endTime,
     amm_mode: 'unified',              // 3-way W/D/L → unified CPMM
     resolver_type: 'sports_api',      // auto via /v4/matches/{id} → score.winner

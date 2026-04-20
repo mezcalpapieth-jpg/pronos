@@ -82,8 +82,8 @@ export async function upsertPending(sql, allSpecs) {
       const result = await sql`
         INSERT INTO points_pending_markets
           (source, source_event_id, source_data, question, category, icon,
-           outcomes, seed_liquidity, end_time, amm_mode, resolver_type,
-           resolver_config)
+           outcomes, seed_liquidity, start_time, end_time, amm_mode,
+           resolver_type, resolver_config)
         VALUES (
           ${s.source},
           ${s.source_event_id},
@@ -93,6 +93,7 @@ export async function upsertPending(sql, allSpecs) {
           ${s.icon || null},
           ${JSON.stringify(s.outcomes)}::jsonb,
           ${s.seed_liquidity ?? 1000},
+          ${s.start_time || null},
           ${s.end_time},
           ${s.amm_mode || 'unified'},
           ${s.resolver_type || null},
@@ -105,6 +106,7 @@ export async function upsertPending(sql, allSpecs) {
             icon            = EXCLUDED.icon,
             outcomes        = EXCLUDED.outcomes,
             seed_liquidity  = EXCLUDED.seed_liquidity,
+            start_time      = EXCLUDED.start_time,
             end_time        = EXCLUDED.end_time,
             amm_mode        = EXCLUDED.amm_mode,
             resolver_type   = EXCLUDED.resolver_type,

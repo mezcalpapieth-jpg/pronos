@@ -69,6 +69,14 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS leg_label TEXT`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_parent ON points_markets(parent_id)`,
 
+  // start_time: for sports markets, kickoff. Trading stays open through
+  // the game and end_time sits a sport-specific padding past kickoff
+  // (so we auto-close after the game wraps, not before it starts).
+  // NULL for non-sports markets where there's no distinct "start" vs
+  // "settle" distinction (crypto/FX over-unders, weather, charts).
+  // Used by the UI to show a LIVE badge while start_time <= now < end_time.
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS start_time TIMESTAMPTZ`,
+
   // ── Balances (single source of truth per user) ─────────────────────────
   `CREATE TABLE IF NOT EXISTS points_balances (
     username     TEXT PRIMARY KEY,
@@ -270,6 +278,9 @@ const POINTS_SCHEMA_MIGRATIONS = [
     approved_market_id INTEGER REFERENCES points_markets(id),
     created_at        TIMESTAMPTZ DEFAULT NOW()
   )`,
+  // start_time on pending rows mirrors the one on points_markets — see
+  // comment above. The approve path carries it across unchanged.
+  `ALTER TABLE points_pending_markets ADD COLUMN IF NOT EXISTS start_time TIMESTAMPTZ`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_points_pending_source_event
     ON points_pending_markets(source, source_event_id)`,
   `CREATE INDEX IF NOT EXISTS idx_points_pending_status

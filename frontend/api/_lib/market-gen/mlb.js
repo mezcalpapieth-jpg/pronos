@@ -77,8 +77,14 @@ export async function generateMlbMarkets() {
     const awayAbbr = away?.team?.abbreviation;
     if (!TEAM_WHITELIST.has(homeAbbr) && !TEAM_WHITELIST.has(awayAbbr)) continue;
 
-    const endTime = new Date(new Date(kickoff).getTime() - 2 * 60_000).toISOString();
-    const dateYmd = new Date(kickoff).toISOString().slice(0, 10);
+    // Trading stays open through the game. end_time = kickoff + 5h
+    // covers a worst-case 3h standard game + potential extra innings
+    // + buffer; the auto-resolver benign-skips while ESPN shows the
+    // game as still in progress, so this is just a hard close.
+    const kickoffMs = new Date(kickoff).getTime();
+    const startTime = new Date(kickoffMs).toISOString();
+    const endTime   = new Date(kickoffMs + 5 * 3600_000).toISOString();
+    const dateYmd   = new Date(kickoff).toISOString().slice(0, 10);
     specs.push({
       source: 'espn-mlb',
       source_event_id: String(ev.id),
@@ -87,6 +93,7 @@ export async function generateMlbMarkets() {
       icon: '⚾',
       outcomes: [home.team.displayName, away.team.displayName],
       seed_liquidity: 1000,
+      start_time: startTime,
       end_time: endTime,
       amm_mode: 'unified',           // 2-way home/away → unified binary
       resolver_type: 'sports_api',   // auto-resolves via ESPN scoreboard

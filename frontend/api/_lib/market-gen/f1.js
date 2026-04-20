@@ -61,9 +61,13 @@ export async function generateF1Markets() {
   const [race, drivers] = await Promise.all([fetchNextRace(), fetchCurrentDrivers()]);
   if (!race || drivers.length < 5) return [];
 
-  // Lock trading 10 minutes before lights-out so the last-second grid
-  // odds don't get chased while the resolver sorts qualifying.
-  const endTime = new Date(new Date(race._startIso).getTime() - 10 * 60_000).toISOString();
+  // Trading stays open through the race. Padding 3h past lights-out
+  // covers a 2h race + podium + buffer; auto-resolver benign-skips
+  // until Jolpica returns position 1, so the end_time is just the
+  // hard close if the results feed stalls.
+  const kickoffMs = new Date(race._startIso).getTime();
+  const startTime = new Date(kickoffMs).toISOString();
+  const endTime   = new Date(kickoffMs + 3 * 3600_000).toISOString();
   const raceName = race.raceName || `GP ${race.round}`;
   const season = race.season;
   const round = race.round;
@@ -85,6 +89,7 @@ export async function generateF1Markets() {
     icon: '🏁',
     outcomes: legs.map(l => l.label),
     seed_liquidity: 1000,
+    start_time: startTime,
     end_time: endTime,
     amm_mode: 'parallel',           // one binary per driver
     resolver_type: 'sports_api',    // auto via Jolpica /{season}/{round}/results

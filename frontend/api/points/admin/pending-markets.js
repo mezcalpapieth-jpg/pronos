@@ -79,6 +79,7 @@ async function list(req, res) {
       icon: r.icon,
       outcomes: parseJsonb(r.outcomes, []),
       seedLiquidity: Number(r.seed_liquidity),
+      startTime: r.start_time,
       endTime: r.end_time,
       ammMode: r.amm_mode,
       resolverType: r.resolver_type,
@@ -135,14 +136,17 @@ async function approveOne(pid, reviewer, note) {
     const ammMode = r.amm_mode === 'parallel' ? 'parallel' : 'unified';
     let createdMarketId;
 
+    const startIso = r.start_time ? new Date(r.start_time).toISOString() : null;
+
     if (ammMode === 'unified') {
       const reserves = initialReserves(seed, outcomes.length);
       const mk = await client.query(
         `INSERT INTO points_markets
            (question, category, icon, outcomes, reserves, seed_liquidity,
-            end_time, status, created_by, amm_mode, resolver_type, resolver_config)
-         VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, 'active', $8,
-                 'unified', $9, $10::jsonb)
+            start_time, end_time, status, created_by, amm_mode,
+            resolver_type, resolver_config)
+         VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8, 'active', $9,
+                 'unified', $10, $11::jsonb)
          RETURNING id`,
         [
           r.question,
@@ -151,6 +155,7 @@ async function approveOne(pid, reviewer, note) {
           JSON.stringify(outcomes),
           JSON.stringify(reserves),
           seed,
+          startIso,
           endDate.toISOString(),
           reviewer,
           r.resolver_type || null,
@@ -165,9 +170,10 @@ async function approveOne(pid, reviewer, note) {
       const parent = await client.query(
         `INSERT INTO points_markets
            (question, category, icon, outcomes, reserves, seed_liquidity,
-            end_time, status, created_by, amm_mode, resolver_type, resolver_config)
-         VALUES ($1, $2, $3, $4::jsonb, '[]'::jsonb, $5, $6, 'active', $7,
-                 'parallel', $8, $9::jsonb)
+            start_time, end_time, status, created_by, amm_mode,
+            resolver_type, resolver_config)
+         VALUES ($1, $2, $3, $4::jsonb, '[]'::jsonb, $5, $6, $7, 'active', $8,
+                 'parallel', $9, $10::jsonb)
          RETURNING id`,
         [
           r.question,
@@ -175,6 +181,7 @@ async function approveOne(pid, reviewer, note) {
           r.icon || null,
           JSON.stringify(outcomes),
           seed,
+          startIso,
           endDate.toISOString(),
           reviewer,
           r.resolver_type || null,
@@ -186,9 +193,10 @@ async function approveOne(pid, reviewer, note) {
         await client.query(
           `INSERT INTO points_markets
              (question, category, icon, outcomes, reserves, seed_liquidity,
-              end_time, status, created_by, amm_mode, parent_id, leg_label)
-           VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, 'active', $8,
-                   'parallel', $9, $10)`,
+              start_time, end_time, status, created_by, amm_mode,
+              parent_id, leg_label)
+           VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8, 'active', $9,
+                   'parallel', $10, $11)`,
           [
             `${r.question} — ${outcomes[i]}`,
             r.category,
@@ -196,6 +204,7 @@ async function approveOne(pid, reviewer, note) {
             JSON.stringify(['Sí', 'No']),
             JSON.stringify(legReserves),
             seed,
+            startIso,
             endDate.toISOString(),
             reviewer,
             createdMarketId,

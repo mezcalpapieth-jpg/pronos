@@ -116,3 +116,10 @@
   color: var(--text-primary);
   font-weight: 600;
 }
+
+/* LIVE badge pulse — used on market cards + detail page while a
+   sports event is in progress (start_time has passed, end_time hasn't). */
+@keyframes pronos-live-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}

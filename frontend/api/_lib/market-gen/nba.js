@@ -44,8 +44,13 @@ export async function generateNbaMarkets() {
     const away = comps.find(c => c.homeAway === 'away');
     if (!home?.team?.displayName || !away?.team?.displayName) continue;
 
-    const endTime = new Date(new Date(kickoff).getTime() - 2 * 60_000).toISOString();
-    const dateYmd = new Date(kickoff).toISOString().slice(0, 10);
+    // Trading open through tip-off + 3h (avg NBA game ~2.5h plus
+    // overtime buffer). Auto-resolver waits for ESPN's `completed`
+    // flag regardless; this is the hard close.
+    const kickoffMs = new Date(kickoff).getTime();
+    const startTime = new Date(kickoffMs).toISOString();
+    const endTime   = new Date(kickoffMs + 3 * 3600_000).toISOString();
+    const dateYmd   = new Date(kickoff).toISOString().slice(0, 10);
     specs.push({
       source: 'espn-nba',
       source_event_id: String(ev.id),
@@ -54,6 +59,7 @@ export async function generateNbaMarkets() {
       icon: '🏀',
       outcomes: [home.team.displayName, away.team.displayName],
       seed_liquidity: 1000,
+      start_time: startTime,
       end_time: endTime,
       amm_mode: 'unified',
       resolver_type: 'sports_api',
