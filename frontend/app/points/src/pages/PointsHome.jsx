@@ -142,27 +142,41 @@ export default function PointsHome({ onOpenLogin }) {
   }, [activeCategory, authenticated]);
 
   // Layered filtering:
-  //   1. Search, when non-empty, bypasses the category tab — a query on
-  //      "bitcoin" should surface crypto markets even if the user is
-  //      parked on the Deportes tab, otherwise the search feels "broken"
-  //      when no results appear in the current category.
-  //   2. "Por resolver" = status='active' AND endTime < now. Pending
-  //      markets DO appear in Trending too; this tab just isolates them.
+  //   1. "Por resolver" isolates markets whose trading window has
+  //      closed but that haven't been resolved yet. Every OTHER view
+  //      (Trending, category tabs, search) hides these — otherwise a
+  //      closed-but-unresolved market clutters the main grid and
+  //      users try to trade something whose window is already shut.
+  //   2. Search, when non-empty, bypasses the category tab so a query
+  //      on "bitcoin" surfaces crypto markets even while the user is
+  //      parked on Deportes. Search still hides pending for the same
+  //      reason as above.
   //   3. Regular category tabs filter by m.category.
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
+    const now = Date.now();
+    const isPending = (m) =>
+      m.status === 'active'
+      && m.endTime
+      && new Date(m.endTime).getTime() < now;
+
     let out = markets;
 
-    if (q) {
-      // Global search across the loaded status bucket (active or
-      // resolved); don't also narrow by category.
-      return out.filter(m => (m.question || '').toLowerCase().includes(q));
+    if (activeCategory === 'porresolver') {
+      out = out.filter(isPending);
+      if (q) out = out.filter(m => (m.question || '').toLowerCase().includes(q));
+      return out;
     }
 
-    if (activeCategory === 'porresolver') {
-      const now = Date.now();
-      out = out.filter(m => m.status === 'active' && m.endTime && new Date(m.endTime).getTime() < now);
-    } else if (activeCategory !== 'all' && activeCategory !== 'resueltos') {
+    // For every non-"Por resolver" view (Trending, categories, search,
+    // even Resueltos — which is already resolved-only so this is a
+    // no-op there), hide pending markets.
+    out = out.filter(m => !isPending(m));
+
+    if (q) {
+      return out.filter(m => (m.question || '').toLowerCase().includes(q));
+    }
+    if (activeCategory !== 'all' && activeCategory !== 'resueltos') {
       out = out.filter(m => (m.category || '').toLowerCase() === activeCategory);
     }
     return out;
