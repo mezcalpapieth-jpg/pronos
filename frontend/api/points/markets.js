@@ -145,6 +145,8 @@ export default async function handler(req, res) {
           outcome: r.outcome,
           resolvedAt: r.resolved_at,
           createdAt: r.created_at,
+          sport: r.sport || null,
+          league: r.league || null,
         };
       }
 
@@ -168,6 +170,8 @@ export default async function handler(req, res) {
         outcome: r.outcome,
         resolvedAt: r.resolved_at,
         createdAt: r.created_at,
+        sport: r.sport || null,
+        league: r.league || null,
       };
     });
 

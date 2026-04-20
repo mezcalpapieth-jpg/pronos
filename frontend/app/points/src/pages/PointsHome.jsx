@@ -34,19 +34,6 @@ function formatCountdown(totalSeconds) {
   return parts.join(' ');
 }
 
-// Tab key → translation key. Labels are resolved via useT() so the bar
-// flips when the user toggles EN/ES.
-const CATEGORIES = [
-  { key: 'all',         tKey: 'points.cat.trending'    },
-  { key: 'musica',      tKey: 'points.cat.musica'      },
-  { key: 'mexico',      tKey: 'points.cat.mexico'      },
-  { key: 'politica',    tKey: 'points.cat.politica'    },
-  { key: 'deportes',    tKey: 'points.cat.deportes'    },
-  { key: 'crypto',      tKey: 'points.cat.crypto'      },
-  { key: 'porresolver', tKey: 'points.cat.porresolver' },
-  { key: 'resueltos',   tKey: 'points.cat.resueltos'   },
-];
-
 export default function PointsHome({ onOpenLogin }) {
   const navigate = useNavigate();
   const { authenticated } = usePointsAuth();
@@ -56,7 +43,6 @@ export default function PointsHome({ onOpenLogin }) {
   const [positionByMarket, setPositionByMarket] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeCategory, setActiveCategory] = useState('all');
   const [cycle, setCycle] = useState(null);
   const [cycleTick, setCycleTick] = useState(0); // forces re-render each minute
 
@@ -94,12 +80,10 @@ export default function PointsHome({ onOpenLogin }) {
       setLoading(true);
       setError(null);
       try {
-        // "Por resolver" and "Trending" plus every category tab all view
-        // active rows. The DB has no separate 'pending' state — pending
-        // just means status='active' with endTime in the past, so we
-        // fetch active and slice client-side in the `filtered` memo.
-        const status = activeCategory === 'resueltos' ? 'resolved' : 'active';
-        const m = await fetchMarkets({ status });
+        // Home is always the "Trending" view — all active markets minus
+        // pending (endTime in past). Category routes handle everything
+        // else via /c/:slug.
+        const m = await fetchMarkets({ status: 'active' });
         if (cancelled) return;
         setMarkets(m);
         setLoading(false);
@@ -139,19 +123,10 @@ export default function PointsHome({ onOpenLogin }) {
     }
     load();
     return () => { cancelled = true; };
-  }, [activeCategory, authenticated]);
+  }, [authenticated]);
 
-  // Layered filtering:
-  //   1. "Por resolver" isolates markets whose trading window has
-  //      closed but that haven't been resolved yet. Every OTHER view
-  //      (Trending, category tabs, search) hides these — otherwise a
-  //      closed-but-unresolved market clutters the main grid and
-  //      users try to trade something whose window is already shut.
-  //   2. Search, when non-empty, bypasses the category tab so a query
-  //      on "bitcoin" surfaces crypto markets even while the user is
-  //      parked on Deportes. Search still hides pending for the same
-  //      reason as above.
-  //   3. Regular category tabs filter by m.category.
+  // Home = Trending. Always active, never pending (those live on
+  // /c/porresolver). Search narrows the visible list.
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const now = Date.now();
@@ -159,28 +134,10 @@ export default function PointsHome({ onOpenLogin }) {
       m.status === 'active'
       && m.endTime
       && new Date(m.endTime).getTime() < now;
-
-    let out = markets;
-
-    if (activeCategory === 'porresolver') {
-      out = out.filter(isPending);
-      if (q) out = out.filter(m => (m.question || '').toLowerCase().includes(q));
-      return out;
-    }
-
-    // For every non-"Por resolver" view (Trending, categories, search,
-    // even Resueltos — which is already resolved-only so this is a
-    // no-op there), hide pending markets.
-    out = out.filter(m => !isPending(m));
-
-    if (q) {
-      return out.filter(m => (m.question || '').toLowerCase().includes(q));
-    }
-    if (activeCategory !== 'all' && activeCategory !== 'resueltos') {
-      out = out.filter(m => (m.category || '').toLowerCase() === activeCategory);
-    }
+    let out = markets.filter(m => !isPending(m));
+    if (q) out = out.filter(m => (m.question || '').toLowerCase().includes(q));
     return out;
-  }, [markets, activeCategory, searchQuery]);
+  }, [markets, searchQuery]);
 
   // Derived stats for the hero — pulled live from the markets list so they
   // stay honest. Falls back to friendly defaults when markets are loading.
@@ -192,26 +149,6 @@ export default function PointsHome({ onOpenLogin }) {
 
   return (
     <>
-      {/* ── Category bar ─────────────────────────────────────
-          Rendered BEFORE the hero so it sits immediately under the
-          sticky nav (top: 64px). That matches the main pronos.io
-          landing's layout where the category pills are always visible
-          without needing to scroll past the hero first. */}
-      <div className="category-bar">
-        <div className="category-bar-inner">
-          <div className="market-filters">
-            {CATEGORIES.map(cat => (
-              <button
-                key={cat.key}
-                className={`filter-btn${activeCategory === cat.key ? ' active' : ''}`}
-                onClick={() => setActiveCategory(cat.key)}
-              >
-                {t(cat.tKey)}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
 
       {/* ── Hero ───────────────────────────────────────────────
           Grid layout mirrors #hero > .hero-inner from the main site:
@@ -437,9 +374,7 @@ export default function PointsHome({ onOpenLogin }) {
           }}>
             {searchQuery
               ? t('points.home.emptySearch', { q: searchQuery })
-              : activeCategory === 'porresolver'
-                ? `🎯 ${t('points.home.emptyPending')}`
-                : `🎯 ${t('points.home.empty')}`}
+              : `🎯 ${t('points.home.empty')}`}
           </div>
         )}
         {!loading && !error && filtered.length > 0 && (

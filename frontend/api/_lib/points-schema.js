@@ -77,6 +77,17 @@ const POINTS_SCHEMA_MIGRATIONS = [
   // Used by the UI to show a LIVE badge while start_time <= now < end_time.
   `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS start_time TIMESTAMPTZ`,
 
+  // sport/league: cheap, generator-set classifiers for the per-type
+  // pages. `sport` is one of {'mlb','nba','soccer','f1',…} — drives the
+  // sports sub-filter. `league` narrows within a sport (soccer →
+  // 'premier-league' / 'la-liga' / 'uefa-cl' / etc.; 'mlb' → 'mlb'; 'nba'
+  // → 'nba'). Both nullable so existing markets and non-sports markets
+  // just stay unclassified (they still show in the parent category).
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS sport TEXT`,
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS league TEXT`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_sport ON points_markets(sport)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_league ON points_markets(league)`,
+
   // ── Balances (single source of truth per user) ─────────────────────────
   `CREATE TABLE IF NOT EXISTS points_balances (
     username     TEXT PRIMARY KEY,
@@ -281,6 +292,10 @@ const POINTS_SCHEMA_MIGRATIONS = [
   // start_time on pending rows mirrors the one on points_markets — see
   // comment above. The approve path carries it across unchanged.
   `ALTER TABLE points_pending_markets ADD COLUMN IF NOT EXISTS start_time TIMESTAMPTZ`,
+  // sport/league mirror the columns on points_markets so the approve
+  // path can pass them through verbatim.
+  `ALTER TABLE points_pending_markets ADD COLUMN IF NOT EXISTS sport TEXT`,
+  `ALTER TABLE points_pending_markets ADD COLUMN IF NOT EXISTS league TEXT`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_points_pending_source_event
     ON points_pending_markets(source, source_event_id)`,
   `CREATE INDEX IF NOT EXISTS idx_points_pending_status

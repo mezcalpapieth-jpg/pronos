@@ -54,6 +54,8 @@ export async function generateNbaMarkets() {
     specs.push({
       source: 'espn-nba',
       source_event_id: String(ev.id),
+      sport: 'nba',
+      league: 'nba',
       question: `¿Quién gana ${away.team.displayName} @ ${home.team.displayName}?`,
       category: 'deportes',
       icon: '🏀',

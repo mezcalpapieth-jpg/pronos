@@ -62,17 +62,22 @@ function eventToSpec(ev, { leagueCode, leagueLabel }) {
   const awayName = away?.team?.displayName;
   if (!homeName || !awayName) return null;
 
-  // 3h padding past kickoff — same rationale as the football-data
-  // generator (90' play + halftime + stoppage + buffer). Auto-resolver
-  // waits for ESPN's `completed=true` anyway.
+  // 2h padding past kickoff — 90' play + halftime + stoppage + buffer.
+  // Auto-resolver waits for ESPN's `completed=true` anyway, so end_time
+  // is just the hard close if the scoreboard stalls.
   const kickoffMs = new Date(kickoff).getTime();
   const startTime = new Date(kickoffMs).toISOString();
-  const endTime   = new Date(kickoffMs + 3 * 3600_000).toISOString();
+  const endTime   = new Date(kickoffMs + 2 * 3600_000).toISOString();
   const dateYmd   = new Date(kickoff).toISOString().slice(0, 10);
+  const league    = leagueCode === 'mex.1' ? 'liga-mx'
+                  : leagueCode === 'usa.1' ? 'mls'
+                  : null;
   return {
     source: 'espn-soccer',
     // leagueCode namespaces the event id — stable across ESPN updates.
     source_event_id: `${leagueCode}:${ev.id}`,
+    sport: 'soccer',
+    league,
     // Match the football-data generator's bare "Home vs Away" format.
     question: `${homeName} vs ${awayName}`,
     category: 'deportes',

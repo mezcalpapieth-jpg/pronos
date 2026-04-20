@@ -61,13 +61,13 @@ export async function generateF1Markets() {
   const [race, drivers] = await Promise.all([fetchNextRace(), fetchCurrentDrivers()]);
   if (!race || drivers.length < 5) return [];
 
-  // Trading stays open through the race. Padding 3h past lights-out
-  // covers a 2h race + podium + buffer; auto-resolver benign-skips
-  // until Jolpica returns position 1, so the end_time is just the
-  // hard close if the results feed stalls.
+  // Trading stays open through the race. 2h past lights-out covers a
+  // typical race (~1h30m + podium + buffer); auto-resolver benign-skips
+  // until Jolpica returns position 1, so end_time is just the hard
+  // close if the results feed stalls.
   const kickoffMs = new Date(race._startIso).getTime();
   const startTime = new Date(kickoffMs).toISOString();
-  const endTime   = new Date(kickoffMs + 3 * 3600_000).toISOString();
+  const endTime   = new Date(kickoffMs + 2 * 3600_000).toISOString();
   const raceName = race.raceName || `GP ${race.round}`;
   const season = race.season;
   const round = race.round;
@@ -84,6 +84,8 @@ export async function generateF1Markets() {
   return [{
     source: 'jolpica-f1',
     source_event_id: `f1:${season}:${round}`,
+    sport: 'f1',
+    league: 'formula-1',
     question: `¿Quién gana el ${raceName} ${season}?`,
     category: 'deportes',
     icon: '🏁',

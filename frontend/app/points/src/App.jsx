@@ -17,8 +17,10 @@ import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import PointsLoginModal from '@app/components/PointsLoginModal.jsx';
 import PointsNav from './components/PointsNav.jsx';
 import PointsTicker from './components/PointsTicker.jsx';
+import PointsCategoryBar from './components/PointsCategoryBar.jsx';
 import PointsHome from './pages/PointsHome.jsx';
 import PointsMarketDetail from './pages/PointsMarketDetail.jsx';
+import PointsCategoryPage from './pages/PointsCategoryPage.jsx';
 import PointsPortfolio from './pages/PointsPortfolio.jsx';
 import PointsEarn from './pages/PointsEarn.jsx';
 import PointsAdmin from './pages/PointsAdmin.jsx';
@@ -95,14 +97,25 @@ export default function App() {
 // Renders the ticker only on the Home page to match the landing's layout.
 function Shell({ onOpenLogin, isAdmin }) {
   const location = useLocation();
-  const isHome = location.pathname === '/';
+  const path = location.pathname;
+  const isHome = path === '/';
+
+  // CategoryBar is the universal browsing affordance — show it on home,
+  // category pages, AND market detail so users can always jump to
+  // another category. Keep it off portfolio/earn/admin/referral where
+  // it would just clutter a focused flow.
+  const showCategoryBar = isHome
+    || path.startsWith('/c/')
+    || path.startsWith('/market');
 
   return (
     <>
       {isHome && <PointsTicker />}
       <PointsNav onOpenLogin={onOpenLogin} isAdmin={isAdmin} />
+      {showCategoryBar && <PointsCategoryBar />}
       <Routes>
         <Route path="/" element={<PointsHome onOpenLogin={onOpenLogin} />} />
+        <Route path="/c/:slug" element={<PointsCategoryPage />} />
         <Route path="/market" element={<PointsMarketDetail onOpenLogin={onOpenLogin} />} />
         <Route path="/portfolio" element={<PointsPortfolio />} />
         <Route path="/earn" element={<PointsEarn onOpenLogin={onOpenLogin} />} />

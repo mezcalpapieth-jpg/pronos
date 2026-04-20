@@ -36,12 +36,26 @@ const TEAM_TLA_WHITELIST = new Set([
   'MUN',   // Manchester United
   'JUV',   // Juventus
   'MIL',   // AC Milan
+  'BAY',   // Bayern Munich
+  'BVB',   // Borussia Dortmund
+  'B04',   // Bayer Leverkusen
 ]);
 
 // Competition codes to pull. CL is always included (every fixture — user
-// wanted all UCL). PD/PL/SA are scanned and filtered to the team whitelist.
+// wanted all UCL). PD/PL/SA/BL1 are scanned and filtered to the team whitelist.
 const COMPETITIONS_ALL_FIXTURES = ['CL'];
-const COMPETITIONS_TEAM_FILTER  = ['PD', 'PL', 'SA'];
+const COMPETITIONS_TEAM_FILTER  = ['PD', 'PL', 'SA', 'BL1'];
+
+// Map football-data competition code → canonical league slug used by
+// the frontend sidebar. Keep in sync with the slugs used in
+// PointsCategoryPage.jsx.
+const COMPETITION_TO_LEAGUE = {
+  CL:  'uefa-cl',
+  PD:  'la-liga',
+  PL:  'premier-league',
+  SA:  'serie-a',
+  BL1: 'bundesliga',
+};
 
 const API_BASE = 'https://api.football-data.org/v4';
 
@@ -153,13 +167,19 @@ function matchToMarketSpec(match, competitionCode) {
   // 3h padding past kickoff covers all of those plus a goalless extra
   // time edge case. Auto-resolver benign-skips until football-data
   // returns status=FINISHED so this is just the hard close.
+  // 90 min + halftime + stoppage + buffer = ~2h. Auto-resolver
+  // benign-skips until football-data returns status=FINISHED, so the
+  // end_time is just the hard close if the results feed stalls.
   const kickoffMs = new Date(kickoffUtc).getTime();
   const startTime = new Date(kickoffMs).toISOString();
-  const endTime   = new Date(kickoffMs + 3 * 3600_000).toISOString();
+  const endTime   = new Date(kickoffMs + 2 * 3600_000).toISOString();
+  const league    = COMPETITION_TO_LEAGUE[competitionCode] || null;
 
   return {
     source: 'football-data.org',
     source_event_id: String(match.id),
+    sport: 'soccer',
+    league,
     // Title format intentionally omits the "¿Quién gana ... ?" wrapper
     // — teams + vs is enough, user-tested preference.
     question: `${homeName} vs ${awayName}`,

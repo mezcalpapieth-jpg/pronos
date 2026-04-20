@@ -88,6 +88,8 @@ export async function generateMlbMarkets() {
     specs.push({
       source: 'espn-mlb',
       source_event_id: String(ev.id),
+      sport: 'mlb',
+      league: 'mlb',
       question: `¿Quién gana ${away.team.displayName} @ ${home.team.displayName}?`,
       category: 'deportes',
       icon: '⚾',

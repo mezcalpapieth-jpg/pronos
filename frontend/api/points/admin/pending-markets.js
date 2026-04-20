@@ -144,9 +144,9 @@ async function approveOne(pid, reviewer, note) {
         `INSERT INTO points_markets
            (question, category, icon, outcomes, reserves, seed_liquidity,
             start_time, end_time, status, created_by, amm_mode,
-            resolver_type, resolver_config)
+            resolver_type, resolver_config, sport, league)
          VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8, 'active', $9,
-                 'unified', $10, $11::jsonb)
+                 'unified', $10, $11::jsonb, $12, $13)
          RETURNING id`,
         [
           r.question,
@@ -160,6 +160,8 @@ async function approveOne(pid, reviewer, note) {
           reviewer,
           r.resolver_type || null,
           r.resolver_config ? JSON.stringify(r.resolver_config) : null,
+          r.sport || null,
+          r.league || null,
         ],
       );
       createdMarketId = mk.rows[0].id;
@@ -171,9 +173,9 @@ async function approveOne(pid, reviewer, note) {
         `INSERT INTO points_markets
            (question, category, icon, outcomes, reserves, seed_liquidity,
             start_time, end_time, status, created_by, amm_mode,
-            resolver_type, resolver_config)
+            resolver_type, resolver_config, sport, league)
          VALUES ($1, $2, $3, $4::jsonb, '[]'::jsonb, $5, $6, $7, 'active', $8,
-                 'parallel', $9, $10::jsonb)
+                 'parallel', $9, $10::jsonb, $11, $12)
          RETURNING id`,
         [
           r.question,
@@ -186,6 +188,8 @@ async function approveOne(pid, reviewer, note) {
           reviewer,
           r.resolver_type || null,
           r.resolver_config ? JSON.stringify(r.resolver_config) : null,
+          r.sport || null,
+          r.league || null,
         ],
       );
       createdMarketId = parent.rows[0].id;
@@ -194,9 +198,9 @@ async function approveOne(pid, reviewer, note) {
           `INSERT INTO points_markets
              (question, category, icon, outcomes, reserves, seed_liquidity,
               start_time, end_time, status, created_by, amm_mode,
-              parent_id, leg_label)
+              parent_id, leg_label, sport, league)
            VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8, 'active', $9,
-                   'parallel', $10, $11)`,
+                   'parallel', $10, $11, $12, $13)`,
           [
             `${r.question} — ${outcomes[i]}`,
             r.category,
@@ -209,6 +213,8 @@ async function approveOne(pid, reviewer, note) {
             reviewer,
             createdMarketId,
             outcomes[i],
+            r.sport || null,
+            r.league || null,
           ],
         );
       }

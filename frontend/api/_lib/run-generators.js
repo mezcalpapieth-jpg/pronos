@@ -83,7 +83,7 @@ export async function upsertPending(sql, allSpecs) {
         INSERT INTO points_pending_markets
           (source, source_event_id, source_data, question, category, icon,
            outcomes, seed_liquidity, start_time, end_time, amm_mode,
-           resolver_type, resolver_config)
+           resolver_type, resolver_config, sport, league)
         VALUES (
           ${s.source},
           ${s.source_event_id},
@@ -97,7 +97,9 @@ export async function upsertPending(sql, allSpecs) {
           ${s.end_time},
           ${s.amm_mode || 'unified'},
           ${s.resolver_type || null},
-          ${s.resolver_config ? JSON.stringify(s.resolver_config) : null}::jsonb
+          ${s.resolver_config ? JSON.stringify(s.resolver_config) : null}::jsonb,
+          ${s.sport || null},
+          ${s.league || null}
         )
         ON CONFLICT (source, source_event_id) DO UPDATE
         SET source_data     = EXCLUDED.source_data,
@@ -110,7 +112,9 @@ export async function upsertPending(sql, allSpecs) {
             end_time        = EXCLUDED.end_time,
             amm_mode        = EXCLUDED.amm_mode,
             resolver_type   = EXCLUDED.resolver_type,
-            resolver_config = EXCLUDED.resolver_config
+            resolver_config = EXCLUDED.resolver_config,
+            sport           = EXCLUDED.sport,
+            league          = EXCLUDED.league
         WHERE points_pending_markets.status = 'pending'
         RETURNING id, (xmax = 0) AS inserted
       `;

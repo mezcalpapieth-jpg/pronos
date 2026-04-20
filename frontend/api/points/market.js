@@ -118,6 +118,8 @@ export default async function handler(req, res) {
             createdAt: r.created_at,
             resolverType,
             resolverSource,
+            sport: r.sport || null,
+            league: r.league || null,
           },
           legs,
         });
@@ -147,6 +149,8 @@ export default async function handler(req, res) {
           createdAt: r.created_at,
           resolverType,
           resolverSource,
+          sport: r.sport || null,
+          league: r.league || null,
         },
       });
     } catch (e) {

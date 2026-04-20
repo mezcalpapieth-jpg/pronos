@@ -567,13 +567,38 @@ const STRINGS = {
   'points.top.loading':            { es: 'Cargando…',           en: 'Loading…' },
 
   'points.cat.trending':      { es: '🔥 Trending',            en: '🔥 Trending' },
+  'points.cat.deportes':      { es: '⚽ Deportes',            en: '⚽ Sports' },
   'points.cat.musica':        { es: '🎵 Música & Farándula',  en: '🎵 Music & Culture' },
   'points.cat.mexico':        { es: '🇲🇽 México & CDMX',      en: '🇲🇽 Mexico & CDMX' },
   'points.cat.politica':      { es: '🌎 Política Intl.',      en: '🌎 World Politics' },
-  'points.cat.deportes':      { es: '⚽ Deportes',            en: '⚽ Sports' },
   'points.cat.crypto':        { es: '₿ Crypto',               en: '₿ Crypto' },
+  'points.cat.finanzas':      { es: '$ Finanzas',             en: '$ Finance' },
   'points.cat.porresolver':   { es: '⏳ Por resolver',         en: '⏳ To resolve' },
   'points.cat.resueltos':     { es: '🏆 Resueltos',            en: '🏆 Resolved' },
+
+  // Category page (per-type header + sub-filters)
+  'points.catpage.eyebrow':   { es: '{n} mercados',           en: '{n} markets' },
+  'points.catpage.leagues':   { es: 'Ligas',                  en: 'Leagues' },
+
+  // Sports sub-filter — /c/deportes
+  'points.sport.all':         { es: 'Todos',                  en: 'All' },
+  'points.sport.soccer':      { es: '⚽ Fútbol',              en: '⚽ Soccer' },
+  'points.sport.mlb':         { es: '⚾ MLB',                  en: '⚾ MLB' },
+  'points.sport.nba':         { es: '🏀 NBA',                  en: '🏀 NBA' },
+  'points.sport.nfl':         { es: '🏈 NFL',                  en: '🏈 NFL' },
+  'points.sport.f1':          { es: '🏁 F1',                   en: '🏁 F1' },
+  'points.sport.tennis':      { es: '🎾 Tenis',               en: '🎾 Tennis' },
+  'points.sport.golf':        { es: '⛳ Golf',                 en: '⛳ Golf' },
+
+  // Soccer leagues sidebar
+  'points.league.all':        { es: 'Todas',                  en: 'All' },
+  'points.league.uefaCl':     { es: 'UEFA Champions',         en: 'UEFA Champions' },
+  'points.league.laLiga':     { es: 'La Liga',                en: 'La Liga' },
+  'points.league.premier':    { es: 'Premier League',         en: 'Premier League' },
+  'points.league.serieA':     { es: 'Serie A',                en: 'Serie A' },
+  'points.league.bundesliga': { es: 'Bundesliga',             en: 'Bundesliga' },
+  'points.league.ligaMx':     { es: 'Liga MX',                en: 'Liga MX' },
+  'points.league.mls':        { es: 'MLS',                    en: 'MLS' },
 
   'points.card.resolved':     { es: 'RESUELTO',              en: 'RESOLVED' },
   'points.card.pending':      { es: 'PENDIENTE',             en: 'PENDING' },
