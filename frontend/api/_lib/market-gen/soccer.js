@@ -165,8 +165,12 @@ function matchToMarketSpec(match, competitionCode) {
     seed_liquidity: 1000,
     end_time: endTime,
     amm_mode: 'unified',              // 3-way W/D/L → unified CPMM
-    resolver_type: null,              // manual for now; sports_api later
-    resolver_config: null,
+    resolver_type: 'sports_api',      // auto via /v4/matches/{id} → score.winner
+    resolver_config: {
+      source: 'football-data',
+      matchId: match.id,
+      shape: 'draw3',
+    },
     source_data: {
       matchId: match.id,
       competitionCode,

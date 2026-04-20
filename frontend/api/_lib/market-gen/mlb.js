@@ -78,6 +78,7 @@ export async function generateMlbMarkets() {
     if (!TEAM_WHITELIST.has(homeAbbr) && !TEAM_WHITELIST.has(awayAbbr)) continue;
 
     const endTime = new Date(new Date(kickoff).getTime() - 2 * 60_000).toISOString();
+    const dateYmd = new Date(kickoff).toISOString().slice(0, 10);
     specs.push({
       source: 'espn-mlb',
       source_event_id: String(ev.id),
@@ -88,8 +89,14 @@ export async function generateMlbMarkets() {
       seed_liquidity: 1000,
       end_time: endTime,
       amm_mode: 'unified',           // 2-way home/away → unified binary
-      resolver_type: null,           // admin resolves manually for now
-      resolver_config: null,
+      resolver_type: 'sports_api',   // auto-resolves via ESPN scoreboard
+      resolver_config: {
+        source: 'espn',
+        leaguePath: 'baseball/mlb',
+        eventId: ev.id,
+        dateYmd,
+        shape: 'binary',
+      },
       source_data: {
         eventId: ev.id,
         kickoffUtc: kickoff,

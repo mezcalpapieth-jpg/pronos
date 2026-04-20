@@ -63,6 +63,7 @@ function eventToSpec(ev, { leagueCode, leagueLabel }) {
   if (!homeName || !awayName) return null;
 
   const endTime = new Date(new Date(kickoff).getTime() - 2 * 60_000).toISOString();
+  const dateYmd = new Date(kickoff).toISOString().slice(0, 10);
   return {
     source: 'espn-soccer',
     // leagueCode namespaces the event id — stable across ESPN updates.
@@ -75,8 +76,14 @@ function eventToSpec(ev, { leagueCode, leagueLabel }) {
     seed_liquidity: 1000,
     end_time: endTime,
     amm_mode: 'unified',          // 3-way W/D/L → unified CPMM
-    resolver_type: null,           // admin resolves manually for now
-    resolver_config: null,
+    resolver_type: 'sports_api',  // auto via ESPN soccer scoreboard
+    resolver_config: {
+      source: 'espn',
+      leaguePath: `soccer/${leagueCode}`,
+      eventId: ev.id,
+      dateYmd,
+      shape: 'draw3',
+    },
     source_data: {
       eventId: ev.id,
       leagueCode,

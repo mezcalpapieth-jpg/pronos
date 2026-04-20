@@ -45,6 +45,7 @@ export async function generateNbaMarkets() {
     if (!home?.team?.displayName || !away?.team?.displayName) continue;
 
     const endTime = new Date(new Date(kickoff).getTime() - 2 * 60_000).toISOString();
+    const dateYmd = new Date(kickoff).toISOString().slice(0, 10);
     specs.push({
       source: 'espn-nba',
       source_event_id: String(ev.id),
@@ -55,8 +56,14 @@ export async function generateNbaMarkets() {
       seed_liquidity: 1000,
       end_time: endTime,
       amm_mode: 'unified',
-      resolver_type: null,
-      resolver_config: null,
+      resolver_type: 'sports_api',
+      resolver_config: {
+        source: 'espn',
+        leaguePath: 'basketball/nba',
+        eventId: ev.id,
+        dateYmd,
+        shape: 'binary',
+      },
       source_data: {
         eventId: ev.id,
         kickoffUtc: kickoff,

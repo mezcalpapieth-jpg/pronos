@@ -31,6 +31,7 @@ import { readCreAverageFor } from '../_lib/fuel.js';
 import { fetchMaxTempC, bucketIndexFor } from '../_lib/weather.js';
 import { readAppleMxTopArtist } from '../_lib/charts.js';
 import { readYouTubeTopMxChannel } from '../_lib/youtube.js';
+import { readEspnEvent, readFootballDataMatch, readJolpicaF1Result } from '../_lib/sports-results.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql   = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -70,7 +71,7 @@ export default async function handler(req, res) {
              outcomes, amm_mode
       FROM points_markets
       WHERE status = 'active'
-        AND resolver_type IN ('chainlink_price', 'api_price', 'weather_api', 'api_chart')
+        AND resolver_type IN ('chainlink_price', 'api_price', 'weather_api', 'api_chart', 'sports_api')
         AND end_time IS NOT NULL
         AND end_time < NOW()
         AND parent_id IS NULL
@@ -209,6 +210,91 @@ export default async function handler(req, res) {
           }
           winningIdx = pickWinnerIdx;
           resolverInfo = { source: cfg.source, ...readerEcho };
+        } else if (m.resolver_type === 'sports_api') {
+          // Sports scoreboards (MLB/NBA/F1 via ESPN + Jolpica +
+          // football-data). Shape in cfg:
+          //   source: 'espn' | 'football-data' | 'jolpica-f1'
+          //   shape:  'binary' | 'draw3' | 'parallel'
+          //   (+ source-specific fields: eventId/leaguePath/dateYmd,
+          //    matchId, season/round, legs[])
+          if (!cfg.source || !cfg.shape) {
+            throw new Error('invalid sports_api config: missing source/shape');
+          }
+
+          // Read result from the configured source.
+          let result;
+          if (cfg.source === 'espn') {
+            result = await readEspnEvent({
+              leaguePath: cfg.leaguePath,
+              eventId: cfg.eventId,
+              dateYmd: cfg.dateYmd,
+            });
+          } else if (cfg.source === 'football-data') {
+            result = await readFootballDataMatch(cfg.matchId);
+          } else if (cfg.source === 'jolpica-f1') {
+            result = await readJolpicaF1Result({ season: cfg.season, round: cfg.round });
+          } else {
+            throw new Error(`unsupported sports_api source: ${cfg.source}`);
+          }
+
+          // Not completed yet = benign skip. Cron will retry on the
+          // next tick; a postponed game just keeps retrying until
+          // admin intervenes (no auto-escalation for now).
+          if (!result.completed) {
+            const err = new Error('not_finished_yet');
+            err.benign = true;
+            throw err;
+          }
+
+          // Map winner → outcome index per shape.
+          if (cfg.shape === 'binary') {
+            // Outcomes [home, away] — MLB/NBA
+            if (result.winner === 'home') winningIdx = 0;
+            else if (result.winner === 'away') winningIdx = 1;
+            else throw new Error(`binary sport got draw/null winner: ${result.winner}`);
+          } else if (cfg.shape === 'draw3') {
+            // Outcomes [home, 'Empate', away] — soccer 3-way
+            if (result.winner === 'home')      winningIdx = 0;
+            else if (result.winner === 'draw') winningIdx = 1;
+            else if (result.winner === 'away') winningIdx = 2;
+            else throw new Error(`draw3 sport got null winner`);
+          } else if (cfg.shape === 'parallel') {
+            // F1 / similar — cfg.legs is [{ label, driverId }]. Match
+            // the winner driverId against the list; fallback to
+            // driver-label case-insensitive; finally fall back to the
+            // "Otro" leg if present (driverId === null).
+            if (!Array.isArray(cfg.legs) || cfg.legs.length === 0) {
+              throw new Error('parallel sport: missing cfg.legs');
+            }
+            const idNeedle = (result.winnerDriverId || '').trim();
+            const nameNeedle = (result.winnerDriverLabel || '').toLowerCase().trim();
+            let idx = cfg.legs.findIndex(l =>
+              l.driverId && String(l.driverId).trim() === idNeedle,
+            );
+            if (idx < 0) {
+              idx = cfg.legs.findIndex(l =>
+                l.label && String(l.label).toLowerCase().trim() === nameNeedle,
+              );
+            }
+            if (idx < 0) {
+              idx = cfg.legs.findIndex(l => !l.driverId && l.label?.toLowerCase() === 'otro');
+            }
+            if (idx < 0) {
+              throw new Error(`no leg matched winner "${result.winnerDriverLabel}"`);
+            }
+            winningIdx = idx;
+          } else {
+            throw new Error(`unknown sports_api shape: ${cfg.shape}`);
+          }
+
+          resolverInfo = {
+            source: cfg.source,
+            shape: cfg.shape,
+            winner: result.winner,
+            homeScore: result.homeScore ?? null,
+            awayScore: result.awayScore ?? null,
+            winnerDriver: result.winnerDriverLabel ?? null,
+          };
         } else {
           throw new Error(`unknown resolver_type: ${m.resolver_type}`);
         }

@@ -68,18 +68,32 @@ export async function generateF1Markets() {
   const season = race.season;
   const round = race.round;
 
+  // Build legs with an explicit "Otro" catchall so a mid-season
+  // substitute (reserve driver, replacement) doesn't leave the market
+  // unresolvable. The sports_api resolver looks up the winner's
+  // driverId against cfg.legs[].driverId; anything unmatched wins Otro.
+  const legs = [
+    ...drivers.map(d => ({ label: d.label, driverId: d.id })),
+    { label: 'Otro', driverId: null },
+  ];
+
   return [{
     source: 'jolpica-f1',
     source_event_id: `f1:${season}:${round}`,
     question: `¿Quién gana el ${raceName} ${season}?`,
     category: 'deportes',
     icon: '🏁',
-    outcomes: drivers.map(d => d.label),
+    outcomes: legs.map(l => l.label),
     seed_liquidity: 1000,
     end_time: endTime,
     amm_mode: 'parallel',           // one binary per driver
-    resolver_type: null,            // admin resolves manually for now
-    resolver_config: null,
+    resolver_type: 'sports_api',    // auto via Jolpica /{season}/{round}/results
+    resolver_config: {
+      source: 'jolpica-f1',
+      season, round,
+      shape: 'parallel',
+      legs,
+    },
     source_data: {
       season, round,
       raceName,
