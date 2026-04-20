@@ -136,8 +136,10 @@ export default function PointsMarketCard({ market, userPosition }) {
         {/* Two layouts:
               N ≤ 3 → original wide rows (label / +payout / %).
               N > 3 → 2-column grid of square-ish tiles (label on top,
-                      big % below). "+MXNP si ganas" is dropped to
-                      keep each tile compact and close to square.
+                      big % below). Capped at 4 tiles; any extra legs
+                      roll into a "+N opciones más" hint so the card
+                      never goes beyond a 2×2 grid. The detail page
+                      still shows every leg.
         */}
         {outcomes.length <= 3 ? (
           <div style={{
@@ -198,55 +200,68 @@ export default function PointsMarketCard({ market, userPosition }) {
             })}
           </div>
         ) : (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: 6,
-            margin: '10px 0 4px',
-          }}>
-            {outcomes.map((label, i) => {
-              const accent = accentFor(i);
-              const pct = Math.round(prices[i] * 100);
-              return (
-                <div
-                  key={i}
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    gap: 4,
-                    padding: '8px 10px',
-                    background: accent.bg,
-                    border: `1px solid ${accent.border}`,
-                    borderRadius: 8,
-                    minHeight: 52,
-                  }}
-                >
-                  <span style={{
-                    fontFamily: 'var(--font-body)',
-                    fontSize: 11,
-                    color: accent.fg,
-                    fontWeight: 600,
-                    lineHeight: 1.25,
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}>
-                    {label}
-                  </span>
-                  <span style={{
-                    fontFamily: 'var(--font-display)',
-                    fontSize: 18,
-                    color: accent.fg,
-                    alignSelf: 'flex-end',
-                    lineHeight: 1,
-                  }}>
-                    {pct}%
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+          <>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 6,
+              margin: '10px 0 4px',
+            }}>
+              {outcomes.slice(0, 4).map((label, i) => {
+                const accent = accentFor(i);
+                const pct = Math.round(prices[i] * 100);
+                return (
+                  <div
+                    key={i}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      gap: 4,
+                      padding: '8px 10px',
+                      background: accent.bg,
+                      border: `1px solid ${accent.border}`,
+                      borderRadius: 8,
+                      minHeight: 52,
+                    }}
+                  >
+                    <span style={{
+                      fontFamily: 'var(--font-body)',
+                      fontSize: 11,
+                      color: accent.fg,
+                      fontWeight: 600,
+                      lineHeight: 1.25,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}>
+                      {label}
+                    </span>
+                    <span style={{
+                      fontFamily: 'var(--font-display)',
+                      fontSize: 18,
+                      color: accent.fg,
+                      alignSelf: 'flex-end',
+                      lineHeight: 1,
+                    }}>
+                      {pct}%
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            {outcomes.length > 4 && (
+              <p style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                color: 'var(--text-muted)',
+                margin: '2px 0 0',
+                letterSpacing: '0.04em',
+              }}>
+                {t('points.card.moreOptions', { n: outcomes.length - 4 })}
+              </p>
+            )}
+          </>
         )}
       </div>
 
