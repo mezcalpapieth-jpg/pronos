@@ -535,6 +535,8 @@ const STRINGS = {
   'points.detail.stateResolved':   { es: 'RESUELTO',           en: 'RESOLVED' },
   'points.detail.statePending':    { es: 'PENDIENTE',          en: 'PENDING' },
   'points.detail.stateActive':     { es: 'ACTIVO',             en: 'ACTIVE' },
+  'points.detail.resolverLabel':   { es: 'RESUELTO POR',       en: 'RESOLVED BY' },
+  'points.detail.resolverAdmin':   { es: 'Admin',              en: 'Admin' },
   'points.detail.marketNotFound':  { es: 'Mercado no encontrado', en: 'Market not found' },
   'points.detail.back':            { es: '← Volver',            en: '← Back' },
   'points.detail.closedHint':      { es: 'Este mercado ya cerró. Los ganadores pueden reclamar su pago en el portafolio.', en: 'This market is closed. Winners can claim their payout in the portfolio.' },

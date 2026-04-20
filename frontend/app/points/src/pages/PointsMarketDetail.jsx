@@ -50,6 +50,28 @@ function accentFor(i, totalOutcomes) {
   return MULTI_ACCENTS[i % MULTI_ACCENTS.length];
 }
 
+// Map (resolver_type, resolver_config.source) → human-readable source
+// name. Brand names stay untranslated — "Chainlink" is "Chainlink" in
+// every language.
+const RESOLVER_LABELS = {
+  'chainlink_price':               'Chainlink',
+  'weather_api':                   'Open-Meteo',
+  'api_price:finnhub':             'Finnhub',
+  'api_price:banxico-fix':         'Banxico',
+  'api_price:cre-gasolina':        'CRE',
+  'api_chart:apple-mx-songs':      'Apple Music',
+  'api_chart:youtube-trending-mx': 'YouTube',
+  'sports_api:espn':               'ESPN',
+  'sports_api:football-data':      'football-data.org',
+  'sports_api:jolpica-f1':         'Jolpica F1',
+};
+
+function resolverLabel(type, source) {
+  if (!type) return null; // null = admin-manual; surface as 'Admin' via fallback text
+  const composite = source ? `${type}:${source}` : type;
+  return RESOLVER_LABELS[composite] || RESOLVER_LABELS[type] || type;
+}
+
 // ─── Outcome pickers ────────────────────────────────────────────────────────
 // Unified: one tap-target per outcome ("Sí" / "No" / "Barcelona" …) showing
 // the current percentage. Tapping opens the buy modal for that outcome at
@@ -686,6 +708,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               padding: '16px 0',
               borderTop: '1px solid var(--border)',
               borderBottom: '1px solid var(--border)',
+              flexWrap: 'wrap',
             }}>
               <div>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 4 }}>
@@ -711,6 +734,14 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                   {isResolved ? t('points.detail.stateResolved')
                    : isPendingResolution ? t('points.detail.statePending')
                    : t('points.detail.stateActive')}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 4 }}>
+                  {t('points.detail.resolverLabel')}
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-primary)' }}>
+                  {resolverLabel(market.resolverType, market.resolverSource) || t('points.detail.resolverAdmin')}
                 </div>
               </div>
             </div>

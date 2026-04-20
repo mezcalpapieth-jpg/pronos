@@ -65,6 +65,13 @@ export default async function handler(req, res) {
       const outcomes = parseJsonb(r.outcomes, ['Sí', 'No']);
       const ammMode = r.amm_mode || 'unified';
 
+      // Expose resolver metadata in a minimal shape — just the type +
+      // source name from the config, nothing auth-related. Frontend
+      // maps (type, source) → a human label ("Chainlink", "ESPN", …).
+      const resolverCfg = parseJsonb(r.resolver_config, null);
+      const resolverType = r.resolver_type || null;
+      const resolverSource = resolverCfg?.source || null;
+
       if (ammMode === 'parallel') {
         const legRows = await sql`
           SELECT l.id, l.leg_label, l.reserves, l.seed_liquidity, l.status, l.outcome,
@@ -108,6 +115,8 @@ export default async function handler(req, res) {
             outcome: r.outcome,
             resolvedAt: r.resolved_at,
             createdAt: r.created_at,
+            resolverType,
+            resolverSource,
           },
           legs,
         });
@@ -134,6 +143,8 @@ export default async function handler(req, res) {
           outcome: r.outcome,
           resolvedAt: r.resolved_at,
           createdAt: r.created_at,
+          resolverType,
+          resolverSource,
         },
       });
     } catch (e) {
