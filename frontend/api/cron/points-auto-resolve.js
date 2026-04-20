@@ -26,6 +26,8 @@ import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { withTransaction } from '../_lib/db-tx.js';
 import { readChainlinkPrice, comparePrice } from '../_lib/chainlink.js';
 import { readFinnhubQuote } from '../_lib/stockprice.js';
+import { readBanxicoLatest } from '../_lib/banxico.js';
+import { readCreAverageFor } from '../_lib/fuel.js';
 import { fetchMaxTempC, bucketIndexFor } from '../_lib/weather.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -106,14 +108,42 @@ export default async function handler(req, res) {
           winningIdx = yes ? yesIdx : (1 - yesIdx);
           resolverInfo = { priceAtResolve: price, op: cfg.op, threshold: cfg.threshold };
         } else if (m.resolver_type === 'api_price') {
-          if (cfg.source !== 'finnhub' || !cfg.symbol || !cfg.op || cfg.threshold == null || cfg.yesOutcome == null) {
+          // api_price is a family — dispatch on cfg.source to pick the
+          // right reader. Each reader returns a scalar price in the
+          // same currency as cfg.threshold.
+          if (!cfg.source || !cfg.op || cfg.threshold == null || cfg.yesOutcome == null) {
             throw new Error(`invalid api_price config (source=${cfg.source})`);
           }
-          const quote = await readFinnhubQuote(cfg.symbol);
-          const yes = comparePrice(quote.price, cfg.op, Number(cfg.threshold));
+          let price;
+          let readerInfo;
+          if (cfg.source === 'finnhub') {
+            if (!cfg.symbol) throw new Error('finnhub: missing symbol');
+            const quote = await readFinnhubQuote(cfg.symbol);
+            price = quote.price;
+            readerInfo = { symbol: cfg.symbol };
+          } else if (cfg.source === 'banxico-fix') {
+            if (!cfg.seriesId) throw new Error('banxico-fix: missing seriesId');
+            const r = await readBanxicoLatest(cfg.seriesId);
+            price = r.value;
+            readerInfo = { seriesId: cfg.seriesId, fecha: r.fecha };
+          } else if (cfg.source === 'cre-gasolina') {
+            if (!cfg.fuelType) throw new Error('cre-gasolina: missing fuelType');
+            const r = await readCreAverageFor(cfg.fuelType);
+            price = r.value;
+            readerInfo = { fuelType: cfg.fuelType, sampleSize: r.sampleSize };
+          } else {
+            throw new Error(`unsupported api_price source: ${cfg.source}`);
+          }
+          const yes = comparePrice(price, cfg.op, Number(cfg.threshold));
           const yesIdx = Number(cfg.yesOutcome);
           winningIdx = yes ? yesIdx : (1 - yesIdx);
-          resolverInfo = { priceAtResolve: quote.price, symbol: cfg.symbol, op: cfg.op, threshold: cfg.threshold };
+          resolverInfo = {
+            priceAtResolve: price,
+            source: cfg.source,
+            op: cfg.op,
+            threshold: cfg.threshold,
+            ...readerInfo,
+          };
         } else if (m.resolver_type === 'weather_api') {
           if (!cfg.lat || !cfg.lng || !cfg.forecastDateYmd || !Array.isArray(cfg.buckets)) {
             throw new Error('invalid weather_api config');

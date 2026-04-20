@@ -28,6 +28,8 @@ import { generateWeatherMarkets }     from '../_lib/market-gen/weather.js';
 import { generateMlbMarkets }         from '../_lib/market-gen/mlb.js';
 import { generateNbaMarkets }         from '../_lib/market-gen/nba.js';
 import { generateF1Markets }          from '../_lib/market-gen/f1.js';
+import { generateFxMarkets }          from '../_lib/market-gen/fx.js';
+import { generateFuelMarkets }        from '../_lib/market-gen/fuel.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -44,6 +46,8 @@ const GENERATORS = [
   { name: 'espn-soccer',  run: generateEspnSoccerMarkets },
   { name: 'crypto',       run: generateCryptoMarkets     },
   { name: 'stocks',       run: generateStockMarkets      },
+  { name: 'fx',           run: generateFxMarkets         },
+  { name: 'fuel',         run: generateFuelMarkets       },
   { name: 'weather',      run: generateWeatherMarkets    },
   { name: 'mlb',          run: generateMlbMarkets        },
   { name: 'nba',          run: generateNbaMarkets        },
