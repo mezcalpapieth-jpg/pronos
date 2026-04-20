@@ -51,6 +51,9 @@ export async function generateNbaMarkets() {
     const startTime = new Date(kickoffMs).toISOString();
     const endTime   = new Date(kickoffMs + 3 * 3600_000).toISOString();
     const dateYmd   = new Date(kickoff).toISOString().slice(0, 10);
+    const homeLogo = home?.team?.logo || home?.team?.logos?.[0]?.href || null;
+    const awayLogo = away?.team?.logo || away?.team?.logos?.[0]?.href || null;
+
     specs.push({
       source: 'espn-nba',
       source_event_id: String(ev.id),
@@ -60,6 +63,7 @@ export async function generateNbaMarkets() {
       category: 'deportes',
       icon: '🏀',
       outcomes: [home.team.displayName, away.team.displayName],
+      outcome_images: [homeLogo, awayLogo],
       seed_liquidity: 1000,
       start_time: startTime,
       end_time: endTime,

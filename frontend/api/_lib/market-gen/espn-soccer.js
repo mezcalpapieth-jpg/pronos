@@ -72,6 +72,12 @@ function eventToSpec(ev, { leagueCode, leagueLabel }) {
   const league    = leagueCode === 'mex.1' ? 'liga-mx'
                   : leagueCode === 'usa.1' ? 'mls'
                   : null;
+  // ESPN competitors carry either team.logo (single) or team.logos[]
+  // — prefer the single field since it's what scoreboard responses
+  // reliably populate. Draw has no image.
+  const homeLogo = home?.team?.logo || home?.team?.logos?.[0]?.href || null;
+  const awayLogo = away?.team?.logo || away?.team?.logos?.[0]?.href || null;
+
   return {
     source: 'espn-soccer',
     // leagueCode namespaces the event id — stable across ESPN updates.
@@ -83,6 +89,7 @@ function eventToSpec(ev, { leagueCode, leagueLabel }) {
     category: 'deportes',
     icon: '⚽',
     outcomes: [homeName, 'Empate', awayName],
+    outcome_images: [homeLogo, null, awayLogo],
     seed_liquidity: 1000,
     start_time: startTime,
     end_time: endTime,

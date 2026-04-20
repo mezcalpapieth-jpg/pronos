@@ -64,6 +64,10 @@ export default async function handler(req, res) {
 
       const outcomes = parseJsonb(r.outcomes, ['Sí', 'No']);
       const ammMode = r.amm_mode || 'unified';
+      const outcomeImagesRaw = parseJsonb(r.outcome_images, null);
+      const outcomeImages = Array.isArray(outcomeImagesRaw) && outcomeImagesRaw.length === outcomes.length
+        ? outcomeImagesRaw
+        : null;
 
       // Expose resolver metadata in a minimal shape — just the type +
       // source name from the config, nothing auth-related. Frontend
@@ -120,6 +124,7 @@ export default async function handler(req, res) {
             resolverSource,
             sport: r.sport || null,
             league: r.league || null,
+            outcomeImages,
           },
           legs,
         });
@@ -151,6 +156,7 @@ export default async function handler(req, res) {
           resolverSource,
           sport: r.sport || null,
           league: r.league || null,
+          outcomeImages,
         },
       });
     } catch (e) {

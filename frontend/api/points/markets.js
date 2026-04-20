@@ -115,6 +115,8 @@ export default async function handler(req, res) {
       const outcomes = parseJsonb(r.outcomes, ['Sí', 'No']);
       const ammMode = r.amm_mode || 'unified';
 
+      const outcomeImages = parseJsonb(r.outcome_images, null);
+
       if (ammMode === 'parallel') {
         // Aggregate legs. Each leg is a binary Sí/No market; the parent
         // outcome's "price" is that leg's YES (outcome 0) price.
@@ -147,6 +149,9 @@ export default async function handler(req, res) {
           createdAt: r.created_at,
           sport: r.sport || null,
           league: r.league || null,
+          outcomeImages: Array.isArray(outcomeImages) && outcomeImages.length === outcomes.length
+            ? outcomeImages
+            : null,
         };
       }
 
@@ -172,6 +177,9 @@ export default async function handler(req, res) {
         createdAt: r.created_at,
         sport: r.sport || null,
         league: r.league || null,
+        outcomeImages: Array.isArray(outcomeImages) && outcomeImages.length === outcomes.length
+          ? outcomeImages
+          : null,
       };
     });
 

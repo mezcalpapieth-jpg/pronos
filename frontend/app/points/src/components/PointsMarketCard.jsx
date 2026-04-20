@@ -54,6 +54,14 @@ export default function PointsMarketCard({ market, userPosition }) {
   const prices = Array.isArray(market.prices) && market.prices.length === outcomes.length
     ? market.prices
     : outcomes.map((_, i) => (i === 0 ? 0.5 : 1 / outcomes.length));
+  // Optional per-outcome image (team crest / player portrait) coming
+  // from the generator pipeline. Sparse array: indices without a logo
+  // hold null (e.g. draw on a 3-way soccer market). Non-sports markets
+  // leave the whole field null.
+  const outcomeImages = Array.isArray(market.outcomeImages)
+    && market.outcomeImages.length === outcomes.length
+    ? market.outcomeImages
+    : null;
 
   const isResolved = market.status === 'resolved';
   // isLive: start_time has passed but the game window hasn't closed
@@ -181,25 +189,36 @@ export default function PointsMarketCard({ market, userPosition }) {
               const accent = accentFor(i);
               const pct = Math.round(prices[i] * 100);
               const gain = previewGain(prices[i]);
+              const logo = outcomeImages?.[i] || null;
               return (
                 <div
                   key={i}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 8,
-                    padding: '8px 10px',
-                    background: accent.bg,
-                    border: `1px solid ${accent.border}`,
-                    borderRadius: 8,
+                    gap: 10,
+                    padding: '6px 6px 6px 8px',
                   }}
                 >
+                  {logo ? (
+                    <img
+                      src={logo}
+                      alt=""
+                      style={{
+                        width: 26,
+                        height: 26,
+                        objectFit: 'contain',
+                        flexShrink: 0,
+                      }}
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  ) : null}
                   <span style={{
                     flex: 1,
                     minWidth: 0,
                     fontFamily: 'var(--font-body)',
-                    fontSize: 12,
-                    color: accent.fg,
+                    fontSize: 13,
+                    color: 'var(--text-primary)',
                     fontWeight: 600,
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
@@ -207,22 +226,38 @@ export default function PointsMarketCard({ market, userPosition }) {
                   }}>
                     {label}
                   </span>
+                  {/* Clickable pill — only the +gain and % sit inside.
+                      Pressing it navigates to the market detail since
+                      the whole card is already clickable, but a
+                      distinct visual hint gives users something to
+                      aim at and mirrors the Polymarket buy style. */}
                   <span style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 11,
-                    color: 'var(--text-muted)',
-                    whiteSpace: 'nowrap',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '6px 10px',
+                    background: accent.bg,
+                    border: `1px solid ${accent.border}`,
+                    borderRadius: 100,
+                    flexShrink: 0,
                   }}>
-                    +{gain} MXNP
-                  </span>
-                  <span style={{
-                    fontFamily: 'var(--font-display)',
-                    fontSize: 14,
-                    color: accent.fg,
-                    minWidth: 38,
-                    textAlign: 'right',
-                  }}>
-                    {pct}%
+                    <span style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 10,
+                      color: 'var(--text-muted)',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      +{gain}
+                    </span>
+                    <span style={{
+                      fontFamily: 'var(--font-display)',
+                      fontSize: 14,
+                      color: accent.fg,
+                      minWidth: 32,
+                      textAlign: 'right',
+                    }}>
+                      {pct}%
+                    </span>
                   </span>
                 </div>
               );

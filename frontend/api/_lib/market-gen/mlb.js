@@ -85,6 +85,11 @@ export async function generateMlbMarkets() {
     const startTime = new Date(kickoffMs).toISOString();
     const endTime   = new Date(kickoffMs + 5 * 3600_000).toISOString();
     const dateYmd   = new Date(kickoff).toISOString().slice(0, 10);
+    // Team logos aligned with the 2-way home/away outcomes. ESPN
+    // competitors carry either team.logo (single) or team.logos[].
+    const homeLogo = home?.team?.logo || home?.team?.logos?.[0]?.href || null;
+    const awayLogo = away?.team?.logo || away?.team?.logos?.[0]?.href || null;
+
     specs.push({
       source: 'espn-mlb',
       source_event_id: String(ev.id),
@@ -94,6 +99,7 @@ export async function generateMlbMarkets() {
       category: 'deportes',
       icon: '⚾',
       outcomes: [home.team.displayName, away.team.displayName],
+      outcome_images: [homeLogo, awayLogo],
       seed_liquidity: 1000,
       start_time: startTime,
       end_time: endTime,

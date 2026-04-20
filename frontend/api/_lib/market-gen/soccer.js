@@ -175,6 +175,12 @@ function matchToMarketSpec(match, competitionCode) {
   const endTime   = new Date(kickoffMs + 2 * 3600_000).toISOString();
   const league    = COMPETITION_TO_LEAGUE[competitionCode] || null;
 
+  // Team crests aligned with the 3-way W/D/L outcomes. Draw has no
+  // image. `crest` is the canonical field on football-data.org team
+  // objects (SVG / PNG depending on the club).
+  const homeCrest = match?.homeTeam?.crest || null;
+  const awayCrest = match?.awayTeam?.crest || null;
+
   return {
     source: 'football-data.org',
     source_event_id: String(match.id),
@@ -186,6 +192,7 @@ function matchToMarketSpec(match, competitionCode) {
     category: 'deportes',
     icon: '⚽',
     outcomes: [homeName, 'Empate', awayName],
+    outcome_images: [homeCrest, null, awayCrest],
     seed_liquidity: 1000,
     start_time: startTime,
     end_time: endTime,

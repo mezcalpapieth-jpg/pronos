@@ -88,6 +88,13 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_markets_sport ON points_markets(sport)`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_league ON points_markets(league)`,
 
+  // outcome_images: JSONB array index-aligned with `outcomes`. Each slot
+  // is either a URL string (team crest / player portrait) or null when
+  // the outcome has no associated image (e.g. 'Empate' for 3-way soccer,
+  // or the 'Otro' leg on F1). Populated by the sports generators; null
+  // for every other market type (crypto / weather / charts).
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS outcome_images JSONB`,
+
   // ── Balances (single source of truth per user) ─────────────────────────
   `CREATE TABLE IF NOT EXISTS points_balances (
     username     TEXT PRIMARY KEY,
@@ -296,6 +303,7 @@ const POINTS_SCHEMA_MIGRATIONS = [
   // path can pass them through verbatim.
   `ALTER TABLE points_pending_markets ADD COLUMN IF NOT EXISTS sport TEXT`,
   `ALTER TABLE points_pending_markets ADD COLUMN IF NOT EXISTS league TEXT`,
+  `ALTER TABLE points_pending_markets ADD COLUMN IF NOT EXISTS outcome_images JSONB`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_points_pending_source_event
     ON points_pending_markets(source, source_event_id)`,
   `CREATE INDEX IF NOT EXISTS idx_points_pending_status

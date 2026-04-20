@@ -138,15 +138,20 @@ async function approveOne(pid, reviewer, note) {
 
     const startIso = r.start_time ? new Date(r.start_time).toISOString() : null;
 
+    const outcomeImages = parseJsonb(r.outcome_images, null);
+    const outcomeImagesJson = Array.isArray(outcomeImages) && outcomeImages.length === outcomes.length
+      ? JSON.stringify(outcomeImages)
+      : null;
+
     if (ammMode === 'unified') {
       const reserves = initialReserves(seed, outcomes.length);
       const mk = await client.query(
         `INSERT INTO points_markets
            (question, category, icon, outcomes, reserves, seed_liquidity,
             start_time, end_time, status, created_by, amm_mode,
-            resolver_type, resolver_config, sport, league)
+            resolver_type, resolver_config, sport, league, outcome_images)
          VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8, 'active', $9,
-                 'unified', $10, $11::jsonb, $12, $13)
+                 'unified', $10, $11::jsonb, $12, $13, $14::jsonb)
          RETURNING id`,
         [
           r.question,
@@ -162,6 +167,7 @@ async function approveOne(pid, reviewer, note) {
           r.resolver_config ? JSON.stringify(r.resolver_config) : null,
           r.sport || null,
           r.league || null,
+          outcomeImagesJson,
         ],
       );
       createdMarketId = mk.rows[0].id;
@@ -173,9 +179,9 @@ async function approveOne(pid, reviewer, note) {
         `INSERT INTO points_markets
            (question, category, icon, outcomes, reserves, seed_liquidity,
             start_time, end_time, status, created_by, amm_mode,
-            resolver_type, resolver_config, sport, league)
+            resolver_type, resolver_config, sport, league, outcome_images)
          VALUES ($1, $2, $3, $4::jsonb, '[]'::jsonb, $5, $6, $7, 'active', $8,
-                 'parallel', $9, $10::jsonb, $11, $12)
+                 'parallel', $9, $10::jsonb, $11, $12, $13::jsonb)
          RETURNING id`,
         [
           r.question,
@@ -190,6 +196,7 @@ async function approveOne(pid, reviewer, note) {
           r.resolver_config ? JSON.stringify(r.resolver_config) : null,
           r.sport || null,
           r.league || null,
+          outcomeImagesJson,
         ],
       );
       createdMarketId = parent.rows[0].id;

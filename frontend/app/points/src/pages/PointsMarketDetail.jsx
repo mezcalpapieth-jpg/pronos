@@ -76,117 +76,183 @@ function resolverLabel(type, source) {
 // Unified: one tap-target per outcome ("Sí" / "No" / "Barcelona" …) showing
 // the current percentage. Tapping opens the buy modal for that outcome at
 // the shared pool.
-function UnifiedOutcomeList({ outcomes, prices, market, onBuyClick }) {
-  return outcomes.map((label, i) => {
-    const pct = Math.round((prices[i] ?? 0) * 100);
-    const accent = accentFor(i, outcomes.length);
-    return (
-      <button
-        key={i}
-        onClick={() => onBuyClick(market, i, label)}
-        style={{
-          width: '100%',
-          padding: '14px 16px',
-          marginBottom: 10,
-          borderRadius: 10,
-          border: `1px solid ${accent.border}`,
-          background: accent.bg,
-          color: accent.fg,
-          fontFamily: 'var(--font-mono)',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          transition: 'transform 0.15s',
-        }}
-        onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
-        onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-      >
-        <span style={{ fontSize: 13, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-          {label}
-        </span>
-        <span style={{ fontFamily: 'var(--font-display)', fontSize: 20 }}>
-          {pct}%
-        </span>
-      </button>
-    );
-  });
+//
+// Layout: when the generator supplied a logo for this outcome, it sits
+// on the LEFT outside the "pill" (the pill contains only the price).
+// This matches the card layout and gives crests/logos room to breathe.
+//
+// Scroll: when a market has > SCROLL_AT_N outcomes (F1 has 21), the list
+// is wrapped in a fixed-height scroll container by the caller, so the
+// detail page doesn't turn into an endless vertical stack.
+const SCROLL_AT_N = 6;
+
+function OutcomeLogo({ src }) {
+  if (!src) return null;
+  return (
+    <img
+      src={src}
+      alt=""
+      style={{
+        width: 28,
+        height: 28,
+        objectFit: 'contain',
+        flexShrink: 0,
+      }}
+      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+    />
+  );
+}
+
+function ScrollableList({ count, children }) {
+  if (count <= SCROLL_AT_N) return <>{children}</>;
+  return (
+    <div style={{
+      maxHeight: 360,
+      overflowY: 'auto',
+      paddingRight: 4,
+      // Subtle scroll shadow so users see there's more below.
+      WebkitMaskImage: 'linear-gradient(to bottom, black calc(100% - 24px), transparent 100%)',
+      maskImage: 'linear-gradient(to bottom, black calc(100% - 24px), transparent 100%)',
+    }}>
+      {children}
+    </div>
+  );
+}
+
+function UnifiedOutcomeList({ outcomes, prices, outcomeImages, market, onBuyClick }) {
+  return (
+    <ScrollableList count={outcomes.length}>
+      {outcomes.map((label, i) => {
+        const pct = Math.round((prices[i] ?? 0) * 100);
+        const accent = accentFor(i, outcomes.length);
+        const logo = outcomeImages?.[i] || null;
+        return (
+          <button
+            key={i}
+            onClick={() => onBuyClick(market, i, label)}
+            style={{
+              width: '100%',
+              padding: '10px 14px 10px 10px',
+              marginBottom: 8,
+              borderRadius: 10,
+              border: `1px solid ${accent.border}`,
+              background: accent.bg,
+              color: accent.fg,
+              fontFamily: 'var(--font-mono)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              transition: 'transform 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+            onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+          >
+            <OutcomeLogo src={logo} />
+            <span style={{
+              flex: 1,
+              minWidth: 0,
+              fontSize: 13,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              textAlign: 'left',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}>
+              {label}
+            </span>
+            <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, flexShrink: 0 }}>
+              {pct}%
+            </span>
+          </button>
+        );
+      })}
+    </ScrollableList>
+  );
 }
 
 // Parallel: each row is a binary Sí/No market. Rendered Polymarket-style:
 // label + aggregated %, then compact Sí / No buttons with each side's
 // current price. Clicking either opens the buy modal against the leg.
-function ParallelLegList({ market, legs, onBuyClick }) {
+//
+// Leg images come from the parent market's `outcomeImages[i]` — the
+// parallel parent stores one image per outcome (e.g. driver portraits
+// when/if we wire that up), index-aligned with the leg order.
+function ParallelLegList({ market, legs, outcomeImages, onBuyClick }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {legs.map((leg, i) => {
-        const accent = accentFor(i, legs.length);
-        const yesPrice = leg.prices?.[0] ?? 0.5;
-        const noPrice  = leg.prices?.[1] ?? 1 - yesPrice;
-        const pct = Math.round(yesPrice * 100);
-        // Synthetic market payload for the buy modal — the modal only
-        // reads .id and .question off its `market` prop, and the trade
-        // endpoints need the leg's id, not the parent's.
-        const legMarket = {
-          id: leg.id,
-          question: `${market.question} — ${leg.label}`,
-        };
-        return (
-          <div
-            key={leg.id}
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'minmax(0, 1fr) 48px auto',
-              gap: 10,
-              alignItems: 'center',
-              padding: '10px 12px',
-              borderRadius: 10,
-              border: `1px solid ${accent.border}`,
-              background: accent.bg,
-            }}
-          >
-            <div style={{
-              minWidth: 0,
-              fontFamily: 'var(--font-body)',
-              fontSize: 13,
-              fontWeight: 600,
-              color: accent.fg,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}>
-              {leg.label}
+    <ScrollableList count={legs.length}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {legs.map((leg, i) => {
+          const accent = accentFor(i, legs.length);
+          const yesPrice = leg.prices?.[0] ?? 0.5;
+          const noPrice  = leg.prices?.[1] ?? 1 - yesPrice;
+          const pct = Math.round(yesPrice * 100);
+          const logo = outcomeImages?.[i] || null;
+          const legMarket = {
+            id: leg.id,
+            question: `${market.question} — ${leg.label}`,
+          };
+          return (
+            <div
+              key={leg.id}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: logo
+                  ? '28px minmax(0, 1fr) 48px auto'
+                  : 'minmax(0, 1fr) 48px auto',
+                gap: 10,
+                alignItems: 'center',
+                padding: '10px 12px',
+                borderRadius: 10,
+                border: `1px solid ${accent.border}`,
+                background: accent.bg,
+              }}
+            >
+              {logo && <OutcomeLogo src={logo} />}
+              <div style={{
+                minWidth: 0,
+                fontFamily: 'var(--font-body)',
+                fontSize: 13,
+                fontWeight: 600,
+                color: accent.fg,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}>
+                {leg.label}
+              </div>
+              <div style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: 16,
+                color: accent.fg,
+                textAlign: 'right',
+              }}>
+                {pct}%
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  onClick={() => onBuyClick(legMarket, 0, `${leg.label} — Sí`)}
+                  style={legButtonStyle('var(--yes)', 'rgba(22,163,74,0.15)', 'rgba(22,163,74,0.4)')}
+                  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                  onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                >
+                  Sí <span style={legPriceStyle}>{Math.round(yesPrice * 100)}¢</span>
+                </button>
+                <button
+                  onClick={() => onBuyClick(legMarket, 1, `${leg.label} — No`)}
+                  style={legButtonStyle('#ff3b3b', 'rgba(255,59,59,0.12)', 'rgba(255,59,59,0.4)')}
+                  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                  onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                >
+                  No <span style={legPriceStyle}>{Math.round(noPrice * 100)}¢</span>
+                </button>
+              </div>
             </div>
-            <div style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: 16,
-              color: accent.fg,
-              textAlign: 'right',
-            }}>
-              {pct}%
-            </div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button
-                onClick={() => onBuyClick(legMarket, 0, `${leg.label} — Sí`)}
-                style={legButtonStyle('var(--yes)', 'rgba(22,163,74,0.15)', 'rgba(22,163,74,0.4)')}
-                onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
-                onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-              >
-                Sí <span style={legPriceStyle}>{Math.round(yesPrice * 100)}¢</span>
-              </button>
-              <button
-                onClick={() => onBuyClick(legMarket, 1, `${leg.label} — No`)}
-                style={legButtonStyle('#ff3b3b', 'rgba(255,59,59,0.12)', 'rgba(255,59,59,0.4)')}
-                onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
-                onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-              >
-                No <span style={legPriceStyle}>{Math.round(noPrice * 100)}¢</span>
-              </button>
-            </div>
-          </div>
-        );
-      })}
-    </div>
+          );
+        })}
+      </div>
+    </ScrollableList>
   );
 }
 
@@ -194,57 +260,64 @@ function ParallelLegList({ market, legs, onBuyClick }) {
 // Each row: label on the left (swatch in the outcome's accent), % on the
 // right. No buttons — the actual buying happens in the leg list below
 // the chart. Keeps the sidebar quick to scan.
-function OddsSummary({ outcomes, prices }) {
+function OddsSummary({ outcomes, prices, outcomeImages }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      {outcomes.map((label, i) => {
-        const accent = accentFor(i, outcomes.length);
-        const pct = Math.round((prices[i] ?? 0) * 100);
-        return (
-          <div
-            key={i}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '8px 10px',
-              borderRadius: 8,
-              background: 'var(--surface2)',
-              border: '1px solid var(--border)',
-            }}
-          >
-            <span style={{
-              width: 8,
-              height: 8,
-              borderRadius: '50%',
-              background: accent.fg,
-              flexShrink: 0,
-            }} />
-            <span style={{
-              flex: 1,
-              minWidth: 0,
-              fontFamily: 'var(--font-body)',
-              fontSize: 12,
-              color: 'var(--text-primary)',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}>
-              {label}
-            </span>
-            <span style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: 14,
-              color: accent.fg,
-              minWidth: 38,
-              textAlign: 'right',
-            }}>
-              {pct}%
-            </span>
-          </div>
-        );
-      })}
-    </div>
+    <ScrollableList count={outcomes.length}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {outcomes.map((label, i) => {
+          const accent = accentFor(i, outcomes.length);
+          const pct = Math.round((prices[i] ?? 0) * 100);
+          const logo = outcomeImages?.[i] || null;
+          return (
+            <div
+              key={i}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '8px 10px',
+                borderRadius: 8,
+                background: 'var(--surface2)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              {logo ? (
+                <OutcomeLogo src={logo} />
+              ) : (
+                <span style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background: accent.fg,
+                  flexShrink: 0,
+                }} />
+              )}
+              <span style={{
+                flex: 1,
+                minWidth: 0,
+                fontFamily: 'var(--font-body)',
+                fontSize: 12,
+                color: 'var(--text-primary)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}>
+                {label}
+              </span>
+              <span style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: 14,
+                color: accent.fg,
+                minWidth: 38,
+                textAlign: 'right',
+              }}>
+                {pct}%
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </ScrollableList>
   );
 }
 
@@ -676,6 +749,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 <ParallelLegList
                   market={market}
                   legs={market.legs}
+                  outcomeImages={market.outcomeImages}
                   onBuyClick={handleBuyClick}
                 />
               </div>
@@ -692,23 +766,46 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
                 gap: 12,
                 marginBottom: 32,
+                // Many outcomes (rare on unified, but guard anyway):
+                // cap height and scroll so the grid doesn't push the
+                // rest of the page off-screen.
+                ...(outcomes.length > 8 ? {
+                  maxHeight: 320,
+                  overflowY: 'auto',
+                } : null),
               }}>
                 {outcomes.map((label, i) => {
                   const pct = Math.round((isResolved ? (winnerIndex === i ? 1 : 0) : prices[i]) * 100);
                   const isWin = isResolved && winnerIndex === i;
+                  const logo = market.outcomeImages?.[i] || null;
                   return (
                     <div key={i} style={{
-                      padding: '18px 16px',
+                      padding: '16px',
                       background: isWin ? 'rgba(0,232,122,0.08)' : 'var(--surface1)',
                       border: `1px solid ${isWin ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
                       borderRadius: 12,
                       opacity: isResolved && !isWin ? 0.5 : 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
                     }}>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.06em', marginBottom: 6 }}>
-                        {label.toUpperCase()}
-                      </div>
-                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, color: isWin ? 'var(--green)' : 'var(--text-primary)' }}>
-                        {pct}%
+                      <OutcomeLogo src={logo} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 10,
+                          color: 'var(--text-muted)',
+                          letterSpacing: '0.06em',
+                          marginBottom: 6,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}>
+                          {label.toUpperCase()}
+                        </div>
+                        <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: isWin ? 'var(--green)' : 'var(--text-primary)' }}>
+                          {pct}%
+                        </div>
                       </div>
                     </div>
                   );
@@ -934,10 +1031,11 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 carries a read-only odds summary to keep scanability. */}
             {!isResolved && !isPendingResolution && (
               market.ammMode === 'parallel'
-                ? <OddsSummary outcomes={outcomes} prices={prices} />
+                ? <OddsSummary outcomes={outcomes} prices={prices} outcomeImages={market.outcomeImages} />
                 : <UnifiedOutcomeList
                     outcomes={outcomes}
                     prices={prices}
+                    outcomeImages={market.outcomeImages}
                     market={market}
                     onBuyClick={handleBuyClick}
                   />
