@@ -518,5 +518,33 @@ if (window.location.hash === '#waitlist') openWaitlistModal();
 <!-- Lógica principal -->
 <script src="js/app.js"></script>
 
+<!-- ── Welcome popup ─────────────────────────────────────────── -->
+<div id="welcome-overlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:20px;">
+  <div id="welcome-modal" style="background:var(--surface1);border:1px solid var(--border-active);border-radius:20px;max-width:440px;width:100%;padding:40px 36px;text-align:center;position:relative;box-shadow:0 0 60px rgba(255,85,0,0.15);">
+    <!-- Logo mark -->
+    <div style="font-family:var(--font-display);font-size:22px;letter-spacing:0.12em;color:var(--green);margin-bottom:24px;">PRONOS<span style="color:var(--green)">✦</span></div>
+    <!-- One-liner -->
+    <h2 style="font-family:var(--font-display);font-size:clamp(22px,5vw,30px);letter-spacing:0.04em;color:var(--text-primary);line-height:1.15;margin-bottom:14px;">El primer mercado de<br>predicciones de Latinoamérica.</h2>
+    <p style="font-family:var(--font-body);font-size:14px;color:var(--text-muted);line-height:1.7;margin-bottom:32px;">Predice el futuro de deportes, política y cultura. Gana MXNB si aciertas — liquidado on-chain, sin intermediarios.</p>
+    <!-- Primary CTA -->
+    <button onclick="window.open('https://tally.so/r/1AMZDg','_blank');document.getElementById('welcome-overlay').style.display='none';localStorage.setItem('pronos-welcomed','1');" style="width:100%;padding:15px 0;background:var(--green);color:#fff;font-family:var(--font-display);font-size:18px;letter-spacing:0.08em;border:none;border-radius:10px;cursor:pointer;margin-bottom:12px;transition:filter 0.15s;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter=''">
+      ÚNETE A LA LISTA
+    </button>
+    <!-- Secondary CTA -->
+    <button onclick="window.open('https://pronos.io/que-son-los-mercados-de-predicciones','_blank');document.getElementById('welcome-overlay').style.display='none';localStorage.setItem('pronos-welcomed','1');" style="width:100%;padding:13px 0;background:transparent;color:var(--text-secondary);font-family:var(--font-mono);font-size:12px;letter-spacing:0.06em;border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:border-color 0.15s,color 0.15s;" onmouseover="this.style.borderColor='var(--border-active)';this.style.color='var(--text-primary)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-secondary)'">
+      ¿Qué son los mercados de predicciones? →
+    </button>
+    <!-- Close -->
+    <button onclick="document.getElementById('welcome-overlay').style.display='none';localStorage.setItem('pronos-welcomed','1');" style="position:absolute;top:16px;right:18px;background:none;border:none;font-size:20px;color:var(--text-muted);cursor:pointer;line-height:1;" title="Cerrar">✕</button>
+  </div>
+</div>
+<script>
+(function(){
+  if(!localStorage.getItem('pronos-welcomed')){
+    document.getElementById('welcome-overlay').style.display='flex';
+  }
+})();
+</script>
+
 </body>
 </html>
