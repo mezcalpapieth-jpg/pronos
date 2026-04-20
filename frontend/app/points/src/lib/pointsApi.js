@@ -202,6 +202,14 @@ export async function adminBackfillResolvers({ dry = false } = {}) {
   return postJson(`/api/points/admin/backfill-resolvers${q}`, {});
 }
 
+// Manually trigger the daily market-generation pipeline. Useful when
+// testing on preview deploys (where Vercel crons don't auto-fire) or
+// after editing entertainment-config.
+export async function adminRunGenerators({ dry = false } = {}) {
+  const q = dry ? '?dry=1' : '';
+  return postJson(`/api/points/admin/run-generators${q}`, {});
+}
+
 // ─── Admin — edit market (question + end time + category) ──────────────────
 export async function adminEditMarket({ marketId, question, endTime, category }) {
   return postJson('/api/points/admin/edit-market', { marketId, question, endTime, category });

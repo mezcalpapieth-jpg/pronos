@@ -24,6 +24,7 @@ import {
   adminReviewPendingMarket,
   adminApproveAllPendingMarkets,
   adminBackfillResolvers,
+  adminRunGenerators,
 } from '../lib/pointsApi.js';
 
 const CATEGORIES = [
@@ -1498,6 +1499,26 @@ function PendingMarketsTable() {
     }
   }
 
+  async function runGenerators() {
+    if (!confirm('¿Ejecutar todos los generadores ahora? Inserta/actualiza filas en la cola de pendientes.')) {
+      return;
+    }
+    setBulkBusy(true);
+    try {
+      const r = await adminRunGenerators({ dry: false });
+      await load();
+      const counts = Object.entries(r.sources || {})
+        .filter(([, v]) => v.count > 0)
+        .map(([k, v]) => `${k}:${v.count}`)
+        .join(' · ') || '(sin eventos)';
+      alert(`✓ Generación completa.\nInsertados: ${r.inserted} · Actualizados: ${r.updated} · Saltados: ${r.skipped}\n${counts}`);
+    } catch (e) {
+      alert(`Generar falló: ${e.code || e.message}`);
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   async function backfillResolvers() {
     setBulkBusy(true);
     try {
@@ -1588,6 +1609,30 @@ function PendingMarketsTable() {
           </button>
         )}
 
+        {/* Generate now — runs every pipeline and upserts. Same code
+            path as the daily cron; useful on preview deploys (which
+            Vercel doesn't cron) and after editing entertainment-config. */}
+        <button
+          onClick={runGenerators}
+          disabled={bulkBusy}
+          title="Ejecuta todos los generadores y hace upsert en la cola pendiente"
+          style={{
+            marginLeft: (filter === 'pending' && pendingCount > 0) ? 0 : 'auto',
+            padding: '6px 14px',
+            borderRadius: 16,
+            border: '1px solid rgba(59,130,246,0.4)',
+            background: 'rgba(59,130,246,0.1)',
+            color: '#3b82f6',
+            fontFamily: 'var(--font-mono)', fontSize: 11,
+            letterSpacing: '0.06em', textTransform: 'uppercase',
+            cursor: bulkBusy ? 'not-allowed' : 'pointer',
+            opacity: bulkBusy ? 0.5 : 1,
+            fontWeight: 600,
+          }}
+        >
+          🔄 Generar ahora
+        </button>
+
         {/* Retrofit resolvers — one-shot migration for markets
             approved before the auto-resolver code landed. Dry-runs
             first to show the candidate count, then applies on confirm. */}
@@ -1596,7 +1641,6 @@ function PendingMarketsTable() {
           disabled={bulkBusy}
           title="Copia resolver_type + resolver_config desde points_pending_markets hacia points_markets donde falten"
           style={{
-            marginLeft: (filter === 'pending' && pendingCount > 0) ? 0 : 'auto',
             padding: '6px 14px',
             borderRadius: 16,
             border: '1px solid var(--border)',
