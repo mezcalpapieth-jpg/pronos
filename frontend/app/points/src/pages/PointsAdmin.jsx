@@ -23,6 +23,7 @@ import {
   adminListPendingMarkets,
   adminReviewPendingMarket,
   adminApproveAllPendingMarkets,
+  adminBackfillResolvers,
 } from '../lib/pointsApi.js';
 
 const CATEGORIES = [
@@ -1497,6 +1498,30 @@ function PendingMarketsTable() {
     }
   }
 
+  async function backfillResolvers() {
+    setBulkBusy(true);
+    try {
+      const preview = await adminBackfillResolvers({ dry: true });
+      const n = preview.candidateCount || 0;
+      if (n === 0) {
+        alert('No hay mercados que necesiten retrofit. Todo al día.');
+        return;
+      }
+      if (!confirm(`Retrofit: ${n} mercados activos recibirán su resolver automático. Continuar?`)) {
+        return;
+      }
+      const r = await adminBackfillResolvers({ dry: false });
+      const breakdown = Object.entries(r.byResolverType || {})
+        .map(([k, v]) => `${k}: ${v}`)
+        .join(' · ');
+      alert(`✓ ${r.updatedCount} mercados actualizados.\n${breakdown}`);
+    } catch (e) {
+      alert(`Retrofit falló: ${e.code || e.message}`);
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   function formatWhen(iso) {
     if (!iso) return '—';
     const d = new Date(iso);
@@ -1562,6 +1587,29 @@ function PendingMarketsTable() {
             {bulkBusy ? `Aprobando ${pendingCount}…` : `✓ Aprobar todos (${pendingCount})`}
           </button>
         )}
+
+        {/* Retrofit resolvers — one-shot migration for markets
+            approved before the auto-resolver code landed. Dry-runs
+            first to show the candidate count, then applies on confirm. */}
+        <button
+          onClick={backfillResolvers}
+          disabled={bulkBusy}
+          title="Copia resolver_type + resolver_config desde points_pending_markets hacia points_markets donde falten"
+          style={{
+            marginLeft: (filter === 'pending' && pendingCount > 0) ? 0 : 'auto',
+            padding: '6px 14px',
+            borderRadius: 16,
+            border: '1px solid var(--border)',
+            background: 'transparent',
+            color: 'var(--text-secondary)',
+            fontFamily: 'var(--font-mono)', fontSize: 11,
+            letterSpacing: '0.06em', textTransform: 'uppercase',
+            cursor: bulkBusy ? 'not-allowed' : 'pointer',
+            opacity: bulkBusy ? 0.5 : 1,
+          }}
+        >
+          🔧 Retrofit resolvers
+        </button>
       </div>
 
       <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.6 }}>

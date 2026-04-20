@@ -195,6 +195,13 @@ export async function adminApproveAllPendingMarkets(note) {
   return postJson('/api/points/admin/pending-markets', { action: 'approve_all', note });
 }
 
+// One-shot: retrofit resolver_type + resolver_config on already-approved
+// markets that were missing them. Idempotent; safe to re-run.
+export async function adminBackfillResolvers({ dry = false } = {}) {
+  const q = dry ? '?dry=1' : '';
+  return postJson(`/api/points/admin/backfill-resolvers${q}`, {});
+}
+
 // ─── Admin — edit market (question + end time + category) ──────────────────
 export async function adminEditMarket({ marketId, question, endTime, category }) {
   return postJson('/api/points/admin/edit-market', { marketId, question, endTime, category });
