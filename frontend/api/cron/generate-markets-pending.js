@@ -32,6 +32,7 @@ import { generateFxMarkets }          from '../_lib/market-gen/fx.js';
 import { generateFuelMarkets }        from '../_lib/market-gen/fuel.js';
 import { generateChartsMarkets }      from '../_lib/market-gen/charts.js';
 import { generateYouTubeMarkets }     from '../_lib/market-gen/youtube.js';
+import { generateEntertainmentMarkets } from '../_lib/market-gen/entertainment.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -54,8 +55,9 @@ const GENERATORS = [
   { name: 'mlb',          run: generateMlbMarkets        },
   { name: 'nba',          run: generateNbaMarkets        },
   { name: 'f1',           run: generateF1Markets         },
-  { name: 'charts',       run: generateChartsMarkets     },
-  { name: 'youtube',      run: generateYouTubeMarkets    },
+  { name: 'charts',         run: generateChartsMarkets       },
+  { name: 'youtube',        run: generateYouTubeMarkets      },
+  { name: 'entertainment',  run: generateEntertainmentMarkets },
 ];
 
 export default async function handler(req, res) {
