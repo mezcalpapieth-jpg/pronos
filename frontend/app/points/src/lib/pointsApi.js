@@ -35,6 +35,13 @@ export async function postJson(url, body) {
 }
 
 // ─── Markets ────────────────────────────────────────────────────────────────
+// Aggregate counters for the home hero. Ships only integers so we
+// can show the true total active-market count without fetching
+// every row.
+export async function fetchStats() {
+  return getJson('/api/points/stats');
+}
+
 // `limit` caps the number of markets returned. Leave undefined on home
 // (trending shows the soonest-closing 100); category / browse pages
 // pass a larger value so nothing is hidden.

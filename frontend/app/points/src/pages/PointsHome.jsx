@@ -15,7 +15,7 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { fetchMarkets, fetchCurrentCycle, fetchPositions } from '../lib/pointsApi.js';
+import { fetchMarkets, fetchCurrentCycle, fetchPositions, fetchStats } from '../lib/pointsApi.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useT } from '@app/lib/i18n.js';
 import PointsMarketCard from '../components/PointsMarketCard.jsx';
@@ -45,6 +45,21 @@ export default function PointsHome({ onOpenLogin }) {
   const [error, setError] = useState(null);
   const [cycle, setCycle] = useState(null);
   const [cycleTick, setCycleTick] = useState(0); // forces re-render each minute
+  // Aggregate counters from /api/points/stats. Source of truth for
+  // the hero's "Mercados activos" number — the grid below only
+  // fetches featured markets, so deriving the count from it would
+  // under-report the total.
+  const [globalStats, setGlobalStats] = useState(null);
+
+  // Fetch aggregate counts once on mount. Endpoint is edge-cached
+  // for 60s so this is effectively free on repeat loads.
+  useEffect(() => {
+    let cancelled = false;
+    fetchStats()
+      .then(s => { if (!cancelled) setGlobalStats(s); })
+      .catch(() => { /* non-critical — hero falls back to grid count */ });
+    return () => { cancelled = true; };
+  }, []);
 
   // Search value comes from the nav input (mirrored to ?q=<text>). Living
   // in the URL keeps deep-links work and lets the nav share state without
@@ -139,13 +154,17 @@ export default function PointsHome({ onOpenLogin }) {
     return out;
   }, [markets, searchQuery]);
 
-  // Derived stats for the hero — pulled live from the markets list so they
-  // stay honest. Falls back to friendly defaults when markets are loading.
+  // Derived stats for the hero. `activeCount` reads from the stats
+  // endpoint's aggregate query so it reflects EVERY active market
+  // across all categories, not just the featured slice the grid
+  // rendered. Volume stays derived from the (featured) grid — it's
+  // a display heuristic, not a critical number.
   const stats = useMemo(() => {
-    const activeCount = markets.filter(m => m.status === 'active').length;
+    const gridCount = markets.filter(m => m.status === 'active').length;
+    const activeCount = globalStats?.activeCount ?? gridCount;
     const totalVolume = markets.reduce((s, m) => s + (Number(m.tradeVolume || 0)), 0);
     return { activeCount, totalVolume };
-  }, [markets]);
+  }, [markets, globalStats]);
 
   return (
     <>
