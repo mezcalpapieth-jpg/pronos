@@ -170,163 +170,110 @@ export default function PointsMarketCard({ market, userPosition }) {
       <div className="mock-card-body">
         <p className="mock-card-title">{market.question}</p>
 
-        {/* Two layouts:
-              N ≤ 3 → original wide rows (label / +payout / %).
-              N > 3 → 2-column grid of square-ish tiles (label on top,
-                      big % below). Capped at 4 tiles; any extra legs
-                      roll into a "+N opciones más" hint so the card
-                      never goes beyond a 2×2 grid. The detail page
-                      still shows every leg.
-        */}
-        {outcomes.length <= 3 ? (
-          <div style={{
+        {/* Single-column list of wide rows — logo + label on the left,
+            a clickable +gain/% pill on the right. When the market has
+            more than 4 outcomes (F1 with 21 drivers, election with 5
+            candidates, …) we cap the list height and let the user
+            scroll through every option inside the card instead of
+            overflowing into a 2×2 grid with a "+N more" hint. */}
+        <div
+          style={{
             display: 'flex',
             flexDirection: 'column',
             gap: 6,
             margin: '10px 0 4px',
-          }}>
-            {outcomes.map((label, i) => {
-              const accent = accentFor(i);
-              const pct = Math.round(prices[i] * 100);
-              const gain = previewGain(prices[i]);
-              const logo = outcomeImages?.[i] || null;
-              return (
-                <div
-                  key={i}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    padding: '6px 6px 6px 8px',
-                  }}
-                >
-                  {logo ? (
-                    <img
-                      src={logo}
-                      alt=""
-                      style={{
-                        width: 26,
-                        height: 26,
-                        objectFit: 'contain',
-                        flexShrink: 0,
-                      }}
-                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    />
-                  ) : null}
-                  <span style={{
-                    flex: 1,
-                    minWidth: 0,
-                    fontFamily: 'var(--font-body)',
-                    fontSize: 13,
-                    color: 'var(--text-primary)',
-                    fontWeight: 600,
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}>
-                    {label}
-                  </span>
-                  {/* Clickable pill — only the +gain and % sit inside.
-                      Pressing it navigates to the market detail since
-                      the whole card is already clickable, but a
-                      distinct visual hint gives users something to
-                      aim at and mirrors the Polymarket buy style. */}
-                  <span style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    padding: '6px 10px',
-                    background: accent.bg,
-                    border: `1px solid ${accent.border}`,
-                    borderRadius: 100,
-                    flexShrink: 0,
-                  }}>
-                    <span style={{
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 10,
-                      color: 'var(--text-muted)',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      +{gain}
-                    </span>
-                    <span style={{
-                      fontFamily: 'var(--font-display)',
-                      fontSize: 14,
-                      color: accent.fg,
-                      minWidth: 32,
-                      textAlign: 'right',
-                    }}>
-                      {pct}%
-                    </span>
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: 6,
-              margin: '10px 0 4px',
-            }}>
-              {outcomes.slice(0, 4).map((label, i) => {
-                const accent = accentFor(i);
-                const pct = Math.round(prices[i] * 100);
-                return (
-                  <div
-                    key={i}
+            ...(outcomes.length > 4 ? {
+              maxHeight: 200,
+              overflowY: 'auto',
+              paddingRight: 4,
+              WebkitMaskImage: 'linear-gradient(to bottom, black calc(100% - 18px), transparent 100%)',
+              maskImage: 'linear-gradient(to bottom, black calc(100% - 18px), transparent 100%)',
+            } : null),
+          }}
+          // Stop clicks inside the scroll area from bubbling up to
+          // the outer card's navigate handler so the user can scroll
+          // without accidentally opening the detail page.
+          onClick={(e) => {
+            if (outcomes.length > 4) e.stopPropagation();
+          }}
+        >
+          {outcomes.map((label, i) => {
+            const accent = accentFor(i);
+            const pct = Math.round(prices[i] * 100);
+            const gain = previewGain(prices[i]);
+            const logo = outcomeImages?.[i] || null;
+            return (
+              <div
+                key={i}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '6px 6px 6px 8px',
+                }}
+              >
+                {logo ? (
+                  <img
+                    src={logo}
+                    alt=""
                     style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      gap: 4,
-                      padding: '8px 10px',
-                      background: accent.bg,
-                      border: `1px solid ${accent.border}`,
-                      borderRadius: 8,
-                      minHeight: 52,
+                      width: 26,
+                      height: 26,
+                      objectFit: 'contain',
+                      flexShrink: 0,
                     }}
-                  >
-                    <span style={{
-                      fontFamily: 'var(--font-body)',
-                      fontSize: 11,
-                      color: accent.fg,
-                      fontWeight: 600,
-                      lineHeight: 1.25,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}>
-                      {label}
-                    </span>
-                    <span style={{
-                      fontFamily: 'var(--font-display)',
-                      fontSize: 18,
-                      color: accent.fg,
-                      alignSelf: 'flex-end',
-                      lineHeight: 1,
-                    }}>
-                      {pct}%
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-            {outcomes.length > 4 && (
-              <p style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 10,
-                color: 'var(--text-muted)',
-                margin: '2px 0 0',
-                letterSpacing: '0.04em',
-              }}>
-                {t('points.card.moreOptions', { n: outcomes.length - 4 })}
-              </p>
-            )}
-          </>
-        )}
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                ) : null}
+                <span style={{
+                  flex: 1,
+                  minWidth: 0,
+                  fontFamily: 'var(--font-body)',
+                  fontSize: 13,
+                  color: 'var(--text-primary)',
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}>
+                  {label}
+                </span>
+                {/* Clickable pill — only the +gain and % sit inside.
+                    Mirrors the Polymarket buy-button style the user
+                    asked for. The whole card is already clickable so
+                    the pill just gives users something to aim at. */}
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '6px 10px',
+                  background: accent.bg,
+                  border: `1px solid ${accent.border}`,
+                  borderRadius: 100,
+                  flexShrink: 0,
+                }}>
+                  <span style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 10,
+                    color: 'var(--text-muted)',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    +{gain}
+                  </span>
+                  <span style={{
+                    fontFamily: 'var(--font-display)',
+                    fontSize: 14,
+                    color: accent.fg,
+                    minWidth: 32,
+                    textAlign: 'right',
+                  }}>
+                    {pct}%
+                  </span>
+                </span>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       <div className="mock-card-footer">

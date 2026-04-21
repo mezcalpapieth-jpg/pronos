@@ -704,27 +704,54 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                     seed={`points-detail-${market.id}-${outcomes[0] || 'yes'}`}
                   />
                 ) : (
+                  // Chart shows up to FOUR lines. When a market has
+                  // more than four outcomes (F1, election-style
+                  // markets) we pick the four with the highest
+                  // current odds — every other line would just be a
+                  // flat zero-ish trace crowding the chart. Color
+                  // stays tied to the outcome's ORIGINAL index so
+                  // it matches the color in the buy-list below.
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {outcomes.map((label, i) => {
-                      const color = OUTCOME_COLORS[i % OUTCOME_COLORS.length];
-                      const series = historyByOutcome && historyByOutcome[i];
-                      return (
-                        <Sparkline
-                          key={i}
-                          height={48}
-                          color={color}
-                          strokeWidth={2}
-                          fill={i === 0}
-                          showValue={true}
-                          valueWidth={44}
-                          label={label.length > 10 ? label.slice(0, 9) + '…' : label}
-                          labelWidth={84}
-                          data={Array.isArray(series) && series.length > 1 ? series : null}
-                          targetPct={Math.round((prices[i] ?? 1 / outcomes.length) * 100)}
-                          seed={`points-detail-${market.id}-${label || 'opt' + i}`}
-                        />
-                      );
-                    })}
+                    {(() => {
+                      const chartIndices = outcomes.length <= 4
+                        ? outcomes.map((_, i) => i)
+                        : [...outcomes.keys()]
+                            .sort((a, b) => (prices[b] ?? 0) - (prices[a] ?? 0))
+                            .slice(0, 4);
+                      return chartIndices.map((i) => {
+                        const label = outcomes[i];
+                        const color = OUTCOME_COLORS[i % OUTCOME_COLORS.length];
+                        const series = historyByOutcome && historyByOutcome[i];
+                        return (
+                          <Sparkline
+                            key={i}
+                            height={48}
+                            color={color}
+                            strokeWidth={2}
+                            fill={i === chartIndices[0]}
+                            showValue={true}
+                            valueWidth={44}
+                            label={label.length > 10 ? label.slice(0, 9) + '…' : label}
+                            labelWidth={84}
+                            data={Array.isArray(series) && series.length > 1 ? series : null}
+                            targetPct={Math.round((prices[i] ?? 1 / outcomes.length) * 100)}
+                            seed={`points-detail-${market.id}-${label || 'opt' + i}`}
+                          />
+                        );
+                      });
+                    })()}
+                    {outcomes.length > 4 && (
+                      <p style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 10,
+                        color: 'var(--text-muted)',
+                        letterSpacing: '0.04em',
+                        margin: '4px 0 0',
+                        textAlign: 'right',
+                      }}>
+                        {t('points.detail.topOnly', { n: outcomes.length })}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

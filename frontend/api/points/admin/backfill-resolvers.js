@@ -3,23 +3,22 @@
  * POST /api/points/admin/backfill-resolvers?dry=1     — preview
  *
  * One-shot migration that patches already-approved points_markets
- * rows whose resolver_type is still NULL.
+ * rows with any generator-owned fields that were added AFTER the
+ * market was approved:
+ *
+ *   - resolver_type / resolver_config  (original purpose)
+ *   - sport / league                   (per-type page classifiers)
+ *   - outcome_images                   (team crests, driver portraits)
+ *
+ * Each field is COALESCE-patched only when the existing column is
+ * NULL, so running this twice is safe and we never clobber a value
+ * a human admin edited by hand.
  *
  * Flow:
  *   1. Run every generator inline — same pool as the daily cron.
- *   2. For each spec with a resolver_type, UPDATE points_markets via
- *      the (source, source_event_id) → approved_market_id chain on
+ *   2. For each spec, UPDATE points_markets via the
+ *      (source, source_event_id) → approved_market_id chain on
  *      points_pending_markets.
- *
- * We bypass the pending-table "is this row's own resolver_type set?"
- * check that the previous version used: pending rows frozen at
- * status='approved' were never refreshed by the DO UPDATE upsert,
- * so the join emptied out even though fresh generator output knows
- * the right value. Going straight from spec → approved market
- * sidesteps that entirely.
- *
- * Idempotent — the WHERE clause pins writes to rows that still have
- * resolver_type IS NULL.
  *
  * Admin-only.
  */
@@ -79,7 +78,7 @@ export default async function handler(req, res) {
     const dryRun = req.query.dry === '1' || req.query.dry === 'true';
     await ensurePointsSchema(sql);
 
-    const specs = (await collectSpecs()).filter(s => s && s.resolver_type);
+    const specs = await collectSpecs();
 
     if (specs.length === 0) {
       return res.status(200).json({
@@ -87,25 +86,35 @@ export default async function handler(req, res) {
         dryRun,
         candidateCount: 0,
         updatedCount: 0,
-        note: 'No generator returned any spec with a resolver_type — nothing to retrofit.',
+        note: 'No generator returned any spec — nothing to retrofit.',
       });
     }
 
     if (dryRun) {
-      // Preview = count how many NULL-resolver approved markets the
-      // fresh specs would touch. Matches the wet-run where clause
-      // exactly so the dry count is truthful.
+      // Preview: a row is a candidate if the market has at least one
+      // NULL field the fresh spec can fill in. We check the same set
+      // the wet-run UPDATE touches so the count is truthful.
       const rows = [];
       for (const s of specs) {
         const r = await sql`
-          SELECT m.id AS market_id
+          SELECT m.id AS market_id,
+                 m.resolver_type,
+                 m.sport,
+                 m.league,
+                 m.outcome_images
           FROM points_markets m
           JOIN points_pending_markets pm ON pm.approved_market_id = m.id
           WHERE pm.source = ${s.source}
             AND pm.source_event_id = ${s.source_event_id}
-            AND m.resolver_type IS NULL
             AND m.status = 'active'
             AND m.parent_id IS NULL
+            AND (
+              (m.resolver_type IS NULL AND ${s.resolver_type || null}::text IS NOT NULL)
+              OR (m.sport IS NULL AND ${s.sport || null}::text IS NOT NULL)
+              OR (m.league IS NULL AND ${s.league || null}::text IS NOT NULL)
+              OR (m.outcome_images IS NULL
+                  AND ${s.outcome_images ? JSON.stringify(s.outcome_images) : null}::jsonb IS NOT NULL)
+            )
           LIMIT 1
         `;
         if (r.length > 0) {
@@ -113,7 +122,12 @@ export default async function handler(req, res) {
             marketId: r[0].market_id,
             source: s.source,
             sourceEventId: s.source_event_id,
-            resolverType: s.resolver_type,
+            patches: {
+              resolverType:   r[0].resolver_type   === null && !!s.resolver_type,
+              sport:          r[0].sport           === null && !!s.sport,
+              league:         r[0].league          === null && !!s.league,
+              outcomeImages:  r[0].outcome_images  === null && !!s.outcome_images,
+            },
           });
         }
       }
@@ -125,32 +139,89 @@ export default async function handler(req, res) {
       });
     }
 
-    const updated = [];
-    const byResolverType = {};
+    // Wet run — one UPDATE per field per spec. Each UPDATE guards on
+    // "column IS NULL AND spec value IS NOT NULL", so we only touch
+    // rows that genuinely need the value AND we can count accurately
+    // which fields flipped.
+    const patchedMarkets = new Map(); // marketId → Set(patches)
+    const patchCounts = { resolverType: 0, sport: 0, league: 0, outcomeImages: 0 };
+
+    function record(marketId, field) {
+      if (!patchedMarkets.has(marketId)) patchedMarkets.set(marketId, new Set());
+      patchedMarkets.get(marketId).add(field);
+      patchCounts[field] += 1;
+    }
+
     for (const s of specs) {
-      const r = await sql`
-        UPDATE points_markets m
-        SET resolver_type   = ${s.resolver_type},
-            resolver_config = ${s.resolver_config ? JSON.stringify(s.resolver_config) : null}::jsonb
-        FROM points_pending_markets pm
-        WHERE pm.source = ${s.source}
-          AND pm.source_event_id = ${s.source_event_id}
-          AND pm.approved_market_id = m.id
-          AND m.resolver_type IS NULL
-          AND m.status = 'active'
-          AND m.parent_id IS NULL
-        RETURNING m.id
-      `;
-      for (const row of r) {
-        updated.push({ marketId: row.id, resolverType: s.resolver_type });
-        byResolverType[s.resolver_type] = (byResolverType[s.resolver_type] || 0) + 1;
+      if (s.resolver_type) {
+        const r = await sql`
+          UPDATE points_markets m
+          SET resolver_type   = ${s.resolver_type},
+              resolver_config = ${s.resolver_config ? JSON.stringify(s.resolver_config) : null}::jsonb
+          FROM points_pending_markets pm
+          WHERE pm.source = ${s.source}
+            AND pm.source_event_id = ${s.source_event_id}
+            AND pm.approved_market_id = m.id
+            AND m.resolver_type IS NULL
+            AND m.status = 'active'
+            AND m.parent_id IS NULL
+          RETURNING m.id
+        `;
+        for (const row of r) record(row.id, 'resolverType');
+      }
+      if (s.sport) {
+        const r = await sql`
+          UPDATE points_markets m
+          SET sport = ${s.sport}
+          FROM points_pending_markets pm
+          WHERE pm.source = ${s.source}
+            AND pm.source_event_id = ${s.source_event_id}
+            AND pm.approved_market_id = m.id
+            AND m.sport IS NULL
+            AND m.parent_id IS NULL
+          RETURNING m.id
+        `;
+        for (const row of r) record(row.id, 'sport');
+      }
+      if (s.league) {
+        const r = await sql`
+          UPDATE points_markets m
+          SET league = ${s.league}
+          FROM points_pending_markets pm
+          WHERE pm.source = ${s.source}
+            AND pm.source_event_id = ${s.source_event_id}
+            AND pm.approved_market_id = m.id
+            AND m.league IS NULL
+            AND m.parent_id IS NULL
+          RETURNING m.id
+        `;
+        for (const row of r) record(row.id, 'league');
+      }
+      if (Array.isArray(s.outcome_images) && s.outcome_images.length > 0) {
+        const r = await sql`
+          UPDATE points_markets m
+          SET outcome_images = ${JSON.stringify(s.outcome_images)}::jsonb
+          FROM points_pending_markets pm
+          WHERE pm.source = ${s.source}
+            AND pm.source_event_id = ${s.source_event_id}
+            AND pm.approved_market_id = m.id
+            AND m.outcome_images IS NULL
+            AND m.parent_id IS NULL
+          RETURNING m.id
+        `;
+        for (const row of r) record(row.id, 'outcomeImages');
       }
     }
+
+    const updated = Array.from(patchedMarkets.entries()).map(([marketId, set]) => ({
+      marketId,
+      patches: Array.from(set),
+    }));
 
     return res.status(200).json({
       ok: true,
       updatedCount: updated.length,
-      byResolverType,
+      patchCounts,
       updated,
       reviewer: admin.username,
     });

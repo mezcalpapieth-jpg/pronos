@@ -528,6 +528,7 @@ const STRINGS = {
   'points.detail.priceHistory':    { es: 'HISTORIAL DE PRECIO', en: 'PRICE HISTORY' },
   'points.detail.priceRealtime':   { es: 'PRECIO EN TIEMPO REAL', en: 'REAL-TIME PRICE' },
   'points.detail.last30d':         { es: 'ÚLT. 30 DÍAS',       en: 'LAST 30 DAYS' },
+  'points.detail.topOnly':         { es: 'Mostrando top 4 de {n} opciones', en: 'Showing top 4 of {n} outcomes' },
   'points.detail.closesLabel':     { es: 'CIERRA',             en: 'CLOSES' },
   'points.detail.closedLabel':     { es: 'CERRÓ',              en: 'CLOSED' },
   'points.detail.volumeLabel':     { es: 'VOLUMEN',            en: 'VOLUME' },

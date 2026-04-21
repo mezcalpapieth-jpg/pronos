@@ -11,9 +11,17 @@
  * the strict "prices sum to 1" constraint — matches the user's own
  * spec and the F1 DFS-style market convention.
  *
- * Resolver: manual for now. A later pass can auto-settle via Jolpica's
- * results endpoint once the race is over.
+ * Driver portraits: every Jolpica driver record carries a Wikipedia
+ * URL. We hit the Wikipedia REST summary endpoint to grab the
+ * canonical portrait per driver and stuff the image URLs into
+ * `outcome_images` (index-aligned with outcomes). 21 extra HTTPS
+ * round-trips a day is well under Wikipedia's rate limit.
+ *
+ * Resolver: sports_api / jolpica-f1 — auto-settles via the results
+ * endpoint once the race is over.
  */
+
+import { fetchWikipediaImage } from '../wikipedia.js';
 
 const BASE = 'https://api.jolpi.ca/ergast/f1';
 
@@ -50,6 +58,7 @@ async function fetchCurrentDrivers() {
       id: d.driverId,
       code: d.code,
       label: `${d.givenName} ${d.familyName}`.trim(),
+      wikiUrl: d.url || null,
     }));
   } catch (e) {
     console.error('[market-gen/f1] drivers fetch failed', { message: e?.message });
@@ -72,6 +81,13 @@ export async function generateF1Markets() {
   const season = race.season;
   const round = race.round;
 
+  // Fetch Wikipedia portraits in parallel. 20 lookups is fast enough
+  // to keep the cron under its normal runtime; any miss resolves to
+  // null and the card/detail just renders no image for that driver.
+  const driverImages = await Promise.all(
+    drivers.map(d => d.wikiUrl ? fetchWikipediaImage(d.wikiUrl) : Promise.resolve(null)),
+  );
+
   // Build legs with an explicit "Otro" catchall so a mid-season
   // substitute (reserve driver, replacement) doesn't leave the market
   // unresolvable. The sports_api resolver looks up the winner's
@@ -79,6 +95,13 @@ export async function generateF1Markets() {
   const legs = [
     ...drivers.map(d => ({ label: d.label, driverId: d.id })),
     { label: 'Otro', driverId: null },
+  ];
+
+  // outcome_images aligns index-for-index with outcomes. The 'Otro'
+  // leg gets null (no portrait makes sense for a catch-all).
+  const outcomeImages = [
+    ...driverImages,
+    null, // 'Otro'
   ];
 
   return [{
@@ -90,6 +113,7 @@ export async function generateF1Markets() {
     category: 'deportes',
     icon: '🏁',
     outcomes: legs.map(l => l.label),
+    outcome_images: outcomeImages,
     seed_liquidity: 1000,
     start_time: startTime,
     end_time: endTime,
@@ -106,7 +130,13 @@ export async function generateF1Markets() {
       raceName,
       startIso: race._startIso,
       circuitName: race?.Circuit?.circuitName,
-      drivers: drivers.map(d => ({ id: d.id, code: d.code, label: d.label })),
+      drivers: drivers.map((d, i) => ({
+        id: d.id,
+        code: d.code,
+        label: d.label,
+        wikiUrl: d.wikiUrl,
+        image: driverImages[i] || null,
+      })),
     },
   }];
 }
