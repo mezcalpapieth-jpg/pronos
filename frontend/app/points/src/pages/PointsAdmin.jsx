@@ -28,6 +28,7 @@ import {
   adminResolveDiagnostic,
   adminRunAutoResolve,
   adminRunGenerators,
+  adminToggleFeatured,
 } from '../lib/pointsApi.js';
 
 const CATEGORIES = [
@@ -1570,6 +1571,26 @@ function PendingMarketsTable() {
     }
   }
 
+  // Flip the featured flag on an approved market. Optimistically
+  // updates the row in state so the 🔥 button responds instantly,
+  // and rolls back on error.
+  async function toggleFeatured(row) {
+    if (!row?.approvedMarketId) return;
+    const next = !row.featured;
+    setRows(prev => (prev || []).map(r =>
+      r.id === row.id ? { ...r, featured: next } : r,
+    ));
+    try {
+      await adminToggleFeatured({ marketId: row.approvedMarketId, featured: next });
+    } catch (e) {
+      // Roll back on failure.
+      setRows(prev => (prev || []).map(r =>
+        r.id === row.id ? { ...r, featured: !next } : r,
+      ));
+      alert(`No se pudo actualizar: ${e.code || e.message}`);
+    }
+  }
+
   async function runAutoResolveNow() {
     if (!confirm('Ejecutar el auto-resolver ahora (equivalente a una corrida del cron)? En preview, el cron no corre automáticamente.')) {
       return;
@@ -1827,9 +1848,40 @@ function PendingMarketsTable() {
             marginBottom: 10,
           }}>
             <div style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
               gap: 12, marginBottom: 8,
             }}>
+              {/* Featured (🔥) toggle — approved rows only. When ON the
+                  market appears on the home Trending grid; when OFF it
+                  only shows under /c/<category>. Opacity indicates state;
+                  tooltip spells it out. */}
+              {r.featured !== null && r.approvedMarketId && (
+                <button
+                  onClick={() => toggleFeatured(r)}
+                  title={r.featured
+                    ? 'Quitar de Trending (aparece solo en su categoría)'
+                    : 'Mostrar en Trending (además de su categoría)'}
+                  style={{
+                    flexShrink: 0,
+                    width: 32, height: 32,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '50%',
+                    border: `1px solid ${r.featured ? 'rgba(245,158,11,0.5)' : 'var(--border)'}`,
+                    background: r.featured ? 'rgba(245,158,11,0.15)' : 'transparent',
+                    cursor: 'pointer',
+                    fontSize: 16,
+                    lineHeight: 1,
+                    padding: 0,
+                    filter: r.featured ? 'none' : 'grayscale(1)',
+                    opacity: r.featured ? 1 : 0.45,
+                    transition: 'opacity 0.15s, background 0.15s, border-color 0.15s',
+                  }}
+                >
+                  🔥
+                </button>
+              )}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{
                   fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)',

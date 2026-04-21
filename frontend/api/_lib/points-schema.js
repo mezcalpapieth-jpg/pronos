@@ -95,6 +95,15 @@ const POINTS_SCHEMA_MIGRATIONS = [
   // for every other market type (crypto / weather / charts).
   `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS outcome_images JSONB`,
 
+  // featured: when true, the market appears in the home "Trending"
+  // grid in addition to its own category page. When false, it only
+  // surfaces under /c/<category>. Defaults TRUE so existing markets
+  // keep showing up on home; admin can toggle specific markets off
+  // via the 🔥 button in the approved-markets list.
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT true`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_featured_status
+    ON points_markets(featured, status) WHERE featured = true`,
+
   // ── Balances (single source of truth per user) ─────────────────────────
   `CREATE TABLE IF NOT EXISTS points_balances (
     username     TEXT PRIMARY KEY,

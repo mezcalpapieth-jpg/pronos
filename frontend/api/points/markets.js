@@ -70,6 +70,12 @@ export default async function handler(req, res) {
   const limit = Number.isFinite(reqLimit) && reqLimit > 0
     ? Math.min(reqLimit, 2000)
     : 100;
+  // featured filter: the home "Trending" grid only shows curated
+  // (featured=true) markets. Category pages pass featured=all to see
+  // everything. Default without a category = trending, so featured=true.
+  // Explicit ?featured=all bypasses the filter entirely.
+  const featuredParam = req.query.featured;
+  const featuredOnly = !category && featuredParam !== 'all';
 
   try {
     const schemaSql = getSchemaSql();
@@ -88,15 +94,26 @@ export default async function handler(req, res) {
           ORDER BY m.end_time ASC
           LIMIT ${limit}
         `
-      : await sql`
-          SELECT m.*,
-            (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
-          FROM points_markets m
-          WHERE m.status = ${status}
-            AND m.parent_id IS NULL
-          ORDER BY m.end_time ASC
-          LIMIT ${limit}
-        `;
+      : featuredOnly
+        ? await sql`
+            SELECT m.*,
+              (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
+            FROM points_markets m
+            WHERE m.status = ${status}
+              AND m.featured = true
+              AND m.parent_id IS NULL
+            ORDER BY m.end_time ASC
+            LIMIT ${limit}
+          `
+        : await sql`
+            SELECT m.*,
+              (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
+            FROM points_markets m
+            WHERE m.status = ${status}
+              AND m.parent_id IS NULL
+            ORDER BY m.end_time ASC
+            LIMIT ${limit}
+          `;
 
     // Collect parallel-parent ids so we can batch-fetch their legs in
     // one query instead of N+1 round-trips.

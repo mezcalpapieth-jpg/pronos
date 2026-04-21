@@ -240,6 +240,12 @@ export async function adminRunAutoResolve({ dry = false } = {}) {
   return postJson(`/api/points/admin/run-auto-resolve${q}`, {});
 }
 
+// Toggle a market's `featured` flag. Featured markets appear in the
+// home Trending grid; non-featured ones only show under /c/<category>.
+export async function adminToggleFeatured({ marketId, featured }) {
+  return postJson('/api/points/admin/toggle-featured', { marketId, featured });
+}
+
 // ─── Admin — edit market (question + end time + category) ──────────────────
 export async function adminEditMarket({ marketId, question, endTime, category }) {
   return postJson('/api/points/admin/edit-market', { marketId, question, endTime, category });

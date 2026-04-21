@@ -52,19 +52,28 @@ async function list(req, res) {
     : 'pending';
   await ensurePointsSchema(schemaSql);
 
+  // LEFT JOIN points_markets so approved rows carry the current
+  // `featured` flag (and market status) back to the admin UI. Pending
+  // / rejected rows have no approved_market_id and the join returns
+  // nulls — which we surface as `featured: null` below so the UI
+  // knows "no toggle applicable".
   const rows = status === 'all'
     ? await readSql`
-        SELECT * FROM points_pending_markets
-        ORDER BY created_at DESC
+        SELECT p.*, mk.featured AS market_featured, mk.status AS market_status
+        FROM points_pending_markets p
+        LEFT JOIN points_markets mk ON mk.id = p.approved_market_id
+        ORDER BY p.created_at DESC
         LIMIT 2000
       `
     : await readSql`
-        SELECT * FROM points_pending_markets
-        WHERE status = ${status}
+        SELECT p.*, mk.featured AS market_featured, mk.status AS market_status
+        FROM points_pending_markets p
+        LEFT JOIN points_markets mk ON mk.id = p.approved_market_id
+        WHERE p.status = ${status}
         ORDER BY
-          CASE status WHEN 'pending' THEN 0 ELSE 1 END,
-          end_time ASC NULLS LAST,
-          created_at DESC
+          CASE p.status WHEN 'pending' THEN 0 ELSE 1 END,
+          p.end_time ASC NULLS LAST,
+          p.created_at DESC
         LIMIT 2000
       `;
 
@@ -90,6 +99,8 @@ async function list(req, res) {
       reviewedAt: r.reviewed_at,
       approvedMarketId: r.approved_market_id,
       createdAt: r.created_at,
+      featured: typeof r.market_featured === 'boolean' ? r.market_featured : null,
+      marketStatus: r.market_status || null,
     })),
   });
 }
