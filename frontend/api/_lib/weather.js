@@ -70,24 +70,18 @@ export function bucketIndexFor(tempC) {
 }
 
 /**
- * Build four adaptive buckets centered around (and slightly biased
- * warmer than) the forecast high. Given a forecast F (rounded), the
- * buckets are:
+ * Build four adaptive buckets centered on the forecast high. Given
+ * a forecast F (rounded to an integer), the buckets are:
  *
- *   ≤ F-3°C          — cool tail
- *   F-2 to F°C       — forecast zone (this is where F lands)
- *   F+1 to F+4°C     — warm zone (Mexican afternoons routinely land here)
- *   ≥ F+5°C          — heat-wave tail
+ *   ≤ F-4°C          — cool tail (open-ended low)
+ *   F-3 to F-2°C     — one step below forecast
+ *   F-1 to F°C       — forecast window (this is where F lands)
+ *   ≥ F+1°C          — hot tail (open-ended high)
  *
- * Example: F=27 → ≤24°C / 25–27°C / 28–31°C / ≥32°C. An actual high
- * of 31°C falls in the third bucket; a surprise 35°C still resolves
- * cleanly to the top bucket instead of landing outside the market.
- *
- * The older scheme (±1 around F) left too little room for upside
- * drift — when the morning forecast underpredicted by 3-4°C (common
- * in Mexico) the top bucket ended up below the actual high, which
- * confused users looking at a market whose "highest" bucket was
- * already baked in.
+ * Example: F=31 (today's Guadalajara max) → buckets are ≤27°C /
+ * 28–29°C / 30–31°C / ≥32°C. The top bucket sits one degree above
+ * the forecast, not wider — any surprise heat (F+2, F+5, …) still
+ * lands in the top bucket thanks to the open-ended tail.
  *
  * minC is inclusive, maxC is exclusive — the auto-resolver uses
  * `temp >= b.minC && temp < b.maxC` to pick the winning bucket.
@@ -95,9 +89,9 @@ export function bucketIndexFor(tempC) {
 export function adaptiveBuckets(forecastC) {
   const F = Math.round(Number(forecastC) || 0);
   return [
-    { label: `≤ ${F - 3}°C`,           minC: -999,   maxC: F - 2 },
-    { label: `${F - 2}–${F}°C`,        minC: F - 2,  maxC: F + 1 },
-    { label: `${F + 1}–${F + 4}°C`,    minC: F + 1,  maxC: F + 5 },
-    { label: `≥ ${F + 5}°C`,           minC: F + 5,  maxC: 999 },
+    { label: `≤ ${F - 4}°C`,           minC: -999,   maxC: F - 3 },
+    { label: `${F - 3}–${F - 2}°C`,    minC: F - 3,  maxC: F - 1 },
+    { label: `${F - 1}–${F}°C`,        minC: F - 1,  maxC: F + 1 },
+    { label: `≥ ${F + 1}°C`,           minC: F + 1,  maxC: 999 },
   ];
 }
