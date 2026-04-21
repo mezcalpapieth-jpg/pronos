@@ -293,7 +293,6 @@ export default async function handler(req, res) {
     });
     // Cache the current Jolpica driver roster so we can match by
     // name when a market's resolver_config doesn't carry driverIds.
-    // Fetched lazily on first fallback hit.
     let driverRoster = null;
     async function getDriverRoster() {
       if (driverRoster) return driverRoster;
@@ -309,6 +308,36 @@ export default async function handler(req, res) {
       } catch { driverRoster = []; return driverRoster; }
     }
 
+    // Cache constructor lookups — many drivers share a constructor,
+    // so we hit Jolpica + Wikipedia at most once per team across
+    // the entire retrofit run.
+    const constructorByDriver = new Map(); // driverId → { constructorId, url }
+    const logoByConstructor = new Map();   // constructorId → URL
+    async function getConstructorLogoForDriver(driverId) {
+      if (!driverId) return null;
+      let ctor = constructorByDriver.get(driverId);
+      if (ctor === undefined) {
+        try {
+          const res = await fetch(
+            `https://api.jolpi.ca/ergast/f1/current/drivers/${encodeURIComponent(driverId)}/constructors.json`,
+            { headers: { 'Accept': 'application/json' } },
+          );
+          if (!res.ok) { constructorByDriver.set(driverId, null); return null; }
+          const data = await res.json();
+          const c = data?.MRData?.ConstructorTable?.Constructors?.[0];
+          ctor = c ? { constructorId: c.constructorId, url: c.url || null } : null;
+        } catch { ctor = null; }
+        constructorByDriver.set(driverId, ctor);
+      }
+      if (!ctor?.constructorId) return null;
+      if (logoByConstructor.has(ctor.constructorId)) {
+        return logoByConstructor.get(ctor.constructorId);
+      }
+      const logo = ctor.url ? await fetchWikipediaImage(ctor.url) : null;
+      logoByConstructor.set(ctor.constructorId, logo);
+      return logo;
+    }
+
     let f1ImagesFound = 0;
     for (const row of f1Rows) {
       const cfg = (typeof row.resolver_config === 'object' && row.resolver_config)
@@ -319,9 +348,8 @@ export default async function handler(req, res) {
         : (() => { try { return JSON.parse(row.outcomes); } catch { return []; } })();
       const legs = Array.isArray(cfg?.legs) ? cfg.legs : [];
 
-      // Resolve a driverId per outcome. Prefer cfg.legs when present
-      // and aligned; otherwise look each outcome label up in the
-      // Jolpica roster by full name.
+      // Resolve driverId per outcome (leg mapping first, name
+      // lookup fallback). 'Otro' stays null.
       let driverIdsPerOutcome;
       if (legs.length === outcomes.length) {
         driverIdsPerOutcome = legs.map(l => l?.driverId || null);
@@ -345,20 +373,11 @@ export default async function handler(req, res) {
         continue;
       }
 
-      const images = await Promise.all(driverIdsPerOutcome.map(async (driverId) => {
-        if (!driverId) return null;
-        try {
-          const res = await fetch(
-            `https://api.jolpi.ca/ergast/f1/drivers/${encodeURIComponent(driverId)}.json`,
-            { headers: { 'Accept': 'application/json' } },
-          );
-          if (!res.ok) return null;
-          const data = await res.json();
-          const wikiUrl = data?.MRData?.DriverTable?.Drivers?.[0]?.url || null;
-          if (!wikiUrl) return null;
-          return fetchWikipediaImage(wikiUrl);
-        } catch { return null; }
-      }));
+      // Each driver gets their constructor's logo (team badge).
+      // Reads much better than driver portraits at card scale.
+      const images = await Promise.all(
+        driverIdsPerOutcome.map(id => getConstructorLogoForDriver(id)),
+      );
 
       const found = images.filter(Boolean).length;
       console.log('[backfill-resolvers] F1 row processed', {

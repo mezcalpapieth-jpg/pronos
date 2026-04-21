@@ -11,11 +11,13 @@
  * the strict "prices sum to 1" constraint — matches the user's own
  * spec and the F1 DFS-style market convention.
  *
- * Driver portraits: every Jolpica driver record carries a Wikipedia
- * URL. We hit the Wikipedia REST summary endpoint to grab the
- * canonical portrait per driver and stuff the image URLs into
- * `outcome_images` (index-aligned with outcomes). 21 extra HTTPS
- * round-trips a day is well under Wikipedia's rate limit.
+ * Outcome images: per user feedback, we use the **constructor**
+ * (team) logo for each driver, not driver portraits. Team logos
+ * read better at card scale than face thumbnails and signal which
+ * stable a driver belongs to. Each driver's constructor is fetched
+ * from Jolpica's /drivers/{id}/constructors endpoint; the
+ * constructor's Wikipedia page is then hit once (cached by
+ * constructorId) for the logo thumbnail.
  *
  * Resolver: sports_api / jolpica-f1 — auto-settles via the results
  * endpoint once the race is over.
@@ -31,10 +33,6 @@ async function fetchJson(path) {
   return res.json();
 }
 
-/**
- * Find the next scheduled race whose start is still in the future.
- * Jolpica's /current/next is a direct shortcut that's been solid.
- */
 async function fetchNextRace() {
   try {
     const data = await fetchJson('/current/next.json');
@@ -66,14 +64,30 @@ async function fetchCurrentDrivers() {
   }
 }
 
+/**
+ * For each driver, pull their current constructor (team) from
+ * Jolpica. Returns an array aligned with `drivers` containing
+ * { constructorId, name, url }. Missing entries become null so
+ * the caller can fall back gracefully.
+ */
+async function fetchConstructorsFor(drivers) {
+  return Promise.all(drivers.map(async (d) => {
+    if (!d.id) return null;
+    try {
+      const data = await fetchJson(`/current/drivers/${encodeURIComponent(d.id)}/constructors.json`);
+      const ctor = data?.MRData?.ConstructorTable?.Constructors?.[0];
+      if (!ctor) return null;
+      return { constructorId: ctor.constructorId, name: ctor.name, url: ctor.url || null };
+    } catch {
+      return null;
+    }
+  }));
+}
+
 export async function generateF1Markets() {
   const [race, drivers] = await Promise.all([fetchNextRace(), fetchCurrentDrivers()]);
   if (!race || drivers.length < 5) return [];
 
-  // Trading stays open through the race. 2h past lights-out covers a
-  // typical race (~1h30m + podium + buffer); auto-resolver benign-skips
-  // until Jolpica returns position 1, so end_time is just the hard
-  // close if the results feed stalls.
   const kickoffMs = new Date(race._startIso).getTime();
   const startTime = new Date(kickoffMs).toISOString();
   const endTime   = new Date(kickoffMs + 2 * 3600_000).toISOString();
@@ -81,28 +95,31 @@ export async function generateF1Markets() {
   const season = race.season;
   const round = race.round;
 
-  // Fetch Wikipedia portraits in parallel. 20 lookups is fast enough
-  // to keep the cron under its normal runtime; any miss resolves to
-  // null and the card/detail just renders no image for that driver.
+  // Driver → constructor mapping (21 Jolpica calls, parallel).
+  const constructorsPerDriver = await fetchConstructorsFor(drivers);
+
+  // Wikipedia lookups cached by constructorId. Many drivers share a
+  // constructor (2 per team in most cases), so we only hit Wikipedia
+  // ~10 times instead of 20.
+  const logoByConstructorId = new Map();
+  async function resolveConstructorLogo(ctor) {
+    if (!ctor?.constructorId) return null;
+    if (logoByConstructorId.has(ctor.constructorId)) {
+      return logoByConstructorId.get(ctor.constructorId);
+    }
+    const logo = ctor.url ? await fetchWikipediaImage(ctor.url) : null;
+    logoByConstructorId.set(ctor.constructorId, logo);
+    return logo;
+  }
   const driverImages = await Promise.all(
-    drivers.map(d => d.wikiUrl ? fetchWikipediaImage(d.wikiUrl) : Promise.resolve(null)),
+    constructorsPerDriver.map(resolveConstructorLogo),
   );
 
-  // Build legs with an explicit "Otro" catchall so a mid-season
-  // substitute (reserve driver, replacement) doesn't leave the market
-  // unresolvable. The sports_api resolver looks up the winner's
-  // driverId against cfg.legs[].driverId; anything unmatched wins Otro.
   const legs = [
     ...drivers.map(d => ({ label: d.label, driverId: d.id })),
     { label: 'Otro', driverId: null },
   ];
-
-  // outcome_images aligns index-for-index with outcomes. The 'Otro'
-  // leg gets null (no portrait makes sense for a catch-all).
-  const outcomeImages = [
-    ...driverImages,
-    null, // 'Otro'
-  ];
+  const outcomeImages = [...driverImages, null];
 
   return [{
     source: 'jolpica-f1',
@@ -117,8 +134,8 @@ export async function generateF1Markets() {
     seed_liquidity: 1000,
     start_time: startTime,
     end_time: endTime,
-    amm_mode: 'parallel',           // one binary per driver
-    resolver_type: 'sports_api',    // auto via Jolpica /{season}/{round}/results
+    amm_mode: 'parallel',
+    resolver_type: 'sports_api',
     resolver_config: {
       source: 'jolpica-f1',
       season, round,
@@ -135,7 +152,8 @@ export async function generateF1Markets() {
         code: d.code,
         label: d.label,
         wikiUrl: d.wikiUrl,
-        image: driverImages[i] || null,
+        constructor: constructorsPerDriver[i] || null,
+        constructorLogo: driverImages[i] || null,
       })),
     },
   }];
