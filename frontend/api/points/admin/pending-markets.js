@@ -56,7 +56,7 @@ async function list(req, res) {
     ? await readSql`
         SELECT * FROM points_pending_markets
         ORDER BY created_at DESC
-        LIMIT 200
+        LIMIT 2000
       `
     : await readSql`
         SELECT * FROM points_pending_markets
@@ -65,7 +65,7 @@ async function list(req, res) {
           CASE status WHEN 'pending' THEN 0 ELSE 1 END,
           end_time ASC NULLS LAST,
           created_at DESC
-        LIMIT 200
+        LIMIT 2000
       `;
 
   return res.status(200).json({

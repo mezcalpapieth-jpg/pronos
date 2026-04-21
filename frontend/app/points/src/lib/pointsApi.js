@@ -35,10 +35,14 @@ export async function postJson(url, body) {
 }
 
 // ─── Markets ────────────────────────────────────────────────────────────────
-export async function fetchMarkets({ status = 'active', category } = {}) {
+// `limit` caps the number of markets returned. Leave undefined on home
+// (trending shows the soonest-closing 100); category / browse pages
+// pass a larger value so nothing is hidden.
+export async function fetchMarkets({ status = 'active', category, limit } = {}) {
   const q = new URLSearchParams();
   if (status) q.set('status', status);
   if (category) q.set('category', category);
+  if (limit) q.set('limit', String(limit));
   const { markets = [] } = await getJson(`/api/points/markets?${q}`);
   return markets;
 }
@@ -225,6 +229,15 @@ export async function adminBackfillF1Images({ dry = false } = {}) {
 // manual" so the admin can see the state without digging into logs.
 export async function adminResolveDiagnostic() {
   return getJson('/api/points/admin/resolve-diagnostic');
+}
+
+// Manually kick the auto-resolver. Vercel cron jobs run ONLY on
+// production — preview deploys never fire the */15 tick, so this is
+// how we resolve markets from a preview environment. Also useful on
+// prod right after a Retrofit to see results without waiting 15 min.
+export async function adminRunAutoResolve({ dry = false } = {}) {
+  const q = dry ? '?dry=1' : '';
+  return postJson(`/api/points/admin/run-auto-resolve${q}`, {});
 }
 
 // ─── Admin — edit market (question + end time + category) ──────────────────

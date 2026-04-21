@@ -26,6 +26,7 @@ import {
   adminBackfillResolvers,
   adminBackfillF1Images,
   adminResolveDiagnostic,
+  adminRunAutoResolve,
   adminRunGenerators,
 } from '../lib/pointsApi.js';
 
@@ -1569,6 +1570,33 @@ function PendingMarketsTable() {
     }
   }
 
+  async function runAutoResolveNow() {
+    if (!confirm('Ejecutar el auto-resolver ahora (equivalente a una corrida del cron)? En preview, el cron no corre automáticamente.')) {
+      return;
+    }
+    setBulkBusy(true);
+    try {
+      const r = await adminRunAutoResolve({ dry: false });
+      const resolvedCount = (r.resolved || []).length;
+      const errorCount = (r.errors || []).length;
+      const errorSample = (r.errors || []).slice(0, 3)
+        .map(e => `#${e.id}: ${e.error}`)
+        .join('\n');
+      alert(
+        `✓ Auto-resolver corrido.\n`
+        + `Candidatos: ${r.checked || 0}\n`
+        + `Resueltos: ${resolvedCount}\n`
+        + `Errores: ${errorCount}\n`
+        + (errorSample ? `\nEjemplos de errores:\n${errorSample}` : ''),
+      );
+      await load();
+    } catch (e) {
+      alert(`Auto-resolver falló: ${e.code || e.message}`);
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   async function showResolveDiagnostic() {
     try {
       const r = await adminResolveDiagnostic();
@@ -1744,6 +1772,28 @@ function PendingMarketsTable() {
           }}
         >
           🩺 Diagnóstico resolver
+        </button>
+
+        {/* Run auto-resolve now — Vercel cron only fires on
+            production deploys, so previews need a manual trigger. */}
+        <button
+          onClick={runAutoResolveNow}
+          disabled={bulkBusy}
+          title="Ejecuta el auto-resolver ahora (el cron solo corre en producción, no en preview)"
+          style={{
+            padding: '6px 14px',
+            borderRadius: 16,
+            border: '1px solid rgba(245,158,11,0.4)',
+            background: 'rgba(245,158,11,0.1)',
+            color: '#f59e0b',
+            fontFamily: 'var(--font-mono)', fontSize: 11,
+            letterSpacing: '0.06em', textTransform: 'uppercase',
+            cursor: bulkBusy ? 'not-allowed' : 'pointer',
+            opacity: bulkBusy ? 0.5 : 1,
+            fontWeight: 600,
+          }}
+        >
+          ⚡ Resolver ahora
         </button>
       </div>
 

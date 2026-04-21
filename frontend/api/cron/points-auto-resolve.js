@@ -43,25 +43,19 @@ function parseJsonb(v, fb) {
   try { return JSON.parse(v); } catch { return fb; }
 }
 
-export default async function handler(req, res) {
-  // Same cron-guard pattern as every other /api/cron/* endpoint.
-  const secret = process.env.CRON_SECRET;
-  const isVercelDeploy = Boolean(process.env.VERCEL_ENV);
-  if (!secret) {
-    if (isVercelDeploy) {
-      return res.status(503).json({ error: 'CRON_SECRET not configured' });
-    }
-    // Local dev — allow through.
-  } else {
-    const provided = req.query.key || (req.headers.authorization || '').replace('Bearer ', '');
-    if (provided !== secret) return res.status(401).json({ error: 'unauthorized' });
-  }
-
-  const dry = req.query.dry === '1' || req.query.dry === 'true';
+/**
+ * Core auto-resolve loop, extracted so the admin "Resolver ahora"
+ * endpoint can trigger it without CRON_SECRET. Returns the same
+ * `{ ok, tookMs, checked, resolved, errors, dryRun }` shape the
+ * cron handler used to build inline.
+ *
+ * Vercel cron jobs ONLY run on production deployments. On preview
+ * URLs the */15 schedule never fires, so admins use the admin
+ * endpoint to kick this off manually.
+ */
+export async function runAutoResolve({ dry = false } = {}) {
   const started = Date.now();
-
-  try {
-    await ensurePointsSchema(schemaSql);
+  await ensurePointsSchema(schemaSql);
 
     // Only parents — parallel legs are resolved via the parent cascade
     // below (weather_api). For price resolvers the market is already
@@ -356,11 +350,31 @@ export default async function handler(req, res) {
       }
     }
 
-    return res.status(200).json({
-      ok: true,
-      tookMs: Date.now() - started,
-      ...report,
-    });
+  return {
+    ok: true,
+    tookMs: Date.now() - started,
+    ...report,
+  };
+}
+
+export default async function handler(req, res) {
+  // Same cron-guard pattern as every other /api/cron/* endpoint.
+  const secret = process.env.CRON_SECRET;
+  const isVercelDeploy = Boolean(process.env.VERCEL_ENV);
+  if (!secret) {
+    if (isVercelDeploy) {
+      return res.status(503).json({ error: 'CRON_SECRET not configured' });
+    }
+    // Local dev — allow through.
+  } else {
+    const provided = req.query.key || (req.headers.authorization || '').replace('Bearer ', '');
+    if (provided !== secret) return res.status(401).json({ error: 'unauthorized' });
+  }
+
+  const dry = req.query.dry === '1' || req.query.dry === 'true';
+  try {
+    const result = await runAutoResolve({ dry });
+    return res.status(200).json(result);
   } catch (e) {
     console.error('[cron/points-auto-resolve] fatal', {
       message: e?.message,

@@ -95,7 +95,10 @@ export default function PointsCategoryPage() {
       setLoading(true);
       setError(null);
       try {
-        const m = await fetchMarkets({ status: fetchStatus });
+        // Category pages show EVERY market in the category, not just
+        // the 100 closest to closing. The home trending grid keeps
+        // the default 100 — this route is where users go to browse.
+        const m = await fetchMarkets({ status: fetchStatus, limit: 2000 });
         if (cancelled) return;
         setMarkets(m);
         setLoading(false);

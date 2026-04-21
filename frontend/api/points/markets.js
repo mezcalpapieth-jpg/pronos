@@ -62,6 +62,14 @@ export default async function handler(req, res) {
 
   const status = req.query.status === 'resolved' ? 'resolved' : 'active';
   const category = typeof req.query.category === 'string' ? req.query.category : null;
+  // Soft cap on returned rows. Default 100 keeps the home grid snappy
+  // (trending doesn't need every market, just the ones about to close);
+  // category pages request a higher cap so nothing is hidden. Clamped
+  // at 2000 so we never return a multi-megabyte response by accident.
+  const reqLimit = Number.parseInt(req.query.limit, 10);
+  const limit = Number.isFinite(reqLimit) && reqLimit > 0
+    ? Math.min(reqLimit, 2000)
+    : 100;
 
   try {
     const schemaSql = getSchemaSql();
@@ -78,7 +86,7 @@ export default async function handler(req, res) {
           WHERE m.status = ${status} AND m.category = ${category}
             AND m.parent_id IS NULL
           ORDER BY m.end_time ASC
-          LIMIT 100
+          LIMIT ${limit}
         `
       : await sql`
           SELECT m.*,
@@ -87,7 +95,7 @@ export default async function handler(req, res) {
           WHERE m.status = ${status}
             AND m.parent_id IS NULL
           ORDER BY m.end_time ASC
-          LIMIT 100
+          LIMIT ${limit}
         `;
 
     // Collect parallel-parent ids so we can batch-fetch their legs in
