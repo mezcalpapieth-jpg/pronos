@@ -96,9 +96,19 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
   // apply transform on hover, which would otherwise trap `position:
   // fixed` into the card's local containing block — the drawer would
   // then "appear on top of the market" instead of viewport-edge).
+  //
+  // React synthetic events bubble up the COMPONENT tree, not the DOM
+  // tree — which means clicks inside a portaled drawer still reach
+  // the parent card's onClick handler (it would navigate to the
+  // detail page and make the drawer useless). We stop propagation
+  // at the overlay level so nothing below here reaches the card.
   const overlay = (
     <div
-      onClick={(e) => { if (e.target === e.currentTarget && !submitting) onClose(); }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !submitting) onClose();
+        e.stopPropagation();
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
       style={{
         position: 'fixed', inset: 0, zIndex: 9998,
         display: 'flex',
