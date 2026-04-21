@@ -24,6 +24,7 @@
  */
 
 import { fetchWikipediaImage } from '../wikipedia.js';
+import { teamForDriver, CONSTRUCTORS_2026 } from '../f1-grid-2026.js';
 
 const BASE = 'https://api.jolpi.ca/ergast/f1';
 
@@ -64,29 +65,27 @@ async function fetchCurrentDrivers() {
   }
 }
 
-/**
- * For each driver, pull their current constructor (team) from
- * Jolpica. Returns an array aligned with `drivers` containing
- * { constructorId, name, url }. Missing entries become null so
- * the caller can fall back gracefully.
- */
-async function fetchConstructorsFor(drivers) {
-  return Promise.all(drivers.map(async (d) => {
-    if (!d.id) return null;
-    try {
-      const data = await fetchJson(`/current/drivers/${encodeURIComponent(d.id)}/constructors.json`);
-      const ctor = data?.MRData?.ConstructorTable?.Constructors?.[0];
-      if (!ctor) return null;
-      return { constructorId: ctor.constructorId, name: ctor.name, url: ctor.url || null };
-    } catch {
-      return null;
-    }
-  }));
-}
-
 export async function generateF1Markets() {
-  const [race, drivers] = await Promise.all([fetchNextRace(), fetchCurrentDrivers()]);
-  if (!race || drivers.length < 5) return [];
+  const [race, allDrivers] = await Promise.all([fetchNextRace(), fetchCurrentDrivers()]);
+  if (!race) return [];
+
+  // Filter Jolpica's roster through the hand-maintained 2026 grid
+  // map so we only produce legs for the 22 drivers actually racing.
+  // Reserves (Jak Crawford et al) are dropped; veterans whose 2026
+  // transfers Jolpica hasn't reflected get their correct team from
+  // the map anyway.
+  const gridDrivers = [];
+  for (const d of allDrivers) {
+    const team = teamForDriver(d.label);
+    if (!team) continue;
+    gridDrivers.push({ ...d, teamKey: team.teamKey, teamName: team.name, teamWiki: team.wiki });
+  }
+  if (gridDrivers.length < 5) {
+    console.warn('[market-gen/f1] grid filter dropped too many drivers', {
+      jolpicaCount: allDrivers.length, matched: gridDrivers.length,
+    });
+    return [];
+  }
 
   const kickoffMs = new Date(race._startIso).getTime();
   const startTime = new Date(kickoffMs).toISOString();
@@ -95,29 +94,22 @@ export async function generateF1Markets() {
   const season = race.season;
   const round = race.round;
 
-  // Driver → constructor mapping (21 Jolpica calls, parallel).
-  const constructorsPerDriver = await fetchConstructorsFor(drivers);
-
-  // Wikipedia lookups cached by constructorId. Many drivers share a
-  // constructor (2 per team in most cases), so we only hit Wikipedia
-  // ~10 times instead of 20.
-  const logoByConstructorId = new Map();
-  async function resolveConstructorLogo(ctor) {
-    if (!ctor?.constructorId) return null;
-    if (logoByConstructorId.has(ctor.constructorId)) {
-      return logoByConstructorId.get(ctor.constructorId);
-    }
-    const logo = ctor.url ? await fetchWikipediaImage(ctor.url) : null;
-    logoByConstructorId.set(ctor.constructorId, logo);
+  // Wikipedia logo lookup, cached by teamKey so each team is hit
+  // at most once per generator run (11 fetches instead of 22).
+  const logoByTeam = new Map();
+  async function resolveTeamLogo(teamKey, wiki) {
+    if (logoByTeam.has(teamKey)) return logoByTeam.get(teamKey);
+    const logo = wiki ? await fetchWikipediaImage(wiki) : null;
+    logoByTeam.set(teamKey, logo);
     return logo;
   }
   const driverImages = await Promise.all(
-    constructorsPerDriver.map(resolveConstructorLogo),
+    gridDrivers.map(d => resolveTeamLogo(d.teamKey, d.teamWiki)),
   );
 
   const legs = [
-    ...drivers.map(d => ({ label: d.label, driverId: d.id })),
-    { label: 'Otro', driverId: null },
+    ...gridDrivers.map(d => ({ label: d.label, driverId: d.id, teamKey: d.teamKey })),
+    { label: 'Otro', driverId: null, teamKey: null },
   ];
   const outcomeImages = [...driverImages, null];
 
@@ -147,13 +139,14 @@ export async function generateF1Markets() {
       raceName,
       startIso: race._startIso,
       circuitName: race?.Circuit?.circuitName,
-      drivers: drivers.map((d, i) => ({
+      drivers: gridDrivers.map((d, i) => ({
         id: d.id,
         code: d.code,
         label: d.label,
         wikiUrl: d.wikiUrl,
-        constructor: constructorsPerDriver[i] || null,
-        constructorLogo: driverImages[i] || null,
+        teamKey: d.teamKey,
+        teamName: d.teamName,
+        teamLogo: driverImages[i] || null,
       })),
     },
   }];

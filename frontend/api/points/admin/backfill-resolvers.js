@@ -47,6 +47,7 @@ import { generateTennisMarkets }        from '../../_lib/market-gen/tennis.js';
 import { generateGolfMarkets }          from '../../_lib/market-gen/golf.js';
 import { fetchWikipediaImage }          from '../../_lib/wikipedia.js';
 import { LMB_TEAMS }                    from '../../_lib/lmb-2026.js';
+import { teamForDriver, CONSTRUCTORS_2026 } from '../../_lib/f1-grid-2026.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -291,97 +292,47 @@ export default async function handler(req, res) {
       count: f1Rows.length,
       ids: f1Rows.map(r => r.id),
     });
-    // Cache the current Jolpica driver roster so we can match by
-    // name when a market's resolver_config doesn't carry driverIds.
-    let driverRoster = null;
-    async function getDriverRoster() {
-      if (driverRoster) return driverRoster;
-      try {
-        const res = await fetch(
-          'https://api.jolpi.ca/ergast/f1/current/drivers.json',
-          { headers: { 'Accept': 'application/json' } },
-        );
-        if (!res.ok) { driverRoster = []; return driverRoster; }
-        const data = await res.json();
-        driverRoster = data?.MRData?.DriverTable?.Drivers || [];
-        return driverRoster;
-      } catch { driverRoster = []; return driverRoster; }
-    }
-
-    // Cache constructor lookups — many drivers share a constructor,
-    // so we hit Jolpica + Wikipedia at most once per team across
-    // the entire retrofit run.
-    const constructorByDriver = new Map(); // driverId → { constructorId, url }
-    const logoByConstructor = new Map();   // constructorId → URL
-    async function getConstructorLogoForDriver(driverId) {
-      if (!driverId) return null;
-      let ctor = constructorByDriver.get(driverId);
-      if (ctor === undefined) {
-        try {
-          const res = await fetch(
-            `https://api.jolpi.ca/ergast/f1/current/drivers/${encodeURIComponent(driverId)}/constructors.json`,
-            { headers: { 'Accept': 'application/json' } },
-          );
-          if (!res.ok) { constructorByDriver.set(driverId, null); return null; }
-          const data = await res.json();
-          const c = data?.MRData?.ConstructorTable?.Constructors?.[0];
-          ctor = c ? { constructorId: c.constructorId, url: c.url || null } : null;
-        } catch { ctor = null; }
-        constructorByDriver.set(driverId, ctor);
-      }
-      if (!ctor?.constructorId) return null;
-      if (logoByConstructor.has(ctor.constructorId)) {
-        return logoByConstructor.get(ctor.constructorId);
-      }
-      const logo = ctor.url ? await fetchWikipediaImage(ctor.url) : null;
-      logoByConstructor.set(ctor.constructorId, logo);
+    // Constructor logos fetched from Wikipedia once per team, per
+    // retrofit run. Jolpica's driver→constructor endpoint is
+    // unreliable for 2025/2026 transfers so we bypass it and map
+    // directly from the driver's DISPLAY NAME (outcome label) via
+    // the hardcoded grid in f1-grid-2026.js.
+    const logoByTeam = new Map();
+    async function resolveTeamLogo(teamKey) {
+      if (logoByTeam.has(teamKey)) return logoByTeam.get(teamKey);
+      const wiki = CONSTRUCTORS_2026[teamKey]?.wiki;
+      const logo = wiki ? await fetchWikipediaImage(wiki) : null;
+      logoByTeam.set(teamKey, logo);
       return logo;
     }
 
     let f1ImagesFound = 0;
     for (const row of f1Rows) {
-      const cfg = (typeof row.resolver_config === 'object' && row.resolver_config)
-        ? row.resolver_config
-        : (() => { try { return JSON.parse(row.resolver_config); } catch { return null; } })();
       const outcomes = Array.isArray(row.outcomes)
         ? row.outcomes
         : (() => { try { return JSON.parse(row.outcomes); } catch { return []; } })();
-      const legs = Array.isArray(cfg?.legs) ? cfg.legs : [];
 
-      // Resolve driverId per outcome (leg mapping first, name
-      // lookup fallback). 'Otro' stays null.
-      let driverIdsPerOutcome;
-      if (legs.length === outcomes.length) {
-        driverIdsPerOutcome = legs.map(l => l?.driverId || null);
-      } else {
-        const roster = await getDriverRoster();
-        driverIdsPerOutcome = outcomes.map(label => {
-          const needle = String(label || '').toLowerCase().trim();
-          if (!needle || needle === 'otro') return null;
-          const match = roster.find(d => {
-            const full = `${d.givenName} ${d.familyName}`.toLowerCase().trim();
-            return full === needle;
-          });
-          return match?.driverId || null;
-        });
-      }
+      // Map each outcome label → team key via the grid (lowercase +
+      // accent-stripped matching). 'Otro' and unknown reserve
+      // drivers stay null.
+      const teamsPerOutcome = outcomes.map(label => {
+        const team = teamForDriver(label);
+        return team?.teamKey || null;
+      });
 
-      if (driverIdsPerOutcome.every(id => !id)) {
-        console.log('[backfill-resolvers] F1 row — no drivers matched', {
+      if (teamsPerOutcome.every(t => !t)) {
+        console.log('[backfill-resolvers] F1 row — no grid drivers matched', {
           id: row.id, outcomes,
         });
         continue;
       }
 
-      // Each driver gets their constructor's logo (team badge).
-      // Reads much better than driver portraits at card scale.
       const images = await Promise.all(
-        driverIdsPerOutcome.map(id => getConstructorLogoForDriver(id)),
+        teamsPerOutcome.map(t => (t ? resolveTeamLogo(t) : null)),
       );
-
       const found = images.filter(Boolean).length;
       console.log('[backfill-resolvers] F1 row processed', {
-        id: row.id, driverIdsPerOutcome, imagesFound: found,
+        id: row.id, teamsPerOutcome, imagesFound: found,
       });
       if (found === 0) continue;
       const upd = await sql`
