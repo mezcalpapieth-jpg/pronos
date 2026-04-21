@@ -210,6 +210,23 @@ export async function adminRunGenerators({ dry = false } = {}) {
   return postJson(`/api/points/admin/run-generators${q}`, {});
 }
 
+// F1-specific retrofit. The generator only produces a spec for the
+// NEXT race, so the general backfill misses any F1 market from an
+// earlier round. This endpoint walks every active F1 parent with
+// NULL outcome_images, re-resolves each driver's Wikipedia portrait
+// via Jolpica → Wikipedia REST, and patches the column directly.
+export async function adminBackfillF1Images({ dry = false } = {}) {
+  const q = dry ? '?dry=1' : '';
+  return postJson(`/api/points/admin/backfill-f1-images${q}`, {});
+}
+
+// Diagnostic: why aren't my markets resolving? Returns active
+// markets grouped by "resolvable / waiting / missing resolver /
+// manual" so the admin can see the state without digging into logs.
+export async function adminResolveDiagnostic() {
+  return getJson('/api/points/admin/resolve-diagnostic');
+}
+
 // ─── Admin — edit market (question + end time + category) ──────────────────
 export async function adminEditMarket({ marketId, question, endTime, category }) {
   return postJson('/api/points/admin/edit-market', { marketId, question, endTime, category });

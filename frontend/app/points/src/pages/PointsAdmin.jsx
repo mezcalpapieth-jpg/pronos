@@ -24,6 +24,8 @@ import {
   adminReviewPendingMarket,
   adminApproveAllPendingMarkets,
   adminBackfillResolvers,
+  adminBackfillF1Images,
+  adminResolveDiagnostic,
   adminRunGenerators,
 } from '../lib/pointsApi.js';
 
@@ -1528,11 +1530,11 @@ function PendingMarketsTable() {
         alert('No hay mercados que necesiten retrofit. Todo al día.');
         return;
       }
-      if (!confirm(`Retrofit: ${n} mercados activos recibirán su resolver automático. Continuar?`)) {
+      if (!confirm(`Retrofit: ${n} mercados activos recibirán resolver + sport/league + logos donde falten. Continuar?`)) {
         return;
       }
       const r = await adminBackfillResolvers({ dry: false });
-      const breakdown = Object.entries(r.byResolverType || {})
+      const breakdown = Object.entries(r.patchCounts || r.byResolverType || {})
         .map(([k, v]) => `${k}: ${v}`)
         .join(' · ');
       alert(`✓ ${r.updatedCount} mercados actualizados.\n${breakdown}`);
@@ -1540,6 +1542,50 @@ function PendingMarketsTable() {
       alert(`Retrofit falló: ${e.code || e.message}`);
     } finally {
       setBulkBusy(false);
+    }
+  }
+
+  async function backfillF1Images() {
+    setBulkBusy(true);
+    try {
+      const preview = await adminBackfillF1Images({ dry: true });
+      const n = preview.candidateCount || 0;
+      if (n === 0) {
+        alert('No hay mercados F1 sin fotos. Todo al día.');
+        return;
+      }
+      if (!confirm(`F1: ${n} mercados sin fotos. Buscar retratos en Wikipedia y patchear?`)) {
+        return;
+      }
+      const r = await adminBackfillF1Images({ dry: false });
+      alert(
+        `✓ ${r.updatedCount} / ${r.candidateCount} mercados actualizados.\n`
+        + `Fotos encontradas: ${r.imagesFound} · No encontradas: ${r.imagesMissing}`,
+      );
+    } catch (e) {
+      alert(`F1 retrofit falló: ${e.code || e.message}`);
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function showResolveDiagnostic() {
+    try {
+      const r = await adminResolveDiagnostic();
+      const s = r.summary || {};
+      const sample = (r.missingResolver || []).slice(0, 5)
+        .map(x => `#${x.id} · ${x.question?.slice(0, 48)}`)
+        .join('\n');
+      alert(
+        `Estado de resolución (activos: ${r.totalActive})\n\n`
+        + `Listos para resolver (cron debería tomarlos): ${s.resolvable}\n`
+        + `Esperando fin de ventana: ${s.waitingWindow}\n`
+        + `Sin resolver_type (correr Retrofit): ${s.missingResolver}\n`
+        + `Manuales (admin resuelve): ${s.manual}\n`
+        + (sample ? `\nEjemplos sin resolver:\n${sample}` : ''),
+      );
+    } catch (e) {
+      alert(`Diagnóstico falló: ${e.code || e.message}`);
     }
   }
 
@@ -1639,7 +1685,7 @@ function PendingMarketsTable() {
         <button
           onClick={backfillResolvers}
           disabled={bulkBusy}
-          title="Copia resolver_type + resolver_config desde points_pending_markets hacia points_markets donde falten"
+          title="Copia resolver_type + resolver_config + sport/league + logos hacia points_markets donde falten"
           style={{
             padding: '6px 14px',
             borderRadius: 16,
@@ -1653,6 +1699,51 @@ function PendingMarketsTable() {
           }}
         >
           🔧 Retrofit resolvers
+        </button>
+
+        {/* F1 image retrofit — existing F1 markets live at earlier
+            source_event_ids than today's generator output, so the
+            general retrofit misses them. This hits Jolpica +
+            Wikipedia per driver and patches the parent directly. */}
+        <button
+          onClick={backfillF1Images}
+          disabled={bulkBusy}
+          title="Busca retratos de pilotos F1 en Wikipedia y patchea outcome_images"
+          style={{
+            padding: '6px 14px',
+            borderRadius: 16,
+            border: '1px solid var(--border)',
+            background: 'transparent',
+            color: 'var(--text-secondary)',
+            fontFamily: 'var(--font-mono)', fontSize: 11,
+            letterSpacing: '0.06em', textTransform: 'uppercase',
+            cursor: bulkBusy ? 'not-allowed' : 'pointer',
+            opacity: bulkBusy ? 0.5 : 1,
+          }}
+        >
+          🏁 Fotos F1
+        </button>
+
+        {/* Resolver diagnostic — read-only "why aren't my markets
+            resolving?" report. Buckets active markets into
+            resolvable / waiting / missing-resolver / manual. */}
+        <button
+          onClick={showResolveDiagnostic}
+          disabled={bulkBusy}
+          title="Diagnóstico: estado de la cola auto-resolver"
+          style={{
+            padding: '6px 14px',
+            borderRadius: 16,
+            border: '1px solid var(--border)',
+            background: 'transparent',
+            color: 'var(--text-secondary)',
+            fontFamily: 'var(--font-mono)', fontSize: 11,
+            letterSpacing: '0.06em', textTransform: 'uppercase',
+            cursor: bulkBusy ? 'not-allowed' : 'pointer',
+            opacity: bulkBusy ? 0.5 : 1,
+          }}
+        >
+          🩺 Diagnóstico resolver
         </button>
       </div>
 

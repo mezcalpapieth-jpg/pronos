@@ -11,14 +11,24 @@
 
 const BASE = 'https://api.open-meteo.com/v1/forecast';
 
+// Ensemble of models we query in parallel. Open-Meteo's default
+// `best_match` often under-forecasts Mexican afternoons by 2-4°C
+// vs. what the user sees on their phone; pulling the other majors
+// and taking the MAX across them gets us closer to the realistic
+// high a trader would anchor on.
+const MODELS = ['best_match', 'gfs_seamless', 'ecmwf_ifs025', 'icon_seamless'];
+
 /**
  * Fetch daily max temperature (°C) for `date` (YYYY-MM-DD) at a given
- * lat/lng. Returns a number. Throws on network / empty response.
+ * lat/lng.
  *
- * Open-Meteo can return either a forecast value (if the date is in the
- * future) or the recorded value (if today or past with historical API).
- * We use the forecast endpoint up to ~16 days out and the archive one
- * past that — but for our weekly cadence, forecast covers everything.
+ * Returns the HIGHEST daily max predicted by any available model —
+ * meant for market-generation where we want buckets that cover the
+ * realistic high, not the timid median forecast. Auto-resolver uses
+ * the same fetch and takes the same max, so the value that centers
+ * the buckets is the same one used to settle.
+ *
+ * Throws on network / empty response across all models.
  */
 export async function fetchMaxTempC({ lat, lng, dateYmd, timezone = 'America/Mexico_City' }) {
   const url = `${BASE}`
@@ -27,16 +37,39 @@ export async function fetchMaxTempC({ lat, lng, dateYmd, timezone = 'America/Mex
     + `&daily=temperature_2m_max`
     + `&timezone=${encodeURIComponent(timezone)}`
     + `&start_date=${encodeURIComponent(dateYmd)}`
-    + `&end_date=${encodeURIComponent(dateYmd)}`;
+    + `&end_date=${encodeURIComponent(dateYmd)}`
+    + `&models=${encodeURIComponent(MODELS.join(','))}`;
 
   const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
   if (!res.ok) throw new Error(`open-meteo: HTTP ${res.status}`);
   const data = await res.json();
-  const temp = data?.daily?.temperature_2m_max?.[0];
-  if (!Number.isFinite(temp)) {
+
+  // When multiple models are requested, Open-Meteo returns keys like
+  // `temperature_2m_max_best_match`, `temperature_2m_max_gfs_seamless`,
+  // etc. Collect every value available for the requested date and
+  // take the MAX. Some models may be missing data for a specific
+  // location; we ignore those and require at least one to succeed.
+  const daily = data?.daily || {};
+  const values = [];
+  for (const m of MODELS) {
+    const arr = daily[`temperature_2m_max_${m}`];
+    if (Array.isArray(arr) && Number.isFinite(arr[0])) values.push(Number(arr[0]));
+  }
+  // Default-model fallback (single-model response shape).
+  if (values.length === 0 && Array.isArray(daily.temperature_2m_max)) {
+    const v = daily.temperature_2m_max[0];
+    if (Number.isFinite(v)) values.push(Number(v));
+  }
+  if (values.length === 0) {
     throw new Error(`open-meteo: missing temp for ${dateYmd}`);
   }
-  return Number(temp);
+  const max = Math.max(...values);
+  console.log('[weather] fetchMaxTempC', {
+    dateYmd, lat, lng,
+    modelValues: values,
+    chosenMax: max,
+  });
+  return max;
 }
 
 // ─── Cities ─────────────────────────────────────────────────────────────────
