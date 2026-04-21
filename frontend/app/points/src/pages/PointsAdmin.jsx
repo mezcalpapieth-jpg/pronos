@@ -24,7 +24,6 @@ import {
   adminReviewPendingMarket,
   adminApproveAllPendingMarkets,
   adminBackfillResolvers,
-  adminBackfillF1Images,
   adminResolveDiagnostic,
   adminRunAutoResolve,
   adminRunGenerators,
@@ -916,6 +915,7 @@ function MarketsTable() {
   const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState(null);
+  const [autoResolving, setAutoResolving] = useState(false);
   // When non-null, render the edit modal for this market.
   const [editing, setEditing] = useState(null);
 
@@ -947,9 +947,52 @@ function MarketsTable() {
     }
   }
 
+  // Toggle 🔥 on an already-created market. Optimistic update; rolls
+  // back on server rejection.
+  async function toggleFeaturedMarket(m) {
+    const next = !m.featured;
+    setMarkets(prev => (prev || []).map(x => x.id === m.id ? { ...x, featured: next } : x));
+    try {
+      await adminToggleFeatured({ marketId: m.id, featured: next });
+    } catch (e) {
+      setMarkets(prev => (prev || []).map(x => x.id === m.id ? { ...x, featured: !next } : x));
+      alert(`No se pudo actualizar: ${e.code || e.message}`);
+    }
+  }
+
+  // Run the auto-resolve loop on demand. Vercel cron jobs only fire
+  // on production deploys — this button is the only way to settle
+  // past-end_time markets on a preview URL, and the fastest path on
+  // prod right after a Retrofit. Relevant on the "Por resolver"
+  // filter where candidates live.
+  async function runAutoResolveNow() {
+    if (!confirm('Ejecutar el auto-resolver ahora? (En preview, el cron no corre automáticamente.)')) return;
+    setAutoResolving(true);
+    try {
+      const r = await adminRunAutoResolve({ dry: false });
+      const resolvedCount = (r.resolved || []).length;
+      const errorCount = (r.errors || []).length;
+      const errorSample = (r.errors || []).slice(0, 3)
+        .map(e => `#${e.id}: ${e.error}`)
+        .join('\n');
+      alert(
+        `✓ Auto-resolver corrido.\n`
+        + `Candidatos: ${r.checked || 0}\n`
+        + `Resueltos: ${resolvedCount}\n`
+        + `Errores: ${errorCount}\n`
+        + (errorSample ? `\nEjemplos de errores:\n${errorSample}` : ''),
+      );
+      await load();
+    } catch (e) {
+      alert(`Auto-resolver falló: ${e.code || e.message}${e.detail ? '\n' + e.detail : ''}`);
+    } finally {
+      setAutoResolving(false);
+    }
+  }
+
   return (
     <div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         {[
           { key: 'all',      label: 'Todos' },
           { key: 'active',   label: 'Activos' },
@@ -972,6 +1015,33 @@ function MarketsTable() {
             {s.label}
           </button>
         ))}
+
+        {/* Run the auto-resolver now — surfaced only on the Por
+            resolver view since that's where candidates live. Vercel
+            cron only runs on production, so this is the canonical
+            path on a preview URL. */}
+        {filter === 'pending' && (
+          <button
+            onClick={runAutoResolveNow}
+            disabled={autoResolving}
+            title="Ejecuta el auto-resolver ahora (el cron solo corre en producción, no en preview)"
+            style={{
+              marginLeft: 'auto',
+              padding: '6px 14px',
+              borderRadius: 16,
+              border: '1px solid rgba(245,158,11,0.4)',
+              background: 'rgba(245,158,11,0.1)',
+              color: '#f59e0b',
+              fontFamily: 'var(--font-mono)', fontSize: 11,
+              letterSpacing: '0.06em', textTransform: 'uppercase',
+              cursor: autoResolving ? 'not-allowed' : 'pointer',
+              opacity: autoResolving ? 0.5 : 1,
+              fontWeight: 600,
+            }}
+          >
+            {autoResolving ? 'Resolviendo…' : '⚡ Resolver ahora'}
+          </button>
+        )}
       </div>
 
       {loading && <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Cargando…</p>}
@@ -987,6 +1057,33 @@ function MarketsTable() {
           borderRadius: 10, padding: '14px 18px', marginBottom: 10,
           display: 'flex', alignItems: 'center', gap: 12,
         }}>
+          {/* 🔥 Featured toggle — controls whether this market appears
+              on home Trending in addition to its category page. */}
+          <button
+            onClick={() => toggleFeaturedMarket(m)}
+            title={m.featured
+              ? 'Quitar de Trending (solo en su categoría)'
+              : 'Mostrar en Trending (además de su categoría)'}
+            style={{
+              flexShrink: 0,
+              width: 32, height: 32,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '50%',
+              border: `1px solid ${m.featured ? 'rgba(245,158,11,0.5)' : 'var(--border)'}`,
+              background: m.featured ? 'rgba(245,158,11,0.15)' : 'transparent',
+              cursor: 'pointer',
+              fontSize: 16,
+              lineHeight: 1,
+              padding: 0,
+              filter: m.featured ? 'none' : 'grayscale(1)',
+              opacity: m.featured ? 1 : 0.45,
+              transition: 'opacity 0.15s, background 0.15s, border-color 0.15s',
+            }}
+          >
+            🔥
+          </button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>
               #{m.id} · {m.category} · {m.tradeCount} trades · seed {m.seedLiquidity} MXNP
@@ -1547,74 +1644,21 @@ function PendingMarketsTable() {
     }
   }
 
-  async function backfillF1Images() {
-    setBulkBusy(true);
-    try {
-      const preview = await adminBackfillF1Images({ dry: true });
-      const n = preview.candidateCount || 0;
-      if (n === 0) {
-        alert('No hay mercados F1 sin fotos. Todo al día.');
-        return;
-      }
-      if (!confirm(`F1: ${n} mercados sin fotos. Buscar retratos en Wikipedia y patchear?`)) {
-        return;
-      }
-      const r = await adminBackfillF1Images({ dry: false });
-      alert(
-        `✓ ${r.updatedCount} / ${r.candidateCount} mercados actualizados.\n`
-        + `Fotos encontradas: ${r.imagesFound} · No encontradas: ${r.imagesMissing}`,
-      );
-    } catch (e) {
-      alert(`F1 retrofit falló: ${e.code || e.message}`);
-    } finally {
-      setBulkBusy(false);
-    }
-  }
-
-  // Flip the featured flag on an approved market. Optimistically
-  // updates the row in state so the 🔥 button responds instantly,
-  // and rolls back on error.
-  async function toggleFeatured(row) {
-    if (!row?.approvedMarketId) return;
-    const next = !row.featured;
+  // Toggle the 🔥 featured flag on a PENDING row. Carries into the
+  // created market at approval time. Optimistic update; rolls back
+  // on server rejection.
+  async function togglePendingFeatured(row) {
+    const next = !row.pendingFeatured;
     setRows(prev => (prev || []).map(r =>
-      r.id === row.id ? { ...r, featured: next } : r,
+      r.id === row.id ? { ...r, pendingFeatured: next } : r,
     ));
     try {
-      await adminToggleFeatured({ marketId: row.approvedMarketId, featured: next });
+      await adminToggleFeatured({ pendingId: row.id, featured: next });
     } catch (e) {
-      // Roll back on failure.
       setRows(prev => (prev || []).map(r =>
-        r.id === row.id ? { ...r, featured: !next } : r,
+        r.id === row.id ? { ...r, pendingFeatured: !next } : r,
       ));
       alert(`No se pudo actualizar: ${e.code || e.message}`);
-    }
-  }
-
-  async function runAutoResolveNow() {
-    if (!confirm('Ejecutar el auto-resolver ahora (equivalente a una corrida del cron)? En preview, el cron no corre automáticamente.')) {
-      return;
-    }
-    setBulkBusy(true);
-    try {
-      const r = await adminRunAutoResolve({ dry: false });
-      const resolvedCount = (r.resolved || []).length;
-      const errorCount = (r.errors || []).length;
-      const errorSample = (r.errors || []).slice(0, 3)
-        .map(e => `#${e.id}: ${e.error}`)
-        .join('\n');
-      alert(
-        `✓ Auto-resolver corrido.\n`
-        + `Candidatos: ${r.checked || 0}\n`
-        + `Resueltos: ${resolvedCount}\n`
-        + `Errores: ${errorCount}\n`
-        + (errorSample ? `\nEjemplos de errores:\n${errorSample}` : ''),
-      );
-      await load();
-    } catch (e) {
-      alert(`Auto-resolver falló: ${e.code || e.message}`);
-    } finally {
-      setBulkBusy(false);
     }
   }
 
@@ -1750,29 +1794,6 @@ function PendingMarketsTable() {
           🔧 Retrofit resolvers
         </button>
 
-        {/* F1 image retrofit — existing F1 markets live at earlier
-            source_event_ids than today's generator output, so the
-            general retrofit misses them. This hits Jolpica +
-            Wikipedia per driver and patches the parent directly. */}
-        <button
-          onClick={backfillF1Images}
-          disabled={bulkBusy}
-          title="Busca retratos de pilotos F1 en Wikipedia y patchea outcome_images"
-          style={{
-            padding: '6px 14px',
-            borderRadius: 16,
-            border: '1px solid var(--border)',
-            background: 'transparent',
-            color: 'var(--text-secondary)',
-            fontFamily: 'var(--font-mono)', fontSize: 11,
-            letterSpacing: '0.06em', textTransform: 'uppercase',
-            cursor: bulkBusy ? 'not-allowed' : 'pointer',
-            opacity: bulkBusy ? 0.5 : 1,
-          }}
-        >
-          🏁 Fotos F1
-        </button>
-
         {/* Resolver diagnostic — read-only "why aren't my markets
             resolving?" report. Buckets active markets into
             resolvable / waiting / missing-resolver / manual. */}
@@ -1795,27 +1816,6 @@ function PendingMarketsTable() {
           🩺 Diagnóstico resolver
         </button>
 
-        {/* Run auto-resolve now — Vercel cron only fires on
-            production deploys, so previews need a manual trigger. */}
-        <button
-          onClick={runAutoResolveNow}
-          disabled={bulkBusy}
-          title="Ejecuta el auto-resolver ahora (el cron solo corre en producción, no en preview)"
-          style={{
-            padding: '6px 14px',
-            borderRadius: 16,
-            border: '1px solid rgba(245,158,11,0.4)',
-            background: 'rgba(245,158,11,0.1)',
-            color: '#f59e0b',
-            fontFamily: 'var(--font-mono)', fontSize: 11,
-            letterSpacing: '0.06em', textTransform: 'uppercase',
-            cursor: bulkBusy ? 'not-allowed' : 'pointer',
-            opacity: bulkBusy ? 0.5 : 1,
-            fontWeight: 600,
-          }}
-        >
-          ⚡ Resolver ahora
-        </button>
       </div>
 
       <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.6 }}>
@@ -1851,16 +1851,19 @@ function PendingMarketsTable() {
               display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
               gap: 12, marginBottom: 8,
             }}>
-              {/* Featured (🔥) toggle — approved rows only. When ON the
-                  market appears on the home Trending grid; when OFF it
-                  only shows under /c/<category>. Opacity indicates state;
-                  tooltip spells it out. */}
-              {r.featured !== null && r.approvedMarketId && (
+              {/* Featured (🔥) toggle — PENDING rows only. When ON at
+                  approval time, the created market goes into the home
+                  Trending grid in addition to its category page. When
+                  OFF (default), it only shows under /c/<category>.
+                  The approved-row equivalent of this lives in the
+                  Mercados tab so admins can flip featured after the
+                  market already exists. */}
+              {isPending && (
                 <button
-                  onClick={() => toggleFeatured(r)}
-                  title={r.featured
-                    ? 'Quitar de Trending (aparece solo en su categoría)'
-                    : 'Mostrar en Trending (además de su categoría)'}
+                  onClick={() => togglePendingFeatured(r)}
+                  title={r.pendingFeatured
+                    ? 'Este mercado irá a Trending al aprobarse (click para quitar)'
+                    : 'Click para que este mercado salga en Trending al aprobarse'}
                   style={{
                     flexShrink: 0,
                     width: 32, height: 32,
@@ -1868,14 +1871,14 @@ function PendingMarketsTable() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     borderRadius: '50%',
-                    border: `1px solid ${r.featured ? 'rgba(245,158,11,0.5)' : 'var(--border)'}`,
-                    background: r.featured ? 'rgba(245,158,11,0.15)' : 'transparent',
+                    border: `1px solid ${r.pendingFeatured ? 'rgba(245,158,11,0.5)' : 'var(--border)'}`,
+                    background: r.pendingFeatured ? 'rgba(245,158,11,0.15)' : 'transparent',
                     cursor: 'pointer',
                     fontSize: 16,
                     lineHeight: 1,
                     padding: 0,
-                    filter: r.featured ? 'none' : 'grayscale(1)',
-                    opacity: r.featured ? 1 : 0.45,
+                    filter: r.pendingFeatured ? 'none' : 'grayscale(1)',
+                    opacity: r.pendingFeatured ? 1 : 0.45,
                     transition: 'opacity 0.15s, background 0.15s, border-color 0.15s',
                   }}
                 >

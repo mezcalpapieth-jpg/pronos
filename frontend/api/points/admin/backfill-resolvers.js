@@ -41,6 +41,7 @@ import { generateFuelMarkets }          from '../../_lib/market-gen/fuel.js';
 import { generateChartsMarkets }        from '../../_lib/market-gen/charts.js';
 import { generateYouTubeMarkets }       from '../../_lib/market-gen/youtube.js';
 import { generateEntertainmentMarkets } from '../../_lib/market-gen/entertainment.js';
+import { fetchWikipediaImage }          from '../../_lib/wikipedia.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -213,6 +214,67 @@ export default async function handler(req, res) {
       }
     }
 
+    // ── F1 portrait pass ────────────────────────────────────────────────
+    // The spec-based loop above relies on the (source, source_event_id)
+    // join to match specs onto markets. For F1 that never works for
+    // already-approved races: today's generator only ever returns the
+    // NEXT race (source_event_id like 'f1:2026:N'), whereas existing
+    // markets live at earlier rounds. So we do a second pass that
+    // walks every active F1 parent directly via resolver_config.
+    const f1Rows = await sql`
+      SELECT id, outcomes, resolver_config
+      FROM points_markets
+      WHERE status = 'active'
+        AND outcome_images IS NULL
+        AND parent_id IS NULL
+        AND resolver_type = 'sports_api'
+        AND resolver_config::text LIKE '%"jolpica-f1"%'
+      LIMIT 50
+    `;
+    let f1ImagesFound = 0;
+    for (const row of f1Rows) {
+      const cfg = (typeof row.resolver_config === 'object' && row.resolver_config)
+        ? row.resolver_config
+        : (() => { try { return JSON.parse(row.resolver_config); } catch { return null; } })();
+      const outcomes = Array.isArray(row.outcomes)
+        ? row.outcomes
+        : (() => { try { return JSON.parse(row.outcomes); } catch { return []; } })();
+      const legs = Array.isArray(cfg?.legs) ? cfg.legs : [];
+      if (legs.length === 0 || legs.length !== outcomes.length) continue;
+
+      // Jolpica driver profile endpoint returns the Wikipedia URL we
+      // hand off to the REST summary API. 'Otro' (driverId === null)
+      // gets a null slot.
+      const images = await Promise.all(legs.map(async (leg) => {
+        if (!leg?.driverId) return null;
+        try {
+          const res = await fetch(
+            `https://api.jolpi.ca/ergast/f1/drivers/${encodeURIComponent(leg.driverId)}.json`,
+            { headers: { 'Accept': 'application/json' } },
+          );
+          if (!res.ok) return null;
+          const data = await res.json();
+          const wikiUrl = data?.MRData?.DriverTable?.Drivers?.[0]?.url || null;
+          if (!wikiUrl) return null;
+          return fetchWikipediaImage(wikiUrl);
+        } catch { return null; }
+      }));
+
+      const found = images.filter(Boolean).length;
+      if (found === 0) continue;  // skip all-null writes
+      const upd = await sql`
+        UPDATE points_markets
+        SET outcome_images = ${JSON.stringify(images)}::jsonb
+        WHERE id = ${row.id}
+          AND outcome_images IS NULL
+        RETURNING id
+      `;
+      if (upd.length > 0) {
+        record(upd[0].id, 'outcomeImages');
+        f1ImagesFound += found;
+      }
+    }
+
     const updated = Array.from(patchedMarkets.entries()).map(([marketId, set]) => ({
       marketId,
       patches: Array.from(set),
@@ -222,6 +284,7 @@ export default async function handler(req, res) {
       ok: true,
       updatedCount: updated.length,
       patchCounts,
+      f1ImagesFound,
       updated,
       reviewer: admin.username,
     });

@@ -50,8 +50,8 @@ function parseJsonb(v, fb) {
  * cron handler used to build inline.
  *
  * Vercel cron jobs ONLY run on production deployments. On preview
- * URLs the */15 schedule never fires, so admins use the admin
- * endpoint to kick this off manually.
+ * URLs the every-15-min schedule never fires, so admins use the
+ * admin endpoint to kick this off manually.
  */
 export async function runAutoResolve({ dry = false } = {}) {
   const started = Date.now();

@@ -5,10 +5,10 @@
  * Admin-auth wrapper around the auto-resolve cron's core loop.
  *
  * Why this exists: Vercel runs cron jobs ONLY on production deploys.
- * The */15 schedule configured in vercel.json never fires on preview
- * URLs (branch deploys, PR previews). Admins working from a preview
- * deploy need a way to kick the resolver manually — otherwise every
- * market that goes past end_time sits forever.
+ * The every-15-min schedule configured in vercel.json never fires on
+ * preview URLs (branch deploys, PR previews). Admins working from a
+ * preview deploy need a way to kick the resolver manually — otherwise
+ * every market that goes past end_time sits forever.
  *
  * Production admins can also use this to force a run without waiting
  * for the next 15-min tick (e.g., after flipping resolver_type via

@@ -1,12 +1,15 @@
 /**
  * POST /api/points/admin/toggle-featured
- *   body: { marketId, featured: boolean }
+ *   body: { marketId?, pendingId?, featured: boolean }
  *
- * Flip the `featured` flag on a market. When true the market appears
- * on the home "Trending" grid; when false it only shows under
- * /c/<category>. Admin-only.
+ * Flip the `featured` flag on either an already-created market
+ * (`marketId` → points_markets) or a pending row in the admin queue
+ * (`pendingId` → points_pending_markets). Exactly one id must be
+ * provided; the pending flag carries over into points_markets at
+ * approval time.
  *
  * Idempotent — a second call with the same value is a no-op.
+ * Admin-only.
  */
 
 import { neon } from '@neondatabase/serverless';
@@ -25,29 +28,50 @@ export default async function handler(req, res) {
     const admin = requirePointsAdmin(req, res);
     if (!admin) return;
 
-    const { marketId, featured } = req.body || {};
-    const id = Number.parseInt(marketId, 10);
-    if (!Number.isInteger(id) || id <= 0) {
-      return res.status(400).json({ error: 'invalid_market_id' });
-    }
+    const { marketId, pendingId, featured } = req.body || {};
     if (typeof featured !== 'boolean') {
       return res.status(400).json({ error: 'featured_must_be_boolean' });
+    }
+    const mid = Number.parseInt(marketId, 10);
+    const pid = Number.parseInt(pendingId, 10);
+    const hasMarket  = Number.isInteger(mid) && mid > 0;
+    const hasPending = Number.isInteger(pid) && pid > 0;
+    if (hasMarket === hasPending) {
+      return res.status(400).json({ error: 'supply_exactly_one_of_marketId_pendingId' });
     }
 
     await ensurePointsSchema(sql);
 
+    if (hasMarket) {
+      const rows = await sql`
+        UPDATE points_markets
+        SET featured = ${featured}
+        WHERE id = ${mid}
+        RETURNING id, featured
+      `;
+      if (rows.length === 0) {
+        return res.status(404).json({ error: 'market_not_found' });
+      }
+      return res.status(200).json({
+        ok: true,
+        marketId: rows[0].id,
+        featured: rows[0].featured,
+        reviewer: admin.username,
+      });
+    }
+
     const rows = await sql`
-      UPDATE points_markets
+      UPDATE points_pending_markets
       SET featured = ${featured}
-      WHERE id = ${id}
+      WHERE id = ${pid}
       RETURNING id, featured
     `;
     if (rows.length === 0) {
-      return res.status(404).json({ error: 'market_not_found' });
+      return res.status(404).json({ error: 'pending_not_found' });
     }
     return res.status(200).json({
       ok: true,
-      marketId: rows[0].id,
+      pendingId: rows[0].id,
       featured: rows[0].featured,
       reviewer: admin.username,
     });

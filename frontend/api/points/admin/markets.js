@@ -88,6 +88,8 @@ export default async function handler(req, res) {
         createdAt: r.created_at,
         resolvedAt: r.resolved_at,
         tradeCount: r.trade_count || 0,
+        featured: r.featured === true || r.featured === false ? r.featured : true,
+        resolverType: r.resolver_type || null,
       })),
     });
   } catch (e) {

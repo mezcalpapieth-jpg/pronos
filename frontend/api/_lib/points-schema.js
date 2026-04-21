@@ -313,6 +313,10 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `ALTER TABLE points_pending_markets ADD COLUMN IF NOT EXISTS sport TEXT`,
   `ALTER TABLE points_pending_markets ADD COLUMN IF NOT EXISTS league TEXT`,
   `ALTER TABLE points_pending_markets ADD COLUMN IF NOT EXISTS outcome_images JSONB`,
+  // featured mirrors the final column on points_markets so admin can
+  // pre-set "show in Trending?" from the pending queue before approval.
+  // Default false on pending — admin explicitly ticks the 🔥 to feature.
+  `ALTER TABLE points_pending_markets ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT false`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_points_pending_source_event
     ON points_pending_markets(source, source_event_id)`,
   `CREATE INDEX IF NOT EXISTS idx_points_pending_status

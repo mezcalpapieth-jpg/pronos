@@ -99,7 +99,13 @@ async function list(req, res) {
       reviewedAt: r.reviewed_at,
       approvedMarketId: r.approved_market_id,
       createdAt: r.created_at,
-      featured: typeof r.market_featured === 'boolean' ? r.market_featured : null,
+      // Pending row's own featured flag — the one the 🔥 button on a
+      // Pendientes row toggles pre-approval. Carries into points_markets
+      // when the row is approved.
+      pendingFeatured: r.featured === true,
+      // The already-created market's featured flag, if this row was
+      // approved. null for pending/rejected — nothing to toggle there.
+      marketFeatured: typeof r.market_featured === 'boolean' ? r.market_featured : null,
       marketStatus: r.market_status || null,
     })),
   });
@@ -154,15 +160,17 @@ async function approveOne(pid, reviewer, note) {
       ? JSON.stringify(outcomeImages)
       : null;
 
+    const pendingFeatured = r.featured === true;
+
     if (ammMode === 'unified') {
       const reserves = initialReserves(seed, outcomes.length);
       const mk = await client.query(
         `INSERT INTO points_markets
            (question, category, icon, outcomes, reserves, seed_liquidity,
             start_time, end_time, status, created_by, amm_mode,
-            resolver_type, resolver_config, sport, league, outcome_images)
+            resolver_type, resolver_config, sport, league, outcome_images, featured)
          VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8, 'active', $9,
-                 'unified', $10, $11::jsonb, $12, $13, $14::jsonb)
+                 'unified', $10, $11::jsonb, $12, $13, $14::jsonb, $15)
          RETURNING id`,
         [
           r.question,
@@ -179,6 +187,7 @@ async function approveOne(pid, reviewer, note) {
           r.sport || null,
           r.league || null,
           outcomeImagesJson,
+          pendingFeatured,
         ],
       );
       createdMarketId = mk.rows[0].id;
@@ -190,9 +199,9 @@ async function approveOne(pid, reviewer, note) {
         `INSERT INTO points_markets
            (question, category, icon, outcomes, reserves, seed_liquidity,
             start_time, end_time, status, created_by, amm_mode,
-            resolver_type, resolver_config, sport, league, outcome_images)
+            resolver_type, resolver_config, sport, league, outcome_images, featured)
          VALUES ($1, $2, $3, $4::jsonb, '[]'::jsonb, $5, $6, $7, 'active', $8,
-                 'parallel', $9, $10::jsonb, $11, $12, $13::jsonb)
+                 'parallel', $9, $10::jsonb, $11, $12, $13::jsonb, $14)
          RETURNING id`,
         [
           r.question,
@@ -208,6 +217,7 @@ async function approveOne(pid, reviewer, note) {
           r.sport || null,
           r.league || null,
           outcomeImagesJson,
+          pendingFeatured,
         ],
       );
       createdMarketId = parent.rows[0].id;
