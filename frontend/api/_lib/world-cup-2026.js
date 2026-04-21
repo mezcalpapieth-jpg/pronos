@@ -20,67 +20,58 @@
  */
 
 // ── Teams ────────────────────────────────────────────────────────────────
+// `code` = flagcdn slug, `espn` = ESPN country-team slug for badge art.
+// Badge primary: a.espncdn.com/i/teamlogos/countries/500/{espn}.png
+// Flag fallback: flagcdn.com/w{size}/{code}.png
 export const TEAMS = {
-  // Group A
-  mx: { code: 'mx',     name: 'México' },
-  za: { code: 'za',     name: 'Sudáfrica' },
-  kr: { code: 'kr',     name: 'Corea del Sur' },
-  cz: { code: 'cz',     name: 'Chequia' },
-  // Group B
-  ca: { code: 'ca',     name: 'Canadá' },
-  ba: { code: 'ba',     name: 'Bosnia y H.' },
-  qa: { code: 'qa',     name: 'Catar' },
-  ch: { code: 'ch',     name: 'Suiza' },
-  // Group C
-  br: { code: 'br',     name: 'Brasil' },
-  ma: { code: 'ma',     name: 'Marruecos' },
-  ht: { code: 'ht',     name: 'Haití' },
-  sct: { code: 'gb-sct', name: 'Escocia' },
-  // Group D
-  us: { code: 'us',     name: 'Estados Unidos' },
-  py: { code: 'py',     name: 'Paraguay' },
-  au: { code: 'au',     name: 'Australia' },
-  tr: { code: 'tr',     name: 'Turquía' },
-  // Group E
-  de: { code: 'de',     name: 'Alemania' },
-  ci: { code: 'ci',     name: 'Costa de Marfil' },
-  ec: { code: 'ec',     name: 'Ecuador' },
-  cw: { code: 'cw',     name: 'Curazao' },
-  // Group F
-  nl: { code: 'nl',     name: 'Países Bajos' },
-  se: { code: 'se',     name: 'Suecia' },
-  tn: { code: 'tn',     name: 'Túnez' },
-  jp: { code: 'jp',     name: 'Japón' },
-  // Group G
-  be: { code: 'be',     name: 'Bélgica' },
-  eg: { code: 'eg',     name: 'Egipto' },
-  ir: { code: 'ir',     name: 'Irán' },
-  nz: { code: 'nz',     name: 'Nueva Zelanda' },
-  // Group H
-  es: { code: 'es',     name: 'España' },
-  cv: { code: 'cv',     name: 'Cabo Verde' },
-  sa: { code: 'sa',     name: 'Arabia Saudí' },
-  uy: { code: 'uy',     name: 'Uruguay' },
-  // Group I
-  fr: { code: 'fr',     name: 'Francia' },
-  sn: { code: 'sn',     name: 'Senegal' },
-  iq: { code: 'iq',     name: 'Irak' },
-  no: { code: 'no',     name: 'Noruega' },
-  // Group J
-  ar: { code: 'ar',     name: 'Argentina' },
-  dz: { code: 'dz',     name: 'Argelia' },
-  at: { code: 'at',     name: 'Austria' },
-  jo: { code: 'jo',     name: 'Jordania' },
-  // Group K
-  pt: { code: 'pt',     name: 'Portugal' },
-  cd: { code: 'cd',     name: 'RD Congo' },
-  uz: { code: 'uz',     name: 'Uzbekistán' },
-  co: { code: 'co',     name: 'Colombia' },
-  // Group L
-  eng: { code: 'gb-eng', name: 'Inglaterra' },
-  hr: { code: 'hr',     name: 'Croacia' },
-  gh: { code: 'gh',     name: 'Ghana' },
-  pa: { code: 'pa',     name: 'Panamá' },
+  mx:  { code: 'mx',     espn: 'mex', name: 'México' },
+  za:  { code: 'za',     espn: 'rsa', name: 'Sudáfrica' },
+  kr:  { code: 'kr',     espn: 'kor', name: 'Corea del Sur' },
+  cz:  { code: 'cz',     espn: 'cze', name: 'Chequia' },
+  ca:  { code: 'ca',     espn: 'can', name: 'Canadá' },
+  ba:  { code: 'ba',     espn: 'bih', name: 'Bosnia y H.' },
+  qa:  { code: 'qa',     espn: 'qat', name: 'Catar' },
+  ch:  { code: 'ch',     espn: 'sui', name: 'Suiza' },
+  br:  { code: 'br',     espn: 'bra', name: 'Brasil' },
+  ma:  { code: 'ma',     espn: 'mar', name: 'Marruecos' },
+  ht:  { code: 'ht',     espn: 'hai', name: 'Haití' },
+  sct: { code: 'gb-sct', espn: 'sco', name: 'Escocia' },
+  us:  { code: 'us',     espn: 'usa', name: 'Estados Unidos' },
+  py:  { code: 'py',     espn: 'par', name: 'Paraguay' },
+  au:  { code: 'au',     espn: 'aus', name: 'Australia' },
+  tr:  { code: 'tr',     espn: 'tur', name: 'Turquía' },
+  de:  { code: 'de',     espn: 'ger', name: 'Alemania' },
+  ci:  { code: 'ci',     espn: 'civ', name: 'Costa de Marfil' },
+  ec:  { code: 'ec',     espn: 'ecu', name: 'Ecuador' },
+  cw:  { code: 'cw',     espn: 'cuw', name: 'Curazao' },
+  nl:  { code: 'nl',     espn: 'ned', name: 'Países Bajos' },
+  se:  { code: 'se',     espn: 'swe', name: 'Suecia' },
+  tn:  { code: 'tn',     espn: 'tun', name: 'Túnez' },
+  jp:  { code: 'jp',     espn: 'jpn', name: 'Japón' },
+  be:  { code: 'be',     espn: 'bel', name: 'Bélgica' },
+  eg:  { code: 'eg',     espn: 'egy', name: 'Egipto' },
+  ir:  { code: 'ir',     espn: 'irn', name: 'Irán' },
+  nz:  { code: 'nz',     espn: 'nzl', name: 'Nueva Zelanda' },
+  es:  { code: 'es',     espn: 'esp', name: 'España' },
+  cv:  { code: 'cv',     espn: 'cpv', name: 'Cabo Verde' },
+  sa:  { code: 'sa',     espn: 'ksa', name: 'Arabia Saudí' },
+  uy:  { code: 'uy',     espn: 'uru', name: 'Uruguay' },
+  fr:  { code: 'fr',     espn: 'fra', name: 'Francia' },
+  sn:  { code: 'sn',     espn: 'sen', name: 'Senegal' },
+  iq:  { code: 'iq',     espn: 'irq', name: 'Irak' },
+  no:  { code: 'no',     espn: 'nor', name: 'Noruega' },
+  ar:  { code: 'ar',     espn: 'arg', name: 'Argentina' },
+  dz:  { code: 'dz',     espn: 'alg', name: 'Argelia' },
+  at:  { code: 'at',     espn: 'aut', name: 'Austria' },
+  jo:  { code: 'jo',     espn: 'jor', name: 'Jordania' },
+  pt:  { code: 'pt',     espn: 'por', name: 'Portugal' },
+  cd:  { code: 'cd',     espn: 'cod', name: 'RD Congo' },
+  uz:  { code: 'uz',     espn: 'uzb', name: 'Uzbekistán' },
+  co:  { code: 'co',     espn: 'col', name: 'Colombia' },
+  eng: { code: 'gb-eng', espn: 'eng', name: 'Inglaterra' },
+  hr:  { code: 'hr',     espn: 'cro', name: 'Croacia' },
+  gh:  { code: 'gh',     espn: 'gha', name: 'Ghana' },
+  pa:  { code: 'pa',     espn: 'pan', name: 'Panamá' },
 };
 
 // ── Groups (12 × 4) — official draw, 2025-12-05 ─────────────────────────
