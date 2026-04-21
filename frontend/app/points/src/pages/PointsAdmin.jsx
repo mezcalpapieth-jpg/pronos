@@ -28,6 +28,7 @@ import {
   adminRunAutoResolve,
   adminRunGenerators,
   adminToggleFeatured,
+  adminProgressWorldCup,
 } from '../lib/pointsApi.js';
 
 const CATEGORIES = [
@@ -1662,6 +1663,38 @@ function PendingMarketsTable() {
     }
   }
 
+  async function progressWorldCup() {
+    setBulkBusy(true);
+    try {
+      const preview = await adminProgressWorldCup({ dry: true });
+      if (!preview.complete) {
+        const resolvedCounts = Object.entries(preview.matchesResolved || {})
+          .map(([g, n]) => `${g}:${n}/${(preview.matchesExpected || {})[g] || 6}`)
+          .join(' · ');
+        alert(`Fase de grupos incompleta.\n${resolvedCounts || '(sin datos)'}`);
+        return;
+      }
+      const n = preview.specsToInsert || 0;
+      if (n === 0) {
+        alert('Sin R32 por generar (ya existen?).');
+        return;
+      }
+      if (!confirm(`Generar ${n} partidos de R32 en la cola pendiente? Después los apruebas manualmente.`)) {
+        return;
+      }
+      const r = await adminProgressWorldCup({ dry: false });
+      alert(
+        `✓ R32 generados.\n`
+        + `Insertados: ${r.inserted || 0} · Actualizados: ${r.updated || 0} · Saltados: ${r.skipped || 0}`,
+      );
+      await load();
+    } catch (e) {
+      alert(`Progresar Mundial falló: ${e.code || e.message}${e.detail ? '\n' + e.detail : ''}`);
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   async function showResolveDiagnostic() {
     try {
       const r = await adminResolveDiagnostic();
@@ -1792,6 +1825,30 @@ function PendingMarketsTable() {
           }}
         >
           🔧 Retrofit resolvers
+        </button>
+
+        {/* Progress the World Cup — once all 12 groups finish,
+            builds R32 pairings from standings and seeds them into
+            the pending queue for admin approval. Safe to re-run:
+            dry-runs first and alerts if groups are still in
+            progress. */}
+        <button
+          onClick={progressWorldCup}
+          disabled={bulkBusy}
+          title="Genera partidos R32 del Mundial una vez completa la fase de grupos"
+          style={{
+            padding: '6px 14px',
+            borderRadius: 16,
+            border: '1px solid rgba(59,130,246,0.4)',
+            background: 'rgba(59,130,246,0.1)',
+            color: '#3b82f6',
+            fontFamily: 'var(--font-mono)', fontSize: 11,
+            letterSpacing: '0.06em', textTransform: 'uppercase',
+            cursor: bulkBusy ? 'not-allowed' : 'pointer',
+            opacity: bulkBusy ? 0.5 : 1,
+          }}
+        >
+          🏆 Progresar Mundial
         </button>
 
         {/* Resolver diagnostic — read-only "why aren't my markets

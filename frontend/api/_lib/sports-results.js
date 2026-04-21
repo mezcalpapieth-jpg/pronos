@@ -116,6 +116,16 @@ export async function readFootballDataMatch(matchId) {
   };
 }
 
+// ─── ESPN tennis (ATP) result ──────────────────────────────────────────
+// Reuses readEspnEvent under the hood — ATP matches expose the same
+// competitor.winner / score shape as other ESPN sports, so the
+// sports_api 'binary' shape handles them without a separate reader.
+// Kept as its own named export for symmetry / future ESPN tennis
+// quirks (retirements, walkovers).
+export async function readEspnTennisMatch({ eventId, dateYmd }) {
+  return readEspnEvent({ leaguePath: 'tennis/atp', eventId, dateYmd });
+}
+
 // ─── Jolpica F1 results ────────────────────────────────────────────────
 // Race is settled once /{season}/{round}/results.json has position 1.
 

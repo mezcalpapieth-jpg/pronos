@@ -42,6 +42,9 @@ import { generateChartsMarkets }        from '../../_lib/market-gen/charts.js';
 import { generateYouTubeMarkets }       from '../../_lib/market-gen/youtube.js';
 import { generateEntertainmentMarkets } from '../../_lib/market-gen/entertainment.js';
 import { generateWorldCupMarkets }      from '../../_lib/market-gen/world-cup.js';
+import { generateLmbMarkets }           from '../../_lib/market-gen/lmb.js';
+import { generateTennisMarkets }        from '../../_lib/market-gen/tennis.js';
+import { generateGolfMarkets }          from '../../_lib/market-gen/golf.js';
 import { fetchWikipediaImage }          from '../../_lib/wikipedia.js';
 
 const sql = neon(process.env.DATABASE_URL);
@@ -54,6 +57,7 @@ const GENERATORS = [
   generateMlbMarkets, generateNbaMarkets, generateF1Markets,
   generateChartsMarkets, generateYouTubeMarkets, generateEntertainmentMarkets,
   generateWorldCupMarkets,
+  generateLmbMarkets, generateTennisMarkets, generateGolfMarkets,
 ];
 
 async function collectSpecs() {
@@ -222,17 +226,48 @@ export default async function handler(req, res) {
     // already-approved races: today's generator only ever returns the
     // NEXT race (source_event_id like 'f1:2026:N'), whereas existing
     // markets live at earlier rounds. So we do a second pass that
-    // walks every active F1 parent directly via resolver_config.
+    // walks every active F1 parent directly.
+    //
+    // Match on EITHER resolver_config (ideal — tells us driverIds) or
+    // icon+category (fallback for older F1 markets approved before
+    // the resolver pipeline existed). When resolver_config is
+    // missing, we match drivers by name via Jolpica's drivers list.
     const f1Rows = await sql`
-      SELECT id, outcomes, resolver_config
+      SELECT id, question, outcomes, resolver_config, resolver_type,
+             icon, category, league, amm_mode
       FROM points_markets
       WHERE status = 'active'
         AND outcome_images IS NULL
         AND parent_id IS NULL
-        AND resolver_type = 'sports_api'
-        AND resolver_config::text LIKE '%"jolpica-f1"%'
+        AND (
+          resolver_config::text LIKE '%"jolpica-f1"%'
+          OR icon = '🏁'
+          OR league = 'formula-1'
+        )
       LIMIT 50
     `;
+    console.log('[backfill-resolvers] F1 candidates', {
+      count: f1Rows.length,
+      ids: f1Rows.map(r => r.id),
+    });
+    // Cache the current Jolpica driver roster so we can match by
+    // name when a market's resolver_config doesn't carry driverIds.
+    // Fetched lazily on first fallback hit.
+    let driverRoster = null;
+    async function getDriverRoster() {
+      if (driverRoster) return driverRoster;
+      try {
+        const res = await fetch(
+          'https://api.jolpi.ca/ergast/f1/current/drivers.json',
+          { headers: { 'Accept': 'application/json' } },
+        );
+        if (!res.ok) { driverRoster = []; return driverRoster; }
+        const data = await res.json();
+        driverRoster = data?.MRData?.DriverTable?.Drivers || [];
+        return driverRoster;
+      } catch { driverRoster = []; return driverRoster; }
+    }
+
     let f1ImagesFound = 0;
     for (const row of f1Rows) {
       const cfg = (typeof row.resolver_config === 'object' && row.resolver_config)
@@ -242,16 +277,38 @@ export default async function handler(req, res) {
         ? row.outcomes
         : (() => { try { return JSON.parse(row.outcomes); } catch { return []; } })();
       const legs = Array.isArray(cfg?.legs) ? cfg.legs : [];
-      if (legs.length === 0 || legs.length !== outcomes.length) continue;
 
-      // Jolpica driver profile endpoint returns the Wikipedia URL we
-      // hand off to the REST summary API. 'Otro' (driverId === null)
-      // gets a null slot.
-      const images = await Promise.all(legs.map(async (leg) => {
-        if (!leg?.driverId) return null;
+      // Resolve a driverId per outcome. Prefer cfg.legs when present
+      // and aligned; otherwise look each outcome label up in the
+      // Jolpica roster by full name.
+      let driverIdsPerOutcome;
+      if (legs.length === outcomes.length) {
+        driverIdsPerOutcome = legs.map(l => l?.driverId || null);
+      } else {
+        const roster = await getDriverRoster();
+        driverIdsPerOutcome = outcomes.map(label => {
+          const needle = String(label || '').toLowerCase().trim();
+          if (!needle || needle === 'otro') return null;
+          const match = roster.find(d => {
+            const full = `${d.givenName} ${d.familyName}`.toLowerCase().trim();
+            return full === needle;
+          });
+          return match?.driverId || null;
+        });
+      }
+
+      if (driverIdsPerOutcome.every(id => !id)) {
+        console.log('[backfill-resolvers] F1 row — no drivers matched', {
+          id: row.id, outcomes,
+        });
+        continue;
+      }
+
+      const images = await Promise.all(driverIdsPerOutcome.map(async (driverId) => {
+        if (!driverId) return null;
         try {
           const res = await fetch(
-            `https://api.jolpi.ca/ergast/f1/drivers/${encodeURIComponent(leg.driverId)}.json`,
+            `https://api.jolpi.ca/ergast/f1/drivers/${encodeURIComponent(driverId)}.json`,
             { headers: { 'Accept': 'application/json' } },
           );
           if (!res.ok) return null;
@@ -263,7 +320,10 @@ export default async function handler(req, res) {
       }));
 
       const found = images.filter(Boolean).length;
-      if (found === 0) continue;  // skip all-null writes
+      console.log('[backfill-resolvers] F1 row processed', {
+        id: row.id, driverIdsPerOutcome, imagesFound: found,
+      });
+      if (found === 0) continue;
       const upd = await sql`
         UPDATE points_markets
         SET outcome_images = ${JSON.stringify(images)}::jsonb

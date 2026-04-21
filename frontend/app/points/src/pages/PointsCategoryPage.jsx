@@ -39,17 +39,18 @@ const SLUG_TO_TITLE_KEY = {
 };
 
 // Sports sub-filter tabs. `key` maps to market.sport. 'all' shows
-// everything deportes-tagged. NFL/tennis/golf are listed but will be
-// empty until the corresponding generators ship.
+// everything deportes-tagged. NFL is listed but will be empty until
+// a generator ships. Baseball is a family — MLB + LMB share the
+// 'baseball' sport and are split by league in the sidebar below.
 const SPORT_TABS = [
-  { key: 'all',    tKey: 'points.sport.all'    },
-  { key: 'soccer', tKey: 'points.sport.soccer' },
-  { key: 'mlb',    tKey: 'points.sport.mlb'    },
-  { key: 'nba',    tKey: 'points.sport.nba'    },
-  { key: 'nfl',    tKey: 'points.sport.nfl'    },
-  { key: 'f1',     tKey: 'points.sport.f1'     },
-  { key: 'tennis', tKey: 'points.sport.tennis' },
-  { key: 'golf',   tKey: 'points.sport.golf'   },
+  { key: 'all',      tKey: 'points.sport.all'      },
+  { key: 'soccer',   tKey: 'points.sport.soccer'   },
+  { key: 'baseball', tKey: 'points.sport.baseball' },
+  { key: 'nba',      tKey: 'points.sport.nba'      },
+  { key: 'nfl',      tKey: 'points.sport.nfl'      },
+  { key: 'f1',       tKey: 'points.sport.f1'       },
+  { key: 'tennis',   tKey: 'points.sport.tennis'   },
+  { key: 'golf',     tKey: 'points.sport.golf'     },
 ];
 
 // Soccer leagues sidebar. `key` maps to market.league as set by the
@@ -64,6 +65,14 @@ const SOCCER_LEAGUES = [
   { key: 'bundesliga',     tKey: 'points.league.bundesliga'    },
   { key: 'liga-mx',        tKey: 'points.league.ligaMx'        },
   { key: 'mls',            tKey: 'points.league.mls'           },
+];
+
+// Baseball leagues sidebar — MLB vs LMB. Both markets live under
+// sport='baseball'; this splits them further.
+const BASEBALL_LEAGUES = [
+  { key: 'all', tKey: 'points.league.all' },
+  { key: 'mlb', tKey: 'points.league.mlb' },
+  { key: 'lmb', tKey: 'points.league.lmb' },
 ];
 
 // Category tabs that want resolved markets instead of active.
@@ -152,8 +161,8 @@ export default function PointsCategoryPage() {
     // Sports sub-filter: only when on /c/deportes.
     if (slug === 'deportes' && sport !== 'all') {
       out = out.filter(m => (m.sport || '').toLowerCase() === sport);
-      // Soccer league sidebar: only when a specific sport is soccer.
-      if (sport === 'soccer' && league !== 'all') {
+      // League sidebars on soccer + baseball.
+      if ((sport === 'soccer' || sport === 'baseball') && league !== 'all') {
         out = out.filter(m => (m.league || '').toLowerCase() === league);
       }
     }
@@ -169,8 +178,9 @@ export default function PointsCategoryPage() {
     const params = new URLSearchParams(searchParams);
     if (next === 'all') params.delete('sport');
     else params.set('sport', next);
-    // Reset league whenever we pivot away from soccer.
-    if (next !== 'soccer') params.delete('league');
+    // Reset league whenever we pivot away from a sport that has
+    // a league sidebar (soccer / baseball).
+    if (next !== 'soccer' && next !== 'baseball') params.delete('league');
     setSearchParams(params, { replace: true });
   }
 
@@ -183,7 +193,10 @@ export default function PointsCategoryPage() {
 
   const titleKey = SLUG_TO_TITLE_KEY[slug] || null;
   const showSportBar = slug === 'deportes';
-  const showLeagueSidebar = slug === 'deportes' && sport === 'soccer';
+  const showLeagueSidebar = slug === 'deportes'
+    && (sport === 'soccer' || sport === 'baseball');
+  const leagueTabs = sport === 'baseball' ? BASEBALL_LEAGUES : SOCCER_LEAGUES;
+  const leagueSidebarLabel = sport === 'baseball' ? 'Ligas' : 'Ligas';
 
   return (
     <section style={{
@@ -259,7 +272,7 @@ export default function PointsCategoryPage() {
             }}>
               {t('points.catpage.leagues')}
             </div>
-            {SOCCER_LEAGUES.map(l => (
+            {leagueTabs.map(l => (
               <button
                 key={l.key}
                 onClick={() => setLeague(l.key)}

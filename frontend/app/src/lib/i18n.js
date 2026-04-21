@@ -585,7 +585,7 @@ const STRINGS = {
   // Sports sub-filter — /c/deportes
   'points.sport.all':         { es: 'Todos',                  en: 'All' },
   'points.sport.soccer':      { es: '⚽ Fútbol',              en: '⚽ Soccer' },
-  'points.sport.mlb':         { es: '⚾ MLB',                  en: '⚾ MLB' },
+  'points.sport.baseball':    { es: '⚾ Béisbol',             en: '⚾ Baseball' },
   'points.sport.nba':         { es: '🏀 NBA',                  en: '🏀 NBA' },
   'points.sport.nfl':         { es: '🏈 NFL',                  en: '🏈 NFL' },
   'points.sport.f1':          { es: '🏁 F1',                   en: '🏁 F1' },
@@ -601,6 +601,8 @@ const STRINGS = {
   'points.league.bundesliga': { es: 'Bundesliga',             en: 'Bundesliga' },
   'points.league.ligaMx':     { es: 'Liga MX',                en: 'Liga MX' },
   'points.league.mls':        { es: 'MLS',                    en: 'MLS' },
+  'points.league.mlb':        { es: 'MLB',                    en: 'MLB' },
+  'points.league.lmb':        { es: 'LMB',                    en: 'LMB' },
 
   'points.card.resolved':     { es: 'RESUELTO',              en: 'RESOLVED' },
   'points.card.pending':      { es: 'PENDIENTE',             en: 'PENDING' },

@@ -34,6 +34,9 @@ import { generateChartsMarkets }        from './market-gen/charts.js';
 import { generateYouTubeMarkets }       from './market-gen/youtube.js';
 import { generateEntertainmentMarkets } from './market-gen/entertainment.js';
 import { generateWorldCupMarkets }      from './market-gen/world-cup.js';
+import { generateLmbMarkets }           from './market-gen/lmb.js';
+import { generateTennisMarkets }        from './market-gen/tennis.js';
+import { generateGolfMarkets }          from './market-gen/golf.js';
 
 export const GENERATORS = [
   { name: 'soccer',         run: generateSoccerMarkets        },
@@ -50,6 +53,9 @@ export const GENERATORS = [
   { name: 'youtube',        run: generateYouTubeMarkets       },
   { name: 'entertainment',  run: generateEntertainmentMarkets },
   { name: 'world-cup',      run: generateWorldCupMarkets      },
+  { name: 'lmb',            run: generateLmbMarkets            },
+  { name: 'tennis',         run: generateTennisMarkets         },
+  { name: 'golf',           run: generateGolfMarkets           },
 ];
 
 export async function runAllGenerators() {

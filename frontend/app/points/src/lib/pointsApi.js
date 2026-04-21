@@ -232,8 +232,17 @@ export async function adminRunAutoResolve({ dry = false } = {}) {
 
 // Toggle a market's `featured` flag. Featured markets appear in the
 // home Trending grid; non-featured ones only show under /c/<category>.
-export async function adminToggleFeatured({ marketId, featured }) {
-  return postJson('/api/points/admin/toggle-featured', { marketId, featured });
+export async function adminToggleFeatured({ marketId, pendingId, featured }) {
+  return postJson('/api/points/admin/toggle-featured', { marketId, pendingId, featured });
+}
+
+// Spawn World Cup knockout matches once the group stage finishes.
+// Dry-run first so the admin can eyeball the projected R32 pairings
+// before committing. On wet run the specs flow through the normal
+// pending-markets queue; admin still approves each.
+export async function adminProgressWorldCup({ dry = false } = {}) {
+  const q = dry ? '?dry=1' : '';
+  return postJson(`/api/points/admin/progress-world-cup${q}`, {});
 }
 
 // ─── Admin — edit market (question + end time + category) ──────────────────

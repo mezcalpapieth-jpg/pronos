@@ -10,6 +10,7 @@
  * on the server. No sell-flow here (sells live on the Portfolio page).
  */
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { quoteBuy, executeBuy } from '../lib/pointsApi.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 
@@ -90,7 +91,12 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
 
   const isDrawer = variant === 'drawer';
 
-  return (
+  // Render via createPortal to document.body so the fixed-position
+  // overlay ignores any `transform` on ancestor elements (market cards
+  // apply transform on hover, which would otherwise trap `position:
+  // fixed` into the card's local containing block — the drawer would
+  // then "appear on top of the market" instead of viewport-edge).
+  const overlay = (
     <div
       onClick={(e) => { if (e.target === e.currentTarget && !submitting) onClose(); }}
       style={{
@@ -317,6 +323,10 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined'
+    ? createPortal(overlay, document.body)
+    : overlay;
 }
 
 function QuoteRow({ label, value, bold, accent, good }) {

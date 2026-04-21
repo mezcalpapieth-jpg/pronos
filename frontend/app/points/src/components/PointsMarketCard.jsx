@@ -322,22 +322,19 @@ export default function PointsMarketCard({ market, userPosition }) {
         </span>
       </div>
 
-      {/* Buy drawer — mounted INSIDE the card but rendered fixed to
-          the viewport by the modal component. Stop the click that
-          propagates into the drawer's scrim from reaching the card's
-          own onClick (which would navigate to detail). */}
+      {/* Buy drawer — rendered via createPortal to document.body by
+          the modal component, so ancestor transforms on the card
+          don't pin it to the card's containing block. */}
       {drawerOpen && canOpenDrawer && (
-        <div onClick={(e) => e.stopPropagation()}>
-          <PointsBuyModal
-            open={drawerOpen}
-            variant="drawer"
-            market={market}
-            outcomeIndex={drawerIndex}
-            outcomeLabel={outcomes[drawerIndex]}
-            onClose={() => setDrawerIndex(null)}
-            onSuccess={() => setDrawerIndex(null)}
-          />
-        </div>
+        <PointsBuyModal
+          open={drawerOpen}
+          variant="drawer"
+          market={market}
+          outcomeIndex={drawerIndex}
+          outcomeLabel={outcomes[drawerIndex]}
+          onClose={() => setDrawerIndex(null)}
+          onSuccess={() => setDrawerIndex(null)}
+        />
       )}
     </div>
   );
