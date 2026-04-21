@@ -568,6 +568,7 @@ const STRINGS = {
   'points.top.loading':            { es: 'Cargando…',           en: 'Loading…' },
 
   'points.cat.trending':      { es: '🔥 Trending',            en: '🔥 Trending' },
+  'points.cat.worldCup':      { es: '🏆 Copa del Mundo',      en: '🏆 World Cup' },
   'points.cat.deportes':      { es: '⚽ Deportes',            en: '⚽ Sports' },
   'points.cat.musica':        { es: '🎵 Música & Farándula',  en: '🎵 Music & Culture' },
   'points.cat.mexico':        { es: '🇲🇽 México & CDMX',      en: '🇲🇽 Mexico & CDMX' },

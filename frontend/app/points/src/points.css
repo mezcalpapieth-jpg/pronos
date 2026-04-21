@@ -123,3 +123,11 @@
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.55; }
 }
+
+/* Buy drawer slide-in from the right. Triggered when the user taps
+   an outcome pill on a market card — the drawer mounts with this
+   animation so it doesn't pop in abruptly. */
+@keyframes points-drawer-slide-in {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}

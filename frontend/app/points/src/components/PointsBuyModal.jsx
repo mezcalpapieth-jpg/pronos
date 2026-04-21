@@ -15,7 +15,11 @@ import { usePointsAuth } from '@app/lib/pointsAuth.js';
 
 const QUICK_AMOUNTS = [5, 10, 25, 50, 100];
 
-export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabel, onClose, onSuccess }) {
+// `variant='modal'` (default) centers on screen with a darkened backdrop.
+// `variant='drawer'` slides in from the right edge and takes the full
+// viewport height — invoked from market cards so the user can buy
+// without leaving the grid.
+export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabel, onClose, onSuccess, variant = 'modal' }) {
   const { user, refresh } = usePointsAuth();
   const [amount, setAmount] = useState('10');
   const [quote, setQuote] = useState(null);
@@ -84,22 +88,34 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
   const isYes = outcomeIndex === 0;
   const accent = isYes ? 'var(--yes)' : '#ff3b3b';
 
+  const isDrawer = variant === 'drawer';
+
   return (
     <div
       onClick={(e) => { if (e.target === e.currentTarget && !submitting) onClose(); }}
       style={{
         position: 'fixed', inset: 0, zIndex: 9998,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        display: 'flex',
+        alignItems: isDrawer ? 'stretch' : 'center',
+        justifyContent: isDrawer ? 'flex-end' : 'center',
         background: 'rgba(0, 0, 0, 0.65)', backdropFilter: 'blur(4px)',
       }}
     >
       <div style={{
-        width: 'min(440px, 92vw)',
+        width: isDrawer ? 'min(440px, 92vw)' : 'min(440px, 92vw)',
+        height: isDrawer ? '100vh' : 'auto',
+        overflowY: isDrawer ? 'auto' : 'visible',
         background: 'var(--surface1)',
         border: '1px solid var(--border)',
-        borderRadius: 16,
+        borderLeft: isDrawer ? '1px solid var(--border)' : '1px solid var(--border)',
+        borderTopLeftRadius: isDrawer ? 0 : 16,
+        borderBottomLeftRadius: isDrawer ? 0 : 16,
+        borderTopRightRadius: isDrawer ? 0 : 16,
+        borderBottomRightRadius: isDrawer ? 0 : 16,
         padding: '28px 26px',
         fontFamily: 'var(--font-body)',
+        // Slide in from the right — pairs with a keyframe in points.css.
+        animation: isDrawer ? 'points-drawer-slide-in 0.22s ease-out' : undefined,
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 18 }}>
           <div>

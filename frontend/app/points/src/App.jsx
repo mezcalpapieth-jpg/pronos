@@ -21,6 +21,7 @@ import PointsCategoryBar from './components/PointsCategoryBar.jsx';
 import PointsHome from './pages/PointsHome.jsx';
 import PointsMarketDetail from './pages/PointsMarketDetail.jsx';
 import PointsCategoryPage from './pages/PointsCategoryPage.jsx';
+import PointsWorldCupPage from './pages/PointsWorldCupPage.jsx';
 import PointsPortfolio from './pages/PointsPortfolio.jsx';
 import PointsEarn from './pages/PointsEarn.jsx';
 import PointsAdmin from './pages/PointsAdmin.jsx';
@@ -115,6 +116,10 @@ function Shell({ onOpenLogin, isAdmin }) {
       {showCategoryBar && <PointsCategoryBar />}
       <Routes>
         <Route path="/" element={<PointsHome onOpenLogin={onOpenLogin} />} />
+        {/* World Cup gets its own page with a hero, groups, and
+            bracket. Registered BEFORE the generic /c/:slug so it
+            wins the match. */}
+        <Route path="/c/world-cup" element={<PointsWorldCupPage />} />
         <Route path="/c/:slug" element={<PointsCategoryPage />} />
         <Route path="/market" element={<PointsMarketDetail onOpenLogin={onOpenLogin} />} />
         <Route path="/portfolio" element={<PointsPortfolio />} />

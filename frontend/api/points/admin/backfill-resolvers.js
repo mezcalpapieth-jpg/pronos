@@ -41,6 +41,7 @@ import { generateFuelMarkets }          from '../../_lib/market-gen/fuel.js';
 import { generateChartsMarkets }        from '../../_lib/market-gen/charts.js';
 import { generateYouTubeMarkets }       from '../../_lib/market-gen/youtube.js';
 import { generateEntertainmentMarkets } from '../../_lib/market-gen/entertainment.js';
+import { generateWorldCupMarkets }      from '../../_lib/market-gen/world-cup.js';
 import { fetchWikipediaImage }          from '../../_lib/wikipedia.js';
 
 const sql = neon(process.env.DATABASE_URL);
@@ -52,6 +53,7 @@ const GENERATORS = [
   generateWeatherMarkets,
   generateMlbMarkets, generateNbaMarkets, generateF1Markets,
   generateChartsMarkets, generateYouTubeMarkets, generateEntertainmentMarkets,
+  generateWorldCupMarkets,
 ];
 
 async function collectSpecs() {

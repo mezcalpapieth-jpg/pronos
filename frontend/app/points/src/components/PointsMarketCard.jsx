@@ -18,9 +18,10 @@
  *                  user in this market. When present, a "Tu posición"
  *                  badge renders at the top of the card.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useT } from '@app/lib/i18n.js';
+import PointsBuyModal from './PointsBuyModal.jsx';
 
 const STAKE_PREVIEW = 100; // MXNP reference stake for the card payout preview
 
@@ -62,8 +63,21 @@ export default function PointsMarketCard({ market, userPosition }) {
     && market.outcomeImages.length === outcomes.length
     ? market.outcomeImages
     : null;
+  const hasAnyLogo = outcomeImages?.some(Boolean) || false;
+
+  // Drawer state — when set, render PointsBuyModal in variant="drawer"
+  // pre-selected on this outcome. Clicking an outcome row stops event
+  // propagation so the card doesn't also navigate to the detail page.
+  const [drawerIndex, setDrawerIndex] = useState(null);
+  const drawerOpen = drawerIndex !== null;
 
   const isResolved = market.status === 'resolved';
+  // Parallel parent markets have no per-parent pool — buys go against
+  // individual legs, which aren't exposed on the card. For parallel we
+  // fall back to the old behavior: clicking navigates to detail so the
+  // user can pick which leg they want to bet on. Resolved markets
+  // aren't tradeable either.
+  const canOpenDrawer = !isResolved && market.ammMode !== 'parallel';
   // isLive: start_time has passed but the game window hasn't closed
   // yet — used to show a red 🔴 EN VIVO pill so users know they can
   // trade against in-progress events. Only sports markets set
@@ -202,16 +216,38 @@ export default function PointsMarketCard({ market, userPosition }) {
             const pct = Math.round(prices[i] * 100);
             const gain = previewGain(prices[i]);
             const logo = outcomeImages?.[i] || null;
+            const rowOnClick = (e) => {
+              // Stop the click from reaching the card's outer
+              // navigate handler so we can open the drawer in place.
+              e.stopPropagation();
+              if (canOpenDrawer) setDrawerIndex(i);
+              else navigate(`/market?id=${encodeURIComponent(market.id)}`);
+            };
             return (
               <div
                 key={i}
+                role="button"
+                tabIndex={0}
+                onClick={rowOnClick}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); rowOnClick(e); }
+                }}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: 10,
                   padding: '6px 6px 6px 8px',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  transition: 'background 0.12s',
                 }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface2)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
               >
+                {/* Logo column. Reserve a 26px slot even when this
+                    outcome has no image (e.g. 'Empate' on a 3-way
+                    soccer row) so every label lines up at the same
+                    x-offset as rows that do have a crest. */}
                 {logo ? (
                   <img
                     src={logo}
@@ -224,6 +260,8 @@ export default function PointsMarketCard({ market, userPosition }) {
                     }}
                     onError={(e) => { e.currentTarget.style.display = 'none'; }}
                   />
+                ) : hasAnyLogo ? (
+                  <span style={{ width: 26, height: 26, flexShrink: 0 }} aria-hidden="true" />
                 ) : null}
                 <span style={{
                   flex: 1,
@@ -238,10 +276,9 @@ export default function PointsMarketCard({ market, userPosition }) {
                 }}>
                   {label}
                 </span>
-                {/* Clickable pill — only the +gain and % sit inside.
-                    Mirrors the Polymarket buy-button style the user
-                    asked for. The whole card is already clickable so
-                    the pill just gives users something to aim at. */}
+                {/* Accent pill — visual cue that this row is the buy
+                    target. The whole row is clickable; the pill just
+                    gives users something to aim at. */}
                 <span style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -284,6 +321,24 @@ export default function PointsMarketCard({ market, userPosition }) {
           {formatDeadline(market.endTime)}
         </span>
       </div>
+
+      {/* Buy drawer — mounted INSIDE the card but rendered fixed to
+          the viewport by the modal component. Stop the click that
+          propagates into the drawer's scrim from reaching the card's
+          own onClick (which would navigate to detail). */}
+      {drawerOpen && canOpenDrawer && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <PointsBuyModal
+            open={drawerOpen}
+            variant="drawer"
+            market={market}
+            outcomeIndex={drawerIndex}
+            outcomeLabel={outcomes[drawerIndex]}
+            onClose={() => setDrawerIndex(null)}
+            onSuccess={() => setDrawerIndex(null)}
+          />
+        </div>
+      )}
     </div>
   );
 }
