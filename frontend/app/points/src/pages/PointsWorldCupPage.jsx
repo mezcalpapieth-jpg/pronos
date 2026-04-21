@@ -357,11 +357,7 @@ export default function PointsWorldCupPage() {
             </button>
           )}
         </div>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-          gap: 10,
-        }}>
+        <div className="wc-group-grid">
           {GROUPS.map(g => {
             const active = activeGroup === g.key;
             const teams = g.teams.map(c => TEAMS[c]).filter(Boolean);
@@ -806,45 +802,26 @@ function MexicoPathCard({ path }) {
   );
 }
 
+// Symmetrical bracket: every column uses the same container height
+// and `justify-content: space-around`, so R16 slots sit at the
+// midpoint between their two parent R32 slots (and so on) without
+// hand-tuned gaps. Styling lives in .wc-bracket / .wc-bracket-col.
 function BracketView() {
   const columns = [
-    { label: '16vos', slots: BRACKET.r32,  height: 26 },
-    { label: '8vos',  slots: BRACKET.r16,  height: 56 },
-    { label: 'QF',    slots: BRACKET.qf,   height: 116 },
-    { label: 'SF',    slots: BRACKET.sf,   height: 236 },
-    { label: 'Final', slots: [BRACKET.final], height: 0 },
+    { label: '16vos', slots: BRACKET.r32 },
+    { label: '8vos',  slots: BRACKET.r16 },
+    { label: 'QF',    slots: BRACKET.qf },
+    { label: 'SF',    slots: BRACKET.sf },
+    { label: 'Final', slots: [BRACKET.final] },
   ];
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: `repeat(${columns.length}, minmax(140px, 1fr))`,
-      gap: 16,
-      overflowX: 'auto',
-      paddingBottom: 10,
-    }}>
+    <div className="wc-bracket">
       {columns.map(col => (
         <div key={col.label}>
-          <div style={{
-            fontFamily: 'var(--font-mono)', fontSize: 10,
-            letterSpacing: '0.12em', color: 'var(--text-muted)',
-            textTransform: 'uppercase', marginBottom: 10, textAlign: 'center',
-          }}>
-            {col.label}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: col.height > 0 ? col.height : 0 }}>
+          <div className="wc-bracket-col-label">{col.label}</div>
+          <div className="wc-bracket-col">
             {col.slots.map(slot => (
-              <div key={slot.id} style={{
-                background: 'var(--surface1)',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
-                padding: '8px 10px',
-                fontFamily: 'var(--font-mono)', fontSize: 10,
-                letterSpacing: '0.04em', color: 'var(--text-secondary)',
-                textAlign: 'center',
-                minHeight: 36,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexDirection: 'column', gap: 2,
-              }}>
+              <div key={slot.id} className="wc-bracket-slot">
                 <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
                   {slot.home} <span style={{ color: 'var(--text-muted)' }}>vs</span> {slot.away}
                 </div>

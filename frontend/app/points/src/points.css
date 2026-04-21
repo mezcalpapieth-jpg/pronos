@@ -131,3 +131,74 @@
   from { transform: translateX(100%); }
   to   { transform: translateX(0); }
 }
+
+/* World Cup group selector — exactly 4 columns × 3 rows on desktop
+   (12 groups = A..L), stepping down to 2 cols on tablet and 1 col
+   on narrow phones so long team names don't overflow. Lives in a
+   class rather than inline styles because inline can't do
+   media queries. */
+.wc-group-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 880px) {
+  .wc-group-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 460px) {
+  .wc-group-grid { grid-template-columns: 1fr; }
+}
+
+/* World Cup bracket tree. Each round is a flex column, every
+   column sharing the same container height (`--bracket-h`).
+   `justify-content: space-around` then places 16 / 8 / 4 / 2 / 1
+   slot(s) equidistantly, so R16 slots land at the vertical midpoint
+   of their two parent R32 slots — and so on up to the Final, which
+   centers at half the height. That's what makes the tree
+   symmetrical without hand-tuned gaps. */
+.wc-bracket {
+  --bracket-h: 820px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(160px, 1fr));
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+}
+.wc-bracket-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  min-height: var(--bracket-h);
+}
+.wc-bracket-col-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  text-align: center;
+  margin-bottom: 10px;
+}
+.wc-bracket-slot {
+  background: var(--surface1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  text-align: center;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 2px;
+}
+/* Shorter bracket container on small screens so the final stages
+   don't have ludicrous vertical padding when a phone can only show
+   two columns at a time (the user will scroll horizontally anyway). */
+@media (max-width: 880px) {
+  .wc-bracket { --bracket-h: 560px; }
+}
