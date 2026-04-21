@@ -105,9 +105,13 @@ export default function PointsCategoryPage() {
       setError(null);
       try {
         // Category pages show EVERY market in the category, not just
-        // the 100 closest to closing. The home trending grid keeps
-        // the default 100 — this route is where users go to browse.
-        const m = await fetchMarkets({ status: fetchStatus, limit: 2000 });
+        // the featured ones. Pass `featured: 'all'` so the API
+        // doesn't apply its Trending default filter.
+        const m = await fetchMarkets({
+          status: fetchStatus,
+          limit: 2000,
+          featured: 'all',
+        });
         if (cancelled) return;
         setMarkets(m);
         setLoading(false);

@@ -18,27 +18,30 @@
 
 const PGA = 'https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard';
 
-// ESPN headshot CDN pattern — stable across the site.
+// ESPN headshot CDN pattern — confirmed working via HEAD probes
+// against the `golf/players` path (the earlier `pga/players` guess
+// was wrong — all 404s). IDs below were verified via ESPN's search
+// API. Update if ESPN re-orgs their CDN.
 function headshot(id) {
-  return id ? `https://a.espncdn.com/i/headshots/pga/players/full/${id}.png` : null;
+  return id ? `https://a.espncdn.com/i/headshots/golf/players/full/${id}.png` : null;
 }
 
-// Top-tier PGA field. ESPN athlete IDs are the stable key for
-// headshots; picked by current world-ranking / Race to the Cup
-// form. Edit this list to refocus the market on a different pool.
+// Top-tier PGA field. Each ID was spot-checked with a HEAD request
+// against the CDN; the whole list returns 200 as of 2026-04. Edit
+// to refocus the market on a different pool.
 const FIELD = [
   { id: '9478',    name: 'Scottie Scheffler' },
   { id: '3470',    name: 'Rory McIlroy' },
   { id: '10140',   name: 'Xander Schauffele' },
   { id: '10046',   name: 'Bryson DeChambeau' },
-  { id: '10592',   name: 'Ludvig Åberg' },
+  { id: '4375972', name: 'Ludvig Åberg' },
   { id: '9131',    name: 'Viktor Hovland' },
-  { id: '10909',   name: 'Collin Morikawa' },
+  { id: '10592',   name: 'Collin Morikawa' },
   { id: '5860',    name: 'Hideki Matsuyama' },
-  { id: '8286',    name: 'Justin Thomas' },
-  { id: '8143',    name: 'Patrick Cantlay' },
-  { id: '11118',   name: 'Sam Burns' },
-  { id: '9468',    name: 'Jordan Spieth' },
+  { id: '5539',    name: 'Tommy Fleetwood' },
+  { id: '6007',    name: 'Patrick Cantlay' },
+  { id: '9938',    name: 'Sam Burns' },
+  { id: '5467',    name: 'Jordan Spieth' },
 ];
 
 function formatDateCompact(d) {

@@ -197,12 +197,14 @@ function ParallelLegList({ market, legs, outcomeImages, onBuyClick }) {
             <div
               key={leg.id}
               style={{
-                display: 'grid',
-                gridTemplateColumns: logo
-                  ? '28px minmax(0, 1fr) 48px auto'
-                  : 'minmax(0, 1fr) 48px auto',
-                gap: 10,
+                // Flex with wrap so long leg labels (golfer names,
+                // driver names) get the full row width they need and
+                // the Sí/No buttons drop to a second line cleanly
+                // instead of colliding into the name column.
+                display: 'flex',
+                flexWrap: 'wrap',
                 alignItems: 'center',
+                gap: 10,
                 padding: '10px 12px',
                 borderRadius: 10,
                 border: `1px solid ${accent.border}`,
@@ -211,6 +213,7 @@ function ParallelLegList({ market, legs, outcomeImages, onBuyClick }) {
             >
               {logo && <OutcomeLogo src={logo} />}
               <div style={{
+                flex: '1 1 200px',
                 minWidth: 0,
                 fontFamily: 'var(--font-body)',
                 fontSize: 13,
@@ -226,11 +229,21 @@ function ParallelLegList({ market, legs, outcomeImages, onBuyClick }) {
                 fontFamily: 'var(--font-display)',
                 fontSize: 16,
                 color: accent.fg,
+                minWidth: 48,
                 textAlign: 'right',
+                flexShrink: 0,
               }}>
                 {pct}%
               </div>
-              <div style={{ display: 'flex', gap: 6 }}>
+              <div style={{
+                display: 'flex',
+                gap: 6,
+                flexShrink: 0,
+                // Push the buttons to the right edge when the row
+                // has enough width; wrap to a new line below the
+                // label when there's not.
+                marginLeft: 'auto',
+              }}>
                 <button
                   onClick={() => onBuyClick(legMarket, 0, `${leg.label} — Sí`)}
                   style={legButtonStyle('var(--yes)', 'rgba(22,163,74,0.15)', 'rgba(22,163,74,0.4)')}

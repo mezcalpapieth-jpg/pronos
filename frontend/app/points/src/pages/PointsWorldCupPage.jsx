@@ -143,7 +143,7 @@ export default function PointsWorldCupPage() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetchMarkets({ status: 'active', category: 'world-cup', limit: 2000 })
+    fetchMarkets({ status: 'active', category: 'world-cup', limit: 2000, featured: 'all' })
       .then(m => { if (!cancelled) { setMarkets(m); setLoading(false); } })
       .catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -155,7 +155,7 @@ export default function PointsWorldCupPage() {
   const [resolvedMarkets, setResolvedMarkets] = useState([]);
   useEffect(() => {
     let cancelled = false;
-    fetchMarkets({ status: 'resolved', category: 'world-cup', limit: 2000 })
+    fetchMarkets({ status: 'resolved', category: 'world-cup', limit: 2000, featured: 'all' })
       .then(m => { if (!cancelled) setResolvedMarkets(m); })
       .catch(() => {});
     return () => { cancelled = true; };

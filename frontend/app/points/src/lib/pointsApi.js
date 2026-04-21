@@ -38,11 +38,17 @@ export async function postJson(url, body) {
 // `limit` caps the number of markets returned. Leave undefined on home
 // (trending shows the soonest-closing 100); category / browse pages
 // pass a larger value so nothing is hidden.
-export async function fetchMarkets({ status = 'active', category, limit } = {}) {
+//
+// `featured: 'all'` bypasses the server-side Trending filter (which
+// defaults to only returning featured markets when no category is
+// set). Category and status pages need every market, not just the
+// curated ones.
+export async function fetchMarkets({ status = 'active', category, limit, featured } = {}) {
   const q = new URLSearchParams();
   if (status) q.set('status', status);
   if (category) q.set('category', category);
   if (limit) q.set('limit', String(limit));
+  if (featured) q.set('featured', featured);
   const { markets = [] } = await getJson(`/api/points/markets?${q}`);
   return markets;
 }
