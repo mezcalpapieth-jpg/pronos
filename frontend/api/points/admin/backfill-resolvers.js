@@ -46,6 +46,7 @@ import { generateLmbMarkets }           from '../../_lib/market-gen/lmb.js';
 import { generateTennisMarkets }        from '../../_lib/market-gen/tennis.js';
 import { generateGolfMarkets }          from '../../_lib/market-gen/golf.js';
 import { fetchWikipediaImage }          from '../../_lib/wikipedia.js';
+import { LMB_TEAMS }                    from '../../_lib/lmb-2026.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -138,9 +139,42 @@ export default async function handler(req, res) {
           });
         }
       }
+      // Also count markets eligible for the force-rebuild passes
+      // (F1 / LMB / golf) so the UI doesn't say "nothing to
+      // retrofit" when the spec-join path is empty but there are
+      // still image rewrites to do.
+      const [f1Count] = await sql`
+        SELECT COUNT(*)::int AS n FROM points_markets
+        WHERE status = 'active' AND parent_id IS NULL AND (
+          resolver_config::text LIKE '%"jolpica-f1"%'
+          OR icon = '🏁'
+          OR league = 'formula-1'
+          OR question ILIKE '%gran premio%'
+          OR question ILIKE '%grand prix%'
+        )
+      `;
+      const [lmbCount] = await sql`
+        SELECT COUNT(*)::int AS n FROM points_markets m
+        LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
+        WHERE m.status = 'active' AND m.parent_id IS NULL
+          AND (m.league = 'lmb' OR pm.source = 'lmb-mx-2026')
+      `;
+      const [golfCount] = await sql`
+        SELECT COUNT(*)::int AS n FROM points_markets m
+        LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
+        WHERE m.status = 'active' AND m.parent_id IS NULL
+          AND (m.league = 'pga' OR pm.source = 'espn-pga' OR m.icon = '⛳')
+      `;
+      const forceRebuildCount = (f1Count?.n || 0) + (lmbCount?.n || 0) + (golfCount?.n || 0);
       return res.status(200).json({
         dryRun: true,
-        candidateCount: rows.length,
+        candidateCount: rows.length + forceRebuildCount,
+        specCandidateCount: rows.length,
+        forceRebuildCandidates: {
+          f1:   f1Count?.n   || 0,
+          lmb:  lmbCount?.n  || 0,
+          golf: golfCount?.n || 0,
+        },
         candidates: rows.slice(0, 50),
         specsTotal: specs.length,
       });
@@ -220,29 +254,36 @@ export default async function handler(req, res) {
       }
     }
 
-    // ── F1 portrait pass ────────────────────────────────────────────────
-    // The spec-based loop above relies on the (source, source_event_id)
-    // join to match specs onto markets. For F1 that never works for
-    // already-approved races: today's generator only ever returns the
-    // NEXT race (source_event_id like 'f1:2026:N'), whereas existing
-    // markets live at earlier rounds. So we do a second pass that
-    // walks every active F1 parent directly.
+    // ── Force-rebuild pass (F1 + LMB + golf + MLB) ──────────────────
     //
-    // Match on EITHER resolver_config (ideal — tells us driverIds) or
-    // icon+category (fallback for older F1 markets approved before
-    // the resolver pipeline existed). When resolver_config is
-    // missing, we match drivers by name via Jolpica's drivers list.
+    // The spec-based loop above joins specs to markets via
+    // (source, source_event_id) and only patches when
+    // outcome_images IS NULL. That misses two cases:
+    //   (a) markets approved before today's generator spec exists
+    //       (F1 always; anything from past dates)
+    //   (b) markets that already have an empty/wrong outcome_images
+    //       array from an earlier buggy run
+    //
+    // This pass walks markets directly by sport / icon / question
+    // and rewrites outcome_images from authoritative sources, no
+    // NULL guard. Safe to re-run — writes the same URLs each time.
+
+    // ── F1 ──────────────────────────────────────────────────────────
+    // Match by resolver_config OR icon='🏁' OR league='formula-1'
+    // OR the question mentioning Grand Prix / Gran Premio / GP.
     const f1Rows = await sql`
       SELECT id, question, outcomes, resolver_config, resolver_type,
              icon, category, league, amm_mode
       FROM points_markets
       WHERE status = 'active'
-        AND outcome_images IS NULL
         AND parent_id IS NULL
         AND (
           resolver_config::text LIKE '%"jolpica-f1"%'
           OR icon = '🏁'
           OR league = 'formula-1'
+          OR question ILIKE '%gran premio%'
+          OR question ILIKE '%grand prix%'
+          OR question ILIKE '%f\u00f3rmula 1%'
         )
       LIMIT 50
     `;
@@ -328,12 +369,93 @@ export default async function handler(req, res) {
         UPDATE points_markets
         SET outcome_images = ${JSON.stringify(images)}::jsonb
         WHERE id = ${row.id}
-          AND outcome_images IS NULL
         RETURNING id
       `;
       if (upd.length > 0) {
         record(upd[0].id, 'outcomeImages');
         f1ImagesFound += found;
+      }
+    }
+
+    // ── LMB ─────────────────────────────────────────────────────────
+    // Match by league='lmb' OR source='lmb-mx-2026' (from the
+    // pending row that created the market — look up via JOIN). For
+    // each, rebuild outcome_images from LMB_TEAMS using the source
+    // data's home/away codes that the generator persisted.
+    const lmbRows = await sql`
+      SELECT m.id, m.outcomes, pm.source_data
+      FROM points_markets m
+      LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
+      WHERE m.status = 'active'
+        AND m.parent_id IS NULL
+        AND (m.league = 'lmb' OR pm.source = 'lmb-mx-2026')
+      LIMIT 200
+    `;
+    let lmbImagesFound = 0;
+    for (const row of lmbRows) {
+      const sd = (typeof row.source_data === 'object' && row.source_data)
+        ? row.source_data
+        : (() => { try { return JSON.parse(row.source_data); } catch { return null; } })();
+      const homeCode = sd?.home?.code;
+      const awayCode = sd?.away?.code;
+      const home = homeCode ? LMB_TEAMS[homeCode] : null;
+      const away = awayCode ? LMB_TEAMS[awayCode] : null;
+      if (!home && !away) continue;
+      const images = [home?.logo || null, away?.logo || null];
+      if (!images.some(Boolean)) continue;
+      const upd = await sql`
+        UPDATE points_markets
+        SET outcome_images = ${JSON.stringify(images)}::jsonb
+        WHERE id = ${row.id}
+        RETURNING id
+      `;
+      if (upd.length > 0) {
+        record(upd[0].id, 'outcomeImages');
+        lmbImagesFound += images.filter(Boolean).length;
+      }
+    }
+
+    // ── Golf ────────────────────────────────────────────────────────
+    // Generator stashes the full FIELD roster on source_data.field.
+    // If that's missing (older rows), fall back to matching the
+    // outcome label against today's generator's FIELD.
+    const currentGolfSpec = (specs.find(s => s.source === 'espn-pga') || null);
+    const golfFieldFallback = currentGolfSpec?.source_data?.field || [];
+    const golfRows = await sql`
+      SELECT m.id, m.outcomes, pm.source_data
+      FROM points_markets m
+      LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
+      WHERE m.status = 'active'
+        AND m.parent_id IS NULL
+        AND (m.league = 'pga' OR pm.source = 'espn-pga' OR m.icon = '⛳')
+      LIMIT 20
+    `;
+    let golfImagesFound = 0;
+    for (const row of golfRows) {
+      const outcomes = Array.isArray(row.outcomes)
+        ? row.outcomes
+        : (() => { try { return JSON.parse(row.outcomes); } catch { return []; } })();
+      const sd = (typeof row.source_data === 'object' && row.source_data)
+        ? row.source_data
+        : (() => { try { return JSON.parse(row.source_data); } catch { return null; } })();
+      const field = (Array.isArray(sd?.field) ? sd.field : golfFieldFallback) || [];
+      if (field.length === 0) continue;
+      const byName = new Map();
+      for (const p of field) byName.set(String(p.name || '').toLowerCase().trim(), p.id);
+      const images = outcomes.map(label => {
+        const id = byName.get(String(label || '').toLowerCase().trim());
+        return id ? `https://a.espncdn.com/i/headshots/golf/players/full/${id}.png` : null;
+      });
+      if (!images.some(Boolean)) continue;
+      const upd = await sql`
+        UPDATE points_markets
+        SET outcome_images = ${JSON.stringify(images)}::jsonb
+        WHERE id = ${row.id}
+        RETURNING id
+      `;
+      if (upd.length > 0) {
+        record(upd[0].id, 'outcomeImages');
+        golfImagesFound += images.filter(Boolean).length;
       }
     }
 
@@ -347,6 +469,8 @@ export default async function handler(req, res) {
       updatedCount: updated.length,
       patchCounts,
       f1ImagesFound,
+      lmbImagesFound,
+      golfImagesFound,
       updated,
       reviewer: admin.username,
     });

@@ -87,6 +87,11 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS league TEXT`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_sport ON points_markets(sport)`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_league ON points_markets(league)`,
+  // One-shot: earlier MLB generator emitted sport='mlb', but the
+  // UI sub-filter keys on sport='baseball' with the MLB/LMB split
+  // carried by `league`. Collapse 'mlb' into 'baseball' so existing
+  // markets show up under the Béisbol tab.
+  `UPDATE points_markets SET sport = 'baseball', league = COALESCE(league, 'mlb') WHERE sport = 'mlb'`,
 
   // outcome_images: JSONB array index-aligned with `outcomes`. Each slot
   // is either a URL string (team crest / player portrait) or null when
