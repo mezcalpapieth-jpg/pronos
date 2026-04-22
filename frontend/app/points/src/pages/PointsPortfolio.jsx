@@ -21,6 +21,7 @@ import {
   redeemWinnings,
   claimDaily,
   fetchDailyStatus,
+  dismissPosition,
 } from '../lib/pointsApi.js';
 
 function fmt(n) {
@@ -30,12 +31,16 @@ function fmt(n) {
 }
 
 // ─── Position card ───────────────────────────────────────────────────────────
-function PositionCard({ position, onSell, onRedeem, selling, redeeming }) {
+function PositionCard({ position, onSell, onRedeem, onDismiss, selling, redeeming, dismissing }) {
   const {
     marketId, outcomeLabel, question, shares, costBasis, currentPrice,
     currentValue, pnl, canRedeem, status,
   } = position;
   const pnlPos = pnl >= 0;
+  // Losing resolved position: the market is settled, this outcome
+  // didn't win, so there's nothing to redeem or sell. Offer an OK
+  // button to acknowledge the loss and clear it from the Active tab.
+  const isLostBet = status === 'resolved' && !canRedeem;
 
   return (
     <div style={{
@@ -119,6 +124,28 @@ function PositionCard({ position, onSell, onRedeem, selling, redeeming }) {
             style={{ padding: '8px 12px', fontSize: 11, cursor: selling ? 'wait' : 'pointer' }}
           >
             {selling ? 'Vendiendo…' : 'Vender anticipado'}
+          </button>
+        ) : isLostBet ? (
+          <button
+            onClick={() => onDismiss?.(position)}
+            disabled={dismissing}
+            title="Reconocer la pérdida y mover a Historial"
+            style={{
+              padding: '8px 14px',
+              borderRadius: 8,
+              border: '1px solid var(--border)',
+              background: 'var(--surface2)',
+              color: 'var(--text-secondary)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              cursor: dismissing ? 'wait' : 'pointer',
+              opacity: dismissing ? 0.6 : 1,
+            }}
+          >
+            {dismissing ? 'Cerrando…' : '✓ OK'}
           </button>
         ) : null}
       </div>
@@ -354,6 +381,29 @@ export default function PointsPortfolio() {
     }
   }
 
+  // Acknowledge a losing resolved position. Drops it off the Active
+  // tab immediately (optimistic) and persists via
+  // /api/points/dismiss-position so the dismissal stays across
+  // devices. Trade history in the Historial tab is untouched.
+  async function handleDismiss(pos) {
+    const key = `${pos.marketId}-${pos.outcomeIndex}`;
+    // Optimistic removal — server guard ensures we only hide
+    // losing resolved positions, so if something goes wrong we
+    // refetch to restore state.
+    setPositions(prev => prev.filter(p =>
+      !(p.marketId === pos.marketId && p.outcomeIndex === pos.outcomeIndex),
+    ));
+    setActionState({ id: key, type: 'dismissing' });
+    try {
+      await dismissPosition({ marketId: pos.marketId, outcomeIndex: pos.outcomeIndex });
+    } catch (e) {
+      setMsg({ type: 'error', text: `No se pudo cerrar: ${e.code || e.message}` });
+      await load(); // rollback
+    } finally {
+      setActionState({ id: null, type: null });
+    }
+  }
+
   const balance = Number(user?.balance || 0);
 
   return (
@@ -468,8 +518,10 @@ export default function PointsPortfolio() {
                         position={p}
                         onSell={handleSell}
                         onRedeem={handleRedeem}
+                        onDismiss={handleDismiss}
                         selling={actionState.id === key && actionState.type === 'selling'}
                         redeeming={actionState.id === key && actionState.type === 'redeeming'}
+                        dismissing={actionState.id === key && actionState.type === 'dismissing'}
                       />
                     );
                   })}

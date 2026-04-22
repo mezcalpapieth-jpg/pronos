@@ -42,6 +42,12 @@ export async function fetchStats() {
   return getJson('/api/points/stats');
 }
 
+// Mark a losing resolved position as acknowledged so it drops off
+// the Active tab. Trades stay in Historial regardless.
+export async function dismissPosition({ marketId, outcomeIndex }) {
+  return postJson('/api/points/dismiss-position', { marketId, outcomeIndex });
+}
+
 // `limit` caps the number of markets returned. Leave undefined on home
 // (trending shows the soonest-closing 100); category / browse pages
 // pass a larger value so nothing is hidden.

@@ -59,7 +59,9 @@ export default async function handler(req, res) {
       FROM points_positions p
       JOIN points_markets m ON m.id = p.market_id
       LEFT JOIN points_markets pm ON pm.id = m.parent_id
-      WHERE p.username = ${username} AND p.shares > 0
+      WHERE p.username = ${username}
+        AND p.shares > 0
+        AND p.dismissed_at IS NULL
       ORDER BY
         CASE m.status WHEN 'active' THEN 0 WHEN 'resolved' THEN 1 ELSE 2 END,
         m.end_time ASC

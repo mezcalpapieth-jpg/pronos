@@ -147,6 +147,11 @@ const POINTS_SCHEMA_MIGRATIONS = [
     PRIMARY KEY (market_id, username, outcome_index)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_points_positions_user ON points_positions(username)`,
+  // dismissed_at: timestamp the user hit "OK" on a losing resolved
+  // position to acknowledge the loss and clear it from the Active
+  // tab. Trades are immutable so Historial still shows the full
+  // record; this just hides the line from the open-positions view.
+  `ALTER TABLE points_positions ADD COLUMN IF NOT EXISTS dismissed_at TIMESTAMPTZ`,
 
   // ── Daily claim tracking (prevents double-claim per day) ───────────────
   `CREATE TABLE IF NOT EXISTS daily_claims (
