@@ -6,6 +6,76 @@
 
 ---
 
+## 🔄 MVP CONSOLIDATION ONTO POINTS-APP (current focus, 2026-04-23)
+
+Decision: rather than branch a separate `mvp-v2` from `main`, we'll
+evolve the `points-app` branch into the production MVP. The points-app
+already carries the final UI (sticky category bar, market cards with
+team logos + buy drawer, per-category routes, World Cup tab with
+bracket, 14 generators, auto-resolvers, admin tooling, stats
+endpoint, OAuth social linking). The on-chain trading engine that
+lives on `main` will be PORTED INTO `points-app`, not the other way
+around — when we're ready to launch production, `points-app`
+replaces `main`.
+
+Features the points-app ALREADY has that the MVP needed:
+- World Cup 2026 hub (72 fixtures, bracket tree, Mexico Path)
+- Shared CategoryBar on every page + Finanzas tab
+- Buy drawer opened from any outcome pill (createPortal + slippage
+  guards minSharesOut / maxAvgPrice / minCollateralOut)
+- Admin tooling: 🔄 Generar ahora · 🔧 Retrofit resolvers ·
+  ⚡ Resolver ahora · 🩺 Diagnóstico resolver · 🏆 Progresar Mundial
+- 🔥 Featured toggle on each market (replaces trending-by-recency)
+- 14 generators + auto-resolvers (Chainlink, API price, weather,
+  charts, sports API, Jolpica F1)
+- Portfolio OK-button for losing resolved positions
+- Stats endpoint for true active-market count
+
+What we still need to add (the on-chain layer):
+- [x] **M1 — Roadmap + plan (this commit).** Lock strategy on
+      `points-app`. Un-sideline hybrid oracle + news feed. Delete
+      the throwaway `mvp-v2` branch I cut earlier today.
+- [ ] **M2 — Privy + Turnkey delegated signing alongside current
+      session auth.** Users can link a wallet; email session stays
+      the default. Turnkey sub-org per user (already in schema as
+      `turnkey_sub_org_id`) gets a 200k MXNB/day · 180d policy the
+      first time they opt in.
+- [ ] **M3 — Port on-chain libs into points-app.** Bring
+      `lib/contracts.js` + `lib/protocolPricing.js` + the BetModal
+      trade path into `frontend/app/points/src/lib/onchain/`.
+      Add `market.chain_market_id` + `market.mode` columns
+      (`points` | `onchain`). Off-chain markets keep working as is.
+- [ ] **M4 — Dual-mode trade endpoints.** `/api/points/buy` +
+      `/api/points/sell` dispatch: `mode='points'` → existing DB
+      path; `mode='onchain'` → Turnkey signs, paymaster relays,
+      indexer writes the trade back. Same drawer UI, same slippage
+      guards, same UX.
+- [ ] **M5 — On-chain indexer + resolver.** Port the
+      `/api/indexer` event reader to write on-chain trades into
+      `points_trades` (so portfolio / leaderboards work across
+      both modes). Resolver for `mode='onchain'` markets calls
+      the factory's resolve() via Safe multisig.
+- [ ] **M6 — Mainnet launch toggle.** Flip the default for new
+      admin-created markets to `mode='onchain'` once contracts are
+      audited + seeded on Arbitrum One. Existing off-chain markets
+      resolve naturally on their own timelines.
+
+### Un-sidelined tracks (resumed in parallel with M2–M6)
+
+- [ ] **Hybrid oracle.** Chainlink Price Feeds for price-settled
+      markets (already live off-chain as `chainlink_price`
+      resolver_type; port the same dispatcher to on-chain resolve).
+      UMA optimistic oracle for subjective/sports markets (new;
+      $15–20k integration cost noted in POST-MVP).
+- [ ] **News feed tab.** `/noticias`. Phase 1 admin-curated via a
+      new `points_news` table. Phase 2 GDELT auto-pull with approval
+      queue. Inline "related news" panel on market detail.
+- [ ] **Social linking OAuth (verified).** X live. IG + TikTok via
+      bio-code verification to skip Meta review (or OAuth once
+      approved).
+
+---
+
 ## 🚧 WHAT'S STILL MISSING (as of 2026-04-16)
 
 **T-minus 60 days to World Cup kickoff.**
@@ -39,7 +109,11 @@ These must be set in Vercel project settings → Environment Variables:
 Already set (verify): `DATABASE_URL`, `DATABASE_READ_URL`, `PRIVY_APP_ID`, `ADMIN_USERNAMES`, `ANTHROPIC_API_KEY`, `MIGRATE_KEY`
 
 ### 🟠 HIGH PRIORITY — PRODUCT POLISH
-- **World Cup hub page** — `/mundial` with all FIFA 2026 markets, bracket viz, custom hero. Launch-defining.
+- ~~**World Cup hub page**~~ — Done on points-app at `/c/world-cup`.
+  Tri-color hero + countdown, 4×3 group grid with flag badges, per-group
+  matches with 1/X/2 buy pills, Group Winner parallel markets, symmetric
+  bracket tree (R32 → Final), Mexico Path composite. Fixtures from the
+  real FIFA 2026 draw (72 group matches).
 - **Per-market OG / share cards** — dynamic preview images with title, odds, sparkline. Huge for WhatsApp-driven LATAM virality.
 - **Search across all sources** — currently only searches hardcoded MARKETS. Need: protocol + generated + live Polymarket.
 - **MXNP points backend** — leaderboard currently uses mock data; need real DB-backed points, referral tracking, social task verification queue.
@@ -418,6 +492,13 @@ Already set (verify): `DATABASE_URL`, `DATABASE_READ_URL`, `PRIVY_APP_ID`, `ADMI
 | 2026-04-15 | **BetModal fix:** Removed `t` from useEffect deps — was causing infinite loop that prevented slippage from ever loading. |
 | 2026-04-15 | **Security audit:** Full codebase review — 3 critical, 10 high, 7 medium, 10 low findings documented. |
 | 2026-04-16 | **Roadmap refresh + audit:** Build passes. Confirmed auth/cron hardening gaps, stale Base Sepolia docs, incorrect liquidity snapshots, drifted portfolio cost basis after partial exits, and large JS bundles. Added readiness snapshot: 78% closed-testnet, 42% mainnet. |
+| 2026-04-17 | **points-app:** parallel AMM mode (N outcomes as N binary legs), cascading resolution on parent → legs. Weather / charts / entertainment generators with adaptive buckets. |
+| 2026-04-18 | **points-app:** 13-generator pipeline, daily cron, admin approval queue with Aprobar todos, category tabs (Trending / Deportes / Música / México / Política / Crypto / Por resolver / Resueltos). |
+| 2026-04-19 | **points-app:** Per-category routes `/c/:slug`, sport sub-filter (soccer / baseball / NBA / F1 / tennis / golf), soccer league sidebar (UCL / La Liga / Premier / Serie A / Bundesliga / Liga MX / MLS), Finanzas tab. |
+| 2026-04-20 | **points-app:** World Cup 2026 tab `/c/world-cup` — real FIFA draw fixtures (72 group matches), hero countdown, 4×3 group grid with team badges, symmetric bracket tree, Group Winner parallel markets, Mexico Path composite. |
+| 2026-04-21 | **points-app:** Buy drawer variant of PointsBuyModal — slides from right via createPortal, escapes ancestor transforms. Clicking any outcome on a card opens the drawer preselected. Slippage guards on buy/sell (`minSharesOut` / `maxAvgPrice` / `minCollateralOut`) — server holds row lock, rejects with 409 `price_moved`. |
+| 2026-04-22 | **points-app:** 🔧 Retrofit resolvers unified (F1 + LMB + golf image rebuild in one pass), 🏆 Progresar Mundial admin endpoint (standings → R32 spawn), ⚡ Resolver ahora + 🩺 Diagnóstico resolver admin buttons. Portfolio OK-button dismisses losing resolved positions. Finanzas + Béisbol sub-filter (MLB + LMB). |
+| 2026-04-23 | **Consolidation decision.** Rather than a separate `mvp-v2` branch off main, the MVP evolves on `points-app` directly — on-chain engine will be ported INTO the points-app when we're ready for mainnet. ROADMAP rewritten with a 6-milestone plan (M1 done). Hybrid oracle, news feed, and OAuth social linking un-sidelined. OAuth social linking for X shipped with the shared oauth.js helper (PKCE + signed state cookie); IG + TikTok scaffolded for bio-code verification to skip Meta review. LMB fake fixtures cleared — real schedule didn't match, admin-entry only until we have a licensed source. |
 
 ---
 
