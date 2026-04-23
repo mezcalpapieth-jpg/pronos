@@ -67,6 +67,22 @@ const POINTS_SCHEMA_MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_status ON points_markets(status)`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_end_time ON points_markets(end_time)`,
+  // Chain classifier (M3). `mode` is one of:
+  //   'points'  — DB-backed CPMM (what every market currently uses)
+  //   'onchain' — settled via PronosAMM contracts on Arbitrum; the
+  //               DB row mirrors on-chain state via the indexer and
+  //               carries chain_market_id (factory's numeric id) +
+  //               chain_address (the pool contract).
+  //
+  // Default 'points' keeps existing code paths untouched. When M4
+  // introduces the dual buy/sell dispatch, rows with mode='onchain'
+  // route through the Turnkey delegation + paymaster path; everyone
+  // else keeps the row-lock + atomic txn path.
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS mode TEXT NOT NULL DEFAULT 'points'`,
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS chain_id INTEGER`,
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS chain_market_id BIGINT`,
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS chain_address TEXT`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_mode ON points_markets(mode) WHERE mode <> 'points'`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_category ON points_markets(category)`,
 
   // amm_mode: 'unified' (default — one pool, N-outcome CPMM) or 'parallel'

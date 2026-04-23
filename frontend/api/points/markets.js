@@ -177,6 +177,10 @@ export default async function handler(req, res) {
           outcomeImages: Array.isArray(outcomeImages) && outcomeImages.length === outcomes.length
             ? outcomeImages
             : null,
+          mode: r.mode || 'points',
+          chainId: r.chain_id || null,
+          chainMarketId: r.chain_market_id ? String(r.chain_market_id) : null,
+          chainAddress: r.chain_address || null,
         };
       }
 
@@ -205,6 +209,10 @@ export default async function handler(req, res) {
         outcomeImages: Array.isArray(outcomeImages) && outcomeImages.length === outcomes.length
           ? outcomeImages
           : null,
+        mode: r.mode || 'points',
+        chainId: r.chain_id || null,
+        chainMarketId: r.chain_market_id ? String(r.chain_market_id) : null,
+        chainAddress: r.chain_address || null,
       };
     });
 

@@ -125,6 +125,10 @@ export default async function handler(req, res) {
             sport: r.sport || null,
             league: r.league || null,
             outcomeImages,
+            mode: r.mode || 'points',
+            chainId: r.chain_id || null,
+            chainMarketId: r.chain_market_id ? String(r.chain_market_id) : null,
+            chainAddress: r.chain_address || null,
           },
           legs,
         });
@@ -157,6 +161,10 @@ export default async function handler(req, res) {
           sport: r.sport || null,
           league: r.league || null,
           outcomeImages,
+          mode: r.mode || 'points',
+          chainId: r.chain_id || null,
+          chainMarketId: r.chain_market_id ? String(r.chain_market_id) : null,
+          chainAddress: r.chain_address || null,
         },
       });
     } catch (e) {
