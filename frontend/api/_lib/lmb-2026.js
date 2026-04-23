@@ -43,10 +43,31 @@ export const LMB_TEAMS = {
 };
 
 // ── Fixture window ──────────────────────────────────────────────────────
-// Seeded with plausible upcoming-week matchups. Dates are ISO 8601
-// UTC; kickoff slotted to 01:00 UTC (~19:00 CT the previous day) as
-// LMB standard night-game time. Replace/extend from the official
-// schedule PDF once you have the full calendar.
+// INTENTIONALLY EMPTY.
+//
+// Previous revisions of this file shipped hand-crafted matchups with
+// plausible-looking dates. The real lmb.com.mx schedule disagreed
+// with what we had — we were generating markets for games that
+// weren't actually scheduled, which is worse than having no LMB
+// markets at all.
+//
+// Why we don't scrape: lmb.com.mx is a Next.js app whose /juegos
+// page renders the scoreboard via an internal RSC payload that the
+// public JS bundles don't expose. Reverse-engineering it is
+// possible but breaks on every Next.js upgrade on their side.
+//
+// How to populate this array:
+//   1) For ad-hoc market seeding, use the admin "Crear mercado" UI
+//      directly — that writes straight into points_markets without
+//      going through this generator. Best for one-off series.
+//   2) For a scheduled pipeline, paste fixtures below in the
+//      `mk(date, home, away, venue)` shape once you have a trusted
+//      source (the official PDF calendar, a captured API response
+//      from lmb.com.mx devtools, or Sportradar if we subscribe).
+//
+// Whenever this array is non-empty, the daily generator cron will
+// produce pending-market specs that admin can approve. Leaving it
+// empty is a safe default — the generator just returns [].
 function mk(date, home, away, venue) {
   return {
     matchId: `lmb26-${date}-${home}-${away}`,
@@ -58,17 +79,4 @@ function mk(date, home, away, venue) {
   };
 }
 
-export const FIXTURES = [
-  mk('2026-04-23', 'diablos',    'tigres',     'Estadio Alfredo Harp Helú'),
-  mk('2026-04-23', 'sultanes',   'acereros',   'Estadio Mobil Super'),
-  mk('2026-04-24', 'pericos',    'leones',     'Estadio Hermanos Serdán'),
-  mk('2026-04-24', 'charros',    'tecos',      'Estadio Panamericano'),
-  mk('2026-04-25', 'diablos',    'sultanes',   'Estadio Alfredo Harp Helú'),
-  mk('2026-04-25', 'olmecas',    'aguila',     'Parque Centenario'),
-  mk('2026-04-26', 'saraperos',  'algodoneros','Estadio Francisco I. Madero'),
-  mk('2026-04-26', 'guerreros',  'tecos',      'Estadio Eduardo Vasconcelos'),
-  mk('2026-04-27', 'conspiradores','bravos',   'Estadio Domingo Santana'),
-  mk('2026-04-28', 'leones',     'pericos',    'Parque Kukulcán'),
-  mk('2026-04-29', 'tigres',     'diablos',    'Beto Ávila'),
-  mk('2026-04-30', 'toros',      'charros',    'Estadio Chevron'),
-];
+export const FIXTURES = [];
