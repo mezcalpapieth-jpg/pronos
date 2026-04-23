@@ -35,11 +35,16 @@ What we still need to add (the on-chain layer):
 - [x] **M1 — Roadmap + plan (this commit).** Lock strategy on
       `points-app`. Un-sideline hybrid oracle + news feed. Delete
       the throwaway `mvp-v2` branch I cut earlier today.
-- [ ] **M2 — Privy + Turnkey delegated signing alongside current
-      session auth.** Users can link a wallet; email session stays
-      the default. Turnkey sub-org per user (already in schema as
-      `turnkey_sub_org_id`) gets a 200k MXNB/day · 180d policy the
-      first time they opt in.
+- [ ] **M2 — Turnkey delegated-signing policy.** No Privy. The
+      existing Turnkey setup (email OTP + sub-org per user +
+      `turnkey_sub_org_id` on points_users) stays as is — we add a
+      policy layer ON TOP. First time a user does an on-chain-mode
+      action, they authorize a one-time policy: the Pronos backend
+      API key can sign `buy / sell / redeem / MXNB.approve` up to
+      200k MXNB/day for 180 days against whitelisted contracts.
+      After that, zero popups on trades. Withdrawals still require
+      fresh user signature. Privy is not in the picture on this
+      branch — dropped when we decided to consolidate on points-app.
 - [ ] **M3 — Port on-chain libs into points-app.** Bring
       `lib/contracts.js` + `lib/protocolPricing.js` + the BetModal
       trade path into `frontend/app/points/src/lib/onchain/`.
