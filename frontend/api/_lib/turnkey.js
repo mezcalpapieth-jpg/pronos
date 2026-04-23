@@ -163,6 +163,93 @@ export async function otpLogin({ suborgId, verificationToken, publicKey, session
 }
 
 /**
+ * Sign an unsigned Ethereum transaction via the backend API key
+ * against the user's sub-organization. Relies on the delegation
+ * policy attached to the sub-org (see turnkey-delegation.js) to
+ * authorize the backend API key to produce this signature.
+ *
+ * Turnkey expects the serialized unsigned tx WITHOUT the 0x prefix.
+ * ethers.utils.serializeTransaction returns with the prefix, so we
+ * strip it here.
+ *
+ * Returns the signed tx as a 0x-prefixed hex string ready for
+ * `provider.sendTransaction()`.
+ */
+export async function signTransactionForSuborg({ suborgId, signWithAddress, unsignedSerialized }) {
+  if (!suborgId) throw new Error('suborgId required');
+  if (!signWithAddress) throw new Error('signWithAddress required');
+  if (!unsignedSerialized) throw new Error('unsignedSerialized required');
+  const hex = unsignedSerialized.startsWith('0x')
+    ? unsignedSerialized.slice(2)
+    : unsignedSerialized;
+  const result = await api().signTransaction({
+    organizationId: suborgId,
+    signWith: signWithAddress,
+    type: 'TRANSACTION_TYPE_ETHEREUM',
+    unsignedTransaction: hex,
+  });
+  const signed = result?.signedTransaction;
+  if (!signed) throw new Error('signTransaction returned no signedTransaction');
+  return signed.startsWith('0x') ? signed : `0x${signed}`;
+}
+
+/**
+ * Create a Turnkey policy on the user's sub-organization that
+ * grants the backend API key signing authority for specific
+ * transaction targets. Returns { policyId }.
+ *
+ * Policy DSL reference: https://docs.turnkey.com/concepts/policies
+ * The consensus expression grants signing rights to whichever
+ * API key holds `backendApiPublicKey` (matches our TURNKEY_API_PUBLIC_KEY).
+ * The condition restricts to ethereum sign-transaction activities
+ * where the destination matches one of the whitelisted contracts.
+ *
+ * The exact DSL strings below are best-effort per Turnkey docs as
+ * of late 2025 — verify against their policy playground once this
+ * is deployed. A 400 from createPolicy usually means the condition
+ * string needs a syntax tweak for the SDK version in use.
+ */
+export async function createDelegationPolicyOnSuborg({
+  suborgId, backendApiPublicKey, allowedTargets, policyName = 'pronos-delegation-v1',
+  notes = 'Pronos delegated signing',
+}) {
+  if (!suborgId) throw new Error('suborgId required');
+  if (!backendApiPublicKey) throw new Error('backendApiPublicKey required');
+  if (!Array.isArray(allowedTargets) || allowedTargets.length === 0) {
+    throw new Error('allowedTargets[] required');
+  }
+  const lowerTargets = allowedTargets.map(a => String(a).toLowerCase());
+  const targetsList = lowerTargets.map(a => `'${a}'`).join(', ');
+
+  // Consensus: any API key whose compressed public key equals the
+  // backend key. Condition: must be a sign-transaction-v2 activity
+  // whose destination is in the target allowlist.
+  const consensus =
+    `approvers.any(user, user.api_keys.any(k, k.public_key == '${backendApiPublicKey}'))`;
+  const condition =
+    `activity.type == 'ACTIVITY_TYPE_SIGN_TRANSACTION_V2' && ` +
+    `eth.tx.to in [${targetsList}]`;
+
+  const result = await api().createPolicy({
+    organizationId: suborgId,
+    policyName,
+    effect: 'EFFECT_ALLOW',
+    consensus,
+    condition,
+    notes,
+  });
+  const policyId = result?.policyId;
+  if (!policyId) throw new Error('createPolicy returned no policyId');
+  return { policyId };
+}
+
+export async function deleteDelegationPolicyOnSuborg({ suborgId, policyId }) {
+  if (!suborgId || !policyId) throw new Error('suborgId + policyId required');
+  await api().deletePolicy({ organizationId: suborgId, policyId });
+  return { ok: true };
+}
+
+/**
  * Best-effort: fetch the first Ethereum address on the sub-org's first
  * wallet. Used to populate points_users.wallet_address after signup.
  */

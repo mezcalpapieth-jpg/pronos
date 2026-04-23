@@ -105,8 +105,17 @@ export default async function handler(req, res) {
           const err = new Error('insufficient_shares'); err.status = 400; throw err;
         }
 
+        const userRow = await client.query(
+          `SELECT wallet_address FROM points_users WHERE turnkey_sub_org_id = $1 LIMIT 1`,
+          [session.sub],
+        );
+        const ownerAddr = userRow.rows[0]?.wallet_address;
+        if (!ownerAddr) {
+          const err = new Error('wallet_not_found'); err.status = 400; throw err;
+        }
         const onchain = await sellOnChain({
           suborgId: session.sub,
+          ownerAddr,
           market: m,
           outcomeIndex: oi,
           shares: n,

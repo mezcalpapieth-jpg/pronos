@@ -22,7 +22,12 @@
  * piece of plumbing above it is already live.
  */
 
-import { isTurnkeyConfigured } from './turnkey.js';
+import {
+  isTurnkeyConfigured,
+  signTransactionForSuborg,
+  createDelegationPolicyOnSuborg,
+  deleteDelegationPolicyOnSuborg,
+} from './turnkey.js';
 
 // ── Tunables (keep in sync with onchain_turnkey_delegation.md) ──────
 
@@ -80,8 +85,8 @@ export async function createDelegationPolicy({ suborgId, backendApiPublicKey }) 
 
   if (!isDelegationEnabled()) {
     // Simulated path — record intent, surface in UI, plumb everything
-    // EXCEPT the actual signing authority. M3 replaces this branch
-    // with the real createPolicy call.
+    // EXCEPT the actual signing authority. Swapped out by setting
+    // TURNKEY_POLICIES_ENABLED=true + the ONCHAIN_* env vars.
     return {
       policyId: `simulated-${suborgId.slice(0, 8)}-${Date.now()}`,
       expiresAt: expiresAt.toISOString(),
@@ -90,31 +95,33 @@ export async function createDelegationPolicy({ suborgId, backendApiPublicKey }) 
     };
   }
 
-  // ── Real Turnkey path (wired at M3) ──────────────────────────────
-  //
-  // Pseudocode (exact method name + policy DSL to be confirmed
-  // against @turnkey/sdk-server when M3 lands):
-  //
-  //   const client = turnkeyApi();
-  //   const { policyId } = await client.createPolicy({
-  //     organizationId: suborgId,
-  //     policyName: 'pronos-delegation-v1',
-  //     effect: 'EFFECT_ALLOW',
-  //     consensus: `approvers.any(user, user.publicKey == '${backendApiPublicKey}')`,
-  //     condition: buildPolicyCondition({
-  //       selectors: ['0x...buy', '0x...sell', '0x...redeem', '0x095ea7b3'],
-  //       allowedTargets: [marketFactory, mxnbToken],
-  //       dailyCapMxnb: DELEGATION_DAILY_CAP_MXNB,
-  //     }),
-  //     notes: `Valid ${DELEGATION_DAYS} days`,
-  //   });
-  //   return { policyId, expiresAt: expiresAt.toISOString(),
-  //            dailyCapMxnb: DELEGATION_DAILY_CAP_MXNB, simulated: false };
-  //
-  // The policy DSL details (exact field names, selector encoding) come
-  // from Turnkey's docs — leaving as a clear TODO so the policy string
-  // lands in one commit after we've tested it against a real sub-org.
-  throw new Error('createDelegationPolicy: real path not wired yet (M3)');
+  // ── Real Turnkey path ─────────────────────────────────────────────
+  // Policy grants the backend API key signing authority for
+  // transactions targeting our MarketFactory + collateral contract.
+  // Scope can be tightened later (function-selector whitelist,
+  // per-day spend cap via a counter approver) but this shape is
+  // enough to keep signing limited to our contracts.
+  const cfg = onchainConfig();
+  const allowedTargets = [cfg.marketFactory, cfg.mxnbToken].filter(Boolean);
+  if (allowedTargets.length === 0) {
+    throw new Error('onchain config missing marketFactory/mxnbToken');
+  }
+  if (!backendApiPublicKey) {
+    throw new Error('backendApiPublicKey required (set TURNKEY_API_PUBLIC_KEY)');
+  }
+  const { policyId } = await createDelegationPolicyOnSuborg({
+    suborgId,
+    backendApiPublicKey,
+    allowedTargets,
+    policyName: `pronos-delegation-${Date.now()}`,
+    notes: `Valid ${DELEGATION_DAYS} days; cap ${DELEGATION_DAILY_CAP_MXNB} MXNB/day`,
+  });
+  return {
+    policyId,
+    expiresAt: expiresAt.toISOString(),
+    dailyCapMxnb: DELEGATION_DAILY_CAP_MXNB,
+    simulated: false,
+  };
 }
 
 /**
@@ -126,8 +133,8 @@ export async function revokeDelegationPolicy({ suborgId, policyId }) {
   if (!isDelegationEnabled() || String(policyId).startsWith('simulated-')) {
     return { revoked: true, simulated: true };
   }
-  // TODO (M3): await turnkeyApi().deletePolicy({ organizationId: suborgId, policyId });
-  throw new Error('revokeDelegationPolicy: real path not wired yet (M3)');
+  await deleteDelegationPolicyOnSuborg({ suborgId, policyId });
+  return { revoked: true, simulated: false };
 }
 
 // ── Signing ────────────────────────────────────────────────────────
@@ -141,21 +148,24 @@ export async function revokeDelegationPolicy({ suborgId, policyId }) {
  * import + call it, failing loudly if the env flag is off. Keeps
  * us from shipping a half-live signing path.
  */
-export async function signDelegatedTransaction({ suborgId, unsignedTx }) {
+/**
+ * Sign an unsigned EVM transaction via the delegation policy. The
+ * caller passes the user's EVM wallet address (signWithAddress) —
+ * usually sourced from points_users.wallet_address, which the
+ * onchain-trader already has from its pre-query. Saves a round-trip
+ * on every trade vs. looking it up from Turnkey each time.
+ */
+export async function signDelegatedTransaction({ suborgId, signWithAddress, unsignedTx }) {
   if (!isDelegationEnabled()) {
     const err = new Error('delegation_not_enabled');
     err.status = 503;
     throw err;
   }
   if (!suborgId || !unsignedTx) throw new Error('suborgId + unsignedTx required');
-  // TODO (M3):
-  //   const client = turnkeyApi();
-  //   const result = await client.signTransaction({
-  //     organizationId: suborgId,
-  //     signWith: /* user's wallet address on the sub-org */,
-  //     type: 'TRANSACTION_TYPE_ETHEREUM',
-  //     unsignedTransaction: unsignedTx,
-  //   });
-  //   return result.signedTransaction;
-  throw new Error('signDelegatedTransaction: real path not wired yet (M3)');
+  if (!signWithAddress) throw new Error('signWithAddress required');
+  return signTransactionForSuborg({
+    suborgId,
+    signWithAddress,
+    unsignedSerialized: unsignedTx,
+  });
 }

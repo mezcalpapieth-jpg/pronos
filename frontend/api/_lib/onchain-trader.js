@@ -1,125 +1,331 @@
 /**
- * On-chain trade dispatcher (M4).
+ * On-chain trade dispatcher (M5 — real implementation).
  *
- * Wraps the three operations that need to hit the chain when a
- * market's `mode = 'onchain'`:
- *   - buyOnChain({suborgId, market, outcomeIndex, collateral, maxAvgPrice})
- *   - sellOnChain({suborgId, market, outcomeIndex, shares, minCollateralOut})
- *   - redeemOnChain({suborgId, market, outcomeIndex})
+ * Given a mode='onchain' market, builds / signs / broadcasts the
+ * buy / sell / redeem transaction(s) and returns a result shape
+ * compatible with the DB-mode buy.js / sell.js paths.
  *
- * Each call:
- *   1. Encodes the contract call via ethers.
- *   2. Builds an EIP-1559 unsigned tx (fetches nonce + gas prices
- *      from the configured RPC).
- *   3. Signs via Turnkey's delegated-signing API key (scope gated
- *      by the user's policy — see turnkey-delegation.js).
- *   4. Broadcasts — directly today, via paymaster in M5.
- *   5. Waits for 1-block confirmation.
- *   6. Returns a normalized result shape so the dispatch callers
- *      (buy.js / sell.js / redeem.js) can return the same payload
- *      they do today regardless of whether the market is
- *      points-mode or onchain-mode.
+ * Signing: via Turnkey's delegated API key, scoped by the user's
+ * policy (M2). That means ZERO wallet popups — backend signs within
+ * whitelisted contracts + selectors, user experiences the trade as
+ * a normal "tap → confirm → done" flow.
  *
- * Hard-gated: until `isOnchainReady()` returns true, every call
- * throws `onchain_not_enabled` with HTTP 503. Prevents a
- * half-configured deploy from silently failing mid-transaction.
+ * Collateral flow: before buy, the AMM needs allowance on the
+ * collateral (USDC on Sepolia, MXNB on mainnet). We check
+ * allowance; if insufficient, we send a MAX_UINT256 approve() tx
+ * first. This spends one extra tx on the user's FIRST trade against
+ * a given market, then every subsequent trade against that market
+ * skips the approve. In mainnet we can move the approve into the
+ * delegation consent flow so it's zero-extra-txs, but M5 keeps it
+ * explicit for clarity.
+ *
+ * Hard-gated: `isOnchainReady()` checks required env vars before
+ * any chain call. Off by default on preview/dev.
  */
 
-import { isDelegationEnabled, signDelegatedTransaction } from './turnkey-delegation.js';
+import { ethers } from 'ethers';
+import {
+  isDelegationEnabled, signDelegatedTransaction,
+} from './turnkey-delegation.js';
+
+// ── Config + ABI ────────────────────────────────────────────────────
+
+const BINARY_AMM_ABI = [
+  'function buy(bool buyYes, uint256 collateralAmount) external returns (uint256)',
+  'function sell(bool sellYes, uint256 sharesAmount) external returns (uint256)',
+  'function redeem(uint256 amount) external',
+  'event SharesBought(address indexed buyer, bool isYes, uint256 collateralIn, uint256 fee, uint256 sharesOut)',
+  'event SharesSold(address indexed seller, bool isYes, uint256 sharesIn, uint256 collateralOut, uint256 fee)',
+];
+
+const MULTI_AMM_ABI = [
+  'function buy(uint8 outcomeIndex, uint256 collateralAmount) external returns (uint256)',
+  'function sell(uint8 outcomeIndex, uint256 sharesAmount) external returns (uint256)',
+  'function redeem(uint256 amount) external',
+  'event SharesBought(address indexed buyer, uint8 indexed outcomeIndex, uint256 collateralIn, uint256 fee, uint256 sharesOut)',
+  'event SharesSold(address indexed seller, uint8 indexed outcomeIndex, uint256 sharesIn, uint256 collateralOut, uint256 fee)',
+];
+
+const ERC20_ABI = [
+  'function approve(address spender, uint256 amount) external returns (bool)',
+  'function allowance(address owner, address spender) view returns (uint256)',
+  'function decimals() view returns (uint8)',
+];
+
+const MAX_UINT256 = ethers.constants.MaxUint256;
+
+// USDC/MXNB decimals — both happen to be 6.
+const COLLATERAL_DECIMALS = 6;
 
 /**
- * Everything needed to send an on-chain tx must be present:
- *   - delegation policies enabled (POLICIES_ENABLED + chain config)
- *   - RPC URL for the chain
- *   - Backend paymaster policy id (set to 'direct' to skip paymaster
- *     and have the user's wallet pay gas — testnet only)
+ * Every on-chain dep must be present. Falls back to the simulated
+ * path when any is missing. Callers pre-check; nothing fires below
+ * if this returns false.
  */
 export function isOnchainReady() {
   if (!isDelegationEnabled()) return false;
   if (!process.env.ONCHAIN_RPC_URL) return false;
+  if (!process.env.ONCHAIN_COLLATERAL_ADDRESS) return false;
   return true;
 }
 
-/**
- * Shared gate used by every dispatch endpoint. Mirrors the existing
- * status-error pattern in buy.js so the main handler just re-throws.
- */
-function requireOnchainReady() {
+function requireReady() {
   if (!isOnchainReady()) {
     const err = new Error('onchain_not_enabled');
     err.status = 503;
-    err.detail = 'on-chain trading requires TURNKEY_POLICIES_ENABLED=true, ONCHAIN_* env vars, and a delegation policy';
+    err.detail = 'set TURNKEY_POLICIES_ENABLED=true + ONCHAIN_RPC_URL + ONCHAIN_COLLATERAL_ADDRESS';
     throw err;
   }
 }
 
-// ── Buy ─────────────────────────────────────────────────────────────
+function provider() {
+  return new ethers.providers.JsonRpcProvider(process.env.ONCHAIN_RPC_URL);
+}
+
+function chainId() {
+  return Number(process.env.ONCHAIN_CHAIN_ID || 421614);
+}
+
+// ── Turnkey-signed tx broadcast ─────────────────────────────────────
 
 /**
- * Execute an on-chain buy against the market's Market contract.
- * Mirrors buy.js's result shape:
- *   { balance, sharesOut, fee, priceBefore, priceAfter, txHash, blockNumber }
+ * Compose an unsigned EIP-1559 transaction, hand it to Turnkey to
+ * stamp with the user's delegated policy, and broadcast.
  *
- * Reserved but not wired — fully implemented once M5 lands paymaster
- * + deployed contracts. Until then this is the authoritative call
- * site that buy.js routes to for mode='onchain' markets, and it
- * bails cleanly rather than half-executing.
+ * Returns the receipt after 1 confirmation. Throws with a useful
+ * status if any step fails — the endpoint translates to HTTP.
  */
-export async function buyOnChain({ suborgId, market, outcomeIndex, collateral, maxAvgPrice }) {
-  requireOnchainReady();
-  if (!suborgId) throw new Error('suborgId required');
-  if (!market?.chain_address) throw new Error('market missing chain_address');
+async function signAndBroadcast({ suborgId, from, to, data, gasLimit }) {
+  const prov = provider();
+  const nonce = await prov.getTransactionCount(from, 'pending');
+  const feeData = await prov.getFeeData();
 
-  // ── Build tx (M5 fills this in) ───────────────────────────────
-  // const iface = new ethers.Interface(PRONOS_AMM_ABI);
-  // const data  = iface.encodeFunctionData('buy', [outcomeIndex, collateral, maxSharesOutOr0]);
-  // const provider = new ethers.JsonRpcProvider(process.env.ONCHAIN_RPC_URL);
-  // const from = userWalletAddressFromSuborg(suborgId);
-  // const nonce = await provider.getTransactionCount(from);
-  // const feeData = await provider.getFeeData();
-  // const unsignedTx = ethers.Transaction.from({
-  //   to: market.chain_address, value: 0n, data,
-  //   nonce, chainId: Number(process.env.ONCHAIN_CHAIN_ID),
-  //   gasLimit: 400_000n,
-  //   maxFeePerGas: feeData.maxFeePerGas,
-  //   maxPriorityFeePerGas: feeData.maxPriorityFeePerGas,
-  //   type: 2,
-  // }).unsignedSerialized;
+  const unsignedTx = {
+    to,
+    nonce,
+    gasLimit: gasLimit || ethers.BigNumber.from(600_000),
+    maxFeePerGas: feeData.maxFeePerGas || ethers.utils.parseUnits('0.1', 'gwei'),
+    maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || ethers.utils.parseUnits('0.01', 'gwei'),
+    data,
+    value: 0,
+    chainId: chainId(),
+    type: 2,
+  };
 
-  // ── Sign (already wired in M2, hard-gated) ────────────────────
-  // const signed = await signDelegatedTransaction({ suborgId, unsignedTx });
+  // ethers v5 serializeTransaction returns 0x-prefixed hex; Turnkey
+  // expects the same (they unwrap it). Strip or keep based on SDK
+  // behavior — for @turnkey/sdk-server v5, pass with 0x prefix.
+  const unsignedSerialized = ethers.utils.serializeTransaction(unsignedTx);
 
-  // ── Submit (paymaster in M5; direct broadcast fallback) ───────
-  // const tx = await provider.broadcastTransaction(signed);
-  // const receipt = await tx.wait();
+  const signedSerialized = await signDelegatedTransaction({
+    suborgId,
+    signWithAddress: from,
+    unsignedTx: unsignedSerialized,
+  });
 
-  // ── Parse receipt, decode BuyExecuted event, return shape ─────
-  // return { balance, sharesOut, fee, priceBefore, priceAfter,
-  //          txHash: receipt.hash, blockNumber: receipt.blockNumber };
-  throw new Error('buyOnChain: tx build + broadcast not wired yet (M5)');
+  const txResponse = await prov.sendTransaction(signedSerialized);
+  const receipt = await txResponse.wait(1);
+  if (receipt.status !== 1) {
+    const err = new Error('tx_reverted');
+    err.status = 400;
+    err.detail = `tx ${receipt.transactionHash} reverted`;
+    throw err;
+  }
+  return receipt;
 }
 
-// ── Sell ────────────────────────────────────────────────────────────
+// ── Collateral allowance (approve once per market) ──────────────────
 
-export async function sellOnChain({ suborgId, market, outcomeIndex, shares, minCollateralOut }) {
-  requireOnchainReady();
-  if (!suborgId) throw new Error('suborgId required');
-  if (!market?.chain_address) throw new Error('market missing chain_address');
+async function ensureCollateralAllowance({ suborgId, ownerAddr, ammAddress, amount }) {
+  const prov = provider();
+  const collateralAddr = process.env.ONCHAIN_COLLATERAL_ADDRESS;
+  const c = new ethers.Contract(collateralAddr, ERC20_ABI, prov);
+  const current = await c.allowance(ownerAddr, ammAddress);
+  if (current.gte(amount)) return null;
 
-  // Same shape as buyOnChain — encodeFunctionData('sell', [...]),
-  // build tx, sign via delegation, broadcast, decode SellExecuted.
-  // Returns { balance, collateralOut, sharesSold, realizedPnl,
-  // priceBefore, priceAfter, txHash, blockNumber } to match sell.js.
-  throw new Error('sellOnChain: tx build + broadcast not wired yet (M5)');
+  const iface = new ethers.utils.Interface(ERC20_ABI);
+  const data = iface.encodeFunctionData('approve', [ammAddress, MAX_UINT256]);
+  const receipt = await signAndBroadcast({
+    suborgId,
+    from: ownerAddr,
+    to: collateralAddr,
+    data,
+    gasLimit: ethers.BigNumber.from(100_000),
+  });
+  return receipt.transactionHash;
 }
 
-// ── Redeem ──────────────────────────────────────────────────────────
+// ── Helpers for encode/decode ───────────────────────────────────────
 
-export async function redeemOnChain({ suborgId, market, outcomeIndex }) {
-  requireOnchainReady();
+function isBinary(market) {
+  const n = Array.isArray(market?.outcomes) ? market.outcomes.length : 2;
+  return n === 2;
+}
+
+function ammInterface(market) {
+  return new ethers.utils.Interface(isBinary(market) ? BINARY_AMM_ABI : MULTI_AMM_ABI);
+}
+
+function encodeBuy(market, outcomeIndex, collateralUnits) {
+  const iface = ammInterface(market);
+  if (isBinary(market)) {
+    return iface.encodeFunctionData('buy', [outcomeIndex === 0, collateralUnits]);
+  }
+  return iface.encodeFunctionData('buy', [outcomeIndex, collateralUnits]);
+}
+
+function encodeSell(market, outcomeIndex, sharesUnits) {
+  const iface = ammInterface(market);
+  if (isBinary(market)) {
+    return iface.encodeFunctionData('sell', [outcomeIndex === 0, sharesUnits]);
+  }
+  return iface.encodeFunctionData('sell', [outcomeIndex, sharesUnits]);
+}
+
+function encodeRedeem(amount) {
+  return new ethers.utils.Interface(BINARY_AMM_ABI).encodeFunctionData('redeem', [amount]);
+}
+
+function parseBuyEvent(market, receipt) {
+  const iface = ammInterface(market);
+  for (const log of receipt.logs || []) {
+    try {
+      const parsed = iface.parseLog(log);
+      if (parsed.name === 'SharesBought') {
+        return {
+          sharesOut: ethers.utils.formatUnits(parsed.args.sharesOut, COLLATERAL_DECIMALS),
+          fee: ethers.utils.formatUnits(parsed.args.fee, COLLATERAL_DECIMALS),
+          collateralIn: ethers.utils.formatUnits(parsed.args.collateralIn, COLLATERAL_DECIMALS),
+        };
+      }
+    } catch { /* not this ABI's log */ }
+  }
+  return null;
+}
+
+function parseSellEvent(market, receipt) {
+  const iface = ammInterface(market);
+  for (const log of receipt.logs || []) {
+    try {
+      const parsed = iface.parseLog(log);
+      if (parsed.name === 'SharesSold') {
+        return {
+          sharesIn: ethers.utils.formatUnits(parsed.args.sharesIn, COLLATERAL_DECIMALS),
+          collateralOut: ethers.utils.formatUnits(parsed.args.collateralOut, COLLATERAL_DECIMALS),
+          fee: ethers.utils.formatUnits(parsed.args.fee, COLLATERAL_DECIMALS),
+        };
+      }
+    } catch { /* skip */ }
+  }
+  return null;
+}
+
+// ── Public API ──────────────────────────────────────────────────────
+
+/**
+ * Lookup the user's EVM wallet address for a given sub-org. We store
+ * it on points_users.wallet_address at signup; the dispatcher looks
+ * it up via the session's username → passed into these helpers.
+ * Exposed so callers can pass from= explicitly without a re-query.
+ */
+export function requireWalletAddress(row) {
+  const addr = row?.wallet_address || row?.walletAddress;
+  if (!addr || !ethers.utils.isAddress(addr)) {
+    const err = new Error('wallet_not_found');
+    err.status = 400;
+    err.detail = 'user has no on-chain wallet address stored';
+    throw err;
+  }
+  return addr;
+}
+
+export async function buyOnChain({
+  suborgId, ownerAddr, market, outcomeIndex, collateral,
+}) {
+  requireReady();
   if (!suborgId) throw new Error('suborgId required');
+  if (!ownerAddr) throw new Error('ownerAddr required');
   if (!market?.chain_address) throw new Error('market missing chain_address');
-  // encodeFunctionData('redeem', [outcomeIndex]) — winner claims.
-  // Emits Redeemed(user, marketId, amount). Returns { payout, txHash }.
-  throw new Error('redeemOnChain: tx build + broadcast not wired yet (M5)');
+
+  const ammAddr = market.chain_address;
+  const collateralUnits = ethers.utils.parseUnits(String(collateral), COLLATERAL_DECIMALS);
+
+  await ensureCollateralAllowance({
+    suborgId, ownerAddr, ammAddress: ammAddr, amount: collateralUnits,
+  });
+
+  const data = encodeBuy(market, outcomeIndex, collateralUnits);
+  const receipt = await signAndBroadcast({
+    suborgId, from: ownerAddr, to: ammAddr, data,
+  });
+
+  const ev = parseBuyEvent(market, receipt);
+  if (!ev) {
+    const err = new Error('event_not_found');
+    err.status = 500;
+    err.detail = 'SharesBought event missing from receipt';
+    throw err;
+  }
+  return {
+    sharesOut: Number(ev.sharesOut),
+    fee: Number(ev.fee),
+    priceBefore: null,   // off-chain quote already rendered; chain
+    priceAfter: null,    //   path relies on indexer snapshot
+    balance: null,       // indexer refreshes balance async
+    txHash: receipt.transactionHash,
+    blockNumber: receipt.blockNumber,
+  };
+}
+
+export async function sellOnChain({
+  suborgId, ownerAddr, market, outcomeIndex, shares,
+}) {
+  requireReady();
+  if (!suborgId) throw new Error('suborgId required');
+  if (!ownerAddr) throw new Error('ownerAddr required');
+  if (!market?.chain_address) throw new Error('market missing chain_address');
+
+  const ammAddr = market.chain_address;
+  const sharesUnits = ethers.utils.parseUnits(String(shares), COLLATERAL_DECIMALS);
+
+  const data = encodeSell(market, outcomeIndex, sharesUnits);
+  const receipt = await signAndBroadcast({
+    suborgId, from: ownerAddr, to: ammAddr, data,
+  });
+
+  const ev = parseSellEvent(market, receipt);
+  if (!ev) {
+    const err = new Error('event_not_found');
+    err.status = 500;
+    err.detail = 'SharesSold event missing from receipt';
+    throw err;
+  }
+  return {
+    collateralOut: Number(ev.collateralOut),
+    fee: Number(ev.fee),
+    priceBefore: null,
+    priceAfter: null,
+    balance: null,
+    txHash: receipt.transactionHash,
+    blockNumber: receipt.blockNumber,
+  };
+}
+
+export async function redeemOnChain({
+  suborgId, ownerAddr, market, amount,
+}) {
+  requireReady();
+  if (!suborgId) throw new Error('suborgId required');
+  if (!ownerAddr) throw new Error('ownerAddr required');
+  if (!market?.chain_address) throw new Error('market missing chain_address');
+
+  const units = ethers.utils.parseUnits(String(amount), COLLATERAL_DECIMALS);
+  const data = encodeRedeem(units);
+  const receipt = await signAndBroadcast({
+    suborgId, from: ownerAddr, to: market.chain_address, data,
+  });
+  return {
+    txHash: receipt.transactionHash,
+    blockNumber: receipt.blockNumber,
+  };
 }

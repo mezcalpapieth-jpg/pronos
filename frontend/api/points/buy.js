@@ -100,12 +100,20 @@ export default async function handler(req, res) {
         if (!session.sub) {
           const err = new Error('suborg_required'); err.status = 400; throw err;
         }
-        // requires the delegation policy — onchain-trader enforces
-        // `isOnchainReady()` and throws 503 if contracts/env aren't
-        // live yet. M5 wires the actual ethers calls; for now the
-        // dispatch just proves the branch routes correctly.
+        // Look up the user's EVM address from points_users so we
+        // don't round-trip to Turnkey on every trade. Stored at
+        // signup via getSuborgWalletAddress().
+        const userRow = await client.query(
+          `SELECT wallet_address FROM points_users WHERE turnkey_sub_org_id = $1 LIMIT 1`,
+          [session.sub],
+        );
+        const ownerAddr = userRow.rows[0]?.wallet_address;
+        if (!ownerAddr) {
+          const err = new Error('wallet_not_found'); err.status = 400; throw err;
+        }
         const onchain = await buyOnChain({
           suborgId: session.sub,
+          ownerAddr,
           market: m,
           outcomeIndex: oi,
           collateral: amt,
