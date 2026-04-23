@@ -44,7 +44,7 @@ export default async function handler(req, res) {
   if (!session) return;
   if (!session.username) return res.status(400).json({ error: 'username_required' });
 
-  const { marketId, outcomeIndex, shares } = req.body || {};
+  const { marketId, outcomeIndex, shares, minCollateralOut } = req.body || {};
   const mid = parseInt(marketId, 10);
   const oi  = parseInt(outcomeIndex, 10);
   const n   = Number(shares);
@@ -52,6 +52,10 @@ export default async function handler(req, res) {
   // Upper bound on oi is enforced once we read the market's reserves length.
   if (!Number.isInteger(oi) || oi < 0)    return res.status(400).json({ error: 'invalid_outcome_index' });
   if (!Number.isFinite(n) || n <= 0)       return res.status(400).json({ error: 'invalid_shares' });
+
+  // Slippage guard: lowest MXNP the user will accept for their
+  // shares. Rejected with `price_moved` if the locked quote undershoots.
+  const minOut = Number.isFinite(Number(minCollateralOut)) ? Number(minCollateralOut) : null;
 
   const username = session.username;
 
@@ -110,6 +114,15 @@ export default async function handler(req, res) {
           : multiSellQuote(reserves, oi, n);
       } catch (e) {
         const err = new Error('invalid_quote'); err.status = 400; err.detail = e.message; throw err;
+      }
+
+      // Slippage: we hold the market row lock, so the quote is
+      // authoritative. Bail if the payout drifted below what the
+      // client was shown.
+      if (minOut !== null && quote.collateralOut < minOut) {
+        const err = new Error('price_moved'); err.status = 409;
+        err.detail = `out=${quote.collateralOut.toFixed(6)} below min=${minOut}`;
+        throw err;
       }
 
       // Reserves + balance

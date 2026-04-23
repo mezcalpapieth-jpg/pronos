@@ -71,7 +71,22 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
     setSubmitting(true);
     setSubmitError('');
     try {
-      await executeBuy({ marketId: market.id, outcomeIndex, collateral: numAmount });
+      // Slippage guard: accept up to 1% fewer shares than the quote
+      // preview promised. If another trader moves the market past
+      // that in the ~200ms between quote + confirm, the server
+      // returns `price_moved` and we surface it as a retry-friendly
+      // error. 1% is generous enough that unlucky timing on a calm
+      // market doesn't fail every attempt.
+      const quotedShares = Number(quote?.sharesOut);
+      const minSharesOut = Number.isFinite(quotedShares) && quotedShares > 0
+        ? quotedShares * 0.99
+        : undefined;
+      await executeBuy({
+        marketId: market.id,
+        outcomeIndex,
+        collateral: numAmount,
+        minSharesOut,
+      });
       await refresh();
       setSuccess(true);
       // Give the user a beat to see the success state, then close.

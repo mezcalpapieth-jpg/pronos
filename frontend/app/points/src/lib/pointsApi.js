@@ -110,16 +110,27 @@ export async function quoteBuy({ marketId, outcomeIndex, collateral }) {
   return postJson('/api/points/quote-buy', { marketId, outcomeIndex, collateral });
 }
 
-export async function executeBuy({ marketId, outcomeIndex, collateral }) {
-  return postJson('/api/points/buy', { marketId, outcomeIndex, collateral });
+// `minSharesOut` / `maxAvgPrice` are slippage guards — the server
+// holds a row lock on the market during the trade, so if the AMM
+// moved past these bounds between the user's quote and now, it
+// rejects with `price_moved` (HTTP 409) so the UI can re-quote.
+export async function executeBuy({ marketId, outcomeIndex, collateral, minSharesOut, maxAvgPrice }) {
+  return postJson('/api/points/buy', {
+    marketId, outcomeIndex, collateral, minSharesOut, maxAvgPrice,
+  });
 }
 
 export async function quoteSell({ marketId, outcomeIndex, shares }) {
   return postJson('/api/points/quote-sell', { marketId, outcomeIndex, shares });
 }
 
-export async function executeSell({ marketId, outcomeIndex, shares }) {
-  return postJson('/api/points/sell', { marketId, outcomeIndex, shares });
+// `minCollateralOut` is the sell-side slippage guard — the lowest
+// MXNP payout the user will accept. Server bails with `price_moved`
+// if the locked quote undershoots.
+export async function executeSell({ marketId, outcomeIndex, shares, minCollateralOut }) {
+  return postJson('/api/points/sell', {
+    marketId, outcomeIndex, shares, minCollateralOut,
+  });
 }
 
 export async function redeemWinnings({ marketId, outcomeIndex }) {

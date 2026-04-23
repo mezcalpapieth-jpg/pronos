@@ -42,7 +42,7 @@ export default async function handler(req, res) {
   if (!session) return;
   if (!session.username) return res.status(400).json({ error: 'username_required' });
 
-  const { marketId, outcomeIndex, collateral } = req.body || {};
+  const { marketId, outcomeIndex, collateral, minSharesOut, maxAvgPrice } = req.body || {};
   const mid = parseInt(marketId, 10);
   const oi  = parseInt(outcomeIndex, 10);
   const amt = Number(collateral);
@@ -51,6 +51,14 @@ export default async function handler(req, res) {
   // reserves count (binary=2 or trinary=3). Just guard the lower bound here.
   if (!Number.isInteger(oi) || oi < 0)    return res.status(400).json({ error: 'invalid_outcome_index' });
   if (!Number.isFinite(amt) || amt <= 0)   return res.status(400).json({ error: 'invalid_amount' });
+
+  // Slippage guards (optional). Client sends what it quoted; server
+  // rejects with `price_moved` if the locked quote exceeds the
+  // tolerance. Either bound works — both kick in if both are set.
+  //   minSharesOut: lowest share count the user will accept
+  //   maxAvgPrice:  highest avg price/share the user will accept
+  const minShares = Number.isFinite(Number(minSharesOut)) ? Number(minSharesOut) : null;
+  const maxPrice  = Number.isFinite(Number(maxAvgPrice))  ? Number(maxAvgPrice)  : null;
 
   const username = session.username;
 
@@ -110,6 +118,21 @@ export default async function handler(req, res) {
           : multiBuyQuote(reserves, oi, amt);
       } catch (e) {
         const err = new Error('invalid_quote'); err.status = 400; err.detail = e.message; throw err;
+      }
+
+      // Slippage enforcement — we already hold FOR UPDATE on the
+      // market row, so the quote above is authoritative. If it drifted
+      // past the client's tolerance between their preview and now,
+      // bail with a specific error so the UI can re-quote cleanly.
+      if (minShares !== null && quote.sharesOut < minShares) {
+        const err = new Error('price_moved'); err.status = 409;
+        err.detail = `shares_out=${quote.sharesOut.toFixed(6)} below min=${minShares}`;
+        throw err;
+      }
+      if (maxPrice !== null && quote.avgPrice > maxPrice) {
+        const err = new Error('price_moved'); err.status = 409;
+        err.detail = `avg_price=${quote.avgPrice.toFixed(6)} above max=${maxPrice}`;
+        throw err;
       }
 
       // Persist reserves + balance + trade + position + audit log.
