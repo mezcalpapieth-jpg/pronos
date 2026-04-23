@@ -167,6 +167,7 @@ export default function Nav({ onOpenLogin }) {
                 const el = document.getElementById('markets');
                 if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth' }); }
               }}>{t('nav.market')}</a>
+              <Link to="/c/world-cup">Mundial 2026</Link>
               <Link to="/portfolio">{t('nav.portfolio')}</Link>
               <a href="/mvp/#how-it-works" onClick={e => {
                 const el = document.getElementById('how-it-works');

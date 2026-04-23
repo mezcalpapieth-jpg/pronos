@@ -157,8 +157,8 @@ export default function Portfolio({ onOpenLogin }) {
     setError(null);
     try {
       const [posRes, histRes] = await Promise.all([
-        getJson('/api/points/positions'),
-        getJson('/api/points/history'),
+        getJson('/api/points/positions?mode=onchain'),
+        getJson('/api/points/history?mode=onchain'),
       ]);
       setPositions(Array.isArray(posRes.data?.positions) ? posRes.data.positions : []);
       setHistory(Array.isArray(histRes.data?.trades) ? histRes.data.trades : []);

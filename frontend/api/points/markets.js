@@ -62,6 +62,15 @@ export default async function handler(req, res) {
 
   const status = req.query.status === 'resolved' ? 'resolved' : 'active';
   const category = typeof req.query.category === 'string' ? req.query.category : null;
+  // `mode` segregates off-chain Points markets from on-chain MVP markets
+  // so the two apps render isolated universes even though they share the
+  // same table. Omitted → Points default ('points'). MVP passes
+  // `?mode=onchain` on every list call. `?mode=all` skips the filter
+  // (used by the shared internal indexer + admin tools).
+  const modeParam = typeof req.query.mode === 'string' ? req.query.mode.toLowerCase() : '';
+  const modeFilter = modeParam === 'onchain' ? 'onchain'
+                    : modeParam === 'all'    ? null
+                    : 'points';
   // Soft cap on returned rows. Default 100 keeps the home grid snappy
   // (trending doesn't need every market, just the ones about to close);
   // category pages request a higher cap so nothing is hidden. Clamped
@@ -84,6 +93,11 @@ export default async function handler(req, res) {
 
     // Only fetch parents / unified markets. Legs (parent_id IS NOT NULL)
     // are rolled up below and never surface as standalone rows.
+    // `modeFilter` is NULL (skip), 'points', or 'onchain'. We pass it
+    // explicitly into each branch — Neon's tagged template takes a
+    // literal; a CASE/COALESCE around `m.mode = $` keeps the plan simple
+    // and indexable. Rows with mode IS NULL are treated as 'points' for
+    // backward-compat with pre-M3 schemas that hadn't populated the column.
     const rows = category
       ? await sql`
           SELECT m.*,
@@ -91,6 +105,7 @@ export default async function handler(req, res) {
           FROM points_markets m
           WHERE m.status = ${status} AND m.category = ${category}
             AND m.parent_id IS NULL
+            AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
           ORDER BY m.end_time ASC
           LIMIT ${limit}
         `
@@ -102,6 +117,7 @@ export default async function handler(req, res) {
             WHERE m.status = ${status}
               AND m.featured = true
               AND m.parent_id IS NULL
+              AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
             ORDER BY m.end_time ASC
             LIMIT ${limit}
           `
@@ -111,6 +127,7 @@ export default async function handler(req, res) {
             FROM points_markets m
             WHERE m.status = ${status}
               AND m.parent_id IS NULL
+              AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
             ORDER BY m.end_time ASC
             LIMIT ${limit}
           `;

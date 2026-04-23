@@ -41,17 +41,24 @@ export default async function handler(req, res) {
   if (!session) return;
   if (!session.username) return res.status(400).json({ error: 'username_required' });
   const username = session.username;
+  // Mode filter — same split as /api/points/positions. Default 'points'
+  // so the Points app only sees off-chain trades; MVP passes 'onchain'.
+  const modeParam = typeof req.query.mode === 'string' ? req.query.mode.toLowerCase() : '';
+  const modeFilter = modeParam === 'onchain' ? 'onchain'
+                    : modeParam === 'all'    ? null
+                    : 'points';
 
   try {
     await ensurePointsSchema(schemaSql);
     const rows = await sql`
       SELECT t.id, t.market_id, t.side, t.outcome_index, t.shares,
-             t.collateral, t.fee, t.price_at_trade, t.created_at,
+             t.collateral, t.fee, t.price_at_trade, t.tx_hash, t.created_at,
              m.question, m.category, m.outcomes, m.reserves,
              m.status, m.outcome, m.end_time, m.resolved_at
       FROM points_trades t
       JOIN points_markets m ON m.id = t.market_id
       WHERE t.username = ${username}
+        AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
       ORDER BY t.created_at ASC
     `;
 

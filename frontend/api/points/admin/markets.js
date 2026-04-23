@@ -28,6 +28,14 @@ export default async function handler(req, res) {
   if (!admin) return;
 
   const filter = ['all', 'active', 'pending', 'resolved'].includes(req.query.status) ? req.query.status : 'all';
+  // Same mode split as the public /api/points/markets — lets the MVP
+  // admin query only on-chain markets while Points admin stays on
+  // off-chain ones. Omitted ⇒ no filter (shows everything; historic
+  // behaviour).
+  const modeParam = typeof req.query.mode === 'string' ? req.query.mode.toLowerCase() : '';
+  const modeFilter = modeParam === 'onchain' ? 'onchain'
+                    : modeParam === 'points' ? 'points'
+                    : null;
 
   try {
     await ensurePointsSchema(schemaSql);
@@ -35,10 +43,6 @@ export default async function handler(req, res) {
     // their parent — hiding them here keeps the admin table uncluttered
     // for markets with many outcomes. Admin resolves the parent; the
     // resolve endpoint cascades to every leg.
-    //
-    // filter=pending = markets whose trading window has closed but the
-    // outcome hasn't been set yet ("por resolver"). DB has no separate
-    // 'pending' state — it's just status='active' AND end_time < now().
     let rows;
     if (filter === 'all') {
       rows = await sql`
@@ -46,6 +50,7 @@ export default async function handler(req, res) {
           (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id) AS trade_count
         FROM points_markets m
         WHERE m.parent_id IS NULL
+          AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
         ORDER BY m.created_at DESC
         LIMIT 200
       `;
@@ -58,6 +63,7 @@ export default async function handler(req, res) {
           AND m.parent_id IS NULL
           AND m.end_time IS NOT NULL
           AND m.end_time < NOW()
+          AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
         ORDER BY m.end_time ASC
         LIMIT 200
       `;
@@ -67,6 +73,7 @@ export default async function handler(req, res) {
           (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id) AS trade_count
         FROM points_markets m
         WHERE m.status = ${filter} AND m.parent_id IS NULL
+          AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
         ORDER BY m.created_at DESC
         LIMIT 200
       `;
@@ -90,6 +97,10 @@ export default async function handler(req, res) {
         tradeCount: r.trade_count || 0,
         featured: r.featured === true || r.featured === false ? r.featured : true,
         resolverType: r.resolver_type || null,
+        mode: r.mode || 'points',
+        chainId: r.chain_id || null,
+        chainMarketId: r.chain_market_id ? String(r.chain_market_id) : null,
+        chainAddress: r.chain_address || null,
       })),
     });
   } catch (e) {

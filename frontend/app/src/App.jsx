@@ -21,6 +21,7 @@ const Home = lazy(() => import('./pages/Home.jsx'));
 const MarketDetail = lazy(() => import('./pages/MarketDetail.jsx'));
 const Portfolio = lazy(() => import('./pages/Portfolio.jsx'));
 const Admin = lazy(() => import('./pages/Admin.jsx'));
+const WorldCupPage = lazy(() => import('./pages/WorldCupPage.jsx'));
 
 function RouteFallback() {
   return (
@@ -80,6 +81,10 @@ export default function App() {
           <Route
             path="/"
             element={<Home username={username} userIsAdmin={userIsAdmin} onOpenLogin={() => setLoginOpen(true)} />}
+          />
+          <Route
+            path="/c/world-cup"
+            element={<WorldCupPage onOpenLogin={() => setLoginOpen(true)} />}
           />
           <Route
             path="/market"

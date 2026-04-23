@@ -38,6 +38,14 @@ export default async function handler(req, res) {
   if (!session.username) return res.status(400).json({ error: 'username_required' });
 
   const username = session.username;
+  // Mode filter — keeps MVP (/mvp) positions separate from Points
+  // positions at the same username. Omitted ⇒ 'points' (default for
+  // the off-chain app). `?mode=onchain` ⇒ only Turnkey-signed
+  // on-chain positions. `?mode=all` ⇒ skip the filter.
+  const modeParam = typeof req.query.mode === 'string' ? req.query.mode.toLowerCase() : '';
+  const modeFilter = modeParam === 'onchain' ? 'onchain'
+                    : modeParam === 'all'    ? null
+                    : 'points';
   try {
     await ensurePointsSchema(schemaSql);
     // Positions sit on leg ids for parallel markets, so we LEFT JOIN the
@@ -62,6 +70,7 @@ export default async function handler(req, res) {
       WHERE p.username = ${username}
         AND p.shares > 0
         AND p.dismissed_at IS NULL
+        AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
       ORDER BY
         CASE m.status WHEN 'active' THEN 0 WHEN 'resolved' THEN 1 ELSE 2 END,
         m.end_time ASC

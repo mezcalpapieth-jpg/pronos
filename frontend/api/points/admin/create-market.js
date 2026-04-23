@@ -5,6 +5,18 @@
  *   outcomes: string[],       // 2 to 10 outcomes
  *   seedLiquidity,
  *   ammMode?: 'unified' | 'parallel'  // default 'unified'
+ *
+ *   // ── On-chain registration (MVP admin) ─────────────────────────
+ *   mode?: 'points' | 'onchain'       // default 'points'
+ *   chainId?: number                  // e.g. 421614 Arbitrum Sepolia
+ *   chainAddress?: string             // deployed PronosAMM / MarketFactory address
+ *   chainMarketId?: string            // on-chain market index (bigint as string)
+ *   featured?: boolean                // default false
+ *
+ * When mode='onchain' the DB row is a mirror of an on-chain market that
+ * was already deployed via MarketFactory. Reserves here are display-only —
+ * buy.js/sell.js read the real reserves from the chain for trade math.
+ * Off-chain mode='points' continues to work exactly as before.
  * }
  *
  * 'unified' (default): one row in points_markets with N-element reserves,
@@ -39,9 +51,45 @@ export default async function handler(req, res) {
   const admin = requirePointsAdmin(req, res);
   if (!admin) return;
 
-  const { question, category, icon, endTime, outcomes, seedLiquidity, ammMode } = req.body || {};
+  const {
+    question, category, icon, endTime, outcomes, seedLiquidity, ammMode,
+    mode: chainMode, chainId, chainAddress, chainMarketId, featured,
+  } = req.body || {};
   const seed = Number(seedLiquidity);
   const mode = ammMode === 'parallel' ? 'parallel' : 'unified';
+  // `marketMode` is the off-chain/on-chain classifier (the `mode`
+  // column on points_markets) — distinct from `ammMode` above.
+  const marketMode = chainMode === 'onchain' ? 'onchain' : 'points';
+  const isOnchain = marketMode === 'onchain';
+
+  // Validate chain metadata when registering an on-chain market.
+  let chainIdNum = null;
+  let chainAddressStr = null;
+  let chainMarketIdStr = null;
+  if (isOnchain) {
+    chainIdNum = Number.parseInt(chainId, 10);
+    if (!Number.isInteger(chainIdNum) || chainIdNum <= 0) {
+      return res.status(400).json({ error: 'invalid_chain_id' });
+    }
+    if (typeof chainAddress !== 'string' || !/^0x[a-fA-F0-9]{40}$/.test(chainAddress.trim())) {
+      return res.status(400).json({ error: 'invalid_chain_address' });
+    }
+    chainAddressStr = chainAddress.trim().toLowerCase();
+    // chainMarketId is optional at registration — some deployments
+    // expose only the AMM contract address and the MVP treats that as
+    // the market. We accept any numeric string ≤ 78 chars (BigInt
+    // safe) or null.
+    if (chainMarketId !== undefined && chainMarketId !== null && chainMarketId !== '') {
+      const raw = String(chainMarketId).trim();
+      if (!/^\d{1,78}$/.test(raw)) {
+        return res.status(400).json({ error: 'invalid_chain_market_id' });
+      }
+      chainMarketIdStr = raw;
+    }
+    if (mode === 'parallel') {
+      return res.status(400).json({ error: 'parallel_onchain_unsupported' });
+    }
+  }
   if (typeof question !== 'string' || question.trim().length < 8) {
     return res.status(400).json({ error: 'invalid_question' });
   }
@@ -78,8 +126,10 @@ export default async function handler(req, res) {
         const r = await client.query(
           `INSERT INTO points_markets
              (question, category, icon, outcomes, reserves, seed_liquidity,
-              end_time, status, created_by, amm_mode)
-           VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, 'active', $8, 'unified')
+              end_time, status, created_by, amm_mode, featured,
+              mode, chain_id, chain_market_id, chain_address)
+           VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, 'active', $8, 'unified', $9,
+                   $10, $11, $12, $13)
            RETURNING id`,
           [
             question.trim(),
@@ -90,11 +140,21 @@ export default async function handler(req, res) {
             seed,
             endDate.toISOString(),
             admin.username,
+            featured === true,
+            marketMode,
+            chainIdNum,
+            chainMarketIdStr,
+            chainAddressStr,
           ],
         );
         return r.rows[0].id;
       });
-      return res.status(200).json({ ok: true, marketId: result, ammMode: 'unified' });
+      return res.status(200).json({
+        ok: true,
+        marketId: result,
+        ammMode: 'unified',
+        mode: marketMode,
+      });
     }
 
     // Parallel: parent carries metadata, N legs carry binary CPMM state.
