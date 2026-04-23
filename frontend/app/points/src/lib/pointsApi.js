@@ -48,6 +48,26 @@ export async function dismissPosition({ marketId, outcomeIndex }) {
   return postJson('/api/points/dismiss-position', { marketId, outcomeIndex });
 }
 
+// ─── Social links (verified via OAuth) ───────────────────────────────
+// Separate surface from the admin-review social_tasks. These are
+// provider accounts (X, IG, TikTok) the user has linked via OAuth,
+// so their handle is cryptographically verified.
+export async function fetchSocialLinks() {
+  return getJson('/api/points/social-links');
+}
+
+export async function unlinkSocial(provider) {
+  return postJson('/api/points/unlink-social', { provider });
+}
+
+// Kick-off URL for the OAuth redirect. Returns a path the browser
+// should `window.location.href` to — server issues a 302 to the
+// provider's consent screen.
+export function socialLinkStartUrl(provider, returnTo = '/earn') {
+  const q = new URLSearchParams({ returnTo }).toString();
+  return `/api/social/${provider}/start?${q}`;
+}
+
 // `limit` caps the number of markets returned. Leave undefined on home
 // (trending shows the soonest-closing 100); category / browse pages
 // pass a larger value so nothing is hidden.

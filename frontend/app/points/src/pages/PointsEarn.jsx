@@ -19,6 +19,9 @@ import {
   fetchReferralStats,
   fetchSocialTaskCatalog,
   submitSocialTask,
+  fetchSocialLinks,
+  unlinkSocial,
+  socialLinkStartUrl,
 } from '../lib/pointsApi.js';
 
 function fmt(n) {
@@ -367,6 +370,192 @@ function SocialTaskRow({ task, onSubmit }) {
   );
 }
 
+// ─── Verified social connections (OAuth) ─────────────────────────────
+// Separate from SocialTasksCard because the verification story is
+// different: here we get a cryptographic handshake with the provider
+// and auto-credit MXNP. SocialTasksCard stays for "follow/post"-style
+// tasks where the only proof we can demand is a screenshot.
+const SOCIAL_PROVIDERS = [
+  {
+    key: 'x',
+    label: 'X (Twitter)',
+    icon: '𝕏',
+    reward: 50,
+    available: true,
+    comingSoonNote: null,
+  },
+  {
+    key: 'instagram',
+    label: 'Instagram',
+    icon: '📸',
+    reward: 50,
+    available: false,
+    comingSoonNote: 'Esperando aprobación de Meta',
+  },
+  {
+    key: 'tiktok',
+    label: 'TikTok',
+    icon: '🎵',
+    reward: 50,
+    available: false,
+    comingSoonNote: 'Esperando aprobación de TikTok',
+  },
+];
+
+function SocialLinksCard() {
+  const [links, setLinks] = useState(null);
+  const [err, setErr] = useState(null);
+  const [busy, setBusy] = useState(null);
+
+  async function load() {
+    try {
+      const r = await fetchSocialLinks();
+      const map = {};
+      for (const l of r.links || []) map[l.provider] = l;
+      setLinks(map);
+    } catch (e) {
+      setErr(e.code || e.message);
+    }
+  }
+  useEffect(() => { load(); }, []);
+
+  // Surface the callback's link/link_error query params as a banner.
+  // The callback redirects to /earn?linked=x on success or
+  // /earn?link_error=x:<code> on failure.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const linked = url.searchParams.get('linked');
+    const linkError = url.searchParams.get('link_error');
+    if (linked || linkError) {
+      // Strip the params so a refresh doesn't re-show the banner.
+      url.searchParams.delete('linked');
+      url.searchParams.delete('link_error');
+      window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
+    }
+    if (linkError) setErr(linkError);
+  }, []);
+
+  async function handleConnect(provider) {
+    if (!SOCIAL_PROVIDERS.find(p => p.key === provider)?.available) return;
+    // Full page redirect — provider OAuth needs to navigate away.
+    window.location.href = socialLinkStartUrl(provider, '/earn');
+  }
+
+  async function handleDisconnect(provider) {
+    setBusy(provider);
+    try {
+      await unlinkSocial(provider);
+      await load();
+    } catch (e) {
+      setErr(e.code || e.message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <section style={panelStyle}>
+      <div style={eyebrowStyle}>🔗 Cuentas verificadas</div>
+      <h3 style={panelTitleStyle}>Conecta tus redes sociales</h3>
+      <p style={panelBodyStyle}>
+        Verificamos tu cuenta directamente con la red social — no hace falta capturas
+        ni revisión manual. Ganas MXNP en cuanto conectas.
+      </p>
+      {err && (
+        <div style={{ ...noticeStyle, color: 'var(--red, #ef4444)' }}>Error: {err}</div>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+        {SOCIAL_PROVIDERS.map(p => {
+          const link = links?.[p.key] || null;
+          const isLinked = !!link;
+          const locked = !p.available && !isLinked;
+          return (
+            <div
+              key={p.key}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '14px 16px',
+                background: 'var(--surface2)',
+                border: '1px solid var(--border)',
+                borderRadius: 10,
+              }}
+            >
+              <div style={{
+                fontSize: 20, width: 28, textAlign: 'center',
+                filter: locked ? 'grayscale(1)' : 'none',
+                opacity: locked ? 0.5 : 1,
+              }}>
+                {p.icon}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text-primary)', marginBottom: 4 }}>
+                  {p.label}
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
+                  {isLinked
+                    ? `Conectado como @${link.handle || '—'}`
+                    : (locked ? p.comingSoonNote : 'Verificación automática vía OAuth')}
+                </div>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: 'var(--green)' }}>
+                  {isLinked && link.rewardCredited ? '✓' : `+${p.reward}`}
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)' }}>MXNP</div>
+              </div>
+              {isLinked ? (
+                <button
+                  onClick={() => handleDisconnect(p.key)}
+                  disabled={busy === p.key}
+                  style={{
+                    padding: '8px 14px',
+                    background: 'transparent',
+                    color: 'var(--text-muted)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    letterSpacing: '0.06em',
+                    cursor: busy === p.key ? 'wait' : 'pointer',
+                    minWidth: 120,
+                    opacity: busy === p.key ? 0.6 : 1,
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {busy === p.key ? '…' : 'Desconectar'}
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleConnect(p.key)}
+                  disabled={locked}
+                  style={{
+                    padding: '8px 14px',
+                    background: locked ? 'var(--surface3)' : 'var(--green)',
+                    color: locked ? 'var(--text-muted)' : '#000',
+                    border: locked ? '1px solid var(--border)' : 'none',
+                    borderRadius: 8,
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: '0.06em',
+                    cursor: locked ? 'not-allowed' : 'pointer',
+                    minWidth: 120,
+                    opacity: locked ? 0.6 : 1,
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {locked ? 'Próximamente' : 'Conectar'}
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function SocialTasksCard() {
   const [tasks, setTasks] = useState(null);
   const [err, setErr] = useState(null);
@@ -484,6 +673,10 @@ export default function PointsEarn({ onOpenLogin }) {
       }}>
         <DailyClaimCardWithStatus onClaimed={refresh} />
         <ReferralCard />
+      </div>
+
+      <div style={{ marginTop: 24 }}>
+        <SocialLinksCard />
       </div>
 
       <div style={{ marginTop: 24 }}>

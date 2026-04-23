@@ -153,6 +153,28 @@ const POINTS_SCHEMA_MIGRATIONS = [
   // record; this just hides the line from the open-positions view.
   `ALTER TABLE points_positions ADD COLUMN IF NOT EXISTS dismissed_at TIMESTAMPTZ`,
 
+  // ── Social account links (OAuth-verified) ────────────────────────────────
+  // Separate from `social_tasks` (admin-reviewed proofs). When a user
+  // completes an OAuth flow to X / Instagram / TikTok, we store the
+  // verified provider handle + user id here. Two UNIQUEs matter:
+  //   (username, provider)      — one account per provider per user
+  //   (provider, provider_user_id) — a given social account can only
+  //                                  link to one Pronos user (prevents
+  //                                  farming rewards across accounts)
+  `CREATE TABLE IF NOT EXISTS points_social_links (
+    id                SERIAL PRIMARY KEY,
+    username          TEXT NOT NULL,
+    provider          TEXT NOT NULL,
+    provider_user_id  TEXT NOT NULL,
+    handle            TEXT,
+    profile_url       TEXT,
+    reward_credited   BOOLEAN NOT NULL DEFAULT false,
+    linked_at         TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (username, provider),
+    UNIQUE (provider, provider_user_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_social_links_user ON points_social_links(username)`,
+
   // ── Daily claim tracking (prevents double-claim per day) ───────────────
   `CREATE TABLE IF NOT EXISTS daily_claims (
     username      TEXT NOT NULL,
