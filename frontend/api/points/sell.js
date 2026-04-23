@@ -18,6 +18,7 @@ import { binarySellQuote, multiSellQuote } from '../_lib/amm-math.js';
 import { requireSession } from '../_lib/session.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { withTransaction } from '../_lib/db-tx.js';
+import { sellOnChain } from '../_lib/onchain-trader.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 
@@ -64,7 +65,8 @@ export default async function handler(req, res) {
 
     const result = await withTransaction(async (client) => {
       const marketResult = await client.query(
-        `SELECT id, status, reserves, end_time
+        `SELECT id, status, reserves, end_time, mode,
+                chain_id, chain_market_id, chain_address
          FROM points_markets
          WHERE id = $1
          FOR UPDATE`,
@@ -79,6 +81,77 @@ export default async function handler(req, res) {
       }
       if (m.end_time && new Date(m.end_time) <= new Date()) {
         const err = new Error('market_expired'); err.status = 400; throw err;
+      }
+
+      // ── Mode dispatch (mirrors buy.js) ────────────────────────────
+      if (m.mode === 'onchain') {
+        if (!session.sub) {
+          const err = new Error('suborg_required'); err.status = 400; throw err;
+        }
+        // Existing position check stays in the DB — we still need to
+        // know the user owns the shares before attempting the chain
+        // call. Chain enforces it too; this just fails fast.
+        const positionResult = await client.query(
+          `SELECT shares, cost_basis FROM points_positions
+           WHERE market_id = $1 AND username = $2 AND outcome_index = $3
+           FOR UPDATE`,
+          [mid, username, oi],
+        );
+        if (positionResult.rows.length === 0) {
+          const err = new Error('no_position'); err.status = 400; throw err;
+        }
+        const heldRow = positionResult.rows[0];
+        if (Number(heldRow.shares) < n) {
+          const err = new Error('insufficient_shares'); err.status = 400; throw err;
+        }
+
+        const onchain = await sellOnChain({
+          suborgId: session.sub,
+          market: m,
+          outcomeIndex: oi,
+          shares: n,
+          minCollateralOut: minOut,
+        });
+
+        await client.query(
+          `INSERT INTO points_trades (
+             market_id, username, side, outcome_index,
+             shares, collateral, fee, price_at_trade,
+             reserves_before, reserves_after, tx_hash
+           ) VALUES ($1, $2, 'sell', $3, $4, $5, $6, $7, NULL, NULL, $8)
+           ON CONFLICT (tx_hash) DO NOTHING`,
+          [
+            mid, username, oi,
+            n, onchain.collateralOut, onchain.fee || 0, onchain.priceBefore || 0,
+            onchain.txHash,
+          ],
+        );
+
+        // Position mirror — chain is source of truth, indexer
+        // reconciles. Here we just subtract what we know we sold.
+        const heldShares = Number(heldRow.shares);
+        const costBasis = Number(heldRow.cost_basis);
+        const avgCost = heldShares > 0 ? costBasis / heldShares : 0;
+        const soldCostBasis = avgCost * n;
+        const newShares = heldShares - n;
+        const newCost = newShares > 0 ? costBasis - soldCostBasis : 0;
+        await client.query(
+          `UPDATE points_positions
+           SET shares = $1, cost_basis = $2, updated_at = NOW()
+           WHERE market_id = $3 AND username = $4 AND outcome_index = $5`,
+          [newShares, newCost, mid, username, oi],
+        );
+
+        return {
+          mode: 'onchain',
+          balance: onchain.balance,
+          collateralOut: onchain.collateralOut,
+          sharesSold: n,
+          priceBefore: onchain.priceBefore,
+          priceAfter: onchain.priceAfter,
+          txHash: onchain.txHash,
+          blockNumber: onchain.blockNumber,
+        };
       }
       const reserves = parseJsonb(m.reserves, []).map(Number);
       // AMM dispatch, same rules as buy.js: N=2 binary, N≥3 unified multi.

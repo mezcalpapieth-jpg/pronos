@@ -160,6 +160,14 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_trades_user ON points_trades(username)`,
   `CREATE INDEX IF NOT EXISTS idx_points_trades_market ON points_trades(market_id)`,
   `CREATE INDEX IF NOT EXISTS idx_points_trades_user_market ON points_trades(username, market_id)`,
+  // tx_hash: on-chain transaction hash for mode='onchain' trades.
+  // NULL for DB-backed trades. UNIQUE so an idempotent retry of a
+  // confirmed on-chain trade (e.g. user refreshes mid-await) can't
+  // insert a duplicate row. The indexer (M5) inserts with ON
+  // CONFLICT DO NOTHING against this constraint so live-read and
+  // indexer writes can both claim the same on-chain event.
+  `ALTER TABLE points_trades ADD COLUMN IF NOT EXISTS tx_hash TEXT`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_points_trades_tx_hash ON points_trades(tx_hash) WHERE tx_hash IS NOT NULL`,
 
   // ── Positions (materialized — updated atomically with each trade) ──────
   `CREATE TABLE IF NOT EXISTS points_positions (
