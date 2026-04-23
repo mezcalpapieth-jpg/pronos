@@ -36,6 +36,16 @@ const POINTS_SCHEMA_MIGRATIONS = [
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_points_users_username_lower ON points_users (LOWER(username))`,
   `CREATE INDEX IF NOT EXISTS idx_points_users_wallet ON points_users(wallet_address)`,
+  // Turnkey delegated-signing policy (M2). When non-null, the Pronos
+  // backend API key can sign on-chain trades on this user's behalf
+  // within the policy's scope — up to `delegation_daily_cap_mxnb`
+  // per 24h against whitelisted contracts, valid until
+  // `delegation_expires_at`. Withdrawals + policy changes still
+  // require fresh user signature.
+  `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS delegation_policy_id TEXT`,
+  `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS delegation_expires_at TIMESTAMPTZ`,
+  `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS delegation_daily_cap_mxnb NUMERIC(20,6)`,
+  `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS delegation_authorized_at TIMESTAMPTZ`,
 
   // ── Markets (off-chain, admin-curated) ─────────────────────────────────
   `CREATE TABLE IF NOT EXISTS points_markets (

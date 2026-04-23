@@ -48,6 +48,22 @@ export async function dismissPosition({ marketId, outcomeIndex }) {
   return postJson('/api/points/dismiss-position', { marketId, outcomeIndex });
 }
 
+// ─── Turnkey delegated signing (M2) ──────────────────────────────────
+// First on-chain trade prompts a one-time consent: the user
+// authorizes Pronos to sign their trades within defined scope
+// (200k MXNB/day, 180d, whitelisted contracts). After that, zero
+// popups per trade. Status tells the UI which state to render;
+// revoke clears the policy.
+export async function fetchDelegationStatus() {
+  return getJson('/api/points/turnkey/delegation-status');
+}
+export async function authorizeDelegation() {
+  return postJson('/api/points/turnkey/authorize-delegation', {});
+}
+export async function revokeDelegation() {
+  return postJson('/api/points/turnkey/revoke-delegation', {});
+}
+
 // ─── Social links (verified via OAuth) ───────────────────────────────
 // Separate surface from the admin-review social_tasks. These are
 // provider accounts (X, IG, TikTok) the user has linked via OAuth,
