@@ -1,205 +1,129 @@
-import React, { useState, useEffect } from 'react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
-import { ethers } from 'ethers';
-import {
-  getUsdcBalance,
-  getUsdcAllowance,
-  approveUsdc,
-  deriveClobApiKey,
-  placeClobOrder,
-  fetchOrderBook,
-  simulateMarketBuy,
-  CTF_EXCHANGE,
-  NEG_RISK_ADAPTER,
-  POLYGON_CHAIN_ID,
-} from '../lib/clob.js';
-import { buyShares } from '../lib/contracts.js';
-import { getProtocolBuyQuote } from '../lib/protocolPricing.js';
-import { isProtocolMarket, getUsdcAddress, CHAIN_IDS, getChainDisplayName, getChainReadProvider, switchWalletChain } from '../lib/protocol.js';
+/**
+ * MVP BetModal — Turnkey delegated signing.
+ *
+ * The UI posts {marketId, outcomeIndex, collateral, minSharesOut, maxAvgPrice}
+ * to /api/points/buy. When the market's `mode === 'onchain'`, the backend
+ * routes through Turnkey-signed tx via _lib/onchain-trader.js; when mode is
+ * `points`, it goes through the DB-locked AMM path. The client doesn't care
+ * which — response shape is identical.
+ *
+ * Slippage guards: the client sends a preview snapshot (minSharesOut,
+ * maxAvgPrice) based on the last quote so the server can short-circuit with
+ * `price_moved` if the market drifted. Preview comes from /api/points/quote-buy
+ * which walks the same AMM math the server uses.
+ */
+import React, { useEffect, useState } from 'react';
+import { usePointsAuth } from '../lib/pointsAuth.js';
 import { useT } from '../lib/i18n.js';
 
 const QUICK_AMOUNTS = [5, 10, 25, 50];
-const ERC20_BALANCE_ABI = ['function balanceOf(address) view returns (uint256)'];
 
-// Steps shown in the UI during the betting flow
 const STEPS = {
   IDLE:     'idle',
-  CHECKING: 'checking',   // checking balance + allowance
-  APPROVING:'approving',  // waiting for approval tx
-  SIGNING:  'signing',    // signing CLOB auth message
-  PLACING:  'placing',    // submitting order
+  QUOTING:  'quoting',    // fetching live quote for slippage preview
+  PLACING:  'placing',    // POST /api/points/buy
   SUCCESS:  'success',
   ERROR:    'error',
 };
 
-export default function BetModal({ open, onClose, outcome, outcomePct, outcomeIndex = 0, marketId, marketTitle, clobTokenId, isNegRisk = false, market = null }) {
+async function postJson(url, body) {
+  const res = await fetch(url, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
+async function postJsonWithQuery(url, body) {
+  return postJson(url, body);
+}
+
+export default function BetModal({
+  open,
+  onClose,
+  outcome,
+  outcomePct,
+  outcomeIndex = 0,
+  marketId,
+  marketTitle,
+  market = null,
+  onOpenLogin,
+}) {
   const t = useT();
-  const { authenticated, login } = usePrivy();
-  const { wallets } = useWallets();
-  const [amount, setAmount]   = useState('');
-  const [step, setStep]       = useState(STEPS.IDLE);
+  const { authenticated, user, refresh } = usePointsAuth();
+
+  const [amount, setAmount]     = useState('');
+  const [step, setStep]         = useState(STEPS.IDLE);
   const [statusMsg, setStatusMsg] = useState('');
-  const [orderId, setOrderId] = useState(null);
-  const [balance, setBalance] = useState(null);
-  const [book, setBook]       = useState(null);
-  const [protocolQuote, setProtocolQuote] = useState(null);
-  const [protocolQuoteState, setProtocolQuoteState] = useState('idle');
-  const [protocolQuoteError, setProtocolQuoteError] = useState('');
+  const [txHash, setTxHash]     = useState(null);
+  const [quote, setQuote]       = useState(null);
+  const [quoteError, setQuoteError] = useState('');
 
-  const numAmount  = parseFloat(amount) || 0;
-  const protocolMarket = isProtocolMarket(market);
-  const protocolChainId = Number(market?.chainId || CHAIN_IDS.arbitrumSepolia);
-  const protocolVersion = market?.protocolVersion || 'v1';
-  // v1 still uses the deployed dynamic fee. v2 uses the requested fixed 2%
-  // upfront fee that never enters the liquidity pool.
-  const fallbackFeePct = protocolMarket && protocolVersion === 'v2' ? 2 : 5 * (1 - (outcomePct || 50) / 100);
-  const fallbackFee = numAmount * fallbackFeePct / 100;
-  const afterFee = numAmount - fallbackFee;
-  const fallbackPayout = outcomePct > 0 && numAmount > 0 ? (afterFee / (outcomePct / 100)).toFixed(2) : '—';
-  const fallbackProfit = outcomePct > 0 && numAmount > 0 ? (afterFee / (outcomePct / 100) - numAmount).toFixed(2) : '—';
-  const isLoading  = [STEPS.CHECKING, STEPS.APPROVING, STEPS.SIGNING, STEPS.PLACING].includes(step);
+  const numAmount = parseFloat(amount) || 0;
+  const isLoading = step === STEPS.QUOTING || step === STEPS.PLACING;
 
-  // Slippage simulation: walk the ask ladder with the user's post-fee USDC.
-  // `slippagePoints` is expressed in percentage points of implied probability
-  // (e.g. market moved from 54% to 56% = "+2 pts"). We use the same unit in
-  // the row, the warning and the threshold so nothing contradicts anything.
-  const sim = (book && afterFee > 0) ? simulateMarketBuy(book, afterFee) : null;
-  const previewImpactPts = protocolMarket
-    ? protocolQuote?.priceImpactPts ?? 0
-    : sim?.slippagePoints ?? 0;
-  const slippagePts = Math.abs(previewImpactPts);
-  const startPct = protocolMarket
-    ? (protocolQuote ? Math.round(protocolQuote.currentPrice * 100) : null)
-    : (sim ? Math.round(sim.startPrice * 100) : null);
-  const postTradePct = protocolMarket
-    ? (protocolQuote ? Math.round(protocolQuote.postTradePrice * 100) : null)
-    : (sim ? Math.round(sim.lastFillPrice * 100) : null);
-  const highSlippage = slippagePts >= 5;
-  const partialFill = !protocolMarket && sim && sim.remaining > 0.01;
-  // Slippage preview is only meaningful when we have a live book. Local/demo
-  // markets without a `clobTokenId` can't be simulated — show a hint instead
-  // of silently hiding the section so the user knows why numbers are missing.
-  const noLiveBook = !clobTokenId && !protocolMarket;
-  const liveTradingUnavailable = protocolMarket ? !market?.poolAddress : !clobTokenId;
-  const previewLoading = protocolMarket
-    ? numAmount > 0 && protocolQuoteState === 'loading'
-    : false;
-  const feePct = protocolMarket && protocolQuote ? protocolQuote.feePct : fallbackFeePct;
-  const fee = protocolMarket && protocolQuote ? protocolQuote.fee : fallbackFee;
-  const payout = protocolMarket
-    ? (protocolQuote ? protocolQuote.payout.toFixed(2) : '—')
-    : fallbackPayout;
-  const profit = protocolMarket
-    ? (protocolQuote ? protocolQuote.profit.toFixed(2) : '—')
-    : fallbackProfit;
-  const impliedPct = protocolMarket && protocolQuote
-    ? Math.round(protocolQuote.currentPrice * 100)
-    : outcomePct;
+  const balance = typeof user?.balance === 'number' ? user.balance : null;
+  const chainMode = market?.mode === 'onchain' ? 'onchain' : 'points';
+  const isOnchain = chainMode === 'onchain';
 
+  // Fetch a live slippage quote when the amount changes. Debounced lightly
+  // so typing doesn't fire a quote per keystroke. Gives us priceBefore,
+  // priceAfter, feePct, sharesOut — surfaced in the preview box below.
   useEffect(() => {
-    if (!open || !protocolMarket || !market?.poolAddress || numAmount <= 0) {
-      setProtocolQuote(null);
-      setProtocolQuoteState('idle');
-      setProtocolQuoteError('');
+    if (!open || !marketId || numAmount <= 0) {
+      setQuote(null);
+      setQuoteError('');
       return;
     }
-
-    const provider = getChainReadProvider(protocolChainId);
-    if (!provider) {
-      setProtocolQuote(null);
-      setProtocolQuoteState('error');
-      setProtocolQuoteError('Vista previa no disponible');
-      return;
-    }
-
-    const quoteOutcome = protocolVersion === 'v2'
-      ? Number(outcomeIndex)
-      : outcome === market.options?.[0]?.label;
     let alive = true;
-    setProtocolQuoteState('loading');
-    setProtocolQuoteError('');
-
-    getProtocolBuyQuote(provider, market.poolAddress, quoteOutcome, amount, { protocolVersion })
-      .then((quote) => {
-        if (!alive) return;
-        setProtocolQuote(quote);
-        setProtocolQuoteState('ready');
-      })
-      .catch((err) => {
-        if (!alive) return;
-        setProtocolQuote(null);
-        setProtocolQuoteState('error');
-        setProtocolQuoteError(err.message || 'Vista previa no disponible');
-      });
-
-    return () => {
-      alive = false;
-    };
-    // NOTE: `t` intentionally excluded — useT() returns a new reference every
-    // render which would cause an infinite re-fire loop, cancelling every
-    // in-flight RPC call before it completes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    amount,
-    market?.options?.[0]?.label,
-    market?.poolAddress,
-    numAmount,
-    open,
-    outcome,
-    outcomeIndex,
-    protocolChainId,
-    protocolMarket,
-    protocolVersion,
-  ]);
-
-  async function getWalletUsdcBalance(provider, address, chainId) {
-    if (!protocolMarket) return getUsdcBalance(provider, address);
-    const usdcAddress = getUsdcAddress(chainId);
-    if (!usdcAddress) throw new Error('USDC is not configured for this chain');
-    const usdc = new ethers.Contract(usdcAddress, ERC20_BALANCE_ABI, provider);
-    const raw = await usdc.balanceOf(address);
-    return Number(ethers.utils.formatUnits(raw, 6));
-  }
-
-  // Load USDC balance when modal opens
-  useEffect(() => {
-    if (!open || !authenticated) return;
-    const wallet = wallets?.[0];
-    if (!wallet) return;
-    wallet.getEthereumProvider().then(async (prov) => {
+    const id = setTimeout(async () => {
+      setStep(STEPS.QUOTING);
+      setQuoteError('');
       try {
-        const provider = new ethers.providers.Web3Provider(prov);
-        const addr = await provider.getSigner().getAddress();
-        const network = await provider.getNetwork();
-        const bal  = await getWalletUsdcBalance(provider, addr, network.chainId);
-        setBalance(bal);
-      } catch (_) {}
-    }).catch(() => {});
-  }, [open, authenticated, wallets]);
-
-  // Fetch order book when modal opens so we can preview slippage in real time.
-  // Refresh every 15s while the modal stays open to keep the simulation close
-  // to live market depth without hammering the CLOB.
-  useEffect(() => {
-    if (!open || !clobTokenId) { setBook(null); return; }
-    let alive = true;
-    const load = async () => {
-      const b = await fetchOrderBook(clobTokenId);
-      if (alive) setBook(b);
-    };
-    load();
-    const iv = setInterval(load, 15000);
-    return () => { alive = false; clearInterval(iv); };
-  }, [open, clobTokenId]);
+        const { ok, data } = await postJsonWithQuery('/api/points/quote-buy', {
+          marketId,
+          outcomeIndex,
+          collateral: numAmount,
+        });
+        if (!alive) return;
+        if (!ok) {
+          setQuote(null);
+          setQuoteError(data?.error || 'preview_unavailable');
+        } else {
+          setQuote(data);
+        }
+      } catch (e) {
+        if (!alive) return;
+        setQuote(null);
+        setQuoteError(e?.message || 'preview_unavailable');
+      } finally {
+        if (alive) setStep(STEPS.IDLE);
+      }
+    }, 220);
+    return () => { alive = false; clearTimeout(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, marketId, outcomeIndex, numAmount]);
 
   if (!open) return null;
 
-  // ── Main bet handler ────────────────────────────────────────────────────────
-  const handleBet = async () => {
-    if (!authenticated) { window.open('/#waitlist', '_blank'); return; }
-    if (liveTradingUnavailable) {
-      setStep(STEPS.ERROR);
-      setStatusMsg(isProtocolMarket(market) ? t('bet.protocolUnavailable') : t('bet.noLiveTrading'));
+  // Derived display fields — prefer the live quote, fall back to naive math.
+  const feePct     = quote?.feePct ?? 2;
+  const fee        = quote?.fee ?? (numAmount * feePct / 100);
+  const payout     = quote?.payout ?? (outcomePct > 0 && numAmount > 0
+    ? ((numAmount - fee) / (outcomePct / 100)).toFixed(2)
+    : '—');
+  const profit     = quote?.profit ?? (typeof payout === 'number' ? (payout - numAmount).toFixed(2) : '—');
+  const impliedPct = quote?.currentPrice !== undefined ? Math.round(quote.currentPrice * 100) : outcomePct;
+  const postPct    = quote?.postTradePrice !== undefined ? Math.round(quote.postTradePrice * 100) : null;
+  const slippagePts = quote?.priceImpactPts ?? 0;
+  const highSlippage = Math.abs(slippagePts) >= 5;
+
+  async function handleBet() {
+    if (!authenticated) {
+      onOpenLogin?.();
       return;
     }
     if (numAmount <= 0) {
@@ -207,130 +131,64 @@ export default function BetModal({ open, onClose, outcome, outcomePct, outcomeIn
       setStatusMsg(t('bet.invalidAmount'));
       return;
     }
-
-    const wallet = wallets?.[0];
-    if (!wallet) {
+    if (balance !== null && balance < numAmount && !isOnchain) {
       setStep(STEPS.ERROR);
-      setStatusMsg(t('bet.noWallet'));
+      setStatusMsg(t('bet.insufficient', { bal: balance.toFixed(2) }));
       return;
     }
 
+    // Compute slippage bounds from the most recent quote. If no quote was
+    // fetched (preview unavailable), skip the guard — the server will still
+    // accept the trade but we can't protect the user from drift.
+    const minShares = quote?.sharesOut ? Number(quote.sharesOut) * 0.98 : null;
+    const maxPrice  = quote?.avgPrice ? Number(quote.avgPrice) * 1.02 : null;
+
+    setStep(STEPS.PLACING);
+    setStatusMsg(isOnchain ? t('bet.placingProtocol') : t('bet.placing'));
+    setTxHash(null);
+
     try {
-      // ── 1. Get provider + signer ──────────────────────────────────────────
-      setStep(STEPS.CHECKING);
-      setStatusMsg(t('bet.checking'));
-      const ethProvider = await wallet.getEthereumProvider();
-      let provider      = new ethers.providers.Web3Provider(ethProvider);
-      let signer        = provider.getSigner();
-      const address     = await signer.getAddress();
-
-      // ── 1b. Check chain + auto-switch ──────────────────────────────────
-      const requiredChainId = protocolMarket ? protocolChainId : POLYGON_CHAIN_ID;
-      const network = await provider.getNetwork();
-      if (network.chainId !== requiredChainId) {
-        setStatusMsg(t('bet.switchingChain'));
-        try {
-          await switchWalletChain(wallet, requiredChainId);
-          // Re-create provider after chain switch
-          const newProv = await wallet.getEthereumProvider();
-          provider = new ethers.providers.Web3Provider(newProv);
-          signer = provider.getSigner();
-        } catch (switchErr) {
-          setStep(STEPS.ERROR);
-          setStatusMsg(t('bet.switchChain', { chain: getChainDisplayName(requiredChainId) }));
-          return;
-        }
-      }
-
-      // ── 2. Check balance ─────────────────────────────────────────────────
-      const bal = await getWalletUsdcBalance(provider, address, requiredChainId);
-      setBalance(bal);
-      if (bal < numAmount) {
-        setStep(STEPS.ERROR);
-        setStatusMsg(t('bet.insufficient', { bal: bal.toFixed(2) }));
-        return;
-      }
-
-      if (protocolMarket) {
-        const usdcAddress = getUsdcAddress(requiredChainId);
-        if (!usdcAddress || !market?.poolAddress) {
-          setStep(STEPS.ERROR);
-          setStatusMsg(t('bet.protocolUnavailable'));
-          return;
-        }
-        setStep(STEPS.APPROVING);
-        setStatusMsg(t('bet.approving'));
-        const buyOutcome = protocolVersion === 'v2'
-          ? Number(outcomeIndex)
-          : outcome === market.options?.[0]?.label;
-        setStep(STEPS.PLACING);
-        setStatusMsg(t('bet.placingProtocol'));
-        const receipt = await buyShares(signer, market.poolAddress, usdcAddress, buyOutcome, amount, { protocolVersion });
-        setOrderId(receipt.transactionHash || receipt.hash || 'OK');
-        setStep(STEPS.SUCCESS);
-        setStatusMsg(t('bet.placed', { amt: numAmount, outcome }));
-        setAmount('');
-        return;
-      }
-
-      // ── 3. Check + request USDC approvals ────────────────────────────────
-      const allowance1 = await getUsdcAllowance(provider, address, CTF_EXCHANGE);
-      const allowance2 = await getUsdcAllowance(provider, address, NEG_RISK_ADAPTER);
-      const needsApproval = allowance1 < numAmount || allowance2 < numAmount;
-
-      if (needsApproval) {
-        setStep(STEPS.APPROVING);
-        setStatusMsg(t('bet.approving'));
-        await approveUsdc(signer);
-        setStatusMsg(t('bet.approved'));
-      }
-
-      // ── 4. Derive CLOB API key ────────────────────────────────────────────
-      setStep(STEPS.SIGNING);
-      setStatusMsg(t('bet.signing'));
-      const creds = await deriveClobApiKey(signer, address);
-
-      // ── 5. Place order ────────────────────────────────────────────────────
-      setStep(STEPS.PLACING);
-      setStatusMsg(t('bet.placing'));
-      const price  = outcomePct / 100;
-      const token  = clobTokenId || marketId;
-      const result = await placeClobOrder({
-        signer,
-        address,
-        creds,
-        tokenId:   token,
-        price,
-        side:      'BUY',
-        size:      numAmount,
-        isNegRisk,
+      const { ok, data } = await postJson('/api/points/buy', {
+        marketId,
+        outcomeIndex,
+        collateral: numAmount,
+        ...(minShares !== null ? { minSharesOut: minShares } : {}),
+        ...(maxPrice !== null ? { maxAvgPrice: maxPrice } : {}),
       });
 
-      setOrderId(result.orderID || result.id || 'OK');
+      if (!ok) {
+        const code = data?.error || 'buy_failed';
+        setStep(STEPS.ERROR);
+        setStatusMsg(code === 'price_moved'
+          ? 'El precio se movió. Refresca la vista previa e intenta otra vez.'
+          : `Error: ${code}${data?.detail ? ` · ${data.detail}` : ''}`);
+        return;
+      }
+
+      // On-chain result carries a txHash; points-mode returns sharesOut only.
+      setTxHash(data?.txHash || null);
       setStep(STEPS.SUCCESS);
       setStatusMsg(t('bet.placed', { amt: numAmount, outcome }));
       setAmount('');
-
+      // Refresh the session so the balance in the nav updates.
+      refresh?.().catch(() => {});
     } catch (e) {
       setStep(STEPS.ERROR);
-      setStatusMsg(e.message || 'Error al colocar apuesta.');
+      setStatusMsg(e?.message || 'Error al colocar orden.');
     }
-  };
+  }
 
   const handleClose = () => {
     setStep(STEPS.IDLE);
     setStatusMsg('');
-    setOrderId(null);
+    setTxHash(null);
+    setQuote(null);
     onClose();
   };
 
-  // ── Step label shown in button ──────────────────────────────────────────────
   const buttonLabel = () => {
     if (!authenticated)             return t('bet.btn.join');
-    if (liveTradingUnavailable)     return t('bet.btn.unavailable');
-    if (step === STEPS.CHECKING)    return t('bet.btn.checking');
-    if (step === STEPS.APPROVING)   return t('bet.btn.approving');
-    if (step === STEPS.SIGNING)     return t('bet.btn.signing');
+    if (step === STEPS.QUOTING)     return t('bet.btn.checking');
     if (step === STEPS.PLACING)     return t('bet.btn.placing');
     if (step === STEPS.SUCCESS)     return t('bet.btn.success');
     if (numAmount > 0)              return t('bet.btn.buyAmount', { amt: numAmount });
@@ -348,7 +206,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, outcomeIn
         {/* Outcome tag */}
         <div className="bet-outcome-tag">
           <span className="bet-outcome-label">{outcome}</span>
-          <span className="bet-outcome-pct">{outcomePct}%</span>
+          <span className="bet-outcome-pct">{impliedPct}%</span>
         </div>
 
         {marketTitle && (
@@ -357,7 +215,30 @@ export default function BetModal({ open, onClose, outcome, outcomePct, outcomeIn
           </p>
         )}
 
-        {/* USDC Balance */}
+        {/* Mode chip */}
+        <div style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '4px 10px',
+          borderRadius: 999,
+          background: isOnchain ? 'rgba(59,130,246,0.12)' : 'rgba(0,232,122,0.10)',
+          border: `1px solid ${isOnchain ? 'rgba(59,130,246,0.35)' : 'rgba(0,232,122,0.35)'}`,
+          color: isOnchain ? '#60a5fa' : 'var(--green)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          marginBottom: 14,
+        }}>
+          <span style={{
+            width: 6, height: 6, borderRadius: '50%',
+            background: isOnchain ? '#60a5fa' : 'var(--green)',
+          }} />
+          {isOnchain ? 'On-chain · Turnkey' : 'Off-chain · MXNP'}
+        </div>
+
+        {/* Balance */}
         {authenticated && balance !== null && (
           <div style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -366,7 +247,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, outcomeIn
           }}>
             <span style={{ color: 'var(--text-muted)' }}>{t('bet.balance')}</span>
             <span style={{ color: balance > 0 ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
-              ${balance.toFixed(2)}
+              ${balance.toFixed(2)} {isOnchain ? 'MXNB' : 'MXNP'}
             </span>
           </div>
         )}
@@ -408,49 +289,41 @@ export default function BetModal({ open, onClose, outcome, outcomePct, outcomeIn
         {numAmount > 0 && (
           <div className="bet-payout-info">
             <div className="bet-payout-row">
-              <span>{t('bet.fee', { pct: feePct.toFixed(2) })}</span>
-              <span style={{ opacity: 0.6 }}>-${fee.toFixed(2)} USDC</span>
+              <span>{t('bet.fee', { pct: Number(feePct).toFixed(2) })}</span>
+              <span style={{ opacity: 0.6 }}>-${Number(fee).toFixed(2)}</span>
             </div>
             <div className="bet-payout-row">
               <span>{t('bet.estimatedPayout')}</span>
-              <span className="green">${payout} USDC</span>
+              <span className="green">${typeof payout === 'number' ? payout.toFixed(2) : payout}</span>
             </div>
             <div className="bet-payout-row">
               <span>{t('bet.profit')}</span>
-              <span className="green">+${profit} USDC</span>
+              <span className="green">+${typeof profit === 'number' ? profit.toFixed(2) : profit}</span>
             </div>
             <div className="bet-payout-row">
               <span>{t('bet.implied')}</span>
               <span>{impliedPct}%</span>
             </div>
-            {startPct !== null && postTradePct !== null && (
+            {postPct !== null && (
               <div className="bet-payout-row">
                 <span>{t('bet.priceAfter')}</span>
                 <span style={{ color: highSlippage ? 'var(--red)' : 'var(--text-secondary)' }}>
-                  {startPct}% → {postTradePct}%
+                  {impliedPct}% → {postPct}%
                 </span>
               </div>
             )}
-            {(protocolQuote || sim) && (
+            {quote && (
               <div className="bet-payout-row">
                 <span>{t('bet.slippage')}</span>
                 <span style={{
                   color: highSlippage ? 'var(--red)' : 'var(--text-secondary)',
                   fontWeight: highSlippage ? 700 : 400,
                 }}>
-                  {previewImpactPts >= 0 ? '+' : ''}{previewImpactPts.toFixed(1)} pts
+                  {slippagePts >= 0 ? '+' : ''}{Number(slippagePts).toFixed(1)} pts
                 </span>
               </div>
             )}
-            {previewLoading && (
-              <div className="bet-payout-row">
-                <span>{t('bet.slippage')}</span>
-                <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
-                  {t('bet.previewLoading')}
-                </span>
-              </div>
-            )}
-            {noLiveBook && (
+            {quoteError && (
               <div className="bet-payout-row">
                 <span>{t('bet.slippage')}</span>
                 <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
@@ -458,18 +331,9 @@ export default function BetModal({ open, onClose, outcome, outcomePct, outcomeIn
                 </span>
               </div>
             )}
-            {protocolMarket && protocolQuoteState === 'error' && (
-              <div className="bet-payout-row">
-                <span>{t('bet.slippage')}</span>
-                <span style={{ color: 'var(--red)', fontSize: 11 }}>
-                  {protocolQuoteError || t('bet.previewUnavailable')}
-                </span>
-              </div>
-            )}
           </div>
         )}
 
-        {/* High slippage warning — book is thin, price drifts ≥5 points */}
         {numAmount > 0 && highSlippage && (
           <div style={{
             padding: '10px 14px', borderRadius: 8, marginBottom: 16,
@@ -480,37 +344,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, outcomeIn
             fontSize: 11,
             lineHeight: 1.5,
           }}>
-            {t('bet.warn.lowVolume', { start: startPct, end: postTradePct, pts: slippagePts.toFixed(1) })}
-          </div>
-        )}
-
-        {/* Partial fill warning — book doesn't have enough depth */}
-        {numAmount > 0 && partialFill && (
-          <div style={{
-            padding: '10px 14px', borderRadius: 8, marginBottom: 16,
-            background: 'rgba(255,165,0,0.08)',
-            border: '1px solid rgba(255,165,0,0.3)',
-            color: 'var(--gold)',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 11,
-            lineHeight: 1.5,
-          }}>
-            {t('bet.warn.lowLiquidity', { filled: sim.filled.toFixed(2) })}
-          </div>
-        )}
-
-        {/* Demo market — no live order book to simulate against */}
-        {numAmount > 0 && noLiveBook && (
-          <div style={{
-            padding: '10px 14px', borderRadius: 8, marginBottom: 16,
-            background: 'rgba(148,163,184,0.06)',
-            border: '1px solid rgba(148,163,184,0.2)',
-            color: 'var(--text-muted)',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 11,
-            lineHeight: 1.5,
-          }}>
-            {t('bet.warn.demoMarket')}
+            {t('bet.warn.lowVolume', { start: impliedPct, end: postPct, pts: Math.abs(slippagePts).toFixed(1) })}
           </div>
         )}
 
@@ -535,9 +369,9 @@ export default function BetModal({ open, onClose, outcome, outcomePct, outcomeIn
             {step === STEPS.SUCCESS && <span style={{ marginRight: 8 }}>✅</span>}
             {step === STEPS.ERROR   && <span style={{ marginRight: 8 }}>❌</span>}
             {statusMsg}
-            {orderId && (
-              <div style={{ marginTop: 4, opacity: 0.6, fontSize: 10 }}>
-                Order ID: {orderId}
+            {txHash && (
+              <div style={{ marginTop: 4, opacity: 0.6, fontSize: 10, fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>
+                tx: {txHash.slice(0, 18)}…{txHash.slice(-8)}
               </div>
             )}
           </div>
@@ -545,16 +379,18 @@ export default function BetModal({ open, onClose, outcome, outcomePct, outcomeIn
 
         <button
           className="btn-primary"
-          style={{ width: '100%', opacity: step === STEPS.SUCCESS || (authenticated && liveTradingUnavailable) ? 0.7 : 1 }}
+          style={{ width: '100%', opacity: step === STEPS.SUCCESS ? 0.7 : 1 }}
           onClick={step === STEPS.SUCCESS ? handleClose : handleBet}
-          disabled={isLoading || (authenticated && liveTradingUnavailable)}
+          disabled={isLoading}
         >
           {buttonLabel()}
         </button>
 
         {authenticated && (
           <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-muted)', marginTop: 12, fontFamily: 'var(--font-mono)' }}>
-            {isProtocolMarket(market) ? t('bet.protocol.own') : t('bet.protocol.poly')}
+            {isOnchain
+              ? 'Firmado por Turnkey bajo tu política delegada.'
+              : 'Trade off-chain con MXNP.'}
           </p>
         )}
       </div>

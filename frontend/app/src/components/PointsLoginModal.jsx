@@ -45,10 +45,13 @@ function humanError(code, detail) {
   return base;
 }
 
-export default function PointsLoginModal({ open, onClose }) {
+export default function PointsLoginModal({ open, onClose, initialStep = 'email' }) {
   const { initOtp, verifyOtp, setUsername, refresh, user } = usePointsAuth();
 
-  const [step, setStep] = useState('email');    // 'email' | 'code' | 'username' | 'done'
+  // `initialStep` lets a caller (e.g. MVP App.jsx) jump straight to the
+  // username step when the user is already authed but missing a username.
+  // Defaults to 'email' so existing callers behave unchanged.
+  const [step, setStep] = useState(initialStep);    // 'email' | 'code' | 'username' | 'done'
   const [email, setEmail]   = useState('');
   const [code, setCode]     = useState('');
   const [uname, setUname]   = useState('');
@@ -61,7 +64,7 @@ export default function PointsLoginModal({ open, onClose }) {
   // Reset when the modal closes so the next open starts clean.
   useEffect(() => {
     if (!open) {
-      setStep('email');
+      setStep(initialStep);
       setEmail('');
       setCode('');
       setUname('');
@@ -74,7 +77,7 @@ export default function PointsLoginModal({ open, onClose }) {
       const id = setTimeout(() => firstFieldRef.current?.focus(), 50);
       return () => clearTimeout(id);
     }
-  }, [open]);
+  }, [open, initialStep]);
 
   // ESC closes the modal.
   useEffect(() => {

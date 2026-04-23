@@ -8,7 +8,7 @@ import HowItWorks from '../components/HowItWorks.jsx';
 import Footer from '../components/Footer.jsx';
 import { useT } from '../lib/i18n.js';
 
-export default function Home() {
+export default function Home({ onOpenLogin }) {
   const t = useT();
   const [activeFilter, setActiveFilter] = useState('trending');
 
@@ -20,7 +20,7 @@ export default function Home() {
       </div>
 
       <Ticker />
-      <Nav />
+      <Nav onOpenLogin={onOpenLogin} />
 
       {/* Category bar — sticky right below the nav, like pronos.io */}
       <div className="category-bar-sticky">
@@ -28,13 +28,13 @@ export default function Home() {
       </div>
 
       <main>
-        <Hero />
+        <Hero onOpenLogin={onOpenLogin} />
 
         <section id="markets" style={{ padding: '40px 48px 60px', maxWidth: 1280, margin: '0 auto' }}>
           <MarketsGrid activeFilter={activeFilter} />
         </section>
 
-        <HowItWorks />
+        <HowItWorks onOpenLogin={onOpenLogin} />
       </main>
 
       <Footer />

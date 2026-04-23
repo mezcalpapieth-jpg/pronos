@@ -1,660 +1,335 @@
-import React, { useState, useEffect } from 'react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
-import { ethers } from 'ethers';
+/**
+ * MVP Portfolio — Turnkey-era.
+ *
+ * Positions + balance + history all come from the points API. There's no
+ * direct wallet read anymore — the backend mirrors on-chain state from the
+ * indexer (and DB-locked state for mode='points' markets). Selling goes
+ * through /api/points/sell which routes to Turnkey-signed tx for
+ * mode='onchain' and to the DB AMM for mode='points'.
+ *
+ * Two tabs: Activo (open positions) and Historial (all trades).
+ */
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import Nav from '../components/Nav.jsx';
 import Footer from '../components/Footer.jsx';
 import EarnMXNP from '../components/EarnMXNP.jsx';
-import Leaderboard from '../components/Leaderboard.jsx';
-import HistoryTab from '../components/HistoryTab.jsx';
-import { getClobPositions, getUsdcBalance } from '../lib/clob.js';
-import { ERC20_ABI, sellShares } from '../lib/contracts.js';
-import { getProtocolSellQuote } from '../lib/protocolPricing.js';
-import { CHAIN_IDS, CONTRACTS, getChainReadProvider, getUsdcAddress, switchWalletChain } from '../lib/protocol.js';
+import { usePointsAuth } from '../lib/pointsAuth.js';
 import { useT } from '../lib/i18n.js';
 
-function formatTokenAmount(value) {
-  return Number(value || 0).toFixed(6).replace(/\.?0+$/, '') || '0';
+async function getJson(url) {
+  const res = await fetch(url, { credentials: 'include' });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
 }
 
-async function getChainAwareUsdcBalance(provider, address) {
-  const network = await provider.getNetwork();
-  if (network.chainId === CHAIN_IDS.polygon) {
-    return getUsdcBalance(provider, address);
-  }
-
-  const usdcAddress = getUsdcAddress(network.chainId);
-  if (!usdcAddress) return null;
-  const usdc = new ethers.Contract(usdcAddress, ERC20_ABI, provider);
-  const raw = await usdc.balanceOf(address);
-  return Number(ethers.utils.formatUnits(raw, 6));
+async function postJson(url, body) {
+  const res = await fetch(url, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
 }
 
-function normalizeProtocolPositions(pos) {
-  if (pos.protocolVersion === 'v2' || pos.outcomeIndex != null) {
-    return [{
-      id: `protocol-${pos.marketId}-${pos.outcomeIndex}`,
-      title: pos.question,
-      marketTitle: pos.question,
-      protocolDbId: pos.marketId,
-      protocolMarketId: pos.protocolMarketId,
-      poolAddress: pos.poolAddress,
-      chainId: Number(pos.chainId || CHAIN_IDS.arbitrumSepolia),
-      status: pos.status,
-      source: 'protocol',
-      protocolVersion: 'v2',
-      outcome: pos.outcomeLabel || `Opción ${Number(pos.outcomeIndex) + 1}`,
-      outcomeIndex: Number(pos.outcomeIndex),
-      shares: Number(pos.shares || 0),
-      initialValue: Number(pos.totalCost || 0),
-      currentValue: Number(pos.currentValue || 0),
-      currentPrice: Number(pos.currentPrice ?? 0),
-    }].filter(p => p.shares > 0);
-  }
-
-  const yesShares = Number(pos.yesShares || 0);
-  const noShares = Number(pos.noShares || 0);
-  const currentPrice = Number(pos.currentPrice ?? 0.5);
-  const yesValue = yesShares * currentPrice;
-  const noValue = noShares * (1 - currentPrice);
-  const totalValue = yesValue + noValue;
-  const totalCost = Number(pos.totalCost || 0);
-  const costFor = (value) => totalValue > 0 ? totalCost * (value / totalValue) : 0;
-  const base = {
-    title: pos.question,
-    marketTitle: pos.question,
-    protocolDbId: pos.marketId,
-    protocolMarketId: pos.protocolMarketId,
-    poolAddress: pos.poolAddress,
-    chainId: Number(pos.chainId || CHAIN_IDS.arbitrumSepolia),
-    status: pos.status,
-    source: 'protocol',
-  };
-
-  return [
-    yesShares > 0 ? {
-      ...base,
-      id: `protocol-${pos.marketId}-yes`,
-      outcome: 'Sí',
-      sellYes: true,
-      shares: yesShares,
-      initialValue: costFor(yesValue),
-      currentValue: yesValue,
-      currentPrice,
-    } : null,
-    noShares > 0 ? {
-      ...base,
-      id: `protocol-${pos.marketId}-no`,
-      outcome: 'No',
-      sellYes: false,
-      shares: noShares,
-      initialValue: costFor(noValue),
-      currentValue: noValue,
-      currentPrice: 1 - currentPrice,
-    } : null,
-  ].filter(Boolean);
+function formatNum(n, digits = 2) {
+  if (!Number.isFinite(Number(n))) return '—';
+  return Number(n).toFixed(digits);
 }
 
-async function enrichProtocolPosition(pos) {
-  if (pos.source !== 'protocol' || pos.status !== 'active' || !pos.poolAddress || Number(pos.shares) <= 0) {
-    return pos;
-  }
-
-  const provider = getChainReadProvider(pos.chainId || CHAIN_IDS.arbitrumSepolia);
-  if (!provider) return pos;
-
+function formatDeadline(iso) {
+  if (!iso) return '';
   try {
-    const quote = await getProtocolSellQuote(
-      provider,
-      pos.poolAddress,
-      pos.protocolVersion === 'v2' ? pos.outcomeIndex : pos.sellYes,
-      formatTokenAmount(pos.shares),
-      { protocolVersion: pos.protocolVersion || 'v1' },
-    );
-    if (!quote) return pos;
-    return {
-      ...pos,
-      currentValue: quote.collateralOut,
-      currentPrice: quote.currentPrice,
-      exitQuote: quote,
-    };
-  } catch (_) {
-    return pos;
-  }
+    return new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
+  } catch { return ''; }
 }
 
-function PositionCard({ pos, onSell, selling }) {
+function PositionRow({ pos, onSell, busy }) {
   const t = useT();
-  const value     = Number(pos.currentValue || pos.size || 0).toFixed(2);
-  const size      = Number(pos.initialValue || pos.size || 0).toFixed(2);
-  const pnl       = (Number(value) - Number(size)).toFixed(2);
-  const pnlPos    = Number(pnl) >= 0;
-  const outcome   = pos.outcome || pos.title || '—';
-  const market    = pos.market?.question || pos.title || pos.marketTitle || '—';
-  const pct       = pos.currentPrice != null ? Math.round(pos.currentPrice * 100) : null;
-  const canSell   = pos.source === 'protocol' && pos.status === 'active' && pos.poolAddress && Number(pos.shares) > 0;
+  const navigate = useNavigate();
+  const label = pos.outcomeLabel || `Opción ${Number(pos.outcomeIndex) + 1}`;
+  const pl = pos.unrealizedPnl ?? ((Number(pos.currentValue || 0) - Number(pos.costBasis || 0)));
+  const plPct = pos.costBasis > 0 ? (pl / Number(pos.costBasis)) * 100 : 0;
 
   return (
     <div style={{
-      background: 'var(--surface1)',
+      padding: 16,
       border: '1px solid var(--border)',
-      borderRadius: 14,
-      padding: '20px 24px',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 12,
+      borderRadius: 12,
+      background: 'var(--surface1)',
+      display: 'grid',
+      gridTemplateColumns: '1fr auto',
+      gap: 16,
+      alignItems: 'center',
+      marginBottom: 10,
     }}>
-      {/* Market title */}
-      <p style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.4, margin: 0 }}>
-        {market}
-      </p>
-
-      {/* Outcome + probability */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{
-          background: 'var(--green-dim)', color: 'var(--green)',
-          fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600,
-          padding: '3px 10px', borderRadius: 20, letterSpacing: '0.06em',
-        }}>
-          {outcome}
-        </span>
-        {pct !== null && (
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)' }}>
-            {pct}% prob
+      <div>
+        <div
+          onClick={() => navigate(`/market?id=${pos.marketId}`)}
+          style={{ cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--text-primary)', marginBottom: 4 }}
+          role="button"
+          tabIndex={0}
+        >
+          {pos.question || `Market #${pos.marketId}`}
+        </div>
+        <div style={{ display: 'flex', gap: 16, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
+          <span>{label} · {formatNum(pos.shares, 4)} shares</span>
+          <span>costo ${formatNum(pos.costBasis)}</span>
+          <span>ahora ${formatNum(pos.currentValue)}</span>
+          <span style={{ color: pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+            {pl >= 0 ? '+' : ''}{formatNum(pl)} ({plPct >= 0 ? '+' : ''}{formatNum(plPct, 1)}%)
           </span>
-        )}
-      </div>
-
-      {/* Value row */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 2, letterSpacing: '0.08em' }}>
-            {t('pf.staked')}
-          </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>
-            ${size} USDC
-          </div>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 2, letterSpacing: '0.08em' }}>
-            {t('pf.pnl')}
-          </div>
-          <div style={{
-            fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700,
-            color: pnlPos ? 'var(--green)' : 'var(--red)',
-          }}>
-            {pnlPos ? '+' : ''}{pnl} USDC
-          </div>
         </div>
       </div>
-
-      {pos.source === 'protocol' && (
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 12,
-          paddingTop: 10,
-          borderTop: '1px solid var(--border)',
-        }}>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
-            {t('pf.shares', { n: formatTokenAmount(pos.shares) })}
-            <span style={{ display: 'block', marginTop: 3 }}>
-              {t('pf.currentValue', { v: value })}
-            </span>
-          </div>
-          <button
-            className="btn-ghost"
-            onClick={() => onSell(pos)}
-            disabled={!canSell || selling}
-            style={{
-              padding: '8px 12px',
-              fontSize: 11,
-              opacity: canSell && !selling ? 1 : 0.5,
-              cursor: canSell && !selling ? 'pointer' : 'not-allowed',
-            }}
-          >
-            {selling ? t('pf.exiting') : t('pf.exit')}
-          </button>
-        </div>
-      )}
+      <button
+        className="btn-ghost"
+        onClick={() => onSell(pos)}
+        disabled={busy}
+        style={{ minWidth: 90 }}
+      >
+        {busy ? '…' : t('pf.sell') || 'Vender'}
+      </button>
     </div>
   );
 }
 
-function ExitPreviewModal({ preview, onClose, onConfirm, confirming }) {
-  const t = useT();
-  if (!preview) return null;
-
-  const { pos, loading, error, quote } = preview;
-  const impactColor = quote && quote.priceImpactPts <= -5 ? 'var(--red)' : 'var(--text-secondary)';
-
+function HistoryRow({ trade }) {
+  const side = trade.side === 'buy' ? 'Compra' : trade.side === 'sell' ? 'Venta' : trade.side;
+  const color = trade.side === 'buy' ? 'var(--green)' : 'var(--red)';
   return (
-    <div className="bet-modal-overlay show" onClick={loading || confirming ? undefined : (e) => e.target === e.currentTarget && onClose()}>
-      <div className="bet-modal-box" style={{ maxWidth: 520 }}>
-        <div className="bet-modal-header">
-          <span className="bet-modal-title">{t('pf.exitPreview')}</span>
-          <button className="bet-modal-close" onClick={onClose} disabled={loading || confirming}>✕</button>
+    <div style={{
+      padding: '12px 16px',
+      border: '1px solid var(--border)',
+      borderRadius: 10,
+      background: 'var(--surface1)',
+      marginBottom: 8,
+      display: 'grid',
+      gridTemplateColumns: 'auto 1fr auto',
+      gap: 12,
+      alignItems: 'center',
+    }}>
+      <span style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        letterSpacing: '0.1em',
+        padding: '4px 8px',
+        borderRadius: 6,
+        background: 'var(--surface2)',
+        color,
+        textTransform: 'uppercase',
+      }}>
+        {side}
+      </span>
+      <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text-primary)' }}>
+        {trade.question || `Market #${trade.marketId}`}
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+          {formatNum(trade.shares, 4)} shares @ {formatNum(trade.priceAtTrade * 100, 1)}¢ · {formatDeadline(trade.createdAt)}
         </div>
-
-        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20, lineHeight: 1.5 }}>
-          {pos?.marketTitle || pos?.title || '—'}
-        </p>
-
-        {loading && (
-          <div style={{
-            padding: '18px 16px',
-            borderRadius: 12,
-            border: '1px solid var(--border)',
-            background: 'var(--surface2)',
-            color: 'var(--text-muted)',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 12,
-            lineHeight: 1.6,
-            marginBottom: 20,
-          }}>
-            {t('pf.exitLoading')}
+      </div>
+      <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)' }}>
+        ${formatNum(trade.collateral)}
+        {trade.txHash && (
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+            tx {String(trade.txHash).slice(0, 8)}…
           </div>
         )}
-
-        {!loading && error && (
-          <div style={{
-            padding: '18px 16px',
-            borderRadius: 12,
-            border: '1px solid rgba(255,69,69,0.3)',
-            background: 'rgba(255,69,69,0.08)',
-            color: 'var(--red)',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 12,
-            lineHeight: 1.6,
-            marginBottom: 20,
-          }}>
-            {error}
-          </div>
-        )}
-
-        {!loading && !error && quote && (
-          <>
-            <div className="bet-payout-info" style={{ marginBottom: 16 }}>
-              <div className="bet-payout-row">
-                <span>{t('pf.shares', { n: formatTokenAmount(pos.shares) })}</span>
-                <span>{pos.outcome}</span>
-              </div>
-              <div className="bet-payout-row">
-                <span>{t('pf.exitEstimate')}</span>
-                <span className="green">${quote.collateralOut.toFixed(2)} USDC</span>
-              </div>
-              <div className="bet-payout-row">
-                <span>{t('pf.exitSpot')}</span>
-                <span>${quote.spotValue.toFixed(2)} USDC</span>
-              </div>
-              {quote.fee > 0 && (
-                <div className="bet-payout-row">
-                  <span>{t('pf.exitFee', { pct: quote.feePct.toFixed(2) })}</span>
-                  <span style={{ opacity: 0.65 }}>-${quote.fee.toFixed(2)} USDC</span>
-                </div>
-              )}
-              <div className="bet-payout-row">
-                <span>{t('pf.exitImpact')}</span>
-                <span style={{ color: impactColor }}>
-                  {quote.priceImpactPts >= 0 ? '+' : ''}{quote.priceImpactPts.toFixed(1)} pts
-                  {quote.slippageAmount > 0 ? ` · -$${quote.slippageAmount.toFixed(2)}` : ''}
-                </span>
-              </div>
-              <div className="bet-payout-row">
-                <span>{t('pf.exitAfterPrice')}</span>
-                <span style={{ color: impactColor }}>
-                  {Math.round(quote.currentPrice * 100)}% → {Math.round(quote.postTradePrice * 100)}%
-                </span>
-              </div>
-            </div>
-
-            <div style={{
-              padding: '12px 14px',
-              borderRadius: 10,
-              marginBottom: 20,
-              background: 'rgba(148,163,184,0.06)',
-              border: '1px solid rgba(148,163,184,0.2)',
-              color: 'var(--text-muted)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-              lineHeight: 1.6,
-            }}>
-              {t('pf.exitWarning')}
-            </div>
-          </>
-        )}
-
-        <div style={{ display: 'flex', gap: 12 }}>
-          <button
-            className="btn-ghost"
-            onClick={onClose}
-            disabled={confirming}
-            style={{ flex: 1, padding: '12px 16px' }}
-          >
-            {t('admin.cancel')}
-          </button>
-          <button
-            className="btn-primary"
-            onClick={onConfirm}
-            disabled={loading || !!error || confirming}
-            style={{ flex: 1, padding: '12px 16px' }}
-          >
-            {confirming ? t('pf.exiting') : t('pf.exitConfirm')}
-          </button>
-        </div>
       </div>
     </div>
   );
 }
 
-export default function Portfolio() {
+export default function Portfolio({ onOpenLogin }) {
   const t = useT();
-  const { authenticated, login, user } = usePrivy();
-  const { wallets } = useWallets();
-  const [positions, setPositions]   = useState([]);
-  const [balance, setBalance]       = useState(null);
-  const [loading, setLoading]       = useState(false);
-  const [error, setError]           = useState(null);
-  const [address, setAddress]       = useState(null);
-  const [sellingId, setSellingId]   = useState(null);
-  const [tradeStatus, setTradeStatus] = useState(null);
-  const [sellPreview, setSellPreview] = useState(null);
-  const [activeTab, setActiveTab]   = useState('activo'); // 'activo' | 'historial'
+  const { authenticated, user, loading: authLoading, refresh } = usePointsAuth();
+  const [positions, setPositions] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState('activo');
+  const [sellingId, setSellingId] = useState(null);
+  const [notice, setNotice] = useState(null);
 
-  useEffect(() => {
-    if (!authenticated || !wallets?.length) return;
-    loadData();
-  }, [authenticated, wallets]);
-
-  async function loadData() {
-    const wallet = wallets?.[0];
-    if (!wallet) return;
+  const loadAll = useCallback(async () => {
+    if (!authenticated) return;
     setLoading(true);
     setError(null);
     try {
-      const prov    = await wallet.getEthereumProvider();
-      const provider = new ethers.providers.Web3Provider(prov);
-      const signer  = provider.getSigner();
-      const addr    = await signer.getAddress();
-      setAddress(addr);
-
-      const [bal, clobPos, protocolData] = await Promise.all([
-        getChainAwareUsdcBalance(provider, addr),
-        getClobPositions(addr).catch(() => []),
-        fetch(`/api/positions?address=${encodeURIComponent(addr)}`).then(r => r.ok ? r.json() : null).catch(() => null),
+      const [posRes, histRes] = await Promise.all([
+        getJson('/api/points/positions'),
+        getJson('/api/points/history'),
       ]);
-
-      const protocolPos = await Promise.all(
-        (protocolData?.positions || [])
-          .flatMap(normalizeProtocolPositions)
-          .map(enrichProtocolPosition),
-      );
-      setBalance(bal);
-      setPositions([...(Array.isArray(clobPos) ? clobPos : []), ...protocolPos]);
+      setPositions(Array.isArray(posRes.data?.positions) ? posRes.data.positions : []);
+      setHistory(Array.isArray(histRes.data?.trades) ? histRes.data.trades : []);
     } catch (e) {
-      setError(e.message);
+      setError(e?.message || 'load_failed');
     } finally {
       setLoading(false);
     }
-  }
+  }, [authenticated]);
 
-  async function handleSellClick(pos) {
-    if (!pos || pos.source !== 'protocol') return;
+  useEffect(() => {
+    if (authenticated) loadAll();
+  }, [authenticated, loadAll]);
 
-    setTradeStatus(null);
-    setSellPreview({ pos, quote: pos.exitQuote || null, loading: true, error: null });
+  async function handleSell(pos) {
+    const confirmMsg = `¿Vender ${formatNum(pos.shares, 4)} acciones de "${pos.outcomeLabel || pos.question}"?`;
+    if (!window.confirm(confirmMsg)) return;
+    setSellingId(`${pos.marketId}-${pos.outcomeIndex}`);
+    setNotice(null);
     try {
-      const provider = getChainReadProvider(pos.chainId || CHAIN_IDS.arbitrumSepolia);
-      if (!provider) throw new Error(t('pf.protocolConfigMissing'));
-
-      const quote = await getProtocolSellQuote(
-        provider,
-        pos.poolAddress,
-        pos.protocolVersion === 'v2' ? pos.outcomeIndex : pos.sellYes,
-        formatTokenAmount(pos.shares),
-        { protocolVersion: pos.protocolVersion || 'v1' },
-      );
-      setSellPreview({ pos, quote, loading: false, error: null });
+      const { ok, data } = await postJson('/api/points/sell', {
+        marketId: pos.marketId,
+        outcomeIndex: pos.outcomeIndex,
+        shares: pos.shares,
+      });
+      if (!ok) throw new Error(data?.error || 'sell_failed');
+      setNotice({ type: 'success', msg: `Vendido por $${formatNum(data?.collateralOut)}.` });
+      await Promise.all([loadAll(), refresh?.()]);
     } catch (e) {
-      setSellPreview({ pos, quote: null, loading: false, error: e.message || t('pf.exitPreviewError') });
-    }
-  }
-
-  async function handleSellPosition(pos) {
-    const wallet = wallets?.[0];
-    if (!wallet || pos.source !== 'protocol') return;
-
-    const chainId = Number(pos.chainId || CHAIN_IDS.arbitrumSepolia);
-    const tokenAddress = pos.protocolVersion === 'v2'
-      ? CONTRACTS[chainId]?.tokenV2
-      : CONTRACTS[chainId]?.token;
-    if (!tokenAddress || !pos.poolAddress) {
-      setTradeStatus({ type: 'error', msg: t('pf.protocolConfigMissing') });
-      return;
-    }
-
-    setSellingId(pos.id);
-    setTradeStatus({ type: 'info', msg: t('pf.exiting') });
-    try {
-      const ethProvider = await wallet.getEthereumProvider();
-      let provider = new ethers.providers.Web3Provider(ethProvider);
-      let network = await provider.getNetwork();
-      if (network.chainId !== chainId) {
-        setTradeStatus({ type: 'info', msg: t('pf.switchingChain') });
-        await switchWalletChain(wallet, chainId);
-        provider = new ethers.providers.Web3Provider(await wallet.getEthereumProvider());
-      }
-
-      const signer = provider.getSigner();
-      const receipt = await sellShares(
-        signer,
-        pos.poolAddress,
-        tokenAddress,
-        pos.protocolVersion === 'v2' ? pos.outcomeIndex : pos.sellYes,
-        formatTokenAmount(pos.shares),
-        { protocolVersion: pos.protocolVersion || 'v1' },
-      );
-      const tx = receipt.transactionHash || receipt.hash || 'OK';
-      setTradeStatus({ type: 'success', msg: t('pf.exitSuccess', { tx: `${tx.slice(0, 10)}…` }) });
-      setSellPreview(null);
-      await loadData();
-    } catch (e) {
-      setTradeStatus({ type: 'error', msg: t('pf.exitError', { msg: e.message || 'Unknown error' }) });
+      setNotice({ type: 'error', msg: e?.message || 'sell_failed' });
     } finally {
       setSellingId(null);
     }
   }
 
-  const totalValue = positions.reduce((s, p) => s + Number(p.currentValue || p.size || 0), 0);
+  const openPositions = useMemo(() => positions.filter(p => Number(p.shares) > 1e-6), [positions]);
 
   return (
     <>
-      <Nav />
-      <main style={{ maxWidth: 1160, margin: '0 auto', padding: '80px 24px 60px' }}>
+      <Nav onOpenLogin={onOpenLogin} />
 
-        {/* ── Page title ── */}
-        <div style={{ marginBottom: 24 }}>
-          <h1 style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 'clamp(32px, 5vw, 52px)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.04em',
-            color: 'var(--text-primary)',
-            marginBottom: 8,
-          }}>
-            {t('pf.title')}
+      <main style={{ padding: '32px 48px 60px', maxWidth: 1100, margin: '0 auto' }}>
+        <div style={{ marginBottom: 28 }}>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 36, letterSpacing: '0.04em', color: 'var(--text-primary)', marginBottom: 10 }}>
+            {t('pf.title') || 'Mi Portafolio'}
           </h1>
+          {authenticated && user?.balance !== undefined && (
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)' }}>
+              Balance: <strong style={{ color: 'var(--green)' }}>${formatNum(user.balance)}</strong>
+            </div>
+          )}
         </div>
 
-        {/* ── Activo / Historial tabs ── */}
-        {authenticated && (
+        {!authenticated && !authLoading && (
           <div style={{
-            display: 'flex',
-            gap: 4,
-            marginBottom: 28,
-            borderBottom: '1px solid var(--border)',
+            padding: 40, textAlign: 'center',
+            border: '1px solid var(--border)', borderRadius: 14,
+            background: 'var(--surface1)',
           }}>
-            {[
-              { id: 'activo',    label: 'Activo'    },
-              { id: 'historial', label: 'Historial' },
-            ].map(tab => {
-              const active = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    padding: '10px 18px',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 12,
-                    letterSpacing: '0.08em',
-                    textTransform: 'uppercase',
-                    color: active ? 'var(--text-primary)' : 'var(--text-muted)',
-                    borderBottom: `2px solid ${active ? 'var(--green)' : 'transparent'}`,
-                    cursor: 'pointer',
-                    marginBottom: -1,
-                    transition: 'color 0.15s, border-color 0.15s',
-                  }}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {!authenticated ? (
-          <div style={{
-            textAlign: 'center', padding: '80px 24px',
-            border: '1px dashed var(--border)', borderRadius: 16,
-          }}>
-            <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>
-              {t('pf.connect')}
+            <p style={{ fontFamily: 'var(--font-body)', color: 'var(--text-secondary)', marginBottom: 14 }}>
+              Inicia sesión para ver tus posiciones.
             </p>
-            <button className="btn-primary" onClick={login}>
-              {t('pf.connectBtn')}
+            <button className="btn-primary" onClick={onOpenLogin}>
+              {t('nav.predict') || 'Iniciar sesión'}
             </button>
           </div>
-        ) : (
-          /* ── Two-column layout when authenticated ── */
-          <div className="portfolio-layout">
+        )}
 
-            {/* ── Left: positions + earn section ── */}
-            <div className="portfolio-main">
-              {activeTab === 'activo' ? (
-                <>
-                  {/* Stats bar — only on Activo */}
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(3, 1fr)',
-                    gap: 16,
-                    marginBottom: 40,
-                  }}>
-                    {[
-                      { label: t('pf.balanceMxnb'),   value: balance != null ? `$${balance.toFixed(2)}` : '—' },
-                      { label: t('pf.inPositions'),    value: `$${totalValue.toFixed(2)}` },
-                      { label: t('pf.activeMarkets'),  value: positions.length.toString() },
-                    ].map(({ label, value }) => (
-                      <div key={label} style={{
-                        background: 'var(--surface1)', border: '1px solid var(--border)',
-                        borderRadius: 12, padding: '20px', textAlign: 'center',
-                      }}>
-                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 8 }}>
-                          {label.toUpperCase()}
-                        </div>
-                        <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--text-primary)', letterSpacing: '0.02em' }}>
-                          {loading ? '…' : value}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Wallet address */}
-                  {address && (
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', marginBottom: 24 }}>
-                      Wallet: {address.slice(0, 6)}…{address.slice(-4)}
-                    </div>
-                  )}
-
-                  {tradeStatus && (
-                    <div style={{
-                      color: tradeStatus.type === 'error' ? 'var(--red)' : tradeStatus.type === 'success' ? 'var(--green)' : 'var(--text-secondary)',
-                      fontFamily: 'var(--font-mono)', fontSize: 12,
-                      padding: '12px 14px', marginBottom: 20,
-                      background: tradeStatus.type === 'error' ? 'var(--red-dim)' : 'var(--surface1)',
-                      border: '1px solid var(--border)', borderRadius: 10,
-                    }}>
-                      {tradeStatus.msg}
-                    </div>
-                  )}
-
-                  {/* Positions */}
-                  {loading ? (
-                    <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                      {t('pf.loading')}
-                    </div>
-                  ) : error ? (
-                    <div style={{ color: 'var(--red)', fontFamily: 'var(--font-mono)', fontSize: 13, padding: '20px', background: 'var(--red-dim)', borderRadius: 10 }}>
-                      {t('pf.error', { msg: error })}
-                    </div>
-                  ) : positions.length === 0 ? (
-                    <div style={{
-                      textAlign: 'center', padding: '60px 24px',
-                      border: '1px dashed var(--border)', borderRadius: 16,
-                    }}>
-                      <p style={{ fontSize: 32, marginBottom: 12 }}>🎯</p>
-                      <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
-                        {t('pf.empty')}
-                      </p>
-                      <a href="/" className="btn-primary" style={{ display: 'inline-block', marginTop: 20, textDecoration: 'none' }}>
-                        {t('pf.viewMarkets')}
-                      </a>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                      {positions.map((pos, i) => (
-                        <PositionCard
-                          key={pos.id || i}
-                          pos={pos}
-                          onSell={handleSellClick}
-                          selling={sellingId === pos.id}
-                        />
-                      ))}
-                    </div>
-                  )}
-
-                  {/* ── Earn MXNP campaign section ── */}
-                  <EarnMXNP address={address} />
-                </>
-              ) : (
-                /* ── Historial tab ── */
-                <HistoryTab address={address} />
-              )}
+        {authenticated && (
+          <>
+            {/* Tabs */}
+            <div style={{
+              display: 'flex', gap: 2, marginBottom: 20,
+              borderBottom: '1px solid var(--border)',
+            }}>
+              {['activo', 'historial'].map(tab => (
+                <button
+                  key={tab}
+                  className={activeTab === tab ? 'tab active' : 'tab'}
+                  onClick={() => setActiveTab(tab)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    padding: '10px 18px',
+                    color: activeTab === tab ? 'var(--text-primary)' : 'var(--text-muted)',
+                    borderBottom: activeTab === tab ? '2px solid var(--green)' : '2px solid transparent',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 12,
+                    letterSpacing: '0.1em',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {tab}
+                </button>
+              ))}
+              <div style={{ flex: 1 }} />
+              <Link to="/" style={{
+                alignSelf: 'center',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                color: 'var(--text-muted)',
+                padding: '10px 18px',
+              }}>
+                ← {t('pf.backToMarkets') || 'volver'}
+              </Link>
             </div>
 
-            {/* ── Right: leaderboard (sticky) ── */}
-            <aside className="portfolio-sidebar">
+            {notice && (
               <div style={{
-                fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)',
-                letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 10,
+                padding: '10px 14px', borderRadius: 8, marginBottom: 16,
+                background: notice.type === 'success' ? 'rgba(0,232,122,0.08)' : 'rgba(255,69,69,0.08)',
+                border: `1px solid ${notice.type === 'success' ? 'rgba(0,232,122,0.25)' : 'rgba(255,69,69,0.25)'}`,
+                color: notice.type === 'success' ? 'var(--green)' : 'var(--red)',
+                fontFamily: 'var(--font-mono)', fontSize: 12,
               }}>
-                Competencia MXNP
+                {notice.msg}
               </div>
-              <Leaderboard />
-            </aside>
+            )}
 
-          </div>
+            {loading && (
+              <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                Cargando…
+              </div>
+            )}
+            {error && (
+              <div style={{ padding: 20, color: 'var(--red)', fontFamily: 'var(--font-mono)' }}>
+                Error: {error}
+              </div>
+            )}
+
+            {!loading && !error && activeTab === 'activo' && (
+              <div>
+                {openPositions.length === 0 ? (
+                  <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
+                    No tienes posiciones abiertas todavía.
+                  </div>
+                ) : (
+                  openPositions.map(pos => (
+                    <PositionRow
+                      key={`${pos.marketId}-${pos.outcomeIndex}`}
+                      pos={pos}
+                      onSell={handleSell}
+                      busy={sellingId === `${pos.marketId}-${pos.outcomeIndex}`}
+                    />
+                  ))
+                )}
+              </div>
+            )}
+
+            {!loading && !error && activeTab === 'historial' && (
+              <div>
+                {history.length === 0 ? (
+                  <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
+                    Aún no hay transacciones.
+                  </div>
+                ) : (
+                  history.map((trade, i) => (
+                    <HistoryRow key={trade.id || `${trade.marketId}-${i}`} trade={trade} />
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* Socials + referrals — plumbing only, no rewards credited until mainnet. */}
+            <EarnMXNP />
+          </>
         )}
       </main>
+
       <Footer />
-      <ExitPreviewModal
-        preview={sellPreview}
-        onClose={() => !sellingId && setSellPreview(null)}
-        onConfirm={() => sellPreview?.pos && handleSellPosition(sellPreview.pos)}
-        confirming={Boolean(sellingId)}
-      />
     </>
   );
 }

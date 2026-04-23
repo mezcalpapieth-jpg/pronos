@@ -1,10 +1,10 @@
 import React from 'react';
-import { usePrivy } from '@privy-io/react-auth';
+import { usePointsAuth } from '../lib/pointsAuth.js';
 import { useT } from '../lib/i18n.js';
 
-export default function HowItWorks() {
+export default function HowItWorks({ onOpenLogin }) {
   const t = useT();
-  const { login, authenticated } = usePrivy();
+  const { authenticated } = usePointsAuth();
 
   const STEPS = [
     { num: '01', icon: '📧', title: t('how.step1.title'), desc: t('how.step1.desc') },
@@ -36,7 +36,7 @@ export default function HowItWorks() {
               <p className="step-desc">{step.desc}</p>
               {i === 0 && !authenticated && (
                 <div className="step-btns">
-                  <button className="step-btn-wallet" onClick={login}>
+                  <button className="step-btn-wallet" onClick={onOpenLogin}>
                     <span>📧</span> {t('how.cta')}
                   </button>
                 </div>
@@ -46,10 +46,10 @@ export default function HowItWorks() {
         </div>
 
         <div className="tech-strip">
-          <div className="tech-pill"><span className="dot" />Polygon</div>
-          <div className="tech-pill"><span className="dot" />USDC Nativo</div>
-          <div className="tech-pill"><span className="dot" />Polymarket</div>
-          <div className="tech-pill"><span className="dot" />Privy</div>
+          <div className="tech-pill"><span className="dot" />Arbitrum</div>
+          <div className="tech-pill"><span className="dot" />MXNB</div>
+          <div className="tech-pill"><span className="dot" />Turnkey</div>
+          <div className="tech-pill"><span className="dot" />Firma delegada</div>
           <div className="tech-pill"><span className="dot" />Sin MetaMask</div>
         </div>
 

@@ -1,10 +1,22 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+/**
+ * MVP router — testnet on-chain via Turnkey delegated signing.
+ *
+ * Routes:
+ *   /          → Home (hero + markets grid)
+ *   /market    → Market detail (?id=<marketId>)
+ *   /portfolio → User positions + history
+ *   /admin     → Admin panel (access-gated client-side, enforced server-side)
+ *
+ * Auth is the shared PointsAuthProvider (Turnkey via email OTP). If the
+ * user is signed in but hasn't claimed a username yet, PointsLoginModal
+ * auto-opens on the username step — same pattern as the points app.
+ */
+import React, { useMemo, useState, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { usePrivy } from '@privy-io/react-auth';
-import UsernameModal from './components/UsernameModal.jsx';
-import { authFetch } from './lib/apiAuth.js';
+import { usePointsAuth } from './lib/pointsAuth.js';
+import PointsLoginModal from './components/PointsLoginModal.jsx';
 
-const IS_PUBLIC_MARKETS = window.location.pathname.startsWith('/markets');
+const IS_PUBLIC_MARKETS = typeof window !== 'undefined' && window.location.pathname.startsWith('/markets');
 const Home = lazy(() => import('./pages/Home.jsx'));
 const MarketDetail = lazy(() => import('./pages/MarketDetail.jsx'));
 const Portfolio = lazy(() => import('./pages/Portfolio.jsx'));
@@ -18,62 +30,23 @@ function RouteFallback() {
   );
 }
 
+// Admin usernames live in VITE_POINTS_ADMIN_USERNAMES so the client can show
+// the admin nav link without a server round-trip. Server-side enforcement
+// happens in _lib/points-admin.js — this is purely cosmetic.
+function parseAdminList() {
+  const raw = import.meta.env.VITE_POINTS_ADMIN_USERNAMES || 'mezcal,frmm,alex';
+  return raw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+}
+
 export default function App() {
-  const { authenticated, user, getAccessToken } = usePrivy();
-  const [username, setUsername] = useState(null);
-  const [userIsAdmin, setUserIsAdmin] = useState(false);
-  const [checkingUsername, setCheckingUsername] = useState(false);
-  const [needsUsername, setNeedsUsername] = useState(false);
+  const { authenticated, user, loading } = usePointsAuth();
+  const [loginOpen, setLoginOpen] = useState(false);
 
-  // Check if logged-in user already has a username + admin status
-  useEffect(() => {
-    if (!authenticated || !user?.id) {
-      setNeedsUsername(false);
-      setUsername(null);
-      setUserIsAdmin(false);
-      return;
-    }
-    setCheckingUsername(true);
-    authFetch(getAccessToken, `/api/user?privyId=${encodeURIComponent(user.id)}`)
-      .then(async (r) => {
-        const data = await r.json().catch(() => ({}));
-        if (r.status === 404) {
-          return { username: null, isAdmin: false, missing: true };
-        }
-        if (!r.ok) {
-          throw new Error(data.error || 'Could not load user profile');
-        }
-        if (!data.username) {
-          return { username: null, isAdmin: false, missing: true };
-        }
-        return data;
-      })
-      .then((data) => {
-        if (data.username) {
-          setUsername(data.username);
-          setUserIsAdmin(data.isAdmin === true);
-          setNeedsUsername(false);
-        } else if (data.missing) {
-          setNeedsUsername(true);
-        }
-      })
-      .catch(() => setNeedsUsername(false))
-      .finally(() => setCheckingUsername(false));
-  }, [authenticated, user?.id, getAccessToken]);
-
-  function handleUsernameCreated(uname) {
-    setUsername(uname);
-    // Re-check admin status after username creation
-    authFetch(getAccessToken, `/api/user?privyId=${encodeURIComponent(user.id)}`)
-      .then(async (r) => {
-        const data = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(data.error || 'Could not load user profile');
-        return data;
-      })
-      .then((data) => setUserIsAdmin(data.isAdmin === true))
-      .catch(() => {});
-    setNeedsUsername(false);
-  }
+  const username = user?.username || null;
+  const needsUsername = !!user?.needsUsername;
+  const adminList = useMemo(() => parseAdminList(), []);
+  const userIsAdmin = !!(username && adminList.includes(username.toLowerCase()));
+  const checkingUsername = loading;
 
   /* Public /markets route — no password, just market detail */
   if (IS_PUBLIC_MARKETS) {
@@ -88,25 +61,38 @@ export default function App() {
     );
   }
 
+  // Modal opens automatically when the user is signed in but missing a
+  // username (first login path). Also opens on manual click from Nav.
+  const showLogin = loginOpen || (authenticated && needsUsername && !checkingUsername);
+
   return (
     <BrowserRouter basename="/mvp">
-      {/* Show username modal after first login */}
-      {authenticated && !checkingUsername && needsUsername && (
-        <UsernameModal
-          privyId={user.id}
-          onComplete={handleUsernameCreated}
-          email={user?.email?.address}
-          walletAddress={user?.wallet?.address}
-          getAccessToken={getAccessToken}
+      {showLogin && (
+        <PointsLoginModal
+          open={showLogin}
+          onClose={() => setLoginOpen(false)}
+          initialStep={authenticated && needsUsername ? 'username' : 'email'}
         />
       )}
 
       <Suspense fallback={<RouteFallback />}>
         <Routes>
-          <Route path="/" element={<Home username={username} userIsAdmin={userIsAdmin} />} />
-          <Route path="/market" element={<MarketDetail />} />
-          <Route path="/portfolio" element={<Portfolio />} />
-          <Route path="/admin" element={<Admin username={username} userIsAdmin={userIsAdmin} loading={checkingUsername} />} />
+          <Route
+            path="/"
+            element={<Home username={username} userIsAdmin={userIsAdmin} onOpenLogin={() => setLoginOpen(true)} />}
+          />
+          <Route
+            path="/market"
+            element={<MarketDetail onOpenLogin={() => setLoginOpen(true)} />}
+          />
+          <Route
+            path="/portfolio"
+            element={<Portfolio onOpenLogin={() => setLoginOpen(true)} />}
+          />
+          <Route
+            path="/admin"
+            element={<Admin username={username} userIsAdmin={userIsAdmin} loading={checkingUsername} />}
+          />
         </Routes>
       </Suspense>
     </BrowserRouter>
