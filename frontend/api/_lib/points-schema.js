@@ -146,6 +146,17 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_markets_live
     ON points_markets(status, end_time) WHERE archived_at IS NULL`,
 
+  // final_score: human-readable final result for resolved markets.
+  // Free-form TEXT so different market types encode what makes sense:
+  //   - soccer / baseball match: "2-1", "México 3-2 Brasil"
+  //   - basketball / NFL:        "112-108"
+  //   - F1:                      "1. Verstappen · 2. Norris · 3. Sainz"
+  //   - non-sports resolvers:    "$BTC 98,421 at Dic 31 · Coinbase"
+  // Populated at resolve time by the admin (UI prompts for it) or by the
+  // auto-resolver when the source API returns final-score data. Capped at
+  // 240 chars server-side so we don't blow up card/detail layouts.
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS final_score TEXT`,
+
   // ── Balances (single source of truth per user) ─────────────────────────
   `CREATE TABLE IF NOT EXISTS points_balances (
     username     TEXT PRIMARY KEY,

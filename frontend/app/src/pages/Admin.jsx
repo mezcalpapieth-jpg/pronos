@@ -777,15 +777,26 @@ function MarketsList({ refreshKey, bumpRefresh }) {
       alert('Índice inválido.');
       return;
     }
+    // Second prompt: free-form score / result line rendered under the
+    // question on resolved cards + detail pages. Empty → NULL, skipped
+    // gracefully. Cap enforced server-side at 240 chars.
+    const scoreInput = window.prompt(
+      `Resultado / marcador (opcional):\n\n` +
+      `Ejemplos: "México 3-2 Brasil", "112-108", "1. Verstappen · 2. Norris · 3. Sainz"`,
+      market.finalScore || '',
+    );
+    const finalScore = scoreInput === null ? null : scoreInput.trim() || null;
+
     setResolvingId(market.id);
     setNotice(null);
     try {
       const { ok, data } = await postJson('/api/points/admin/resolve-market', {
         marketId: market.id,
         winningOutcomeIndex: idx,
+        finalScore,
       });
       if (!ok) throw new Error(data?.error || 'resolve_failed');
-      setNotice({ type: 'success', msg: `Resuelto: ${market.outcomes[idx]}` });
+      setNotice({ type: 'success', msg: `Resuelto: ${market.outcomes[idx]}${finalScore ? ` · ${finalScore}` : ''}` });
       load();
       bumpRefresh();
     } catch (e) {

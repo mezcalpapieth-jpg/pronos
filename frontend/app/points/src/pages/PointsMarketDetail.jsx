@@ -618,10 +618,32 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               fontSize: 'clamp(26px, 3vw, 38px)',
               lineHeight: 1.2,
               color: 'var(--text-primary)',
-              marginBottom: 24,
+              marginBottom: market.finalScore && isResolved ? 12 : 24,
             }}>
               {market.question}
             </h1>
+
+            {/* Final-score strip — shown right below the question on resolved
+                markets whose resolver filled in a score / result. */}
+            {isResolved && market.finalScore && (
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '8px 14px',
+                borderRadius: 10,
+                background: 'var(--surface1)',
+                border: '1px solid var(--border)',
+                marginBottom: 24,
+                fontFamily: 'var(--font-mono)',
+                fontSize: 13,
+                color: 'var(--text-primary)',
+                letterSpacing: '0.03em',
+              }}>
+                <span style={{ color: 'var(--green)', fontWeight: 700 }}>FINAL</span>
+                <span>{market.finalScore}</span>
+              </div>
+            )}
 
             {/* Big probability ring for 2-outcome markets */}
             {outcomes.length === 2 && (

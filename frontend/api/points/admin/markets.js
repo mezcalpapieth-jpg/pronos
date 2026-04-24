@@ -133,6 +133,7 @@ export default async function handler(req, res) {
         sport: r.sport || null,
         league: r.league || null,
         archivedAt: r.archived_at || null,
+        finalScore: r.final_score || null,
       })),
     });
   } catch (e) {

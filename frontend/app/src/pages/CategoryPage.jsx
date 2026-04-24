@@ -86,6 +86,9 @@ function MarketTile({ m, onBet }) {
     return pricesFromReserves(m.reserves || []);
   }, [m]);
 
+  const isResolved = m.status === 'resolved';
+  const winnerIndex = isResolved ? Number(m.outcome) : null;
+
   return (
     <div style={{
       border: '1px solid var(--border)',
@@ -105,57 +108,96 @@ function MarketTile({ m, onBet }) {
         >
           {m.question}
         </div>
-        <span style={{
-          fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.1em',
-          padding: '3px 6px', borderRadius: 6,
-          background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.3)',
-          color: '#60a5fa', textTransform: 'uppercase', whiteSpace: 'nowrap',
-        }}>
-          on-chain
-        </span>
+        {isResolved ? (
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.1em',
+            padding: '3px 6px', borderRadius: 6,
+            background: 'rgba(0,232,122,0.12)', border: '1px solid rgba(0,232,122,0.3)',
+            color: 'var(--green)', textTransform: 'uppercase', whiteSpace: 'nowrap',
+          }}>
+            resuelto
+          </span>
+        ) : (
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.1em',
+            padding: '3px 6px', borderRadius: 6,
+            background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.3)',
+            color: '#60a5fa', textTransform: 'uppercase', whiteSpace: 'nowrap',
+          }}>
+            on-chain
+          </span>
+        )}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {(m.outcomes || []).map((label, i) => {
-          const pct = Math.round((prices[i] || 0) * 100);
+          // On resolved markets, collapse to 100/0 so the winner reads
+          // the same here as on the detail page and in the leaderboard.
+          const livePct = Math.round((prices[i] || 0) * 100);
+          const pct = isResolved ? (winnerIndex === i ? 100 : 0) : livePct;
+          const isWinner = isResolved && winnerIndex === i;
           return (
             <button
               key={i}
-              onClick={() => onBet({ market: m, outcomeIndex: i, outcome: label, outcomePct: pct })}
+              onClick={() => isResolved ? null : onBet({ market: m, outcomeIndex: i, outcome: label, outcomePct: pct })}
+              disabled={isResolved}
               style={{
                 display: 'grid',
                 gridTemplateColumns: '1fr auto auto',
                 alignItems: 'center',
                 gap: 10,
                 padding: '8px 12px',
-                border: '1px solid var(--border)',
+                border: `1px solid ${isWinner ? 'rgba(0,232,122,0.35)' : 'var(--border)'}`,
                 borderRadius: 8,
-                background: 'var(--surface2)',
+                background: isWinner ? 'rgba(0,232,122,0.06)' : 'var(--surface2)',
                 color: 'var(--text-primary)',
                 fontFamily: 'var(--font-body)',
                 fontSize: 13,
-                cursor: 'pointer',
+                cursor: isResolved ? 'default' : 'pointer',
+                opacity: isResolved && !isWinner ? 0.55 : 1,
               }}
             >
-              <span style={{ textAlign: 'left' }}>{label}</span>
+              <span style={{ textAlign: 'left' }}>
+                {isWinner && <span style={{ marginRight: 6 }}>🏆</span>}
+                {label}
+              </span>
               <span style={{
                 fontFamily: 'var(--font-mono)', fontSize: 11,
-                color: 'var(--text-muted)', letterSpacing: '0.04em',
+                color: isWinner ? 'var(--green)' : 'var(--text-muted)',
+                letterSpacing: '0.04em', fontWeight: isWinner ? 700 : 400,
               }}>
                 {pct}¢
               </span>
               <span style={{
                 fontFamily: 'var(--font-mono)', fontSize: 10,
                 padding: '2px 8px', borderRadius: 6,
-                background: 'rgba(0,232,122,0.12)', color: 'var(--green)',
+                background: isResolved
+                  ? (isWinner ? 'rgba(0,232,122,0.18)' : 'transparent')
+                  : 'rgba(0,232,122,0.12)',
+                color: isResolved ? (isWinner ? 'var(--green)' : 'var(--text-muted)') : 'var(--green)',
                 letterSpacing: '0.06em',
               }}>
-                APOSTAR
+                {isResolved ? (isWinner ? 'GANÓ' : '—') : 'APOSTAR'}
               </span>
             </button>
           );
         })}
       </div>
+
+      {/* Final-score strip — rendered between outcomes and the footer
+          so resolved market cards show the actual result, not just
+          "RESUELTO". */}
+      {isResolved && m.finalScore && (
+        <div style={{
+          padding: '6px 10px', borderRadius: 8,
+          background: 'var(--surface2)', border: '1px solid var(--border)',
+          fontFamily: 'var(--font-mono)', fontSize: 11,
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <span style={{ color: 'var(--green)', fontWeight: 700, letterSpacing: '0.06em' }}>FINAL</span>
+          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{m.finalScore}</span>
+        </div>
+      )}
 
       <div style={{
         display: 'flex', justifyContent: 'space-between',

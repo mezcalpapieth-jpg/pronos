@@ -213,8 +213,13 @@ export default function PointsMarketCard({ market, userPosition }) {
         >
           {outcomes.map((label, i) => {
             const accent = accentFor(i);
-            const pct = Math.round(prices[i] * 100);
-            const gain = previewGain(prices[i]);
+            // Resolved markets collapse to a binary 100 / 0 display so
+            // the card matches what the detail page already does — no
+            // more stale "Bad Bunny 67%" showing after Bad Bunny won.
+            const livePrice = prices[i];
+            const resolvedPrice = isResolved ? (Number(market.outcome) === i ? 1 : 0) : null;
+            const pct = Math.round((resolvedPrice ?? livePrice) * 100);
+            const gain = previewGain(livePrice);
             const logo = outcomeImages?.[i] || null;
             const rowOnClick = (e) => {
               // Stop the click from reaching the card's outer
@@ -312,6 +317,30 @@ export default function PointsMarketCard({ market, userPosition }) {
           })}
         </div>
       </div>
+
+      {/* Final score strip — only for resolved markets that have the
+          score populated. Sits between the outcome rows and the
+          volume / deadline footer so it reads like a result line at the
+          bottom of a match card. */}
+      {isResolved && market.finalScore && (
+        <div style={{
+          margin: '2px 0 8px',
+          padding: '6px 10px',
+          borderRadius: 8,
+          background: 'var(--surface2)',
+          border: '1px solid var(--border)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          letterSpacing: '0.04em',
+          color: 'var(--text-secondary)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}>
+          <span style={{ color: 'var(--green)', fontWeight: 700 }}>FINAL</span>
+          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{market.finalScore}</span>
+        </div>
+      )}
 
       <div className="mock-card-footer">
         <span className="mock-card-vol">

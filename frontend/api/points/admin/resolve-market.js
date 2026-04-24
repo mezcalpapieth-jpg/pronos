@@ -1,12 +1,17 @@
 /**
  * POST /api/points/admin/resolve-market
- * Body: { marketId, winningOutcomeIndex }
+ * Body: { marketId, winningOutcomeIndex, finalScore? }
  *
  * Unified: flips the market to resolved + sets the winning outcome.
  * Parallel: marketId is the parent id. We flip the parent AND cascade
  * to every leg — the winning leg resolves as YES=0 (payout for YES
  * holders), every losing leg resolves as NO=1 (payout for NO holders).
  * All in one transaction so users never see a half-resolved group.
+ *
+ * finalScore is a free-form display string (e.g. "México 3-2 Brasil",
+ * "112-108", "1. Verstappen · 2. Norris · 3. Sainz"). Stored on the
+ * parent row only; cards + detail views render it under the question
+ * on resolved markets.
  *
  * Either way, users with winning shares can then call /api/points/redeem
  * for their specific (market_id, outcome_index) position.
@@ -27,11 +32,24 @@ export default async function handler(req, res) {
   const admin = requirePointsAdmin(req, res);
   if (!admin) return;
 
-  const { marketId, winningOutcomeIndex } = req.body || {};
+  const { marketId, winningOutcomeIndex, finalScore } = req.body || {};
   const mid = parseInt(marketId, 10);
   const oi = parseInt(winningOutcomeIndex, 10);
   if (!Number.isInteger(mid) || mid <= 0) return res.status(400).json({ error: 'invalid_market_id' });
   if (!Number.isInteger(oi) || oi < 0) return res.status(400).json({ error: 'invalid_outcome' });
+  // finalScore: optional free-form string. Cap at 240 chars so weird
+  // input can't break card / detail layouts. Empty string becomes NULL.
+  let scoreVal = null;
+  if (finalScore !== undefined && finalScore !== null) {
+    if (typeof finalScore !== 'string') {
+      return res.status(400).json({ error: 'invalid_final_score' });
+    }
+    const trimmed = finalScore.trim();
+    if (trimmed.length > 240) {
+      return res.status(400).json({ error: 'final_score_too_long' });
+    }
+    scoreVal = trimmed.length > 0 ? trimmed : null;
+  }
 
   try {
     await ensurePointsSchema(schemaSql);
@@ -59,9 +77,10 @@ export default async function handler(req, res) {
       await client.query(
         `UPDATE points_markets
            SET status = 'resolved', outcome = $1,
-               resolved_at = NOW(), resolved_by = $2
-         WHERE id = $3`,
-        [oi, admin.username, mid],
+               resolved_at = NOW(), resolved_by = $2,
+               final_score = $3
+         WHERE id = $4`,
+        [oi, admin.username, scoreVal, mid],
       );
 
       if (m.amm_mode === 'parallel') {
