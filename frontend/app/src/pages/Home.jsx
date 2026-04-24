@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import Ticker from '../components/Ticker.jsx';
 import Nav from '../components/Nav.jsx';
 import Hero from '../components/Hero.jsx';
@@ -10,7 +10,6 @@ import { useT } from '../lib/i18n.js';
 
 export default function Home({ onOpenLogin }) {
   const t = useT();
-  const [activeFilter, setActiveFilter] = useState('trending');
 
   return (
     <>
@@ -22,16 +21,16 @@ export default function Home({ onOpenLogin }) {
       <Ticker />
       <Nav onOpenLogin={onOpenLogin} />
 
-      {/* Category bar — sticky right below the nav, like pronos.io */}
+      {/* Category bar — sticky; clicking a tab routes to /c/<slug> */}
       <div className="category-bar-sticky">
-        <CategoryBar activeFilter={activeFilter} onFilter={setActiveFilter} />
+        <CategoryBar />
       </div>
 
       <main>
         <Hero onOpenLogin={onOpenLogin} />
 
         <section id="markets" style={{ padding: '40px 48px 60px', maxWidth: 1280, margin: '0 auto' }}>
-          <MarketsGrid activeFilter={activeFilter} />
+          <MarketsGrid activeFilter="trending" />
         </section>
 
         <HowItWorks onOpenLogin={onOpenLogin} />

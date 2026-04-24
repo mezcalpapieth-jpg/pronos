@@ -22,6 +22,7 @@ const MarketDetail = lazy(() => import('./pages/MarketDetail.jsx'));
 const Portfolio = lazy(() => import('./pages/Portfolio.jsx'));
 const Admin = lazy(() => import('./pages/Admin.jsx'));
 const WorldCupPage = lazy(() => import('./pages/WorldCupPage.jsx'));
+const CategoryPage = lazy(() => import('./pages/CategoryPage.jsx'));
 
 function RouteFallback() {
   return (
@@ -85,6 +86,10 @@ export default function App() {
           <Route
             path="/c/world-cup"
             element={<WorldCupPage onOpenLogin={() => setLoginOpen(true)} />}
+          />
+          <Route
+            path="/c/:slug"
+            element={<CategoryPage onOpenLogin={() => setLoginOpen(true)} />}
           />
           <Route
             path="/market"

@@ -12,6 +12,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import Nav from '../components/Nav.jsx';
 import Footer from '../components/Footer.jsx';
 import BetModal from '../components/BetModal.jsx';
+import CategoryBar from '../components/CategoryBar.jsx';
 import { usePointsAuth } from '../lib/pointsAuth.js';
 import { OPENING_KICKOFF_ISO } from '../../points/src/lib/worldCup.js';
 
@@ -178,6 +179,9 @@ export default function WorldCupPage({ onOpenLogin }) {
   return (
     <>
       <Nav onOpenLogin={onOpenLogin} />
+      <div className="category-bar-sticky">
+        <CategoryBar />
+      </div>
 
       {/* Hero — countdown to opener */}
       <section style={{
