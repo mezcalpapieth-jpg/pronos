@@ -832,12 +832,241 @@ function MarketsList({ refreshKey, bumpRefresh }) {
   );
 }
 
+// ═══ Social tasks queue ═════════════════════════════════════════════════════
+function SocialTasksSection() {
+  const [status, setStatus] = useState('pending');
+  const [tasks, setTasks] = useState(null);
+  const [working, setWorking] = useState(null);
+
+  const load = useCallback(async () => {
+    setTasks(null);
+    try {
+      const { ok, data } = await getJson(`/api/points/admin/social-tasks?status=${status}`);
+      setTasks(ok && Array.isArray(data?.tasks) ? data.tasks : []);
+    } catch {
+      setTasks([]);
+    }
+  }, [status]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function review(id, action) {
+    let note = null;
+    if (action === 'reject') {
+      note = window.prompt('Motivo del rechazo (mostrado al usuario):');
+      if (!note || !note.trim()) return;
+    }
+    setWorking(id);
+    try {
+      const { ok, data } = await postJson('/api/points/admin/social-tasks', { id, action, note });
+      if (!ok) throw new Error(data?.error || 'review_failed');
+      await load();
+    } catch (e) {
+      alert(`No se pudo ${action === 'approve' ? 'aprobar' : 'rechazar'}: ${e?.message || 'error'}`);
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  return (
+    <section style={{
+      padding: 20, border: '1px solid var(--border)', borderRadius: 14,
+      background: 'var(--surface1)',
+    }}>
+      <SectionHeader
+        title="Tareas sociales"
+        subtitle="Pruebas FOLLOW enviadas por usuarios. Aprobar acredita la recompensa registrada (pero sin MXNP real hasta mainnet)."
+      />
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        {['pending', 'approved', 'rejected'].map(s => (
+          <button
+            key={s}
+            onClick={() => setStatus(s)}
+            style={{
+              padding: '6px 14px', borderRadius: 16,
+              border: `1px solid ${status === s ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
+              background: status === s ? 'rgba(0,232,122,0.1)' : 'transparent',
+              color: status === s ? 'var(--green)' : 'var(--text-secondary)',
+              fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer',
+              letterSpacing: '0.06em', textTransform: 'uppercase',
+            }}
+          >
+            {s === 'pending' ? 'Pendientes' : s === 'approved' ? 'Aprobadas' : 'Rechazadas'}
+          </button>
+        ))}
+      </div>
+
+      {tasks === null && <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Cargando…</p>}
+      {tasks && tasks.length === 0 && (
+        <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Sin tareas en esta categoría.</p>
+      )}
+      {tasks && tasks.map(t => (
+        <div key={t.id} style={{
+          background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 10,
+          padding: '14px 18px', marginBottom: 10,
+          display: 'flex', alignItems: 'center', gap: 12,
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
+              #{t.id} · @{t.username} · {t.task_key} · +{t.reward} MXNP
+            </div>
+            {t.proof_url && (
+              <a href={t.proof_url} target="_blank" rel="noopener noreferrer" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--green)', textDecoration: 'underline' }}>
+                Ver prueba ↗
+              </a>
+            )}
+            {t.rejection_note && (
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--red)', marginTop: 4 }}>
+                Rechazo: {t.rejection_note}
+              </div>
+            )}
+          </div>
+          {t.status === 'pending' ? (
+            <>
+              <button onClick={() => review(t.id, 'approve')} disabled={working === t.id} className="btn-primary" style={{ padding: '6px 12px', fontSize: 11 }}>
+                Aprobar
+              </button>
+              <button onClick={() => review(t.id, 'reject')} disabled={working === t.id} className="btn-ghost" style={{ padding: '6px 12px', fontSize: 11 }}>
+                Rechazar
+              </button>
+            </>
+          ) : (
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
+              Revisada por @{t.reviewer} · {t.reviewed_at ? new Date(t.reviewed_at).toLocaleDateString('es-MX') : ''}
+            </span>
+          )}
+        </div>
+      ))}
+    </section>
+  );
+}
+
+// ═══ Stats dashboard ═══════════════════════════════════════════════════════
+function StatCard({ label, value }) {
+  return (
+    <div style={{
+      padding: 16, borderRadius: 12,
+      background: 'var(--surface2)', border: '1px solid var(--border)',
+    }}>
+      <div style={{
+        fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em',
+        color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 8,
+      }}>
+        {label}
+      </div>
+      <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--text-primary)', letterSpacing: '0.02em' }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function StatsSection() {
+  const { user } = usePointsAuth();
+  const [stats, setStats] = useState(null);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { ok, data } = await getJson('/api/points/admin/stats');
+        if (!ok) throw new Error(data?.error || 'stats_failed');
+        setStats(data);
+      } catch (e) {
+        setErr(e?.message || 'stats_failed');
+      }
+    })();
+  }, []);
+
+  if (err) return (
+    <section style={{ padding: 20, border: '1px solid var(--border)', borderRadius: 14, background: 'var(--surface1)' }}>
+      <SectionHeader title="Estadísticas" />
+      <p style={{ color: 'var(--red)', fontFamily: 'var(--font-mono)' }}>Error: {err}</p>
+    </section>
+  );
+  if (!stats) return (
+    <section style={{ padding: 20, border: '1px solid var(--border)', borderRadius: 14, background: 'var(--surface1)' }}>
+      <SectionHeader title="Estadísticas" />
+      <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Cargando…</p>
+    </section>
+  );
+
+  return (
+    <section style={{
+      padding: 20, border: '1px solid var(--border)', borderRadius: 14,
+      background: 'var(--surface1)',
+    }}>
+      <SectionHeader
+        title="Estadísticas"
+        subtitle="Totales acumulados del backend compartido. Puntos + on-chain combinados."
+      />
+
+      {user?.username && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '10px 16px', background: 'var(--surface2)',
+          border: '1px solid var(--border)', borderRadius: 10, marginBottom: 16,
+          fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)',
+        }}>
+          <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--green)', boxShadow: '0 0 8px var(--green)' }} />
+          Sesión admin: <strong style={{ color: 'var(--text-primary)' }}>@{user.username}</strong>
+          {user.balance != null && (
+            <span style={{ marginLeft: 'auto', color: 'var(--green)' }}>
+              {Number(user.balance).toLocaleString('es-MX')} MXNP
+            </span>
+          )}
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+        <StatCard label="Usuarios" value={Number(stats.users || 0).toLocaleString('es-MX')} />
+        <StatCard label="MXNP en circulación" value={`${Number(stats.totalSupply || 0).toLocaleString('es-MX')} MXNP`} />
+        <StatCard label="Mercados (activos / total)" value={`${stats.markets?.active ?? 0} / ${stats.markets?.total ?? 0}`} />
+      </div>
+
+      <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: 20 }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 12 }}>
+          Distribuciones (últimos 7 días)
+        </div>
+        {(stats.recentDistributions || []).length === 0 && (
+          <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+            Sin actividad reciente.
+          </p>
+        )}
+        {(stats.recentDistributions || []).map(d => (
+          <div key={d.kind} style={{
+            display: 'flex', justifyContent: 'space-between',
+            padding: '6px 0', borderBottom: '1px solid var(--border)',
+            fontFamily: 'var(--font-mono)', fontSize: 12,
+          }}>
+            <span style={{ color: 'var(--text-secondary)' }}>{d.kind}</span>
+            <span style={{ color: d.total >= 0 ? 'var(--green)' : 'var(--red)', fontWeight: 700 }}>
+              {d.total >= 0 ? '+' : ''}{Number(d.total).toLocaleString('es-MX')} MXNP ({d.count})
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 // ═══ Page shell ═════════════════════════════════════════════════════════════
+const ADMIN_TABS = [
+  { id: 'create',   label: 'Crear mercado'   },
+  { id: 'generate', label: 'Generar'         },
+  { id: 'pending',  label: 'Por aprobar'     },
+  { id: 'markets',  label: 'Mercados'        },
+  { id: 'social',   label: 'Tareas sociales' },
+  { id: 'stats',    label: 'Estadísticas'    },
+];
+
 export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
   const t = useT();
   const { authenticated } = usePointsAuth();
   const [refreshKey, setRefreshKey] = useState(0);
   const bumpRefresh = () => setRefreshKey(k => k + 1);
+  const [tab, setTab] = useState('create');
 
   const body = useMemo(() => {
     if (loading) return <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Cargando…</p>;
@@ -858,13 +1087,42 @@ export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
     );
     return (
       <>
-        <GeneratorsSection />
-        <PendingMarketsSection refreshKey={refreshKey} bumpRefresh={bumpRefresh} />
-        <CreateMarketForm onCreated={bumpRefresh} />
-        <MarketsList refreshKey={refreshKey} bumpRefresh={bumpRefresh} />
+        {/* Tab bar */}
+        <div style={{
+          display: 'flex', gap: 4, marginBottom: 28,
+          borderBottom: '1px solid var(--border)', flexWrap: 'wrap',
+        }}>
+          {ADMIN_TABS.map(t => {
+            const active = tab === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                style={{
+                  background: 'none', border: 'none', padding: '10px 18px',
+                  fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: active ? 'var(--text-primary)' : 'var(--text-muted)',
+                  borderBottom: `2px solid ${active ? 'var(--green)' : 'transparent'}`,
+                  cursor: 'pointer', marginBottom: -1,
+                }}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Active tab content */}
+        {tab === 'create'   && <CreateMarketForm onCreated={bumpRefresh} />}
+        {tab === 'generate' && <GeneratorsSection />}
+        {tab === 'pending'  && <PendingMarketsSection refreshKey={refreshKey} bumpRefresh={bumpRefresh} />}
+        {tab === 'markets'  && <MarketsList refreshKey={refreshKey} bumpRefresh={bumpRefresh} />}
+        {tab === 'social'   && <SocialTasksSection />}
+        {tab === 'stats'    && <StatsSection />}
       </>
     );
-  }, [authenticated, loading, onOpenLogin, refreshKey, t, userIsAdmin, username]);
+  }, [authenticated, loading, onOpenLogin, refreshKey, t, tab, userIsAdmin, username]);
 
   return (
     <>
