@@ -117,9 +117,41 @@ async function list(req, res) {
  * bulk approval can call this per-row and tolerate per-row failure
  * without rolling back earlier successes.
  *
+ * `opts` lets the MVP admin tag the resulting market as on-chain and
+ * attach the deployed contract coordinates. Off-chain callers leave
+ * opts empty (or pass mode: 'points') and behaviour is unchanged.
+ *
+ *   opts.mode          — 'points' (default) | 'onchain'
+ *   opts.chainId       — numeric chain id (required when mode='onchain')
+ *   opts.chainAddress  — 0x-prefixed 40-hex contract address (required
+ *                        when mode='onchain'); persisted on parent + legs
+ *   opts.chainMarketId — numeric market id within the contract (optional)
+ *
  * Throws on validation / DB error. Returns { id, marketId }.
  */
-async function approveOne(pid, reviewer, note) {
+async function approveOne(pid, reviewer, note, opts = {}) {
+  const marketMode = opts.mode === 'onchain' ? 'onchain' : 'points';
+  const isOnchain = marketMode === 'onchain';
+  let chainIdNum = null;
+  let chainAddressStr = null;
+  let chainMarketIdStr = null;
+  if (isOnchain) {
+    chainIdNum = Number.parseInt(opts.chainId, 10);
+    if (!Number.isInteger(chainIdNum) || chainIdNum <= 0) {
+      const err = new Error('invalid_chain_id'); err.status = 400; throw err;
+    }
+    if (typeof opts.chainAddress !== 'string' || !/^0x[a-fA-F0-9]{40}$/.test(opts.chainAddress.trim())) {
+      const err = new Error('invalid_chain_address'); err.status = 400; throw err;
+    }
+    chainAddressStr = opts.chainAddress.trim().toLowerCase();
+    if (opts.chainMarketId !== undefined && opts.chainMarketId !== null && opts.chainMarketId !== '') {
+      const raw = String(opts.chainMarketId).trim();
+      if (!/^\d{1,78}$/.test(raw)) {
+        const err = new Error('invalid_chain_market_id'); err.status = 400; throw err;
+      }
+      chainMarketIdStr = raw;
+    }
+  }
   return withTransaction(async (client) => {
     const rowRes = await client.query(
       `SELECT * FROM points_pending_markets WHERE id = $1 FOR UPDATE`,
@@ -168,9 +200,11 @@ async function approveOne(pid, reviewer, note) {
         `INSERT INTO points_markets
            (question, category, icon, outcomes, reserves, seed_liquidity,
             start_time, end_time, status, created_by, amm_mode,
-            resolver_type, resolver_config, sport, league, outcome_images, featured)
+            resolver_type, resolver_config, sport, league, outcome_images, featured,
+            mode, chain_id, chain_market_id, chain_address)
          VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8, 'active', $9,
-                 'unified', $10, $11::jsonb, $12, $13, $14::jsonb, $15)
+                 'unified', $10, $11::jsonb, $12, $13, $14::jsonb, $15,
+                 $16, $17, $18, $19)
          RETURNING id`,
         [
           r.question,
@@ -188,6 +222,10 @@ async function approveOne(pid, reviewer, note) {
           r.league || null,
           outcomeImagesJson,
           pendingFeatured,
+          marketMode,
+          chainIdNum,
+          chainMarketIdStr,
+          chainAddressStr,
         ],
       );
       createdMarketId = mk.rows[0].id;
@@ -199,9 +237,11 @@ async function approveOne(pid, reviewer, note) {
         `INSERT INTO points_markets
            (question, category, icon, outcomes, reserves, seed_liquidity,
             start_time, end_time, status, created_by, amm_mode,
-            resolver_type, resolver_config, sport, league, outcome_images, featured)
+            resolver_type, resolver_config, sport, league, outcome_images, featured,
+            mode, chain_id, chain_market_id, chain_address)
          VALUES ($1, $2, $3, $4::jsonb, '[]'::jsonb, $5, $6, $7, 'active', $8,
-                 'parallel', $9, $10::jsonb, $11, $12, $13::jsonb, $14)
+                 'parallel', $9, $10::jsonb, $11, $12, $13::jsonb, $14,
+                 $15, $16, $17, $18)
          RETURNING id`,
         [
           r.question,
@@ -218,6 +258,10 @@ async function approveOne(pid, reviewer, note) {
           r.league || null,
           outcomeImagesJson,
           pendingFeatured,
+          marketMode,
+          chainIdNum,
+          chainMarketIdStr,
+          chainAddressStr,
         ],
       );
       createdMarketId = parent.rows[0].id;
@@ -226,9 +270,9 @@ async function approveOne(pid, reviewer, note) {
           `INSERT INTO points_markets
              (question, category, icon, outcomes, reserves, seed_liquidity,
               start_time, end_time, status, created_by, amm_mode,
-              parent_id, leg_label, sport, league)
+              parent_id, leg_label, sport, league, mode, chain_id, chain_address)
            VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8, 'active', $9,
-                   'parallel', $10, $11, $12, $13)`,
+                   'parallel', $10, $11, $12, $13, $14, $15, $16)`,
           [
             `${r.question} — ${outcomes[i]}`,
             r.category,
@@ -243,6 +287,9 @@ async function approveOne(pid, reviewer, note) {
             outcomes[i],
             r.sport || null,
             r.league || null,
+            marketMode,
+            chainIdNum,
+            chainAddressStr,
           ],
         );
       }
@@ -260,7 +307,12 @@ async function approveOne(pid, reviewer, note) {
 }
 
 async function review(req, res, admin) {
-  const { id, action, note } = req.body || {};
+  const { id, action, note, mode, chainId, chainAddress, chainMarketId } = req.body || {};
+  // Shared opts passed to approveOne for both single-row and
+  // approve_all paths. Default behaviour (no opts) keeps Points admin
+  // approvals off-chain; the MVP admin sends mode='onchain' + chain
+  // fields on every approve call.
+  const approveOpts = { mode, chainId, chainAddress, chainMarketId };
 
   await ensurePointsSchema(schemaSql);
 
@@ -268,7 +320,18 @@ async function review(req, res, admin) {
   // so one bad spec (e.g. end_time already in the past) doesn't undo
   // the rows that processed cleanly before it. Returns a summary of
   // what landed + what failed so the admin UI can show the result.
+  //
+  // Bulk approve with mode='onchain' would assign the same chain_address
+  // to every market, which doesn't match reality (each market = its own
+  // contract). Reject it explicitly — MVP admin must approve on-chain
+  // markets one at a time with per-market chain details.
   if (action === 'approve_all') {
+    if (approveOpts?.mode === 'onchain') {
+      return res.status(400).json({
+        error: 'bulk_approve_onchain_unsupported',
+        detail: 'On-chain approvals must be done one at a time so each market gets its own chain_address.',
+      });
+    }
     const pending = await readSql`
       SELECT id FROM points_pending_markets
       WHERE status = 'pending'
@@ -278,7 +341,7 @@ async function review(req, res, admin) {
     const failures = [];
     for (const row of pending) {
       try {
-        const result = await approveOne(row.id, admin.username, note);
+        const result = await approveOne(row.id, admin.username, note, approveOpts);
         approved.push({ pendingId: result.id, marketId: result.marketId });
       } catch (e) {
         failures.push({
@@ -334,6 +397,6 @@ async function review(req, res, admin) {
   }
 
   // action === 'approve'
-  const approved = await approveOne(pid, admin.username, note);
+  const approved = await approveOne(pid, admin.username, note, approveOpts);
   return res.status(200).json({ ok: true, action: 'approve', ...approved });
 }

@@ -86,9 +86,9 @@ export default async function handler(req, res) {
       }
       chainMarketIdStr = raw;
     }
-    if (mode === 'parallel') {
-      return res.status(400).json({ error: 'parallel_onchain_unsupported' });
-    }
+    // Parallel onchain: the parent row + each leg all share the same
+    // `chain_address` (display-level mirror). Per-leg contract addresses
+    // can be patched in later via edit-market; keeps registration simple.
   }
   if (typeof question !== 'string' || question.trim().length < 8) {
     return res.status(400).json({ error: 'invalid_question' });
@@ -158,13 +158,18 @@ export default async function handler(req, res) {
     }
 
     // Parallel: parent carries metadata, N legs carry binary CPMM state.
+    // On-chain parallel markets share the parent's chain_address across
+    // legs; each leg's chain_market_id can be patched in later via
+    // edit-market (e.g. when the MarketFactory emits the leg ids).
     const legReserves = initialReserves(seed, 2); // always [seed, seed]
     const result = await withTransaction(async (client) => {
       const parent = await client.query(
         `INSERT INTO points_markets
            (question, category, icon, outcomes, reserves, seed_liquidity,
-            end_time, status, created_by, amm_mode)
-         VALUES ($1, $2, $3, $4::jsonb, '[]'::jsonb, $5, $6, 'active', $7, 'parallel')
+            end_time, status, created_by, amm_mode, featured,
+            mode, chain_id, chain_market_id, chain_address)
+         VALUES ($1, $2, $3, $4::jsonb, '[]'::jsonb, $5, $6, 'active', $7, 'parallel', $8,
+                 $9, $10, $11, $12)
          RETURNING id`,
         [
           question.trim(),
@@ -174,6 +179,11 @@ export default async function handler(req, res) {
           seed,
           endDate.toISOString(),
           admin.username,
+          featured === true,
+          marketMode,
+          chainIdNum,
+          chainMarketIdStr,
+          chainAddressStr,
         ],
       );
       const parentId = parent.rows[0].id;
@@ -182,9 +192,10 @@ export default async function handler(req, res) {
         await client.query(
           `INSERT INTO points_markets
              (question, category, icon, outcomes, reserves, seed_liquidity,
-              end_time, status, created_by, amm_mode, parent_id, leg_label)
+              end_time, status, created_by, amm_mode, parent_id, leg_label,
+              mode, chain_id, chain_address)
            VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, 'active', $8,
-                   'parallel', $9, $10)`,
+                   'parallel', $9, $10, $11, $12, $13)`,
           [
             // Leg "question" is synthetic — positions.js + portfolio use
             // parent.question + leg_label for display, but keeping a
@@ -199,12 +210,20 @@ export default async function handler(req, res) {
             admin.username,
             parentId,
             normalizedOutcomes[i],
+            marketMode,
+            chainIdNum,
+            chainAddressStr,
           ],
         );
       }
       return parentId;
     });
-    return res.status(200).json({ ok: true, marketId: result, ammMode: 'parallel' });
+    return res.status(200).json({
+      ok: true,
+      marketId: result,
+      ammMode: 'parallel',
+      mode: marketMode,
+    });
   } catch (e) {
     console.error('[admin/create-market] error', { message: e?.message, code: e?.code });
     return res.status(500).json({ error: 'create_failed', detail: e?.message?.slice(0, 240) });
