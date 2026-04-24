@@ -71,6 +71,15 @@ export default async function handler(req, res) {
   const modeFilter = modeParam === 'onchain' ? 'onchain'
                     : modeParam === 'all'    ? null
                     : 'points';
+  // Chain filter: MVP can narrow to a specific chain_id (e.g. 421614
+  // for Sepolia, 42161 for Arbitrum One) so flipping env chains between
+  // testnet and mainnet is a one-variable change — each chain sees only
+  // its own on-chain markets. Mode='points' markets have chain_id=NULL
+  // so this filter should only be sent with mode='onchain'.
+  const chainIdRaw = req.query.chain_id;
+  const chainIdFilter = Number.isFinite(Number(chainIdRaw)) && Number(chainIdRaw) > 0
+    ? Number(chainIdRaw)
+    : null;
   // Soft cap on returned rows. Default 100 keeps the home grid snappy
   // (trending doesn't need every market, just the ones about to close);
   // category pages request a higher cap so nothing is hidden. Clamped
@@ -106,6 +115,8 @@ export default async function handler(req, res) {
           WHERE m.status = ${status} AND m.category = ${category}
             AND m.parent_id IS NULL
             AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
+            AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
+            AND m.archived_at IS NULL
           ORDER BY m.end_time ASC
           LIMIT ${limit}
         `
@@ -118,6 +129,8 @@ export default async function handler(req, res) {
               AND m.featured = true
               AND m.parent_id IS NULL
               AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
+            AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
+            AND m.archived_at IS NULL
             ORDER BY m.end_time ASC
             LIMIT ${limit}
           `
@@ -128,6 +141,8 @@ export default async function handler(req, res) {
             WHERE m.status = ${status}
               AND m.parent_id IS NULL
               AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
+            AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
+            AND m.archived_at IS NULL
             ORDER BY m.end_time ASC
             LIMIT ${limit}
           `;

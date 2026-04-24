@@ -54,6 +54,7 @@ export default async function handler(req, res) {
   const {
     question, category, icon, endTime, outcomes, seedLiquidity, ammMode,
     mode: chainMode, chainId, chainAddress, chainMarketId, featured,
+    sport, league, outcomeImages,
   } = req.body || {};
   const seed = Number(seedLiquidity);
   const mode = ammMode === 'parallel' ? 'parallel' : 'unified';
@@ -61,6 +62,26 @@ export default async function handler(req, res) {
   // column on points_markets) — distinct from `ammMode` above.
   const marketMode = chainMode === 'onchain' ? 'onchain' : 'points';
   const isOnchain = marketMode === 'onchain';
+
+  // Sport / league / outcomeImages — optional metadata matching what the
+  // generator pipeline writes. Lets manually-registered markets show up
+  // in the /c/deportes sport sub-tabs + league sidebar and render team
+  // crests in outcome rows.
+  const sportVal = typeof sport === 'string' && sport.trim() ? sport.trim().toLowerCase() : null;
+  const leagueVal = typeof league === 'string' && league.trim() ? league.trim().toLowerCase() : null;
+  // outcomeImages must be an array of strings (URLs) the same length as
+  // `outcomes`. Anything else is rejected to avoid index-misaligned crests.
+  let outcomeImagesJson = null;
+  if (Array.isArray(outcomeImages) && outcomeImages.length > 0) {
+    if (outcomeImages.length !== (Array.isArray(outcomes) ? outcomes.length : 0)) {
+      return res.status(400).json({ error: 'outcome_images_length_mismatch' });
+    }
+    const cleaned = outcomeImages.map(u => typeof u === 'string' ? u.trim() : '');
+    if (!cleaned.every(u => u === '' || /^https?:\/\//i.test(u))) {
+      return res.status(400).json({ error: 'invalid_outcome_image_url' });
+    }
+    outcomeImagesJson = JSON.stringify(cleaned);
+  }
 
   // Validate chain metadata when registering an on-chain market.
   let chainIdNum = null;
@@ -127,9 +148,10 @@ export default async function handler(req, res) {
           `INSERT INTO points_markets
              (question, category, icon, outcomes, reserves, seed_liquidity,
               end_time, status, created_by, amm_mode, featured,
-              mode, chain_id, chain_market_id, chain_address)
+              mode, chain_id, chain_market_id, chain_address,
+              sport, league, outcome_images)
            VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, 'active', $8, 'unified', $9,
-                   $10, $11, $12, $13)
+                   $10, $11, $12, $13, $14, $15, $16::jsonb)
            RETURNING id`,
           [
             question.trim(),
@@ -145,6 +167,9 @@ export default async function handler(req, res) {
             chainIdNum,
             chainMarketIdStr,
             chainAddressStr,
+            sportVal,
+            leagueVal,
+            outcomeImagesJson,
           ],
         );
         return r.rows[0].id;
@@ -167,9 +192,10 @@ export default async function handler(req, res) {
         `INSERT INTO points_markets
            (question, category, icon, outcomes, reserves, seed_liquidity,
             end_time, status, created_by, amm_mode, featured,
-            mode, chain_id, chain_market_id, chain_address)
+            mode, chain_id, chain_market_id, chain_address,
+            sport, league, outcome_images)
          VALUES ($1, $2, $3, $4::jsonb, '[]'::jsonb, $5, $6, 'active', $7, 'parallel', $8,
-                 $9, $10, $11, $12)
+                 $9, $10, $11, $12, $13, $14, $15::jsonb)
          RETURNING id`,
         [
           question.trim(),
@@ -184,6 +210,9 @@ export default async function handler(req, res) {
           chainIdNum,
           chainMarketIdStr,
           chainAddressStr,
+          sportVal,
+          leagueVal,
+          outcomeImagesJson,
         ],
       );
       const parentId = parent.rows[0].id;

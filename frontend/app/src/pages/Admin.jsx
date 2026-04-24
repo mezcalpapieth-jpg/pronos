@@ -34,7 +34,38 @@ const CATEGORIES = [
   { value: 'general',  label: 'General',  icon: '📊' },
 ];
 
-const DEFAULT_CHAIN_ID = 421614; // Arbitrum Sepolia
+const DEFAULT_CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 421614);
+
+// Sport options (keys match market.sport written by generators) + league
+// options per sport. Keep in lockstep with SPORT_TABS in CategoryPage.jsx.
+const SPORT_OPTIONS = [
+  { key: '',         label: '— ninguno —' },
+  { key: 'soccer',   label: 'Soccer'      },
+  { key: 'baseball', label: 'Béisbol'     },
+  { key: 'nba',      label: 'NBA'         },
+  { key: 'nfl',      label: 'NFL'         },
+  { key: 'f1',       label: 'F1'          },
+  { key: 'tennis',   label: 'Tenis'       },
+  { key: 'golf',     label: 'Golf'        },
+];
+
+const LEAGUE_BY_SPORT = {
+  soccer: [
+    { key: '',               label: '— ninguna —'     },
+    { key: 'uefa-cl',        label: 'Champions League'},
+    { key: 'la-liga',        label: 'La Liga'         },
+    { key: 'premier-league', label: 'Premier League'  },
+    { key: 'serie-a',        label: 'Serie A'         },
+    { key: 'bundesliga',     label: 'Bundesliga'      },
+    { key: 'liga-mx',        label: 'Liga MX'         },
+    { key: 'mls',            label: 'MLS'             },
+  ],
+  baseball: [
+    { key: '',    label: '— ninguna —' },
+    { key: 'mlb', label: 'MLB'         },
+    { key: 'lmb', label: 'LMB'         },
+  ],
+};
 
 // ── HTTP helpers ────────────────────────────────────────────────────────────
 async function getJson(url) {
@@ -404,6 +435,7 @@ function CreateMarketForm({ onCreated }) {
   const [category, setCategory] = useState('deportes');
   const [icon, setIcon] = useState('⚽');
   const [outcomes, setOutcomes] = useState(['Sí', 'No']);
+  const [outcomeImages, setOutcomeImages] = useState(['', '']);
   const [endTime, setEndTime] = useState('');
   const [seed, setSeed] = useState('1000');
   const [ammMode, setAmmMode] = useState('unified');
@@ -411,14 +443,33 @@ function CreateMarketForm({ onCreated }) {
   const [chainAddress, setChainAddress] = useState('');
   const [chainMarketId, setChainMarketId] = useState('');
   const [featured, setFeatured] = useState(false);
+  const [sport, setSport] = useState('');
+  const [league, setLeague] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState(null);
 
+  // Keep outcomeImages aligned with outcomes[] — adding/removing an
+  // outcome should add/remove its corresponding image slot.
   function updateOutcome(i, val) {
     setOutcomes(prev => prev.map((o, idx) => idx === i ? val : o));
   }
-  function addOutcome()    { setOutcomes(prev => prev.length < 10 ? [...prev, ''] : prev); }
-  function removeOutcome(i) { setOutcomes(prev => prev.length > 2 ? prev.filter((_, idx) => idx !== i) : prev); }
+  function updateOutcomeImage(i, val) {
+    setOutcomeImages(prev => prev.map((u, idx) => idx === i ? val : u));
+  }
+  function addOutcome() {
+    setOutcomes(prev => prev.length < 10 ? [...prev, ''] : prev);
+    setOutcomeImages(prev => prev.length < 10 ? [...prev, ''] : prev);
+  }
+  function removeOutcome(i) {
+    setOutcomes(prev => prev.length > 2 ? prev.filter((_, idx) => idx !== i) : prev);
+    setOutcomeImages(prev => prev.length > 2 ? prev.filter((_, idx) => idx !== i) : prev);
+  }
+  // Switching sport resets league — avoids "soccer → baseball with league=premier-league" bug.
+  function changeSport(next) {
+    setSport(next);
+    setLeague('');
+  }
+  const leagueOptions = LEAGUE_BY_SPORT[sport] || null;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -430,6 +481,11 @@ function CreateMarketForm({ onCreated }) {
     }
     setSubmitting(true);
     try {
+      // Only ship outcomeImages when at least one slot is filled — otherwise
+      // the API rejects length mismatches even when every slot is empty.
+      const trimmedImages = outcomeImages.slice(0, trimmedOutcomes.length).map(u => (u || '').trim());
+      const hasAnyImage = trimmedImages.some(Boolean);
+
       const { ok, data } = await postJson('/api/points/admin/create-market', {
         question: question.trim(),
         category,
@@ -443,10 +499,19 @@ function CreateMarketForm({ onCreated }) {
         chainAddress: chainAddress.trim(),
         chainMarketId: chainMarketId.trim() || null,
         featured,
+        sport: sport || null,
+        league: league || null,
+        outcomeImages: hasAnyImage ? trimmedImages : null,
       });
       if (!ok) throw new Error(data?.error ? `${data.error}${data.detail ? ` · ${data.detail}` : ''}` : 'create_failed');
       setNotice({ type: 'success', msg: `Mercado creado · id=${data.marketId} · ${data.ammMode}` });
-      setQuestion(''); setOutcomes(['Sí', 'No']); setChainAddress(''); setChainMarketId('');
+      setQuestion('');
+      setOutcomes(['Sí', 'No']);
+      setOutcomeImages(['', '']);
+      setChainAddress('');
+      setChainMarketId('');
+      setSport('');
+      setLeague('');
       onCreated?.(data.marketId);
     } catch (e) {
       setNotice({ type: 'error', msg: e?.message || 'create_failed' });
@@ -505,12 +570,15 @@ function CreateMarketForm({ onCreated }) {
         </div>
       </Field>
 
-      <Field label="Outcomes (2–10)" hint="Orden importa — el índice se usa al firmar trades on-chain.">
+      <Field label="Outcomes (2–10)" hint="Orden importa — el índice se usa al firmar trades on-chain. La imagen es opcional; ESPN badge / flag CDN / Cloudinary URLs funcionan.">
         {outcomes.map((o, i) => (
-          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-            <input type="text" required value={o} onChange={e => updateOutcome(i, e.target.value)} placeholder={`Outcome ${i + 1}`} style={{ ...inputStyle, flex: 1 }} />
-            {outcomes.length > 2 && (
+          <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, marginBottom: 6 }}>
+            <input type="text" required value={o} onChange={e => updateOutcome(i, e.target.value)} placeholder={`Outcome ${i + 1}`} style={inputStyle} />
+            <input type="url" value={outcomeImages[i] || ''} onChange={e => updateOutcomeImage(i, e.target.value)} placeholder="URL de imagen (opcional)" style={inputStyle} />
+            {outcomes.length > 2 ? (
               <button type="button" onClick={() => removeOutcome(i)} style={{ padding: '6px 10px', borderRadius: 6, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'pointer' }}>×</button>
+            ) : (
+              <div style={{ width: 36 }} />
             )}
           </div>
         ))}
@@ -520,6 +588,27 @@ function CreateMarketForm({ onCreated }) {
           </button>
         )}
       </Field>
+
+      {/* Sport / league — only populated for sports categories, but the
+          fields are always visible so the admin can opt-in from any slug. */}
+      <div style={{ display: 'grid', gridTemplateColumns: leagueOptions ? '1fr 1fr' : '1fr', gap: 14 }}>
+        <Field label="Deporte (opcional)" hint="Alimenta los sub-tabs de /c/deportes (soccer · béisbol · NBA · …).">
+          <select value={sport} onChange={e => changeSport(e.target.value)} style={inputStyle}>
+            {SPORT_OPTIONS.map(s => (
+              <option key={s.key} value={s.key}>{s.label}</option>
+            ))}
+          </select>
+        </Field>
+        {leagueOptions && (
+          <Field label="Liga" hint="Aparece en la barra lateral dentro de Deportes.">
+            <select value={league} onChange={e => setLeague(e.target.value)} style={inputStyle}>
+              {leagueOptions.map(l => (
+                <option key={l.key} value={l.key}>{l.label}</option>
+              ))}
+            </select>
+          </Field>
+        )}
+      </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <Field label="Fecha de cierre">
@@ -641,10 +730,11 @@ function EditMarketModal({ market, onClose, onSaved }) {
 
 // ═══ Markets list with tabs + edit/featured/resolve ═════════════════════════
 const STATUS_TABS = [
-  { value: 'all',      label: 'Todos'     },
-  { value: 'active',   label: 'Activos'   },
+  { value: 'all',      label: 'Todos'        },
+  { value: 'active',   label: 'Activos'      },
   { value: 'pending',  label: 'Por resolver' },
-  { value: 'resolved', label: 'Resueltos' },
+  { value: 'resolved', label: 'Resueltos'    },
+  { value: 'archived', label: 'Archivados'   },
 ];
 
 function MarketsList({ refreshKey, bumpRefresh }) {
@@ -654,6 +744,7 @@ function MarketsList({ refreshKey, bumpRefresh }) {
   const [error, setError] = useState(null);
   const [resolvingId, setResolvingId] = useState(null);
   const [featuringId, setFeaturingId] = useState(null);
+  const [archivingId, setArchivingId] = useState(null);
   const [editingMarket, setEditingMarket] = useState(null);
   const [notice, setNotice] = useState(null);
 
@@ -661,7 +752,9 @@ function MarketsList({ refreshKey, bumpRefresh }) {
     setLoading(true);
     setError(null);
     try {
-      const { ok, data } = await getJson(`/api/points/admin/markets?status=${filter}&mode=onchain`);
+      const { ok, data } = await getJson(
+        `/api/points/admin/markets?status=${filter}&mode=onchain&chain_id=${DEFAULT_CHAIN_ID}`,
+      );
       if (!ok) throw new Error(data?.error || 'list_failed');
       setRows(Array.isArray(data?.markets) ? data.markets : []);
     } catch (e) {
@@ -718,6 +811,30 @@ function MarketsList({ refreshKey, bumpRefresh }) {
       setNotice({ type: 'error', msg: e?.message || 'toggle_failed' });
     } finally {
       setFeaturingId(null);
+    }
+  }
+
+  async function handleArchive(market) {
+    const archiving = !market.archivedAt;
+    const verb = archiving ? 'archivar' : 'restaurar';
+    if (!window.confirm(`¿${archiving ? 'Archivar' : 'Restaurar'} "${market.question}"?${archiving ? '\n\nSe ocultará en /mvp pero se mantendrá en la base para historial.' : ''}`)) {
+      return;
+    }
+    setArchivingId(market.id);
+    setNotice(null);
+    try {
+      const { ok, data } = await postJson('/api/points/admin/archive-market', {
+        marketId: market.id,
+        archive: archiving,
+      });
+      if (!ok) throw new Error(data?.error || `${verb}_failed`);
+      setNotice({ type: 'success', msg: archiving ? 'Mercado archivado.' : 'Mercado restaurado.' });
+      load();
+      bumpRefresh();
+    } catch (e) {
+      setNotice({ type: 'error', msg: e?.message || `${verb}_failed` });
+    } finally {
+      setArchivingId(null);
     }
   }
 
@@ -782,11 +899,20 @@ function MarketsList({ refreshKey, bumpRefresh }) {
               <span>#{m.id}</span>
               <span>{m.ammMode}</span>
               <span>{(m.outcomes || []).length} outcomes</span>
-              <span style={{ color: m.status === 'active' ? 'var(--green)' : m.status === 'resolved' ? 'var(--gold)' : 'var(--text-muted)' }}>
-                {m.status === 'active' ? 'ACTIVO' : m.status === 'resolved' ? `✓ ${m.outcomes?.[m.outcome ?? 0] || 'resuelto'}` : m.status}
+              <span style={{
+                color: m.archivedAt ? 'var(--text-muted)'
+                       : m.status === 'active' ? 'var(--green)'
+                       : m.status === 'resolved' ? 'var(--gold)' : 'var(--text-muted)',
+              }}>
+                {m.archivedAt ? '📦 ARCHIVADO'
+                  : m.status === 'active' ? 'ACTIVO'
+                  : m.status === 'resolved' ? `✓ ${m.outcomes?.[m.outcome ?? 0] || 'resuelto'}`
+                  : m.status}
               </span>
               <span>{m.tradeCount || 0} trades</span>
-              {m.chainAddress && <span>chain: {m.chainAddress.slice(0, 6)}…{m.chainAddress.slice(-4)}</span>}
+              {m.sport && <span>{m.sport}{m.league ? ` · ${m.league}` : ''}</span>}
+              {m.chainId && <span>chain {m.chainId}</span>}
+              {m.chainAddress && <span>{m.chainAddress.slice(0, 6)}…{m.chainAddress.slice(-4)}</span>}
               {m.endTime && <span>cierra {new Date(m.endTime).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}</span>}
             </div>
           </div>
@@ -808,11 +934,23 @@ function MarketsList({ refreshKey, bumpRefresh }) {
             <button onClick={() => setEditingMarket(m)} className="btn-ghost" style={{ fontSize: 11, padding: '6px 10px' }}>
               Editar
             </button>
-            {m.status === 'active' && (
+            {m.status === 'active' && !m.archivedAt && (
               <button onClick={() => handleResolve(m)} disabled={resolvingId === m.id} className="btn-ghost" style={{ fontSize: 11, padding: '6px 10px' }}>
                 {resolvingId === m.id ? '…' : 'Resolver'}
               </button>
             )}
+            <button
+              onClick={() => handleArchive(m)}
+              disabled={archivingId === m.id}
+              className="btn-ghost"
+              style={{
+                fontSize: 11, padding: '6px 10px',
+                color: m.archivedAt ? 'var(--green)' : 'var(--red)',
+                borderColor: m.archivedAt ? 'rgba(0,232,122,0.3)' : 'rgba(255,69,69,0.25)',
+              }}
+            >
+              {archivingId === m.id ? '…' : m.archivedAt ? 'Restaurar' : 'Archivar'}
+            </button>
           </div>
         </div>
       ))}

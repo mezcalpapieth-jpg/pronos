@@ -20,6 +20,8 @@ import CategoryBar from '../components/CategoryBar.jsx';
 import BetModal from '../components/BetModal.jsx';
 import { usePointsAuth } from '../lib/pointsAuth.js';
 
+const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 421614);
+
 const SLUG_LABELS = {
   deportes:    'Deportes',
   musica:      'Música',
@@ -188,7 +190,7 @@ export default function CategoryPage({ onOpenLogin }) {
       setError(null);
       try {
         const res = await fetch(
-          `/api/points/markets?mode=onchain&status=${fetchStatus}&featured=all&limit=2000`,
+          `/api/points/markets?mode=onchain&status=${fetchStatus}&featured=all&limit=2000&chain_id=${CHAIN_ID}`,
           { credentials: 'include' },
         );
         const data = await res.json().catch(() => ({}));

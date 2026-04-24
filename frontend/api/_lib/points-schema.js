@@ -135,6 +135,17 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_markets_featured_status
     ON points_markets(featured, status) WHERE featured = true`,
 
+  // archived_at: soft-delete timestamp. Populated by /admin/archive-market
+  // and NULL for live markets. Archived rows stay in the DB so trade
+  // history + positions endpoints keep returning accurate past data,
+  // but are filtered out of every public list endpoint by default.
+  // Admin lists surface them behind a `?show_archived=1` flag.
+  // Partial index keeps the common case (WHERE archived_at IS NULL) fast
+  // without the cost of indexing the soft-deleted tail.
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_live
+    ON points_markets(status, end_time) WHERE archived_at IS NULL`,
+
   // ── Balances (single source of truth per user) ─────────────────────────
   `CREATE TABLE IF NOT EXISTS points_balances (
     username     TEXT PRIMARY KEY,

@@ -27,7 +27,7 @@ export default async function handler(req, res) {
   const admin = requirePointsAdmin(req, res);
   if (!admin) return;
 
-  const filter = ['all', 'active', 'pending', 'resolved'].includes(req.query.status) ? req.query.status : 'all';
+  const filter = ['all', 'active', 'pending', 'resolved', 'archived'].includes(req.query.status) ? req.query.status : 'all';
   // Same mode split as the public /api/points/markets — lets the MVP
   // admin query only on-chain markets while Points admin stays on
   // off-chain ones. Omitted ⇒ no filter (shows everything; historic
@@ -36,6 +36,17 @@ export default async function handler(req, res) {
   const modeFilter = modeParam === 'onchain' ? 'onchain'
                     : modeParam === 'points' ? 'points'
                     : null;
+  // Chain filter: MVP admin scopes to whatever chain is currently
+  // active (Sepolia 421614, Arbitrum One 42161, etc). When omitted the
+  // admin sees markets across every chain.
+  const chainIdRaw = req.query.chain_id;
+  const chainIdFilter = Number.isFinite(Number(chainIdRaw)) && Number(chainIdRaw) > 0
+    ? Number(chainIdRaw)
+    : null;
+  // By default we hide archived (soft-deleted) rows from the admin
+  // lists too — they only surface on the explicit `status=archived`
+  // tab or when `show_archived=1`.
+  const showArchived = req.query.show_archived === '1' || filter === 'archived';
 
   try {
     await ensurePointsSchema(schemaSql);
@@ -44,13 +55,27 @@ export default async function handler(req, res) {
     // for markets with many outcomes. Admin resolves the parent; the
     // resolve endpoint cascades to every leg.
     let rows;
-    if (filter === 'all') {
+    if (filter === 'archived') {
+      rows = await sql`
+        SELECT m.*,
+          (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id) AS trade_count
+        FROM points_markets m
+        WHERE m.parent_id IS NULL
+          AND m.archived_at IS NOT NULL
+          AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
+          AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
+        ORDER BY m.archived_at DESC
+        LIMIT 200
+      `;
+    } else if (filter === 'all') {
       rows = await sql`
         SELECT m.*,
           (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id) AS trade_count
         FROM points_markets m
         WHERE m.parent_id IS NULL
           AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
+          AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
+          AND (${showArchived} OR m.archived_at IS NULL)
         ORDER BY m.created_at DESC
         LIMIT 200
       `;
@@ -64,6 +89,8 @@ export default async function handler(req, res) {
           AND m.end_time IS NOT NULL
           AND m.end_time < NOW()
           AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
+          AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
+          AND (${showArchived} OR m.archived_at IS NULL)
         ORDER BY m.end_time ASC
         LIMIT 200
       `;
@@ -74,6 +101,8 @@ export default async function handler(req, res) {
         FROM points_markets m
         WHERE m.status = ${filter} AND m.parent_id IS NULL
           AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
+          AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
+          AND (${showArchived} OR m.archived_at IS NULL)
         ORDER BY m.created_at DESC
         LIMIT 200
       `;
@@ -101,6 +130,9 @@ export default async function handler(req, res) {
         chainId: r.chain_id || null,
         chainMarketId: r.chain_market_id ? String(r.chain_market_id) : null,
         chainAddress: r.chain_address || null,
+        sport: r.sport || null,
+        league: r.league || null,
+        archivedAt: r.archived_at || null,
       })),
     });
   } catch (e) {

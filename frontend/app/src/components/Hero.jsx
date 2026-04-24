@@ -22,6 +22,7 @@ import { useT, useLang } from '../lib/i18n.js';
 
 const TIME_PERIODS = ['1D', '1W', '1M', 'ALL'];
 const AUTO_INTERVAL_MS = 7000;
+const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 421614);
 const TRADE_MIN_MS = 1500;
 const TRADE_MAX_MS = 3800;
 
@@ -194,9 +195,10 @@ export default function Hero({ onOpenLogin }) {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('/api/points/markets?mode=onchain&featured=true&status=active', {
-          credentials: 'include',
-        });
+        const res = await fetch(
+          `/api/points/markets?mode=onchain&featured=true&status=active&chain_id=${CHAIN_ID}`,
+          { credentials: 'include' },
+        );
         if (!res.ok) return;
         const data = await res.json();
         const rows = Array.isArray(data?.markets) ? data.markets : [];

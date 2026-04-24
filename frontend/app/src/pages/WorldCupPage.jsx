@@ -19,6 +19,8 @@ import { OPENING_KICKOFF_ISO } from '../../points/src/lib/worldCup.js';
 const HERO_GRADIENT =
   'linear-gradient(130deg, rgba(22,163,74,0.25) 0%, rgba(220,38,38,0.22) 45%, rgba(59,130,246,0.28) 100%), var(--surface1)';
 
+const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 421614);
+
 function pad(n) { return String(n).padStart(2, '0'); }
 
 function useCountdown(targetIso) {
@@ -156,7 +158,7 @@ export default function WorldCupPage({ onOpenLogin }) {
       setError(null);
       try {
         const res = await fetch(
-          '/api/points/markets?mode=onchain&category=world-cup&featured=all&status=active&limit=500',
+          `/api/points/markets?mode=onchain&category=world-cup&featured=all&status=active&limit=500&chain_id=${CHAIN_ID}`,
           { credentials: 'include' },
         );
         const data = await res.json().catch(() => ({}));
