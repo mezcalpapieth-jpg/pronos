@@ -119,6 +119,7 @@ export default async function handler(req, res) {
             status: r.status,
             outcome: r.outcome,
             resolvedAt: r.resolved_at,
+            finalScore: r.final_score || null,
             createdAt: r.created_at,
             resolverType,
             resolverSource,
@@ -155,6 +156,7 @@ export default async function handler(req, res) {
           status: r.status,
           outcome: r.outcome,
           resolvedAt: r.resolved_at,
+          finalScore: r.final_score || null,
           createdAt: r.created_at,
           resolverType,
           resolverSource,
@@ -165,6 +167,7 @@ export default async function handler(req, res) {
           chainId: r.chain_id || null,
           chainMarketId: r.chain_market_id ? String(r.chain_market_id) : null,
           chainAddress: r.chain_address || null,
+          archivedAt: r.archived_at || null,
         },
       });
     } catch (e) {
