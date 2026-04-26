@@ -448,6 +448,34 @@ export default function PointsMarketDetail({ onOpenLogin }) {
         setLoading(false);
         if (!m) return;
 
+        // For resolved markets, append a final synthesized point at
+        // resolved_at so the chart's right edge snaps to 100 (winner) /
+        // 0 (loser). Without this the line ended at whatever the last
+        // live tick was, which contradicted the ring chart + cards
+        // that already collapse to 100/0 on resolution.
+        const tailPointFor = (outcomeIdx) => {
+          if (m.status !== 'resolved' || m.outcome == null) return null;
+          const t = m.resolvedAt
+            ? Math.floor(new Date(m.resolvedAt).getTime() / 1000)
+            : Math.floor(Date.now() / 1000);
+          const p = Number(m.outcome) === outcomeIdx ? 100 : 0;
+          return { t, p };
+        };
+        const withTail = (series, outcomeIdx) => {
+          const tail = tailPointFor(outcomeIdx);
+          if (!tail) return series;
+          // Drop any in-history points after resolved_at so the snap is
+          // the unambiguous final point.
+          const filtered = series.filter(pt => pt.t <= tail.t);
+          // If the existing last point already matches the resolved
+          // value we don't need a duplicate; skip the append.
+          const last = filtered[filtered.length - 1];
+          if (last && last.t === tail.t && Math.abs(last.p - tail.p) < 0.5) {
+            return filtered;
+          }
+          return [...filtered, tail];
+        };
+
         // Fire-and-forget price-history fetch. Shape differs by AMM mode:
         //   Unified: one call per outcome on the parent market id (the
         //   snapshot job stores a price per outcome in one row).
@@ -456,10 +484,10 @@ export default function PointsMarketDetail({ onOpenLogin }) {
         //   (outcome 0) series to plot the per-outcome line.
         if (m.ammMode === 'parallel' && Array.isArray(m.legs)) {
           Promise.all(
-            m.legs.map(leg =>
+            m.legs.map((leg, i) =>
               fetchPriceHistory([leg.id], { days: 30, outcome: 0 })
-                .then(h => h[leg.id] || [])
-                .catch(() => []),
+                .then(h => withTail(h[leg.id] || [], i))
+                .catch(() => withTail([], i)),
             ),
           ).then(series => {
             if (!cancelled) setHistoryByOutcome(series);
@@ -469,8 +497,8 @@ export default function PointsMarketDetail({ onOpenLogin }) {
           Promise.all(
             Array.from({ length: n }, (_, i) =>
               fetchPriceHistory([m.id], { days: 30, outcome: i })
-                .then(h => h[m.id] || [])
-                .catch(() => []),
+                .then(h => withTail(h[m.id] || [], i))
+                .catch(() => withTail([], i)),
             ),
           ).then(series => {
             if (!cancelled) setHistoryByOutcome(series);

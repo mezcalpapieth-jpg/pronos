@@ -76,6 +76,11 @@ export async function readEspnEvent({ leaguePath, eventId, dateYmd }) {
     winner,
     homeScore: Number.isFinite(homeScore) ? homeScore : null,
     awayScore: Number.isFinite(awayScore) ? awayScore : null,
+    // Team names for the final-score strip on resolved cards. Prefer
+    // shortDisplayName ("México") over displayName ("Mexico National
+    // Team") when available; null when ESPN doesn't ship team metadata.
+    homeTeam: home?.team?.shortDisplayName || home?.team?.displayName || home?.team?.name || null,
+    awayTeam: away?.team?.shortDisplayName || away?.team?.displayName || away?.team?.name || null,
     state,
   };
 }
@@ -112,6 +117,8 @@ export async function readFootballDataMatch(matchId) {
     winner,
     homeScore: Number.isFinite(homeScore) ? homeScore : null,
     awayScore: Number.isFinite(awayScore) ? awayScore : null,
+    homeTeam: match?.homeTeam?.shortName || match?.homeTeam?.name || null,
+    awayTeam: match?.awayTeam?.shortName || match?.awayTeam?.name || null,
     status,
   };
 }

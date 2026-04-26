@@ -44,6 +44,65 @@ function parseJsonb(v, fb) {
 }
 
 /**
+ * Build the free-form final-score string we store on points_markets.final_score.
+ * Rendered under the question on resolved market cards and the detail page.
+ *
+ * `outcomes` is the market's outcomes array so we can reach for the winning
+ * label as a fallback (e.g. price / weather resolvers where there's no
+ * meaningful scoreline — we just echo "Subió a $98,421" or the winner label).
+ * Cap at 240 chars to match resolve-market.js server validation.
+ */
+function buildFinalScore({ resolverType, cfg, result, resolverInfo, outcomes, winningIdx }) {
+  const winLabel = Array.isArray(outcomes) ? outcomes[winningIdx] : null;
+  const clip = (s) => (s == null ? null : String(s).slice(0, 240));
+
+  try {
+    if (resolverType === 'sports_api') {
+      if (cfg.shape === 'binary' || cfg.shape === 'draw3') {
+        const home = Number.isFinite(result.homeScore) ? result.homeScore : null;
+        const away = Number.isFinite(result.awayScore) ? result.awayScore : null;
+        const score = (home != null && away != null) ? `${home}-${away}` : null;
+        const hName = result.homeTeam || null;
+        const aName = result.awayTeam || null;
+        if (hName && aName && score) return clip(`${hName} ${score} ${aName}`);
+        if (score) return clip(score);
+        return clip(winLabel);
+      }
+      if (cfg.shape === 'parallel') {
+        const driver = result.winnerDriverLabel || resolverInfo?.winnerDriver;
+        if (driver) return clip(`🏁 ${driver}`);
+        return clip(winLabel);
+      }
+    }
+
+    if (resolverType === 'chainlink_price' || resolverType === 'api_price') {
+      const price = resolverInfo?.priceAtResolve;
+      if (price != null) {
+        const sym = cfg.symbol || cfg.feedAddress || resolverInfo?.source || '';
+        const short = sym ? (typeof sym === 'string' ? sym.slice(0, 20) : '') : '';
+        const priceStr = typeof price === 'number' ? price.toLocaleString('en-US', { maximumFractionDigits: 4 }) : String(price);
+        return clip(short ? `${short} · ${priceStr}` : priceStr);
+      }
+      return clip(winLabel);
+    }
+
+    if (resolverType === 'weather_api') {
+      const temp = resolverInfo?.recordedMaxC;
+      if (Number.isFinite(temp)) return clip(`${Number(temp).toFixed(1)}°C máx`);
+      return clip(winLabel);
+    }
+
+    if (resolverType === 'api_chart') {
+      const top = resolverInfo?.topArtist || resolverInfo?.topChannel || resolverInfo?.topTrack || resolverInfo?.topTitle;
+      if (top) return clip(`#1 ${top}`);
+      return clip(winLabel);
+    }
+  } catch { /* fall through */ }
+
+  return clip(winLabel);
+}
+
+/**
  * Core auto-resolve loop, extracted so the admin "Resolver ahora"
  * endpoint can trigger it without CRON_SECRET. Returns the same
  * `{ ok, tookMs, checked, resolved, errors, dryRun }` shape the
@@ -302,8 +361,22 @@ export async function runAutoResolve({ dry = false } = {}) {
         continue;
       }
 
+      // Build the human-readable score string (e.g. "México 3-2 Brasil",
+      // "🏁 Verstappen", "BTC · 98,421") from the same data we already
+      // pulled from the source. Falls back to the winning outcome label
+      // when the source doesn't give us a scoreline.
+      const marketOutcomes = parseJsonb(m.outcomes, []);
+      const finalScore = buildFinalScore({
+        resolverType: m.resolver_type,
+        cfg,
+        result,
+        resolverInfo,
+        outcomes: marketOutcomes,
+        winningIdx,
+      });
+
       if (dry) {
-        report.resolved.push({ id: m.id, winningIdx, ...resolverInfo, dry: true });
+        report.resolved.push({ id: m.id, winningIdx, finalScore, ...resolverInfo, dry: true });
         continue;
       }
 
@@ -313,10 +386,11 @@ export async function runAutoResolve({ dry = false } = {}) {
           const r = await client.query(
             `UPDATE points_markets
                SET status = 'resolved', outcome = $1,
-                   resolved_at = NOW(), resolved_by = $2
-             WHERE id = $3 AND status = 'active'
+                   resolved_at = NOW(), resolved_by = $2,
+                   final_score = $3
+             WHERE id = $4 AND status = 'active'
              RETURNING id, amm_mode`,
-            [winningIdx, `resolver:${m.resolver_type}`, m.id],
+            [winningIdx, `resolver:${m.resolver_type}`, finalScore, m.id],
           );
           if (r.rows.length === 0) {
             const err = new Error('not_active_at_write'); err.benign = true; throw err;
