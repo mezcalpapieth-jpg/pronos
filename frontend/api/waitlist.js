@@ -13,41 +13,148 @@ async function sendWelcomeEmail(email, name) {
 
   const greeting = name ? `Hola ${name}` : 'Hola';
 
-  const html = `
-<div style="font-family:'DM Sans',Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;background:#080808;border-radius:12px;overflow:hidden;">
-  <div style="padding:40px 32px;text-align:center;">
-    <div style="font-family:'Bebas Neue',Impact,sans-serif;font-size:36px;letter-spacing:0.04em;color:#FF5500;margin-bottom:8px;">PRONOS</div>
-    <div style="width:40px;height:2px;background:#FF5500;margin:0 auto 32px;"></div>
-
-    <h1 style="font-size:22px;color:#F0F0F0;margin-bottom:16px;font-weight:600;">${greeting}, ¡estás dentro! 🎉</h1>
-
-    <p style="font-size:15px;color:#999;line-height:1.7;margin-bottom:24px;">
-      Gracias por unirte a la lista de espera de <strong style="color:#F0F0F0;">Pronos</strong> — el primer mercado de predicciones on-chain de Latinoamérica.
-    </p>
-
-    <p style="font-size:15px;color:#999;line-height:1.7;margin-bottom:24px;">
-      Estamos construyendo algo diferente: predicciones reales sobre deportes, política y entretenimiento, con liquidación automática y sin intermediarios.
-    </p>
-
-    <div style="background:#111;border:1px solid rgba(255,85,0,0.2);border-radius:8px;padding:20px;margin-bottom:24px;">
-      <p style="font-size:14px;color:#FF5500;margin-bottom:8px;font-weight:600;">¿Qué sigue?</p>
-      <p style="font-size:14px;color:#999;line-height:1.6;margin:0;">
-        Te avisaremos en cuanto abramos la beta. Serás de los primeros en probar la plataforma y participar en los mercados iniciales.
-      </p>
-    </div>
-
-    <p style="font-size:14px;color:#555;line-height:1.6;">
-      Mientras tanto, síguenos para novedades:<br/>
-      <a href="https://x.com/pronosmarket" style="color:#FF5500;text-decoration:none;">@pronosmarket</a>
-    </p>
-
-    <div style="margin-top:32px;padding-top:24px;border-top:1px solid rgba(255,255,255,0.07);">
-      <p style="font-size:12px;color:#444;">
-        — Simon, fundador de Pronos
-      </p>
-    </div>
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark light" />
+  <meta name="supported-color-schemes" content="dark light" />
+  <title>¡Estás en la lista de espera de Pronos!</title>
+  <style>
+    /* Most clients ignore <style>, but Apple Mail / iOS use it. The
+       inline styles below are the source of truth for everyone else. */
+    a { color: #FF5500; text-decoration: none; }
+    .dim { color: #888; }
+    .social-row a:hover { opacity: 0.85; }
+    @media only screen and (max-width: 600px) {
+      .container { width: 100% !important; }
+      .px-pad { padding-left: 24px !important; padding-right: 24px !important; }
+      .py-pad { padding-top: 32px !important; padding-bottom: 32px !important; }
+      h1 { font-size: 22px !important; }
+    }
+  </style>
+</head>
+<body style="margin:0;padding:0;background:#000000;font-family:'DM Sans',Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+  <!-- Hidden preheader text — shows in the inbox preview line -->
+  <div style="display:none;font-size:1px;color:#000;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">
+    ${greeting}, ya estás dentro de la beta de Pronos. Te avisamos en cuanto abramos.
   </div>
-</div>`;
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#000000;">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+        <!-- Card -->
+        <table role="presentation" class="container" width="600" cellpadding="0" cellspacing="0" border="0"
+          style="width:600px;max-width:600px;background:#0B0B0B;border:1px solid rgba(255,85,0,0.18);border-radius:16px;overflow:hidden;">
+
+          <!-- Brand bar -->
+          <tr>
+            <td align="center" class="px-pad py-pad" style="padding:48px 40px 8px;">
+              <div style="font-family:'Bebas Neue',Impact,'Arial Narrow',sans-serif;font-size:42px;line-height:1;letter-spacing:0.06em;color:#FF5500;font-weight:400;">
+                PRONOS
+              </div>
+              <div style="width:48px;height:2px;background:#FF5500;margin:14px auto 0;border-radius:1px;"></div>
+            </td>
+          </tr>
+
+          <!-- Hero -->
+          <tr>
+            <td class="px-pad" style="padding:32px 40px 8px;text-align:center;">
+              <h1 style="margin:0 0 14px;font-family:'DM Sans',Helvetica,Arial,sans-serif;font-size:26px;line-height:1.25;color:#F2F2F2;font-weight:600;letter-spacing:-0.01em;">
+                ${greeting}, ¡estás dentro!&nbsp;🎉
+              </h1>
+              <p style="margin:0;font-size:15px;line-height:1.65;color:#A0A0A0;">
+                Gracias por unirte a la lista de espera de
+                <strong style="color:#F2F2F2;font-weight:600;">Pronos</strong> —
+                el primer mercado de predicciones de Latinoamérica.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td class="px-pad" style="padding:18px 40px 8px;text-align:center;">
+              <p style="margin:0;font-size:15px;line-height:1.65;color:#A0A0A0;">
+                Estamos construyendo algo diferente: predicciones reales sobre
+                <strong style="color:#D8D8D8;font-weight:600;">deportes</strong>,
+                <strong style="color:#D8D8D8;font-weight:600;">política</strong> y
+                <strong style="color:#D8D8D8;font-weight:600;">entretenimiento</strong>,
+                con liquidación automática y sin intermediarios.
+              </p>
+            </td>
+          </tr>
+
+          <!-- "What's next" callout -->
+          <tr>
+            <td class="px-pad" style="padding:24px 40px 8px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                style="background:#111111;border:1px solid rgba(255,85,0,0.22);border-radius:10px;">
+                <tr>
+                  <td style="padding:18px 22px;">
+                    <p style="margin:0 0 6px;font-size:13px;line-height:1.5;color:#FF5500;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">
+                      ¿Qué sigue?
+                    </p>
+                    <p style="margin:0;font-size:14px;line-height:1.6;color:#A0A0A0;">
+                      Te avisaremos en cuanto abramos la beta. Serás de los primeros
+                      en probar la plataforma y participar en los mercados iniciales.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Socials -->
+          <tr>
+            <td class="px-pad" style="padding:28px 40px 4px;text-align:center;">
+              <p style="margin:0 0 10px;font-size:13px;line-height:1.5;color:#666;letter-spacing:0.02em;">
+                Mientras tanto, síguenos para novedades:
+              </p>
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" class="social-row" style="margin:0 auto;">
+                <tr>
+                  <td style="padding:0 8px;">
+                    <a href="https://www.instagram.com/pronos.latam/" style="display:inline-block;padding:8px 14px;border:1px solid rgba(255,85,0,0.32);border-radius:8px;color:#FF5500;font-size:13px;font-weight:600;letter-spacing:0.02em;text-decoration:none;">
+                      Instagram&nbsp;·&nbsp;@pronos.latam
+                    </a>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:8px;">
+                    <a href="https://www.tiktok.com/@pronos.io" style="display:inline-block;padding:8px 14px;border:1px solid rgba(255,255,255,0.14);border-radius:8px;color:#D8D8D8;font-size:13px;font-weight:600;letter-spacing:0.02em;text-decoration:none;">
+                      TikTok&nbsp;·&nbsp;@pronos.io
+                    </a>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:0 8px;">
+                    <a href="https://twitter.com/pronos_io" style="display:inline-block;padding:8px 14px;border:1px solid rgba(255,255,255,0.14);border-radius:8px;color:#D8D8D8;font-size:13px;font-weight:600;letter-spacing:0.02em;text-decoration:none;">
+                      X&nbsp;·&nbsp;@pronos_io
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Sign-off -->
+          <tr>
+            <td class="px-pad" style="padding:32px 40px 40px;text-align:center;border-top:1px solid rgba(255,255,255,0.06);margin-top:24px;">
+              <p style="margin:24px 0 0;font-size:12px;line-height:1.5;color:#555;letter-spacing:0.02em;">
+                — Simon, fundador de Pronos
+              </p>
+              <p style="margin:8px 0 0;font-size:11px;line-height:1.5;color:#3A3A3A;">
+                Estás recibiendo este correo porque te uniste a la lista de espera en
+                <a href="https://pronos.io" style="color:#3A3A3A;text-decoration:underline;">pronos.io</a>.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
 
   const r = await fetch('https://api.resend.com/emails', {
     method: 'POST',
