@@ -1,21 +1,19 @@
 import React from 'react';
 
-const TICKER_ITEMS = [
-  { label: 'POWERED BY', val: 'POLYMARKET' },
+// Pronos / MVP ticker. Items are duplicated once so the CSS-driven
+// horizontal scroll can loop seamlessly without a visible reset.
+// Re-branded from the Privy/USDC/Polygon era to the Turnkey/MXNB/
+// Arbitrum stack the MVP actually runs on now.
+const ITEMS = [
+  { label: 'POWERED BY', val: 'PRONOS' },
   { label: 'MERCADOS ACTIVOS', val: '60+', green: true },
-  { label: 'LIQUIDITY', val: '$1.2B+ USDC' },
+  { label: 'COLATERAL', val: 'MXNB · Bitso' },
   { label: 'PRÓXIMO DESTACADO', val: 'México vs Sudáfrica · 11 Jun 2026' },
-  { label: 'RED', val: 'POLYGON · SIN GAS', green: true },
-  { label: 'AUTH', val: 'EMAIL · GOOGLE · WALLET' },
-  { label: 'COMISIÓN', val: '≤2.5%' },
-  { label: 'POWERED BY', val: 'POLYMARKET' },
-  { label: 'MERCADOS ACTIVOS', val: '60+', green: true },
-  { label: 'LIQUIDITY', val: '$1.2B+ USDC' },
-  { label: 'PRÓXIMO DESTACADO', val: 'México vs Sudáfrica · 11 Jun 2026' },
-  { label: 'RED', val: 'POLYGON · SIN GAS', green: true },
-  { label: 'AUTH', val: 'EMAIL · GOOGLE · WALLET' },
+  { label: 'RED', val: 'ARBITRUM · SIN GAS', green: true },
+  { label: 'AUTH', val: 'EMAIL · TURNKEY · FIRMA DELEGADA' },
   { label: 'COMISIÓN', val: '≤2.5%' },
 ];
+const TICKER_ITEMS = [...ITEMS, ...ITEMS];
 
 export default function Ticker() {
   return (

@@ -52,6 +52,25 @@ const ERC20_ABI = [
   'function decimals() view returns (uint8)',
 ];
 
+// MarketFactory ABI — assumed shape for the contract that deploys new
+// AMMs on demand. Tweak the function/event signatures here once you
+// finalize the actual Solidity contract; the rest of deployMarketOnChain
+// will keep working as long as the names match.
+//
+// Assumed contract:
+//   function createBinaryMarket(string question, uint256 endTime, uint256 seedAmount)
+//       external returns (uint256 marketId, address market);
+//   function createMultiMarket(string question, uint8 outcomeCount,
+//       uint256 endTime, uint256 seedAmount)
+//       external returns (uint256 marketId, address market);
+//   event MarketCreated(uint256 indexed marketId, address indexed market,
+//       address indexed creator, uint8 outcomeCount, uint256 endTime);
+const MARKET_FACTORY_ABI = [
+  'function createBinaryMarket(string question, uint256 endTime, uint256 seedAmount) external returns (uint256, address)',
+  'function createMultiMarket(string question, uint8 outcomeCount, uint256 endTime, uint256 seedAmount) external returns (uint256, address)',
+  'event MarketCreated(uint256 indexed marketId, address indexed market, address indexed creator, uint8 outcomeCount, uint256 endTime)',
+];
+
 const MAX_UINT256 = ethers.constants.MaxUint256;
 
 // USDC/MXNB decimals — both happen to be 6.
@@ -327,5 +346,103 @@ export async function redeemOnChain({
   return {
     txHash: receipt.transactionHash,
     blockNumber: receipt.blockNumber,
+  };
+}
+
+// ── Auto-deploy a new market via MarketFactory ──────────────────────
+//
+// Caller passes a pending market description; we encode the factory
+// call, sign via the deployer's Turnkey delegation, broadcast, and
+// parse the MarketCreated event for the new (marketId, address).
+//
+// `deployerSuborgId` and `deployerAddr` are the SUB-ORG that owns the
+// creation rights. Two reasonable choices:
+//   1. A dedicated deployer sub-org (e.g. ONCHAIN_DEPLOYER_SUBORG_ID)
+//      that has a separate delegation policy authorizing factory calls.
+//      Recommended — keeps user trades and admin deploys on different
+//      keys, simpler audit trail.
+//   2. The admin's own user sub-org if the admin's policy whitelists
+//      the factory address. Works but mixes concerns.
+//
+// Hard-gated: factory address must be set, plus the standard onchain
+// pre-checks. Returns { marketId, marketAddress, txHash, blockNumber }.
+export async function deployMarketOnChain({
+  deployerSuborgId, deployerAddr,
+  question, outcomeCount, endTime, seedAmount,
+}) {
+  requireReady();
+  const factoryAddr = process.env.ONCHAIN_MARKET_FACTORY_ADDRESS;
+  if (!factoryAddr) {
+    const err = new Error('factory_not_configured');
+    err.status = 503;
+    err.detail = 'set ONCHAIN_MARKET_FACTORY_ADDRESS to enable auto-deploy';
+    throw err;
+  }
+  if (!deployerSuborgId) throw new Error('deployerSuborgId required');
+  if (!deployerAddr) throw new Error('deployerAddr required');
+  if (typeof question !== 'string' || question.trim().length < 8) {
+    throw new Error('question too short');
+  }
+  const n = Number.parseInt(outcomeCount, 10);
+  if (!Number.isInteger(n) || n < 2 || n > 10) {
+    throw new Error('outcomeCount must be 2..10');
+  }
+  const endTs = Math.floor(new Date(endTime).getTime() / 1000);
+  if (!Number.isFinite(endTs) || endTs <= Math.floor(Date.now() / 1000)) {
+    throw new Error('endTime must be a future timestamp');
+  }
+  const seedUnits = ethers.utils.parseUnits(String(seedAmount), COLLATERAL_DECIMALS);
+
+  const iface = new ethers.utils.Interface(MARKET_FACTORY_ABI);
+  const data = n === 2
+    ? iface.encodeFunctionData('createBinaryMarket', [question, endTs, seedUnits])
+    : iface.encodeFunctionData('createMultiMarket', [question, n, endTs, seedUnits]);
+
+  // The factory pulls seed collateral from the deployer's wallet on
+  // creation, so make sure the deployer has approved MAX on the
+  // collateral token towards the factory. ensureCollateralAllowance
+  // approves towards an arbitrary spender — reuse it.
+  await ensureCollateralAllowance({
+    suborgId: deployerSuborgId,
+    ownerAddr: deployerAddr,
+    ammAddress: factoryAddr,
+    amount: seedUnits,
+  });
+
+  const receipt = await signAndBroadcast({
+    suborgId: deployerSuborgId,
+    from: deployerAddr,
+    to: factoryAddr,
+    data,
+    gasLimit: 4_000_000n, // contract deploys are heavier than trades
+  });
+
+  // Parse MarketCreated event from the receipt logs.
+  let marketId = null;
+  let marketAddress = null;
+  for (const log of receipt.logs || []) {
+    try {
+      const parsed = iface.parseLog(log);
+      if (parsed?.name === 'MarketCreated') {
+        marketId = parsed.args.marketId?.toString() || null;
+        marketAddress = parsed.args.market || null;
+        break;
+      }
+    } catch { /* not our event — skip */ }
+  }
+  if (!marketAddress) {
+    const err = new Error('market_created_event_missing');
+    err.status = 502;
+    err.detail = 'tx succeeded but MarketCreated event not found — check factory ABI';
+    err.txHash = receipt.transactionHash;
+    throw err;
+  }
+
+  return {
+    marketId,
+    marketAddress,
+    txHash: receipt.transactionHash,
+    blockNumber: receipt.blockNumber,
+    chainId: chainId(),
   };
 }

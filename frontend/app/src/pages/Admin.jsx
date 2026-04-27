@@ -445,6 +445,10 @@ function CreateMarketForm({ onCreated }) {
   const [featured, setFeatured] = useState(false);
   const [sport, setSport] = useState('');
   const [league, setLeague] = useState('');
+  // Auto-deploy: when true, server calls MarketFactory itself + captures
+  // the resulting address. When false, admin pastes the address manually
+  // (for contracts deployed via Foundry/Hardhat/Remix outside Pronos).
+  const [autoDeploy, setAutoDeploy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState(null);
 
@@ -496,15 +500,19 @@ function CreateMarketForm({ onCreated }) {
         ammMode,
         mode: 'onchain',
         chainId: Number(chainId),
-        chainAddress: chainAddress.trim(),
+        chainAddress: autoDeploy ? '' : chainAddress.trim(),
         chainMarketId: chainMarketId.trim() || null,
         featured,
         sport: sport || null,
         league: league || null,
         outcomeImages: hasAnyImage ? trimmedImages : null,
+        autoDeploy,
       });
       if (!ok) throw new Error(data?.error ? `${data.error}${data.detail ? ` · ${data.detail}` : ''}` : 'create_failed');
-      setNotice({ type: 'success', msg: `Mercado creado · id=${data.marketId} · ${data.ammMode}` });
+      const deployBit = data.autoDeploy
+        ? ` · auto-deployed at ${data.autoDeploy.chainAddress.slice(0, 10)}… (tx ${data.autoDeploy.txHash.slice(0, 10)}…)`
+        : '';
+      setNotice({ type: 'success', msg: `Mercado creado · id=${data.marketId} · ${data.ammMode}${deployBit}` });
       setQuestion('');
       setOutcomes(['Sí', 'No']);
       setOutcomeImages(['', '']);
@@ -620,20 +628,43 @@ function CreateMarketForm({ onCreated }) {
       </div>
 
       <div style={{ padding: 14, borderRadius: 10, background: 'var(--surface2)', border: '1px solid var(--border)', marginTop: 8, marginBottom: 8 }}>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 12 }}>
-          Metadatos on-chain
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+            Metadatos on-chain
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-mono)', fontSize: 11, color: autoDeploy ? 'var(--green)' : 'var(--text-secondary)' }}>
+            <input type="checkbox" checked={autoDeploy} onChange={e => setAutoDeploy(e.target.checked)} />
+            Auto-desplegar contrato
+          </label>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr', gap: 10 }}>
-          <Field label="Chain ID" hint="421614 = Arbitrum Sepolia">
-            <input type="number" required min={1} value={chainId} onChange={e => setChainId(e.target.value)} style={inputStyle} />
-          </Field>
-          <Field label="Contract address" hint="La AMM ya desplegada.">
-            <input type="text" required pattern="0x[a-fA-F0-9]{40}" value={chainAddress} onChange={e => setChainAddress(e.target.value)} style={inputStyle} placeholder="0x…" />
-          </Field>
-          <Field label="Market ID (opcional)" hint="Índice dentro del contract.">
-            <input type="text" value={chainMarketId} onChange={e => setChainMarketId(e.target.value)} style={inputStyle} placeholder="0 · 1 · …" />
-          </Field>
-        </div>
+
+        {autoDeploy ? (
+          <div style={{
+            padding: '10px 12px', borderRadius: 8,
+            background: 'rgba(0,232,122,0.06)', border: '1px solid rgba(0,232,122,0.25)',
+            fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.55,
+          }}>
+            El backend llamará a <strong style={{ color: 'var(--green)' }}>MarketFactory</strong> con la sub-org de despliegue
+            (<code>ONCHAIN_DEPLOYER_SUBORG_ID</code>) y guardará la dirección del nuevo contract automáticamente.
+            Requiere <code>ONCHAIN_MARKET_FACTORY_ADDRESS</code> + <code>ONCHAIN_DEPLOYER_ADDRESS</code> en env.
+            <br /><br />
+            <Field label="Chain ID" hint="421614 = Arbitrum Sepolia">
+              <input type="number" required min={1} value={chainId} onChange={e => setChainId(e.target.value)} style={inputStyle} />
+            </Field>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr', gap: 10 }}>
+            <Field label="Chain ID" hint="421614 = Arbitrum Sepolia">
+              <input type="number" required min={1} value={chainId} onChange={e => setChainId(e.target.value)} style={inputStyle} />
+            </Field>
+            <Field label="Contract address" hint="AMM ya desplegada (Foundry/Hardhat/Remix)">
+              <input type="text" required pattern="0x[a-fA-F0-9]{40}" value={chainAddress} onChange={e => setChainAddress(e.target.value)} style={inputStyle} placeholder="0x…" />
+            </Field>
+            <Field label="Market ID (opcional)" hint="Índice dentro del contract.">
+              <input type="text" value={chainMarketId} onChange={e => setChainMarketId(e.target.value)} style={inputStyle} placeholder="0 · 1 · …" />
+            </Field>
+          </div>
+        )}
       </div>
 
       <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', marginTop: 6, marginBottom: 14, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)' }}>
@@ -745,8 +776,38 @@ function MarketsList({ refreshKey, bumpRefresh }) {
   const [resolvingId, setResolvingId] = useState(null);
   const [featuringId, setFeaturingId] = useState(null);
   const [archivingId, setArchivingId] = useState(null);
+  const [bulkArchiving, setBulkArchiving] = useState(false);
   const [editingMarket, setEditingMarket] = useState(null);
   const [notice, setNotice] = useState(null);
+
+  async function handleBulkArchivePoints() {
+    const confirmMsg =
+      'Archivar TODOS los mercados off-chain (mode=points + legacy NULL).\n\n' +
+      '· Se ocultan de las listas públicas y de admin\n' +
+      '· Se mantienen en la base para historial de trades\n' +
+      '· Solo afecta a mercados off-chain — los onchain no se tocan\n\n' +
+      '¿Continuar?';
+    if (!window.confirm(confirmMsg)) return;
+    setBulkArchiving(true);
+    setNotice(null);
+    try {
+      const { ok, data } = await postJson('/api/points/admin/bulk-archive', {
+        mode: 'points',
+        includeNullMode: true,
+      });
+      if (!ok) throw new Error(data?.error || 'bulk_archive_failed');
+      setNotice({
+        type: 'success',
+        msg: `Archivados ${data.archivedCount} mercados off-chain.`,
+      });
+      load();
+      bumpRefresh();
+    } catch (e) {
+      setNotice({ type: 'error', msg: e?.message || 'bulk_archive_failed' });
+    } finally {
+      setBulkArchiving(false);
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -859,7 +920,24 @@ function MarketsList({ refreshKey, bumpRefresh }) {
       <SectionHeader
         title={`Mercados on-chain (${rows.length})`}
         subtitle="mode='onchain'. Filtros + edit + featured + resolve."
-        right={<button onClick={load} className="btn-ghost" style={{ fontSize: 11 }}>Refrescar</button>}
+        right={
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={load} className="btn-ghost" style={{ fontSize: 11 }}>Refrescar</button>
+            <button
+              onClick={handleBulkArchivePoints}
+              disabled={bulkArchiving}
+              className="btn-ghost"
+              title="Archiva todos los mercados off-chain (mode=points + legacy NULL). No toca los on-chain."
+              style={{
+                fontSize: 11,
+                color: 'var(--red)',
+                borderColor: 'rgba(255,69,69,0.25)',
+              }}
+            >
+              {bulkArchiving ? '…' : 'Archivar legacy'}
+            </button>
+          </div>
+        }
       />
 
       {/* Status tabs */}

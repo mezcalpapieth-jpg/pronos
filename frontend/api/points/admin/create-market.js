@@ -36,6 +36,7 @@ import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { initialReserves } from '../../_lib/amm-math.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 import { neon } from '@neondatabase/serverless';
+import { deployMarketOnChain, isOnchainReady } from '../../_lib/onchain-trader.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 
@@ -55,6 +56,7 @@ export default async function handler(req, res) {
     question, category, icon, endTime, outcomes, seedLiquidity, ammMode,
     mode: chainMode, chainId, chainAddress, chainMarketId, featured,
     sport, league, outcomeImages,
+    autoDeploy,
   } = req.body || {};
   const seed = Number(seedLiquidity);
   const mode = ammMode === 'parallel' ? 'parallel' : 'unified';
@@ -87,15 +89,28 @@ export default async function handler(req, res) {
   let chainIdNum = null;
   let chainAddressStr = null;
   let chainMarketIdStr = null;
+  // Two paths to fill chainAddressStr below:
+  //   A) Manual paste — admin pre-deployed the contract elsewhere
+  //      (Foundry / Hardhat / Remix) and supplies the address.
+  //   B) Auto-deploy — admin sends `autoDeploy: true` with no
+  //      chainAddress, and we call MarketFactory ourselves to deploy
+  //      the contract and capture the resulting address. Requires
+  //      ONCHAIN_MARKET_FACTORY_ADDRESS + ONCHAIN_DEPLOYER_SUBORG_ID
+  //      + ONCHAIN_DEPLOYER_ADDRESS env vars.
+  const wantsAutoDeploy = isOnchain
+    && autoDeploy === true
+    && (!chainAddress || String(chainAddress).trim() === '');
   if (isOnchain) {
     chainIdNum = Number.parseInt(chainId, 10);
     if (!Number.isInteger(chainIdNum) || chainIdNum <= 0) {
       return res.status(400).json({ error: 'invalid_chain_id' });
     }
-    if (typeof chainAddress !== 'string' || !/^0x[a-fA-F0-9]{40}$/.test(chainAddress.trim())) {
-      return res.status(400).json({ error: 'invalid_chain_address' });
+    if (!wantsAutoDeploy) {
+      if (typeof chainAddress !== 'string' || !/^0x[a-fA-F0-9]{40}$/.test(chainAddress.trim())) {
+        return res.status(400).json({ error: 'invalid_chain_address' });
+      }
+      chainAddressStr = chainAddress.trim().toLowerCase();
     }
-    chainAddressStr = chainAddress.trim().toLowerCase();
     // chainMarketId is optional at registration — some deployments
     // expose only the AMM contract address and the MVP treats that as
     // the market. We accept any numeric string ≤ 78 chars (BigInt
@@ -136,6 +151,49 @@ export default async function handler(req, res) {
   const endDate = endTime ? new Date(endTime) : null;
   if (!endDate || isNaN(endDate.getTime()) || endDate <= new Date()) {
     return res.status(400).json({ error: 'invalid_end_time' });
+  }
+
+  // Auto-deploy step (path B from above) — runs BEFORE the DB insert so
+  // a failed deploy doesn't leave a stub row pointing at nothing. Uses
+  // the deployer sub-org's delegation policy to call MarketFactory and
+  // captures the new market address from the MarketCreated event.
+  let autoDeployResult = null;
+  if (wantsAutoDeploy) {
+    if (!isOnchainReady()) {
+      return res.status(503).json({
+        error: 'onchain_not_enabled',
+        detail: 'set TURNKEY_POLICIES_ENABLED + ONCHAIN_RPC_URL + ONCHAIN_COLLATERAL_ADDRESS',
+      });
+    }
+    const deployerSuborgId = process.env.ONCHAIN_DEPLOYER_SUBORG_ID;
+    const deployerAddr = process.env.ONCHAIN_DEPLOYER_ADDRESS;
+    if (!deployerSuborgId || !deployerAddr) {
+      return res.status(503).json({
+        error: 'deployer_not_configured',
+        detail: 'set ONCHAIN_DEPLOYER_SUBORG_ID + ONCHAIN_DEPLOYER_ADDRESS to enable auto-deploy',
+      });
+    }
+    try {
+      autoDeployResult = await deployMarketOnChain({
+        deployerSuborgId,
+        deployerAddr,
+        question: question.trim(),
+        outcomeCount: outcomes.length,
+        endTime: endDate.toISOString(),
+        seedAmount: seed,
+      });
+      // Populate the address fields with what the factory returned so
+      // the downstream INSERT lands the market with a valid chain ref.
+      chainAddressStr = String(autoDeployResult.marketAddress || '').toLowerCase();
+      chainMarketIdStr = autoDeployResult.marketId || null;
+    } catch (e) {
+      console.error('[admin/create-market] auto-deploy failed', { message: e?.message, code: e?.code });
+      return res.status(e?.status || 500).json({
+        error: 'auto_deploy_failed',
+        detail: e?.detail || e?.message?.slice(0, 240) || null,
+        txHash: e?.txHash || null,
+      });
+    }
   }
 
   try {
@@ -179,6 +237,13 @@ export default async function handler(req, res) {
         marketId: result,
         ammMode: 'unified',
         mode: marketMode,
+        autoDeploy: autoDeployResult ? {
+          chainAddress: autoDeployResult.marketAddress,
+          chainMarketId: autoDeployResult.marketId,
+          txHash: autoDeployResult.txHash,
+          blockNumber: autoDeployResult.blockNumber,
+          chainId: autoDeployResult.chainId,
+        } : null,
       });
     }
 

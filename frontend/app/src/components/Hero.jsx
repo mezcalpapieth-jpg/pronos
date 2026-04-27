@@ -346,11 +346,11 @@ export default function Hero({ onOpenLogin }) {
 
           <div className="hero-stats">
             <div className="hero-stat">
-              <span className="hero-stat-val"><span className="green">$1.2B+</span></span>
-              <span className="hero-stat-label">{t('hero.stats.volumeLabel')}</span>
+              <span className="hero-stat-val"><span className="green">MXNB</span></span>
+              <span className="hero-stat-label">colateral on-chain</span>
             </div>
             <div className="hero-stat">
-              <span className="hero-stat-val">60+</span>
+              <span className="hero-stat-val">{markets.length || '—'}</span>
               <span className="hero-stat-label">{t('hero.stats.activeLabel')}</span>
             </div>
             <div className="hero-stat">

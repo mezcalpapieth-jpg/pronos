@@ -30,12 +30,14 @@ export default async function handler(req, res) {
   const filter = ['all', 'active', 'pending', 'resolved', 'archived'].includes(req.query.status) ? req.query.status : 'all';
   // Same mode split as the public /api/points/markets — lets the MVP
   // admin query only on-chain markets while Points admin stays on
-  // off-chain ones. Omitted ⇒ no filter (shows everything; historic
-  // behaviour).
+  // off-chain ones. Default 'points' (matches the public endpoint
+  // default) so markets registered through MVP admin never surface in
+  // the Points admin lists. `?mode=all` keeps the legacy behaviour for
+  // any tooling that wants every row regardless of mode.
   const modeParam = typeof req.query.mode === 'string' ? req.query.mode.toLowerCase() : '';
   const modeFilter = modeParam === 'onchain' ? 'onchain'
-                    : modeParam === 'points' ? 'points'
-                    : null;
+                    : modeParam === 'all'    ? null
+                    : 'points';
   // Chain filter: MVP admin scopes to whatever chain is currently
   // active (Sepolia 421614, Arbitrum One 42161, etc). When omitted the
   // admin sees markets across every chain.

@@ -12,6 +12,19 @@ import { usePointsAuth } from '../lib/pointsAuth.js';
 import { useT, useLang, setLang } from '../lib/i18n.js';
 import MARKETS from '../lib/markets.js';
 
+// MVP Nav fetches the user's on-chain MXNB balance via a dedicated
+// endpoint instead of reading user.balance from the session — that
+// field is the off-chain MXNP balance from points_balances and would
+// leak Points-app state into the MVP nav. /api/points/onchain-balance
+// reads the ERC-20 balance from the chain via Alchemy.
+async function fetchOnchainBalance() {
+  try {
+    const r = await fetch('/api/points/onchain-balance', { credentials: 'include' });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
+}
+
 function getInitialTheme() {
   const saved = typeof localStorage !== 'undefined' && localStorage.getItem('pronos-theme');
   if (saved) return saved;
@@ -42,7 +55,22 @@ export default function Nav({ onOpenLogin }) {
 
   const username = user?.username || null;
   const walletAddress = user?.walletAddress || null;
-  const balance = typeof user?.balance === 'number' ? user.balance : null;
+  // On-chain MXNB balance — fetched separately so the Points-app
+  // off-chain MXNP balance never bleeds into the MVP nav. Null until
+  // the first fetch resolves; rendered as '— MXNB' in that window.
+  const [onchainBalance, setOnchainBalance] = useState(null);
+
+  useEffect(() => {
+    if (!authenticated) { setOnchainBalance(null); return; }
+    let alive = true;
+    fetchOnchainBalance().then(d => {
+      if (!alive) return;
+      setOnchainBalance(typeof d?.balance === 'number' ? d.balance : 0);
+    });
+    return () => { alive = false; };
+  }, [authenticated, user?.walletAddress]);
+
+  const balance = onchainBalance;
 
   // Client-side admin flag (cosmetic only; server enforces the real rule).
   const adminList = (import.meta.env.VITE_POINTS_ADMIN_USERNAMES || 'mezcal,frmm,alex')
