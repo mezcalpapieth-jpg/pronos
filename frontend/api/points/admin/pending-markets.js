@@ -232,6 +232,7 @@ async function approveOne(pid, reviewer, note, opts = {}) {
     // (binary) or V2 (multi 2..8) inside deployMarketOnChain. Parallel
     // pending markets fall through to the manual-paste path because we
     // don't have a parallel factory yet (would need to loop V1 per leg).
+    let parallelLegDeploys = null;
     if (wantsAutoDeploy && deployer && ammMode === 'unified') {
       try {
         const deployResult = await deployer.deployMarketOnChain({
@@ -256,11 +257,32 @@ async function approveOne(pid, reviewer, note, opts = {}) {
         if (deployErr?.txHash) err.detail = `${err.detail || ''} (tx=${deployErr.txHash})`.trim();
         throw err;
       }
-    } else if (wantsAutoDeploy && ammMode === 'parallel') {
-      const err = new Error('parallel_auto_deploy_unsupported');
-      err.status = 400;
-      err.detail = 'Parallel markets need per-leg deploys; paste contracts manually for now.';
-      throw err;
+    } else if (wantsAutoDeploy && deployer && ammMode === 'parallel') {
+      // Loop V1 createMarket once per outcome — each leg is its own
+      // binary Yes/No contract. The parent row gets no chain_address;
+      // each leg's chain_address is filled below in the per-leg INSERT.
+      try {
+        const { deployParallelBinaryOnChain } = await import('../../_lib/onchain-trader.js');
+        const parallelResult = await deployParallelBinaryOnChain({
+          deployerSuborgId: deployer.deployerSuborgId,
+          deployerAddr: deployer.deployerAddr,
+          parentQuestion: String(r.question || '').trim(),
+          category: String(r.category || 'general').trim(),
+          outcomeLabels: outcomes,
+          endTime: endDate.toISOString(),
+          resolutionSource: r.resolution_source || 'Pronos auto-resolver',
+          seedAmountPerLeg: seed,
+        });
+        parallelLegDeploys = parallelResult.legs;
+      } catch (deployErr) {
+        const err = new Error(deployErr?.message || 'parallel_auto_deploy_failed');
+        err.status = deployErr?.status || 500;
+        err.detail = deployErr?.detail || null;
+        if (Array.isArray(deployErr?.partialLegs) && deployErr.partialLegs.length > 0) {
+          err.detail = `${err.detail || ''} (${deployErr.partialLegs.length} legs already on-chain — orphaned)`.trim();
+        }
+        throw err;
+      }
     }
 
     if (ammMode === 'unified') {
@@ -335,13 +357,24 @@ async function approveOne(pid, reviewer, note, opts = {}) {
       );
       createdMarketId = parent.rows[0].id;
       for (let i = 0; i < outcomes.length; i++) {
+        // Auto-deployed parallel: each leg has its own binary contract.
+        // Manual / off-chain falls back to the parent's chainAddressStr
+        // (which is null for off-chain points-mode markets).
+        const legChainAddress = parallelLegDeploys
+          ? String(parallelLegDeploys[i]?.marketAddress || '').toLowerCase()
+          : chainAddressStr;
+        const legChainMarketId = parallelLegDeploys
+          ? (parallelLegDeploys[i]?.marketId || null)
+          : null;
+
         await client.query(
           `INSERT INTO points_markets
              (question, category, icon, outcomes, reserves, seed_liquidity,
               start_time, end_time, status, created_by, amm_mode,
-              parent_id, leg_label, sport, league, mode, chain_id, chain_address)
+              parent_id, leg_label, sport, league, mode,
+              chain_id, chain_market_id, chain_address)
            VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8, 'active', $9,
-                   'parallel', $10, $11, $12, $13, $14, $15, $16)`,
+                   'parallel', $10, $11, $12, $13, $14, $15, $16, $17)`,
           [
             `${r.question} — ${outcomes[i]}`,
             r.category,
@@ -358,7 +391,8 @@ async function approveOne(pid, reviewer, note, opts = {}) {
             r.league || null,
             marketMode,
             chainIdNum,
-            chainAddressStr,
+            legChainMarketId,
+            legChainAddress,
           ],
         );
       }

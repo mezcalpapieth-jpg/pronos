@@ -508,3 +508,93 @@ export async function deployMarketOnChain({
     factoryVariant: useV2 ? 'v2-multi' : 'v1-binary',
   };
 }
+
+// ── Parallel-binary auto-deploy ─────────────────────────────────────
+//
+// "Parallel" markets are N binary Yes/No markets grouped under a
+// single parent question — e.g. "Who wins the F1 GP?" with one Yes/No
+// AMM per driver. There's no parallel-specific factory contract, so
+// we just loop V1 `MarketFactory.createMarket(...)` once per outcome
+// and collect the resulting addresses.
+//
+// Costs: N transactions, each spending `seedAmountPerLeg` of MXNB.
+// Total deployer collateral needed = N × seedAmountPerLeg. Because
+// every leg is independent, liquidity doesn't pool across legs — that
+// matches what mode='points' parallel already does in approveOne.
+//
+// Failure semantics: best-effort with abort. If leg `i` fails to
+// deploy, we throw immediately. Legs 0..i-1 are already on-chain but
+// orphaned — wasted gas but no DB inconsistency. The error names the
+// failed leg index so the operator can debug.
+//
+// Each leg's question is synthesized: parentQuestion + " — " + label
+// so the on-chain `question` field is human-readable on Arbiscan
+// without depending on our DB.
+//
+// Returns:
+//   { legs: [{label, marketId, marketAddress, txHash}, ...],
+//     chainId, factoryVariant: 'v1-binary-parallel' }
+export async function deployParallelBinaryOnChain({
+  deployerSuborgId, deployerAddr,
+  parentQuestion, category, outcomeLabels,
+  endTime, resolutionSource, seedAmountPerLeg,
+}) {
+  requireReady();
+  if (!deployerSuborgId) throw new Error('deployerSuborgId required');
+  if (!deployerAddr) throw new Error('deployerAddr required');
+  if (typeof parentQuestion !== 'string' || parentQuestion.trim().length < 8) {
+    throw new Error('parentQuestion too short');
+  }
+  if (typeof category !== 'string' || category.trim() === '') {
+    throw new Error('category required');
+  }
+  if (!Array.isArray(outcomeLabels) || outcomeLabels.length < 2) {
+    throw new Error('outcomeLabels must have at least 2 entries');
+  }
+  if (!outcomeLabels.every(l => typeof l === 'string' && l.trim() !== '')) {
+    throw new Error('every outcomeLabel must be a non-empty string');
+  }
+
+  const legs = [];
+  for (let i = 0; i < outcomeLabels.length; i++) {
+    const label = outcomeLabels[i].trim();
+    // Truncate the synthesized question if the parent + label combo
+    // would push us past a reasonable on-chain string length. Solidity
+    // strings are unbounded but storage costs scale, and most explorers
+    // truncate at ~256 chars anyway.
+    const rawQ = `${parentQuestion.trim()} — ¿${label}?`;
+    const legQuestion = rawQ.length > 240 ? rawQ.slice(0, 237) + '…' : rawQ;
+    try {
+      const result = await deployMarketOnChain({
+        deployerSuborgId,
+        deployerAddr,
+        question: legQuestion,
+        category: category.trim(),
+        outcomeCount: 2, // every leg is binary
+        endTime,
+        resolutionSource: resolutionSource || 'Pronos parallel — leg auto',
+        seedAmount: seedAmountPerLeg,
+      });
+      legs.push({
+        label,
+        marketId: result.marketId,
+        marketAddress: result.marketAddress,
+        txHash: result.txHash,
+        blockNumber: result.blockNumber,
+      });
+    } catch (e) {
+      // Re-throw with leg context so the caller knows which one died.
+      const err = new Error(`leg_${i}_deploy_failed`);
+      err.status = e?.status || 500;
+      err.detail = `leg ${i} (${label}): ${e?.message || 'unknown'}`;
+      err.partialLegs = legs; // legs already deployed before failure
+      throw err;
+    }
+  }
+
+  return {
+    legs,
+    chainId: chainId(),
+    factoryVariant: 'v1-binary-parallel',
+  };
+}

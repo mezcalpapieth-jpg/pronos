@@ -36,7 +36,11 @@ import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { initialReserves } from '../../_lib/amm-math.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 import { neon } from '@neondatabase/serverless';
-import { deployMarketOnChain, isOnchainReady } from '../../_lib/onchain-trader.js';
+import {
+  deployMarketOnChain,
+  deployParallelBinaryOnChain,
+  isOnchainReady,
+} from '../../_lib/onchain-trader.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 
@@ -154,10 +158,13 @@ export default async function handler(req, res) {
   }
 
   // Auto-deploy step (path B from above) — runs BEFORE the DB insert so
-  // a failed deploy doesn't leave a stub row pointing at nothing. Uses
-  // the deployer sub-org's delegation policy to call MarketFactory and
-  // captures the new market address from the MarketCreated event.
+  // a failed deploy doesn't leave a stub row pointing at nothing.
+  // Three branches:
+  //   · unified + autoDeploy → single deployMarketOnChain call (V1 or V2)
+  //   · parallel + autoDeploy → deployParallelBinaryOnChain (N V1 deploys)
+  //   · neither → no-op, manual chainAddress already validated above
   let autoDeployResult = null;
+  let parallelLegDeploys = null; // [{label, marketAddress, marketId, txHash}, …]
   if (wantsAutoDeploy) {
     if (!isOnchainReady()) {
       return res.status(503).json({
@@ -173,32 +180,61 @@ export default async function handler(req, res) {
         detail: 'set ONCHAIN_DEPLOYER_SUBORG_ID + ONCHAIN_DEPLOYER_ADDRESS to enable auto-deploy',
       });
     }
-    try {
-      autoDeployResult = await deployMarketOnChain({
-        deployerSuborgId,
-        deployerAddr,
-        question: question.trim(),
-        category,
-        outcomeCount: normalizedOutcomes.length,
-        outcomeLabels: normalizedOutcomes,
-        endTime: endDate.toISOString(),
-        // Use the resolver source if it's set on a generator-approved
-        // pending market; otherwise fall back to a generic admin label
-        // so the on-chain `resolutionSource` field is never empty.
-        resolutionSource: req.body?.resolutionSource || 'Pronos admin',
-        seedAmount: seed,
-      });
-      // Populate the address fields with what the factory returned so
-      // the downstream INSERT lands the market with a valid chain ref.
-      chainAddressStr = String(autoDeployResult.marketAddress || '').toLowerCase();
-      chainMarketIdStr = autoDeployResult.marketId || null;
-    } catch (e) {
-      console.error('[admin/create-market] auto-deploy failed', { message: e?.message, code: e?.code });
-      return res.status(e?.status || 500).json({
-        error: 'auto_deploy_failed',
-        detail: e?.detail || e?.message?.slice(0, 240) || null,
-        txHash: e?.txHash || null,
-      });
+
+    if (mode === 'parallel') {
+      // Loop V1 createMarket once per outcome. Each leg is a binary
+      // Yes/No market with its own contract + seed = `seed` MXNB.
+      // Total deployer collateral burned = N × seed.
+      try {
+        const parallelResult = await deployParallelBinaryOnChain({
+          deployerSuborgId,
+          deployerAddr,
+          parentQuestion: question.trim(),
+          category,
+          outcomeLabels: normalizedOutcomes,
+          endTime: endDate.toISOString(),
+          resolutionSource: req.body?.resolutionSource || 'Pronos admin',
+          seedAmountPerLeg: seed,
+        });
+        parallelLegDeploys = parallelResult.legs;
+        // Parent row stays addressless (it's metadata only); legs each
+        // carry their own chain_address, persisted in the loop below.
+      } catch (e) {
+        console.error('[admin/create-market] parallel auto-deploy failed', { message: e?.message, detail: e?.detail });
+        return res.status(e?.status || 500).json({
+          error: 'auto_deploy_failed',
+          detail: e?.detail || e?.message?.slice(0, 240) || null,
+          partialLegs: e?.partialLegs || null,
+        });
+      }
+    } else {
+      try {
+        autoDeployResult = await deployMarketOnChain({
+          deployerSuborgId,
+          deployerAddr,
+          question: question.trim(),
+          category,
+          outcomeCount: normalizedOutcomes.length,
+          outcomeLabels: normalizedOutcomes,
+          endTime: endDate.toISOString(),
+          // Use the resolver source if it's set on a generator-approved
+          // pending market; otherwise fall back to a generic admin label
+          // so the on-chain `resolutionSource` field is never empty.
+          resolutionSource: req.body?.resolutionSource || 'Pronos admin',
+          seedAmount: seed,
+        });
+        // Populate the address fields with what the factory returned so
+        // the downstream INSERT lands the market with a valid chain ref.
+        chainAddressStr = String(autoDeployResult.marketAddress || '').toLowerCase();
+        chainMarketIdStr = autoDeployResult.marketId || null;
+      } catch (e) {
+        console.error('[admin/create-market] auto-deploy failed', { message: e?.message, code: e?.code });
+        return res.status(e?.status || 500).json({
+          error: 'auto_deploy_failed',
+          detail: e?.detail || e?.message?.slice(0, 240) || null,
+          txHash: e?.txHash || null,
+        });
+      }
     }
   }
 
@@ -289,13 +325,24 @@ export default async function handler(req, res) {
       const parentId = parent.rows[0].id;
 
       for (let i = 0; i < normalizedOutcomes.length; i++) {
+        // For onchain auto-deployed parallel markets, each leg gets the
+        // address of the binary contract we just deployed for it. Manual
+        // / off-chain parallel falls back to chainAddressStr (which is
+        // null for off-chain points-mode markets).
+        const legChainAddress = parallelLegDeploys
+          ? String(parallelLegDeploys[i]?.marketAddress || '').toLowerCase()
+          : chainAddressStr;
+        const legChainMarketId = parallelLegDeploys
+          ? (parallelLegDeploys[i]?.marketId || null)
+          : null;
+
         await client.query(
           `INSERT INTO points_markets
              (question, category, icon, outcomes, reserves, seed_liquidity,
               end_time, status, created_by, amm_mode, parent_id, leg_label,
-              mode, chain_id, chain_address)
+              mode, chain_id, chain_market_id, chain_address)
            VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, 'active', $8,
-                   'parallel', $9, $10, $11, $12, $13)`,
+                   'parallel', $9, $10, $11, $12, $13, $14)`,
           [
             // Leg "question" is synthetic — positions.js + portfolio use
             // parent.question + leg_label for display, but keeping a
@@ -312,7 +359,8 @@ export default async function handler(req, res) {
             normalizedOutcomes[i],
             marketMode,
             chainIdNum,
-            chainAddressStr,
+            legChainMarketId,
+            legChainAddress,
           ],
         );
       }
