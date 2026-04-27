@@ -74,14 +74,33 @@ export default async function handler(req, res) {
         const err = new Error('market_not_active'); err.status = 400; throw err;
       }
 
+      // Resolve in two steps so the core UPDATE doesn't depend on
+      // the final_score column existing. If the schema migration that
+      // adds final_score hasn't run yet on this DB (warm Lambda from
+      // before the migration shipped, or a clone DB without the
+      // latest schema), the second UPDATE no-ops via try/catch and
+      // resolution still succeeds.
       await client.query(
         `UPDATE points_markets
            SET status = 'resolved', outcome = $1,
-               resolved_at = NOW(), resolved_by = $2,
-               final_score = $3
-         WHERE id = $4`,
-        [oi, admin.username, scoreVal, mid],
+               resolved_at = NOW(), resolved_by = $2
+         WHERE id = $3`,
+        [oi, admin.username, mid],
       );
+      if (scoreVal != null) {
+        try {
+          await client.query(
+            `UPDATE points_markets SET final_score = $1 WHERE id = $2`,
+            [scoreVal, mid],
+          );
+        } catch (e) {
+          // Postgres 42703 = undefined_column. Anything else is a real
+          // problem and should bubble up; a missing column is benign
+          // here because the resolve is already committed.
+          if (e?.code !== '42703') throw e;
+          console.warn('[admin/resolve-market] final_score column missing — skipping', { mid });
+        }
+      }
 
       if (m.amm_mode === 'parallel') {
         const legs = await client.query(
