@@ -339,7 +339,10 @@ function PendingMarketsSection({ refreshKey, bumpRefresh }) {
     try {
       const { ok, data } = await getJson('/api/points/admin/pending-markets?status=pending');
       if (!ok) throw new Error(data?.error || 'list_failed');
-      setRows(Array.isArray(data?.markets) ? data.markets : []);
+      // API returns `pending`, not `markets` — Points admin uses the
+      // right key, MVP was reading the wrong field which is why the
+      // tab always rendered empty even after a successful generation.
+      setRows(Array.isArray(data?.pending) ? data.pending : []);
     } catch (e) {
       setError(e?.message || 'list_failed');
     } finally {
