@@ -265,6 +265,10 @@ function ApproveOnchainForm({ pendingId, onSuccess, onCancel }) {
   const [chainAddress, setChainAddress] = useState('');
   const [chainMarketId, setChainMarketId] = useState('');
   const [note, setNote] = useState('');
+  // Auto-deploy is the default — the whole point of the MVP admin
+  // approving a generated pending row is to have it land on-chain
+  // automatically. Manual paste is the fallback.
+  const [autoDeploy, setAutoDeploy] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState(null);
 
@@ -279,8 +283,11 @@ function ApproveOnchainForm({ pendingId, onSuccess, onCancel }) {
         note: note.trim() || null,
         mode: 'onchain',
         chainId: Number(chainId),
-        chainAddress: chainAddress.trim(),
-        chainMarketId: chainMarketId.trim() || null,
+        // When auto-deploying, leave chainAddress / chainMarketId empty;
+        // the backend calls MarketFactory(V1/V2) and fills them in.
+        chainAddress: autoDeploy ? '' : chainAddress.trim(),
+        chainMarketId: autoDeploy ? null : (chainMarketId.trim() || null),
+        autoDeploy,
       });
       if (!ok) throw new Error(data?.error ? `${data.error}${data.detail ? ` · ${data.detail}` : ''}` : 'approve_failed');
       onSuccess?.(data);
@@ -296,17 +303,46 @@ function ApproveOnchainForm({ pendingId, onSuccess, onCancel }) {
       marginTop: 10, padding: 12, borderRadius: 10,
       border: '1px dashed var(--border)', background: 'var(--surface2)',
     }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr', gap: 8 }}>
+      <label style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        marginBottom: 10,
+        fontFamily: 'var(--font-mono)', fontSize: 11,
+        color: autoDeploy ? 'var(--green)' : 'var(--text-secondary)',
+      }}>
+        <input type="checkbox" checked={autoDeploy} onChange={e => setAutoDeploy(e.target.checked)} />
+        Auto-desplegar contrato vía MarketFactory
+      </label>
+
+      {autoDeploy ? (
+        <div style={{
+          padding: '8px 10px', borderRadius: 6,
+          background: 'rgba(0,232,122,0.06)', border: '1px solid rgba(0,232,122,0.22)',
+          fontFamily: 'var(--font-mono)', fontSize: 10, lineHeight: 1.55,
+          color: 'var(--text-secondary)', marginBottom: 10,
+        }}>
+          Backend llamará V1 (binario) o V2 (multi 2..8) según los outcomes
+          del pending. Aprobará seed MXNB hacia el factory y guardará
+          la dirección automáticamente.
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr', gap: 8 }}>
+          <Field label="Chain ID">
+            <input required type="number" min={1} value={chainId} onChange={e => setChainId(e.target.value)} style={inputStyle} />
+          </Field>
+          <Field label="Contract address">
+            <input required pattern="0x[a-fA-F0-9]{40}" value={chainAddress} onChange={e => setChainAddress(e.target.value)} style={inputStyle} placeholder="0x…" />
+          </Field>
+          <Field label="Market ID (opcional)">
+            <input value={chainMarketId} onChange={e => setChainMarketId(e.target.value)} style={inputStyle} placeholder="0 · 1 · …" />
+          </Field>
+        </div>
+      )}
+
+      {autoDeploy && (
         <Field label="Chain ID">
-          <input required type="number" min={1} value={chainId} onChange={e => setChainId(e.target.value)} style={inputStyle} />
+          <input required type="number" min={1} value={chainId} onChange={e => setChainId(e.target.value)} style={{ ...inputStyle, maxWidth: 160 }} />
         </Field>
-        <Field label="Contract address">
-          <input required pattern="0x[a-fA-F0-9]{40}" value={chainAddress} onChange={e => setChainAddress(e.target.value)} style={inputStyle} placeholder="0x…" />
-        </Field>
-        <Field label="Market ID (opcional)">
-          <input value={chainMarketId} onChange={e => setChainMarketId(e.target.value)} style={inputStyle} placeholder="0 · 1 · …" />
-        </Field>
-      </div>
+      )}
       <Field label="Nota (opcional)">
         <input value={note} onChange={e => setNote(e.target.value)} style={inputStyle} placeholder="Contexto para el registro" />
       </Field>

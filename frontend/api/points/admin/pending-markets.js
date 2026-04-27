@@ -135,23 +135,56 @@ async function approveOne(pid, reviewer, note, opts = {}) {
   let chainIdNum = null;
   let chainAddressStr = null;
   let chainMarketIdStr = null;
+  // Two paths to fill chainAddressStr when isOnchain:
+  //   A) Manual paste — opts.chainAddress is a 0x40-hex address
+  //   B) Auto-deploy — opts.autoDeploy=true, no chainAddress; we call
+  //      MarketFactory ourselves once we've read the pending row's
+  //      question / outcomes / endTime / seed.
+  const wantsAutoDeploy = isOnchain
+    && opts.autoDeploy === true
+    && (!opts.chainAddress || String(opts.chainAddress).trim() === '');
   if (isOnchain) {
     chainIdNum = Number.parseInt(opts.chainId, 10);
     if (!Number.isInteger(chainIdNum) || chainIdNum <= 0) {
       const err = new Error('invalid_chain_id'); err.status = 400; throw err;
     }
-    if (typeof opts.chainAddress !== 'string' || !/^0x[a-fA-F0-9]{40}$/.test(opts.chainAddress.trim())) {
-      const err = new Error('invalid_chain_address'); err.status = 400; throw err;
-    }
-    chainAddressStr = opts.chainAddress.trim().toLowerCase();
-    if (opts.chainMarketId !== undefined && opts.chainMarketId !== null && opts.chainMarketId !== '') {
-      const raw = String(opts.chainMarketId).trim();
-      if (!/^\d{1,78}$/.test(raw)) {
-        const err = new Error('invalid_chain_market_id'); err.status = 400; throw err;
+    if (!wantsAutoDeploy) {
+      if (typeof opts.chainAddress !== 'string' || !/^0x[a-fA-F0-9]{40}$/.test(opts.chainAddress.trim())) {
+        const err = new Error('invalid_chain_address'); err.status = 400; throw err;
       }
-      chainMarketIdStr = raw;
+      chainAddressStr = opts.chainAddress.trim().toLowerCase();
+      if (opts.chainMarketId !== undefined && opts.chainMarketId !== null && opts.chainMarketId !== '') {
+        const raw = String(opts.chainMarketId).trim();
+        if (!/^\d{1,78}$/.test(raw)) {
+          const err = new Error('invalid_chain_market_id'); err.status = 400; throw err;
+        }
+        chainMarketIdStr = raw;
+      }
     }
   }
+  // Lazy-load the deploy helper so off-chain approvals don't import
+  // ethers / Turnkey deps unnecessarily. Validates env vars upfront so
+  // the deploy doesn't fail mid-transaction.
+  let deployer = null;
+  if (wantsAutoDeploy) {
+    const { isOnchainReady, deployMarketOnChain } = await import('../../_lib/onchain-trader.js');
+    if (!isOnchainReady()) {
+      const err = new Error('onchain_not_enabled');
+      err.status = 503;
+      err.detail = 'set TURNKEY_POLICIES_ENABLED + ONCHAIN_RPC_URL + ONCHAIN_COLLATERAL_ADDRESS';
+      throw err;
+    }
+    const deployerSuborgId = process.env.ONCHAIN_DEPLOYER_SUBORG_ID;
+    const deployerAddr = process.env.ONCHAIN_DEPLOYER_ADDRESS;
+    if (!deployerSuborgId || !deployerAddr) {
+      const err = new Error('deployer_not_configured');
+      err.status = 503;
+      err.detail = 'set ONCHAIN_DEPLOYER_SUBORG_ID + ONCHAIN_DEPLOYER_ADDRESS';
+      throw err;
+    }
+    deployer = { deployerSuborgId, deployerAddr, deployMarketOnChain };
+  }
+
   return withTransaction(async (client) => {
     const rowRes = await client.query(
       `SELECT * FROM points_pending_markets WHERE id = $1 FOR UPDATE`,
@@ -193,6 +226,42 @@ async function approveOne(pid, reviewer, note, opts = {}) {
       : null;
 
     const pendingFeatured = r.featured === true;
+
+    // Auto-deploy step — runs BEFORE the INSERT so a failed deploy doesn't
+    // leave a half-approved row pointing at no contract. Dispatches V1
+    // (binary) or V2 (multi 2..8) inside deployMarketOnChain. Parallel
+    // pending markets fall through to the manual-paste path because we
+    // don't have a parallel factory yet (would need to loop V1 per leg).
+    if (wantsAutoDeploy && deployer && ammMode === 'unified') {
+      try {
+        const deployResult = await deployer.deployMarketOnChain({
+          deployerSuborgId: deployer.deployerSuborgId,
+          deployerAddr: deployer.deployerAddr,
+          question: String(r.question || '').trim(),
+          category: String(r.category || 'general').trim(),
+          outcomeCount: outcomes.length,
+          outcomeLabels: outcomes,
+          endTime: endDate.toISOString(),
+          resolutionSource: r.resolution_source || 'Pronos auto-resolver',
+          seedAmount: seed,
+        });
+        chainAddressStr = String(deployResult.marketAddress || '').toLowerCase();
+        chainMarketIdStr = deployResult.marketId || null;
+      } catch (deployErr) {
+        // Surface as much as we can — the trader helper sets .status /
+        // .detail on its own errors. Anything else gets wrapped.
+        const err = new Error(deployErr?.message || 'auto_deploy_failed');
+        err.status = deployErr?.status || 500;
+        err.detail = deployErr?.detail || null;
+        if (deployErr?.txHash) err.detail = `${err.detail || ''} (tx=${deployErr.txHash})`.trim();
+        throw err;
+      }
+    } else if (wantsAutoDeploy && ammMode === 'parallel') {
+      const err = new Error('parallel_auto_deploy_unsupported');
+      err.status = 400;
+      err.detail = 'Parallel markets need per-leg deploys; paste contracts manually for now.';
+      throw err;
+    }
 
     if (ammMode === 'unified') {
       const reserves = initialReserves(seed, outcomes.length);
@@ -307,12 +376,12 @@ async function approveOne(pid, reviewer, note, opts = {}) {
 }
 
 async function review(req, res, admin) {
-  const { id, action, note, mode, chainId, chainAddress, chainMarketId } = req.body || {};
+  const { id, action, note, mode, chainId, chainAddress, chainMarketId, autoDeploy } = req.body || {};
   // Shared opts passed to approveOne for both single-row and
   // approve_all paths. Default behaviour (no opts) keeps Points admin
   // approvals off-chain; the MVP admin sends mode='onchain' + chain
   // fields on every approve call.
-  const approveOpts = { mode, chainId, chainAddress, chainMarketId };
+  const approveOpts = { mode, chainId, chainAddress, chainMarketId, autoDeploy };
 
   await ensurePointsSchema(schemaSql);
 

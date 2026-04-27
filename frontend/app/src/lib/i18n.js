@@ -433,8 +433,8 @@ const STRINGS = {
   'um.skip':                  { es: 'Saltar — generar automáticamente', en: 'Skip — generate automatically' },
 
   // ── Home / generic ────────────────────────────────────────────────────────
-  'home.banner':              { es: '⚡ BETA — Mercados en vivo · Powered by Polymarket · Trading con USDC real',
-                                en: '⚡ BETA — Live markets · Powered by Polymarket · Real USDC trading' },
+  'home.banner':              { es: '⚡ BETA — Mercados en vivo · Trading con MXNB en Arbitrum · Sin gas',
+                                en: '⚡ BETA — Live markets · MXNB on Arbitrum · Gas-free' },
   'home.markets':             { es: 'Mercados',             en: 'Markets' },
   'home.live':                { es: 'EN VIVO',              en: 'LIVE' },
   'home.subtitle':            { es: 'Predicciones en tiempo real de Polymarket + mercados locales.',
