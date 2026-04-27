@@ -542,9 +542,17 @@ function CreateMarketForm({ onCreated }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <Field label="Categoría">
           <select value={category} onChange={e => {
-            setCategory(e.target.value);
-            const c = CATEGORIES.find(c => c.value === e.target.value);
+            const next = e.target.value;
+            setCategory(next);
+            const c = CATEGORIES.find(c => c.value === next);
             if (c) setIcon(c.icon);
+            // Sport / league only make sense under 'deportes'. When the
+            // user flips to any other category, scrub any sport state
+            // they had picked so it isn't posted as ghost metadata.
+            if (next !== 'deportes') {
+              setSport('');
+              setLeague('');
+            }
           }} style={inputStyle}>
             {CATEGORIES.map(c => (
               <option key={c.value} value={c.value}>{c.icon} {c.label}</option>
@@ -597,26 +605,31 @@ function CreateMarketForm({ onCreated }) {
         )}
       </Field>
 
-      {/* Sport / league — only populated for sports categories, but the
-          fields are always visible so the admin can opt-in from any slug. */}
-      <div style={{ display: 'grid', gridTemplateColumns: leagueOptions ? '1fr 1fr' : '1fr', gap: 14 }}>
-        <Field label="Deporte (opcional)" hint="Alimenta los sub-tabs de /c/deportes (soccer · béisbol · NBA · …).">
-          <select value={sport} onChange={e => changeSport(e.target.value)} style={inputStyle}>
-            {SPORT_OPTIONS.map(s => (
-              <option key={s.key} value={s.key}>{s.label}</option>
-            ))}
-          </select>
-        </Field>
-        {leagueOptions && (
-          <Field label="Liga" hint="Aparece en la barra lateral dentro de Deportes.">
-            <select value={league} onChange={e => setLeague(e.target.value)} style={inputStyle}>
-              {leagueOptions.map(l => (
-                <option key={l.key} value={l.key}>{l.label}</option>
+      {/* Sport / league — only relevant when the category is "deportes".
+          Hide the section entirely otherwise so the form doesn't pretend
+          there's a sport sub-classification for crypto / política / etc.
+          Also defensively clear stale state when category flips away from
+          deportes so we never POST a sport with a non-deportes category. */}
+      {category === 'deportes' && (
+        <div style={{ display: 'grid', gridTemplateColumns: leagueOptions ? '1fr 1fr' : '1fr', gap: 14 }}>
+          <Field label="Deporte (opcional)" hint="Alimenta los sub-tabs de /c/deportes (soccer · béisbol · NBA · …).">
+            <select value={sport} onChange={e => changeSport(e.target.value)} style={inputStyle}>
+              {SPORT_OPTIONS.map(s => (
+                <option key={s.key} value={s.key}>{s.label}</option>
               ))}
             </select>
           </Field>
-        )}
-      </div>
+          {leagueOptions && (
+            <Field label="Liga" hint="Aparece en la barra lateral dentro de Deportes.">
+              <select value={league} onChange={e => setLeague(e.target.value)} style={inputStyle}>
+                {leagueOptions.map(l => (
+                  <option key={l.key} value={l.key}>{l.label}</option>
+                ))}
+              </select>
+            </Field>
+          )}
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <Field label="Fecha de cierre">
@@ -881,7 +894,15 @@ function MarketsList({ refreshKey, bumpRefresh }) {
         winningOutcomeIndex: idx,
         finalScore,
       });
-      if (!ok) throw new Error(data?.error || 'resolve_failed');
+      if (!ok) {
+        // Surface as much context as the API gave us so we can debug
+        // without needing Vercel function logs. The endpoint now ships
+        // a `detail` (message) and `code` (Postgres error code) on 500.
+        const parts = [data?.error || 'resolve_failed'];
+        if (data?.detail) parts.push(data.detail);
+        if (data?.code)   parts.push(`pg:${data.code}`);
+        throw new Error(parts.join(' · '));
+      }
       setNotice({ type: 'success', msg: `Resuelto: ${market.outcomes[idx]}${finalScore ? ` · ${finalScore}` : ''}` });
       load();
       bumpRefresh();

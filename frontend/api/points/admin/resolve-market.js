@@ -117,7 +117,18 @@ export default async function handler(req, res) {
     if (e?.status && typeof e?.message === 'string') {
       return res.status(e.status).json({ error: e.message, detail: e.detail });
     }
-    console.error('[admin/resolve-market] error', { message: e?.message, code: e?.code });
-    return res.status(500).json({ error: 'resolve_failed' });
+    console.error('[admin/resolve-market] error', {
+      message: e?.message,
+      code: e?.code,
+      stack: e?.stack?.split('\n').slice(0, 3).join(' | '),
+    });
+    // Bubble up the underlying message + Postgres code so admin can
+    // debug from the toast without needing Vercel function logs. Capped
+    // at 240 chars to keep the response sane.
+    return res.status(500).json({
+      error: 'resolve_failed',
+      detail: e?.message?.slice(0, 240) || null,
+      code: e?.code || null,
+    });
   }
 }
