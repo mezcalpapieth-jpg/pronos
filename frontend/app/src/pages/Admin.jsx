@@ -632,21 +632,46 @@ function CreateMarketForm({ onCreated }) {
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
             Metadatos on-chain
           </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-mono)', fontSize: 11, color: autoDeploy ? 'var(--green)' : 'var(--text-secondary)' }}>
-            <input type="checkbox" checked={autoDeploy} onChange={e => setAutoDeploy(e.target.checked)} />
+          <label style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            fontFamily: 'var(--font-mono)', fontSize: 11,
+            color: outcomes.length > 8 ? 'var(--text-muted)' : autoDeploy ? 'var(--green)' : 'var(--text-secondary)',
+            cursor: outcomes.length > 8 ? 'not-allowed' : 'pointer',
+          }}>
+            <input
+              type="checkbox"
+              checked={autoDeploy && outcomes.length <= 8}
+              disabled={outcomes.length > 8}
+              onChange={e => setAutoDeploy(e.target.checked)}
+            />
             Auto-desplegar contrato
+            {outcomes.length > 8 && (
+              <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>(máx 8 outcomes)</span>
+            )}
           </label>
         </div>
 
-        {autoDeploy ? (
+        {autoDeploy && outcomes.length <= 8 ? (
           <div style={{
             padding: '10px 12px', borderRadius: 8,
             background: 'rgba(0,232,122,0.06)', border: '1px solid rgba(0,232,122,0.25)',
             fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.55,
           }}>
-            El backend llamará a <strong style={{ color: 'var(--green)' }}>MarketFactory</strong> con la sub-org de despliegue
-            (<code>ONCHAIN_DEPLOYER_SUBORG_ID</code>) y guardará la dirección del nuevo contract automáticamente.
-            Requiere <code>ONCHAIN_MARKET_FACTORY_ADDRESS</code> + <code>ONCHAIN_DEPLOYER_ADDRESS</code> en env.
+            {outcomes.length === 2 ? (
+              <>El backend llamará <code>MarketFactory.createMarket(...)</code> (V1 binario,
+              <code> PronosAMM</code>).</>
+            ) : (
+              <>El backend llamará <code>MarketFactoryV2.createMarket(...)</code> (V2 multi,
+              <code> PronosAMMMulti</code>) con los <strong>{outcomes.length} outcomes</strong> que
+              definiste arriba.</>
+            )}
+            {' '}Aprobará el seed MXNB hacia el factory y guardará la dirección del nuevo pool
+            automáticamente.
+            <br /><br />
+            <strong style={{ color: 'var(--green)' }}>Requisitos:</strong> el wallet del deployer
+            (<code>ONCHAIN_DEPLOYER_ADDRESS</code>) tiene que ser el <code>owner()</code> del factory
+            correspondiente {outcomes.length >= 3 && (<>(<code>ONCHAIN_MARKET_FACTORY_V2_ADDRESS</code>)</>)}
+            {' '}y tener saldo MXNB suficiente para el seed.
             <br /><br />
             <Field label="Chain ID" hint="421614 = Arbitrum Sepolia">
               <input type="number" required min={1} value={chainId} onChange={e => setChainId(e.target.value)} style={inputStyle} />

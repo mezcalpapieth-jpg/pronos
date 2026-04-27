@@ -52,23 +52,35 @@ const ERC20_ABI = [
   'function decimals() view returns (uint8)',
 ];
 
-// MarketFactory ABI — assumed shape for the contract that deploys new
-// AMMs on demand. Tweak the function/event signatures here once you
-// finalize the actual Solidity contract; the rest of deployMarketOnChain
-// will keep working as long as the names match.
+// MarketFactory ABIs — match contracts/src/{MarketFactory,MarketFactoryV2}.sol.
+// Mirrors live here so the deployer doesn't import Solidity build
+// artifacts at runtime.
 //
-// Assumed contract:
-//   function createBinaryMarket(string question, uint256 endTime, uint256 seedAmount)
-//       external returns (uint256 marketId, address market);
-//   function createMultiMarket(string question, uint8 outcomeCount,
-//       uint256 endTime, uint256 seedAmount)
-//       external returns (uint256 marketId, address market);
-//   event MarketCreated(uint256 indexed marketId, address indexed market,
-//       address indexed creator, uint8 outcomeCount, uint256 endTime);
-const MARKET_FACTORY_ABI = [
-  'function createBinaryMarket(string question, uint256 endTime, uint256 seedAmount) external returns (uint256, address)',
-  'function createMultiMarket(string question, uint8 outcomeCount, uint256 endTime, uint256 seedAmount) external returns (uint256, address)',
-  'event MarketCreated(uint256 indexed marketId, address indexed market, address indexed creator, uint8 outcomeCount, uint256 endTime)',
+// V1 (binary, PronosAMM):
+//   function createMarket(string q, string cat, uint256 endTime,
+//     string resolutionSource, uint256 seed) onlyOwner returns (uint256);
+//   event MarketCreated(uint256 indexed marketId, address pool,
+//     string question, string category, uint256 endTime);
+//
+// V2 (multi-outcome 2..8, PronosAMMMulti):
+//   function createMarket(string q, string cat, uint256 endTime,
+//     string resolutionSource, string[] outcomes, uint256 seed)
+//     onlyOwner returns (uint256);
+//   event MarketCreated(uint256 indexed marketId, address pool,
+//     string question, string category, uint256 endTime,
+//     string resolutionSource, string[] outcomes);
+//
+// Both factories are `onlyOwner` ⇒ the deployer wallet must equal
+// factory.owner() on the target chain. `pool` is not indexed in either
+// event, so we decode it from the data field.
+const MARKET_FACTORY_V1_ABI = [
+  'function createMarket(string question, string category, uint256 endTime, string resolutionSource, uint256 seedAmount) external returns (uint256)',
+  'function getMarket(uint256 marketId) external view returns (address pool, string question, string category, uint256 endTime, string resolutionSource, bool active)',
+  'event MarketCreated(uint256 indexed marketId, address pool, string question, string category, uint256 endTime)',
+];
+const MARKET_FACTORY_V2_ABI = [
+  'function createMarket(string question, string category, uint256 endTime, string resolutionSource, string[] outcomes, uint256 seedAmount) external returns (uint256)',
+  'event MarketCreated(uint256 indexed marketId, address pool, string question, string category, uint256 endTime, string resolutionSource, string[] outcomes)',
 ];
 
 const MAX_UINT256 = ethers.constants.MaxUint256;
@@ -351,57 +363,102 @@ export async function redeemOnChain({
 
 // ── Auto-deploy a new market via MarketFactory ──────────────────────
 //
-// Caller passes a pending market description; we encode the factory
-// call, sign via the deployer's Turnkey delegation, broadcast, and
-// parse the MarketCreated event for the new (marketId, address).
+// Dispatches between V1 (binary PronosAMM) and V2 (multi-outcome
+// PronosAMMMulti) based on outcomeCount:
+//   · 2 outcomes  → V1 (ONCHAIN_MARKET_FACTORY_ADDRESS)
+//   · 3..8        → V2 (ONCHAIN_MARKET_FACTORY_V2_ADDRESS)
+//   · 9+          → reject; V2's PronosAMMMulti hard-caps at 8
+//   · parallel    → caller's responsibility (loop V1 N times); not
+//                   handled here, register manually or via DB tooling
 //
-// `deployerSuborgId` and `deployerAddr` are the SUB-ORG that owns the
-// creation rights. Two reasonable choices:
-//   1. A dedicated deployer sub-org (e.g. ONCHAIN_DEPLOYER_SUBORG_ID)
-//      that has a separate delegation policy authorizing factory calls.
-//      Recommended — keeps user trades and admin deploys on different
-//      keys, simpler audit trail.
-//   2. The admin's own user sub-org if the admin's policy whitelists
-//      the factory address. Works but mixes concerns.
+// Auth: both factories' `createMarket` are `onlyOwner`. The deployer
+// wallet (ONCHAIN_DEPLOYER_ADDRESS) must equal `factory.owner()` on
+// whichever variant is being called. Each factory needs its OWN
+// MAX-approval on the collateral token from the deployer wallet —
+// the helper handles that idempotently.
 //
-// Hard-gated: factory address must be set, plus the standard onchain
-// pre-checks. Returns { marketId, marketAddress, txHash, blockNumber }.
+// Returns { marketId, marketAddress, txHash, blockNumber, chainId,
+//           question, category, factoryVariant }. `marketAddress` is
+// the deployed PronosAMM(Multi), which the rest of the system stores
+// as `chain_address`.
 export async function deployMarketOnChain({
   deployerSuborgId, deployerAddr,
-  question, outcomeCount, endTime, seedAmount,
+  question, category, outcomeCount, outcomeLabels, endTime,
+  resolutionSource, seedAmount,
 }) {
   requireReady();
-  const factoryAddr = process.env.ONCHAIN_MARKET_FACTORY_ADDRESS;
-  if (!factoryAddr) {
-    const err = new Error('factory_not_configured');
-    err.status = 503;
-    err.detail = 'set ONCHAIN_MARKET_FACTORY_ADDRESS to enable auto-deploy';
-    throw err;
-  }
   if (!deployerSuborgId) throw new Error('deployerSuborgId required');
   if (!deployerAddr) throw new Error('deployerAddr required');
   if (typeof question !== 'string' || question.trim().length < 8) {
     throw new Error('question too short');
   }
-  const n = Number.parseInt(outcomeCount, 10);
-  if (!Number.isInteger(n) || n < 2 || n > 10) {
-    throw new Error('outcomeCount must be 2..10');
+  if (typeof category !== 'string' || category.trim() === '') {
+    throw new Error('category required');
   }
+  const n = Number.parseInt(outcomeCount, 10);
+  if (!Number.isInteger(n) || n < 2) {
+    throw new Error('outcomeCount must be >= 2');
+  }
+  if (n > 8) {
+    const err = new Error('too_many_outcomes_for_v2');
+    err.status = 400;
+    err.detail = 'PronosAMMMulti hard-caps at MAX_OUTCOMES=8. For 9+ outcomes, paste a contract manually.';
+    throw err;
+  }
+
+  // Pick factory variant.
+  const useV2 = n >= 3;
+  const factoryAddr = useV2
+    ? process.env.ONCHAIN_MARKET_FACTORY_V2_ADDRESS
+    : process.env.ONCHAIN_MARKET_FACTORY_ADDRESS;
+  if (!factoryAddr) {
+    const err = new Error('factory_not_configured');
+    err.status = 503;
+    err.detail = useV2
+      ? 'set ONCHAIN_MARKET_FACTORY_V2_ADDRESS for multi-outcome auto-deploy'
+      : 'set ONCHAIN_MARKET_FACTORY_ADDRESS for binary auto-deploy';
+    throw err;
+  }
+  if (useV2) {
+    // V2 needs the actual outcome label strings to seed PronosAMMMulti.
+    if (!Array.isArray(outcomeLabels) || outcomeLabels.length !== n) {
+      throw new Error('outcomeLabels[] required for multi-outcome auto-deploy');
+    }
+    if (!outcomeLabels.every(l => typeof l === 'string' && l.trim() !== '')) {
+      throw new Error('outcomeLabels entries must be non-empty strings');
+    }
+  }
+
   const endTs = Math.floor(new Date(endTime).getTime() / 1000);
   if (!Number.isFinite(endTs) || endTs <= Math.floor(Date.now() / 1000)) {
     throw new Error('endTime must be a future timestamp');
   }
   const seedUnits = ethers.utils.parseUnits(String(seedAmount), COLLATERAL_DECIMALS);
+  const resolutionSrc = (typeof resolutionSource === 'string' && resolutionSource.trim())
+    ? resolutionSource.trim()
+    : 'Pronos admin (manual resolution)';
 
-  const iface = new ethers.utils.Interface(MARKET_FACTORY_ABI);
-  const data = n === 2
-    ? iface.encodeFunctionData('createBinaryMarket', [question, endTs, seedUnits])
-    : iface.encodeFunctionData('createMultiMarket', [question, n, endTs, seedUnits]);
+  const iface = new ethers.utils.Interface(useV2 ? MARKET_FACTORY_V2_ABI : MARKET_FACTORY_V1_ABI);
+  const data = useV2
+    ? iface.encodeFunctionData('createMarket', [
+        question.trim(),
+        category.trim(),
+        endTs,
+        resolutionSrc,
+        outcomeLabels.map(l => l.trim()),
+        seedUnits,
+      ])
+    : iface.encodeFunctionData('createMarket', [
+        question.trim(),
+        category.trim(),
+        endTs,
+        resolutionSrc,
+        seedUnits,
+      ]);
 
-  // The factory pulls seed collateral from the deployer's wallet on
-  // creation, so make sure the deployer has approved MAX on the
-  // collateral token towards the factory. ensureCollateralAllowance
-  // approves towards an arbitrary spender — reuse it.
+  // Factory pulls `seedAmount` of collateral via transferFrom(msg.sender, …).
+  // Each factory variant needs its own MAX-approval; ensureCollateralAllowance
+  // is keyed on (deployer, factoryAddr) so it's idempotent across calls.
   await ensureCollateralAllowance({
     suborgId: deployerSuborgId,
     ownerAddr: deployerAddr,
@@ -414,18 +471,20 @@ export async function deployMarketOnChain({
     from: deployerAddr,
     to: factoryAddr,
     data,
-    gasLimit: 4_000_000n, // contract deploys are heavier than trades
+    // V2 deploys a heavier ERC-1155-aware AMM with N outcome tokens;
+    // bump the gas budget vs V1.
+    gasLimit: useV2 ? 6_500_000n : 4_500_000n,
   });
 
-  // Parse MarketCreated event from the receipt logs.
   let marketId = null;
   let marketAddress = null;
   for (const log of receipt.logs || []) {
+    if ((log.address || '').toLowerCase() !== factoryAddr.toLowerCase()) continue;
     try {
       const parsed = iface.parseLog(log);
       if (parsed?.name === 'MarketCreated') {
         marketId = parsed.args.marketId?.toString() || null;
-        marketAddress = parsed.args.market || null;
+        marketAddress = parsed.args.pool || null;
         break;
       }
     } catch { /* not our event — skip */ }
@@ -433,7 +492,7 @@ export async function deployMarketOnChain({
   if (!marketAddress) {
     const err = new Error('market_created_event_missing');
     err.status = 502;
-    err.detail = 'tx succeeded but MarketCreated event not found — check factory ABI';
+    err.detail = 'tx succeeded but MarketCreated not found — check factory ABI / address';
     err.txHash = receipt.transactionHash;
     throw err;
   }
@@ -444,5 +503,8 @@ export async function deployMarketOnChain({
     txHash: receipt.transactionHash,
     blockNumber: receipt.blockNumber,
     chainId: chainId(),
+    question: question.trim(),
+    category: category.trim(),
+    factoryVariant: useV2 ? 'v2-multi' : 'v1-binary',
   };
 }

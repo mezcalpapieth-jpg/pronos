@@ -178,8 +178,14 @@ export default async function handler(req, res) {
         deployerSuborgId,
         deployerAddr,
         question: question.trim(),
-        outcomeCount: outcomes.length,
+        category,
+        outcomeCount: normalizedOutcomes.length,
+        outcomeLabels: normalizedOutcomes,
         endTime: endDate.toISOString(),
+        // Use the resolver source if it's set on a generator-approved
+        // pending market; otherwise fall back to a generic admin label
+        // so the on-chain `resolutionSource` field is never empty.
+        resolutionSource: req.body?.resolutionSource || 'Pronos admin',
         seedAmount: seed,
       });
       // Populate the address fields with what the factory returned so
