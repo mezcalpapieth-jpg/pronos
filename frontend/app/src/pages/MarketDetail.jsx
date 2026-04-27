@@ -27,6 +27,7 @@ import Footer from '../components/Footer.jsx';
 import BetModal from '../components/BetModal.jsx';
 import CategoryBar from '../components/CategoryBar.jsx';
 import Sparkline from '../components/Sparkline.jsx';
+import ShareButton from '../components/ShareButton.jsx';
 import { usePointsAuth } from '../lib/pointsAuth.js';
 
 const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 421614);
@@ -291,6 +292,8 @@ export default function MarketDetail({ onOpenLogin }) {
               on-chain · chain {market.chainId || CHAIN_ID}
             </span>
           )}
+          <span style={{ flex: 1 }} />
+          <ShareButton marketId={market.id} app="mvp" question={market.question} />
         </div>
 
         <h1 style={{

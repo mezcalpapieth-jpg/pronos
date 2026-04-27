@@ -14,6 +14,7 @@ import { fetchMarket, fetchPriceHistory, fetchPositions } from '../lib/pointsApi
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useT } from '@app/lib/i18n.js';
 import Sparkline from '@app/components/Sparkline.jsx';
+import ShareButton from '@app/components/ShareButton.jsx';
 import PointsBuyModal from '../components/PointsBuyModal.jsx';
 import MarketComments from '../components/MarketComments.jsx';
 import TopHolders from '../components/TopHolders.jsx';
@@ -614,6 +615,10 @@ export default function PointsMarketDetail({ onOpenLogin }) {
           {/* Left column: market info */}
           <div>
             <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              flexWrap: 'wrap',
               fontFamily: 'var(--font-mono)',
               fontSize: 10,
               letterSpacing: '0.12em',
@@ -621,13 +626,12 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               color: 'var(--text-muted)',
               marginBottom: 10,
             }}>
-              {market.icon && `${market.icon} `}{market.category || 'General'}
+              <span>{market.icon && `${market.icon} `}{market.category || 'General'}</span>
               {isResolved && (
-                <span style={{ marginLeft: 12, color: 'var(--green)' }}>{t('points.detail.resolvedBadge')}</span>
+                <span style={{ color: 'var(--green)' }}>{t('points.detail.resolvedBadge')}</span>
               )}
               {isLive && (
                 <span style={{
-                  marginLeft: 12,
                   color: '#dc2626',
                   fontWeight: 700,
                   letterSpacing: '0.08em',
@@ -637,8 +641,10 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 </span>
               )}
               {isPendingResolution && !isResolved && !isLive && (
-                <span style={{ marginLeft: 12, color: '#f59e0b' }}>{t('points.detail.pendingBadge')}</span>
+                <span style={{ color: '#f59e0b' }}>{t('points.detail.pendingBadge')}</span>
               )}
+              <span style={{ flex: 1 }} />
+              <ShareButton marketId={market.id} app="points" question={market.question} />
             </div>
 
             <h1 style={{
