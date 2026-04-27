@@ -148,8 +148,14 @@ export async function runAutoResolve({ dry = false } = {}) {
       // Compute the winning outcome index per resolver type. Price
       // resolvers hit a feed / API and compare; weather_api resolves by
       // fetching the recorded high and picking the bucket index.
+      // `result` is hoisted to the iteration scope so buildFinalScore
+      // (called below outside this try-block) can read it for sports
+      // markets without crashing on non-sports resolvers that never
+      // assign it. Non-sports types pass `null` through and
+      // buildFinalScore's branch logic falls back to winLabel.
       let winningIdx = null;
       let resolverInfo = {};
+      let result = null;
       try {
         if (m.resolver_type === 'chainlink_price') {
           if (!cfg.feedAddress || !cfg.op || cfg.threshold == null || cfg.yesOutcome == null) {
@@ -274,8 +280,9 @@ export async function runAutoResolve({ dry = false } = {}) {
             throw new Error('invalid sports_api config: missing source/shape');
           }
 
-          // Read result from the configured source.
-          let result;
+          // Read result from the configured source. Reuses the
+          // iteration-scope `result` declared above so buildFinalScore
+          // can see it after the dispatch.
           if (cfg.source === 'espn') {
             result = await readEspnEvent({
               leaguePath: cfg.leaguePath,

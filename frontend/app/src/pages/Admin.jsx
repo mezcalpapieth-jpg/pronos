@@ -395,7 +395,9 @@ function PendingMarketsSection({ refreshKey, bumpRefresh }) {
       const { ok, data } = await postJson('/api/points/admin/pending-markets', { id: pid, action: 'reject' });
       if (!ok) throw new Error(data?.error || 'reject_failed');
       setNotice({ type: 'success', msg: `Pendiente ${pid} rechazado.` });
-      load();
+      // Drop the rejected row in place — same scroll-preservation
+      // pattern as the approve handler.
+      setRows(prev => prev.filter(row => row.id !== pid));
     } catch (e) {
       setNotice({ type: 'error', msg: e?.message || 'reject_failed' });
     } finally {
@@ -458,7 +460,23 @@ function PendingMarketsSection({ refreshKey, bumpRefresh }) {
           {openId === r.id && (
             <ApproveOnchainForm
               pendingId={r.id}
-              onSuccess={() => { setOpenId(null); setNotice({ type: 'success', msg: `Pendiente ${r.id} aprobado on-chain.` }); load(); bumpRefresh(); }}
+              onSuccess={(data) => {
+                setOpenId(null);
+                const deployBit = data?.autoDeploy
+                  ? ` · auto-deployed at ${String(data.autoDeploy.chainAddress || '').slice(0, 10)}…`
+                  : '';
+                setNotice({
+                  type: 'success',
+                  msg: `Pendiente ${r.id} aprobado on-chain.${deployBit}`,
+                });
+                // In-place removal instead of refetching the list, so
+                // the page doesn't jump back to the top after each
+                // approval. The approved row drops out of the pending
+                // queue locally; bumpRefresh() lets the Mercados tab
+                // pick up the new market on its next load.
+                setRows(prev => prev.filter(row => row.id !== r.id));
+                bumpRefresh();
+              }}
               onCancel={() => setOpenId(null)}
             />
           )}
