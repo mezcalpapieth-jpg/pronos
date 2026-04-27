@@ -934,16 +934,24 @@ function MarketsList({ refreshKey, bumpRefresh }) {
         finalScore,
       });
       if (!ok) {
-        // Surface as much context as the API gave us so we can debug
-        // without needing Vercel function logs. The endpoint now ships
-        // a `detail` (message) and `code` (Postgres error code) on 500.
         const parts = [data?.error || 'resolve_failed'];
         if (data?.detail) parts.push(data.detail);
         if (data?.code)   parts.push(`pg:${data.code}`);
         throw new Error(parts.join(' · '));
       }
       setNotice({ type: 'success', msg: `Resuelto: ${market.outcomes[idx]}${finalScore ? ` · ${finalScore}` : ''}` });
-      load();
+      // In-place row patch instead of full load() so the page doesn't
+      // jump back to the top mid-scroll. The row reflects the new
+      // status / outcome / finalScore immediately. bumpRefresh() still
+      // fires so peer components (stats, mercados-on-chain count) can
+      // refresh in their own time.
+      setRows(prev => prev.map(m => m.id === market.id ? {
+        ...m,
+        status: 'resolved',
+        outcome: idx,
+        finalScore: finalScore ?? m.finalScore ?? null,
+        resolvedAt: new Date().toISOString(),
+      } : m));
       bumpRefresh();
     } catch (e) {
       setNotice({ type: 'error', msg: e?.message || 'resolve_failed' });

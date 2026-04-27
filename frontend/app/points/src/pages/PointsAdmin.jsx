@@ -940,9 +940,20 @@ function MarketsTable() {
       await postJson('/api/points/admin/resolve-market', {
         marketId, winningOutcomeIndex,
       });
-      await load();
+      // In-place patch instead of refetching the whole list — the
+      // refetch would scroll the page back to the top and lose the
+      // admin's place when they're working through a stack of
+      // por-resolver candidates. Optimistically flip status to
+      // resolved + write the winning outcome locally; on the next
+      // explicit refresh / filter change the API state will be loaded.
+      setMarkets(prev => (prev || []).map(m => m.id === marketId ? {
+        ...m,
+        status: 'resolved',
+        outcome: winningOutcomeIndex,
+        resolvedAt: new Date().toISOString(),
+      } : m));
     } catch (e) {
-      alert(`No se pudo resolver: ${e.code || e.message}`);
+      alert(`No se pudo resolver: ${e.code || e.message}${e.detail ? '\n' + e.detail : ''}`);
     } finally {
       setResolving(null);
     }

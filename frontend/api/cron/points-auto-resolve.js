@@ -382,18 +382,32 @@ export async function runAutoResolve({ dry = false } = {}) {
 
       try {
         await withTransaction(async (client) => {
-          // Update parent first; guarded against admin races.
+          // Two-step UPDATE: core resolution must always work; the
+          // final_score patch is best-effort (column may not exist on
+          // older schemas — treat 42703 as benign skip).
           const r = await client.query(
             `UPDATE points_markets
                SET status = 'resolved', outcome = $1,
-                   resolved_at = NOW(), resolved_by = $2,
-                   final_score = $3
-             WHERE id = $4 AND status = 'active'
+                   resolved_at = NOW(), resolved_by = $2
+             WHERE id = $3 AND status = 'active'
              RETURNING id, amm_mode`,
-            [winningIdx, `resolver:${m.resolver_type}`, finalScore, m.id],
+            [winningIdx, `resolver:${m.resolver_type}`, m.id],
           );
           if (r.rows.length === 0) {
             const err = new Error('not_active_at_write'); err.benign = true; throw err;
+          }
+          // Optional score — never blocks the resolution itself.
+          if (finalScore != null && finalScore !== '') {
+            try {
+              await client.query(
+                `UPDATE points_markets SET final_score = $1 WHERE id = $2`,
+                [finalScore, m.id],
+              );
+            } catch (e) {
+              if (e?.code !== '42703') throw e;
+              // 42703 = column doesn't exist; the resolution itself is
+              // already committed above, so we just skip the score.
+            }
           }
           // Cascade to parallel legs (mirrors admin resolve-market.js):
           // winning leg's YES side pays out; losing legs' NO side pays.
