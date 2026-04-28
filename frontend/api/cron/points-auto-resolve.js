@@ -31,7 +31,7 @@ import { readCreAverageFor } from '../_lib/fuel.js';
 import { fetchMaxTempC, bucketIndexFor } from '../_lib/weather.js';
 import { readAppleMxTopArtist } from '../_lib/charts.js';
 import { readYouTubeTopMxChannel } from '../_lib/youtube.js';
-import { readEspnEvent, readFootballDataMatch, readJolpicaF1Result } from '../_lib/sports-results.js';
+import { readEspnEvent, readFootballDataMatch, readJolpicaF1Result, readEspnPgaWinner } from '../_lib/sports-results.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql   = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -293,6 +293,12 @@ export async function runAutoResolve({ dry = false } = {}) {
             result = await readFootballDataMatch(cfg.matchId);
           } else if (cfg.source === 'jolpica-f1') {
             result = await readJolpicaF1Result({ season: cfg.season, round: cfg.round });
+          } else if (cfg.source === 'espn-pga') {
+            // Golf: reads ESPN PGA scoreboard, returns position-1
+            // player using the same winnerDriverId/Label shape as F1
+            // so the parallel-shape branch below picks it up
+            // unchanged (id-match → label-match → 'Otro' fallback).
+            result = await readEspnPgaWinner({ eventId: cfg.eventId });
           } else {
             throw new Error(`unsupported sports_api source: ${cfg.source}`);
           }

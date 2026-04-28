@@ -392,7 +392,8 @@ export default async function handler(req, res) {
     const currentGolfSpec = (specs.find(s => s.source === 'espn-pga') || null);
     const golfFieldFallback = currentGolfSpec?.source_data?.field || [];
     const golfRows = await sql`
-      SELECT m.id, m.outcomes, pm.source_data
+      SELECT m.id, m.outcomes, m.resolver_type, m.resolver_config,
+             pm.source_data, pm.source_event_id
       FROM points_markets m
       LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
       WHERE m.status = 'active'
@@ -401,6 +402,7 @@ export default async function handler(req, res) {
       LIMIT 20
     `;
     let golfImagesFound = 0;
+    let golfResolverMigrated = 0;
     for (const row of golfRows) {
       const outcomes = Array.isArray(row.outcomes)
         ? row.outcomes
@@ -409,23 +411,66 @@ export default async function handler(req, res) {
         ? row.source_data
         : (() => { try { return JSON.parse(row.source_data); } catch { return null; } })();
       const field = (Array.isArray(sd?.field) ? sd.field : golfFieldFallback) || [];
-      if (field.length === 0) continue;
-      const byName = new Map();
-      for (const p of field) byName.set(String(p.name || '').toLowerCase().trim(), p.id);
-      const images = outcomes.map(label => {
-        const id = byName.get(String(label || '').toLowerCase().trim());
-        return id ? `https://a.espncdn.com/i/headshots/golf/players/full/${id}.png` : null;
-      });
-      if (!images.some(Boolean)) continue;
-      const upd = await sql`
-        UPDATE points_markets
-        SET outcome_images = ${JSON.stringify(images)}::jsonb
-        WHERE id = ${row.id}
-        RETURNING id
-      `;
-      if (upd.length > 0) {
-        record(upd[0].id, 'outcomeImages');
-        golfImagesFound += images.filter(Boolean).length;
+
+      // Image rewrite (always safe — same URLs, no NULL guard).
+      if (field.length > 0) {
+        const byName = new Map();
+        for (const p of field) byName.set(String(p.name || '').toLowerCase().trim(), p.id);
+        const images = outcomes.map(label => {
+          const id = byName.get(String(label || '').toLowerCase().trim());
+          return id ? `https://a.espncdn.com/i/headshots/golf/players/full/${id}.png` : null;
+        });
+        if (images.some(Boolean)) {
+          const upd = await sql`
+            UPDATE points_markets
+            SET outcome_images = ${JSON.stringify(images)}::jsonb
+            WHERE id = ${row.id}
+            RETURNING id
+          `;
+          if (upd.length > 0) {
+            record(upd[0].id, 'outcomeImages');
+            golfImagesFound += images.filter(Boolean).length;
+          }
+        }
+      }
+
+      // Resolver migration: golf markets created before the espn-pga
+      // sports_api reader landed had resolver_type='manual'. Switch
+      // them to sports_api so the cron auto-resolves them when ESPN
+      // marks the tournament completed. Build the legs from outcomes
+      // + the persisted FIELD (or current spec's field as fallback).
+      const isManualOrNull = !row.resolver_type || row.resolver_type === 'manual';
+      const eventId = sd?.eventId
+        || (row.source_event_id ? String(row.source_event_id).replace(/^pga:/, '') : null);
+      if (isManualOrNull && field.length > 0 && eventId) {
+        const byName = new Map();
+        for (const p of field) byName.set(String(p.name || '').toLowerCase().trim(), p.id);
+        const legs = outcomes.map(label => {
+          const norm = String(label || '').toLowerCase().trim();
+          const id = byName.get(norm);
+          if (id) return { label, driverId: String(id) };
+          if (norm === 'otro') return { label, driverId: null };
+          return { label, driverId: null };
+        });
+        const newCfg = {
+          source: 'espn-pga',
+          shape: 'parallel',
+          eventId,
+          legs,
+        };
+        const upd = await sql`
+          UPDATE points_markets
+          SET resolver_type = 'sports_api',
+              resolver_config = ${JSON.stringify(newCfg)}::jsonb
+          WHERE id = ${row.id}
+            AND status = 'active'
+            AND (resolver_type IS NULL OR resolver_type = 'manual')
+          RETURNING id
+        `;
+        if (upd.length > 0) {
+          record(upd[0].id, 'resolverType');
+          golfResolverMigrated += 1;
+        }
       }
     }
 
@@ -441,6 +486,7 @@ export default async function handler(req, res) {
       f1ImagesFound,
       lmbImagesFound,
       golfImagesFound,
+      golfResolverMigrated,
       updated,
       reviewer: admin.username,
     });

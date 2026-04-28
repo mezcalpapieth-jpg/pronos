@@ -10,10 +10,11 @@
  * field dynamically. The top-12 covers most realistic winners; any
  * longshot win resolves to "Otro".
  *
- * Resolution stays manual — admin picks the winner once the
- * tournament finishes. A future sports_api resolver can read the
- * leaderboard's 1st-place finisher via ESPN (post-event that
- * endpoint works fine).
+ * Resolution: sports_api via espn-pga reader (sports-results.js).
+ * Once the tournament's status.type.completed flips true on ESPN,
+ * the cron auto-resolver picks the position-1 player and matches
+ * by driverId (the FIELD entry's `id` below) against the leg list.
+ * Dark-horse wins fall through to the "Otro" catchall leg.
  */
 
 const PGA = 'https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard';
@@ -86,10 +87,13 @@ export async function generateGolfMarkets() {
   const endTime = new Date(startMs + 5 * 86_400_000).toISOString();
 
   // Include an "Otro" catchall so the market is always resolvable
-  // even when a dark-horse wins.
+  // even when a dark-horse wins. Field name `driverId` is the
+  // shared key the cron's parallel-shape dispatch matches against
+  // (originally F1, now also golf via espn-pga). Keeping the same
+  // name avoids a sport-specific code path in the cron.
   const legs = [
-    ...FIELD.map(p => ({ label: p.name, playerId: p.id })),
-    { label: 'Otro', playerId: null },
+    ...FIELD.map(p => ({ label: p.name, driverId: p.id })),
+    { label: 'Otro', driverId: null },
   ];
 
   return [{
@@ -109,14 +113,16 @@ export async function generateGolfMarkets() {
     start_time: startTime,
     end_time: endTime,
     amm_mode: 'parallel',
-    // Manual for now — sports_api resolver for PGA can read the
-    // leaderboard's 1st-place finisher post-event. TODO once we
-    // wire a readPgaWinner() helper.
-    resolver_type: 'manual',
+    // sports_api auto-resolution via espn-pga reader. The cron polls
+    // ESPN's PGA scoreboard, finds this eventId, and picks the
+    // position-1 player when the tournament reports completed=true.
+    // Player ID match → exact leg; name match → fallback; "Otro"
+    // catches any winner outside FIELD.
+    resolver_type: 'sports_api',
     resolver_config: {
-      source: 'manual',
-      eventId: ev.id,
+      source: 'espn-pga',
       shape: 'parallel',
+      eventId: ev.id,
       legs,
     },
     source_data: {
