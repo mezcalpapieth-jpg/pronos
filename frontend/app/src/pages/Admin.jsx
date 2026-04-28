@@ -1631,7 +1631,11 @@ export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
   return (
     <>
       <Nav onOpenLogin={onOpenLogin} />
-      <main style={{ padding: '32px 48px 80px', maxWidth: 1100, margin: '0 auto' }}>
+      <main style={{
+        padding: 'clamp(20px, 4vw, 32px) clamp(14px, 4vw, 48px) 72px',
+        maxWidth: 1100,
+        margin: '0 auto',
+      }}>
         <div style={{ marginBottom: 24 }}>
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 34, letterSpacing: '0.04em', color: 'var(--text-primary)', marginBottom: 6 }}>
             Admin · MVP

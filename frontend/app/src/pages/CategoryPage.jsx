@@ -304,7 +304,11 @@ export default function CategoryPage({ onOpenLogin }) {
         <CategoryBar />
       </div>
 
-      <main style={{ padding: '28px 48px 80px', maxWidth: 1280, margin: '0 auto' }}>
+      <main style={{
+        padding: 'clamp(20px, 4vw, 28px) clamp(14px, 4vw, 48px) 64px',
+        maxWidth: 1280,
+        margin: '0 auto',
+      }}>
         <h1 style={{
           fontFamily: 'var(--font-display)', fontSize: 34, letterSpacing: '0.04em',
           color: 'var(--text-primary)', marginBottom: 16, textTransform: 'capitalize',

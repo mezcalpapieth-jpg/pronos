@@ -13,6 +13,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
+import { useIsMobile } from '@app/lib/useIsMobile.js';
 import {
   claimDaily,
   fetchDailyStatus,
@@ -753,6 +754,7 @@ function SocialTasksCard() {
 export default function PointsEarn({ onOpenLogin }) {
   const navigate = useNavigate();
   const { authenticated, user, loading, refresh } = usePointsAuth();
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     if (!loading && !authenticated) {
@@ -788,7 +790,11 @@ export default function PointsEarn({ onOpenLogin }) {
   const balance = Number(user?.balance || 0);
 
   return (
-    <main style={{ padding: '60px 48px', maxWidth: 1160, margin: '0 auto' }}>
+    <main style={{
+      padding: isMobile ? '32px 16px 56px' : '60px 48px',
+      maxWidth: 1160,
+      margin: '0 auto',
+    }}>
       <div style={{ marginBottom: 32 }}>
         <h1 style={{
           fontFamily: 'var(--font-display)',

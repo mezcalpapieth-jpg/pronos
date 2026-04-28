@@ -407,7 +407,7 @@ export default function PointsPortfolio() {
   const balance = Number(user?.balance || 0);
 
   return (
-    <main style={{ maxWidth: 1160, margin: '0 auto', padding: '60px 24px' }}>
+    <main style={{ maxWidth: 1160, margin: '0 auto', padding: 'clamp(24px, 5vw, 60px) clamp(14px, 4vw, 24px)' }}>
       <div style={{ marginBottom: 24 }}>
         <h1 style={{
           fontFamily: 'var(--font-display)',

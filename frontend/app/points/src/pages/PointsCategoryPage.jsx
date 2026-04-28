@@ -22,6 +22,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useT } from '@app/lib/i18n.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
+import { useIsMobile } from '@app/lib/useIsMobile.js';
 import { fetchMarkets, fetchPositions } from '../lib/pointsApi.js';
 import PointsMarketCard from '../components/PointsMarketCard.jsx';
 
@@ -85,6 +86,10 @@ export default function PointsCategoryPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const t = useT();
   const { authenticated } = usePointsAuth();
+  // Drives layout collapses for the league sidebar + page padding on
+  // phones. The sport sub-filter row is already overflow-scrollable
+  // via existing inline styles, so it doesn't need this hook.
+  const isMobile = useIsMobile();
   const [markets, setMarkets] = useState([]);
   const [positionByMarket, setPositionByMarket] = useState({});
   const [loading, setLoading] = useState(true);
@@ -206,7 +211,7 @@ export default function PointsCategoryPage() {
     <section style={{
       maxWidth: 1280,
       margin: '0 auto',
-      padding: '28px 48px 60px',
+      padding: isMobile ? '16px 16px 48px' : '28px 48px 60px',
     }}>
       <h1 style={{
         fontFamily: 'var(--font-display)',
@@ -251,20 +256,27 @@ export default function PointsCategoryPage() {
       )}
 
       {/* Body: soccer view gets a left sidebar; everything else is a
-          single column. */}
+          single column. On phones the sidebar collapses above the
+          grid (full-width row of league pills) so we don't lose half
+          the viewport to a 200px column. */}
       {showLeagueSidebar ? (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: '200px 1fr',
-          gap: 24,
+          gridTemplateColumns: isMobile ? '1fr' : '200px 1fr',
+          gap: isMobile ? 12 : 24,
           alignItems: 'start',
         }}>
           <aside style={{
             display: 'flex',
-            flexDirection: 'column',
+            flexDirection: isMobile ? 'row' : 'column',
+            flexWrap: isMobile ? 'wrap' : 'nowrap',
             gap: 6,
-            position: 'sticky',
-            top: 120, // below nav + category bar
+            // Sticky only on desktop — on mobile the sidebar sits
+            // inline above the grid and shouldn't follow scroll.
+            position: isMobile ? 'static' : 'sticky',
+            top: isMobile ? undefined : 120,
+            overflowX: isMobile ? 'auto' : undefined,
+            paddingBottom: isMobile ? 4 : undefined,
           }}>
             <div style={{
               fontFamily: 'var(--font-mono)',

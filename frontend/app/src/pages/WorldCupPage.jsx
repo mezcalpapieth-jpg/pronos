@@ -226,7 +226,7 @@ export default function WorldCupPage({ onOpenLogin }) {
       <section style={{
         background: HERO_GRADIENT,
         borderBottom: '1px solid var(--border)',
-        padding: '48px 48px 36px',
+        padding: 'clamp(28px, 6vw, 48px) clamp(14px, 4vw, 48px) clamp(20px, 4vw, 36px)',
       }}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
           <div style={{
@@ -267,7 +267,11 @@ export default function WorldCupPage({ onOpenLogin }) {
         </div>
       </section>
 
-      <main style={{ padding: '32px 48px 80px', maxWidth: 1100, margin: '0 auto' }}>
+      <main style={{
+        padding: 'clamp(20px, 4vw, 32px) clamp(14px, 4vw, 48px) 64px',
+        maxWidth: 1100,
+        margin: '0 auto',
+      }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--text-primary)', margin: 0, letterSpacing: '0.03em' }}>
             Mercados activos

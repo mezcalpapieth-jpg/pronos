@@ -29,6 +29,7 @@ import CategoryBar from '../components/CategoryBar.jsx';
 import Sparkline from '../components/Sparkline.jsx';
 import ShareButton from '../components/ShareButton.jsx';
 import { usePointsAuth } from '../lib/pointsAuth.js';
+import { useIsMobile } from '../lib/useIsMobile.js';
 
 const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 421614);
 
@@ -111,6 +112,7 @@ export default function MarketDetail({ onOpenLogin }) {
   const id = searchParams.get('id');
   const preselectedOutcome = searchParams.get('outcome');
   const { authenticated } = usePointsAuth();
+  const isMobile = useIsMobile();
 
   const [market, setMarket] = useState(null);
   const [historyByOutcome, setHistoryByOutcome] = useState(null);
@@ -271,7 +273,11 @@ export default function MarketDetail({ onOpenLogin }) {
       <Nav onOpenLogin={onOpenLogin} />
       <div className="category-bar-sticky"><CategoryBar /></div>
 
-      <main style={{ padding: '28px 48px 80px', maxWidth: 1100, margin: '0 auto' }}>
+      <main style={{
+        padding: isMobile ? '20px 16px 56px' : '28px 48px 80px',
+        maxWidth: 1100,
+        margin: '0 auto',
+      }}>
         {/* Category + status badges */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
@@ -321,11 +327,15 @@ export default function MarketDetail({ onOpenLogin }) {
           </div>
         )}
 
-        {/* Two-column layout: chart + buy panel */}
+        {/* Two-column layout: chart + buy panel.
+            On phones, stack chart on top of the buy panel (single col)
+            so chart + outcome list use the full viewport width. */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)',
-          gap: 28,
+          gridTemplateColumns: isMobile
+            ? 'minmax(0, 1fr)'
+            : 'minmax(0, 1.4fr) minmax(0, 1fr)',
+          gap: isMobile ? 18 : 28,
           alignItems: 'start',
         }}>
           {/* Left: ring + history chart */}
@@ -439,7 +449,11 @@ export default function MarketDetail({ onOpenLogin }) {
             border: '1px solid var(--border)',
             borderRadius: 14,
             background: 'var(--surface1)',
-            position: 'sticky', top: 92,
+            // Sticky only when there's a sibling column to the left.
+            // On phones the panel is stacked below the chart and
+            // shouldn't follow scroll.
+            position: isMobile ? 'static' : 'sticky',
+            top: isMobile ? undefined : 92,
           }}>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 12 }}>
               {isResolved ? 'Resultado' : 'Apuesta'}

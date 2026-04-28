@@ -15,6 +15,7 @@ import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useT } from '@app/lib/i18n.js';
 import Sparkline from '@app/components/Sparkline.jsx';
 import ShareButton from '@app/components/ShareButton.jsx';
+import { useIsMobile } from '@app/lib/useIsMobile.js';
 import PointsBuyModal from '../components/PointsBuyModal.jsx';
 import MarketComments from '../components/MarketComments.jsx';
 import TopHolders from '../components/TopHolders.jsx';
@@ -423,6 +424,9 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   const id = searchParams.get('id');
   const { authenticated, user } = usePointsAuth();
   const t = useT();
+  // Collapses the 360px buy panel to a single column on phones so the
+  // chart + outcome list can use the full viewport width.
+  const isMobile = useIsMobile();
 
   const [market, setMarket] = useState(null);
   // historyByOutcome[i] = [{t, p}] for outcome i. Populated for every
@@ -588,7 +592,11 @@ export default function PointsMarketDetail({ onOpenLogin }) {
 
   return (
     <>
-      <main style={{ padding: '40px 48px', maxWidth: 1160, margin: '0 auto' }}>
+      <main style={{
+        padding: isMobile ? '20px 16px 60px' : '40px 48px',
+        maxWidth: 1160,
+        margin: '0 auto',
+      }}>
         <button
           onClick={() => navigate('/')}
           style={{
@@ -608,8 +616,10 @@ export default function PointsMarketDetail({ onOpenLogin }) {
 
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1fr) 360px',
-          gap: 40,
+          // On phones, stack the buy panel below the market info so we
+          // get the full viewport width for the question / chart / odds.
+          gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) 360px',
+          gap: isMobile ? 24 : 40,
           alignItems: 'start',
         }}>
           {/* Left column: market info */}

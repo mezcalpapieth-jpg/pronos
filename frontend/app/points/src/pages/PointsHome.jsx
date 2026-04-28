@@ -18,6 +18,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchMarkets, fetchCurrentCycle, fetchPositions, fetchStats } from '../lib/pointsApi.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useT } from '@app/lib/i18n.js';
+import { useIsMobile } from '@app/lib/useIsMobile.js';
 import PointsMarketCard from '../components/PointsMarketCard.jsx';
 
 // Human-readable "2d 14h 37m" style countdown for the cycle deadline.
@@ -39,6 +40,10 @@ export default function PointsHome({ onOpenLogin }) {
   const { authenticated } = usePointsAuth();
   const t = useT();
   const [searchParams] = useSearchParams();
+  // Used to tighten section padding (60px → 24px horizontal) on phones.
+  // The Hero + markets grid get their responsive treatment from CSS;
+  // this hook only flips inline-styled sections lower on the page.
+  const isMobile = useIsMobile();
   const [markets, setMarkets] = useState([]);
   const [positionByMarket, setPositionByMarket] = useState({});
   const [loading, setLoading] = useState(true);
@@ -407,7 +412,7 @@ export default function PointsHome({ onOpenLogin }) {
 
       {/* ── How it works ──────────────────────────────────── */}
       <section id="how-it-works" style={{
-        padding: '60px 48px 80px',
+        padding: isMobile ? '40px 16px 56px' : '60px 48px 80px',
         maxWidth: 1280,
         margin: '0 auto',
         borderTop: '1px solid var(--border)',
@@ -440,7 +445,7 @@ export default function PointsHome({ onOpenLogin }) {
           on-chain settlement. Logos are text badges for now to keep
           the build self-contained — can swap in SVG art later. */}
       <section id="partners" style={{
-        padding: '48px 48px 72px',
+        padding: isMobile ? '32px 16px 48px' : '48px 48px 72px',
         maxWidth: 1280,
         margin: '0 auto',
         borderTop: '1px solid var(--border)',
