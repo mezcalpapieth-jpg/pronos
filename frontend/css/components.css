@@ -1138,7 +1138,10 @@ html[data-theme="light"] .btn-theme-toggle::before {
   top: 64px;
   z-index: 90;
   width: 100%;
-  background: rgba(10, 10, 10, 0.92);
+  /* Theme-aware translucent bg. --bg-rgb is "8,8,8" in dark and
+     "245,245,243" in light, so 0.92 alpha gives a near-opaque match
+     to the page bg in either theme. */
+  background: rgba(var(--bg-rgb), 0.92);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--border);
@@ -1186,7 +1189,9 @@ html[data-theme="light"] .btn-theme-toggle::before {
 }
 .filter-btn:hover {
   color: var(--text-primary);
-  border-color: rgba(255,255,255,0.2);
+  /* --text-secondary works in both themes (#888 dark, #555 light) so
+     the hover border is visible without going hardcoded white. */
+  border-color: var(--text-secondary);
 }
 .filter-btn.active {
   color: var(--green);

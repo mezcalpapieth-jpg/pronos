@@ -67,6 +67,10 @@ export default function PointsCategoryBar() {
               // Special treatment for the World Cup tab — tri-color
               // gradient (green/red/blue host flags) with a subtle
               // shine so it catches the eye in the row.
+              // The tri-color gradient already provides the hue
+              // contrast; the border just needs a subtle outline that
+              // reads in both themes. `--border-active` (orange) when
+              // selected, `--border` when idle — both swap with theme.
               return (
                 <button
                   key={cat.slug}
@@ -76,7 +80,7 @@ export default function PointsCategoryBar() {
                     background: isActive
                       ? 'linear-gradient(130deg, rgba(22,163,74,0.35), rgba(220,38,38,0.32) 50%, rgba(59,130,246,0.38))'
                       : 'linear-gradient(130deg, rgba(22,163,74,0.18), rgba(220,38,38,0.15) 50%, rgba(59,130,246,0.2))',
-                    borderColor: isActive ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.18)',
+                    borderColor: isActive ? 'var(--border-active)' : 'var(--border)',
                     color: 'var(--text-primary)',
                     fontWeight: 700,
                     letterSpacing: '0.08em',
