@@ -23,7 +23,11 @@
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
         { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
         { "key": "X-XSS-Protection", "value": "0" },
-        { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload" }
+        { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload" },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.sentry-cdn.com https://browser.sentry-cdn.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://a.espncdn.com https://flagcdn.com https://*.cloudinary.com https://res.cloudinary.com https://pbs.twimg.com https://abs.twimg.com https://platform-lookaside.fbsbx.com https://scontent.cdninstagram.com https://scontent-*.cdninstagram.com https://o.lencr.org; connect-src 'self' https://api.turnkey.com https://*.turnkey.com https://*.alchemy.com https://*.alchemyapi.io https://gamma-api.polymarket.com https://clob.polymarket.com https://api.resend.com https://api.twitter.com https://graph.instagram.com https://api.instagram.com https://o0.ingest.sentry.io https://*.ingest.sentry.io https://o4.ingest.us.sentry.io wss://*.alchemy.com wss://*.alchemyapi.io; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://accounts.google.com https://twitter.com https://www.instagram.com https://api.instagram.com https://www.tiktok.com; object-src 'none'; upgrade-insecure-requests"
+        }
       ]
     },
     {

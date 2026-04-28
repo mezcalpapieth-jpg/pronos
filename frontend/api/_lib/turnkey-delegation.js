@@ -42,8 +42,9 @@ export const DELEGATION_DAILY_CAP_MXNB = 200_000;
 function onchainConfig() {
   return {
     chainId: Number(process.env.ONCHAIN_CHAIN_ID || 0),
-    marketFactory: process.env.ONCHAIN_MARKET_FACTORY_ADDRESS || null,
-    mxnbToken: process.env.ONCHAIN_MXNB_ADDRESS || null,
+    marketFactoryV1: process.env.ONCHAIN_MARKET_FACTORY_ADDRESS || null,
+    marketFactoryV2: process.env.ONCHAIN_MARKET_FACTORY_V2_ADDRESS || null,
+    collateralToken: process.env.ONCHAIN_COLLATERAL_ADDRESS || process.env.ONCHAIN_MXNB_ADDRESS || null,
   };
 }
 
@@ -57,7 +58,7 @@ export function isDelegationEnabled() {
   if (process.env.TURNKEY_POLICIES_ENABLED !== 'true') return false;
   if (!isTurnkeyConfigured()) return false;
   const cfg = onchainConfig();
-  return Boolean(cfg.marketFactory && cfg.mxnbToken);
+  return Boolean((cfg.marketFactoryV1 || cfg.marketFactoryV2) && cfg.collateralToken);
 }
 
 // ── Policy creation ────────────────────────────────────────────────
@@ -102,9 +103,13 @@ export async function createDelegationPolicy({ suborgId, backendApiPublicKey }) 
   // per-day spend cap via a counter approver) but this shape is
   // enough to keep signing limited to our contracts.
   const cfg = onchainConfig();
-  const allowedTargets = [cfg.marketFactory, cfg.mxnbToken].filter(Boolean);
+  const allowedTargets = [
+    cfg.marketFactoryV1,
+    cfg.marketFactoryV2,
+    cfg.collateralToken,
+  ].filter(Boolean);
   if (allowedTargets.length === 0) {
-    throw new Error('onchain config missing marketFactory/mxnbToken');
+    throw new Error('onchain config missing marketFactory/collateralToken');
   }
   if (!backendApiPublicKey) {
     throw new Error('backendApiPublicKey required (set TURNKEY_API_PUBLIC_KEY)');

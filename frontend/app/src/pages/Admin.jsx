@@ -149,6 +149,167 @@ function Notice({ notice }) {
   );
 }
 
+// ═══ Onchain wiring status panel ═══════════════════════════════════════════
+// Pre-flight check on the auto-deploy plumbing. Hits
+// /api/points/admin/onchain-status which probes env vars + factory.owner()
+// + factory.collateral() + deployer balances and returns a list of
+// warnings. Operator hits "Refrescar" after every Vercel env change /
+// contract redeploy / deployer faucet to validate setup before trying
+// the first auto-deploy.
+function OnchainStatusPanel() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { ok, data: body } = await getJson('/api/points/admin/onchain-status');
+      if (!ok) throw new Error(body?.error || 'status_failed');
+      setData(body);
+    } catch (e) {
+      setError(e?.message || 'status_failed');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const greenChip = (ok) => ({
+    display: 'inline-block',
+    padding: '2px 8px',
+    borderRadius: 6,
+    fontFamily: 'var(--font-mono)',
+    fontSize: 10,
+    letterSpacing: '0.06em',
+    fontWeight: 700,
+    background: ok ? 'rgba(0,232,122,0.12)' : 'rgba(255,69,69,0.12)',
+    color: ok ? 'var(--green)' : 'var(--red)',
+  });
+
+  return (
+    <section style={{
+      padding: 20, border: '1px solid var(--border)', borderRadius: 14,
+      background: 'var(--surface1)', marginBottom: 24,
+    }}>
+      <SectionHeader
+        title="Estado del despliegue on-chain"
+        subtitle="Verifica env vars, factory.owner() y saldos del deployer antes de intentar auto-deploy."
+        right={
+          <button onClick={load} className="btn-ghost" disabled={loading} style={{ fontSize: 11 }}>
+            {loading ? '…' : 'Refrescar'}
+          </button>
+        }
+      />
+
+      {error && <div style={{ color: 'var(--red)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>Error: {error}</div>}
+
+      {data && (
+        <>
+          <div style={{ marginBottom: 14 }}>
+            <span style={greenChip(data.ok)}>{data.ok ? 'TODO LISTO' : `${data.warnings?.length || 0} ALERTAS`}</span>
+          </div>
+
+          {/* Env vars block */}
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6 }}>
+              Env vars
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 18px', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+              {[
+                ['ONCHAIN_RPC_URL',                  data.env.rpc ? '✓' : '✕'],
+                ['ONCHAIN_CHAIN_ID',                 data.env.chainId || '✕'],
+                ['ONCHAIN_MARKET_FACTORY_ADDRESS',   data.env.factoryV1 ? short(data.env.factoryV1) : '✕'],
+                ['ONCHAIN_MARKET_FACTORY_V2_ADDRESS', data.env.factoryV2 ? short(data.env.factoryV2) : '✕'],
+                ['ONCHAIN_COLLATERAL_ADDRESS',       data.env.collateral ? short(data.env.collateral) : '✕'],
+                ['ONCHAIN_DEPLOYER_SUBORG_ID',       data.env.deployerSuborgId ? '✓' : '✕'],
+                ['ONCHAIN_DEPLOYER_ADDRESS',         data.env.deployerAddress ? short(data.env.deployerAddress) : '✕'],
+                ['TURNKEY_POLICIES_ENABLED',         data.env.policiesEnabled ? '✓' : '✕'],
+              ].map(([k, v]) => (
+                <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, color: v === '✕' ? 'var(--red)' : 'var(--text-secondary)' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>{k}</span>
+                  <span>{v}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Factories */}
+          {[['V1 (binario)', data.v1], ['V2 (multi 2..8)', data.v2]].map(([label, f]) => f && (
+            <div key={label} style={{ marginBottom: 12, padding: 10, borderRadius: 8, background: 'var(--surface2)' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6 }}>
+                Factory {label}
+              </div>
+              {f.address ? (
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, lineHeight: 1.7, color: 'var(--text-secondary)' }}>
+                  <div>address: <span style={{ color: 'var(--text-primary)' }}>{f.address}</span></div>
+                  <div>reachable: <span style={greenChip(f.reachable)}>{f.reachable ? 'SÍ' : 'NO'}</span></div>
+                  {f.error && <div style={{ color: 'var(--red)' }}>error: {f.error}</div>}
+                  {f.reachable && (
+                    <>
+                      <div>owner: {short(f.owner)} <span style={greenChip(f.deployerIsOwner)}>{f.deployerIsOwner ? '== deployer' : 'MISMATCH'}</span></div>
+                      <div>collateral: {short(f.collateral)} <span style={greenChip(f.collateralMatches)}>{f.collateralMatches ? '== ENV' : 'MISMATCH'}</span></div>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>address no configurado</div>
+              )}
+            </div>
+          ))}
+
+          {/* Deployer balances */}
+          {data.deployer && (
+            <div style={{ marginBottom: 12, padding: 10, borderRadius: 8, background: 'var(--surface2)' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6 }}>
+                Saldos del deployer
+              </div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, lineHeight: 1.7, color: 'var(--text-secondary)' }}>
+                <div>{short(data.deployer.address)}</div>
+                <div>
+                  ETH: <span style={{ color: data.deployer.ethBalanceEther > 0 ? 'var(--green)' : 'var(--red)' }}>
+                    {data.deployer.ethBalanceEther.toFixed(6)}
+                  </span>
+                  {' '}<span style={greenChip(data.deployer.ethBalanceEther > 0)}>{data.deployer.ethBalanceEther > 0 ? 'OK' : 'NEEDS GAS'}</span>
+                </div>
+                {data.deployer.collateralBalanceUnits != null && (
+                  <div>
+                    {data.deployer.collateralSymbol || 'COLLATERAL'}: <span style={{ color: data.deployer.collateralBalanceUnits > 0 ? 'var(--green)' : 'var(--red)' }}>
+                      {data.deployer.collateralBalanceUnits.toFixed(2)}
+                    </span>
+                    {' '}<span style={greenChip(data.deployer.collateralBalanceUnits > 0)}>{data.deployer.collateralBalanceUnits > 0 ? 'OK' : 'NEEDS FAUCET'}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Warnings */}
+          {data.warnings?.length > 0 && (
+            <div style={{ padding: 12, borderRadius: 8, background: 'rgba(255,69,69,0.06)', border: '1px solid rgba(255,69,69,0.25)' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--red)', textTransform: 'uppercase', marginBottom: 6 }}>
+                Por arreglar
+              </div>
+              <ul style={{ margin: 0, padding: '0 0 0 18px', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                {data.warnings.map((w, i) => <li key={i}>{w}</li>)}
+              </ul>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function short(addr) {
+  if (!addr) return '—';
+  const s = String(addr);
+  if (s.length < 14) return s;
+  return `${s.slice(0, 8)}…${s.slice(-6)}`;
+}
+
 // ═══ Generators / auto-resolve section ═════════════════════════════════════
 function GeneratorsSection() {
   const [running, setRunning] = useState(null); // 'generate' | 'resolve' | null
@@ -1453,7 +1614,12 @@ export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
 
         {/* Active tab content */}
         {tab === 'create'   && <CreateMarketForm onCreated={bumpRefresh} />}
-        {tab === 'generate' && <GeneratorsSection />}
+        {tab === 'generate' && (
+          <>
+            <OnchainStatusPanel />
+            <GeneratorsSection />
+          </>
+        )}
         {tab === 'pending'  && <PendingMarketsSection refreshKey={refreshKey} bumpRefresh={bumpRefresh} />}
         {tab === 'markets'  && <MarketsList refreshKey={refreshKey} bumpRefresh={bumpRefresh} />}
         {tab === 'social'   && <SocialTasksSection />}

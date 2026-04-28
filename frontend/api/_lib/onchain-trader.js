@@ -49,6 +49,7 @@ const MULTI_AMM_ABI = [
 const ERC20_ABI = [
   'function approve(address spender, uint256 amount) external returns (bool)',
   'function allowance(address owner, address spender) view returns (uint256)',
+  'function balanceOf(address owner) view returns (uint256)',
   'function decimals() view returns (uint8)',
 ];
 
@@ -74,11 +75,15 @@ const ERC20_ABI = [
 // factory.owner() on the target chain. `pool` is not indexed in either
 // event, so we decode it from the data field.
 const MARKET_FACTORY_V1_ABI = [
+  'function owner() view returns (address)',
+  'function collateral() view returns (address)',
   'function createMarket(string question, string category, uint256 endTime, string resolutionSource, uint256 seedAmount) external returns (uint256)',
   'function getMarket(uint256 marketId) external view returns (address pool, string question, string category, uint256 endTime, string resolutionSource, bool active)',
   'event MarketCreated(uint256 indexed marketId, address pool, string question, string category, uint256 endTime)',
 ];
 const MARKET_FACTORY_V2_ABI = [
+  'function owner() view returns (address)',
+  'function collateral() view returns (address)',
   'function createMarket(string question, string category, uint256 endTime, string resolutionSource, string[] outcomes, uint256 seedAmount) external returns (uint256)',
   'event MarketCreated(uint256 indexed marketId, address pool, string question, string category, uint256 endTime, string resolutionSource, string[] outcomes)',
 ];
@@ -167,9 +172,10 @@ async function signAndBroadcast({ suborgId, from, to, data, gasLimit }) {
 
 // ── Collateral allowance (approve once per market) ──────────────────
 
-async function ensureCollateralAllowance({ suborgId, ownerAddr, ammAddress, amount }) {
+async function ensureCollateralAllowance({
+  suborgId, ownerAddr, ammAddress, amount, collateralAddr = process.env.ONCHAIN_COLLATERAL_ADDRESS,
+}) {
   const prov = provider();
-  const collateralAddr = process.env.ONCHAIN_COLLATERAL_ADDRESS;
   const c = new ethers.Contract(collateralAddr, ERC20_ABI, prov);
   const current = await c.allowance(ownerAddr, ammAddress);
   if (current.gte(amount)) return null;
@@ -184,6 +190,31 @@ async function ensureCollateralAllowance({ suborgId, ownerAddr, ammAddress, amou
     gasLimit: ethers.BigNumber.from(100_000),
   });
   return receipt.transactionHash;
+}
+
+function sameAddress(a, b) {
+  return String(a || '').toLowerCase() === String(b || '').toLowerCase();
+}
+
+function formatNative(units) {
+  return ethers.utils.formatUnits(units, 'ether');
+}
+
+function formatCollateral(units) {
+  return ethers.utils.formatUnits(units, COLLATERAL_DECIMALS);
+}
+
+function extractRevertDetail(err) {
+  const raw = [
+    err?.error?.message,
+    err?.reason,
+    err?.message,
+  ].find(Boolean);
+  if (!raw) return 'unknown revert';
+  return String(raw)
+    .replace(/^execution reverted:\s*/i, '')
+    .replace(/^call reverted:\s*/i, '')
+    .trim();
 }
 
 // ── Helpers for encode/decode ───────────────────────────────────────
@@ -439,6 +470,43 @@ export async function deployMarketOnChain({
     : 'Pronos admin (manual resolution)';
 
   const iface = new ethers.utils.Interface(useV2 ? MARKET_FACTORY_V2_ABI : MARKET_FACTORY_V1_ABI);
+  const prov = provider();
+  const factory = new ethers.Contract(factoryAddr, useV2 ? MARKET_FACTORY_V2_ABI : MARKET_FACTORY_V1_ABI, prov);
+  const gasLimit = ethers.BigNumber.from(useV2 ? 6_500_000 : 4_500_000);
+  const [factoryOwner, factoryCollateral, feeData, nativeBalance] = await Promise.all([
+    factory.owner(),
+    factory.collateral(),
+    prov.getFeeData(),
+    prov.getBalance(deployerAddr),
+  ]);
+  if (!sameAddress(factoryOwner, deployerAddr)) {
+    const err = new Error('deployer_not_factory_owner');
+    err.status = 400;
+    err.detail = `factory owner=${factoryOwner}, deployer=${deployerAddr}`;
+    throw err;
+  }
+  const collateral = new ethers.Contract(factoryCollateral, ERC20_ABI, prov);
+  const collateralBalance = await collateral.balanceOf(deployerAddr);
+  if (collateralBalance.lt(seedUnits)) {
+    const err = new Error('deployer_insufficient_collateral');
+    err.status = 400;
+    err.detail = `wallet ${deployerAddr} has ${formatCollateral(collateralBalance)} collateral at ${factoryCollateral}, needs ${formatCollateral(seedUnits)}`;
+    throw err;
+  }
+  const maxFeePerGas = feeData.maxFeePerGas || ethers.utils.parseUnits('0.1', 'gwei');
+  const estimatedNative = gasLimit.mul(maxFeePerGas).mul(2);
+  if (nativeBalance.lt(estimatedNative)) {
+    const err = new Error('deployer_insufficient_gas');
+    err.status = 400;
+    err.detail = `wallet ${deployerAddr} has ${formatNative(nativeBalance)} ETH, needs at least ~${formatNative(estimatedNative)} ETH for approve + createMarket`;
+    throw err;
+  }
+  if (process.env.ONCHAIN_COLLATERAL_ADDRESS && !sameAddress(process.env.ONCHAIN_COLLATERAL_ADDRESS, factoryCollateral)) {
+    const err = new Error('factory_collateral_mismatch');
+    err.status = 500;
+    err.detail = `env ONCHAIN_COLLATERAL_ADDRESS=${process.env.ONCHAIN_COLLATERAL_ADDRESS} but factory uses ${factoryCollateral}`;
+    throw err;
+  }
   const data = useV2
     ? iface.encodeFunctionData('createMarket', [
         question.trim(),
@@ -464,7 +532,17 @@ export async function deployMarketOnChain({
     ownerAddr: deployerAddr,
     ammAddress: factoryAddr,
     amount: seedUnits,
+    collateralAddr: factoryCollateral,
   });
+
+  try {
+    await prov.call({ from: deployerAddr, to: factoryAddr, data });
+  } catch (e) {
+    const err = new Error('factory_create_simulation_failed');
+    err.status = 400;
+    err.detail = extractRevertDetail(e);
+    throw err;
+  }
 
   const receipt = await signAndBroadcast({
     suborgId: deployerSuborgId,
@@ -473,7 +551,7 @@ export async function deployMarketOnChain({
     data,
     // V2 deploys a heavier ERC-1155-aware AMM with N outcome tokens;
     // bump the gas budget vs V1.
-    gasLimit: useV2 ? 6_500_000n : 4_500_000n,
+    gasLimit,
   });
 
   let marketId = null;
