@@ -50,20 +50,18 @@ export default async function handler(req, res) {
     await ensurePointsSchema(schemaSql);
 
     const result = await withTransaction(async (client) => {
-      const existingResult = await client.query(
-        `SELECT amount, streak_day FROM daily_claims
-         WHERE username = $1 AND claim_date = $2`,
-        [username, today],
-      );
-      if (existingResult.rows.length > 0) {
-        const row = existingResult.rows[0];
-        return {
-          alreadyClaimedToday: true,
-          amount: Number(row.amount),
-          streakDay: row.streak_day,
-        };
-      }
-
+      // Compute the streak + amount inside a FOR UPDATE lock on the streak
+      // row so two concurrent claims serialize on it. Even with that, the
+      // SELECT on daily_claims (the previous version of this code) can be
+      // bypassed by a race because the read isn't covered by any lock —
+      // both transactions could pass it before either commits.
+      //
+      // The fix is to drive idempotency from the daily_claims INSERT: do
+      // it FIRST, with `ON CONFLICT DO NOTHING RETURNING *`, and treat the
+      // returned row as the source of truth. If the insert returned a
+      // row, *we* won the race and we credit. If it returned no row,
+      // someone else already claimed today — read their row and report
+      // alreadyClaimedToday without touching the balance.
       const streakResult = await client.query(
         `SELECT current_streak, last_claim_date, best_streak
          FROM points_streaks
@@ -81,6 +79,33 @@ export default async function handler(req, res) {
       const amount = BASE_REWARD + (streakDay - 1) * STREAK_BONUS;
       const bestStreak = Math.max(Number(prev.best_streak || 0), streakDay);
 
+      // Atomic idempotency gate: this INSERT either succeeds (we won the
+      // race for "today's claim") or returns zero rows (someone else won).
+      // Everything below is only run on the winner path.
+      const insertResult = await client.query(
+        `INSERT INTO daily_claims (username, claim_date, amount, streak_day)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (username, claim_date) DO NOTHING
+         RETURNING amount, streak_day`,
+        [username, today, amount, streakDay],
+      );
+      if (insertResult.rows.length === 0) {
+        // Lost the race — fetch the row that did win and report it.
+        const existingResult = await client.query(
+          `SELECT amount, streak_day FROM daily_claims
+           WHERE username = $1 AND claim_date = $2`,
+          [username, today],
+        );
+        const row = existingResult.rows[0] || { amount, streak_day: streakDay };
+        return {
+          alreadyClaimedToday: true,
+          amount: Number(row.amount),
+          streakDay: row.streak_day,
+        };
+      }
+
+      // We won — credit balance, update streak, write audit. Locks taken
+      // here serialize against any concurrent buy/sell on the same user.
       const balanceResult = await client.query(
         `SELECT balance FROM points_balances WHERE username = $1 FOR UPDATE`,
         [username],
@@ -98,13 +123,6 @@ export default async function handler(req, res) {
           [newBalance, username],
         );
       }
-
-      await client.query(
-        `INSERT INTO daily_claims (username, claim_date, amount, streak_day)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (username, claim_date) DO NOTHING`,
-        [username, today, amount, streakDay],
-      );
 
       if (streakResult.rows.length === 0) {
         await client.query(

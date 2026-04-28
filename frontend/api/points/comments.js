@@ -10,6 +10,21 @@
  * Soft-deletes set `deleted_at`; GET filters them out. Authors can hide
  * their own comments; no edit endpoint (deleting + reposting is fine for
  * the MVP). Rate-limited per IP to keep the spam floor reasonable.
+ *
+ * ────────────────────────────────────────────────────────────────────
+ * XSS / output-safety contract:
+ *
+ * Comment bodies are stored exactly as the user submitted them, with no
+ * server-side HTML escape. The XSS contract is: every consumer of this
+ * endpoint MUST render bodies as text, never as HTML. The current React
+ * components (`MarketComments.jsx`) do this correctly via JSX text nodes.
+ *
+ * If you ever add a new consumer (notifications email, RSS feed, OG
+ * preview card, server-rendered HTML page, etc.) — escape on the way
+ * out. Do NOT bake escaping into this endpoint, because then every
+ * client would need to un-escape, and one client missing the un-escape
+ * would render `&lt;` literally for users.
+ * ────────────────────────────────────────────────────────────────────
  */
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';

@@ -21,8 +21,17 @@ export async function readFinnhubQuote(symbol) {
   if (!key) throw new Error('stockprice: FINNHUB_API_KEY not set');
   if (!symbol) throw new Error('stockprice: symbol required');
 
-  const url = `${FINNHUB_BASE}/quote?symbol=${encodeURIComponent(symbol)}&token=${encodeURIComponent(key)}`;
-  const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+  // Pass the API key in the X-Finnhub-Token header rather than the
+  // ?token= query string. Both auth methods are documented; the header
+  // form keeps the secret out of any HTTP-level access logs along the
+  // path (Finnhub edge, any intermediate proxy, our own request logs).
+  const url = `${FINNHUB_BASE}/quote?symbol=${encodeURIComponent(symbol)}`;
+  const res = await fetch(url, {
+    headers: {
+      'Accept': 'application/json',
+      'X-Finnhub-Token': key,
+    },
+  });
   if (!res.ok) {
     throw new Error(`finnhub: HTTP ${res.status}`);
   }

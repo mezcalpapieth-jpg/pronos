@@ -120,6 +120,40 @@ export function clearOAuthCookie(res, provider) {
 // ── URL utility ─────────────────────────────────────────────────────────
 
 /**
+ * Validate a `returnTo` query param so it can only point to a path on
+ * our own origin. Without this guard, `?returnTo=//evil.tld/path` would
+ * pass a naive `startsWith('/')` check and turn the OAuth start endpoint
+ * into an open redirect — useful for phishing pivots after a successful
+ * auth flow.
+ *
+ * The function:
+ *   - rejects non-strings and anything not starting with '/'
+ *   - rejects protocol-relative URLs ('//host', and '/\\host' which some
+ *     browsers normalize to the same thing)
+ *   - rejects values that contain '\r' / '\n' (header injection guard)
+ *   - reconstructs the URL against a placeholder origin and returns
+ *     pathname+search+hash, so any encoding tricks can't change origin
+ *
+ * Returns `fallback` when the input is unsafe.
+ */
+export function safeReturnPath(input, fallback = '/earn') {
+  if (typeof input !== 'string' || input.length === 0 || input.length > 1024) return fallback;
+  if (/[\r\n]/.test(input)) return fallback;
+  if (!input.startsWith('/')) return fallback;
+  if (input.startsWith('//') || input.startsWith('/\\')) return fallback;
+  try {
+    const placeholder = 'http://pronos-return-path.invalid';
+    const u = new URL(input, placeholder);
+    if (u.origin !== placeholder) return fallback;
+    const out = `${u.pathname}${u.search}${u.hash}`;
+    if (!out.startsWith('/') || out.startsWith('//')) return fallback;
+    return out;
+  } catch {
+    return fallback;
+  }
+}
+
+/**
  * Resolve our public callback URL for `provider`. Prefers an explicit
  * override env var; falls back to the Vercel-assigned host in prod/preview.
  * In local dev the env var is required (localhost:3000 won't work for X
@@ -138,11 +172,26 @@ export function resolveCallbackUrl(provider) {
 
 /**
  * Build a redirect response to the caller's original returnTo (or /earn).
+ *
+ * Defense-in-depth: the start endpoints already filter `returnTo` through
+ * `safeReturnPath` before storing it in the OAuth cookie, but we re-run
+ * the same check here so a tampered or stale cookie can't ever produce a
+ * cross-origin redirect.
+ *
+ * Fragment handling: the new query param needs to land in the URL's
+ * search portion, NOT inside the fragment. Naive concatenation
+ * (`${base}?${param}`) breaks when `base` contains a `#fragment` —
+ * the appended `?…` becomes part of the fragment, which the browser
+ * treats as opaque text. We split out the hash and re-attach it after
+ * the param.
  */
 export function redirectToReturn(res, returnTo, status = 'linked', provider = '') {
-  const base = returnTo || '/earn';
-  const sep = base.includes('?') ? '&' : '?';
-  const url = `${base}${sep}${status}=${encodeURIComponent(provider)}`;
+  const base = safeReturnPath(returnTo, '/earn');
+  const hashIdx = base.indexOf('#');
+  const path = hashIdx === -1 ? base : base.slice(0, hashIdx);
+  const hash = hashIdx === -1 ? '' : base.slice(hashIdx);
+  const sep = path.includes('?') ? '&' : '?';
+  const url = `${path}${sep}${status}=${encodeURIComponent(provider)}${hash}`;
   res.setHeader('Location', url);
   res.status(302).end();
 }

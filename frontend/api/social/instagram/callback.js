@@ -31,7 +31,7 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
-import { readOAuthCookie, clearOAuthCookie, resolveCallbackUrl, redirectToReturn } from '../../_lib/oauth.js';
+import { readOAuthCookie, clearOAuthCookie, resolveCallbackUrl, redirectToReturn, safeReturnPath } from '../../_lib/oauth.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 
 const TOKEN_URL = 'https://api.instagram.com/oauth/access_token';
@@ -201,9 +201,17 @@ export default async function handler(req, res) {
 }
 
 function bailOut(res, returnTo, provider, code) {
-  const base = returnTo || '/earn';
-  const sep = base.includes('?') ? '&' : '?';
-  const url = `${base}${sep}link_error=${encodeURIComponent(provider)}:${encodeURIComponent(code)}`;
+  // Defense-in-depth: re-validate `returnTo` even though it came from the
+  // HMAC-signed cookie. Guards against pre-fix in-flight cookies that
+  // were minted before the start endpoint started filtering, and against
+  // any future bug that might let an unsafe path through. Splits out the
+  // fragment so the new query param lands in `?...`, not inside `#...`.
+  const base = safeReturnPath(returnTo, '/earn');
+  const hashIdx = base.indexOf('#');
+  const path = hashIdx === -1 ? base : base.slice(0, hashIdx);
+  const hash = hashIdx === -1 ? '' : base.slice(hashIdx);
+  const sep = path.includes('?') ? '&' : '?';
+  const url = `${path}${sep}link_error=${encodeURIComponent(provider)}:${encodeURIComponent(code)}${hash}`;
   res.setHeader('Location', url);
   res.status(302).end();
 }

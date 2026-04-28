@@ -16,12 +16,25 @@
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 const FROM_EMAIL = 'Simon <simon@pronos.io>';
 
+// Defensive HTML-entity escape. Username is regex-validated upstream
+// (lowercase + digits + underscore), so this is belt-and-suspenders —
+// it ensures the email helper itself stays safe if a future caller
+// passes a less-strictly-validated string.
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export async function sendPointsWelcomeEmail({ email, username }) {
   const key = process.env.RESEND_API_KEY;
   if (!key || !email) return false;
 
-  const handle = username ? `@${username}` : 'participante';
-  const subject = `¡Bienvenido a Pronos, ${handle}! 🎯`;
+  const handle = username ? `@${escapeHtml(username)}` : 'participante';
+  const subject = username ? `¡Bienvenido a Pronos, @${username}! 🎯` : `¡Bienvenido a Pronos! 🎯`;
 
   const html = `
 <div style="font-family:'DM Sans',Helvetica,Arial,sans-serif;max-width:600px;margin:0 auto;background:#080808;border-radius:14px;overflow:hidden;color:#f0f0f0;">

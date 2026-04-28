@@ -137,34 +137,55 @@ async function handleRollover(req, res, nextCycleLabel) {
     // reset happens for EVERY balance row (not just top-100) so users
     // outside the leaderboard also restart at 500. We also audit each
     // reset as a signed distribution so the ledger stays balanced.
-    const resetRows = await client.query(
-      `UPDATE points_balances
-       SET balance = $1, updated_at = NOW()
+    //
+    // We need the *pre-reset* balances to compute the audit deltas, so
+    // we SELECT FOR UPDATE first (locking every row we're about to
+    // touch — also blocks any concurrent buy/sell during rollover),
+    // then UPDATE, then write one audit row per reset. Earlier versions
+    // of this code looked up the previous balance in the top-100
+    // snapshot only — which silently skipped audit rows for users
+    // outside top-100, leaving the ledger out of balance with the
+    // actual balance reset.
+    const preReset = await client.query(
+      `SELECT username, balance
+       FROM points_balances
        WHERE balance <> $1
-       RETURNING username, balance`,
+       FOR UPDATE`,
       [CYCLE_STARTING_BALANCE],
     );
-    // For each reset, write an audit row whose amount is the *delta*
-    // the reset applied (so recentDistributions nets out to zero).
-    for (const row of resetRows.rows) {
-      // row.balance here is the NEW balance (500). We need the previous
-      // balance to compute delta, so we look it up in the snapshot we
-      // just captured above.
-      const snapshot = top.rows.find(r => r.username === row.username);
-      if (!snapshot) continue;
-      const prev = Number(snapshot.final_balance);
-      const delta = CYCLE_STARTING_BALANCE - prev;
-      if (delta === 0) continue;
+    const resetCount = preReset.rows.length;
+    if (resetCount > 0) {
       await client.query(
-        `INSERT INTO points_distributions (username, amount, kind, reference_id, reason)
-         VALUES ($1, $2, 'cycle_reset', $3, $4)`,
-        [
-          row.username,
-          delta,
-          activeCycle.id,
-          `Reinicio de ciclo #${activeCycle.id} — balance volvió a ${CYCLE_STARTING_BALANCE} MXNP`,
-        ],
+        `UPDATE points_balances
+         SET balance = $1, updated_at = NOW()
+         WHERE username = ANY($2::text[])`,
+        [CYCLE_STARTING_BALANCE, preReset.rows.map(r => r.username)],
       );
+      // Bulk-insert audit rows in a single round-trip via UNNEST(). With
+      // 10k+ active users a per-row INSERT loop is the slowest part of
+      // rollover; this collapses it to one statement.
+      const usernames = [];
+      const deltas = [];
+      for (const row of preReset.rows) {
+        const prev = Number(row.balance);
+        const delta = CYCLE_STARTING_BALANCE - prev;
+        if (delta === 0) continue;
+        usernames.push(row.username);
+        deltas.push(delta);
+      }
+      if (usernames.length > 0) {
+        await client.query(
+          `INSERT INTO points_distributions (username, amount, kind, reference_id, reason)
+           SELECT u, d, 'cycle_reset', $3, $4
+           FROM UNNEST($1::text[], $2::int[]) AS t(u, d)`,
+          [
+            usernames,
+            deltas,
+            activeCycle.id,
+            `Reinicio de ciclo #${activeCycle.id} — balance volvió a ${CYCLE_STARTING_BALANCE} MXNP`,
+          ],
+        );
+      }
     }
 
     // ── 3. Close the active cycle ───────────────────────────────────
@@ -193,7 +214,7 @@ async function handleRollover(req, res, nextCycleLabel) {
       closedCycleId: activeCycle.id,
       newCycle: inserted.rows[0],
       snapshotted: top.rows.length,
-      resetCount: resetRows.rows.length,
+      resetCount,
       winners: top.rows.slice(0, 3).map((r, i) => ({
         rank: i + 1,
         username: r.username,

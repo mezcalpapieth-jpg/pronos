@@ -24,10 +24,17 @@ export async function readYouTubeTrendingMx({ max = 10 } = {}) {
   const key = process.env.YOUTUBE_API_KEY;
   if (!key) throw new Error('youtube: YOUTUBE_API_KEY not set');
 
+  // Pass the API key in the X-goog-api-key header rather than ?key= so
+  // the secret stays out of any HTTP-level access logs along the path.
+  // Google's API explorer documents both forms as equivalent.
   const url = `${BASE}?part=snippet&chart=mostPopular&regionCode=MX`
-    + `&maxResults=${Math.min(50, Math.max(1, max))}`
-    + `&key=${encodeURIComponent(key)}`;
-  const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    + `&maxResults=${Math.min(50, Math.max(1, max))}`;
+  const res = await fetch(url, {
+    headers: {
+      'Accept': 'application/json',
+      'X-goog-api-key': key,
+    },
+  });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     throw new Error(`youtube: HTTP ${res.status} · ${body.slice(0, 160)}`);

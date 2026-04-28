@@ -20,7 +20,7 @@ import { applyCors } from '../../_lib/cors.js';
 import { requireSession } from '../../_lib/session.js';
 import {
   generateState, generateCodeVerifier, codeChallenge,
-  setOAuthCookie, resolveCallbackUrl,
+  setOAuthCookie, resolveCallbackUrl, safeReturnPath,
 } from '../../_lib/oauth.js';
 
 const AUTHORIZE_URL = 'https://twitter.com/i/oauth2/authorize';
@@ -43,9 +43,11 @@ export default function handler(req, res) {
   const state = generateState();
   const verifier = generateCodeVerifier();
   const challenge = codeChallenge(verifier);
-  const returnTo = typeof req.query.returnTo === 'string' && req.query.returnTo.startsWith('/')
-    ? req.query.returnTo
-    : '/earn';
+  // Restrict `returnTo` to a same-origin path. A naive startsWith('/')
+  // check accepts `//attacker.com/path`, which browsers resolve to a
+  // different origin and would turn this endpoint into an open-redirect
+  // pivot for post-OAuth phishing.
+  const returnTo = safeReturnPath(req.query.returnTo, '/earn');
 
   // Cookie carries what the callback needs to verify this flow.
   setOAuthCookie(res, 'x', {

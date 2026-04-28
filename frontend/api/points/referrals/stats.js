@@ -17,6 +17,11 @@ import { readSession } from '../../_lib/session.js';
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
 
+// Canonical share-link origin. Configurable so preview deploys can
+// override to their own host; falls back to the production canonical
+// origin so we never emit a half-baked URL.
+const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || 'https://pronos.io').replace(/\/+$/, '');
+
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'GET, OPTIONS', credentials: true });
   if (cors) return cors;
@@ -51,9 +56,14 @@ export default async function handler(req, res) {
       `,
     ]);
 
-    const host = req.headers['x-forwarded-host'] || req.headers.host || 'pronos.io';
-    const protocol = req.headers['x-forwarded-proto'] || 'https';
-    const link = `${protocol}://${host}/r/${username}`;
+    // Build the share link from a trusted source: PUBLIC_BASE_URL when
+    // set, falling back to a hardcoded canonical host. Earlier versions
+    // pulled from `x-forwarded-host` / `x-forwarded-proto` directly,
+    // which let any client spoof the link by sending those headers.
+    // This response is JSON so the link wasn't used as a server-side
+    // redirect — but a client that rendered the link as a clickable
+    // anchor would propagate the spoofed value verbatim.
+    const link = `${PUBLIC_BASE_URL}/r/${username}`;
 
     return res.status(200).json({
       authenticated: true,

@@ -250,6 +250,38 @@ export async function deleteDelegationPolicyOnSuborg({ suborgId, policyId }) {
 }
 
 /**
+ * Fetch the verified email of the sub-org's root user.
+ *
+ * The sub-org is created with a single root user whose `userEmail` is
+ * the email that received and verified the login OTP — so this is the
+ * authoritative "this user controls this email" answer. The verify-otp
+ * endpoint uses it to bind the points_users row + session cookie to a
+ * Turnkey-attested email instead of trusting whatever the client put in
+ * the request body.
+ *
+ * Returns null on lookup failure or if no email is recorded — callers
+ * should treat null as "don't persist any email", never as "fall back
+ * to the body value".
+ */
+export async function getSuborgRootUserEmail(suborgId) {
+  if (!suborgId) return null;
+  try {
+    const result = await api().getUsers({ organizationId: suborgId });
+    const users = result?.users || [];
+    if (users.length === 0) return null;
+    // Sub-orgs created via getOrCreateSuborg() have exactly one root
+    // user. If we ever start creating multi-user sub-orgs, prefer the
+    // first user with an email.
+    const withEmail = users.find(u => typeof u?.userEmail === 'string' && u.userEmail.length > 0);
+    const email = withEmail?.userEmail || null;
+    return email ? email.toLowerCase().trim() : null;
+  } catch (e) {
+    console.warn('[turnkey] getSuborgRootUserEmail failed:', e?.message);
+    return null;
+  }
+}
+
+/**
  * Best-effort: fetch the first Ethereum address on the sub-org's first
  * wallet. Used to populate points_users.wallet_address after signup.
  */

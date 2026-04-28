@@ -29,7 +29,7 @@ import { applyCors } from '../../_lib/cors.js';
 import { requireSession } from '../../_lib/session.js';
 import {
   generateState,
-  setOAuthCookie, resolveCallbackUrl,
+  setOAuthCookie, resolveCallbackUrl, safeReturnPath,
 } from '../../_lib/oauth.js';
 
 const AUTHORIZE_URL = 'https://www.instagram.com/oauth/authorize';
@@ -50,9 +50,11 @@ export default function handler(req, res) {
   }
 
   const state = generateState();
-  const returnTo = typeof req.query.returnTo === 'string' && req.query.returnTo.startsWith('/')
-    ? req.query.returnTo
-    : '/earn';
+  // Restrict `returnTo` to a same-origin path. A naive startsWith('/')
+  // check accepts `//attacker.com/path`, which browsers resolve to a
+  // different origin and would turn this endpoint into an open-redirect
+  // pivot for post-OAuth phishing.
+  const returnTo = safeReturnPath(req.query.returnTo, '/earn');
 
   // Cookie carries what the callback needs to verify this flow.
   // No verifier — IG's OAuth doesn't take a code_verifier. Keep the

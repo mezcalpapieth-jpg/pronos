@@ -1037,21 +1037,46 @@ function MarketsList({ refreshKey, bumpRefresh }) {
   const [notice, setNotice] = useState(null);
 
   async function handleBulkArchivePoints() {
-    const confirmMsg =
-      'Archivar TODOS los mercados off-chain (mode=points + legacy NULL).\n\n' +
-      '· Se ocultan de las listas públicas y de admin\n' +
-      '· Se mantienen en la base para historial de trades\n' +
-      '· Solo afecta a mercados off-chain — los onchain no se tocan\n\n' +
-      '¿Continuar?';
-    if (!window.confirm(confirmMsg)) return;
     setBulkArchiving(true);
     setNotice(null);
     try {
+      // Two-phase confirm: dry-run first to get the actual count, then
+      // confirm with the count pinned. The server rejects with 409
+      // count_mismatch if the live count drifts between preview and
+      // commit (e.g. concurrent admin or new market generation).
+      const preview = await postJson('/api/points/admin/bulk-archive', {
+        mode: 'points',
+        includeNullMode: true,
+        dryRun: true,
+      });
+      if (!preview.ok) throw new Error(preview.data?.error || 'bulk_archive_failed');
+      const wouldArchive = preview.data?.wouldArchiveCount ?? 0;
+      if (wouldArchive === 0) {
+        setNotice({ type: 'success', msg: 'No hay mercados off-chain por archivar.' });
+        return;
+      }
+      const confirmMsg =
+        `Archivar ${wouldArchive} mercados off-chain (mode=points + legacy NULL).\n\n` +
+        '· Se ocultan de las listas públicas y de admin\n' +
+        '· Se mantienen en la base para historial de trades\n' +
+        '· Solo afecta a mercados off-chain — los onchain no se tocan\n\n' +
+        '¿Continuar?';
+      if (!window.confirm(confirmMsg)) return;
+
       const { ok, data } = await postJson('/api/points/admin/bulk-archive', {
         mode: 'points',
         includeNullMode: true,
+        expectedCount: wouldArchive,
       });
-      if (!ok) throw new Error(data?.error || 'bulk_archive_failed');
+      if (!ok) {
+        if (data?.error === 'count_mismatch') {
+          throw new Error(
+            `El conteo cambió (esperaba ${data.detail?.expectedCount}, ahora hay ${data.detail?.liveCount}). ` +
+            'Vuelve a confirmar.',
+          );
+        }
+        throw new Error(data?.error || 'bulk_archive_failed');
+      }
       setNotice({
         type: 'success',
         msg: `Archivados ${data.archivedCount} mercados off-chain.`,

@@ -20,6 +20,7 @@
  * Error codes:
  *   invalid_input         — missing / malformed body
  *   invalid_code          — Turnkey rejected the code (wrong / expired)
+ *   email_mismatch        — body email differs from Turnkey-verified email
  *   session_failed        — otpLogin call did not return a session
  *   turnkey_unavailable   — other Turnkey SDK error
  *   db_unavailable        — Postgres call failed
@@ -27,7 +28,7 @@
 
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
-import { verifyOtp, otpLogin, getSuborgWalletAddress } from '../../_lib/turnkey.js';
+import { verifyOtp, otpLogin, getSuborgWalletAddress, getSuborgRootUserEmail } from '../../_lib/turnkey.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { createSessionToken, setSessionCookie } from '../../_lib/session.js';
 import { rateLimit, clientIp } from '../../_lib/rate-limit.js';
@@ -92,7 +93,29 @@ export default async function handler(req, res) {
     }
 
     // At this point the OTP is verified and the user "owns" the sub-org.
-    // Upsert a points_users row so downstream queries can join on it.
+    // Resolve the *verified* email for this sub-org from Turnkey rather
+    // than trusting the body — the body is attacker-controlled, and a
+    // mismatch would let a successful logger-in pin a different email
+    // (e.g. a victim's address) onto their points_users row + session.
+    //
+    // If the body submitted an email, cross-check it. If they disagree
+    // (after normalize + lowercase), reject with email_mismatch so a
+    // tampered client surfaces clearly. If Turnkey's lookup fails, we
+    // proceed without persisting an email — never fall back to the body
+    // value.
+    const verifiedEmail = await getSuborgRootUserEmail(suborgId);
+    const bodyEmailNorm = typeof email === 'string' && email.length > 0
+      ? email.toLowerCase().trim()
+      : null;
+    if (bodyEmailNorm && verifiedEmail && bodyEmailNorm !== verifiedEmail) {
+      console.warn('[auth/verify-otp] body email does not match Turnkey-verified email', {
+        suborgId,
+        // Don't log the addresses themselves — they're PII.
+      });
+      return res.status(400).json({ error: 'email_mismatch' });
+    }
+    const persistEmail = verifiedEmail; // null-safe; never the body value
+
     let username = null;
     let walletAddress = null;
     try {
@@ -103,7 +126,7 @@ export default async function handler(req, res) {
 
       const rows = await sql`
         INSERT INTO points_users (turnkey_sub_org_id, wallet_address, email)
-        VALUES (${suborgId}, ${walletAddress}, ${email || null})
+        VALUES (${suborgId}, ${walletAddress}, ${persistEmail})
         ON CONFLICT (turnkey_sub_org_id) DO UPDATE
         SET wallet_address = COALESCE(points_users.wallet_address, EXCLUDED.wallet_address),
             email          = COALESCE(points_users.email, EXCLUDED.email)
@@ -120,7 +143,7 @@ export default async function handler(req, res) {
     try {
       token = createSessionToken({
         suborgId,
-        email: email || null,
+        email: persistEmail,
         username,
       });
       setSessionCookie(res, token);
