@@ -155,6 +155,35 @@ export async function logout() {
   cachedIdb = null;
 }
 
+// ─── Turnkey delegated signing ───────────────────────────────────────────────
+// Used by:
+//   - PointsLoginModal: prompts new MVP signups right after username
+//   - Portfolio: shows a one-time banner for legacy points-app accounts
+// Both surfaces call authorizeDelegation() on accept; status check
+// drives whether the prompt/banner shows at all.
+export async function fetchDelegationStatus() {
+  const { ok, data } = await getJson('/api/points/turnkey/delegation-status');
+  if (!ok) {
+    // Don't surface as an error to the caller — both the signup
+    // prompt and the legacy banner treat "couldn't fetch" the same
+    // as "no active policy" and just don't show anything. A real
+    // auth/network issue will reappear on the next user action.
+    return { active: false };
+  }
+  return data; // { active, simulated, enabled, expiresAt, dailyCapMxnb, defaults }
+}
+
+export async function authorizeDelegation() {
+  const { ok, data, status } = await postJson('/api/points/turnkey/authorize-delegation', {});
+  if (!ok) {
+    const err = new Error(data?.error || `HTTP ${status}`);
+    err.code = data?.error;
+    err.detail = data?.detail || null;
+    throw err;
+  }
+  return data;
+}
+
 // ─── React context ──────────────────────────────────────────────────────────
 const AuthContext = createContext(null);
 

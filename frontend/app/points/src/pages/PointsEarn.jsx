@@ -23,10 +23,7 @@ import {
   fetchSocialLinks,
   unlinkSocial,
   socialLinkStartUrl,
-  fetchDelegationStatus,
-  revokeDelegation,
 } from '../lib/pointsApi.js';
-import PointsDelegationModal from '../components/PointsDelegationModal.jsx';
 
 function fmt(n) {
   const v = Number(n) || 0;
@@ -560,145 +557,19 @@ function SocialLinksCard() {
   );
 }
 
-// ─── Turnkey delegated signing (M2) ──────────────────────────────────
-// Surfaces the one-time consent sheet so users can set up (or
-// revoke) delegated signing ahead of on-chain markets. The delegation
-// endpoint is the SAME one /api/points/buy will call when it
-// encounters a `mode='onchain'` market and no active policy — having
-// the card here lets users opt in proactively (and test M2 end-to-end
-// before M3 introduces actual contracts to sign against).
-function DelegationCard() {
-  const [status, setStatus] = useState(null);
-  const [err, setErr] = useState(null);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-
-  async function load() {
-    try {
-      const r = await fetchDelegationStatus();
-      setStatus(r);
-      setErr(null);
-    } catch (e) {
-      setErr(e.code || e.message);
-    }
-  }
-  useEffect(() => { load(); }, []);
-
-  async function handleRevoke() {
-    if (!confirm('Revocar la autorización? Las próximas apuestas en blockchain te pedirán confirmar de nuevo.')) return;
-    setBusy(true);
-    try {
-      await revokeDelegation();
-      await load();
-    } catch (e) {
-      setErr(e.code || e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const active = status?.active;
-  const simulated = status?.simulated;
-  const enabled = status?.enabled;
-  const expiresAt = status?.expiresAt;
-  const daysLeft = expiresAt
-    ? Math.max(0, Math.round((new Date(expiresAt).getTime() - Date.now()) / 86_400_000))
-    : null;
-  const cap = status?.dailyCapMxnb ?? status?.defaults?.dailyCapMxnb ?? 200000;
-
-  return (
-    <section style={panelStyle}>
-      <div style={eyebrowStyle}>⚡ Firma delegada · Turnkey</div>
-      <h3 style={panelTitleStyle}>Apuesta en blockchain sin interrupciones</h3>
-      <p style={panelBodyStyle}>
-        Autoriza a Pronos una sola vez a firmar tus apuestas on-chain. Limitado a
-        los contratos de los mercados, con tope diario y vigencia de 6 meses. Tus
-        retiros siguen requiriendo tu firma en todos los casos.
-      </p>
-
-      {err && (
-        <div style={{ ...noticeStyle, color: 'var(--red, #ef4444)' }}>Error: {err}</div>
-      )}
-
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 12,
-        padding: '14px 16px',
-        background: 'var(--surface2)',
-        border: '1px solid var(--border)',
-        borderRadius: 10,
-        marginTop: 12,
-      }}>
-        <div style={{ fontSize: 20, width: 28, textAlign: 'center' }}>
-          {active ? '✅' : '○'}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text-primary)', marginBottom: 4 }}>
-            {active ? 'Firma delegada activa' : 'Sin autorización'}
-          </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
-            {active
-              ? `Tope ${Number(cap).toLocaleString('es-MX')} MXNB/día · caduca en ${daysLeft} días`
-              : 'Autoriza para apostar sin confirmar cada vez'}
-            {active && simulated && ' · pendiente de contratos on-chain'}
-            {!enabled && active && ' · modo simulación'}
-          </div>
-        </div>
-        {active ? (
-          <button
-            onClick={handleRevoke}
-            disabled={busy}
-            style={{
-              padding: '8px 14px',
-              background: 'transparent',
-              color: 'var(--text-muted)',
-              border: '1px solid var(--border)',
-              borderRadius: 8,
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-              fontWeight: 600,
-              letterSpacing: '0.06em',
-              cursor: busy ? 'wait' : 'pointer',
-              minWidth: 120,
-              opacity: busy ? 0.6 : 1,
-              textTransform: 'uppercase',
-            }}
-          >
-            {busy ? '…' : 'Revocar'}
-          </button>
-        ) : (
-          <button
-            onClick={() => setModalOpen(true)}
-            style={{
-              padding: '8px 14px',
-              background: 'var(--green)',
-              color: '#000',
-              border: 'none',
-              borderRadius: 8,
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: '0.06em',
-              cursor: 'pointer',
-              minWidth: 120,
-              textTransform: 'uppercase',
-            }}
-          >
-            Autorizar
-          </button>
-        )}
-      </div>
-
-      <PointsDelegationModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onAuthorized={() => {
-          setModalOpen(false);
-          load();
-        }}
-      />
-    </section>
-  );
-}
+// (Turnkey delegated-signing card was removed from this page on
+// 2026-04-30. The points app is purely off-chain MXNP and never calls
+// into a signing flow, so prompting here just confused users. The MVP
+// — the on-chain product — handles the authorization in two places:
+//   1. New MVP signups: a one-time step right after the username
+//      modal, before the user lands on the home feed.
+//   2. Legacy points-app accounts that signed up pre-MVP and so
+//      missed step 1: a dismissable banner on the Portfolio page,
+//      shown until they accept (banner self-hides forever once
+//      delegation goes active).
+//
+// The PointsDelegationModal component itself is still imported by the
+// MVP and the new banner — only the *trigger* lives elsewhere.
 
 function SocialTasksCard() {
   const [tasks, setTasks] = useState(null);
@@ -826,10 +697,6 @@ export default function PointsEarn({ onOpenLogin }) {
 
       <div style={{ marginTop: 24 }}>
         <SocialLinksCard />
-      </div>
-
-      <div style={{ marginTop: 24 }}>
-        <DelegationCard />
       </div>
 
       <div style={{ marginTop: 24 }}>

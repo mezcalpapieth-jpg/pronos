@@ -135,9 +135,9 @@ export async function readEspnTennisMatch({ eventId, dateYmd }) {
 
 // ─── ESPN PGA Tour winner ──────────────────────────────────────────────
 // Reads the post-tournament leaderboard from ESPN's golf scoreboard
-// and returns position-1 (the winner). Uses the parallel-shape
-// dispatch in the cron, so the return shape mirrors readJolpicaF1Result
-// — winnerDriverId / winnerDriverLabel — and the same matching logic
+// and returns the winner. Uses the parallel-shape dispatch in the
+// cron, so the return shape mirrors readJolpicaF1Result —
+// winnerDriverId / winnerDriverLabel — and the same matching logic
 // (id-first, then label, then "Otro" fallback) applies.
 //
 // Notes:
@@ -147,8 +147,20 @@ export async function readEspnTennisMatch({ eventId, dateYmd }) {
 //   - ESPN sets status.type.completed=true once the final round is
 //     official. Sunday-evening cron ticks find the winner the same
 //     night.
-//   - Leaderboard players appear under competitions[0].competitors
-//     with status.position.id ranking. Position "1" is the winner.
+//   - Winner lookup uses competitor.order === 1, NOT
+//     status.position. ESPN doesn't populate status.position on
+//     completed events (verified empirically across 2026 majors and
+//     the Zurich Classic).
+//   - Two competitor shapes ESPN ships:
+//       individual (Masters etc.): { type: 'athlete', id: <athleteId>,
+//         athlete: { displayName, ... } }
+//       team (Zurich Classic, Presidents Cup): { type: 'team',
+//         id: <teamId>, team: { displayName: 'Smalley/Springer', ... } }
+//     Team events have no individual athlete to match against the
+//     hardcoded FIELD, so the cron's parallel-shape leg matcher
+//     falls through to "Otro". That's the correct outcome — the
+//     FIELD lists individual players, none of whom can "win" a team
+//     event by themselves.
 
 const ESPN_PGA = 'https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard';
 
@@ -175,23 +187,43 @@ export async function readEspnPgaWinner({ eventId }) {
   if (!completed) {
     return { completed: false, winner: null, state: ev?.status?.type?.state || null };
   }
-  // Pull position-1 from the leaderboard. ESPN nests competitors in
-  // competitions[0].competitors; each competitor has athlete.id and
-  // status.position.id (string "1" / "2" / ... or "T2" for ties).
+  // Find the order=1 competitor. Both individual and team events
+  // expose `order: 1` on the leader; status.position is not reliable
+  // (it's null on completed events as of 2026).
   const comp = Array.isArray(ev.competitions) ? ev.competitions[0] : null;
   const ctors = Array.isArray(comp?.competitors) ? comp.competitors : [];
-  const p1 = ctors.find(c => {
-    const pos = c?.status?.position?.id ?? c?.status?.position;
-    return String(pos) === '1';
-  });
-  if (!p1) {
-    // Tournament reported completed but no clear position 1 — could
-    // be a tie that resolved to a playoff still in flight. Treat as
-    // "not done" so the cron retries.
-    return { completed: false, winner: null, state: 'no_p1' };
+  const winnerC = ctors.find(c => c?.order === 1);
+  if (!winnerC) {
+    // No order=1 — could be an unresolved playoff or unusual data.
+    // Treat as "not done" so the cron retries.
+    return { completed: false, winner: null, state: 'no_order_1' };
   }
-  const ath = p1?.athlete || p1?.competitor?.athlete || {};
+  const isTeam = winnerC?.type === 'team';
+  if (isTeam) {
+    // Team events: surface the team's displayName as the label so
+    // the resolved-card final-score still says something useful, but
+    // pass null id so the leg matcher can't accidentally match a
+    // FIELD player whose id happens to collide with the team id.
+    // Falls through to "Otro" as expected.
+    const teamName = winnerC?.team?.displayName
+      || winnerC?.team?.shortDisplayName
+      || winnerC?.team?.name
+      || null;
+    return {
+      completed: true,
+      winner: 'p1',
+      winnerDriverId: null,
+      winnerDriverLabel: teamName,
+    };
+  }
+  // Individual event — pull athlete.id from `competitor.id` (which
+  // mirrors athlete.id in the API) and the display name from
+  // competitor.athlete.
+  const ath = winnerC?.athlete || {};
+  const athleteId = winnerC?.id ? String(winnerC.id) : null;
   const fullName = ath.displayName
+    || ath.fullName
+    || ath.shortName
     || `${ath.firstName || ''} ${ath.lastName || ''}`.trim()
     || null;
   return {
@@ -200,7 +232,7 @@ export async function readEspnPgaWinner({ eventId }) {
     // Reuse F1's field names so the cron's parallel-shape dispatch
     // and buildFinalScore can match by id then label without a
     // golf-specific code path.
-    winnerDriverId: ath.id ? String(ath.id) : null,
+    winnerDriverId: athleteId,
     winnerDriverLabel: fullName,
   };
 }

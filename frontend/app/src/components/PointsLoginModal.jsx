@@ -17,6 +17,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { usePointsAuth } from '../lib/pointsAuth.js';
+import DelegationPrompt from './DelegationPrompt.jsx';
 
 const ERRORS = {
   invalid_email:          'Ingresa un correo válido.',
@@ -51,7 +52,9 @@ export default function PointsLoginModal({ open, onClose, initialStep = 'email' 
   // `initialStep` lets a caller (e.g. MVP App.jsx) jump straight to the
   // username step when the user is already authed but missing a username.
   // Defaults to 'email' so existing callers behave unchanged.
-  const [step, setStep] = useState(initialStep);    // 'email' | 'code' | 'username' | 'done'
+  // 'delegate' is the post-username step where new MVP signups
+  // authorize delegated signing once before they ever try to bet.
+  const [step, setStep] = useState(initialStep);    // 'email' | 'code' | 'username' | 'delegate' | 'done'
   const [email, setEmail]   = useState('');
   const [code, setCode]     = useState('');
   const [uname, setUname]   = useState('');
@@ -117,6 +120,9 @@ export default function PointsLoginModal({ open, onClose, initialStep = 'email' 
         setStep('username');
         setTimeout(() => firstFieldRef.current?.focus(), 50);
       } else {
+        // Returning user — already has a username. Skip the delegation
+        // step here; if they don't have a delegation policy yet, the
+        // Portfolio page surfaces a one-time banner for them.
         setStep('done');
         onClose?.();
       }
@@ -134,13 +140,20 @@ export default function PointsLoginModal({ open, onClose, initialStep = 'email' 
     try {
       await setUsername(uname.trim().toLowerCase());
       await refresh();
-      setStep('done');
-      onClose?.();
+      // First-time signup: pivot to the delegation prompt. The
+      // user can authorize now (one tap) or skip — either way the
+      // login completes and we close the modal.
+      setStep('delegate');
     } catch (e) {
       setErr(humanError(e.code || e.message, e.detail));
     } finally {
       setPending(false);
     }
+  }
+
+  function finishLogin() {
+    setStep('done');
+    onClose?.();
   }
 
   return (
@@ -175,6 +188,7 @@ export default function PointsLoginModal({ open, onClose, initialStep = 'email' 
           {step === 'email' && 'Crear cuenta o entrar'}
           {step === 'code' && 'Código enviado'}
           {step === 'username' && 'Elige tu usuario'}
+          {step === 'delegate' && '¡Bienvenido a Pronos!'}
         </h2>
 
         {step === 'email' && (
@@ -276,6 +290,14 @@ export default function PointsLoginModal({ open, onClose, initialStep = 'email' 
               🎁 Recibes 500 MXNP de bienvenida al crear tu usuario.
             </p>
           </form>
+        )}
+
+        {step === 'delegate' && (
+          <DelegationPrompt
+            variant="inline"
+            onAuthorized={finishLogin}
+            onSkip={finishLogin}
+          />
         )}
       </div>
     </div>

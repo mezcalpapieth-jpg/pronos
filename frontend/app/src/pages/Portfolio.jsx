@@ -14,7 +14,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import Nav from '../components/Nav.jsx';
 import Footer from '../components/Footer.jsx';
 import EarnMXNP from '../components/EarnMXNP.jsx';
-import { usePointsAuth } from '../lib/pointsAuth.js';
+import { usePointsAuth, fetchDelegationStatus } from '../lib/pointsAuth.js';
+import DelegationPrompt from '../components/DelegationPrompt.jsx';
 import { useT } from '../lib/i18n.js';
 
 async function getJson(url) {
@@ -151,6 +152,43 @@ export default function Portfolio({ onOpenLogin }) {
   const [sellingId, setSellingId] = useState(null);
   const [notice, setNotice] = useState(null);
 
+  // ── Delegation banner state ────────────────────────────────────────────
+  // Legacy points-app accounts (pre-MVP signup) never saw the
+  // delegation prompt that's now part of the signup flow. We surface a
+  // one-time banner here for any authenticated user whose policy isn't
+  // active, with a "Más tarde" dismiss that pins to localStorage so
+  // we don't keep nagging them. Once they authorize, status flips
+  // active and the banner disappears naturally.
+  const DELEGATION_DISMISS_KEY = 'pronos.delegationBannerDismissed.v1';
+  const [delegationActive, setDelegationActive] = useState(null); // null = not loaded yet
+  const [delegationDismissed, setDelegationDismissed] = useState(() => {
+    try { return localStorage.getItem(DELEGATION_DISMISS_KEY) === '1'; }
+    catch { return false; }
+  });
+  useEffect(() => {
+    if (!authenticated) return;
+    let cancelled = false;
+    fetchDelegationStatus()
+      .then(s => { if (!cancelled) setDelegationActive(Boolean(s?.active)); })
+      .catch(() => { if (!cancelled) setDelegationActive(false); });
+    return () => { cancelled = true; };
+  }, [authenticated]);
+
+  function dismissDelegationBanner() {
+    try { localStorage.setItem(DELEGATION_DISMISS_KEY, '1'); } catch { /* private mode etc */ }
+    setDelegationDismissed(true);
+  }
+  function onDelegationAuthorized() {
+    // Mark dismissed for symmetry — once they've authorized the
+    // status check will return active anyway, so the banner stays
+    // hidden whether or not localStorage was writable.
+    dismissDelegationBanner();
+    setDelegationActive(true);
+  }
+  const showDelegationBanner = authenticated
+    && delegationActive === false
+    && !delegationDismissed;
+
   const loadAll = useCallback(async () => {
     if (!authenticated) return;
     setLoading(true);
@@ -228,6 +266,16 @@ export default function Portfolio({ onOpenLogin }) {
             <button className="btn-primary" onClick={onOpenLogin}>
               {t('nav.predict') || 'Iniciar sesión'}
             </button>
+          </div>
+        )}
+
+        {showDelegationBanner && (
+          <div style={{ marginBottom: 24 }}>
+            <DelegationPrompt
+              variant="banner"
+              onAuthorized={onDelegationAuthorized}
+              onSkip={dismissDelegationBanner}
+            />
           </div>
         )}
 
