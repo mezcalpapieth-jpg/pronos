@@ -248,10 +248,62 @@ export const readEspnPgaWinner = ({ eventId }) =>
 export const readEspnLivWinner = ({ eventId }) =>
   readEspnGolfWinnerImpl({ leaguePath: 'liv', eventId });
 
-// ─── Jolpica F1 results ────────────────────────────────────────────────
-// Race is settled once /{season}/{round}/results.json has position 1.
+// ─── Jolpica F1 season-standings (championship resolver) ─────────────
+// Reads /{season}/{constructorStandings,driverStandings}.json and
+// returns position-1 in the same envelope as the per-race resolver
+// (winnerDriverId / winnerDriverLabel) so the cron's parallel-shape
+// matcher handles championship markets unchanged.
+//
+// Idempotent: standings keep being recomputed after every race, but
+// the cron only auto-resolves markets whose end_time has passed.
+// We set season markets' end_time to ~3 days after the season
+// finale (Abu Dhabi GP), so by the time this is queried the
+// standings are mathematically final.
+//
+// kind: 'drivers' | 'constructors'
 
 const JOLPICA_BASE = 'https://api.jolpi.ca/ergast/f1';
+
+export async function readJolpicaF1Standings({ season, kind }) {
+  if (!season) throw new Error('jolpica: missing season');
+  const path = kind === 'constructors' ? 'constructorStandings' : 'driverStandings';
+  const res = await fetch(
+    `${JOLPICA_BASE}/${encodeURIComponent(season)}/${path}.json`,
+    { headers: { 'Accept': 'application/json' } },
+  );
+  if (!res.ok) throw new Error(`jolpica: HTTP ${res.status}`);
+  const data = await res.json();
+  const lists = data?.MRData?.StandingsTable?.StandingsLists;
+  if (!Array.isArray(lists) || lists.length === 0) {
+    return { completed: false, winner: null };
+  }
+  const items = kind === 'constructors'
+    ? (lists[0].ConstructorStandings || [])
+    : (lists[0].DriverStandings || []);
+  const p1 = items.find(s => String(s.position) === '1');
+  if (!p1) return { completed: false, winner: null };
+  if (kind === 'constructors') {
+    const c = p1.Constructor || {};
+    return {
+      completed: true,
+      winner: 'p1',
+      winnerDriverId: c.constructorId || null,
+      winnerDriverLabel: c.name || null,
+    };
+  }
+  const drv = p1.Driver || {};
+  const label = `${drv.givenName || ''} ${drv.familyName || ''}`.trim();
+  return {
+    completed: true,
+    winner: 'p1',
+    winnerDriverId: drv.driverId || null,
+    winnerDriverLabel: label || null,
+  };
+}
+
+// ─── Jolpica F1 results ────────────────────────────────────────────────
+// Race is settled once /{season}/{round}/results.json has position 1.
+// (JOLPICA_BASE declared above near the season-standings reader.)
 
 export async function readJolpicaF1Result({ season, round }) {
   if (!season || !round) throw new Error('jolpica: missing season/round');

@@ -31,7 +31,7 @@ import { readCreAverageFor } from '../_lib/fuel.js';
 import { fetchMaxTempC, bucketIndexFor } from '../_lib/weather.js';
 import { readAppleMxTopArtist } from '../_lib/charts.js';
 import { readYouTubeTopMxChannel } from '../_lib/youtube.js';
-import { readEspnEvent, readFootballDataMatch, readJolpicaF1Result, readEspnPgaWinner, readEspnLivWinner } from '../_lib/sports-results.js';
+import { readEspnEvent, readFootballDataMatch, readJolpicaF1Result, readJolpicaF1Standings, readEspnPgaWinner, readEspnLivWinner } from '../_lib/sports-results.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql   = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -293,6 +293,16 @@ export async function runAutoResolve({ dry = false } = {}) {
             result = await readFootballDataMatch(cfg.matchId);
           } else if (cfg.source === 'jolpica-f1') {
             result = await readJolpicaF1Result({ season: cfg.season, round: cfg.round });
+          } else if (cfg.source === 'jolpica-f1-standings') {
+            // F1 season-long markets — Drivers' / Constructors'
+            // Championship. Cron only auto-resolves markets whose
+            // end_time has passed; for these we set end_time to a
+            // few days after the season finale, so by then the
+            // standings are mathematically locked.
+            result = await readJolpicaF1Standings({
+              season: cfg.season,
+              kind: cfg.kind, // 'drivers' | 'constructors'
+            });
           } else if (cfg.source === 'espn-pga') {
             // PGA Tour: ESPN PGA scoreboard. Returns the order=1
             // player using the same winnerDriverId/Label shape as F1

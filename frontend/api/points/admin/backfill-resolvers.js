@@ -46,6 +46,7 @@ import { generateLmbMarkets }           from '../../_lib/market-gen/lmb.js';
 import { generateTennisMarkets }        from '../../_lib/market-gen/tennis.js';
 import { generateGolfMarkets }          from '../../_lib/market-gen/golf.js';
 import { generateLivMarkets }           from '../../_lib/market-gen/liv.js';
+import { generateF1SeasonMarkets }      from '../../_lib/market-gen/f1-season.js';
 import { fetchWikipediaImage }          from '../../_lib/wikipedia.js';
 import { LMB_TEAMS }                    from '../../_lib/lmb-2026.js';
 import { teamForDriver, CONSTRUCTORS_2026 } from '../../_lib/f1-grid-2026.js';
@@ -61,7 +62,7 @@ const GENERATORS = [
   generateChartsMarkets, generateYouTubeMarkets, generateEntertainmentMarkets,
   generateWorldCupMarkets,
   generateLmbMarkets, generateTennisMarkets, generateGolfMarkets,
-  generateLivMarkets,
+  generateLivMarkets, generateF1SeasonMarkets,
 ];
 
 async function collectSpecs() {
