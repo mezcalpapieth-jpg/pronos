@@ -31,7 +31,7 @@ import { readCreAverageFor } from '../_lib/fuel.js';
 import { fetchMaxTempC, bucketIndexFor } from '../_lib/weather.js';
 import { readAppleMxTopArtist } from '../_lib/charts.js';
 import { readYouTubeTopMxChannel } from '../_lib/youtube.js';
-import { readEspnEvent, readFootballDataMatch, readJolpicaF1Result, readEspnPgaWinner } from '../_lib/sports-results.js';
+import { readEspnEvent, readFootballDataMatch, readJolpicaF1Result, readEspnPgaWinner, readEspnLivWinner } from '../_lib/sports-results.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql   = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -294,11 +294,20 @@ export async function runAutoResolve({ dry = false } = {}) {
           } else if (cfg.source === 'jolpica-f1') {
             result = await readJolpicaF1Result({ season: cfg.season, round: cfg.round });
           } else if (cfg.source === 'espn-pga') {
-            // Golf: reads ESPN PGA scoreboard, returns position-1
+            // PGA Tour: ESPN PGA scoreboard. Returns the order=1
             // player using the same winnerDriverId/Label shape as F1
             // so the parallel-shape branch below picks it up
             // unchanged (id-match → label-match → 'Otro' fallback).
+            // Team events (Zurich Classic) fall through to 'Otro'.
             result = await readEspnPgaWinner({ eventId: cfg.eventId });
+          } else if (cfg.source === 'espn-liv') {
+            // LIV Golf — same scoreboard shape as PGA, just a
+            // different leaguePath under ESPN's golf API. Same
+            // winnerDriverId/Label envelope, same parallel-shape
+            // matcher. LIV uses team scores too (4-man teams) but
+            // the individual leaderboard always has order=1; we
+            // resolve on the individual winner.
+            result = await readEspnLivWinner({ eventId: cfg.eventId });
           } else {
             throw new Error(`unsupported sports_api source: ${cfg.source}`);
           }

@@ -37,6 +37,7 @@ import { generateWorldCupMarkets }      from './market-gen/world-cup.js';
 import { generateLmbMarkets }           from './market-gen/lmb.js';
 import { generateTennisMarkets }        from './market-gen/tennis.js';
 import { generateGolfMarkets }          from './market-gen/golf.js';
+import { generateLivMarkets }           from './market-gen/liv.js';
 
 export const GENERATORS = [
   { name: 'soccer',         run: generateSoccerMarkets        },
@@ -56,6 +57,7 @@ export const GENERATORS = [
   { name: 'lmb',            run: generateLmbMarkets            },
   { name: 'tennis',         run: generateTennisMarkets         },
   { name: 'golf',           run: generateGolfMarkets           },
+  { name: 'liv',            run: generateLivMarkets            },
 ];
 
 export async function runAllGenerators() {

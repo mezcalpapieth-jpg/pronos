@@ -133,7 +133,7 @@ export async function readEspnTennisMatch({ eventId, dateYmd }) {
   return readEspnEvent({ leaguePath: 'tennis/atp', eventId, dateYmd });
 }
 
-// ─── ESPN PGA Tour winner ──────────────────────────────────────────────
+// ─── ESPN golf scoreboard winner (PGA + LIV) ───────────────────────────
 // Reads the post-tournament leaderboard from ESPN's golf scoreboard
 // and returns the winner. Uses the parallel-shape dispatch in the
 // cron, so the return shape mirrors readJolpicaF1Result —
@@ -141,20 +141,23 @@ export async function readEspnTennisMatch({ eventId, dateYmd }) {
 // (id-first, then label, then "Otro" fallback) applies.
 //
 // Notes:
-//   - The PGA scoreboard endpoint covers ~60 days forward from the
-//     query date; we widen by 7 days back so a tournament that just
-//     ended is still in the window when the cron polls.
+//   - leaguePath: 'pga' (PGA Tour) or 'liv' (LIV Golf). ESPN exposes
+//     both at the same scoreboard endpoint shape, so a single reader
+//     handles them. Add new tours here when needed.
+//   - The scoreboard endpoint covers ~60 days forward from the query
+//     date; we widen by 7 days back so a tournament that just ended
+//     is still in the window when the cron polls.
 //   - ESPN sets status.type.completed=true once the final round is
 //     official. Sunday-evening cron ticks find the winner the same
 //     night.
 //   - Winner lookup uses competitor.order === 1, NOT
 //     status.position. ESPN doesn't populate status.position on
-//     completed events (verified empirically across 2026 majors and
-//     the Zurich Classic).
+//     completed events (verified empirically across 2026 majors,
+//     LIV events, and the PGA Zurich Classic).
 //   - Two competitor shapes ESPN ships:
-//       individual (Masters etc.): { type: 'athlete', id: <athleteId>,
-//         athlete: { displayName, ... } }
-//       team (Zurich Classic, Presidents Cup): { type: 'team',
+//       individual (Masters, every LIV event, etc.): { type:
+//         'athlete', id: <athleteId>, athlete: { displayName, ... } }
+//       team (PGA Zurich Classic, Presidents Cup): { type: 'team',
 //         id: <teamId>, team: { displayName: 'Smalley/Springer', ... } }
 //     Team events have no individual athlete to match against the
 //     hardcoded FIELD, so the cron's parallel-shape leg matcher
@@ -162,21 +165,23 @@ export async function readEspnTennisMatch({ eventId, dateYmd }) {
 //     FIELD lists individual players, none of whom can "win" a team
 //     event by themselves.
 
-const ESPN_PGA = 'https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard';
+const ESPN_GOLF_BASE = 'https://site.api.espn.com/apis/site/v2/sports/golf';
 
-export async function readEspnPgaWinner({ eventId }) {
-  if (!eventId) throw new Error('espn-pga: missing eventId');
+async function readEspnGolfWinnerImpl({ leaguePath, eventId }) {
+  if (!leaguePath) throw new Error('espn-golf: missing leaguePath');
+  if (!eventId) throw new Error('espn-golf: missing eventId');
   // Wide date window so tournaments mid-week or just-finished are
-  // still found (PGA events span Thu→Sun, weather can extend to Mon).
+  // still found (PGA events span Thu→Sun, weather can extend to Mon;
+  // LIV is Fri→Sun shotgun-start).
   const now = new Date();
   const back = new Date(now.getTime() - 7 * 86_400_000);
   const fwd  = new Date(now.getTime() + 60 * 86_400_000);
   const fmt = (x) => `${x.getUTCFullYear()}${String(x.getUTCMonth() + 1).padStart(2, '0')}${String(x.getUTCDate()).padStart(2, '0')}`;
   const range = `${fmt(back)}-${fmt(fwd)}`;
-  const res = await fetch(`${ESPN_PGA}?dates=${range}&limit=50`, {
+  const res = await fetch(`${ESPN_GOLF_BASE}/${leaguePath}/scoreboard?dates=${range}&limit=50`, {
     headers: { 'Accept': 'application/json' },
   });
-  if (!res.ok) throw new Error(`espn-pga: HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`espn-${leaguePath}: HTTP ${res.status}`);
   const data = await res.json();
   const events = Array.isArray(data?.events) ? data.events : [];
   const ev = events.find(e => String(e.id) === String(eventId));
@@ -236,6 +241,12 @@ export async function readEspnPgaWinner({ eventId }) {
     winnerDriverLabel: fullName,
   };
 }
+
+export const readEspnPgaWinner = ({ eventId }) =>
+  readEspnGolfWinnerImpl({ leaguePath: 'pga', eventId });
+
+export const readEspnLivWinner = ({ eventId }) =>
+  readEspnGolfWinnerImpl({ leaguePath: 'liv', eventId });
 
 // ─── Jolpica F1 results ────────────────────────────────────────────────
 // Race is settled once /{season}/{round}/results.json has position 1.

@@ -27,16 +27,25 @@ function headshot(id) {
   return id ? `https://a.espncdn.com/i/headshots/golf/players/full/${id}.png` : null;
 }
 
-// Top-tier PGA field. Each ID was spot-checked with a HEAD request
-// against the CDN; the whole list returns 200 as of 2026-04. Edit
-// to refocus the market on a different pool.
+// Top-tier PGA field. IDs verified by mapping ESPN's PGA scoreboard
+// responses back to athlete display names (a HEAD-200 against the
+// headshot CDN proves the id exists, but NOT that it points at the
+// right person — earlier versions of this file had wrong ids that
+// never matched winners). Edit to refocus the market on a different
+// pool.
+//
+// LIV-affiliated golfers (DeChambeau et al) DO play the four majors
+// and a handful of other ESPN-covered "open" events that show up on
+// the PGA scoreboard, so they belong in this list — they can win a
+// market generated from /golf/pga/scoreboard. Their LIV-tour events
+// are handled separately by market-gen/liv.js.
 const FIELD = [
   { id: '9478',    name: 'Scottie Scheffler' },
   { id: '3470',    name: 'Rory McIlroy' },
   { id: '10140',   name: 'Xander Schauffele' },
   { id: '10046',   name: 'Bryson DeChambeau' },
   { id: '4375972', name: 'Ludvig Åberg' },
-  { id: '9131',    name: 'Viktor Hovland' },
+  { id: '4364873', name: 'Viktor Hovland' },
   { id: '10592',   name: 'Collin Morikawa' },
   { id: '5860',    name: 'Hideki Matsuyama' },
   { id: '5539',    name: 'Tommy Fleetwood' },

@@ -45,6 +45,7 @@ import { generateWorldCupMarkets }      from '../../_lib/market-gen/world-cup.js
 import { generateLmbMarkets }           from '../../_lib/market-gen/lmb.js';
 import { generateTennisMarkets }        from '../../_lib/market-gen/tennis.js';
 import { generateGolfMarkets }          from '../../_lib/market-gen/golf.js';
+import { generateLivMarkets }           from '../../_lib/market-gen/liv.js';
 import { fetchWikipediaImage }          from '../../_lib/wikipedia.js';
 import { LMB_TEAMS }                    from '../../_lib/lmb-2026.js';
 import { teamForDriver, CONSTRUCTORS_2026 } from '../../_lib/f1-grid-2026.js';
@@ -60,6 +61,7 @@ const GENERATORS = [
   generateChartsMarkets, generateYouTubeMarkets, generateEntertainmentMarkets,
   generateWorldCupMarkets,
   generateLmbMarkets, generateTennisMarkets, generateGolfMarkets,
+  generateLivMarkets,
 ];
 
 async function collectSpecs() {
@@ -164,7 +166,11 @@ export default async function handler(req, res) {
         SELECT COUNT(*)::int AS n FROM points_markets m
         LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
         WHERE m.status = 'active' AND m.parent_id IS NULL
-          AND (m.league = 'pga' OR pm.source = 'espn-pga' OR m.icon = '⛳')
+          AND (
+            m.league IN ('pga', 'liv')
+            OR pm.source IN ('espn-pga', 'espn-liv')
+            OR m.icon = '⛳'
+          )
       `;
       const forceRebuildCount = (f1Count?.n || 0) + (lmbCount?.n || 0) + (golfCount?.n || 0);
       return res.status(200).json({
@@ -385,21 +391,39 @@ export default async function handler(req, res) {
       }
     }
 
-    // ── Golf ────────────────────────────────────────────────────────
-    // Generator stashes the full FIELD roster on source_data.field.
-    // If that's missing (older rows), fall back to matching the
-    // outcome label against today's generator's FIELD.
-    const currentGolfSpec = (specs.find(s => s.source === 'espn-pga') || null);
-    const golfFieldFallback = currentGolfSpec?.source_data?.field || [];
+    // ── Golf (PGA + LIV) ────────────────────────────────────────────
+    // Both tours share icon='⛳' and shape, so we walk them together
+    // but per-row detect which tour we're on (PGA vs LIV) so the
+    // resolver migration writes the correct cfg.source. Detection
+    // priority:
+    //   1. m.league ('pga' / 'liv')
+    //   2. pm.source ('espn-pga' / 'espn-liv')
+    //   3. source_event_id prefix ('pga:' / 'liv:')
+    // Fallback: 'pga' (the original tour, matches the pre-LIV code).
+    //
+    // Generators stash the league-specific FIELD on
+    // source_data.field, so the per-row roster is correct as long as
+    // pm.source_data exists. For older malformed rows missing that,
+    // we fall back to whichever current spec matches the detected
+    // league.
+    const currentPgaSpec = (specs.find(s => s.source === 'espn-pga') || null);
+    const currentLivSpec = (specs.find(s => s.source === 'espn-liv') || null);
+    const fallbackFieldFor = (league) =>
+      (league === 'liv' ? currentLivSpec : currentPgaSpec)?.source_data?.field || [];
+
     const golfRows = await sql`
-      SELECT m.id, m.outcomes, m.resolver_type, m.resolver_config,
-             pm.source_data, pm.source_event_id
+      SELECT m.id, m.outcomes, m.resolver_type, m.resolver_config, m.league,
+             pm.source, pm.source_data, pm.source_event_id
       FROM points_markets m
       LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
       WHERE m.status = 'active'
         AND m.parent_id IS NULL
-        AND (m.league = 'pga' OR pm.source = 'espn-pga' OR m.icon = '⛳')
-      LIMIT 20
+        AND (
+          m.league IN ('pga', 'liv')
+          OR pm.source IN ('espn-pga', 'espn-liv')
+          OR m.icon = '⛳'
+        )
+      LIMIT 40
     `;
     let golfImagesFound = 0;
     let golfResolverMigrated = 0;
@@ -410,7 +434,18 @@ export default async function handler(req, res) {
       const sd = (typeof row.source_data === 'object' && row.source_data)
         ? row.source_data
         : (() => { try { return JSON.parse(row.source_data); } catch { return null; } })();
-      const field = (Array.isArray(sd?.field) ? sd.field : golfFieldFallback) || [];
+
+      // Detect tour for this row.
+      const league = row.league === 'liv' ? 'liv'
+        : row.league === 'pga' ? 'pga'
+        : row.source === 'espn-liv' ? 'liv'
+        : row.source === 'espn-pga' ? 'pga'
+        : String(row.source_event_id || '').startsWith('liv:') ? 'liv'
+        : String(row.source_event_id || '').startsWith('pga:') ? 'pga'
+        : 'pga';
+      const cfgSource = league === 'liv' ? 'espn-liv' : 'espn-pga';
+      const eventIdPrefix = league === 'liv' ? 'liv:' : 'pga:';
+      const field = (Array.isArray(sd?.field) ? sd.field : fallbackFieldFor(league)) || [];
 
       // Image rewrite (always safe — same URLs, no NULL guard).
       if (field.length > 0) {
@@ -434,14 +469,12 @@ export default async function handler(req, res) {
         }
       }
 
-      // Resolver migration: golf markets created before the espn-pga
-      // sports_api reader landed had resolver_type='manual'. Switch
-      // them to sports_api so the cron auto-resolves them when ESPN
-      // marks the tournament completed. Build the legs from outcomes
-      // + the persisted FIELD (or current spec's field as fallback).
+      // Resolver migration: golf markets created before the
+      // sports_api readers landed had resolver_type='manual'. Switch
+      // to sports_api with the league-correct cfg.source.
       const isManualOrNull = !row.resolver_type || row.resolver_type === 'manual';
       const eventId = sd?.eventId
-        || (row.source_event_id ? String(row.source_event_id).replace(/^pga:/, '') : null);
+        || (row.source_event_id ? String(row.source_event_id).replace(eventIdPrefix, '') : null);
       if (isManualOrNull && field.length > 0 && eventId) {
         const byName = new Map();
         for (const p of field) byName.set(String(p.name || '').toLowerCase().trim(), p.id);
@@ -449,11 +482,10 @@ export default async function handler(req, res) {
           const norm = String(label || '').toLowerCase().trim();
           const id = byName.get(norm);
           if (id) return { label, driverId: String(id) };
-          if (norm === 'otro') return { label, driverId: null };
           return { label, driverId: null };
         });
         const newCfg = {
-          source: 'espn-pga',
+          source: cfgSource,
           shape: 'parallel',
           eventId,
           legs,
