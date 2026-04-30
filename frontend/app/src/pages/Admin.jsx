@@ -522,7 +522,7 @@ function ApproveOnchainForm({ pendingId, onSuccess, onCancel }) {
   );
 }
 
-function PendingMarketsSection({ bumpRefresh }) {
+function PendingMarketsSection() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -557,16 +557,35 @@ function PendingMarketsSection({ bumpRefresh }) {
   // re-fetches naturally.
   useEffect(() => { load(); }, [load]);
 
+  // Scroll-preservation helper. Approve and reject both mutate the
+  // DOM in ways that change page height (form unmounts, row removed,
+  // notice banner appears). Without this, the browser may clamp
+  // scrollY to max-possible after the section shrinks — which
+  // effectively snaps the user to the top of the queue. We capture
+  // scrollY BEFORE the state mutations and restore it after React
+  // commits the new DOM (rAF fires after layout).
+  function preserveScroll(fn) {
+    const beforeY = typeof window !== 'undefined' ? window.scrollY : 0;
+    fn();
+    if (typeof window !== 'undefined') {
+      requestAnimationFrame(() => {
+        // Use scrollTo with 'instant' so the user doesn't see a
+        // visible jump from a momentarily-clamped scroll position.
+        window.scrollTo({ top: beforeY, left: 0, behavior: 'instant' });
+      });
+    }
+  }
+
   async function handleReject(pid) {
     if (!window.confirm('¿Rechazar este mercado pendiente? No se puede deshacer.')) return;
     setRejectingId(pid);
     try {
       const { ok, data } = await postJson('/api/points/admin/pending-markets', { id: pid, action: 'reject' });
       if (!ok) throw new Error(data?.error || 'reject_failed');
-      setNotice({ type: 'success', msg: `Pendiente ${pid} rechazado.` });
-      // Drop the rejected row in place — same scroll-preservation
-      // pattern as the approve handler.
-      setRows(prev => prev.filter(row => row.id !== pid));
+      preserveScroll(() => {
+        setNotice({ type: 'success', msg: `Pendiente ${pid} rechazado.` });
+        setRows(prev => prev.filter(row => row.id !== pid));
+      });
     } catch (e) {
       setNotice({ type: 'error', msg: e?.message || 'reject_failed' });
     } finally {
@@ -630,21 +649,27 @@ function PendingMarketsSection({ bumpRefresh }) {
             <ApproveOnchainForm
               pendingId={r.id}
               onSuccess={(data) => {
-                setOpenId(null);
                 const deployBit = data?.autoDeploy
                   ? ` · auto-deployed at ${String(data.autoDeploy.chainAddress || '').slice(0, 10)}…`
                   : '';
-                setNotice({
-                  type: 'success',
-                  msg: `Pendiente ${r.id} aprobado on-chain.${deployBit}`,
+                // Wrap all mutations in preserveScroll so the form-
+                // unmount + row-removal + notice-insert combo doesn't
+                // shift the user's scroll position. We deliberately
+                // do NOT call bumpRefresh() here — refreshKey lives
+                // in the parent's body useMemo dep array, so bumping
+                // it forces the entire admin layout to re-render and
+                // can clobber scroll. The Mercados tab re-fetches on
+                // mount when the user switches to it, so we don't
+                // lose the approved market — it shows up there
+                // naturally on the next visit.
+                preserveScroll(() => {
+                  setOpenId(null);
+                  setNotice({
+                    type: 'success',
+                    msg: `Pendiente ${r.id} aprobado on-chain.${deployBit}`,
+                  });
+                  setRows(prev => prev.filter(row => row.id !== r.id));
                 });
-                // In-place removal instead of refetching the list, so
-                // the page doesn't jump back to the top after each
-                // approval. The approved row drops out of the pending
-                // queue locally; bumpRefresh() lets the Mercados tab
-                // pick up the new market on its next load.
-                setRows(prev => prev.filter(row => row.id !== r.id));
-                bumpRefresh();
               }}
               onCancel={() => setOpenId(null)}
             />
@@ -1653,7 +1678,7 @@ export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
             <GeneratorsSection />
           </>
         )}
-        {tab === 'pending'  && <PendingMarketsSection bumpRefresh={bumpRefresh} />}
+        {tab === 'pending'  && <PendingMarketsSection />}
         {tab === 'markets'  && <MarketsList refreshKey={refreshKey} bumpRefresh={bumpRefresh} />}
         {tab === 'social'   && <SocialTasksSection />}
         {tab === 'stats'    && <StatsSection />}
