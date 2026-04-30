@@ -34,16 +34,17 @@ function headshot(id) {
 // never matched winners). Edit to refocus the market on a different
 // pool.
 //
-// LIV-affiliated golfers (DeChambeau et al) DO play the four majors
-// and a handful of other ESPN-covered "open" events that show up on
-// the PGA scoreboard, so they belong in this list — they can win a
-// market generated from /golf/pga/scoreboard. Their LIV-tour events
-// are handled separately by market-gen/liv.js.
-const FIELD = [
+// PGA-tour-only golfers below. LIV defectors don't play regular
+// PGA events anymore — they only show up on ESPN's PGA scoreboard
+// when a major (Masters / PGA / US Open / The Open) is on the
+// calendar, since the majors are run by independent bodies and
+// invite both tours. We add the LIV stars in via MAJORS_LIV_EXTRAS
+// only when the upcoming event is one of those four — see
+// isMajorEvent() below.
+const PGA_FIELD = [
   { id: '9478',    name: 'Scottie Scheffler' },
   { id: '3470',    name: 'Rory McIlroy' },
   { id: '10140',   name: 'Xander Schauffele' },
-  { id: '10046',   name: 'Bryson DeChambeau' },
   { id: '4375972', name: 'Ludvig Åberg' },
   { id: '4364873', name: 'Viktor Hovland' },
   { id: '10592',   name: 'Collin Morikawa' },
@@ -52,7 +53,33 @@ const FIELD = [
   { id: '6007',    name: 'Patrick Cantlay' },
   { id: '9938',    name: 'Sam Burns' },
   { id: '5467',    name: 'Jordan Spieth' },
+  { id: '4848',    name: 'Justin Thomas' },
 ];
+
+// LIV golfers who are realistic contenders at the four majors and
+// should appear as outcomes ONLY when the upcoming event is a
+// major. Adding them to non-major PGA events would put a non-entrant
+// on the leaderboard — the market would always resolve to "Otro"
+// for them, which looks broken from the user's side.
+const MAJORS_LIV_EXTRAS = [
+  { id: '10046', name: 'Bryson DeChambeau' },
+  { id: '9780',  name: 'Jon Rahm' },
+];
+
+// True when the ESPN event name matches one of the four majors. The
+// Masters Tournament, PGA Championship, U.S. Open, and The Open
+// Championship are the only PGA-scoreboard events where LIV players
+// can compete (and frequently win — Rahm '23 Masters, DeChambeau '24
+// US Open). Everything else is PGA-only.
+function isMajorEvent(name) {
+  if (!name) return false;
+  const n = String(name).toLowerCase();
+  return /\bmasters\b/.test(n)              // "Masters Tournament"
+      || /\bpga championship\b/.test(n)     // "PGA Championship"
+      || /\bu\.?s\.? open\b/.test(n)        // "U.S. Open" / "US Open"
+      || /\bthe open\b/.test(n)             // "The Open Championship"
+      || /\bopen championship\b/.test(n);
+}
 
 function formatDateCompact(d) {
   const pad = (n) => String(n).padStart(2, '0');
@@ -95,13 +122,21 @@ export async function generateGolfMarkets() {
   const startTime = new Date(startMs).toISOString();
   const endTime = new Date(startMs + 5 * 86_400_000).toISOString();
 
+  // Field for THIS event: regular PGA tournaments use PGA_FIELD only;
+  // the four majors (Masters, PGA Championship, US Open, The Open)
+  // also include the LIV stars who actually play those events. See
+  // isMajorEvent() and MAJORS_LIV_EXTRAS for the rule.
+  const eventField = isMajorEvent(ev.name)
+    ? [...PGA_FIELD, ...MAJORS_LIV_EXTRAS]
+    : PGA_FIELD;
+
   // Include an "Otro" catchall so the market is always resolvable
   // even when a dark-horse wins. Field name `driverId` is the
   // shared key the cron's parallel-shape dispatch matches against
   // (originally F1, now also golf via espn-pga). Keeping the same
   // name avoids a sport-specific code path in the cron.
   const legs = [
-    ...FIELD.map(p => ({ label: p.name, driverId: p.id })),
+    ...eventField.map(p => ({ label: p.name, driverId: p.id })),
     { label: 'Otro', driverId: null },
   ];
 
@@ -115,7 +150,7 @@ export async function generateGolfMarkets() {
     icon: '⛳',
     outcomes: legs.map(l => l.label),
     outcome_images: [
-      ...FIELD.map(p => headshot(p.id)),
+      ...eventField.map(p => headshot(p.id)),
       null, // Otro
     ],
     seed_liquidity: 1000,
@@ -138,7 +173,12 @@ export async function generateGolfMarkets() {
       eventId: ev.id,
       tournamentName: ev.name,
       startDateIso: ev.date,
-      field: FIELD,
+      isMajor: isMajorEvent(ev.name),
+      // Persist the per-event field (with LIV extras for majors) so
+      // backfill-resolvers can rebuild outcome_images and resolver
+      // legs from this row alone, without having to recompute the
+      // major-detection logic later.
+      field: eventField,
     },
   }];
 }

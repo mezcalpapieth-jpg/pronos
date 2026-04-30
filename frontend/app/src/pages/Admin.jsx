@@ -522,7 +522,7 @@ function ApproveOnchainForm({ pendingId, onSuccess, onCancel }) {
   );
 }
 
-function PendingMarketsSection({ refreshKey, bumpRefresh }) {
+function PendingMarketsSection({ bumpRefresh }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -547,7 +547,15 @@ function PendingMarketsSection({ refreshKey, bumpRefresh }) {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load, refreshKey]);
+  // Only reload on initial mount or explicit Refrescar click. We
+  // intentionally don't depend on the global `refreshKey` here:
+  // approve/reject already do an in-place setRows mutation, and a
+  // full list refetch would re-render every row and snap the page
+  // back to the top of the queue — which is exactly the user
+  // complaint about losing scroll position after each action.
+  // Switching tabs unmounts this component, so the next visit
+  // re-fetches naturally.
+  useEffect(() => { load(); }, [load]);
 
   async function handleReject(pid) {
     if (!window.confirm('¿Rechazar este mercado pendiente? No se puede deshacer.')) return;
@@ -1645,7 +1653,7 @@ export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
             <GeneratorsSection />
           </>
         )}
-        {tab === 'pending'  && <PendingMarketsSection refreshKey={refreshKey} bumpRefresh={bumpRefresh} />}
+        {tab === 'pending'  && <PendingMarketsSection bumpRefresh={bumpRefresh} />}
         {tab === 'markets'  && <MarketsList refreshKey={refreshKey} bumpRefresh={bumpRefresh} />}
         {tab === 'social'   && <SocialTasksSection />}
         {tab === 'stats'    && <StatsSection />}

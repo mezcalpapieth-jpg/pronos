@@ -52,6 +52,35 @@ async function list(req, res) {
     : 'pending';
   await ensurePointsSchema(schemaSql);
 
+  // Auto-expire stale pendings BEFORE the list query runs. Any row
+  // whose end_time has already passed is no longer approvable — the
+  // event it was generated for already started/ended — so we flip
+  // it to 'rejected' with a marker note. This keeps the pending
+  // queue trimmed to actionable candidates and prevents the same
+  // dead rows from cluttering the admin UI on every load.
+  //
+  // The COALESCE on admin_note preserves any human note that was
+  // already there, only filling in the auto-expire reason when the
+  // slot is empty. `reviewer = 'system'` distinguishes it from a
+  // manual rejection. Idempotent — already-rejected rows are skipped
+  // by the WHERE.
+  try {
+    await schemaSql`
+      UPDATE points_pending_markets
+      SET status = 'rejected',
+          admin_note = COALESCE(NULLIF(admin_note, ''), 'auto-expired: end_time passed before approval'),
+          reviewer = COALESCE(reviewer, 'system'),
+          reviewed_at = COALESCE(reviewed_at, NOW())
+      WHERE status = 'pending'
+        AND end_time IS NOT NULL
+        AND end_time < NOW()
+    `;
+  } catch (e) {
+    // Don't block the list on the cleanup query — log and continue.
+    // The list itself still returns even if cleanup fails.
+    console.warn('[admin/pending-markets] auto-expire skipped', { code: e?.code, message: e?.message?.slice(0, 120) });
+  }
+
   // LEFT JOIN points_markets so approved rows carry the current
   // `featured` flag (and market status) back to the admin UI. Pending
   // / rejected rows have no approved_market_id and the join returns
