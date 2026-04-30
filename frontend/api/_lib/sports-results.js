@@ -133,6 +133,83 @@ export async function readEspnTennisMatch({ eventId, dateYmd }) {
   return readEspnEvent({ leaguePath: 'tennis/atp', eventId, dateYmd });
 }
 
+// ─── ESPN ATP tournament winner ────────────────────────────────────────
+// For tournament-level markets (replacing the old per-match H2H
+// generator). ESPN's atp/scoreboard returns one event per
+// tournament with a `groupings` array — Men's Singles, Women's
+// Singles, Men's Doubles, Women's Doubles. We pull the Men's
+// Singles grouping, find the Final (round.id='7'), and read the
+// competitor with winner=true.
+//
+// Returns the same winnerDriverId / winnerDriverLabel envelope as
+// the F1 / golf readers so the cron's parallel-shape leg matcher
+// works unchanged. competitor.id mirrors the ESPN athlete id, which
+// matches what the tennis generator stores in cfg.legs[i].driverId.
+
+const ESPN_ATP_BASE = 'https://site.api.espn.com/apis/site/v2/sports/tennis/atp';
+
+export async function readEspnAtpTournamentWinner({ eventId }) {
+  if (!eventId) throw new Error('espn-atp-tournament: missing eventId');
+  // Wide date window — tournaments span 1-2 weeks and we may poll
+  // a few days post-final. -7 / +60 covers in-progress and just-
+  // completed events at the same query.
+  const now = new Date();
+  const back = new Date(now.getTime() - 7 * 86_400_000);
+  const fwd  = new Date(now.getTime() + 60 * 86_400_000);
+  const fmt = (x) => `${x.getUTCFullYear()}${String(x.getUTCMonth() + 1).padStart(2, '0')}${String(x.getUTCDate()).padStart(2, '0')}`;
+  const range = `${fmt(back)}-${fmt(fwd)}`;
+  const res = await fetch(`${ESPN_ATP_BASE}/scoreboard?dates=${range}&limit=500`, {
+    headers: { 'Accept': 'application/json' },
+  });
+  if (!res.ok) throw new Error(`espn-atp-tournament: HTTP ${res.status}`);
+  const data = await res.json();
+  const events = Array.isArray(data?.events) ? data.events : [];
+  const ev = events.find(e => String(e.id) === String(eventId));
+  if (!ev) {
+    return { completed: false, winner: null, notFound: true };
+  }
+  const completed = Boolean(ev?.status?.type?.completed)
+    || ev?.status?.type?.state === 'post';
+  if (!completed) {
+    return { completed: false, winner: null, state: ev?.status?.type?.state || null };
+  }
+  // Pull Men's Singles draw.
+  const groupings = Array.isArray(ev.groupings) ? ev.groupings : [];
+  const mens = groupings.find(g => g?.grouping?.slug === 'mens-singles');
+  if (!mens) {
+    return { completed: false, winner: null, state: 'no_mens_singles' };
+  }
+  // Round id '7' is the Final on ESPN. There can be multiple comps
+  // with that round id across years/groupings, so within Men's
+  // Singles the latest-by-date Final is the right one.
+  const comps = Array.isArray(mens.competitions) ? mens.competitions : [];
+  const finals = comps.filter(c => c?.round?.id === '7');
+  if (finals.length === 0) {
+    return { completed: false, winner: null, state: 'no_final_match' };
+  }
+  finals.sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime());
+  const final = finals[finals.length - 1];
+  const ctors = Array.isArray(final?.competitors) ? final.competitors : [];
+  const winnerC = ctors.find(c => c?.winner === true);
+  if (!winnerC) {
+    // Final scheduled but result not in yet (TBD competitors, etc.)
+    // — let cron retry next tick.
+    return { completed: false, winner: null, state: 'final_pending' };
+  }
+  const ath = winnerC?.athlete || {};
+  const athleteId = winnerC?.id ? String(winnerC.id) : null;
+  const fullName = ath.displayName
+    || ath.fullName
+    || `${ath.firstName || ''} ${ath.lastName || ''}`.trim()
+    || null;
+  return {
+    completed: true,
+    winner: 'p1',
+    winnerDriverId: athleteId,
+    winnerDriverLabel: fullName,
+  };
+}
+
 // ─── ESPN golf scoreboard winner (PGA + LIV) ───────────────────────────
 // Reads the post-tournament leaderboard from ESPN's golf scoreboard
 // and returns the winner. Uses the parallel-shape dispatch in the

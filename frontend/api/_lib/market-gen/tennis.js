@@ -1,48 +1,92 @@
 /**
- * ATP tennis generator — ESPN scoreboard.
+ * ATP tennis generator — TOURNAMENT-WINNER markets.
  *
- * Pulls upcoming ATP matches, filters to a configurable player
- * whitelist, and emits one binary market per match. Resolution is
- * via ESPN's `completed` flag, same shape as MLB/NBA sports_api.
+ * Earlier versions of this generator emitted one binary head-to-head
+ * market per match, but matches resolve in 2-3 hours after first
+ * serve and the market never had time to attract liquidity. We now
+ * emit ONE parallel market per upcoming top-tier tournament:
+ *   "¿Quién gana el <Tournament>?"
+ * with a curated top field plus "Otro" for dark-horse winners.
  *
- * Whitelist covers the top-seeded players the user called out. Add
- * or remove names to adjust what surfaces.
+ * Mirrors the golf.js (PGA) generator shape — the cron's parallel-
+ * shape leg matcher handles tennis tournament resolution unchanged
+ * (id-match → label-match → 'Otro' fallback).
+ *
+ * Tier filter: Slams + Masters 1000 + ATP 500 only. ATP 250 and
+ * regional / "challenger" events are filtered out — they don't draw
+ * the whitelisted top names so a market for them would resolve to
+ * "Otro" 90% of the time, which reads as broken.
  */
 
 const ESPN = 'https://site.api.espn.com/apis/site/v2/sports/tennis/atp/scoreboard';
 
-// Player name matching is case-insensitive, strips accents, and
-// matches on either FULL name or LAST name (ESPN sometimes abbreviates).
-// Normalized forms computed at module load — avoids per-event work.
-const PLAYER_WHITELIST_RAW = [
-  'Jannik Sinner',
-  'Novak Djokovic',
-  'Carlos Alcaraz',
-  'Alexander Zverev',
-  'Ben Shelton',
-  'Lorenzo Musetti',
-  'Flavio Cobolli',
-  'Daniil Medvedev',
+// Top-12 ATP field for tournament-winner markets. Each ESPN
+// athlete ID was verified by walking the 2026 ATP scoreboard and
+// matching displayNames to competitor.id (HEAD-200 against the
+// headshot CDN proves the URL exists but NOT that it points at the
+// right player — earlier versions of this file had wrong IDs that
+// would never have matched a winner). Holger Rune doesn't appear
+// in 2026 ATP events on ESPN (injured/out); swapped for Alex de
+// Minaur, a consistent top-10 player.
+const FIELD = [
+  { id: '3782', name: 'Carlos Alcaraz' },
+  { id: '3623', name: 'Jannik Sinner' },
+  { id: '296',  name: 'Novak Djokovic' },
+  { id: '2375', name: 'Alexander Zverev' },
+  { id: '2383', name: 'Daniil Medvedev' },
+  { id: '2869', name: 'Stefanos Tsitsipas' },
+  { id: '2642', name: 'Andrey Rublev' },
+  { id: '2989', name: 'Casper Ruud' },
+  { id: '2946', name: 'Taylor Fritz' },
+  { id: '9250', name: 'Ben Shelton' },
+  { id: '3764', name: 'Lorenzo Musetti' },
+  { id: '2651', name: 'Alex de Minaur' },
 ];
 
-function normalize(s) {
-  return String(s || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .trim();
+function headshot(id) {
+  return id ? `https://a.espncdn.com/i/headshots/tennis/players/full/${id}.png` : null;
 }
 
-const WHITELIST_FULL = new Set(PLAYER_WHITELIST_RAW.map(normalize));
-const WHITELIST_LAST = new Set(
-  PLAYER_WHITELIST_RAW.map(n => normalize(n.split(' ').pop())),
-);
+// Top-tier tournament name matchers. ESPN's `event.major === true`
+// flag identifies the four Slams; everything else needs a name
+// pattern. Patterns are case-insensitive substring matches against
+// `event.name`. Curated to cover Masters 1000 and ATP 500 events
+// using the sponsor names ESPN actually returns (verified against
+// the full 2026 ATP calendar).
+const TOP_TIER_NAME_PATTERNS = [
+  // Masters 1000
+  /BNP Paribas Open/i,             // Indian Wells
+  /Miami Open/i,
+  /Monte[- ]?Carlo Masters/i,
+  /Mutua Madrid Open/i,
+  /Internazionali BNL/i,           // Italian Open / Rome
+  /Canadian Open|Rogers Cup|National Bank Open/i,
+  /Western & Southern Open|Cincinnati Open/i,
+  /Shanghai Masters|Rolex Shanghai/i,
+  /Paris Masters|Rolex Paris/i,
+  // ATP 500
+  /ABN Amro/i,                     // Rotterdam
+  /Abierto Mexicano/i,             // Acapulco
+  /Dubai Duty Free/i,
+  /Qatar ExxonMobil Open|Qatar Open/i, // Doha
+  /Rio Open/i,
+  /Barcelona Open Banc Sabadell/i,
+  /Boss Open/i,                    // Stuttgart
+  /Cinch Championships|Queen's Club/i,
+  /Bitpanda Hamburg Open|Hamburg European Open/i,
+  /Mubadala Citi DC Open|Citi Open/i, // Washington
+  /China Open|Beijing/i,
+  /Kinoshita Group Japan Open|Rakuten/i, // Tokyo
+  /Erste Bank Open/i,              // Vienna
+  /Swiss Indoors|Basel/i,
+  // Year-end
+  /ATP Finals|Nitto ATP Finals/i,
+];
 
-function matchesWhitelist(name) {
-  const n = normalize(name);
-  if (WHITELIST_FULL.has(n)) return true;
-  const last = normalize(n.split(' ').pop());
-  return WHITELIST_LAST.has(last);
+function isTopTier(ev) {
+  if (ev?.major === true) return true; // The 4 Slams
+  const name = String(ev?.name || '');
+  return TOP_TIER_NAME_PATTERNS.some(re => re.test(name));
 }
 
 function formatDateCompact(d) {
@@ -50,7 +94,7 @@ function formatDateCompact(d) {
   return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}`;
 }
 
-export async function generateTennisMarkets({ horizonDays = 14 } = {}) {
+export async function generateTennisMarkets({ horizonDays = 60 } = {}) {
   const now = new Date();
   const horizon = new Date(now.getTime() + horizonDays * 86_400_000);
   const dates = `${formatDateCompact(now)}-${formatDateCompact(horizon)}`;
@@ -71,66 +115,62 @@ export async function generateTennisMarkets({ horizonDays = 14 } = {}) {
   const specs = [];
   for (const ev of events) {
     if (ev?.status?.type?.state !== 'pre') continue;
-    const kickoff = ev?.date;
-    if (!kickoff) continue;
-    const comp = Array.isArray(ev.competitions) ? ev.competitions[0] : null;
-    if (!comp) continue;
-    const ctors = Array.isArray(comp.competitors) ? comp.competitors : [];
-    if (ctors.length !== 2) continue;
-    const [c1, c2] = ctors;
-    const p1Name = c1?.athlete?.displayName || c1?.displayName;
-    const p2Name = c2?.athlete?.displayName || c2?.displayName;
-    if (!p1Name || !p2Name) continue;
+    if (!isTopTier(ev)) continue;          // Drop ATP 250 / regional events
+    const startIso = ev.date;
+    const endIso = ev.endDate || ev.date;  // ESPN ships endDate on tournaments
+    if (!startIso) continue;
+    const startMs = new Date(startIso).getTime();
+    const endMs = new Date(endIso).getTime();
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) continue;
 
-    // Admit the match if AT LEAST ONE player is on the whitelist —
-    // usually a top seed vs a qualifier the user doesn't care about.
-    if (!matchesWhitelist(p1Name) && !matchesWhitelist(p2Name)) continue;
+    // Pad 2 days past tournament endDate so a Sunday-evening final
+    // landing on a UTC-boundary edge doesn't strand the market.
+    const startTime = new Date(startMs).toISOString();
+    const endTime = new Date(endMs + 2 * 86_400_000).toISOString();
 
-    const kickoffMs = new Date(kickoff).getTime();
-    if (!Number.isFinite(kickoffMs)) continue;
-    const startTime = new Date(kickoffMs).toISOString();
-    const endTime = new Date(kickoffMs + 4 * 3600_000).toISOString();
-    const dateYmd = new Date(kickoff).toISOString().slice(0, 10);
-
-    const p1Photo = c1?.athlete?.headshot?.href || c1?.headshot?.href || null;
-    const p2Photo = c2?.athlete?.headshot?.href || c2?.headshot?.href || null;
-
-    const tournamentName = comp?.venue?.fullName
-                        || ev?.season?.displayName
-                        || 'ATP Tour';
+    const legs = [
+      ...FIELD.map(p => ({ label: p.name, driverId: p.id })),
+      { label: 'Otro', driverId: null },
+    ];
 
     specs.push({
-      source: 'espn-atp',
+      source: 'espn-atp-tournament',
       source_event_id: `atp:${ev.id}`,
       sport: 'tennis',
       league: 'atp',
-      question: `${p1Name} vs ${p2Name}`,
+      question: `¿Quién gana el ${ev.name}?`,
       category: 'deportes',
       icon: '🎾',
-      outcomes: [p1Name, p2Name],
-      outcome_images: [p1Photo, p2Photo],
+      outcomes: legs.map(l => l.label),
+      outcome_images: [
+        ...FIELD.map(p => headshot(p.id)),
+        null, // Otro
+      ],
       seed_liquidity: 1000,
       start_time: startTime,
       end_time: endTime,
-      amm_mode: 'unified',
+      amm_mode: 'parallel',
+      // sports_api auto-resolution via espn-atp-tournament reader.
+      // After the tournament ends the cron fetches the event's
+      // Men's Singles Final (round.id='7') and reads the competitor
+      // with winner=true. Player ID match → exact leg; name match
+      // → fallback; "Otro" catches dark horses.
       resolver_type: 'sports_api',
       resolver_config: {
-        source: 'espn',
-        leaguePath: 'tennis/atp',
+        source: 'espn-atp-tournament',
+        shape: 'parallel',
         eventId: ev.id,
-        dateYmd,
-        shape: 'binary',
+        legs,
       },
       source_data: {
         eventId: ev.id,
-        tournament: tournamentName,
-        kickoffUtc: kickoff,
-        p1: { id: c1?.athlete?.id, name: p1Name, photo: p1Photo },
-        p2: { id: c2?.athlete?.id, name: p2Name, photo: p2Photo },
+        tournamentName: ev.name,
+        startDateIso: ev.date,
+        endDateIso: ev.endDate || null,
+        isMajor: ev.major === true,
+        field: FIELD,
       },
     });
   }
   return specs;
 }
-
-export const _internal = { PLAYER_WHITELIST_RAW, matchesWhitelist, normalize };

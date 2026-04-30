@@ -31,7 +31,7 @@ import { readCreAverageFor } from '../_lib/fuel.js';
 import { fetchMaxTempC, bucketIndexFor } from '../_lib/weather.js';
 import { readAppleMxTopArtist } from '../_lib/charts.js';
 import { readYouTubeTopMxChannel } from '../_lib/youtube.js';
-import { readEspnEvent, readFootballDataMatch, readJolpicaF1Result, readJolpicaF1Standings, readEspnPgaWinner, readEspnLivWinner } from '../_lib/sports-results.js';
+import { readEspnEvent, readFootballDataMatch, readJolpicaF1Result, readJolpicaF1Standings, readEspnPgaWinner, readEspnLivWinner, readEspnAtpTournamentWinner } from '../_lib/sports-results.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql   = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -318,6 +318,14 @@ export async function runAutoResolve({ dry = false } = {}) {
             // the individual leaderboard always has order=1; we
             // resolve on the individual winner.
             result = await readEspnLivWinner({ eventId: cfg.eventId });
+          } else if (cfg.source === 'espn-atp-tournament') {
+            // ATP tournament-winner markets (Slams + Masters 1000
+            // + ATP 500). Pulls /atp/scoreboard for the tournament
+            // event, walks groupings → mens-singles → Final
+            // (round.id='7'), and returns the competitor with
+            // winner=true. Same envelope as the other parallel-
+            // shape readers.
+            result = await readEspnAtpTournamentWinner({ eventId: cfg.eventId });
           } else {
             throw new Error(`unsupported sports_api source: ${cfg.source}`);
           }
