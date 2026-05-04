@@ -146,6 +146,18 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_markets_live
     ON points_markets(status, end_time) WHERE archived_at IS NULL`,
 
+  // source / source_event_id mirror the columns on points_pending_markets
+  // so auto-generated markets that bypass the admin queue (e.g. the
+  // chainlink-5min crypto markets — created+activated+resolved by cron
+  // on a 5-minute boundary) can use the same idempotency pattern. The
+  // partial UNIQUE only enforces uniqueness for rows that opt in, so
+  // existing markets (which have NULL source columns) are unaffected.
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS source TEXT`,
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS source_event_id TEXT`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_points_markets_source_event
+    ON points_markets(source, source_event_id)
+    WHERE source IS NOT NULL AND source_event_id IS NOT NULL`,
+
   // final_score: human-readable final result for resolved markets.
   // Free-form TEXT so different market types encode what makes sense:
   //   - soccer / baseball match: "2-1", "México 3-2 Brasil"

@@ -1,6 +1,8 @@
 import { neon } from '@neondatabase/serverless';
 import { ethers } from 'ethers';
 import { ensureProtocolSchema } from './_lib/protocol-schema.js';
+import { ensurePointsSchema } from './_lib/points-schema.js';
+import { runCrypto5MinTick } from './_lib/crypto-5min.js';
 
 /**
  * /api/indexer — On-chain event indexer for Pronos protocol.
@@ -141,12 +143,34 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'Unauthorized' });
   }
 
+  // ── Crypto 5-min boundary processing ──────────────────────────────
+  // Multiplexed onto this cron so we don't burn a second Vercel cron
+  // slot. runCrypto5MinTick is gated on VERCEL_ENV='production' so it
+  // does nothing on preview deploys (the feature stays dormant until
+  // points-app merges to main). On a 5-min boundary it fires the
+  // resolve+activate+create lifecycle for BTC and ETH; the rest of
+  // the time it's a fast no-op (minute-bucket gate inside the fn).
+  // Wrapped in try/catch so any crypto-5min failure can't break the
+  // on-chain indexer below.
+  let crypto5MinReport = null;
+  try {
+    await ensurePointsSchema(sql);
+    crypto5MinReport = await runCrypto5MinTick({ sql });
+  } catch (e) {
+    console.error('[indexer] crypto-5min tick failed', {
+      message: e?.message,
+      code: e?.code,
+    });
+    crypto5MinReport = { error: e?.message || 'crypto_5min_failed' };
+  }
+
   const { factories, rpcUrl, startBlock, lookbackBlocks, maxBatches: configuredMaxBatches } = getIndexerConfig();
 
   if (!factories.length || !rpcUrl) {
     return res.status(200).json({
       status: 'skipped',
       reason: 'MarketFactory address or Arbitrum RPC URL not configured',
+      crypto5Min: crypto5MinReport,
     });
   }
 
@@ -215,6 +239,7 @@ export default async function handler(req, res) {
       block: currentBlock,
       factories: factoryRuns,
       processed,
+      crypto5Min: crypto5MinReport,
     });
   } catch (e) {
     console.error('Indexer error:', {
