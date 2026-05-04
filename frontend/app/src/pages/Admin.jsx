@@ -681,13 +681,15 @@ function PendingMarketsSection() {
 }
 
 // ═══ Create-market form ═════════════════════════════════════════════════════
-function CreateMarketForm({ onCreated, seed }) {
-  // `seed` arrives from a deep-link handoff (currently the points-app's
+function CreateMarketForm({ onCreated, prefill }) {
+  // `prefill` arrives from a deep-link handoff (currently the points-app's
   // /c/noticias "Crear mercado de esta noticia" button). When present
   // we pre-fill question + category so the admin only has to fill in
-  // the trade-specific fields (outcomes, end time, etc).
-  const [question, setQuestion] = useState(seed?.question || '');
-  const [category, setCategory] = useState(seed?.category || 'deportes');
+  // the trade-specific fields (outcomes, end time, etc). Renamed from
+  // `seed` to avoid colliding with the local `seed` state used for
+  // initial liquidity in the create form below.
+  const [question, setQuestion] = useState(prefill?.question || '');
+  const [category, setCategory] = useState(prefill?.category || 'deportes');
   const [icon, setIcon] = useState('⚽');
   const [outcomes, setOutcomes] = useState(['Sí', 'No']);
   const [outcomeImages, setOutcomeImages] = useState(['', '']);
@@ -1696,7 +1698,7 @@ export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
         </div>
 
         {/* Active tab content */}
-        {tab === 'create'   && <CreateMarketForm onCreated={bumpRefresh} seed={createSeed} />}
+        {tab === 'create'   && <CreateMarketForm onCreated={bumpRefresh} prefill={createSeed} />}
         {tab === 'generate' && (
           <>
             <OnchainStatusPanel />

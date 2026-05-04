@@ -345,3 +345,27 @@ export async function fetchNews({ category = 'featured', limit = 60 } = {}) {
   if (limit) q.set('limit', String(limit));
   return getJson(`/api/points/news${q.toString() ? `?${q}` : ''}`);
 }
+
+// Admin-only: link / unlink a news headline to an existing market.
+export async function adminLinkNews({ newsUrl, newsTitle, newsSource, marketId }) {
+  return postJson('/api/points/admin/news-link', { newsUrl, newsTitle, newsSource, marketId });
+}
+export async function adminUnlinkNews(newsUrl) {
+  const q = new URLSearchParams({ newsUrl });
+  const res = await fetch(`/api/points/admin/news-link?${q}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data?.error || `HTTP ${res.status}`);
+    err.code = data?.error;
+    throw err;
+  }
+  return data;
+}
+
+// Admin-only: list active markets (for the news → market picker).
+export async function adminListActiveMarkets() {
+  return getJson('/api/points/admin/markets?status=active&mode=all');
+}

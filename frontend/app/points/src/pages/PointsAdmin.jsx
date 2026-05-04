@@ -129,9 +129,28 @@ function currentTimezoneLabel() {
 }
 
 export default function PointsAdmin({ isAdmin }) {
+  // Read initial tab + create-form prefill from query string. Lets
+  // /c/noticias' "Crear mercado de esta noticia" deep-link into the
+  // create form with question + category pre-filled.
+  const initialTab = (() => {
+    if (typeof window === 'undefined') return 'create';
+    const sp = new URLSearchParams(window.location.search);
+    const t = sp.get('tab');
+    return ['create', 'markets', 'stats', 'pending', 'social'].includes(t) ? t : 'create';
+  })();
+  const createPrefill = (() => {
+    if (typeof window === 'undefined') return null;
+    const sp = new URLSearchParams(window.location.search);
+    const q = sp.get('question');
+    if (!q) return null;
+    return {
+      question: q.slice(0, 200),
+      category: (sp.get('category') || '').slice(0, 32) || null,
+    };
+  })();
   const navigate = useNavigate();
   const { authenticated, user, loading: authLoading } = usePointsAuth();
-  const [tab, setTab] = useState('create'); // 'create' | 'markets' | 'stats'
+  const [tab, setTab] = useState(initialTab); // 'create' | 'markets' | 'stats'
 
   useEffect(() => {
     if (authLoading) return;
@@ -194,7 +213,7 @@ export default function PointsAdmin({ isAdmin }) {
         })}
       </div>
 
-      {tab === 'create' && <CreateMarketForm />}
+      {tab === 'create' && <CreateMarketForm prefill={createPrefill} />}
       {tab === 'pending' && <PendingMarketsTable />}
       {tab === 'markets' && <MarketsTable />}
       {tab === 'social' && <SocialTasksQueue />}
@@ -489,12 +508,15 @@ function SocialTasksQueue() {
 //     (Polymarket-style: one binary Sí/No market per outcome grouped under
 //     a parent row). Only meaningful for Múltiple; Binario is locked to
 //     Unificado since the two modes are equivalent at N=2.
-function CreateMarketForm() {
+function CreateMarketForm({ prefill }) {
   const [mode, setMode] = useState('binary'); // 'binary' | 'multi'
   const [ammMode, setAmmMode] = useState('unified'); // 'unified' | 'parallel'
+  // `prefill` arrives via deep-link (currently from the /c/noticias
+  // "Crear mercado de esta noticia" button). Seeds question +
+  // category so admin only fills outcomes / end time.
   const [form, setForm] = useState({
-    question: '',
-    category: 'deportes',
+    question: prefill?.question || '',
+    category: prefill?.category || 'deportes',
     icon: '⚽',
     endDate: '',   // dd/mm/yyyy (text)
     endHour: '',   // 0-23 (string, validated on submit)

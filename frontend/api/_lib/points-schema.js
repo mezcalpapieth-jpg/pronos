@@ -158,6 +158,25 @@ const POINTS_SCHEMA_MIGRATIONS = [
     ON points_markets(source, source_event_id)
     WHERE source IS NOT NULL AND source_event_id IS NOT NULL`,
 
+  // ── News → market links ──────────────────────────────────────────────────
+  // Admins linking a news headline to an existing market so users
+  // browsing /c/noticias can jump to the active market it relates
+  // to. Many-to-one in principle (one market, multiple headlines) but
+  // we enforce one link per news_url to keep the UI obvious.
+  // ON DELETE SET NULL on market_id so resolving / archiving a market
+  // doesn't cascade-delete the news link — we just stop showing it.
+  `CREATE TABLE IF NOT EXISTS points_news_links (
+    id          SERIAL PRIMARY KEY,
+    news_url    TEXT UNIQUE NOT NULL,
+    news_title  TEXT,
+    news_source TEXT,
+    market_id   INTEGER REFERENCES points_markets(id) ON DELETE SET NULL,
+    linked_by   TEXT,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_news_links_market
+    ON points_news_links(market_id) WHERE market_id IS NOT NULL`,
+
   // final_score: human-readable final result for resolved markets.
   // Free-form TEXT so different market types encode what makes sense:
   //   - soccer / baseball match: "2-1", "México 3-2 Brasil"
