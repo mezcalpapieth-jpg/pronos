@@ -1,55 +1,73 @@
 /**
- * Mexican news RSS aggregator.
+ * Mexican news aggregator — Google News RSS backend.
  *
- * Pulls RSS feeds from a curated list of Mexican news outlets, parses
- * them into a normalized item shape, classifies into sub-categories
- * (política / economía / seguridad / internacional / cultura / deportes /
- * farándula / general), dedupes near-duplicate headlines that ran across
- * multiple outlets, sorts by publication date, and returns the top N.
+ * The first cut hit each outlet's own RSS feed directly. That broke
+ * fast: 7 of 9 sources started returning 404/403 (URLs changed,
+ * outlets dropped public RSS, or Cloudflare started blocking
+ * non-browser User-Agents). We pivoted to Google News RSS, which:
  *
- * No new dependency: the parser is regex-based, which is fine for RSS
- * 2.0 / Atom (the structures we care about — title, link, description,
- * pubDate, category, image) are simple enough that pulling in a full
- * XML library would be overkill. Per-outlet quirks (different image
- * field names, CDATA wrapping, summary in description vs content:encoded)
- * are handled by the permissive extractors below.
+ *   - Aggregates ~100 articles per query, refreshed every few minutes
+ *   - Uses stable redirector URLs (news.google.com/rss/articles/<id>)
+ *     that are reliable for our news↔market linking persistence
+ *   - Exposes source name via the trailing " - <Outlet>" suffix in
+ *     the item title
+ *   - Tolerates a regular browser User-Agent without blocking
  *
- * Cache:
- *   - In-memory module-level cache, 5-minute TTL.
- *   - Stale-while-revalidate: if cache is stale we serve the stale
- *     copy AND kick off a refresh in the background. Rare-cold-cache
- *     callers (first hit after deploy) wait for a fresh fetch.
+ * One query per category instead of one feed per outlet, then we
+ * filter to a preferred-outlet allowlist so the feed stays curated
+ * (you don't drown in random regional / aggregator results).
  *
- * Image strategy ("the easy way"):
- *   - Hotlink from each outlet's CDN. CSP `img-src` allows `https:` so
- *     any HTTPS image source loads. Some sites block hotlinking and
- *     will return 403 — those broken images will be reported back so we
- *     can decide on a proxy / specific allowlist later.
+ * Per-source RSS overrides remain supported via DIRECT_SOURCES if a
+ * specific outlet ever ships a stable feed again — the merge logic
+ * dedupes by canonical URL, so adding direct sources alongside
+ * Google News is safe.
+ *
+ * Cache: in-memory module-level, 5-min TTL, stale-while-revalidate.
  */
 
-const SOURCES = [
-  { id: 'el-universal',      name: 'El Universal',      rss: 'https://www.eluniversal.com.mx/rss.xml',                         lean: 'center'         },
-  { id: 'animal-politico',   name: 'Animal Político',   rss: 'https://www.animalpolitico.com/feed/',                            lean: 'left'           },
-  { id: 'aristegui',         name: 'Aristegui Noticias',rss: 'https://aristeguinoticias.com/feed/',                             lean: 'independent'    },
-  { id: 'milenio',           name: 'Milenio',           rss: 'https://www.milenio.com/rss',                                     lean: 'center'         },
-  { id: 'el-financiero',     name: 'El Financiero',     rss: 'https://www.elfinanciero.com.mx/rss/',                            lean: 'center-right'   },
-  { id: 'sin-embargo',       name: 'Sin Embargo',       rss: 'https://www.sinembargo.mx/feed',                                  lean: 'left'           },
-  { id: 'proceso',           name: 'Proceso',           rss: 'https://www.proceso.com.mx/rss',                                  lean: 'investigative'  },
-  { id: 'noroeste',          name: 'Noroeste',          rss: 'https://www.noroeste.com.mx/rss/',                                lean: 'regional'       },
-  { id: 'debate',            name: 'El Debate',         rss: 'https://www.debate.com.mx/rss/portada.xml',                       lean: 'regional'       },
+// ─── Preferred outlets (curated allowlist) ──────────────────────────────────
+// Items whose Google News-extracted source matches any of these labels
+// (case-insensitive substring) survive the post-fetch filter. The
+// `priority` field ranks results when multiple outlets cover the same
+// story — lower = preferred. `id` is what the frontend reads.
+const PREFERRED_SOURCES = [
+  { id: 'el-universal',     match: ['el universal'],                priority: 1 },
+  { id: 'animal-politico',  match: ['animal político', 'animal politico'], priority: 1 },
+  { id: 'aristegui',        match: ['aristegui'],                   priority: 1 },
+  { id: 'milenio',          match: ['milenio'],                     priority: 1 },
+  { id: 'el-financiero',    match: ['el financiero'],               priority: 1 },
+  { id: 'sin-embargo',      match: ['sinembargo', 'sin embargo'],   priority: 2 },
+  { id: 'proceso',          match: ['proceso'],                     priority: 2 },
+  { id: 'noroeste',         match: ['noroeste'],                    priority: 2 },
+  { id: 'debate',           match: ['debate'],                      priority: 2 },
+  // Tier-3: high-quality outlets that frequently appear in Google News
+  // results and are common picks for Mexican reads. Kept lower priority
+  // so the curated nine win when there's overlap.
+  { id: 'jornada',          match: ['la jornada', 'jornada'],       priority: 3 },
+  { id: 'reforma',          match: ['reforma'],                     priority: 3 },
+  { id: 'expansion',        match: ['expansión', 'expansion'],      priority: 3 },
+  { id: 'forbes-mx',        match: ['forbes méxico', 'forbes mexico'], priority: 3 },
+  { id: 'infobae',          match: ['infobae'],                     priority: 3 },
 ];
 
-// Total cap — we only ever return this many items even if the dedup
-// pass leaves more. Keeps the page light.
-const MAX_ITEMS = 60;
-// Drop items older than this — old news is dead news.
-const MAX_AGE_HOURS = 36;
-const CACHE_TTL_MS = 5 * 60_000;
-// Per-feed fetch timeout — slow feeds shouldn't block the whole batch.
-const FEED_TIMEOUT_MS = 6_000;
+function normalize(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
 
-// ─── Categories ─────────────────────────────────────────────────────────────
-// Sub-tab values used by the frontend — order matters (= UI order).
+function matchSource(rawName) {
+  const n = normalize(rawName);
+  if (!n) return null;
+  for (const src of PREFERRED_SOURCES) {
+    if (src.match.some(m => n.includes(normalize(m)))) return src;
+  }
+  return null;
+}
+
+// ─── Categories + Google News queries ───────────────────────────────────────
+// One Google News query per category. Spanish + Mexico locale filter
+// (hl/gl/ceid) so we get Mexican-relevant results. Queries are tuned
+// to surface mainstream stories without getting pure-keyword matches
+// from random blogs.
 export const NEWS_CATEGORIES = [
   'featured',
   'politica',
@@ -62,362 +80,325 @@ export const NEWS_CATEGORIES = [
   'general',
 ];
 
-// Keyword classifier. Each rule maps a category → array of regex patterns
-// (case-insensitive, accent-insensitive after we normalize). First match
-// wins. If nothing matches, we use the RSS feed's own <category> tag if
-// it looks like one of our buckets; otherwise 'general'.
-const CATEGORY_KEYWORDS = {
-  politica: [
-    /\bsheinbaum\b/, /\bamlo\b/, /\bobrador\b/, /\bmorena\b/,
-    /\bpan\b/, /\bpri\b/, /\bprd\b/, /\bmovimiento ciudadano\b/,
-    /\bsenad\w+/, /\bdiputad\w+/, /\bcongres\w+/, /\bcamara\b/,
-    /\belector\w+/, /\bvotacion\w+/, /\bgobern\w+/, /\bcandidat\w+/,
-    /\bpresident\w+/, /\bsecretari\w+ de \w+/, /\binem\b/, /\bsuprema corte\b/,
-    /\bconstituci\w+/, /\bley\b/, /\bdecreto\b/, /\breforma\b/,
-  ],
-  economia: [
-    /\bpeso\b/, /\bdolar\b/, /\binflacion\b/, /\bbanxico\b/, /\btasas?\b/,
-    /\bpib\b/, /\bcrecimiento economic\w+/, /\bremesa\w+/, /\bemple\w+/,
-    /\bsalario\b/, /\bpemex\b/, /\bcfe\b/, /\binversion\w+/,
-    /\bfinanzas\b/, /\bhacienda\b/, /\bsat\b/, /\baranc\w+/, /\btlcan\b/,
-    /\bt-mec\b/, /\btmec\b/, /\bbolsa\b/, /\bibovespa\b/, /\bbmv\b/,
-  ],
-  seguridad: [
-    /\bnarco\w+/, /\bcartel\b/, /\bcjng\b/, /\bsinaloa\b.*\bcartel/,
-    /\bmatanza\b/, /\bhomicidi\w+/, /\bsicari\w+/, /\barmas?\b/,
-    /\bdetenid\w+/, /\bdetenci\w+/, /\boperat\w+/, /\bguardia nacional\b/,
-    /\bsedena\b/, /\bmarina\b.*armad/, /\bfgr\b/, /\bfiscal\w+/,
-    /\bsecuestr\w+/, /\bdesapareci\w+/, /\bextorsion\w+/, /\bbloqu\w+/,
-  ],
-  internacional: [
-    /\bestados unidos\b/, /\beeuu\b/, /\beua\b/, /\btrump\b/, /\bbiden\b/,
-    /\bharris\b/, /\bsenado.*estad\w+/, /\bisrael\b/, /\bgaza\b/, /\bpalestin\w+/,
-    /\bucrania\b/, /\brusia\b/, /\bputin\b/, /\bzelensk\w+/,
-    /\bchina\b/, /\bxi jinping\b/, /\bcorea\b/, /\bjapon\b/, /\beuropa\b/,
-    /\bunion europea\b/, /\bonu\b/, /\botan\b/, /\bnaciones unidas\b/,
-    /\bcanada\b/, /\bcumbre\b/, /\btratado\b/,
-  ],
-  cultura: [
-    /\bmuseo\b/, /\bexposicion\w+/, /\bteatro\b/, /\bobra\b/,
-    /\bnovela\b/, /\blibro\b/, /\bpoes\w+/, /\bescritor\w+/, /\bautor\w+/,
-    /\bmusica\b/, /\bconcierto\b/, /\bdisco\b/, /\bfilm\b/, /\bcine\b/,
-    /\bpelicula\b/, /\bdirector cinematogr\w+/, /\bestreno\b/,
-    /\bbellas artes\b/, /\bunesco\b/, /\bpatrimonio\b/,
-  ],
-  deportes: [
-    /\bfutbol\b/, /\bliga mx\b/, /\bseleccion mexican\w+/, /\bel tri\b/,
-    /\bconcacaf\b/, /\bcopa\b/, /\bmundial\b/, /\bclasico\b/, /\bgol\b/,
-    /\bnba\b/, /\bnfl\b/, /\bmlb\b/, /\bbox\w+/, /\bpelea\b/,
-    /\bcanelo\b/, /\bf1\b/, /\bformula 1\b/, /\bgrand prix\b/, /\bgran premio\b/,
-    /\bolimpic\w+/, /\bjuegos olim/, /\btenis\b/, /\bgolf\b/,
-  ],
-  farandula: [
-    /\bbelinda\b/, /\bdanna paola\b/, /\bgloria trevi\b/, /\bthalia\b/,
-    /\bjuanga\b/, /\bjuan gabriel\b/, /\beugenio derbez\b/,
-    /\bnovela\b.*\btelevisa\b/, /\btelevisa\b/, /\baztec\w+ uno\b/,
-    /\bla casa de los famosos\b/, /\bbig brother\b/, /\binstagram\b/,
-    /\btiktok\b/, /\bmiss universo\b/, /\bmiss mexico\b/,
-    /\baeropuerto\b.*celebridad/, /\bex novi[ao]\b/, /\bhija de\b/,
-  ],
+const CATEGORY_QUERIES = {
+  // 'featured' is composed at read time from items across all
+  // categories — no separate query.
+  politica:      'política mexico cuando:1d',
+  economia:      'economia mexico empresas finanzas cuando:1d',
+  seguridad:     'seguridad mexico narcotrafico cuando:1d',
+  internacional: 'noticias internacionales mexico cuando:1d',
+  cultura:       'cultura mexico arte cuando:2d',
+  deportes:      'deportes mexico cuando:1d',
+  farandula:     'farandula mexico espectaculos cuando:2d',
+  general:       'noticias mexico cuando:1d',
 };
 
-// Normalize text for keyword matching: lowercase + strip diacritics.
-function normalize(s) {
-  return String(s || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '');
-}
+const GNEWS_BASE = 'https://news.google.com/rss/search';
+const GNEWS_LOCALE = 'hl=es-MX&gl=MX&ceid=MX:es-419';
+// Browser-like User-Agent — Google News RSS 302s when called with
+// non-browser UAs.
+const GNEWS_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 PronosNewsBot/1.0';
 
-// Map a feed's own <category> tag to one of our buckets where the
-// match is unambiguous. Returns null if unknown.
-function mapFeedCategory(raw) {
-  const n = normalize(raw);
-  if (!n) return null;
-  if (n.includes('politic'))            return 'politica';
-  if (n.includes('econom') || n.includes('finanz') || n.includes('negoci')) return 'economia';
-  if (n.includes('segurid') || n.includes('justicia') || n.includes('policiac')) return 'seguridad';
-  if (n.includes('internacional') || n.includes('mundo')) return 'internacional';
-  if (n.includes('cultur') || n.includes('arte') || n.includes('libro')) return 'cultura';
-  if (n.includes('deporte'))            return 'deportes';
-  if (n.includes('farandul') || n.includes('espectacul') || n.includes('gente')) return 'farandula';
-  if (n.includes('estilo') || n.includes('tendenci'))   return 'farandula'; // best-fit bucket
-  if (n.includes('tecnolog') || n.includes('cienci'))   return 'general';   // no dedicated bucket yet
-  return null;
-}
+// Optional direct-RSS sources still working. Empty for now — added
+// here when a specific outlet ships a stable feed we want to ingest
+// alongside Google News. Same item shape as fetchGoogleCategory.
+const DIRECT_SOURCES = [];
 
-function classify(item) {
-  const text = normalize(`${item.title} ${item.summary || ''}`);
-  for (const [cat, patterns] of Object.entries(CATEGORY_KEYWORDS)) {
-    for (const re of patterns) {
-      if (re.test(text)) return cat;
+// ─── Configuration ──────────────────────────────────────────────────────────
+const MAX_ITEMS_PER_CATEGORY = 40;
+const MAX_TOTAL_ITEMS = 120;
+const MAX_AGE_HOURS = 48;
+const CACHE_TTL_MS = 5 * 60_000;
+const FEED_TIMEOUT_MS = 8_000;
+
+// ─── URL canonicalization ───────────────────────────────────────────────────
+// Strip tracking params + trailing slash so stored news_url and
+// looked-up news_url match across feed refreshes. Without this,
+// "vincular" links disappear when the source URL gets a fresh utm_*.
+const TRACKING_PARAMS = new Set([
+  'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+  'fbclid', 'gclid', 'mc_cid', 'mc_eid', 'igshid', '_ga', '_gl',
+  'ref', 'ref_src', 'source', 'cmpid', 'spm', 'wt_zmc', 'oc',
+]);
+
+export function canonicalizeUrl(raw) {
+  if (typeof raw !== 'string' || !raw) return raw;
+  try {
+    const u = new URL(raw);
+    // Drop tracking params.
+    const keep = [];
+    for (const [k, v] of u.searchParams.entries()) {
+      if (!TRACKING_PARAMS.has(k.toLowerCase())) keep.push([k, v]);
     }
+    u.search = '';
+    for (const [k, v] of keep) u.searchParams.append(k, v);
+    // Strip fragment + trailing slash on path.
+    u.hash = '';
+    if (u.pathname.length > 1 && u.pathname.endsWith('/')) {
+      u.pathname = u.pathname.replace(/\/+$/, '');
+    }
+    return u.toString();
+  } catch {
+    return raw;
   }
-  // Fallback to feed's own <category> if it maps cleanly.
-  for (const raw of (item.feedCategories || [])) {
-    const mapped = mapFeedCategory(raw);
-    if (mapped) return mapped;
-  }
-  return 'general';
 }
 
-// ─── RSS parser ─────────────────────────────────────────────────────────────
-// Permissive regex-based extractor. Handles:
-//   - Plain element values: <title>x</title>
-//   - CDATA wrappers:       <title><![CDATA[x]]></title>
-//   - Self-closing tags:    <enclosure url="..." />
-//   - media:* and content:* namespaces
-//
-// Not built for: Atom 1.0 (most Mexican feeds are RSS 2.0), nested
-// custom namespaces. If a source produces Atom, we'd see empty items
-// and add a branch. So far the SOURCES list above is RSS 2.0.
+// ─── RSS parser (regex-based, permissive) ───────────────────────────────────
 
 function unwrapCdata(s) {
   if (!s) return '';
-  return String(s)
-    .replace(/^\s*<!\[CDATA\[/, '')
-    .replace(/\]\]>\s*$/, '')
-    .trim();
+  return String(s).replace(/^\s*<!\[CDATA\[/, '').replace(/\]\]>\s*$/, '').trim();
 }
-
 function decodeEntities(s) {
   if (!s) return '';
   return String(s)
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&#x27;/g, "'")
-    .replace(/&apos;/g, "'")
-    .replace(/&nbsp;/g, ' ');
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&#x27;/g, "'")
+    .replace(/&apos;/g, "'").replace(/&nbsp;/g, ' ');
 }
-
 function stripHtml(s) {
   if (!s) return '';
-  return String(s)
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return String(s).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
-
-// Pull the FIRST <img src="..."> from an HTML blob (typical pattern in
-// description / content:encoded for sites that don't ship media:thumbnail).
+function extractTag(xml, tag) {
+  const re = new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`, 'i');
+  const m = xml.match(re);
+  return m ? unwrapCdata(decodeEntities(m[1])) : '';
+}
+function extractAttr(xml, tag, attr) {
+  const re = new RegExp(`<${tag}\\b[^>]*\\b${attr}=["']([^"']+)["'][^>]*/?>`, 'i');
+  const m = xml.match(re);
+  return m ? m[1] : null;
+}
 function firstImageFromHtml(html) {
   if (!html) return null;
   const m = String(html).match(/<img[^>]+src=["']([^"']+)["']/i);
   return m ? m[1] : null;
 }
 
-function extractTag(xml, tag) {
-  // Match <tag>...</tag> non-greedily, with optional attributes.
-  const re = new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`, 'i');
-  const m = xml.match(re);
-  return m ? unwrapCdata(decodeEntities(m[1])) : '';
+// Extract the source name from a Google News title.
+// Google News convention: "Headline - Source Name". Some titles
+// embed the source mid-string before the trailing " - " — we always
+// take the LAST segment after the final " - " separator.
+function splitTitleSource(title) {
+  if (!title) return { title: '', source: null };
+  // Try em-dash first (rare), then hyphen+space.
+  const sepIdx = Math.max(title.lastIndexOf(' — '), title.lastIndexOf(' - '));
+  if (sepIdx <= 0) return { title: title.trim(), source: null };
+  const headline = title.slice(0, sepIdx).trim();
+  const source = title.slice(sepIdx + 3).trim();
+  // Don't strip if the trailing segment looks like part of the
+  // headline (long, has spaces with verbs etc).
+  if (source.length > 60) return { title: title.trim(), source: null };
+  return { title: headline, source };
 }
 
-function extractAllTags(xml, tag) {
-  const re = new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`, 'gi');
-  const out = [];
-  let m;
-  while ((m = re.exec(xml)) !== null) {
-    out.push(unwrapCdata(decodeEntities(m[1])));
-  }
-  return out;
+// Favicon URL for a host name — used as a small visual identifier
+// on cards when Google News doesn't include a thumbnail. Falls
+// through `https:` in the CSP allowlist.
+function faviconForUrl(url) {
+  if (!url) return null;
+  try {
+    const host = new URL(url).hostname;
+    return `https://www.google.com/s2/favicons?domain=${host}&sz=128`;
+  } catch { return null; }
 }
 
-// Pull a self-closing or empty tag's attribute. e.g.
-// extractAttr(xml, 'enclosure', 'url') → 'https://...'
-function extractAttr(xml, tag, attr) {
-  const re = new RegExp(`<${tag}\\b[^>]*\\b${attr}=["']([^"']+)["'][^>]*/?>`, 'i');
-  const m = xml.match(re);
-  return m ? m[1] : null;
-}
-
-function parseItems(xml, source) {
+function parseGoogleNewsItems(xml) {
   const items = [];
   const itemRe = /<item\b[\s\S]*?<\/item>/gi;
   let m;
   while ((m = itemRe.exec(xml)) !== null) {
     const block = m[0];
-    const title = stripHtml(extractTag(block, 'title'));
-    const link  = stripHtml(extractTag(block, 'link'));
-    if (!title || !link) continue;
+    const titleRaw = stripHtml(extractTag(block, 'title'));
+    const link = stripHtml(extractTag(block, 'link'));
+    if (!titleRaw || !link) continue;
 
-    // Description comes in two flavors: <description> (short) and
-    // <content:encoded> (full HTML). Prefer description for the
-    // summary; pull image from whichever has one.
+    const { title, source } = splitTitleSource(titleRaw);
     const description = extractTag(block, 'description');
-    const contentEncoded = extractTag(block, 'content:encoded');
-    const summaryHtml = description || contentEncoded || '';
-    const summary = stripHtml(summaryHtml).slice(0, 280);
-
-    // Image: enclosure → media:thumbnail → media:content → first <img>
-    const image =
-         extractAttr(block, 'enclosure', 'url')
-      || extractAttr(block, 'media:thumbnail', 'url')
-      || extractAttr(block, 'media:content', 'url')
-      || firstImageFromHtml(contentEncoded || description)
-      || null;
-
-    const pubDateRaw = extractTag(block, 'pubDate') || extractTag(block, 'dc:date');
+    const summary = stripHtml(description).slice(0, 280);
+    const pubDateRaw = extractTag(block, 'pubDate');
     const publishedAt = pubDateRaw ? new Date(pubDateRaw) : null;
     const publishedAtIso = (publishedAt && !Number.isNaN(publishedAt.getTime()))
       ? publishedAt.toISOString() : null;
 
-    const feedCategories = extractAllTags(block, 'category')
-      .map(c => stripHtml(c))
-      .filter(Boolean);
-
-    const guidRaw = extractTag(block, 'guid');
-    const guid = stripHtml(guidRaw) || link;
+    // Google News rarely ships images, but check just in case.
+    const image =
+        extractAttr(block, 'enclosure', 'url')
+      || extractAttr(block, 'media:thumbnail', 'url')
+      || extractAttr(block, 'media:content', 'url')
+      || firstImageFromHtml(description)
+      || null;
 
     items.push({
-      sourceId: source.id,
-      sourceName: source.name,
-      sourceLean: source.lean,
       title,
-      url: link,
+      url: canonicalizeUrl(link),
       summary,
       image,
+      sourceName: source,           // raw label from title (may be null)
       publishedAt: publishedAtIso,
-      feedCategories,
-      guid,
     });
   }
   return items;
 }
 
-// ─── Fetcher ────────────────────────────────────────────────────────────────
+// ─── Fetch ──────────────────────────────────────────────────────────────────
 
-async function fetchOneSource(source, signal) {
+async function fetchGoogleCategory(category, signal) {
+  const query = CATEGORY_QUERIES[category];
+  if (!query) return [];
+  const url = `${GNEWS_BASE}?q=${encodeURIComponent(query)}&${GNEWS_LOCALE}`;
   try {
-    const res = await fetch(source.rss, {
+    const res = await fetch(url, {
       headers: {
-        'User-Agent': 'PronosBot/1.0 (https://pronos.io; news aggregator)',
-        'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+        'User-Agent': GNEWS_UA,
+        'Accept': 'application/rss+xml, application/xml, */*',
       },
+      redirect: 'follow',
       signal,
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const xml = await res.text();
-    return parseItems(xml, source);
+    const raw = parseGoogleNewsItems(xml);
+    return raw.map(it => ({ ...it, category }));
   } catch (e) {
-    console.warn('[news-mexico] feed fetch failed', { sourceId: source.id, error: e?.message });
+    console.warn('[news-mexico] gnews fetch failed', { category, error: e?.message });
     return [];
   }
 }
 
 // ─── Dedup ──────────────────────────────────────────────────────────────────
-// Two items are considered the same story if their normalized titles
-// are highly overlapping. We use a cheap shingle-based Jaccard
-// approximation rather than full Levenshtein — fast for ~60 items.
+// Two passes:
+//   1. URL-exact dedup (same canonical URL across categories — one
+//      politica story might also surface in 'general')
+//   2. Title-shingle Jaccard for cross-outlet near-duplicates ("AMLO
+//      announces X" from El Universal + Milenio = same story)
 
-function shingles(s, n = 3) {
+function shingles(s, n = 4) {
   const out = new Set();
   const trimmed = normalize(s).replace(/[^a-z0-9 ]/g, '');
-  for (let i = 0; i + n <= trimmed.length; i++) {
-    out.add(trimmed.slice(i, i + n));
-  }
+  for (let i = 0; i + n <= trimmed.length; i++) out.add(trimmed.slice(i, i + n));
   return out;
 }
-
-function jaccard(setA, setB) {
-  if (setA.size === 0 || setB.size === 0) return 0;
+function jaccard(a, b) {
+  if (a.size === 0 || b.size === 0) return 0;
   let inter = 0;
-  for (const v of setA) if (setB.has(v)) inter++;
-  const union = setA.size + setB.size - inter;
-  return inter / union;
+  for (const v of a) if (b.has(v)) inter++;
+  return inter / (a.size + b.size - inter);
 }
-
 const DEDUP_THRESHOLD = 0.55;
 
 function dedupe(items) {
-  // Stable: keep the FIRST item we see (already sorted by date descending
-  // when called), drop later near-duplicates.
+  // Stable: keep the FIRST item we see (already date-sorted desc).
+  const seenUrl = new Set();
   const kept = [];
   const keptShingles = [];
-  for (const item of items) {
-    const sh = shingles(item.title, 4);
+  for (const it of items) {
+    if (seenUrl.has(it.url)) continue;
+    seenUrl.add(it.url);
+    const sh = shingles(it.title, 4);
     let dupe = false;
     for (const ksh of keptShingles) {
       if (jaccard(sh, ksh) >= DEDUP_THRESHOLD) { dupe = true; break; }
     }
-    if (!dupe) {
-      kept.push(item);
-      keptShingles.push(sh);
-    }
+    if (dupe) continue;
+    kept.push(it);
+    keptShingles.push(sh);
   }
   return kept;
 }
 
-// ─── Cache ──────────────────────────────────────────────────────────────────
+// ─── Cache + refresh ────────────────────────────────────────────────────────
 
-let cache = { fetchedAt: 0, items: [] };
+let cache = { fetchedAt: 0, items: [], debug: {} };
 let inFlight = null;
 
 async function refreshCache() {
   const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), FEED_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), FEED_TIMEOUT_MS);
+  const debug = { categoryCounts: {}, fetchedAt: new Date().toISOString() };
   try {
+    const categories = Object.keys(CATEGORY_QUERIES);
     const all = await Promise.all(
-      SOURCES.map(s => fetchOneSource(s, controller.signal)),
+      categories.map(c => fetchGoogleCategory(c, controller.signal)),
     );
     let items = all.flat();
+    debug.rawCount = items.length;
 
-    // Drop items without dates or older than MAX_AGE_HOURS.
-    const cutoff = Date.now() - MAX_AGE_HOURS * 60 * 60_000;
-    items = items.filter(i => i.publishedAt && new Date(i.publishedAt).getTime() >= cutoff);
-
-    // Sort newest first BEFORE dedup so we keep the freshest copy of
-    // any cross-outlet duplicate.
-    items.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
-    items = dedupe(items);
-
-    // Classify each item once (cached on the row).
+    // Filter to preferred outlets + tag with our outlet id.
+    const filtered = [];
     for (const it of items) {
-      it.category = classify(it);
+      const src = matchSource(it.sourceName);
+      if (!src) continue;
+      filtered.push({
+        ...it,
+        sourceId: src.id,
+        sourceName: it.sourceName, // keep raw for display
+        sourcePriority: src.priority,
+        // Favicon serves as a lightweight visual identifier when the
+        // article doesn't ship its own thumbnail (Google News usually
+        // doesn't). Falls through `https:` in the CSP allowlist.
+        favicon: faviconForUrl(it.url),
+      });
+    }
+    debug.preferredCount = filtered.length;
+
+    // Drop too-old items.
+    const cutoff = Date.now() - MAX_AGE_HOURS * 60 * 60_000;
+    let recent = filtered.filter(i => i.publishedAt
+      && new Date(i.publishedAt).getTime() >= cutoff);
+    debug.recentCount = recent.length;
+
+    // Sort newest first, then dedupe.
+    recent.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+    let deduped = dedupe(recent);
+    debug.dedupedCount = deduped.length;
+
+    // Per-category trim so we have variety in 'featured'.
+    const perCat = {};
+    const balanced = [];
+    for (const it of deduped) {
+      const c = it.category || 'general';
+      perCat[c] = (perCat[c] || 0) + 1;
+      if (perCat[c] <= MAX_ITEMS_PER_CATEGORY) balanced.push(it);
+    }
+    debug.balancedCount = balanced.length;
+
+    // Hard cap on total.
+    const final = balanced.slice(0, MAX_TOTAL_ITEMS);
+
+    // Per-category counts for the API debug response.
+    for (const it of final) {
+      debug.categoryCounts[it.category] = (debug.categoryCounts[it.category] || 0) + 1;
     }
 
-    cache = { fetchedAt: Date.now(), items: items.slice(0, MAX_ITEMS) };
+    cache = { fetchedAt: Date.now(), items: final, debug };
   } catch (e) {
     console.error('[news-mexico] refresh failed', { message: e?.message });
   } finally {
-    clearTimeout(t);
+    clearTimeout(timeout);
   }
 }
 
 /**
- * Public: returns up to MAX_ITEMS news items, optionally filtered by
- * category. Featured = top items across all categories, sorted by date.
- *
- * Returns a structure ready to ship as JSON to the client:
- *   {
- *     fetchedAt: <ISO>,
- *     items: [...],
- *     counts: { politica: N, economia: N, ... },
- *     sources: [{ id, name, lean }, ...]
- *   }
+ * Public: returns up to MAX_TOTAL_ITEMS news items, optionally filtered
+ * by category. Featured = mixed across categories, sorted by date.
  */
-export async function getMexicanNews({ category = 'featured', limit = MAX_ITEMS } = {}) {
+export async function getMexicanNews({ category = 'featured', limit = MAX_TOTAL_ITEMS } = {}) {
   const now = Date.now();
   const cacheAge = now - (cache.fetchedAt || 0);
   const stale = cacheAge >= CACHE_TTL_MS;
   const empty = !cache.items?.length;
 
   if (empty) {
-    // Cold — wait for a fresh fetch.
     if (!inFlight) inFlight = refreshCache().finally(() => { inFlight = null; });
     await inFlight;
   } else if (stale) {
-    // Stale-while-revalidate — serve current, kick a background refresh.
     if (!inFlight) inFlight = refreshCache().finally(() => { inFlight = null; });
   }
 
   const counts = {};
-  for (const item of cache.items) {
-    counts[item.category] = (counts[item.category] || 0) + 1;
-  }
+  for (const it of cache.items) counts[it.category] = (counts[it.category] || 0) + 1;
 
   let filtered = cache.items;
   if (category && category !== 'featured') {
@@ -432,9 +413,9 @@ export async function getMexicanNews({ category = 'featured', limit = MAX_ITEMS 
     items: filtered,
     counts,
     totalCount: cache.items.length,
-    sources: SOURCES.map(s => ({ id: s.id, name: s.name, lean: s.lean })),
+    sources: PREFERRED_SOURCES.map(s => ({ id: s.id, priority: s.priority })),
+    debug: cache.debug,
   };
 }
 
-// Exposed for the API endpoint to validate `?category=` input.
 export const VALID_CATEGORIES = NEWS_CATEGORIES;

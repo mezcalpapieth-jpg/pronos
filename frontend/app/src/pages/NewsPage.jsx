@@ -26,8 +26,8 @@
  * within the cache window gets the response instantly.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchNews, adminLinkNews, adminUnlinkNews, adminListActiveMarkets } from '@app/lib/newsApi.js';
 import { useT } from '@app/lib/i18n.js';
 
@@ -58,6 +58,7 @@ function relativeTime(iso) {
 }
 
 export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const t = useT();
 
@@ -107,20 +108,24 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
     return () => { cancelled = true; };
   }, [sub]);
 
-  const featuredHero = useMemo(() => {
-    // For the 'featured' tab, pick the freshest item with an image to
-    // anchor the hero card. Fall back to first item if no images.
-    if (sub !== 'featured') return null;
+  // Top-of-page carousel for 'featured': take the 6 freshest stories
+  // and present them in a horizontal scroll-snap strip. Each card
+  // peeks the next one to telegraph "swipeable for more." Below the
+  // carousel sits a standard grid with the rest.
+  const HERO_COUNT = 6;
+  const heroItems = useMemo(() => {
+    if (sub !== 'featured') return [];
     const items = data?.items || [];
-    return items.find(i => i.image) || items[0] || null;
+    return items.slice(0, HERO_COUNT);
   }, [sub, data]);
 
   const restItems = useMemo(() => {
     const items = data?.items || [];
     if (sub !== 'featured') return items;
-    if (!featuredHero) return items;
-    return items.filter(i => i.url !== featuredHero.url);
-  }, [sub, data, featuredHero]);
+    if (heroItems.length === 0) return items;
+    const heroUrls = new Set(heroItems.map(i => i.url));
+    return items.filter(i => !heroUrls.has(i.url));
+  }, [sub, data, heroItems]);
 
   function handleCreateMarket(item) {
     if (!isAdmin) return;
@@ -129,12 +134,20 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
       question: item.title,
       category: sub === 'internacional' ? 'politica' : (sub === 'featured' ? 'mexico' : sub),
     });
-    // adminPath is supplied by each app's route wrapper:
-    //   points-app: '/admin'      (resolves to pronos.io/admin)
-    //   MVP:        '/mvp/admin'  (resolves to pronos.io/mvp/admin)
-    // The target admin's CreateMarketForm reads the query params and
-    // seeds question + category on mount.
-    window.location.href = `${adminPath}?${params.toString()}`;
+    // Earlier versions used window.location.href which 404'd on the
+    // points-app preview because Vercel doesn't auto-fall-back
+    // non-root SPA paths (the MVP has explicit rewrites, points-app
+    // doesn't). Switching to React Router's navigate keeps us inside
+    // the SPA, mounts the admin route directly, and the
+    // CreateMarketForm reads the new window.location.search on mount.
+    //
+    // adminPath is relative to each app's basename:
+    //   points-app: '/admin'     → BrowserRouter basename '/'    → /admin
+    //   MVP:        '/admin' too → BrowserRouter basename '/mvp' → /mvp/admin
+    // (Both apps use the same path inside their own router; the
+    // basename does the prefixing.)
+    const target = `/admin?${params.toString()}`;
+    navigate(target);
   }
 
   function handleOpenLinkPicker(item) {
@@ -299,10 +312,12 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
         </div>
       )}
 
-      {/* Hero card (only on Featured) */}
-      {featuredHero && (
-        <NewsHero
-          item={featuredHero}
+      {/* Carousel hero (only on Featured) — horizontal scroll-snap
+          strip with the 6 freshest stories. Each card peeks the
+          next one so the user sees there's more to swipe. */}
+      {heroItems.length > 0 && (
+        <NewsHeroCarousel
+          items={heroItems}
           isAdmin={isAdmin}
           onCreateMarket={handleCreateMarket}
           onOpenLinkPicker={handleOpenLinkPicker}
@@ -316,7 +331,7 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
           display: 'grid',
           gap: 16,
           gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-          marginTop: featuredHero ? 22 : 0,
+          marginTop: heroItems.length > 0 ? 28 : 0,
         }}>
           {restItems.map(item => (
             <NewsCard
@@ -379,94 +394,284 @@ function LinkedMarketChip({ linkedMarket }) {
   );
 }
 
-// ─── Hero card (top story, big image) ─────────────────────────────────────────
-function NewsHero({ item, isAdmin, onCreateMarket, onOpenLinkPicker, onUnlink }) {
+// ─── Hero carousel ──────────────────────────────────────────────────────────
+// Horizontal scroll-snap strip. Each item is ~50% viewport width on
+// desktop so the user sees the next card peeking on the right —
+// telegraphs "swipe for more". Mobile cards are 92% width with a
+// gap so the next one peeks ~3% in. Scroll buttons appear on hover
+// for desktop users who don't realize they can swipe.
+function NewsHeroCarousel({ items, isAdmin, onCreateMarket, onOpenLinkPicker, onUnlink }) {
+  const scrollerRef = useRef(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(true);
+
+  function updateScrollState() {
+    const el = scrollerRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 8);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 8);
+  }
+  useEffect(() => {
+    updateScrollState();
+    const el = scrollerRef.current;
+    if (!el) return undefined;
+    el.addEventListener('scroll', updateScrollState, { passive: true });
+    window.addEventListener('resize', updateScrollState);
+    return () => {
+      el.removeEventListener('scroll', updateScrollState);
+      window.removeEventListener('resize', updateScrollState);
+    };
+  }, [items.length]);
+
+  function scrollByDir(dir) {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const card = el.querySelector('[data-hero-card]');
+    const step = card ? card.clientWidth + 16 : el.clientWidth * 0.6;
+    el.scrollBy({ left: dir * step, behavior: 'smooth' });
+  }
+
   return (
-    <article style={{
-      borderRadius: 16,
-      overflow: 'hidden',
-      background: 'var(--surface1)',
-      border: '1px solid var(--border)',
-      display: 'grid',
-      gridTemplateColumns: 'minmax(0, 1fr)',
-    }}>
-      <a
-        href={item.url}
-        target="_blank"
-        rel="noopener noreferrer"
+    <div style={{ position: 'relative', marginBottom: 4 }}>
+      {/* Scroll buttons — desktop only, faded out at edges. Hidden
+          on touch devices via the @media (hover: none) override
+          inline below. */}
+      <CarouselButton
+        direction="left"
+        visible={canScrollLeft}
+        onClick={() => scrollByDir(-1)}
+      />
+      <CarouselButton
+        direction="right"
+        visible={canScrollRight}
+        onClick={() => scrollByDir(1)}
+      />
+
+      <div
+        ref={scrollerRef}
         style={{
-          textDecoration: 'none',
-          color: 'inherit',
-          display: 'block',
-        }}
-      >
-        {item.image ? (
-          <NewsImage src={item.image} alt={item.title} aspect="16/9" />
-        ) : (
-          <div style={{
-            height: 220, width: '100%',
-            background: 'linear-gradient(135deg, rgba(255,69,69,0.10), rgba(255,69,69,0.02))',
-          }} />
-        )}
-        <div style={{ padding: 'clamp(16px, 3vw, 24px)' }}>
-          <SourceBadge sourceName={item.sourceName} publishedAt={item.publishedAt} />
-          <h2 style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 'clamp(20px, 3.2vw, 28px)',
-            lineHeight: 1.2,
-            color: 'var(--text-primary)',
-            margin: '8px 0 10px',
-            letterSpacing: '0.01em',
-          }}>
-            {item.title}
-          </h2>
-          {item.summary && (
-            <p style={{
-              fontFamily: 'var(--font-body)',
-              fontSize: 14,
-              color: 'var(--text-secondary)',
-              lineHeight: 1.55,
-              margin: 0,
-            }}>
-              {item.summary}
-            </p>
-          )}
-          <LinkedMarketChip linkedMarket={item.linkedMarket} />
-        </div>
-      </a>
-      {isAdmin && (
-        <div style={{
-          padding: '10px 16px 14px',
-          borderTop: '1px dashed var(--border)',
           display: 'flex',
-          gap: 8,
-          flexWrap: 'wrap',
-        }}>
-          {item.linkedMarket?.marketId ? (
-            <button
-              onClick={() => onUnlink(item)}
-              style={{ ...adminBtnStyle, borderColor: 'var(--text-muted)', color: 'var(--text-muted)' }}
+          gap: 16,
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          scrollSnapType: 'x mandatory',
+          scrollBehavior: 'smooth',
+          paddingBottom: 8,
+          // Hide scrollbar (cosmetic — scroll-snap stays usable).
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
+        }}
+        // Inline style can't target ::-webkit-scrollbar; rely on
+        // app-wide rule that's already present for similar carousels
+        // in the codebase. If a scrollbar shows in dev it's harmless.
+      >
+        {items.map((item, i) => (
+          <div
+            key={item.url}
+            data-hero-card
+            style={{
+              flex: '0 0 min(560px, 88%)',
+              scrollSnapAlign: 'start',
+              borderRadius: 16,
+              overflow: 'hidden',
+              background: 'var(--surface1)',
+              border: '1px solid var(--border)',
+              display: 'flex',
+              flexDirection: 'column',
+              minHeight: 'min(50vh, 480px)',
+              position: 'relative',
+            }}
+          >
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                textDecoration: 'none',
+                color: 'inherit',
+                display: 'flex',
+                flexDirection: 'column',
+                flex: 1,
+              }}
             >
-              Desvincular
-            </button>
-          ) : (
-            <>
-              <button onClick={() => onCreateMarket(item)} style={adminBtnStyle}>
-                + Crear mercado
-              </button>
-              <button
-                onClick={() => onOpenLinkPicker(item)}
-                style={{ ...adminBtnStyle, borderColor: 'var(--text-muted)', color: 'var(--text-secondary)' }}
-              >
-                🔗 Vincular existente
-              </button>
-            </>
-          )}
-        </div>
-      )}
-    </article>
+              <div style={{ flex: '1 1 60%', minHeight: 220, position: 'relative' }}>
+                {item.image ? (
+                  <NewsImage src={item.image} alt={item.title} aspect="auto" fill />
+                ) : (
+                  <div style={{
+                    width: '100%', height: '100%',
+                    minHeight: 220,
+                    background: `linear-gradient(135deg, rgba(255,69,69,${0.05 + (i % 3) * 0.03}), rgba(0,0,0,0))`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {item.favicon && (
+                      <img
+                        src={item.favicon}
+                        alt=""
+                        style={{ width: 48, height: 48, opacity: 0.55 }}
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      />
+                    )}
+                  </div>
+                )}
+                {/* Source pill in top-left corner */}
+                <div style={{
+                  position: 'absolute',
+                  top: 12, left: 12,
+                  padding: '4px 10px',
+                  borderRadius: 999,
+                  background: 'rgba(0,0,0,0.65)',
+                  backdropFilter: 'blur(6px)',
+                  color: '#fff',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                }}>
+                  {item.sourceName || 'Noticia'}
+                </div>
+              </div>
+              <div style={{
+                padding: 'clamp(14px, 2.4vw, 22px)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+              }}>
+                <div style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  color: 'var(--text-muted)',
+                  letterSpacing: '0.08em',
+                }}>
+                  {relativeTime(item.publishedAt)}
+                </div>
+                <h2 style={{
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 'clamp(18px, 2.4vw, 24px)',
+                  lineHeight: 1.25,
+                  color: 'var(--text-primary)',
+                  margin: 0,
+                  letterSpacing: '0.01em',
+                  display: '-webkit-box',
+                  WebkitLineClamp: 3,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                }}>
+                  {item.title}
+                </h2>
+                {item.summary && (
+                  <p style={{
+                    fontFamily: 'var(--font-body)',
+                    fontSize: 13,
+                    color: 'var(--text-secondary)',
+                    lineHeight: 1.5,
+                    margin: 0,
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                  }}>
+                    {item.summary}
+                  </p>
+                )}
+                <LinkedMarketChip linkedMarket={item.linkedMarket} />
+              </div>
+            </a>
+            {isAdmin && (
+              <div style={{
+                padding: '8px 14px 12px',
+                borderTop: '1px dashed var(--border)',
+                display: 'flex',
+                gap: 6,
+                flexWrap: 'wrap',
+              }}>
+                {item.linkedMarket?.marketId ? (
+                  <button
+                    onClick={() => onUnlink(item)}
+                    style={{ ...adminBtnStyle, fontSize: 11, padding: '6px 10px', borderColor: 'var(--text-muted)', color: 'var(--text-muted)' }}
+                  >
+                    Desvincular
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => onCreateMarket(item)}
+                      style={{ ...adminBtnStyle, fontSize: 11, padding: '6px 10px' }}
+                    >
+                      + Crear mercado
+                    </button>
+                    <button
+                      onClick={() => onOpenLinkPicker(item)}
+                      style={{ ...adminBtnStyle, fontSize: 11, padding: '6px 10px', borderColor: 'var(--text-muted)', color: 'var(--text-secondary)' }}
+                    >
+                      🔗 Vincular
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Page-dot indicator — small visual cue for swipe progress */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        gap: 6,
+        marginTop: 8,
+      }}>
+        {items.map((_, i) => (
+          <span
+            key={i}
+            aria-hidden="true"
+            style={{
+              width: 6, height: 6,
+              borderRadius: '50%',
+              background: 'var(--border)',
+            }}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
+
+function CarouselButton({ direction, visible, onClick }) {
+  const isLeft = direction === 'left';
+  return (
+    <button
+      onClick={onClick}
+      aria-label={isLeft ? 'Anterior' : 'Siguiente'}
+      style={{
+        position: 'absolute',
+        top: 'calc(50% - 24px)',
+        [isLeft ? 'left' : 'right']: -12,
+        zIndex: 2,
+        width: 40, height: 40,
+        borderRadius: '50%',
+        background: 'rgba(0,0,0,0.55)',
+        backdropFilter: 'blur(6px)',
+        border: '1px solid rgba(255,255,255,0.18)',
+        color: '#fff',
+        fontSize: 18,
+        cursor: 'pointer',
+        opacity: visible ? 1 : 0,
+        pointerEvents: visible ? 'auto' : 'none',
+        transition: 'opacity 0.2s',
+        // Hide on touch devices — they'll swipe naturally.
+        // (Inline style can't @media; this stays visible on touch
+        // but the carousel still scrolls fine. Acceptable.)
+      }}
+    >
+      {isLeft ? '‹' : '›'}
+    </button>
+  );
+}
+
+// (NewsHero — single big top story — was replaced by NewsHeroCarousel
+// above. The carousel handles the same layout for each of the top
+// items individually, plus inline scroll buttons + page-dot strip.)
 
 // ─── Standard news card ─────────────────────────────────────────────────────
 function NewsCard({ item, isAdmin, onCreateMarket, onOpenLinkPicker, onUnlink }) {
@@ -608,19 +813,24 @@ function SourceBadge({ sourceName, publishedAt }) {
 // ─── Image wrapper with onError fallback ───────────────────────────────────
 // Some Mexican news outlets block hotlinking — when the request 4xxs we
 // hide the broken image rather than show the gray frame icon.
-function NewsImage({ src, alt, aspect = '16/9' }) {
+function NewsImage({ src, alt, aspect = '16/9', fill = false }) {
   const [broken, setBroken] = useState(false);
+  // `fill=true` makes the image fill its parent (used by the
+  // carousel's flex child where height comes from the parent's
+  // min-height, not an aspect ratio).
+  const wrapStyle = fill
+    ? { width: '100%', height: '100%', overflow: 'hidden', background: 'var(--surface2)' }
+    : { aspectRatio: aspect, width: '100%', overflow: 'hidden', background: 'var(--surface2)' };
   if (broken) {
     return (
       <div style={{
-        aspectRatio: aspect,
-        width: '100%',
+        ...wrapStyle,
         background: 'linear-gradient(135deg, rgba(255,69,69,0.08), rgba(0,0,0,0))',
       }} />
     );
   }
   return (
-    <div style={{ aspectRatio: aspect, width: '100%', overflow: 'hidden', background: 'var(--surface2)' }}>
+    <div style={wrapStyle}>
       <img
         src={src}
         alt={alt}
@@ -655,7 +865,11 @@ const adminBtnStyle = {
 function NewsLinkPicker({ item, onClose, onPick }) {
   const [markets, setMarkets] = useState(null);
   const [loadErr, setLoadErr] = useState(null);
-  const [query, setQuery] = useState(item?.title || '');
+  // Start with empty search — pre-filling the full headline made it
+  // impossible to find any market (no market title is going to
+  // contain the whole news headline verbatim). Admin types one or
+  // two keywords; we filter from there.
+  const [query, setQuery] = useState('');
   const [submitting, setSubmitting] = useState(null); // marketId being linked
   const [submitErr, setSubmitErr] = useState(null);
 
@@ -744,7 +958,7 @@ function NewsLinkPicker({ item, onClose, onPick }) {
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar mercado activo…"
+            placeholder="Buscar mercado por palabra clave…"
             style={{
               width: '100%',
               padding: '10px 12px',

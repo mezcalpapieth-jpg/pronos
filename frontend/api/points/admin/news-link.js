@@ -18,6 +18,7 @@ import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
+import { canonicalizeUrl } from '../../_lib/news-mexico.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -40,8 +41,13 @@ export default async function handler(req, res) {
     await ensurePointsSchema(sql);
 
     if (req.method === 'POST') {
-      const { newsUrl, newsTitle, newsSource, marketId } = req.body || {};
-      if (!isValidUrl(newsUrl)) return res.status(400).json({ error: 'invalid_news_url' });
+      const { newsUrl: rawUrl, newsTitle, newsSource, marketId } = req.body || {};
+      if (!isValidUrl(rawUrl)) return res.status(400).json({ error: 'invalid_news_url' });
+      // Store the canonical form so re-fetches that ship the URL with
+      // different tracking params still match on lookup. Without this,
+      // a vinculo set today disappears tomorrow when Google News
+      // refreshes the feed with a new utm_source on the same article.
+      const newsUrl = canonicalizeUrl(rawUrl);
       const mid = Number(marketId);
       if (!Number.isInteger(mid) || mid <= 0) return res.status(400).json({ error: 'invalid_market_id' });
 
@@ -72,8 +78,10 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'DELETE') {
-      const newsUrl = req.query.newsUrl || req.body?.newsUrl;
-      if (!isValidUrl(newsUrl)) return res.status(400).json({ error: 'invalid_news_url' });
+      const rawUrl = req.query.newsUrl || req.body?.newsUrl;
+      if (!isValidUrl(rawUrl)) return res.status(400).json({ error: 'invalid_news_url' });
+      // Match canonical form to delete what was actually stored.
+      const newsUrl = canonicalizeUrl(rawUrl);
       await sql`DELETE FROM points_news_links WHERE news_url = ${newsUrl}`;
       return res.status(200).json({ ok: true });
     }
