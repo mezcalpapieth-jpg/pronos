@@ -18,6 +18,7 @@ import ShareButton from '@app/components/ShareButton.jsx';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
 import PointsBuyModal from '../components/PointsBuyModal.jsx';
 import MarketComments from '../components/MarketComments.jsx';
+import Crypto5MinDetail from '../components/Crypto5MinDetail.jsx';
 import TopHolders from '../components/TopHolders.jsx';
 
 // Accent colors for the multi-line price chart. Match the buy-button
@@ -565,6 +566,24 @@ export default function PointsMarketDetail({ onOpenLogin }) {
         </h2>
         <button className="btn-ghost" onClick={() => navigate('/')}>{t('points.detail.back')}</button>
       </div>
+    );
+  }
+
+  // 5-min crypto direction markets get a fully separate layout — live
+  // ticker chart + threshold rule + countdown + SUBE/BAJA buttons.
+  // Detected via cryptoMeta on the API response (only set when
+  // resolver_config.shape === 'binary-direction'). Routed here BEFORE
+  // the standard outcome / sparkline layout so the crypto variant
+  // doesn't share unrelated state.
+  if (market.cryptoMeta) {
+    return (
+      <main style={{
+        padding: isMobile ? '20px 16px 60px' : '40px 48px',
+        maxWidth: 1160,
+        margin: '0 auto',
+      }}>
+        <Crypto5MinDetail market={market} userPositions={userPositions} />
+      </main>
     );
   }
 

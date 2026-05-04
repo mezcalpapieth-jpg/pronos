@@ -76,6 +76,25 @@ export default async function handler(req, res) {
       const resolverType = r.resolver_type || null;
       const resolverSource = resolverCfg?.source || null;
 
+      // Crypto-5min direction markets ship a small public metadata
+      // bundle so the live-chart UI can render threshold + asset
+      // without needing to refetch resolver_config separately.
+      // Fields here are display-only — feedAddress / chainId stay
+      // server-side. Null for any other market shape.
+      const cryptoMeta = resolverCfg?.shape === 'binary-direction'
+        ? {
+            asset:            resolverCfg.asset            || null,
+            symbol:           resolverCfg.symbol           || null,
+            coinbaseProductId:resolverCfg.coinbaseProductId|| null,
+            threshold:        resolverCfg.threshold == null ? null : Number(resolverCfg.threshold),
+            openPrice:        resolverCfg.openPrice  == null ? null : Number(resolverCfg.openPrice),
+            closePrice:       resolverCfg.closePrice == null ? null : Number(resolverCfg.closePrice),
+            openedAt:         resolverCfg.openedAt          || null,
+            closesAt:         resolverCfg.closesAt          || null,
+            rounding:         resolverCfg.rounding          || 1,
+          }
+        : null;
+
       if (ammMode === 'parallel') {
         const legRows = await sql`
           SELECT l.id, l.leg_label, l.reserves, l.seed_liquidity, l.status, l.outcome,
@@ -123,6 +142,7 @@ export default async function handler(req, res) {
             createdAt: r.created_at,
             resolverType,
             resolverSource,
+            cryptoMeta,
             sport: r.sport || null,
             league: r.league || null,
             outcomeImages,
@@ -160,6 +180,7 @@ export default async function handler(req, res) {
           createdAt: r.created_at,
           resolverType,
           resolverSource,
+          cryptoMeta,
           sport: r.sport || null,
           league: r.league || null,
           outcomeImages,
