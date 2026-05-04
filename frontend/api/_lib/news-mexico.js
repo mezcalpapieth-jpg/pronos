@@ -153,6 +153,15 @@ const MAX_TOTAL_ITEMS = 180;       // hard cap across all outlets
 const MAX_AGE_HOURS = 48;
 const CACHE_TTL_MS = 5 * 60_000;
 const FEED_TIMEOUT_MS = 8_000;     // per-outlet timeout (independent)
+// Image enrichment for Google News items. The GN redirector page
+// has <meta property="og:image"> pointing at Google's own CDN
+// (lh3.googleusercontent.com) — we can scrape it without API keys
+// or a redirect decoder. We only enrich the top-N items per refresh
+// to keep the refresh cost bounded; the rest fall back to favicon.
+const IMAGE_ENRICH_TOP_N = 60;
+const IMAGE_FETCH_TIMEOUT_MS = 4_000;
+const IMAGE_FETCH_CONCURRENCY = 6;
+const IMAGE_CACHE_MAX_ENTRIES = 4000; // hard cap on memory growth
 
 // ─── URL canonicalization ───────────────────────────────────────────────────
 // Strip tracking params + trailing slash so stored news_url and
@@ -419,6 +428,123 @@ function dedupe(items) {
   return kept;
 }
 
+// ─── Image enrichment (Google News og:image scrape) ─────────────────────────
+// Persistent in-memory cache keyed by canonicalized news_url. Once
+// we've resolved an image for a URL, never re-fetch — the article's
+// og:image doesn't change.
+const imageCache = new Map(); // url → string | null (null = "tried, missed")
+
+function imageCacheGet(url) {
+  return imageCache.has(url) ? imageCache.get(url) : undefined;
+}
+function imageCacheSet(url, val) {
+  // Cap the cache so it can't grow unboundedly across long-lived
+  // serverless containers. When full, drop the oldest 25% (Map
+  // iteration order is insertion order, so slice from the start).
+  if (imageCache.size >= IMAGE_CACHE_MAX_ENTRIES) {
+    const drop = Math.floor(IMAGE_CACHE_MAX_ENTRIES * 0.25);
+    let i = 0;
+    for (const k of imageCache.keys()) {
+      if (i++ >= drop) break;
+      imageCache.delete(k);
+    }
+  }
+  imageCache.set(url, val);
+}
+
+// Extract og:image from an HTML document. Tries property="og:image"
+// in either attribute order, then twitter:image as a fallback.
+function extractOgImage(html) {
+  if (!html) return null;
+  const patterns = [
+    /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
+    /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i,
+  ];
+  for (const re of patterns) {
+    const m = html.match(re);
+    if (m && m[1]) return m[1];
+  }
+  return null;
+}
+
+async function fetchOgImage(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), IMAGE_FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': GNEWS_UA,
+        'Accept': 'text/html,application/xhtml+xml,*/*;q=0.8',
+      },
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+    return extractOgImage(html);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Limit concurrency so we don't open 60 sockets at once. Returns
+// when all input items have been processed (success or failure).
+async function runWithConcurrency(items, worker, n) {
+  let i = 0;
+  async function next() {
+    while (i < items.length) {
+      const idx = i++;
+      await worker(items[idx]);
+    }
+  }
+  const runners = Array.from({ length: Math.min(n, items.length) }, () => next());
+  await Promise.all(runners);
+}
+
+// Populate `image` on items that don't already have one (Google News
+// items that came without media:thumbnail). Looks up the in-memory
+// cache first; only fetches the redirector page for cache misses,
+// limited to the top-N items per refresh so the cost is bounded.
+async function enrichItemsWithImages(items) {
+  // Group items into:
+  //   already-has-image   → skip (direct RSS)
+  //   cache-hit (positive)→ stamp image from cache
+  //   cache-hit (negative)→ skip (we tried earlier, missed)
+  //   cache-miss          → fetch og:image and cache the result
+  const toFetch = [];
+  for (const it of items) {
+    if (it.image) continue;
+    const cached = imageCacheGet(it.url);
+    if (cached === undefined) {
+      toFetch.push(it);
+    } else if (cached) {
+      it.image = cached;
+    }
+    // cached === null means "we tried before, no image" — keep as-is
+  }
+
+  // Cap fetch count per refresh. Items beyond this fall through
+  // without images this round; they'll get fetched on a future
+  // refresh once the priority items finish caching.
+  const fetchTargets = toFetch.slice(0, IMAGE_ENRICH_TOP_N);
+
+  await runWithConcurrency(
+    fetchTargets,
+    async (it) => {
+      const img = await fetchOgImage(it.url);
+      imageCacheSet(it.url, img); // stores either URL or null
+      if (img) it.image = img;
+    },
+    IMAGE_FETCH_CONCURRENCY,
+  );
+
+  return { fetched: fetchTargets.length, cached: items.length - toFetch.length };
+}
+
 // ─── Cache + refresh ────────────────────────────────────────────────────────
 
 let cache = { fetchedAt: 0, items: [], debug: {} };
@@ -465,6 +591,15 @@ async function refreshCache() {
 
     // Hard cap.
     items = items.slice(0, MAX_TOTAL_ITEMS);
+
+    // Image enrichment: scrape og:image from the Google News
+    // redirector page for items that don't have an image yet.
+    // Bounded by IMAGE_ENRICH_TOP_N per refresh; results cached
+    // forever (article og:image doesn't change).
+    const imageStats = await enrichItemsWithImages(items);
+    debug.imagesFetched = imageStats.fetched;
+    debug.imagesCacheHits = imageStats.cached;
+    debug.imageCacheSize = imageCache.size;
 
     // Per-category counts for the debug response.
     for (const it of items) {
