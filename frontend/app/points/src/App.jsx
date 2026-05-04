@@ -22,7 +22,9 @@ import PointsHome from './pages/PointsHome.jsx';
 import PointsMarketDetail from './pages/PointsMarketDetail.jsx';
 import PointsCategoryPage from './pages/PointsCategoryPage.jsx';
 import PointsWorldCupPage from './pages/PointsWorldCupPage.jsx';
-import PointsNewsPage from './pages/PointsNewsPage.jsx';
+// Shared news page — same component used by the MVP build, with the
+// admin-handoff destination passed in via the `adminPath` prop.
+import NewsPage from '@app/pages/NewsPage.jsx';
 import PointsPortfolio from './pages/PointsPortfolio.jsx';
 import PointsEarn from './pages/PointsEarn.jsx';
 import PointsAdmin from './pages/PointsAdmin.jsx';
@@ -122,8 +124,9 @@ function Shell({ onOpenLogin, isAdmin }) {
             wins the match. */}
         <Route path="/c/world-cup" element={<PointsWorldCupPage />} />
         {/* News page — registered BEFORE the generic /c/:slug so the
-            specialized layout wins over the standard category grid. */}
-        <Route path="/c/noticias" element={<PointsNewsPage isAdmin={isAdmin} />} />
+            specialized layout wins over the standard category grid.
+            adminPath='/admin' targets the points-app's own admin. */}
+        <Route path="/c/noticias" element={<NewsPage isAdmin={isAdmin} adminPath="/admin" />} />
         <Route path="/c/:slug" element={<PointsCategoryPage />} />
         <Route path="/market" element={<PointsMarketDetail onOpenLogin={onOpenLogin} />} />
         <Route path="/portfolio" element={<PointsPortfolio />} />

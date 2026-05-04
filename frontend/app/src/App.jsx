@@ -23,6 +23,7 @@ const Portfolio = lazy(() => import('./pages/Portfolio.jsx'));
 const Admin = lazy(() => import('./pages/Admin.jsx'));
 const WorldCupPage = lazy(() => import('./pages/WorldCupPage.jsx'));
 const CategoryPage = lazy(() => import('./pages/CategoryPage.jsx'));
+const NewsPage = lazy(() => import('./pages/NewsPage.jsx'));
 
 function RouteFallback() {
   return (
@@ -86,6 +87,13 @@ export default function App() {
           <Route
             path="/c/world-cup"
             element={<WorldCupPage onOpenLogin={() => setLoginOpen(true)} />}
+          />
+          {/* News feed — registered BEFORE /c/:slug so the specialized
+              layout wins over the generic category grid. adminPath
+              points to the MVP admin since this is the MVP build. */}
+          <Route
+            path="/c/noticias"
+            element={<NewsPage isAdmin={userIsAdmin} adminPath="/mvp/admin" />}
           />
           <Route
             path="/c/:slug"

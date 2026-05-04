@@ -21,6 +21,7 @@ import React from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 export const CATEGORY_TABS = [
+  { slug: 'noticias',    label: 'Noticias',    news: true },
   { slug: 'all',         label: 'Trending'     },
   { slug: 'world-cup',   label: 'Mundial 2026', highlight: true },
   { slug: 'deportes',    label: 'Deportes'     },
@@ -73,6 +74,44 @@ export default function CategoryBar() {
                     letterSpacing: '0.08em',
                   }}
                 >
+                  {cat.label}
+                </button>
+              );
+            }
+            if (cat.news) {
+              // Same Noticias treatment as the points-app's CategoryBar
+              // (red gradient + pulsing live-dot) so the tab feels
+              // identical regardless of which app the user is on.
+              return (
+                <button
+                  key={cat.slug}
+                  onClick={() => handleClick(cat.slug)}
+                  className="filter-btn"
+                  style={{
+                    background: isActive
+                      ? 'linear-gradient(130deg, rgba(220,38,38,0.35), rgba(255,69,69,0.20))'
+                      : 'linear-gradient(130deg, rgba(220,38,38,0.16), rgba(255,69,69,0.08))',
+                    borderColor: isActive ? 'var(--red, #FF4545)' : 'rgba(255,69,69,0.35)',
+                    color: 'var(--text-primary)',
+                    fontWeight: 700,
+                    letterSpacing: '0.08em',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 7,
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      display: 'inline-block',
+                      width: 7,
+                      height: 7,
+                      borderRadius: '50%',
+                      background: 'var(--red, #FF4545)',
+                      boxShadow: '0 0 0 3px rgba(255,69,69,0.18)',
+                      animation: 'pronos-news-pulse 1.6s ease-in-out infinite',
+                    }}
+                  />
                   {cat.label}
                 </button>
               );

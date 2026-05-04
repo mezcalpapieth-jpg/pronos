@@ -1,5 +1,5 @@
 /**
- * PointsNewsPage — /c/noticias
+ * NewsPage — /c/noticias (shared between points-app and MVP)
  *
  * Aggregated Mexican news feed, sourced from /api/points/news. Top of
  * the page surfaces a hero card (the freshest item across all
@@ -10,8 +10,16 @@
  * Click-throughs:
  *   - Tap a card → opens the source URL in a new tab.
  *   - Admin only: "Crear mercado de esta noticia" pre-fills the admin
- *     CreateMarketForm via a query string handoff:
- *       /admin?tab=create&question=...&category=...
+ *     CreateMarketForm via a query string handoff. The destination
+ *     varies per app (PointsAdmin in points-app, MVP Admin in MVP) —
+ *     callers pass the right base path via the `adminPath` prop.
+ *
+ * Props:
+ *   adminPath  — base path for the admin create-market handoff.
+ *                Defaults to '/admin' (points-app's admin within
+ *                its own basename). Pass '/mvp/admin' from the MVP.
+ *   isAdmin    — boolean, derived in each app from its own admin
+ *                username allowlist.
  *
  * The feed is cached server-side (5-min TTL via _lib/news-mexico.js)
  * AND CDN-cached (60s s-maxage). On Vercel the second tab/visitor
@@ -20,7 +28,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { fetchNews, adminLinkNews, adminUnlinkNews, adminListActiveMarkets } from '../lib/pointsApi.js';
+import { fetchNews, adminLinkNews, adminUnlinkNews, adminListActiveMarkets } from '@app/lib/newsApi.js';
 import { useT } from '@app/lib/i18n.js';
 
 const SUB_TABS = [
@@ -49,7 +57,7 @@ function relativeTime(iso) {
   return `hace ${d} d`;
 }
 
-export default function PointsNewsPage({ isAdmin = false }) {
+export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const t = useT();
 
@@ -121,11 +129,12 @@ export default function PointsNewsPage({ isAdmin = false }) {
       question: item.title,
       category: sub === 'internacional' ? 'politica' : (sub === 'featured' ? 'mexico' : sub),
     });
-    // Targets the points-app's own admin (not MVP's). The points-app
-    // is the active surface right now; MVP is for on-chain mainnet
-    // ops that aren't live yet. PointsAdmin reads these query params
-    // on mount and seeds its CreateMarketForm.
-    window.location.href = `/admin?${params.toString()}`;
+    // adminPath is supplied by each app's route wrapper:
+    //   points-app: '/admin'      (resolves to pronos.io/admin)
+    //   MVP:        '/mvp/admin'  (resolves to pronos.io/mvp/admin)
+    // The target admin's CreateMarketForm reads the query params and
+    // seeds question + category on mount.
+    window.location.href = `${adminPath}?${params.toString()}`;
   }
 
   function handleOpenLinkPicker(item) {
