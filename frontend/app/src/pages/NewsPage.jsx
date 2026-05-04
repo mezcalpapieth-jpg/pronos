@@ -28,7 +28,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { fetchNews, adminLinkNews, adminUnlinkNews, adminListActiveMarkets } from '@app/lib/newsApi.js';
+import { fetchNews, adminLinkNews, adminUnlinkNews, adminListActiveMarkets, adminHideNews } from '@app/lib/newsApi.js';
 import { useT } from '@app/lib/i18n.js';
 
 const SUB_TABS = [
@@ -199,6 +199,23 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
     }
   }
 
+  // Admin: hide an irrelevant headline from the feed for everyone.
+  // Optimistic — drop locally first, fire-and-forget the persist.
+  // If the backend rejects, the next refresh will bring the item
+  // back; not worth a confirmation prompt for a non-destructive op.
+  async function handleHide(newsItem) {
+    setData(prev => prev && {
+      ...prev,
+      items: prev.items.filter(i => i.url !== newsItem.url),
+    });
+    try {
+      await adminHideNews({ newsUrl: newsItem.url, newsTitle: newsItem.title });
+    } catch (e) {
+      console.error('[news] hide failed', e);
+      // Surface gently; the local removal already happened.
+    }
+  }
+
   return (
     <main style={{
       maxWidth: 1100,
@@ -322,6 +339,7 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
           onCreateMarket={handleCreateMarket}
           onOpenLinkPicker={handleOpenLinkPicker}
           onUnlink={handleUnlink}
+          onHide={handleHide}
         />
       )}
 
@@ -341,6 +359,7 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
               onCreateMarket={handleCreateMarket}
               onOpenLinkPicker={handleOpenLinkPicker}
               onUnlink={handleUnlink}
+              onHide={handleHide}
             />
           ))}
         </div>
@@ -400,7 +419,7 @@ function LinkedMarketChip({ linkedMarket }) {
 // telegraphs "swipe for more". Mobile cards are 92% width with a
 // gap so the next one peeks ~3% in. Scroll buttons appear on hover
 // for desktop users who don't realize they can swipe.
-function NewsHeroCarousel({ items, isAdmin, onCreateMarket, onOpenLinkPicker, onUnlink }) {
+function NewsHeroCarousel({ items, isAdmin, onCreateMarket, onOpenLinkPicker, onUnlink, onHide }) {
   const scrollerRef = useRef(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
@@ -514,10 +533,17 @@ function NewsHeroCarousel({ items, isAdmin, onCreateMarket, onOpenLinkPicker, on
                     )}
                   </div>
                 )}
-                {/* Source pill in top-left corner */}
+                {/* Admin hide button — top-left corner of the image.
+                    Click stops propagation so the parent <a> doesn't
+                    open the article. */}
+                {isAdmin && (
+                  <HideButton onHide={onHide} item={item} />
+                )}
+                {/* Source pill in top-right corner (was top-left
+                    until the hide button took that spot). */}
                 <div style={{
                   position: 'absolute',
-                  top: 12, left: 12,
+                  top: 12, right: 12,
                   padding: '4px 10px',
                   borderRadius: 999,
                   background: 'rgba(0,0,0,0.65)',
@@ -674,7 +700,7 @@ function CarouselButton({ direction, visible, onClick }) {
 // items individually, plus inline scroll buttons + page-dot strip.)
 
 // ─── Standard news card ─────────────────────────────────────────────────────
-function NewsCard({ item, isAdmin, onCreateMarket, onOpenLinkPicker, onUnlink }) {
+function NewsCard({ item, isAdmin, onCreateMarket, onOpenLinkPicker, onUnlink, onHide }) {
   return (
     <article style={{
       borderRadius: 12,
@@ -683,7 +709,13 @@ function NewsCard({ item, isAdmin, onCreateMarket, onOpenLinkPicker, onUnlink })
       border: '1px solid var(--border)',
       display: 'flex',
       flexDirection: 'column',
+      position: 'relative', // anchor the absolute hide button
     }}>
+      {/* Admin hide button — top-left corner of the card, overlaid on
+          the image. Outside the <a> below so click doesn't navigate. */}
+      {isAdmin && (
+        <HideButton onHide={onHide} item={item} />
+      )}
       <a
         href={item.url}
         target="_blank"
@@ -858,6 +890,48 @@ const adminBtnStyle = {
   borderRadius: 8,
   cursor: 'pointer',
 };
+
+// ─── Admin hide button ──────────────────────────────────────────────────────
+// Small "−" overlay at top-left of every news card image, visible
+// only to admins. Click stops propagation + prevents default so the
+// parent <a> doesn't navigate to the article. Persists via
+// /api/points/admin/news-hide; the optimistic local removal happens
+// in the parent's onHide handler.
+function HideButton({ onHide, item }) {
+  function handleClick(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    onHide?.(item);
+  }
+  return (
+    <button
+      onClick={handleClick}
+      title="Ocultar de la lista"
+      aria-label="Ocultar noticia"
+      style={{
+        position: 'absolute',
+        top: 8, left: 8,
+        zIndex: 3,
+        width: 28, height: 28,
+        borderRadius: '50%',
+        background: 'rgba(0,0,0,0.65)',
+        backdropFilter: 'blur(6px)',
+        border: '1px solid rgba(255,255,255,0.2)',
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: 700,
+        lineHeight: 1,
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 0,
+      }}
+    >
+      −
+    </button>
+  );
+}
 
 // ─── Link picker modal ──────────────────────────────────────────────────────
 // Admin opens this from any news card. Fetches active markets once on

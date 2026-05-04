@@ -177,6 +177,21 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_news_links_market
     ON points_news_links(market_id) WHERE market_id IS NOT NULL`,
 
+  // ── News hide list (admin curation) ──────────────────────────────────────
+  // Admins flagging individual news items as irrelevant so they
+  // disappear from /c/noticias for everyone. Persistent across
+  // cache refreshes — even if the same article re-enters the feed
+  // from a different fetch, the hidden flag still applies. Soft
+  // signal only: rows live forever (until the URL ages out
+  // naturally), so undoing is just a DELETE on the same news_url.
+  `CREATE TABLE IF NOT EXISTS points_news_hidden (
+    id         SERIAL PRIMARY KEY,
+    news_url   TEXT UNIQUE NOT NULL,
+    news_title TEXT,
+    hidden_by  TEXT,
+    hidden_at  TIMESTAMPTZ DEFAULT NOW()
+  )`,
+
   // final_score: human-readable final result for resolved markets.
   // Free-form TEXT so different market types encode what makes sense:
   //   - soccer / baseball match: "2-1", "México 3-2 Brasil"

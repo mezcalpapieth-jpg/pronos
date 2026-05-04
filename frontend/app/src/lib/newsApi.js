@@ -75,3 +75,28 @@ export async function adminUnlinkNews(newsUrl) {
 export async function adminListActiveMarkets() {
   return getJson('/api/points/admin/markets?status=active&mode=all');
 }
+
+// Admin — POST /api/points/admin/news-hide
+// Hide a news item from the /c/noticias feed for everyone. Persists
+// via canonical news_url so a re-enter of the same article (with
+// fresh tracking params) stays hidden.
+export async function adminHideNews({ newsUrl, newsTitle }) {
+  return postJson('/api/points/admin/news-hide', { newsUrl, newsTitle });
+}
+
+// Admin — DELETE /api/points/admin/news-hide?newsUrl=...
+// (currently unexposed in the UI; kept for future "undo hide" flow)
+export async function adminUnhideNews(newsUrl) {
+  const q = new URLSearchParams({ newsUrl });
+  const res = await fetch(`/api/points/admin/news-hide?${q}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data?.error || `HTTP ${res.status}`);
+    err.code = data?.error;
+    throw err;
+  }
+  return data;
+}

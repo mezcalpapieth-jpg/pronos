@@ -46,31 +46,38 @@ export default async function handler(req, res) {
 
     const data = await getMexicanNews({ category, limit });
 
-    // Enrich items with admin-curated market links. We pull all
-    // active links for the URLs we're about to ship in one query
-    // (small set — at most `limit` rows) and stitch them in.
-    // Schema-drift tolerant: if the table doesn't exist yet on this
-    // DB (warm Lambda from before the migration), the catch falls
-    // through and we just ship items without `linkedMarket` set.
+    // Enrich items with admin-curated market links + filter out
+    // admin-hidden items in a single DB pass per pageload. Both
+    // tables key on news_url; we batch their lookups to keep the
+    // request cheap.
     let linkedByUrl = new Map();
+    let hiddenSet = new Set();
     try {
       await ensurePointsSchema(schemaSql);
       const urls = data.items.map(i => i.url).filter(Boolean);
       if (urls.length > 0) {
-        const rows = await sql`
-          SELECT nl.news_url, nl.market_id,
-                 m.question AS market_question,
-                 m.status   AS market_status,
-                 m.category AS market_category,
-                 m.icon     AS market_icon,
-                 m.outcome  AS market_outcome
-          FROM points_news_links nl
-          LEFT JOIN points_markets m ON m.id = nl.market_id
-          WHERE nl.news_url = ANY(${urls}::text[])
-            AND nl.market_id IS NOT NULL
-            AND (m.archived_at IS NULL OR m.id IS NULL)
-        `;
-        for (const r of rows) {
+        // Run link + hide queries in parallel — same input set,
+        // independent results.
+        const [links, hidden] = await Promise.all([
+          sql`
+            SELECT nl.news_url, nl.market_id,
+                   m.question AS market_question,
+                   m.status   AS market_status,
+                   m.category AS market_category,
+                   m.icon     AS market_icon,
+                   m.outcome  AS market_outcome
+            FROM points_news_links nl
+            LEFT JOIN points_markets m ON m.id = nl.market_id
+            WHERE nl.news_url = ANY(${urls}::text[])
+              AND nl.market_id IS NOT NULL
+              AND (m.archived_at IS NULL OR m.id IS NULL)
+          `,
+          sql`
+            SELECT news_url FROM points_news_hidden
+            WHERE news_url = ANY(${urls}::text[])
+          `,
+        ]);
+        for (const r of links) {
           linkedByUrl.set(r.news_url, {
             marketId: Number(r.market_id),
             question: r.market_question,
@@ -80,15 +87,16 @@ export default async function handler(req, res) {
             outcome:  r.market_outcome,
           });
         }
+        for (const r of hidden) hiddenSet.add(r.news_url);
       }
     } catch (e) {
-      console.warn('[points/news] link enrichment skipped', { code: e?.code, message: e?.message?.slice(0, 120) });
+      console.warn('[points/news] link/hide enrichment skipped', { code: e?.code, message: e?.message?.slice(0, 120) });
     }
 
-    const enrichedItems = data.items.map(i => ({
-      ...i,
-      linkedMarket: linkedByUrl.get(i.url) || null,
-    }));
+    // Drop hidden items + decorate the rest with linkedMarket.
+    const enrichedItems = data.items
+      .filter(i => !hiddenSet.has(i.url))
+      .map(i => ({ ...i, linkedMarket: linkedByUrl.get(i.url) || null }));
 
     // CDN-friendly: cache 60s at the edge while still letting our
     // module-level cache do most of the dedup work.

@@ -27,16 +27,23 @@
  */
 
 // ─── Outlets ────────────────────────────────────────────────────────────────
-// Each outlet maps to a `site:<host>` Google News query. The id +
-// name + lean fields are kept for the API response and per-outlet
-// debug. Add or drop outlets by editing this array — no other
-// changes required.
+// Hybrid sourcing strategy per outlet:
+//   directRss — outlet's own RSS endpoint. Preferred when working
+//               because it ships real article images via
+//               <media:thumbnail> / <enclosure> / inline <img>.
+//   host      — domain for the Google News `site:<host>` fallback
+//               query. Used when directRss isn't set OR returns
+//               zero items (404/403/empty).
+// Probed 2026-05-04: only El Financiero still has a working public
+// RSS feed with items. Everyone else 404/403s or returns an HTML
+// page. The other 8 fall through to Google News.
 const OUTLETS = [
   { id: 'el-universal',    name: 'El Universal',       host: 'eluniversal.com.mx',     lean: 'center',         priority: 1 },
   { id: 'animal-politico', name: 'Animal Político',    host: 'animalpolitico.com',     lean: 'left',           priority: 1 },
   { id: 'aristegui',       name: 'Aristegui Noticias', host: 'aristeguinoticias.com',  lean: 'independent',    priority: 1 },
   { id: 'milenio',         name: 'Milenio',            host: 'milenio.com',            lean: 'center',         priority: 1 },
-  { id: 'el-financiero',   name: 'El Financiero',      host: 'elfinanciero.com.mx',    lean: 'center-right',   priority: 1 },
+  { id: 'el-financiero',   name: 'El Financiero',      host: 'elfinanciero.com.mx',    lean: 'center-right',   priority: 1,
+    directRss: 'https://www.elfinanciero.com.mx/rss/' },
   { id: 'sin-embargo',     name: 'Sin Embargo',        host: 'sinembargo.mx',          lean: 'left',           priority: 2 },
   { id: 'proceso',         name: 'Proceso',            host: 'proceso.com.mx',         lean: 'investigative',  priority: 2 },
   { id: 'noroeste',        name: 'Noroeste',           host: 'noroeste.com.mx',        lean: 'regional',       priority: 2 },
@@ -280,11 +287,56 @@ function parseGoogleNewsItems(xml) {
 
 // ─── Fetch ──────────────────────────────────────────────────────────────────
 
-// Fetch one outlet's feed via Google News' site:-scoped query.
-// Each outlet gets its own AbortController so a slow outlet can't
-// drag down the parallel batch. Returns up to ITEMS_PER_OUTLET
-// recent items, all already tagged with the outlet's id/name.
-async function fetchOneOutlet(outlet) {
+// Tag fetched items with outlet metadata. Used by both direct and
+// Google News paths so downstream dedup/sort/classify code is
+// agnostic to the source channel.
+function tagItem(it, outlet, channel) {
+  return {
+    ...it,
+    sourceId: outlet.id,
+    sourceName: outlet.name,
+    sourceLean: outlet.lean,
+    sourcePriority: outlet.priority,
+    favicon: faviconForUrl(it.url),
+    sourceChannel: channel, // 'direct' | 'gnews' — for debug
+  };
+}
+
+// Direct RSS fetcher — used when outlet.directRss is set. Reuses the
+// regex parser to pull title/link/image/pubDate. Direct items ship
+// real article images via media:thumbnail / enclosure / inline img,
+// which is the main reason we prefer this channel when available.
+async function fetchDirectRss(outlet) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FEED_TIMEOUT_MS);
+  try {
+    const res = await fetch(outlet.directRss, {
+      headers: {
+        'User-Agent': GNEWS_UA,
+        'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+      },
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const xml = await res.text();
+    const raw = parseGoogleNewsItems(xml); // same regex parser; works
+                                           // for both Google News + RSS 2.0
+    return raw.slice(0, ITEMS_PER_OUTLET).map(it => tagItem(it, outlet, 'direct'));
+  } catch (e) {
+    console.warn('[news-mexico] direct rss failed', { outletId: outlet.id, error: e?.message });
+    return null; // null signals "fall through to Google News"
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Google News site:-scoped fallback. Returns up to
+// ITEMS_PER_OUTLET items. No article images (Google News redirector
+// URLs don't expose og:image without resolving each one — too
+// expensive at refresh time). The frontend renders these cards
+// with a colored gradient + favicon instead.
+async function fetchGoogleNewsForOutlet(outlet) {
   const q = `site:${outlet.host}`;
   const url = `${GNEWS_BASE}?q=${encodeURIComponent(q)}&${GNEWS_LOCALE}`;
   const controller = new AbortController();
@@ -301,24 +353,29 @@ async function fetchOneOutlet(outlet) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const xml = await res.text();
     const raw = parseGoogleNewsItems(xml);
-    // Tag each item with the outlet metadata. The Google News-
-    // extracted source name (from " - <Outlet>" suffix) is kept
-    // around for display, but the canonical sourceId/Name come
-    // from the OUTLETS config — that's what the frontend reads.
-    return raw.slice(0, ITEMS_PER_OUTLET).map(it => ({
-      ...it,
-      sourceId: outlet.id,
-      sourceName: outlet.name,
-      sourceLean: outlet.lean,
-      sourcePriority: outlet.priority,
-      favicon: faviconForUrl(it.url),
-    }));
+    return raw.slice(0, ITEMS_PER_OUTLET).map(it => tagItem(it, outlet, 'gnews'));
   } catch (e) {
-    console.warn('[news-mexico] outlet fetch failed', { outletId: outlet.id, error: e?.message });
+    console.warn('[news-mexico] gnews fetch failed', { outletId: outlet.id, error: e?.message });
     return { __error: e?.message || 'fetch_failed', outletId: outlet.id };
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Per-outlet fetcher with channel-fallback: direct RSS first when
+// available, Google News if it fails or no directRss configured.
+// Returns either an array of items (success) or { __error, outletId }
+// sentinel (both channels failed) so the refresh code can surface
+// per-outlet status in the debug response.
+async function fetchOneOutlet(outlet) {
+  if (outlet.directRss) {
+    const direct = await fetchDirectRss(outlet);
+    if (Array.isArray(direct) && direct.length > 0) return direct;
+    // Fall through to Google News if direct RSS broke or returned
+    // zero items. Outlets where directRss is unreliable can still
+    // surface stories via the search index.
+  }
+  return fetchGoogleNewsForOutlet(outlet);
 }
 
 // ─── Dedup ──────────────────────────────────────────────────────────────────
