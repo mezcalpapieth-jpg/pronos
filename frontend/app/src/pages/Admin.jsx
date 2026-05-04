@@ -681,9 +681,13 @@ function PendingMarketsSection() {
 }
 
 // ═══ Create-market form ═════════════════════════════════════════════════════
-function CreateMarketForm({ onCreated }) {
-  const [question, setQuestion] = useState('');
-  const [category, setCategory] = useState('deportes');
+function CreateMarketForm({ onCreated, seed }) {
+  // `seed` arrives from a deep-link handoff (currently the points-app's
+  // /c/noticias "Crear mercado de esta noticia" button). When present
+  // we pre-fill question + category so the admin only has to fill in
+  // the trade-specific fields (outcomes, end time, etc).
+  const [question, setQuestion] = useState(seed?.question || '');
+  const [category, setCategory] = useState(seed?.category || 'deportes');
   const [icon, setIcon] = useState('⚽');
   const [outcomes, setOutcomes] = useState(['Sí', 'No']);
   const [outcomeImages, setOutcomeImages] = useState(['', '']);
@@ -1623,7 +1627,28 @@ export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
   const { authenticated } = usePointsAuth();
   const [refreshKey, setRefreshKey] = useState(0);
   const bumpRefresh = () => setRefreshKey(k => k + 1);
-  const [tab, setTab] = useState('create');
+
+  // Read initial tab + create-form seed from query string. Lets the
+  // points-app news page hand off "Crear mercado de esta noticia"
+  // links by deep-linking into /mvp/admin?tab=create&question=...&category=...
+  const initialTab = (() => {
+    if (typeof window === 'undefined') return 'create';
+    const sp = new URLSearchParams(window.location.search);
+    const t = sp.get('tab');
+    return ['create', 'generate', 'pending', 'markets', 'social', 'stats'].includes(t) ? t : 'create';
+  })();
+  const createSeed = (() => {
+    if (typeof window === 'undefined') return null;
+    const sp = new URLSearchParams(window.location.search);
+    const q = sp.get('question');
+    if (!q) return null;
+    return {
+      question: q.slice(0, 200),
+      category: (sp.get('category') || '').slice(0, 32) || null,
+    };
+  })();
+
+  const [tab, setTab] = useState(initialTab);
 
   const body = useMemo(() => {
     if (loading) return <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Cargando…</p>;
@@ -1671,7 +1696,7 @@ export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
         </div>
 
         {/* Active tab content */}
-        {tab === 'create'   && <CreateMarketForm onCreated={bumpRefresh} />}
+        {tab === 'create'   && <CreateMarketForm onCreated={bumpRefresh} seed={createSeed} />}
         {tab === 'generate' && (
           <>
             <OnchainStatusPanel />

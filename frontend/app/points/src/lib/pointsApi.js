@@ -337,3 +337,11 @@ export async function adminRolloverCycle(nextCycleLabel) {
     nextCycleLabel: nextCycleLabel || null,
   });
 }
+
+// ─── News (Mexican RSS aggregator) ──────────────────────────────────────────
+export async function fetchNews({ category = 'featured', limit = 60 } = {}) {
+  const q = new URLSearchParams();
+  if (category && category !== 'featured') q.set('category', category);
+  if (limit) q.set('limit', String(limit));
+  return getJson(`/api/points/news${q.toString() ? `?${q}` : ''}`);
+}

@@ -22,6 +22,7 @@ import PointsHome from './pages/PointsHome.jsx';
 import PointsMarketDetail from './pages/PointsMarketDetail.jsx';
 import PointsCategoryPage from './pages/PointsCategoryPage.jsx';
 import PointsWorldCupPage from './pages/PointsWorldCupPage.jsx';
+import PointsNewsPage from './pages/PointsNewsPage.jsx';
 import PointsPortfolio from './pages/PointsPortfolio.jsx';
 import PointsEarn from './pages/PointsEarn.jsx';
 import PointsAdmin from './pages/PointsAdmin.jsx';
@@ -120,6 +121,9 @@ function Shell({ onOpenLogin, isAdmin }) {
             bracket. Registered BEFORE the generic /c/:slug so it
             wins the match. */}
         <Route path="/c/world-cup" element={<PointsWorldCupPage />} />
+        {/* News page — registered BEFORE the generic /c/:slug so the
+            specialized layout wins over the standard category grid. */}
+        <Route path="/c/noticias" element={<PointsNewsPage isAdmin={isAdmin} />} />
         <Route path="/c/:slug" element={<PointsCategoryPage />} />
         <Route path="/market" element={<PointsMarketDetail onOpenLogin={onOpenLogin} />} />
         <Route path="/portfolio" element={<PointsPortfolio />} />

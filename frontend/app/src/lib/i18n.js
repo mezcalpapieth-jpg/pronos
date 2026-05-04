@@ -567,6 +567,7 @@ const STRINGS = {
   'points.top.title':              { es: 'Top holders',         en: 'Top holders' },
   'points.top.loading':            { es: 'Cargando…',           en: 'Loading…' },
 
+  'points.cat.noticias':      { es: 'Noticias',               en: 'News' },
   'points.cat.trending':      { es: '🔥 Trending',            en: '🔥 Trending' },
   'points.cat.worldCup':      { es: '🏆 Copa del Mundo',      en: '🏆 World Cup' },
   'points.cat.deportes':      { es: '⚽ Deportes',            en: '⚽ Sports' },

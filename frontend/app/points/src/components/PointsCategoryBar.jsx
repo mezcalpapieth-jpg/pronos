@@ -21,7 +21,10 @@ import { useT } from '@app/lib/i18n.js';
 // (used in /c/<slug>) to the i18n key that produces the label.
 // `highlight: true` applies the attention-grabbing tri-color
 // gradient treatment — used for the World Cup tab so it pops.
+// `news: true` applies a red-gradient + live-dot treatment for the
+// Noticias tab, less loud than world-cup but still distinctive.
 export const CATEGORY_TABS = [
+  { slug: 'noticias',    tKey: 'points.cat.noticias',   news: true },
   { slug: 'all',         tKey: 'points.cat.trending'    },
   { slug: 'world-cup',   tKey: 'points.cat.worldCup',   highlight: true },
   { slug: 'deportes',    tKey: 'points.cat.deportes'    },
@@ -86,6 +89,44 @@ export default function PointsCategoryBar() {
                     letterSpacing: '0.08em',
                   }}
                 >
+                  {t(cat.tKey)}
+                </button>
+              );
+            }
+            if (cat.news) {
+              // Noticias tab — single-hue red gradient + a pulsing
+              // live-dot. Distinctive but less loud than the World
+              // Cup's tri-color treatment.
+              return (
+                <button
+                  key={cat.slug}
+                  onClick={() => handleClick(cat.slug)}
+                  className="filter-btn"
+                  style={{
+                    background: isActive
+                      ? 'linear-gradient(130deg, rgba(220,38,38,0.35), rgba(255,69,69,0.20))'
+                      : 'linear-gradient(130deg, rgba(220,38,38,0.16), rgba(255,69,69,0.08))',
+                    borderColor: isActive ? 'var(--red, #FF4545)' : 'rgba(255,69,69,0.35)',
+                    color: 'var(--text-primary)',
+                    fontWeight: 700,
+                    letterSpacing: '0.08em',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 7,
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      display: 'inline-block',
+                      width: 7,
+                      height: 7,
+                      borderRadius: '50%',
+                      background: 'var(--red, #FF4545)',
+                      boxShadow: '0 0 0 3px rgba(255,69,69,0.18)',
+                      animation: 'pronos-news-pulse 1.6s ease-in-out infinite',
+                    }}
+                  />
                   {t(cat.tKey)}
                 </button>
               );
