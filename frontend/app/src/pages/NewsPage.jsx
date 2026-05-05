@@ -57,6 +57,29 @@ function relativeTime(iso) {
   return `hace ${d} d`;
 }
 
+// localStorage key for the source-filter dropdown. We store the
+// list of DISABLED source ids (not enabled) so newly-added sources
+// default to "shown" without anyone having to opt in. Each user's
+// preference persists across visits.
+const DISABLED_SOURCES_KEY = 'pronos.news.disabledSources.v1';
+
+function loadDisabledSources() {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = window.localStorage.getItem(DISABLED_SOURCES_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch { return new Set(); }
+}
+
+function saveDisabledSources(set) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(DISABLED_SOURCES_KEY, JSON.stringify(Array.from(set)));
+  } catch { /* private mode etc — silently ignore */ }
+}
+
 export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -70,6 +93,33 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
   // Picker state for admin "Vincular existente" — open when linkPickerFor
   // holds a news item, null when closed.
   const [linkPickerFor, setLinkPickerFor] = useState(null);
+  // Source-filter state. We track which source ids the user has
+  // DISABLED rather than enabled — new outlets we add later default
+  // to visible without forcing existing users to opt them in.
+  const [disabledSources, setDisabledSources] = useState(() => loadDisabledSources());
+  function toggleSourceDisabled(sourceId) {
+    setDisabledSources(prev => {
+      const next = new Set(prev);
+      if (next.has(sourceId)) next.delete(sourceId);
+      else next.add(sourceId);
+      saveDisabledSources(next);
+      return next;
+    });
+  }
+  function setAllSourcesEnabled() {
+    setDisabledSources(prev => {
+      const next = new Set();
+      saveDisabledSources(next);
+      return next;
+    });
+  }
+  function setAllSourcesDisabled(allIds) {
+    setDisabledSources(() => {
+      const next = new Set(allIds);
+      saveDisabledSources(next);
+      return next;
+    });
+  }
 
   // Persist sub-tab in URL so a refresh keeps you in the same view
   // and so links can deep-link into a category.
@@ -88,17 +138,18 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
     }
   }, [sub, searchParams, setSearchParams]);
 
-  // Fetch on sub change. Server caches across requests so this is cheap.
+  // Fetch ONCE per page visit (and on manual refresh): always pull
+  // the full feed regardless of sub-tab so we can drive both the
+  // category filter AND the source-filter counts client-side.
+  // Server caches for 5 min so the actual HTTP cost is one request
+  // per cache-cycle per visitor.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchNews({ category: sub, limit: 60 })
+    fetchNews({ category: 'featured', limit: 120 })
       .then(res => {
         if (cancelled) return;
-        // postJson / getJson wrapper returns { ok, data, status } in the
-        // points-app, but lib/pointsApi.fetchNews returns raw JSON via
-        // getJson — match the actual shape.
         const payload = res?.data || res;
         if (!payload || payload.error) throw new Error(payload?.error || 'news_failed');
         setData(payload);
@@ -106,7 +157,29 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
       .catch(e => { if (!cancelled) setError(e?.message || 'news_failed'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [sub]);
+  }, []);
+
+  // Source filter is applied client-side BEFORE the hero/rest split
+  // so disabled sources don't take hero slots. Counts in the sub-
+  // tabs also reflect the filtered set so users see what they can
+  // actually see.
+  const visibleItems = useMemo(() => {
+    const items = data?.items || [];
+    if (disabledSources.size === 0) return items;
+    return items.filter(i => !disabledSources.has(i.sourceId));
+  }, [data, disabledSources]);
+
+  // Filtered counts per sub-category — drive the sub-tab badges so
+  // they reflect what the user actually sees rather than the raw
+  // unfiltered server counts.
+  const visibleCounts = useMemo(() => {
+    const counts = {};
+    for (const it of visibleItems) {
+      counts[it.category] = (counts[it.category] || 0) + 1;
+    }
+    counts.featured = visibleItems.length;
+    return counts;
+  }, [visibleItems]);
 
   // Top-of-page carousel for 'featured': take the 6 freshest stories
   // and present them in a horizontal scroll-snap strip. Each card
@@ -115,17 +188,17 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
   const HERO_COUNT = 6;
   const heroItems = useMemo(() => {
     if (sub !== 'featured') return [];
-    const items = data?.items || [];
-    return items.slice(0, HERO_COUNT);
-  }, [sub, data]);
+    return visibleItems.slice(0, HERO_COUNT);
+  }, [sub, visibleItems]);
 
   const restItems = useMemo(() => {
-    const items = data?.items || [];
-    if (sub !== 'featured') return items;
-    if (heroItems.length === 0) return items;
+    if (sub !== 'featured') {
+      return visibleItems.filter(i => i.category === sub);
+    }
+    if (heroItems.length === 0) return visibleItems;
     const heroUrls = new Set(heroItems.map(i => i.url));
-    return items.filter(i => !heroUrls.has(i.url));
-  }, [sub, data, heroItems]);
+    return visibleItems.filter(i => !heroUrls.has(i.url));
+  }, [sub, visibleItems, heroItems]);
 
   function handleCreateMarket(item) {
     if (!isAdmin) return;
@@ -239,14 +312,28 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
           }} />
           en vivo · noticias de méxico
         </div>
-        <h1 style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 'clamp(28px, 5vw, 42px)',
-          color: 'var(--text-primary)', margin: 0, letterSpacing: '0.02em',
-          textTransform: 'uppercase',
+        <div style={{
+          display: 'flex', alignItems: 'center', flexWrap: 'wrap',
+          gap: 16,
         }}>
-          {t('points.cat.noticias') || 'Noticias'}
-        </h1>
+          <h1 style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 'clamp(28px, 5vw, 42px)',
+            color: 'var(--text-primary)', margin: 0, letterSpacing: '0.02em',
+            textTransform: 'uppercase',
+          }}>
+            {t('points.cat.noticias') || 'Noticias'}
+          </h1>
+          {data?.sources && data.sources.length > 0 && (
+            <SourceFilter
+              sources={data.sources}
+              disabled={disabledSources}
+              onToggle={toggleSourceDisabled}
+              onEnableAll={setAllSourcesEnabled}
+              onDisableAll={() => setAllSourcesDisabled(data.sources.map(s => s.id))}
+            />
+          )}
+        </div>
         <p style={{
           fontFamily: 'var(--font-body)',
           fontSize: 14,
@@ -261,7 +348,7 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
             fontFamily: 'var(--font-mono)', fontSize: 10,
             color: 'var(--text-muted)', marginTop: 4,
           }}>
-            Actualizado {relativeTime(data.fetchedAt)} · {data.totalCount || 0} historias · {(data.sources || []).length} fuentes
+            Actualizado {relativeTime(data.fetchedAt)} · {visibleItems.length} historias · {(data.sources || []).length - disabledSources.size}/{(data.sources || []).length} fuentes
           </div>
         )}
       </div>
@@ -273,7 +360,7 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
       }}>
         {SUB_TABS.map(tab => {
           const isActive = sub === tab.key;
-          const count = data?.counts?.[tab.key];
+          const count = visibleCounts[tab.key];
           return (
             <button
               key={tab.key}
@@ -938,6 +1025,183 @@ const adminBtnStyle = {
   textTransform: 'uppercase',
   padding: '8px 12px',
   borderRadius: 8,
+  cursor: 'pointer',
+};
+
+// ─── Source filter dropdown ────────────────────────────────────────────────
+// Sits inline next to the page title. Click to open a panel with a
+// checkbox per source — disabled sources are filtered out of the
+// feed client-side. Selection persists in localStorage so user
+// preferences survive refreshes. New outlets added later default
+// to "shown" because we store DISABLED ids, not enabled.
+function SourceFilter({ sources, disabled, onToggle, onEnableAll, onDisableAll }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  // Click-outside-to-close behavior. Tap target outside the panel
+  // → close. Doesn't run when the panel is closed (cheap).
+  useEffect(() => {
+    if (!open) return undefined;
+    function onDocClick(e) {
+      if (!wrapRef.current) return;
+      if (!wrapRef.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open]);
+
+  // Close on Esc.
+  useEffect(() => {
+    if (!open) return undefined;
+    function onKey(e) { if (e.key === 'Escape') setOpen(false); }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open]);
+
+  const enabledCount = sources.length - disabled.size;
+  const allEnabled = disabled.size === 0;
+
+  return (
+    <div ref={wrapRef} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '8px 14px',
+          borderRadius: 999,
+          background: allEnabled ? 'var(--surface1)' : 'rgba(255,69,69,0.08)',
+          border: `1px solid ${allEnabled ? 'var(--border)' : 'var(--red, #FF4545)'}`,
+          color: allEnabled ? 'var(--text-secondary)' : 'var(--red, #FF4545)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          fontWeight: 600,
+          cursor: 'pointer',
+        }}
+      >
+        Fuentes
+        <span style={{ opacity: 0.7, fontWeight: 500 }}>
+          {enabledCount}/{sources.length}
+        </span>
+        <span aria-hidden="true" style={{
+          fontSize: 9,
+          transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+          transition: 'transform 0.15s',
+        }}>
+          ▼
+        </span>
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute',
+          top: 'calc(100% + 8px)',
+          left: 0,
+          zIndex: 10,
+          minWidth: 260,
+          maxWidth: 'calc(100vw - 32px)',
+          background: 'var(--surface1)',
+          border: '1px solid var(--border)',
+          borderRadius: 12,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+          padding: '8px 0',
+        }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '8px 14px',
+            borderBottom: '1px solid var(--border)',
+            marginBottom: 4,
+          }}>
+            <span style={{
+              fontFamily: 'var(--font-mono)', fontSize: 10,
+              letterSpacing: '0.12em', color: 'var(--text-muted)',
+              textTransform: 'uppercase',
+            }}>
+              Fuentes
+            </span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button
+                onClick={onEnableAll}
+                style={miniBtnStyle}
+              >
+                Todas
+              </button>
+              <button
+                onClick={onDisableAll}
+                style={miniBtnStyle}
+              >
+                Ninguna
+              </button>
+            </div>
+          </div>
+
+          <div style={{ maxHeight: 360, overflowY: 'auto' }}>
+            {sources.map(s => {
+              const isDisabled = disabled.has(s.id);
+              return (
+                <label
+                  key={s.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '10px 14px',
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font-body)',
+                    fontSize: 13,
+                    color: isDisabled ? 'var(--text-muted)' : 'var(--text-primary)',
+                    transition: 'background 0.1s',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface2)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={!isDisabled}
+                    onChange={() => onToggle(s.id)}
+                    style={{
+                      cursor: 'pointer',
+                      accentColor: 'var(--red, #FF4545)',
+                      width: 16, height: 16,
+                    }}
+                  />
+                  <span style={{ flex: 1 }}>{s.name}</span>
+                  {s.lean && (
+                    <span style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 9,
+                      letterSpacing: '0.08em',
+                      color: 'var(--text-muted)',
+                      textTransform: 'uppercase',
+                    }}>
+                      {s.lean}
+                    </span>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const miniBtnStyle = {
+  background: 'transparent',
+  border: '1px solid var(--border)',
+  borderRadius: 6,
+  padding: '4px 8px',
+  fontFamily: 'var(--font-mono)',
+  fontSize: 10,
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  color: 'var(--text-secondary)',
   cursor: 'pointer',
 };
 
