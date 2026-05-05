@@ -117,7 +117,10 @@ export default async function handler(req, res) {
             AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
             AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
             AND m.archived_at IS NULL
-          ORDER BY m.end_time ASC
+          ORDER BY
+            CASE WHEN ${status}::text = 'resolved' THEN m.resolved_at END DESC NULLS LAST,
+            m.end_time ASC,
+            m.id ASC
           LIMIT ${limit}
         `
       : featuredOnly
@@ -131,7 +134,10 @@ export default async function handler(req, res) {
               AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
             AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
             AND m.archived_at IS NULL
-            ORDER BY m.end_time ASC
+            ORDER BY
+              CASE WHEN ${status}::text = 'resolved' THEN m.resolved_at END DESC NULLS LAST,
+              m.end_time ASC,
+              m.id ASC
             LIMIT ${limit}
           `
         : await sql`
@@ -143,7 +149,10 @@ export default async function handler(req, res) {
               AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
             AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
             AND m.archived_at IS NULL
-            ORDER BY m.end_time ASC
+            ORDER BY
+              CASE WHEN ${status}::text = 'resolved' THEN m.resolved_at END DESC NULLS LAST,
+              m.end_time ASC,
+              m.id ASC
             LIMIT ${limit}
           `;
 
