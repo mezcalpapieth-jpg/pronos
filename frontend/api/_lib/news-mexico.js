@@ -1,3 +1,5 @@
+import { fetchHomepageScrape, getScraperConfig } from './news-scraper.js';
+
 /**
  * Mexican news aggregator — Google News RSS backend, per-outlet queries.
  *
@@ -371,18 +373,35 @@ async function fetchGoogleNewsForOutlet(outlet) {
   }
 }
 
-// Per-outlet fetcher with channel-fallback: direct RSS first when
-// available, Google News if it fails or no directRss configured.
-// Returns either an array of items (success) or { __error, outletId }
-// sentinel (both channels failed) so the refresh code can surface
-// per-outlet status in the debug response.
+// Per-outlet fetcher with channel-fallback chain:
+//   1. Direct RSS (when working — only El Financiero today). Best
+//      because the RSS feed ships article images via media:thumbnail.
+//   2. Homepage HTML scrape (5 outlets — El Universal, Aristegui,
+//      Milenio, Proceso, Noroeste). Pulls real article images from
+//      <article> blocks on the outlet's homepage.
+//   3. Google News site:-scoped query (last resort, no images).
+// Each step is gated on the previous returning useful data.
 async function fetchOneOutlet(outlet) {
   if (outlet.directRss) {
     const direct = await fetchDirectRss(outlet);
     if (Array.isArray(direct) && direct.length > 0) return direct;
-    // Fall through to Google News if direct RSS broke or returned
-    // zero items. Outlets where directRss is unreliable can still
-    // surface stories via the search index.
+  }
+  // Homepage scrape — present for the 5 outlets we've validated.
+  // Returns null if no scraper config OR fetch failed.
+  const scrapeCfg = getScraperConfig(outlet.id);
+  if (scrapeCfg) {
+    const scraped = await fetchHomepageScrape(outlet, { timeoutMs: FEED_TIMEOUT_MS });
+    if (Array.isArray(scraped) && scraped.length > 0) {
+      // Tag with outlet metadata + favicon (the scraper sets sourceId/
+      // sourceName but doesn't add the lean / priority / favicon
+      // fields the rest of the pipeline expects).
+      return scraped.slice(0, ITEMS_PER_OUTLET).map(it => ({
+        ...it,
+        sourceLean: outlet.lean,
+        sourcePriority: outlet.priority,
+        favicon: faviconForUrl(it.url),
+      }));
+    }
   }
   return fetchGoogleNewsForOutlet(outlet);
 }
