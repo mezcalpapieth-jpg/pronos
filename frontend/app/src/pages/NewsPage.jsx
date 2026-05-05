@@ -171,11 +171,14 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
 
   // Filtered counts per sub-category — drive the sub-tab badges so
   // they reflect what the user actually sees rather than the raw
-  // unfiltered server counts.
+  // unfiltered server counts. Items can belong to multiple categories
+  // (an article about Sheinbaum's security plan tags both politica and
+  // seguridad), so each category gets a +1 for every match.
   const visibleCounts = useMemo(() => {
     const counts = {};
     for (const it of visibleItems) {
-      counts[it.category] = (counts[it.category] || 0) + 1;
+      const cats = it.categories || (it.category ? [it.category] : []);
+      for (const c of cats) counts[c] = (counts[c] || 0) + 1;
     }
     counts.featured = visibleItems.length;
     return counts;
@@ -193,7 +196,11 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
 
   const restItems = useMemo(() => {
     if (sub !== 'featured') {
-      return visibleItems.filter(i => i.category === sub);
+      // Multi-tag: an item shows up under any of its categories.
+      return visibleItems.filter(i => {
+        const cats = i.categories || (i.category ? [i.category] : []);
+        return cats.includes(sub);
+      });
     }
     if (heroItems.length === 0) return visibleItems;
     const heroUrls = new Set(heroItems.map(i => i.url));

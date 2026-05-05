@@ -78,73 +78,259 @@ export const NEWS_CATEGORIES = [
 ];
 
 // Category classifier — applied to each item's title + summary
-// AFTER fetching from per-outlet feeds. First matching pattern wins;
-// items that don't match any pattern are tagged 'general'. Keywords
-// are matched on the diacritic-stripped lowercase form.
+// AFTER fetching from per-outlet feeds. First matching pattern wins,
+// so order matters: very-specific categories (deportes, farandula)
+// run BEFORE more-ambiguous ones (internacional). Without that order,
+// "México vs Argentina mundial 2026" matches "argentina" → internacional
+// even though it's plainly sports. Items that don't match any pattern
+// are tagged 'general'. Keywords are matched on the diacritic-stripped
+// lowercase form.
 const CATEGORY_KEYWORDS = {
+  // Sports first — names and league terms that would otherwise get
+  // pulled into internacional / politica via overlapping country or
+  // person mentions.
+  deportes: [
+    // Soccer
+    /\bfutbol\b/, /\bliga mx\b/, /\bseleccion mexican\w+/, /\bel tri\b/,
+    /\bconcacaf\b/, /\bconmebol\b/, /\bcopa(?: america| oro| mx| del rey| libertadores| sudamericana)?\b/,
+    /\bmundial\b/, /\beliminator\w+/, /\bclasificator\w+/,
+    /\bclasico\b/, /\bclausura\b/, /\bapertura\b/, /\bjornada \d+\b/,
+    /\bgol(es|eador)?\b/, /\bpenal\b/, /\bautogol\b/,
+    /\bchampions league\b/, /\bpremier league\b/, /\bla liga\b/, /\bbundesliga\b/, /\bserie a\b/,
+    /\bchivas\b/, /\bamerica\b(?=.*(?:gol|partido|tigres|pumas|monterrey|liga|chivas))/i,
+    /\btigres\b/, /\bpumas\b/, /\bcruz azul\b/, /\bmonterrey\b(?=.*(?:liga|gol|partido|rayados))/i,
+    /\brayados\b/, /\btoluca\b/, /\bsanto\w+ laguna\b/, /\batlas\b/,
+    /\bmessi\b/, /\bcristiano\b/, /\bronaldo\b/, /\bmbappe\b/, /\bneymar\b/,
+    /\bmemo ochoa\b/, /\bguillermo ochoa\b/, /\bhirving lozano\b/, /\bedson alvarez\b/,
+    // F1 + motor
+    /\bf1\b/, /\bformula 1\b/, /\bgran premio\b/, /\bgrand prix\b/,
+    /\bchecó? perez\b/, /\bsergio perez\b/, /\bverstappen\b/, /\bhamilton\b/, /\bferrari\b/, /\bmclaren\b/,
+    /\bmotogp\b/, /\bnascar\b/, /\bindycar\b/,
+    // Basketball / NBA
+    /\bnba\b/, /\bbasquet\w+/, /\blebron\b/, /\bcurry\b/, /\bdoncic\b/,
+    // Baseball
+    /\bbeisbol\b/, /\bmlb\b/, /\bgrandes ligas\b/, /\btomateros\b/, /\bnaranjeros\b/, /\bdiablos rojos\b/,
+    // Football (American)
+    /\bnfl\b/, /\bsuper bowl\b/, /\btom brady\b/, /\bpatrick mahomes\b/,
+    // Boxing / MMA
+    /\bbox\w+/, /\bpelea\b/, /\bcombate\b/, /\bcanelo\b/, /\bsaul alvarez\b/,
+    /\bufc\b/, /\bmma\b/, /\bcinturon\b(?=.*(?:box|pelea|wbc|wba|wbo))/i,
+    /\bwbc\b/, /\bwba\b/, /\bwbo\b/, /\bibf\b/,
+    // Tennis
+    /\btenis\b/, /\bdjokovic\b/, /\balcaraz\b/, /\bsinner\b/, /\bnadal\b/, /\bswiatek\b/,
+    /\babierto (?:de )?(?:australia|francia|estados unidos|wimbledon|usa)\b/, /\broland garros\b/, /\bus open\b/, /\bwimbledon\b/, /\batp\b/, /\bwta\b/,
+    // Golf
+    /\bgolf\b/, /\bpga\b/, /\bliv golf\b/, /\bmasters\b(?=.*(?:augusta|golf|pga))/i,
+    /\bryder cup\b/,
+    // Olympics + general
+    /\bolimpic\w+/, /\bjuegos olim/, /\bparalimpic\w+/,
+    /\batletismo\b/, /\bnatacion\b/, /\bclavados\b/, /\bgimnasia\b/, /\bciclismo\b/,
+    /\bdeport\w+/, /\batlet\w+/, /\bcancha\b/, /\barbitr\w+/, /\bve\w+ vencer\b/,
+    /\bcampeon\w+/, /\btorneo\b/, /\bfinal\b(?=.*(?:gol|partido|copa|liga|nba|nfl|mlb))/i,
+  ],
+  // Entertainment before politica/internacional so celebrity mentions
+  // don't get pulled by political family names or country mentions in
+  // entertainment news.
+  farandula: [
+    // Mexican / Latin music + TV celebrities
+    /\bbelinda\b/, /\bdanna paola\b/, /\bgloria trevi\b/, /\bthalia\b/, /\bpaulina rubio\b/,
+    /\bbad bunny\b/, /\bkarol g\b/, /\bshakira\b/, /\bj balvin\b/, /\bricky martin\b/,
+    /\bchristian nodal\b/, /\bcazzu\b/, /\bangela aguilar\b/, /\bpepe aguilar\b/,
+    /\beugenio derbez\b/, /\bdiego luna\b/, /\bgael garcia\b/, /\beiza gonzalez\b/,
+    /\bkate del castillo\b/, /\bsalma hayek\b/, /\byalitza aparicio\b/,
+    /\btelevisa\b/, /\btv azteca\b/, /\bazteca uno\b/, /\bunivision\b/, /\btelemundo\b/,
+    /\btelenovel\w+/, /\breality( show)?\b/, /\brealiti\b/,
+    /\bla casa de los famosos\b/, /\bbig brother\b/, /\bmasterchef\b/, /\bmexicos got talent\b/,
+    /\bmiss (?:universo|mexico|mundo)\b/, /\bcertamen de belleza\b/,
+    // Award shows + TV/film events
+    /\bgrammys?\b/, /\blatin grammys?\b/, /\boscar\w*\b/, /\bgolden globe\w*\b/, /\bemmy\w*\b/,
+    /\bmtv vma\w*\b/, /\bbillboard\b/, /\bmet gala\b/,
+    // Celebrity drama / lifestyle keywords
+    /\binfluencer\w*\b/, /\byoutuber\w*\b/, /\btiktoker\w*\b/, /\bstreamer\w*\b/,
+    /\bromance\b/, /\bnovi(o|a)s?\b/, /\bbod\w+\b/, /\bdivorci\w+\b/, /\bseparac\w+\b/,
+    /\bembaraz\w+\b/, /\bbaby shower\b/, /\bcasamient\w+\b/,
+    /\bfarandul\w+/, /\bespectacul\w+/, /\bchism\w+/, /\bfan\w*\b/,
+    /\bcantante\b/, /\bactor\b/, /\bactriz\b/, /\bartista\b/,
+    /\bbeyonce\b/, /\btaylor swift\b/, /\bkim kardashian\b/, /\brihanna\b/, /\barian\w+ grande\b/,
+  ],
+  // Security before politica because a bunch of crime headlines mention
+  // governors / mayors but are clearly seguridad stories.
+  seguridad: [
+    /\bnarco\w+/, /\bcartel\b/, /\bcjng\b/, /\bcds\b/, /\bsinaloa\b(?=.*(?:cartel|cds|narco|chapo|el mayo|guzman))/i,
+    /\bel chapo\b/, /\bel mayo\b/, /\bguzman loera\b/, /\bovidio\b/,
+    /\bmatanza\b/, /\bmasacre\b/, /\bhomicidi\w+/, /\bsicari\w+/, /\bejecuta\w+/, /\batentado\b/,
+    /\barma(s|do)?\b(?=.*(?:fuego|asalto|crimen|delict|narco))/i,
+    /\bdetenid\w+/, /\bdetenci\w+/, /\bcaptur\w+/, /\boperat\w+\b/,
+    /\bguardia nacional\b/, /\bsedena\b/, /\bsemar\b/, /\bpolicia\b/, /\bagente\b(?=.*(?:detuvo|capturo|seguridad))/i,
+    /\bfgr\b/, /\bfiscal\w+/, /\bministerio publico\b/, /\bmp\b(?=.*(?:detuvo|caso))/i,
+    /\bsecuestr\w+/, /\bdesapareci\w+/, /\bdesaparici\w+/, /\bextorsion\w+/, /\bcobro de piso\b/,
+    /\brob(?:o|os|a|an|ar|aba|aban|aron|ado|ada|ados|ando)\b/, /\basalt\w+/, /\batraco\b/, /\binvasion\w+/,
+    /\bbloqu\w+\b(?=.*(?:carretera|via|ciudad|protesta|cni))/i,
+    /\bviolenc\w+/, /\bbalacer\w+/, /\btiroteo\b/, /\bdisparo\w*\b/,
+    /\bfeminicid\w+/, /\bviolaci\w+/, /\babus\w+ sexual/, /\bagresion\b/,
+    /\bcadaver\w*\b/, /\bcuerp(o|os) sin vida\b/, /\bfosa\b/, /\binhuma\w+ clandestin\w+/,
+    /\bcorrup\w+(?=.*(?:funcionario|servidor publico|gobierno|alcalde|gobernador))/i,
+    /\bdelincuen\w+/, /\bcrim(en|inal)\w*\b/,
+    /\bcarcel\b/, /\bpenal\b/, /\breclusorio\b/, /\baltiplano\b/,
+    // Natural disasters & civil emergencies — they were defaulting to general.
+    /\bsismo\b/, /\bterremoto\b/, /\bhuracan\w*\b/, /\btormenta\b/, /\bciclon\w*\b/,
+    /\binundac\w+/, /\bdesbord\w+/, /\bdeslizamiento\b/, /\bdeslave\b/,
+    /\bincendio\w*\b/, /\bevacuac\w+/, /\bemergenc\w+/, /\bproteccion civil\b/,
+    /\bsequia\b/, /\bcaravanas?\b(?=.*(?:migrante|frontera|tijuana))/i,
+    // General security-policy framing (caught a lot of headlines that
+    // were defaulting to 'politica' only when they're really both).
+    /\bseguridad nacional\b/, /\bseguridad publica\b/, /\bseguridad fronteriza\b/,
+    /\bplan de seguridad\b/, /\bestrategia de seguridad\b/, /\bcrisis de seguridad\b/,
+    /\bgolpe (?:al narco|al crimen)\b/,
+  ],
   politica: [
-    /\bsheinbaum\b/, /\bamlo\b/, /\bobrador\b/, /\bmorena\b/,
-    /\bpan\b/, /\bpri\b/, /\bprd\b/, /\bmovimiento ciudadano\b/,
-    /\bsenad\w+/, /\bdiputad\w+/, /\bcongres\w+/, /\bcamara\b/,
-    /\belector\w+/, /\bvotacion\w+/, /\bgobern\w+/, /\bcandidat\w+/,
-    /\bpresident\w+/, /\bsecretari\w+ de \w+/, /\bine\b/, /\bsuprema corte\b/,
-    /\bconstituci\w+/, /\bdecreto\b/, /\breforma\b/, /\bpolitic\w+/,
+    // Federal executive
+    /\bsheinbaum\b/, /\bclaudia sheinbaum\b/, /\bamlo\b/, /\bandres manuel\b/, /\bobrador\b/,
+    /\bpresidenc(?:ia|ial)\b/, /\bpalacio nacional\b/, /\bmananera\b/, /\bla mananera\b/,
+    /\bgabinete\b/, /\bsecretari[oa] de \w+/, /\bsubsecreta\w+/,
+    /\bcanciller\w*\b/, /\brelaciones exteriores\b/, /\bsre\b/,
+    /\bsegob\b/, /\bsedena\b(?=.*(?:secretaria|secretario))/i, /\bsemarnat\b/, /\bsep\b(?=.*(?:secretaria|secretario|educa))/i,
+    /\bsalud\b(?=.*(?:secretari|federal|funcionari|gobierno))/i,
+    // Parties + politicians
+    /\bmorena\b/, /\bpan\b/, /\bpri\b/, /\bprd\b/, /\bmovimiento ciudadano\b/, /\bmc\b(?=.*(?:diputado|partido|movimiento))/i,
+    /\bpvem\b/, /\bpt\b(?=.*(?:diputado|partido))/i, /\bnueva alianza\b/,
+    /\bxochitl galvez\b/, /\bmaynez\b/, /\bjorge maynez\b/, /\bclaudia ojeda\b/,
+    /\bmarcelo ebrard\b/, /\badan augusto\b/, /\brosario piedra\b/, /\bricardo monreal\b/,
+    /\bnoroña\b/, /\bgerardo fernandez noroña\b/, /\bmonreal\b/,
+    /\bfox\b(?=.*(?:expresidente|panista|fundacion))/i, /\bcalderon\b(?=.*(?:expresidente|panista|felipe))/i,
+    /\bpeña nieto\b/, /\benrique peña\b/,
+    // Legislature + judiciary
+    /\bsenad\w+/, /\bdiputad\w+/, /\bcongres\w+/, /\bcamara (?:de diputados|alta|baja)\b/,
+    /\blegislatur\w+/, /\bcomisi(?:on|ones) (?:permanente|de \w+)/,
+    /\bsuprema corte\b/, /\bscjn\b/, /\bministra?\b(?=.*(?:scjn|corte|judicial))/i,
+    /\bjuez\b(?=.*(?:federal|amparo|fiscal|caso))/i, /\btribunal electoral\b/, /\btepjf\b/, /\btribunal\b/,
+    /\bine\b/, /\bcomision\w+ electoral\b/, /\binstituto electoral\b/,
+    // Acts of governance
+    /\belector\w+/, /\bvotacion\w+/, /\bcomicios\b/, /\bencuesta\w+\b(?=.*(?:electoral|partido|candidat))/i,
+    /\bgobern\w+/, /\bgobierno\w*\b/, /\bcandidat\w+/, /\bcampaña\w*\b(?=.*(?:electoral|candidat|partido))/i,
+    /\bjefa de gobierno\b/, /\bjefe de gobierno\b/, /\bclara brugada\b/,
+    /\balcalde\w*\b/, /\balcaldesa\b/, /\bmunicipi(?:o|os)\b(?=.*(?:gobierno|alcalde|presupuesto|recurso))/i,
+    /\bpresident\w+/, /\bsecretari\w+ de \w+/,
+    /\bconstituci\w+/, /\bdecreto\b/, /\breforma\b/, /\bley\b(?=.*(?:congres|aprob|reforma|votar|publicar))/i,
+    /\biniciativa\b/, /\bdictamen\b/, /\bveto\b/, /\bamparo\b/, /\bimpugnaci\w+\b/,
+    /\bpolitic\w+/, /\bdeclaracion\w*\b(?=.*(?:presidenta|presidente|gobierno|secretari|amlo|sheinbaum))/i,
   ],
   economia: [
-    /\bpeso\b/, /\bdolar\b/, /\binflacion\b/, /\bbanxico\b/, /\btasas?\b/,
-    /\bpib\b/, /\bcrecimiento economic\w+/, /\bremesa\w+/, /\bemple\w+/,
-    /\bsalario\b/, /\bpemex\b/, /\bcfe\b/, /\binversion\w+/,
-    /\bfinanzas\b/, /\bhacienda\b/, /\bsat\b/, /\baranc\w+/, /\btlcan\b/,
-    /\bt-mec\b/, /\btmec\b/, /\bbolsa\b/, /\bbmv\b/, /\beconomi\w+/,
-    /\bnegoci\w+/, /\bempresa\w+/,
+    // Macro
+    /\bpeso\b(?=.*(?:dolar|cotiza|tipo de cambio|cierre|sesion))/i,
+    /\bdolar\b/, /\beuro\b/, /\binflacion\b/, /\bbanxico\b/, /\btasas?(?: de interes)?\b/,
+    /\bpib\b/, /\bcrecimiento economic\w+/, /\bremesa\w+/,
+    /\bemple\w+/, /\bdesemple\w+/, /\bsalario\b/, /\bsueldo\b/,
+    /\btipo de cambio\b/, /\bcotiza\w+\b(?=.*(?:peso|dolar|euro|bolsa|acci))/i,
+    // State + para-state
+    /\bpemex\b/, /\bcfe\b/, /\bishtar\b/, /\bbanco bienestar\b/,
+    /\bhacienda\b/, /\bsat\b/, /\bsfi\b/, /\bfinanzas\b/, /\binversi\w+\b/,
+    /\baranc\w+/, /\btlcan\b/, /\bt-mec\b/, /\btmec\b/,
+    /\bbolsa\b/, /\bbmv\b/, /\bibovespa\b/, /\bdow jones\b/, /\bnasdaq\b/, /\bsp ?500\b/,
+    /\beconomi\w+/, /\bnegoci\w+\b/, /\bempresa\w*\b/, /\bcorporativ\w+/,
+    // Mexican companies + brands
+    /\bwalmart\b/, /\boxxo\b/, /\bfemsa\b/, /\bcemex\b/, /\bbimbo\b/, /\bliverpool\b/, /\bsoriana\b/,
+    /\bgrupo (?:salinas|carso|bimbo|mexico|televisa|elektra|aeroportuario)\b/,
+    /\bbanorte\b/, /\bbbva\b/, /\bsantander\b/, /\bcitibanamex\b/, /\bbanamex\b/, /\bscotiabank\b/, /\bhsbc\b/, /\binbursa\b/,
+    /\baeroport\w+\b/, /\baerolinea\b/, /\baeromexico\b/, /\bvolaris\b/, /\bviva aerobus\b/, /\baicm\b/, /\baifa\b/,
+    // Trade / industry
+    /\bexportaci\w+/, /\bimportaci\w+/, /\bcomercio (?:exterior|internacional)\b/,
+    /\bnearshoring\b/, /\bmaquiladora\b/, /\bmanufactura\b/, /\bindustri\w+\b(?=.*(?:automotri|manufact|export|inversi))/i,
+    /\binmobiliari\w+/, /\bvivienda\b(?=.*(?:precio|venta|infonavit|fovissste))/i, /\binfonavit\b/,
+    /\bipc\b/, /\bdeuda (?:publica|externa)\b/, /\bbono\b(?=.*(?:tesoro|gobierno|bolsa))/i,
+    /\bipo\b/, /\boferta publica\b/, /\bfusion\b(?=.*(?:empresa|adquisici|corporativ))/i,
+    // Crypto / fintech
+    /\bbitcoin\b/, /\bethereum\b/, /\bcripto\w+\b/, /\bblockchain\b/, /\bnft\b/,
+    /\bfintech\w*\b/, /\bbinance\b/, /\bcoinbase\b/,
+    // Tax + impact terms
+    /\bimpuest\w+\b/, /\biva\b/, /\bisr\b/, /\bsubsidio\w*\b/,
+    /\bmercado\b(?=.*(?:bolsa|peso|dolar|sesion|abre|cierra|baja|sube))/i,
   ],
-  seguridad: [
-    /\bnarco\w+/, /\bcartel\b/, /\bcjng\b/,
-    /\bmatanza\b/, /\bhomicidi\w+/, /\bsicari\w+/, /\barmas?\b/,
-    /\bdetenid\w+/, /\bdetenci\w+/, /\boperat\w+/, /\bguardia nacional\b/,
-    /\bsedena\b/, /\bfgr\b/, /\bfiscal\w+/,
-    /\bsecuestr\w+/, /\bdesapareci\w+/, /\bextorsion\w+/, /\bbloqu\w+/,
-    /\bviolenc\w+/, /\bbalacer\w+/,
-  ],
-  internacional: [
-    /\bestados unidos\b/, /\beeuu\b/, /\beua\b/, /\btrump\b/, /\bbiden\b/,
-    /\bharris\b/, /\bisrael\b/, /\bgaza\b/, /\bpalestin\w+/,
-    /\bucrania\b/, /\brusia\b/, /\bputin\b/, /\bzelensk\w+/,
-    /\bchina\b/, /\bxi jinping\b/, /\bcorea\b/, /\bjapon\b/, /\beuropa\b/,
-    /\bunion europea\b/, /\bonu\b/, /\botan\b/, /\bnaciones unidas\b/,
-    /\bcanada\b/, /\bcumbre\b/, /\btratado\b/, /\bbritani\w+/,
-    /\bargentina\b/, /\bbrasil\b/, /\bvenezuela\b/, /\bcuba\b/,
-  ],
+  // Culture last among Mexico-centric blocks; education/religion/food
+  // get folded in here because they were defaulting to general.
   cultura: [
-    /\bmuseo\b/, /\bexposicion\w+/, /\bteatro\b/, /\bobra\b/,
-    /\bnovela\b/, /\blibro\b/, /\bpoes\w+/, /\bescritor\w+/, /\bautor\w+/,
-    /\bmusica\b/, /\bconcierto\b/, /\bdisco\b/, /\bfilm\b/, /\bcine\b/,
-    /\bpelicula\b/, /\bdirector cinematogr\w+/, /\bestreno\b/,
+    // Arts + heritage
+    /\bmuseo\b/, /\bexposicion\w+/, /\bgaler\w+\b(?=.*(?:arte|expos|museo))/i,
+    /\bteatro\b/, /\bobra de teatro\b/, /\bopera\b(?=.*(?:bellas|teatro|estren))/i, /\bdanza\b/, /\bballet\b/,
+    /\bnovela\b(?!.*tele)/i, /\blibro\b/, /\bpoes\w+/, /\bescritor\w+/, /\bautor\w+\b(?=.*(?:libro|literari|novela|premio))/i,
+    /\bliteratur\w+/, /\beditorial\b(?=.*(?:libro|literari|premio))/i,
+    /\bfrida kahlo\b/, /\bdiego rivera\b/, /\boctavio paz\b/, /\bcarlos fuentes\b/, /\belena poniatowska\b/,
+    // Music + cinema
+    /\bmusica\b/, /\bconcierto\b/, /\bdisco\b(?=.*(?:musica|estren|cantante|premio))/i,
+    /\bfilm\b/, /\bcine\b/, /\bpelicula\b/, /\bdirector cinematogr\w+/, /\bestreno\b/,
+    /\bfestival\b(?=.*(?:cine|musica|cultura|gastronom|jazz|guelaguetza))/i,
+    /\bguelaguetza\b/, /\bcervantino\b/, /\bfica\b/, /\bdocumental\b/,
+    /\bspotify\b/, /\bnetflix\b(?=.*(?:estren|serie|peli))/i, /\bdisney\+?\b(?=.*(?:estren|serie|peli))/i,
+    // Cultural patrimony / Mexican identity
     /\bbellas artes\b/, /\bunesco\b/, /\bpatrimonio\b/, /\barte\b/,
+    /\binah\b/, /\binba\b/, /\bzona arqueolog\w+/, /\bteotihuacan\b/, /\bchichen itza\b/,
+    /\bdia de muertos\b/, /\bvirgen de guadalupe\b/, /\bguadalupe\b(?=.*(?:basilica|virgen|peregrin))/i,
+    /\bcarnaval\b/, /\bferia\b(?=.*(?:cultural|libro|gastronom|nacion|estad))/i,
+    /\btradicion\w*\b/, /\bcostumbre\w*\b/,
+    // Gastronomy
+    /\bgastronom\w+/, /\bchef\b/, /\brestaurante\b(?=.*(?:premio|estrella|michelin|gastronom))/i,
+    /\btaquer\w+\b/, /\bmole\b/, /\bmezcal\b(?=.*(?:cultura|tradic|denominaci|premio))/i,
+    /\bmichelin\b/, /\b50 best\b/, /\bestrella\w* michelin\b/,
+    // Religion (general cultural / society)
+    /\bpapa\b(?=.*(?:vatican|francisco|leon|encicli|santo padre))/i, /\bvaticano\b/, /\biglesia\b(?=.*(?:catolica|papa|vaticano|cardenal))/i,
+    /\bcardenal\b/, /\bobispo\b/, /\barzobispo\b/,
+    // Education / science (when not security/political)
+    /\bunam\b/, /\bipn\b/, /\buam\b/, /\bunesco\b/, /\bsep\b(?=.*(?:beca|escuela|universid|profesor|maestro|estudiante))/i,
+    /\beducaci\w+/, /\bestudiante\w*\b/, /\bprofesor\w*\b/, /\bmaestro\w*\b(?=.*(?:escuela|sep|magisteri|cnte))/i,
+    /\binvestigaci\w+ cientif\w+/, /\bcientific\w+/, /\bnasa\b/, /\bespacio\b(?=.*(?:nasa|spacex|cohete|astronaut))/i,
   ],
-  deportes: [
-    /\bfutbol\b/, /\bliga mx\b/, /\bseleccion mexican\w+/, /\bel tri\b/,
-    /\bconcacaf\b/, /\bcopa\b/, /\bmundial\b/, /\bclasico\b/, /\bgol\b/,
-    /\bnba\b/, /\bnfl\b/, /\bmlb\b/, /\bbox\w+/, /\bpelea\b/,
-    /\bcanelo\b/, /\bf1\b/, /\bformula 1\b/, /\bgrand prix\b/, /\bgran premio\b/,
-    /\bolimpic\w+/, /\bjuegos olim/, /\btenis\b/, /\bgolf\b/, /\bdeport\w+/,
-    /\bbeisbol\b/, /\bbasquet\w+/,
-  ],
-  farandula: [
-    /\bbelinda\b/, /\bdanna paola\b/, /\bgloria trevi\b/, /\bthalia\b/,
-    /\beugenio derbez\b/, /\btelevisa\b/, /\baztec\w+ uno\b/,
-    /\bla casa de los famosos\b/, /\bbig brother\b/,
-    /\bmiss universo\b/, /\bmiss mexico\b/, /\bfarandul\w+/,
-    /\bespectacul\w+/, /\bcantante\b/, /\bactor\b/, /\bactriz\b/,
+  // International last so country/leader names don't grab clearly
+  // local stories that mention foreign actors in passing.
+  internacional: [
+    // North America
+    /\bestados unidos\b/, /\beeuu\b/, /\beua\b/, /\bcasa blanca\b/,
+    /\btrump\b/, /\bbiden\b/, /\bharris\b/, /\bvance\b/, /\bwalz\b/, /\bdesantis\b/,
+    /\bcanada\b/, /\btrudeau\b/, /\bcarney\b(?=.*(?:canad|primer ministro))/i,
+    // Latin America
+    /\bargentina\b/, /\bmilei\b/, /\bbrasil\b/, /\blula\b/,
+    /\bcolombia\b/, /\bpetro\b(?=.*(?:colombia|president))/i,
+    /\bchile\b/, /\bboric\b/,
+    /\bperu\b/, /\bbolivia\b/, /\becuador\b/, /\bnoboa\b/, /\bparaguay\b/, /\buruguay\b/,
+    /\bvenezuela\b/, /\bmaduro\b(?=.*(?:venezuel|caracas))/i, /\bguaido\b/,
+    /\bcuba\b/, /\bdiaz-?canel\b/, /\bnicaragua\b/, /\bortega\b(?=.*(?:nicarag|managua))/i,
+    /\bel salvador\b/, /\bbukele\b/, /\bguatemala\b/, /\bhonduras\b/,
+    // Europe
+    /\beuropa\b/, /\bunion europea\b/, /\bbritani\w+/, /\breino unido\b/, /\bbrexit\b/,
+    /\balemania\b/, /\bmerkel\b/, /\bscholz\b/, /\bfrancia\b/, /\bmacron\b/,
+    /\bitalia\b/, /\bmeloni\b/, /\bespaña\b/, /\bsanchez\b(?=.*(?:españa|presidente|gobiern))/i,
+    /\brusia\b/, /\bputin\b/, /\bucrania\b/, /\bzelensk\w+/, /\bkremlin\b/,
+    /\botan\b/,
+    // Asia
+    /\bchina\b/, /\bxi jinping\b/, /\bhong kong\b/, /\btaiwan\b/,
+    /\bcorea\b/, /\bjapon\b/, /\bjapan\b/, /\bindia\b/, /\bmodi\b(?=.*(?:india|primer ministro))/i,
+    /\bfilipinas\b/, /\bvietnam\b/,
+    // Middle East / Africa
+    /\bisrael\b/, /\bnetanyahu\b/, /\bgaza\b/, /\bpalestin\w+/, /\bhamas\b/, /\bhezbol[ah][a]?\b/,
+    /\biran\b/, /\biraq\b/, /\bsiria\b/, /\blibano\b/, /\barabia saudita\b/,
+    /\bafrica\b/, /\bnigeria\b/, /\bsudafrica\b/, /\begipto\b/, /\bmarruecos\b/,
+    // Multilateral
+    /\bonu\b/, /\bnaciones unidas\b/, /\bunesco\b(?=.*(?:resoluci|consejo|delegaci))/i,
+    /\boea\b/, /\boms\b(?=.*(?:resoluci|advert|alert|epidem))/i, /\bfmi\b/, /\bbanco mundial\b/, /\bbid\b(?=.*(?:banco|prestamo))/i,
+    /\bcumbre\b/, /\btratado\b/, /\baranceles?\b(?=.*(?:trump|estados unidos|canad|china))/i,
+    /\bemba\w+/, /\bdiplomac\w+/, /\bextradici\w+\b/,
   ],
 };
 
+// Returns every category whose keyword set matches the headline+summary.
+// An item legitimately belongs to multiple tabs ("Trump y Biden debaten
+// sobre aranceles" = economia AND internacional; "Sheinbaum anuncia plan
+// de seguridad" = politica AND seguridad), so we tag with all of them
+// instead of picking a single winner. Items with no matches fall back
+// to ['general'].
 function classify(item) {
   const text = normalize(`${item.title} ${item.summary || ''}`);
+  const matched = [];
   for (const [cat, patterns] of Object.entries(CATEGORY_KEYWORDS)) {
-    for (const re of patterns) if (re.test(text)) return cat;
+    for (const re of patterns) {
+      if (re.test(text)) { matched.push(cat); break; }
+    }
   }
-  return 'general';
+  return matched.length ? matched : ['general'];
 }
 
 const GNEWS_BASE = 'https://news.google.com/rss/search';
@@ -159,6 +345,16 @@ const MAX_TOTAL_ITEMS = 180;       // hard cap across all outlets
 const MAX_AGE_HOURS = 48;
 const CACHE_TTL_MS = 5 * 60_000;
 const FEED_TIMEOUT_MS = 8_000;     // per-outlet timeout (independent)
+
+// First-seen timestamp tracker for items that have no real publish
+// date (homepage-scraped cards, mostly). Maps canonicalized URL →
+// epoch-ms of first time we saw it. Stable across refreshes within
+// the lifetime of the serverless instance so an item's apparent age
+// stops resetting to "1m ago" on every cache refresh. We GC entries
+// older than MAX_AGE_HOURS during refresh; FIRST_SEEN_MAX_ENTRIES is
+// the hard memory ceiling.
+const FIRST_SEEN_MAX_ENTRIES = 5000;
+const firstSeenByUrl = new Map();
 // Image enrichment for Google News items. The GN redirector page
 // has <meta property="og:image"> pointing at Google's own CDN
 // (lh3.googleusercontent.com) — we can scrape it without API keys
@@ -619,22 +815,101 @@ async function refreshCache() {
     }
     debug.rawCount = items.length;
 
+    // Resolve missing/invalid publishedAt via the first-seen tracker.
+    // Scraped homepage cards usually arrive with publishedAt = null
+    // (the scraper used to stamp "now" — that bug made every refresh
+    // make every item look 1 minute old, which sorted those outlets
+    // permanently to the top). Now: if a URL has no real date, we use
+    // the first wall-clock time we ever saw it. Subsequent refreshes
+    // keep that timestamp, so items naturally age out.
+    const nowMs = Date.now();
+    for (const it of items) {
+      const t = it.publishedAt ? new Date(it.publishedAt).getTime() : NaN;
+      if (Number.isFinite(t)) continue;
+      const seen = firstSeenByUrl.get(it.url);
+      if (seen) {
+        it.publishedAt = new Date(seen).toISOString();
+        it.publishedAtSource = 'first-seen';
+      } else {
+        firstSeenByUrl.set(it.url, nowMs);
+        it.publishedAt = new Date(nowMs).toISOString();
+        it.publishedAtSource = 'first-seen';
+      }
+    }
+
+    // GC the first-seen map so it doesn't grow unbounded:
+    //   1. drop entries older than the MAX_AGE_HOURS cutoff (those
+    //      items would be filtered out below anyway);
+    //   2. if still over cap, drop oldest entries first (Map iteration
+    //      order = insertion order, so we evict from the front).
+    const firstSeenCutoff = nowMs - MAX_AGE_HOURS * 60 * 60_000;
+    for (const [url, ts] of firstSeenByUrl) {
+      if (ts < firstSeenCutoff) firstSeenByUrl.delete(url);
+    }
+    if (firstSeenByUrl.size > FIRST_SEEN_MAX_ENTRIES) {
+      const drop = firstSeenByUrl.size - FIRST_SEEN_MAX_ENTRIES;
+      let i = 0;
+      for (const url of firstSeenByUrl.keys()) {
+        if (i++ >= drop) break;
+        firstSeenByUrl.delete(url);
+      }
+    }
+    debug.firstSeenSize = firstSeenByUrl.size;
+
     // Drop too-old items.
-    const cutoff = Date.now() - MAX_AGE_HOURS * 60 * 60_000;
+    const cutoff = nowMs - MAX_AGE_HOURS * 60 * 60_000;
     items = items.filter(i => i.publishedAt
       && new Date(i.publishedAt).getTime() >= cutoff);
     debug.recentCount = items.length;
 
     // Classify each item by keywords (politica / economia / etc.).
-    for (const it of items) it.category = classify(it);
+    // Multi-tag: an item lands in every category whose keywords match.
+    // We keep `category` as the first match for any older client code
+    // that reads the singular field; new code should prefer `categories`.
+    for (const it of items) {
+      it.categories = classify(it);
+      it.category = it.categories[0];
+    }
 
     // Sort newest first, then dedupe by URL + near-duplicate title.
     items.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
     items = dedupe(items);
     debug.dedupedCount = items.length;
 
-    // Hard cap.
-    items = items.slice(0, MAX_TOTAL_ITEMS);
+    // Round-robin interleave by outlet. Without this, when Noroeste /
+    // Latinus / Universal / Aristegui all dump 20 freshly-stamped
+    // items at "now", the top of the feed is 20 Noroeste, then 20
+    // Latinus, etc. — slow outlets never appear above the fold. We
+    // bucket items per outlet (each bucket already in date order
+    // because the global sort was stable) and walk the buckets in
+    // lockstep, taking one item from each per pass until every
+    // outlet runs out. Map insertion order = the date order in which
+    // outlets first appeared in the sorted feed, so outlets with more
+    // recent content lead each pass. No per-outlet cap — every item
+    // makes it in (subject to the MAX_TOTAL_ITEMS hard cap), just
+    // interleaved instead of clustered.
+    const byOutlet = new Map();
+    for (const it of items) {
+      let arr = byOutlet.get(it.sourceId);
+      if (!arr) { arr = []; byOutlet.set(it.sourceId, arr); }
+      arr.push(it);
+    }
+    const interleaved = [];
+    let progress = true;
+    while (progress) {
+      progress = false;
+      for (const list of byOutlet.values()) {
+        if (list.length === 0) continue;
+        interleaved.push(list.shift());
+        progress = true;
+      }
+    }
+    items = interleaved.slice(0, MAX_TOTAL_ITEMS);
+    debug.perOutletAfterInterleave = Object.fromEntries(
+      Array.from(byOutlet.keys()).map(sid => [
+        sid, items.filter(i => i.sourceId === sid).length,
+      ]),
+    );
 
     // Image enrichment: scrape og:image from the Google News
     // redirector page for items that don't have an image yet.
@@ -645,9 +920,13 @@ async function refreshCache() {
     debug.imagesCacheHits = imageStats.cached;
     debug.imageCacheSize = imageCache.size;
 
-    // Per-category counts for the debug response.
+    // Per-category counts for the debug response. Multi-tag items
+    // contribute to each of their categories.
     for (const it of items) {
-      debug.categoryCounts[it.category] = (debug.categoryCounts[it.category] || 0) + 1;
+      const cats = it.categories || [it.category];
+      for (const c of cats) {
+        debug.categoryCounts[c] = (debug.categoryCounts[c] || 0) + 1;
+      }
     }
 
     cache = { fetchedAt: Date.now(), items, debug };
@@ -675,12 +954,19 @@ export async function getMexicanNews({ category = 'featured', limit = MAX_TOTAL_
     if (!inFlight) inFlight = refreshCache().finally(() => { inFlight = null; });
   }
 
+  // Multi-tag counts: an item that matches both 'politica' and
+  // 'seguridad' increments both totals.
   const counts = {};
-  for (const it of cache.items) counts[it.category] = (counts[it.category] || 0) + 1;
+  for (const it of cache.items) {
+    const cats = it.categories || [it.category];
+    for (const c of cats) counts[c] = (counts[c] || 0) + 1;
+  }
 
   let filtered = cache.items;
   if (category && category !== 'featured') {
-    filtered = cache.items.filter(it => it.category === category);
+    filtered = cache.items.filter(it =>
+      (it.categories || [it.category]).includes(category)
+    );
   }
   filtered = filtered.slice(0, limit);
 

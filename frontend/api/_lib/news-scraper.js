@@ -115,6 +115,44 @@ function extractFirstSummary(block) {
   return '';
 }
 
+// Try to recover a real publication date from the article card. Many
+// outlets expose schema.org or OG metadata even on homepage cards; some
+// also include a <time datetime="..."> tag near the headline. We try
+// each in priority order and return an ISO string, or null if none of
+// them parsed.
+//
+// Returning null (instead of "now") matters: news-mexico.js falls back
+// to a per-URL first-seen timestamp, which keeps an item's apparent
+// age stable across refreshes. Stamping "now" on every refresh was the
+// bug that made every scraped story say "1m ago" forever and kept the
+// hot-publishing outlets glued to the top of the feed.
+function extractFirstDate(block) {
+  // Strict ISO/RFC date inside common metadata attributes.
+  const meta =
+       block.match(/<meta\b[^>]*\bitemProp=["']datePublished["'][^>]*\bcontent=["']([^"']+)["']/i)
+    || block.match(/<meta\b[^>]*\bcontent=["']([^"']+)["'][^>]*\bitemProp=["']datePublished["']/i)
+    || block.match(/<meta\b[^>]*\bproperty=["']article:published_time["'][^>]*\bcontent=["']([^"']+)["']/i)
+    || block.match(/<meta\b[^>]*\bcontent=["']([^"']+)["'][^>]*\bproperty=["']article:published_time["']/i)
+    || block.match(/<meta\b[^>]*\bname=["']date["'][^>]*\bcontent=["']([^"']+)["']/i);
+  if (meta && meta[1]) {
+    const d = new Date(meta[1]);
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+  // <time datetime="...">.
+  const t = block.match(/<time\b[^>]*\bdatetime=["']([^"']+)["']/i);
+  if (t && t[1]) {
+    const d = new Date(t[1]);
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+  // data-publish-date / data-date attributes.
+  const dataAttr = block.match(/\bdata-(?:publish-date|date|published)=["']([^"']+)["']/i);
+  if (dataAttr && dataAttr[1]) {
+    const d = new Date(dataAttr[1]);
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+  return null;
+}
+
 function extractItemFromBlock(block, outlet) {
   const href = extractFirstHref(block);
   const title = extractFirstHeadline(block);
@@ -127,6 +165,7 @@ function extractItemFromBlock(block, outlet) {
 
   const image = extractFirstImage(block);
   const summary = extractFirstSummary(block);
+  const publishedAt = extractFirstDate(block);
 
   return {
     title,
@@ -135,7 +174,10 @@ function extractItemFromBlock(block, outlet) {
     summary,
     sourceName: outlet.name,
     sourceId: outlet.id,
-    publishedAt: new Date().toISOString(), // homepage rarely surfaces per-card date
+    // null = "no date on the homepage card" — news-mexico.js will
+    // resolve this via its first-seen tracker so the apparent age
+    // stays stable across refreshes.
+    publishedAt,
     sourceChannel: 'scrape',
   };
 }
