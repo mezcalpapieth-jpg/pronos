@@ -1523,14 +1523,14 @@ html[data-theme="light"] .btn-theme-toggle::before {
   flex: 0 0 92%;
 }
 .news-hero-card.has-image {
-  min-height: min(46vh, 420px);
+  min-height: 240px;
 }
 @media (min-width: 720px) {
   .news-hero-card {
     flex: 0 0 calc(50% - 8px); /* 8px = half of the parent's 16px gap */
   }
   .news-hero-card.has-image {
-    min-height: min(50vh, 480px);
+    min-height: 280px;
   }
 }
 
@@ -1538,25 +1538,36 @@ html[data-theme="light"] .btn-theme-toggle::before {
    reads as a clean strip. scroll-snap still works. */
 .news-hero-scroller::-webkit-scrollbar { display: none; }
 
-/* Mosaic grid for the rest of the news. Uses grid-auto-flow: dense
-   so text-only cards (which are shorter) pack into the gaps left
-   by image cards. align-items:start keeps text-only cards at their
-   natural height — without this they'd stretch to match the
-   tallest card in their row, which is what made them "still very
-   big" relative to nearby image cards. Featured cards (every Nth
-   with image) span 2 columns on wide screens for visual variety. */
+/* True masonry packing via CSS columns. We tried `grid-auto-flow: dense`
+   first but pure CSS Grid can't reflow a short card up into the gap
+   left by a taller card — every grid row is the height of its tallest
+   item, which left big empty patches under text-only cards next to
+   image cards. CSS columns ARE the only browser-native way to get
+   gap-free Pinterest-style packing without JS or the not-yet-shipped
+   `grid-template-rows: masonry`. Trade-off: cards flow top-to-bottom
+   per column rather than left-to-right per row, and `grid-column:
+   span` no longer applies — the .news-card-feature class still picks
+   up its row-layout content via the JSX, just doesn't span columns. */
 .news-grid {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  grid-auto-flow: dense;
-  grid-auto-rows: min-content;
-  align-items: start;
+  column-count: 1;
+  column-gap: 16px;
 }
 @media (min-width: 720px) {
-  .news-card-feature {
-    grid-column: span 2;
-  }
+  .news-grid { column-count: 2; }
+}
+@media (min-width: 1100px) {
+  .news-grid { column-count: 3; }
+}
+@media (min-width: 1400px) {
+  .news-grid { column-count: 4; }
+}
+.news-grid > * {
+  break-inside: avoid;
+  -webkit-column-break-inside: avoid;   /* Safari */
+  page-break-inside: avoid;             /* legacy */
+  margin-bottom: 16px;
+  display: block;
+  width: 100%;
 }
 
 .hmc {

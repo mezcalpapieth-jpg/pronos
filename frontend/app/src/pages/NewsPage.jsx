@@ -610,7 +610,7 @@ function NewsHeroCarousel({ items, isAdmin, onCreateMarket, onOpenLinkPicker, on
               }}
             >
               {item.image ? (
-                <div style={{ flex: '1 1 60%', minHeight: 220, position: 'relative' }}>
+                <div style={{ flex: '1 1 55%', minHeight: 150, position: 'relative' }}>
                   <NewsImage src={item.image} alt={item.title} aspect="auto" fill />
                   {isAdmin && <HideButton onHide={onHide} item={item} />}
                   <div style={{

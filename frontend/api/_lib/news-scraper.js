@@ -153,6 +153,34 @@ function extractFirstDate(block) {
   return null;
 }
 
+// Several Mexican outlets bake YYYY/MM/DD into the article URL slug:
+//   eluniversal.com.mx/nacion/2026/05/05/slug
+//   proceso.com.mx/nacional/2026/5/5/slug-NNNN.html
+//   noroeste.com.mx/sinaloa/2026/05/05/slug
+//   latinus.us/mexico/2026/05/05/slug
+// For those, the URL is a more reliable date source than the
+// homepage card markup (which usually shows a relative-time string
+// we'd need to parse). We accept both /YYYY/MM/DD/ and /YYYY-MM-DD/
+// separators, validate the resulting date is sensible (within the
+// last ~5 years, not in the future), and return at midnight local
+// of that day so it slots into the date sort the same way as the
+// real publish time would.
+function extractDateFromUrl(url) {
+  if (!url) return null;
+  const m = String(url).match(/\/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})(?:\/|$|[-_])/);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  const dt = new Date(Date.UTC(y, mo - 1, d, 12, 0, 0)); // noon UTC ≈ noon-ish locally
+  if (Number.isNaN(dt.getTime())) return null;
+  const now = Date.now();
+  if (dt.getTime() > now + 24 * 60 * 60 * 1000) return null; // future
+  if (dt.getTime() < now - 5 * 365 * 24 * 60 * 60 * 1000) return null; // ancient
+  return dt.toISOString();
+}
+
 function extractItemFromBlock(block, outlet) {
   const href = extractFirstHref(block);
   const title = extractFirstHeadline(block);
@@ -165,18 +193,23 @@ function extractItemFromBlock(block, outlet) {
 
   const image = extractFirstImage(block);
   const summary = extractFirstSummary(block);
-  const publishedAt = extractFirstDate(block);
+  const resolvedUrl = canonicalizeUrl(resolveUrl(href, outlet.host));
+  // Date priority: structured markup on the card → date in URL slug
+  // → null (lets news-mexico.js fall back to first-seen tracker).
+  // URL date matters because most Mexican outlet homepages don't
+  // expose datePublished on the card, but their article URLs do
+  // contain /YYYY/MM/DD/ — that's what avoids "hace un momento"
+  // showing on every refresh after a fresh serverless instance
+  // boots with an empty first-seen map.
+  const publishedAt = extractFirstDate(block) || extractDateFromUrl(resolvedUrl);
 
   return {
     title,
-    url: canonicalizeUrl(resolveUrl(href, outlet.host)),
+    url: resolvedUrl,
     image: image ? resolveUrl(image, outlet.host) : null,
     summary,
     sourceName: outlet.name,
     sourceId: outlet.id,
-    // null = "no date on the homepage card" — news-mexico.js will
-    // resolve this via its first-seen tracker so the apparent age
-    // stays stable across refreshes.
     publishedAt,
     sourceChannel: 'scrape',
   };
