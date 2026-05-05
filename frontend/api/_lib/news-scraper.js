@@ -148,6 +148,7 @@ const OUTLET_SCRAPERS = {
   'milenio':         { homepage: 'https://www.milenio.com/' },
   'proceso':         { homepage: 'https://www.proceso.com.mx/' },
   'noroeste':        { homepage: 'https://www.noroeste.com.mx/' },
+  'latinus':         { homepage: 'https://latinus.us/' },
   // animal-politico, sin-embargo, debate are blocked / SPA-rendered
   // — they fall through to Google News in the fetchOneOutlet chain.
 };

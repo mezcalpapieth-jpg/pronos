@@ -50,6 +50,10 @@ const OUTLETS = [
   { id: 'proceso',         name: 'Proceso',            host: 'proceso.com.mx',         lean: 'investigative',  priority: 2 },
   { id: 'noroeste',        name: 'Noroeste',           host: 'noroeste.com.mx',        lean: 'regional',       priority: 2 },
   { id: 'debate',          name: 'El Debate',          host: 'debate.com.mx',          lean: 'regional',       priority: 2 },
+  // Latinus — Carlos Loret de Mola's outlet. No public RSS but
+  // homepage has 72 <article> tags, 66 of which extract cleanly
+  // via the homepage scraper. Lean = independent / right-leaning.
+  { id: 'latinus',         name: 'Latinus',            host: 'latinus.us',             lean: 'independent',    priority: 2 },
 ];
 
 function normalize(s) {
