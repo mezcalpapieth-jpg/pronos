@@ -452,8 +452,29 @@ function imageCacheSet(url, val) {
   imageCache.set(url, val);
 }
 
+// Google News' redirector page lies about og:image — every article
+// returns the SAME generic Google News logo placeholder rather than
+// the underlying article's image. Probed against 5 distinct
+// articles, all returned the identical URL:
+//   lh3.googleusercontent.com/J6_coFbogxhRI9iM864NL_li...
+// We blacklist that token; any future placeholder Google rotates in
+// can be added here. If we ever extract og:image successfully from
+// a non-Google-News URL (which we don't currently — all our items
+// are GN redirectors except direct-RSS El Financiero), this filter
+// is harmless because direct-RSS images don't pass through here.
+const GNEWS_PLACEHOLDER_TOKENS = [
+  'J6_coFbogxh',
+];
+
+function isGnewsPlaceholder(url) {
+  if (!url) return false;
+  return GNEWS_PLACEHOLDER_TOKENS.some(t => url.includes(t));
+}
+
 // Extract og:image from an HTML document. Tries property="og:image"
 // in either attribute order, then twitter:image as a fallback.
+// Rejects known Google News placeholder URLs so cards fall back to
+// the text-only treatment instead of all looking identical.
 function extractOgImage(html) {
   if (!html) return null;
   const patterns = [
@@ -464,7 +485,7 @@ function extractOgImage(html) {
   ];
   for (const re of patterns) {
     const m = html.match(re);
-    if (m && m[1]) return m[1];
+    if (m && m[1] && !isGnewsPlaceholder(m[1])) return m[1];
   }
   return null;
 }

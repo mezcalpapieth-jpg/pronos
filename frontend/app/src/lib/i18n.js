@@ -567,17 +567,21 @@ const STRINGS = {
   'points.top.title':              { es: 'Top holders',         en: 'Top holders' },
   'points.top.loading':            { es: 'Cargando…',           en: 'Loading…' },
 
+  // Category labels — kept emoji-free so the points-app's CategoryBar
+  // matches the MVP's clean text-only treatment. Earlier copy had
+  // 🔥 / ⚽ / 🎵 / 🇲🇽 etc. in front of each label; user asked to
+  // strip them to match the MVP look.
   'points.cat.noticias':      { es: 'Noticias',               en: 'News' },
-  'points.cat.trending':      { es: '🔥 Trending',            en: '🔥 Trending' },
-  'points.cat.worldCup':      { es: '🏆 Copa del Mundo',      en: '🏆 World Cup' },
-  'points.cat.deportes':      { es: '⚽ Deportes',            en: '⚽ Sports' },
-  'points.cat.musica':        { es: '🎵 Música & Farándula',  en: '🎵 Music & Culture' },
-  'points.cat.mexico':        { es: '🇲🇽 México & CDMX',      en: '🇲🇽 Mexico & CDMX' },
-  'points.cat.politica':      { es: '🌎 Política Intl.',      en: '🌎 World Politics' },
-  'points.cat.crypto':        { es: '₿ Crypto',               en: '₿ Crypto' },
-  'points.cat.finanzas':      { es: '$ Finanzas',             en: '$ Finance' },
-  'points.cat.porresolver':   { es: '⏳ Por resolver',         en: '⏳ To resolve' },
-  'points.cat.resueltos':     { es: '🏆 Resueltos',            en: '🏆 Resolved' },
+  'points.cat.trending':      { es: 'Trending',               en: 'Trending' },
+  'points.cat.worldCup':      { es: 'Copa del Mundo',         en: 'World Cup' },
+  'points.cat.deportes':      { es: 'Deportes',               en: 'Sports' },
+  'points.cat.musica':        { es: 'Música & Farándula',     en: 'Music & Culture' },
+  'points.cat.mexico':        { es: 'México & CDMX',          en: 'Mexico & CDMX' },
+  'points.cat.politica':      { es: 'Política Intl.',         en: 'World Politics' },
+  'points.cat.crypto':        { es: 'Crypto',                 en: 'Crypto' },
+  'points.cat.finanzas':      { es: 'Finanzas',               en: 'Finance' },
+  'points.cat.porresolver':   { es: 'Por resolver',           en: 'To resolve' },
+  'points.cat.resueltos':     { es: 'Resueltos',              en: 'Resolved' },
 
   // Category page (per-type header + sub-filters)
   'points.catpage.eyebrow':   { es: '{n} mercados',           en: '{n} markets' },

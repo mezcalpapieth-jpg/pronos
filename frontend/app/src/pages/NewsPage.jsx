@@ -491,7 +491,7 @@ function NewsHeroCarousel({ items, isAdmin, onCreateMarket, onOpenLinkPicker, on
           <div
             key={item.url}
             data-hero-card
-            className="news-hero-card"
+            className={`news-hero-card${item.image ? ' has-image' : ''}`}
             style={{
               scrollSnapAlign: 'start',
               borderRadius: 16,

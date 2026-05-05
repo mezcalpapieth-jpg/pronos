@@ -1515,16 +1515,21 @@ html[data-theme="light"] .btn-theme-toggle::before {
    - Mobile (default): 92% width, one card visible at a time, peek
      ~6% so the swipe-affordance is obvious.
    - Tablet+ (≥720px): 50% width minus half-gap, two cards visible
-     side-by-side. Scroll buttons advance by full clientWidth so
-     each click moves both cards out and the next two in. Avoids
-     the "card 2 stays half-cut" issue. */
+     side-by-side.
+   .has-image variant gets a min-height so the picture has room.
+   Text-only cards (no .has-image) shrink to their content height —
+   no big empty box where the image would have been. */
 .news-hero-card {
   flex: 0 0 92%;
+}
+.news-hero-card.has-image {
   min-height: min(46vh, 420px);
 }
 @media (min-width: 720px) {
   .news-hero-card {
     flex: 0 0 calc(50% - 8px); /* 8px = half of the parent's 16px gap */
+  }
+  .news-hero-card.has-image {
     min-height: min(50vh, 480px);
   }
 }
@@ -1535,19 +1540,18 @@ html[data-theme="light"] .btn-theme-toggle::before {
 
 /* Mosaic grid for the rest of the news. Uses grid-auto-flow: dense
    so text-only cards (which are shorter) pack into the gaps left
-   by image cards. Featured cards (every Nth with image) span 2
-   columns on wide screens for visual variety. */
+   by image cards. align-items:start keeps text-only cards at their
+   natural height — without this they'd stretch to match the
+   tallest card in their row, which is what made them "still very
+   big" relative to nearby image cards. Featured cards (every Nth
+   with image) span 2 columns on wide screens for visual variety. */
 .news-grid {
   display: grid;
   gap: 16px;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   grid-auto-flow: dense;
   grid-auto-rows: min-content;
-}
-.news-card-feature {
-  /* Wide feature card — spans 2 cols when there's room.
-     Falls back to a single col on narrow viewports automatically
-     since auto-fill caps grid lines at the container width. */
+  align-items: start;
 }
 @media (min-width: 720px) {
   .news-card-feature {
