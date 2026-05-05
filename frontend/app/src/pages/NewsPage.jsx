@@ -343,19 +343,19 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
         />
       )}
 
-      {/* Card grid */}
+      {/* Mosaic grid — varied card sizes. dense auto-flow lets
+          text-only (shorter) cards pack into gaps left by image
+          cards, so the layout doesn't read as a uniform 3x3 of
+          identical squares. Every 5th item with an image becomes
+          a "feature" that spans 2 columns on wide screens. */}
       {restItems.length > 0 && (
-        <div style={{
-          display: 'grid',
-          gap: 16,
-          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-          marginTop: heroItems.length > 0 ? 28 : 0,
-        }}>
-          {restItems.map(item => (
+        <div className="news-grid" style={{ marginTop: heroItems.length > 0 ? 28 : 0 }}>
+          {restItems.map((item, i) => (
             <NewsCard
               key={item.url}
               item={item}
               isAdmin={isAdmin}
+              feature={Boolean(item.image) && i % 5 === 0}
               onCreateMarket={handleCreateMarket}
               onOpenLinkPicker={handleOpenLinkPicker}
               onUnlink={handleUnlink}
@@ -445,8 +445,11 @@ function NewsHeroCarousel({ items, isAdmin, onCreateMarket, onOpenLinkPicker, on
   function scrollByDir(dir) {
     const el = scrollerRef.current;
     if (!el) return;
-    const card = el.querySelector('[data-hero-card]');
-    const step = card ? card.clientWidth + 16 : el.clientWidth * 0.6;
+    // Advance by the FULL visible width (one "page" of the
+    // carousel) so on desktop where 2 cards fit, a click moves
+    // both cards out of view and the next 2 in. Avoids the
+    // "card 2 stays half-visible" behavior the user flagged.
+    const step = el.clientWidth * 0.95;
     el.scrollBy({ left: dir * step, behavior: 'smooth' });
   }
 
@@ -468,6 +471,7 @@ function NewsHeroCarousel({ items, isAdmin, onCreateMarket, onOpenLinkPicker, on
 
       <div
         ref={scrollerRef}
+        className="news-hero-scroller"
         style={{
           display: 'flex',
           gap: 16,
@@ -476,20 +480,19 @@ function NewsHeroCarousel({ items, isAdmin, onCreateMarket, onOpenLinkPicker, on
           scrollSnapType: 'x mandatory',
           scrollBehavior: 'smooth',
           paddingBottom: 8,
-          // Hide scrollbar (cosmetic — scroll-snap stays usable).
+          // Hide scrollbar (cosmetic). Companion ::-webkit-scrollbar
+          // rule in components.css under .news-hero-scroller takes
+          // care of WebKit; these two cover Firefox + IE/Edge.
           scrollbarWidth: 'none',
           msOverflowStyle: 'none',
         }}
-        // Inline style can't target ::-webkit-scrollbar; rely on
-        // app-wide rule that's already present for similar carousels
-        // in the codebase. If a scrollbar shows in dev it's harmless.
       >
-        {items.map((item, i) => (
+        {items.map((item) => (
           <div
             key={item.url}
             data-hero-card
+            className="news-hero-card"
             style={{
-              flex: '0 0 min(560px, 88%)',
               scrollSnapAlign: 'start',
               borderRadius: 16,
               overflow: 'hidden',
@@ -497,7 +500,6 @@ function NewsHeroCarousel({ items, isAdmin, onCreateMarket, onOpenLinkPicker, on
               border: '1px solid var(--border)',
               display: 'flex',
               flexDirection: 'column',
-              minHeight: 'min(50vh, 480px)',
               position: 'relative',
             }}
           >
@@ -513,50 +515,56 @@ function NewsHeroCarousel({ items, isAdmin, onCreateMarket, onOpenLinkPicker, on
                 flex: 1,
               }}
             >
-              <div style={{ flex: '1 1 60%', minHeight: 220, position: 'relative' }}>
-                {item.image ? (
+              {item.image ? (
+                <div style={{ flex: '1 1 60%', minHeight: 220, position: 'relative' }}>
                   <NewsImage src={item.image} alt={item.title} aspect="auto" fill />
-                ) : (
+                  {isAdmin && <HideButton onHide={onHide} item={item} />}
                   <div style={{
-                    width: '100%', height: '100%',
-                    minHeight: 220,
-                    background: `linear-gradient(135deg, rgba(255,69,69,${0.05 + (i % 3) * 0.03}), rgba(0,0,0,0))`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    position: 'absolute',
+                    top: 12, right: 12,
+                    padding: '4px 10px',
+                    borderRadius: 999,
+                    background: 'rgba(0,0,0,0.65)',
+                    backdropFilter: 'blur(6px)',
+                    color: '#fff',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 10,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
                   }}>
-                    {item.favicon && (
-                      <img
-                        src={item.favicon}
-                        alt=""
-                        style={{ width: 48, height: 48, opacity: 0.55 }}
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                      />
-                    )}
+                    {item.sourceName || 'Noticia'}
                   </div>
-                )}
-                {/* Admin hide button — top-left corner of the image.
-                    Click stops propagation so the parent <a> doesn't
-                    open the article. */}
-                {isAdmin && (
-                  <HideButton onHide={onHide} item={item} />
-                )}
-                {/* Source pill in top-right corner (was top-left
-                    until the hide button took that spot). */}
-                <div style={{
-                  position: 'absolute',
-                  top: 12, right: 12,
-                  padding: '4px 10px',
-                  borderRadius: 999,
-                  background: 'rgba(0,0,0,0.65)',
-                  backdropFilter: 'blur(6px)',
-                  color: '#fff',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 10,
-                  letterSpacing: '0.08em',
-                  textTransform: 'uppercase',
-                }}>
-                  {item.sourceName || 'Noticia'}
                 </div>
-              </div>
+              ) : (
+                /* No image — render only the source pill in a thin
+                   strip so the card has visual identity without a
+                   placeholder image. The headline + summary below
+                   become the focal point. */
+                <div style={{
+                  position: 'relative',
+                  padding: '12px 14px',
+                  borderBottom: '1px solid var(--border)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                }}>
+                  <span style={{
+                    width: 6, height: 6, borderRadius: '50%',
+                    background: 'var(--red, #FF4545)',
+                    flexShrink: 0,
+                  }} />
+                  <span style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 10,
+                    letterSpacing: '0.12em',
+                    color: 'var(--text-muted)',
+                    textTransform: 'uppercase',
+                  }}>
+                    {item.sourceName || 'Noticia'}
+                  </span>
+                  {isAdmin && <HideButton onHide={onHide} item={item} inline />}
+                </div>
+              )}
               <div style={{
                 padding: 'clamp(14px, 2.4vw, 22px)',
                 display: 'flex',
@@ -699,23 +707,34 @@ function CarouselButton({ direction, visible, onClick }) {
 // above. The carousel handles the same layout for each of the top
 // items individually, plus inline scroll buttons + page-dot strip.)
 
-// ─── Standard news card ─────────────────────────────────────────────────────
-function NewsCard({ item, isAdmin, onCreateMarket, onOpenLinkPicker, onUnlink, onHide }) {
+// ─── News card with 3 layout variants ──────────────────────────────────────
+//   image card     — image on top, headline + summary below (default)
+//   feature card   — wide (2-col span on desktop), image on left,
+//                    headline + summary on right
+//   text-only card — no image area at all, compact, just a thin
+//                    source strip + headline + summary. Used when
+//                    item.image is null (couldn't fetch og:image).
+//
+// The mix of these three variants gives the grid visual rhythm
+// instead of the previous uniform-3x3 look.
+function NewsCard({ item, isAdmin, feature, onCreateMarket, onOpenLinkPicker, onUnlink, onHide }) {
+  const hasImage = Boolean(item.image);
+  const isFeature = feature && hasImage;
+  const className = ['news-card', isFeature ? 'news-card-feature' : ''].filter(Boolean).join(' ');
+
   return (
-    <article style={{
-      borderRadius: 12,
-      overflow: 'hidden',
-      background: 'var(--surface1)',
-      border: '1px solid var(--border)',
-      display: 'flex',
-      flexDirection: 'column',
-      position: 'relative', // anchor the absolute hide button
-    }}>
-      {/* Admin hide button — top-left corner of the card, overlaid on
-          the image. Outside the <a> below so click doesn't navigate. */}
-      {isAdmin && (
-        <HideButton onHide={onHide} item={item} />
-      )}
+    <article
+      className={className}
+      style={{
+        borderRadius: 12,
+        overflow: 'hidden',
+        background: 'var(--surface1)',
+        border: '1px solid var(--border)',
+        display: 'flex',
+        flexDirection: isFeature ? 'row' : 'column',
+        position: 'relative',
+      }}
+    >
       <a
         href={item.url}
         target="_blank"
@@ -725,34 +744,68 @@ function NewsCard({ item, isAdmin, onCreateMarket, onOpenLinkPicker, onUnlink, o
           color: 'inherit',
           flex: 1,
           display: 'flex',
-          flexDirection: 'column',
+          flexDirection: isFeature ? 'row' : 'column',
         }}
       >
-        {item.image ? (
-          <NewsImage src={item.image} alt={item.title} aspect="16/10" />
-        ) : (
+        {hasImage && (
           <div style={{
-            height: 130, width: '100%',
-            background: 'linear-gradient(135deg, rgba(255,69,69,0.08), rgba(0,0,0,0))',
-          }} />
+            position: 'relative',
+            ...(isFeature
+              ? { flex: '0 0 42%', minHeight: 200 }
+              : {}),
+          }}>
+            <NewsImage
+              src={item.image}
+              alt={item.title}
+              aspect={isFeature ? 'auto' : '16/10'}
+              fill={isFeature}
+            />
+            {isAdmin && <HideButton onHide={onHide} item={item} />}
+          </div>
         )}
         <div style={{
           padding: 14,
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
+          minWidth: 0,
         }}>
-          <SourceBadge sourceName={item.sourceName} publishedAt={item.publishedAt} />
+          {/* Text-only cards put the source strip with a tiny live-dot
+              up top so the card has a visual anchor without an image.
+              Image cards keep the standard SourceBadge below the
+              picture. */}
+          {!hasImage ? (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              fontFamily: 'var(--font-mono)', fontSize: 10,
+              letterSpacing: '0.12em', textTransform: 'uppercase',
+              color: 'var(--text-muted)',
+              marginBottom: 10,
+            }}>
+              <span aria-hidden="true" style={{
+                width: 5, height: 5, borderRadius: '50%',
+                background: 'var(--red, #FF4545)',
+                flexShrink: 0,
+              }} />
+              <span style={{ color: 'var(--red, #FF4545)', fontWeight: 600 }}>
+                {item.sourceName || 'Noticia'}
+              </span>
+              <span aria-hidden="true">·</span>
+              <span>{relativeTime(item.publishedAt)}</span>
+              {isAdmin && <HideButton onHide={onHide} item={item} inline />}
+            </div>
+          ) : (
+            <SourceBadge sourceName={item.sourceName} publishedAt={item.publishedAt} />
+          )}
           <h3 style={{
             fontFamily: 'var(--font-display)',
-            fontSize: 16,
+            fontSize: isFeature ? 19 : 16,
             lineHeight: 1.25,
             color: 'var(--text-primary)',
-            margin: '6px 0 6px',
+            margin: hasImage ? '6px 0 6px' : '0 0 6px',
             letterSpacing: '0.01em',
-            // Clamp to 3 lines so cards have a consistent height.
             display: '-webkit-box',
-            WebkitLineClamp: 3,
+            WebkitLineClamp: isFeature ? 4 : 3,
             WebkitBoxOrient: 'vertical',
             overflow: 'hidden',
           }}>
@@ -766,7 +819,7 @@ function NewsCard({ item, isAdmin, onCreateMarket, onOpenLinkPicker, onUnlink, o
               lineHeight: 1.5,
               margin: 0,
               display: '-webkit-box',
-              WebkitLineClamp: 3,
+              WebkitLineClamp: hasImage ? 3 : 5,
               WebkitBoxOrient: 'vertical',
               overflow: 'hidden',
             }}>
@@ -847,20 +900,17 @@ function SourceBadge({ sourceName, publishedAt }) {
 // hide the broken image rather than show the gray frame icon.
 function NewsImage({ src, alt, aspect = '16/9', fill = false }) {
   const [broken, setBroken] = useState(false);
-  // `fill=true` makes the image fill its parent (used by the
-  // carousel's flex child where height comes from the parent's
-  // min-height, not an aspect ratio).
+  // No src OR the load failed — render NOTHING. Earlier versions
+  // showed a "broken image" gradient placeholder and a favicon, but
+  // the news.google.com favicon turned out to be a Google Docs
+  // glyph (because the URL is on news.google.com), which looked
+  // wrong on every text-only card. The new contract: parents must
+  // check item.image before rendering NewsImage at all; if NewsImage
+  // ends up here without a src, we're a no-op.
+  if (!src || broken) return null;
   const wrapStyle = fill
     ? { width: '100%', height: '100%', overflow: 'hidden', background: 'var(--surface2)' }
     : { aspectRatio: aspect, width: '100%', overflow: 'hidden', background: 'var(--surface2)' };
-  if (broken) {
-    return (
-      <div style={{
-        ...wrapStyle,
-        background: 'linear-gradient(135deg, rgba(255,69,69,0.08), rgba(0,0,0,0))',
-      }} />
-    );
-  }
   return (
     <div style={wrapStyle}>
       <img
@@ -892,16 +942,43 @@ const adminBtnStyle = {
 };
 
 // ─── Admin hide button ──────────────────────────────────────────────────────
-// Small "−" overlay at top-left of every news card image, visible
-// only to admins. Click stops propagation + prevents default so the
-// parent <a> doesn't navigate to the article. Persists via
-// /api/points/admin/news-hide; the optimistic local removal happens
-// in the parent's onHide handler.
-function HideButton({ onHide, item }) {
+// Default mode: "−" overlay at top-left of an image, dark pill so it
+// reads against any background. Inline mode: small ghost button used
+// on text-only cards where there's no image to overlay against —
+// renders inside the source strip so admins still get a one-tap
+// hide control without breaking the layout.
+function HideButton({ onHide, item, inline = false }) {
   function handleClick(e) {
     e.preventDefault();
     e.stopPropagation();
     onHide?.(item);
+  }
+  if (inline) {
+    return (
+      <button
+        onClick={handleClick}
+        title="Ocultar de la lista"
+        aria-label="Ocultar noticia"
+        style={{
+          marginLeft: 'auto',
+          width: 22, height: 22,
+          borderRadius: '50%',
+          background: 'transparent',
+          border: '1px solid var(--border)',
+          color: 'var(--text-muted)',
+          fontSize: 14,
+          fontWeight: 700,
+          lineHeight: 1,
+          cursor: 'pointer',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 0,
+        }}
+      >
+        −
+      </button>
+    );
   }
   return (
     <button

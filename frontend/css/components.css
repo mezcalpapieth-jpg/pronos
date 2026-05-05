@@ -1507,6 +1507,54 @@ html[data-theme="light"] .btn-theme-toggle::before {
   50%      { opacity: 0.5; transform: scale(0.85); }
 }
 
+/* ============================================================
+   NEWS PAGE — carousel + mosaic grid
+============================================================ */
+
+/* Hero carousel card sizing.
+   - Mobile (default): 92% width, one card visible at a time, peek
+     ~6% so the swipe-affordance is obvious.
+   - Tablet+ (≥720px): 50% width minus half-gap, two cards visible
+     side-by-side. Scroll buttons advance by full clientWidth so
+     each click moves both cards out and the next two in. Avoids
+     the "card 2 stays half-cut" issue. */
+.news-hero-card {
+  flex: 0 0 92%;
+  min-height: min(46vh, 420px);
+}
+@media (min-width: 720px) {
+  .news-hero-card {
+    flex: 0 0 calc(50% - 8px); /* 8px = half of the parent's 16px gap */
+    min-height: min(50vh, 480px);
+  }
+}
+
+/* Hide the webkit scrollbar on the hero scroller so the carousel
+   reads as a clean strip. scroll-snap still works. */
+.news-hero-scroller::-webkit-scrollbar { display: none; }
+
+/* Mosaic grid for the rest of the news. Uses grid-auto-flow: dense
+   so text-only cards (which are shorter) pack into the gaps left
+   by image cards. Featured cards (every Nth with image) span 2
+   columns on wide screens for visual variety. */
+.news-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-auto-flow: dense;
+  grid-auto-rows: min-content;
+}
+.news-card-feature {
+  /* Wide feature card — spans 2 cols when there's room.
+     Falls back to a single col on narrow viewports automatically
+     since auto-fill caps grid lines at the container width. */
+}
+@media (min-width: 720px) {
+  .news-card-feature {
+    grid-column: span 2;
+  }
+}
+
 .hmc {
   background: var(--surface1);
   border: 1px solid var(--border);
