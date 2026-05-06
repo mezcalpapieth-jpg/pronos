@@ -41,10 +41,20 @@ export default defineConfig({
       '@app': path.resolve(__dirname, 'src'),
     },
   },
+  // Dev-server proxy. Default target = localhost vercel-dev so a
+  // running `vercel dev` instance handles /api/*. Set
+  // VITE_API_PROXY_TARGET=https://pronos.io to talk directly to
+  // production from a local dev server (only useful for read-only
+  // smoke tests — write endpoints reject cross-origin requests via
+  // the M7 CSRF guard in api/_lib/cors.js).
+  //
+  // M9 from the 2026-03-31 security audit: previous default was
+  // https://pronos.io, which made local dev forms hit live data —
+  // easy way to mistakenly write to prod from a feature branch.
   server: {
     proxy: {
       '/api': {
-        target: 'https://pronos.io',
+        target: process.env.VITE_API_PROXY_TARGET || 'http://localhost:3000',
         changeOrigin: true,
       },
     },
