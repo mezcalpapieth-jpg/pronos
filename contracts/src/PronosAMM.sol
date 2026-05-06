@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./PronosToken.sol";
 
 /**
@@ -19,7 +20,7 @@ import "./PronosToken.sol";
  * Fees are deducted BEFORE entering the pool and sent to the fee collector.
  * They never touch the AMM reserves.
  */
-contract PronosAMM is ERC1155Holder {
+contract PronosAMM is ERC1155Holder, ReentrancyGuard {
     // ─── State ────────────────────────────────────────────────────────────────
 
     PronosToken public immutable token;
@@ -142,6 +143,7 @@ contract PronosAMM is ERC1155Holder {
      */
     function buy(bool buyYes, uint256 collateralAmount)
         external
+        nonReentrant
         whenNotPaused
         whenNotResolved
         returns (uint256 sharesOut)
@@ -152,6 +154,13 @@ contract PronosAMM is ERC1155Holder {
         // 1. Calculate and deduct fee BEFORE pool
         uint256 fee = calculateFee(collateralAmount, buyYes);
         uint256 netAmount = collateralAmount - fee;
+        // Guard against dust trades where the entire amount is fee. With
+        // the round-up minimum-fee-of-1 in calculateFee, very small inputs
+        // can land at fee == amount, leaving netAmount == 0 — the pool
+        // would then mint a 0-pair, transfer 0 shares, but still consume
+        // the user's collateral as a fee. Reject explicitly so the user
+        // doesn't lose dust to a no-op trade.
+        require(netAmount > 0, "PronosAMM: amount below fee");
 
         // 2. Transfer full amount from user
         require(collateral.transferFrom(msg.sender, address(this), collateralAmount), "PronosAMM: transfer failed");
@@ -199,6 +208,7 @@ contract PronosAMM is ERC1155Holder {
      */
     function sell(bool sellYes, uint256 sharesAmount)
         external
+        nonReentrant
         whenNotPaused
         whenNotResolved
         returns (uint256 collateralOut)
@@ -355,7 +365,7 @@ contract PronosAMM is ERC1155Holder {
     }
 
     /// @notice Redeem winning tokens for USDC (1 token = 1 USDC).
-    function redeem(uint256 amount) external {
+    function redeem(uint256 amount) external nonReentrant {
         require(resolved, "PronosAMM: not resolved");
         require(amount > 0, "PronosAMM: zero amount");
 

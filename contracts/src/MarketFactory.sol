@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./PronosToken.sol";
 import "./PronosAMM.sol";
 
@@ -13,7 +14,7 @@ import "./PronosAMM.sol";
  * Revenue distribution:
  *   70% treasury, 20% liquidity reserve, 10% emergency reserve
  */
-contract MarketFactory {
+contract MarketFactory is ReentrancyGuard {
     // ─── State ────────────────────────────────────────────────────────────────
 
     PronosToken public immutable token;
@@ -53,6 +54,10 @@ contract MarketFactory {
     event FeesDistributed(uint256 treasury, uint256 liquidity, uint256 emergency);
     event OwnershipTransferred(address indexed oldOwner, address indexed newOwner);
     event ResolverUpdated(address indexed oldResolver, address indexed newResolver);
+    event FeeCollectorUpdated(address indexed oldCollector, address indexed newCollector);
+    event TreasuryUpdated(address indexed oldTreasury, address indexed newTreasury);
+    event LiquidityReserveUpdated(address indexed oldReserve, address indexed newReserve);
+    event EmergencyReserveUpdated(address indexed oldReserve, address indexed newReserve);
 
     // ─── Modifiers ───────────────────────────────────────────────────────────
 
@@ -165,7 +170,7 @@ contract MarketFactory {
      * @notice Distribute fees from feeCollector wallet (70/20/10 split).
      *         Requires feeCollector to have approved this contract.
      */
-    function distributeFees() external onlyOwner {
+    function distributeFees() external onlyOwner nonReentrant {
         uint256 total = collateral.balanceOf(feeCollector);
         require(total > 0, "MarketFactory: no fees");
 
@@ -220,21 +225,25 @@ contract MarketFactory {
 
     function setFeeCollector(address _feeCollector) external onlyOwner {
         require(_feeCollector != address(0), "MarketFactory: zero address");
+        emit FeeCollectorUpdated(feeCollector, _feeCollector);
         feeCollector = _feeCollector;
     }
 
     function setTreasury(address _treasury) external onlyOwner {
         require(_treasury != address(0), "MarketFactory: zero address");
+        emit TreasuryUpdated(treasury, _treasury);
         treasury = _treasury;
     }
 
     function setLiquidityReserve(address _reserve) external onlyOwner {
         require(_reserve != address(0), "MarketFactory: zero address");
+        emit LiquidityReserveUpdated(liquidityReserve, _reserve);
         liquidityReserve = _reserve;
     }
 
     function setEmergencyReserve(address _reserve) external onlyOwner {
         require(_reserve != address(0), "MarketFactory: zero address");
+        emit EmergencyReserveUpdated(emergencyReserve, _reserve);
         emergencyReserve = _reserve;
     }
 }
