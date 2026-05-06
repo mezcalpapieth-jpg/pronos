@@ -1519,6 +1519,76 @@ html[data-theme="light"] .btn-theme-toggle::before {
    .has-image variant gets a min-height so the picture has room.
    Text-only cards (no .has-image) shrink to their content height —
    no big empty box where the image would have been. */
+/* News layout — sub-tab sidebar on the left at desktop widths, falling
+   back to a horizontal flex-wrap row at the top on tablet/phone. The
+   sticky positioning keeps the category list visible as the user
+   scrolls through the grid below the carousel. */
+.news-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  margin-bottom: 22px;
+}
+.news-sidebar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.news-main {
+  flex: 1 1 auto;
+  min-width: 0;       /* allow flex child to shrink past content width */
+}
+.news-tab {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 7px 14px;
+  letter-spacing: 0.06em;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface1);
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.news-tab:hover {
+  background: var(--surface2);
+}
+.news-tab.active {
+  border-color: var(--red, #FF4545);
+  color: var(--red, #FF4545);
+  background: rgba(255,69,69,0.08);
+}
+.news-tab-count {
+  margin-left: 6px;
+  opacity: 0.7;
+}
+
+@media (min-width: 900px) {
+  .news-layout {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 28px;
+  }
+  .news-sidebar {
+    flex: 0 0 180px;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    position: sticky;
+    top: 84px;          /* clear of the top nav */
+  }
+  .news-tab {
+    width: 100%;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
 /* Hero card sizing — three-tier responsive layout:
      mobile (<720)    → 1 card visible at 92% width
      tablet (720-1100) → 2 cards visible at calc(50% - 8px)

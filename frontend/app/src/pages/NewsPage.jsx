@@ -373,36 +373,30 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
         )}
       </div>
 
-      {/* Sub-tabs */}
-      <div style={{
-        display: 'flex', gap: 8, marginBottom: 22,
-        flexWrap: 'wrap',
-      }}>
-        {SUB_TABS.map(tab => {
-          const isActive = sub === tab.key;
-          const count = visibleCounts[tab.key];
-          return (
-            <button
-              key={tab.key}
-              onClick={() => setSub(tab.key)}
-              className={`filter-btn${isActive ? ' active' : ''}`}
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 11, padding: '7px 14px',
-                letterSpacing: '0.06em',
-                borderColor: isActive ? 'var(--red, #FF4545)' : 'var(--border)',
-                color: isActive ? 'var(--red, #FF4545)' : 'var(--text-muted)',
-                background: isActive ? 'rgba(255,69,69,0.08)' : 'var(--surface1)',
-              }}
-            >
-              {tab.label}
-              {count != null && count > 0 && (
-                <span style={{ marginLeft: 6, opacity: 0.7 }}>· {count}</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+      {/* Layout: sub-tab sidebar on the left at desktop widths,
+          collapses to a horizontal flex-wrap row at the top on
+          tablet/phone (≥900px breakpoint switches between modes). */}
+      <div className="news-layout">
+        <aside className="news-sidebar">
+          {SUB_TABS.map(tab => {
+            const isActive = sub === tab.key;
+            const count = visibleCounts[tab.key];
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setSub(tab.key)}
+                className={`news-tab${isActive ? ' active' : ''}`}
+              >
+                <span>{tab.label}</span>
+                {count != null && count > 0 && (
+                  <span className="news-tab-count">· {count}</span>
+                )}
+              </button>
+            );
+          })}
+        </aside>
+
+        <div className="news-main">
 
       {/* Loading / error / empty states */}
       {loading && !data && (
@@ -471,6 +465,8 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
           ))}
         </div>
       )}
+        </div>{/* /news-main */}
+      </div>{/* /news-layout */}
 
       {linkPickerFor && (
         <NewsLinkPicker
