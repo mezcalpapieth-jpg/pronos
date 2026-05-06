@@ -618,6 +618,46 @@ async function fetchOneOutlet(outlet) {
   return fetchGoogleNewsForOutlet(outlet);
 }
 
+// ─── Quality filter ─────────────────────────────────────────────────────────
+// Drops obviously low-value items (horoscopes, lottery results,
+// daily-rate stubs, listicle clickbait, sponsored placements). Light
+// touch — biased toward keeping borderline items, since the cost of
+// false-positive filtering is real news the user wants. Adjust the
+// regex list below to tune.
+//
+// Applied AFTER per-outlet fetch + AFTER first-seen resolution but
+// BEFORE dedup/sort/balance — so we don't waste downstream work on
+// items we're going to drop anyway.
+const QUALITY_BLACKLIST = [
+  // Daily horoscopes — every outlet runs these as filler
+  /\bhor[oó]scopo\b/i,
+  // Lottery / draw results
+  /\b(?:melate|tris(?:el)?|chispazo|prog[oó]l|loter[ií]a nacional)\b/i,
+  // Generic weather/temperature reports (storms + emergencies still
+  // caught by the seguridad classifier and bypass this filter via the
+  // negative lookahead — we only drop the boring "Pronóstico del clima"
+  // boilerplate).
+  /\bpron[oó]stico\s+del?\s+clima\b/i,
+  // Daily commodity / FX stubs ("dólar hoy", "precios de la gasolina")
+  /\bd[oó]lar\s+hoy\b/i,
+  /\bprecios?\s+de\s+la\s+gasolin\w+\s+hoy\b/i,
+  // Listicle / clickbait openings
+  /^\s*(?:estos? son los?|top\s+\d+|los? \d+\s+(?:mejores?|peores?|m[aá]s)|\d+\s+(?:cosas|claves|consejos|tips|maneras|formas|razones|errores))\b/i,
+  // Sponsored / native ads
+  /\bpublirreportaje\b|\bcontenido\s+patrocinado\b/i,
+];
+
+function isQualityNews(item) {
+  const title = (item.title || '').trim();
+  // Very short titles are usually fragments / placeholder feed entries.
+  if (title.length < 25) return false;
+  const text = `${title} ${item.summary || ''}`;
+  for (const re of QUALITY_BLACKLIST) {
+    if (re.test(text)) return false;
+  }
+  return true;
+}
+
 // ─── Dedup ──────────────────────────────────────────────────────────────────
 // Two passes:
 //   1. URL-exact dedup (same canonical URL across categories — one
@@ -663,7 +703,15 @@ function dedupe(items) {
 // Persistent in-memory cache keyed by canonicalized news_url. Once
 // we've resolved an image for a URL, never re-fetch — the article's
 // og:image doesn't change.
-const imageCache = new Map(); // url → string | null (null = "tried, missed")
+// Enrichment cache: per-URL og-meta we've extracted from the article
+// page. Stored value is { image, publishedAt } where each field is
+// either a string or null ("tried, missed"). undefined means we
+// haven't fetched this URL yet. Lives in memory only — Vercel cycles
+// instances frequently, so this rebuilds within a few refreshes after
+// any cold start. (We considered persisting to DB like the
+// firstSeenByUrl tracker but the value is small and re-derivable, so
+// the memory cache is enough.)
+const imageCache = new Map();
 
 function imageCacheGet(url) {
   return imageCache.has(url) ? imageCache.get(url) : undefined;
@@ -721,7 +769,47 @@ function extractOgImage(html) {
   return null;
 }
 
-async function fetchOgImage(url) {
+// Extract a real publish date from article HTML metadata. Many
+// outlets that don't put the date in the URL slug (Aristegui,
+// Noroeste, Proceso, sub-domains of Universal) DO ship
+// <meta property="article:published_time"> or <meta
+// itemProp="datePublished">. We try them in priority order and
+// return an ISO string, or null if nothing parses to a sensible
+// date (within last 5 years, not in the future).
+//
+// Piggybacks on the same fetch as extractOgImage — no extra HTTP
+// cost beyond what we're already doing for image enrichment.
+function extractOgPublishedAt(html) {
+  if (!html) return null;
+  const patterns = [
+    /<meta[^>]+property=["']article:published_time["'][^>]+content=["']([^"']+)["']/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']article:published_time["']/i,
+    /<meta[^>]+itemProp=["']datePublished["'][^>]+content=["']([^"']+)["']/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+itemProp=["']datePublished["']/i,
+    /<meta[^>]+name=["']pubdate["'][^>]+content=["']([^"']+)["']/i,
+    /<meta[^>]+name=["']date["'][^>]+content=["']([^"']+)["']/i,
+    /<time[^>]+itemProp=["']datePublished["'][^>]+datetime=["']([^"']+)["']/i,
+    /<time[^>]+datetime=["']([^"']+)["']/i,
+  ];
+  const now = Date.now();
+  const fiveYearsAgo = now - 5 * 365 * 24 * 60 * 60 * 1000;
+  const oneDayAhead = now + 24 * 60 * 60 * 1000;
+  for (const re of patterns) {
+    const m = html.match(re);
+    if (!m || !m[1]) continue;
+    const d = new Date(m[1]);
+    const t = d.getTime();
+    if (!Number.isFinite(t)) continue;
+    if (t < fiveYearsAgo || t > oneDayAhead) continue;
+    return d.toISOString();
+  }
+  return null;
+}
+
+// Fetch the article page once and extract BOTH og:image and
+// article:published_time. Returns { image, publishedAt } where each
+// field is null if not present / not parseable.
+async function fetchOgMeta(url) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), IMAGE_FETCH_TIMEOUT_MS);
   try {
@@ -733,11 +821,14 @@ async function fetchOgImage(url) {
       redirect: 'follow',
       signal: controller.signal,
     });
-    if (!res.ok) return null;
+    if (!res.ok) return { image: null, publishedAt: null };
     const html = await res.text();
-    return extractOgImage(html);
+    return {
+      image: extractOgImage(html),
+      publishedAt: extractOgPublishedAt(html),
+    };
   } catch {
-    return null;
+    return { image: null, publishedAt: null };
   } finally {
     clearTimeout(timer);
   }
@@ -757,39 +848,56 @@ async function runWithConcurrency(items, worker, n) {
   await Promise.all(runners);
 }
 
-// Populate `image` on items that don't already have one (Google News
-// items that came without media:thumbnail). Looks up the in-memory
-// cache first; only fetches the redirector page for cache misses,
-// limited to the top-N items per refresh so the cost is bounded.
+// Populate `image` AND a real `publishedAt` on items that don't
+// already have one. Looks up the in-memory cache first; only fetches
+// the article page for cache misses, limited to the top-N items per
+// refresh. Each fetch extracts BOTH og:image and
+// article:published_time so we get image + real date for the cost
+// of one HTTP round-trip.
+//
+// Why both: many Mexican outlets (Aristegui, Noroeste, Proceso, El
+// Universal sub-domains) don't put dates in URL slugs, so the
+// scraper-side URL-date extractor returns null and they fall through
+// to first-seen. By extracting article:published_time here, items
+// get their real publish time on the same fetch we already do for
+// images. Cached forever (publish times don't change).
+//
+// Apply order: a fetched real date overrides a first-seen stamp.
+// publishedAtSource = 'og-fetch' marks these for debug visibility.
 async function enrichItemsWithImages(items) {
-  // Group items into:
-  //   already-has-image   → skip (direct RSS)
-  //   cache-hit (positive)→ stamp image from cache
-  //   cache-hit (negative)→ skip (we tried earlier, missed)
-  //   cache-miss          → fetch og:image and cache the result
   const toFetch = [];
   for (const it of items) {
-    if (it.image) continue;
+    const needsImage = !it.image;
+    const needsDate = it.publishedAtSource === 'first-seen';
     const cached = imageCacheGet(it.url);
     if (cached === undefined) {
-      toFetch.push(it);
-    } else if (cached) {
-      it.image = cached;
+      // Never tried — fetch if we need image OR date.
+      if (needsImage || needsDate) toFetch.push(it);
+    } else {
+      // Already tried — apply whatever we found.
+      if (cached.image && needsImage) it.image = cached.image;
+      if (cached.publishedAt && needsDate) {
+        it.publishedAt = cached.publishedAt;
+        it.publishedAtSource = 'og-fetch';
+      }
     }
-    // cached === null means "we tried before, no image" — keep as-is
   }
 
   // Cap fetch count per refresh. Items beyond this fall through
-  // without images this round; they'll get fetched on a future
+  // without enrichment this round; they'll get enriched on a future
   // refresh once the priority items finish caching.
   const fetchTargets = toFetch.slice(0, IMAGE_ENRICH_TOP_N);
 
   await runWithConcurrency(
     fetchTargets,
     async (it) => {
-      const img = await fetchOgImage(it.url);
-      imageCacheSet(it.url, img); // stores either URL or null
-      if (img) it.image = img;
+      const meta = await fetchOgMeta(it.url);
+      imageCacheSet(it.url, meta); // stores { image, publishedAt }
+      if (meta.image && !it.image) it.image = meta.image;
+      if (meta.publishedAt && it.publishedAtSource === 'first-seen') {
+        it.publishedAt = meta.publishedAt;
+        it.publishedAtSource = 'og-fetch';
+      }
     },
     IMAGE_FETCH_CONCURRENCY,
   );
@@ -955,6 +1063,14 @@ async function refreshCache() {
       it.categories = classify(it);
       it.category = it.categories[0];
     }
+
+    // Quality filter — drop horoscopes, lottery results, daily stubs,
+    // listicle clickbait. Done after first-seen resolution so the
+    // filter rules can be tuned without affecting the persisted
+    // first-seen timestamps for borderline items.
+    const beforeQuality = items.length;
+    items = items.filter(isQualityNews);
+    debug.qualityFiltered = beforeQuality - items.length;
 
     // Sort newest first, then dedupe by URL + near-duplicate title.
     items.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));

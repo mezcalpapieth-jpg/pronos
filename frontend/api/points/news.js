@@ -5,7 +5,7 @@
  * Used by the /c/noticias page in the points-app.
  *
  *   category: one of NEWS_CATEGORIES (default 'featured' = all)
- *   limit:    1..60, default 60
+ *   limit:    1..120, default 120
  *
  * Caching: in-memory module cache inside _lib/news-mexico.js, 5-min TTL,
  * stale-while-revalidate. Per-IP rate-limit on top so a misbehaving
@@ -41,8 +41,8 @@ export default async function handler(req, res) {
     const category = VALID_CATEGORIES.includes(rawCategory) ? rawCategory : 'featured';
     const rawLimit = Number(req.query.limit);
     const limit = Number.isFinite(rawLimit) && rawLimit > 0
-      ? Math.min(60, Math.floor(rawLimit))
-      : 60;
+      ? Math.min(120, Math.floor(rawLimit))
+      : 120;
 
     const data = await getMexicanNews({ category, limit });
 
