@@ -24,6 +24,8 @@ const Admin = lazy(() => import('./pages/Admin.jsx'));
 const WorldCupPage = lazy(() => import('./pages/WorldCupPage.jsx'));
 const CategoryPage = lazy(() => import('./pages/CategoryPage.jsx'));
 const NewsPage = lazy(() => import('./pages/NewsPage.jsx'));
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy.jsx'));
+const TermsOfService = lazy(() => import('./pages/TermsOfService.jsx'));
 
 function RouteFallback() {
   return (
@@ -111,6 +113,8 @@ export default function App() {
             path="/admin"
             element={<Admin username={username} userIsAdmin={userIsAdmin} loading={checkingUsername} />}
           />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/terms"   element={<TermsOfService />} />
         </Routes>
       </Suspense>
     </BrowserRouter>

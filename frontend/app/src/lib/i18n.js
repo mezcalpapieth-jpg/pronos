@@ -360,6 +360,8 @@ const STRINGS = {
   'footer.copyright':         { es: '© 2026 Pronos · El primer mercado de predicciones on-chain para LATAM',
                                 en: '© 2026 Pronos · The first on-chain prediction market for LATAM' },
   'footer.home':              { es: 'Inicio',               en: 'Home' },
+  'footer.privacy':           { es: 'Privacidad',           en: 'Privacy' },
+  'footer.terms':             { es: 'Términos',             en: 'Terms' },
   'footer.contact':           { es: 'Contacto',             en: 'Contact' },
 
   // ── HowItWorks ────────────────────────────────────────────────────────────

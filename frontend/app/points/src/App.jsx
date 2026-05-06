@@ -25,6 +25,9 @@ import PointsWorldCupPage from './pages/PointsWorldCupPage.jsx';
 // Shared news page — same component used by the MVP build, with the
 // admin-handoff destination passed in via the `adminPath` prop.
 import NewsPage from '@app/pages/NewsPage.jsx';
+import PrivacyPolicy from '@app/pages/PrivacyPolicy.jsx';
+import TermsOfService from '@app/pages/TermsOfService.jsx';
+import Footer from '@app/components/Footer.jsx';
 import PointsPortfolio from './pages/PointsPortfolio.jsx';
 import PointsEarn from './pages/PointsEarn.jsx';
 import PointsAdmin from './pages/PointsAdmin.jsx';
@@ -133,7 +136,10 @@ function Shell({ onOpenLogin, isAdmin }) {
         <Route path="/earn" element={<PointsEarn onOpenLogin={onOpenLogin} />} />
         <Route path="/admin" element={<PointsAdmin isAdmin={isAdmin} />} />
         <Route path="/r/:username" element={<PointsReferralLanding onOpenLogin={onOpenLogin} />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms"   element={<TermsOfService />} />
       </Routes>
+      <Footer />
     </>
   );
 }

@@ -22,20 +22,35 @@ export default function Footer() {
         {t('footer.copyright')}
       </div>
 
-      <div style={{ display: 'flex', gap: 24 }}>
-        <a href="/" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.06em', transition: 'color 0.2s' }}
-          onMouseOver={e => e.target.style.color = 'var(--text-secondary)'}
-          onMouseOut={e => e.target.style.color = 'var(--text-muted)'}
-        >
-          {t('footer.home')}
-        </a>
-        <a href="mailto:hola@pronos.io" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.06em', transition: 'color 0.2s' }}
-          onMouseOver={e => e.target.style.color = 'var(--text-secondary)'}
-          onMouseOut={e => e.target.style.color = 'var(--text-muted)'}
-        >
-          {t('footer.contact')}
-        </a>
+      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', justifyContent: 'center' }}>
+        <FooterLink href="/">{t('footer.home')}</FooterLink>
+        <FooterLink href="/privacy">{t('footer.privacy') || 'Privacidad'}</FooterLink>
+        <FooterLink href="/terms">{t('footer.terms') || 'Términos'}</FooterLink>
+        <FooterLink href="mailto:hola@pronos.io">{t('footer.contact')}</FooterLink>
       </div>
     </footer>
+  );
+}
+
+function FooterLink({ href, children }) {
+  const isExternal = href.startsWith('mailto:') || href.startsWith('http');
+  const baseStyle = {
+    fontFamily: 'var(--font-mono)',
+    fontSize: 11,
+    color: 'var(--text-muted)',
+    letterSpacing: '0.06em',
+    transition: 'color 0.2s',
+    textDecoration: 'none',
+  };
+  return (
+    <a
+      href={href}
+      style={baseStyle}
+      onMouseOver={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; }}
+      onMouseOut={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; }}
+      {...(isExternal ? {} : {})}
+    >
+      {children}
+    </a>
   );
 }
