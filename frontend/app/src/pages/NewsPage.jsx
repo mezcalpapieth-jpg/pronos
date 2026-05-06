@@ -654,6 +654,11 @@ function NewsHeroCarousel({ items, isAdmin, onCreateMarket, onOpenLinkPicker, on
           scrollSnapType: 'x mandatory',
           scrollBehavior: 'smooth',
           paddingBottom: 8,
+          // alignItems: flex-start so text-only cards take their
+          // natural height instead of stretching to match the
+          // tallest image card in the same row. Image cards have
+          // their own explicit height cap from CSS.
+          alignItems: 'flex-start',
           // Hide scrollbar (cosmetic). Companion ::-webkit-scrollbar
           // rule in components.css under .news-hero-scroller takes
           // care of WebKit; these two cover Firefox + IE/Edge.
@@ -690,7 +695,7 @@ function NewsHeroCarousel({ items, isAdmin, onCreateMarket, onOpenLinkPicker, on
               }}
             >
               {item.image ? (
-                <div style={{ flex: '1 1 55%', minHeight: 120, position: 'relative' }}>
+                <div style={{ flex: '1 1 50%', minHeight: 90, position: 'relative' }}>
                   <NewsImage src={item.image} alt={item.title} aspect="auto" fill />
                   {isAdmin && <HideButton onHide={onHide} item={item} />}
                   <div style={{

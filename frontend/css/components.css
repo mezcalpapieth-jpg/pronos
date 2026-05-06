@@ -1524,19 +1524,25 @@ html[data-theme="light"] .btn-theme-toggle::before {
      tablet (720-1100) → 2 cards visible at calc(50% - 8px)
      desktop (>1100)  → 3 cards visible at calc(33.33% - 11px)
    The 11px in the desktop clamp = 2/3 of the 16px gap, so 3 cards +
-   2 gaps fit cleanly without horizontal overflow. */
+   2 gaps fit cleanly without horizontal overflow.
+
+   Heights are explicit (not just min-) so image cards can't stretch
+   to absurd portrait-photo heights. The scroller is aligned to
+   flex-start (see NewsPage.jsx) so text-only cards stay at their
+   natural height instead of stretching to match image cards in the
+   same row. */
 .news-hero-card {
   flex: 0 0 92%;
 }
 .news-hero-card.has-image {
-  min-height: 180px;
+  height: 180px;
 }
 @media (min-width: 720px) {
   .news-hero-card {
     flex: 0 0 calc(50% - 8px);
   }
   .news-hero-card.has-image {
-    min-height: 200px;
+    height: 200px;
   }
 }
 @media (min-width: 1100px) {
@@ -1544,7 +1550,7 @@ html[data-theme="light"] .btn-theme-toggle::before {
     flex: 0 0 calc(33.333% - 11px);
   }
   .news-hero-card.has-image {
-    min-height: 200px;
+    height: 200px;
   }
 }
 
