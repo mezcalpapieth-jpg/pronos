@@ -9,9 +9,10 @@ contracts/lib/
 contracts/broadcast/
 
 # Claude Code — entire dir is personal config (worktrees, commands, hooks,
-# settings). MCP server wiring is also user-specific.
+# settings). MCP server wiring + the project-context file are personal too.
 .claude/
 .mcp.json
+CLAUDE.md
 
 # Node
 scripts/node_modules/
