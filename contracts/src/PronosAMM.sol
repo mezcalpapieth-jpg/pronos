@@ -24,7 +24,11 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
     // ─── State ────────────────────────────────────────────────────────────────
 
     PronosToken public immutable token;
-    IERC20      public immutable collateral;      // USDC
+    // Generic ERC-20 collateral. On Arbitrum One mainnet this is MXNB
+    // (Bitso's MXN-pegged stablecoin, 0xF197FFC28c23E0309B5559e7a166f2c6164C80aA).
+    // On Arbitrum Sepolia we use Circle's testnet USDC as a stand-in
+    // (the website still labels it "MXNB" for parity).
+    IERC20      public immutable collateral;
     address     public immutable factory;
 
     uint256 public immutable marketId;

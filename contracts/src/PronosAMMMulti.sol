@@ -24,6 +24,8 @@ contract PronosAMMMulti is ERC1155Holder {
     uint8 public constant MAX_OUTCOMES = 8;
 
     PronosTokenV2 public immutable token;
+    // Generic ERC-20 collateral. Arbitrum One: MXNB (Bitso). Arbitrum
+    // Sepolia: Circle USDC stand-in (labelled MXNB in the UI).
     IERC20 public immutable collateral;
     address public immutable factory;
 

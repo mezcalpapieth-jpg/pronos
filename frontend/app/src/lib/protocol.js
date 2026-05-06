@@ -1,14 +1,52 @@
 import { ethers } from 'ethers';
 
 /**
- * Protocol Switch — Toggle between Polymarket aggregator and own Pronos protocol.
+ * Pronos Protocol — own prediction-market contracts on Arbitrum.
  *
- * Stored in localStorage so it persists. When "own" mode is enabled,
- * the admin panel shows contract management tools and markets route
- * to the on-chain AMM instead of Polymarket CLOB.
+ * ════════════════════════════════════════════════════════════════════════
+ *  ARCHITECTURE — own protocol, no third-party aggregator
+ * ════════════════════════════════════════════════════════════════════════
+ *
+ *   Pronos runs ITS OWN smart contracts on Arbitrum. We are not a
+ *   Polymarket aggregator and we don't proxy CLOB / Gamma. Markets,
+ *   buy/sell, resolution, and redemption all happen against
+ *   MarketFactory + PronosAMM (or MarketFactoryV2 + PronosAMMMulti
+ *   for multi-outcome).
+ *
+ *   Earlier iterations had a dual-mode toggle that fed Polymarket
+ *   markets into the same UI. That mode is REMOVED. Don't reintroduce
+ *   it. If something feels like it needs Polymarket data, it doesn't —
+ *   we want our own market for it. (See `lib/gamma.js`,
+ *   `lib/polymarketApproved.js`, `lib/polymarketFilter.js` for the
+ *   deprecated callers; they're being phased out as their consumers
+ *   are migrated.)
+ *
+ * ════════════════════════════════════════════════════════════════════════
+ *  CHAINS — Arbitrum only
+ * ════════════════════════════════════════════════════════════════════════
+ *
+ *   Testnet: Arbitrum Sepolia (chain id 421614)
+ *   Mainnet: Arbitrum One (chain id 42161)
+ *
+ *   No Polygon. No Base. No L1.
+ *
+ * ════════════════════════════════════════════════════════════════════════
+ *  COLLATERAL — MXNB (with a testnet stand-in)
+ * ════════════════════════════════════════════════════════════════════════
+ *
+ *   MXNB is Bitso's MXN-pegged stablecoin on Arbitrum.
+ *
+ *   Mainnet:  real MXNB at 0xF197FFC28c23E0309B5559e7a166f2c6164C80aA
+ *   Testnet:  Circle's official USDC on Arbitrum Sepolia
+ *             (0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d) is used as
+ *             a stand-in. The website labels it "MXNB" everywhere
+ *             regardless of chain — same UX, easier testnet liquidity.
+ *
+ *   The contracts treat collateral as a generic IERC20, so swapping
+ *   between USDC-on-Sepolia and MXNB-on-mainnet is a deploy-time
+ *   address change, not a code change.
  */
 
-const PROTOCOL_KEY = 'pronos-protocol-mode';
 const READ_PROVIDERS = new Map();
 const envAddress = (name) => {
   const value = import.meta.env[name];
@@ -16,26 +54,18 @@ const envAddress = (name) => {
 };
 
 export const CHAIN_IDS = Object.freeze({
-  polygon: 137,
   arbitrum: 42161,
   arbitrumSepolia: 421614,
 });
 
 export const CHAIN_CONFIGS = Object.freeze({
-  [CHAIN_IDS.polygon]: {
-    chainId: CHAIN_IDS.polygon,
-    name: 'Polygon',
-    shortName: 'Polygon',
-    usdc: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
-    rpcUrls: ['https://polygon-rpc.com'],
-    blockExplorerUrls: ['https://polygonscan.com'],
-    nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
-  },
   [CHAIN_IDS.arbitrumSepolia]: {
     chainId: CHAIN_IDS.arbitrumSepolia,
     name: 'Arbitrum Sepolia',
     shortName: 'Arb Sepolia',
-    usdc: '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d',
+    // Testnet collateral: USDC on Arbitrum Sepolia, displayed as
+    // "MXNB" in the UI for parity with mainnet.
+    collateral: '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d',
     rpcUrls: ['https://sepolia-rollup.arbitrum.io/rpc'],
     blockExplorerUrls: ['https://sepolia.arbiscan.io'],
     nativeCurrency: { name: 'Arbitrum Sepolia Ether', symbol: 'ETH', decimals: 18 },
@@ -44,64 +74,48 @@ export const CHAIN_CONFIGS = Object.freeze({
     chainId: CHAIN_IDS.arbitrum,
     name: 'Arbitrum One',
     shortName: 'Arbitrum',
-    usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+    // Real MXNB issued by Bitso on Arbitrum One.
+    collateral: '0xF197FFC28c23E0309B5559e7a166f2c6164C80aA',
     rpcUrls: ['https://arb1.arbitrum.io/rpc'],
     blockExplorerUrls: ['https://arbiscan.io'],
     nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
   },
 });
 
-export function getProtocolMode() {
-  return localStorage.getItem(PROTOCOL_KEY) || 'polymarket';
-}
+// Display label for the collateral token. Always "MXNB" — the testnet
+// chain technically uses USDC as a stand-in, but the user-facing label
+// stays consistent across environments.
+export const COLLATERAL_LABEL = 'MXNB';
 
-export function setProtocolMode(mode) {
-  if (mode !== 'polymarket' && mode !== 'own') {
-    throw new Error('Invalid protocol mode: ' + mode);
-  }
-  localStorage.setItem(PROTOCOL_KEY, mode);
-  window.dispatchEvent(new CustomEvent('pronos-protocol-change', { detail: mode }));
-}
-
-export function isOwnProtocol() {
-  return getProtocolMode() === 'own';
-}
+// ─── Admin gate ─────────────────────────────────────────────────────────────
 
 /**
- * Check if user has admin access.
- * Now uses the isAdmin flag from the server response, not a client-side list.
- * Pass the flag directly from the /api/user response.
+ * Check if user has admin access. Adminship is server-evaluated and
+ * passed in via the `isAdmin` flag from /api/user — never derive it
+ * from a client-side allowlist.
  */
 export function isAdmin(adminFlag) {
   return adminFlag === true;
 }
 
-// ─── Contract addresses per chain ─────────────────────────────────────────
+// ─── Contract addresses per chain ──────────────────────────────────────────
 
 export const CONTRACTS = {
-  // Polygon (Polymarket)
-  [CHAIN_IDS.polygon]: {
-    factory: null,
-    factoryV2: null,
-    token: null,
-    tokenV2: null,
-    usdc: CHAIN_CONFIGS[CHAIN_IDS.polygon].usdc,
-  },
-  // Arbitrum Sepolia (testnet)
   [CHAIN_IDS.arbitrumSepolia]: {
-    factory: envAddress('VITE_PRONOS_ARB_SEPOLIA_FACTORY'),
+    factory:   envAddress('VITE_PRONOS_ARB_SEPOLIA_FACTORY'),
     factoryV2: envAddress('VITE_PRONOS_ARB_SEPOLIA_FACTORY_V2'),
-    token: envAddress('VITE_PRONOS_ARB_SEPOLIA_TOKEN'),
-    tokenV2: envAddress('VITE_PRONOS_ARB_SEPOLIA_TOKEN_V2'),
-    usdc: envAddress('VITE_PRONOS_ARB_SEPOLIA_USDC') || CHAIN_CONFIGS[CHAIN_IDS.arbitrumSepolia].usdc,
+    token:     envAddress('VITE_PRONOS_ARB_SEPOLIA_TOKEN'),
+    tokenV2:   envAddress('VITE_PRONOS_ARB_SEPOLIA_TOKEN_V2'),
+    collateral: envAddress('VITE_PRONOS_ARB_SEPOLIA_COLLATERAL')
+              || CHAIN_CONFIGS[CHAIN_IDS.arbitrumSepolia].collateral,
   },
-  // Arbitrum One (mainnet)
   [CHAIN_IDS.arbitrum]: {
-    factory: envAddress('VITE_PRONOS_ARBITRUM_FACTORY'),
+    factory:   envAddress('VITE_PRONOS_ARBITRUM_FACTORY'),
     factoryV2: envAddress('VITE_PRONOS_ARBITRUM_FACTORY_V2'),
-    token: envAddress('VITE_PRONOS_ARBITRUM_TOKEN'),
-    tokenV2: envAddress('VITE_PRONOS_ARBITRUM_TOKEN_V2'),
-    usdc: envAddress('VITE_PRONOS_ARBITRUM_USDC') || CHAIN_CONFIGS[CHAIN_IDS.arbitrum].usdc,
+    token:     envAddress('VITE_PRONOS_ARBITRUM_TOKEN'),
+    tokenV2:   envAddress('VITE_PRONOS_ARBITRUM_TOKEN_V2'),
+    collateral: envAddress('VITE_PRONOS_ARBITRUM_COLLATERAL')
+              || CHAIN_CONFIGS[CHAIN_IDS.arbitrum].collateral,
   },
 };
 
@@ -109,8 +123,12 @@ export function getContracts(chainId) {
   return CONTRACTS[chainId] || null;
 }
 
-export function getUsdcAddress(chainId) {
-  return CONTRACTS[chainId]?.usdc || null;
+/**
+ * Address of the collateral token for a given chain. Always labelled
+ * "MXNB" in the UI — see COLLATERAL_LABEL.
+ */
+export function getCollateralAddress(chainId) {
+  return CONTRACTS[chainId]?.collateral || null;
 }
 
 export function getChainConfig(chainId) {
@@ -135,33 +153,18 @@ export function getChainReadProvider(chainId) {
   return provider;
 }
 
-// ─── Market source detection ──────────────────────────────────────────────
+// ─── Required chain helper ─────────────────────────────────────────────────
 
 /**
- * Determine if a market is from Polymarket or own protocol.
- * Own protocol markets have a numeric `protocolMarketId`.
- */
-export function isProtocolMarket(market) {
-  return market && market.source === 'protocol';
-}
-
-export function isPolymarket(market) {
-  return !market || market.source !== 'protocol';
-}
-
-// ─── Network switching ───────────────────────────────────────────────────
-
-/**
- * Get the required chain ID based on current protocol mode.
- * Polymarket → Polygon, Own protocol → Arbitrum (or Arbitrum Sepolia for testnet)
+ * The chain Pronos contracts run on. Testnet returns Arbitrum Sepolia,
+ * mainnet returns Arbitrum One. There's only one path now — no
+ * polymarket / polygon branch.
  */
 export function getRequiredChainId(testnet = true) {
-  const mode = getProtocolMode();
-  if (mode === 'own') {
-    return testnet ? CHAIN_IDS.arbitrumSepolia : CHAIN_IDS.arbitrum;
-  }
-  return CHAIN_IDS.polygon;
+  return testnet ? CHAIN_IDS.arbitrumSepolia : CHAIN_IDS.arbitrum;
 }
+
+// ─── Wallet chain switching ────────────────────────────────────────────────
 
 export function normalizeWalletChainId(chainId) {
   if (typeof chainId === 'number') return chainId;
@@ -207,8 +210,9 @@ function isUnknownChainError(err) {
 }
 
 /**
- * Switch to a chain and add it to the wallet if the wallet does not know it.
- * This helps Vivaldi/MetaMask-style injected wallets on Arbitrum Sepolia.
+ * Switch the wallet to a target chain, adding it to the wallet's
+ * known networks if necessary (Arbitrum Sepolia in particular needs
+ * adding for many wallets).
  */
 export async function switchWalletChain(wallet, chainId) {
   const numericChainId = Number(chainId);
@@ -265,10 +269,34 @@ export async function switchWalletChain(wallet, chainId) {
 }
 
 /**
- * Switch the wallet to the required chain for the current protocol mode.
- * @param {object} wallet - Privy wallet object (from useWallets)
+ * Switch the wallet to the required chain (Arbitrum One on mainnet,
+ * Arbitrum Sepolia on testnet). Used by buy/sell flows before any
+ * write call.
  */
 export async function switchToRequiredChain(wallet, testnet = true) {
   const requiredChainId = getRequiredChainId(testnet);
   return switchWalletChain(wallet, requiredChainId);
 }
+
+// ─── Deprecated exports kept as no-ops for legacy callers ──────────────────
+//
+// Kept so the MVP code path (frontend/app/src/components/MarketsGrid.jsx)
+// continues to compile while it's being migrated. New code MUST NOT
+// import these. Once MarketsGrid is rewritten to fetch protocol
+// markets, these can be deleted entirely.
+//
+// To callers: every Pronos market is a protocol market. There is no
+// polymarket source. isProtocolMarket → true. isPolymarket → false.
+
+/** @deprecated Always returns true. All markets are protocol markets. */
+export function isProtocolMarket(_market) { return true; }
+/** @deprecated Always returns false. Polymarket integration removed. */
+export function isPolymarket(_market) { return false; }
+/** @deprecated Always returns 'own'. Polymarket mode removed. */
+export function getProtocolMode() { return 'own'; }
+/** @deprecated No-op. Polymarket mode removed. */
+export function setProtocolMode(_mode) { /* no-op */ }
+/** @deprecated Always returns true. */
+export function isOwnProtocol() { return true; }
+/** @deprecated Use getCollateralAddress(chainId) instead. */
+export function getUsdcAddress(chainId) { return getCollateralAddress(chainId); }

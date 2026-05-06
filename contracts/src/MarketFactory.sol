@@ -18,7 +18,10 @@ contract MarketFactory is ReentrancyGuard {
     // ─── State ────────────────────────────────────────────────────────────────
 
     PronosToken public immutable token;
-    IERC20      public immutable collateral; // USDC
+    // Generic ERC-20 collateral. Arbitrum One: MXNB. Arbitrum Sepolia:
+    // Circle USDC stand-in (labelled MXNB in the UI). The contract
+    // doesn't care which token it is — only the deploy script does.
+    IERC20      public immutable collateral;
 
     address public owner;       // Safe multisig
     address public resolver;    // Can be same as owner or separate multisig (2/3)
@@ -168,7 +171,21 @@ contract MarketFactory is ReentrancyGuard {
 
     /**
      * @notice Distribute fees from feeCollector wallet (70/20/10 split).
-     *         Requires feeCollector to have approved this contract.
+     *
+     * Setup requirement (one-time, before first call):
+     *     feeCollector must call collateral.approve(factoryAddress,
+     *     uint256.max) so the factory can pull-and-distribute fees on
+     *     each call. If feeCollector is a Safe multisig, sign that
+     *     approve as the first transaction after setting feeCollector.
+     *     Without it, distributeFees() reverts with "MarketFactory:
+     *     treasury failed" (the underlying transferFrom fails on
+     *     missing allowance).
+     *
+     * Distribution math: floor-truncates treasury and liquidity to
+     *     keep them at exactly 70% / 20% of integer total. The
+     *     emergency reserve receives `total - treasury - liquidity`,
+     *     which absorbs the rounding remainder. No fees evaporate to
+     *     rounding (verified by testFuzz_distributeFees_no_dust).
      */
     function distributeFees() external onlyOwner nonReentrant {
         uint256 total = collateral.balanceOf(feeCollector);

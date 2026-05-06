@@ -3,13 +3,14 @@
  *
  * Scans points_markets for active rows whose trading window has closed
  * AND whose resolver_type is one we know how to settle automatically.
- * Today: only 'chainlink_price' (reads the feed via JSON-RPC, compares
- * to resolver_config.threshold, flips status=resolved). Future resolver
- * types (sports_api, polymarket_mirror) plug into the same dispatch.
+ * Active resolver types: chainlink_price, api_price, weather_api,
+ * api_chart, sports_api (espn / espn-pga / espn-liv / etc.).
  *
- * Intentionally a SEPARATE cron from /api/cron/auto-resolve — that one
- * is MVP-only and handles Polymarket-backed on-chain markets, which
- * doesn't apply to the off-chain points app.
+ * NOTE: this is now the ONLY auto-resolver. The older
+ * /api/cron/auto-resolve was a Polymarket-Gamma mirror for the
+ * legacy MVP path; it's been deprecated (returns 410 Gone) since
+ * Pronos no longer integrates Polymarket. See lib/protocol.js for
+ * the architecture decision.
  *
  * Env vars:
  *   DATABASE_URL   (required)
