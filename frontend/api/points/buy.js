@@ -2,8 +2,13 @@
  * POST /api/points/buy
  * Body: { marketId, outcomeIndex, collateral }
  *
- * Atomic buy: read state with row locks, validate, compute AMM math,
- * write derived state — all inside a single Postgres transaction.
+ * Off-chain MXNP buy. Points-app only — every market in `points_markets`
+ * lives entirely in Postgres; no chain calls happen here. The MVP build's
+ * on-chain trading flow is at /api/protocol/buy, backed by Turnkey
+ * delegated signing in _lib/onchain-trader.js.
+ *
+ * Atomic: reads state with row locks, validates, computes AMM math,
+ * writes derived state — all inside a single Postgres transaction.
  * Uses the Pool-backed withTransaction helper because Neon's HTTP
  * client cannot carry session state across separate queries.
  */
@@ -14,7 +19,6 @@ import { binaryBuyQuote, multiBuyQuote } from '../_lib/amm-math.js';
 import { requireSession } from '../_lib/session.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { withTransaction } from '../_lib/db-tx.js';
-import { buyOnChain } from '../_lib/onchain-trader.js';
 
 // Lightweight HTTP client used only to run the idempotent schema bootstrap.
 // Transactional work goes through withTransaction() which uses a WS Pool.
@@ -70,12 +74,9 @@ export default async function handler(req, res) {
 
     const result = await withTransaction(async (client) => {
       // Lock the market row first, then the position row — consistent lock
-      // order across buy/sell prevents deadlocks. For onchain-mode markets
-      // the chain itself serializes writes so the lock is cosmetic, but we
-      // still hold it while we record the trade locally.
+      // order across buy/sell prevents deadlocks.
       const marketResult = await client.query(
-        `SELECT id, status, reserves, end_time, mode,
-                chain_id, chain_market_id, chain_address
+        `SELECT id, status, reserves, end_time
          FROM points_markets
          WHERE id = $1
          FOR UPDATE`,
@@ -90,71 +91,6 @@ export default async function handler(req, res) {
       }
       if (m.end_time && new Date(m.end_time) <= new Date()) {
         const err = new Error('market_expired'); err.status = 400; throw err;
-      }
-
-      // ── Mode dispatch ─────────────────────────────────────────────
-      // mode='onchain' markets delegate the trade execution to the
-      // on-chain CPMM via Turnkey-signed tx. The DB path below stays
-      // for mode='points' markets (default for every market today).
-      if (m.mode === 'onchain') {
-        if (!session.sub) {
-          const err = new Error('suborg_required'); err.status = 400; throw err;
-        }
-        // Look up the user's EVM address from points_users so we
-        // don't round-trip to Turnkey on every trade. Stored at
-        // signup via getSuborgWalletAddress().
-        const userRow = await client.query(
-          `SELECT wallet_address FROM points_users WHERE turnkey_sub_org_id = $1 LIMIT 1`,
-          [session.sub],
-        );
-        const ownerAddr = userRow.rows[0]?.wallet_address;
-        if (!ownerAddr) {
-          const err = new Error('wallet_not_found'); err.status = 400; throw err;
-        }
-        const onchain = await buyOnChain({
-          suborgId: session.sub,
-          ownerAddr,
-          market: m,
-          outcomeIndex: oi,
-          collateral: amt,
-          maxAvgPrice: maxPrice,
-        });
-        // Record the trade locally so portfolio / history show it
-        // immediately — indexer will UPSERT the same row on its next
-        // pass (idempotent via tx_hash UNIQUE).
-        await client.query(
-          `INSERT INTO points_trades (
-             market_id, username, side, outcome_index,
-             shares, collateral, fee, price_at_trade,
-             reserves_before, reserves_after, tx_hash
-           ) VALUES ($1, $2, 'buy', $3, $4, $5, $6, $7, NULL, NULL, $8)
-           ON CONFLICT (tx_hash) DO NOTHING`,
-          [
-            mid, username, oi,
-            onchain.sharesOut, amt, onchain.fee || 0, onchain.priceAfter || 0,
-            onchain.txHash,
-          ],
-        );
-        // Update position mirror (indexer will reconcile from chain)
-        await client.query(
-          `INSERT INTO points_positions (market_id, username, outcome_index, shares, cost_basis)
-           VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT (market_id, username, outcome_index) DO UPDATE
-           SET shares     = points_positions.shares + EXCLUDED.shares,
-               cost_basis = points_positions.cost_basis + EXCLUDED.cost_basis,
-               updated_at = NOW()`,
-          [mid, username, oi, onchain.sharesOut, amt],
-        );
-        return {
-          mode: 'onchain',
-          balance: onchain.balance,
-          sharesOut: onchain.sharesOut,
-          fee: onchain.fee || 0,
-          priceBefore: onchain.priceBefore,
-          priceAfter: onchain.priceAfter,
-          txHash: onchain.txHash,
-          blockNumber: onchain.blockNumber,
-        };
       }
       const reserves = parseJsonb(m.reserves, []).map(Number);
       // Dispatch AMM by outcome count:

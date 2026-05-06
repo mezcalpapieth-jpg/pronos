@@ -232,7 +232,8 @@ export default function CategoryPage({ onOpenLogin }) {
       setError(null);
       try {
         const res = await fetch(
-          `/api/points/markets?mode=onchain&status=${fetchStatus}&featured=all&limit=2000&chain_id=${CHAIN_ID}`,
+          `/api/protocol/markets?status=${fetchStatus}&limit=200&chainId=${CHAIN_ID}` +
+            (slug ? `&category=${encodeURIComponent(slug)}` : ''),
           { credentials: 'include' },
         );
         const data = await res.json().catch(() => ({}));

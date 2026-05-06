@@ -1,16 +1,15 @@
 /**
  * MVP BetModal — Turnkey delegated signing.
  *
- * The UI posts {marketId, outcomeIndex, collateral, minSharesOut, maxAvgPrice}
- * to /api/points/buy. When the market's `mode === 'onchain'`, the backend
- * routes through Turnkey-signed tx via _lib/onchain-trader.js; when mode is
- * `points`, it goes through the DB-locked AMM path. The client doesn't care
- * which — response shape is identical.
+ * The UI posts {marketId, outcomeIndex, collateral} to /api/protocol/buy
+ * which routes through Turnkey-signed tx via _lib/onchain-trader.js.
+ * The points-app has its own modal (PointsBuyModal) that talks to the
+ * off-chain /api/points/buy endpoint — these two flows are completely
+ * separate now (the points-app's MXNP ledger is never on-chain).
  *
- * Slippage guards: the client sends a preview snapshot (minSharesOut,
- * maxAvgPrice) based on the last quote so the server can short-circuit with
- * `price_moved` if the market drifted. Preview comes from /api/points/quote-buy
- * which walks the same AMM math the server uses.
+ * Slippage preview is currently degraded: there's no /api/protocol/quote-buy
+ * endpoint yet, so the modal falls back to a naive fee estimate. TODO: add
+ * a chain-aware quote endpoint that calls AMM.estimateBuy / AMM.estimateSell.
  */
 import React, { useEffect, useState } from 'react';
 import { usePointsAuth } from '../lib/pointsAuth.js';
@@ -21,7 +20,7 @@ const QUICK_AMOUNTS = [5, 10, 25, 50];
 const STEPS = {
   IDLE:     'idle',
   QUOTING:  'quoting',    // fetching live quote for slippage preview
-  PLACING:  'placing',    // POST /api/points/buy
+  PLACING:  'placing',    // POST /api/protocol/buy
   SUCCESS:  'success',
   ERROR:    'error',
 };
@@ -66,46 +65,23 @@ export default function BetModal({
   const isLoading = step === STEPS.QUOTING || step === STEPS.PLACING;
 
   const balance = typeof user?.balance === 'number' ? user.balance : null;
-  const chainMode = market?.mode === 'onchain' ? 'onchain' : 'points';
-  const isOnchain = chainMode === 'onchain';
+  // Every market the MVP shows is on-chain (the off-chain MXNP ledger
+  // lives in the points-app, not here). Keeping the flag as a constant
+  // so the existing UI conditionals continue to compile without spread
+  // changes; can be deleted once they're cleaned up.
+  const isOnchain = true;
 
-  // Fetch a live slippage quote when the amount changes. Debounced lightly
-  // so typing doesn't fire a quote per keystroke. Gives us priceBefore,
-  // priceAfter, feePct, sharesOut — surfaced in the preview box below.
+  // Slippage preview is disabled until /api/protocol/quote-buy exists.
+  // The modal handles `quote === null` gracefully (shows a "preview
+  // unavailable" tag and falls back to the naive fee estimate below).
   useEffect(() => {
-    if (!open || !marketId || numAmount <= 0) {
-      setQuote(null);
-      setQuoteError('');
-      return;
-    }
-    let alive = true;
-    const id = setTimeout(async () => {
-      setStep(STEPS.QUOTING);
-      setQuoteError('');
-      try {
-        const { ok, data } = await postJsonWithQuery('/api/points/quote-buy', {
-          marketId,
-          outcomeIndex,
-          collateral: numAmount,
-        });
-        if (!alive) return;
-        if (!ok) {
-          setQuote(null);
-          setQuoteError(data?.error || 'preview_unavailable');
-        } else {
-          setQuote(data);
-        }
-      } catch (e) {
-        if (!alive) return;
-        setQuote(null);
-        setQuoteError(e?.message || 'preview_unavailable');
-      } finally {
-        if (alive) setStep(STEPS.IDLE);
-      }
-    }, 220);
-    return () => { alive = false; clearTimeout(id); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setQuote(null);
+    setQuoteError('');
   }, [open, marketId, outcomeIndex, numAmount]);
+  // postJsonWithQuery is unused after the quote removal; keep the
+  // helper around in case the chain-aware quote endpoint shows up
+  // later — its signature already matches.
+  void postJsonWithQuery;
 
   if (!open) return null;
 
@@ -144,11 +120,11 @@ export default function BetModal({
     const maxPrice  = quote?.avgPrice ? Number(quote.avgPrice) * 1.02 : null;
 
     setStep(STEPS.PLACING);
-    setStatusMsg(isOnchain ? t('bet.placingProtocol') : t('bet.placing'));
+    setStatusMsg(t('bet.placingProtocol') || t('bet.placing'));
     setTxHash(null);
 
     try {
-      const { ok, data } = await postJson('/api/points/buy', {
+      const { ok, data } = await postJson('/api/protocol/buy', {
         marketId,
         outcomeIndex,
         collateral: numAmount,

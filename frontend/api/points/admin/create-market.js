@@ -5,30 +5,22 @@
  *   outcomes: string[],       // 2 to 10 outcomes
  *   seedLiquidity,
  *   ammMode?: 'unified' | 'parallel'  // default 'unified'
- *
- *   // ── On-chain registration (MVP admin) ─────────────────────────
- *   mode?: 'points' | 'onchain'       // default 'points'
- *   chainId?: number                  // e.g. 421614 Arbitrum Sepolia
- *   chainAddress?: string             // deployed PronosAMM / MarketFactory address
- *   chainMarketId?: string            // on-chain market index (bigint as string)
- *   featured?: boolean                // default false
- *
- * When mode='onchain' the DB row is a mirror of an on-chain market that
- * was already deployed via MarketFactory. Reserves here are display-only —
- * buy.js/sell.js read the real reserves from the chain for trade math.
- * Off-chain mode='points' continues to work exactly as before.
+ *   featured?: boolean
+ *   sport?, league?, outcomeImages?
  * }
  *
+ * Off-chain MXNP market. Points-app only. The MVP build's on-chain
+ * markets are deployed via /api/protocol/admin/create-market which
+ * calls MarketFactory.createMarket directly through Turnkey.
+ *
  * 'unified' (default): one row in points_markets with N-element reserves,
- *   priced by the unified CPMM. Works for any N ≥ 2. This is the
- *   original behaviour.
+ *   priced by the unified CPMM. Works for any N ≥ 2.
  *
  * 'parallel': one "parent" row (reserves = []) plus N "leg" rows, each a
  *   binary Sí/No market with reserves = [seed, seed]. Parent carries the
- *   display metadata (question, outcomes as labels, end_time); legs carry
- *   the binary CPMM state the trading endpoints operate on. Addressable
- *   by parent id; legs are resolved via the parent's cascade on admin
- *   resolve. Admin-only endpoint.
+ *   display metadata; legs carry the binary CPMM state the trading
+ *   endpoints operate on. Resolved via the parent's cascade on admin
+ *   resolve.
  */
 import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
@@ -36,11 +28,6 @@ import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { initialReserves } from '../../_lib/amm-math.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 import { neon } from '@neondatabase/serverless';
-import {
-  deployMarketOnChain,
-  deployParallelBinaryOnChain,
-  isOnchainReady,
-} from '../../_lib/onchain-trader.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 
@@ -58,16 +45,15 @@ export default async function handler(req, res) {
 
   const {
     question, category, icon, endTime, outcomes, seedLiquidity, ammMode,
-    mode: chainMode, chainId, chainAddress, chainMarketId, featured,
+    featured,
     sport, league, outcomeImages,
-    autoDeploy,
   } = req.body || {};
   const seed = Number(seedLiquidity);
   const mode = ammMode === 'parallel' ? 'parallel' : 'unified';
-  // `marketMode` is the off-chain/on-chain classifier (the `mode`
-  // column on points_markets) — distinct from `ammMode` above.
-  const marketMode = chainMode === 'onchain' ? 'onchain' : 'points';
-  const isOnchain = marketMode === 'onchain';
+  // Points-app markets are off-chain forever; `marketMode` stays
+  // 'points' regardless of body input. Kept as a constant so the
+  // INSERT below doesn't have to special-case the column.
+  const marketMode = 'points';
 
   // Sport / league / outcomeImages — optional metadata matching what the
   // generator pipeline writes. Lets manually-registered markets show up
@@ -89,47 +75,13 @@ export default async function handler(req, res) {
     outcomeImagesJson = JSON.stringify(cleaned);
   }
 
-  // Validate chain metadata when registering an on-chain market.
-  let chainIdNum = null;
-  let chainAddressStr = null;
-  let chainMarketIdStr = null;
-  // Two paths to fill chainAddressStr below:
-  //   A) Manual paste — admin pre-deployed the contract elsewhere
-  //      (Foundry / Hardhat / Remix) and supplies the address.
-  //   B) Auto-deploy — admin sends `autoDeploy: true` with no
-  //      chainAddress, and we call MarketFactory ourselves to deploy
-  //      the contract and capture the resulting address. Requires
-  //      ONCHAIN_MARKET_FACTORY_ADDRESS + ONCHAIN_DEPLOYER_SUBORG_ID
-  //      + ONCHAIN_DEPLOYER_ADDRESS env vars.
-  const wantsAutoDeploy = isOnchain
-    && autoDeploy === true
-    && (!chainAddress || String(chainAddress).trim() === '');
-  if (isOnchain) {
-    chainIdNum = Number.parseInt(chainId, 10);
-    if (!Number.isInteger(chainIdNum) || chainIdNum <= 0) {
-      return res.status(400).json({ error: 'invalid_chain_id' });
-    }
-    if (!wantsAutoDeploy) {
-      if (typeof chainAddress !== 'string' || !/^0x[a-fA-F0-9]{40}$/.test(chainAddress.trim())) {
-        return res.status(400).json({ error: 'invalid_chain_address' });
-      }
-      chainAddressStr = chainAddress.trim().toLowerCase();
-    }
-    // chainMarketId is optional at registration — some deployments
-    // expose only the AMM contract address and the MVP treats that as
-    // the market. We accept any numeric string ≤ 78 chars (BigInt
-    // safe) or null.
-    if (chainMarketId !== undefined && chainMarketId !== null && chainMarketId !== '') {
-      const raw = String(chainMarketId).trim();
-      if (!/^\d{1,78}$/.test(raw)) {
-        return res.status(400).json({ error: 'invalid_chain_market_id' });
-      }
-      chainMarketIdStr = raw;
-    }
-    // Parallel onchain: the parent row + each leg all share the same
-    // `chain_address` (display-level mirror). Per-leg contract addresses
-    // can be patched in later via edit-market; keeps registration simple.
-  }
+  // chain_id / chain_address / chain_market_id columns still live on
+  // points_markets (legacy schema) but are always NULL going forward.
+  // They're kept nullable so we don't need a destructive migration; a
+  // future cleanup can drop them once no rows reference them.
+  const chainIdNum = null;
+  const chainAddressStr = null;
+  const chainMarketIdStr = null;
   if (typeof question !== 'string' || question.trim().length < 8) {
     return res.status(400).json({ error: 'invalid_question' });
   }
@@ -157,86 +109,11 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'invalid_end_time' });
   }
 
-  // Auto-deploy step (path B from above) — runs BEFORE the DB insert so
-  // a failed deploy doesn't leave a stub row pointing at nothing.
-  // Three branches:
-  //   · unified + autoDeploy → single deployMarketOnChain call (V1 or V2)
-  //   · parallel + autoDeploy → deployParallelBinaryOnChain (N V1 deploys)
-  //   · neither → no-op, manual chainAddress already validated above
-  let autoDeployResult = null;
-  let parallelLegDeploys = null; // [{label, marketAddress, marketId, txHash}, …]
-  if (wantsAutoDeploy) {
-    if (!isOnchainReady()) {
-      return res.status(503).json({
-        error: 'onchain_not_enabled',
-        detail: 'set TURNKEY_POLICIES_ENABLED + ONCHAIN_RPC_URL + ONCHAIN_COLLATERAL_ADDRESS',
-      });
-    }
-    const deployerSuborgId = process.env.ONCHAIN_DEPLOYER_SUBORG_ID;
-    const deployerAddr = process.env.ONCHAIN_DEPLOYER_ADDRESS;
-    if (!deployerSuborgId || !deployerAddr) {
-      return res.status(503).json({
-        error: 'deployer_not_configured',
-        detail: 'set ONCHAIN_DEPLOYER_SUBORG_ID + ONCHAIN_DEPLOYER_ADDRESS to enable auto-deploy',
-      });
-    }
-
-    if (mode === 'parallel') {
-      // Loop V1 createMarket once per outcome. Each leg is a binary
-      // Yes/No market with its own contract + seed = `seed` MXNB.
-      // Total deployer collateral burned = N × seed.
-      try {
-        const parallelResult = await deployParallelBinaryOnChain({
-          deployerSuborgId,
-          deployerAddr,
-          parentQuestion: question.trim(),
-          category,
-          outcomeLabels: normalizedOutcomes,
-          endTime: endDate.toISOString(),
-          resolutionSource: req.body?.resolutionSource || 'Pronos admin',
-          seedAmountPerLeg: seed,
-        });
-        parallelLegDeploys = parallelResult.legs;
-        // Parent row stays addressless (it's metadata only); legs each
-        // carry their own chain_address, persisted in the loop below.
-      } catch (e) {
-        console.error('[admin/create-market] parallel auto-deploy failed', { message: e?.message, detail: e?.detail });
-        return res.status(e?.status || 500).json({
-          error: 'auto_deploy_failed',
-          detail: e?.detail || e?.message?.slice(0, 240) || null,
-          partialLegs: e?.partialLegs || null,
-        });
-      }
-    } else {
-      try {
-        autoDeployResult = await deployMarketOnChain({
-          deployerSuborgId,
-          deployerAddr,
-          question: question.trim(),
-          category,
-          outcomeCount: normalizedOutcomes.length,
-          outcomeLabels: normalizedOutcomes,
-          endTime: endDate.toISOString(),
-          // Use the resolver source if it's set on a generator-approved
-          // pending market; otherwise fall back to a generic admin label
-          // so the on-chain `resolutionSource` field is never empty.
-          resolutionSource: req.body?.resolutionSource || 'Pronos admin',
-          seedAmount: seed,
-        });
-        // Populate the address fields with what the factory returned so
-        // the downstream INSERT lands the market with a valid chain ref.
-        chainAddressStr = String(autoDeployResult.marketAddress || '').toLowerCase();
-        chainMarketIdStr = autoDeployResult.marketId || null;
-      } catch (e) {
-        console.error('[admin/create-market] auto-deploy failed', { message: e?.message, code: e?.code });
-        return res.status(e?.status || 500).json({
-          error: 'auto_deploy_failed',
-          detail: e?.detail || e?.message?.slice(0, 240) || null,
-          txHash: e?.txHash || null,
-        });
-      }
-    }
-  }
+  // On-chain auto-deploy used to live here. It moved to
+  // /api/protocol/admin/create-market when points-app and the MVP
+  // were split; off-chain MXNP markets never touch the chain.
+  const parallelLegDeploys = null;
+  const autoDeployResult = null;
 
   try {
     await ensurePointsSchema(schemaSql);

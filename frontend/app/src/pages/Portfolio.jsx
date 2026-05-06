@@ -1,11 +1,13 @@
 /**
- * MVP Portfolio — Turnkey-era.
+ * MVP Portfolio — on-chain only.
  *
- * Positions + balance + history all come from the points API. There's no
- * direct wallet read anymore — the backend mirrors on-chain state from the
- * indexer (and DB-locked state for mode='points' markets). Selling goes
- * through /api/points/sell which routes to Turnkey-signed tx for
- * mode='onchain' and to the DB AMM for mode='points'.
+ * Positions + history come from /api/protocol/* — indexer-owned tables
+ * (`outcome_positions`, `positions`, `trades`, `redemptions`) backed by
+ * MarketCreated/SharesBought/SharesSold/WinningsRedeemed events.
+ *
+ * Selling routes through /api/protocol/sell → Turnkey-signed tx via
+ * _lib/onchain-trader.js. The off-chain MXNP ledger (points-app) has
+ * its own portfolio view at /portfolio in the points-app build.
  *
  * Two tabs: Activo (open positions) and Historial (all trades).
  */
@@ -195,8 +197,8 @@ export default function Portfolio({ onOpenLogin }) {
     setError(null);
     try {
       const [posRes, histRes] = await Promise.all([
-        getJson('/api/points/positions?mode=onchain'),
-        getJson('/api/points/history?mode=onchain'),
+        getJson('/api/protocol/positions'),
+        getJson('/api/protocol/history'),
       ]);
       setPositions(Array.isArray(posRes.data?.positions) ? posRes.data.positions : []);
       setHistory(Array.isArray(histRes.data?.trades) ? histRes.data.trades : []);
@@ -217,7 +219,7 @@ export default function Portfolio({ onOpenLogin }) {
     setSellingId(`${pos.marketId}-${pos.outcomeIndex}`);
     setNotice(null);
     try {
-      const { ok, data } = await postJson('/api/points/sell', {
+      const { ok, data } = await postJson('/api/protocol/sell', {
         marketId: pos.marketId,
         outcomeIndex: pos.outcomeIndex,
         shares: pos.shares,

@@ -1,10 +1,9 @@
 /**
  * MVP market detail — /mvp/market?id=<numericId>.
  *
- * Single fetch path: GET /api/points/market?id=<id>. Mirrors what
- * PointsMarketDetail does on the off-chain side, but renders against
- * mode='onchain' rows so trading flows through the Turnkey-signed
- * BetModal we already have.
+ * Single fetch path: GET /api/protocol/market?id=<id>. Reads from
+ * the indexer-owned `protocol_markets` table; trading flows through
+ * the Turnkey-signed BetModal we already have via /api/protocol/buy.
  *
  * Drops the legacy gmFetchBySlug / fetchProtocolMarket / MARKETS-static
  * fallback completely. If a Polymarket-sourced market lands here, it
@@ -135,7 +134,7 @@ export default function MarketDetail({ onOpenLogin }) {
     setHistoryByOutcome(null);
     (async () => {
       try {
-        const { ok, data } = await getJson(`/api/points/market?id=${numericId}`);
+        const { ok, data } = await getJson(`/api/protocol/market?id=${numericId}`);
         if (!ok) throw new Error(data?.error || 'load_failed');
         if (cancelled) return;
         setMarket(data?.market || null);

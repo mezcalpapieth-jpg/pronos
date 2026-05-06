@@ -195,7 +195,7 @@ export default function WorldCupPage({ onOpenLogin }) {
       setError(null);
       try {
         const res = await fetch(
-          `/api/points/markets?mode=onchain&category=world-cup&featured=all&status=active&limit=500&chain_id=${CHAIN_ID}`,
+          `/api/protocol/markets?category=world-cup&status=active&limit=200&chainId=${CHAIN_ID}`,
           { credentials: 'include' },
         );
         const data = await res.json().catch(() => ({}));

@@ -1,281 +1,49 @@
-import { ethers } from 'ethers';
+/**
+ * @deprecated Polymarket CLOB integration removed.
+ *
+ * Pronos used to mirror Polymarket markets and place orders on its
+ * CTF Exchange via this module. As of 2026-05-06 we run our OWN
+ * AMM protocol on Arbitrum (MarketFactory + PronosAMM + PronosToken),
+ * with MXNB collateral on mainnet and a USDC stand-in on Sepolia.
+ * Trades go through /api/protocol/buy and Turnkey-signed transactions.
+ *
+ * Every function in this file now throws so any stale caller fails
+ * loudly with a useful migration message instead of silently hitting
+ * Polymarket. Constants are kept for backward-compat; they're inert
+ * (Polygon is no longer in the chain map).
+ *
+ * Once `frontend/app/src/components/MarketsGrid.jsx` and any other
+ * stale importers are migrated to /api/protocol/markets, this entire
+ * file (and `frontend/api/clob.js`) can be deleted.
+ */
 
-// ─── POLYGON MAINNET CONSTANTS ────────────────────────────────────────────────
+const REMOVED = 'polymarket_clob_removed';
+
+function gone(name) {
+  const err = new Error(REMOVED);
+  err.detail = `${name}: Polymarket CLOB removed; use /api/protocol/* endpoints`;
+  throw err;
+}
+
+// ── Inert constants (kept so import statements still resolve) ──────
 export const POLYGON_CHAIN_ID = 137;
-export const USDC_ADDRESS     = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'; // Polygon native USDC
-export const MXNB_ADDRESS     = USDC_ADDRESS; // Backward-compatible alias for older imports.
-export const CTF_EXCHANGE     = '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E';
-export const NEG_RISK_ADAPTER = '0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296';
-export const NEG_RISK_EXCHANGE = '0xC5d563A36AE78145C45a50134d48A1215220f80a';
+export const USDC_ADDRESS     = '0x0000000000000000000000000000000000000000';
+export const MXNB_ADDRESS     = USDC_ADDRESS;
+export const CTF_EXCHANGE     = '0x0000000000000000000000000000000000000000';
+export const NEG_RISK_ADAPTER = '0x0000000000000000000000000000000000000000';
+export const NEG_RISK_EXCHANGE = '0x0000000000000000000000000000000000000000';
 
-const ERC20_ABI = [
-  'function balanceOf(address) view returns (uint256)',
-  'function allowance(address owner, address spender) view returns (uint256)',
-  'function approve(address spender, uint256 amount) returns (bool)',
-];
+// ── Pure helpers — kept because they're trivially correct and a
+//    couple of UI components may still call them for display math ──
+export function usdcToRaw(amount) { return BigInt(Math.round(amount * 1e6)); }
+export function rawToUsdc(raw) { return Number(raw) / 1e6; }
 
-// EIP-712 Order types for CTF Exchange
-const CTF_DOMAIN = (verifyingContract) => ({
-  name: 'CTFExchange',
-  version: '1',
-  chainId: POLYGON_CHAIN_ID,
-  verifyingContract,
-});
-
-const ORDER_TYPES = {
-  Order: [
-    { name: 'salt',          type: 'uint256' },
-    { name: 'maker',         type: 'address' },
-    { name: 'signer',        type: 'address' },
-    { name: 'taker',         type: 'address' },
-    { name: 'tokenId',       type: 'uint256' },
-    { name: 'makerAmount',   type: 'uint256' },
-    { name: 'takerAmount',   type: 'uint256' },
-    { name: 'expiration',    type: 'uint256' },
-    { name: 'nonce',         type: 'uint256' },
-    { name: 'feeRateBps',    type: 'uint256' },
-    { name: 'side',          type: 'uint8'   },
-    { name: 'signatureType', type: 'uint8'   },
-  ],
-};
-
-// ─── HELPERS ──────────────────────────────────────────────────────────────────
-
-export function usdcToRaw(amount) {
-  return BigInt(Math.round(amount * 1e6));
-}
-
-export function rawToUsdc(raw) {
-  return Number(raw) / 1e6;
-}
-
-// ─── USDC BALANCE ─────────────────────────────────────────────────────────────
-
-export async function getUsdcBalance(provider, address) {
-  const usdc = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, provider);
-  const raw = await usdc.balanceOf(address);
-  return rawToUsdc(raw.toBigInt());
-}
-
-// ─── USDC ALLOWANCE ───────────────────────────────────────────────────────────
-
-export async function getUsdcAllowance(provider, owner, spender) {
-  const usdc = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, provider);
-  const raw = await usdc.allowance(owner, spender);
-  return rawToUsdc(raw.toBigInt());
-}
-
-// ─── APPROVE USDC ─────────────────────────────────────────────────────────────
-// Approves CTF Exchange + NegRisk Adapter to spend USDC.
-// Returns tx hashes.
-
-export async function approveUsdc(signer, amount = ethers.constants.MaxUint256) {
-  const usdc = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, signer);
-  const txs = [];
-
-  const tx1 = await usdc.approve(CTF_EXCHANGE, amount);
-  await tx1.wait();
-  txs.push(tx1.hash);
-
-  const tx2 = await usdc.approve(NEG_RISK_ADAPTER, amount);
-  await tx2.wait();
-  txs.push(tx2.hash);
-
-  return txs;
-}
-
-// ─── DERIVE CLOB API KEY ──────────────────────────────────────────────────────
-// Signs an L1 message with the user's wallet and exchanges it for API credentials.
-
-export async function deriveClobApiKey(signer, address) {
-  const timestamp = Math.floor(Date.now() / 1000).toString();
-  const nonce = 0;
-
-  // Sign the auth message (EIP-191 personal sign)
-  const message = `This message attests that I control the given wallet`;
-  const signature = await signer.signMessage(message);
-
-  const res = await fetch(`/api/clob?action=derive-key`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'same-origin',
-    body: JSON.stringify({ address, signature, timestamp, nonce }),
-  });
-
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Failed to derive API key');
-  }
-
-  return res.json(); // { ok, apiKey }; credentials are stored in an HTTP-only API cookie
-}
-
-// ─── PLACE ORDER ─────────────────────────────────────────────────────────────
-// Builds + signs an EIP-712 order and submits it to the CLOB.
-// side: 'BUY' | 'SELL'
-// price: 0.0–1.0 (e.g. 0.54 = 54% probability = $0.54 per share)
-// size: amount in USDC
-
-export async function placeClobOrder({ signer, address, creds, tokenId, price, side, size, isNegRisk = true }) {
-  if (!/^\d+$/.test(String(tokenId))) {
-    throw new Error('Invalid CLOB token id');
-  }
-  if (!Number.isFinite(Number(price)) || Number(price) <= 0 || Number(price) >= 1) {
-    throw new Error('Invalid CLOB price');
-  }
-
-  const exchange = isNegRisk ? NEG_RISK_EXCHANGE : CTF_EXCHANGE;
-
-  const sideNum    = side === 'BUY' ? 0 : 1;
-  const makerAmt   = usdcToRaw(side === 'BUY' ? size : size / price);       // USDC in (buying)
-  const takerAmt   = usdcToRaw(side === 'BUY' ? size / price : size);       // shares out
-  const salt       = BigInt(Math.floor(Math.random() * 1e15));
-
-  const order = {
-    salt:          salt.toString(),
-    maker:         address,
-    signer:        address,
-    taker:         '0x0000000000000000000000000000000000000000',
-    tokenId:       tokenId,
-    makerAmount:   makerAmt.toString(),
-    takerAmount:   takerAmt.toString(),
-    expiration:    '0',
-    nonce:         '0',
-    feeRateBps:    '0',
-    side:          sideNum,
-    signatureType: 0,  // EOA
-  };
-
-  // Sign EIP-712
-  const domain  = CTF_DOMAIN(exchange);
-  const typedOrder = {
-    ...order,
-    salt:        BigInt(order.salt),
-    makerAmount: BigInt(order.makerAmount),
-    takerAmount: BigInt(order.takerAmount),
-    tokenId:     BigInt(order.tokenId),
-    expiration:  BigInt(order.expiration),
-    nonce:       BigInt(order.nonce),
-    feeRateBps:  BigInt(order.feeRateBps),
-  };
-
-  const signature = await signer._signTypedData(domain, ORDER_TYPES, typedOrder);
-  const signedOrder = { ...order, signature };
-
-  const body = {
-    order:     signedOrder,
-    owner:     address,
-    orderType: 'FOK',          // Fill-Or-Kill for market orders
-  };
-
-  const res = await fetch(`/api/clob?action=place-order`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'same-origin',
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || JSON.stringify(err));
-  }
-
-  return res.json(); // { orderID, status, ... }
-}
-
-// ─── GET POSITIONS ────────────────────────────────────────────────────────────
-
-export async function getClobPositions(address) {
-  const res = await fetch(`/api/clob?action=positions&address=${address}`);
-  if (!res.ok) throw new Error('Failed to fetch positions');
-  return res.json();
-}
-
-// ─── ORDER BOOK + SLIPPAGE SIMULATION ─────────────────────────────────────────
-// Used by BetModal to preview the post-trade price so users know how much the
-// price will drift before they submit a market order.
-
-/**
- * Fetch the raw CLOB order book for a token.
- * Returns `{ asks: [{price, size}], bids: [{price, size}] }` with numeric
- * prices and sizes, sorted so position 0 is always the BEST level (lowest
- * ask, highest bid) — Polymarket's raw payload sorts descending, so we
- * normalize here.
- */
-export async function fetchOrderBook(tokenId) {
-  if (!tokenId) return null;
-  const res = await fetch(`/api/clob?action=book&token_id=${encodeURIComponent(tokenId)}`);
-  if (!res.ok) return null;
-  const data = await res.json();
-  const parseLevels = (arr) => (Array.isArray(arr) ? arr : [])
-    .map(l => ({ price: parseFloat(l.price), size: parseFloat(l.size) }))
-    .filter(l => Number.isFinite(l.price) && Number.isFinite(l.size) && l.size > 0);
-  const asks = parseLevels(data.asks).sort((a, b) => a.price - b.price); // best (lowest) first
-  const bids = parseLevels(data.bids).sort((a, b) => b.price - a.price); // best (highest) first
-  return { asks, bids };
-}
-
-/**
- * Simulate a market BUY against an order book.
- *
- * Walks the ask ladder from best to worst, consuming depth with the user's
- * `usdcAmount`. Returns:
- *   - shares:         total outcome tokens received
- *   - avgPrice:       volume-weighted average execution price (0-1)
- *   - lastFillPrice:  price of the last consumed level — the new post-trade
- *                     best ask, i.e. what the market moves to
- *   - startPrice:     best ask before the trade (0-1)
- *   - filled:         usdc actually used (may be < amount if book is too thin)
- *   - remaining:      usdc left unfilled (0 when book has enough depth)
- *   - slippagePoints: (lastFillPrice - startPrice) × 100 — drift measured in
- *                     percentage points of implied probability, which is how
- *                     prediction-market users think about price changes
- *                     (a market going from 54% to 56% drifted "2 points").
- *                     Capped at [0, 100] since a single outcome can't move
- *                     the probability more than 100 points.
- *
- * Returns null when the book is empty.
- */
-export function simulateMarketBuy(book, usdcAmount) {
-  if (!book || !Array.isArray(book.asks) || book.asks.length === 0) return null;
-  const asks = book.asks;
-  const startPrice = asks[0].price;
-  let remaining = usdcAmount;
-  let shares = 0;
-  let spent = 0;
-  let lastFillPrice = startPrice;
-
-  for (const level of asks) {
-    if (remaining <= 0) break;
-    const levelCost = level.price * level.size; // USDC needed to clear this level
-    if (remaining >= levelCost) {
-      shares += level.size;
-      spent += levelCost;
-      remaining -= levelCost;
-      lastFillPrice = level.price;
-    } else {
-      const partialShares = remaining / level.price;
-      shares += partialShares;
-      spent += remaining;
-      lastFillPrice = level.price;
-      remaining = 0;
-      break;
-    }
-  }
-
-  const avgPrice = shares > 0 ? spent / shares : startPrice;
-  // Percentage-point drift — matches how the UI renders outcome probabilities,
-  // clamped so we never display nonsensical values like 137%.
-  const rawDrift = (lastFillPrice - startPrice) * 100;
-  const slippagePoints = Math.max(0, Math.min(100, rawDrift));
-
-  return {
-    shares,
-    avgPrice,
-    lastFillPrice,
-    startPrice,
-    filled: spent,
-    remaining,
-    slippagePoints,
-  };
-}
+// ── Network-touching helpers — every call throws ───────────────────
+export async function getUsdcBalance() { gone('getUsdcBalance'); }
+export async function getUsdcAllowance() { gone('getUsdcAllowance'); }
+export async function approveUsdc() { gone('approveUsdc'); }
+export async function deriveClobApiKey() { gone('deriveClobApiKey'); }
+export async function placeClobOrder() { gone('placeClobOrder'); }
+export async function getClobPositions() { gone('getClobPositions'); }
+export async function fetchOrderBook() { gone('fetchOrderBook'); }
+export function simulateMarketBuy() { gone('simulateMarketBuy'); }

@@ -60,32 +60,43 @@ const ERC20_ABI = [
 // V1 (binary, PronosAMM):
 //   function createMarket(string q, string cat, uint256 endTime,
 //     string resolutionSource, uint256 seed) onlyOwner returns (uint256);
+//   function resolveMarket(uint256 marketId, uint8 outcome) onlyResolver;
 //   event MarketCreated(uint256 indexed marketId, address pool,
 //     string question, string category, uint256 endTime);
+//   event MarketResolved(uint256 indexed marketId, uint8 outcome);
 //
 // V2 (multi-outcome 2..8, PronosAMMMulti):
 //   function createMarket(string q, string cat, uint256 endTime,
 //     string resolutionSource, string[] outcomes, uint256 seed)
 //     onlyOwner returns (uint256);
+//   function resolveMarket(uint256 marketId, uint8 outcome) onlyResolver;
 //   event MarketCreated(uint256 indexed marketId, address pool,
 //     string question, string category, uint256 endTime,
 //     string resolutionSource, string[] outcomes);
+//   event MarketResolved(uint256 indexed marketId, uint8 outcome);
 //
-// Both factories are `onlyOwner` ⇒ the deployer wallet must equal
-// factory.owner() on the target chain. `pool` is not indexed in either
-// event, so we decode it from the data field.
+// createMarket is `onlyOwner` ⇒ deployer must equal factory.owner().
+// resolveMarket is `onlyResolver` ⇒ resolver wallet must equal
+// factory.resolver() (set via setResolver, defaults to owner at deploy).
+// `pool` is not indexed in MarketCreated, so we decode it from the data field.
 const MARKET_FACTORY_V1_ABI = [
   'function owner() view returns (address)',
+  'function resolver() view returns (address)',
   'function collateral() view returns (address)',
   'function createMarket(string question, string category, uint256 endTime, string resolutionSource, uint256 seedAmount) external returns (uint256)',
+  'function resolveMarket(uint256 marketId, uint8 outcome) external',
   'function getMarket(uint256 marketId) external view returns (address pool, string question, string category, uint256 endTime, string resolutionSource, bool active)',
   'event MarketCreated(uint256 indexed marketId, address pool, string question, string category, uint256 endTime)',
+  'event MarketResolved(uint256 indexed marketId, uint8 outcome)',
 ];
 const MARKET_FACTORY_V2_ABI = [
   'function owner() view returns (address)',
+  'function resolver() view returns (address)',
   'function collateral() view returns (address)',
   'function createMarket(string question, string category, uint256 endTime, string resolutionSource, string[] outcomes, uint256 seedAmount) external returns (uint256)',
+  'function resolveMarket(uint256 marketId, uint8 outcome) external',
   'event MarketCreated(uint256 indexed marketId, address pool, string question, string category, uint256 endTime, string resolutionSource, string[] outcomes)',
+  'event MarketResolved(uint256 indexed marketId, uint8 outcome)',
 ];
 
 const MAX_UINT256 = ethers.constants.MaxUint256;
@@ -674,5 +685,121 @@ export async function deployParallelBinaryOnChain({
     legs,
     chainId: chainId(),
     factoryVariant: 'v1-binary-parallel',
+  };
+}
+
+// ── Resolve a market via MarketFactory.resolveMarket ─────────────────
+//
+// Cascades on-chain so winning shares can be redeemed for collateral.
+// The factory's `resolveMarket(marketId, outcome)` is `onlyResolver`;
+// the resolver wallet defaults to the deployer at deploy time and can
+// be reassigned via `setResolver(addr)` (e.g. to a Gnosis Safe on
+// mainnet for multi-sig resolution).
+//
+// Inputs:
+//   resolverSuborgId, resolverAddr — Turnkey suborg + EVM address that
+//     equals factory.resolver() on the target chain. Mismatch → revert.
+//   factoryAddress — V1 or V2 factory.
+//   factoryVariant — 'v1' | 'v2'. Used to pick the right ABI; the
+//     resolveMarket selector is identical across both, but keeping the
+//     dispatch consistent with deployMarketOnChain avoids surprises.
+//   marketId — bigint-as-string OR number; the factory-issued id.
+//   outcome — small integer index of the winning outcome.
+//             V1 (binary): 0=YES, 1=NO.
+//             V2 (multi):  0..outcomeCount-1.
+//
+// Pre-flight: simulate via prov.call so a wrong resolver / already-
+// resolved market surfaces as `factory_resolve_simulation_failed`
+// instead of an opaque on-chain revert post-broadcast.
+//
+// Returns { txHash, blockNumber, marketId, outcome, factoryVariant }.
+// Indexer picks up MarketResolved within ~1 minute and updates
+// protocol_markets.status='resolved'.
+export async function resolveMarketOnChain({
+  resolverSuborgId, resolverAddr,
+  factoryAddress, factoryVariant,
+  marketId, outcome,
+}) {
+  requireReady();
+  if (!resolverSuborgId) throw new Error('resolverSuborgId required');
+  if (!resolverAddr) throw new Error('resolverAddr required');
+  if (!factoryAddress) throw new Error('factoryAddress required');
+
+  const useV2 = factoryVariant === 'v2';
+  const abi = useV2 ? MARKET_FACTORY_V2_ABI : MARKET_FACTORY_V1_ABI;
+
+  // marketId can come from DB as a bigint string ("123") or as a
+  // JS number; both work via ethers.BigNumber.from.
+  let marketIdBn;
+  try {
+    marketIdBn = ethers.BigNumber.from(String(marketId));
+  } catch (_) {
+    throw new Error(`invalid_marketId: ${marketId}`);
+  }
+  const outcomeNum = Number.parseInt(outcome, 10);
+  if (!Number.isInteger(outcomeNum) || outcomeNum < 0 || outcomeNum > 255) {
+    throw new Error('outcome must be an integer in [0, 255]');
+  }
+
+  const prov = provider();
+  const factory = new ethers.Contract(factoryAddress, abi, prov);
+  const onChainResolver = await factory.resolver();
+  if (!sameAddress(onChainResolver, resolverAddr)) {
+    const err = new Error('not_resolver');
+    err.status = 400;
+    err.detail = `factory.resolver()=${onChainResolver} but resolverAddr=${resolverAddr} — call setResolver first or use a different signer suborg`;
+    throw err;
+  }
+
+  const iface = new ethers.utils.Interface(abi);
+  const data = iface.encodeFunctionData('resolveMarket', [marketIdBn, outcomeNum]);
+
+  // Simulate first so a bad outcome / already-resolved market gives
+  // a useful error before we burn a tx.
+  try {
+    await prov.call({ from: resolverAddr, to: factoryAddress, data });
+  } catch (e) {
+    const err = new Error('factory_resolve_simulation_failed');
+    err.status = 400;
+    err.detail = extractRevertDetail(e);
+    throw err;
+  }
+
+  const receipt = await signAndBroadcast({
+    suborgId: resolverSuborgId,
+    from: resolverAddr,
+    to: factoryAddress,
+    data,
+    // resolveMarket is small but writes a Resolved flag, then transfers
+    // payouts via transferFrom calls inside the AMM on first redeem;
+    // the resolve tx itself only flips a flag and emits the event, so
+    // a 250k budget is plenty.
+    gasLimit: ethers.BigNumber.from(250_000),
+  });
+
+  // Sanity-check: parse the MarketResolved event from the receipt.
+  // If it's missing, the tx still succeeded (status==1 enforced by
+  // signAndBroadcast) but something's misconfigured at the ABI level.
+  let resolvedMarketId = null;
+  let resolvedOutcome = null;
+  for (const log of receipt.logs || []) {
+    if ((log.address || '').toLowerCase() !== factoryAddress.toLowerCase()) continue;
+    try {
+      const parsed = iface.parseLog(log);
+      if (parsed?.name === 'MarketResolved') {
+        resolvedMarketId = parsed.args.marketId?.toString() || null;
+        resolvedOutcome = Number(parsed.args.outcome ?? -1);
+        break;
+      }
+    } catch { /* skip non-matching logs */ }
+  }
+
+  return {
+    txHash: receipt.transactionHash,
+    blockNumber: receipt.blockNumber,
+    marketId: resolvedMarketId || marketIdBn.toString(),
+    outcome: resolvedOutcome ?? outcomeNum,
+    factoryVariant: useV2 ? 'v2' : 'v1',
+    chainId: chainId(),
   };
 }
