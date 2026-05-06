@@ -192,6 +192,26 @@ const POINTS_SCHEMA_MIGRATIONS = [
     hidden_at  TIMESTAMPTZ DEFAULT NOW()
   )`,
 
+  // points_news_first_seen — persistent backup for the in-memory
+  // firstSeenByUrl Map in news-mexico.js. Outlets like Aristegui /
+  // Noroeste / Proceso don't expose datePublished on their homepage
+  // cards and many of their article URLs lack /YYYY/MM/DD/ slugs, so
+  // the URL-date extractor returns null and we fall back to
+  // first-seen-time. Without persistence, a fresh serverless instance
+  // starts with an empty Map → every item gets stamped NOW() on its
+  // very first refresh → "hace un momento" forever bug. Persisting
+  // to a tiny table keyed by news_url survives instance churn.
+  //
+  // Rows are inserted ON CONFLICT DO NOTHING so the FIRST sighting
+  // is the timestamp we keep. GC: news-mexico.js prunes rows older
+  // than MAX_AGE_HOURS during each refresh so the table stays bounded.
+  `CREATE TABLE IF NOT EXISTS points_news_first_seen (
+    news_url      TEXT PRIMARY KEY,
+    first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_news_first_seen_age
+    ON points_news_first_seen(first_seen_at)`,
+
   // final_score: human-readable final result for resolved markets.
   // Free-form TEXT so different market types encode what makes sense:
   //   - soccer / baseball match: "2-1", "México 3-2 Brasil"

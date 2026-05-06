@@ -184,13 +184,26 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
     return counts;
   }, [visibleItems]);
 
-  // Top-of-page carousel for 'featured': take the 6 freshest stories
-  // and present them in a horizontal scroll-snap strip. Each card
-  // peeks the next one to telegraph "swipeable for more." Below the
-  // carousel sits a standard grid with the rest.
-  const HERO_COUNT = 6;
+  // Top-of-page carousel for 'featured': horizontal scroll-snap strip.
+  // Goal: surface "interesting" curated items, not breaking-news that
+  // just came in. We prefer items that have been in the feed for at
+  // least 10 minutes — fresh-but-noisy items still appear in the grid
+  // below the carousel, so nothing gets buried.
+  //
+  // Fallback: if there aren't enough aged items (cold start, sparse
+  // news cycle, after a feed flush), fall through to the freshest
+  // available so the carousel never goes empty.
+  const HERO_COUNT = 12;
+  const HERO_MIN_AGE_MS = 10 * 60 * 1000;
   const heroItems = useMemo(() => {
     if (sub !== 'featured') return [];
+    const cutoff = Date.now() - HERO_MIN_AGE_MS;
+    const aged = visibleItems.filter(i => {
+      if (!i.publishedAt) return false;
+      const t = new Date(i.publishedAt).getTime();
+      return Number.isFinite(t) && t <= cutoff;
+    });
+    if (aged.length >= 3) return aged.slice(0, HERO_COUNT);
     return visibleItems.slice(0, HERO_COUNT);
   }, [sub, visibleItems]);
 

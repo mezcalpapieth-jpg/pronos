@@ -1,4 +1,16 @@
 import { fetchHomepageScrape, getScraperConfig } from './news-scraper.js';
+import { neon } from '@neondatabase/serverless';
+
+// Lazy SQL client for the postgres-backed first-seen tracker. Resolves
+// at first use so a missing DATABASE_URL doesn't break module load.
+let _sqlFirstSeen = null;
+function getFirstSeenSql() {
+  if (_sqlFirstSeen) return _sqlFirstSeen;
+  const cs = process.env.DATABASE_URL;
+  if (!cs) return null;
+  _sqlFirstSeen = neon(cs);
+  return _sqlFirstSeen;
+}
 
 /**
  * Mexican news aggregator — Google News RSS backend, per-outlet queries.
@@ -816,13 +828,57 @@ async function refreshCache() {
     debug.rawCount = items.length;
 
     // Resolve missing/invalid publishedAt via the first-seen tracker.
-    // Scraped homepage cards usually arrive with publishedAt = null
-    // (the scraper used to stamp "now" — that bug made every refresh
-    // make every item look 1 minute old, which sorted those outlets
-    // permanently to the top). Now: if a URL has no real date, we use
-    // the first wall-clock time we ever saw it. Subsequent refreshes
-    // keep that timestamp, so items naturally age out.
+    // Scraped homepage cards usually arrive with publishedAt = null —
+    // many Mexican outlets (Aristegui, Noroeste, Proceso, sub-domains
+    // of El Universal like sanluis.eluniversal.com.mx) don't expose a
+    // date on their cards AND their article URLs lack /YYYY/MM/DD/
+    // slugs. We fall back to the first wall-clock time we ever saw a
+    // URL, so subsequent refreshes keep the same age.
+    //
+    // Two-tier tracker:
+    //   1. In-memory Map (firstSeenByUrl) — fast, per-instance
+    //   2. Postgres table (points_news_first_seen) — survives
+    //      serverless instance churn so cold starts don't reset every
+    //      undated URL to "hace un momento" again.
+    //
+    // Hydrate memory from DB before doing the per-item resolution,
+    // then persist any newly-discovered URLs at the end. Both DB ops
+    // are batched into single queries so they run in O(1) round-trips.
     const nowMs = Date.now();
+    const undatedUrls = items
+      .filter(it => {
+        const t = it.publishedAt ? new Date(it.publishedAt).getTime() : NaN;
+        return !Number.isFinite(t);
+      })
+      .map(it => it.url);
+    debug.undatedCount = undatedUrls.length;
+
+    const sqlFs = getFirstSeenSql();
+    if (sqlFs && undatedUrls.length > 0) {
+      try {
+        // Hydrate: pull any persisted timestamps for this batch's URLs
+        // into memory. Items present in DB but not yet in memory get
+        // backfilled — this is what makes the cold-start case work.
+        const persisted = await sqlFs`
+          SELECT news_url, first_seen_at
+          FROM points_news_first_seen
+          WHERE news_url = ANY(${undatedUrls}::text[])
+        `;
+        for (const row of persisted) {
+          const ts = new Date(row.first_seen_at).getTime();
+          if (Number.isFinite(ts) && !firstSeenByUrl.has(row.news_url)) {
+            firstSeenByUrl.set(row.news_url, ts);
+          }
+        }
+        debug.firstSeenHydrated = persisted.length;
+      } catch (e) {
+        debug.firstSeenHydrateError = e?.message?.slice(0, 200) || 'unknown';
+      }
+    }
+
+    // Per-item resolution. Memory now reflects the union of (a) what
+    // this instance already knew + (b) what other instances persisted.
+    const newlySeenUrls = [];
     for (const it of items) {
       const t = it.publishedAt ? new Date(it.publishedAt).getTime() : NaN;
       if (Number.isFinite(t)) continue;
@@ -834,14 +890,30 @@ async function refreshCache() {
         firstSeenByUrl.set(it.url, nowMs);
         it.publishedAt = new Date(nowMs).toISOString();
         it.publishedAtSource = 'first-seen';
+        newlySeenUrls.push(it.url);
+      }
+    }
+    debug.firstSeenNew = newlySeenUrls.length;
+
+    // Persist newly-seen URLs to the DB. ON CONFLICT DO NOTHING means
+    // a concurrent instance that beat us to it keeps its (earlier)
+    // timestamp — correct behavior for the "first" sighting semantic.
+    if (sqlFs && newlySeenUrls.length > 0) {
+      try {
+        await sqlFs`
+          INSERT INTO points_news_first_seen (news_url)
+          SELECT unnest(${newlySeenUrls}::text[])
+          ON CONFLICT (news_url) DO NOTHING
+        `;
+      } catch (e) {
+        debug.firstSeenPersistError = e?.message?.slice(0, 200) || 'unknown';
       }
     }
 
-    // GC the first-seen map so it doesn't grow unbounded:
-    //   1. drop entries older than the MAX_AGE_HOURS cutoff (those
-    //      items would be filtered out below anyway);
-    //   2. if still over cap, drop oldest entries first (Map iteration
-    //      order = insertion order, so we evict from the front).
+    // GC: prune in-memory map AND the DB table for entries older than
+    // the visibility cutoff. Items past MAX_AGE_HOURS would be filtered
+    // out by the cutoff filter below anyway, so their first-seen
+    // entries are dead weight.
     const firstSeenCutoff = nowMs - MAX_AGE_HOURS * 60 * 60_000;
     for (const [url, ts] of firstSeenByUrl) {
       if (ts < firstSeenCutoff) firstSeenByUrl.delete(url);
@@ -852,6 +924,19 @@ async function refreshCache() {
       for (const url of firstSeenByUrl.keys()) {
         if (i++ >= drop) break;
         firstSeenByUrl.delete(url);
+      }
+    }
+    if (sqlFs) {
+      // DB-side GC. Capped at MAX_AGE_HOURS so the table stays small.
+      try {
+        const cutoffIso = new Date(firstSeenCutoff).toISOString();
+        await sqlFs`
+          DELETE FROM points_news_first_seen
+          WHERE first_seen_at < ${cutoffIso}::timestamptz
+        `;
+      } catch (_) {
+        // Best-effort GC. A failed delete just leaves the table
+        // slightly larger; nothing else breaks.
       }
     }
     debug.firstSeenSize = firstSeenByUrl.size;

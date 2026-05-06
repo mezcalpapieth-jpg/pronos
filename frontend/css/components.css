@@ -1519,18 +1519,32 @@ html[data-theme="light"] .btn-theme-toggle::before {
    .has-image variant gets a min-height so the picture has room.
    Text-only cards (no .has-image) shrink to their content height —
    no big empty box where the image would have been. */
+/* Hero card sizing — three-tier responsive layout:
+     mobile (<720)    → 1 card visible at 92% width
+     tablet (720-1100) → 2 cards visible at calc(50% - 8px)
+     desktop (>1100)  → 3 cards visible at calc(33.33% - 11px)
+   The 11px in the desktop clamp = 2/3 of the 16px gap, so 3 cards +
+   2 gaps fit cleanly without horizontal overflow. */
 .news-hero-card {
   flex: 0 0 92%;
 }
 .news-hero-card.has-image {
-  min-height: 200px;
+  min-height: 180px;
 }
 @media (min-width: 720px) {
   .news-hero-card {
-    flex: 0 0 calc(50% - 8px); /* 8px = half of the parent's 16px gap */
+    flex: 0 0 calc(50% - 8px);
   }
   .news-hero-card.has-image {
-    min-height: 220px;
+    min-height: 200px;
+  }
+}
+@media (min-width: 1100px) {
+  .news-hero-card {
+    flex: 0 0 calc(33.333% - 11px);
+  }
+  .news-hero-card.has-image {
+    min-height: 200px;
   }
 }
 

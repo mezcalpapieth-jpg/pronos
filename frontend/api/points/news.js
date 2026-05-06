@@ -47,17 +47,23 @@ export default async function handler(req, res) {
     const data = await getMexicanNews({ category, limit });
 
     // Enrich items with admin-curated market links + filter out
-    // admin-hidden items in a single DB pass per pageload. Both
-    // tables key on news_url; we batch their lookups to keep the
-    // request cheap.
+    // admin-hidden items in a single DB pass per pageload.
+    //
+    // Hide matching: by URL OR by title. The same article often
+    // re-enters the feed under different URL forms — e.g. an El
+    // Universal piece appearing once via the www.eluniversal.com.mx
+    // homepage scrape and again via the sanluis.eluniversal.com.mx
+    // regional subdomain. Hiding the URL form the admin clicked on
+    // doesn't catch the other form. The title is stable across these
+    // variants, so we OR the lookups.
     let linkedByUrl = new Map();
-    let hiddenSet = new Set();
+    let hiddenUrls = new Set();
+    let hiddenTitles = new Set();
     try {
       await ensurePointsSchema(schemaSql);
       const urls = data.items.map(i => i.url).filter(Boolean);
+      const titles = data.items.map(i => i.title).filter(Boolean);
       if (urls.length > 0) {
-        // Run link + hide queries in parallel — same input set,
-        // independent results.
         const [links, hidden] = await Promise.all([
           sql`
             SELECT nl.news_url, nl.market_id,
@@ -73,8 +79,9 @@ export default async function handler(req, res) {
               AND (m.archived_at IS NULL OR m.id IS NULL)
           `,
           sql`
-            SELECT news_url FROM points_news_hidden
-            WHERE news_url = ANY(${urls}::text[])
+            SELECT news_url, news_title FROM points_news_hidden
+            WHERE news_url   = ANY(${urls}::text[])
+               OR news_title = ANY(${titles}::text[])
           `,
         ]);
         for (const r of links) {
@@ -87,15 +94,18 @@ export default async function handler(req, res) {
             outcome:  r.market_outcome,
           });
         }
-        for (const r of hidden) hiddenSet.add(r.news_url);
+        for (const r of hidden) {
+          if (r.news_url) hiddenUrls.add(r.news_url);
+          if (r.news_title) hiddenTitles.add(r.news_title);
+        }
       }
     } catch (e) {
       console.warn('[points/news] link/hide enrichment skipped', { code: e?.code, message: e?.message?.slice(0, 120) });
     }
 
-    // Drop hidden items + decorate the rest with linkedMarket.
+    // Drop hidden items (URL OR title match) + decorate the rest.
     const enrichedItems = data.items
-      .filter(i => !hiddenSet.has(i.url))
+      .filter(i => !hiddenUrls.has(i.url) && !hiddenTitles.has(i.title))
       .map(i => ({ ...i, linkedMarket: linkedByUrl.get(i.url) || null }));
 
     // CDN-friendly: cache 60s at the edge while still letting our
