@@ -1,7 +1,8 @@
 {
   "mcpServers": {
     "postgres": {
-      "command": "/Users/Fran/pronos/.claude/hooks/run-postgres-mcp.sh"
+      "command": "bash",
+      "args": ["-c", "exec \"$CLAUDE_PROJECT_DIR/.claude/hooks/run-postgres-mcp.sh\""]
     },
     "vercel": {
       "type": "http",
