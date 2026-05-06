@@ -1523,14 +1523,14 @@ html[data-theme="light"] .btn-theme-toggle::before {
   flex: 0 0 92%;
 }
 .news-hero-card.has-image {
-  min-height: 240px;
+  min-height: 200px;
 }
 @media (min-width: 720px) {
   .news-hero-card {
     flex: 0 0 calc(50% - 8px); /* 8px = half of the parent's 16px gap */
   }
   .news-hero-card.has-image {
-    min-height: 280px;
+    min-height: 220px;
   }
 }
 

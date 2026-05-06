@@ -508,58 +508,125 @@ function LinkedMarketChip({ linkedMarket }) {
 }
 
 // ─── Hero carousel ──────────────────────────────────────────────────────────
-// Horizontal scroll-snap strip. Each item is ~50% viewport width on
-// desktop so the user sees the next card peeking on the right —
-// telegraphs "swipe for more". Mobile cards are 92% width with a
-// gap so the next one peeks ~3% in. Scroll buttons appear on hover
-// for desktop users who don't realize they can swipe.
+// Horizontal scroll-snap strip with INFINITE LOOP. Items are rendered
+// three times back-to-back; on mount we scroll to the start of the
+// middle copy. When the user's scroll approaches the start of the
+// first copy or the end of the third copy, we instantly teleport
+// scrollLeft back to the equivalent position in the middle copy.
+// The teleport runs through `behavior: 'auto'` (instant) and is
+// debounced ~150ms after the last scroll event — so smooth-scroll
+// animations from prev/next clicks complete cleanly first, free
+// swipes settle first, and the user never sees a jolt.
+//
+// Why infinite-loop: the user reported that mass-clicking the right
+// arrow at the end of the strip "accidentally pressed the last news
+// card" — the original strip had a hard wall at scrollWidth. Now the
+// arrows always advance, the carousel cycles, and there's no edge
+// state where the next click does nothing or selects an item.
 function NewsHeroCarousel({ items, isAdmin, onCreateMarket, onOpenLinkPicker, onUnlink, onHide }) {
   const scrollerRef = useRef(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(true);
+  const teleportTimeoutRef = useRef(null);
+  // Guard so we don't cycle handle-init logic on every render.
+  const initRef = useRef(false);
 
-  function updateScrollState() {
+  // Triple-render the items so the user can scroll continuously in
+  // either direction. The keys include a copy index to avoid React
+  // duplicate-key warnings.
+  const tripled = useMemo(() => {
+    if (!items || items.length === 0) return [];
+    return [
+      ...items.map((it, i) => ({ ...it, _copy: 0, _key: `0-${it.url}-${i}` })),
+      ...items.map((it, i) => ({ ...it, _copy: 1, _key: `1-${it.url}-${i}` })),
+      ...items.map((it, i) => ({ ...it, _copy: 2, _key: `2-${it.url}-${i}` })),
+    ];
+  }, [items]);
+
+  // Measure: width of one full copy of the items strip (cardWidth*N + gap*N).
+  function measureSetWidth() {
     const el = scrollerRef.current;
-    if (!el) return;
-    setCanScrollLeft(el.scrollLeft > 8);
-    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 8);
+    if (!el || items.length === 0) return 0;
+    const cards = el.querySelectorAll('[data-hero-card]');
+    if (cards.length < items.length) return 0;
+    const gap = parseFloat(getComputedStyle(el).gap) || 16;
+    let total = 0;
+    for (let i = 0; i < items.length; i++) {
+      total += cards[i].getBoundingClientRect().width + gap;
+    }
+    return total;
   }
-  useEffect(() => {
-    updateScrollState();
+
+  // Teleport check — silently jump back into the middle copy when
+  // the user has drifted into the first or third copy. Called from
+  // the scroll handler with a debounce so we don't fight an active
+  // smooth-scroll or swipe.
+  function maybeTeleport() {
     const el = scrollerRef.current;
-    if (!el) return undefined;
-    el.addEventListener('scroll', updateScrollState, { passive: true });
-    window.addEventListener('resize', updateScrollState);
+    if (!el || items.length === 0) return;
+    const setWidth = measureSetWidth();
+    if (setWidth <= 0) return;
+    // Threshold sits 30% into each outer copy — far enough from the
+    // boundary that ongoing momentum scrolls don't repeatedly trigger.
+    const THRESHOLD = setWidth * 0.3;
+    if (el.scrollLeft < setWidth - THRESHOLD) {
+      el.scrollLeft += setWidth;
+    } else if (el.scrollLeft > setWidth * 2 + THRESHOLD) {
+      el.scrollLeft -= setWidth;
+    }
+  }
+
+  function handleScroll() {
+    clearTimeout(teleportTimeoutRef.current);
+    teleportTimeoutRef.current = setTimeout(maybeTeleport, 150);
+  }
+
+  // On mount + when item count changes, place the viewport at the
+  // start of the MIDDLE copy. Using behavior:'auto' so it's instant.
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el || items.length === 0) return undefined;
+    // Wait one frame so the DOM has actual measured widths.
+    const raf = requestAnimationFrame(() => {
+      const setWidth = measureSetWidth();
+      if (setWidth > 0) {
+        el.scrollLeft = setWidth;
+        initRef.current = true;
+      }
+    });
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleScroll);
     return () => {
-      el.removeEventListener('scroll', updateScrollState);
-      window.removeEventListener('resize', updateScrollState);
+      cancelAnimationFrame(raf);
+      clearTimeout(teleportTimeoutRef.current);
+      el.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items.length]);
 
   function scrollByDir(dir) {
     const el = scrollerRef.current;
     if (!el) return;
-    // Advance by the FULL visible width (one "page" of the
-    // carousel) so on desktop where 2 cards fit, a click moves
-    // both cards out of view and the next 2 in. Avoids the
-    // "card 2 stays half-visible" behavior the user flagged.
+    // Advance by ~one viewport width — on desktop two cards leave,
+    // two enter; on mobile one full card swap. The teleport handler
+    // takes care of looping when we approach a copy boundary.
     const step = el.clientWidth * 0.95;
     el.scrollBy({ left: dir * step, behavior: 'smooth' });
   }
 
   return (
     <div style={{ position: 'relative', marginBottom: 4 }}>
-      {/* Scroll buttons — desktop only, faded out at edges. Hidden
-          on touch devices via the @media (hover: none) override
-          inline below. */}
+      {/* Scroll buttons — always visible since the carousel loops
+          infinitely; there's no edge state where one direction
+          becomes a no-op. Hidden on touch devices via the @media
+          (hover: none) override below. */}
       <CarouselButton
         direction="left"
-        visible={canScrollLeft}
+        visible={true}
         onClick={() => scrollByDir(-1)}
       />
       <CarouselButton
         direction="right"
-        visible={canScrollRight}
+        visible={true}
         onClick={() => scrollByDir(1)}
       />
 
@@ -581,9 +648,9 @@ function NewsHeroCarousel({ items, isAdmin, onCreateMarket, onOpenLinkPicker, on
           msOverflowStyle: 'none',
         }}
       >
-        {items.map((item) => (
+        {tripled.map((item) => (
           <div
-            key={item.url}
+            key={item._key}
             data-hero-card
             className={`news-hero-card${item.image ? ' has-image' : ''}`}
             style={{
@@ -610,7 +677,7 @@ function NewsHeroCarousel({ items, isAdmin, onCreateMarket, onOpenLinkPicker, on
               }}
             >
               {item.image ? (
-                <div style={{ flex: '1 1 55%', minHeight: 150, position: 'relative' }}>
+                <div style={{ flex: '1 1 55%', minHeight: 120, position: 'relative' }}>
                   <NewsImage src={item.image} alt={item.title} aspect="auto" fill />
                   {isAdmin && <HideButton onHide={onHide} item={item} />}
                   <div style={{
