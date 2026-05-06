@@ -633,18 +633,34 @@ const QUALITY_BLACKLIST = [
   /\bhor[oó]scopo\b/i,
   // Lottery / draw results
   /\b(?:melate|tris(?:el)?|chispazo|prog[oó]l|loter[ií]a nacional)\b/i,
-  // Generic weather/temperature reports (storms + emergencies still
-  // caught by the seguridad classifier and bypass this filter via the
-  // negative lookahead — we only drop the boring "Pronóstico del clima"
-  // boilerplate).
-  /\bpron[oó]stico\s+del?\s+clima\b/i,
-  // Daily commodity / FX stubs ("dólar hoy", "precios de la gasolina")
-  /\bd[oó]lar\s+hoy\b/i,
-  /\bprecios?\s+de\s+la\s+gasolin\w+\s+hoy\b/i,
-  // Listicle / clickbait openings
-  /^\s*(?:estos? son los?|top\s+\d+|los? \d+\s+(?:mejores?|peores?|m[aá]s)|\d+\s+(?:cosas|claves|consejos|tips|maneras|formas|razones|errores))\b/i,
+  // Listicle clickbait openings
+  /^\s*(?:estos? son los?|top\s+\d+|los? \d+\s+(?:mejores?|peores?|m[aá]s)|\d+\s+(?:cosas|claves|consejos|tips|maneras|formas|razones|errores|productos|aud[ií]fonos|tel[eé]fonos|smartphones?))\b/i,
   // Sponsored / native ads
   /\bpublirreportaje\b|\bcontenido\s+patrocinado\b/i,
+  // Product reviews (drop "review of X", "reseña de Y" — these are
+  // affiliate/commerce content, not news).
+  /\b(?:reseñ\w+|review)\b/i,
+  // Shopping holidays
+  /\b(?:hot\s+sale|cyber\s+monday|black\s+friday|buen\s+fin|prime\s+day)\b/i,
+  // E-commerce deal posts (Amazon / MercadoLibre / Liverpool / etc.)
+  /\b(?:ofertas?|descuent\w+|rebajas?|promoci\w+|chollos?)\s+(?:en|de|del?)\s+(?:amazon|mercado\s*libre|liverpool|sears|walmart|costco|elektra|coppel)\b/i,
+  // Buyer's-guide listicles for consumer products
+  /\b(?:los\s+mejores|cu[aá]l\s+es\s+(?:el\s+)?mejor)\s+(?:productos?|gadgets?|aparat\w+|aud[ií]fonos|tel[eé]fonos|smartphones?|laptops|tablets?|relojes|tenis|bolsos|cremas?|lentes|gafas)\b/i,
+  // Skincare / beauty product content
+  /\b(?:skin\s*care|cuidado\s+de\s+la\s+piel)\b/i,
+  /\b(?:crema|s[eé]rum|tratamiento)\s+(?:antiarrug\w+|facial|de\s+noche|para\s+(?:la\s+piel|el\s+rostro))\b/i,
+  // Poems / short-story literary filler (regional papers run a lot)
+  /^\s*poema\b/i,
+  /\bpoes[ií]a\s+del?\s+d[ií]a\b/i,
+  /\bcuento\s+(?:corto|infantil|de\s+navidad|de\s+miedo|tradicional|maya|azteca|nahua)\b/i,
+
+  // KEPT OUT of the blacklist on purpose — Fran flagged these as
+  // potentially bet-relevant content, not filler:
+  //   - Weather forecasts → input to weather-related markets
+  //   - Daily $/gas prices → input to commodity / FX markets
+  //   - Brand/product names alone (iPhone, AirPods) → can be news
+  //     about launches, lawsuits, etc. (We only filter when paired
+  //     with an explicit shopping/review context above.)
 ];
 
 function isQualityNews(item) {
