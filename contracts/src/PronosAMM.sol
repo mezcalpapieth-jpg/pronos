@@ -221,9 +221,23 @@ contract PronosAMM is ERC1155Holder {
         }
 
         // Solve quadratic: c = [(a+b) - sqrt((a-b)^2 + 4k)] / 2
+        //
+        // Round-direction matters here: _sqrt returns FLOOR, which makes
+        // (a+b - sqrt) round UP, which makes c round UP, which means the
+        // pool pays out slightly more than the exact CPMM solution and k
+        // slowly leaks. To pin k as monotonic-non-decreasing across sells
+        // (verified by the fuzz test in test/PronosAMMFuzz.t.sol), we
+        // promote sqrt to its CEILING so the subtraction goes the other
+        // way and c rounds DOWN. The pool keeps the rounding crumb;
+        // sellers receive at most 1 wei less than the exact solution
+        // (negligible at USDC-microunit scale).
         uint256 diff = a > b ? a - b : b - a;
         uint256 discriminant = diff * diff + 4 * k;
         uint256 sqrtDisc = _sqrt(discriminant);
+        if (sqrtDisc * sqrtDisc < discriminant) {
+            sqrtDisc += 1; // promote floor to ceil
+        }
+        require(a + b >= sqrtDisc, "PronosAMM: insufficient output");
         uint256 c = (a + b - sqrtDisc) / 2;
 
         require(c > 0, "PronosAMM: insufficient output");
@@ -318,6 +332,12 @@ contract PronosAMM is ERC1155Holder {
         uint256 diff = a > b ? a - b : b - a;
         uint256 discriminant = diff * diff + 4 * k;
         uint256 sqrtDisc = _sqrt(discriminant);
+        // Match sell()'s ceil-of-sqrt rounding so the estimate exactly
+        // matches the on-chain payout. See sell() for the full rationale.
+        if (sqrtDisc * sqrtDisc < discriminant) {
+            sqrtDisc += 1;
+        }
+        if (a + b < sqrtDisc) return 0;
         uint256 c = (a + b - sqrtDisc) / 2;
 
         uint256 fee = calculateFee(c, !sellYes);
