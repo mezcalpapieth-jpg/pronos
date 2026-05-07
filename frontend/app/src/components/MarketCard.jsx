@@ -35,11 +35,34 @@ export default function MarketCard({ market, history }) {
             <span className="mock-card-badge" style={{ background: 'rgba(148,163,184,0.1)', border: '1px solid rgba(148,163,184,0.3)', color: 'var(--text-muted)' }}>
               {t('card.closed')}
             </span>
+          ) : market._live ? (
+            // Live game window — red pulsing dot + EN VIVO label.
+            // Mirrors PointsMarketCard's live treatment so a market
+            // looks the same in either app.
+            <span
+              className="mock-card-badge live"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                background: 'rgba(255,69,69,0.12)',
+                border: '1px solid rgba(255,69,69,0.35)',
+                color: 'var(--red, #FF4545)',
+              }}
+            >
+              <span
+                aria-hidden="true"
+                style={{
+                  width: 6, height: 6, borderRadius: '50%',
+                  background: 'var(--red, #FF4545)',
+                  boxShadow: '0 0 0 3px rgba(255,69,69,0.18)',
+                  animation: 'pronos-news-pulse 1.4s ease-in-out infinite',
+                }}
+              />
+              {t('card.live') || 'EN VIVO'}
+            </span>
           ) : (
-            <>
-              {market.trending && <span className="mock-card-badge trending">{t('card.trending')}</span>}
-              {market._source === 'polymarket' && <span className="mock-card-badge live">{t('card.live')}</span>}
-            </>
+            market.trending && <span className="mock-card-badge trending">{t('card.trending')}</span>
           )}
         </div>
       </div>
