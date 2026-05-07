@@ -87,7 +87,11 @@ function apiToCard(row) {
     _resolvedDate: row.resolvedAt
       ? new Date(row.resolvedAt).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })
       : null,
-    trending: false,
+    // Live markets (currently in their game window) get promoted to
+    // the trending bucket so they surface in the Trending sub-tab on
+    // top of being ordered to the front of the grid by the API.
+    trending: !!row.live,
+    _live: !!row.live,
     icon: CATEGORY_ICON[cat] || '🌎',
     category: cat,
     categoryLabel: CATEGORY_LABEL[cat] || cat,

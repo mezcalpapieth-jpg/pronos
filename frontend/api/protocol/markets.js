@@ -59,7 +59,7 @@ export default async function handler(req, res) {
       rows = await sql`
         SELECT m.id, m.market_id, m.pool_address, m.factory_address, m.chain_id,
                m.question, m.category, m.outcomes, m.outcome_count,
-               m.protocol_version, m.end_time, m.status, m.outcome,
+               m.protocol_version, m.start_time, m.end_time, m.status, m.outcome,
                m.seed_liquidity, m.tx_hash, m.created_at, m.resolved_at,
                s.yes_price AS s_yes, s.no_price AS s_no, s.prices AS s_prices,
                s.liquidity AS s_liquidity, s.volume_24h AS s_volume,
@@ -74,14 +74,21 @@ export default async function handler(req, res) {
           ) s ON TRUE
          WHERE (${category}::text IS NULL OR LOWER(m.category) = ${category})
            AND (${chainId}::int IS NULL OR m.chain_id = ${chainId})
-         ORDER BY m.created_at DESC
+         ORDER BY
+           -- Live markets first (kickoff has passed, deadline hasn't).
+           -- start_time is NULL for non-sports markets so they fall
+           -- through to the created_at ordering below.
+           CASE WHEN m.start_time IS NOT NULL
+                 AND m.start_time <= NOW()
+                 AND m.end_time > NOW() THEN 0 ELSE 1 END,
+           m.created_at DESC
          LIMIT ${limit}
       `;
     } else {
       rows = await sql`
         SELECT m.id, m.market_id, m.pool_address, m.factory_address, m.chain_id,
                m.question, m.category, m.outcomes, m.outcome_count,
-               m.protocol_version, m.end_time, m.status, m.outcome,
+               m.protocol_version, m.start_time, m.end_time, m.status, m.outcome,
                m.seed_liquidity, m.tx_hash, m.created_at, m.resolved_at,
                s.yes_price AS s_yes, s.no_price AS s_no, s.prices AS s_prices,
                s.liquidity AS s_liquidity, s.volume_24h AS s_volume,
@@ -97,7 +104,14 @@ export default async function handler(req, res) {
          WHERE m.status = ${status}
            AND (${category}::text IS NULL OR LOWER(m.category) = ${category})
            AND (${chainId}::int IS NULL OR m.chain_id = ${chainId})
-         ORDER BY m.created_at DESC
+         ORDER BY
+           -- Live markets first (kickoff has passed, deadline hasn't).
+           -- start_time is NULL for non-sports markets so they fall
+           -- through to the created_at ordering below.
+           CASE WHEN m.start_time IS NOT NULL
+                 AND m.start_time <= NOW()
+                 AND m.end_time > NOW() THEN 0 ELSE 1 END,
+           m.created_at DESC
          LIMIT ${limit}
       `;
     }
@@ -117,7 +131,16 @@ export default async function handler(req, res) {
         outcomes,
         outcomeCount: Number(r.outcome_count) || outcomes.length,
         protocolVersion: r.protocol_version || 'v1',
+        startTime: r.start_time,
         endTime: r.end_time,
+        // Live = sports market currently in its game window. Mirrors
+        // the ORDER BY computation above so the UI can render a LIVE
+        // badge without re-doing the date math.
+        live: !!(r.start_time
+          && new Date(r.start_time).getTime() <= Date.now()
+          && r.end_time
+          && new Date(r.end_time).getTime() > Date.now()
+          && r.status === 'active'),
         status: r.status,
         outcome: r.outcome != null ? Number(r.outcome) : null,
         seedLiquidity: r.seed_liquidity != null ? Number(r.seed_liquidity) : 0,

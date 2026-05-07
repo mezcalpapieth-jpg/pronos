@@ -119,6 +119,10 @@ export default async function handler(req, res) {
             AND m.archived_at IS NULL
           ORDER BY
             CASE WHEN ${status}::text = 'resolved' THEN m.resolved_at END DESC NULLS LAST,
+            -- Live markets first (kickoff has passed, deadline hasn't).
+            CASE WHEN m.start_time IS NOT NULL
+                  AND m.start_time <= NOW()
+                  AND m.end_time > NOW() THEN 0 ELSE 1 END,
             m.end_time ASC,
             m.id ASC
           LIMIT ${limit}
@@ -136,6 +140,14 @@ export default async function handler(req, res) {
             AND m.archived_at IS NULL
             ORDER BY
               CASE WHEN ${status}::text = 'resolved' THEN m.resolved_at END DESC NULLS LAST,
+              -- Live markets first (kickoff has passed, deadline hasn't).
+              -- Sports stories where the game is in progress jump to the
+              -- front of the grid + the trending tab. Non-sports markets
+              -- have NULL start_time and fall through to the end_time
+              -- ordering below as before.
+              CASE WHEN m.start_time IS NOT NULL
+                    AND m.start_time <= NOW()
+                    AND m.end_time > NOW() THEN 0 ELSE 1 END,
               m.end_time ASC,
               m.id ASC
             LIMIT ${limit}
@@ -151,6 +163,14 @@ export default async function handler(req, res) {
             AND m.archived_at IS NULL
             ORDER BY
               CASE WHEN ${status}::text = 'resolved' THEN m.resolved_at END DESC NULLS LAST,
+              -- Live markets first (kickoff has passed, deadline hasn't).
+              -- Sports stories where the game is in progress jump to the
+              -- front of the grid + the trending tab. Non-sports markets
+              -- have NULL start_time and fall through to the end_time
+              -- ordering below as before.
+              CASE WHEN m.start_time IS NOT NULL
+                    AND m.start_time <= NOW()
+                    AND m.end_time > NOW() THEN 0 ELSE 1 END,
               m.end_time ASC,
               m.id ASC
             LIMIT ${limit}
@@ -242,6 +262,15 @@ export default async function handler(req, res) {
         tradeVolume: Number(r.trade_volume || 0),
         startTime: r.start_time,
         endTime: r.end_time,
+        // Live = sports market currently in its game window. Mirrors the
+        // PointsMarketCard isLive computation but pre-computed here so
+        // every consumer (carousel, grid, trending tab) reads the same
+        // boolean without re-doing the date math.
+        live: !!(r.start_time
+          && new Date(r.start_time).getTime() <= Date.now()
+          && r.end_time
+          && new Date(r.end_time).getTime() > Date.now()
+          && r.status === 'active'),
         status: r.status,
         outcome: r.outcome,
         resolvedAt: r.resolved_at,

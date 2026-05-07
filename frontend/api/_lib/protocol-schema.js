@@ -59,6 +59,14 @@ const PROTOCOL_SCHEMA_MIGRATIONS = [
   `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS protocol_version TEXT NOT NULL DEFAULT 'v1'`,
   `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS outcome_count INTEGER NOT NULL DEFAULT 2`,
   `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS outcomes JSONB`,
+  // start_time mirrors the points_markets column — kickoff for sports
+  // markets, NULL for everything else. The on-chain factory.createMarket
+  // doesn't take a start_time; admin sets it via the create-market
+  // endpoint and we INSERT the value into the row before the indexer
+  // first sees the MarketCreated event (the indexer's UPSERT preserves
+  // any non-null start_time on conflict). Used by /api/protocol/markets
+  // to put live markets at the front of the grid.
+  `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS start_time TIMESTAMPTZ`,
   `UPDATE protocol_markets SET factory_address = LOWER(factory_address), pool_address = LOWER(pool_address)`,
   `ALTER TABLE protocol_markets DROP CONSTRAINT IF EXISTS protocol_markets_chain_id_market_id_key`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_protocol_markets_chain_factory_market ON protocol_markets(chain_id, factory_address, market_id)`,
