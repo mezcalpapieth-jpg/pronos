@@ -1523,6 +1523,9 @@ html[data-theme="light"] .btn-theme-toggle::before {
    back to a horizontal flex-wrap row at the top on tablet/phone. The
    sticky positioning keeps the category list visible as the user
    scrolls through the grid below the carousel. */
+/* Mirrors the deportes/soccer league sidebar in PointsCategoryPage.jsx
+   so users moving between tabs see the same proportions. The news tab
+   colors stay red-themed to keep the live-news vs sports distinction. */
 .news-layout {
   display: flex;
   flex-direction: column;
@@ -1531,7 +1534,7 @@ html[data-theme="light"] .btn-theme-toggle::before {
 }
 .news-sidebar {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 .news-main {
@@ -1539,14 +1542,13 @@ html[data-theme="light"] .btn-theme-toggle::before {
   min-width: 0;       /* allow flex child to shrink past content width */
 }
 .news-tab {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  padding: 7px 14px;
-  letter-spacing: 0.06em;
+  font-family: var(--font-body);
+  font-size: 12px;
+  padding: 8px 10px;
   border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface1);
-  color: var(--text-muted);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
   cursor: pointer;
   text-align: left;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
@@ -1569,20 +1571,18 @@ html[data-theme="light"] .btn-theme-toggle::before {
   .news-layout {
     flex-direction: row;
     align-items: flex-start;
-    gap: 28px;
+    gap: 24px;          /* matches deportes/soccer grid gap */
   }
   .news-sidebar {
-    flex: 0 0 180px;
+    flex: 0 0 200px;    /* matches deportes/soccer 200px league column */
     flex-direction: column;
     flex-wrap: nowrap;
+    gap: 6px;
     position: sticky;
-    top: 84px;          /* clear of the top nav */
+    top: 120px;         /* matches deportes/soccer sticky offset */
   }
   .news-tab {
     width: 100%;
-    border-radius: 10px;
-    padding: 10px 14px;
-    font-size: 12px;
     display: flex;
     align-items: center;
     justify-content: space-between;

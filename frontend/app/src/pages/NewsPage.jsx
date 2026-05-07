@@ -311,9 +311,14 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
 
   return (
     <main style={{
-      maxWidth: 1100,
+      // Match the points-app deportes/soccer page (PointsCategoryPage) so the
+      // title + sidebar align horizontally between the two tabs. 1280 max width
+      // with 48px gutters anchors the title further left than the previous
+      // 1100/clamp setup, and gives the carousel ~160px more breathing room
+      // once the league sidebar renders to its left.
+      maxWidth: 1280,
       margin: '0 auto',
-      padding: 'clamp(20px, 4vw, 40px) clamp(14px, 4vw, 32px) 56px',
+      padding: 'clamp(16px, 3vw, 28px) clamp(16px, 4vw, 48px) 60px',
     }}>
       {/* Header */}
       <div style={{ marginBottom: 22 }}>
