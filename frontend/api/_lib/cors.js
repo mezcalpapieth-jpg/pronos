@@ -16,6 +16,25 @@ function allowedOrigins() {
 }
 
 /**
+ * Same-origin check: the browser's Origin header equals the schema +
+ * host the request was actually served from. Used to allow Vercel
+ * preview deploys (every PR/branch gets its own *.vercel.app
+ * hostname) and any future custom domain without forcing operators
+ * to maintain an env-var allowlist that drifts each redeploy.
+ *
+ * x-forwarded-proto is always set to 'https' on Vercel for HTTPS
+ * traffic; the http/connection.encrypted fallback covers local dev.
+ */
+function isSameOriginAsRequest(req, origin) {
+  if (!origin) return false;
+  const host = req.headers.host;
+  if (!host) return false;
+  const proto = req.headers['x-forwarded-proto']
+    || (req.connection?.encrypted ? 'https' : 'http');
+  return origin === `${proto}://${host}`;
+}
+
+/**
  * applyCors — sets CORS headers, handles preflight, and (by default)
  * enforces an Origin allowlist on state-changing requests.
  *
@@ -44,7 +63,13 @@ export function applyCors(req, res, {
   enforceSameOriginForStateChanging = true,
 } = {}) {
   const origin = req.headers.origin;
-  const allowed = origin && allowedOrigins().includes(origin);
+  // Same-origin requests are always allowed — they're the page
+  // calling its own API. This covers Vercel preview deploys
+  // (*.vercel.app hostnames that aren't in the static allowlist)
+  // and any custom domain we add later. Cross-origin requests still
+  // need to be in allowedOrigins() to pass.
+  const sameOrigin = isSameOriginAsRequest(req, origin);
+  const allowed = origin && (allowedOrigins().includes(origin) || sameOrigin);
 
   res.setHeader('Vary', 'Origin');
   if (allowed) {
@@ -59,9 +84,11 @@ export function applyCors(req, res, {
     return res.status(200).end();
   }
 
-  // CSRF guard: state-changing methods with an Origin header MUST have
-  // it on the allowlist. Reject cross-origin form-style POSTs that
-  // would otherwise sneak past the preflight.
+  // CSRF guard: state-changing methods from a CROSS-origin source
+  // must be in the allowlist. Same-origin (the page hitting its own
+  // API) always passes — that's the normal app flow. The check still
+  // blocks evil.com from triggering authenticated POSTs at our API
+  // because evil.com → pronos.io is cross-origin and not allowlisted.
   if (
     enforceSameOriginForStateChanging
     && req.method !== 'GET'
