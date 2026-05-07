@@ -134,6 +134,12 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT true`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_featured_status
     ON points_markets(featured, status) WHERE featured = true`,
+  // auto_featured: tracks whether the cron flipped `featured = true`
+  // because the market entered its game window (start_time <= now <
+  // end_time). Lets us safely auto-unfeature when the game ends
+  // without clobbering a market the admin manually featured. Set by
+  // /api/cron/points-auto-feature on each tick.
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS auto_featured BOOLEAN NOT NULL DEFAULT false`,
 
   // archived_at: soft-delete timestamp. Populated by /admin/archive-market
   // and NULL for live markets. Archived rows stay in the DB so trade

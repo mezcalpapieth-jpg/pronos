@@ -43,9 +43,15 @@ export default async function handler(req, res) {
     await ensurePointsSchema(sql);
 
     if (hasMarket) {
+      // Clear auto_featured so the points-auto-feature cron leaves
+      // this row alone going forward — a manual toggle wins until
+      // someone toggles it again. Without this, an admin un-flame
+      // would get re-flamed on the next cron tick if the game was
+      // still live.
       const rows = await sql`
         UPDATE points_markets
-        SET featured = ${featured}
+        SET featured = ${featured},
+            auto_featured = false
         WHERE id = ${mid}
         RETURNING id, featured
       `;
