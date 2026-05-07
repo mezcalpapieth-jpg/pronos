@@ -35,6 +35,12 @@ const SUB_TABS = [
   { key: 'featured',      label: 'Destacadas' },
   { key: 'politica',      label: 'Política' },
   { key: 'economia',      label: 'Economía' },
+  // 'tec-fin' captures big-tech (Google, Apple, Samsung, Nvidia,
+  // OpenAI, etc.) and crypto / fintech / Wall Street content. Runs
+  // alongside 'economia' so a Mexican-specific macro story stays in
+  // economía while a Google/Apple/BTC story lands here. Outlets like
+  // MacRumors and CoinDesk default-tag here.
+  { key: 'tec-fin',       label: 'Tec & Finanzas' },
   { key: 'seguridad',     label: 'Seguridad' },
   { key: 'internacional', label: 'Internacional' },
   { key: 'cultura',       label: 'Cultura' },

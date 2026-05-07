@@ -98,10 +98,10 @@ const OUTLETS = [
     directRss: 'https://www.actionnetwork.com/feed',
     defaultCategories: ['deportes'] },
 
-  // Tech product speculation (Apple launch dates etc.). No tech
-  // sub-tab today so these land in 'general' / 'Otras'.
+  // Tech product speculation (Apple launch dates etc.).
   { id: 'macrumors',       name: 'MacRumors',          host: 'macrumors.com',          lean: 'tech',           priority: 2,
-    directRss: 'https://feeds.macrumors.com/MacRumors-All' },
+    directRss: 'https://feeds.macrumors.com/MacRumors-All',
+    defaultCategories: ['tec-fin'] },
 
   // Election / political projections (Nate Silver's substack — explicit
   // forecast probabilities baked into headlines)
@@ -116,11 +116,10 @@ const OUTLETS = [
     directRss: 'https://goldderby.com/feed/',
     defaultCategories: ['farandula', 'cultura'] },
 
-  // Crypto — broader speculative coverage than The Block. No crypto
-  // sub-tab; route to economia.
+  // Crypto — broader speculative coverage than The Block.
   { id: 'coindesk',        name: 'CoinDesk',           host: 'coindesk.com',           lean: 'crypto',         priority: 2,
     directRss: 'https://www.coindesk.com/arc/outboundfeeds/rss/?outputType=xml',
-    defaultCategories: ['economia'] },
+    defaultCategories: ['tec-fin'] },
 
   // Economics / global markets — Reuters Agency wire (the public
   // reuters.com RSS got mostly retired ~2021; the agency feed is
@@ -372,6 +371,67 @@ const CATEGORY_KEYWORDS = {
     /\bunam\b/, /\bipn\b/, /\buam\b/, /\bunesco\b/, /\bsep\b(?=.*(?:beca|escuela|universid|profesor|maestro|estudiante))/i,
     /\beducaci\w+/, /\bestudiante\w*\b/, /\bprofesor\w*\b/, /\bmaestro\w*\b(?=.*(?:escuela|sep|magisteri|cnte))/i,
     /\binvestigaci\w+ cientif\w+/, /\bcientific\w+/, /\bnasa\b/, /\bespacio\b(?=.*(?:nasa|spacex|cohete|astronaut))/i,
+  ],
+  // Tech & finance bucket — big-tech companies, crypto, US stock
+  // markets, fintech. Runs AFTER economia so a Mexican-macro story
+  // (peso, BMV, BANXICO) keeps economía as its singular category;
+  // a Google/Apple/Bitcoin story still gets tec-fin tagged via the
+  // multi-match path. Outlets that mostly belong here (MacRumors,
+  // CoinDesk) get tec-fin as their default category at the outlet
+  // level — see OUTLETS above.
+  'tec-fin': [
+    // Big-tech companies (US-headquartered)
+    /\bgoogle\b/, /\balphabet\s+(?:inc|stock)\b/, /\bsundar pichai\b/,
+    /\bapple\b(?=.*(?:iphone|ipad|macbook|tim cook|cupertino|app store|wwdc|stock|acci[oó]n|earnings|trimestr))/i,
+    /\btim cook\b/, /\bcupertino\b/,
+    /\bsamsung\b/, /\bgalaxy\s+(?:s|note|fold|flip|z)\b/,
+    /\bmicrosoft\b/, /\bsatya nadella\b/, /\bxbox\b/, /\bwindows\s+\d+\b/,
+    /\bmeta\s+(?:platforms|inc|stock)\b/, /\bzuckerberg\b/, /\bmetaverse\b/, /\bmetaverso\b/,
+    /\bfacebook\b/, /\binstagram\s+(?:lanza|presenta|anunci|stock)/i,
+    /\bwhatsapp\b/, /\btiktok\b/, /\bbytedance\b/,
+    /\bamazon\b(?=.*(?:bezos|aws|stock|earnings|prime|fulfilment|despide|despid|layoff))/i,
+    /\bjeff bezos\b/, /\baws\b/,
+    /\bnvidia\b/, /\bjensen huang\b/,
+    /\bintel\b(?=.*(?:chip|cpu|procesad|fab|foundry|stock|arc|core ultra))/i,
+    /\bamd\b/, /\bryzen\b/, /\bradeon\b/,
+    /\btsmc\b/, /\bsemiconductor\w*\b/, /\bfundici[oó]n de chips\b/,
+    /\boracle\b/, /\bsalesforce\b/, /\bsap\b/, /\badobe\b/, /\bibm\b/,
+    /\bnetflix\b(?=.*(?:stock|abonad|suscriptor|earnings|trimestr))/i,
+    /\buber\b/, /\blyft\b/, /\bairbnb\b/, /\bdoordash\b/,
+    /\bpaypal\b/, /\bstripe\b/, /\bplaid\b/, /\bsquare\b/, /\bblock inc\b/,
+    /\btesla\b/, /\belon musk\b/, /\bmusk\b/, /\bspacex\b/, /\bstarlink\b/,
+    /\bx\s+\(twitter\)\b/, /\btwitter\b/,
+    /\bsoftbank\b/, /\bmasayoshi son\b/,
+    /\boppo\b/, /\bxiaomi\b/, /\bhuawei\b/, /\bbyd\b/,
+    // AI labs + tooling
+    /\bopenai\b/, /\bsam altman\b/, /\bchatgpt\b/, /\bgpt-?\d+\b/,
+    /\banthropic\b/, /\bdario amodei\b/, /\bclaude\s+(?:ai|3|4|opus|sonnet|haiku)\b/,
+    /\bdeepmind\b/, /\bgemini\b/, /\bllama\s+\d+\b/, /\bperplexity\b/, /\bmistral\b/, /\bcohere\b/,
+    /\binteligencia artificial\b/, /\bia\s+generativa\b/, /\bgenerative\s+ai\b/, /\bllm\b/,
+    // Apple / Samsung / Google product lines (consumer hardware)
+    /\biphone\b/, /\bipad\b/, /\bmacbook\b/, /\bairpods?\b/, /\bapple\s+watch\b/, /\bapple\s+tv\b/,
+    /\bvision\s+pro\b/, /\bhomepod\b/,
+    /\bandroid\b/, /\bpixel\s+\d+\b/, /\bchromebook\b/, /\bchromecast\b/,
+    /\bgalaxy\s+(?:s|note|fold|flip|z|tab|buds|watch)\s*\d*\b/,
+    // Crypto + Web3
+    /\bbitcoin\b/, /\bbtc\b/, /\bethereum\b/, /\beth\b/, /\bsolana\b/, /\bsol\b(?=.*(?:cripto|crypto|blockchain|jupiter|jito))/i,
+    /\bcardano\b/, /\bxrp\b/, /\bripple\b/, /\bdoge\s*coin\b/, /\bshiba\s+inu\b/,
+    /\bcripto\w*\b/, /\bcrypto\w*\b/, /\bblockchain\b/, /\bdefi\b/,
+    /\bweb3\b/, /\bnft\b/, /\baltcoin\b/, /\bstablecoin\b/, /\busdt\b/, /\busdc\b/,
+    /\bbinance\b/, /\bcoinbase\b/, /\bkraken\b/, /\bbitso\b/, /\buniswap\b/,
+    /\bsec\b(?=.*(?:cripto|crypto|bitcoin|etf|gary gensler))/i,
+    /\bgary gensler\b/, /\bvitalik buterin\b/,
+    /\betf\s+(?:de\s+)?(?:bitcoin|ethereum|cripto|crypto|spot)\b/i, /\bspot\s+etf\b/,
+    /\bhalving\b/, /\bminer[íi]a\s+(?:de\s+)?(?:bitcoin|cripto|crypto)\b/,
+    // US / global stock markets + Wall Street
+    /\bnasdaq\b/, /\bs[\.\s&]*p\s*500\b/, /\bdow\s+jones\b/, /\bdjia\b/,
+    /\bwall\s+street\b/, /\bmercados?\s+(?:globales|de\s+wall\s+street)\b/,
+    /\bipo\b/, /\boferta\s+p[uú]blica\s+inicial\b/,
+    /\bfondos?\s+de\s+inversi[oó]n\b/, /\bventure\s+capital\b/, /\bventura\s+capital\b/,
+    /\bsoftbank\s+vision\s+fund\b/, /\bsequoia\b/, /\ba16z\b/, /\bandreessen\s+horowitz\b/,
+    // Fintech (global)
+    /\bfintech\b/, /\bbanca\s+digital\b/, /\bneobanco\w*\b/, /\bopen\s+banking\b/,
+    /\bmercado\s+pago\b/, /\bn[uú]\s+m[eé]xico\b/, /\bnubank\b/, /\bklar\b/,
   ],
   // International last so country/leader names don't grab clearly
   // local stories that mention foreign actors in passing.
