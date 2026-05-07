@@ -649,6 +649,16 @@ const QUALITY_BLACKLIST = [
   // Skincare / beauty product content
   /\b(?:skin\s*care|cuidado\s+de\s+la\s+piel)\b/i,
   /\b(?:crema|s[eé]rum|tratamiento)\s+(?:antiarrug\w+|facial|de\s+noche|para\s+(?:la\s+piel|el\s+rostro))\b/i,
+  // Gift / mother's day / father's day shopping content. Catches
+  //   "regalo", "regalos", "regalar", "regaló", "regalada", etc.
+  //   plus standalone "perfumes" / "fragancias" listicles which were
+  //   slipping past the buyer's-guide regex above.
+  /\bregal(?:o|a|ar)\w*\b/i,
+  /\bperfumes?\b/i,
+  /\bfragancias?\b/i,
+  // Gift guides keyed on shopping holidays, e.g.
+  //   "guía de regalos para el día del padre"
+  /\bgu[ií]a\s+(?:de\s+regalos|de\s+compras)\b/i,
   // Poems / short-story literary filler (regional papers run a lot)
   /^\s*poema\b/i,
   /\bpoes[ií]a\s+del?\s+d[ií]a\b/i,

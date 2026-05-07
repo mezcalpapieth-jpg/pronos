@@ -1603,24 +1603,30 @@ html[data-theme="light"] .btn-theme-toggle::before {
    same row. */
 .news-hero-card {
   flex: 0 0 92%;
+  /* Min-height applies to text-only cards so they don't shrink under
+     image cards in the same row. has-image still sets `height` below
+     so portrait photos don't blow up the row. */
+  min-height: 220px;
 }
 .news-hero-card.has-image {
-  height: 180px;
+  height: 220px;
 }
 @media (min-width: 720px) {
   .news-hero-card {
     flex: 0 0 calc(50% - 8px);
+    min-height: 240px;
   }
   .news-hero-card.has-image {
-    height: 200px;
+    height: 240px;
   }
 }
 @media (min-width: 1100px) {
   .news-hero-card {
     flex: 0 0 calc(33.333% - 11px);
+    min-height: 280px;
   }
   .news-hero-card.has-image {
-    height: 200px;
+    height: 280px;
   }
 }
 
