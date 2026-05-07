@@ -66,6 +66,53 @@ const OUTLETS = [
   // homepage has 72 <article> tags, 66 of which extract cleanly
   // via the homepage scraper. Lean = independent / right-leaning.
   { id: 'latinus',         name: 'Latinus',            host: 'latinus.us',             lean: 'independent',    priority: 2 },
+
+  // ── International / topical (added 2026-05-07) ──────────────────────
+  // Speculation-heavy feeds for prediction-market input. All ship a
+  // working RSS endpoint so they bypass the Spanish Google News
+  // fallback (which would otherwise return zero results for
+  // English-language sites). Items will mostly classify as 'general'
+  // until CATEGORY_KEYWORDS gets English variants — that's a future
+  // refinement; for now the dedicated outlets are the discovery
+  // surface.
+
+  // Soccer / fútbol
+  { id: 'mediotiempo',     name: 'Mediotiempo',        host: 'mediotiempo.com',        lean: 'sports',         priority: 2,
+    directRss: 'https://www.mediotiempo.com/rss/all-news.xml' },
+  { id: 'goal-es',         name: 'Goal en Español',    host: 'goal.com',               lean: 'sports',         priority: 2,
+    directRss: 'https://www.goal.com/feeds/es/news?fmt=rss' },
+
+  // North-American sports speculation
+  { id: 'the-ringer',      name: 'The Ringer',         host: 'theringer.com',          lean: 'sports',         priority: 2,
+    directRss: 'https://www.theringer.com/rss/index.xml' },
+  { id: 'action-network',  name: 'The Action Network', host: 'actionnetwork.com',      lean: 'sports-betting', priority: 2,
+    directRss: 'https://www.actionnetwork.com/feed' },
+
+  // Tech product speculation (Apple launch dates etc.)
+  { id: 'macrumors',       name: 'MacRumors',          host: 'macrumors.com',          lean: 'tech',           priority: 2,
+    directRss: 'https://feeds.macrumors.com/MacRumors-All' },
+
+  // Election / political projections (Nate Silver's substack — explicit
+  // forecast probabilities baked into headlines)
+  { id: 'silver-bulletin', name: 'Silver Bulletin',    host: 'natesilver.net',         lean: 'data-driven',    priority: 2,
+    directRss: 'https://www.natesilver.net/feed' },
+
+  // Awards predictions — seasonal but high-density during awards season
+  { id: 'gold-derby',      name: 'Gold Derby',         host: 'goldderby.com',          lean: 'entertainment',  priority: 2,
+    directRss: 'https://goldderby.com/feed/' },
+
+  // Crypto — broader speculative coverage than The Block, more
+  // "BTC could hit $X" / ETF flow analysis
+  { id: 'coindesk',        name: 'CoinDesk',           host: 'coindesk.com',           lean: 'crypto',         priority: 2,
+    directRss: 'https://www.coindesk.com/arc/outboundfeeds/rss/?outputType=xml' },
+
+  // Economics / global markets — Reuters Agency wire (the public
+  // reuters.com RSS got mostly retired ~2021; the agency feed is
+  // the working substitute). If this 404s the code falls through to
+  // Google News with the Spanish locale, which still returns
+  // Reuters LATAM-Spanish content via reuters.com/latam.
+  { id: 'reuters',         name: 'Reuters',            host: 'reuters.com',            lean: 'wire',           priority: 2,
+    directRss: 'https://www.reutersagency.com/feed/?best-topics=business-finance&post_type=best' },
 ];
 
 function normalize(s) {
