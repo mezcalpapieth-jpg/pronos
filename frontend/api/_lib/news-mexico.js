@@ -75,40 +75,52 @@ const OUTLETS = [
   // Speculation-heavy feeds for prediction-market input. All ship a
   // working RSS endpoint so they bypass the Spanish Google News
   // fallback (which would otherwise return zero results for
-  // English-language sites). Items will mostly classify as 'general'
-  // until CATEGORY_KEYWORDS gets English variants — that's a future
-  // refinement; for now the dedicated outlets are the discovery
-  // surface.
+  // English-language sites).
+  //
+  // `defaultCategories` is merged into classify()'s output so English
+  // titles that don't hit the Spanish CATEGORY_KEYWORDS still land
+  // in the right sub-tab. Outlets without it fall through to
+  // content-based classification (the Mexican outlets above).
 
   // Soccer / fútbol
   { id: 'mediotiempo',     name: 'Mediotiempo',        host: 'mediotiempo.com',        lean: 'sports',         priority: 2,
-    directRss: 'https://www.mediotiempo.com/rss/all-news.xml' },
+    directRss: 'https://www.mediotiempo.com/rss/all-news.xml',
+    defaultCategories: ['deportes'] },
   { id: 'goal-es',         name: 'Goal en Español',    host: 'goal.com',               lean: 'sports',         priority: 2,
-    directRss: 'https://www.goal.com/feeds/es/news?fmt=rss' },
+    directRss: 'https://www.goal.com/feeds/es/news?fmt=rss',
+    defaultCategories: ['deportes'] },
 
   // North-American sports speculation
   { id: 'the-ringer',      name: 'The Ringer',         host: 'theringer.com',          lean: 'sports',         priority: 2,
-    directRss: 'https://www.theringer.com/rss/index.xml' },
+    directRss: 'https://www.theringer.com/rss/index.xml',
+    defaultCategories: ['deportes'] },
   { id: 'action-network',  name: 'The Action Network', host: 'actionnetwork.com',      lean: 'sports-betting', priority: 2,
-    directRss: 'https://www.actionnetwork.com/feed' },
+    directRss: 'https://www.actionnetwork.com/feed',
+    defaultCategories: ['deportes'] },
 
-  // Tech product speculation (Apple launch dates etc.)
+  // Tech product speculation (Apple launch dates etc.). No tech
+  // sub-tab today so these land in 'general' / 'Otras'.
   { id: 'macrumors',       name: 'MacRumors',          host: 'macrumors.com',          lean: 'tech',           priority: 2,
     directRss: 'https://feeds.macrumors.com/MacRumors-All' },
 
   // Election / political projections (Nate Silver's substack — explicit
   // forecast probabilities baked into headlines)
   { id: 'silver-bulletin', name: 'Silver Bulletin',    host: 'natesilver.net',         lean: 'data-driven',    priority: 2,
-    directRss: 'https://www.natesilver.net/feed' },
+    directRss: 'https://www.natesilver.net/feed',
+    defaultCategories: ['politica', 'internacional'] },
 
-  // Awards predictions — seasonal but high-density during awards season
+  // Awards predictions — entertainment + cultural commentary,
+  // mostly Anglophone (Oscars/Emmys/Grammys/Cannes). Almost every
+  // item belongs in farandula + cultura by default.
   { id: 'gold-derby',      name: 'Gold Derby',         host: 'goldderby.com',          lean: 'entertainment',  priority: 2,
-    directRss: 'https://goldderby.com/feed/' },
+    directRss: 'https://goldderby.com/feed/',
+    defaultCategories: ['farandula', 'cultura'] },
 
-  // Crypto — broader speculative coverage than The Block, more
-  // "BTC could hit $X" / ETF flow analysis
+  // Crypto — broader speculative coverage than The Block. No crypto
+  // sub-tab; route to economia.
   { id: 'coindesk',        name: 'CoinDesk',           host: 'coindesk.com',           lean: 'crypto',         priority: 2,
-    directRss: 'https://www.coindesk.com/arc/outboundfeeds/rss/?outputType=xml' },
+    directRss: 'https://www.coindesk.com/arc/outboundfeeds/rss/?outputType=xml',
+    defaultCategories: ['economia'] },
 
   // Economics / global markets — Reuters Agency wire (the public
   // reuters.com RSS got mostly retired ~2021; the agency feed is
@@ -116,8 +128,13 @@ const OUTLETS = [
   // Google News with the Spanish locale, which still returns
   // Reuters LATAM-Spanish content via reuters.com/latam.
   { id: 'reuters',         name: 'Reuters',            host: 'reuters.com',            lean: 'wire',           priority: 2,
-    directRss: 'https://www.reutersagency.com/feed/?best-topics=business-finance&post_type=best' },
+    directRss: 'https://www.reutersagency.com/feed/?best-topics=business-finance&post_type=best',
+    defaultCategories: ['economia', 'internacional'] },
 ];
+
+// Sourceid → outlet lookup. Built once at module load so classify()
+// can pull defaultCategories without scanning OUTLETS on every item.
+const OUTLETS_BY_ID = Object.fromEntries(OUTLETS.map(o => [o.id, o]));
 
 function normalize(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -205,6 +222,20 @@ const CATEGORY_KEYWORDS = {
     /\btelenovel\w+/, /\breality( show)?\b/, /\brealiti\b/,
     /\bla casa de los famosos\b/, /\bbig brother\b/, /\bmasterchef\b/, /\bmexicos got talent\b/,
     /\bmiss (?:universo|mexico|mundo)\b/, /\bcertamen de belleza\b/,
+    // K-pop + Asian pop culture (a Proceso BTS feature was being
+    // misclassified as `economia` because it mentioned "modelo
+    // económico"; without these keywords the farandula bucket
+    // didn't fire and economia won the singular-category coin flip).
+    /\bbts\b/, /\bblackpink\b/, /\bnewjeans\b/, /\bnew jeans\b/,
+    /\btwice\b/, /\bstray kids\b/, /\bseventeen\b/, /\benhypen\b/,
+    /\baespa\b/, /\bitzy\b/, /\b(?:le\s+)?sserafim\b/, /\biu\b/, /\bnct\b/,
+    /\b(?:k|j)-?pop\b/, /\bk-?drama\b/, /\bhallyu\b/, /\bidol coreano\w*\b/,
+    /\bsquid game\b/, /\bparasit(?:e|os)\b/, /\bjenni rivera\b/,
+    // Global anglophone pop / awards-circuit names commonly mentioned
+    // in farandula coverage.
+    /\btaylor swift\b/, /\bbeyonce\b/, /\bdrake\b/, /\bariana grande\b/,
+    /\bsabrina carpenter\b/, /\bbillie eilish\b/, /\bdua lipa\b/, /\bweeknd\b/,
+    /\brihanna\b/, /\bkanye\b/, /\bkim kardashian\b/, /\btravis kelce\b/,
     // Award shows + TV/film events
     /\bgrammys?\b/, /\blatin grammys?\b/, /\boscar\w*\b/, /\bgolden globe\w*\b/, /\bemmy\w*\b/,
     /\bmtv vma\w*\b/, /\bbillboard\b/, /\bmet gala\b/,
@@ -387,13 +418,30 @@ const CATEGORY_KEYWORDS = {
 // to ['general'].
 function classify(item) {
   const text = normalize(`${item.title} ${item.summary || ''}`);
-  const matched = [];
+  // Use a Set for de-dup since outlet defaults can overlap with
+  // content matches. Set preserves insertion order in JS, so outlet
+  // defaults appear first in the categories array (and therefore
+  // become the singular `category` value below) — that matches the
+  // operator's mental model: a Gold Derby story is a farandula
+  // story even if the title coincidentally trips an unrelated regex.
+  const matched = new Set();
+
+  // Outlet-level defaults — applied BEFORE content matching so the
+  // singular `category` field reflects the outlet's main beat. e.g.
+  // Gold Derby items always land in farandula+cultura even when the
+  // title is in English and matches no Spanish keywords.
+  const outlet = OUTLETS_BY_ID[item.sourceId];
+  if (outlet?.defaultCategories) {
+    for (const c of outlet.defaultCategories) matched.add(c);
+  }
+
+  // Content-based pattern matching (Spanish keyword regexes).
   for (const [cat, patterns] of Object.entries(CATEGORY_KEYWORDS)) {
     for (const re of patterns) {
-      if (re.test(text)) { matched.push(cat); break; }
+      if (re.test(text)) { matched.add(cat); break; }
     }
   }
-  return matched.length ? matched : ['general'];
+  return matched.size ? Array.from(matched) : ['general'];
 }
 
 const GNEWS_BASE = 'https://news.google.com/rss/search';
