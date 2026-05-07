@@ -43,6 +43,37 @@ const SUB_TABS = [
   { key: 'general',       label: 'Otras' },
 ];
 
+// Defensive client-side HTML-entity decoder. The server-side decoder
+// in news-mexico.js does the heavy lifting, but CDN cache + occasional
+// double-encoded feeds (Google News re-emitting an already-encoded
+// upstream title) can still leak `&#039;`, `&#8216;`, `&amp;` to the
+// browser. We re-run the same logic here so the rendered text is
+// always clean regardless of where the caching pipe staled.
+//
+// Two passes catch double-encoded inputs (&amp;#039; → &#039; → ').
+// Idempotent on already-decoded strings.
+function decodeEntitiesPass(s) {
+  return String(s)
+    .replace(/&#(\d+);/g, (_, n) => {
+      const c = Number.parseInt(n, 10);
+      return Number.isFinite(c) && c > 0 && c <= 0x10FFFF ? String.fromCodePoint(c) : '';
+    })
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => {
+      const c = Number.parseInt(h, 16);
+      return Number.isFinite(c) && c > 0 && c <= 0x10FFFF ? String.fromCodePoint(c) : '';
+    })
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&nbsp;/g, ' ')
+    .replace(/&mdash;/g, '—').replace(/&ndash;/g, '–')
+    .replace(/&lsquo;/g, '‘').replace(/&rsquo;/g, '’')
+    .replace(/&ldquo;/g, '“').replace(/&rdquo;/g, '”')
+    .replace(/&hellip;/g, '…').replace(/&middot;/g, '·');
+}
+function decodeText(s) {
+  if (!s) return '';
+  return decodeEntitiesPass(decodeEntitiesPass(s));
+}
+
 function relativeTime(iso) {
   if (!iso) return '';
   const ms = Date.now() - new Date(iso).getTime();
@@ -152,6 +183,18 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
         if (cancelled) return;
         const payload = res?.data || res;
         if (!payload || payload.error) throw new Error(payload?.error || 'news_failed');
+        // Run every fetched title/summary through the entity decoder
+        // once at intake so every render site below sees clean text
+        // (cheaper than wrapping each {item.title} interpolation, and
+        // catches search/filter strings too). Idempotent on already-
+        // decoded strings.
+        if (Array.isArray(payload.items)) {
+          payload.items = payload.items.map(it => ({
+            ...it,
+            title: decodeText(it.title),
+            summary: decodeText(it.summary),
+          }));
+        }
         setData(payload);
       })
       .catch(e => { if (!cancelled) setError(e?.message || 'news_failed'); })

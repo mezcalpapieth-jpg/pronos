@@ -744,6 +744,31 @@ const QUALITY_BLACKLIST = [
   // Gift guides keyed on shopping holidays, e.g.
   //   "guía de regalos para el día del padre"
   /\bgu[ií]a\s+(?:de\s+regalos|de\s+compras)\b/i,
+
+  // Product-buying decision content (Amazon-affiliate listicle titles
+  // like "AIRPODS 4 O AIRPODS PRO 3: CUÁL COMPRAR..."). Carefully scoped
+  // so legit "comprar" in M&A / stock-purchase contexts still gets
+  // through:
+  //   - "Banamex tras comprar Banco X" → unblocked (no decision-question
+  //     phrasing)
+  //   - "Walmart compra Mercado Libre" → unblocked (declarative)
+  //   - "AirPods o iPhone, ¿cuál comprar?" → BLOCKED
+  /\b(?:cu[aá]l|qu[eé])\s+(?:comprar|elegir|escoger|llevar)\b/i,
+  // Mentions of Amazon's Mexican storefront in titles — almost always
+  // commerce content, not Amazon-the-company news. We don't filter
+  // bare "amazon" since "Amazon AWS outage", "Amazon stock", etc. are
+  // legitimate.
+  /\bamazon\s+m[eé]xico\b/i,
+  /\bamazon\.com\.mx\b/i,
+  /\bvale\s+la\s+pena\s+comprar\b/i,
+  // Tech-product head-to-head comparisons (consumer electronics).
+  // Pattern: <product> [\s\d]* "o" <product> — covers "AirPods 4 o
+  // AirPods Pro 3", "iPhone 16 o 15 Pro", etc. Won't match
+  // "iPhone aplaza X" or "Galaxy gana batalla legal".
+  /\b(?:airpods?|iphone|ipad|macbook|apple\s+watch|galaxy|pixel)\b[\s\d\w]*\bo\s+(?:airpods?|iphone|ipad|macbook|apple\s+watch|galaxy|pixel)\b/i,
+  // "descuentos en Amazon|Mercado Libre|Liverpool" — Black-Friday-style
+  // deal posts independent of the named brand prefix.
+  /\bdescuent\w+\s+(?:que\s+hay\s+ahora\s+)?en\s+(?:amazon|mercado\s*libre|liverpool|sears|walmart|costco|coppel|elektra)\b/i,
   // Poems / short-story literary filler (regional papers run a lot)
   /^\s*poema\b/i,
   /\bpoes[ií]a\s+del?\s+d[ií]a\b/i,
