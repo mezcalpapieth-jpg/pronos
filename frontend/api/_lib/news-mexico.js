@@ -52,7 +52,11 @@ function getFirstSeenSql() {
 // RSS feed with items. Everyone else 404/403s or returns an HTML
 // page. The other 8 fall through to Google News.
 const OUTLETS = [
-  { id: 'el-universal',    name: 'El Universal',       host: 'eluniversal.com.mx',     lean: 'center',         priority: 1 },
+  // El Universal serves images from a CDN that rejects hot-linked
+  // requests from our origin (referrer check), so og:image enrichment
+  // returns URLs that 403 in the browser. Forced to text-only to keep
+  // the feed clean. Same for Noroeste below.
+  { id: 'el-universal',    name: 'El Universal',       host: 'eluniversal.com.mx',     lean: 'center',         priority: 1, textOnly: true },
   { id: 'animal-politico', name: 'Animal Político',    host: 'animalpolitico.com',     lean: 'left',           priority: 1 },
   { id: 'aristegui',       name: 'Aristegui Noticias', host: 'aristeguinoticias.com',  lean: 'independent',    priority: 1 },
   { id: 'milenio',         name: 'Milenio',            host: 'milenio.com',            lean: 'center',         priority: 1 },
@@ -60,7 +64,7 @@ const OUTLETS = [
     directRss: 'https://www.elfinanciero.com.mx/rss/' },
   { id: 'sin-embargo',     name: 'Sin Embargo',        host: 'sinembargo.mx',          lean: 'left',           priority: 2 },
   { id: 'proceso',         name: 'Proceso',            host: 'proceso.com.mx',         lean: 'investigative',  priority: 2 },
-  { id: 'noroeste',        name: 'Noroeste',           host: 'noroeste.com.mx',        lean: 'regional',       priority: 2 },
+  { id: 'noroeste',        name: 'Noroeste',           host: 'noroeste.com.mx',        lean: 'regional',       priority: 2, textOnly: true },
   { id: 'debate',          name: 'El Debate',          host: 'debate.com.mx',          lean: 'regional',       priority: 2 },
   // Latinus — Carlos Loret de Mola's outlet. No public RSS but
   // homepage has 72 <article> tags, 66 of which extract cleanly
@@ -607,6 +611,12 @@ function tagItem(it, outlet, channel) {
     sourcePriority: outlet.priority,
     favicon: faviconForUrl(it.url),
     sourceChannel: channel, // 'direct' | 'gnews' — for debug
+    // textOnly outlets force-clear any feed-level image and mark the
+    // item so enrichItemsWithImages doesn't waste an HTTP fetch
+    // re-discovering an image that's only going to 403 in the
+    // browser. The UI's `item.image ? ' has-image' : ''` branch
+    // then renders a clean text card.
+    ...(outlet.textOnly ? { image: null, _textOnly: true } : {}),
   };
 }
 
@@ -1003,7 +1013,12 @@ async function runWithConcurrency(items, worker, n) {
 async function enrichItemsWithImages(items) {
   const toFetch = [];
   for (const it of items) {
-    const needsImage = !it.image;
+    // Items from textOnly outlets (e.g. El Universal, Noroeste — their
+    // CDN rejects hot-linked images) skip image discovery entirely.
+    // Date enrichment still runs in case the outlet doesn't ship a
+    // pubDate.
+    const skipImage = it._textOnly === true;
+    const needsImage = !it.image && !skipImage;
     const needsDate = it.publishedAtSource === 'first-seen';
     const cached = imageCacheGet(it.url);
     if (cached === undefined) {
@@ -1029,7 +1044,10 @@ async function enrichItemsWithImages(items) {
     async (it) => {
       const meta = await fetchOgMeta(it.url);
       imageCacheSet(it.url, meta); // stores { image, publishedAt }
-      if (meta.image && !it.image) it.image = meta.image;
+      // Gate image assignment by _textOnly too — items from El Universal /
+      // Noroeste are in fetchTargets only for date enrichment; they
+      // must keep image=null even when fetchOgMeta finds one upstream.
+      if (meta.image && !it.image && !it._textOnly) it.image = meta.image;
       if (meta.publishedAt && it.publishedAtSource === 'first-seen') {
         it.publishedAt = meta.publishedAt;
         it.publishedAtSource = 'og-fetch';
