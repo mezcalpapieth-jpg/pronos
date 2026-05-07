@@ -1606,27 +1606,41 @@ html[data-theme="light"] .btn-theme-toggle::before {
   /* Min-height applies to text-only cards so they don't shrink under
      image cards in the same row. has-image still sets `height` below
      so portrait photos don't blow up the row. */
-  min-height: 220px;
+  min-height: 280px;
 }
 .news-hero-card.has-image {
-  height: 220px;
+  height: 280px;
+}
+/* Fixed image strip — paired with `flex: 0 0 auto` on the inline JSX
+   wrapper so the text below always has the remaining card height for
+   headline + summary. Without this the image was free to grow past
+   50% and squeeze the title section, causing 1-2 lines of the
+   headline to clip below the card border. */
+.news-hero-card .news-hero-image {
+  height: 150px;
 }
 @media (min-width: 720px) {
   .news-hero-card {
     flex: 0 0 calc(50% - 8px);
-    min-height: 240px;
+    min-height: 320px;
   }
   .news-hero-card.has-image {
-    height: 240px;
+    height: 320px;
+  }
+  .news-hero-card .news-hero-image {
+    height: 170px;
   }
 }
 @media (min-width: 1100px) {
   .news-hero-card {
     flex: 0 0 calc(33.333% - 11px);
-    min-height: 280px;
+    min-height: 380px;
   }
   .news-hero-card.has-image {
-    height: 280px;
+    height: 380px;
+  }
+  .news-hero-card .news-hero-image {
+    height: 200px;
   }
 }
 

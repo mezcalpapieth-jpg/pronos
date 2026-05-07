@@ -696,7 +696,16 @@ function NewsHeroCarousel({ items, isAdmin, onCreateMarket, onOpenLinkPicker, on
               }}
             >
               {item.image ? (
-                <div style={{ flex: '1 1 50%', minHeight: 90, position: 'relative' }}>
+                /* Fixed image height (flex 0 0) so the text section
+                   below gets a predictable share of the card height
+                   instead of being squeezed when the headline is long.
+                   Without this, `flex: 1 1 50%` lets the image shrink
+                   the text below its content height — which is what
+                   was clipping the titles on Gold Derby / MacRumors
+                   cards. The fixed values match the per-breakpoint
+                   .news-hero-card heights in components.css so image
+                   and text always share the card cleanly. */
+                <div className="news-hero-image" style={{ flex: '0 0 auto', position: 'relative' }}>
                   <NewsImage src={item.image} alt={item.title} aspect="auto" fill />
                   {isAdmin && <HideButton onHide={onHide} item={item} />}
                   <div style={{
@@ -746,6 +755,13 @@ function NewsHeroCarousel({ items, isAdmin, onCreateMarket, onOpenLinkPicker, on
                 </div>
               )}
               <div style={{
+                /* flex:1 + min-height:0 + overflow:hidden lets the text
+                   section absorb whatever's left after the image and
+                   clips gracefully via the line-clamps below — instead
+                   of overflowing past the card border. */
+                flex: '1 1 auto',
+                minHeight: 0,
+                overflow: 'hidden',
                 padding: 'clamp(14px, 2.4vw, 22px)',
                 display: 'flex',
                 flexDirection: 'column',
@@ -767,7 +783,10 @@ function NewsHeroCarousel({ items, isAdmin, onCreateMarket, onOpenLinkPicker, on
                   margin: 0,
                   letterSpacing: '0.01em',
                   display: '-webkit-box',
-                  WebkitLineClamp: 3,
+                  /* Image cards have less vertical room — clamp the
+                     headline to 2 lines so it never gets cut by the
+                     card border. Text-only cards still get 3 lines. */
+                  WebkitLineClamp: item.image ? 2 : 3,
                   WebkitBoxOrient: 'vertical',
                   overflow: 'hidden',
                 }}>
@@ -781,7 +800,10 @@ function NewsHeroCarousel({ items, isAdmin, onCreateMarket, onOpenLinkPicker, on
                     lineHeight: 1.5,
                     margin: 0,
                     display: '-webkit-box',
-                    WebkitLineClamp: 2,
+                    /* Image cards: 1-line summary keeps the chip + admin
+                       buttons inside the card frame even at desktop's
+                       380px height. Text-only cards get 2 lines. */
+                    WebkitLineClamp: item.image ? 1 : 2,
                     WebkitBoxOrient: 'vertical',
                     overflow: 'hidden',
                   }}>

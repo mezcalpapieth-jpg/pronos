@@ -462,12 +462,50 @@ function unwrapCdata(s) {
   if (!s) return '';
   return String(s).replace(/^\s*<!\[CDATA\[/, '').replace(/\]\]>\s*$/, '').trim();
 }
+// HTML entity decoder. Handles named entities + GENERIC numeric forms
+// (&#NNN; decimal, &#xHH; hex). Many RSS feeds — particularly WordPress-
+// based ones (Gold Derby, Silver Bulletin, MacRumors) — emit Microsoft-Word
+// smart quotes as numeric entities like &#8216; / &#8217; / &#8212; / &#039;
+// which previously slipped through and rendered literally on the news cards.
+//
+// Some feeds double-encode (e.g. &amp;#8216;) — we run two passes so a
+// double-encoded sequence resolves on the second pass after &amp;
+// becomes & in the first. Order: numeric → named, two passes.
+function decodeEntitiesPass(s) {
+  return String(s)
+    // Decimal numeric: &#8216; → ‘   (also &#039; etc. with leading zero)
+    .replace(/&#(\d+);/g, (_, n) => {
+      const code = Number.parseInt(n, 10);
+      return Number.isFinite(code) && code > 0 && code <= 0x10FFFF
+        ? String.fromCodePoint(code) : '';
+    })
+    // Hex numeric: &#x27; → '
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => {
+      const code = Number.parseInt(h, 16);
+      return Number.isFinite(code) && code > 0 && code <= 0x10FFFF
+        ? String.fromCodePoint(code) : '';
+    })
+    // Named entities — common subset that shows up in news titles.
+    .replace(/&amp;/g,    '&')
+    .replace(/&lt;/g,     '<')
+    .replace(/&gt;/g,     '>')
+    .replace(/&quot;/g,   '"')
+    .replace(/&apos;/g,   "'")
+    .replace(/&nbsp;/g,   ' ')
+    .replace(/&mdash;/g,  '—')
+    .replace(/&ndash;/g,  '–')
+    .replace(/&lsquo;/g,  '‘')
+    .replace(/&rsquo;/g,  '’')
+    .replace(/&ldquo;/g,  '“')
+    .replace(/&rdquo;/g,  '”')
+    .replace(/&hellip;/g, '…')
+    .replace(/&middot;/g, '·');
+}
 function decodeEntities(s) {
   if (!s) return '';
-  return String(s)
-    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&#x27;/g, "'")
-    .replace(/&apos;/g, "'").replace(/&nbsp;/g, ' ');
+  // Two passes catches double-encoded inputs (&amp;#8216; → &#8216; → ').
+  // Idempotent on already-decoded strings.
+  return decodeEntitiesPass(decodeEntitiesPass(s));
 }
 function stripHtml(s) {
   if (!s) return '';
