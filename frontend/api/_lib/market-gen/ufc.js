@@ -124,7 +124,11 @@ function buildFightMarket(ev, fight, isLastOnCard) {
   return {
     source: 'espn-mma',
     source_event_id: `mma:${ev.id}:${fight.id}`,
-    sport: 'mma',
+    // sport='combate' is the new umbrella for fighting markets in
+    // PointsCategoryPage; UFC + boxing land under it via the
+    // league sidebar (see PointsCategoryPage SPORT_TABS + the
+    // COMBATE_LEAGUES list).
+    sport: 'combate',
     league: 'ufc',
     question: `¿Quién gana ${aName} vs ${bName}?`,
     category: 'deportes',

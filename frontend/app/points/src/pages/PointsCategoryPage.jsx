@@ -52,6 +52,10 @@ const SPORT_TABS = [
   { key: 'f1',       tKey: 'points.sport.f1'       },
   { key: 'tennis',   tKey: 'points.sport.tennis'   },
   { key: 'golf',     tKey: 'points.sport.golf'     },
+  // Combate = fighting umbrella. Markets land here with sport='combate'
+  // and league='ufc' or 'boxing'. Generator: market-gen/ufc.js; boxing
+  // generator pending a data source decision.
+  { key: 'combate',  tKey: 'points.sport.combate',  fallback: 'Combate' },
 ];
 
 // Soccer leagues sidebar. `key` maps to market.league as set by the
@@ -74,6 +78,14 @@ const BASEBALL_LEAGUES = [
   { key: 'all', tKey: 'points.league.all' },
   { key: 'mlb', tKey: 'points.league.mlb' },
   { key: 'lmb', tKey: 'points.league.lmb' },
+];
+
+// Combate (fighting) leagues sidebar — UFC + Boxing today, with
+// kickboxing / Bellator / PFL slots reserved for future generators.
+const COMBATE_LEAGUES = [
+  { key: 'all',    tKey: 'points.league.all', fallback: 'Todos' },
+  { key: 'ufc',    tKey: 'points.league.ufc', fallback: 'UFC' },
+  { key: 'boxing', tKey: 'points.league.boxing', fallback: 'Boxeo' },
 ];
 
 // Category tabs that want resolved markets instead of active.
@@ -170,8 +182,8 @@ export default function PointsCategoryPage() {
     // Sports sub-filter: only when on /c/deportes.
     if (slug === 'deportes' && sport !== 'all') {
       out = out.filter(m => (m.sport || '').toLowerCase() === sport);
-      // League sidebars on soccer + baseball.
-      if ((sport === 'soccer' || sport === 'baseball') && league !== 'all') {
+      // League sidebars on soccer + baseball + combate (combat sports).
+      if ((sport === 'soccer' || sport === 'baseball' || sport === 'combate') && league !== 'all') {
         out = out.filter(m => (m.league || '').toLowerCase() === league);
       }
     }
@@ -188,8 +200,10 @@ export default function PointsCategoryPage() {
     if (next === 'all') params.delete('sport');
     else params.set('sport', next);
     // Reset league whenever we pivot away from a sport that has
-    // a league sidebar (soccer / baseball).
-    if (next !== 'soccer' && next !== 'baseball') params.delete('league');
+    // a league sidebar (soccer / baseball / combate).
+    if (next !== 'soccer' && next !== 'baseball' && next !== 'combate') {
+      params.delete('league');
+    }
     setSearchParams(params, { replace: true });
   }
 
@@ -203,9 +217,15 @@ export default function PointsCategoryPage() {
   const titleKey = SLUG_TO_TITLE_KEY[slug] || null;
   const showSportBar = slug === 'deportes';
   const showLeagueSidebar = slug === 'deportes'
-    && (sport === 'soccer' || sport === 'baseball');
-  const leagueTabs = sport === 'baseball' ? BASEBALL_LEAGUES : SOCCER_LEAGUES;
-  const leagueSidebarLabel = sport === 'baseball' ? 'Ligas' : 'Ligas';
+    && (sport === 'soccer' || sport === 'baseball' || sport === 'combate');
+  const leagueTabs = sport === 'baseball'
+    ? BASEBALL_LEAGUES
+    : sport === 'combate'
+      ? COMBATE_LEAGUES
+      : SOCCER_LEAGUES;
+  // Friendly sidebar header. "Disciplinas" feels right for combat
+  // sports vs "Ligas" for soccer / baseball.
+  const leagueSidebarLabel = sport === 'combate' ? 'Disciplinas' : 'Ligas';
 
   return (
     <section style={{

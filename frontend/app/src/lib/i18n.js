@@ -598,9 +598,12 @@ const STRINGS = {
   'points.sport.f1':          { es: '🏁 F1',                   en: '🏁 F1' },
   'points.sport.tennis':      { es: '🎾 Tenis',               en: '🎾 Tennis' },
   'points.sport.golf':        { es: '⛳ Golf',                 en: '⛳ Golf' },
+  'points.sport.combate':     { es: '🥊 Combate',             en: '🥊 Fighting' },
 
-  // Soccer leagues sidebar
+  // Soccer / Baseball / Combate leagues sidebar
   'points.league.all':        { es: 'Todas',                  en: 'All' },
+  'points.league.ufc':        { es: 'UFC',                    en: 'UFC' },
+  'points.league.boxing':     { es: 'Boxeo',                  en: 'Boxing' },
   'points.league.uefaCl':     { es: 'UEFA Champions',         en: 'UEFA Champions' },
   'points.league.laLiga':     { es: 'La Liga',                en: 'La Liga' },
   'points.league.premier':    { es: 'Premier League',         en: 'Premier League' },
