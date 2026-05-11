@@ -160,6 +160,25 @@ contract MarketFactoryV2 {
     /// @notice Emitted on each successful sweep.
     event DustSwept(uint256 indexed marketId, address indexed recipient);
 
+    /**
+     * @notice Batch push-redeem on a resolved market — same as
+     *         MarketFactory (V1). Sized for ~100 holders/tx.
+     */
+    function pushRedeem(
+        uint256 marketId,
+        address[] calldata holders,
+        uint256[] calldata amounts
+    ) external onlyOwner {
+        require(marketId < markets.length, "MarketFactoryV2: invalid market");
+        require(holders.length == amounts.length, "MarketFactoryV2: length mismatch");
+        require(holders.length > 0, "MarketFactoryV2: empty batch");
+
+        PronosAMMMulti pool = PronosAMMMulti(markets[marketId].pool);
+        for (uint256 i = 0; i < holders.length; i++) {
+            pool.redeemOnBehalf(holders[i], amounts[i]);
+        }
+    }
+
     function distributeFees() external onlyOwner {
         uint256 total = collateral.balanceOf(feeCollector);
         require(total > 0, "MarketFactoryV2: no fees");

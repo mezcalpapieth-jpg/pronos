@@ -190,6 +190,34 @@ contract MarketFactory is ReentrancyGuard {
     /// reconciling treasury inflows back to specific markets.
     event DustSwept(uint256 indexed marketId, address indexed recipient);
 
+    /**
+     * @notice Batch push-redeem on a resolved market — pays each
+     *         (holder, amount) pair without requiring holders to
+     *         send their own tx. Designed for an off-chain cron
+     *         that wakes up after the grace period and settles
+     *         everyone still holding winning tokens.
+     *
+     * The protocol pays gas. Each redemption emits the same
+     * WinningsRedeemed event as a self-claim so the indexer
+     * doesn't need a separate code path.
+     *
+     * Sized for ~100 holders per tx; chunk above that.
+     */
+    function pushRedeem(
+        uint256 marketId,
+        address[] calldata holders,
+        uint256[] calldata amounts
+    ) external onlyOwner {
+        require(marketId < markets.length, "MarketFactory: invalid market");
+        require(holders.length == amounts.length, "MarketFactory: length mismatch");
+        require(holders.length > 0, "MarketFactory: empty batch");
+
+        PronosAMM pool = PronosAMM(markets[marketId].pool);
+        for (uint256 i = 0; i < holders.length; i++) {
+            pool.redeemOnBehalf(holders[i], amounts[i]);
+        }
+    }
+
     // ─── Fee Distribution (70/20/10) ─────────────────────────────────────────
 
     /**

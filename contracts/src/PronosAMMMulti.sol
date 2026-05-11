@@ -287,6 +287,21 @@ contract PronosAMMMulti is ERC1155Holder {
         emit DustRecovered(recipient, ammWinningBalance);
     }
 
+    /// @notice Push-redeem: factory pays out a holder's winnings
+    /// without them sending a tx. Mirrors PronosAMM.redeemOnBehalf —
+    /// the caller (factory) pays gas, the holder always receives
+    /// the collateral, no theft vector.
+    function redeemOnBehalf(address holder, uint256 amount) external onlyFactory {
+        require(resolved, "PronosAMMMulti: not resolved");
+        require(amount > 0, "PronosAMMMulti: zero amount");
+        require(holder != address(0), "PronosAMMMulti: zero holder");
+
+        token.burn(holder, token.tokenId(marketId, outcome), amount);
+        require(collateral.transfer(holder, amount), "PronosAMMMulti: transfer failed");
+
+        emit WinningsRedeemed(holder, outcome, amount, amount);
+    }
+
     function redeem(uint256 amount) external {
         require(resolved, "PronosAMMMulti: not resolved");
         require(amount > 0, "PronosAMMMulti: zero amount");

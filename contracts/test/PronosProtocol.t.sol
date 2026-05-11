@@ -733,4 +733,117 @@ contract PronosProtocolTest is Test {
         vm.expectRevert(bytes("PronosAMM: not factory"));
         pool.recoverDust(admin);
     }
+
+    // ─── Push-redeem (pushRedeem / redeemOnBehalf) ───────────────────
+
+    function test_pushRedeem_pays_each_holder() public {
+        _createTestMarket(10_000 * ONE_USDC);
+        (address poolAddr,,,,, ) = factory.getMarket(0);
+        PronosAMM pool = PronosAMM(poolAddr);
+
+        // Alice + Bob buy YES on the same market
+        vm.startPrank(alice);
+        usdc.approve(address(pool), 1_000 * ONE_USDC);
+        uint256 aliceShares = pool.buy(true, 1_000 * ONE_USDC);
+        vm.stopPrank();
+
+        vm.startPrank(bob);
+        usdc.approve(address(pool), 500 * ONE_USDC);
+        uint256 bobShares = pool.buy(true, 500 * ONE_USDC);
+        vm.stopPrank();
+
+        // Resolve YES, then admin pushes redemption to both holders
+        vm.prank(admin);
+        factory.resolveMarket(0, 1);
+
+        address[] memory holders = new address[](2);
+        holders[0] = alice;
+        holders[1] = bob;
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = aliceShares;
+        amounts[1] = bobShares;
+
+        uint256 aliceBefore = usdc.balanceOf(alice);
+        uint256 bobBefore = usdc.balanceOf(bob);
+        vm.prank(admin);
+        factory.pushRedeem(0, holders, amounts);
+
+        // Each holder received 1:1 collateral; neither sent a tx.
+        assertEq(usdc.balanceOf(alice) - aliceBefore, aliceShares);
+        assertEq(usdc.balanceOf(bob)   - bobBefore,   bobShares);
+        // Tokens burned.
+        assertEq(token.balanceOf(alice, pool.yesId()), 0);
+        assertEq(token.balanceOf(bob,   pool.yesId()), 0);
+    }
+
+    function test_pushRedeem_reverts_length_mismatch() public {
+        _createTestMarket(5_000 * ONE_USDC);
+        vm.prank(admin);
+        factory.resolveMarket(0, 1);
+
+        address[] memory holders = new address[](2);
+        holders[0] = alice;
+        holders[1] = bob;
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = 100;
+
+        vm.prank(admin);
+        vm.expectRevert(bytes("MarketFactory: length mismatch"));
+        factory.pushRedeem(0, holders, amounts);
+    }
+
+    function test_pushRedeem_reverts_empty() public {
+        _createTestMarket(5_000 * ONE_USDC);
+        vm.prank(admin);
+        factory.resolveMarket(0, 1);
+
+        address[] memory holders = new address[](0);
+        uint256[] memory amounts = new uint256[](0);
+
+        vm.prank(admin);
+        vm.expectRevert(bytes("MarketFactory: empty batch"));
+        factory.pushRedeem(0, holders, amounts);
+    }
+
+    function test_pushRedeem_reverts_non_owner() public {
+        _createTestMarket(5_000 * ONE_USDC);
+        vm.prank(admin);
+        factory.resolveMarket(0, 1);
+
+        address[] memory holders = new address[](1);
+        holders[0] = alice;
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = 100;
+
+        vm.prank(alice);
+        vm.expectRevert(bytes("MarketFactory: not owner"));
+        factory.pushRedeem(0, holders, amounts);
+    }
+
+    function test_pushRedeem_reverts_before_resolution() public {
+        _createTestMarket(5_000 * ONE_USDC);
+        address[] memory holders = new address[](1);
+        holders[0] = alice;
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = 1;
+
+        // Market still active — push should revert because the AMM
+        // isn't resolved yet, so redeemOnBehalf bails first.
+        vm.prank(admin);
+        vm.expectRevert(bytes("PronosAMM: not resolved"));
+        factory.pushRedeem(0, holders, amounts);
+    }
+
+    function test_redeemOnBehalf_reverts_non_factory() public {
+        _createTestMarket(5_000 * ONE_USDC);
+        (address poolAddr,,,,, ) = factory.getMarket(0);
+        PronosAMM pool = PronosAMM(poolAddr);
+
+        vm.prank(admin);
+        factory.resolveMarket(0, 1);
+
+        vm.prank(admin);
+        vm.expectRevert(bytes("PronosAMM: not factory"));
+        pool.redeemOnBehalf(alice, 100);
+    }
 }

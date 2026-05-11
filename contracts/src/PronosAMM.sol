@@ -426,6 +426,28 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
         emit DustRecovered(recipient, ammWinningBalance);
     }
 
+    /// @notice Push-redeem: factory pays out a holder's winnings
+    /// without the holder needing to send a tx. The AMM burns
+    /// `amount` of the holder's winning tokens and transfers 1:1
+    /// collateral to that same holder. Caller (factory) pays gas.
+    ///
+    /// Designed for the post-resolution wind-down cron: after the
+    /// 30-day grace period for self-claim, the protocol sweeps each
+    /// remaining winner so nobody is stranded forever holding
+    /// unredeemed tokens. The collateral always lands at `holder` —
+    /// no theft vector even though anyone-via-factory can invoke.
+    function redeemOnBehalf(address holder, uint256 amount) external onlyFactory nonReentrant {
+        require(resolved, "PronosAMM: not resolved");
+        require(amount > 0, "PronosAMM: zero amount");
+        require(holder != address(0), "PronosAMM: zero holder");
+
+        uint256 winningTokenId = outcome == 1 ? yesId : noId;
+        token.burn(holder, winningTokenId, amount);
+        require(collateral.transfer(holder, amount), "PronosAMM: transfer failed");
+
+        emit WinningsRedeemed(holder, amount, amount);
+    }
+
     /// @notice Redeem winning tokens for USDC (1 token = 1 USDC).
     function redeem(uint256 amount) external nonReentrant {
         require(resolved, "PronosAMM: not resolved");
