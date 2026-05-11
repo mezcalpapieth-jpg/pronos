@@ -592,4 +592,145 @@ contract PronosProtocolTest is Test {
         factory.transferOwnership(alice);
         assertEq(factory.owner(), alice);
     }
+
+    // ─── Dust recovery (recoverDust / sweepDust) ─────────────────────
+
+    function test_sweepDust_recovers_seed_after_grace() public {
+        uint256 seed = 10_000 * ONE_USDC;
+        _createTestMarket(seed);
+        (address poolAddr,,,,, ) = factory.getMarket(0);
+        PronosAMM pool = PronosAMM(poolAddr);
+
+        // Alice buys YES, market resolves YES, Alice redeems
+        vm.startPrank(alice);
+        usdc.approve(address(pool), 1_000 * ONE_USDC);
+        uint256 aliceShares = pool.buy(true, 1_000 * ONE_USDC);
+        vm.stopPrank();
+
+        vm.prank(admin);
+        factory.resolveMarket(0, 1);
+
+        vm.prank(alice);
+        pool.redeem(aliceShares);
+
+        // Fast-forward past the grace period and sweep
+        vm.warp(block.timestamp + 30 days + 1);
+
+        address sweepRecipient = address(0xCAFE);
+        uint256 before = usdc.balanceOf(sweepRecipient);
+        vm.prank(admin);
+        factory.sweepDust(0, sweepRecipient);
+        uint256 after_ = usdc.balanceOf(sweepRecipient);
+
+        // Recipient receives the AMM's remaining collateral — should
+        // be approximately seed - alice's winning fraction. Either
+        // way it's strictly > 0 and strictly <= seed, and the AMM
+        // ends up with zero collateral.
+        assertGt(after_ - before, 0);
+        assertLe(after_ - before, seed);
+        assertEq(usdc.balanceOf(address(pool)), 0);
+    }
+
+    function test_sweepDust_reverts_before_grace_period() public {
+        _createTestMarket(10_000 * ONE_USDC);
+        vm.prank(admin);
+        factory.resolveMarket(0, 1);
+
+        // Try to sweep immediately — should revert.
+        vm.prank(admin);
+        vm.expectRevert(bytes("PronosAMM: grace period not over"));
+        factory.sweepDust(0, address(0xCAFE));
+
+        // 29 days in is still inside grace
+        vm.warp(block.timestamp + 29 days);
+        vm.prank(admin);
+        vm.expectRevert(bytes("PronosAMM: grace period not over"));
+        factory.sweepDust(0, address(0xCAFE));
+    }
+
+    function test_sweepDust_reverts_before_resolution() public {
+        _createTestMarket(10_000 * ONE_USDC);
+        // Skip ahead well past the would-be grace period — without
+        // resolution this should still revert.
+        vm.warp(block.timestamp + 60 days);
+        vm.prank(admin);
+        vm.expectRevert(bytes("PronosAMM: not resolved"));
+        factory.sweepDust(0, address(0xCAFE));
+    }
+
+    function test_sweepDust_idempotent() public {
+        _createTestMarket(5_000 * ONE_USDC);
+        vm.prank(admin);
+        factory.resolveMarket(0, 1);
+        vm.warp(block.timestamp + 30 days + 1);
+
+        address sink = address(0xCAFE);
+        vm.prank(admin);
+        factory.sweepDust(0, sink);
+        uint256 firstSweep = usdc.balanceOf(sink);
+
+        // Second call drains nothing further (AMM reserve is empty) but
+        // must not revert — lets a "sweep-all-resolved" cron run blindly.
+        vm.prank(admin);
+        factory.sweepDust(0, sink);
+        assertEq(usdc.balanceOf(sink), firstSweep);
+    }
+
+    function test_sweepDust_reverts_non_owner() public {
+        _createTestMarket(5_000 * ONE_USDC);
+        vm.prank(admin);
+        factory.resolveMarket(0, 1);
+        vm.warp(block.timestamp + 30 days + 1);
+
+        // alice isn't the owner — can't call sweepDust.
+        vm.prank(alice);
+        vm.expectRevert(bytes("MarketFactory: not owner"));
+        factory.sweepDust(0, alice);
+    }
+
+    function test_sweepDust_user_redeem_still_works_after_sweep() public {
+        // Edge case: a user who DOESN'T redeem within the grace period
+        // should still be able to redeem after the sweep. The sweep
+        // only drains the AMM's OWN winning reserve, not the
+        // collateral backing user-held tokens.
+        uint256 seed = 5_000 * ONE_USDC;
+        _createTestMarket(seed);
+        (address poolAddr,,,,, ) = factory.getMarket(0);
+        PronosAMM pool = PronosAMM(poolAddr);
+
+        // Alice buys YES but never redeems before sweep
+        vm.startPrank(alice);
+        usdc.approve(address(pool), 500 * ONE_USDC);
+        uint256 aliceShares = pool.buy(true, 500 * ONE_USDC);
+        vm.stopPrank();
+
+        vm.prank(admin);
+        factory.resolveMarket(0, 1);
+
+        vm.warp(block.timestamp + 30 days + 1);
+        vm.prank(admin);
+        factory.sweepDust(0, address(0xCAFE));
+
+        // Alice redeems after sweep — should still get 1:1 collateral
+        // for her winning shares.
+        uint256 aliceBefore = usdc.balanceOf(alice);
+        vm.prank(alice);
+        pool.redeem(aliceShares);
+        assertEq(usdc.balanceOf(alice) - aliceBefore, aliceShares);
+    }
+
+    function test_recoverDust_reverts_non_factory() public {
+        _createTestMarket(5_000 * ONE_USDC);
+        vm.prank(admin);
+        factory.resolveMarket(0, 1);
+        vm.warp(block.timestamp + 30 days + 1);
+
+        (address poolAddr,,,,, ) = factory.getMarket(0);
+        PronosAMM pool = PronosAMM(poolAddr);
+        // Bypassing the factory by calling the pool directly must
+        // fail — only the factory may sweep.
+        vm.prank(admin);
+        vm.expectRevert(bytes("PronosAMM: not factory"));
+        pool.recoverDust(admin);
+    }
 }

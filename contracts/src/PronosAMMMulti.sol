@@ -41,12 +41,25 @@ contract PronosAMMMulti is ERC1155Holder {
     bool public resolved;
     uint8 public outcome;
 
+    /// @notice block.timestamp when resolve() was called; 0 while
+    /// the market is open. Drives the post-resolution grace period
+    /// enforced by recoverDust().
+    uint256 public resolvedAt;
+
+    /// @notice Window after resolution before the factory can sweep
+    /// leftover collateral. Same value as the binary AMM so operators
+    /// don't have to remember two policies.
+    uint256 public constant RECOVER_GRACE_PERIOD = 30 days;
+
     event LiquidityAdded(address indexed provider, uint256 amount);
     event SharesBought(address indexed buyer, uint8 indexed outcomeIndex, uint256 collateralIn, uint256 fee, uint256 sharesOut);
     event SharesSold(address indexed seller, uint8 indexed outcomeIndex, uint256 sharesIn, uint256 collateralOut, uint256 fee);
     event MarketResolved(uint256 indexed marketId, uint8 outcome);
     event WinningsRedeemed(address indexed user, uint8 indexed outcomeIndex, uint256 shares, uint256 payout);
     event MarketPaused(bool paused);
+    /// @notice Emitted when the factory sweeps the AMM's leftover
+    /// collateral after resolution + grace period.
+    event DustRecovered(address indexed recipient, uint256 amount);
 
     constructor(
         address _token,
@@ -246,7 +259,32 @@ contract PronosAMMMulti is ERC1155Holder {
         _requireOutcome(outcomeIndex);
         resolved = true;
         outcome = outcomeIndex;
+        resolvedAt = block.timestamp;
         emit MarketResolved(marketId, outcomeIndex);
+    }
+
+    /// @notice Sweep the AMM's leftover collateral after resolution +
+    /// grace period. Mirrors the binary PronosAMM.recoverDust: burns
+    /// the AMM's own winning-outcome tokens and transfers an equal
+    /// amount of collateral to `recipient`. User-held positions stay
+    /// redeemable because the burned amount equals what we transfer,
+    /// preserving the outstanding_winning_tokens == collateral_balance
+    /// invariant. Idempotent.
+    function recoverDust(address recipient) external onlyFactory {
+        require(resolved, "PronosAMMMulti: not resolved");
+        require(block.timestamp >= resolvedAt + RECOVER_GRACE_PERIOD, "PronosAMMMulti: grace period not over");
+        require(recipient != address(0), "PronosAMMMulti: zero recipient");
+
+        uint256 winningTokenId = token.tokenId(marketId, outcome);
+        uint256 ammWinningBalance = token.balanceOf(address(this), winningTokenId);
+        if (ammWinningBalance == 0) {
+            return; // already swept
+        }
+
+        token.burn(address(this), winningTokenId, ammWinningBalance);
+        require(collateral.transfer(recipient, ammWinningBalance), "PronosAMMMulti: transfer failed");
+
+        emit DustRecovered(recipient, ammWinningBalance);
     }
 
     function redeem(uint256 amount) external {

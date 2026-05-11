@@ -144,6 +144,22 @@ contract MarketFactoryV2 {
         emit MarketPaused(marketId, paused);
     }
 
+    /**
+     * @notice Sweep a resolved market's leftover collateral to the
+     *         given recipient. Mirrors MarketFactory (V1): must wait
+     *         the AMM's RECOVER_GRACE_PERIOD (30 days) past resolve();
+     *         idempotent after the AMM's winning reserve is drained.
+     */
+    function sweepDust(uint256 marketId, address recipient) external onlyOwner {
+        require(marketId < markets.length, "MarketFactoryV2: invalid market");
+        require(recipient != address(0), "MarketFactoryV2: zero recipient");
+        PronosAMMMulti(markets[marketId].pool).recoverDust(recipient);
+        emit DustSwept(marketId, recipient);
+    }
+
+    /// @notice Emitted on each successful sweep.
+    event DustSwept(uint256 indexed marketId, address indexed recipient);
+
     function distributeFees() external onlyOwner {
         uint256 total = collateral.balanceOf(feeCollector);
         require(total > 0, "MarketFactoryV2: no fees");

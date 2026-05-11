@@ -46,6 +46,19 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
     bool public resolved;
     uint8 public outcome; // 0=unresolved, 1=YES, 2=NO
 
+    /// @notice block.timestamp at which resolve() was called. 0 while
+    /// the market is open. Used by recoverDust() to enforce the
+    /// post-resolution grace period during which holders can redeem
+    /// before any residual liquidity gets swept.
+    uint256 public resolvedAt;
+
+    /// @notice Window after resolution before the factory can sweep
+    /// leftover collateral. Long enough that any user with a winning
+    /// position has time to redeem; short enough that the protocol
+    /// recovers seed promptly. Constant rather than configurable —
+    /// keeps the trust story simple.
+    uint256 public constant RECOVER_GRACE_PERIOD = 30 days;
+
     // ─── Events ──────────────────────────────────────────────────────────────
 
     event LiquidityAdded(address indexed provider, uint256 amount);
@@ -54,6 +67,12 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
     event MarketResolved(uint256 indexed marketId, uint8 outcome);
     event WinningsRedeemed(address indexed user, uint256 shares, uint256 payout);
     event MarketPaused(bool paused);
+    /// @notice Emitted when the factory sweeps the AMM's leftover
+    /// collateral after resolution + grace period. `amount` is the
+    /// collateral transferred — equal to the AMM's winning-token
+    /// reserve at sweep time, which is exactly the seed minus any
+    /// CPMM convexity drag absorbed by trading.
+    event DustRecovered(address indexed recipient, uint256 amount);
 
     // ─── Constructor ─────────────────────────────────────────────────────────
 
@@ -365,7 +384,46 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
         require(_outcome == 1 || _outcome == 2, "PronosAMM: invalid outcome");
         resolved = true;
         outcome = _outcome;
+        resolvedAt = block.timestamp;
         emit MarketResolved(marketId, _outcome);
+    }
+
+    /// @notice Sweep the AMM's leftover collateral after resolution +
+    /// grace period. Designed for the protocol to recover the seed
+    /// liquidity it provided at market creation, minus whatever
+    /// convexity drag trading inflicted.
+    ///
+    /// Mechanism: at resolution the AMM still holds `reserveYes` (or
+    /// `reserveNo`, depending on outcome) of winning tokens that
+    /// nobody can redeem because the AMM is itself the holder. After
+    /// the grace period, this burns the AMM's own winning tokens and
+    /// transfers an equal amount of collateral to the recipient.
+    /// User-held winning tokens stay intact — every user who hasn't
+    /// redeemed yet can still call `redeem()` because we only
+    /// transfer collateral 1:1 with the burned reserve, preserving
+    /// the `outstanding_winning_tokens == collateral_balance`
+    /// invariant.
+    ///
+    /// Idempotent: subsequent calls after the reserve is drained are
+    /// no-ops (no revert).
+    function recoverDust(address recipient) external onlyFactory nonReentrant {
+        require(resolved, "PronosAMM: not resolved");
+        require(block.timestamp >= resolvedAt + RECOVER_GRACE_PERIOD, "PronosAMM: grace period not over");
+        require(recipient != address(0), "PronosAMM: zero recipient");
+
+        uint256 winningTokenId = outcome == 1 ? yesId : noId;
+        uint256 ammWinningBalance = token.balanceOf(address(this), winningTokenId);
+        if (ammWinningBalance == 0) {
+            // Already swept (or never had a reserve, which shouldn't
+            // happen post-initialize). Return cleanly so the caller
+            // doesn't have to special-case idempotent sweeps.
+            return;
+        }
+
+        token.burn(address(this), winningTokenId, ammWinningBalance);
+        require(collateral.transfer(recipient, ammWinningBalance), "PronosAMM: transfer failed");
+
+        emit DustRecovered(recipient, ammWinningBalance);
     }
 
     /// @notice Redeem winning tokens for USDC (1 token = 1 USDC).

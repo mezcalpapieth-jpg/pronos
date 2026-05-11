@@ -167,6 +167,29 @@ contract MarketFactory is ReentrancyGuard {
         emit MarketPaused(marketId, paused);
     }
 
+    /**
+     * @notice Sweep a resolved market's leftover collateral to the
+     *         given recipient (typically treasury or liquidity reserve).
+     *
+     * The AMM's RECOVER_GRACE_PERIOD (30 days post-resolution) must
+     * have elapsed before this succeeds — gives winning holders a
+     * full month to redeem before the protocol recovers the residual.
+     *
+     * Idempotent: a second call after the AMM's reserve is drained
+     * is a no-op (no revert), so a "sweep all resolved markets"
+     * helper script can run blindly.
+     */
+    function sweepDust(uint256 marketId, address recipient) external onlyOwner {
+        require(marketId < markets.length, "MarketFactory: invalid market");
+        require(recipient != address(0), "MarketFactory: zero recipient");
+        PronosAMM(markets[marketId].pool).recoverDust(recipient);
+        emit DustSwept(marketId, recipient);
+    }
+
+    /// @notice Emitted on each successful sweep — useful for indexers
+    /// reconciling treasury inflows back to specific markets.
+    event DustSwept(uint256 indexed marketId, address indexed recipient);
+
     // ─── Fee Distribution (70/20/10) ─────────────────────────────────────────
 
     /**
