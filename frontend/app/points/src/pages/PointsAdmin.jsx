@@ -1605,7 +1605,23 @@ function PendingMarketsTable() {
     setBusyId(id);
     try {
       await adminReviewPendingMarket(id, action, null);
-      await load();
+      // Don't reload — admin's scroll position is preserved if we
+      // mutate the local rows array instead of refetching. Reload
+      // was causing the page to "jump back to the top" between
+      // every approval. Backend already committed the status flip;
+      // the next manual refresh (or a tab switch) re-syncs.
+      setRows(prev => {
+        if (!Array.isArray(prev)) return prev;
+        // On the Pending tab, drop the row entirely so the queue
+        // shrinks underneath the cursor. On Approved / Rejected
+        // tabs, update the row in place so the new status reflects.
+        if (filter === 'pending') {
+          return prev.filter(r => r.id !== id);
+        }
+        return prev.map(r => r.id === id
+          ? { ...r, status: action === 'approve' ? 'approved' : 'rejected' }
+          : r);
+      });
     } catch (e) {
       alert(`${action} falló: ${e.code || e.message}`);
     } finally {
