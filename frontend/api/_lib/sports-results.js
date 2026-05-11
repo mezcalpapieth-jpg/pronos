@@ -325,6 +325,150 @@ export const readEspnPgaWinner = ({ eventId }) =>
 export const readEspnLivWinner = ({ eventId }) =>
   readEspnGolfWinnerImpl({ leaguePath: 'liv', eventId });
 
+// ─── LIV Golf team-leaderboard reader (livgolf.com scrape) ───────────
+//
+// ESPN's `golf/liv` API only ships individual scores — their /teams
+// endpoint literally responds "Teams are not currently supported for
+// golf/liv", and /summary returns 502 on LIV events. So we scrape
+// livgolf.com/leaderboard, which renders via Next.js App Router with
+// the team standings embedded in the RSC stream
+// (self.__next_f.push([...]) blocks).
+//
+// Match strategy: parse the events list inside the RSC payload, find
+// the event whose displayName/startDate matches the market's
+// tournamentName/startDateIso, then read the displayed
+// `initialTeamConfig.playoff.teams[]` array (which always reflects
+// the currently-displayed event). If the page is showing a different
+// event than the one we're trying to resolve, we return
+// {completed:false} so the cron retries later (livgolf swaps the
+// displayed event in the days after each tournament ends).
+//
+// Returns the same envelope as the individual ESPN readers
+// (winnerDriverId / winnerDriverLabel) so the cron's parallel-shape
+// matcher picks it up unchanged.
+
+const LIVGOLF_LEADERBOARD = 'https://www.livgolf.com/leaderboard';
+
+// livgolf.com team slug → market_gen/liv.js TEAMS.{id, name}.
+// Verified against an actual rendered RSC payload (LIV Virginia,
+// 2026-05). Add new teams here as LIV expands.
+const LIV_TEAM_BY_SLUG = {
+  '4-aces':           { id: 'fourAces',       name: '4Aces GC' },
+  'fireballs':        { id: 'fireballs',      name: 'Fireballs GC' },
+  'legion':           { id: 'legion',         name: 'Legion XIII' },
+  'crushers':         { id: 'crushers',       name: 'Crushers GC' },
+  'ripper':           { id: 'ripper',         name: 'Ripper GC' },
+  'southern-guards':  { id: 'southernGuards', name: 'Southern Guards GC' },
+  'cleeks':           { id: 'cleeks',         name: 'Cleeks GC' },
+  'torque':           { id: 'torque',         name: 'Torque GC' },
+  'hy-flyers':        { id: 'hyflyers',       name: 'HyFlyers GC' },
+  'okgc':             { id: 'okgc',           name: 'OKGC' },
+  'majesticks':       { id: 'majesticks',     name: 'Majesticks GC' },
+  'range-goats':      { id: 'rangegoats',     name: 'RangeGoats GC' },
+  'korean-golf-club': { id: 'koreanGc',       name: 'Korean GC' },
+};
+
+function decodeRscStream(html) {
+  const re = /self\.__next_f\.push\(\[\s*1\s*,\s*"([\s\S]*?)"\s*\]\)/g;
+  let m, all = '';
+  while ((m = re.exec(html)) !== null) {
+    all += m[1]
+      .replace(/\\"/g, '"')
+      .replace(/\\n/g, '\n')
+      .replace(/\\\\/g, '\\');
+  }
+  return all;
+}
+
+// Match livgolf's event-list entry to our market. Two anchors:
+//   - displayName loosely contains the market's tournamentName
+//     (livgolf prefixes "MAADEN " etc.; we compare loosely)
+//   - startDate's YYYY-MM-DD equals the market's startDateIso prefix
+// Either anchor counts as a match. If neither hits we bail.
+function findDisplayedEvent(rsc, { tournamentName, startDateIso }) {
+  // Event entries look like:
+  //   {"id":"10058","event":"virginia","displayName":"MAADEN LIV Golf Virginia",
+  //    "time":"May 7, 2026","location":"...","disabled":...,"isLive":false,
+  //    "statusLabel":"Round 4","startDate":"2026-05-07T17:05:00.000Z",...}
+  const re = /\{"id":"\d+","event":"[^"]+","displayName":"([^"]+)","time":"[^"]+","location":"[^"]+","disabled":[^,]+,"isLive":[^,]+,"statusLabel":"[^"]+","startDate":"([^"]+)"/g;
+  const wantDate = typeof startDateIso === 'string' ? startDateIso.slice(0, 10) : null;
+  const wantName = String(tournamentName || '').toLowerCase();
+  let m;
+  while ((m = re.exec(rsc)) !== null) {
+    const display = m[1];
+    const startISO = m[2];
+    const dateOk = wantDate && startISO.slice(0, 10) === wantDate;
+    const nameOk = wantName
+      && (display.toLowerCase().includes(wantName)
+       || wantName.includes(display.toLowerCase()));
+    if (dateOk || nameOk) {
+      return { displayName: display, startDate: startISO };
+    }
+  }
+  return null;
+}
+
+export async function readLivTeamWinner({ tournamentName, startDateIso }) {
+  // The page is React Server Components rendered HTML — we need a
+  // browser-ish UA so the CDN doesn't serve a bot-blocked variant.
+  const res = await fetch(LIVGOLF_LEADERBOARD, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 PronosLivBot/1.0',
+      'Accept': 'text/html,application/xhtml+xml',
+    },
+  });
+  if (!res.ok) throw new Error(`livgolf: HTTP ${res.status}`);
+  const html = await res.text();
+  const rsc = decodeRscStream(html);
+  if (!rsc) {
+    return { completed: false, winner: null, state: 'no_rsc_stream' };
+  }
+
+  // Make sure the displayed event is the one we want — livgolf swaps
+  // the active event after Monday or so. If it shows a different one,
+  // bail and let the cron retry later.
+  const matched = findDisplayedEvent(rsc, { tournamentName, startDateIso });
+  if (!matched) {
+    return { completed: false, winner: null, state: 'event_not_displayed' };
+  }
+
+  // Pull the team rankings. Order in the array == final ranking, but
+  // we explicitly key on position="1" so a rendering quirk can't
+  // mislead us.
+  const teamRe = /"teamId":\d+,"team":"([^"]+)","position":"([^"]+)","eventPositionText":"([^"]+)"/g;
+  let t;
+  let winnerSlug = null;
+  while ((t = teamRe.exec(rsc)) !== null) {
+    if (t[2] === '1' || t[3] === '1') {
+      winnerSlug = t[1];
+      break;
+    }
+  }
+  if (!winnerSlug) {
+    return { completed: false, winner: null, state: 'no_position_1' };
+  }
+
+  const mapped = LIV_TEAM_BY_SLUG[winnerSlug];
+  if (!mapped) {
+    // Unknown slug — log + return label so the cron can still resolve
+    // via label-match. id=null prevents an accidental driver-id
+    // collision with the individual market.
+    console.warn('[livgolf-team] unknown slug', { slug: winnerSlug, tournamentName });
+    return {
+      completed: true,
+      winner: 'p1',
+      winnerDriverId: null,
+      winnerDriverLabel: winnerSlug,
+    };
+  }
+  return {
+    completed: true,
+    winner: 'p1',
+    winnerDriverId: mapped.id,
+    winnerDriverLabel: mapped.name,
+  };
+}
+
 // ─── Jolpica F1 season-standings (championship resolver) ─────────────
 // Reads /{season}/{constructorStandings,driverStandings}.json and
 // returns position-1 in the same envelope as the per-race resolver

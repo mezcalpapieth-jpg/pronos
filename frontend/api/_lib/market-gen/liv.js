@@ -10,10 +10,14 @@
  *
  *   2. Team winner — "¿Qué equipo gana el <Event>?"
  *      source='espn-liv-teams'     source_event_id='livteam:<id>'
- *      Manual resolution (admin picks). ESPN's public scoreboard
- *      doesn't expose the LIV team leaderboard — only individual
- *      scores — so we can't auto-derive the team winner. Admin
- *      checks livgolf.com after the event and selects the leg.
+ *      Auto-resolved by scraping livgolf.com/leaderboard. ESPN's
+ *      API explicitly says "Teams are not currently supported for
+ *      golf/liv", and /summary 502s on LIV events, so the resolver
+ *      reads the team standings out of livgolf.com's RSC stream
+ *      (see _lib/sports-results.js → readLivTeamWinner). The
+ *      tournamentName + startDateIso below are the anchors the
+ *      scraper uses to confirm livgolf is currently displaying the
+ *      right event before applying the winner.
  *
  * Why hardcoded legs in both: LIV's individual entry list isn't
  * exposed in the pre-event ESPN response, and the 13 LIV teams are
@@ -171,17 +175,20 @@ export async function generateLivMarkets() {
     start_time: startTime,
     end_time: endTime,
     amm_mode: 'parallel',
-    // Manual — admin resolves from livgolf.com once team scores
-    // are official. A future espn-liv-teams reader could
-    // auto-derive team scores by summing best-3-of-4 player rounds
-    // (LIV's team scoring rule), but that requires per-round per-
-    // player data ESPN doesn't ship publicly.
-    resolver_type: 'manual',
+    // Auto-resolved via livgolf.com/leaderboard scrape (the
+    // espn-liv-teams source name is historical — the actual reader
+    // hits livgolf.com because ESPN's API doesn't expose team data).
+    // The scraper anchors on tournamentName + startDateIso to avoid
+    // accidentally resolving against the next event after livgolf's
+    // page rotates.
+    resolver_type: 'sports_api',
     resolver_config: {
-      source: 'manual',
+      source: 'espn-liv-teams',
       shape: 'parallel',
       eventId: ev.id,
       kind: 'team',
+      tournamentName: ev.name,
+      startDateIso: ev.date,
       legs: teamLegs,
     },
     source_data: {
