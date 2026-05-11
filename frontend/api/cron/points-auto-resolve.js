@@ -32,7 +32,7 @@ import { readCreAverageFor } from '../_lib/fuel.js';
 import { fetchMaxTempC, bucketIndexFor } from '../_lib/weather.js';
 import { readAppleMxTopArtist } from '../_lib/charts.js';
 import { readYouTubeTopMxChannel } from '../_lib/youtube.js';
-import { readEspnEvent, readFootballDataMatch, readJolpicaF1Result, readJolpicaF1Standings, readEspnPgaWinner, readEspnLivWinner, readLivTeamWinner, readEspnAtpTournamentWinner } from '../_lib/sports-results.js';
+import { readEspnEvent, readFootballDataMatch, readJolpicaF1Result, readJolpicaF1Standings, readEspnPgaWinner, readEspnLivWinner, readLivTeamWinner, readEspnAtpTournamentWinner, readEspnMmaWinner } from '../_lib/sports-results.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql   = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -319,6 +319,15 @@ export async function runAutoResolve({ dry = false } = {}) {
             // the individual leaderboard always has order=1; we
             // resolve on the individual winner.
             result = await readEspnLivWinner({ eventId: cfg.eventId });
+          } else if (cfg.source === 'espn-mma') {
+            // UFC — per-fight winner from the MMA scoreboard.
+            // Passes both eventId (the card) and fightId (the bout).
+            // Draws return completed=false; admin handles those via
+            // /api/points/admin/void-market.
+            result = await readEspnMmaWinner({
+              eventId: cfg.eventId,
+              fightId: cfg.fightId,
+            });
           } else if (cfg.source === 'espn-liv-teams' || cfg.source === 'livgolf-teams') {
             // LIV team-leaderboard — ESPN's API explicitly does NOT
             // expose team data ("Teams are not currently supported

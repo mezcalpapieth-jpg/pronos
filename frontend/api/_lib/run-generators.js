@@ -38,6 +38,7 @@ import { generateLmbMarkets }           from './market-gen/lmb.js';
 import { generateTennisMarkets }        from './market-gen/tennis.js';
 import { generateGolfMarkets }          from './market-gen/golf.js';
 import { generateLivMarkets }           from './market-gen/liv.js';
+import { generateUfcMarkets }           from './market-gen/ufc.js';
 import { generateF1SeasonMarkets }      from './market-gen/f1-season.js';
 
 export const GENERATORS = [
@@ -59,6 +60,7 @@ export const GENERATORS = [
   { name: 'tennis',         run: generateTennisMarkets         },
   { name: 'golf',           run: generateGolfMarkets           },
   { name: 'liv',            run: generateLivMarkets            },
+  { name: 'ufc',            run: generateUfcMarkets            },
   { name: 'f1-season',      run: generateF1SeasonMarkets       },
 ];
 

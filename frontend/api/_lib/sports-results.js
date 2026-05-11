@@ -325,6 +325,66 @@ export const readEspnPgaWinner = ({ eventId }) =>
 export const readEspnLivWinner = ({ eventId }) =>
   readEspnGolfWinnerImpl({ leaguePath: 'liv', eventId });
 
+// ─── ESPN MMA (UFC) — per-fight winner reader ────────────────────────
+//
+// One UFC event carries N fights as ESPN "competitions". The cron
+// passes both eventId (the card) and fightId (the specific bout).
+// We find that competition, inspect `winner: true` on each side, and
+// return the winning fighter in the same envelope as the golf
+// readers so the parallel-shape matcher in points-auto-resolve
+// handles it without any new code path.
+//
+// Draws: UFC has technically-possible draws (split / majority). ESPN
+// represents them as both competitors having winner=false on a
+// completed event. We return completed=false in that case so the
+// market stays open for admin review (rare enough that a dedicated
+// auto-void path isn't worth it — admin uses /api/points/admin/
+// void-market to refund holders).
+export async function readEspnMmaWinner({ eventId, fightId }) {
+  if (!eventId) throw new Error('espn-mma: missing eventId');
+  if (!fightId) throw new Error('espn-mma: missing fightId');
+  const now = new Date();
+  const back = new Date(now.getTime() - 7 * 86_400_000);
+  const fwd  = new Date(now.getTime() + 35 * 86_400_000);
+  const fmt = (x) => `${x.getUTCFullYear()}${String(x.getUTCMonth() + 1).padStart(2, '0')}${String(x.getUTCDate()).padStart(2, '0')}`;
+  const res = await fetch(
+    `https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=${fmt(back)}-${fmt(fwd)}&limit=30`,
+    { headers: { Accept: 'application/json' } },
+  );
+  if (!res.ok) throw new Error(`espn-mma: HTTP ${res.status}`);
+  const data = await res.json();
+  const events = Array.isArray(data?.events) ? data.events : [];
+  const ev = events.find(e => String(e.id) === String(eventId));
+  if (!ev) return { completed: false, winner: null, notFound: true };
+
+  const fights = Array.isArray(ev.competitions) ? ev.competitions : [];
+  const fight = fights.find(f => String(f.id) === String(fightId));
+  if (!fight) return { completed: false, winner: null, notFound: true };
+
+  const completed = Boolean(fight?.status?.type?.completed);
+  if (!completed) {
+    return { completed: false, winner: null, state: fight?.status?.type?.state || null };
+  }
+
+  const ctors = Array.isArray(fight.competitors) ? fight.competitors : [];
+  const winnerC = ctors.find(c => c?.winner === true);
+  if (!winnerC) {
+    // Both winner=false on a completed event = draw, no-contest, or
+    // unusual data. Treat as not-done so admin handles via void
+    // endpoint; cron retries next tick (idempotent for normal
+    // completion, harmless re-poll for draws).
+    return { completed: false, winner: null, state: 'no_winner_flag' };
+  }
+  return {
+    completed: true,
+    winner: 'p1',
+    winnerDriverId: String(winnerC.id || ''),
+    winnerDriverLabel: winnerC.athlete?.displayName
+      || winnerC.athlete?.fullName
+      || null,
+  };
+}
+
 // ─── LIV Golf team-leaderboard reader (livgolf.com scrape) ───────────
 //
 // ESPN's `golf/liv` API only ships individual scores — their /teams
