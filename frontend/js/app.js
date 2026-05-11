@@ -48,10 +48,10 @@ function navSearchKey(e) {
 
 function navSearchGo(id) {
   clearNavSearch();
-  // Pre-relaunch search slugs no longer match real markets — the
-  // marketing index uses Polymarket-era IDs while the live app is on
-  // numeric DB ids. Send the user to /points where the real grid is.
-  location.href = '/points';
+  // Pre-relaunch slugs in MARKETS no longer map to real DB IDs, and
+  // /points is password-gated. Send the user to the public /markets
+  // browser so they can see real market content without a password.
+  location.href = '/markets';
 }
 
 function clearNavSearch() {
@@ -416,7 +416,7 @@ function renderMockMarkets(filter) {
     : MARKETS.filter(m => m.category === filter);
 
   grid.innerHTML = filtered.map(m => `
-    <div class="mock-card" title="${m.title}" onclick="location.href='/points'" style="cursor:pointer">
+    <div class="mock-card" title="${m.title}" onclick="location.href='/markets'" style="cursor:pointer">
       <div class="mock-card-header">
         <span class="mock-card-cat">${m.icon} ${m.categoryLabel}</span>
       </div>
@@ -794,10 +794,10 @@ const HMC_MOCK_IDS = [
   'grammy-album-2027',
 ];
 function hmcBet(marketIdx, outcomeIdx) {
-  // HMC_MOCK_IDS are pre-relaunch Polymarket-era slugs that no longer
-  // exist in the live DB. Send the user to the points-app home so
-  // they land on real markets instead of a 404.
-  location.href = '/points';
+  // HMC_MOCK_IDS are pre-relaunch Polymarket-era slugs that don't map
+  // to real DB IDs. /points is password-gated for pre-launch testing,
+  // so we route to /markets — the public read-only market browser.
+  location.href = '/markets';
 }
 
 function hmcResetTimer() {

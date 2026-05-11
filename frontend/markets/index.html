@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mercados — Pronos</title>
+  <meta name="description" content="Mercados de predicción activos en Pronos. Vista pública." />
+
+  <!-- Same favicons + OG as the marketing landing for share-card parity -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="shortcut icon" href="/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="512x512" href="/favicon-512.png" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://pronos.io/markets" />
+  <meta property="og:title" content="Mercados — Pronos" />
+  <meta property="og:description" content="Mercados de predicción activos en Pronos." />
+
+  <!-- Anti-flash: apply saved theme before first paint -->
+  <script>(function(){var s=localStorage.getItem('pronos-theme');document.documentElement.setAttribute('data-theme',s||'light');})();</script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+
+  <style>
+    /* Page-scoped layout — uses the shared design tokens from base.css.
+       The markets grid styling rides on .mock-card / .mock-card-* already
+       defined in components.css so this page feels native to the rest of
+       the marketing surface. */
+    body { background: var(--bg); color: var(--text-primary); font-family: 'DM Sans', sans-serif; min-height: 100vh; }
+    .mkt-nav { position: sticky; top: 0; z-index: 90; display: flex; align-items: center; justify-content: space-between; padding: 16px clamp(16px, 4vw, 32px); border-bottom: 1px solid var(--border); background: var(--bg); }
+    .mkt-nav-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text-primary); font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 0.04em; }
+    .mkt-nav-brand .dot { width: 7px; height: 7px; border-radius: 50%; background: #FF5500; display: inline-block; margin-top: -8px; }
+    .mkt-nav-actions { display: flex; gap: 10px; align-items: center; }
+    .mkt-cta-primary { padding: 8px 18px; background: #FF5500; color: #fff; border-radius: 10px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; text-decoration: none; }
+    .mkt-cta-secondary { padding: 8px 18px; background: transparent; color: var(--text-secondary); border: 1px solid var(--border); border-radius: 10px; font-family: 'DM Sans', sans-serif; font-size: 13px; text-decoration: none; }
+
+    .mkt-hero { padding: clamp(28px, 5vw, 48px) clamp(16px, 4vw, 32px) clamp(20px, 3vw, 28px); max-width: 1100px; margin: 0 auto; }
+    .mkt-hero-eyebrow { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.14em; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; }
+    .mkt-hero-title { font-family: 'Bebas Neue', sans-serif; font-size: clamp(32px, 6vw, 52px); letter-spacing: 0.02em; margin: 0 0 10px; text-transform: uppercase; }
+    .mkt-hero-sub { font-size: 16px; color: var(--text-secondary); max-width: 580px; line-height: 1.5; }
+
+    .mkt-grid-wrap { max-width: 1100px; margin: 0 auto; padding: 16px clamp(16px, 4vw, 32px) 80px; }
+    .mkt-status-line { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 14px; }
+    .mkt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+    .mkt-empty { padding: 60px 0; text-align: center; font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text-muted); }
+    .mkt-card-link { text-decoration: none; color: inherit; display: block; }
+
+    /* CTA footer banner */
+    .mkt-foot { margin-top: 24px; padding: 24px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface1); text-align: center; }
+    .mkt-foot-title { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 0.04em; margin-bottom: 6px; }
+    .mkt-foot-sub { font-size: 14px; color: var(--text-secondary); margin-bottom: 14px; }
+  </style>
+</head>
+<body>
+  <nav class="mkt-nav">
+    <a href="/" class="mkt-nav-brand">PRONOS<span class="dot"></span></a>
+    <div class="mkt-nav-actions">
+      <a href="/" class="mkt-cta-secondary">Volver</a>
+      <a href="/points" class="mkt-cta-primary">Apostar ahora</a>
+    </div>
+  </nav>
+
+  <section class="mkt-hero">
+    <div class="mkt-hero-eyebrow">VISTA PÚBLICA · MERCADOS ACTIVOS</div>
+    <h1 class="mkt-hero-title">Mercados de predicción</h1>
+    <p class="mkt-hero-sub">
+      Estos son los mercados activos en Pronos ahora mismo. Inicia
+      sesión para apostar y ganar MXNP — los mejores del leaderboard
+      cada quincena se llevan premios reales.
+    </p>
+  </section>
+
+  <main class="mkt-grid-wrap">
+    <div class="mkt-status-line" id="mktStatus">Cargando mercados…</div>
+    <div class="mkt-grid" id="mktGrid"></div>
+
+    <div class="mkt-foot">
+      <div class="mkt-foot-title">¿Listo para apostar?</div>
+      <div class="mkt-foot-sub">Crea tu cuenta gratis con tu correo. Sin contraseñas, sin tarjeta.</div>
+      <a href="/points" class="mkt-cta-primary">Entrar a Pronos →</a>
+    </div>
+  </main>
+
+  <script>
+    // Public read-only markets browser. Fetches /api/points/markets and
+    // renders a card grid. Click on a card opens the gated points-app
+    // detail page (password-gated until launch); from there the user
+    // enters the password once and can browse + bet normally.
+    (function(){
+      const CATEGORY_LABELS = {
+        deportes: 'DEPORTES', mexico: 'MÉXICO', politica: 'POLÍTICA',
+        finanzas: 'FINANZAS', crypto: 'CRYPTO', musica: 'MÚSICA',
+        general: 'GENERAL',
+      };
+      const ICONS = {
+        deportes: '⚽', mexico: '🇲🇽', politica: '🏛️',
+        finanzas: '💵', crypto: '₿', musica: '🎵', general: '🌎',
+        combate: '🥊', 'tec-fin': '💻',
+      };
+
+      function escapeHtml(s){
+        return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      }
+      function fmtDeadline(iso){
+        if (!iso) return '';
+        try { return new Date(iso).toLocaleDateString('es-MX', { day:'numeric', month:'short', year:'numeric' }); }
+        catch { return ''; }
+      }
+      function pctOf(prices, idx){
+        if (!Array.isArray(prices) || prices.length <= idx) return '—';
+        const v = Number(prices[idx]);
+        if (!Number.isFinite(v)) return '—';
+        return Math.round(v * 100) + '%';
+      }
+
+      function renderCard(m){
+        const cat = (m.category || 'general').toLowerCase();
+        const icon = ICONS[cat] || '🌎';
+        const catLabel = CATEGORY_LABELS[cat] || cat.toUpperCase();
+        const outcomes = Array.isArray(m.outcomes) ? m.outcomes : [];
+        const opts = outcomes.slice(0, 3).map((label, i) => `
+          <div class="mock-card-opt ${i === 0 ? 'yes' : 'no'}">
+            <span class="mock-card-opt-label">${escapeHtml(label)}</span>
+            <span class="mock-card-opt-pct">${pctOf(m.prices, i)}</span>
+          </div>
+        `).join('');
+        // Clicking a card opens the points-app's market detail (password-
+        // gated until launch). Once unlocked the user navigates freely.
+        return `
+          <a class="mkt-card-link" href="/points/market?id=${encodeURIComponent(m.id)}">
+            <div class="mock-card">
+              <div class="mock-card-header">
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span style="font-size:16px;">${icon}</span>
+                  <span class="mock-card-cat">${escapeHtml(catLabel)}</span>
+                </div>
+              </div>
+              <div class="mock-card-body">
+                <p class="mock-card-title">${escapeHtml(m.question || '')}</p>
+                <div class="mock-card-opts">${opts}</div>
+              </div>
+              <div class="mock-card-footer">
+                <div class="mock-card-vol">VOL <span>${escapeHtml(String(m.volume || m.tradeVolume || 0))} MXNP</span></div>
+                <div class="mock-card-deadline">${fmtDeadline(m.endTime)}</div>
+              </div>
+            </div>
+          </a>
+        `;
+      }
+
+      function setStatus(text){
+        const el = document.getElementById('mktStatus');
+        if (el) el.textContent = text;
+      }
+
+      fetch('/api/points/markets?status=active&limit=48&featured=all', { credentials: 'omit' })
+        .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+        .then(data => {
+          const markets = Array.isArray(data?.markets) ? data.markets : [];
+          if (markets.length === 0) {
+            setStatus('Aún no hay mercados activos. Vuelve pronto.');
+            return;
+          }
+          setStatus(`Mostrando ${markets.length} mercado${markets.length === 1 ? '' : 's'} activo${markets.length === 1 ? '' : 's'}.`);
+          const html = markets.map(renderCard).join('');
+          const grid = document.getElementById('mktGrid');
+          if (grid) grid.innerHTML = html;
+        })
+        .catch(err => {
+          setStatus('No se pudieron cargar los mercados. Recarga la página.');
+          console.warn('[markets/public] fetch failed', err);
+        });
+    })();
+  </script>
+</body>
+</html>
