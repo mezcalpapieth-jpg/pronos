@@ -32,7 +32,7 @@ import { readCreAverageFor } from '../_lib/fuel.js';
 import { fetchMaxTempC, bucketIndexFor } from '../_lib/weather.js';
 import { readAppleMxTopArtist } from '../_lib/charts.js';
 import { readYouTubeTopMxChannel } from '../_lib/youtube.js';
-import { readEspnEvent, readFootballDataMatch, readJolpicaF1Result, readJolpicaF1Standings, readEspnPgaWinner, readEspnLivWinner, readLivTeamWinner, readEspnAtpTournamentWinner, readEspnMmaWinner } from '../_lib/sports-results.js';
+import { readEspnEvent, readFootballDataMatch, readJolpicaF1Result, readJolpicaF1Standings, readEspnPgaWinner, readEspnLivWinner, readLivTeamWinner, readEspnAtpTournamentWinner, readEspnMmaWinner, readOddsApiBoxingWinner, readNextOpponent } from '../_lib/sports-results.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql   = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -319,6 +319,24 @@ export async function runAutoResolve({ dry = false } = {}) {
             // the individual leaderboard always has order=1; we
             // resolve on the individual winner.
             result = await readEspnLivWinner({ eventId: cfg.eventId });
+          } else if (cfg.source === 'odds-api-boxing') {
+            // Boxing — the-odds-api scores endpoint. Returns the
+            // winner by name (no id-system in their API), which
+            // matches what we wrote into legs[].driverId at
+            // generation time. Draws/no-contests come back as
+            // completed=false; admin voids via /admin/void-market.
+            result = await readOddsApiBoxingWinner({ eventId: cfg.eventId });
+          } else if (cfg.source === 'next-opponent') {
+            // "Next opponent" markets for marquee fighters. Hits
+            // either ESPN MMA scoreboard or the-odds-api boxing
+            // depending on cfg.resolverSource. Returns the opponent
+            // name as winnerDriverLabel; cron's parallel-shape
+            // matcher does loose name match against legs[].label
+            // (case-insensitive substring either direction).
+            result = await readNextOpponent({
+              fighterLabel: cfg.fighterLabel,
+              resolverSource: cfg.resolverSource,
+            });
           } else if (cfg.source === 'espn-mma') {
             // UFC — per-fight winner from the MMA scoreboard.
             // Passes both eventId (the card) and fightId (the bout).

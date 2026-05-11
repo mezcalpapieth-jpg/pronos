@@ -128,3 +128,69 @@ export function isMexicanFighter(flagAlt) {
 }
 
 export const _marqueeList = UFC_MARQUEE; // export for tests/debug
+
+// ── Boxing marquee allowlist ────────────────────────────────────────
+// the-odds-api doesn't ship nationality, so Mexican fighters are
+// detected by name match against MEXICAN_BOXERS_NORM below. The
+// broader marquee list catches global stars whose fights we always
+// want a market for regardless of opponent.
+const BOXING_MARQUEE = [
+  // Mexican (always include — also in MEXICAN_BOXERS_NORM below)
+  'Saúl Álvarez', 'Canelo Álvarez', 'Saul Canelo Alvarez', 'Canelo Alvarez',
+  'Jaime Munguía', 'Jaime Munguia',
+  'David Benavidez',
+  'Isaac "Pitbull" Cruz', 'Isaac Cruz', 'Pitbull Cruz',
+  'Andy Ruiz', 'Andy Ruiz Jr',
+  'Rey Vargas',
+  'Emanuel Navarrete',
+  'Óscar Valdez', 'Oscar Valdez',
+  'William Zepeda',
+  // Global stars — names alone drive trading interest
+  'Terence Crawford',
+  'Naoya Inoue',
+  'Dmitry Bivol',
+  'Artur Beterbiev',
+  'Gervonta Davis', 'Tank Davis',
+  'Devin Haney',
+  'Shakur Stevenson',
+  'Tyson Fury',
+  'Oleksandr Usyk',
+  'Anthony Joshua',
+  'Errol Spence Jr', 'Errol Spence',
+  'Jake Paul',
+  'Ryan Garcia',
+  'Keyshawn Davis',
+  'Edgar Berlanga',
+  'Christian Mbilli',
+];
+
+const BOXING_MARQUEE_NORM = new Set(BOXING_MARQUEE.map(normalize));
+
+export function isMarqueeBoxer(displayName) {
+  return BOXING_MARQUEE_NORM.has(normalize(displayName));
+}
+
+// Name-based fallback for Mexican boxer detection (the-odds-api
+// doesn't carry nationality). If a fighter's normalized name is
+// here, we treat them as Mexican → auto-include in the boxing
+// generator. Keep this list tight; add as new Mexican fighters
+// become relevant.
+const MEXICAN_BOXERS_NORM = new Set([
+  'saul alvarez', 'canelo alvarez', 'saul canelo alvarez',
+  'jaime munguia',
+  'david benavidez',
+  'isaac cruz', 'pitbull cruz', 'isaac pitbull cruz',
+  'andy ruiz', 'andy ruiz jr',
+  'rey vargas',
+  'emanuel navarrete',
+  'oscar valdez',
+  'william zepeda',
+  'rafael espinoza',
+  'pedro lucero',
+  'angel ayala',
+  'eduardo nunez',
+].map(normalize));
+
+export function isMexicanBoxer(displayName) {
+  return MEXICAN_BOXERS_NORM.has(normalize(displayName));
+}
