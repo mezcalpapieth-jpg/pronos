@@ -48,11 +48,9 @@ function navSearchKey(e) {
 
 function navSearchGo(id) {
   clearNavSearch();
-  // /points is password-gated for pre-launch, so we don't deep-link
-  // there. Instead, /markets?id=<slug> opens a public fake-detail page
-  // built from markets.js — same layout the marketing landing carousel
-  // teases. The user can click "Apostar ahora" from there once they're
-  // ready to enter the gated trading app.
+  // /markets?id=<slug> opens a mock-detail page built from markets.js.
+  // The marketing surface stays self-contained — no links into the
+  // gated trading app and no live data fetch from /api/points/*.
   location.href = '/markets?id=' + encodeURIComponent(id);
 }
 
@@ -160,7 +158,7 @@ function updateUI(s) {
     ['btn-mx','btn-draw','btn-sa'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = true; });
     const bb = document.getElementById('marketBetBtn'); if (bb) bb.disabled = true;
   } else if (!s.bettingOpen) {
-    if (badge) { badge.textContent = 'Apuestas cerradas'; badge.className = 'mc-badge upcoming'; }
+    if (badge) { badge.textContent = 'Mercado cerrado'; badge.className = 'mc-badge upcoming'; }
   }
 }
 
@@ -247,14 +245,14 @@ window.connectWallet = async function() {
 function updateWalletUI(address) {
   // Landing page nav keeps "Únete a la lista" button — don't replace it
   const heroBtn = document.getElementById('heroConnectBtn');
-  if (heroBtn) { heroBtn.textContent = 'Apostar ahora'; heroBtn.onclick = () => openBetModal(1); }
+  if (heroBtn) { heroBtn.textContent = 'Predecir ahora'; heroBtn.onclick = () => openBetModal(1); }
   if (typeof renderPortfolio === 'function') renderPortfolio();
 }
 
 // ─── BET MODAL ───────────────────────────────────────────────────────────────
 window.openBetModal = function(outcome) {
   if (!userAddress) { window.connectWallet(); return; }
-  if (marketState && !marketState.bettingOpen) { showToast('Las apuestas están cerradas', true); return; }
+  if (marketState && !marketState.bettingOpen) { showToast('El mercado está cerrado', true); return; }
   selectedOutcome = outcome;
   setId('betOutcomeTag', OUTCOME_LABELS[outcome]);
   const inp = document.getElementById('betAmount'); if (inp) inp.value = '';
@@ -306,20 +304,20 @@ window.submitBet = async function() {
       await approveTx.wait();
     }
 
-    btn.textContent = 'Confirmando apuesta...';
-    showToast('Enviando apuesta... (firma en tu wallet)');
+    btn.textContent = 'Confirmando predicción...';
+    showToast('Enviando predicción... (firma en tu wallet)');
     const betTx = await pronoContract.placeBet(selectedOutcome, amtRaw);
     btn.textContent = 'Esperando confirmación...';
     await betTx.wait();
 
     closeBetModal();
-    showToast('✅ ¡Apuesta confirmada! ' + OUTCOME_LABELS[selectedOutcome]);
+    showToast('✅ ¡Predicción confirmada! ' + OUTCOME_LABELS[selectedOutcome]);
     await fetchMarketState();
   } catch (err) {
     console.error(err);
-    showToast(err.reason || err.message || 'Error al apostar', true);
+    showToast(err.reason || err.message || 'Error al confirmar predicción', true);
   } finally {
-    btn.disabled = false; btn.textContent = 'Confirmar apuesta';
+    btn.disabled = false; btn.textContent = 'Confirmar predicción';
   }
 };
 
@@ -796,9 +794,9 @@ const HMC_MOCK_IDS = [
   'grammy-album-2027',
 ];
 function hmcBet(marketIdx, outcomeIdx) {
-  // Open the fake market detail page so users see a market-like surface
-  // before being asked for the gated /points password. markets.js carries
-  // a MARKETS entry for each HMC_MOCK_IDS slug.
+  // Route to the public mock market detail at /markets?id=<slug>.
+  // markets.js carries an entry for each HMC_MOCK_IDS slug; the page
+  // is self-contained mock content — no live data, no app handoff.
   const id = HMC_MOCK_IDS[marketIdx];
   if (id) location.href = '/markets?id=' + encodeURIComponent(id);
   else location.href = '/markets';

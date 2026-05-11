@@ -211,8 +211,8 @@ const MARKETS = [
   },
 
   // ── Hero carousel slugs ──────────────────────────────────────────────────
-  // Mirrors HERO_MARKETS in app.js so the carousel's "Apostar" buttons
-  // can route to /markets?id=<slug> and the fake detail page can look the
+  // Mirrors HERO_MARKETS in app.js so the carousel's outcome buttons can
+  // route to /markets?id=<slug> and the mock detail page can look the
   // outcome / odds up by id. Keep these in sync if HERO_MARKETS changes.
   {
     id: 'mundial-mexico-inaugural-2026',
