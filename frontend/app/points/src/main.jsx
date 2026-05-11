@@ -13,11 +13,19 @@ import ReactDOM from 'react-dom/client';
 import { Sentry, initSentry } from '@app/lib/sentry.js';
 import { PointsAuthProvider } from '@app/lib/pointsAuth.js';
 import PasswordGate from '@app/components/PasswordGate.jsx';
+import { preloadCryptoTicker } from './lib/useCryptoTicker.js';
 import App from './App.jsx';
 import '@app/styles/mvp.css';
 import './points.css';
 
 initSentry();
+
+// Pre-warm the BTC/ETH price feeds so the 5-min crypto markets show
+// live chart movement the moment the user opens one — without this,
+// the chart only starts populating on detail-page mount and re-empties
+// every navigation. The store persists across mounts.
+preloadCryptoTicker('BTC-USD');
+preloadCryptoTicker('ETH-USD');
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

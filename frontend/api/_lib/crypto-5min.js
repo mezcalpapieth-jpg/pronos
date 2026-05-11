@@ -365,8 +365,19 @@ async function insertCryptoMarket(sql, { asset, windowStart, windowEnd, status, 
 // by the frontend's live-chart component, NOT baked into this string.
 // That way the activation step doesn't need to UPDATE the question
 // column; it just stamps a threshold and the UI picks it up.
+//
+// The close time is rendered in CDMX time (UTC-6, year-round since
+// Mexico abolished DST in 2022) so users see a local clock value
+// rather than a UTC stamp they have to mentally convert. Node 18+
+// ships full-ICU by default so timeZone formatting works on Vercel.
+const CDMX_TIME_FMT = new Intl.DateTimeFormat('es-MX', {
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: 'America/Mexico_City',
+});
 function thresholdQuestion(asset, _threshold, windowEnd) {
-  const t = `${windowEnd.toISOString().slice(11, 16)} UTC`;
+  const t = `${CDMX_TIME_FMT.format(windowEnd)} CDMX`;
   return `${asset.label}: ¿sube o baja a las ${t}?`;
 }
 

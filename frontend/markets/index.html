@@ -4,16 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Mercados — Pronos</title>
-  <meta name="description" content="Mercados de predicción activos en Pronos. Vista pública." />
+  <meta name="description" content="Mercados de predicción en Pronos. Vista pública." />
 
-  <!-- Same favicons + OG as the marketing landing for share-card parity -->
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="shortcut icon" href="/favicon.svg" />
   <link rel="icon" type="image/png" sizes="512x512" href="/favicon-512.png" />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://pronos.io/markets" />
   <meta property="og:title" content="Mercados — Pronos" />
-  <meta property="og:description" content="Mercados de predicción activos en Pronos." />
+  <meta property="og:description" content="Mercados de predicción en Pronos." />
 
   <!-- Anti-flash: apply saved theme before first paint -->
   <script>(function(){var s=localStorage.getItem('pronos-theme');document.documentElement.setAttribute('data-theme',s||'light');})();</script>
@@ -25,16 +24,12 @@
   <link rel="stylesheet" href="/css/components.css" />
 
   <style>
-    /* Page-scoped layout — uses the shared design tokens from base.css.
-       The markets grid styling rides on .mock-card / .mock-card-* already
-       defined in components.css so this page feels native to the rest of
-       the marketing surface. */
     body { background: var(--bg); color: var(--text-primary); font-family: 'DM Sans', sans-serif; min-height: 100vh; }
     .mkt-nav { position: sticky; top: 0; z-index: 90; display: flex; align-items: center; justify-content: space-between; padding: 16px clamp(16px, 4vw, 32px); border-bottom: 1px solid var(--border); background: var(--bg); }
     .mkt-nav-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text-primary); font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 0.04em; }
     .mkt-nav-brand .dot { width: 7px; height: 7px; border-radius: 50%; background: #FF5500; display: inline-block; margin-top: -8px; }
     .mkt-nav-actions { display: flex; gap: 10px; align-items: center; }
-    .mkt-cta-primary { padding: 8px 18px; background: #FF5500; color: #fff; border-radius: 10px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; text-decoration: none; }
+    .mkt-cta-primary { padding: 8px 18px; background: #FF5500; color: #fff; border-radius: 10px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; text-decoration: none; border: none; cursor: pointer; }
     .mkt-cta-secondary { padding: 8px 18px; background: transparent; color: var(--text-secondary); border: 1px solid var(--border); border-radius: 10px; font-family: 'DM Sans', sans-serif; font-size: 13px; text-decoration: none; }
 
     .mkt-hero { padding: clamp(28px, 5vw, 48px) clamp(16px, 4vw, 32px) clamp(20px, 3vw, 28px); max-width: 1100px; margin: 0 auto; }
@@ -52,6 +47,33 @@
     .mkt-foot { margin-top: 24px; padding: 24px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface1); text-align: center; }
     .mkt-foot-title { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 0.04em; margin-bottom: 6px; }
     .mkt-foot-sub { font-size: 14px; color: var(--text-secondary); margin-bottom: 14px; }
+
+    /* ─── Fake market detail page ──────────────────────────────────────── */
+    .mkt-detail { max-width: 880px; margin: 0 auto; padding: clamp(20px, 4vw, 36px) clamp(16px, 4vw, 32px) 64px; }
+    .mkt-detail-back { display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); text-decoration: none; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 18px; }
+    .mkt-detail-back:hover { color: var(--text-primary); }
+    .mkt-detail-eyebrow { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.14em; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
+    .mkt-detail-title { font-family: 'Bebas Neue', sans-serif; font-size: clamp(24px, 4vw, 36px); letter-spacing: 0.02em; line-height: 1.15; margin: 0 0 16px; }
+
+    .mkt-stats-row { display: flex; flex-wrap: wrap; gap: 24px; margin: 12px 0 26px; align-items: baseline; }
+    .mkt-stat-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.12em; color: var(--text-muted); text-transform: uppercase; margin-bottom: 3px; }
+    .mkt-stat-val { font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: var(--text-primary); letter-spacing: 0.04em; }
+
+    .mkt-chart-wrap { border: 1px solid var(--border); border-radius: 12px; background: var(--surface1); padding: 14px 14px 8px; margin-bottom: 24px; }
+    .mkt-chart-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-muted); letterSpacing: 0.06em; }
+
+    .mkt-outcomes { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 24px; }
+    .mkt-outcome { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface1); }
+    .mkt-outcome-label { font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 600; color: var(--text-primary); }
+    .mkt-outcome-bar-wrap { flex: 1; margin: 0 14px; height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; max-width: 320px; }
+    .mkt-outcome-bar { height: 100%; background: var(--yes, #00C96B); border-radius: 4px; transition: width 0.5s; }
+    .mkt-outcome-pct { font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 0.04em; color: var(--text-primary); min-width: 50px; text-align: right; }
+
+    .mkt-detail-cta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+    .mkt-detail-cta .mkt-cta-primary { padding: 14px 26px; font-size: 15px; }
+    .mkt-detail-cta .mkt-cta-secondary { padding: 14px 26px; font-size: 13px; }
+
+    .mkt-notice { padding: 14px 18px; border: 1px dashed var(--border); border-radius: 10px; background: var(--surface2); font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-muted); letter-spacing: 0.04em; line-height: 1.5; }
   </style>
 </head>
 <body>
@@ -63,7 +85,50 @@
     </div>
   </nav>
 
-  <section class="mkt-hero">
+  <!-- Fake market detail (visible when ?id=<slug> matches) -->
+  <main class="mkt-detail" id="detailRoot" style="display:none;">
+    <a href="/" class="mkt-detail-back">← Volver al inicio</a>
+    <div class="mkt-detail-eyebrow" id="detailEyebrow">CATEGORÍA</div>
+    <h1 class="mkt-detail-title" id="detailTitle">…</h1>
+
+    <div class="mkt-stats-row">
+      <div>
+        <div class="mkt-stat-label">Volumen</div>
+        <div class="mkt-stat-val" id="detailVol">—</div>
+      </div>
+      <div>
+        <div class="mkt-stat-label">Cierra</div>
+        <div class="mkt-stat-val" id="detailDeadline">—</div>
+      </div>
+      <div>
+        <div class="mkt-stat-label">Probabilidad líder</div>
+        <div class="mkt-stat-val" id="detailLeader">—</div>
+      </div>
+    </div>
+
+    <div class="mkt-chart-wrap">
+      <div class="mkt-chart-head">
+        <span>HISTORIAL · ÚLTIMOS 30 DÍAS</span>
+        <span id="detailChartLegend">—</span>
+      </div>
+      <svg id="detailChart" viewBox="0 0 800 220" preserveAspectRatio="none" style="width:100%; height:220px; display:block;"></svg>
+    </div>
+
+    <div class="mkt-outcomes" id="detailOutcomes"></div>
+
+    <div class="mkt-detail-cta">
+      <a href="/points" class="mkt-cta-primary">Apostar ahora →</a>
+      <a href="/markets" class="mkt-cta-secondary">Ver más mercados</a>
+    </div>
+
+    <div class="mkt-notice">
+      Vista previa pública. Para apostar y ver el order book real entra a la app de Pronos.
+      Los precios mostrados son ilustrativos y se actualizan en la app.
+    </div>
+  </main>
+
+  <!-- Public browser (visible when no ?id=) -->
+  <section class="mkt-hero" id="browserHero" style="display:none;">
     <div class="mkt-hero-eyebrow">VISTA PÚBLICA · MERCADOS ACTIVOS</div>
     <h1 class="mkt-hero-title">Mercados de predicción</h1>
     <p class="mkt-hero-sub">
@@ -73,7 +138,7 @@
     </p>
   </section>
 
-  <main class="mkt-grid-wrap">
+  <main class="mkt-grid-wrap" id="browserRoot" style="display:none;">
     <div class="mkt-status-line" id="mktStatus">Cargando mercados…</div>
     <div class="mkt-grid" id="mktGrid"></div>
 
@@ -84,95 +149,262 @@
     </div>
   </main>
 
+  <!-- Fake market data, shared with the marketing landing's mock grid -->
+  <script src="/js/markets.js"></script>
   <script>
-    // Public read-only markets browser. Fetches /api/points/markets and
-    // renders a card grid. Click on a card opens the gated points-app
-    // detail page (password-gated until launch); from there the user
-    // enters the password once and can browse + bet normally.
     (function(){
-      const CATEGORY_LABELS = {
-        deportes: 'DEPORTES', mexico: 'MÉXICO', politica: 'POLÍTICA',
-        finanzas: 'FINANZAS', crypto: 'CRYPTO', musica: 'MÚSICA',
-        general: 'GENERAL',
-      };
-      const ICONS = {
-        deportes: '⚽', mexico: '🇲🇽', politica: '🏛️',
-        finanzas: '💵', crypto: '₿', musica: '🎵', general: '🌎',
-        combate: '🥊', 'tec-fin': '💻',
-      };
+      const PALETTE = ['#00C96B', '#FF5500', '#F59E0B', '#8B5CF6', '#06B6D4'];
 
       function escapeHtml(s){
         return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
       }
-      function fmtDeadline(iso){
-        if (!iso) return '';
-        try { return new Date(iso).toLocaleDateString('es-MX', { day:'numeric', month:'short', year:'numeric' }); }
-        catch { return ''; }
+
+      // Deterministic PRNG seeded by the slug so the same market always
+      // renders the same chart shape (cards "remember" their history).
+      function strHash(s){
+        let h = 2166136261;
+        for (let i = 0; i < s.length; i++) {
+          h ^= s.charCodeAt(i);
+          h = Math.imul(h, 16777619);
+        }
+        return (h >>> 0);
       }
-      function pctOf(prices, idx){
-        if (!Array.isArray(prices) || prices.length <= idx) return '—';
-        const v = Number(prices[idx]);
-        if (!Number.isFinite(v)) return '—';
-        return Math.round(v * 100) + '%';
+      function makeRng(seed){
+        let s = seed >>> 0;
+        return function(){
+          s = (s + 0x6D2B79F5) >>> 0;
+          let t = s;
+          t = Math.imul(t ^ (t >>> 15), t | 1);
+          t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+      // Smoothed random walk landing exactly at `endPct`. Used for each
+      // outcome line so the rightmost value matches the displayed %.
+      function buildSeries(seed, points, endPct, noise){
+        const rng = makeRng(seed);
+        const out = [];
+        let v = endPct + (rng() - 0.5) * 20;
+        for (let i = 0; i < points; i++) {
+          v = v + (rng() - 0.5) * noise;
+          v = Math.max(2, Math.min(98, v));
+          out.push(v);
+        }
+        // Force the last point to be the target % so chart and outcome
+        // pill always agree.
+        out[out.length - 1] = endPct;
+        // Light smoothing pass (EMA) so the line reads like history not noise.
+        const smoothed = [];
+        let prev = out[0];
+        const alpha = 0.55;
+        for (const x of out) {
+          const s = alpha * x + (1 - alpha) * prev;
+          smoothed.push(s);
+          prev = s;
+        }
+        smoothed[smoothed.length - 1] = endPct;
+        return smoothed;
       }
 
-      function renderCard(m){
-        const cat = (m.category || 'general').toLowerCase();
-        const icon = ICONS[cat] || '🌎';
-        const catLabel = CATEGORY_LABELS[cat] || cat.toUpperCase();
-        const outcomes = Array.isArray(m.outcomes) ? m.outcomes : [];
-        const opts = outcomes.slice(0, 3).map((label, i) => `
-          <div class="mock-card-opt ${i === 0 ? 'yes' : 'no'}">
-            <span class="mock-card-opt-label">${escapeHtml(label)}</span>
-            <span class="mock-card-opt-pct">${pctOf(m.prices, i)}</span>
-          </div>
-        `).join('');
-        // Clicking a card opens the points-app's market detail (password-
-        // gated until launch). Once unlocked the user navigates freely.
-        return `
-          <a class="mkt-card-link" href="/points/market?id=${encodeURIComponent(m.id)}">
-            <div class="mock-card">
-              <div class="mock-card-header">
-                <div style="display:flex;align-items:center;gap:8px;">
-                  <span style="font-size:16px;">${icon}</span>
-                  <span class="mock-card-cat">${escapeHtml(catLabel)}</span>
+      function pointsToPath(pts, W, H, padX, padTop, padBot){
+        if (pts.length === 0) return '';
+        const innerW = W - padX * 2;
+        const innerH = H - padTop - padBot;
+        const stepX = innerW / Math.max(1, pts.length - 1);
+        let d = '';
+        for (let i = 0; i < pts.length; i++) {
+          const x = padX + i * stepX;
+          const y = padTop + innerH - (pts[i] / 100) * innerH;
+          d += (i === 0 ? `M${x.toFixed(1)},${y.toFixed(1)}` : ` L${x.toFixed(1)},${y.toFixed(1)}`);
+        }
+        return d;
+      }
+
+      function renderChart(market){
+        const svg = document.getElementById('detailChart');
+        if (!svg) return;
+        const W = 800, H = 220;
+        const padX = 8, padTop = 10, padBot = 18;
+        const opts = market.options || [];
+        const seedBase = strHash(market.id);
+        const NS = 'http://www.w3.org/2000/svg';
+        svg.innerHTML = '';
+        // Reference grid: dashed midline so the eye has an anchor.
+        const mid = document.createElementNS(NS, 'line');
+        mid.setAttribute('x1', padX); mid.setAttribute('x2', W - padX);
+        mid.setAttribute('y1', padTop + (H - padTop - padBot) / 2);
+        mid.setAttribute('y2', padTop + (H - padTop - padBot) / 2);
+        mid.setAttribute('stroke', 'var(--text-muted)');
+        mid.setAttribute('stroke-width', '1');
+        mid.setAttribute('stroke-dasharray', '4 6');
+        mid.setAttribute('opacity', '0.25');
+        svg.appendChild(mid);
+
+        const legend = [];
+        opts.forEach((opt, i) => {
+          const color = PALETTE[i % PALETTE.length];
+          const series = buildSeries(seedBase + i * 1009, 60, opt.pct, 6 + (i % 3) * 1.5);
+          const linePath = pointsToPath(series, W, H, padX, padTop, padBot);
+          if (i === 0) {
+            // Subtle area fill under the leading line so the chart has
+            // a focal series even before the eye picks up on the legend.
+            const grad = document.createElementNS(NS, 'linearGradient');
+            const gid = 'mkt-grad-' + i;
+            grad.setAttribute('id', gid);
+            grad.setAttribute('x1', '0'); grad.setAttribute('x2', '0');
+            grad.setAttribute('y1', '0'); grad.setAttribute('y2', '1');
+            const s1 = document.createElementNS(NS, 'stop');
+            s1.setAttribute('offset', '0%'); s1.setAttribute('stop-color', color); s1.setAttribute('stop-opacity', '0.18');
+            const s2 = document.createElementNS(NS, 'stop');
+            s2.setAttribute('offset', '100%'); s2.setAttribute('stop-color', color); s2.setAttribute('stop-opacity', '0');
+            grad.appendChild(s1); grad.appendChild(s2);
+            const defs = document.createElementNS(NS, 'defs');
+            defs.appendChild(grad); svg.appendChild(defs);
+            const area = document.createElementNS(NS, 'path');
+            area.setAttribute('d', linePath + ` L${(W - padX).toFixed(1)},${(H - padBot).toFixed(1)} L${padX.toFixed(1)},${(H - padBot).toFixed(1)} Z`);
+            area.setAttribute('fill', `url(#${gid})`);
+            area.setAttribute('stroke', 'none');
+            svg.appendChild(area);
+          }
+          const path = document.createElementNS(NS, 'path');
+          path.setAttribute('d', linePath);
+          path.setAttribute('fill', 'none');
+          path.setAttribute('stroke', color);
+          path.setAttribute('stroke-width', i === 0 ? '2.2' : '1.6');
+          path.setAttribute('stroke-opacity', i === 0 ? '1' : '0.78');
+          path.setAttribute('stroke-linejoin', 'round');
+          path.setAttribute('stroke-linecap', 'round');
+          svg.appendChild(path);
+          legend.push(`<span style="display:inline-flex; align-items:center; gap:4px;"><span style="width:8px;height:2px;background:${color};display:inline-block;"></span>${escapeHtml(opt.label)} ${opt.pct}%</span>`);
+        });
+        const legEl = document.getElementById('detailChartLegend');
+        if (legEl) legEl.innerHTML = legend.join(' &nbsp; ');
+      }
+
+      function renderDetail(market){
+        document.getElementById('detailRoot').style.display = '';
+        document.title = `${market.title} — Pronos`;
+        const eyebrow = document.getElementById('detailEyebrow');
+        eyebrow.innerHTML = `<span>${escapeHtml(market.icon || '')}</span><span>${escapeHtml(market.categoryLabel || market.category || '')}</span>`;
+        document.getElementById('detailTitle').textContent = market.title || '';
+        document.getElementById('detailVol').textContent = `$${market.volume || '—'} MXNB`;
+        document.getElementById('detailDeadline').textContent = market.deadline || '—';
+
+        const sorted = [...(market.options || [])].sort((a, b) => (b.pct || 0) - (a.pct || 0));
+        document.getElementById('detailLeader').textContent = sorted[0]
+          ? `${sorted[0].label} · ${sorted[0].pct}%`
+          : '—';
+
+        // Outcomes list — bar widths == probability %
+        const outs = document.getElementById('detailOutcomes');
+        outs.innerHTML = (market.options || []).map((opt, i) => {
+          const color = PALETTE[i % PALETTE.length];
+          return `
+            <div class="mkt-outcome">
+              <span class="mkt-outcome-label">${escapeHtml(opt.label)}</span>
+              <div class="mkt-outcome-bar-wrap">
+                <div class="mkt-outcome-bar" style="width:${opt.pct}%; background:${color};"></div>
+              </div>
+              <span class="mkt-outcome-pct" style="color:${color}">${opt.pct}%</span>
+            </div>
+          `;
+        }).join('');
+
+        renderChart(market);
+      }
+
+      function renderBrowser(){
+        document.getElementById('browserHero').style.display = '';
+        document.getElementById('browserRoot').style.display = '';
+
+        const CATEGORY_LABELS = {
+          deportes: 'DEPORTES', mexico: 'MÉXICO', politica: 'POLÍTICA',
+          finanzas: 'FINANZAS', crypto: 'CRYPTO', musica: 'MÚSICA',
+          general: 'GENERAL',
+        };
+        const ICONS = {
+          deportes: '⚽', mexico: '🇲🇽', politica: '🏛️',
+          finanzas: '💵', crypto: '₿', musica: '🎵', general: '🌎',
+          combate: '🥊', 'tec-fin': '💻',
+        };
+        function fmtDeadline(iso){
+          if (!iso) return '';
+          try { return new Date(iso).toLocaleDateString('es-MX', { day:'numeric', month:'short', year:'numeric' }); }
+          catch { return ''; }
+        }
+        function pctOf(prices, idx){
+          if (!Array.isArray(prices) || prices.length <= idx) return '—';
+          const v = Number(prices[idx]);
+          if (!Number.isFinite(v)) return '—';
+          return Math.round(v * 100) + '%';
+        }
+        function renderCard(m){
+          const cat = (m.category || 'general').toLowerCase();
+          const icon = ICONS[cat] || '🌎';
+          const catLabel = CATEGORY_LABELS[cat] || cat.toUpperCase();
+          const outcomes = Array.isArray(m.outcomes) ? m.outcomes : [];
+          const opts = outcomes.slice(0, 3).map((label, i) => `
+            <div class="mock-card-opt ${i === 0 ? 'yes' : 'no'}">
+              <span class="mock-card-opt-label">${escapeHtml(label)}</span>
+              <span class="mock-card-opt-pct">${pctOf(m.prices, i)}</span>
+            </div>
+          `).join('');
+          // Real DB markets — click sends to the gated points app; password
+          // prompt fires there. Marketing-landing teaser cards go through
+          // /markets?id=<slug> instead so users see a fake detail first.
+          return `
+            <a class="mkt-card-link" href="/points/market?id=${encodeURIComponent(m.id)}">
+              <div class="mock-card">
+                <div class="mock-card-header">
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="font-size:16px;">${icon}</span>
+                    <span class="mock-card-cat">${escapeHtml(catLabel)}</span>
+                  </div>
+                </div>
+                <div class="mock-card-body">
+                  <p class="mock-card-title">${escapeHtml(m.question || '')}</p>
+                  <div class="mock-card-opts">${opts}</div>
+                </div>
+                <div class="mock-card-footer">
+                  <div class="mock-card-vol">VOL <span>${escapeHtml(String(m.volume || m.tradeVolume || 0))} MXNP</span></div>
+                  <div class="mock-card-deadline">${fmtDeadline(m.endTime)}</div>
                 </div>
               </div>
-              <div class="mock-card-body">
-                <p class="mock-card-title">${escapeHtml(m.question || '')}</p>
-                <div class="mock-card-opts">${opts}</div>
-              </div>
-              <div class="mock-card-footer">
-                <div class="mock-card-vol">VOL <span>${escapeHtml(String(m.volume || m.tradeVolume || 0))} MXNP</span></div>
-                <div class="mock-card-deadline">${fmtDeadline(m.endTime)}</div>
-              </div>
-            </div>
-          </a>
-        `;
+            </a>
+          `;
+        }
+        function setStatus(text){
+          const el = document.getElementById('mktStatus');
+          if (el) el.textContent = text;
+        }
+        fetch('/api/points/markets?status=active&limit=48&featured=all', { credentials: 'omit' })
+          .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+          .then(data => {
+            const markets = Array.isArray(data?.markets) ? data.markets : [];
+            if (markets.length === 0) {
+              setStatus('Aún no hay mercados activos. Vuelve pronto.');
+              return;
+            }
+            setStatus(`Mostrando ${markets.length} mercado${markets.length === 1 ? '' : 's'} activo${markets.length === 1 ? '' : 's'}.`);
+            const html = markets.map(renderCard).join('');
+            const grid = document.getElementById('mktGrid');
+            if (grid) grid.innerHTML = html;
+          })
+          .catch(err => {
+            setStatus('No se pudieron cargar los mercados. Recarga la página.');
+            console.warn('[markets/public] fetch failed', err);
+          });
       }
 
-      function setStatus(text){
-        const el = document.getElementById('mktStatus');
-        if (el) el.textContent = text;
-      }
+      // Router: ?id=<slug> → fake detail. No id → live browser.
+      const params = new URLSearchParams(location.search);
+      const id = params.get('id');
+      const market = id && Array.isArray(window.MARKETS)
+        ? window.MARKETS.find(m => m.id === id)
+        : null;
 
-      fetch('/api/points/markets?status=active&limit=48&featured=all', { credentials: 'omit' })
-        .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
-        .then(data => {
-          const markets = Array.isArray(data?.markets) ? data.markets : [];
-          if (markets.length === 0) {
-            setStatus('Aún no hay mercados activos. Vuelve pronto.');
-            return;
-          }
-          setStatus(`Mostrando ${markets.length} mercado${markets.length === 1 ? '' : 's'} activo${markets.length === 1 ? '' : 's'}.`);
-          const html = markets.map(renderCard).join('');
-          const grid = document.getElementById('mktGrid');
-          if (grid) grid.innerHTML = html;
-        })
-        .catch(err => {
-          setStatus('No se pudieron cargar los mercados. Recarga la página.');
-          console.warn('[markets/public] fetch failed', err);
-        });
+      if (market) renderDetail(market);
+      else renderBrowser();
     })();
   </script>
 </body>

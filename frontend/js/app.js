@@ -48,10 +48,12 @@ function navSearchKey(e) {
 
 function navSearchGo(id) {
   clearNavSearch();
-  // Pre-relaunch slugs in MARKETS no longer map to real DB IDs, and
-  // /points is password-gated. Send the user to the public /markets
-  // browser so they can see real market content without a password.
-  location.href = '/markets';
+  // /points is password-gated for pre-launch, so we don't deep-link
+  // there. Instead, /markets?id=<slug> opens a public fake-detail page
+  // built from markets.js — same layout the marketing landing carousel
+  // teases. The user can click "Apostar ahora" from there once they're
+  // ready to enter the gated trading app.
+  location.href = '/markets?id=' + encodeURIComponent(id);
 }
 
 function clearNavSearch() {
@@ -416,7 +418,7 @@ function renderMockMarkets(filter) {
     : MARKETS.filter(m => m.category === filter);
 
   grid.innerHTML = filtered.map(m => `
-    <div class="mock-card" title="${m.title}" onclick="location.href='/markets'" style="cursor:pointer">
+    <div class="mock-card" title="${m.title}" onclick="location.href='/markets?id=${encodeURIComponent(m.id)}'" style="cursor:pointer">
       <div class="mock-card-header">
         <span class="mock-card-cat">${m.icon} ${m.categoryLabel}</span>
       </div>
@@ -794,10 +796,12 @@ const HMC_MOCK_IDS = [
   'grammy-album-2027',
 ];
 function hmcBet(marketIdx, outcomeIdx) {
-  // HMC_MOCK_IDS are pre-relaunch Polymarket-era slugs that don't map
-  // to real DB IDs. /points is password-gated for pre-launch testing,
-  // so we route to /markets — the public read-only market browser.
-  location.href = '/markets';
+  // Open the fake market detail page so users see a market-like surface
+  // before being asked for the gated /points password. markets.js carries
+  // a MARKETS entry for each HMC_MOCK_IDS slug.
+  const id = HMC_MOCK_IDS[marketIdx];
+  if (id) location.href = '/markets?id=' + encodeURIComponent(id);
+  else location.href = '/markets';
 }
 
 function hmcResetTimer() {
