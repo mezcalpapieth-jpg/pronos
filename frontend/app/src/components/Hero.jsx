@@ -143,26 +143,37 @@ const DEMO_MARKETS = [
   },
 ];
 
-// Map an API row to the HERO shape. API returns raw reserves-derived
-// probabilities; we map them into HMC's start/end/noise shape so the
-// same rendering pipeline works.
+// Map an API row to the HERO shape. /api/protocol/markets returns rows
+// with `outcomes` (labels) + `prices` (probabilities) — not `options`
+// like the legacy gamma client did. Reading the right shape matters
+// because hmcNormalize([]) crashes on seriesArr[0].length, which is
+// what triggers the Sentry "Algo salió mal" boundary in production.
 function apiRowToHeroMarket(m) {
-  const options = Array.isArray(m.options) ? m.options : [];
-  const outcomes = options.map((opt, i) => {
-    const pct = Math.round(Math.max(1, Math.min(99, Number(opt.probability || 0.5) * 100)));
-    // If we don't have historical data, fake a small drift from an
-    // arbitrary starting point so the line still moves.
+  const labels = Array.isArray(m.outcomes) ? m.outcomes : [];
+  const prices = Array.isArray(m.prices)   ? m.prices   : [];
+  const outcomes = labels.map((label, i) => {
+    const probability = Number(prices[i]);
+    const pct = Math.round(Math.max(1, Math.min(99,
+      (Number.isFinite(probability) ? probability : 1 / Math.max(1, labels.length)) * 100,
+    )));
+    // No historical series available, so fake a small drift from an
+    // arbitrary starting point near the current pct so the line still
+    // moves into its endpoint.
     const start = Math.max(1, Math.min(99, pct - 8 + (i * 4)));
     return {
-      label: opt.label_es || opt.label,
+      label,
       color: COLOR_ROTATION[i % COLOR_ROTATION.length],
       pct,
       start,
       noise: 3,
     };
   });
-  const volumeLabel = Number.isFinite(Number(m.tradeVolume))
-    ? `$${Number(m.tradeVolume).toLocaleString('en-US')}`
+  // Skip rows that don't have any outcome data — they'd produce a
+  // zero-series history and crash hmcNormalize on the next render.
+  if (outcomes.length === 0) return null;
+  const volumeRaw = Number(m.tradeVolume ?? m.volume ?? m.liquidity ?? 0);
+  const volumeLabel = Number.isFinite(volumeRaw)
+    ? `$${volumeRaw.toLocaleString('en-US')}`
     : '—';
   return {
     id: `api-${m.id}`,
@@ -206,7 +217,8 @@ export default function Hero({ onOpenLogin }) {
         const data = await res.json();
         const rows = Array.isArray(data?.markets) ? data.markets : [];
         if (cancelled || rows.length === 0) return;
-        setMarkets(rows.slice(0, 5).map(apiRowToHeroMarket));
+        const mapped = rows.slice(0, 5).map(apiRowToHeroMarket).filter(Boolean);
+        if (mapped.length > 0) setMarkets(mapped);
       } catch { /* keep demos */ }
     })();
     return () => { cancelled = true; };

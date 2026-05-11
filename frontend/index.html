@@ -321,12 +321,6 @@
         </div>
         <div class="step-title">Crea tu cuenta</div>
         <p class="step-desc">Regístrate con email o Google en segundos. Pronos crea automáticamente una wallet on-chain para ti — sin extensiones, sin seed phrases, sin MetaMask.</p>
-        <div class="step-btns">
-          <button class="step-btn-wallet" onclick="document.location='/mvp'">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
-            Crear cuenta gratis
-          </button>
-        </div>
       </div>
 
       <div class="step">
@@ -366,23 +360,83 @@
 </section>
 
 <!-- ============================================================
-     7. PARTNERS
+     7. PARTNERS  (mirrors the points-app partners section)
 ============================================================ -->
-<section id="partners">
-  <div class="partners-inner">
-    <div class="partners-label">Respaldado por</div>
-    <div class="partners-row">
-      <div class="partner">
-        <div class="partner-logo">
-          <div class="partner-logo-base">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2" stroke="white" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
-          </div>
-        </div>
-        <div class="partner-name">Base · Coinbase L2</div>
-      </div>
-    </div>
+<section id="partners" style="padding: 48px 48px 72px; max-width: 1280px; margin: 0 auto; border-top: 1px solid var(--border);">
+  <div class="section-header" style="text-align: center; margin-bottom: 32px;">
+    <div class="section-eyebrow">Construido con</div>
+    <div class="section-title">Partners</div>
+  </div>
+
+  <div class="partners-grid" id="partnersGrid">
+    <a class="partner-card" href="https://turnkey.com" target="_blank" rel="noopener noreferrer">
+      <div class="partner-card-name">Turnkey</div>
+      <div class="partner-card-role">Wallet &amp; auth infra</div>
+      <p class="partner-card-desc">Custodia segura y auth con email.</p>
+    </a>
+    <a class="partner-card" href="https://bitso.com" target="_blank" rel="noopener noreferrer">
+      <div class="partner-card-name">Bitso</div>
+      <div class="partner-card-role">Exchange · LATAM</div>
+      <p class="partner-card-desc">Rampa de entrada y salida en pesos.</p>
+    </a>
+    <a class="partner-card" href="https://mxnb.mx" target="_blank" rel="noopener noreferrer">
+      <div class="partner-card-name">MXNB</div>
+      <div class="partner-card-role">Stablecoin peso</div>
+      <p class="partner-card-desc">Peso mexicano pegged on-chain.</p>
+    </a>
+    <a class="partner-card" href="https://chain.link" target="_blank" rel="noopener noreferrer">
+      <div class="partner-card-name">Chainlink</div>
+      <div class="partner-card-role">Oráculos &amp; precios</div>
+      <p class="partner-card-desc">Datos verificables on-chain.</p>
+    </a>
   </div>
 </section>
+
+<style>
+  .partners-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  .partner-card {
+    display: block;
+    padding: 20px 22px;
+    background: var(--surface1);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    text-decoration: none;
+    transition: border-color 0.18s, transform 0.18s;
+  }
+  .partner-card:hover {
+    border-color: var(--green);
+    transform: translateY(-2px);
+  }
+  .partner-card-name {
+    font-family: var(--font-display);
+    font-size: 22px;
+    letter-spacing: 0.04em;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+  .partner-card-role {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--green);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .partner-card-desc {
+    font-family: var(--font-body, var(--font-mono));
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.55;
+    margin: 0;
+  }
+</style>
 
 <!-- ============================================================
      8. WAITLIST
