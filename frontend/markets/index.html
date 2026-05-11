@@ -14,8 +14,10 @@
   <meta property="og:title" content="Mercados — Pronos" />
   <meta property="og:description" content="Mercados de predicción de Pronos." />
 
-  <!-- Anti-flash: apply saved theme before first paint -->
-  <script>(function(){var s=localStorage.getItem('pronos-theme');document.documentElement.setAttribute('data-theme',s||'light');})();</script>
+  <!-- Anti-flash: apply saved theme before first paint. Falls back to
+       the OS preference so users in dark mode never get a light-page
+       flash before the toggle saves an explicit choice. -->
+  <script>(function(){var s=localStorage.getItem('pronos-theme');if(!s){s=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.setAttribute('data-theme',s);})();</script>
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -285,7 +287,7 @@
       function renderBrowser(){
         document.getElementById('browserHero').style.display = '';
         document.getElementById('browserRoot').style.display = '';
-        const list = Array.isArray(window.MARKETS) ? window.MARKETS : [];
+        const list = Array.isArray(window.PRONOS_MARKETS) ? window.PRONOS_MARKETS : [];
         const status = document.getElementById('mktStatus');
         if (status) status.textContent = list.length
           ? `${list.length} mercado${list.length === 1 ? '' : 's'} en vista previa.`
@@ -325,8 +327,8 @@
       // Router: ?id=<slug> → mock detail. No id → mock grid.
       const params = new URLSearchParams(location.search);
       const id = params.get('id');
-      const market = id && Array.isArray(window.MARKETS)
-        ? window.MARKETS.find(m => m.id === id)
+      const market = id && Array.isArray(window.PRONOS_MARKETS)
+        ? window.PRONOS_MARKETS.find(m => m.id === id)
         : null;
 
       if (market) renderDetail(market);

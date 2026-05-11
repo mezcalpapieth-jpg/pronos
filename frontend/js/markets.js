@@ -3,6 +3,12 @@
 // El mercado on-chain (México vs SA) se maneja directamente en app.js.
 //
 // Categorías: 'musica' | 'mexico' | 'politica' | 'deportes'
+//
+// `const` in a non-module script is block-scoped at the script level —
+// it does NOT attach to `window`. The marketing landing reads MARKETS
+// directly (same script context), but standalone pages like
+// /markets/index.html need an explicit global. We expose it as
+// `window.PRONOS_MARKETS` at the bottom of this file.
 
 const MARKETS = [
   // ── MÚSICA & FARÁNDULA ──────────────────────────────────────────────────
@@ -270,3 +276,8 @@ const MARKETS = [
     volume: '34,800',
   },
 ];
+
+// Expose for standalone pages (e.g. /markets/index.html) that aren't
+// in the same script context as app.js. Don't rename — app.js still
+// reads the local `MARKETS` symbol directly.
+if (typeof window !== 'undefined') window.PRONOS_MARKETS = MARKETS;
