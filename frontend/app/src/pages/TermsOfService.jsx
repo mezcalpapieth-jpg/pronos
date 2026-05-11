@@ -142,11 +142,6 @@ export default function TermsOfService() {
         licencia no exclusiva para mostrarlos públicamente en la
         plataforma.
       </P>
-      <P>
-        El código de los contratos inteligentes está disponible
-        públicamente en GitHub bajo la licencia que ahí se indica. El
-        repositorio del frontend también es público.
-      </P>
 
       <H2>10. Contenido de terceros</H2>
       <P>
