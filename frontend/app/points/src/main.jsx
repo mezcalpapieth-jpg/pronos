@@ -1,13 +1,18 @@
 /**
- * Entry point for the points-app (pronos.io root).
+ * Entry point for the points-app (pronos.io/points/*).
  *
- * Uses Turnkey for auth instead of Privy, and routes on "/" instead of "/mvp".
+ * Uses Turnkey for auth instead of Privy. Wrapped in <PasswordGate> so
+ * the same pre-launch password that protects /mvp now also protects
+ * /points — one cookie (`pronos_mvp_access`) unlocks both surfaces.
+ * Legal pages (/privacy, /terms) bypass the gate inside the component
+ * itself so the TikTok crawler can still index them.
  * Reuses MXNP-centric components from `@app/...` (shared tree with the MVP).
  */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { Sentry, initSentry } from '@app/lib/sentry.js';
 import { PointsAuthProvider } from '@app/lib/pointsAuth.js';
+import PasswordGate from '@app/components/PasswordGate.jsx';
 import App from './App.jsx';
 import '@app/styles/mvp.css';
 import './points.css';
@@ -23,9 +28,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         </div>
       }
     >
-      <PointsAuthProvider>
-        <App />
-      </PointsAuthProvider>
+      <PasswordGate>
+        <PointsAuthProvider>
+          <App />
+        </PointsAuthProvider>
+      </PasswordGate>
     </Sentry.ErrorBoundary>
   </React.StrictMode>,
 );

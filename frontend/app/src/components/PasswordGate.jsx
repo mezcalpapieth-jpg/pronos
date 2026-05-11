@@ -3,8 +3,36 @@ import { useT } from '../lib/i18n.js';
 
 const STORAGE_KEY = 'pronos-mvp-access';
 
+// Paths that bypass the password gate. Both /privacy and /terms exist
+// under the points-app's basename ("/points") so the URL is
+// /points/privacy in the browser; TikTok and other crawlers reach
+// them via a 301 redirect from the root-level alias /privacy →
+// /points/privacy (configured in frontend/vercel.json). Either form
+// matches here.
+const PUBLIC_PATHS = new Set([
+  '/privacy', '/terms',
+  '/points/privacy', '/points/terms',
+]);
+
+function isPublicPath() {
+  if (typeof window === 'undefined') return false;
+  const p = window.location.pathname.replace(/\/+$/, '') || '/';
+  return PUBLIC_PATHS.has(p);
+}
+
 export default function PasswordGate({ children }) {
   const t = useT();
+  // Bypass the gate entirely for the legal pages so crawlers can index
+  // them without solving the password. Checked at mount and on any
+  // navigation event so an in-app link click to /points/privacy still
+  // reveals the page without forcing a re-auth.
+  const [isPublic, setIsPublic] = useState(() => isPublicPath());
+  useEffect(() => {
+    const handler = () => setIsPublic(isPublicPath());
+    window.addEventListener('popstate', handler);
+    return () => window.removeEventListener('popstate', handler);
+  }, []);
+
   const [unlocked, setUnlocked] = useState(false);
   const [checking, setChecking] = useState(true);
   const [input, setInput] = useState('');
@@ -59,7 +87,7 @@ export default function PasswordGate({ children }) {
     }
   };
 
-  if (unlocked) return children;
+  if (unlocked || isPublic) return children;
 
   return (
     <div style={{

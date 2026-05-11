@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build:mvp": "vite build && mkdir -p ../markets && cp ../mvp/index.html ../markets/index.html",
+    "build:mvp": "vite build",
     "build:points": "BUILD_TARGET=points vite build",
     "build": "npm run build:mvp && npm run build:points",
     "preview": "vite preview"

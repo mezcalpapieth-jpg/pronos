@@ -82,7 +82,13 @@ export default function App() {
   const isAdmin = !!user?.username && adminList.includes(user.username.toLowerCase());
 
   return (
-    <BrowserRouter>
+    // basename="/points" — the points-app is mounted at pronos.io/points/*
+    // after the relaunch restructure. All router routes (declared below)
+    // resolve relative to this prefix, so `/portfolio` in the route table
+    // matches the URL `/points/portfolio` in the browser. Existing root-
+    // level shortcuts (`pronos.io/portfolio` etc.) are 301-redirected to
+    // `/points/portfolio` at the Vercel layer; see frontend/vercel.json.
+    <BrowserRouter basename="/points">
       <Shell
         onOpenLogin={() => setLoginOpen(true)}
         isAdmin={isAdmin}
