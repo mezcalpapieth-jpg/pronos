@@ -66,20 +66,67 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
   const isPending = status === 'pending' || (status === 'active' && opensAt && opensAt.getTime() > Date.now());
   const isResolved = status === 'resolved';
 
-  // For resolved markets, build a history that includes the open and
-  // close points stored in cryptoMeta so the chart shows the full window
-  // even after the WS has stopped pushing live ticks for it.
+  // Backfill price history from Coinbase's public candles REST API.
+  // Without this, the live WebSocket starts with an empty history every
+  // time the user opens the page, so a market that's been live for 4
+  // minutes shows a chart that started 2 seconds ago. Coinbase's 60s
+  // candles cover the full open→now span at 1-minute granularity, then
+  // the WebSocket appends real-time ticks on top.
+  //
+  // Re-fetches on market.id change (a new 5-min window means a new
+  // open/close range to backfill).
+  const [backfill, setBackfill] = useState([]);
+  const openedAtMs = meta.openedAt ? new Date(meta.openedAt).getTime() : null;
+  useEffect(() => {
+    if (status === 'resolved') { setBackfill([]); return; }
+    if (!openedAtMs || !Number.isFinite(meta.openPrice)) { setBackfill([]); return; }
+    let cancelled = false;
+    const start = new Date(openedAtMs).toISOString();
+    const end = new Date().toISOString();
+    const url = `https://api.exchange.coinbase.com/products/${productId}/candles?granularity=60&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+    fetch(url, { headers: { Accept: 'application/json' } })
+      .then(r => r.ok ? r.json() : [])
+      .then(candles => {
+        if (cancelled) return;
+        if (!Array.isArray(candles)) { setBackfill([{ t: openedAtMs, price: Number(meta.openPrice) }]); return; }
+        // Coinbase returns each candle as [time, low, high, open, close, volume],
+        // newest-first. Map to ascending {t, price=close} and anchor the series
+        // with the open snapshot so the line starts exactly at openPrice@openedAt.
+        const points = candles
+          .map(c => ({ t: c[0] * 1000, price: Number(c[4]) }))
+          .filter(p => Number.isFinite(p.price) && p.t > openedAtMs)
+          .sort((a, b) => a.t - b.t);
+        setBackfill([{ t: openedAtMs, price: Number(meta.openPrice) }, ...points]);
+      })
+      .catch(() => {
+        if (!cancelled) setBackfill([{ t: openedAtMs, price: Number(meta.openPrice) }]);
+      });
+    return () => { cancelled = true; };
+  }, [market.id, productId, openedAtMs, meta.openPrice, status]);
+
+  // Build the chart's history depending on lifecycle stage.
+  //   resolved: open + close snapshot from cryptoMeta (chart is frozen).
+  //   active:   backfill (open + 1-min candles) + live ticker after them.
+  //   pending:  just whatever the live ticker has accumulated.
   const chartHistory = useMemo(() => {
-    if (status !== 'resolved') return history;
-    const base = [];
-    if (meta.openedAt && meta.openPrice != null) {
-      base.push({ t: new Date(meta.openedAt).getTime(), price: meta.openPrice });
+    if (status === 'resolved') {
+      const base = [];
+      if (meta.openedAt && meta.openPrice != null) {
+        base.push({ t: new Date(meta.openedAt).getTime(), price: meta.openPrice });
+      }
+      if (closesAt && meta.closePrice != null) {
+        base.push({ t: closesAt.getTime(), price: meta.closePrice });
+      }
+      return base;
     }
-    if (closesAt && meta.closePrice != null) {
-      base.push({ t: closesAt.getTime(), price: meta.closePrice });
-    }
-    return base;
-  }, [status, history, meta.openedAt, meta.openPrice, meta.closePrice, closesAt]);
+    if (backfill.length === 0) return history;
+    // Splice: backfill ends ~1 min ago (candle resolution); the live
+    // ticker provides everything newer. Avoid double-counting any
+    // overlap by cutting live history at the last backfill timestamp.
+    const lastBackfillT = backfill[backfill.length - 1].t;
+    const liveAfter = history.filter(p => p.t > lastBackfillT);
+    return [...backfill, ...liveAfter];
+  }, [status, backfill, history, meta.openedAt, meta.openPrice, meta.closePrice, closesAt]);
 
   // Buy handler — opens the existing PointsBuyModal pre-targeted on the
   // chosen outcome. We pass the same shape it expects from non-crypto
@@ -212,6 +259,13 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
           history={chartHistory}
           threshold={meta.threshold ?? null}
           height={260}
+          // Anchor the X axis to the market's actual window so the
+          // chart shows open-on-left, close-on-right regardless of
+          // when the user opens the page. Falls back to LivePriceChart's
+          // sliding 5-min window when these are absent (e.g. pending
+          // pre-open state).
+          xStart={opensAt ? opensAt.getTime() : undefined}
+          xEnd={closesAt ? closesAt.getTime() : undefined}
         />
       </div>
 

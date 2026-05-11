@@ -35,6 +35,14 @@ export default function LivePriceChart({
   width = 800,
   height = 220,
   windowMs = 5 * 60_000,
+  // Optional fixed-window anchors. When BOTH are set, the X axis runs
+  // from xStart on the left to xEnd on the right regardless of how far
+  // through the window we are — gives the crypto-5min markets a stable
+  // chart that shows open-on-left, close-on-right for the full life of
+  // the bout, instead of a sliding window that resets when the user
+  // re-enters the page mid-window.
+  xStart,
+  xEnd,
 }) {
   if (!Array.isArray(history) || history.length === 0) {
     // Skeleton rectangle keeps layout stable while WS connects.
@@ -46,16 +54,22 @@ export default function LivePriceChart({
     );
   }
 
-  // Use the latest tick's timestamp as "now" so the chart doesn't lurch
-  // when a render fires between ticks (e.g., a state change unrelated to
-  // price). The trailing edge stays anchored to real data.
-  const now = history[history.length - 1].t;
-  const xMin = now - windowMs;
-  const xMax = now;
+  // If the caller anchored the window via xStart/xEnd, use that. Otherwise
+  // fall back to the sliding-windowMs behavior (legacy callers).
+  let xMin;
+  let xMax;
+  if (Number.isFinite(xStart) && Number.isFinite(xEnd) && xEnd > xStart) {
+    xMin = xStart;
+    xMax = xEnd;
+  } else {
+    const now = history[history.length - 1].t;
+    xMin = now - windowMs;
+    xMax = now;
+  }
 
   // Build the visible slice. We lazily filter (keep all of history; only
-  // points within [xMin, xMax] get drawn). Saves a useMemo on the parent.
-  const visible = history.filter(p => p.t >= xMin);
+  // points within [xMin, xMax] get drawn).
+  const visible = history.filter(p => p.t >= xMin && p.t <= xMax);
   if (visible.length === 0) return null;
 
   // Y range: include the threshold (if set) so the rule is always

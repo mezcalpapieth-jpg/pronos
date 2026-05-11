@@ -48,7 +48,10 @@ function navSearchKey(e) {
 
 function navSearchGo(id) {
   clearNavSearch();
-  location.href = '/markets?id=' + id;
+  // Pre-relaunch search slugs no longer match real markets — the
+  // marketing index uses Polymarket-era IDs while the live app is on
+  // numeric DB ids. Send the user to /points where the real grid is.
+  location.href = '/points';
 }
 
 function clearNavSearch() {
@@ -413,7 +416,7 @@ function renderMockMarkets(filter) {
     : MARKETS.filter(m => m.category === filter);
 
   grid.innerHTML = filtered.map(m => `
-    <div class="mock-card" title="${m.title}" onclick="location.href='/markets?id=${m.id}'" style="cursor:pointer">
+    <div class="mock-card" title="${m.title}" onclick="location.href='/points'" style="cursor:pointer">
       <div class="mock-card-header">
         <span class="mock-card-cat">${m.icon} ${m.categoryLabel}</span>
       </div>
@@ -791,8 +794,10 @@ const HMC_MOCK_IDS = [
   'grammy-album-2027',
 ];
 function hmcBet(marketIdx, outcomeIdx) {
-  const id = HMC_MOCK_IDS[marketIdx];
-  if (id) location.href = '/markets?id=' + id;
+  // HMC_MOCK_IDS are pre-relaunch Polymarket-era slugs that no longer
+  // exist in the live DB. Send the user to the points-app home so
+  // they land on real markets instead of a 404.
+  location.href = '/points';
 }
 
 function hmcResetTimer() {
