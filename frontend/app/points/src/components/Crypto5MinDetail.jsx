@@ -281,23 +281,27 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
     lastSnapshotPersistRef.current = 0;
   }, [market.id, snapshotWindow]);
 
-  // Build the chart's history depending on lifecycle stage.
-  //   resolved: backfill (1-min candles spanning the full window) +
-  //             a final point anchored at (closesAt, closePrice) so
-  //             the rightmost point exactly matches the settlement.
-  //   active:   backfill (open + 1-min candles) + live ticker on top.
-  //   pending:  just whatever the live ticker has accumulated.
-  const liveChartHistory = useMemo(() => {
-    if (backfill.length === 0) {
-      return normalizeChartPoints(history, snapshotWindow);
-    }
-    // Splice: backfill ends ~1 min ago (candle resolution); the live
-    // ticker provides everything newer. Avoid double-counting any
-    // overlap by cutting live history at the last backfill timestamp.
-    const lastBackfillT = backfill[backfill.length - 1].t;
-    const liveAfter = history.filter(p => p.t > lastBackfillT);
-    return normalizeChartPoints([...backfill, ...liveAfter], snapshotWindow);
-  }, [backfill, history, snapshotWindow]);
+  // Active/pending curve = union of every source we have:
+  //   - live WS ticker accumulated in-tab
+  //   - server backfill (global truth, but can be sparse early on)
+  //   - stored per-market snapshot from this browser
+  //   - explicit open anchor
+  //
+  // This avoids the old failure mode where a thin backfill response
+  // arrived after mount and replaced a richer live curve with a nearly
+  // straight line. Unioning the sources preserves the densest history
+  // we have at any moment instead of choosing one winner.
+  const liveChartHistory = useMemo(() => normalizeChartPoints(
+    [
+      ...storedSnapshot,
+      ...backfill,
+      ...history,
+      ...(Number.isFinite(openedAtMs) && meta.openPrice != null
+        ? [{ t: openedAtMs, price: Number(meta.openPrice) }]
+        : []),
+    ],
+    snapshotWindow,
+  ), [storedSnapshot, backfill, history, openedAtMs, meta.openPrice, snapshotWindow]);
 
   useEffect(() => {
     if (status === 'resolved' || liveChartHistory.length < 2) return;
@@ -314,11 +318,6 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
         [
           ...liveChartHistory,
           ...(snapshotRef.current || []),
-          ...storedSnapshot,
-          ...backfill,
-          ...(Number.isFinite(openedAtMs) && meta.openPrice != null
-            ? [{ t: openedAtMs, price: Number(meta.openPrice) }]
-            : []),
         ],
         snapshotWindow,
       );
