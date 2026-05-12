@@ -213,6 +213,10 @@ export default async function handler(req, res) {
         });
         const seedTotal = legs.reduce((s, l) => s + Number(l.seed_liquidity || 0), 0);
         const tradeTotal = legs.reduce((s, l) => s + Number(l.trade_volume || 0), 0);
+        // Per-outcome leg ids so the card-level buy drawer can target the
+        // right leg without an extra round-trip to /api/points/market.
+        // Each leg is binary Sí/No, ordered to match `outcomes`.
+        const legIds = legs.map(l => l.id);
         return {
           id: r.id,
           ammMode: 'parallel',
@@ -224,6 +228,7 @@ export default async function handler(req, res) {
           prices: legPrices.length === outcomes.length
             ? legPrices
             : outcomes.map(() => 1 / outcomes.length),
+          legIds: legIds.length === outcomes.length ? legIds : null,
           seedLiquidity: seedTotal,
           volume: seedTotal,
           tradeVolume: tradeTotal,

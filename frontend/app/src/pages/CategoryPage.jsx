@@ -40,6 +40,10 @@ const SPORT_TABS = [
   { key: 'baseball', label: 'Béisbol'  },
   { key: 'nba',      label: 'NBA'      },
   { key: 'nfl',      label: 'NFL'      },
+  // Combate = combat-sports umbrella. Markets land here with
+  // sport='combate' and league='ufc' or 'boxing'. Generator:
+  // market-gen/ufc.js + market-gen/boxing.js.
+  { key: 'combate',  label: 'Combate'  },
   { key: 'f1',       label: 'F1'       },
   { key: 'tennis',   label: 'Tenis'    },
   { key: 'golf',     label: 'Golf'     },
@@ -60,6 +64,15 @@ const BASEBALL_LEAGUES = [
   { key: 'all', label: 'Todas' },
   { key: 'mlb', label: 'MLB'   },
   { key: 'lmb', label: 'LMB'   },
+];
+
+// Combate league sidebar — UFC + Boxing. Matches the points-app's
+// PointsCategoryPage COMBATE_LEAGUES so the two surfaces filter the
+// same data the same way.
+const COMBATE_LEAGUES = [
+  { key: 'all',    label: 'Todas' },
+  { key: 'ufc',    label: 'UFC'   },
+  { key: 'boxing', label: 'Boxeo' },
 ];
 
 const RESOLVED_SLUGS = new Set(['resueltos']);
@@ -265,7 +278,7 @@ export default function CategoryPage({ onOpenLogin }) {
 
     if (slug === 'deportes' && sport !== 'all') {
       out = out.filter(m => (m.sport || '').toLowerCase() === sport);
-      if ((sport === 'soccer' || sport === 'baseball') && league !== 'all') {
+      if ((sport === 'soccer' || sport === 'baseball' || sport === 'combate') && league !== 'all') {
         out = out.filter(m => (m.league || '').toLowerCase() === league);
       }
     }
@@ -295,8 +308,12 @@ export default function CategoryPage({ onOpenLogin }) {
 
   const title = SLUG_LABELS[slug] || (slug || '').replace(/-/g, ' ');
   const showSportTabs = slug === 'deportes';
-  const showLeagueSidebar = slug === 'deportes' && (sport === 'soccer' || sport === 'baseball');
-  const leagueOptions = sport === 'soccer' ? SOCCER_LEAGUES : BASEBALL_LEAGUES;
+  const showLeagueSidebar = slug === 'deportes' && (sport === 'soccer' || sport === 'baseball' || sport === 'combate');
+  const leagueOptions = sport === 'soccer'
+    ? SOCCER_LEAGUES
+    : sport === 'baseball'
+      ? BASEBALL_LEAGUES
+      : COMBATE_LEAGUES;
 
   return (
     <>

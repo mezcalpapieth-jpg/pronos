@@ -73,11 +73,16 @@ export default function PointsMarketCard({ market, userPosition }) {
 
   const isResolved = market.status === 'resolved';
   // Parallel parent markets have no per-parent pool — buys go against
-  // individual legs, which aren't exposed on the card. For parallel we
-  // fall back to the old behavior: clicking navigates to detail so the
-  // user can pick which leg they want to bet on. Resolved markets
-  // aren't tradeable either.
-  const canOpenDrawer = !isResolved && market.ammMode !== 'parallel';
+  // individual legs. /api/points/markets now exposes legIds (one leg
+  // per outcome, same order as `outcomes`), so the drawer can target
+  // the right leg directly. If legIds is missing (older response /
+  // schema mismatch) fall back to navigating into the detail page.
+  const parallelLegs = market.ammMode === 'parallel' && Array.isArray(market.legIds)
+    && market.legIds.length === outcomes.length
+    ? market.legIds
+    : null;
+  const canOpenDrawer = !isResolved
+    && (market.ammMode !== 'parallel' || parallelLegs !== null);
   // isLive: start_time has passed but the game window hasn't closed
   // yet — used to show a red 🔴 EN VIVO pill so users know they can
   // trade against in-progress events. Only sports markets set
@@ -353,13 +358,29 @@ export default function PointsMarketCard({ market, userPosition }) {
 
       {/* Buy drawer — rendered via createPortal to document.body by
           the modal component, so ancestor transforms on the card
-          don't pin it to the card's containing block. */}
+          don't pin it to the card's containing block.
+          For parallel parents, the actual pool lives on the leg, so
+          we hand the modal a synthetic per-leg market shape: id =
+          legIds[drawerIndex], outcomes = ['Sí','No'], outcomeIndex = 0
+          (= bet YES on the chosen contender). The label keeps the
+          parent outcome name so users see who they're betting on. */}
       {drawerOpen && canOpenDrawer && (
         <PointsBuyModal
           open={drawerOpen}
           variant="drawer"
-          market={market}
-          outcomeIndex={drawerIndex}
+          market={parallelLegs
+            ? {
+                ...market,
+                id: parallelLegs[drawerIndex],
+                ammMode: 'unified',
+                outcomes: ['Sí', 'No'],
+                outcomeImages: null,
+                // Display fields stay in sync with the chosen leg's
+                // YES price so the modal's quote ticker isn't off.
+                prices: [market.prices?.[drawerIndex] ?? 0.5, 1 - (market.prices?.[drawerIndex] ?? 0.5)],
+              }
+            : market}
+          outcomeIndex={parallelLegs ? 0 : drawerIndex}
           outcomeLabel={outcomes[drawerIndex]}
           onClose={() => setDrawerIndex(null)}
           onSuccess={() => setDrawerIndex(null)}

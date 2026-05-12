@@ -15,6 +15,9 @@ import React, { useMemo, useState, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { usePointsAuth } from './lib/pointsAuth.js';
 import PointsLoginModal from './components/PointsLoginModal.jsx';
+import Nav from './components/Nav.jsx';
+import CategoryBar from './components/CategoryBar.jsx';
+import Footer from './components/Footer.jsx';
 
 const IS_PUBLIC_MARKETS = typeof window !== 'undefined' && window.location.pathname.startsWith('/markets');
 const Home = lazy(() => import('./pages/Home.jsx'));
@@ -92,10 +95,24 @@ export default function App() {
           />
           {/* News feed — registered BEFORE /c/:slug so the specialized
               layout wins over the generic category grid. adminPath
-              points to the MVP admin since this is the MVP build. */}
+              points to the MVP admin since this is the MVP build.
+              The points-app App.jsx renders chrome via a global Shell
+              wrapper, so NewsPage itself is bare. The MVP doesn't have
+              that pattern, so we wrap Nav/CategoryBar/Footer here
+              inline — otherwise users hit a chromeless dead end with
+              no way back to home, no nav, no profile. */}
           <Route
             path="/c/noticias"
-            element={<NewsPage isAdmin={userIsAdmin} adminPath="/mvp/admin" />}
+            element={
+              <>
+                <Nav onOpenLogin={() => setLoginOpen(true)} />
+                <div className="category-bar-sticky">
+                  <CategoryBar />
+                </div>
+                <NewsPage isAdmin={userIsAdmin} adminPath="/mvp/admin" />
+                <Footer />
+              </>
+            }
           />
           <Route
             path="/c/:slug"
