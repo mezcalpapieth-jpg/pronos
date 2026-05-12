@@ -7,10 +7,6 @@
     {
       "path": "/api/indexer",
       "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/cron/crypto-ticker",
-      "schedule": "* * * * *"
     }
   ],
   "redirects": [
