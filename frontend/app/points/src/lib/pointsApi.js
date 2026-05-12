@@ -311,9 +311,15 @@ export async function adminProgressWorldCup({ dry = false } = {}) {
   return postJson(`/api/points/admin/progress-world-cup${q}`, {});
 }
 
-// ─── Admin — edit market (question + end time + category) ──────────────────
-export async function adminEditMarket({ marketId, question, endTime, category }) {
-  return postJson('/api/points/admin/edit-market', { marketId, question, endTime, category });
+// ─── Admin — edit market (question + start/end time + category) ────────────
+export async function adminEditMarket({ marketId, question, startTime, endTime, category }) {
+  return postJson('/api/points/admin/edit-market', {
+    marketId,
+    question,
+    startTime,
+    endTime,
+    category,
+  });
 }
 
 // ─── Cycles (2-week leaderboard windows) ────────────────────────────────────

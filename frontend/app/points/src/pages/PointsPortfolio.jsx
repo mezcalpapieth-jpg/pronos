@@ -10,7 +10,7 @@
  * users have one dashboard for everything.
  */
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import {
   fetchPositions,
@@ -245,6 +245,7 @@ function MiniLeaderboard({ currentUsername }) {
   const [data, setData] = useState(null);
   const [search, setSearch] = useState('');
   const navigate = useNavigate();
+  const location = useLocation();
   useEffect(() => {
     fetchLeaderboard().then(setData).catch(() => setData(null));
   }, []);
@@ -252,7 +253,9 @@ function MiniLeaderboard({ currentUsername }) {
   function gotoProfile(username) {
     const clean = String(username || '').trim().toLowerCase();
     if (!clean) return;
-    navigate(`/u/${encodeURIComponent(clean)}`);
+    navigate(`/u/${encodeURIComponent(clean)}`, {
+      state: { from: `${location.pathname}${location.search}${location.hash}` || '/portfolio' },
+    });
   }
   function onSearchSubmit(e) {
     e.preventDefault();

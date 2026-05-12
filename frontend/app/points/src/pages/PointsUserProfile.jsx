@@ -15,7 +15,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 function fmt(n, d = 2) {
   const v = Number(n);
@@ -40,11 +40,27 @@ const STATUS_LABEL = {
 
 export default function PointsUserProfile() {
   const { username: paramUsername } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [tab, setTab] = useState('activo'); // 'activo' | 'historial'
+  const backTarget = typeof location.state?.from === 'string' && location.state.from.startsWith('/')
+    ? location.state.from
+    : null;
+
+  function handleBack() {
+    if (backTarget) {
+      navigate(backTarget);
+      return;
+    }
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate('/portfolio');
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -98,7 +114,7 @@ export default function PointsUserProfile() {
             No tenemos un perfil para <strong>@{paramUsername}</strong>.
           </p>
           <button
-            onClick={() => navigate(-1)}
+            onClick={handleBack}
             style={{
               marginTop: 12, padding: '10px 18px', background: 'var(--surface2)',
               border: '1px solid var(--border)', borderRadius: 8,
@@ -138,7 +154,7 @@ export default function PointsUserProfile() {
           </div>
         </div>
         <button
-          onClick={() => navigate('/')}
+          onClick={handleBack}
           style={{
             padding: '8px 14px', background: 'var(--surface2)',
             border: '1px solid var(--border)', borderRadius: 8,

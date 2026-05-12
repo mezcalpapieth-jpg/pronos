@@ -34,6 +34,11 @@ const CATEGORIES = [
   { value: 'general',  label: 'General',  icon: '📊' },
 ];
 
+const MARKET_CATEGORY_FILTERS = [
+  { value: 'all', label: 'Todas', icon: '◦' },
+  ...CATEGORIES,
+];
+
 const DEFAULT_CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 421614);
 
 // Sport options (keys match market.sport written by generators) + league
@@ -980,6 +985,9 @@ function CreateMarketForm({ onCreated, prefill }) {
 function EditMarketModal({ market, onClose, onSaved }) {
   const [question, setQuestion] = useState(market.question || '');
   const [category, setCategory] = useState(market.category || 'general');
+  const [startTime, setStartTime] = useState(
+    market.startTime ? new Date(market.startTime).toISOString().slice(0, 16) : '',
+  );
   const [endTime, setEndTime] = useState(
     market.endTime ? new Date(market.endTime).toISOString().slice(0, 16) : '',
   );
@@ -991,10 +999,14 @@ function EditMarketModal({ market, onClose, onSaved }) {
     setErr(null);
     setSaving(true);
     try {
+      if (startTime && endTime && new Date(startTime).getTime() >= new Date(endTime).getTime()) {
+        throw new Error('La fecha de inicio debe ser anterior a la fecha de cierre.');
+      }
       const { ok, data } = await postJson('/api/points/admin/edit-market', {
         marketId: market.id,
         question: question.trim(),
         category,
+        startTime,
         endTime,
       });
       if (!ok) throw new Error(data?.error ? `${data.error}${data.detail ? ` · ${data.detail}` : ''}` : 'edit_failed');
@@ -1033,6 +1045,9 @@ function EditMarketModal({ market, onClose, onSaved }) {
             ))}
           </select>
         </Field>
+        <Field label="Fecha de inicio">
+          <input type="datetime-local" value={startTime} onChange={e => setStartTime(e.target.value)} style={inputStyle} />
+        </Field>
         <Field label="Fecha de cierre">
           <input type="datetime-local" required value={endTime} onChange={e => setEndTime(e.target.value)} style={inputStyle} />
         </Field>
@@ -1066,6 +1081,7 @@ const STATUS_TABS = [
 function MarketsList({ refreshKey, bumpRefresh }) {
   const [rows, setRows] = useState([]);
   const [filter, setFilter] = useState('active');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [resolvingId, setResolvingId] = useState(null);
@@ -1133,8 +1149,14 @@ function MarketsList({ refreshKey, bumpRefresh }) {
     setLoading(true);
     setError(null);
     try {
+      const q = new URLSearchParams({
+        status: filter,
+        mode: 'onchain',
+        chain_id: String(DEFAULT_CHAIN_ID),
+      });
+      if (categoryFilter !== 'all') q.set('category', categoryFilter);
       const { ok, data } = await getJson(
-        `/api/points/admin/markets?status=${filter}&mode=onchain&chain_id=${DEFAULT_CHAIN_ID}`,
+        `/api/points/admin/markets?${q.toString()}`,
       );
       if (!ok) throw new Error(data?.error || 'list_failed');
       setRows(Array.isArray(data?.markets) ? data.markets : []);
@@ -1143,7 +1165,7 @@ function MarketsList({ refreshKey, bumpRefresh }) {
     } finally {
       setLoading(false);
     }
-  }, [filter]);
+  }, [categoryFilter, filter]);
 
   useEffect(() => { load(); }, [load, refreshKey]);
 
@@ -1299,6 +1321,31 @@ function MarketsList({ refreshKey, bumpRefresh }) {
         ))}
       </div>
 
+      <div style={{
+        display: 'flex', gap: 8, marginBottom: 14,
+        flexWrap: 'wrap',
+      }}>
+        {MARKET_CATEGORY_FILTERS.map(tab => (
+          <button
+            key={tab.value}
+            onClick={() => setCategoryFilter(tab.value)}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 999,
+              border: `1px solid ${categoryFilter === tab.value ? 'rgba(0,232,122,0.35)' : 'var(--border)'}`,
+              background: categoryFilter === tab.value ? 'rgba(0,232,122,0.08)' : 'transparent',
+              color: categoryFilter === tab.value ? 'var(--green)' : 'var(--text-muted)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              letterSpacing: '0.04em',
+              cursor: 'pointer',
+            }}
+          >
+            {tab.icon} {tab.label}
+          </button>
+        ))}
+      </div>
+
       <Notice notice={notice} />
 
       {loading && <div style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Cargando…</div>}
@@ -1322,6 +1369,7 @@ function MarketsList({ refreshKey, bumpRefresh }) {
             </div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
               <span>#{m.id}</span>
+              <span>{m.category || 'general'}</span>
               <span>{m.ammMode}</span>
               <span>{(m.outcomes || []).length} outcomes</span>
               <span style={{

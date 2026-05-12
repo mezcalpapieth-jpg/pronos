@@ -41,6 +41,11 @@ const CATEGORIES = [
   { key: 'musica',   label: '🎵 Música' },
 ];
 
+const MARKET_CATEGORY_FILTERS = [
+  { key: 'all', label: 'Todas' },
+  ...CATEGORIES,
+];
+
 // ─── Date helpers (dd/mm/yyyy + HH:mm) ──────────────────────────────────────
 // The native <input type="datetime-local"> defers format entirely to the
 // browser locale, which lets en-US users see mm/dd/yyyy against our
@@ -105,6 +110,7 @@ function isoToMinutePart(iso) {
 // Compose `${HH}:${mm}` for partsToIso when the pieces come from two
 // separate number inputs. Tolerates single-digit input ('9' → '09').
 function composeHhMm(hourStr, minuteStr) {
+  if (String(hourStr ?? '').trim() === '' || String(minuteStr ?? '').trim() === '') return null;
   const h = Number(hourStr);
   const m = Number(minuteStr);
   if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
@@ -936,6 +942,7 @@ const inputStyle = {
 function MarketsTable() {
   const [markets, setMarkets] = useState(null);
   const [filter, setFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState(null);
   const [autoResolving, setAutoResolving] = useState(false);
@@ -945,7 +952,9 @@ function MarketsTable() {
   async function load() {
     setLoading(true);
     try {
-      const r = await getJson(`/api/points/admin/markets?status=${filter}`);
+      const q = new URLSearchParams({ status: filter });
+      if (categoryFilter !== 'all') q.set('category', categoryFilter);
+      const r = await getJson(`/api/points/admin/markets?${q.toString()}`);
       setMarkets(r.markets || []);
     } catch (e) {
       setMarkets([]);
@@ -954,7 +963,7 @@ function MarketsTable() {
     }
   }
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [filter]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [filter, categoryFilter]);
 
   async function resolveMarket(marketId, winningOutcomeIndex) {
     setResolving(marketId);
@@ -1078,6 +1087,28 @@ function MarketsTable() {
         )}
       </div>
 
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+        {MARKET_CATEGORY_FILTERS.map(c => (
+          <button
+            key={c.key}
+            onClick={() => setCategoryFilter(c.key)}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 16,
+              border: `1px solid ${categoryFilter === c.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
+              background: categoryFilter === c.key ? 'rgba(0,232,122,0.1)' : 'transparent',
+              color: categoryFilter === c.key ? 'var(--green)' : 'var(--text-secondary)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              cursor: 'pointer',
+              letterSpacing: '0.04em',
+            }}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+
       {loading && <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Cargando…</p>}
       {!loading && markets?.length === 0 && (
         <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
@@ -1130,7 +1161,7 @@ function MarketsTable() {
             <>
               <button
                 onClick={() => setEditing(m)}
-                title="Editar nombre o fecha de cierre"
+                title="Editar nombre, inicio o cierre"
                 style={{
                   padding: '6px 10px',
                   background: 'transparent',
@@ -1175,8 +1206,8 @@ function MarketsTable() {
 }
 
 // ─── Edit-market modal ──────────────────────────────────────────────────────
-// Lets an admin patch the user-facing question, the close datetime, and
-// the category. Reserves, outcomes, and status stay locked — mutating
+// Lets an admin patch the user-facing question, start/close datetimes,
+// and category. Reserves, outcomes, and status stay locked — mutating
 // those post-creation would desync the AMM or confuse existing holders.
 // Wired to POST /api/points/admin/edit-market.
 function EditMarketModal({ market, onClose, onSaved }) {
@@ -1185,43 +1216,89 @@ function EditMarketModal({ market, onClose, onSaved }) {
   // Split date + time into three plain inputs so format is stable
   // across browser locales. Hour/minute are number inputs clamped to
   // 0-23 / 0-59 via their native min/max attributes.
-  const [date, setDate] = useState(isoToDdMmYyyy(market.endTime));
-  const [hour, setHour] = useState(isoToHourPart(market.endTime));
-  const [minute, setMinute] = useState(isoToMinutePart(market.endTime));
+  const [startDate, setStartDate] = useState(isoToDdMmYyyy(market.startTime));
+  const [startHour, setStartHour] = useState(isoToHourPart(market.startTime));
+  const [startMinute, setStartMinute] = useState(isoToMinutePart(market.startTime));
+  const [endDate, setEndDate] = useState(isoToDdMmYyyy(market.endTime));
+  const [endHour, setEndHour] = useState(isoToHourPart(market.endTime));
+  const [endMinute, setEndMinute] = useState(isoToMinutePart(market.endTime));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(null);
 
-  const initialDate = isoToDdMmYyyy(market.endTime);
-  const initialHour = isoToHourPart(market.endTime);
-  const initialMinute = isoToMinutePart(market.endTime);
+  const initialStartDate = isoToDdMmYyyy(market.startTime);
+  const initialStartHour = isoToHourPart(market.startTime);
+  const initialStartMinute = isoToMinutePart(market.startTime);
+  const initialEndDate = isoToDdMmYyyy(market.endTime);
+  const initialEndHour = isoToHourPart(market.endTime);
+  const initialEndMinute = isoToMinutePart(market.endTime);
   const initialCategory = market.category || 'general';
+
+  function normalizeEditedIso(dateValue, hourValue, minuteValue, initialDateValue, initialHourValue, initialMinuteValue, label) {
+    const touched =
+      dateValue !== initialDateValue ||
+      hourValue !== initialHourValue ||
+      minuteValue !== initialMinuteValue;
+    if (!touched) return { value: undefined };
+
+    const timeStr = composeHhMm(hourValue, minuteValue);
+    if (!timeStr) {
+      return { error: `Hora de ${label} inválida. Horas 0–23, minutos 0–59.` };
+    }
+    const iso = partsToIso(dateValue, timeStr);
+    if (!iso) {
+      return { error: `Fecha de ${label} inválida. Formato: dd/mm/yyyy.` };
+    }
+    return { value: iso };
+  }
 
   async function save() {
     setSaving(true);
     setErr(null);
 
-    const dateTouched = date !== initialDate || hour !== initialHour || minute !== initialMinute;
-    let nextIso;
-    if (dateTouched) {
-      const timeStr = composeHhMm(hour, minute);
-      if (!timeStr) {
-        setErr('Hora inválida. Horas 0–23, minutos 0–59.');
-        setSaving(false);
-        return;
-      }
-      nextIso = partsToIso(date, timeStr);
-      if (!nextIso) {
-        setErr('Fecha inválida. Formato: dd/mm/yyyy.');
-        setSaving(false);
-        return;
-      }
+    const nextStart = normalizeEditedIso(
+      startDate,
+      startHour,
+      startMinute,
+      initialStartDate,
+      initialStartHour,
+      initialStartMinute,
+      'inicio',
+    );
+    if (nextStart.error) {
+      setErr(nextStart.error);
+      setSaving(false);
+      return;
+    }
+
+    const nextEnd = normalizeEditedIso(
+      endDate,
+      endHour,
+      endMinute,
+      initialEndDate,
+      initialEndHour,
+      initialEndMinute,
+      'cierre',
+    );
+    if (nextEnd.error) {
+      setErr(nextEnd.error);
+      setSaving(false);
+      return;
+    }
+
+    const effectiveStart = nextStart.value ?? market.startTime ?? null;
+    const effectiveEnd = nextEnd.value ?? market.endTime ?? null;
+    if (effectiveStart && effectiveEnd && new Date(effectiveStart).getTime() >= new Date(effectiveEnd).getTime()) {
+      setErr('La fecha de inicio debe ser anterior a la fecha de cierre.');
+      setSaving(false);
+      return;
     }
 
     try {
       await adminEditMarket({
         marketId: market.id,
         question: question.trim() !== (market.question || '').trim() ? question.trim() : undefined,
-        endTime: nextIso,
+        startTime: nextStart.value,
+        endTime: nextEnd.value,
         category: category !== initialCategory ? category : undefined,
       });
       await onSaved?.();
@@ -1317,6 +1394,71 @@ function EditMarketModal({ market, onClose, onSaved }) {
         </select>
 
         <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
+          Fecha de inicio
+        </label>
+        {(() => {
+          const smallInput = {
+            background: 'var(--surface2)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            padding: '10px 12px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 14,
+            color: 'var(--text-primary)',
+            outline: 'none',
+            width: '100%',
+          };
+          return (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 8px 70px', gap: 8, alignItems: 'center' }}>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="dd/mm/yyyy"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  style={smallInput}
+                />
+                <input
+                  type="number"
+                  min={0}
+                  max={23}
+                  step={1}
+                  placeholder="HH"
+                  value={startHour}
+                  onChange={(e) => setStartHour(e.target.value)}
+                  style={{ ...smallInput, textAlign: 'center' }}
+                />
+                <span style={{
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--text-muted)',
+                  textAlign: 'center',
+                }}>:</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={59}
+                  step={1}
+                  placeholder="mm"
+                  value={startMinute}
+                  onChange={(e) => setStartMinute(e.target.value)}
+                  style={{ ...smallInput, textAlign: 'center' }}
+                />
+              </div>
+              <p style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                color: 'var(--text-muted)',
+                margin: '6px 0 14px',
+                letterSpacing: '0.04em',
+              }}>
+                Horas 0–23, minutos 0–59. Zona: <strong>{currentTimezoneLabel()}</strong>.
+              </p>
+            </>
+          );
+        })()}
+
+        <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
           Fecha de cierre
         </label>
         {(() => {
@@ -1338,8 +1480,8 @@ function EditMarketModal({ market, onClose, onSaved }) {
                   type="text"
                   inputMode="numeric"
                   placeholder="dd/mm/yyyy"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
                   style={smallInput}
                 />
                 <input
@@ -1348,8 +1490,8 @@ function EditMarketModal({ market, onClose, onSaved }) {
                   max={23}
                   step={1}
                   placeholder="HH"
-                  value={hour}
-                  onChange={(e) => setHour(e.target.value)}
+                  value={endHour}
+                  onChange={(e) => setEndHour(e.target.value)}
                   style={{ ...smallInput, textAlign: 'center' }}
                 />
                 <span style={{
@@ -1363,8 +1505,8 @@ function EditMarketModal({ market, onClose, onSaved }) {
                   max={59}
                   step={1}
                   placeholder="mm"
-                  value={minute}
-                  onChange={(e) => setMinute(e.target.value)}
+                  value={endMinute}
+                  onChange={(e) => setEndMinute(e.target.value)}
                   style={{ ...smallInput, textAlign: 'center' }}
                 />
               </div>
@@ -1382,8 +1524,8 @@ function EditMarketModal({ market, onClose, onSaved }) {
         })()}
 
         <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 16 }}>
-          Pregunta, fecha de cierre y categoría son editables. Opciones y
-          reservas del AMM no se pueden cambiar después de crear el mercado.
+          Pregunta, fecha de inicio, fecha de cierre y categoría son editables.
+          Opciones y reservas del AMM no se pueden cambiar después de crear el mercado.
         </p>
 
         {err && (

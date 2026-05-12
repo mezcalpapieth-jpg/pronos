@@ -1,9 +1,10 @@
 /**
  * POST /api/points/admin/edit-market
- * Body: { marketId, question?, endTime?, category? }
+ * Body: { marketId, question?, startTime?, endTime?, category? }
  *
  * Admin-only. Updates the editable fields of a points market:
  *   - question: the user-facing title
+ *   - start_time: when the market should open for trading
  *   - end_time: the trading/resolution deadline (ISO-8601 string or
  *               epoch ms)
  *   - category: display bucket (deportes, politica, etc.)
@@ -13,10 +14,8 @@
  * them post-creation would either desync the AMM state or confuse
  * existing holders.
  *
- * For parallel markets we also cascade the edit to every leg so the
- * parent and legs stay in sync (legs share end_time / category with
- * their parent; question isn't shown on leg rows but we still update
- * for consistency on direct DB inspection).
+ * For parallel markets we also cascade shared timing/category edits to
+ * every leg so the parent and legs stay in sync.
  *
  * Returns: the updated market row so the admin UI can refresh without
  * a follow-up GET.
@@ -41,7 +40,7 @@ export default async function handler(req, res) {
     const session = requirePointsAdmin(req, res);
     if (!session) return; // 401/403 already sent
 
-    const { marketId, question, endTime, category } = req.body || {};
+    const { marketId, question, startTime, endTime, category } = req.body || {};
     const mid = parseInt(marketId, 10);
     if (!Number.isInteger(mid) || mid <= 0) {
       return res.status(400).json({ error: 'invalid_market_id' });
@@ -54,6 +53,15 @@ export default async function handler(req, res) {
       if (q.length === 0) return res.status(400).json({ error: 'question_empty' });
       if (q.length > 500) return res.status(400).json({ error: 'question_too_long' });
       nextQuestion = q;
+    }
+
+    let nextStartTime = null;
+    if (startTime !== undefined && startTime !== null && startTime !== '') {
+      const parsed = new Date(startTime);
+      if (Number.isNaN(parsed.getTime())) {
+        return res.status(400).json({ error: 'invalid_start_time' });
+      }
+      nextStartTime = parsed.toISOString();
     }
 
     let nextEndTime = null;
@@ -73,20 +81,50 @@ export default async function handler(req, res) {
       nextCategory = category;
     }
 
-    if (nextQuestion === null && nextEndTime === null && nextCategory === null) {
+    if (nextQuestion === null && nextStartTime === null && nextEndTime === null && nextCategory === null) {
       return res.status(400).json({ error: 'nothing_to_update' });
     }
 
     await ensurePointsSchema(sql);
 
+    const existingRows = await sql`
+      SELECT id, start_time, end_time
+      FROM points_markets
+      WHERE id = ${mid}
+      LIMIT 1
+    `;
+    if (existingRows.length === 0) {
+      return res.status(404).json({ error: 'market_not_found' });
+    }
+    const existing = existingRows[0];
+    const effectiveStart = nextStartTime !== null
+      ? new Date(nextStartTime)
+      : (existing.start_time ? new Date(existing.start_time) : null);
+    const effectiveEnd = nextEndTime !== null
+      ? new Date(nextEndTime)
+      : (existing.end_time ? new Date(existing.end_time) : null);
+    if (effectiveStart && effectiveEnd && effectiveStart.getTime() >= effectiveEnd.getTime()) {
+      return res.status(400).json({
+        error: 'invalid_time_window',
+        detail: 'start_time_must_be_before_end_time',
+      });
+    }
+
     // Apply to the target row. For parallel parents we also cascade
-    // endTime + category to every leg so admin changes ripple through
-    // the whole group atomically.
+    // start/end time + category to every leg so admin changes ripple
+    // through the whole group atomically.
     if (nextQuestion !== null) {
       await sql`
         UPDATE points_markets
         SET question = ${nextQuestion}
         WHERE id = ${mid}
+      `;
+    }
+    if (nextStartTime !== null) {
+      await sql`
+        UPDATE points_markets
+        SET start_time = ${nextStartTime}
+        WHERE id = ${mid} OR parent_id = ${mid}
       `;
     }
     if (nextEndTime !== null) {
@@ -105,14 +143,11 @@ export default async function handler(req, res) {
     }
 
     const rows = await sql`
-      SELECT id, question, category, end_time, status, outcome, outcomes, amm_mode
+      SELECT id, question, category, start_time, end_time, status, outcome, outcomes, amm_mode
       FROM points_markets
       WHERE id = ${mid}
       LIMIT 1
     `;
-    if (rows.length === 0) {
-      return res.status(404).json({ error: 'market_not_found' });
-    }
     const r = rows[0];
     return res.status(200).json({
       ok: true,
@@ -120,6 +155,7 @@ export default async function handler(req, res) {
         id: r.id,
         question: r.question,
         category: r.category,
+        startTime: r.start_time,
         endTime: r.end_time,
         status: r.status,
         outcome: r.outcome,

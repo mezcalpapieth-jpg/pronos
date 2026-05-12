@@ -1,5 +1,5 @@
 /**
- * GET /api/points/admin/markets?status=all|active|resolved
+ * GET /api/points/admin/markets?status=all|active|resolved&category=<slug>
  *
  * Admin-only full market list (including expired / resolved) with trade
  * counts. Used by the admin panel to pick what to resolve.
@@ -28,6 +28,8 @@ export default async function handler(req, res) {
   if (!admin) return;
 
   const filter = ['all', 'active', 'pending', 'resolved', 'archived'].includes(req.query.status) ? req.query.status : 'all';
+  const categoryParam = typeof req.query.category === 'string' ? req.query.category.trim().toLowerCase() : '';
+  const categoryFilter = categoryParam && categoryParam !== 'all' ? categoryParam : null;
   // Same mode split as the public /api/points/markets — lets the MVP
   // admin query only on-chain markets while Points admin stays on
   // off-chain ones. Default 'points' (matches the public endpoint
@@ -64,6 +66,7 @@ export default async function handler(req, res) {
         FROM points_markets m
         WHERE m.parent_id IS NULL
           AND m.archived_at IS NOT NULL
+          AND (${categoryFilter}::text IS NULL OR m.category = ${categoryFilter}::text)
           AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
           AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
         ORDER BY m.archived_at DESC
@@ -75,6 +78,7 @@ export default async function handler(req, res) {
           (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id) AS trade_count
         FROM points_markets m
         WHERE m.parent_id IS NULL
+          AND (${categoryFilter}::text IS NULL OR m.category = ${categoryFilter}::text)
           AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
           AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
           AND (${showArchived} OR m.archived_at IS NULL)
@@ -90,6 +94,7 @@ export default async function handler(req, res) {
           AND m.parent_id IS NULL
           AND m.end_time IS NOT NULL
           AND m.end_time < NOW()
+          AND (${categoryFilter}::text IS NULL OR m.category = ${categoryFilter}::text)
           AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
           AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
           AND (${showArchived} OR m.archived_at IS NULL)
@@ -102,6 +107,7 @@ export default async function handler(req, res) {
           (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id) AS trade_count
         FROM points_markets m
         WHERE m.status = ${filter} AND m.parent_id IS NULL
+          AND (${categoryFilter}::text IS NULL OR m.category = ${categoryFilter}::text)
           AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
           AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
           AND (${showArchived} OR m.archived_at IS NULL)
@@ -119,6 +125,7 @@ export default async function handler(req, res) {
         outcomes: parseJsonb(r.outcomes, ['Sí', 'No']),
         reserves: parseJsonb(r.reserves, []).map(Number),
         seedLiquidity: Number(r.seed_liquidity || 0),
+        startTime: r.start_time,
         endTime: r.end_time,
         status: r.status,
         outcome: r.outcome,
