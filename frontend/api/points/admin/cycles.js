@@ -171,13 +171,20 @@ async function handleRollover(req, res, nextCycleLabel) {
         const delta = CYCLE_STARTING_BALANCE - prev;
         if (delta === 0) continue;
         usernames.push(row.username);
-        deltas.push(delta);
+        // points_distributions.amount is NUMERIC(20,6) — keep the
+        // fractional part so balances that ended on a decimal (after
+        // CPMM trades) reset audit-correctly. Earlier this was cast to
+        // int[] which threw "invalid input syntax for type integer" on
+        // any non-integer balance (e.g. 3653.581803). Stringify so the
+        // node-postgres driver doesn't do scientific notation on large
+        // deltas before Postgres sees them.
+        deltas.push(delta.toFixed(6));
       }
       if (usernames.length > 0) {
         await client.query(
           `INSERT INTO points_distributions (username, amount, kind, reference_id, reason)
            SELECT u, d, 'cycle_reset', $3, $4
-           FROM UNNEST($1::text[], $2::int[]) AS t(u, d)`,
+           FROM UNNEST($1::text[], $2::numeric[]) AS t(u, d)`,
           [
             usernames,
             deltas,
