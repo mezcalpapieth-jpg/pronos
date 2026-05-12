@@ -567,38 +567,22 @@ function MatchRow({ fixture, home, away, market, onBuy, onOpen }) {
       </div>
 
       <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-        {hasMarket ? (
-          [0, 1, 2].map(i => (
-            <button
-              key={i}
-              onClick={(e) => { e.stopPropagation(); onBuy(i, market.outcomes?.[i]); }}
-              title={market.outcomes?.[i]}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                padding: '8px 10px',
-                background: accent[i].bg,
-                border: `1px solid ${accent[i].border}`,
-                borderRadius: 100,
-                cursor: 'pointer',
-                fontFamily: 'var(--font-mono)', fontSize: 11,
-                color: accent[i].fg, fontWeight: 600, whiteSpace: 'nowrap',
-              }}
-            >
-              {i === 0 ? '1' : i === 1 ? 'X' : '2'}
-              <span style={{ fontFamily: 'var(--font-display)', fontSize: 13 }}>
-                {pct(i)}%
-              </span>
-            </button>
-          ))
-        ) : (
-          <span style={{
-            fontFamily: 'var(--font-mono)', fontSize: 10,
-            letterSpacing: '0.08em', color: 'var(--text-muted)',
-            textTransform: 'uppercase',
-          }}>
-            Próximamente
-          </span>
-        )}
+        {/* World Cup is outside the current 2-week cycle, so the trade
+            buttons are locked across the whole hub until the cycle that
+            actually contains kickoff opens. The market is still
+            clickable — users can read the detail page — but no buys. */}
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          padding: '6px 10px',
+          background: 'rgba(245,158,11,0.10)',
+          border: '1px solid rgba(245,158,11,0.35)',
+          borderRadius: 100,
+          fontFamily: 'var(--font-mono)', fontSize: 10,
+          letterSpacing: '0.1em', color: 'var(--gold, #f59e0b)',
+          textTransform: 'uppercase',
+        }}>
+          🔒 Próximamente
+        </span>
       </div>
     </div>
   );
@@ -647,21 +631,23 @@ function GroupWinnerCard({ market, onBuy }) {
       }}>
         {outcomes.map((label, i) => {
           const pct = Math.round((prices[i] ?? 0) * 100);
+          // Group-winner buttons are locked too — same reason as
+          // MatchRow above: World Cup sits outside the current cycle,
+          // no buys until the cycle catches up. Keep the visual but
+          // make it a non-button so the row still reads as a leaderboard.
           return (
-            <button
+            <div
               key={i}
-              onClick={() => onBuy(i, label)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 padding: '8px 10px',
                 background: 'var(--surface2)',
                 border: '1px solid var(--border)',
                 borderRadius: 10,
-                cursor: 'pointer',
                 textAlign: 'left',
+                cursor: 'default',
+                opacity: 0.85,
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(245,158,11,0.4)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
             >
               <img
                 src={images[i] || ''}
@@ -683,9 +669,18 @@ function GroupWinnerCard({ market, onBuy }) {
               }}>
                 {pct}%
               </span>
-            </button>
+            </div>
           );
         })}
+      </div>
+      <div style={{
+        marginTop: 10,
+        textAlign: 'center',
+        fontFamily: 'var(--font-mono)', fontSize: 10,
+        letterSpacing: '0.1em', color: 'var(--gold, #f59e0b)',
+        textTransform: 'uppercase',
+      }}>
+        🔒 Próximamente — fuera del ciclo actual
       </div>
     </div>
   );

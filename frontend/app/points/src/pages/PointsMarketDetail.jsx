@@ -183,6 +183,10 @@ function UnifiedOutcomeList({ outcomes, prices, outcomeImages, market, onBuyClic
 // parallel parent stores one image per outcome (e.g. driver portraits
 // when/if we wire that up), index-aligned with the leg order.
 function ParallelLegList({ market, legs, outcomeImages, onBuyClick }) {
+  // World Cup is locked outside the current cycle — render the row
+  // structure but swap the Sí/No buttons for a Próximamente pill so
+  // the user still gets the odds preview without any tradeable UI.
+  const locked = market?.category === 'world-cup' || market?.league === 'world-cup';
   return (
     <ScrollableList count={legs.length}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -247,22 +251,39 @@ function ParallelLegList({ market, legs, outcomeImages, onBuyClick }) {
                 // label when there's not.
                 marginLeft: 'auto',
               }}>
-                <button
-                  onClick={() => onBuyClick(legMarket, 0, `${leg.label} — Sí`)}
-                  style={legButtonStyle('var(--yes)', 'rgba(22,163,74,0.15)', 'rgba(22,163,74,0.4)')}
-                  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
-                  onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-                >
-                  Sí <span style={legPriceStyle}>{Math.round(yesPrice * 100)}¢</span>
-                </button>
-                <button
-                  onClick={() => onBuyClick(legMarket, 1, `${leg.label} — No`)}
-                  style={legButtonStyle('#ff3b3b', 'rgba(255,59,59,0.12)', 'rgba(255,59,59,0.4)')}
-                  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
-                  onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-                >
-                  No <span style={legPriceStyle}>{Math.round(noPrice * 100)}¢</span>
-                </button>
+                {locked ? (
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    padding: '6px 10px',
+                    background: 'rgba(245,158,11,0.10)',
+                    border: '1px solid rgba(245,158,11,0.35)',
+                    borderRadius: 100,
+                    fontFamily: 'var(--font-mono)', fontSize: 10,
+                    letterSpacing: '0.1em', color: 'var(--gold, #f59e0b)',
+                    textTransform: 'uppercase',
+                  }}>
+                    🔒 Próximamente
+                  </span>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => onBuyClick(legMarket, 0, `${leg.label} — Sí`)}
+                      style={legButtonStyle('var(--yes)', 'rgba(22,163,74,0.15)', 'rgba(22,163,74,0.4)')}
+                      onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                      onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                    >
+                      Sí <span style={legPriceStyle}>{Math.round(yesPrice * 100)}¢</span>
+                    </button>
+                    <button
+                      onClick={() => onBuyClick(legMarket, 1, `${leg.label} — No`)}
+                      style={legButtonStyle('#ff3b3b', 'rgba(255,59,59,0.12)', 'rgba(255,59,59,0.4)')}
+                      onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                      onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                    >
+                      No <span style={legPriceStyle}>{Math.round(noPrice * 100)}¢</span>
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           );
@@ -541,6 +562,14 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   function handleBuyClick(target, outcomeIndex, outcomeLabel) {
     if (!authenticated) {
       onOpenLogin?.();
+      return;
+    }
+    // World Cup is locked outside the current cycle — same as the hub
+    // and the card. Detail page should also refuse to open the buy
+    // modal so the user can't bypass the lock by clicking through.
+    const lockTarget = target || market;
+    if (lockTarget?.category === 'world-cup' || lockTarget?.league === 'world-cup'
+        || market?.category === 'world-cup' || market?.league === 'world-cup') {
       return;
     }
     setBuyState({ market: target, outcomeIndex, outcomeLabel });
@@ -1153,17 +1182,39 @@ export default function PointsMarketDetail({ onOpenLogin }) {
             {/* Unified: one big button per outcome lives in the sidebar.
                 Parallel: voting moved below the chart in the main column
                 (one row per leg with Sí/No buttons); the sidebar only
-                carries a read-only odds summary to keep scanability. */}
+                carries a read-only odds summary to keep scanability.
+                World Cup is locked outside the current cycle — show an
+                odds summary instead of buy buttons + a clear notice. */}
             {!isResolved && !isPendingResolution && (
-              market.ammMode === 'parallel'
+              (market.category === 'world-cup' || market.league === 'world-cup')
                 ? <OddsSummary outcomes={outcomes} prices={prices} outcomeImages={market.outcomeImages} />
-                : <UnifiedOutcomeList
-                    outcomes={outcomes}
-                    prices={prices}
-                    outcomeImages={market.outcomeImages}
-                    market={market}
-                    onBuyClick={handleBuyClick}
-                  />
+                : market.ammMode === 'parallel'
+                  ? <OddsSummary outcomes={outcomes} prices={prices} outcomeImages={market.outcomeImages} />
+                  : <UnifiedOutcomeList
+                      outcomes={outcomes}
+                      prices={prices}
+                      outcomeImages={market.outcomeImages}
+                      market={market}
+                      onBuyClick={handleBuyClick}
+                    />
+            )}
+
+            {!isResolved && !isPendingResolution
+              && (market.category === 'world-cup' || market.league === 'world-cup') && (
+              <div style={{
+                marginTop: 14,
+                padding: '12px 14px',
+                background: 'rgba(245,158,11,0.10)',
+                border: '1px solid rgba(245,158,11,0.35)',
+                borderRadius: 10,
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                color: 'var(--gold, #f59e0b)',
+                lineHeight: 1.5,
+                letterSpacing: '0.04em',
+              }}>
+                🔒 <strong>Próximamente.</strong> Estos mercados se abren en el próximo ciclo, cerca del inicio del Mundial 2026.
+              </div>
             )}
 
             {(isResolved || isPendingResolution) && (

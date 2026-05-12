@@ -72,6 +72,13 @@ export default function PointsMarketCard({ market, userPosition }) {
   const drawerOpen = drawerIndex !== null;
 
   const isResolved = market.status === 'resolved';
+  // World Cup markets sit outside the current 2-week cycle — kickoff
+  // is June 11, so the whole hub is locked to view-only until the
+  // cycle that contains it opens. Treat category/league='world-cup'
+  // as a "trading-locked" market: card shows a Próximamente pill, the
+  // outcome rows can't open the drawer, and the detail page blocks
+  // buys too (handled in PointsMarketDetail).
+  const isWorldCupLocked = (market.category === 'world-cup' || market.league === 'world-cup');
   // Parallel parent markets have no per-parent pool — buys go against
   // individual legs. /api/points/markets now exposes legIds (one leg
   // per outcome, same order as `outcomes`), so the drawer can target
@@ -82,6 +89,7 @@ export default function PointsMarketCard({ market, userPosition }) {
     ? market.legIds
     : null;
   const canOpenDrawer = !isResolved
+    && !isWorldCupLocked
     && (market.ammMode !== 'parallel' || parallelLegs !== null);
   // isLive: only true for fixed-window sports events. The API
   // (/api/points/markets) computes this with two defenses — excludes
@@ -173,9 +181,19 @@ export default function PointsMarketCard({ market, userPosition }) {
             {t('points.card.live')}
           </span>
         )}
-        {isPending && !isResolved && !isLive && (
+        {isPending && !isResolved && !isLive && !isWorldCupLocked && (
           <span className="mock-card-badge" style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 9 }}>
             {t('points.card.pending')}
+          </span>
+        )}
+        {isWorldCupLocked && !isResolved && (
+          <span className="mock-card-badge" style={{
+            background: 'rgba(245,158,11,0.12)', color: '#f59e0b',
+            padding: '2px 6px', borderRadius: 4,
+            fontFamily: 'var(--font-mono)', fontSize: 9,
+            letterSpacing: '0.08em', textTransform: 'uppercase',
+          }}>
+            🔒 Próximamente
           </span>
         )}
         {userPosition && userPosition.shares > 0 && (
