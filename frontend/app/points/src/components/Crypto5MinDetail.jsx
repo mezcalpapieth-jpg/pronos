@@ -32,6 +32,27 @@ function fmt(n, d = 2) {
   return Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
+// Shared style for the Prev/Next sibling-navigation buttons. Borderless,
+// monospace, low contrast so they don't compete with the SUBE/BAJA CTAs.
+const navBtnStyle = {
+  width: '100%',
+  padding: '12px 16px',
+  borderRadius: 10,
+  background: 'transparent',
+  border: '1px solid var(--border)',
+  color: 'var(--text-secondary)',
+  cursor: 'pointer',
+  fontFamily: 'var(--font-mono)',
+  fontSize: 12,
+  letterSpacing: '0.08em',
+  textTransform: 'uppercase',
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  gap: 8,
+  transition: 'border-color 0.15s, color 0.15s',
+};
+
 // Compute MM:SS until a target Date. Returns '0:00' if past.
 function formatCountdown(target) {
   if (!target) return '—';
@@ -449,45 +470,55 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
         </div>
       )}
 
-      {/* "Próximo mercado" — the cron pre-creates the next 5-min window
-          as a pending market when the current one opens, so the user
-          can place an early bet (the threshold gets stamped at the
-          activation tick, until then prices stay at 50/50). Hidden for
-          resolved markets — that view links back via Volver. */}
-      {meta.nextMarketId && !isResolved && (
-        <div style={{ marginBottom: 16 }}>
-          <button
-            onClick={() => navigate(`/market?id=${encodeURIComponent(meta.nextMarketId)}`)}
-            style={{
-              width: '100%',
-              padding: '12px 16px',
-              borderRadius: 10,
-              background: 'transparent',
-              border: '1px solid var(--border)',
-              color: 'var(--text-primary)',
-              cursor: 'pointer',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 12,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: 8,
-              transition: 'border-color 0.15s, color 0.15s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = 'var(--green)';
-              e.currentTarget.style.color = 'var(--green)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = 'var(--border)';
-              e.currentTarget.style.color = 'var(--text-primary)';
-            }}
-          >
-            <span>Próximo mercado ({meta.symbol || ''} · 5 min)</span>
-            <span aria-hidden="true">→</span>
-          </button>
+      {/* Prev / next navigation row — lets users hop between consecutive
+          5-min windows without bouncing out to the grid. Both buttons
+          surface only when the sibling exists on the books (the cron
+          archives resolved markets after 24h, and only creates the
+          next pending market a window before activation). Hidden on
+          resolved markets to keep the view focused on the settlement. */}
+      {!isResolved && (meta.prevMarketId || meta.nextMarketId) && (
+        <div style={{
+          marginBottom: 16,
+          display: 'grid',
+          gridTemplateColumns: meta.prevMarketId && meta.nextMarketId
+            ? '1fr 1fr'
+            : '1fr',
+          gap: 10,
+        }}>
+          {meta.prevMarketId && (
+            <button
+              onClick={() => navigate(`/market?id=${encodeURIComponent(meta.prevMarketId)}`)}
+              style={navBtnStyle}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'var(--text-muted)';
+                e.currentTarget.style.color = 'var(--text-primary)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--border)';
+                e.currentTarget.style.color = 'var(--text-secondary)';
+              }}
+            >
+              <span aria-hidden="true">←</span>
+              <span>Anterior ({meta.symbol || ''} · 5 min)</span>
+            </button>
+          )}
+          {meta.nextMarketId && (
+            <button
+              onClick={() => navigate(`/market?id=${encodeURIComponent(meta.nextMarketId)}`)}
+              style={navBtnStyle}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'var(--green)';
+                e.currentTarget.style.color = 'var(--green)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--border)';
+                e.currentTarget.style.color = 'var(--text-secondary)';
+              }}
+            >
+              <span>Próximo ({meta.symbol || ''} · 5 min)</span>
+              <span aria-hidden="true">→</span>
+            </button>
+          )}
         </div>
       )}
 

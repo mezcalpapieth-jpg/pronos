@@ -536,6 +536,44 @@ export default function PointsMarketDetail({ onOpenLogin }) {
     return () => { cancelled = true; };
   }, [id]);
 
+  // Light-touch polling so users on a crypto-5min detail page don't
+  // need to refresh to see lifecycle transitions:
+  //   - status flips pending → active (the cron tick stamps a
+  //     threshold and openPrice). Without polling the user is stuck
+  //     looking at "Próximo: 0:00" until they reload.
+  //   - cryptoMeta.nextMarketId appears once the cron pre-creates the
+  //     upcoming window. Subsequent markets can then surface their
+  //     "Próximo mercado" CTA without a manual refresh.
+  // Stops once the market is resolved — nothing to refresh after that.
+  useEffect(() => {
+    if (!id || !market) return undefined;
+    if (market.status === 'resolved') return undefined;
+    // 10s is a nice middle ground: the cron tick runs every minute on
+    // production, so any state change lands within one or two polls
+    // and there's no avalanche of fetches when many tabs are open on
+    // the same market.
+    const interval = setInterval(() => {
+      fetchMarket(id)
+        .then(fresh => {
+          if (!fresh) return;
+          setMarket(prev => {
+            if (!prev) return fresh;
+            // Skip the re-render if nothing meaningful changed — keeps
+            // the chart from re-keying and losing accumulated WS
+            // history mid-poll.
+            const sameStatus = prev.status === fresh.status;
+            const sameNext   = prev.cryptoMeta?.nextMarketId === fresh.cryptoMeta?.nextMarketId;
+            const samePrev   = prev.cryptoMeta?.prevMarketId === fresh.cryptoMeta?.prevMarketId;
+            const sameThreshold = prev.cryptoMeta?.threshold === fresh.cryptoMeta?.threshold;
+            if (sameStatus && sameNext && samePrev && sameThreshold) return prev;
+            return fresh;
+          });
+        })
+        .catch(() => { /* transient — next tick will retry */ });
+    }, 10_000);
+    return () => clearInterval(interval);
+  }, [id, market?.status, market?.cryptoMeta?.nextMarketId, market?.cryptoMeta?.prevMarketId, market?.cryptoMeta?.threshold]);
+
   // Fetch the signed-in user's positions. For parallel markets, positions
   // live on leg ids but positions.js surfaces the parent id via
   // `parentMarketId` — so we match on either to pick up both modes.

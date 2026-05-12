@@ -93,15 +93,20 @@ export default async function handler(req, res) {
             closesAt:         resolverCfg.closesAt          || null,
             rounding:         resolverCfg.rounding          || 1,
             nextMarketId:     null,  // populated below when a pending sibling exists
+            prevMarketId:     null,  // populated below when an older sibling is still on the books
           }
         : null;
 
-      // Look up the next 5-min window's market (same asset, immediately
-      // after this one) so the detail page can render a "Próximo mercado"
-      // CTA. The lifecycle cron pre-creates these as 'pending' a full
-      // window before activation, so this query almost always finds a
-      // row when status='active'. resolved markets only have a sibling
-      // if it's still on the books (24h archive window).
+      // Look up sibling 5-min windows for the same asset so the detail
+      // page can render Próximo / Anterior CTAs and the user can hop
+      // between consecutive markets without bouncing back to the grid.
+      // Lifecycle:
+      //   - The cron pre-creates each upcoming window as 'pending' a
+      //     full window before activation, so an active market almost
+      //     always has a nextMarketId.
+      //   - Resolved markets stay on the books for 24h (archive window)
+      //     before being soft-deleted; during that time the next market
+      //     can still find them via prevMarketId for back-navigation.
       if (cryptoMeta && r.end_time) {
         try {
           const sib = await sql`
@@ -119,6 +124,24 @@ export default async function handler(req, res) {
             cryptoMeta = { ...cryptoMeta, nextMarketId: sib[0].id };
           }
         } catch { /* surfacing this as a hard failure isn't worth it */ }
+      }
+      if (cryptoMeta && r.start_time) {
+        try {
+          const prev = await sql`
+            SELECT id FROM points_markets
+            WHERE resolver_config->>'source' = 'chainlink'
+              AND resolver_config->>'shape'  = 'binary-direction'
+              AND resolver_config->>'asset'  = ${cryptoMeta.asset || ''}
+              AND end_time = ${r.start_time}
+              AND id <> ${r.id}
+              AND archived_at IS NULL
+            ORDER BY id DESC
+            LIMIT 1
+          `;
+          if (prev.length > 0) {
+            cryptoMeta = { ...cryptoMeta, prevMarketId: prev[0].id };
+          }
+        } catch { /* same — best-effort */ }
       }
 
       if (ammMode === 'parallel') {
