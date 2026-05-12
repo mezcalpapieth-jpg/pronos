@@ -410,6 +410,23 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_cycle_snapshots_cycle_rank
     ON points_cycle_snapshots(cycle_id, rank ASC)`,
 
+  // ── Crypto price ticks (server-side history for the 5-min chart) ─────────
+  // Recorded by /api/cron/crypto-ticker every ~5s for each asset (BTC, ETH).
+  // /api/points/crypto-history serves these to the chart so a fresh page
+  // open shows the same dense curve as a continuously-mounted page —
+  // without that, the chart can only backfill from Coinbase's public trades
+  // endpoint, which doesn't paginate cleanly past ~50 min on busy markets.
+  // Retention: 7 days. Older rows get pruned by the same cron's tail.
+  `CREATE TABLE IF NOT EXISTS crypto_ticks (
+    id          BIGSERIAL PRIMARY KEY,
+    asset       TEXT NOT NULL,
+    captured_at TIMESTAMPTZ NOT NULL,
+    price       NUMERIC(20,8) NOT NULL,
+    UNIQUE(asset, captured_at)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_crypto_ticks_asset_time
+    ON crypto_ticks(asset, captured_at DESC)`,
+
   // ── Comments (per-market discussion, soft-deleted) ────────────────────────
   // Keyed on market_id. `deleted_at` = NULL means live; non-null means hidden
   // from the feed. We keep soft-deletes so admin can audit / un-delete later

@@ -89,22 +89,18 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
   const isPending = status === 'pending' || (status === 'active' && opensAt && opensAt.getTime() > Date.now());
   const isResolved = status === 'resolved';
 
-  // Backfill price history from Coinbase. The naive approach — 1-min
-  // candles — only gives ~5 points per 5-min window, and the chart
-  // ends up rendering as straight slopes between candle closes (Fran's
-  // complaint: "it still only remembers the last minute, when you get
-  // out and get back in you dont get the true graphs"). We paginate
-  // the public trades feed instead, which has per-fill granularity
-  // (often 1–5 trades/sec on BTC/ETH), so every fresh page open shows
-  // the same dense curve the live WebSocket would build up if the user
-  // had been on the page the whole window.
+  // Backfill price history. Server-recorded ticks are the source of
+  // truth — /api/cron/crypto-ticker snapshots Coinbase's ticker every
+  // ~5s for BTC/ETH, so /api/points/crypto-history returns the same
+  // dense curve regardless of who's viewing and when. We use the
+  // server endpoint first; for brand-new markets that haven't
+  // accumulated ticks yet (cron hasn't run since open, or the very
+  // first window after deploy) we fall back to Coinbase's public
+  // per-trade endpoint so the chart isn't blank.
   //
-  // For resolved markets the window is fixed [openedAt, closesAt]; for
-  // active/pending we extend to NOW. Trades come back newest-first; we
-  // walk backward via ?after=<oldest_trade_id> until either (a) the
-  // batch goes older than openedAt or (b) the page cap kicks in. The
-  // cap keeps a tab-thrash scenario from running 60+ requests in a
-  // row on a network where the user's already shipped.
+  // Anchor with openPrice@openedAt so the line starts exactly at the
+  // threshold-stamping moment even if the first recorded tick landed
+  // a few seconds later.
   const [backfill, setBackfill] = useState([]);
   const openedAtMs = meta.openedAt ? new Date(meta.openedAt).getTime() : null;
   useEffect(() => {
@@ -114,15 +110,57 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
       ? closesAt.getTime()
       : Date.now();
 
-    async function run() {
+    function decimate(points) {
+      // Keep one point per 200ms — anything denser is wasted at ~800px
+      // chart width and hurts framerate when the WS layers ticks on
+      // top. Within a bucket, prefer the latest tick so the chart
+      // hugs the freshest price.
+      const out = [];
+      let lastT = -Infinity;
+      for (const p of points) {
+        if (!Number.isFinite(p.t) || !Number.isFinite(p.price)) continue;
+        if (p.t - lastT >= 200) {
+          out.push(p);
+          lastT = p.t;
+        } else if (out.length > 0) {
+          out[out.length - 1] = p;
+        }
+      }
+      return out;
+    }
+
+    function anchor(points) {
+      const sorted = [...points].sort((a, b) => a.t - b.t);
+      const head = { t: openedAtMs, price: Number(meta.openPrice) };
+      if (sorted.length === 0 || sorted[0].t > openedAtMs) {
+        return [head, ...sorted];
+      }
+      return sorted;
+    }
+
+    async function loadFromServer() {
+      const res = await fetch(
+        `/api/points/crypto-history?marketId=${encodeURIComponent(market.id)}`,
+        { credentials: 'omit' },
+      );
+      if (!res.ok) return null;
+      const json = await res.json().catch(() => null);
+      const points = Array.isArray(json?.points) ? json.points : null;
+      if (!points || points.length === 0) return null;
+      return points;
+    }
+
+    async function loadFromCoinbase() {
+      // Fallback path — only used when the server hasn't accumulated
+      // any ticks for this window yet. Paginates the public trades
+      // endpoint until the window is covered or the page cap fires.
       const collected = [];
       let cursor = null;
-      const MAX_PAGES = 12;        // 12 * 1000 = ~50 min worth of trades, hard cap.
-      const PAGE_SIZE = 1000;
+      const MAX_PAGES = 8; // softer cap than before — server is primary now
       try {
         for (let page = 0; page < MAX_PAGES; page++) {
-          if (cancelled) return;
-          let url = `https://api.exchange.coinbase.com/products/${productId}/trades?limit=${PAGE_SIZE}`;
+          if (cancelled) return collected;
+          let url = `https://api.exchange.coinbase.com/products/${productId}/trades?limit=1000`;
           if (cursor != null) url += `&after=${cursor}`;
           const res = await fetch(url, { headers: { Accept: 'application/json' } });
           if (!res.ok) break;
@@ -142,45 +180,25 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
               collected.push({ t: ts, price });
             }
           }
-          // Walked past the open of our window — no more pages needed.
           if (oldestTs <= openedAtMs) break;
-          // No usable cursor to walk further — give up.
           if (oldestTradeId == null) break;
           cursor = oldestTradeId;
         }
-      } catch {
-        // network blip: fall through to whatever we collected, even if 0
-      }
+      } catch { /* network blip — surface what we got */ }
+      return collected;
+    }
 
+    async function run() {
+      let points = await loadFromServer().catch(() => null);
+      if (!points || points.length < 5) {
+        // Server has nothing useful yet — fill the gap from Coinbase
+        // so the first user on a brand-new market doesn't see a blank
+        // chart. Merge with whatever the server did return.
+        const fallback = await loadFromCoinbase();
+        points = [...(points || []), ...fallback];
+      }
       if (cancelled) return;
-
-      // Subsample if very dense — the chart only has ~800 px of width,
-      // so >800 points is wasted rendering and harms framerate when
-      // the WS is also pushing ticks. Keep one point per 200ms.
-      collected.sort((a, b) => a.t - b.t);
-      const decimated = [];
-      let lastT = -Infinity;
-      for (const p of collected) {
-        if (p.t - lastT >= 200) {
-          decimated.push(p);
-          lastT = p.t;
-        } else if (decimated.length > 0) {
-          // Replace the in-bucket point with the latest one so the
-          // chart hugs the most recent price within each bucket.
-          decimated[decimated.length - 1] = p;
-        }
-      }
-
-      // Anchor the series with openPrice@openedAt so the chart's left
-      // edge always lines up with the threshold-stamping moment, even
-      // if Coinbase's first trade in-window happened a few hundred ms
-      // after the cron's openedAt timestamp.
-      const head = { t: openedAtMs, price: Number(meta.openPrice) };
-      if (decimated.length === 0 || decimated[0].t > openedAtMs) {
-        setBackfill([head, ...decimated]);
-      } else {
-        setBackfill(decimated);
-      }
+      setBackfill(anchor(decimate(points)));
     }
 
     run();
