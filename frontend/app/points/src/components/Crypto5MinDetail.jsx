@@ -72,19 +72,28 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
   // Without this, the live WebSocket starts with an empty history every
   // time the user opens the page, so a market that's been live for 4
   // minutes shows a chart that started 2 seconds ago. Coinbase's 60s
-  // candles cover the full open→now span at 1-minute granularity, then
-  // the WebSocket appends real-time ticks on top.
+  // candles cover the full open→now (or open→close) span at 1-minute
+  // granularity. We backfill for ALL lifecycle states — including
+  // resolved — so the chart shows the full 5-min journey even after
+  // settlement. Previously resolved markets collapsed to two anchor
+  // points and rendered as a single straight line ("user complaint:
+  // it just finishes as a line graph").
   //
   // Re-fetches on market.id change (a new 5-min window means a new
   // open/close range to backfill).
   const [backfill, setBackfill] = useState([]);
   const openedAtMs = meta.openedAt ? new Date(meta.openedAt).getTime() : null;
   useEffect(() => {
-    if (status === 'resolved') { setBackfill([]); return; }
     if (!openedAtMs || !Number.isFinite(meta.openPrice)) { setBackfill([]); return; }
     let cancelled = false;
+    // For resolved markets we cap the window at closesAt so we don't
+    // pull post-close candles that drift past the actual settlement
+    // time. For active/pending we use NOW so the latest minute lands.
+    const endMs = (status === 'resolved' && closesAt)
+      ? closesAt.getTime()
+      : Date.now();
     const start = new Date(openedAtMs).toISOString();
-    const end = new Date().toISOString();
+    const end = new Date(endMs).toISOString();
     const url = `https://api.exchange.coinbase.com/products/${productId}/candles?granularity=60&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
     fetch(url, { headers: { Accept: 'application/json' } })
       .then(r => r.ok ? r.json() : [])
@@ -104,20 +113,31 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
         if (!cancelled) setBackfill([{ t: openedAtMs, price: Number(meta.openPrice) }]);
       });
     return () => { cancelled = true; };
-  }, [market.id, productId, openedAtMs, meta.openPrice, status]);
+  }, [market.id, productId, openedAtMs, meta.openPrice, status, closesAt]);
 
   // Build the chart's history depending on lifecycle stage.
-  //   resolved: open + close snapshot from cryptoMeta (chart is frozen).
-  //   active:   backfill (open + 1-min candles) + live ticker after them.
+  //   resolved: backfill (1-min candles spanning the full window) +
+  //             a final point anchored at (closesAt, closePrice) so
+  //             the rightmost point exactly matches the settlement.
+  //   active:   backfill (open + 1-min candles) + live ticker on top.
   //   pending:  just whatever the live ticker has accumulated.
   const chartHistory = useMemo(() => {
     if (status === 'resolved') {
-      const base = [];
-      if (meta.openedAt && meta.openPrice != null) {
-        base.push({ t: new Date(meta.openedAt).getTime(), price: meta.openPrice });
-      }
+      const base = backfill.length > 0
+        ? [...backfill]
+        : (meta.openedAt && meta.openPrice != null
+            ? [{ t: new Date(meta.openedAt).getTime(), price: Number(meta.openPrice) }]
+            : []);
       if (closesAt && meta.closePrice != null) {
-        base.push({ t: closesAt.getTime(), price: meta.closePrice });
+        const lastT = base.length ? base[base.length - 1].t : 0;
+        // Don't double-stamp if the last candle already sits at
+        // closesAt — just overwrite its price to match the settlement
+        // value (which can drift by a few cents from the closing candle).
+        if (lastT >= closesAt.getTime() - 30_000) {
+          base[base.length - 1] = { t: closesAt.getTime(), price: Number(meta.closePrice) };
+        } else {
+          base.push({ t: closesAt.getTime(), price: Number(meta.closePrice) });
+        }
       }
       return base;
     }
