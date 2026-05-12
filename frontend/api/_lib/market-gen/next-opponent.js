@@ -120,7 +120,12 @@ export async function generateNextOpponentMarkets() {
   // doesn't book inside that window, admin voids via the existing
   // /api/points/admin/void-market endpoint.
   const endTime = new Date(now.getTime() + 180 * 86_400_000).toISOString();
-  const startTime = now.toISOString();
+  // NB: do NOT set start_time. Next-opponent is an open-ended
+  // prediction — there's no kickoff to count down to. The list/card
+  // API treats `start_time != null AND start_time <= NOW < end_time`
+  // as "live", so a start-of-creation timestamp here made every
+  // next-opponent market render with a red "EN VIVO" pill for the
+  // full 180-day window. Leaving start_time null keeps it static.
 
   const specs = [];
   for (const f of FIGHTERS) {
@@ -140,7 +145,7 @@ export async function generateNextOpponentMarkets() {
       outcomes: legs.map(l => l.label),
       outcome_images: [...f.candidates.map(c => c.image || null), null],
       seed_liquidity: 800,
-      start_time: startTime,
+      start_time: null,
       end_time: endTime,
       amm_mode: 'parallel',
       resolver_type: 'sports_api',

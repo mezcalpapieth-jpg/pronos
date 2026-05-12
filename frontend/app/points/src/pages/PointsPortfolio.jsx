@@ -16,6 +16,7 @@ import {
   fetchPositions,
   fetchHistory,
   fetchLeaderboard,
+  fetchCycleHistory,
   quoteSell,
   executeSell,
   redeemWinnings,
@@ -305,6 +306,118 @@ function MiniLeaderboard({ currentUsername }) {
   );
 }
 
+// ─── Past-cycle history leaderboard ───────────────────────────────────────
+// One collapsible card per closed cycle, each showing the snapshotted
+// top 10 (rank, username, final balance, final pnl). The most-recent
+// cycle is expanded by default; older ones are collapsed so the side-
+// bar stays scannable. Data comes from /api/points/cycles/history,
+// which already returns rank<=10 per cycle.
+function CycleHistoryLeaderboard({ currentUsername }) {
+  const [cycles, setCycles] = useState(null);
+  const [openId, setOpenId] = useState(null);
+  useEffect(() => {
+    fetchCycleHistory(6)
+      .then(rows => {
+        const arr = Array.isArray(rows) ? rows : (rows?.cycles || []);
+        setCycles(arr);
+        if (arr.length > 0) setOpenId(arr[0].id);
+      })
+      .catch(() => setCycles([]));
+  }, []);
+  if (!cycles) return null;
+  if (cycles.length === 0) return null;
+  return (
+    <div style={{
+      background: 'var(--surface1)',
+      border: '1px solid var(--border)',
+      borderRadius: 14,
+      padding: '18px 20px',
+      marginTop: 16,
+    }}>
+      <div style={{
+        fontFamily: 'var(--font-mono)', fontSize: 10,
+        letterSpacing: '0.1em', color: 'var(--text-muted)',
+        textTransform: 'uppercase', marginBottom: 12,
+      }}>
+        🗓️ Ciclos anteriores
+      </div>
+      {cycles.map(cycle => {
+        const isOpen = openId === cycle.id;
+        const top = Array.isArray(cycle.top) ? cycle.top : [];
+        return (
+          <div key={cycle.id} style={{ borderBottom: '1px solid var(--border)', paddingBottom: 8, marginBottom: 8 }}>
+            <button
+              onClick={() => setOpenId(isOpen ? null : cycle.id)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                padding: '6px 0',
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                color: 'var(--text-primary)',
+                cursor: 'pointer',
+                letterSpacing: '0.04em',
+              }}
+            >
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {cycle.label || `Ciclo #${cycle.id}`}
+              </span>
+              <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>{isOpen ? '▾' : '▸'}</span>
+            </button>
+            {isOpen && (
+              <div style={{ marginTop: 4 }}>
+                {top.length === 0 && (
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', padding: '4px 0' }}>
+                    Sin ganadores registrados.
+                  </div>
+                )}
+                {top.map(row => {
+                  const isMe = row.username === currentUsername;
+                  const pnl = Number(row.finalPnl ?? 0);
+                  const pnlPos = pnl >= 0;
+                  return (
+                    <div
+                      key={`${cycle.id}-${row.rank}`}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '4px 0',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 11,
+                        color: isMe ? 'var(--green)' : 'var(--text-secondary)',
+                      }}
+                    >
+                      <span style={{ width: 20, color: 'var(--text-muted)' }}>{row.rank}.</span>
+                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {isMe ? '(tú) ' : ''}{row.username}
+                      </span>
+                      <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>
+                        {fmt(Number(row.finalBalance))}
+                      </span>
+                      <span style={{
+                        width: 56,
+                        textAlign: 'right',
+                        fontSize: 10,
+                        color: pnlPos ? 'var(--green)' : 'var(--red, #ef4444)',
+                      }}>
+                        {pnlPos ? '+' : ''}{fmt(pnl)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Main Portfolio ──────────────────────────────────────────────────────────
 export default function PointsPortfolio() {
   const navigate = useNavigate();
@@ -539,6 +652,7 @@ export default function PointsPortfolio() {
         <aside style={{ position: 'sticky', top: 80, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <DailyClaimCard onClaimed={() => { refresh(); load(); }} />
           <MiniLeaderboard currentUsername={user?.username} />
+          <CycleHistoryLeaderboard currentUsername={user?.username} />
         </aside>
       </div>
     </main>

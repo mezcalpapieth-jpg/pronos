@@ -22,6 +22,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useCryptoTicker } from '../lib/useCryptoTicker.js';
 import LivePriceChart from './LivePriceChart.jsx';
 import PointsBuyModal from './PointsBuyModal.jsx';
@@ -43,6 +44,7 @@ function formatCountdown(target) {
 }
 
 export default function Crypto5MinDetail({ market, userPositions = [] }) {
+  const navigate = useNavigate();
   const meta = market?.cryptoMeta || {};
   const productId = meta.coinbaseProductId || (meta.asset === 'eth' ? 'ETH-USD' : 'BTC-USD');
   const { currentPrice, history, status: wsStatus } = useCryptoTicker(productId);
@@ -372,6 +374,48 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, opacity: 0.85 }}>
               {(bajaPrice * 100).toFixed(0)}¢ por acción
             </span>
+          </button>
+        </div>
+      )}
+
+      {/* "Próximo mercado" — the cron pre-creates the next 5-min window
+          as a pending market when the current one opens, so the user
+          can place an early bet (the threshold gets stamped at the
+          activation tick, until then prices stay at 50/50). Hidden for
+          resolved markets — that view links back via Volver. */}
+      {meta.nextMarketId && !isResolved && (
+        <div style={{ marginBottom: 16 }}>
+          <button
+            onClick={() => navigate(`/market?id=${encodeURIComponent(meta.nextMarketId)}`)}
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              borderRadius: 10,
+              background: 'transparent',
+              border: '1px solid var(--border)',
+              color: 'var(--text-primary)',
+              cursor: 'pointer',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 12,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 8,
+              transition: 'border-color 0.15s, color 0.15s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = 'var(--green)';
+              e.currentTarget.style.color = 'var(--green)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = 'var(--border)';
+              e.currentTarget.style.color = 'var(--text-primary)';
+            }}
+          >
+            <span>Próximo mercado ({meta.symbol || ''} · 5 min)</span>
+            <span aria-hidden="true">→</span>
           </button>
         </div>
       )}

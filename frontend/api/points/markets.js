@@ -253,6 +253,23 @@ export default async function handler(req, res) {
 
       const reserves = parseJsonb(r.reserves, []).map(Number);
       const prices = pricesFromReserves(reserves, outcomes.length);
+      // "Live" is the red EN VIVO pill — only for fixed-window sports
+      // events. Two defenses against open-ended prediction markets
+      // accidentally showing live:
+      //   (a) resolver_config.source === 'next-opponent' is explicitly
+      //       excluded — these are 180-day open-ended fights with no
+      //       kickoff. Existing rows in production already have a
+      //       start_time stamped at creation (legacy generator bug);
+      //       this filter neutralizes them without a DB migration.
+      //   (b) duration > 14 days is also excluded as a backstop in
+      //       case any other generator ships a long-window market
+      //       with start_time set.
+      const cfg = parseJsonb(r.resolver_config, null);
+      const isOpenEnded = cfg?.source === 'next-opponent';
+      const startMs = r.start_time ? new Date(r.start_time).getTime() : 0;
+      const endMs   = r.end_time   ? new Date(r.end_time).getTime()   : 0;
+      const windowOk = startMs > 0 && endMs > startMs
+        && (endMs - startMs) <= 14 * 86_400_000;
       return {
         id: r.id,
         ammMode: 'unified',
@@ -271,10 +288,10 @@ export default async function handler(req, res) {
         // PointsMarketCard isLive computation but pre-computed here so
         // every consumer (carousel, grid, trending tab) reads the same
         // boolean without re-doing the date math.
-        live: !!(r.start_time
-          && new Date(r.start_time).getTime() <= Date.now()
-          && r.end_time
-          && new Date(r.end_time).getTime() > Date.now()
+        live: !!(!isOpenEnded
+          && windowOk
+          && startMs <= Date.now()
+          && endMs > Date.now()
           && r.status === 'active'),
         status: r.status,
         outcome: r.outcome,

@@ -83,16 +83,24 @@ export default function PointsMarketCard({ market, userPosition }) {
     : null;
   const canOpenDrawer = !isResolved
     && (market.ammMode !== 'parallel' || parallelLegs !== null);
-  // isLive: start_time has passed but the game window hasn't closed
-  // yet — used to show a red 🔴 EN VIVO pill so users know they can
-  // trade against in-progress events. Only sports markets set
-  // start_time; everything else is isLive=false.
+  // isLive: only true for fixed-window sports events. The API
+  // (/api/points/markets) computes this with two defenses — excludes
+  // resolver_config.source='next-opponent' and rejects windows longer
+  // than 14 days — so we trust market.live and skip the client-side
+  // recompute. Falling back to the date check for older API responses
+  // that don't carry the field. Don't recompute for open-ended
+  // predictions like ¿Contra quién pelea Canelo? which used to flash
+  // EN VIVO for their entire 180-day window.
   const now = new Date();
-  const isLive = !isResolved
-    && market.status === 'active'
-    && market.startTime
-    && new Date(market.startTime) <= now
-    && (!market.endTime || new Date(market.endTime) > now);
+  const isLive = typeof market.live === 'boolean'
+    ? (!isResolved && market.live)
+    : (
+        !isResolved
+        && market.status === 'active'
+        && market.startTime
+        && new Date(market.startTime) <= now
+        && (!market.endTime || new Date(market.endTime) > now)
+      );
   const isPending = !isResolved
     && !isLive
     && market.status === 'active'
