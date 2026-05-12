@@ -32,6 +32,7 @@ import PointsPortfolio from './pages/PointsPortfolio.jsx';
 import PointsEarn from './pages/PointsEarn.jsx';
 import PointsAdmin from './pages/PointsAdmin.jsx';
 import PointsReferralLanding from './pages/PointsReferralLanding.jsx';
+import PointsUserProfile from './pages/PointsUserProfile.jsx';
 import PointsWelcomeModal, { hasBeenWelcomed } from './components/PointsWelcomeModal.jsx';
 
 // Admin usernames live in env var VITE_POINTS_ADMIN_USERNAMES so the client
@@ -142,6 +143,7 @@ function Shell({ onOpenLogin, isAdmin }) {
         <Route path="/earn" element={<PointsEarn onOpenLogin={onOpenLogin} />} />
         <Route path="/admin" element={<PointsAdmin isAdmin={isAdmin} />} />
         <Route path="/r/:username" element={<PointsReferralLanding onOpenLogin={onOpenLogin} />} />
+        <Route path="/u/:username" element={<PointsUserProfile />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms"   element={<TermsOfService />} />
       </Routes>

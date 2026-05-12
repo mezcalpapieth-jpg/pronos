@@ -93,6 +93,31 @@ const RESOLVED_SLUGS = new Set(['resueltos']);
 // Category tabs that want pending markets (active + endTime in the past).
 const PENDING_SLUGS = new Set(['porresolver']);
 
+// Top-level category chips on /c/resueltos. Without these the resolved
+// view dumps every settled market into one wall — and the 5-min crypto
+// rollover history drowns the rest. With the chips the user can scope
+// down to one category and then drill further via the existing sport /
+// crypto-type filters.
+const RESUELTOS_CATEGORIES = [
+  { key: 'all',      tKey: 'points.cat.trending',  fallback: 'Todas' },
+  { key: 'deportes', tKey: 'points.cat.deportes'   },
+  { key: 'musica',   tKey: 'points.cat.musica'     },
+  { key: 'mexico',   tKey: 'points.cat.mexico'     },
+  { key: 'politica', tKey: 'points.cat.politica'   },
+  { key: 'crypto',   tKey: 'points.cat.crypto'     },
+  { key: 'finanzas', tKey: 'points.cat.finanzas'   },
+];
+
+// Crypto type sub-row — splits the BTC/ETH 5-min "sube o baja" rollover
+// markets out of the broader crypto bucket so users can drill into one
+// or the other without the 5-min stream dominating the count. The
+// crypto5min flag is computed server-side from resolver_config.shape.
+const CRYPTO_TYPE_TABS = [
+  { key: 'all',     fallback: 'Todos'     },
+  { key: 'general', fallback: 'Eventos'   },
+  { key: '5min',    fallback: '5 minutos' },
+];
+
 export default function PointsCategoryPage() {
   const { slug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -110,6 +135,14 @@ export default function PointsCategoryPage() {
   const searchQuery = (searchParams.get('q') || '').trim();
   const sport  = searchParams.get('sport')  || 'all';
   const league = searchParams.get('league') || 'all';
+  // Category narrower for /c/resueltos: 'all' shows every resolved
+  // market; otherwise scopes to a single category and lets the
+  // existing sport / crypto-type sub-filters work inside it.
+  const resueltosCat = searchParams.get('cat') || 'all';
+  // Crypto-type narrower: 'all' shows everything, 'general' hides
+  // 5-min rollover markets, '5min' shows only them. Applies on
+  // /c/crypto and on /c/resueltos?cat=crypto.
+  const cryptoType = searchParams.get('ctype') || 'all';
 
   // Status to fetch — resueltos loads resolved; everything else fetches
   // active and filters client-side for "pending" if needed.
@@ -172,15 +205,23 @@ export default function PointsCategoryPage() {
     if (PENDING_SLUGS.has(slug)) {
       out = out.filter(isPending);
     } else if (RESOLVED_SLUGS.has(slug)) {
-      // Already resolved by fetchStatus — no extra filtering here.
+      // Already resolved by fetchStatus. Apply the resueltos-only
+      // top-level category narrower so the page can scope down to a
+      // single bucket before any sub-filters fire.
+      if (resueltosCat !== 'all') {
+        out = out.filter(m => (m.category || '').toLowerCase() === resueltosCat);
+      }
     } else {
       // Regular category: hide pending from the main grid.
       out = out.filter(m => !isPending(m));
       out = out.filter(m => (m.category || '').toLowerCase() === slug);
     }
 
-    // Sports sub-filter: only when on /c/deportes.
-    if (slug === 'deportes' && sport !== 'all') {
+    // Sports sub-filter: only when on /c/deportes OR when scoping
+    // /c/resueltos to category=deportes.
+    const inDeportesContext = slug === 'deportes'
+      || (RESOLVED_SLUGS.has(slug) && resueltosCat === 'deportes');
+    if (inDeportesContext && sport !== 'all') {
       out = out.filter(m => (m.sport || '').toLowerCase() === sport);
       // League sidebars on soccer + baseball + combate (combat sports).
       if ((sport === 'soccer' || sport === 'baseball' || sport === 'combate') && league !== 'all') {
@@ -188,12 +229,22 @@ export default function PointsCategoryPage() {
       }
     }
 
+    // Crypto-type sub-filter: only when on /c/crypto OR when scoping
+    // /c/resueltos to category=crypto. Server sets crypto5min=true on
+    // resolver_config.shape='binary-direction' rows.
+    const inCryptoContext = slug === 'crypto'
+      || (RESOLVED_SLUGS.has(slug) && resueltosCat === 'crypto');
+    if (inCryptoContext && cryptoType !== 'all') {
+      if (cryptoType === '5min') out = out.filter(m => m.crypto5min === true);
+      else if (cryptoType === 'general') out = out.filter(m => !m.crypto5min);
+    }
+
     if (q) {
       out = out.filter(m => (m.question || '').toLowerCase().includes(q));
     }
 
     return out;
-  }, [markets, slug, sport, league, searchQuery]);
+  }, [markets, slug, sport, league, resueltosCat, cryptoType, searchQuery]);
 
   function setSport(next) {
     const params = new URLSearchParams(searchParams);
@@ -214,10 +265,38 @@ export default function PointsCategoryPage() {
     setSearchParams(params, { replace: true });
   }
 
+  function setResueltosCat(next) {
+    const params = new URLSearchParams(searchParams);
+    if (next === 'all') params.delete('cat');
+    else params.set('cat', next);
+    // Switching the top-level category invalidates inner sub-filters
+    // that don't apply outside their parent (sport only matters when
+    // cat=deportes; ctype only when cat=crypto). Clear them so a
+    // stale ?sport=combate doesn't filter out every musica row.
+    params.delete('sport');
+    params.delete('league');
+    params.delete('ctype');
+    setSearchParams(params, { replace: true });
+  }
+
+  function setCryptoType(next) {
+    const params = new URLSearchParams(searchParams);
+    if (next === 'all') params.delete('ctype');
+    else params.set('ctype', next);
+    setSearchParams(params, { replace: true });
+  }
+
   const titleKey = SLUG_TO_TITLE_KEY[slug] || null;
-  const showSportBar = slug === 'deportes';
-  const showLeagueSidebar = slug === 'deportes'
+  const isResueltos = RESOLVED_SLUGS.has(slug);
+  // /c/deportes always shows the sport bar; /c/resueltos shows it only
+  // when the user has scoped to category=deportes via the chip row.
+  const showSportBar = slug === 'deportes'
+    || (isResueltos && resueltosCat === 'deportes');
+  const showLeagueSidebar = (slug === 'deportes' || (isResueltos && resueltosCat === 'deportes'))
     && (sport === 'soccer' || sport === 'baseball' || sport === 'combate');
+  // Crypto-type sub-row: /c/crypto, or /c/resueltos?cat=crypto.
+  const showCryptoTypeBar = slug === 'crypto'
+    || (isResueltos && resueltosCat === 'crypto');
   const leagueTabs = sport === 'baseball'
     ? BASEBALL_LEAGUES
     : sport === 'combate'
@@ -253,7 +332,32 @@ export default function PointsCategoryPage() {
         {t('points.catpage.eyebrow', { n: filtered.length })}
       </p>
 
-      {/* Sports sub-filter row — only on /c/deportes */}
+      {/* Top-level category chips — only on /c/resueltos. Lets users
+          scope an otherwise-huge resolved list to one category before
+          the existing sport / crypto-type sub-rows kick in. */}
+      {isResueltos && (
+        <div style={{
+          display: 'flex',
+          gap: 8,
+          flexWrap: 'wrap',
+          overflowX: 'auto',
+          marginBottom: 16,
+          paddingBottom: 4,
+        }}>
+          {RESUELTOS_CATEGORIES.map(c => (
+            <button
+              key={c.key}
+              className={`filter-btn${resueltosCat === c.key ? ' active' : ''}`}
+              onClick={() => setResueltosCat(c.key)}
+            >
+              {c.tKey ? (t(c.tKey) || c.fallback) : c.fallback}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Sports sub-filter row — /c/deportes always, /c/resueltos
+          when scoped to cat=deportes. */}
       {showSportBar && (
         <div style={{
           display: 'flex',
@@ -270,6 +374,30 @@ export default function PointsCategoryPage() {
               onClick={() => setSport(s.key)}
             >
               {t(s.tKey)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Crypto-type sub-filter row — /c/crypto always, /c/resueltos
+          when scoped to cat=crypto. Separates the BTC/ETH 5-min
+          rollover stream from the broader crypto markets. */}
+      {showCryptoTypeBar && (
+        <div style={{
+          display: 'flex',
+          gap: 8,
+          flexWrap: 'wrap',
+          overflowX: 'auto',
+          marginBottom: 20,
+          paddingBottom: 4,
+        }}>
+          {CRYPTO_TYPE_TABS.map(c => (
+            <button
+              key={c.key}
+              className={`filter-btn${cryptoType === c.key ? ' active' : ''}`}
+              onClick={() => setCryptoType(c.key)}
+            >
+              {c.fallback}
             </button>
           ))}
         </div>

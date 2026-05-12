@@ -248,6 +248,7 @@ export default async function handler(req, res) {
           chainId: r.chain_id || null,
           chainMarketId: r.chain_market_id ? String(r.chain_market_id) : null,
           chainAddress: r.chain_address || null,
+          crypto5min: false,
         };
       }
 
@@ -270,6 +271,11 @@ export default async function handler(req, res) {
       const endMs   = r.end_time   ? new Date(r.end_time).getTime()   : 0;
       const windowOk = startMs > 0 && endMs > startMs
         && (endMs - startMs) <= 14 * 86_400_000;
+      // Discriminator for crypto-5min markets (BTC/ETH "sube o baja a
+      // las HH:MM CDMX"). Exposed so the category page can offer a
+      // dedicated "5 minutos" sub-filter — otherwise resueltos and the
+      // crypto tab are dominated by 5-min rollover history.
+      const crypto5min = cfg?.shape === 'binary-direction';
       return {
         id: r.id,
         ammMode: 'unified',
@@ -293,6 +299,7 @@ export default async function handler(req, res) {
           && startMs <= Date.now()
           && endMs > Date.now()
           && r.status === 'active'),
+        crypto5min,
         status: r.status,
         outcome: r.outcome,
         resolvedAt: r.resolved_at,

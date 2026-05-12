@@ -238,11 +238,27 @@ function DailyClaimCard({ onClaimed }) {
 }
 
 // ─── Mini leaderboard ─────────────────────────────────────────────────────
+// Each row is now a button → /u/:username, and there's a search input
+// above the list that jumps to whatever username the user types. Both
+// route to the public PointsUserProfile page.
 function MiniLeaderboard({ currentUsername }) {
   const [data, setData] = useState(null);
+  const [search, setSearch] = useState('');
+  const navigate = useNavigate();
   useEffect(() => {
     fetchLeaderboard().then(setData).catch(() => setData(null));
   }, []);
+
+  function gotoProfile(username) {
+    const clean = String(username || '').trim().toLowerCase();
+    if (!clean) return;
+    navigate(`/u/${encodeURIComponent(clean)}`);
+  }
+  function onSearchSubmit(e) {
+    e.preventDefault();
+    gotoProfile(search);
+  }
+
   if (!data) return null;
   return (
     <div style={{
@@ -254,6 +270,56 @@ function MiniLeaderboard({ currentUsername }) {
       <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 12 }}>
         🏆 Top predictores
       </div>
+
+      {/* Username search — Enter submits to /u/:username. Untyped strings
+          land on the 404 state, which has a Volver button. */}
+      <form
+        onSubmit={onSearchSubmit}
+        style={{
+          display: 'flex',
+          gap: 6,
+          marginBottom: 12,
+        }}
+      >
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Buscar usuario…"
+          autoComplete="off"
+          spellCheck={false}
+          style={{
+            flex: 1,
+            background: 'var(--surface2)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            padding: '6px 10px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            color: 'var(--text-primary)',
+            outline: 'none',
+          }}
+        />
+        <button
+          type="submit"
+          style={{
+            background: 'var(--green)',
+            color: '#000',
+            border: 'none',
+            borderRadius: 8,
+            padding: '6px 12px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            cursor: 'pointer',
+            fontWeight: 700,
+          }}
+        >
+          Ver
+        </button>
+      </form>
+
       {data.top.length === 0 && (
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
           Aún no hay participantes — sé el primero.
@@ -264,8 +330,10 @@ function MiniLeaderboard({ currentUsername }) {
         const delta = Number(u.cycleDelta ?? 0);
         const deltaPos = delta >= 0;
         return (
-          <div
+          <button
             key={u.username}
+            type="button"
+            onClick={() => gotoProfile(u.username)}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -274,7 +342,18 @@ function MiniLeaderboard({ currentUsername }) {
               fontFamily: 'var(--font-mono)',
               fontSize: 12,
               color: isMe ? 'var(--green)' : 'var(--text-secondary)',
+              background: 'transparent',
+              border: 'none',
+              borderBottomColor: 'var(--border)',
+              borderBottomWidth: 1,
+              borderBottomStyle: 'solid',
+              cursor: 'pointer',
+              width: '100%',
+              textAlign: 'left',
+              transition: 'background 0.12s',
             }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface2)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
           >
             <span style={{ width: 20, color: 'var(--text-muted)' }}>{u.rank}.</span>
             <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -294,7 +373,7 @@ function MiniLeaderboard({ currentUsername }) {
             }}>
               {deltaPos ? '+' : ''}{fmt(delta)}
             </span>
-          </div>
+          </button>
         );
       })}
       {data.me && data.me.rank && data.me.rank > 10 && (
