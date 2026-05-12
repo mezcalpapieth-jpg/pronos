@@ -3,7 +3,7 @@
  *
  * Returns the server-recorded price-tick series for a 5-min crypto
  * market's [openedAt, closesAt] window. Source: crypto_ticks table,
- * populated by /api/cron/crypto-ticker every minute.
+ * or the frozen per-market snapshot captured at resolve-time.
  *
  * Why this endpoint exists: the chart used to backfill by hitting
  * Coinbase's public trades endpoint directly from the browser. That
@@ -75,6 +75,33 @@ export default async function handler(req, res) {
       return res.status(409).json({ error: 'incomplete_market_window' });
     }
 
+    const snapshotRows = await sql`
+      SELECT opened_at, closes_at, points
+      FROM points_crypto_market_snapshots
+      WHERE market_id = ${marketId}
+      LIMIT 1
+    `;
+    if (snapshotRows.length > 0) {
+      const snap = snapshotRows[0];
+      const rawPoints = parseJsonb(snap.points, []);
+      const points = Array.isArray(rawPoints)
+        ? rawPoints
+            .map((p) => ({ t: Number(p?.t), price: Number(p?.price) }))
+            .filter((p) => Number.isFinite(p.t) && Number.isFinite(p.price))
+            .sort((a, b) => a.t - b.t)
+        : [];
+      if (points.length > 0) {
+        return res.status(200).json({
+          marketId,
+          asset,
+          openedAt: snap.opened_at || openedAt,
+          closesAt: snap.closes_at || closesAt,
+          points,
+          source: 'final_snapshot',
+        });
+      }
+    }
+
     const points = await sql`
       SELECT captured_at, price
       FROM crypto_ticks
@@ -89,6 +116,7 @@ export default async function handler(req, res) {
       asset,
       openedAt,
       closesAt,
+      source: 'ticks',
       points: points.map(p => ({
         t: new Date(p.captured_at).getTime(),
         price: Number(p.price),

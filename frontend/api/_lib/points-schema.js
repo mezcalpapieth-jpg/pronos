@@ -427,6 +427,23 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_crypto_ticks_asset_time
     ON crypto_ticks(asset, captured_at DESC)`,
 
+  // ── Frozen crypto market curves (one final chart per resolved 5-min market)
+  // Snapshot is written at resolve time from whatever `crypto_ticks` history we
+  // have for that market's [openedAt, closesAt] window, plus open/close anchors.
+  // Kept off `points_markets` so frequent `SELECT m.*` list/detail queries do
+  // not drag large chart blobs through the hot path.
+  `CREATE TABLE IF NOT EXISTS points_crypto_market_snapshots (
+    market_id   INTEGER PRIMARY KEY REFERENCES points_markets(id) ON DELETE CASCADE,
+    asset       TEXT NOT NULL,
+    opened_at   TIMESTAMPTZ NOT NULL,
+    closes_at   TIMESTAMPTZ NOT NULL,
+    points      JSONB NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_crypto_market_snapshots_asset_close
+    ON points_crypto_market_snapshots(asset, closes_at DESC)`,
+
   // ── Comments (per-market discussion, soft-deleted) ────────────────────────
   // Keyed on market_id. `deleted_at` = NULL means live; non-null means hidden
   // from the feed. We keep soft-deletes so admin can audit / un-delete later

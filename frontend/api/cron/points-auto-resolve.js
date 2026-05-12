@@ -26,6 +26,7 @@ import { neon } from '@neondatabase/serverless';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { withTransaction } from '../_lib/db-tx.js';
 import { readChainlinkPrice, comparePrice } from '../_lib/chainlink.js';
+import { bestEffortPersistResolvedCryptoMarketSnapshot } from '../_lib/crypto-chart-snapshot.js';
 import { readFinnhubQuote } from '../_lib/stockprice.js';
 import { readBanxicoLatest } from '../_lib/banxico.js';
 import { readCreAverageFor } from '../_lib/fuel.js';
@@ -511,6 +512,12 @@ export async function runAutoResolve({ dry = false } = {}) {
               );
             }
           }
+
+          await bestEffortPersistResolvedCryptoMarketSnapshot(
+            client,
+            m.id,
+            'cron/points-auto-resolve',
+          );
         });
         report.resolved.push({ id: m.id, winningIdx, ...resolverInfo });
       } catch (e) {

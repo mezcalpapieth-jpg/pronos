@@ -41,6 +41,8 @@
 
 import { readChainlinkPrice, FEEDS_ARBITRUM_ONE } from './chainlink.js';
 import { initialReserves } from './amm-math.js';
+import { withTransaction } from './db-tx.js';
+import { bestEffortPersistResolvedCryptoMarketSnapshot } from './crypto-chart-snapshot.js';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -183,34 +185,44 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
 
     if (!dry) {
       try {
-        // Use a single UPDATE that conditionally picks the outcome
-        // index based on the row's stored threshold and the current
-        // price we just read. SUBE (idx=0) wins if price > threshold,
-        // BAJA (idx=1) if price < threshold. Equal: void (status set
-        // to 'archived' as a paper rule — should be near-impossible
-        // with $1 rounding).
-        const resolveRows = await sql`
-          UPDATE points_markets
-          SET status = 'resolved',
-              outcome = CASE
-                WHEN ${price}::numeric > (resolver_config->>'threshold')::numeric THEN 0
-                WHEN ${price}::numeric < (resolver_config->>'threshold')::numeric THEN 1
-                ELSE NULL
-              END,
-              final_score = '$' || (resolver_config->>'threshold') || ' → $' ||
-                            to_char(${price}::numeric, 'FM999999990.00'),
-              resolved_at = NOW(),
-              resolved_by = 'system',
-              resolver_config = jsonb_set(resolver_config, '{closePrice}', to_jsonb(${price}::numeric))
-          WHERE source = ${closing.source}
-            AND source_event_id = ${closing.source_event_id}
-            AND status = 'active'
-            AND outcome IS NULL
-          RETURNING id, outcome
-        `;
-        if (resolveRows.length > 0) {
-          entry.resolvedId = resolveRows[0].id;
-          entry.resolvedOutcomeIdx = resolveRows[0].outcome;
+        // Resolve + freeze the final chart in one transactional pass.
+        // Snapshot persistence is best-effort inside the tx via a
+        // savepoint, so a snapshot failure never blocks settlement.
+        const resolved = await withTransaction(async (client) => {
+          const resolveRows = await client.query(
+            `UPDATE points_markets
+                SET status = 'resolved',
+                    outcome = CASE
+                      WHEN $1::numeric > (resolver_config->>'threshold')::numeric THEN 0
+                      WHEN $1::numeric < (resolver_config->>'threshold')::numeric THEN 1
+                      ELSE NULL
+                    END,
+                    final_score = '$' || (resolver_config->>'threshold') || ' -> $' ||
+                                  to_char($1::numeric, 'FM999999990.00'),
+                    resolved_at = NOW(),
+                    resolved_by = 'system',
+                    resolver_config = jsonb_set(resolver_config, '{closePrice}', to_jsonb($1::numeric))
+              WHERE source = $2
+                AND source_event_id = $3
+                AND status = 'active'
+                AND outcome IS NULL
+            RETURNING id, outcome`,
+            [price, closing.source, closing.source_event_id],
+          );
+          if (resolveRows.rows.length === 0) return null;
+
+          const row = resolveRows.rows[0];
+          await bestEffortPersistResolvedCryptoMarketSnapshot(
+            client,
+            row.id,
+            'crypto-5min',
+          );
+          return row;
+        });
+
+        if (resolved?.id) {
+          entry.resolvedId = resolved.id;
+          entry.resolvedOutcomeIdx = resolved.outcome;
         }
       } catch (e) {
         entry.resolveError = e?.message || 'resolve_failed';

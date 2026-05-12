@@ -21,7 +21,7 @@
  * confirmation, same error handling.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCryptoTicker } from '../lib/useCryptoTicker.js';
 import LivePriceChart from './LivePriceChart.jsx';
@@ -53,6 +53,9 @@ const navBtnStyle = {
   transition: 'border-color 0.15s, color 0.15s',
 };
 
+const SNAPSHOT_STORAGE_PREFIX = 'pronos-crypto-chart:';
+const SNAPSHOT_PERSIST_MS = 5_000;
+
 // Compute MM:SS until a target Date. Returns '0:00' if past.
 function formatCountdown(target) {
   if (!target) return '—';
@@ -62,6 +65,62 @@ function formatCountdown(target) {
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function normalizeChartPoints(points, { minT, maxT } = {}) {
+  if (!Array.isArray(points) || points.length === 0) return [];
+  const out = [];
+  for (const p of points) {
+    const t = Number(p?.t);
+    const price = Number(p?.price);
+    if (!Number.isFinite(t) || !Number.isFinite(price)) continue;
+    if (Number.isFinite(minT) && t < minT) continue;
+    if (Number.isFinite(maxT) && t > maxT) continue;
+    out.push({ t, price });
+  }
+  out.sort((a, b) => a.t - b.t);
+  const deduped = [];
+  for (const p of out) {
+    if (deduped.length > 0 && deduped[deduped.length - 1].t === p.t) {
+      deduped[deduped.length - 1] = p;
+    } else {
+      deduped.push(p);
+    }
+  }
+  return deduped;
+}
+
+function snapshotStorageKey(marketId) {
+  return marketId ? `${SNAPSHOT_STORAGE_PREFIX}${marketId}` : null;
+}
+
+function loadStoredSnapshot(marketId, windowBounds) {
+  if (typeof window === 'undefined') return [];
+  const key = snapshotStorageKey(marketId);
+  if (!key) return [];
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    const points = Array.isArray(parsed?.points) ? parsed.points : [];
+    return normalizeChartPoints(points, windowBounds);
+  } catch {
+    return [];
+  }
+}
+
+function persistSnapshot(marketId, points) {
+  if (typeof window === 'undefined') return;
+  const key = snapshotStorageKey(marketId);
+  if (!key) return;
+  const normalized = normalizeChartPoints(points);
+  if (normalized.length < 2) return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify({
+      savedAt: Date.now(),
+      points: normalized,
+    }));
+  } catch { /* best-effort */ }
 }
 
 export default function Crypto5MinDetail({ market, userPositions = [] }) {
@@ -103,6 +162,8 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
   // a few seconds later.
   const [backfill, setBackfill] = useState([]);
   const openedAtMs = meta.openedAt ? new Date(meta.openedAt).getTime() : null;
+  const chartWindowStart = openedAtMs ?? (opensAt ? opensAt.getTime() : null);
+  const chartWindowEnd = closesAt ? closesAt.getTime() : null;
   useEffect(() => {
     if (!openedAtMs || !Number.isFinite(meta.openPrice)) { setBackfill([]); return; }
     let cancelled = false;
@@ -205,40 +266,85 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
     return () => { cancelled = true; };
   }, [market.id, productId, openedAtMs, meta.openPrice, status, closesAt]);
 
+  const snapshotWindow = useMemo(() => ({
+    minT: chartWindowStart,
+    maxT: chartWindowEnd,
+  }), [chartWindowStart, chartWindowEnd]);
+  const [storedSnapshot, setStoredSnapshot] = useState(() => loadStoredSnapshot(market.id, snapshotWindow));
+  const snapshotRef = useRef(storedSnapshot);
+  const lastSnapshotPersistRef = useRef(0);
+
+  useEffect(() => {
+    const stored = loadStoredSnapshot(market.id, snapshotWindow);
+    snapshotRef.current = stored;
+    setStoredSnapshot(stored);
+    lastSnapshotPersistRef.current = 0;
+  }, [market.id, snapshotWindow]);
+
   // Build the chart's history depending on lifecycle stage.
   //   resolved: backfill (1-min candles spanning the full window) +
   //             a final point anchored at (closesAt, closePrice) so
   //             the rightmost point exactly matches the settlement.
   //   active:   backfill (open + 1-min candles) + live ticker on top.
   //   pending:  just whatever the live ticker has accumulated.
-  const chartHistory = useMemo(() => {
-    if (status === 'resolved') {
-      const base = backfill.length > 0
-        ? [...backfill]
-        : (meta.openedAt && meta.openPrice != null
-            ? [{ t: new Date(meta.openedAt).getTime(), price: Number(meta.openPrice) }]
-            : []);
-      if (closesAt && meta.closePrice != null) {
-        const lastT = base.length ? base[base.length - 1].t : 0;
-        // Don't double-stamp if the last candle already sits at
-        // closesAt — just overwrite its price to match the settlement
-        // value (which can drift by a few cents from the closing candle).
-        if (lastT >= closesAt.getTime() - 30_000) {
-          base[base.length - 1] = { t: closesAt.getTime(), price: Number(meta.closePrice) };
-        } else {
-          base.push({ t: closesAt.getTime(), price: Number(meta.closePrice) });
-        }
-      }
-      return base;
+  const liveChartHistory = useMemo(() => {
+    if (backfill.length === 0) {
+      return normalizeChartPoints(history, snapshotWindow);
     }
-    if (backfill.length === 0) return history;
     // Splice: backfill ends ~1 min ago (candle resolution); the live
     // ticker provides everything newer. Avoid double-counting any
     // overlap by cutting live history at the last backfill timestamp.
     const lastBackfillT = backfill[backfill.length - 1].t;
     const liveAfter = history.filter(p => p.t > lastBackfillT);
-    return [...backfill, ...liveAfter];
-  }, [status, backfill, history, meta.openedAt, meta.openPrice, meta.closePrice, closesAt]);
+    return normalizeChartPoints([...backfill, ...liveAfter], snapshotWindow);
+  }, [backfill, history, snapshotWindow]);
+
+  useEffect(() => {
+    if (status === 'resolved' || liveChartHistory.length < 2) return;
+    snapshotRef.current = liveChartHistory;
+    const now = Date.now();
+    if (now - lastSnapshotPersistRef.current < SNAPSHOT_PERSIST_MS) return;
+    lastSnapshotPersistRef.current = now;
+    persistSnapshot(market.id, liveChartHistory);
+  }, [status, liveChartHistory, market.id]);
+
+  const chartHistory = useMemo(() => {
+    if (status === 'resolved') {
+      const base = normalizeChartPoints(
+        [
+          ...liveChartHistory,
+          ...(snapshotRef.current || []),
+          ...storedSnapshot,
+          ...backfill,
+          ...(Number.isFinite(openedAtMs) && meta.openPrice != null
+            ? [{ t: openedAtMs, price: Number(meta.openPrice) }]
+            : []),
+        ],
+        snapshotWindow,
+      );
+      if (closesAt && meta.closePrice != null) {
+        const closeT = closesAt.getTime();
+        const closePrice = Number(meta.closePrice);
+        const lastT = base.length ? base[base.length - 1].t : 0;
+        // Don't double-stamp if the last curve point already sits at
+        // closesAt — just overwrite its price to match the settlement
+        // value (which can drift by a few cents from the closing candle).
+        if (lastT >= closeT - 30_000) {
+          base[base.length - 1] = { t: closeT, price: closePrice };
+        } else {
+          base.push({ t: closeT, price: closePrice });
+        }
+      }
+      return base;
+    }
+    return liveChartHistory;
+  }, [status, liveChartHistory, storedSnapshot, backfill, openedAtMs, meta.openPrice, meta.closePrice, closesAt, snapshotWindow]);
+
+  useEffect(() => {
+    if (status !== 'resolved' || chartHistory.length < 2) return;
+    snapshotRef.current = chartHistory;
+    persistSnapshot(market.id, chartHistory);
+  }, [status, chartHistory, market.id]);
 
   // Buy handler — opens the existing PointsBuyModal pre-targeted on the
   // chosen outcome. We pass the same shape it expects from non-crypto
@@ -376,7 +482,7 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
           // when the user opens the page. Falls back to LivePriceChart's
           // sliding 5-min window when these are absent (e.g. pending
           // pre-open state).
-          xStart={opensAt ? opensAt.getTime() : undefined}
+          xStart={chartWindowStart ?? undefined}
           xEnd={closesAt ? closesAt.getTime() : undefined}
         />
       </div>
@@ -489,12 +595,10 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
       )}
 
       {/* Prev / next navigation row — lets users hop between consecutive
-          5-min windows without bouncing out to the grid. Both buttons
-          surface only when the sibling exists on the books (the cron
-          archives resolved markets after 24h, and only creates the
-          next pending market a window before activation). Hidden on
-          resolved markets to keep the view focused on the settlement. */}
-      {!isResolved && (meta.prevMarketId || meta.nextMarketId) && (
+          5-min windows without bouncing out to the grid. Keep it visible
+          after resolution too so the user can inspect the settled result
+          and still move through the sequence without losing context. */}
+      {(meta.prevMarketId || meta.nextMarketId) && (
         <div style={{
           marginBottom: 16,
           display: 'grid',
