@@ -398,8 +398,8 @@ const SOCIAL_PROVIDERS = [
     label: 'TikTok',
     icon: '🎵',
     reward: 50,
-    available: false,
-    comingSoonNote: 'Esperando aprobación de TikTok',
+    available: true,
+    comingSoonNote: null,
   },
 ];
 
