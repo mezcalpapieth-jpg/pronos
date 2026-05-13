@@ -30,6 +30,10 @@ import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { binaryPrices, multiPrices } from '../_lib/amm-math.js';
+import {
+  buildPublicProfileHistory,
+  buildPublicProfileStats,
+} from '../_lib/points-public-profile.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -155,108 +159,24 @@ export default async function handler(req, res) {
       ORDER BY t.created_at ASC
     `;
 
-    const byMarket = new Map();
-    for (const r of tradeRows) {
-      const mid = r.market_id;
-      if (!byMarket.has(mid)) {
-        byMarket.set(mid, {
-          marketId: mid,
-          question: r.parent_question
-            ? `${r.parent_question}${r.leg_label ? ` — ${r.leg_label}` : ''}`
-            : r.question,
-          category: r.category,
-          status: r.status,
-          marketOutcome: r.m_outcome,
-          endTime: r.end_time,
-          resolvedAt: r.resolved_at,
-          finalScore: r.final_score,
-          outcomeIndex: r.outcome_index,
-          buyCollateral: 0,
-          buyShares: 0,
-          buyFees: 0,
-          sellProceeds: 0,
-          sellShares: 0,
-          sellFees: 0,
-        });
-      }
-      const slot = byMarket.get(mid);
-      const collateral = Number(r.collateral || 0);
-      const fee        = Number(r.fee || 0);
-      const shares     = Number(r.shares || 0);
-      if (r.side === 'buy') {
-        slot.buyCollateral += collateral;
-        slot.buyShares     += shares;
-        slot.buyFees       += fee;
-      } else {
-        slot.sellProceeds += collateral;
-        slot.sellShares   += shares;
-        slot.sellFees     += fee;
-      }
-    }
-
-    const history = Array.from(byMarket.values()).map(m => {
-      const sharesHeld = m.buyShares - m.sellShares;
-      let outcomeStatus = 'open';
-      let netPnl = 0;
-      if (m.status === 'resolved') {
-        const won = m.marketOutcome === m.outcomeIndex;
-        outcomeStatus = won ? 'won' : 'lost';
-        // Won → unredeemed shares pay 1 MXNP each. Lost → 0.
-        const redeemValue = won ? sharesHeld : 0;
-        netPnl = (m.sellProceeds + redeemValue) - m.buyCollateral - m.buyFees - m.sellFees;
-      } else if (sharesHeld <= 0.0001) {
-        // Fully exited an active market.
-        outcomeStatus = 'exited';
-        netPnl = m.sellProceeds - m.buyCollateral - m.buyFees - m.sellFees;
-      } else if (m.endTime && new Date(m.endTime).getTime() < Date.now()) {
-        outcomeStatus = 'pending';
-        netPnl = m.sellProceeds - m.buyCollateral - m.buyFees - m.sellFees;
-      } else {
-        outcomeStatus = 'open';
-        netPnl = m.sellProceeds - m.buyCollateral - m.buyFees - m.sellFees;
-      }
-      return {
-        marketId: m.marketId,
-        question: m.question,
-        category: m.category,
-        outcomeStatus,
-        netPnl: round2(netPnl),
-        buyCollateral: round2(m.buyCollateral),
-        sellProceeds: round2(m.sellProceeds),
-        resolvedAt: m.resolvedAt,
-        finalScore: m.finalScore,
-      };
-    });
-
-    history.sort((a, b) => {
-      // Resolved first by recency, then everything else.
-      const ar = a.resolvedAt ? new Date(a.resolvedAt).getTime() : 0;
-      const br = b.resolvedAt ? new Date(b.resolvedAt).getTime() : 0;
-      return br - ar;
-    });
+    const history = buildPublicProfileHistory(tradeRows);
 
     // ── Aggregate stats ───────────────────────────────────────────────
-    const totalPnl = history.reduce((s, m) => s + m.netPnl, 0);
-    const totalVolume = history.reduce((s, m) => s + m.buyCollateral, 0);
-    const won  = history.filter(m => m.outcomeStatus === 'won').length;
-    const lost = history.filter(m => m.outcomeStatus === 'lost').length;
-    const open = history.filter(m => m.outcomeStatus === 'open').length;
-    const settled = won + lost;
-    const winRate = settled > 0 ? round2((won / settled) * 100) : null;
+    const stats = buildPublicProfileStats(history);
 
     return res.status(200).json({
       user: {
         username: userRow[0].username,
         joinedAt: userRow[0].created_at,
-        totalVolume: round2(totalVolume),
+        totalVolume: stats.totalVolume,
       },
       stats: {
-        totalPnl: round2(totalPnl),
-        marketsTraded: history.length,
-        marketsWon: won,
-        marketsLost: lost,
-        marketsOpen: open,
-        winRate, // null when nothing has settled
+        totalPnl: stats.totalPnl,
+        marketsTraded: stats.marketsTraded,
+        marketsWon: stats.marketsWon,
+        marketsLost: stats.marketsLost,
+        marketsOpen: stats.marketsOpen,
+        winRate: stats.winRate, // null when nothing has settled
       },
       active,
       history,

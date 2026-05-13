@@ -60,6 +60,32 @@ function api() {
   return cachedApi;
 }
 
+export function buildSuborgCreationParams(email, { nowMs = Date.now() } = {}) {
+  const normalized = String(email || '').toLowerCase().trim();
+  return {
+    subOrganizationName: `points-${nowMs}`,
+    rootQuorumThreshold: 1,
+    rootUsers: [
+      {
+        userName: normalized,
+        userEmail: normalized,
+        apiKeys: [],
+        authenticators: [],
+        oauthProviders: [],
+      },
+    ],
+    wallet: {
+      walletName: 'Wallet 1',
+      accounts: [{
+        curve: 'CURVE_SECP256K1',
+        pathFormat: 'PATH_FORMAT_BIP32',
+        path: "m/44'/60'/0'/0/0",
+        addressFormat: 'ADDRESS_FORMAT_ETHEREUM',
+      }],
+    },
+  };
+}
+
 /**
  * Find an existing sub-organization for an email, or create one.
  * Email-verified sub-orgs are preferred when present; unverified ones
@@ -91,56 +117,11 @@ export async function getOrCreateSuborg(email) {
     return { suborgId: existing };
   }
 
-  // Step 2 — no match, create a fresh sub-org with two root users:
-  //   (a) the human, keyed to their email so OTP login works.
-  //   (b) the Pronos backend's API key, so the backend can later
-  //       create a delegation policy + sign txs on this suborg.
-  //       Without (b) Turnkey rejects every backend-initiated activity
-  //       with "organization mismatch: voters are in <parent org>" —
-  //       the parent's root API key has no implicit authority on a
-  //       child suborg, it has to be registered as a root user in
-  //       the child too.
-  const { pubKey: backendApiPublicKey } = getEnv();
-  if (!backendApiPublicKey) {
-    throw new Error('TURNKEY_API_PUBLIC_KEY required to create suborg with backend voter');
-  }
-  const created = await api().createSubOrganization({
-    subOrganizationName: `points-${Date.now()}`,
-    // Threshold = 1: either root user can authorize on their own.
-    // The human acts via session credentials minted by otpLogin; the
-    // backend acts via its long-lived P-256 API key.
-    rootQuorumThreshold: 1,
-    rootUsers: [
-      {
-        userName: normalized,
-        userEmail: normalized,
-        apiKeys: [],
-        authenticators: [],
-        oauthProviders: [],
-      },
-      {
-        userName: 'Pronos Backend',
-        // No email — this user is the backend, not a human; OTP login
-        // should never resolve to it.
-        apiKeys: [{
-          apiKeyName: 'pronos-backend-delegate',
-          publicKey: backendApiPublicKey,
-          curveType: 'API_KEY_CURVE_P256',
-        }],
-        authenticators: [],
-        oauthProviders: [],
-      },
-    ],
-    wallet: {
-      walletName: 'Wallet 1',
-      accounts: [{
-        curve: 'CURVE_SECP256K1',
-        pathFormat: 'PATH_FORMAT_BIP32',
-        path: "m/44'/60'/0'/0/0",
-        addressFormat: 'ADDRESS_FORMAT_ETHEREUM',
-      }],
-    },
-  });
+  // Step 2 — no match, create a fresh sub-org with only the human
+  // email user in the root quorum. The backend must never be installed
+  // as root: day-to-day preauthorized investing should be handled by a
+  // scoped Turnkey policy, not root authority.
+  const created = await api().createSubOrganization(buildSuborgCreationParams(normalized));
   if (!created?.subOrganizationId) {
     throw new Error('createSubOrganization returned no subOrganizationId');
   }
@@ -148,53 +129,17 @@ export async function getOrCreateSuborg(email) {
 }
 
 /**
- * Backfill an existing sub-org with the backend API key as a root
- * user. Required for suborgs created before the multi-root pattern
- * landed — they have only the user's email as a voter, so any
- * backend-initiated activity (create-policy, sign-tx) is rejected
- * with "organization mismatch: voters are in <parent>". The user
- * must authorize this themselves via the client SDK; we can't repair
- * it from the backend (same chicken-and-egg as the original error).
- *
- * Call from a client-stamped endpoint: stamp = user-session creds,
- * organizationId = suborgId, body adds the backend API key as a new
- * root user named "Pronos Backend".
- *
- * Returns { added: true, userId } on success, { skipped: true } if
- * the backend API key is already registered on the suborg.
+ * Legacy guardrail. Older experiments tried to add the backend API key
+ * as a root user so future trades could be signed without per-trade
+ * prompts. That grants too much authority because root quorum bypasses
+ * policies. Keep this export as a fail-closed tripwire for any stale
+ * caller, but do not create root backend users.
  */
-export async function ensureBackendRootUser({ suborgId, userClient }) {
-  if (!suborgId) throw new Error('suborgId required');
-  if (!userClient) throw new Error('userClient (stamped with user session) required');
-  const { pubKey: backendApiPublicKey } = getEnv();
-  if (!backendApiPublicKey) throw new Error('TURNKEY_API_PUBLIC_KEY missing');
-
-  // Skip if backend already registered as a root user on this suborg.
-  const users = await userClient.getUsers({ organizationId: suborgId });
-  const existing = (users?.users || []).find(u =>
-    (u.apiKeys || []).some(k =>
-      String(k.publicKey || '').toLowerCase() === backendApiPublicKey.toLowerCase()
-    )
-  );
-  if (existing) return { skipped: true, userId: existing.userId };
-
-  const created = await userClient.createUsers({
-    organizationId: suborgId,
-    users: [{
-      userName: 'Pronos Backend',
-      apiKeys: [{
-        apiKeyName: 'pronos-backend-delegate',
-        publicKey: backendApiPublicKey,
-        curveType: 'API_KEY_CURVE_P256',
-      }],
-      authenticators: [],
-      oauthProviders: [],
-      userTags: [],
-    }],
-  });
-  const userId = created?.userIds?.[0];
-  if (!userId) throw new Error('createUsers returned no userId');
-  return { added: true, userId };
+export async function ensureBackendRootUser() {
+  const err = new Error('backend_root_user_disabled');
+  err.status = 409;
+  err.detail = 'Use a user-authorized, non-root Turnkey policy for delegated investing.';
+  throw err;
 }
 
 /**
@@ -287,26 +232,28 @@ export async function signTransactionForSuborg({ suborgId, signWithAddress, unsi
  * is deployed. A 400 from createPolicy usually means the condition
  * string needs a syntax tweak for the SDK version in use.
  */
-export async function createDelegationPolicyOnSuborg({
-  suborgId, backendApiPublicKey, allowedTargets, policyName = 'pronos-delegation-v1',
-  notes = 'Pronos delegated signing',
-}) {
-  if (!suborgId) throw new Error('suborgId required');
+export function buildDelegationPolicyExpressions({ backendApiPublicKey, allowedTargets }) {
   if (!backendApiPublicKey) throw new Error('backendApiPublicKey required');
   if (!Array.isArray(allowedTargets) || allowedTargets.length === 0) {
     throw new Error('allowedTargets[] required');
   }
   const lowerTargets = allowedTargets.map(a => String(a).toLowerCase());
   const targetsList = lowerTargets.map(a => `'${a}'`).join(', ');
+  return {
+    consensus: `credentials.any(credential, credential.public_key == '${backendApiPublicKey}')`,
+    condition: `activity.type == 'ACTIVITY_TYPE_SIGN_TRANSACTION_V2' && eth.tx.to in [${targetsList}]`,
+  };
+}
 
-  // Consensus: any API key whose compressed public key equals the
-  // backend key. Condition: must be a sign-transaction-v2 activity
-  // whose destination is in the target allowlist.
-  const consensus =
-    `approvers.any(user, user.api_keys.any(k, k.public_key == '${backendApiPublicKey}'))`;
-  const condition =
-    `activity.type == 'ACTIVITY_TYPE_SIGN_TRANSACTION_V2' && ` +
-    `eth.tx.to in [${targetsList}]`;
+export async function createDelegationPolicyOnSuborg({
+  suborgId, backendApiPublicKey, allowedTargets, policyName = 'pronos-delegation-v1',
+  notes = 'Pronos delegated signing',
+}) {
+  if (!suborgId) throw new Error('suborgId required');
+  const { consensus, condition } = buildDelegationPolicyExpressions({
+    backendApiPublicKey,
+    allowedTargets,
+  });
 
   const result = await api().createPolicy({
     organizationId: suborgId,

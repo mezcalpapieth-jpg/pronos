@@ -15,6 +15,7 @@
     { "source": "/earn",       "destination": "/points/earn",       "permanent": true },
     { "source": "/market",     "destination": "/points/market",     "permanent": true },
     { "source": "/r/:username","destination": "/points/r/:username","permanent": true },
+    { "source": "/u/:username","destination": "/points/u/:username","permanent": true },
     { "source": "/c/:slug",    "destination": "/points/c/:slug",    "permanent": true },
     { "source": "/privacy",    "destination": "/points/privacy",    "permanent": true },
     { "source": "/terms",      "destination": "/points/terms",      "permanent": true }
@@ -30,6 +31,7 @@
     { "source": "/points/privacy",      "destination": "/points/" },
     { "source": "/points/terms",        "destination": "/points/" },
     { "source": "/points/r/:username",  "destination": "/points/" },
+    { "source": "/points/u/:username",  "destination": "/points/" },
     { "source": "/points/c/:slug",      "destination": "/points/" }
   ],
   "headers": [

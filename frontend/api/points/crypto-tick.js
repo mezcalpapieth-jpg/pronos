@@ -37,6 +37,7 @@ const schemaSql = neon(process.env.DATABASE_URL);
 
 const ALLOWED_ASSETS = new Set(['btc', 'eth']);
 const BUCKET_MS = 5_000;
+const RETENTION_DAYS = 7;
 const PLAUSIBILITY_PCT = 0.02; // ±2%
 const PLAUSIBILITY_WINDOW_MS = 30_000;
 // Absolute sanity bounds — if the client sends $0.42 or $42M we drop
@@ -118,7 +119,12 @@ export default async function handler(req, res) {
       ON CONFLICT (asset, captured_at) DO NOTHING
     `;
 
-    return res.status(200).json({ stored: true, bucket: bucketIso });
+    await sql`
+      DELETE FROM crypto_ticks
+      WHERE captured_at < NOW() - INTERVAL '7 days'
+    `;
+
+    return res.status(200).json({ stored: true, bucket: bucketIso, retentionDays: RETENTION_DAYS });
   } catch (e) {
     console.error('[points/crypto-tick] error', { message: e?.message, code: e?.code });
     return res.status(500).json({ error: 'tick_failed' });

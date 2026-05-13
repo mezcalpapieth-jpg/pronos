@@ -411,12 +411,11 @@ const POINTS_SCHEMA_MIGRATIONS = [
     ON points_cycle_snapshots(cycle_id, rank ASC)`,
 
   // ── Crypto price ticks (server-side history for the 5-min chart) ─────────
-  // Recorded by /api/cron/crypto-ticker every ~5s for each asset (BTC, ETH).
-  // /api/points/crypto-history serves these to the chart so a fresh page
-  // open shows the same dense curve as a continuously-mounted page —
-  // without that, the chart can only backfill from Coinbase's public trades
-  // endpoint, which doesn't paginate cleanly past ~50 min on busy markets.
-  // Retention: 7 days. Older rows get pruned by the same cron's tail.
+  // Recorded by /api/points/crypto-tick every ~5s for each asset (BTC, ETH)
+  // while visitors have the points app open. /api/points/crypto-history
+  // serves these to the chart so a fresh page open shows the same dense
+  // curve as a continuously-mounted page. Retention: 7 days; older rows
+  // are pruned by /api/points/crypto-tick after accepted inserts.
   `CREATE TABLE IF NOT EXISTS crypto_ticks (
     id          BIGSERIAL PRIMARY KEY,
     asset       TEXT NOT NULL,

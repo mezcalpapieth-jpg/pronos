@@ -149,21 +149,21 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
   const isResolved = status === 'resolved';
 
   // Backfill price history. Server-recorded ticks are the source of
-  // truth — /api/cron/crypto-ticker snapshots Coinbase's ticker every
-  // ~5s for BTC/ETH, so /api/points/crypto-history returns the same
-  // dense curve regardless of who's viewing and when. We use the
+  // truth — browsers with the points app open submit Coinbase WS ticks
+  // every ~5s, so /api/points/crypto-history returns the same dense
+  // curve regardless of who's viewing and when. We use the
   // server endpoint first; for brand-new markets that haven't
-  // accumulated ticks yet (cron hasn't run since open, or the very
-  // first window after deploy) we fall back to Coinbase's public
-  // per-trade endpoint so the chart isn't blank.
+  // accumulated ticks yet (for example, right after deploy) we fall
+  // back to Coinbase's public per-trade endpoint so the chart isn't
+  // blank.
   //
   // Anchor with openPrice@openedAt so the line starts exactly at the
   // threshold-stamping moment even if the first recorded tick landed
   // a few seconds later.
   const [backfill, setBackfill] = useState([]);
   const openedAtMs = meta.openedAt ? new Date(meta.openedAt).getTime() : null;
-  const chartWindowStart = openedAtMs ?? (opensAt ? opensAt.getTime() : null);
-  const chartWindowEnd = closesAt ? closesAt.getTime() : null;
+  const chartWindowStart = openedAtMs ?? (!isPending && opensAt ? opensAt.getTime() : null);
+  const chartWindowEnd = (openedAtMs || !isPending) && closesAt ? closesAt.getTime() : null;
   useEffect(() => {
     if (!openedAtMs || !Number.isFinite(meta.openPrice)) { setBackfill([]); return; }
     let cancelled = false;
@@ -482,7 +482,7 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
           // sliding 5-min window when these are absent (e.g. pending
           // pre-open state).
           xStart={chartWindowStart ?? undefined}
-          xEnd={closesAt ? closesAt.getTime() : undefined}
+          xEnd={chartWindowEnd ?? undefined}
         />
       </div>
 
