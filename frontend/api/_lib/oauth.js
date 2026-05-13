@@ -154,17 +154,28 @@ export function safeReturnPath(input, fallback = '/earn') {
 }
 
 /**
- * Resolve our public callback URL for `provider`. Prefers an explicit
- * override env var; falls back to the Vercel-assigned host in prod/preview.
- * In local dev the env var is required (localhost:3000 won't work for X
- * anyway — it needs a public URL).
+ * Resolve our public callback URL for `provider`. Resolution order:
+ *
+ *   1. OAUTH_<PROVIDER>_CALLBACK_URL — explicit override, always wins.
+ *   2. VERCEL_PROJECT_PRODUCTION_URL — Vercel exposes this only on
+ *      production deployments and it's set to the canonical custom
+ *      domain (e.g. "pronos.io"). This is what every OAuth dev portal
+ *      gets registered against, so using it removes the need for a
+ *      manual override env var per provider in the common case.
+ *   3. VERCEL_URL — deployment-specific host like
+ *      "pronos-git-relaunch-fr.vercel.app". Useful only for preview
+ *      OAuth (provider must register the preview URL separately), but
+ *      kept as a last resort.
+ *
+ * In local dev the override env var is required — none of the Vercel
+ * vars are populated by `vercel dev` for unauthenticated paths.
  */
 export function resolveCallbackUrl(provider) {
   const override = process.env[`OAUTH_${provider.toUpperCase()}_CALLBACK_URL`];
   if (override) return override;
-  const host = process.env.VERCEL_URL;
+  const host = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
   if (!host) {
-    throw new Error(`OAUTH_${provider.toUpperCase()}_CALLBACK_URL not set and VERCEL_URL missing`);
+    throw new Error(`OAUTH_${provider.toUpperCase()}_CALLBACK_URL not set and VERCEL_PROJECT_PRODUCTION_URL/VERCEL_URL missing`);
   }
   const scheme = host.startsWith('http') ? '' : 'https://';
   return `${scheme}${host}/api/social/${provider}/callback`;
