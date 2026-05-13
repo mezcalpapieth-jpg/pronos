@@ -533,7 +533,7 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
           letterSpacing: '0.04em',
           textAlign: 'center',
         }}>
-          El mercado abre cuando cierre el actual. El umbral se fija con el precio de Chainlink en ese momento.
+          El próximo mercado ya está preparado. El umbral se publica al abrir, justo cuando cierre el mercado anterior.
         </div>
       )}
 

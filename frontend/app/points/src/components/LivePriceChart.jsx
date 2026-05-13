@@ -1,14 +1,15 @@
 /**
  * LivePriceChart — pure-SVG live price line for the crypto 5-min markets.
  *
- * No charting library dependency — the renderer is ~100 lines so it's
- * cheaper to keep inline than pull in lightweight-charts (~80kb gzipped)
- * or recharts. This is intentionally minimal:
+ * No charting library dependency — the renderer is small enough to keep
+ * inline instead of pulling in lightweight-charts (~80kb gzipped) or
+ * recharts. This is intentionally minimal:
  *
  *   - One line for the price history (color flips green/red around the
  *     threshold)
  *   - One dotted horizontal rule at the threshold
  *   - A pulsing dot at the rightmost (current) price
+ *   - Pointer/touch tracker with the nearest price + timestamp
  *   - Y axis auto-scales to [min*0.999, max*1.001] so small movements
  *     read as visually meaningful
  *
@@ -25,9 +26,30 @@
  * so the parent can keep a stable layout while the WebSocket is opening.
  */
 
-import React from 'react';
+import React, { useMemo, useState } from 'react';
+import {
+  computeChartWindow,
+  densifyPoints,
+  filterVisiblePoints,
+  nearestPointByX,
+} from '../lib/cryptoChartMath.js';
 
 const PADDING = { top: 12, right: 14, bottom: 18, left: 8 };
+
+function formatTrackerPrice(price) {
+  return '$' + Number(price).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatTrackerTime(t) {
+  return new Date(t).toLocaleTimeString('es-MX', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
 
 export default function LivePriceChart({
   history,
@@ -44,6 +66,20 @@ export default function LivePriceChart({
   xStart,
   xEnd,
 }) {
+  const [trackerX, setTrackerX] = useState(null);
+  const frame = useMemo(
+    () => computeChartWindow({ history, xStart, xEnd, windowMs }),
+    [history, xStart, xEnd, windowMs]
+  );
+  const visible = useMemo(
+    () => filterVisiblePoints(history, frame),
+    [history, frame]
+  );
+  const chartPoints = useMemo(
+    () => densifyPoints(visible, { intervalMs: 1_000 }),
+    [visible]
+  );
+
   if (!Array.isArray(history) || history.length === 0) {
     // Skeleton rectangle keeps layout stable while WS connects.
     return (
@@ -54,29 +90,15 @@ export default function LivePriceChart({
     );
   }
 
-  // If the caller anchored the window via xStart/xEnd, use that. Otherwise
-  // fall back to the sliding-windowMs behavior (legacy callers).
-  let xMin;
-  let xMax;
-  if (Number.isFinite(xStart) && Number.isFinite(xEnd) && xEnd > xStart) {
-    xMin = xStart;
-    xMax = xEnd;
-  } else {
-    const now = history[history.length - 1].t;
-    xMin = now - windowMs;
-    xMax = now;
-  }
+  if (chartPoints.length === 0) return null;
 
-  // Build the visible slice. We lazily filter (keep all of history; only
-  // points within [xMin, xMax] get drawn).
-  const visible = history.filter(p => p.t >= xMin && p.t <= xMax);
-  if (visible.length === 0) return null;
+  const { xMin, xMax } = frame;
 
   // Y range: include the threshold (if set) so the rule is always
   // on-screen, plus a small padding so the line never touches edges.
-  let yMin = visible[0].price;
-  let yMax = visible[0].price;
-  for (const p of visible) {
+  let yMin = chartPoints[0].price;
+  let yMax = chartPoints[0].price;
+  for (const p of chartPoints) {
     if (p.price < yMin) yMin = p.price;
     if (p.price > yMax) yMax = p.price;
   }
@@ -104,18 +126,19 @@ export default function LivePriceChart({
     return PADDING.top + (1 - (price - yMin) / (yMax - yMin)) * innerH;
   }
 
-  // SVG path: M first, L the rest. Skip degenerate same-x duplicates
-  // by drawing one point per ms boundary at most (Coinbase floods on
-  // hot markets but the SVG smooths it visually anyway).
+  // SVG path: M first, L the rest. chartPoints includes one-second
+  // interpolated points between sparse server ticks so the line advances
+  // like a live market chart without inventing new settlement data.
   let d = '';
-  for (let i = 0; i < visible.length; i++) {
-    const x = xAt(visible[i].t).toFixed(2);
-    const y = yAt(visible[i].price).toFixed(2);
+  for (let i = 0; i < chartPoints.length; i++) {
+    const x = xAt(chartPoints[i].t).toFixed(2);
+    const y = yAt(chartPoints[i].price).toFixed(2);
     d += (i === 0 ? `M${x},${y}` : ` L${x},${y}`);
   }
 
-  const lastPrice = visible[visible.length - 1].price;
-  const lastX = xAt(visible[visible.length - 1].t);
+  const lastPoint = chartPoints[chartPoints.length - 1];
+  const lastPrice = lastPoint.price;
+  const lastX = xAt(lastPoint.t);
   const lastY = yAt(lastPrice);
   const hasThreshold = typeof threshold === 'number' && Number.isFinite(threshold);
   const above = hasThreshold && lastPrice > threshold;
@@ -134,9 +157,9 @@ export default function LivePriceChart({
   // points as the line, then drop down to baseline and close.
   const baseY = yAt(yMin);
   let areaD = d;
-  if (visible.length >= 2) {
-    areaD += ` L${xAt(visible[visible.length - 1].t).toFixed(2)},${baseY.toFixed(2)}`;
-    areaD += ` L${xAt(visible[0].t).toFixed(2)},${baseY.toFixed(2)} Z`;
+  if (chartPoints.length >= 2) {
+    areaD += ` L${xAt(chartPoints[chartPoints.length - 1].t).toFixed(2)},${baseY.toFixed(2)}`;
+    areaD += ` L${xAt(chartPoints[0].t).toFixed(2)},${baseY.toFixed(2)} Z`;
   }
 
   // Threshold rule line + label.
@@ -144,17 +167,52 @@ export default function LivePriceChart({
   const thresholdLabel = hasThreshold
     ? '$' + Number(threshold).toLocaleString('en-US', { maximumFractionDigits: 0 })
     : '';
+  const tracker = trackerX == null
+    ? null
+    : nearestPointByX(chartPoints, trackerX, {
+        xMin,
+        xMax,
+        width,
+        padding: PADDING,
+      });
+  const trackerPoint = tracker?.point || null;
+  const trackerY = trackerPoint ? yAt(trackerPoint.price) : null;
+  const trackerLabel = trackerPoint ? formatTrackerPrice(trackerPoint.price) : '';
+  const trackerTime = trackerPoint ? formatTrackerTime(trackerPoint.t) : '';
+  const trackerLabelWidth = Math.max(70, trackerLabel.length * 7.2 + 16);
+  const trackerLabelX = tracker
+    ? Math.min(Math.max(tracker.x + 8, PADDING.left), width - PADDING.right - trackerLabelWidth)
+    : 0;
+  const trackerLabelY = trackerY == null
+    ? 0
+    : Math.min(Math.max(trackerY - 32, PADDING.top + 2), height - PADDING.bottom - 44);
+
+  function handlePointerMove(event) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const pointerX = ((event.clientX - rect.left) / rect.width) * width;
+    setTrackerX(pointerX);
+  }
 
   return (
     <svg
       viewBox={`0 0 ${width} ${height}`}
       preserveAspectRatio="none"
-      style={{ width: '100%', height, display: 'block' }}
+      style={{
+        width: '100%',
+        height,
+        display: 'block',
+        cursor: 'crosshair',
+        touchAction: 'none',
+      }}
       role="img"
       aria-label="Gráfica de precio en vivo"
+      onPointerMove={handlePointerMove}
+      onPointerLeave={() => setTrackerX(null)}
+      onPointerCancel={() => setTrackerX(null)}
     >
       {/* subtle area fill */}
-      {visible.length >= 2 && (
+      {chartPoints.length >= 2 && (
         <path d={areaD} fill={fillColor} stroke="none" />
       )}
 
@@ -187,6 +245,57 @@ export default function LivePriceChart({
       {/* price line */}
       <path d={d} fill="none" stroke={lineColor} strokeWidth="2"
             strokeLinejoin="round" strokeLinecap="round" />
+
+      {/* pointer tracker */}
+      {trackerPoint && trackerY != null && (
+        <g pointerEvents="none">
+          <line
+            x1={tracker.x}
+            x2={tracker.x}
+            y1={PADDING.top}
+            y2={height - PADDING.bottom}
+            stroke="var(--text-muted)"
+            strokeWidth="1"
+            opacity="0.42"
+          />
+          <circle
+            cx={tracker.x}
+            cy={trackerY}
+            r="4"
+            fill="var(--surface0, #050505)"
+            stroke={lineColor}
+            strokeWidth="2"
+          />
+          <rect
+            x={trackerLabelX}
+            y={trackerLabelY}
+            width={trackerLabelWidth}
+            height="34"
+            rx="6"
+            fill="var(--surface0, #050505)"
+            stroke="var(--border)"
+            opacity="0.96"
+          />
+          <text
+            x={trackerLabelX + 8}
+            y={trackerLabelY + 14}
+            fontFamily="var(--font-mono, monospace)"
+            fontSize="11"
+            fill="var(--text-primary)"
+          >
+            {trackerLabel}
+          </text>
+          <text
+            x={trackerLabelX + 8}
+            y={trackerLabelY + 28}
+            fontFamily="var(--font-mono, monospace)"
+            fontSize="9"
+            fill="var(--text-muted)"
+          >
+            {trackerTime}
+          </text>
+        </g>
+      )}
 
       {/* pulsing dot at current price */}
       <circle cx={lastX} cy={lastY} r="3.5" fill={lineColor}>
