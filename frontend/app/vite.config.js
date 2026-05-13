@@ -4,6 +4,52 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const nodeModuleSegment = `${path.sep}node_modules${path.sep}`;
+
+function matchesNodeModule(id, names) {
+  return names.some((name) => (
+    id.includes(`${nodeModuleSegment}${name}${path.sep}`)
+    || id.includes(`${nodeModuleSegment}${name}.js`)
+  ));
+}
+
+function manualChunks(id) {
+  if (!id.includes(nodeModuleSegment)) return null;
+
+  if (matchesNodeModule(id, ['react', 'react-dom', 'scheduler'])) {
+    return 'react-vendor';
+  }
+
+  if (matchesNodeModule(id, ['react-router', 'react-router-dom', '@remix-run/router'])) {
+    return 'router-vendor';
+  }
+
+  if (matchesNodeModule(id, ['@sentry'])) {
+    return 'sentry-vendor';
+  }
+
+  if (matchesNodeModule(id, ['@safe-global'])) {
+    return 'safe-vendor';
+  }
+
+  if (matchesNodeModule(id, ['ethers', '@ethersproject', 'bn.js', 'elliptic'])) {
+    return 'ethers-vendor';
+  }
+
+  if (matchesNodeModule(id, ['viem', 'abitype', 'ox', '@scure', '@adraffy'])) {
+    return 'viem-vendor';
+  }
+
+  if (matchesNodeModule(id, ['@peculiar', 'reflect-metadata', 'asn1js', 'pvtsutils', 'pvutils', 'tsyringe'])) {
+    return 'crypto-vendor';
+  }
+
+  if (matchesNodeModule(id, ['@turnkey', '@hpke', '@noble', 'jose', 'buffer', 'base-x', 'bs58', 'bs58check', 'cross-fetch', 'node-fetch'])) {
+    return 'turnkey-vendor';
+  }
+
+  return 'vendor';
+}
 
 // Two build targets share this Vite project:
 //   - MVP    (Privy, on-chain, USDC)     — default, outputs to ../mvp/    served at /mvp/
@@ -24,6 +70,11 @@ export default defineConfig({
       ? path.resolve(__dirname, '../points')   // → frontend/points/
       : path.resolve(__dirname, '../mvp'),     // → frontend/mvp/
     emptyOutDir: true,                          // safe on both — own folder
+    rollupOptions: {
+      output: {
+        manualChunks,
+      },
+    },
   },
   resolve: {
     alias: {

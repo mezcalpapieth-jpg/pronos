@@ -11,29 +11,30 @@
  * When an authenticated user doesn't yet have a username, the modal
  * opens automatically in the username step.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import PointsLoginModal from '@app/components/PointsLoginModal.jsx';
 import PointsNav from './components/PointsNav.jsx';
 import PointsTicker from './components/PointsTicker.jsx';
 import PointsCategoryBar from './components/PointsCategoryBar.jsx';
-import PointsHome from './pages/PointsHome.jsx';
-import PointsMarketDetail from './pages/PointsMarketDetail.jsx';
-import PointsCategoryPage from './pages/PointsCategoryPage.jsx';
-import PointsWorldCupPage from './pages/PointsWorldCupPage.jsx';
+import Footer from '@app/components/Footer.jsx';
+import PointsWelcomeModal, { hasBeenWelcomed } from './components/PointsWelcomeModal.jsx';
+
+const PointsHome = lazy(() => import('./pages/PointsHome.jsx'));
+const PointsMarketDetail = lazy(() => import('./pages/PointsMarketDetail.jsx'));
+const PointsCategoryPage = lazy(() => import('./pages/PointsCategoryPage.jsx'));
+const PointsWorldCupPage = lazy(() => import('./pages/PointsWorldCupPage.jsx'));
 // Shared news page — same component used by the MVP build, with the
 // admin-handoff destination passed in via the `adminPath` prop.
-import NewsPage from '@app/pages/NewsPage.jsx';
-import PrivacyPolicy from '@app/pages/PrivacyPolicy.jsx';
-import TermsOfService from '@app/pages/TermsOfService.jsx';
-import Footer from '@app/components/Footer.jsx';
-import PointsPortfolio from './pages/PointsPortfolio.jsx';
-import PointsEarn from './pages/PointsEarn.jsx';
-import PointsAdmin from './pages/PointsAdmin.jsx';
-import PointsReferralLanding from './pages/PointsReferralLanding.jsx';
-import PointsUserProfile from './pages/PointsUserProfile.jsx';
-import PointsWelcomeModal, { hasBeenWelcomed } from './components/PointsWelcomeModal.jsx';
+const NewsPage = lazy(() => import('@app/pages/NewsPage.jsx'));
+const PrivacyPolicy = lazy(() => import('@app/pages/PrivacyPolicy.jsx'));
+const TermsOfService = lazy(() => import('@app/pages/TermsOfService.jsx'));
+const PointsPortfolio = lazy(() => import('./pages/PointsPortfolio.jsx'));
+const PointsEarn = lazy(() => import('./pages/PointsEarn.jsx'));
+const PointsAdmin = lazy(() => import('./pages/PointsAdmin.jsx'));
+const PointsReferralLanding = lazy(() => import('./pages/PointsReferralLanding.jsx'));
+const PointsUserProfile = lazy(() => import('./pages/PointsUserProfile.jsx'));
 
 // Admin usernames live in env var VITE_POINTS_ADMIN_USERNAMES so the client
 // can hide the admin nav link without needing a server round-trip. The real
@@ -42,6 +43,14 @@ import PointsWelcomeModal, { hasBeenWelcomed } from './components/PointsWelcomeM
 function parseAdminList() {
   const raw = import.meta.env.VITE_POINTS_ADMIN_USERNAMES || 'mezcal,frmm,alex';
   return raw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+}
+
+function RouteFallback() {
+  return (
+    <div style={{ textAlign: 'center', padding: '100px 48px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', letterSpacing: '0.1em' }}>
+      Cargando...
+    </div>
+  );
 }
 
 export default function App() {
@@ -127,26 +136,28 @@ function Shell({ onOpenLogin, isAdmin }) {
       {isHome && <PointsTicker />}
       <PointsNav onOpenLogin={onOpenLogin} isAdmin={isAdmin} />
       {showCategoryBar && <PointsCategoryBar />}
-      <Routes>
-        <Route path="/" element={<PointsHome onOpenLogin={onOpenLogin} />} />
-        {/* World Cup gets its own page with a hero, groups, and
-            bracket. Registered BEFORE the generic /c/:slug so it
-            wins the match. */}
-        <Route path="/c/world-cup" element={<PointsWorldCupPage />} />
-        {/* News page — registered BEFORE the generic /c/:slug so the
-            specialized layout wins over the standard category grid.
-            adminPath='/admin' targets the points-app's own admin. */}
-        <Route path="/c/noticias" element={<NewsPage isAdmin={isAdmin} adminPath="/admin" />} />
-        <Route path="/c/:slug" element={<PointsCategoryPage />} />
-        <Route path="/market" element={<PointsMarketDetail onOpenLogin={onOpenLogin} />} />
-        <Route path="/portfolio" element={<PointsPortfolio />} />
-        <Route path="/earn" element={<PointsEarn onOpenLogin={onOpenLogin} />} />
-        <Route path="/admin" element={<PointsAdmin isAdmin={isAdmin} />} />
-        <Route path="/r/:username" element={<PointsReferralLanding onOpenLogin={onOpenLogin} />} />
-        <Route path="/u/:username" element={<PointsUserProfile />} />
-        <Route path="/privacy" element={<PrivacyPolicy />} />
-        <Route path="/terms"   element={<TermsOfService />} />
-      </Routes>
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
+          <Route path="/" element={<PointsHome onOpenLogin={onOpenLogin} />} />
+          {/* World Cup gets its own page with a hero, groups, and
+              bracket. Registered BEFORE the generic /c/:slug so it
+              wins the match. */}
+          <Route path="/c/world-cup" element={<PointsWorldCupPage />} />
+          {/* News page — registered BEFORE the generic /c/:slug so the
+              specialized layout wins over the standard category grid.
+              adminPath='/admin' targets the points-app's own admin. */}
+          <Route path="/c/noticias" element={<NewsPage isAdmin={isAdmin} adminPath="/admin" />} />
+          <Route path="/c/:slug" element={<PointsCategoryPage />} />
+          <Route path="/market" element={<PointsMarketDetail onOpenLogin={onOpenLogin} />} />
+          <Route path="/portfolio" element={<PointsPortfolio />} />
+          <Route path="/earn" element={<PointsEarn onOpenLogin={onOpenLogin} />} />
+          <Route path="/admin" element={<PointsAdmin isAdmin={isAdmin} />} />
+          <Route path="/r/:username" element={<PointsReferralLanding onOpenLogin={onOpenLogin} />} />
+          <Route path="/u/:username" element={<PointsUserProfile />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/terms"   element={<TermsOfService />} />
+        </Routes>
+      </Suspense>
       <Footer />
     </>
   );

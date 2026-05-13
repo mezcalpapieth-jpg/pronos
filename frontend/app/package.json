@@ -10,9 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@privy-io/react-auth": "^1.93.0",
     "@safe-global/api-kit": "^4.1.0",
-    "@safe-global/protocol-kit": "^7.0.0",
+    "@safe-global/protocol-kit": "^7.1.0",
     "@sentry/react": "^10.47.0",
     "@turnkey/sdk-browser": "^5.16.1",
     "ethers": "^5.7.2",
