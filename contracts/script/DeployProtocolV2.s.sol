@@ -10,12 +10,13 @@ import {MarketFactoryV2} from "../src/MarketFactoryV2.sol";
  * @notice Deploys the multi-outcome Pronos protocol alongside v1.
  *
  * Usage:
- *   forge script script/DeployProtocolV2.s.sol --rpc-url arbitrum_sepolia --broadcast --verify
+ *   forge script script/DeployProtocolV2.s.sol --rpc-url arbitrum --broadcast --verify
  */
 contract DeployProtocolV2 is Script {
     function run() external {
         uint256 deployerKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
-        address usdc = vm.envAddress("USDC_ADDRESS");
+        address collateral = vm.envOr("COLLATERAL_ADDRESS", address(0));
+        if (collateral == address(0)) collateral = vm.envAddress("ONCHAIN_COLLATERAL_ADDRESS");
         address treasury = vm.envAddress("TREASURY_ADDRESS");
         address liquidityReserve = vm.envAddress("LIQUIDITY_RESERVE");
         address emergencyReserve = vm.envAddress("EMERGENCY_RESERVE");
@@ -24,7 +25,7 @@ contract DeployProtocolV2 is Script {
         address resolverAddress = vm.envOr("RESOLVER_ADDRESS", address(0));
 
         console.log("=== Deploying Pronos Protocol V2 ===");
-        console.log("USDC:", usdc);
+        console.log("Collateral:", collateral);
         console.log("Treasury:", treasury);
         console.log("Fee collector:", feeCollector);
 
@@ -35,7 +36,7 @@ contract DeployProtocolV2 is Script {
 
         MarketFactoryV2 factory = new MarketFactoryV2(
             address(token),
-            usdc,
+            collateral,
             treasury,
             liquidityReserve,
             emergencyReserve
@@ -65,8 +66,9 @@ contract DeployProtocolV2 is Script {
 
         console.log("=== Deployment Complete ===");
         console.log("Vercel env:");
-        console.log("VITE_PRONOS_ARB_SEPOLIA_FACTORY_V2=", address(factory));
-        console.log("VITE_PRONOS_ARB_SEPOLIA_TOKEN_V2=", address(token));
+        console.log("ONCHAIN_MARKET_FACTORY_V2_ADDRESS=", address(factory));
+        console.log("VITE_PRONOS_ARBITRUM_FACTORY_V2=", address(factory));
+        console.log("VITE_PRONOS_ARBITRUM_TOKEN_V2=", address(token));
         console.log("PRONOS_FACTORY_V2_ADDRESS=", address(factory));
         console.log("FACTORY_V2_ADDRESS=", address(factory));
         console.log("Next steps:");

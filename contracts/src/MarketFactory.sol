@@ -18,9 +18,9 @@ contract MarketFactory is ReentrancyGuard {
     // ─── State ────────────────────────────────────────────────────────────────
 
     PronosToken public immutable token;
-    // Generic ERC-20 collateral. Arbitrum One: MXNB. Arbitrum Sepolia:
-    // Circle USDC stand-in (labelled MXNB in the UI). The contract
-    // doesn't care which token it is — only the deploy script does.
+    // Generic ERC-20 collateral. Arbitrum One: MXNB. Testnet:
+    // MockMXNB. The contract doesn't care which token it is — only
+    // the deploy script and environment do.
     IERC20      public immutable collateral;
 
     address public owner;       // Safe multisig
@@ -101,7 +101,7 @@ contract MarketFactory is ReentrancyGuard {
      * @param category  Category tag (e.g. "deportes")
      * @param endTime   Unix timestamp when betting closes
      * @param resolutionSource  How the outcome will be determined
-     * @param seedAmount USDC amount to seed as initial liquidity
+     * @param seedAmount collateral amount to seed as initial liquidity
      * @return marketId  The new market's ID
      */
     function createMarket(
@@ -128,7 +128,7 @@ contract MarketFactory is ReentrancyGuard {
         // Authorize pool as minter
         token.setMinter(address(pool), true);
 
-        // Transfer seed USDC from owner to this contract, then approve pool
+        // Transfer seed collateral from owner to this contract, then approve pool
         require(collateral.transferFrom(msg.sender, address(this), seedAmount), "MarketFactory: seed transfer failed");
         require(collateral.approve(address(pool), seedAmount), "MarketFactory: approve failed");
 

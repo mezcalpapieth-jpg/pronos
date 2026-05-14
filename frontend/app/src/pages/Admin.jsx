@@ -8,15 +8,13 @@
  *   2. Pendientes — candidate markets produced by generators. Each row
  *      gets an "Aprobar on-chain" form that collects the deployed
  *      contract address before POST-ing to /admin/pending-markets.
- *   3. Crear manual — CreateMarketForm with ammMode radio (unified |
- *      parallel binary), full chain-metadata fields, featured toggle.
- *   4. Mercados — list of mode='onchain' markets filtered by status
- *      tabs (All/Active/Pending/Resolved). Featured quick-toggle,
- *      Edit modal, Resolve prompt.
+ *   3. Crear manual — CreateMarketForm deploys MarketFactory/V2 contracts
+ *      through /api/protocol/admin/create-market.
+ *   4. Mercados — list of indexed protocol_markets filtered by status.
+ *      Resolve calls /api/protocol/admin/resolve-market on-chain.
  *
- * All backend calls hit /api/points/admin/*; the `?mode=onchain` filter
- * keeps Points admin and MVP admin operating on disjoint slices of
- * the shared schema.
+ * Generator/pending/social tooling still lives under /api/points/admin/*.
+ * Live MVP market create/list/resolve lives under /api/protocol/*.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Nav from '../components/Nav.jsx';
@@ -39,7 +37,7 @@ const MARKET_CATEGORY_FILTERS = [
   ...CATEGORIES,
 ];
 
-const DEFAULT_CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 421614);
+const DEFAULT_CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 42161);
 
 // Sport options (keys match market.sport written by generators) + league
 // options per sport. Keep in lockstep with SPORT_TABS in CategoryPage.jsx.
@@ -156,7 +154,7 @@ function Notice({ notice }) {
 
 // ═══ Onchain wiring status panel ═══════════════════════════════════════════
 // Pre-flight check on the auto-deploy plumbing. Hits
-// /api/points/admin/onchain-status which probes env vars + factory.owner()
+// /api/protocol/admin/onchain-status which probes env vars + factory.owner()
 // + factory.collateral() + deployer balances and returns a list of
 // warnings. Operator hits "Refrescar" after every Vercel env change /
 // contract redeploy / deployer faucet to validate setup before trying
@@ -170,7 +168,7 @@ function OnchainStatusPanel() {
     setLoading(true);
     setError(null);
     try {
-      const { ok, data: body } = await getJson('/api/points/admin/onchain-status');
+      const { ok, data: body } = await getJson('/api/protocol/admin/onchain-status');
       if (!ok) throw new Error(body?.error || 'status_failed');
       setData(body);
     } catch (e) {
@@ -284,7 +282,7 @@ function OnchainStatusPanel() {
                     {data.deployer.collateralSymbol || 'COLLATERAL'}: <span style={{ color: data.deployer.collateralBalanceUnits > 0 ? 'var(--green)' : 'var(--red)' }}>
                       {data.deployer.collateralBalanceUnits.toFixed(2)}
                     </span>
-                    {' '}<span style={greenChip(data.deployer.collateralBalanceUnits > 0)}>{data.deployer.collateralBalanceUnits > 0 ? 'OK' : 'NEEDS FAUCET'}</span>
+                    {' '}<span style={greenChip(data.deployer.collateralBalanceUnits > 0)}>{data.deployer.collateralBalanceUnits > 0 ? 'OK' : 'NEEDS MXNB'}</span>
                   </div>
                 )}
               </div>
@@ -702,15 +700,8 @@ function CreateMarketForm({ onCreated, prefill }) {
   const [seed, setSeed] = useState('1000');
   const [ammMode, setAmmMode] = useState('unified');
   const [chainId, setChainId] = useState(String(DEFAULT_CHAIN_ID));
-  const [chainAddress, setChainAddress] = useState('');
-  const [chainMarketId, setChainMarketId] = useState('');
-  const [featured, setFeatured] = useState(false);
   const [sport, setSport] = useState('');
   const [league, setLeague] = useState('');
-  // Auto-deploy: when true, server calls MarketFactory itself + captures
-  // the resulting address. When false, admin pastes the address manually
-  // (for contracts deployed via Foundry/Hardhat/Remix outside Pronos).
-  const [autoDeploy, setAutoDeploy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState(null);
 
@@ -723,8 +714,8 @@ function CreateMarketForm({ onCreated, prefill }) {
     setOutcomeImages(prev => prev.map((u, idx) => idx === i ? val : u));
   }
   function addOutcome() {
-    setOutcomes(prev => prev.length < 10 ? [...prev, ''] : prev);
-    setOutcomeImages(prev => prev.length < 10 ? [...prev, ''] : prev);
+    setOutcomes(prev => prev.length < 8 ? [...prev, ''] : prev);
+    setOutcomeImages(prev => prev.length < 8 ? [...prev, ''] : prev);
   }
   function removeOutcome(i) {
     setOutcomes(prev => prev.length > 2 ? prev.filter((_, idx) => idx !== i) : prev);
@@ -752,37 +743,26 @@ function CreateMarketForm({ onCreated, prefill }) {
       const trimmedImages = outcomeImages.slice(0, trimmedOutcomes.length).map(u => (u || '').trim());
       const hasAnyImage = trimmedImages.some(Boolean);
 
-      const { ok, data } = await postJson('/api/points/admin/create-market', {
+      const { ok, data } = await postJson('/api/protocol/admin/create-market', {
         question: question.trim(),
         category,
-        icon,
         endTime,
         outcomes: trimmedOutcomes,
-        seedLiquidity: Number(seed),
+        seedAmount: Number(seed),
         ammMode,
-        mode: 'onchain',
-        chainId: Number(chainId),
-        chainAddress: autoDeploy ? '' : chainAddress.trim(),
-        chainMarketId: chainMarketId.trim() || null,
-        featured,
-        sport: sport || null,
-        league: league || null,
-        outcomeImages: hasAnyImage ? trimmedImages : null,
-        autoDeploy,
+        resolutionSource: 'Pronos admin',
       });
       if (!ok) throw new Error(data?.error ? `${data.error}${data.detail ? ` · ${data.detail}` : ''}` : 'create_failed');
-      const deployBit = data.autoDeploy
-        ? ` · auto-deployed at ${data.autoDeploy.chainAddress.slice(0, 10)}… (tx ${data.autoDeploy.txHash.slice(0, 10)}…)`
-        : '';
-      setNotice({ type: 'success', msg: `Mercado creado · id=${data.marketId} · ${data.ammMode}${deployBit}` });
+      const deployBit = data.ammMode === 'parallel'
+        ? ` · ${data.legs?.length || trimmedOutcomes.length} pools`
+        : ` · market #${data.marketId} · ${String(data.marketAddress || '').slice(0, 10)}…`;
+      setNotice({ type: 'success', msg: `Mercado on-chain creado · ${data.ammMode}${deployBit}` });
       setQuestion('');
       setOutcomes(['Sí', 'No']);
       setOutcomeImages(['', '']);
-      setChainAddress('');
-      setChainMarketId('');
       setSport('');
       setLeague('');
-      onCreated?.(data.marketId);
+      onCreated?.(data.marketId || Date.now());
     } catch (e) {
       setNotice({ type: 'error', msg: e?.message || 'create_failed' });
     } finally {
@@ -795,7 +775,7 @@ function CreateMarketForm({ onCreated, prefill }) {
       padding: 20, border: '1px solid var(--border)', borderRadius: 14,
       background: 'var(--surface1)', marginBottom: 24,
     }}>
-      <SectionHeader title="Registrar manualmente" subtitle="Crea un mercado on-chain apuntando a un contrato ya desplegado." />
+      <SectionHeader title="Crear mercado on-chain" subtitle="Despliega vía MarketFactory y deja que el indexer lo publique en el MVP." />
 
       <Field label="Pregunta" hint="Debe resolver en una fecha clara.">
         <input type="text" required minLength={8} maxLength={200} value={question} onChange={e => setQuestion(e.target.value)} style={inputStyle} placeholder="¿México gana el partido inaugural del Mundial 2026?" />
@@ -848,11 +828,10 @@ function CreateMarketForm({ onCreated, prefill }) {
         </div>
       </Field>
 
-      <Field label="Outcomes (2–10)" hint="Orden importa — el índice se usa al firmar trades on-chain. La imagen es opcional; ESPN badge / flag CDN / Cloudinary URLs funcionan.">
+      <Field label="Outcomes (2–8)" hint="Orden importa: el índice se usa al resolver y al firmar trades on-chain.">
         {outcomes.map((o, i) => (
-          <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, marginBottom: 6 }}>
+          <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, marginBottom: 6 }}>
             <input type="text" required value={o} onChange={e => updateOutcome(i, e.target.value)} placeholder={`Outcome ${i + 1}`} style={inputStyle} />
-            <input type="url" value={outcomeImages[i] || ''} onChange={e => updateOutcomeImage(i, e.target.value)} placeholder="URL de imagen (opcional)" style={inputStyle} />
             {outcomes.length > 2 ? (
               <button type="button" onClick={() => removeOutcome(i)} style={{ padding: '6px 10px', borderRadius: 6, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'pointer' }}>×</button>
             ) : (
@@ -860,7 +839,7 @@ function CreateMarketForm({ onCreated, prefill }) {
             )}
           </div>
         ))}
-        {outcomes.length < 10 && (
+        {outcomes.length < 8 && (
           <button type="button" onClick={addOutcome} style={{ padding: '6px 12px', borderRadius: 6, background: 'transparent', border: '1px dashed var(--border)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer', letterSpacing: '0.06em' }}>
             + agregar outcome
           </button>
@@ -897,7 +876,7 @@ function CreateMarketForm({ onCreated, prefill }) {
         <Field label="Fecha de cierre">
           <input type="datetime-local" required value={endTime} onChange={e => setEndTime(e.target.value)} style={inputStyle} />
         </Field>
-        <Field label="Seed liquidity (display)" hint="Afecta sólo la UI; la liquidez real vive en el contract.">
+        <Field label="Seed liquidity (MXNB)" hint="El deployer debe tener este saldo y allowance suficiente para el factory.">
           <input type="number" required min={100} value={seed} onChange={e => setSeed(e.target.value)} style={inputStyle} />
         </Field>
       </div>
@@ -905,77 +884,39 @@ function CreateMarketForm({ onCreated, prefill }) {
       <div style={{ padding: 14, borderRadius: 10, background: 'var(--surface2)', border: '1px solid var(--border)', marginTop: 8, marginBottom: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-            Metadatos on-chain
+            Despliegue on-chain
           </div>
-          <label style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            fontFamily: 'var(--font-mono)', fontSize: 11,
-            color: outcomes.length > 8 ? 'var(--text-muted)' : autoDeploy ? 'var(--green)' : 'var(--text-secondary)',
-            cursor: outcomes.length > 8 ? 'not-allowed' : 'pointer',
-          }}>
-            <input
-              type="checkbox"
-              checked={autoDeploy && outcomes.length <= 8}
-              disabled={outcomes.length > 8}
-              onChange={e => setAutoDeploy(e.target.checked)}
-            />
-            Auto-desplegar contrato
-            {outcomes.length > 8 && (
-              <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>(máx 8 outcomes)</span>
-            )}
-          </label>
         </div>
 
-        {autoDeploy && outcomes.length <= 8 ? (
-          <div style={{
-            padding: '10px 12px', borderRadius: 8,
-            background: 'rgba(0,232,122,0.06)', border: '1px solid rgba(0,232,122,0.25)',
-            fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.55,
-          }}>
-            {outcomes.length === 2 ? (
-              <>El backend llamará <code>MarketFactory.createMarket(...)</code> (V1 binario,
-              <code> PronosAMM</code>).</>
-            ) : (
-              <>El backend llamará <code>MarketFactoryV2.createMarket(...)</code> (V2 multi,
-              <code> PronosAMMMulti</code>) con los <strong>{outcomes.length} outcomes</strong> que
-              definiste arriba.</>
-            )}
-            {' '}Aprobará el seed MXNB hacia el factory y guardará la dirección del nuevo pool
-            automáticamente.
-            <br /><br />
-            <strong style={{ color: 'var(--green)' }}>Requisitos:</strong> el wallet del deployer
-            (<code>ONCHAIN_DEPLOYER_ADDRESS</code>) tiene que ser el <code>owner()</code> del factory
-            correspondiente {outcomes.length >= 3 && (<>(<code>ONCHAIN_MARKET_FACTORY_V2_ADDRESS</code>)</>)}
-            {' '}y tener saldo MXNB suficiente para el seed.
-            <br /><br />
-            <Field label="Chain ID" hint="421614 = Arbitrum Sepolia">
-              <input type="number" required min={1} value={chainId} onChange={e => setChainId(e.target.value)} style={inputStyle} />
-            </Field>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr', gap: 10 }}>
-            <Field label="Chain ID" hint="421614 = Arbitrum Sepolia">
-              <input type="number" required min={1} value={chainId} onChange={e => setChainId(e.target.value)} style={inputStyle} />
-            </Field>
-            <Field label="Contract address" hint="AMM ya desplegada (Foundry/Hardhat/Remix)">
-              <input type="text" required pattern="0x[a-fA-F0-9]{40}" value={chainAddress} onChange={e => setChainAddress(e.target.value)} style={inputStyle} placeholder="0x…" />
-            </Field>
-            <Field label="Market ID (opcional)" hint="Índice dentro del contract.">
-              <input type="text" value={chainMarketId} onChange={e => setChainMarketId(e.target.value)} style={inputStyle} placeholder="0 · 1 · …" />
-            </Field>
-          </div>
-        )}
+        <div style={{
+          padding: '10px 12px', borderRadius: 8,
+          background: 'rgba(0,232,122,0.06)', border: '1px solid rgba(0,232,122,0.25)',
+          fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.55,
+        }}>
+          {outcomes.length === 2 ? (
+            <>El backend llamará <code>MarketFactory.createMarket(...)</code> (V1 binario,
+            <code> PronosAMM</code>).</>
+          ) : (
+            <>El backend llamará <code>MarketFactoryV2.createMarket(...)</code> (V2 multi,
+            <code> PronosAMMMulti</code>) con los <strong>{outcomes.length} outcomes</strong> definidos.</>
+          )}
+          {' '}El indexer guardará el pool en <code>protocol_markets</code>.
+          <br /><br />
+          <strong style={{ color: 'var(--green)' }}>Requisitos:</strong> el wallet del deployer
+          (<code>ONCHAIN_DEPLOYER_ADDRESS</code>) debe ser <code>owner()</code> del factory
+          correspondiente {outcomes.length >= 3 && (<>(<code>ONCHAIN_MARKET_FACTORY_V2_ADDRESS</code>)</>)}
+          {' '}y tener MXNB suficiente para el seed.
+          <br /><br />
+          <Field label="Chain ID" hint="42161 = Arbitrum One · 421614 = Arbitrum Sepolia">
+            <input type="number" required min={1} value={chainId} onChange={e => setChainId(e.target.value)} style={inputStyle} />
+          </Field>
+        </div>
       </div>
-
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', marginTop: 6, marginBottom: 14, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)' }}>
-        <input type="checkbox" checked={featured} onChange={e => setFeatured(e.target.checked)} />
-        Mostrar como destacado en el hero del /mvp.
-      </label>
 
       <Notice notice={notice} />
 
       <button type="submit" className="btn-primary" disabled={submitting} style={{ width: '100%' }}>
-        {submitting ? 'Creando…' : 'Registrar mercado'}
+        {submitting ? 'Creando…' : 'Crear en protocolo'}
       </button>
     </form>
   );
@@ -1073,9 +1014,7 @@ function EditMarketModal({ market, onClose, onSaved }) {
 const STATUS_TABS = [
   { value: 'all',      label: 'Todos'        },
   { value: 'active',   label: 'Activos'      },
-  { value: 'pending',  label: 'Por resolver' },
   { value: 'resolved', label: 'Resueltos'    },
-  { value: 'archived', label: 'Archivados'   },
 ];
 
 function MarketsList({ refreshKey, bumpRefresh }) {
@@ -1151,15 +1090,20 @@ function MarketsList({ refreshKey, bumpRefresh }) {
     try {
       const q = new URLSearchParams({
         status: filter,
-        mode: 'onchain',
-        chain_id: String(DEFAULT_CHAIN_ID),
+        chainId: String(DEFAULT_CHAIN_ID),
+        limit: '200',
       });
       if (categoryFilter !== 'all') q.set('category', categoryFilter);
       const { ok, data } = await getJson(
-        `/api/points/admin/markets?${q.toString()}`,
+        `/api/protocol/markets?${q.toString()}`,
       );
       if (!ok) throw new Error(data?.error || 'list_failed');
-      setRows(Array.isArray(data?.markets) ? data.markets : []);
+      setRows(Array.isArray(data?.markets) ? data.markets.map((m) => ({
+        ...m,
+        ammMode: m.protocolVersion === 'v2' ? 'unified-v2' : 'binary-v1',
+        chainAddress: m.poolAddress,
+        tradeCount: m.tradeCount ?? null,
+      })) : []);
     } catch (e) {
       setError(e?.message || 'list_failed');
     } finally {
@@ -1180,23 +1124,12 @@ function MarketsList({ refreshKey, bumpRefresh }) {
       alert('Índice inválido.');
       return;
     }
-    // Second prompt: free-form score / result line rendered under the
-    // question on resolved cards + detail pages. Empty → NULL, skipped
-    // gracefully. Cap enforced server-side at 240 chars.
-    const scoreInput = window.prompt(
-      `Resultado / marcador (opcional):\n\n` +
-      `Ejemplos: "México 3-2 Brasil", "112-108", "1. Verstappen · 2. Norris · 3. Sainz"`,
-      market.finalScore || '',
-    );
-    const finalScore = scoreInput === null ? null : scoreInput.trim() || null;
-
     setResolvingId(market.id);
     setNotice(null);
     try {
-      const { ok, data } = await postJson('/api/points/admin/resolve-market', {
+      const { ok, data } = await postJson('/api/protocol/admin/resolve-market', {
         marketId: market.id,
         winningOutcomeIndex: idx,
-        finalScore,
       });
       if (!ok) {
         const parts = [data?.error || 'resolve_failed'];
@@ -1204,7 +1137,7 @@ function MarketsList({ refreshKey, bumpRefresh }) {
         if (data?.code)   parts.push(`pg:${data.code}`);
         throw new Error(parts.join(' · '));
       }
-      setNotice({ type: 'success', msg: `Resuelto: ${market.outcomes[idx]}${finalScore ? ` · ${finalScore}` : ''}` });
+      setNotice({ type: 'success', msg: `Resolución enviada on-chain: ${market.outcomes[idx]}` });
       // In-place row patch instead of full load() so the page doesn't
       // jump back to the top mid-scroll. The row reflects the new
       // status / outcome / finalScore immediately. bumpRefresh() still
@@ -1214,7 +1147,6 @@ function MarketsList({ refreshKey, bumpRefresh }) {
         ...m,
         status: 'resolved',
         outcome: idx,
-        finalScore: finalScore ?? m.finalScore ?? null,
         resolvedAt: new Date().toISOString(),
       } : m));
       bumpRefresh();
@@ -1277,7 +1209,7 @@ function MarketsList({ refreshKey, bumpRefresh }) {
     }}>
       <SectionHeader
         title={`Mercados on-chain (${rows.length})`}
-        subtitle="mode='onchain'. Filtros + edit + featured + resolve."
+        subtitle="protocol_markets indexado. Filtros + resolución on-chain."
         right={
           <div style={{ display: 'flex', gap: 6 }}>
             <button onClick={load} className="btn-ghost" style={{ fontSize: 11 }}>Refrescar</button>
@@ -1382,7 +1314,7 @@ function MarketsList({ refreshKey, bumpRefresh }) {
                   : m.status === 'resolved' ? `✓ ${m.outcomes?.[m.outcome ?? 0] || 'resuelto'}`
                   : m.status}
               </span>
-              <span>{m.tradeCount || 0} trades</span>
+              {m.tradeCount != null && <span>{m.tradeCount} trades</span>}
               {m.sport && <span>{m.sport}{m.league ? ` · ${m.league}` : ''}</span>}
               {m.chainId && <span>chain {m.chainId}</span>}
               {m.chainAddress && <span>{m.chainAddress.slice(0, 6)}…{m.chainAddress.slice(-4)}</span>}
@@ -1390,40 +1322,11 @@ function MarketsList({ refreshKey, bumpRefresh }) {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <button
-              onClick={() => handleToggleFeatured(m)}
-              disabled={featuringId === m.id}
-              title={m.featured ? 'Quitar destacado' : 'Marcar como destacado'}
-              style={{
-                fontSize: 14, cursor: 'pointer',
-                background: 'transparent', border: '1px solid var(--border)',
-                borderRadius: 6, padding: '4px 8px',
-                color: m.featured ? '#FF5500' : 'var(--text-muted)',
-                minWidth: 36,
-              }}
-            >
-              {m.featured ? '🔥' : '☆'}
-            </button>
-            <button onClick={() => setEditingMarket(m)} className="btn-ghost" style={{ fontSize: 11, padding: '6px 10px' }}>
-              Editar
-            </button>
-            {m.status === 'active' && !m.archivedAt && (
+            {m.status === 'active' && (
               <button onClick={() => handleResolve(m)} disabled={resolvingId === m.id} className="btn-ghost" style={{ fontSize: 11, padding: '6px 10px' }}>
                 {resolvingId === m.id ? '…' : 'Resolver'}
               </button>
             )}
-            <button
-              onClick={() => handleArchive(m)}
-              disabled={archivingId === m.id}
-              className="btn-ghost"
-              style={{
-                fontSize: 11, padding: '6px 10px',
-                color: m.archivedAt ? 'var(--green)' : 'var(--red)',
-                borderColor: m.archivedAt ? 'rgba(0,232,122,0.3)' : 'rgba(255,69,69,0.25)',
-              }}
-            >
-              {archivingId === m.id ? '…' : m.archivedAt ? 'Restaurar' : 'Archivar'}
-            </button>
           </div>
         </div>
       ))}
@@ -1774,7 +1677,7 @@ export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
             Admin · MVP
           </h1>
           <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
-            Gestión de mercados on-chain · Turnkey · Arbitrum Sepolia · MXNB.
+            Gestión de mercados on-chain · Turnkey · Arbitrum One · MXNB.
           </p>
         </div>
         {body}

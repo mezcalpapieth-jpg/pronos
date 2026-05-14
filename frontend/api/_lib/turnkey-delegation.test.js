@@ -32,3 +32,17 @@ test('delegated policy consensus targets the approving credential public key', (
   assert.match(condition, /ACTIVITY_TYPE_SIGN_TRANSACTION_V2/);
   assert.match(condition, /0xabcdef0000000000000000000000000000000000/);
 });
+
+test('delegated policy pins Arbitrum chain, zero native value, and allowed selectors', () => {
+  const { condition } = buildDelegationPolicyExpressions({
+    backendApiPublicKey: 'abc123',
+    allowedTargets: ['0xABCDEF0000000000000000000000000000000000'],
+    chainId: 42161,
+    allowedFunctionSelectors: ['0x095EA7B3', '0xe24c469b'],
+  });
+
+  assert.match(condition, /activity\.params\.type == 'TRANSACTION_TYPE_ETHEREUM'/);
+  assert.match(condition, /eth\.tx\.chain_id == 42161/);
+  assert.match(condition, /eth\.tx\.value == 0/);
+  assert.match(condition, /eth\.tx\.data\[0\.\.10\] in \['0x095ea7b3', '0xe24c469b'\]/);
+});

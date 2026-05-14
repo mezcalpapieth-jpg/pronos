@@ -10,17 +10,14 @@ import {MarketFactory} from "../src/MarketFactory.sol";
  * @notice Deploys the full Pronos protocol: PronosToken + MarketFactory
  *
  * Usage:
- *   forge script script/DeployProtocol.s.sol --rpc-url arbitrum_sepolia --broadcast --verify
+ *   forge script script/DeployProtocol.s.sol --rpc-url arbitrum --broadcast --verify
  *
  * Required env vars:
  *   DEPLOYER_PRIVATE_KEY - Private key of deployer (becomes initial owner)
  *   COLLATERAL_ADDRESS   - ERC-20 collateral token address on target chain.
  *                          Mainnet: real MXNB
  *                          (0xF197FFC28c23E0309B5559e7a166f2c6164C80aA, Bitso).
- *                          Testnet: Circle USDC on Arbitrum Sepolia
- *                          (0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d) used
- *                          as a stand-in; the website labels it "MXNB".
- *                          Legacy alias: USDC_ADDRESS (still supported).
+ *                          Testnet: MockMXNB from DeployMockMXNB.s.sol.
  *   TREASURY_ADDRESS     - Treasury wallet (receives 70% of fees)
  *   LIQUIDITY_RESERVE    - Liquidity reserve wallet (receives 20%)
  *   EMERGENCY_RESERVE    - Emergency reserve wallet (receives 10%)
@@ -35,11 +32,8 @@ import {MarketFactory} from "../src/MarketFactory.sol";
 contract DeployProtocol is Script {
     function run() external {
         uint256 deployerKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
-        // Prefer COLLATERAL_ADDRESS (chain-agnostic name); fall back to
-        // legacy USDC_ADDRESS for backward compatibility with existing
-        // .env files. Whichever is set wins.
         address collateral = vm.envOr("COLLATERAL_ADDRESS", address(0));
-        if (collateral == address(0)) collateral = vm.envAddress("USDC_ADDRESS");
+        if (collateral == address(0)) collateral = vm.envAddress("ONCHAIN_COLLATERAL_ADDRESS");
         address treasury = vm.envAddress("TREASURY_ADDRESS");
         address liquidityReserve = vm.envAddress("LIQUIDITY_RESERVE");
         address emergencyReserve = vm.envAddress("EMERGENCY_RESERVE");
@@ -99,9 +93,12 @@ contract DeployProtocol is Script {
 
         console.log("=== Deployment Complete ===");
         console.log("Vercel env:");
-        console.log("VITE_PRONOS_ARB_SEPOLIA_FACTORY=", address(factory));
-        console.log("VITE_PRONOS_ARB_SEPOLIA_TOKEN=", address(token));
-        console.log("VITE_PRONOS_ARB_SEPOLIA_COLLATERAL=", collateral);
+        console.log("ONCHAIN_CHAIN_ID=42161");
+        console.log("ONCHAIN_COLLATERAL_ADDRESS=", collateral);
+        console.log("ONCHAIN_MARKET_FACTORY_ADDRESS=", address(factory));
+        console.log("VITE_ONCHAIN_CHAIN_ID=42161");
+        console.log("VITE_PRONOS_ARBITRUM_FACTORY=", address(factory));
+        console.log("VITE_PRONOS_ARBITRUM_TOKEN=", address(token));
         console.log("FACTORY_ADDRESS=", address(factory));
         console.log("PRONOS_FACTORY_ADDRESS=", address(factory));
         console.log("Next steps:");

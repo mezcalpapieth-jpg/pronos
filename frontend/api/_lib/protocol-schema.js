@@ -3,7 +3,7 @@ let protocolSchemaReady = false;
 const PROTOCOL_SCHEMA_MIGRATIONS = [
   `CREATE TABLE IF NOT EXISTS protocol_markets (
     id              SERIAL PRIMARY KEY,
-    chain_id        INTEGER NOT NULL DEFAULT 421614,
+    chain_id        INTEGER NOT NULL DEFAULT 42161,
     factory_address TEXT NOT NULL,
     pool_address    TEXT NOT NULL,
     market_id       INTEGER NOT NULL,

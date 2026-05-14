@@ -2,7 +2,7 @@
  * MVP Nav — Turnkey session + delegated signing, no Privy.
  *
  * Trimmed from the legacy Privy version: no wallet-link flow, no direct
- * chain switching, no USDC balance read. The backend handles all chain
+ * chain switching, no browser-side collateral balance read. The backend handles all chain
  * interaction via Turnkey-signed txs, and the user's MXNB/MXNP balance
  * comes from the session payload (user.balance) populated by /api/points/auth/me.
  */

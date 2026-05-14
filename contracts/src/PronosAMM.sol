@@ -24,10 +24,9 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
     // ─── State ────────────────────────────────────────────────────────────────
 
     PronosToken public immutable token;
-    // Generic ERC-20 collateral. On Arbitrum One mainnet this is MXNB
-    // (Bitso's MXN-pegged stablecoin, 0xF197FFC28c23E0309B5559e7a166f2c6164C80aA).
-    // On Arbitrum Sepolia we use Circle's testnet USDC as a stand-in
-    // (the website still labels it "MXNB" for parity).
+    // Generic ERC-20 collateral. On Arbitrum One this is MXNB
+    // (0xF197FFC28c23E0309B5559e7a166f2c6164C80aA). On testnets use
+    // MockMXNB with the same 6-decimal convention.
     IERC20      public immutable collateral;
     address     public immutable factory;
 
@@ -160,9 +159,9 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
     // ─── Trading ─────────────────────────────────────────────────────────────
 
     /**
-     * @notice Buy outcome tokens with USDC.
+     * @notice Buy outcome tokens with collateral.
      *         Fee is deducted first and sent to feeCollector.
-     *         Remaining USDC enters the pool.
+     *         Remaining collateral enters the pool.
      */
     function buy(bool buyYes, uint256 collateralAmount)
         external
@@ -220,7 +219,7 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
     }
 
     /**
-     * @notice Sell outcome tokens back for USDC.
+     * @notice Sell outcome tokens back for collateral.
      *         Uses quadratic formula to compute collateral out.
      *         Fee is deducted and sent to feeCollector.
      *
@@ -263,7 +262,7 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
         // promote sqrt to its CEILING so the subtraction goes the other
         // way and c rounds DOWN. The pool keeps the rounding crumb;
         // sellers receive at most 1 wei less than the exact solution
-        // (negligible at USDC-microunit scale).
+        // (negligible at 6-decimal collateral scale).
         uint256 diff = a > b ? a - b : b - a;
         uint256 discriminant = diff * diff + 4 * k;
         uint256 sqrtDisc = _sqrt(discriminant);
@@ -448,7 +447,7 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
         emit WinningsRedeemed(holder, amount, amount);
     }
 
-    /// @notice Redeem winning tokens for USDC (1 token = 1 USDC).
+    /// @notice Redeem winning tokens for collateral (1 token = 1 collateral unit).
     function redeem(uint256 amount) external nonReentrant {
         require(resolved, "PronosAMM: not resolved");
         require(amount > 0, "PronosAMM: zero amount");

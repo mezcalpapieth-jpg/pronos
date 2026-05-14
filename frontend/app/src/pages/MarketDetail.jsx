@@ -30,7 +30,7 @@ import ShareButton from '../components/ShareButton.jsx';
 import { usePointsAuth } from '../lib/pointsAuth.js';
 import { useIsMobile } from '../lib/useIsMobile.js';
 
-const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 421614);
+const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 42161);
 
 // Multi-outcome line palette — same hue rotation the Hero uses so
 // chart colors stay consistent across the app.

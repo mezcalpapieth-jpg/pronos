@@ -17,7 +17,7 @@ import { runCrypto5MinTick } from './_lib/crypto-5min.js';
  *   FACTORY_ADDRESS    — Deployed MarketFactory address
  *   ARB_RPC_URL        — Arbitrum RPC endpoint
  *
- * Supported aliases for Arbitrum Sepolia deployments:
+ * Supported aliases for Arbitrum deployments:
  *   PROTOCOL_CHAIN_ID / CHAIN_ID
  *   PRONOS_FACTORY_ADDRESS / VITE_PRONOS_ARB_SEPOLIA_FACTORY
  *   ARB_SEPOLIA_RPC / ARBITRUM_SEPOLIA_RPC_URL
@@ -65,7 +65,7 @@ const AMM_MULTI_ABI = [
 const BLOCK_BATCH = 2000; // Process 2000 blocks at a time
 const DEFAULT_LOOKBACK_BLOCKS = 250000;
 const DEFAULT_MAX_BATCHES = 5;
-const CHAIN_ID = parseInteger(process.env.CHAIN_ID) || parseInteger(process.env.PROTOCOL_CHAIN_ID) || 421614;
+const CHAIN_ID = parseInteger(process.env.CHAIN_ID) || parseInteger(process.env.PROTOCOL_CHAIN_ID) || 42161;
 
 function parseInteger(value) {
   const n = Number.parseInt(value, 10);

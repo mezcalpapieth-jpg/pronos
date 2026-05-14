@@ -5,7 +5,7 @@ import React from 'react';
  *
  * Draft tailored to Pronos:
  *   - Prediction-market platform with own AMM contracts on Arbitrum
- *   - MXNB collateral on mainnet, USDC stand-in on testnet (labelled MXNB)
+ *   - MXNB collateral on mainnet, MockMXNB on testnet
  *   - Mexico-first audience (jurisdictional grey zone — clear disclaimers)
  *   - No-investment-advice / smart-contract-risk / regulatory-uncertainty
  *
@@ -46,8 +46,8 @@ export default function TermsOfService() {
         otros. Las operaciones se liquidan automáticamente mediante
         contratos inteligentes desplegados en la red Arbitrum, usando
         MXNB (la stablecoin emitida por Bitso) como activo de colateral
-        en mainnet. En testnet utilizamos USDC como sustituto, etiquetado
-        como “MXNB” en la interfaz.
+        en mainnet. En testnet utilizamos MockMXNB para ensayar el flujo
+        sin apuntar la aplicación a un token real.
       </P>
 
       <H2>2. Elegibilidad</H2>

@@ -22,7 +22,7 @@ import { useT, useLang } from '../lib/i18n.js';
 
 const TIME_PERIODS = ['1D', '1W', '1M', 'ALL'];
 const AUTO_INTERVAL_MS = 7000;
-const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 421614);
+const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 42161);
 const TRADE_MIN_MS = 1500;
 const TRADE_MAX_MS = 3800;
 

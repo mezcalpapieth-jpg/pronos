@@ -232,27 +232,51 @@ export async function signTransactionForSuborg({ suborgId, signWithAddress, unsi
  * is deployed. A 400 from createPolicy usually means the condition
  * string needs a syntax tweak for the SDK version in use.
  */
-export function buildDelegationPolicyExpressions({ backendApiPublicKey, allowedTargets }) {
+export function buildDelegationPolicyExpressions({
+  backendApiPublicKey,
+  allowedTargets,
+  chainId,
+  allowedFunctionSelectors = [],
+}) {
   if (!backendApiPublicKey) throw new Error('backendApiPublicKey required');
   if (!Array.isArray(allowedTargets) || allowedTargets.length === 0) {
     throw new Error('allowedTargets[] required');
   }
   const lowerTargets = allowedTargets.map(a => String(a).toLowerCase());
   const targetsList = lowerTargets.map(a => `'${a}'`).join(', ');
+  const selectors = Array.isArray(allowedFunctionSelectors)
+    ? allowedFunctionSelectors.map(s => String(s).toLowerCase()).filter(Boolean)
+    : [];
+  const conditions = [
+    "activity.type == 'ACTIVITY_TYPE_SIGN_TRANSACTION_V2'",
+    "activity.params.type == 'TRANSACTION_TYPE_ETHEREUM'",
+  ];
+  const numericChainId = Number(chainId);
+  if (Number.isInteger(numericChainId) && numericChainId > 0) {
+    conditions.push(`eth.tx.chain_id == ${numericChainId}`);
+  }
+  conditions.push('eth.tx.value == 0');
+  conditions.push(`eth.tx.to in [${targetsList}]`);
+  if (selectors.length > 0) {
+    const selectorList = selectors.map(s => `'${s}'`).join(', ');
+    conditions.push(`eth.tx.data[0..10] in [${selectorList}]`);
+  }
   return {
     consensus: `credentials.any(credential, credential.public_key == '${backendApiPublicKey}')`,
-    condition: `activity.type == 'ACTIVITY_TYPE_SIGN_TRANSACTION_V2' && eth.tx.to in [${targetsList}]`,
+    condition: conditions.join(' && '),
   };
 }
 
 export async function createDelegationPolicyOnSuborg({
   suborgId, backendApiPublicKey, allowedTargets, policyName = 'pronos-delegation-v1',
-  notes = 'Pronos delegated signing',
+  notes = 'Pronos delegated signing', chainId, allowedFunctionSelectors,
 }) {
   if (!suborgId) throw new Error('suborgId required');
   const { consensus, condition } = buildDelegationPolicyExpressions({
     backendApiPublicKey,
     allowedTargets,
+    chainId,
+    allowedFunctionSelectors,
   });
 
   const result = await api().createPolicy({

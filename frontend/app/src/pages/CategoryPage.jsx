@@ -20,7 +20,7 @@ import CategoryBar from '../components/CategoryBar.jsx';
 import MarketCard from '../components/MarketCard.jsx';
 import { mapProtocolMarketToCard } from '../lib/mvpMarketCard.js';
 
-const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 421614);
+const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 42161);
 
 const SLUG_LABELS = {
   deportes:    'Deportes',

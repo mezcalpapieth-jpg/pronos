@@ -44,7 +44,7 @@ export default async function handler(req, res) {
     ? req.query.category.trim().toLowerCase()
     : null;
   // chainId filter — typically used when the same DB tracks multiple
-  // chains (Sepolia vs Mainnet). Pass `?chainId=421614` to scope.
+  // chains (testnet vs mainnet). Pass `?chainId=42161` to scope mainnet.
   const chainIdRaw = Number.parseInt(req.query.chainId ?? req.query.chain_id, 10);
   const chainId = Number.isFinite(chainIdRaw) && chainIdRaw > 0 ? chainIdRaw : null;
   const limitRaw = Number.parseInt(req.query.limit, 10);

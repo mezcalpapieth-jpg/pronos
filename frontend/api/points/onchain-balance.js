@@ -46,7 +46,7 @@ export default async function handler(req, res) {
 
     const rpcUrl = process.env.ONCHAIN_RPC_URL;
     const collateralAddr = process.env.ONCHAIN_COLLATERAL_ADDRESS;
-    const chainId = Number(process.env.ONCHAIN_CHAIN_ID || 421614);
+    const chainId = Number(process.env.ONCHAIN_CHAIN_ID || 42161);
     if (!rpcUrl || !collateralAddr) {
       return res.status(200).json({
         balance: 0,

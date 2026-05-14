@@ -18,7 +18,7 @@ import {MockMXNB} from "../src/MockMXNB.sol";
  * After deploy:
  *   1. Note the printed address.
  *   2. Set Vercel `ONCHAIN_COLLATERAL_ADDRESS` to that address.
- *   3. Re-deploy MarketFactory + MarketFactoryV2 with USDC_ADDRESS = mock MXNB address.
+ *   3. Re-deploy MarketFactory + MarketFactoryV2 with COLLATERAL_ADDRESS = mock MXNB address.
  *   4. Anyone (including the new factory deployer wallet) can call
  *      `MockMXNB.faucet()` to mint 1,000 MXNB for testing.
  */
@@ -38,7 +38,7 @@ contract DeployMockMXNB is Script {
         console.log("");
         console.log("Next steps:");
         console.log("  1. Set Vercel ONCHAIN_COLLATERAL_ADDRESS =", address(mxnb));
-        console.log("  2. Re-deploy MarketFactory(V1+V2) with USDC_ADDRESS =", address(mxnb));
+        console.log("  2. Re-deploy MarketFactory(V1+V2) with COLLATERAL_ADDRESS =", address(mxnb));
         console.log("  3. Call faucet() from your deployer wallet for testnet MXNB");
     }
 }

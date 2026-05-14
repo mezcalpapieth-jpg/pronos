@@ -4,7 +4,7 @@
  * Pronos used to mirror Polymarket markets and place orders on its
  * CTF Exchange via this module. As of 2026-05-06 we run our OWN
  * AMM protocol on Arbitrum (MarketFactory + PronosAMM + PronosToken),
- * with MXNB collateral on mainnet and a USDC stand-in on Sepolia.
+ * with MXNB collateral on Arbitrum One and MockMXNB on testnets.
  * Trades go through /api/protocol/buy and Turnkey-signed transactions.
  *
  * Every function in this file now throws so any stale caller fails

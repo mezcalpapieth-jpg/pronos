@@ -4,7 +4,7 @@
  *
  * MVP-only on-chain redemption. After a market is resolved, holders
  * of the winning outcome can call AMM.redeem(amount) to burn winning
- * shares 1:1 for collateral (USDC on Sepolia, MXNB on mainnet).
+ * shares 1:1 for collateral (MXNB on Arbitrum One, MockMXNB on testnets).
  *
  * Both V1 (binary) and V2 (multi) AMMs use the same `redeem(uint256)`
  * signature — the contract knows which outcome is winning from its

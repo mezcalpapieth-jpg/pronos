@@ -11,7 +11,7 @@
  * a normal "tap → confirm → done" flow.
  *
  * Collateral flow: before buy, the AMM needs allowance on the
- * collateral (USDC on Sepolia, MXNB on mainnet). We check
+ * collateral (MXNB on Arbitrum One, MockMXNB on testnet). We check
  * allowance; if insufficient, we send a MAX_UINT256 approve() tx
  * first. This spends one extra tx on the user's FIRST trade against
  * a given market, then every subsequent trade against that market
@@ -101,7 +101,7 @@ const MARKET_FACTORY_V2_ABI = [
 
 const MAX_UINT256 = ethers.constants.MaxUint256;
 
-// USDC/MXNB decimals — both happen to be 6.
+// MXNB decimals.
 const COLLATERAL_DECIMALS = 6;
 
 /**
@@ -130,7 +130,7 @@ function provider() {
 }
 
 function chainId() {
-  return Number(process.env.ONCHAIN_CHAIN_ID || 421614);
+  return Number(process.env.ONCHAIN_CHAIN_ID || 42161);
 }
 
 // ── Turnkey-signed tx broadcast ─────────────────────────────────────

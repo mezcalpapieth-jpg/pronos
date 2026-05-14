@@ -19,7 +19,7 @@ import { OPENING_KICKOFF_ISO } from '../../points/src/lib/worldCup.js';
 const HERO_GRADIENT =
   'linear-gradient(130deg, rgba(22,163,74,0.25) 0%, rgba(220,38,38,0.22) 45%, rgba(59,130,246,0.28) 100%), var(--surface1)';
 
-const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 421614);
+const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 42161);
 
 function pad(n) { return String(n).padStart(2, '0'); }
 
@@ -246,7 +246,7 @@ export default function WorldCupPage({ onOpenLogin }) {
             maxWidth: 680, lineHeight: 1.6, marginBottom: 22,
           }}>
             Todos los mercados de abajo se liquidan en <strong>MXNB on-chain</strong> con firma
-            delegada vía Turnkey — cero fricción, cero gas visible.
+            delegada vía Turnkey — sin MetaMask y con ejecución en Arbitrum.
           </p>
 
           {!countdown.done && (

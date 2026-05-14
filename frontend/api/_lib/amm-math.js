@@ -17,8 +17,8 @@
  * to `binaryBuyQuote` per leg using the shared event_group_id.
  *
  * Precision:
- *   - All collateral / reserve amounts scaled by 1e6 (6 decimals, matches
- *     USDC). A value of 500_000_000n represents 500 MXNP.
+ *   - All collateral / reserve amounts scaled by 1e6 (6 decimals, matching
+ *     MXNB/MXNP). A value of 500_000_000n represents 500 MXNP.
  *   - All share amounts use the same 6-decimal scale.
  *   - Prices are probability × 1e6 (500_000 = 50%).
  *
@@ -43,7 +43,7 @@
  */
 
 // ─── Constants ───────────────────────────────────────────────────────────────
-const SCALE = 1_000_000n;              // 1e6 — matches USDC/MXNP 6 decimals
+const SCALE = 1_000_000n;              // 1e6 — matches MXNB/MXNP 6 decimals
 const PRICE_SCALE = 1_000_000n;        // probabilities stored as ×1e6
 const FEE_SLOPE_BPS = 500n;            // fee = 5% × (1 - P)
 const FEE_DENOM = 10_000n;             // bps denominator

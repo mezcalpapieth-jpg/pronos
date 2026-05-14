@@ -18,7 +18,7 @@ import MarketCard from './MarketCard.jsx';
 import { useT } from '../lib/i18n.js';
 import { mapProtocolMarketToCard } from '../lib/mvpMarketCard.js';
 
-const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 421614);
+const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 42161);
 const GRID_CACHE_KEY = 'pronos-protocol-grid-cache-v1';
 
 function readCache(key) {

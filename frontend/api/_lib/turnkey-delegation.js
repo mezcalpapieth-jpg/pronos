@@ -34,6 +34,25 @@ import {
 export const DELEGATION_DAYS = 180;
 export const DELEGATION_DAILY_CAP_MXNB = 200_000;
 
+// Function selectors allowed by the user-delegated EVM policy.
+// Turnkey policies inspect the first 4 calldata bytes via
+// eth.tx.data[0..10] (0x + 8 hex chars).
+export const DELEGATION_ALLOWED_SELECTORS = Object.freeze([
+  '0x095ea7b3', // ERC20.approve(address,uint256)
+  '0xe24c469b', // PronosAMM.buy(bool,uint256)
+  '0xf571c5f3', // PronosAMM.sell(bool,uint256)
+  '0x62f791c0', // PronosAMMMulti.buy(uint8,uint256)
+  '0xd9515e0b', // PronosAMMMulti.sell(uint8,uint256)
+  '0xdb006a75', // redeem(uint256)
+]);
+
+function parseAddressList(value) {
+  return String(value || '')
+    .split(/[,\s]+/)
+    .map(v => v.trim())
+    .filter(Boolean);
+}
+
 // When M3 adds real contracts, populate this map (via env vars or
 // a deployed-contracts manifest). Keys are chain IDs; values are
 // the contract addresses the policy will allow the backend key to
@@ -45,6 +64,10 @@ function onchainConfig() {
     marketFactoryV1: process.env.ONCHAIN_MARKET_FACTORY_ADDRESS || null,
     marketFactoryV2: process.env.ONCHAIN_MARKET_FACTORY_V2_ADDRESS || null,
     collateralToken: process.env.ONCHAIN_COLLATERAL_ADDRESS || process.env.ONCHAIN_MXNB_ADDRESS || null,
+    marketPools: [
+      ...parseAddressList(process.env.ONCHAIN_MARKET_POOL_ADDRESSES),
+      ...parseAddressList(process.env.ONCHAIN_AMM_ADDRESSES),
+    ],
   };
 }
 
@@ -58,7 +81,7 @@ export function isDelegationEnabled() {
   if (process.env.TURNKEY_POLICIES_ENABLED !== 'true') return false;
   if (!isTurnkeyConfigured()) return false;
   const cfg = onchainConfig();
-  return Boolean((cfg.marketFactoryV1 || cfg.marketFactoryV2) && cfg.collateralToken);
+  return Boolean(cfg.chainId > 0 && (cfg.marketFactoryV1 || cfg.marketFactoryV2) && cfg.collateralToken);
 }
 
 // ── Policy creation ────────────────────────────────────────────────
@@ -97,16 +120,17 @@ export async function createDelegationPolicy({ suborgId, backendApiPublicKey }) 
   }
 
   // ── Real Turnkey path ─────────────────────────────────────────────
-  // Policy grants the backend API key signing authority for
-  // transactions targeting our MarketFactory + collateral contract.
-  // Scope can be tightened later (function-selector whitelist,
-  // per-day spend cap via a counter approver) but this shape is
-  // enough to keep signing limited to our contracts.
+  // Policy grants the backend API key signing authority for EVM
+  // transactions on the configured chain, zero native value, selected
+  // function selectors, and known Pronos targets. Add newly deployed AMM
+  // pools to ONCHAIN_MARKET_POOL_ADDRESSES before asking users to create
+  // fresh policies that can buy/sell/redeem those pools.
   const cfg = onchainConfig();
   const allowedTargets = [
     cfg.marketFactoryV1,
     cfg.marketFactoryV2,
     cfg.collateralToken,
+    ...cfg.marketPools,
   ].filter(Boolean);
   if (allowedTargets.length === 0) {
     throw new Error('onchain config missing marketFactory/collateralToken');
@@ -118,6 +142,8 @@ export async function createDelegationPolicy({ suborgId, backendApiPublicKey }) 
     suborgId,
     backendApiPublicKey,
     allowedTargets,
+    chainId: cfg.chainId,
+    allowedFunctionSelectors: DELEGATION_ALLOWED_SELECTORS,
     policyName: `pronos-delegation-${Date.now()}`,
     notes: `Valid ${DELEGATION_DAYS} days; cap ${DELEGATION_DAILY_CAP_MXNB} MXNB/day`,
   });

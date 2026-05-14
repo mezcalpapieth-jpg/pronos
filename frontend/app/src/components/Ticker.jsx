@@ -2,7 +2,7 @@ import React from 'react';
 
 // Pronos / MVP ticker. Items are duplicated once so the CSS-driven
 // horizontal scroll can loop seamlessly without a visible reset.
-// Re-branded from the Privy/USDC/Polygon era to the Turnkey/MXNB/
+// Re-branded from the Privy/Polygon era to the Turnkey/MXNB/
 // Arbitrum stack the MVP actually runs on now.
 const ITEMS = [
   { label: 'POWERED BY', val: 'PRONOS' },

@@ -3,7 +3,7 @@
  * Body: {
  *   question, category, endTime,
  *   outcomes: string[],            // 2..8
- *   seedAmount,                    // collateral units (USDC/MXNB)
+ *   seedAmount,                    // collateral units (MXNB)
  *   resolutionSource?: string,
  *   ammMode?: 'unified' | 'parallel',
  * }

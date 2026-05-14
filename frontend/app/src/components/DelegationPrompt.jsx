@@ -28,8 +28,8 @@ import { authorizeDelegation } from '@app/lib/pointsAuth.js';
 
 const BULLETS = [
   { icon: '✓',  title: 'Apuestas sin interrupciones',  body: 'Pronos firma tus compras y ventas on-chain sin pedirte confirmar cada vez.' },
-  { icon: '💰', title: 'Tope: 200,000 MXNB por día',   body: 'Aunque nuestro backend fuera comprometido, no puede gastar más que esto por cuenta.' },
-  { icon: '🔒', title: 'Solo a contratos de Pronos',    body: 'La firma vive encerrada — únicamente para contratos de mercados. No envía fondos a otros lados.' },
+  { icon: '$',  title: 'Sin retiros automáticos',       body: 'La autorización no permite enviar MXNB a wallets externas ni exportar llaves.' },
+  { icon: '🔒', title: 'Solo contratos de Pronos',      body: 'La firma queda limitada a Arbitrum, contratos permitidos y funciones de trading autorizadas.' },
   { icon: '🚪', title: 'Tus retiros siguen en tus manos', body: 'Para mover MXNB fuera de Pronos vas a confirmar con tu correo. Eso no cambia.' },
   { icon: '📅', title: 'Vigencia: 180 días',            body: 'Después de medio año te volvemos a pedir autorización. Puedes revocar antes desde tu perfil.' },
 ];
@@ -80,8 +80,8 @@ export default function DelegationPrompt({ variant = 'inline', onAuthorized, onS
           lineHeight: 1.55, margin: 0,
         }}>
           Autoriza a Pronos una sola vez a firmar tus apuestas on-chain.
-          Tope de 200,000 MXNB/día, vigencia de 6 meses, solo a los contratos
-          de los mercados. Tus retiros siguen requiriendo tu firma.
+          Vigencia de 6 meses, solo en Arbitrum y solo contra contratos y
+          funciones de trading autorizadas. Tus retiros siguen requiriendo tu firma.
         </p>
         {err && (
           <div style={{ fontSize: 12, color: 'var(--red, #ef4444)' }}>

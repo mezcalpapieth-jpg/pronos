@@ -8,7 +8,7 @@
  *
  * The email is intentionally aspirational: it explains what Pronos is
  * today (off-chain MXNP competition, biweekly prizes) AND what's coming
- * (on-chain USDC markets, real prediction markets). The goal is to get
+ * (on-chain MXNB markets, real prediction markets). The goal is to get
  * early users engaged with both the current product and the vision so
  * they stick around when trading goes live.
  */

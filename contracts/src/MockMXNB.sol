@@ -9,7 +9,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
  *         Real MXNB is mainnet-only; this token lets us exercise the full
  *         buy/sell/redeem/seed flow with MXNB-branded collateral on testnet.
  *
- * Decimals: 6 (matches USDC convention; the Pronos backend's
+ * Decimals: 6 (matches MXNB convention; the Pronos backend's
  *           COLLATERAL_DECIMALS = 6 expects this).
  *
  * Faucet: anyone can call faucet() to receive 1,000 MXNB. No rate limit
