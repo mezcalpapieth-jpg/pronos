@@ -31,3 +31,30 @@ test('public user profile route hard-refreshes through the points SPA', () => {
     'expected /points/u/:username to rewrite to /points/',
   );
 });
+
+test('root legal pages render at root URLs through the MVP SPA', () => {
+  assert.ok(
+    !hasRule(vercelConfig.redirects, '/privacy', '/points/privacy'),
+    'expected /privacy to stop redirecting to /points/privacy',
+  );
+  assert.ok(
+    !hasRule(vercelConfig.redirects, '/terms', '/points/terms'),
+    'expected /terms to stop redirecting to /points/terms',
+  );
+  assert.ok(
+    hasRule(vercelConfig.rewrites, '/privacy', '/mvp/'),
+    'expected /privacy to rewrite to /mvp/',
+  );
+  assert.ok(
+    hasRule(vercelConfig.rewrites, '/terms', '/mvp/'),
+    'expected /terms to rewrite to /mvp/',
+  );
+  assert.ok(
+    hasRule(vercelConfig.rewrites, '/mvp/privacy', '/mvp/'),
+    'expected /mvp/privacy to hard-refresh through the MVP SPA',
+  );
+  assert.ok(
+    hasRule(vercelConfig.rewrites, '/mvp/terms', '/mvp/'),
+    'expected /mvp/terms to hard-refresh through the MVP SPA',
+  );
+});

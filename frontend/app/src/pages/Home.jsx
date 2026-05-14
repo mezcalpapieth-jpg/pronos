@@ -120,7 +120,7 @@ export default function Home({ onOpenLogin }) {
         <Hero onOpenLogin={onOpenLogin} />
 
         <section id="markets" style={{ padding: '40px 48px 60px', maxWidth: 1280, margin: '0 auto' }}>
-          <MarketsGrid activeFilter="trending" />
+          <MarketsGrid activeFilter="trending" onOpenLogin={onOpenLogin} />
         </section>
 
         <HowItWorks onOpenLogin={onOpenLogin} />

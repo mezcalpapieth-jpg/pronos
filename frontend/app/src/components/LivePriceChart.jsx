@@ -1,29 +1,8 @@
 /**
- * LivePriceChart — pure-SVG live price line for the crypto 5-min markets.
+ * LivePriceChart — pure-SVG live price line for 5-minute crypto markets.
  *
- * No charting library dependency — the renderer is small enough to keep
- * inline instead of pulling in lightweight-charts (~80kb gzipped) or
- * recharts. This is intentionally minimal:
- *
- *   - One line for the price history (color flips green/red around the
- *     threshold)
- *   - One dotted horizontal rule at the threshold
- *   - A pulsing dot at the rightmost (current) price
- *   - Pointer/touch tracker with the nearest price + timestamp
- *   - Y axis auto-scales to [min*0.999, max*1.001] so small movements
- *     read as visually meaningful
- *
- * Props:
- *   history    - [{ t, price }] in chronological order (from useCryptoTicker)
- *   threshold  - number | null   (null = pre-market, just show the line, no
- *                                 threshold rule, no green/red coloring)
- *   width      - SVG width in px (default 100% of container — see usage)
- *   height     - SVG height in px (default 200)
- *   windowMs   - sliding window length in ms (default 5 min) — anything
- *                older than (now - windowMs) is clipped from the X axis
- *
- * Renders nothing (returns null) until there's at least 1 point to draw,
- * so the parent can keep a stable layout while the WebSocket is opening.
+ * Shared by Points today and ready for MVP on-chain crypto markets once
+ * the protocol-side market data exists.
  */
 
 import React, { useMemo, useState } from 'react';
@@ -57,12 +36,6 @@ export default function LivePriceChart({
   width = 800,
   height = 220,
   windowMs = 5 * 60_000,
-  // Optional fixed-window anchors. When BOTH are set, the X axis runs
-  // from xStart on the left to xEnd on the right regardless of how far
-  // through the window we are — gives the crypto-5min markets a stable
-  // chart that shows open-on-left, close-on-right for the full life of
-  // the bout, instead of a sliding window that resets when the user
-  // re-enters the page mid-window.
   xStart,
   xEnd,
 }) {
@@ -81,7 +54,6 @@ export default function LivePriceChart({
   );
 
   if (!Array.isArray(history) || history.length === 0) {
-    // Skeleton rectangle keeps layout stable while WS connects.
     return (
       <div style={{
         width: '100%', height, borderRadius: 12,
@@ -94,8 +66,6 @@ export default function LivePriceChart({
 
   const { xMin, xMax } = frame;
 
-  // Y range: include the threshold (if set) so the rule is always
-  // on-screen, plus a small padding so the line never touches edges.
   let yMin = chartPoints[0].price;
   let yMax = chartPoints[0].price;
   for (const p of chartPoints) {
@@ -106,7 +76,6 @@ export default function LivePriceChart({
     if (threshold < yMin) yMin = threshold;
     if (threshold > yMax) yMax = threshold;
   }
-  // Add padding so a flat-line market still has visible vertical room.
   if (yMin === yMax) {
     yMin = yMin * 0.9995;
     yMax = yMax * 1.0005;
@@ -116,8 +85,8 @@ export default function LivePriceChart({
     yMax += pad;
   }
 
-  const innerW = width  - PADDING.left - PADDING.right;
-  const innerH = height - PADDING.top  - PADDING.bottom;
+  const innerW = width - PADDING.left - PADDING.right;
+  const innerH = height - PADDING.top - PADDING.bottom;
 
   function xAt(t) {
     return PADDING.left + ((t - xMin) / (xMax - xMin)) * innerW;
@@ -126,9 +95,6 @@ export default function LivePriceChart({
     return PADDING.top + (1 - (price - yMin) / (yMax - yMin)) * innerH;
   }
 
-  // SVG path: M first, L the rest. chartPoints includes one-second
-  // interpolated points between sparse server ticks so the line advances
-  // like a live market chart without inventing new settlement data.
   let d = '';
   for (let i = 0; i < chartPoints.length; i++) {
     const x = xAt(chartPoints[i].t).toFixed(2);
@@ -143,8 +109,6 @@ export default function LivePriceChart({
   const hasThreshold = typeof threshold === 'number' && Number.isFinite(threshold);
   const above = hasThreshold && lastPrice > threshold;
   const below = hasThreshold && lastPrice < threshold;
-  // Color logic: green if currently above threshold, red if below, neutral
-  // gray pre-threshold (the pending "next market" state).
   const lineColor = !hasThreshold ? '#888888'
     : above ? 'var(--yes, #00C96B)'
     : below ? 'var(--red, #FF4545)'
@@ -153,8 +117,6 @@ export default function LivePriceChart({
     : above ? 'rgba(0,201,107,0.10)'
     : 'rgba(255,69,69,0.10)';
 
-  // Build a closed area path for the subtle fill under the line. Same
-  // points as the line, then drop down to baseline and close.
   const baseY = yAt(yMin);
   let areaD = d;
   if (chartPoints.length >= 2) {
@@ -162,7 +124,6 @@ export default function LivePriceChart({
     areaD += ` L${xAt(chartPoints[0].t).toFixed(2)},${baseY.toFixed(2)} Z`;
   }
 
-  // Threshold rule line + label.
   const thresholdY = hasThreshold ? yAt(threshold) : null;
   const thresholdLabel = hasThreshold
     ? '$' + Number(threshold).toLocaleString('en-US', { maximumFractionDigits: 0 })
@@ -211,12 +172,10 @@ export default function LivePriceChart({
       onPointerLeave={() => setTrackerX(null)}
       onPointerCancel={() => setTrackerX(null)}
     >
-      {/* subtle area fill */}
       {chartPoints.length >= 2 && (
         <path d={areaD} fill={fillColor} stroke="none" />
       )}
 
-      {/* threshold rule */}
       {hasThreshold && thresholdY != null && (
         <>
           <line
@@ -242,11 +201,9 @@ export default function LivePriceChart({
         </>
       )}
 
-      {/* price line */}
       <path d={d} fill="none" stroke={lineColor} strokeWidth="2"
             strokeLinejoin="round" strokeLinecap="round" />
 
-      {/* pointer tracker */}
       {trackerPoint && trackerY != null && (
         <g pointerEvents="none">
           <line
@@ -297,7 +254,6 @@ export default function LivePriceChart({
         </g>
       )}
 
-      {/* pulsing dot at current price */}
       <circle cx={lastX} cy={lastY} r="3.5" fill={lineColor}>
         <animate attributeName="r" values="3.5;5.5;3.5" dur="1.4s" repeatCount="indefinite" />
         <animate attributeName="opacity" values="1;0.45;1" dur="1.4s" repeatCount="indefinite" />

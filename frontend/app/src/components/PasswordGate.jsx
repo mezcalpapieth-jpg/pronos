@@ -3,14 +3,12 @@ import { useT } from '../lib/i18n.js';
 
 const STORAGE_KEY = 'pronos-mvp-access';
 
-// Paths that bypass the password gate. Both /privacy and /terms exist
-// under the points-app's basename ("/points") so the URL is
-// /points/privacy in the browser; TikTok and other crawlers reach
-// them via a 301 redirect from the root-level alias /privacy →
-// /points/privacy (configured in frontend/vercel.json). Either form
-// matches here.
+// Paths that bypass the password gate. Root legal URLs now render
+// through the MVP SPA at pronos.io/privacy and pronos.io/terms; keep
+// the legacy app-prefixed forms public for direct hard-refreshes.
 const PUBLIC_PATHS = new Set([
   '/privacy', '/terms',
+  '/mvp/privacy', '/mvp/terms',
   '/points/privacy', '/points/terms',
 ]);
 
@@ -24,7 +22,7 @@ export default function PasswordGate({ children }) {
   const t = useT();
   // Bypass the gate entirely for the legal pages so crawlers can index
   // them without solving the password. Checked at mount and on any
-  // navigation event so an in-app link click to /points/privacy still
+  // navigation event so an in-app link click to /privacy still
   // reveals the page without forcing a re-auth.
   const [isPublic, setIsPublic] = useState(() => isPublicPath());
   useEffect(() => {

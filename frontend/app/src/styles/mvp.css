@@ -544,6 +544,11 @@ html[data-theme="dark"] .hfc-odd.no  { border-color: rgba(255,69,69,0.2); backgr
   to   { width: 100%; }
 }
 
+@keyframes mvp-drawer-slide-in {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
 /* ── Mobile search toggle button (hidden on desktop) ────────── */
 .nav-search-mobile-btn {
   display: none;

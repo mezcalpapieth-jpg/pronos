@@ -13,12 +13,12 @@
  * the generator pipeline when markets are approved.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import Nav from '../components/Nav.jsx';
 import Footer from '../components/Footer.jsx';
 import CategoryBar from '../components/CategoryBar.jsx';
-import BetModal from '../components/BetModal.jsx';
-import { usePointsAuth } from '../lib/pointsAuth.js';
+import MarketCard from '../components/MarketCard.jsx';
+import { mapProtocolMarketToCard } from '../lib/mvpMarketCard.js';
 
 const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 421614);
 
@@ -78,160 +78,12 @@ const COMBATE_LEAGUES = [
 const RESOLVED_SLUGS = new Set(['resueltos']);
 const PENDING_SLUGS = new Set(['porresolver']);
 
-function pricesFromReserves(reserves) {
-  if (!Array.isArray(reserves) || reserves.length < 2) return [];
-  const invs = reserves.map(r => (Number(r) > 0 ? 1 / Number(r) : 0));
-  const total = invs.reduce((s, v) => s + v, 0) || 1;
-  return invs.map(v => v / total);
-}
-
-function formatDate(iso) {
-  if (!iso) return '';
-  try {
-    return new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
-  } catch { return ''; }
-}
-
-function MarketTile({ m, onBet }) {
-  const navigate = useNavigate();
-  const prices = useMemo(() => {
-    if (Array.isArray(m.prices) && m.prices.length > 0) return m.prices;
-    return pricesFromReserves(m.reserves || []);
-  }, [m]);
-
-  const isResolved = m.status === 'resolved';
-  const winnerIndex = isResolved ? Number(m.outcome) : null;
-
-  return (
-    <div style={{
-      border: '1px solid var(--border)',
-      borderRadius: 14,
-      background: 'var(--surface1)',
-      padding: 16,
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 12,
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => navigate(`/market?id=${m.id}`)}
-          style={{ cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.4 }}
-        >
-          {m.question}
-        </div>
-        {isResolved ? (
-          <span style={{
-            fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.1em',
-            padding: '3px 6px', borderRadius: 6,
-            background: 'rgba(0,232,122,0.12)', border: '1px solid rgba(0,232,122,0.3)',
-            color: 'var(--green)', textTransform: 'uppercase', whiteSpace: 'nowrap',
-          }}>
-            resuelto
-          </span>
-        ) : (
-          <span style={{
-            fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.1em',
-            padding: '3px 6px', borderRadius: 6,
-            background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.3)',
-            color: '#60a5fa', textTransform: 'uppercase', whiteSpace: 'nowrap',
-          }}>
-            on-chain
-          </span>
-        )}
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {(m.outcomes || []).map((label, i) => {
-          // On resolved markets, collapse to 100/0 so the winner reads
-          // the same here as on the detail page and in the leaderboard.
-          const livePct = Math.round((prices[i] || 0) * 100);
-          const pct = isResolved ? (winnerIndex === i ? 100 : 0) : livePct;
-          const isWinner = isResolved && winnerIndex === i;
-          return (
-            <button
-              key={i}
-              onClick={() => isResolved ? null : onBet({ market: m, outcomeIndex: i, outcome: label, outcomePct: pct })}
-              disabled={isResolved}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr auto auto',
-                alignItems: 'center',
-                gap: 10,
-                padding: '8px 12px',
-                border: `1px solid ${isWinner ? 'rgba(0,232,122,0.35)' : 'var(--border)'}`,
-                borderRadius: 8,
-                background: isWinner ? 'rgba(0,232,122,0.06)' : 'var(--surface2)',
-                color: 'var(--text-primary)',
-                fontFamily: 'var(--font-body)',
-                fontSize: 13,
-                cursor: isResolved ? 'default' : 'pointer',
-                opacity: isResolved && !isWinner ? 0.55 : 1,
-              }}
-            >
-              <span style={{ textAlign: 'left' }}>
-                {isWinner && <span style={{ marginRight: 6 }}>🏆</span>}
-                {label}
-              </span>
-              <span style={{
-                fontFamily: 'var(--font-mono)', fontSize: 11,
-                color: isWinner ? 'var(--green)' : 'var(--text-muted)',
-                letterSpacing: '0.04em', fontWeight: isWinner ? 700 : 400,
-              }}>
-                {pct}¢
-              </span>
-              <span style={{
-                fontFamily: 'var(--font-mono)', fontSize: 10,
-                padding: '2px 8px', borderRadius: 6,
-                background: isResolved
-                  ? (isWinner ? 'rgba(0,232,122,0.18)' : 'transparent')
-                  : 'rgba(0,232,122,0.12)',
-                color: isResolved ? (isWinner ? 'var(--green)' : 'var(--text-muted)') : 'var(--green)',
-                letterSpacing: '0.06em',
-              }}>
-                {isResolved ? (isWinner ? 'GANÓ' : '—') : 'APOSTAR'}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Final-score strip — rendered between outcomes and the footer
-          so resolved market cards show the actual result, not just
-          "RESUELTO". */}
-      {isResolved && m.finalScore && (
-        <div style={{
-          padding: '6px 10px', borderRadius: 8,
-          background: 'var(--surface2)', border: '1px solid var(--border)',
-          fontFamily: 'var(--font-mono)', fontSize: 11,
-          display: 'flex', alignItems: 'center', gap: 8,
-        }}>
-          <span style={{ color: 'var(--green)', fontWeight: 700, letterSpacing: '0.06em' }}>FINAL</span>
-          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{m.finalScore}</span>
-        </div>
-      )}
-
-      <div style={{
-        display: 'flex', justifyContent: 'space-between',
-        fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)',
-        letterSpacing: '0.04em', borderTop: '1px solid var(--border)', paddingTop: 10,
-      }}>
-        <span>#{m.id}</span>
-        <span>{m.endTime ? `cierra ${formatDate(m.endTime)}` : ''}</span>
-      </div>
-    </div>
-  );
-}
-
 export default function CategoryPage({ onOpenLogin }) {
   const { slug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { authenticated } = usePointsAuth();
   const [markets, setMarkets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [bet, setBet] = useState(null);
 
   const sport = searchParams.get('sport') || 'all';
   const league = searchParams.get('league') || 'all';
@@ -244,9 +96,11 @@ export default function CategoryPage({ onOpenLogin }) {
       setLoading(true);
       setError(null);
       try {
+        const categoryQuery = slug && !PENDING_SLUGS.has(slug) && !RESOLVED_SLUGS.has(slug)
+          ? `&category=${encodeURIComponent(slug)}`
+          : '';
         const res = await fetch(
-          `/api/protocol/markets?status=${fetchStatus}&limit=200&chainId=${CHAIN_ID}` +
-            (slug ? `&category=${encodeURIComponent(slug)}` : ''),
+          `/api/protocol/markets?status=${fetchStatus}&limit=200&chainId=${CHAIN_ID}${categoryQuery}`,
           { credentials: 'include' },
         );
         const data = await res.json().catch(() => ({}));
@@ -259,7 +113,7 @@ export default function CategoryPage({ onOpenLogin }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [fetchStatus]);
+  }, [fetchStatus, slug]);
 
   const filtered = useMemo(() => {
     const now = Date.now();
@@ -285,11 +139,6 @@ export default function CategoryPage({ onOpenLogin }) {
 
     return out;
   }, [markets, slug, sport, league]);
-
-  function handleBet({ market, outcomeIndex, outcome, outcomePct }) {
-    if (!authenticated) { onOpenLogin?.(); return; }
-    setBet({ market, outcomeIndex, outcome, outcomePct });
-  }
 
   // Sport-tab click updates ?sport= and clears ?league=
   function setSport(next) {
@@ -415,24 +264,18 @@ export default function CategoryPage({ onOpenLogin }) {
                 gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
                 gap: 16,
               }}>
-                {filtered.map(m => <MarketTile key={m.id} m={m} onBet={handleBet} />)}
+                {filtered.map(m => (
+                  <MarketCard
+                    key={m.id}
+                    market={mapProtocolMarketToCard(m)}
+                    onOpenLogin={onOpenLogin}
+                  />
+                ))}
               </div>
             )}
           </div>
         </div>
       </main>
-
-      <BetModal
-        open={!!bet}
-        onClose={() => setBet(null)}
-        outcome={bet?.outcome}
-        outcomePct={bet?.outcomePct}
-        outcomeIndex={bet?.outcomeIndex}
-        marketId={bet?.market?.id}
-        marketTitle={bet?.market?.question}
-        market={bet?.market}
-        onOpenLogin={onOpenLogin}
-      />
 
       <Footer />
     </>

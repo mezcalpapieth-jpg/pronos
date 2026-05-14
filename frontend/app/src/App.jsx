@@ -19,7 +19,9 @@ import Nav from './components/Nav.jsx';
 import CategoryBar from './components/CategoryBar.jsx';
 import Footer from './components/Footer.jsx';
 
-const IS_PUBLIC_MARKETS = typeof window !== 'undefined' && window.location.pathname.startsWith('/markets');
+const PUBLIC_PATHNAME = typeof window !== 'undefined' ? window.location.pathname : '';
+const IS_PUBLIC_MARKETS = PUBLIC_PATHNAME.startsWith('/markets');
+const IS_ROOT_LEGAL = PUBLIC_PATHNAME === '/privacy' || PUBLIC_PATHNAME === '/terms';
 const Home = lazy(() => import('./pages/Home.jsx'));
 const MarketDetail = lazy(() => import('./pages/MarketDetail.jsx'));
 const Portfolio = lazy(() => import('./pages/Portfolio.jsx'));
@@ -56,13 +58,15 @@ export default function App() {
   const userIsAdmin = !!(username && adminList.includes(username.toLowerCase()));
   const checkingUsername = loading;
 
-  /* Public /markets route — no password, just market detail */
-  if (IS_PUBLIC_MARKETS) {
+  /* Public root routes — no /mvp basename so pronos.io/privacy works. */
+  if (IS_PUBLIC_MARKETS || IS_ROOT_LEGAL) {
     return (
       <BrowserRouter basename="/">
         <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/markets" element={<MarketDetail />} />
+            <Route path="/privacy" element={<PrivacyPolicy />} />
+            <Route path="/terms" element={<TermsOfService />} />
           </Routes>
         </Suspense>
       </BrowserRouter>

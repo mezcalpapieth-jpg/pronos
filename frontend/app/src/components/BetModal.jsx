@@ -12,6 +12,7 @@
  * a chain-aware quote endpoint that calls AMM.estimateBuy / AMM.estimateSell.
  */
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { usePointsAuth } from '../lib/pointsAuth.js';
 import { useT } from '../lib/i18n.js';
 
@@ -50,6 +51,7 @@ export default function BetModal({
   marketTitle,
   market = null,
   onOpenLogin,
+  variant = 'modal',
 }) {
   const t = useT();
   const { authenticated, user, refresh } = usePointsAuth();
@@ -63,6 +65,7 @@ export default function BetModal({
 
   const numAmount = parseFloat(amount) || 0;
   const isLoading = step === STEPS.QUOTING || step === STEPS.PLACING;
+  const isDrawer = variant === 'drawer';
 
   const balance = typeof user?.balance === 'number' ? user.balance : null;
   // Every market the MVP shows is on-chain (the off-chain MXNP ledger
@@ -86,12 +89,13 @@ export default function BetModal({
   if (!open) return null;
 
   // Derived display fields — prefer the live quote, fall back to naive math.
-  const feePct     = quote?.feePct ?? 2;
-  const fee        = quote?.fee ?? (numAmount * feePct / 100);
-  const payout     = quote?.payout ?? (outcomePct > 0 && numAmount > 0
-    ? ((numAmount - fee) / (outcomePct / 100)).toFixed(2)
-    : '—');
-  const profit     = quote?.profit ?? (typeof payout === 'number' ? (payout - numAmount).toFixed(2) : '—');
+  const feePct      = quote?.feePct ?? 2;
+  const fee         = quote?.fee ?? (numAmount * feePct / 100);
+  const naivePayout = outcomePct > 0 && numAmount > 0
+    ? (numAmount - fee) / (outcomePct / 100)
+    : null;
+  const payout      = quote?.payout ?? (naivePayout !== null ? naivePayout : '—');
+  const profit      = quote?.profit ?? (naivePayout !== null ? naivePayout - numAmount : '—');
   const impliedPct = quote?.currentPrice !== undefined ? Math.round(quote.currentPrice * 100) : outcomePct;
   const postPct    = quote?.postTradePrice !== undefined ? Math.round(quote.postTradePrice * 100) : null;
   const slippagePts = quote?.priceImpactPts ?? 0;
@@ -171,9 +175,30 @@ export default function BetModal({
     return t('bet.btn.buy');
   };
 
-  return (
-    <div className="bet-modal-overlay show" onClick={e => e.target === e.currentTarget && handleClose()}>
-      <div className="bet-modal-box">
+  const overlay = (
+    <div
+      className="bet-modal-overlay show"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleClose();
+        e.stopPropagation();
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
+      style={isDrawer ? {
+        alignItems: 'stretch',
+        justifyContent: 'flex-end',
+      } : undefined}
+    >
+      <div
+        className="bet-modal-box"
+        style={isDrawer ? {
+          width: 'min(440px, 92vw)',
+          maxWidth: 'min(440px, 92vw)',
+          height: '100vh',
+          overflowY: 'auto',
+          borderRadius: 0,
+          animation: 'mvp-drawer-slide-in 0.22s ease-out',
+        } : undefined}
+      >
         <div className="bet-modal-header">
           <span className="bet-modal-title">{t('bet.title')}</span>
           <button className="bet-modal-close" onClick={handleClose}>✕</button>
@@ -372,4 +397,8 @@ export default function BetModal({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined'
+    ? createPortal(overlay, document.body)
+    : overlay;
 }

@@ -24,7 +24,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCryptoTicker } from '../lib/useCryptoTicker.js';
-import LivePriceChart from './LivePriceChart.jsx';
+import LivePriceChart from '@app/components/LivePriceChart.jsx';
 import PointsBuyModal from './PointsBuyModal.jsx';
 
 function fmt(n, d = 2) {

@@ -16,29 +16,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import MarketCard from './MarketCard.jsx';
 import { useT } from '../lib/i18n.js';
+import { mapProtocolMarketToCard } from '../lib/mvpMarketCard.js';
 
 const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 421614);
 const GRID_CACHE_KEY = 'pronos-protocol-grid-cache-v1';
-
-const CATEGORY_LABEL = {
-  general:  'General',
-  mexico:   'México',
-  politica: 'Política',
-  deportes: 'Deportes',
-  finanzas: 'Finanzas',
-  crypto:   'Crypto',
-  musica:   'Música',
-};
-
-const CATEGORY_ICON = {
-  general:  '🌎',
-  mexico:   '🇲🇽',
-  politica: '🏛️',
-  deportes: '⚽',
-  finanzas: '💵',
-  crypto:   '₿',
-  musica:   '🎵',
-};
 
 function readCache(key) {
   try {
@@ -58,52 +39,7 @@ function writeCache(key, markets) {
   } catch {}
 }
 
-function formatDeadline(iso) {
-  if (!iso) return '';
-  try {
-    return new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
-  } catch { return ''; }
-}
-
-// Translate the API row shape into the legacy `market` shape that
-// MarketCard reads (id, icon, categoryLabel, options[], _resolved, …).
-// Single place to keep the mapping so we don't poke MarketCard.
-function apiToCard(row) {
-  const outcomes = Array.isArray(row.outcomes) ? row.outcomes : [];
-  const prices = Array.isArray(row.prices) ? row.prices : [];
-  const options = outcomes.map((label, i) => ({
-    label,
-    pct: Math.round(Number(prices[i] || 0) * 100),
-  }));
-  const cat = (row.category || 'general').toLowerCase();
-  const winnerIndex = row.outcome != null ? Number(row.outcome) : null;
-  return {
-    id: row.id,
-    source: 'protocol',
-    _source: 'protocol',
-    _resolved: row.status === 'resolved',
-    _winner: winnerIndex != null ? outcomes[winnerIndex] : null,
-    _winnerShort: winnerIndex != null ? outcomes[winnerIndex] : null,
-    _resolvedDate: row.resolvedAt
-      ? new Date(row.resolvedAt).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })
-      : null,
-    // Live markets (currently in their game window) get promoted to
-    // the trending bucket so they surface in the Trending sub-tab on
-    // top of being ordered to the front of the grid by the API.
-    trending: !!row.live,
-    _live: !!row.live,
-    icon: CATEGORY_ICON[cat] || '🌎',
-    category: cat,
-    categoryLabel: CATEGORY_LABEL[cat] || cat,
-    question: row.question,
-    options,
-    deadline: formatDeadline(row.endTime),
-    endTime: row.endTime,
-    volume: Math.round(Number(row.liquidity || 0)).toLocaleString('en-US'),
-  };
-}
-
-export default function MarketsGrid({ activeFilter }) {
+export default function MarketsGrid({ activeFilter, onOpenLogin }) {
   const t = useT();
   const [markets, setMarkets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -129,7 +65,7 @@ export default function MarketsGrid({ activeFilter }) {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data?.error || 'load_failed');
         if (cancelled) return;
-        const mapped = (Array.isArray(data?.markets) ? data.markets : []).map(apiToCard);
+        const mapped = (Array.isArray(data?.markets) ? data.markets : []).map(mapProtocolMarketToCard);
         setMarkets(mapped);
         writeCache(status, mapped);
         setError(null);
@@ -189,7 +125,7 @@ export default function MarketsGrid({ activeFilter }) {
       ) : (
         <div className="markets-grid">
           {filtered.map(market => (
-            <MarketCard key={market.id} market={market} history={{}} />
+            <MarketCard key={market.id} market={market} onOpenLogin={onOpenLogin} />
           ))}
         </div>
       )}

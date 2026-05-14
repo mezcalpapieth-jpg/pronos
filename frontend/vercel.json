@@ -16,14 +16,16 @@
     { "source": "/market",     "destination": "/points/market",     "permanent": true },
     { "source": "/r/:username","destination": "/points/r/:username","permanent": true },
     { "source": "/u/:username","destination": "/points/u/:username","permanent": true },
-    { "source": "/c/:slug",    "destination": "/points/c/:slug",    "permanent": true },
-    { "source": "/privacy",    "destination": "/points/privacy",    "permanent": true },
-    { "source": "/terms",      "destination": "/points/terms",      "permanent": true }
+    { "source": "/c/:slug",    "destination": "/points/c/:slug",    "permanent": true }
   ],
   "rewrites": [
+    { "source": "/privacy",      "destination": "/mvp/" },
+    { "source": "/terms",        "destination": "/mvp/" },
     { "source": "/mvp/market",    "destination": "/mvp/" },
     { "source": "/mvp/portfolio", "destination": "/mvp/" },
     { "source": "/mvp/admin",     "destination": "/mvp/" },
+    { "source": "/mvp/privacy",   "destination": "/mvp/" },
+    { "source": "/mvp/terms",     "destination": "/mvp/" },
     { "source": "/points/market",       "destination": "/points/" },
     { "source": "/points/portfolio",    "destination": "/points/" },
     { "source": "/points/admin",        "destination": "/points/" },

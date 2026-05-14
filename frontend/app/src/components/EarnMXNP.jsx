@@ -5,9 +5,10 @@
  * in the Points app. For the on-chain MVP it's reduced to the two pieces
  * worth keeping until mainnet:
  *
- *   1. Social linking — OAuth via /api/points/social/* so users can
- *      connect X / Instagram / TikTok. Rewards are NOT credited until
- *      mainnet; today the link just records the association.
+ *   1. Social linking — OAuth via /api/social/:provider/start and
+ *      /api/points/social-links so users can connect X / Instagram /
+ *      TikTok. Rewards are NOT credited until mainnet; today the link
+ *      just records the association.
  *   2. Referrals — every user has a /r/<username> landing; this component
  *      surfaces a copyable link + basic share buttons. Referrer credit
  *      also rolls over to mainnet.
@@ -17,20 +18,15 @@
  */
 import React, { useEffect, useState } from 'react';
 import { usePointsAuth } from '../lib/pointsAuth.js';
+import {
+  fetchSocialLinks,
+  socialLinkStartUrl,
+  unlinkSocial,
+} from '../lib/socialLinks.js';
 
 const IG_PROFILE = 'https://www.instagram.com/pronos.latam/';
 const TT_PROFILE = 'https://www.tiktok.com/@pronos.io';
 const X_PROFILE  = 'https://twitter.com/pronos_io';
-
-async function getJson(url) {
-  const res = await fetch(url, { credentials: 'include' });
-  const data = await res.json().catch(() => ({}));
-  return { ok: res.ok, data };
-}
-
-function socialStartUrl(provider, returnTo = '/mvp/portfolio') {
-  return `/api/points/social/start?provider=${encodeURIComponent(provider)}&returnTo=${encodeURIComponent(returnTo)}`;
-}
 
 function buildShareUrl(platform, link) {
   const text = encodeURIComponent(`¡Únete a Pronos y predice eventos reales! 🎯\n${link}`);
@@ -52,7 +48,47 @@ function SectionLabel({ children }) {
   );
 }
 
-function SocialRow({ icon, label, href, connected, connectedLabel, onConnect }) {
+const SOCIAL_PROVIDERS = [
+  {
+    key: 'x',
+    label: 'X (Twitter)',
+    icon: '𝕏',
+    href: X_PROFILE,
+    available: true,
+    comingSoonNote: null,
+  },
+  {
+    key: 'instagram',
+    label: 'Instagram',
+    icon: '📸',
+    href: IG_PROFILE,
+    available: false,
+    comingSoonNote: 'Esperando aprobación de Meta',
+  },
+  {
+    key: 'tiktok',
+    label: 'TikTok',
+    icon: '🎵',
+    href: TT_PROFILE,
+    available: true,
+    comingSoonNote: null,
+  },
+];
+
+function SocialRow({
+  icon,
+  label,
+  href,
+  connected,
+  connectedLabel,
+  available,
+  comingSoonNote,
+  busy,
+  onConnect,
+  onDisconnect,
+}) {
+  const locked = !available && !connected;
+
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10,
@@ -66,6 +102,10 @@ function SocialRow({ icon, label, href, connected, connectedLabel, onConnect }) 
         {connected ? (
           <div style={{ fontSize: 10, color: 'var(--green)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
             ✓ {connectedLabel || 'Vinculado'}
+          </div>
+        ) : locked ? (
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
+            {comingSoonNote || 'Próximamente'}
           </div>
         ) : href ? (
           <a
@@ -83,26 +123,43 @@ function SocialRow({ icon, label, href, connected, connectedLabel, onConnect }) 
         ) : null}
       </div>
       {connected ? (
-        <span style={{
-          padding: '5px 12px',
-          fontFamily: 'var(--font-mono)', fontSize: 10,
-          color: 'var(--text-muted)', letterSpacing: '0.06em',
-          flexShrink: 0, minWidth: 84, textAlign: 'center',
-        }}>
-          CONECTADO
-        </span>
+        <button
+          onClick={onDisconnect}
+          disabled={busy}
+          style={{
+            background: 'transparent',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            padding: '5px 12px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            color: 'var(--text-muted)',
+            cursor: busy ? 'wait' : 'pointer',
+            letterSpacing: '0.06em',
+            flexShrink: 0,
+            minWidth: 104,
+            textAlign: 'center',
+          }}
+        >
+          {busy ? '…' : 'DESCONECTAR'}
+        </button>
       ) : (
         <button
           onClick={onConnect}
+          disabled={locked || busy}
           style={{
-            background: 'rgba(0,232,122,0.1)',
-            border: '1px solid rgba(0,232,122,0.3)',
+            background: locked ? 'var(--surface2)' : 'rgba(0,232,122,0.1)',
+            border: locked ? '1px solid var(--border)' : '1px solid rgba(0,232,122,0.3)',
             borderRadius: 8, padding: '5px 12px', fontSize: 10,
-            fontFamily: 'var(--font-mono)', color: 'var(--green)',
-            cursor: 'pointer', letterSpacing: '0.06em', flexShrink: 0, minWidth: 84,
+            fontFamily: 'var(--font-mono)', color: locked ? 'var(--text-muted)' : 'var(--green)',
+            cursor: locked || busy ? 'not-allowed' : 'pointer',
+            letterSpacing: '0.06em',
+            flexShrink: 0,
+            minWidth: 104,
+            opacity: locked || busy ? 0.65 : 1,
           }}
         >
-          CONECTAR
+          {locked ? 'PRÓXIMAMENTE' : 'CONECTAR'}
         </button>
       )}
     </div>
@@ -111,32 +168,61 @@ function SocialRow({ icon, label, href, connected, connectedLabel, onConnect }) 
 
 export default function EarnMXNP() {
   const { authenticated, user } = usePointsAuth();
-  const [links, setLinks] = useState({ twitter: null, instagram: null, tiktok: null });
+  const [links, setLinks] = useState({ x: null, instagram: null, tiktok: null });
+  const [socialError, setSocialError] = useState('');
+  const [socialNotice, setSocialNotice] = useState('');
+  const [busySocial, setBusySocial] = useState(null);
   const [copied, setCopied] = useState(false);
 
   const username = user?.username || null;
   const referralLink = username ? `https://pronos.io/r/${username}` : '';
 
-  // Pull linked social accounts from the server. Safe no-op if the
-  // endpoint isn't present yet — we just render "not linked" state.
   useEffect(() => {
-    if (!authenticated) return;
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    const linked = url.searchParams.get('linked');
+    const linkError = url.searchParams.get('link_error');
+    if (linked || linkError) {
+      url.searchParams.delete('linked');
+      url.searchParams.delete('link_error');
+      window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
+    }
+    if (linked) setSocialNotice(`${linked} vinculado correctamente.`);
+    if (linkError) setSocialError(linkError);
+  }, []);
+
+  useEffect(() => {
+    if (!authenticated) {
+      setLinks({ x: null, instagram: null, tiktok: null });
+      return;
+    }
     let alive = true;
-    getJson('/api/points/social/links')
-      .then(({ ok, data }) => {
-        if (!alive || !ok) return;
-        setLinks({
-          twitter:   data?.links?.twitter || null,
-          instagram: data?.links?.instagram || null,
-          tiktok:    data?.links?.tiktok || null,
-        });
+    fetchSocialLinks()
+      .then((nextLinks) => {
+        if (alive) setLinks(nextLinks);
       })
-      .catch(() => { /* optional endpoint */ });
+      .catch((e) => {
+        if (alive) setSocialError(e?.code || e?.message || 'social_links_failed');
+      });
     return () => { alive = false; };
   }, [authenticated]);
 
   function handleConnect(provider) {
-    window.location.href = socialStartUrl(provider);
+    window.location.href = socialLinkStartUrl(provider, '/mvp/portfolio');
+  }
+
+  async function handleDisconnect(provider) {
+    setBusySocial(provider);
+    setSocialError('');
+    setSocialNotice('');
+    try {
+      await unlinkSocial(provider);
+      setLinks(await fetchSocialLinks());
+    } catch (e) {
+      setSocialError(e?.code || e?.message || 'unlink_failed');
+    } finally {
+      setBusySocial(null);
+    }
   }
 
   function copyReferral() {
@@ -163,36 +249,59 @@ export default function EarnMXNP() {
         <div>
           <SectionLabel>Conectar cuentas</SectionLabel>
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', lineHeight: 1.5 }}>
-            Las recompensas por conectar redes se acreditan a partir del lanzamiento en mainnet.
+            Verificamos tu cuenta directamente con la red social. Las recompensas se acreditan a partir del lanzamiento en mainnet.
           </div>
         </div>
       </div>
 
+      {socialNotice && (
+        <div style={{
+          marginTop: 12,
+          padding: '10px 12px',
+          borderRadius: 8,
+          background: 'rgba(0,232,122,0.08)',
+          border: '1px solid rgba(0,232,122,0.24)',
+          color: 'var(--green)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+        }}>
+          {socialNotice}
+        </div>
+      )}
+      {socialError && (
+        <div style={{
+          marginTop: 12,
+          padding: '10px 12px',
+          borderRadius: 8,
+          background: 'rgba(255,69,69,0.08)',
+          border: '1px solid rgba(255,69,69,0.24)',
+          color: 'var(--red)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+        }}>
+          Error: {socialError}
+        </div>
+      )}
+
       <div style={{ marginTop: 14 }}>
-        <SocialRow
-          icon="𝕏"
-          label="Vincula tu cuenta de X (Twitter)"
-          href={X_PROFILE}
-          connected={!!links.twitter}
-          connectedLabel={links.twitter?.handle ? `@${links.twitter.handle}` : null}
-          onConnect={() => handleConnect('twitter')}
-        />
-        <SocialRow
-          icon="📸"
-          label="Vincula tu cuenta de Instagram"
-          href={IG_PROFILE}
-          connected={!!links.instagram}
-          connectedLabel={links.instagram?.handle ? `@${links.instagram.handle}` : null}
-          onConnect={() => handleConnect('instagram')}
-        />
-        <SocialRow
-          icon="🎵"
-          label="Vincula tu cuenta de TikTok"
-          href={TT_PROFILE}
-          connected={!!links.tiktok}
-          connectedLabel={links.tiktok?.handle ? `@${links.tiktok.handle}` : null}
-          onConnect={() => handleConnect('tiktok')}
-        />
+        {SOCIAL_PROVIDERS.map((provider) => {
+          const linked = links[provider.key] || null;
+          return (
+            <SocialRow
+              key={provider.key}
+              icon={provider.icon}
+              label={`Vincula tu cuenta de ${provider.label}`}
+              href={provider.href}
+              connected={!!linked}
+              connectedLabel={linked?.handle ? `@${linked.handle}` : null}
+              available={provider.available}
+              comingSoonNote={provider.comingSoonNote}
+              busy={busySocial === provider.key}
+              onConnect={() => handleConnect(provider.key)}
+              onDisconnect={() => handleDisconnect(provider.key)}
+            />
+          );
+        })}
       </div>
 
       {/* Referrals */}
