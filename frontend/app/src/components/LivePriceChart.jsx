@@ -13,12 +13,20 @@ import {
   nearestPointByX,
 } from '../lib/cryptoChartMath.js';
 
-const PADDING = { top: 12, right: 14, bottom: 18, left: 8 };
+const PADDING = { top: 12, right: 78, bottom: 18, left: 8 };
 
 function formatTrackerPrice(price) {
   return '$' + Number(price).toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
+  });
+}
+
+function formatAxisPrice(price) {
+  const value = Number(price);
+  if (!Number.isFinite(value)) return '$—';
+  return '$' + value.toLocaleString('en-US', {
+    maximumFractionDigits: Math.abs(value) >= 1000 ? 0 : 2,
   });
 }
 
@@ -38,6 +46,8 @@ export default function LivePriceChart({
   windowMs = 5 * 60_000,
   xStart,
   xEnd,
+  highlightStart,
+  highlightEnd,
 }) {
   const [trackerX, setTrackerX] = useState(null);
   const frame = useMemo(
@@ -94,6 +104,13 @@ export default function LivePriceChart({
   function yAt(price) {
     return PADDING.top + (1 - (price - yMin) / (yMax - yMin)) * innerH;
   }
+  const plotRight = width - PADDING.right;
+
+  const yTicks = Array.from({ length: 5 }, (_, i) => {
+    const ratio = i / 4;
+    const price = yMax - (yMax - yMin) * ratio;
+    return { price, y: yAt(price) };
+  });
 
   let d = '';
   for (let i = 0; i < chartPoints.length; i++) {
@@ -128,6 +145,20 @@ export default function LivePriceChart({
   const thresholdLabel = hasThreshold
     ? '$' + Number(threshold).toLocaleString('en-US', { maximumFractionDigits: 0 })
     : '';
+  const currentLabel = formatAxisPrice(lastPrice);
+  const currentLabelWidth = Math.max(52, currentLabel.length * 6.6 + 14);
+  const currentLabelX = width - currentLabelWidth - 4;
+  const currentLabelY = Math.min(
+    Math.max(lastY - 11, PADDING.top),
+    height - PADDING.bottom - 16,
+  );
+  const hasHighlight = Number.isFinite(highlightStart)
+    && Number.isFinite(highlightEnd)
+    && highlightEnd > highlightStart
+    && highlightEnd >= xMin
+    && highlightStart <= xMax;
+  const highlightX1 = hasHighlight ? Math.max(PADDING.left, xAt(Math.max(highlightStart, xMin))) : 0;
+  const highlightX2 = hasHighlight ? Math.min(plotRight, xAt(Math.min(highlightEnd, xMax))) : 0;
   const tracker = trackerX == null
     ? null
     : nearestPointByX(chartPoints, trackerX, {
@@ -172,6 +203,43 @@ export default function LivePriceChart({
       onPointerLeave={() => setTrackerX(null)}
       onPointerCancel={() => setTrackerX(null)}
     >
+      <g pointerEvents="none">
+        {yTicks.map((tick, i) => (
+          <g key={`${tick.price}-${i}`}>
+            <line
+              x1={PADDING.left}
+              x2={plotRight}
+              y1={tick.y}
+              y2={tick.y}
+              stroke="var(--border)"
+              strokeWidth="1"
+              opacity={i === 0 || i === yTicks.length - 1 ? 0.22 : 0.16}
+            />
+            <text
+              x={plotRight + 8}
+              y={Math.min(Math.max(tick.y + 3, PADDING.top + 9), height - PADDING.bottom)}
+              fontFamily="var(--font-mono, monospace)"
+              fontSize="9"
+              fill="var(--text-muted)"
+            >
+              {formatAxisPrice(tick.price)}
+            </text>
+          </g>
+        ))}
+      </g>
+
+      {hasHighlight && highlightX2 > highlightX1 && (
+        <rect
+          x={highlightX1}
+          y={PADDING.top}
+          width={highlightX2 - highlightX1}
+          height={innerH}
+          fill={lineColor}
+          opacity="0.055"
+          pointerEvents="none"
+        />
+      )}
+
       {chartPoints.length >= 2 && (
         <path d={areaD} fill={fillColor} stroke="none" />
       )}
@@ -180,7 +248,7 @@ export default function LivePriceChart({
         <>
           <line
             x1={PADDING.left}
-            x2={width - PADDING.right}
+            x2={plotRight}
             y1={thresholdY}
             y2={thresholdY}
             stroke="var(--text-muted)"
@@ -189,7 +257,7 @@ export default function LivePriceChart({
             opacity="0.6"
           />
           <text
-            x={width - PADDING.right - 4}
+            x={plotRight - 4}
             y={thresholdY - 4}
             textAnchor="end"
             fontFamily="var(--font-mono, monospace)"
@@ -200,6 +268,40 @@ export default function LivePriceChart({
           </text>
         </>
       )}
+
+      <line
+        x1={PADDING.left}
+        x2={plotRight}
+        y1={lastY}
+        y2={lastY}
+        stroke={lineColor}
+        strokeWidth="1"
+        strokeDasharray="2 5"
+        opacity="0.48"
+        pointerEvents="none"
+      />
+      <rect
+        x={currentLabelX}
+        y={currentLabelY}
+        width={currentLabelWidth}
+        height="16"
+        rx="5"
+        fill="var(--surface0, #050505)"
+        stroke={lineColor}
+        opacity="0.96"
+        pointerEvents="none"
+      />
+      <text
+        x={currentLabelX + currentLabelWidth / 2}
+        y={currentLabelY + 11}
+        textAnchor="middle"
+        fontFamily="var(--font-mono, monospace)"
+        fontSize="9"
+        fill={lineColor}
+        pointerEvents="none"
+      >
+        {currentLabel}
+      </text>
 
       <path d={d} fill="none" stroke={lineColor} strokeWidth="2"
             strokeLinejoin="round" strokeLinecap="round" />

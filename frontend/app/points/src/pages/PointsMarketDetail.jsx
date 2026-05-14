@@ -20,6 +20,10 @@ import PointsBuyModal from '../components/PointsBuyModal.jsx';
 import MarketComments from '../components/MarketComments.jsx';
 import Crypto5MinDetail from '../components/Crypto5MinDetail.jsx';
 import TopHolders from '../components/TopHolders.jsx';
+import {
+  buildCryptoMarketSequence,
+  cryptoMarketSequenceSignature,
+} from '../lib/cryptoMarketHub.js';
 
 // Accent colors for the multi-line price chart. Match the buy-button
 // accents so users recognize the same color for the same outcome.
@@ -462,6 +466,9 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   //   parallel → the individual leg market (so the buy endpoint hits the
   //              leg's binary CPMM, not the aggregated parent)
   const [buyState, setBuyState] = useState(null);
+  const cryptoSequenceSig = market?.cryptoMeta
+    ? cryptoMarketSequenceSignature(buildCryptoMarketSequence(market))
+    : '';
 
   useEffect(() => {
     if (!id) return;
@@ -544,10 +551,13 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   //   - cryptoMeta.nextMarketId appears once the cron pre-creates the
   //     upcoming window. Subsequent markets can then surface their
   //     "Próximo mercado" CTA without a manual refresh.
-  // Stops once the market is resolved — nothing to refresh after that.
+  // Non-crypto markets stop once resolved. Crypto 5-minute pages keep
+  // polling because this detail screen acts like an asset-level hub:
+  // the selected market can resolve while the next BTC/ETH window
+  // appears in the bottom strip.
   useEffect(() => {
     if (!id || !market) return undefined;
-    if (market.status === 'resolved') return undefined;
+    if (market.status === 'resolved' && !market.cryptoMeta) return undefined;
     // 10s is a nice middle ground: the cron tick runs every minute on
     // production, so any state change lands within one or two polls
     // and there's no avalanche of fetches when many tabs are open on
@@ -565,14 +575,16 @@ export default function PointsMarketDetail({ onOpenLogin }) {
             const sameNext   = prev.cryptoMeta?.nextMarketId === fresh.cryptoMeta?.nextMarketId;
             const samePrev   = prev.cryptoMeta?.prevMarketId === fresh.cryptoMeta?.prevMarketId;
             const sameThreshold = prev.cryptoMeta?.threshold === fresh.cryptoMeta?.threshold;
-            if (sameStatus && sameNext && samePrev && sameThreshold) return prev;
+            const sameSequence = cryptoMarketSequenceSignature(buildCryptoMarketSequence(prev))
+              === cryptoMarketSequenceSignature(buildCryptoMarketSequence(fresh));
+            if (sameStatus && sameNext && samePrev && sameThreshold && sameSequence) return prev;
             return fresh;
           });
         })
         .catch(() => { /* transient — next tick will retry */ });
     }, 10_000);
     return () => clearInterval(interval);
-  }, [id, market?.status, market?.cryptoMeta?.nextMarketId, market?.cryptoMeta?.prevMarketId, market?.cryptoMeta?.threshold]);
+  }, [id, market?.status, market?.cryptoMeta?.nextMarketId, market?.cryptoMeta?.prevMarketId, market?.cryptoMeta?.threshold, cryptoSequenceSig]);
 
   // Fetch the signed-in user's positions. For parallel markets, positions
   // live on leg ids but positions.js surfaces the parent id via
@@ -587,15 +599,21 @@ export default function PointsMarketDetail({ onOpenLogin }) {
       .then(r => {
         if (cancelled) return;
         const mid = Number(id);
+        const cryptoIds = market?.cryptoMeta
+          ? new Set(buildCryptoMarketSequence(market).map((m) => Number(m.id)))
+          : null;
         const mine = (r.positions || []).filter(p => {
           if (Number(p.shares) <= 0) return false;
+          if (cryptoIds) {
+            return cryptoIds.has(Number(p.marketId)) || cryptoIds.has(Number(p.parentMarketId));
+          }
           return Number(p.marketId) === mid || Number(p.parentMarketId) === mid;
         });
         setUserPositions(mine);
       })
       .catch(() => { /* best-effort */ });
     return () => { cancelled = true; };
-  }, [authenticated, id, buyState]);
+  }, [authenticated, id, buyState, market?.cryptoMeta, cryptoSequenceSig]);
 
   function handleBuyClick(target, outcomeIndex, outcomeLabel) {
     if (!authenticated) {

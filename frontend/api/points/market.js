@@ -29,6 +29,42 @@ function pricesFromReserves(reserves, outcomeCount) {
   return invs.map(v => v / total);
 }
 
+function cryptoMetaFromResolverConfig(resolverCfg) {
+  if (resolverCfg?.shape !== 'binary-direction') return null;
+  return {
+    asset:            resolverCfg.asset            || null,
+    symbol:           resolverCfg.symbol           || null,
+    coinbaseProductId:resolverCfg.coinbaseProductId|| null,
+    threshold:        resolverCfg.threshold == null ? null : Number(resolverCfg.threshold),
+    openPrice:        resolverCfg.openPrice  == null ? null : Number(resolverCfg.openPrice),
+    closePrice:       resolverCfg.closePrice == null ? null : Number(resolverCfg.closePrice),
+    openedAt:         resolverCfg.openedAt          || null,
+    closesAt:         resolverCfg.closesAt          || null,
+    rounding:         resolverCfg.rounding          || 1,
+  };
+}
+
+function summarizeCryptoMarketRow(row) {
+  const resolverCfg = parseJsonb(row.resolver_config, null);
+  const cryptoMeta = cryptoMetaFromResolverConfig(resolverCfg);
+  if (!cryptoMeta) return null;
+  const outcomes = parseJsonb(row.outcomes, ['SUBE', 'BAJA']);
+  const reserves = parseJsonb(row.reserves, []).map(Number);
+  return {
+    id: row.id,
+    question: row.question,
+    outcomes,
+    prices: pricesFromReserves(reserves, outcomes.length),
+    status: row.status,
+    outcome: row.outcome,
+    resolvedAt: row.resolved_at,
+    finalScore: row.final_score || null,
+    startTime: row.start_time,
+    endTime: row.end_time,
+    cryptoMeta,
+  };
+}
+
 export default async function handler(req, res) {
   // Top-level try/catch guarantees JSON output — see markets.js for
   // details on why this matters.
@@ -81,21 +117,16 @@ export default async function handler(req, res) {
       // without needing to refetch resolver_config separately.
       // Fields here are display-only — feedAddress / chainId stay
       // server-side. Null for any other market shape.
-      let cryptoMeta = resolverCfg?.shape === 'binary-direction'
-        ? {
-            asset:            resolverCfg.asset            || null,
-            symbol:           resolverCfg.symbol           || null,
-            coinbaseProductId:resolverCfg.coinbaseProductId|| null,
-            threshold:        resolverCfg.threshold == null ? null : Number(resolverCfg.threshold),
-            openPrice:        resolverCfg.openPrice  == null ? null : Number(resolverCfg.openPrice),
-            closePrice:       resolverCfg.closePrice == null ? null : Number(resolverCfg.closePrice),
-            openedAt:         resolverCfg.openedAt          || null,
-            closesAt:         resolverCfg.closesAt          || null,
-            rounding:         resolverCfg.rounding          || 1,
-            nextMarketId:     null,  // populated below when a pending sibling exists
-            prevMarketId:     null,  // populated below when an older sibling is still on the books
-          }
-        : null;
+      let cryptoMeta = cryptoMetaFromResolverConfig(resolverCfg);
+      if (cryptoMeta) {
+        cryptoMeta = {
+          ...cryptoMeta,
+          nextMarketId: null,  // populated below when a pending sibling exists
+          prevMarketId: null,  // populated below when an older sibling is still on the books
+          marketSequence: [],
+          alternateAssetMarket: null,
+        };
+      }
 
       // Look up sibling 5-min windows for the same asset so the detail
       // page can render Próximo / Anterior CTAs and the user can hop
@@ -142,6 +173,62 @@ export default async function handler(req, res) {
             cryptoMeta = { ...cryptoMeta, prevMarketId: prev[0].id };
           }
         } catch { /* same — best-effort */ }
+      }
+      if (cryptoMeta && r.start_time) {
+        try {
+          const sequenceRows = await sql`
+            SELECT id, question, outcomes, reserves, start_time, end_time,
+                   status, outcome, resolved_at, final_score, resolver_config
+            FROM points_markets
+            WHERE resolver_config->>'source' = 'chainlink'
+              AND resolver_config->>'shape'  = 'binary-direction'
+              AND resolver_config->>'asset'  = ${cryptoMeta.asset || ''}
+              AND start_time >= ${r.start_time}::timestamptz - INTERVAL '15 minutes'
+              AND start_time <= ${r.start_time}::timestamptz + INTERVAL '15 minutes'
+              AND archived_at IS NULL
+            ORDER BY start_time ASC, id ASC
+            LIMIT 9
+          `;
+          const marketSequence = sequenceRows
+            .map(summarizeCryptoMarketRow)
+            .filter(Boolean);
+          if (marketSequence.length > 0) {
+            cryptoMeta = { ...cryptoMeta, marketSequence };
+          }
+        } catch { /* best-effort; the main market payload is enough to render */ }
+      }
+      if (cryptoMeta && r.start_time) {
+        const alternateAsset = cryptoMeta.asset === 'btc'
+          ? 'eth'
+          : cryptoMeta.asset === 'eth'
+            ? 'btc'
+            : null;
+        if (alternateAsset) {
+          try {
+            const alternateRows = await sql`
+              SELECT id, resolver_config
+              FROM points_markets
+              WHERE resolver_config->>'source' = 'chainlink'
+                AND resolver_config->>'shape'  = 'binary-direction'
+                AND resolver_config->>'asset'  = ${alternateAsset}
+                AND start_time = ${r.start_time}
+                AND archived_at IS NULL
+              ORDER BY id DESC
+              LIMIT 1
+            `;
+            if (alternateRows.length > 0) {
+              const altMeta = cryptoMetaFromResolverConfig(parseJsonb(alternateRows[0].resolver_config, null));
+              cryptoMeta = {
+                ...cryptoMeta,
+                alternateAssetMarket: {
+                  id: alternateRows[0].id,
+                  asset: altMeta?.asset || alternateAsset,
+                  symbol: altMeta?.symbol || (alternateAsset === 'eth' ? 'ETH/USD' : 'BTC/USD'),
+                },
+              };
+            }
+          } catch { /* optional affordance only */ }
+        }
       }
 
       if (ammMode === 'parallel') {

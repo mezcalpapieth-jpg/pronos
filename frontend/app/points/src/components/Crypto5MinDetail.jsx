@@ -24,6 +24,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCryptoTicker } from '../lib/useCryptoTicker.js';
+import {
+  buildCryptoMarketSequence,
+  computeCryptoGraphFrame,
+  cryptoMarketSequenceSignature,
+  getSelectedCryptoMarket,
+} from '../lib/cryptoMarketHub.js';
 import LivePriceChart from '@app/components/LivePriceChart.jsx';
 import PointsBuyModal from './PointsBuyModal.jsx';
 
@@ -31,27 +37,6 @@ function fmt(n, d = 2) {
   if (n == null || !Number.isFinite(Number(n))) return '—';
   return Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 }
-
-// Shared style for the Prev/Next sibling-navigation buttons. Borderless,
-// monospace, low contrast so they don't compete with the SUBE/BAJA CTAs.
-const navBtnStyle = {
-  width: '100%',
-  padding: '12px 16px',
-  borderRadius: 10,
-  background: 'transparent',
-  border: '1px solid var(--border)',
-  color: 'var(--text-secondary)',
-  cursor: 'pointer',
-  fontFamily: 'var(--font-mono)',
-  fontSize: 12,
-  letterSpacing: '0.08em',
-  textTransform: 'uppercase',
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  gap: 8,
-  transition: 'border-color 0.15s, color 0.15s',
-};
 
 const SNAPSHOT_STORAGE_PREFIX = 'pronos-crypto-chart:';
 const SNAPSHOT_PERSIST_MS = 5_000;
@@ -123,11 +108,84 @@ function persistSnapshot(marketId, points) {
   } catch { /* best-effort */ }
 }
 
+function dateMs(value) {
+  const ms = value ? new Date(value).getTime() : NaN;
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function marketWindowBounds(market) {
+  const meta = market?.cryptoMeta || {};
+  const start = dateMs(meta.openedAt || market?.startTime);
+  const end = dateMs(meta.closesAt || market?.endTime);
+  return { start, end };
+}
+
+function formatMarketChipTime(market) {
+  const { end } = marketWindowBounds(market);
+  if (!end) return '—';
+  return new Date(end).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+}
+
+function marketChipKicker(market, nowMs) {
+  if (market?.status === 'resolved') return 'Past';
+  const meta = market?.cryptoMeta || {};
+  const start = dateMs(market?.startTime);
+  if (market?.status === 'pending' || meta.threshold == null || (start && start > nowMs)) {
+    return 'Awaiting';
+  }
+  return 'Live';
+}
+
+function decimate(points) {
+  const out = [];
+  let lastT = -Infinity;
+  for (const p of points) {
+    if (!Number.isFinite(p.t) || !Number.isFinite(p.price)) continue;
+    if (p.t - lastT >= 200) {
+      out.push(p);
+      lastT = p.t;
+    } else if (out.length > 0) {
+      out[out.length - 1] = p;
+    }
+  }
+  return out;
+}
+
+function anchorMarketPoints(market, points) {
+  const meta = market?.cryptoMeta || {};
+  const openedAtMs = dateMs(meta.openedAt);
+  if (!openedAtMs || !Number.isFinite(Number(meta.openPrice))) {
+    return normalizeChartPoints(points);
+  }
+  const sorted = normalizeChartPoints(points);
+  const head = { t: openedAtMs, price: Number(meta.openPrice) };
+  if (sorted.length === 0 || sorted[0].t > openedAtMs) {
+    return [head, ...sorted];
+  }
+  return sorted;
+}
+
+function pointsForMarketWindow(points, market) {
+  const { start, end } = marketWindowBounds(market);
+  return normalizeChartPoints(points, {
+    minT: start ?? undefined,
+    maxT: end ?? undefined,
+  });
+}
+
 export default function Crypto5MinDetail({ market, userPositions = [] }) {
   const navigate = useNavigate();
-  const meta = market?.cryptoMeta || {};
-  const productId = meta.coinbaseProductId || (meta.asset === 'eth' ? 'ETH-USD' : 'BTC-USD');
+  const baseMeta = market?.cryptoMeta || {};
+  const productId = baseMeta.coinbaseProductId || (baseMeta.asset === 'eth' ? 'ETH-USD' : 'BTC-USD');
   const { currentPrice, history, status: wsStatus } = useCryptoTicker(productId);
+  const sequence = useMemo(() => buildCryptoMarketSequence(market), [market]);
+  const sequenceSig = useMemo(() => cryptoMarketSequenceSignature(sequence), [sequence]);
+  const [selectedMarketId, setSelectedMarketId] = useState(market.id);
+  const selectedMarket = useMemo(
+    () => getSelectedCryptoMarket(market, selectedMarketId),
+    [market, selectedMarketId],
+  );
+  const meta = selectedMarket?.cryptoMeta || {};
 
   // Re-render once per second so the countdown ticks. Cheap.
   const [tick, setTick] = useState(0);
@@ -140,68 +198,38 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
   // works without modification.
   const [buyState, setBuyState] = useState(null);
 
-  const status = market.status;
-  const closesAt = useMemo(() => meta.closesAt ? new Date(meta.closesAt) : (market.endTime ? new Date(market.endTime) : null), [meta.closesAt, market.endTime]);
-  const opensAt = useMemo(() => market.startTime ? new Date(market.startTime) : null, [market.startTime]);
+  useEffect(() => {
+    if (sequence.length === 0) return;
+    const stillPresent = sequence.some((item) => String(item.id) === String(selectedMarketId));
+    if (!stillPresent) setSelectedMarketId(market.id);
+  }, [market.id, selectedMarketId, sequenceSig, sequence]);
+
+  const nowMs = Date.now();
+  const status = selectedMarket.status;
+  const closesAt = useMemo(() => meta.closesAt ? new Date(meta.closesAt) : (selectedMarket.endTime ? new Date(selectedMarket.endTime) : null), [meta.closesAt, selectedMarket.endTime]);
+  const opensAt = useMemo(() => selectedMarket.startTime ? new Date(selectedMarket.startTime) : null, [selectedMarket.startTime]);
 
   const canTrade = status === 'active' && closesAt && closesAt.getTime() > Date.now();
   const isPending = status === 'pending' || (status === 'active' && opensAt && opensAt.getTime() > Date.now());
   const isResolved = status === 'resolved';
 
-  // Backfill price history. Server-recorded ticks are the source of
-  // truth — browsers with the points app open submit Coinbase WS ticks
-  // every ~5s, so /api/points/crypto-history returns the same dense
-  // curve regardless of who's viewing and when. We use the
-  // server endpoint first; for brand-new markets that haven't
-  // accumulated ticks yet (for example, right after deploy) we fall
-  // back to Coinbase's public per-trade endpoint so the chart isn't
-  // blank.
-  //
-  // Anchor with openPrice@openedAt so the line starts exactly at the
-  // threshold-stamping moment even if the first recorded tick landed
-  // a few seconds later.
-  const [backfill, setBackfill] = useState([]);
-  const openedAtMs = meta.openedAt ? new Date(meta.openedAt).getTime() : null;
-  const chartWindowStart = openedAtMs ?? (!isPending && opensAt ? opensAt.getTime() : null);
-  const chartWindowEnd = (openedAtMs || !isPending) && closesAt ? closesAt.getTime() : null;
+  const graphFrame = useMemo(
+    () => computeCryptoGraphFrame(sequence, { nowMs, history }),
+    [sequenceSig, history, nowMs],
+  );
+  const selectedWindow = useMemo(() => marketWindowBounds(selectedMarket), [selectedMarket]);
+
+  // Backfill price history for the nearby BTC/ETH windows, but cache it
+  // by market id. Selecting another chip changes the threshold/controls;
+  // it does not blank the asset graph or force a new chart source.
+  const [backfillByMarketId, setBackfillByMarketId] = useState({});
+  const loadingBackfillRef = useRef(new Set());
+  const loadedBackfillRef = useRef(new Set());
   useEffect(() => {
-    if (!openedAtMs || !Number.isFinite(meta.openPrice)) { setBackfill([]); return; }
     let cancelled = false;
-    const endMs = (status === 'resolved' && closesAt)
-      ? closesAt.getTime()
-      : Date.now();
-
-    function decimate(points) {
-      // Keep one point per 200ms — anything denser is wasted at ~800px
-      // chart width and hurts framerate when the WS layers ticks on
-      // top. Within a bucket, prefer the latest tick so the chart
-      // hugs the freshest price.
-      const out = [];
-      let lastT = -Infinity;
-      for (const p of points) {
-        if (!Number.isFinite(p.t) || !Number.isFinite(p.price)) continue;
-        if (p.t - lastT >= 200) {
-          out.push(p);
-          lastT = p.t;
-        } else if (out.length > 0) {
-          out[out.length - 1] = p;
-        }
-      }
-      return out;
-    }
-
-    function anchor(points) {
-      const sorted = [...points].sort((a, b) => a.t - b.t);
-      const head = { t: openedAtMs, price: Number(meta.openPrice) };
-      if (sorted.length === 0 || sorted[0].t > openedAtMs) {
-        return [head, ...sorted];
-      }
-      return sorted;
-    }
-
-    async function loadFromServer() {
+    async function loadFromServer(target) {
       const res = await fetch(
-        `/api/points/crypto-history?marketId=${encodeURIComponent(market.id)}`,
+        `/api/points/crypto-history?marketId=${encodeURIComponent(target.id)}`,
         { credentials: 'omit' },
       );
       if (!res.ok) return null;
@@ -211,7 +239,7 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
       return points;
     }
 
-    async function loadFromCoinbase() {
+    async function loadFromCoinbase(target, openedAtMs, endMs) {
       // Fallback path — only used when the server hasn't accumulated
       // any ticks for this window yet. Paginates the public trades
       // endpoint until the window is covered or the page cap fires.
@@ -249,101 +277,112 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
       return collected;
     }
 
-    async function run() {
-      let points = await loadFromServer().catch(() => null);
+    async function loadTarget(target) {
+      const key = String(target.id);
+      if (loadedBackfillRef.current.has(key) || loadingBackfillRef.current.has(key)) return;
+      const targetMeta = target.cryptoMeta || {};
+      const openedAtMs = dateMs(targetMeta.openedAt);
+      if (!openedAtMs || !Number.isFinite(Number(targetMeta.openPrice))) return;
+      const closesAtMs = dateMs(targetMeta.closesAt || target.endTime);
+      const endMs = target.status === 'resolved' && closesAtMs
+        ? closesAtMs
+        : Math.min(Date.now(), closesAtMs || Date.now());
+      loadingBackfillRef.current.add(key);
+
+      let points = await loadFromServer(target).catch(() => null);
       if (!points || points.length < 5) {
-        // Server has nothing useful yet — fill the gap from Coinbase
-        // so the first user on a brand-new market doesn't see a blank
-        // chart. Merge with whatever the server did return.
-        const fallback = await loadFromCoinbase();
-        points = [...(points || []), ...fallback];
+        const allowCoinbaseFallback = key === String(selectedMarket.id) || target.status === 'active';
+        if (allowCoinbaseFallback) {
+          // Server has nothing useful yet — fill the active/selected
+          // gap from Coinbase so the first user on a brand-new market
+          // doesn't see a blank chart. Avoid doing this for every
+          // historical chip in the sequence.
+          const fallback = await loadFromCoinbase(target, openedAtMs, endMs);
+          points = [...(points || []), ...fallback];
+        }
       }
+      loadingBackfillRef.current.delete(key);
+      loadedBackfillRef.current.add(key);
       if (cancelled) return;
-      setBackfill(anchor(decimate(points)));
+      setBackfillByMarketId((prev) => ({
+        ...prev,
+        [key]: anchorMarketPoints(target, decimate(points || [])),
+      }));
     }
 
-    run();
+    for (const target of sequence) {
+      loadTarget(target);
+    }
     return () => { cancelled = true; };
-  }, [market.id, productId, openedAtMs, meta.openPrice, status, closesAt]);
+  }, [sequence, sequenceSig, selectedMarket.id, productId]);
 
   const snapshotWindow = useMemo(() => ({
-    minT: chartWindowStart,
-    maxT: chartWindowEnd,
-  }), [chartWindowStart, chartWindowEnd]);
-  const [storedSnapshot, setStoredSnapshot] = useState(() => loadStoredSnapshot(market.id, snapshotWindow));
-  const snapshotRef = useRef(storedSnapshot);
+    minT: graphFrame.xStart,
+    maxT: graphFrame.xEnd,
+  }), [graphFrame.xStart, graphFrame.xEnd]);
+  const [storedSnapshotsByMarketId, setStoredSnapshotsByMarketId] = useState({});
   const lastSnapshotPersistRef = useRef(0);
 
   useEffect(() => {
-    const stored = loadStoredSnapshot(market.id, snapshotWindow);
-    snapshotRef.current = stored;
-    setStoredSnapshot(stored);
+    const next = {};
+    for (const item of sequence) {
+      next[String(item.id)] = loadStoredSnapshot(item.id, snapshotWindow);
+    }
+    setStoredSnapshotsByMarketId(next);
     lastSnapshotPersistRef.current = 0;
-  }, [market.id, snapshotWindow]);
+  }, [sequenceSig, snapshotWindow]);
 
   // Active/pending curve = union of every source we have:
   //   - live WS ticker accumulated in-tab
-  //   - server backfill (global truth, but can be sparse early on)
-  //   - stored per-market snapshot from this browser
-  //   - explicit open anchor
+  //   - cached server backfills for nearby 5-min windows
+  //   - stored per-market snapshots from this browser
+  //   - explicit open/close anchors from market lifecycle metadata
   //
   // This avoids the old failure mode where a thin backfill response
   // arrived after mount and replaced a richer live curve with a nearly
-  // straight line. Unioning the sources preserves the densest history
-  // we have at any moment instead of choosing one winner.
+  // straight line. The graph is now asset-level: switching chips changes
+  // the selected threshold and controls, not the accumulated curve.
   const liveChartHistory = useMemo(() => normalizeChartPoints(
     [
-      ...storedSnapshot,
-      ...backfill,
+      ...Object.values(storedSnapshotsByMarketId).flat(),
+      ...Object.values(backfillByMarketId).flat(),
       ...history,
-      ...(Number.isFinite(openedAtMs) && meta.openPrice != null
-        ? [{ t: openedAtMs, price: Number(meta.openPrice) }]
-        : []),
+      ...sequence.flatMap((item) => {
+        const itemMeta = item.cryptoMeta || {};
+        const openedAtMs = dateMs(itemMeta.openedAt);
+        if (!openedAtMs || itemMeta.openPrice == null) return [];
+        return [{ t: openedAtMs, price: Number(itemMeta.openPrice) }];
+      }),
     ],
     snapshotWindow,
-  ), [storedSnapshot, backfill, history, openedAtMs, meta.openPrice, snapshotWindow]);
+  ), [storedSnapshotsByMarketId, backfillByMarketId, history, sequence, snapshotWindow]);
 
   useEffect(() => {
     if (status === 'resolved' || liveChartHistory.length < 2) return;
-    snapshotRef.current = liveChartHistory;
+    const selectedPoints = pointsForMarketWindow(liveChartHistory, selectedMarket);
+    if (selectedPoints.length < 2) return;
     const now = Date.now();
     if (now - lastSnapshotPersistRef.current < SNAPSHOT_PERSIST_MS) return;
     lastSnapshotPersistRef.current = now;
-    persistSnapshot(market.id, liveChartHistory);
-  }, [status, liveChartHistory, market.id]);
+    persistSnapshot(selectedMarket.id, selectedPoints);
+  }, [status, liveChartHistory, selectedMarket]);
 
   const chartHistory = useMemo(() => {
-    if (status === 'resolved') {
-      const base = normalizeChartPoints(
-        [
-          ...liveChartHistory,
-          ...(snapshotRef.current || []),
-        ],
-        snapshotWindow,
-      );
-      if (closesAt && meta.closePrice != null) {
-        const closeT = closesAt.getTime();
-        const closePrice = Number(meta.closePrice);
-        const lastT = base.length ? base[base.length - 1].t : 0;
-        // Don't double-stamp if the last curve point already sits at
-        // closesAt — just overwrite its price to match the settlement
-        // value (which can drift by a few cents from the closing candle).
-        if (lastT >= closeT - 30_000) {
-          base[base.length - 1] = { t: closeT, price: closePrice };
-        } else {
-          base.push({ t: closeT, price: closePrice });
-        }
-      }
-      return base;
-    }
-    return liveChartHistory;
-  }, [status, liveChartHistory, storedSnapshot, backfill, openedAtMs, meta.openPrice, meta.closePrice, closesAt, snapshotWindow]);
+    const closeAnchors = sequence.flatMap((item) => {
+      const itemMeta = item.cryptoMeta || {};
+      const closeT = dateMs(itemMeta.closesAt || item.endTime);
+      if (item.status !== 'resolved' || !closeT || itemMeta.closePrice == null) return [];
+      return [{ t: closeT, price: Number(itemMeta.closePrice) }];
+    });
+    return normalizeChartPoints([...liveChartHistory, ...closeAnchors], snapshotWindow);
+  }, [sequence, liveChartHistory, snapshotWindow]);
 
   useEffect(() => {
     if (status !== 'resolved' || chartHistory.length < 2) return;
-    snapshotRef.current = chartHistory;
-    persistSnapshot(market.id, chartHistory);
-  }, [status, chartHistory, market.id]);
+    const selectedPoints = pointsForMarketWindow(chartHistory, selectedMarket);
+    if (selectedPoints.length < 2) return;
+    persistSnapshot(selectedMarket.id, selectedPoints);
+  }, [status, chartHistory, selectedMarket]);
 
   // Buy handler — opens the existing PointsBuyModal pre-targeted on the
   // chosen outcome. We pass the same shape it expects from non-crypto
@@ -351,17 +390,20 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
   function openBuy(outcomeIndex) {
     if (!canTrade) return;
     setBuyState({
-      market,
+      market: selectedMarket,
       outcomeIndex,
-      outcomeLabel: market.outcomes?.[outcomeIndex] || (outcomeIndex === 0 ? 'SUBE' : 'BAJA'),
+      outcomeLabel: selectedMarket.outcomes?.[outcomeIndex] || (outcomeIndex === 0 ? 'SUBE' : 'BAJA'),
     });
   }
 
-  const subePrice = market.prices?.[0] ?? 0.5;
-  const bajaPrice = market.prices?.[1] ?? 0.5;
+  const subePrice = selectedMarket.prices?.[0] ?? 0.5;
+  const bajaPrice = selectedMarket.prices?.[1] ?? 0.5;
   const direction = currentPrice != null && meta.threshold != null
     ? (currentPrice > meta.threshold ? 'sube' : currentPrice < meta.threshold ? 'baja' : 'flat')
     : null;
+  const selectedPositions = userPositions.filter((p) => Number(p.marketId) === Number(selectedMarket.id));
+  const selectedTimeLabel = formatMarketChipTime(selectedMarket);
+  const alternateAssetMarket = baseMeta.alternateAssetMarket || null;
 
   return (
     <div style={{
@@ -371,18 +413,55 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
       {/* Header — back button is provided by the page-level nav above. */}
       <div style={{ marginBottom: 20 }}>
         <div style={{
-          fontFamily: 'var(--font-mono)', fontSize: 11,
-          color: 'var(--text-muted)', letterSpacing: '0.12em',
-          textTransform: 'uppercase', marginBottom: 6,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 12,
+          flexWrap: 'wrap',
+          marginBottom: 6,
         }}>
-          {meta.symbol || '—'} · 5 min · Chainlink
+          <div style={{
+            fontFamily: 'var(--font-mono)', fontSize: 11,
+            color: 'var(--text-muted)', letterSpacing: '0.12em',
+            textTransform: 'uppercase',
+          }}>
+            {meta.symbol || '—'} · 5 min · Chainlink
+          </div>
+          {alternateAssetMarket && (
+            <button
+              onClick={() => navigate(`/market?id=${encodeURIComponent(alternateAssetMarket.id)}`)}
+              style={{
+                border: '1px solid var(--border)',
+                background: 'transparent',
+                color: 'var(--text-secondary)',
+                borderRadius: 8,
+                padding: '7px 10px',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+              }}
+            >
+              {alternateAssetMarket.asset === 'eth' ? 'ETH' : 'BTC'}
+            </button>
+          )}
         </div>
         <h1 style={{
           fontFamily: 'var(--font-display)', fontSize: 'clamp(22px, 4vw, 32px)',
           color: 'var(--text-primary)', margin: 0, letterSpacing: '0.02em',
         }}>
-          {market.question}
+          {meta.asset === 'eth' ? 'Ethereum: sube o baja en 5 minutos' : 'Bitcoin: sube o baja en 5 minutos'}
         </h1>
+        <div style={{
+          marginTop: 6,
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          color: 'var(--text-secondary)',
+          letterSpacing: '0.04em',
+        }}>
+          {selectedTimeLabel} · {selectedMarket.question}
+        </div>
       </div>
 
       {/* Live price strip */}
@@ -476,13 +555,10 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
           history={chartHistory}
           threshold={meta.threshold ?? null}
           height={260}
-          // Anchor the X axis to the market's actual window so the
-          // chart shows open-on-left, close-on-right regardless of
-          // when the user opens the page. Falls back to LivePriceChart's
-          // sliding 5-min window when these are absent (e.g. pending
-          // pre-open state).
-          xStart={chartWindowStart ?? undefined}
-          xEnd={chartWindowEnd ?? undefined}
+          xStart={graphFrame.xStart ?? undefined}
+          xEnd={graphFrame.xEnd ?? undefined}
+          highlightStart={selectedWindow.start ?? undefined}
+          highlightEnd={selectedWindow.end ?? undefined}
         />
       </div>
 
@@ -507,13 +583,13 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
             color: 'var(--text-primary)',
           }}>
             <strong style={{
-              color: market.outcome === 0 ? 'var(--yes, #00C96B)' : 'var(--red, #FF4545)',
+              color: selectedMarket.outcome === 0 ? 'var(--yes, #00C96B)' : 'var(--red, #FF4545)',
             }}>
-              {market.outcomes?.[market.outcome] || (market.outcome === 0 ? 'SUBE' : 'BAJA')}
+              {selectedMarket.outcomes?.[selectedMarket.outcome] || (selectedMarket.outcome === 0 ? 'SUBE' : 'BAJA')}
             </strong>
             {' · '}
             <span style={{ color: 'var(--text-secondary)' }}>
-              {market.finalScore || (meta.openPrice != null && meta.closePrice != null
+              {selectedMarket.finalScore || (meta.openPrice != null && meta.closePrice != null
                 ? `$${fmt(meta.openPrice, 2)} → $${fmt(meta.closePrice, 2)}`
                 : '')}
             </span>
@@ -533,7 +609,7 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
           letterSpacing: '0.04em',
           textAlign: 'center',
         }}>
-          El próximo mercado ya está preparado. El umbral se publica al abrir, justo cuando cierre el mercado anterior.
+          Awaiting previous market. El umbral se publica al abrir, justo cuando cierre la ventana anterior.
         </div>
       )}
 
@@ -593,58 +669,86 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
         </div>
       )}
 
-      {/* Prev / next navigation row — lets users hop between consecutive
-          5-min windows without bouncing out to the grid. Keep it visible
-          after resolution too so the user can inspect the settled result
-          and still move through the sequence without losing context. */}
-      {(meta.prevMarketId || meta.nextMarketId) && (
+      {sequence.length > 1 && (
         <div style={{
           marginBottom: 16,
-          display: 'grid',
-          gridTemplateColumns: meta.prevMarketId && meta.nextMarketId
-            ? '1fr 1fr'
-            : '1fr',
-          gap: 10,
+          overflowX: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          paddingBottom: 2,
         }}>
-          {meta.prevMarketId && (
-            <button
-              onClick={() => navigate(`/market?id=${encodeURIComponent(meta.prevMarketId)}`)}
-              style={navBtnStyle}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'var(--text-muted)';
-                e.currentTarget.style.color = 'var(--text-primary)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--border)';
-                e.currentTarget.style.color = 'var(--text-secondary)';
-              }}
-            >
-              <span aria-hidden="true">←</span>
-              <span>Anterior ({meta.symbol || ''} · 5 min)</span>
-            </button>
-          )}
-          {meta.nextMarketId && (
-            <button
-              onClick={() => navigate(`/market?id=${encodeURIComponent(meta.nextMarketId)}`)}
-              style={navBtnStyle}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'var(--green)';
-                e.currentTarget.style.color = 'var(--green)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--border)';
-                e.currentTarget.style.color = 'var(--text-secondary)';
-              }}
-            >
-              <span>Próximo ({meta.symbol || ''} · 5 min)</span>
-              <span aria-hidden="true">→</span>
-            </button>
-          )}
+          <div style={{
+            display: 'flex',
+            gap: 8,
+            minWidth: 'max-content',
+          }}>
+            {sequence.map((item) => {
+              const selected = String(item.id) === String(selectedMarket.id);
+              const itemMeta = item.cryptoMeta || {};
+              const kicker = marketChipKicker(item, nowMs);
+              const itemAbove = currentPrice != null && itemMeta.threshold != null && currentPrice > itemMeta.threshold;
+              const itemBelow = currentPrice != null && itemMeta.threshold != null && currentPrice < itemMeta.threshold;
+              const accent = item.status === 'resolved'
+                ? (item.outcome === 0 ? 'var(--yes, #00C96B)' : 'var(--red, #FF4545)')
+                : itemAbove
+                  ? 'var(--yes, #00C96B)'
+                  : itemBelow
+                    ? 'var(--red, #FF4545)'
+                    : 'var(--text-secondary)';
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setSelectedMarketId(item.id)}
+                  style={{
+                    width: 112,
+                    minHeight: 66,
+                    borderRadius: 8,
+                    border: selected ? `1px solid ${accent}` : '1px solid var(--border)',
+                    background: selected ? 'var(--surface1)' : 'transparent',
+                    color: selected ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    padding: '9px 10px',
+                    textAlign: 'left',
+                    fontFamily: 'var(--font-mono)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    gap: 6,
+                  }}
+                >
+                  <span style={{
+                    fontSize: 10,
+                    letterSpacing: '0.1em',
+                    textTransform: 'uppercase',
+                    color: selected ? accent : 'var(--text-muted)',
+                  }}>
+                    {kicker}
+                  </span>
+                  <span style={{
+                    fontFamily: 'var(--font-display)',
+                    fontSize: 19,
+                    lineHeight: 1,
+                    color: selected ? accent : 'var(--text-primary)',
+                  }}>
+                    {formatMarketChipTime(item)}
+                  </span>
+                  <span style={{
+                    fontSize: 10,
+                    color: 'var(--text-muted)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}>
+                    {itemMeta.threshold != null ? `$${fmt(itemMeta.threshold, 0)}` : 'Awaiting'}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
       {/* User position panel — minimal display matching the rest of detail */}
-      {userPositions.length > 0 && (
+      {selectedPositions.length > 0 && (
         <div style={{
           padding: 12, borderRadius: 8,
           background: 'var(--surface2)', border: '1px solid var(--border)',
@@ -653,9 +757,9 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
           marginBottom: 12,
         }}>
           Tu posición:
-          {userPositions.map((p, i) => (
+          {selectedPositions.map((p, i) => (
             <span key={i} style={{ marginLeft: 10 }}>
-              {market.outcomes?.[p.outcomeIndex] ?? `Outcome ${p.outcomeIndex}`} · {fmt(p.shares, 2)} acciones
+              {selectedMarket.outcomes?.[p.outcomeIndex] ?? `Outcome ${p.outcomeIndex}`} · {fmt(p.shares, 2)} acciones
             </span>
           ))}
         </div>
