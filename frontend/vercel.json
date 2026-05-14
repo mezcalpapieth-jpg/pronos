@@ -10,7 +10,6 @@
     }
   ],
   "redirects": [
-    { "source": "/",           "destination": "/mvp/",              "permanent": false },
     { "source": "/portfolio",  "destination": "/points/portfolio",  "permanent": true },
     { "source": "/admin",      "destination": "/points/admin",      "permanent": true },
     { "source": "/earn",       "destination": "/points/earn",       "permanent": true },

@@ -12,6 +12,7 @@ import { readFile } from 'node:fs/promises';
 const vercelConfig = JSON.parse(
   await readFile(new URL('../../vercel.json', import.meta.url), 'utf8'),
 );
+const rootIndexHtml = await readFile(new URL('../../index.html', import.meta.url), 'utf8');
 
 function hasRule(rules, source, destination) {
   return Array.isArray(rules)
@@ -23,6 +24,18 @@ test('public user profile route has a root shortcut redirect', () => {
     hasRule(vercelConfig.redirects, '/u/:username', '/points/u/:username'),
     'expected /u/:username to redirect to /points/u/:username',
   );
+});
+
+test('root serves the marketing landing instead of redirecting to an app', () => {
+  assert.ok(
+    !hasRule(vercelConfig.redirects, '/', '/mvp/'),
+    'expected / to serve frontend/index.html, not redirect to /mvp/',
+  );
+  assert.ok(
+    !/http-equiv=["']refresh["']/i.test(rootIndexHtml),
+    'expected frontend/index.html to be the marketing landing, not a meta-refresh shell',
+  );
+  assert.match(rootIndexHtml, /El mercado de predicciones de Latinoamérica/);
 });
 
 test('public user profile route hard-refreshes through the points SPA', () => {
