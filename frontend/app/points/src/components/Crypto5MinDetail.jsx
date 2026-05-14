@@ -127,13 +127,13 @@ function formatMarketChipTime(market) {
 }
 
 function marketChipKicker(market, nowMs) {
-  if (market?.status === 'resolved') return 'Past';
+  if (market?.status === 'resolved') return 'Cerrado';
   const meta = market?.cryptoMeta || {};
   const start = dateMs(market?.startTime);
   if (market?.status === 'pending' || meta.threshold == null || (start && start > nowMs)) {
-    return 'Awaiting';
+    return 'En espera';
   }
-  return 'Live';
+  return 'En vivo';
 }
 
 function decimate(points) {
@@ -404,6 +404,11 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
   const selectedPositions = userPositions.filter((p) => Number(p.marketId) === Number(selectedMarket.id));
   const selectedTimeLabel = formatMarketChipTime(selectedMarket);
   const alternateAssetMarket = baseMeta.alternateAssetMarket || null;
+  const alternateIsEth = alternateAssetMarket?.asset === 'eth';
+  const alternateAccent = alternateIsEth ? '#627eea' : '#f7931a';
+  const alternateSoftBg = alternateIsEth ? 'rgba(98,126,234,0.14)' : 'rgba(247,147,26,0.14)';
+  const alternateLabel = alternateIsEth ? 'ETH' : 'BTC';
+  const alternateIcon = alternateIsEth ? 'Ξ' : '₿';
 
   return (
     <div style={{
@@ -427,25 +432,6 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
           }}>
             {meta.symbol || '—'} · 5 min · Chainlink
           </div>
-          {alternateAssetMarket && (
-            <button
-              onClick={() => navigate(`/market?id=${encodeURIComponent(alternateAssetMarket.id)}`)}
-              style={{
-                border: '1px solid var(--border)',
-                background: 'transparent',
-                color: 'var(--text-secondary)',
-                borderRadius: 8,
-                padding: '7px 10px',
-                cursor: 'pointer',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 10,
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-              }}
-            >
-              {alternateAssetMarket.asset === 'eth' ? 'ETH' : 'BTC'}
-            </button>
-          )}
         </div>
         <h1 style={{
           fontFamily: 'var(--font-display)', fontSize: 'clamp(22px, 4vw, 32px)',
@@ -609,7 +595,7 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
           letterSpacing: '0.04em',
           textAlign: 'center',
         }}>
-          Awaiting previous market. El umbral se publica al abrir, justo cuando cierre la ventana anterior.
+          En espera del mercado anterior. El umbral se publica al abrir, justo cuando cierre la ventana anterior.
         </div>
       )}
 
@@ -669,81 +655,132 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
         </div>
       )}
 
-      {sequence.length > 1 && (
+      {(sequence.length > 1 || alternateAssetMarket) && (
         <div style={{
           marginBottom: 16,
-          overflowX: 'auto',
-          WebkitOverflowScrolling: 'touch',
-          paddingBottom: 2,
+          display: 'flex',
+          alignItems: 'stretch',
+          gap: 10,
         }}>
           <div style={{
-            display: 'flex',
-            gap: 8,
-            minWidth: 'max-content',
+            flex: '1 1 auto',
+            minWidth: 0,
+            overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
+            paddingBottom: 2,
           }}>
-            {sequence.map((item) => {
-              const selected = String(item.id) === String(selectedMarket.id);
-              const itemMeta = item.cryptoMeta || {};
-              const kicker = marketChipKicker(item, nowMs);
-              const itemAbove = currentPrice != null && itemMeta.threshold != null && currentPrice > itemMeta.threshold;
-              const itemBelow = currentPrice != null && itemMeta.threshold != null && currentPrice < itemMeta.threshold;
-              const accent = item.status === 'resolved'
-                ? (item.outcome === 0 ? 'var(--yes, #00C96B)' : 'var(--red, #FF4545)')
-                : itemAbove
-                  ? 'var(--yes, #00C96B)'
-                  : itemBelow
-                    ? 'var(--red, #FF4545)'
-                    : 'var(--text-secondary)';
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setSelectedMarketId(item.id)}
-                  style={{
-                    width: 112,
-                    minHeight: 66,
-                    borderRadius: 8,
-                    border: selected ? `1px solid ${accent}` : '1px solid var(--border)',
-                    background: selected ? 'var(--surface1)' : 'transparent',
-                    color: selected ? 'var(--text-primary)' : 'var(--text-secondary)',
-                    cursor: 'pointer',
-                    padding: '9px 10px',
-                    textAlign: 'left',
-                    fontFamily: 'var(--font-mono)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    gap: 6,
-                  }}
-                >
-                  <span style={{
-                    fontSize: 10,
-                    letterSpacing: '0.1em',
-                    textTransform: 'uppercase',
-                    color: selected ? accent : 'var(--text-muted)',
-                  }}>
-                    {kicker}
-                  </span>
-                  <span style={{
-                    fontFamily: 'var(--font-display)',
-                    fontSize: 19,
-                    lineHeight: 1,
-                    color: selected ? accent : 'var(--text-primary)',
-                  }}>
-                    {formatMarketChipTime(item)}
-                  </span>
-                  <span style={{
-                    fontSize: 10,
-                    color: 'var(--text-muted)',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}>
-                    {itemMeta.threshold != null ? `$${fmt(itemMeta.threshold, 0)}` : 'Awaiting'}
-                  </span>
-                </button>
-              );
-            })}
+            <div style={{
+              display: 'flex',
+              gap: 8,
+              minWidth: 'max-content',
+            }}>
+              {sequence.map((item) => {
+                const selected = String(item.id) === String(selectedMarket.id);
+                const itemMeta = item.cryptoMeta || {};
+                const kicker = marketChipKicker(item, nowMs);
+                const itemAbove = currentPrice != null && itemMeta.threshold != null && currentPrice > itemMeta.threshold;
+                const itemBelow = currentPrice != null && itemMeta.threshold != null && currentPrice < itemMeta.threshold;
+                const accent = item.status === 'resolved'
+                  ? (item.outcome === 0 ? 'var(--yes, #00C96B)' : 'var(--red, #FF4545)')
+                  : itemAbove
+                    ? 'var(--yes, #00C96B)'
+                    : itemBelow
+                      ? 'var(--red, #FF4545)'
+                      : 'var(--text-secondary)';
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setSelectedMarketId(item.id)}
+                    style={{
+                      width: 112,
+                      minHeight: 66,
+                      borderRadius: 8,
+                      border: selected ? `1px solid ${accent}` : '1px solid var(--border)',
+                      background: selected ? 'var(--surface1)' : 'transparent',
+                      color: selected ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      padding: '9px 10px',
+                      textAlign: 'left',
+                      fontFamily: 'var(--font-mono)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      gap: 6,
+                    }}
+                  >
+                    <span style={{
+                      fontSize: 10,
+                      letterSpacing: '0.1em',
+                      textTransform: 'uppercase',
+                      color: selected ? accent : 'var(--text-muted)',
+                    }}>
+                      {kicker}
+                    </span>
+                    <span style={{
+                      fontFamily: 'var(--font-display)',
+                      fontSize: 19,
+                      lineHeight: 1,
+                      color: selected ? accent : 'var(--text-primary)',
+                    }}>
+                      {formatMarketChipTime(item)}
+                    </span>
+                    <span style={{
+                      fontSize: 10,
+                      color: 'var(--text-muted)',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}>
+                      {itemMeta.threshold != null ? `$${fmt(itemMeta.threshold, 0)}` : 'En espera'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
+          {alternateAssetMarket && (
+            <button
+              onClick={() => navigate(`/market?id=${encodeURIComponent(alternateAssetMarket.id)}`)}
+              style={{
+                width: 92,
+                minHeight: 66,
+                flex: '0 0 auto',
+                borderRadius: 8,
+                border: `1px solid ${alternateAccent}`,
+                background: alternateSoftBg,
+                color: alternateAccent,
+                cursor: 'pointer',
+                padding: '9px 10px',
+                fontFamily: 'var(--font-mono)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                textAlign: 'left',
+              }}
+            >
+              <span style={{
+                fontSize: 10,
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+              }}>
+                Cambiar
+              </span>
+              <span style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: 23,
+                lineHeight: 1,
+              }}>
+                {alternateIcon} {alternateLabel}
+              </span>
+              <span style={{
+                fontSize: 10,
+                color: 'var(--text-secondary)',
+              }}>
+                5 min
+              </span>
+            </button>
+          )}
         </div>
       )}
 
