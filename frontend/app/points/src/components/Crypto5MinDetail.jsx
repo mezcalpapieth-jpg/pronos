@@ -31,6 +31,7 @@ import {
   getSelectedCryptoMarket,
 } from '../lib/cryptoMarketHub.js';
 import LivePriceChart from '@app/components/LivePriceChart.jsx';
+import { useLang, useT } from '@app/lib/i18n.js';
 import PointsBuyModal from './PointsBuyModal.jsx';
 
 function fmt(n, d = 2) {
@@ -120,20 +121,24 @@ function marketWindowBounds(market) {
   return { start, end };
 }
 
-function formatMarketChipTime(market) {
+function formatMarketChipTime(market, locale = 'es-MX') {
   const { end } = marketWindowBounds(market);
   if (!end) return '—';
-  return new Date(end).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+  return new Date(end).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 }
 
-function marketChipKicker(market, nowMs) {
-  if (market?.status === 'resolved') return 'Cerrado';
+function marketChipKicker(market, nowMs, t) {
+  if (market?.status === 'resolved') return t('points.crypto.kicker.past');
   const meta = market?.cryptoMeta || {};
   const start = dateMs(market?.startTime);
   if (market?.status === 'pending' || meta.threshold == null || (start && start > nowMs)) {
-    return 'En espera';
+    return t('points.crypto.kicker.awaiting');
   }
-  return 'En vivo';
+  return t('points.crypto.kicker.live');
+}
+
+function cryptoOutcomeLabel(outcomeIndex, t) {
+  return outcomeIndex === 0 ? t('points.crypto.up') : t('points.crypto.down');
 }
 
 function decimate(points) {
@@ -175,6 +180,9 @@ function pointsForMarketWindow(points, market) {
 
 export default function Crypto5MinDetail({ market, userPositions = [] }) {
   const navigate = useNavigate();
+  const t = useT();
+  const lang = useLang();
+  const timeLocale = lang === 'en' ? 'en-US' : 'es-MX';
   const baseMeta = market?.cryptoMeta || {};
   const productId = baseMeta.coinbaseProductId || (baseMeta.asset === 'eth' ? 'ETH-USD' : 'BTC-USD');
   const { currentPrice, history, status: wsStatus } = useCryptoTicker(productId);
@@ -392,7 +400,7 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
     setBuyState({
       market: selectedMarket,
       outcomeIndex,
-      outcomeLabel: selectedMarket.outcomes?.[outcomeIndex] || (outcomeIndex === 0 ? 'SUBE' : 'BAJA'),
+      outcomeLabel: cryptoOutcomeLabel(outcomeIndex, t),
     });
   }
 
@@ -402,7 +410,7 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
     ? (currentPrice > meta.threshold ? 'sube' : currentPrice < meta.threshold ? 'baja' : 'flat')
     : null;
   const selectedPositions = userPositions.filter((p) => Number(p.marketId) === Number(selectedMarket.id));
-  const selectedTimeLabel = formatMarketChipTime(selectedMarket);
+  const selectedTimeLabel = formatMarketChipTime(selectedMarket, timeLocale);
   const alternateAssetMarket = baseMeta.alternateAssetMarket || null;
   const alternateIsEth = alternateAssetMarket?.asset === 'eth';
   const alternateAccent = alternateIsEth ? '#627eea' : '#f7931a';
@@ -437,7 +445,7 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
           fontFamily: 'var(--font-display)', fontSize: 'clamp(22px, 4vw, 32px)',
           color: 'var(--text-primary)', margin: 0, letterSpacing: '0.02em',
         }}>
-          {meta.asset === 'eth' ? 'Ethereum: sube o baja en 5 minutos' : 'Bitcoin: sube o baja en 5 minutos'}
+          {t('points.crypto.title', { asset: meta.asset === 'eth' ? 'Ethereum' : 'Bitcoin' })}
         </h1>
         <div style={{
           marginTop: 6,
@@ -462,7 +470,7 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
             letterSpacing: '0.12em', color: 'var(--text-muted)',
             textTransform: 'uppercase', marginBottom: 4,
           }}>
-            Precio actual
+            {t('points.crypto.currentPrice')}
           </div>
           <div style={{
             fontFamily: 'var(--font-display)',
@@ -479,7 +487,7 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
             fontFamily: 'var(--font-mono)', fontSize: 10,
             color: 'var(--text-muted)', marginTop: 2,
           }}>
-            {wsStatus === 'open' ? '● en vivo · Coinbase' : wsStatus === 'connecting' ? 'conectando…' : 'sin conexión'}
+            {wsStatus === 'open' ? t('points.crypto.ws.liveCoinbase') : wsStatus === 'connecting' ? t('points.crypto.ws.connecting') : t('points.crypto.ws.offline')}
           </div>
         </div>
 
@@ -489,7 +497,7 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
             letterSpacing: '0.12em', color: 'var(--text-muted)',
             textTransform: 'uppercase', marginBottom: 4,
           }}>
-            Umbral
+            {t('points.crypto.threshold')}
           </div>
           <div style={{
             fontFamily: 'var(--font-display)',
@@ -497,13 +505,13 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
             color: meta.threshold != null ? 'var(--text-primary)' : 'var(--text-muted)',
             letterSpacing: '0.02em',
           }}>
-            {meta.threshold != null ? `$${fmt(meta.threshold, 0)}` : 'al abrir'}
+            {meta.threshold != null ? `$${fmt(meta.threshold, 0)}` : t('points.crypto.atOpen')}
           </div>
           <div style={{
             fontFamily: 'var(--font-mono)', fontSize: 10,
             color: 'var(--text-muted)', marginTop: 2,
           }}>
-            redondeado al $1 · sin empate
+            {t('points.crypto.thresholdNote')}
           </div>
         </div>
 
@@ -514,7 +522,7 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
             textTransform: 'uppercase', marginBottom: 4,
             textAlign: 'right',
           }}>
-            {isPending ? 'Abre en' : isResolved ? 'Cerró' : 'Cierra en'}
+            {isPending ? t('points.crypto.opensIn') : isResolved ? t('points.crypto.closedAt') : t('points.crypto.closesIn')}
           </div>
           <div
             key={tick /* re-render each second */}
@@ -527,7 +535,7 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
             }}
           >
             {isResolved
-              ? closesAt?.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+              ? closesAt?.toLocaleTimeString(timeLocale, { hour: '2-digit', minute: '2-digit' })
               : isPending
                 ? formatCountdown(opensAt)
                 : formatCountdown(closesAt)}
@@ -562,7 +570,7 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
             letterSpacing: '0.12em', color: 'var(--text-muted)',
             textTransform: 'uppercase', marginBottom: 4,
           }}>
-            Resuelto
+            {t('points.crypto.resolved')}
           </div>
           <div style={{
             fontFamily: 'var(--font-body)', fontSize: 16,
@@ -571,7 +579,7 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
             <strong style={{
               color: selectedMarket.outcome === 0 ? 'var(--yes, #00C96B)' : 'var(--red, #FF4545)',
             }}>
-              {selectedMarket.outcomes?.[selectedMarket.outcome] || (selectedMarket.outcome === 0 ? 'SUBE' : 'BAJA')}
+              {cryptoOutcomeLabel(selectedMarket.outcome, t)}
             </strong>
             {' · '}
             <span style={{ color: 'var(--text-secondary)' }}>
@@ -595,7 +603,7 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
           letterSpacing: '0.04em',
           textAlign: 'center',
         }}>
-          En espera del mercado anterior. El umbral se publica al abrir, justo cuando cierre la ventana anterior.
+          {t('points.crypto.pendingHint')}
         </div>
       )}
 
@@ -624,9 +632,9 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
               alignItems: 'flex-start',
             }}
           >
-            <span style={{ fontSize: 22, fontWeight: 700 }}>↑ SUBE</span>
+            <span style={{ fontSize: 22, fontWeight: 700 }}>↑ {t('points.crypto.up')}</span>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, opacity: 0.85 }}>
-              {(subePrice * 100).toFixed(0)}¢ por acción
+              {(subePrice * 100).toFixed(0)}¢ {t('points.crypto.perShare')}
             </span>
           </button>
           <button
@@ -647,9 +655,9 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
               alignItems: 'flex-start',
             }}
           >
-            <span style={{ fontSize: 22, fontWeight: 700 }}>↓ BAJA</span>
+            <span style={{ fontSize: 22, fontWeight: 700 }}>↓ {t('points.crypto.down')}</span>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, opacity: 0.85 }}>
-              {(bajaPrice * 100).toFixed(0)}¢ por acción
+              {(bajaPrice * 100).toFixed(0)}¢ {t('points.crypto.perShare')}
             </span>
           </button>
         </div>
@@ -677,7 +685,7 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
               {sequence.map((item) => {
                 const selected = String(item.id) === String(selectedMarket.id);
                 const itemMeta = item.cryptoMeta || {};
-                const kicker = marketChipKicker(item, nowMs);
+                const kicker = marketChipKicker(item, nowMs, t);
                 const itemAbove = currentPrice != null && itemMeta.threshold != null && currentPrice > itemMeta.threshold;
                 const itemBelow = currentPrice != null && itemMeta.threshold != null && currentPrice < itemMeta.threshold;
                 const accent = item.status === 'resolved'
@@ -722,7 +730,7 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
                       lineHeight: 1,
                       color: selected ? accent : 'var(--text-primary)',
                     }}>
-                      {formatMarketChipTime(item)}
+                      {formatMarketChipTime(item, timeLocale)}
                     </span>
                     <span style={{
                       fontSize: 10,
@@ -731,7 +739,7 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                     }}>
-                      {itemMeta.threshold != null ? `$${fmt(itemMeta.threshold, 0)}` : 'En espera'}
+                      {itemMeta.threshold != null ? `$${fmt(itemMeta.threshold, 0)}` : t('points.crypto.kicker.awaiting')}
                     </span>
                   </button>
                 );
@@ -764,7 +772,7 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
                 letterSpacing: '0.1em',
                 textTransform: 'uppercase',
               }}>
-                Cambiar
+                {t('points.crypto.switch')}
               </span>
               <span style={{
                 fontFamily: 'var(--font-display)',
@@ -777,7 +785,7 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
                 fontSize: 10,
                 color: 'var(--text-secondary)',
               }}>
-                5 min
+                {t('points.crypto.durationShort')}
               </span>
             </button>
           )}
@@ -793,10 +801,10 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
           color: 'var(--text-secondary)',
           marginBottom: 12,
         }}>
-          Tu posición:
+          {t('points.crypto.position')}:
           {selectedPositions.map((p, i) => (
             <span key={i} style={{ marginLeft: 10 }}>
-              {selectedMarket.outcomes?.[p.outcomeIndex] ?? `Outcome ${p.outcomeIndex}`} · {fmt(p.shares, 2)} acciones
+              {cryptoOutcomeLabel(p.outcomeIndex, t) || `${t('points.crypto.outcome')} ${p.outcomeIndex}`} · {fmt(p.shares, 2)} {t('points.crypto.shares')}
             </span>
           ))}
         </div>

@@ -12,6 +12,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { quoteBuy, executeBuy } from '../lib/pointsApi.js';
+import { useLang, useT } from '@app/lib/i18n.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 
 const QUICK_AMOUNTS = [5, 10, 25, 50, 100];
@@ -22,6 +23,8 @@ const QUICK_AMOUNTS = [5, 10, 25, 50, 100];
 // without leaving the grid.
 export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabel, onClose, onSuccess, variant = 'modal' }) {
   const { user, refresh } = usePointsAuth();
+  const t = useT();
+  const lang = useLang();
   const [amount, setAmount] = useState('10');
   const [quote, setQuote] = useState(null);
   const [quoteState, setQuoteState] = useState('idle'); // idle | loading | ready | error
@@ -33,6 +36,7 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
   const balance = Number(user?.balance || 0);
   const numAmount = parseFloat(amount) || 0;
   const insufficientBalance = numAmount > balance;
+  const numberLocale = lang === 'en' ? 'en-US' : 'es-MX';
 
   // Debounced quote — re-request when the amount changes
   useEffect(() => {
@@ -155,7 +159,7 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
               letterSpacing: '0.14em', color: 'var(--text-muted)',
               textTransform: 'uppercase', marginBottom: 4,
             }}>
-              Comprar
+              {t('points.buy.title')}
             </div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: accent, letterSpacing: '0.02em' }}>
               {outcomeLabel?.toUpperCase()}
@@ -193,9 +197,9 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
           fontFamily: 'var(--font-mono)',
           fontSize: 12,
         }}>
-          <span style={{ color: 'var(--text-muted)' }}>Balance</span>
+          <span style={{ color: 'var(--text-muted)' }}>{t('points.buy.balance')}</span>
           <span style={{ color: 'var(--green)', fontWeight: 700 }}>
-            {balance.toLocaleString('es-MX')} MXNP
+            {balance.toLocaleString(numberLocale)} MXNP
           </span>
         </div>
 
@@ -208,7 +212,7 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
           color: 'var(--text-muted)',
           marginBottom: 6,
         }}>
-          Monto (MXNP)
+          {t('points.buy.amountLabel')}
         </label>
         <input
           type="number"
@@ -265,27 +269,27 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
           fontFamily: 'var(--font-mono)',
           fontSize: 12,
         }}>
-          <QuoteRow label="Comisión" value={
+          <QuoteRow label={t('points.buy.fee')} value={
             quoteState === 'ready' ? `${quote.fee.toFixed(2)} MXNP (${quote.feePct.toFixed(2)}%)` :
-            quoteState === 'loading' ? 'Calculando…' :
+            quoteState === 'loading' ? t('points.buy.calculating') :
             '—'
           } />
-          <QuoteRow label="Acciones que recibes" value={
+          <QuoteRow label={t('points.buy.receivedShares')} value={
             quoteState === 'ready' ? `${quote.sharesOut.toFixed(2)}` :
-            quoteState === 'loading' ? 'Calculando…' :
+            quoteState === 'loading' ? t('points.buy.calculating') :
             '—'
           } bold accent={accent} />
-          <QuoteRow label="Ganancia si aciertas" value={
+          <QuoteRow label={t('points.buy.winProfit')} value={
             quoteState === 'ready' ? `+${Math.max(0, quote.sharesOut - numAmount).toFixed(2)} MXNP` :
             '—'
           } good />
-          <QuoteRow label="Precio tras la compra" value={
+          <QuoteRow label={t('points.buy.priceAfter')} value={
             quoteState === 'ready' ? `${Math.round(quote.priceBefore * 100)}% → ${Math.round(quote.priceAfter * 100)}%` :
             '—'
           } />
           {quoteState === 'error' && (
             <div style={{ color: 'var(--red, #ef4444)', fontSize: 11, marginTop: 8 }}>
-              No se pudo calcular el precio ({quoteError}).
+              {t('points.buy.quoteError', { err: quoteError })}
             </div>
           )}
         </div>
@@ -301,7 +305,7 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
             borderRadius: 8,
             marginBottom: 12,
           }}>
-            ⚠️ Balance insuficiente. Tienes {balance.toLocaleString('es-MX')} MXNP.
+            {t('points.buy.insufficientBalanceDetail', { amount: balance.toLocaleString(numberLocale) })}
           </div>
         )}
 
@@ -316,7 +320,7 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
             borderRadius: 8,
             marginBottom: 12,
           }}>
-            {mapError(submitError)}
+            {mapError(submitError, t)}
           </div>
         )}
 
@@ -340,10 +344,10 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
             transition: 'opacity 0.15s',
           }}
         >
-          {success ? '✓ Compra realizada' :
-           submitting ? 'Enviando…' :
-           insufficientBalance ? 'Balance insuficiente' :
-           `Comprar ${numAmount || '—'} MXNP`}
+          {success ? `✓ ${t('points.buy.success')}` :
+           submitting ? t('points.buy.submitting') :
+           insufficientBalance ? t('points.buy.insufficientBalance') :
+           `${t('points.buy.title')} ${numAmount || '—'} MXNP`}
         </button>
       </div>
     </div>
@@ -374,12 +378,12 @@ function QuoteRow({ label, value, bold, accent, good }) {
   );
 }
 
-function mapError(code) {
-  if (!code) return 'Algo salió mal.';
+function mapError(code, t) {
+  if (!code) return t('points.buy.errorGeneric');
   if (typeof code !== 'string') return String(code);
-  if (code.includes('insufficient')) return 'Balance insuficiente.';
-  if (code.includes('not_authenticated')) return 'Tu sesión expiró. Vuelve a iniciar sesión.';
-  if (code.includes('market_closed')) return 'El mercado cerró o se resolvió.';
-  if (code.includes('market_not_found')) return 'Mercado no encontrado.';
-  return `Error: ${code}`;
+  if (code.includes('insufficient')) return t('points.buy.errorInsufficient');
+  if (code.includes('not_authenticated')) return t('points.buy.errorNotAuth');
+  if (code.includes('market_closed')) return t('points.buy.errorMarketClosed');
+  if (code.includes('market_not_found')) return t('points.buy.errorMarketNotFound');
+  return t('points.buy.errorPrefix', { code });
 }

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useLang } from '../lib/i18n.js';
 
 /**
  * Terms of Service / Términos y Condiciones
@@ -14,7 +15,224 @@ import React from 'react';
  * a real attorney's eyes.
  */
 export default function TermsOfService() {
-  const lastUpdated = '6 de mayo de 2026';
+  const lang = useLang();
+  const isEn = lang === 'en';
+  const lastUpdated = isEn ? 'May 6, 2026' : '6 de mayo de 2026';
+
+  if (isEn) {
+    return (
+      <div style={{
+        maxWidth: 820,
+        margin: '0 auto',
+        padding: 'clamp(24px, 5vw, 48px) clamp(20px, 5vw, 48px) 80px',
+        fontFamily: 'var(--font-body, system-ui, sans-serif)',
+        color: 'var(--text-primary)',
+        lineHeight: 1.7,
+      }}>
+        <DraftBanner lang="en" />
+
+        <Eyebrow>TERMS · LAST UPDATED {lastUpdated.toUpperCase()}</Eyebrow>
+        <H1>Terms of Service</H1>
+
+        <P>
+          Welcome to Pronos. By accessing the platform or using any of its
+          services, you accept these terms. If you do not agree, please do not
+          use the platform. These terms form a legal agreement between you and
+          Pronos.
+        </P>
+
+        <H2>1. What Pronos is</H2>
+        <P>
+          Pronos is a prediction-market platform where users buy and sell
+          shares on the outcome of future events: sports, politics, economics,
+          culture, and more. Activity settles automatically through smart
+          contracts deployed on Arbitrum, using MXNB (the stablecoin issued by
+          Bitso) as collateral on mainnet. On testnet we use MockMXNB to test
+          the flow without pointing the app at a real token.
+        </P>
+
+        <H2>2. Eligibility</H2>
+        <Ul>
+          <li>You must be at least 18 years old.</li>
+          <li>You must have legal capacity to enter into contracts in your jurisdiction.</li>
+          <li>You are responsible for verifying that using prediction markets is legal in the country and state where you are located. Pronos does not guarantee that the service is legal in every jurisdiction.</li>
+          <li>You must not reside in a jurisdiction sanctioned by the U.S. Department of the Treasury, the United Nations, or the European Union.</li>
+        </Ul>
+        <P>
+          If we discover that you are violating any of the points above, we may
+          suspend or close your account without prior notice.
+        </P>
+
+        <H2>3. Regulatory notice (Mexico)</H2>
+        <P>
+          Prediction markets are in a regulatory grey area in Mexico. Pronos
+          does not operate under a license from the Federal Commission of Games
+          and Raffles. The platform operates in a decentralized manner using
+          public smart contracts on Arbitrum. We recommend consulting a legal
+          adviser before using the platform if you have questions about its
+          applicability to your specific situation.
+        </P>
+
+        <H2>4. Account and authentication</H2>
+        <Ul>
+          <li>Your account is created through a one-time code (OTP) sent to your email.</li>
+          <li>Pronos does not store passwords. Your session is maintained through an HMAC-signed cookie valid for 30 days.</li>
+          <li>You are responsible for securing your email account - whoever has access to it may access your Pronos account.</li>
+          <li>The wallet associated with your account is managed through Turnkey delegated signing. We do not have direct access to your private keys.</li>
+        </Ul>
+
+        <H2>5. How markets work</H2>
+        <Ul>
+          <li><b>Buying and selling:</b> prices are calculated through a constant-product formula (CPMM, x*y=k). Each trade includes a dynamic fee from 0.05% to 2.5%, depending on the certainty level of the market.</li>
+          <li><b>Resolution:</b> markets resolve when the event occurs. Some resolve automatically with public data (sports results, on-chain oracle prices); others are resolved manually by the Pronos team.</li>
+          <li><b>Redemption:</b> after resolution, winning outcome tokens are redeemed 1 to 1 for collateral. Losing outcome tokens lose all value.</li>
+          <li><b>Pauses:</b> in exceptional cases (serious error, ambiguous event, platform attack) we may pause a market while the situation is resolved.</li>
+        </Ul>
+
+        <H2>6. Fees</H2>
+        <Ul>
+          <li><b>Market fee:</b> dynamic, calculated with the formula <code>5 × (1 − P)%</code>, where P is the implied probability of the outcome you are buying. It equals 2.5% in 50/50 markets, 0.5% in 90/10 markets, and 0.05% in 99/1 markets. It is deducted before entering the pool.</li>
+          <li><b>Fee distribution:</b> 70% treasury, 20% liquidity reserve, 10% emergency reserve.</li>
+          <li><b>Gas:</b> you pay the gas for each on-chain transaction in Arbitrum ETH. Pronos may subsidize gas in certain promotions - this will be announced explicitly when it happens.</li>
+        </Ul>
+
+        <H2>7. Risks</H2>
+        <P>
+          Using Pronos involves risk. By participating, you state that you
+          understand and accept the following risks:
+        </P>
+        <Ul>
+          <li><b>Loss of capital:</b> you may lose all collateral you put at risk. Only risk what you can afford to lose.</li>
+          <li><b>Volatility:</b> prices move with market liquidity and may change quickly. Low-liquidity markets can suffer significant slippage.</li>
+          <li><b>Smart contract risk:</b> although contracts are internally reviewed and covered by property tests, we cannot guarantee that they are error-free. A code failure could result in unrecoverable losses.</li>
+          <li><b>Oracle / resolution risk:</b> a market's outcome depends on external sources (sports APIs, human teams). Errors in those sources can produce incorrect resolutions. We have a review process, but we are not immune to error.</li>
+          <li><b>Regulatory risk:</b> changes in Mexican or international regulation may require us to close services or limit access from certain jurisdictions.</li>
+          <li><b>Stablecoin risk:</b> MXNB depends on Bitso to maintain its peg to the Mexican peso. A depeg event would affect the value of collateral in your account.</li>
+          <li><b>Network risk:</b> Arbitrum may suffer downtime or failures. During those periods you may not be able to trade.</li>
+        </Ul>
+        <P>
+          <b>Pronos is not an investment adviser.</b> Nothing on the platform
+          is financial, investment, legal, or tax advice. The decisions you make
+          are your sole responsibility.
+        </P>
+
+        <H2>8. Prohibited conduct</H2>
+        <P>You may not:</P>
+        <Ul>
+          <li>Manipulate prices through coordinated activity (wash trading, pump-and-dump, spoofing).</li>
+          <li>Trade using privileged information about an event outcome (for example, a referee betting against their own match).</li>
+          <li>Use bots, scrapers, or any unauthorized automation.</li>
+          <li>Impersonate another person or create multiple accounts to evade restrictions.</li>
+          <li>Use the platform to launder money, finance illegal activities, or evade sanctions.</li>
+          <li>Attack the technical integrity of the system (denial of service, exploits, malicious reverse engineering of contracts).</li>
+        </Ul>
+        <P>
+          Pronos may freeze your account, cancel activity, and report to the
+          appropriate authorities if it detects any of the conduct above.
+        </P>
+
+        <H2>9. Intellectual property</H2>
+        <P>
+          The Pronos name, logo, and original editorial content on the platform
+          are protected by copyright and trademark rights. User-generated text
+          (comments, etc.) remains owned by users; by publishing it on Pronos,
+          you grant us a non-exclusive license to display it publicly on the
+          platform.
+        </P>
+
+        <H2>10. Third-party content</H2>
+        <P>
+          The News section aggregates headlines from Mexican media for
+          editorial context. Each item includes attribution to its original
+          source and a link to the full article. Pronos is not responsible for
+          content published by those media outlets. If you own rights to any
+          aggregated content and believe its use exceeds editorial fair use,
+          write to{' '}
+          <a href="mailto:simon@pronos.io" style={linkStyle}>simon@pronos.io</a>{' '}
+          and we will remove it.
+        </P>
+
+        <H2>11. Disclaimer and limitation of liability</H2>
+        <P>
+          The platform is provided <b>"as is"</b>, without express or implied
+          warranties, including but not limited to warranties of merchantability,
+          fitness for a particular purpose, accuracy, or non-infringement.
+        </P>
+        <P>
+          To the maximum extent permitted by law, Pronos, its operators,
+          employees, contractors, and providers will not be liable for direct,
+          indirect, incidental, special, consequential, or exemplary damages,
+          including loss of profits, data, opportunities, or reputation, arising
+          from the use of or inability to use the platform.
+        </P>
+        <P>
+          Our aggregate liability for any claim related to the service is
+          limited to the amount actually charged in fees to your account during
+          the 6 months before the claim.
+        </P>
+
+        <H2>12. Indemnification</H2>
+        <P>
+          You agree to indemnify and hold Pronos harmless from any third-party
+          claim arising from your breach of these terms, your violation of
+          applicable law, or your misuse of the platform.
+        </P>
+
+        <H2>13. Suspension and termination</H2>
+        <P>
+          We may suspend or cancel your account at any time if we believe you
+          violated these terms, if a competent authority requires it, or if we
+          stop operating the service. You may close your account whenever you
+          want by writing to{' '}
+          <a href="mailto:simon@pronos.io" style={linkStyle}>simon@pronos.io</a>.
+        </P>
+        <P>
+          After cancellation, activity already settled on blockchain remains
+          recorded. Any balance in your wallet remains yours, and you may
+          withdraw it to another address.
+        </P>
+
+        <H2>14. Changes to these terms</H2>
+        <P>
+          We may update these terms when necessary. If changes are material, we
+          will notify you by email and show a notice on the platform at least 7
+          days in advance. If you do not agree with the new terms, you must stop
+          using the platform. The date at the top of this document always
+          reflects the current version.
+        </P>
+
+        <H2>15. Governing law and jurisdiction</H2>
+        <P>
+          These terms are governed by the laws of the United Mexican States.
+          Any dispute arising from or related to these terms will be submitted
+          to the jurisdiction of the competent courts of Mazatlan, Sinaloa. The
+          parties waive any other venue that may correspond to them because of
+          present or future domicile.
+        </P>
+
+        <H2>16. Dispute resolution</H2>
+        <P>
+          Before starting any legal proceeding, both parties will try to resolve
+          the dispute in good faith through direct negotiation. If no resolution
+          is reached within 30 days, either party may go to the courts described
+          in the previous section.
+        </P>
+
+        <H2>17. Miscellaneous</H2>
+        <Ul>
+          <li>If any provision of these terms is invalid or unenforceable, the remaining provisions will remain fully in effect.</li>
+          <li>Pronos's failure to exercise any right does not waive its right to exercise it in the future.</li>
+          <li>These terms, together with the Privacy Policy, constitute the complete agreement between you and Pronos.</li>
+        </Ul>
+
+        <H2>18. Contact</H2>
+        <P>
+          Questions about these terms? Write to{' '}
+          <a href="mailto:simon@pronos.io" style={linkStyle}>simon@pronos.io</a>.
+        </P>
+      </div>
+    );
+  }
 
   return (
     <div style={{
@@ -247,7 +465,7 @@ export default function TermsOfService() {
 
 // ─── Shared visual primitives ──────────────────────────────────────────────
 
-function DraftBanner() {
+function DraftBanner({ lang = 'es' }) {
   return (
     <div style={{
       background: 'rgba(255,85,0,0.08)',
@@ -260,7 +478,9 @@ function DraftBanner() {
       color: 'var(--orange, #FF5500)',
       letterSpacing: '0.06em',
     }}>
-      BORRADOR · pendiente de revisión legal · no es texto definitivo
+      {lang === 'en'
+        ? 'DRAFT · pending legal review · not final text'
+        : 'BORRADOR · pendiente de revisión legal · no es texto definitivo'}
     </div>
   );
 }

@@ -16,6 +16,7 @@
  */
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useLang } from '@app/lib/i18n.js';
 
 export const WELCOMED_KEY_PREFIX = 'pronos-points-welcomed-';
 
@@ -37,6 +38,8 @@ export function hasBeenWelcomed(username) {
 
 export default function PointsWelcomeModal({ open, username, onClose }) {
   const navigate = useNavigate();
+  const lang = useLang();
+  const isEn = lang === 'en';
 
   if (!open) return null;
 
@@ -103,7 +106,7 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
             textTransform: 'uppercase',
             marginBottom: 10,
           }}>
-            ⚡ Bienvenido a la beta
+            {isEn ? '⚡ Welcome to the beta' : '⚡ Bienvenido a la beta'}
           </div>
           <h1
             id="welcome-title"
@@ -115,7 +118,7 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
               letterSpacing: '0.02em',
             }}
           >
-            Hola{username ? <>, <span style={{ color: 'var(--green)' }}>@{username}</span></> : null}
+            {isEn ? 'Hi' : 'Hola'}{username ? <>, <span style={{ color: 'var(--green)' }}>@{username}</span></> : null}
           </h1>
           <p style={{
             fontFamily: 'var(--font-body)',
@@ -124,8 +127,11 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
             lineHeight: 1.55,
             margin: 0,
           }}>
-            Ya tienes <strong style={{ color: 'var(--green)' }}>500 MXNP</strong> de
-            bienvenida para empezar a predecir.
+            {isEn ? (
+              <>You already have <strong style={{ color: 'var(--green)' }}>500 MXNP</strong> as a welcome bonus to start predicting.</>
+            ) : (
+              <>Ya tienes <strong style={{ color: 'var(--green)' }}>500 MXNP</strong> de bienvenida para empezar a predecir.</>
+            )}
           </p>
         </div>
 
@@ -133,19 +139,36 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
         <div style={{ padding: '26px 36px 12px' }}>
           <WelcomeSection
             accent="var(--green)"
-            eyebrow="Qué es Pronos hoy"
+            eyebrow={isEn ? 'What Pronos is today' : 'Qué es Pronos hoy'}
             body={
-              <>
-                Una <strong>competencia de predicciones</strong>. Compras acciones
-                en eventos reales (deportes, política, crypto, cultura) con MXNP
-                — los puntos de la competencia. Los precios se mueven con la
-                demanda, como en un mercado real.
-                <br /><br />
-                Cada <strong style={{ color: 'var(--green)' }}>2 semanas</strong>,
-                los Top 3 del leaderboard ganan premios en efectivo:
-              </>
+              isEn ? (
+                <>
+                  A <strong>prediction competition</strong>. You buy shares on
+                  real events (sports, politics, crypto, culture) with MXNP -
+                  the competition points. Prices move with demand, like a real
+                  market.
+                  <br /><br />
+                  Every <strong style={{ color: 'var(--green)' }}>2 weeks</strong>,
+                  the top 3 on the leaderboard win cash prizes:
+                </>
+              ) : (
+                <>
+                  Una <strong>competencia de predicciones</strong>. Compras acciones
+                  en eventos reales (deportes, política, crypto, cultura) con MXNP
+                  — los puntos de la competencia. Los precios se mueven con la
+                  demanda, como en un mercado real.
+                  <br /><br />
+                  Cada <strong style={{ color: 'var(--green)' }}>2 semanas</strong>,
+                  los Top 3 del leaderboard ganan premios en efectivo:
+                </>
+              )
             }
-            bullets={[
+            bullets={isEn ? [
+              { icon: '🥇', text: '1st place', value: '$5,000 MXN' },
+              { icon: '🥈', text: '2nd place', value: '$3,000 MXN' },
+              { icon: '🥉', text: '3rd place', value: '$2,000 MXN' },
+              { icon: '🎁', text: '4th - 10th place', value: 'surprise prizes' },
+            ] : [
               { icon: '🥇', text: '1° lugar', value: '$5,000 MXN' },
               { icon: '🥈', text: '2° lugar', value: '$3,000 MXN' },
               { icon: '🥉', text: '3° lugar', value: '$2,000 MXN' },
@@ -155,25 +178,42 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
 
           <WelcomeSection
             accent="#ff5500"
-            eyebrow="Qué viene después"
+            eyebrow={isEn ? 'What comes next' : 'Qué viene después'}
             body={
-              <>
-                Estamos construyendo el primer <strong>mercado de predicciones
-                on-chain</strong> diseñado para Latinoamérica. Lo que usas ahora
-                con MXNP es el calentamiento — pronto podrás invertir{' '}
-                <strong>Pesos</strong> sobre eventos reales, con liquidación
-                automática y sin intermediarios.
-                <br /><br />
-                Los competidores activos hoy tendrán <strong style={{ color: '#ff5500' }}>
-                acceso prioritario</strong> cuando abramos trading en Pesos.
-              </>
+              isEn ? (
+                <>
+                  We are building the first <strong>on-chain prediction
+                  market</strong> designed for Latin America. What you use now
+                  with MXNP is the warm-up - soon you will be able to trade{' '}
+                  <strong>Pesos</strong> on real events, with automatic
+                  settlement and no intermediaries.
+                  <br /><br />
+                  Active competitors today will get <strong style={{ color: '#ff5500' }}>
+                  priority access</strong> when we open Peso trading.
+                </>
+              ) : (
+                <>
+                  Estamos construyendo el primer <strong>mercado de predicciones
+                  on-chain</strong> diseñado para Latinoamérica. Lo que usas ahora
+                  con MXNP es el calentamiento — pronto podrás invertir{' '}
+                  <strong>Pesos</strong> sobre eventos reales, con liquidación
+                  automática y sin intermediarios.
+                  <br /><br />
+                  Los competidores activos hoy tendrán <strong style={{ color: '#ff5500' }}>
+                  acceso prioritario</strong> cuando abramos trading en Pesos.
+                </>
+              )
             }
           />
 
           <WelcomeSection
             accent="var(--text-muted)"
-            eyebrow="Cómo ganar MXNP sin gastarlo"
-            bullets={[
+            eyebrow={isEn ? 'How to earn MXNP without spending it' : 'Cómo ganar MXNP sin gastarlo'}
+            bullets={isEn ? [
+              { icon: '⚡', text: 'Daily claim', value: '100 + 20/day streak' },
+              { icon: '🤝', text: 'Each friend you invite', value: '+100 MXNP' },
+              { icon: '📲', text: 'Follow Pronos on social', value: 'up to +85 MXNP' },
+            ] : [
               { icon: '⚡', text: 'Reclamo diario', value: '100 + 20/día racha' },
               { icon: '🤝', text: 'Cada amigo que invites', value: '+100 MXNP' },
               { icon: '📲', text: 'Seguir a Pronos en redes', value: 'hasta +85 MXNP' },
@@ -200,7 +240,7 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
               textTransform: 'uppercase',
             }}
           >
-            Reclamar mis primeros MXNP
+            {isEn ? 'Claim my first MXNP' : 'Reclamar mis primeros MXNP'}
           </button>
           <button
             onClick={goMarkets}
@@ -219,7 +259,7 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
               cursor: 'pointer',
             }}
           >
-            Explorar mercados
+            {isEn ? 'Explore markets' : 'Explorar mercados'}
           </button>
         </div>
 
@@ -232,8 +272,9 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
           margin: 0,
           lineHeight: 1.6,
         }}>
-          MXNP son puntos de la competencia — no tienen valor económico directo.
-          Los premios del leaderboard se pagan en efectivo (MXN).
+          {isEn
+            ? 'MXNP are competition points - they do not have direct economic value. Leaderboard prizes are paid in cash (MXN).'
+            : 'MXNP son puntos de la competencia — no tienen valor económico directo. Los premios del leaderboard se pagan en efectivo (MXN).'}
         </p>
       </div>
     </div>
