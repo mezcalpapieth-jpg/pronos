@@ -46,6 +46,47 @@ const MARKET_CATEGORY_FILTERS = [
   ...CATEGORIES,
 ];
 
+const ADMIN_SPORT_FILTERS = [
+  { key: 'all', label: 'Todos' },
+  { key: 'soccer', label: '⚽ Fútbol' },
+  { key: 'baseball', label: '⚾ Béisbol' },
+  { key: 'nba', label: '🏀 NBA' },
+  { key: 'nfl', label: '🏈 NFL' },
+  { key: 'f1', label: '🏁 F1' },
+  { key: 'tennis', label: '🎾 Tenis' },
+  { key: 'golf', label: '⛳ Golf' },
+  { key: 'combate', label: '🥊 Combate' },
+];
+
+const ADMIN_SOCCER_LEAGUES = [
+  { key: 'all', label: 'Todas' },
+  { key: 'uefa-cl', label: 'UEFA Champions' },
+  { key: 'la-liga', label: 'La Liga' },
+  { key: 'premier-league', label: 'Premier' },
+  { key: 'serie-a', label: 'Serie A' },
+  { key: 'bundesliga', label: 'Bundesliga' },
+  { key: 'liga-mx', label: 'Liga MX' },
+  { key: 'mls', label: 'MLS' },
+];
+
+const ADMIN_BASEBALL_LEAGUES = [
+  { key: 'all', label: 'Todas' },
+  { key: 'mlb', label: 'MLB' },
+  { key: 'lmb', label: 'LMB' },
+];
+
+const ADMIN_COMBATE_LEAGUES = [
+  { key: 'all', label: 'Todas' },
+  { key: 'ufc', label: 'UFC' },
+  { key: 'boxing', label: 'Boxeo' },
+];
+
+const ADMIN_CRYPTO_FILTERS = [
+  { key: 'all', label: 'Todos' },
+  { key: 'general', label: 'Eventos' },
+  { key: '5min', label: '5 minutos' },
+];
+
 // ─── Date helpers (dd/mm/yyyy + HH:mm) ──────────────────────────────────────
 // The native <input type="datetime-local"> defers format entirely to the
 // browser locale, which lets en-US users see mm/dd/yyyy against our
@@ -943,17 +984,33 @@ function MarketsTable() {
   const [markets, setMarkets] = useState(null);
   const [filter, setFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [sportFilter, setSportFilter] = useState('all');
+  const [leagueFilter, setLeagueFilter] = useState('all');
+  const [cryptoTypeFilter, setCryptoTypeFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState(null);
   const [autoResolving, setAutoResolving] = useState(false);
   // When non-null, render the edit modal for this market.
   const [editing, setEditing] = useState(null);
 
+  const showSportFilters = categoryFilter === 'deportes';
+  const showCryptoFilters = categoryFilter === 'crypto';
+  const showLeagueFilters = showSportFilters
+    && (sportFilter === 'soccer' || sportFilter === 'baseball' || sportFilter === 'combate');
+  const activeLeagueFilters = sportFilter === 'baseball'
+    ? ADMIN_BASEBALL_LEAGUES
+    : sportFilter === 'combate'
+      ? ADMIN_COMBATE_LEAGUES
+      : ADMIN_SOCCER_LEAGUES;
+
   async function load() {
     setLoading(true);
     try {
       const q = new URLSearchParams({ status: filter });
       if (categoryFilter !== 'all') q.set('category', categoryFilter);
+      if (showSportFilters && sportFilter !== 'all') q.set('sport', sportFilter);
+      if (showLeagueFilters && leagueFilter !== 'all') q.set('league', leagueFilter);
+      if (showCryptoFilters && cryptoTypeFilter !== 'all') q.set('crypto_type', cryptoTypeFilter);
       const r = await getJson(`/api/points/admin/markets?${q.toString()}`);
       setMarkets(r.markets || []);
     } catch (e) {
@@ -963,7 +1020,21 @@ function MarketsTable() {
     }
   }
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [filter, categoryFilter]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [filter, categoryFilter, sportFilter, leagueFilter, cryptoTypeFilter]);
+
+  function selectCategoryFilter(next) {
+    setCategoryFilter(next);
+    setSportFilter('all');
+    setLeagueFilter('all');
+    setCryptoTypeFilter('all');
+  }
+
+  function selectSportFilter(next) {
+    setSportFilter(next);
+    if (next !== 'soccer' && next !== 'baseball' && next !== 'combate') {
+      setLeagueFilter('all');
+    }
+  }
 
   async function resolveMarket(marketId, winningOutcomeIndex) {
     setResolving(marketId);
@@ -1015,6 +1086,7 @@ function MarketsTable() {
       const r = await adminRunAutoResolve({ dry: false });
       const resolvedCount = (r.resolved || []).length;
       const errorCount = (r.errors || []).length;
+      const deferredCount = (r.deferred || []).length;
       const errorSample = (r.errors || []).slice(0, 3)
         .map(e => `#${e.id}: ${e.error}`)
         .join('\n');
@@ -1022,6 +1094,7 @@ function MarketsTable() {
         `✓ Auto-resolver corrido.\n`
         + `Candidatos: ${r.checked || 0}\n`
         + `Resueltos: ${resolvedCount}\n`
+        + `Diferidos: ${deferredCount}\n`
         + `Errores: ${errorCount}\n`
         + (errorSample ? `\nEjemplos de errores:\n${errorSample}` : ''),
       );
@@ -1091,7 +1164,7 @@ function MarketsTable() {
         {MARKET_CATEGORY_FILTERS.map(c => (
           <button
             key={c.key}
-            onClick={() => setCategoryFilter(c.key)}
+            onClick={() => selectCategoryFilter(c.key)}
             style={{
               padding: '6px 12px',
               borderRadius: 16,
@@ -1108,6 +1181,78 @@ function MarketsTable() {
           </button>
         ))}
       </div>
+
+      {showSportFilters && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          {ADMIN_SPORT_FILTERS.map(s => (
+            <button
+              key={s.key}
+              onClick={() => selectSportFilter(s.key)}
+              style={{
+                padding: '6px 12px',
+                borderRadius: 16,
+                border: `1px solid ${sportFilter === s.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
+                background: sportFilter === s.key ? 'rgba(0,232,122,0.1)' : 'transparent',
+                color: sportFilter === s.key ? 'var(--green)' : 'var(--text-secondary)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                cursor: 'pointer',
+                letterSpacing: '0.04em',
+              }}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {showLeagueFilters && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          {activeLeagueFilters.map(l => (
+            <button
+              key={l.key}
+              onClick={() => setLeagueFilter(l.key)}
+              style={{
+                padding: '5px 10px',
+                borderRadius: 14,
+                border: `1px solid ${leagueFilter === l.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
+                background: leagueFilter === l.key ? 'rgba(0,232,122,0.1)' : 'transparent',
+                color: leagueFilter === l.key ? 'var(--green)' : 'var(--text-secondary)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                cursor: 'pointer',
+                letterSpacing: '0.04em',
+              }}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {showCryptoFilters && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          {ADMIN_CRYPTO_FILTERS.map(c => (
+            <button
+              key={c.key}
+              onClick={() => setCryptoTypeFilter(c.key)}
+              style={{
+                padding: '6px 12px',
+                borderRadius: 16,
+                border: `1px solid ${cryptoTypeFilter === c.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
+                background: cryptoTypeFilter === c.key ? 'rgba(0,232,122,0.1)' : 'transparent',
+                color: cryptoTypeFilter === c.key ? 'var(--green)' : 'var(--text-secondary)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                cursor: 'pointer',
+                letterSpacing: '0.04em',
+              }}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {loading && <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Cargando…</p>}
       {!loading && markets?.length === 0 && (
@@ -1152,6 +1297,14 @@ function MarketsTable() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>
               #{m.id} · {m.category} · {m.tradeCount} trades · seed {m.seedLiquidity} MXNP
+              {m.sport && <> · {m.sport}</>}
+              {m.league && <>/{m.league}</>}
+              {m.crypto5min && <> · 5min</>}
+              {m.seriesMeta?.subtitle && <> · {m.seriesMeta.subtitle}</>}
+              {m.source && <> · {m.source}</>}
+              {(m.resolverConfig?.eventId || m.sourceEventId) && <> · event {m.resolverConfig?.eventId || m.sourceEventId}</>}
+              {m.resolverConfig?.dateYmd && <> · fecha {m.resolverConfig.dateYmd}</>}
+              {m.endTime && <> · cierra {formatWhen(m.endTime)}</>}
             </div>
             <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.3 }}>
               {m.question}

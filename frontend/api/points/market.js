@@ -8,6 +8,12 @@ import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { binaryPrices } from '../_lib/amm-math.js';
+import {
+  buildSeriesDetail,
+  normalizeSeriesMeta,
+  seriesSubtitle,
+  teamPairKeyFromMeta,
+} from '../_lib/series-markets.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -65,6 +71,95 @@ function summarizeCryptoMarketRow(row) {
   };
 }
 
+function publicSeriesMetaFromRow(row, { requireGameNumber = true } = {}) {
+  const resolverCfg = parseJsonb(row.resolver_config, null);
+  const sourceData = parseJsonb(row.pending_source_data, null);
+  const meta = normalizeSeriesMeta({ resolverConfig: resolverCfg, sourceData, row });
+  if (!meta) return null;
+  if (requireGameNumber && !meta.gameNumber) return null;
+  return {
+    key: meta.key,
+    leaguePath: meta.leaguePath,
+    league: meta.league,
+    sport: meta.sport,
+    gameNumber: meta.gameNumber,
+    bestOf: meta.bestOf,
+    winTarget: meta.winTarget,
+    guaranteedGames: meta.guaranteedGames,
+    round: meta.round,
+    seasonYear: meta.seasonYear,
+    homeTeam: meta.homeTeam,
+    awayTeam: meta.awayTeam,
+    teams: meta.teams,
+    subtitle: seriesSubtitle({ gameNumber: meta.gameNumber }),
+  };
+}
+
+function summarizeSeriesMarketRow(row, fallbackMeta) {
+  const outcomes = parseJsonb(row.outcomes, ['Sí', 'No']);
+  const rawMeta = publicSeriesMetaFromRow(row, { requireGameNumber: false });
+  return {
+    id: row.id,
+    question: row.question,
+    outcomes,
+    status: row.status,
+    outcome: row.outcome,
+    resolvedAt: row.resolved_at,
+    finalScore: row.final_score || null,
+    startTime: row.start_time,
+    endTime: row.end_time,
+    seriesMeta: {
+      ...fallbackMeta,
+      gameNumber: rawMeta?.gameNumber || null,
+    },
+  };
+}
+
+async function loadSeriesDetail(sqlClient, currentRow, currentMeta) {
+  if (!currentMeta?.leaguePath) return null;
+  const currentPair = teamPairKeyFromMeta(currentMeta);
+  if (!currentPair) return null;
+  const anchor = currentRow.start_time || currentRow.end_time || currentRow.created_at;
+  if (!anchor) return null;
+
+  const rows = await sqlClient`
+    SELECT m.id, m.question, m.outcomes, m.start_time, m.end_time,
+           m.status, m.outcome, m.resolved_at, m.final_score,
+           m.resolver_config, m.sport, m.league,
+           pm.source_data AS pending_source_data
+    FROM points_markets m
+    LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
+    WHERE m.parent_id IS NULL
+      AND m.resolver_type = 'sports_api'
+      AND m.resolver_config->>'source' = 'espn'
+      AND m.resolver_config->>'leaguePath' = ${currentMeta.leaguePath}
+      AND m.start_time >= ${anchor}::timestamptz - INTERVAL '45 days'
+      AND m.start_time <= ${anchor}::timestamptz + INTERVAL '45 days'
+    ORDER BY m.start_time ASC NULLS LAST, m.id ASC
+    LIMIT 80
+  `;
+
+  const siblings = rows
+    .map((row) => {
+      const meta = publicSeriesMetaFromRow(row, { requireGameNumber: false });
+      if (!meta || meta.leaguePath !== currentMeta.leaguePath) return null;
+      if (teamPairKeyFromMeta(meta) !== currentPair) return null;
+      return summarizeSeriesMarketRow(row, currentMeta);
+    })
+    .filter(Boolean);
+
+  if (siblings.length === 0) return null;
+  const detail = buildSeriesDetail(currentMeta, siblings);
+  if (!detail) return null;
+  const currentItem = detail.sequence?.find(item => Number(item.id) === Number(currentRow.id));
+  const gameNumber = currentItem?.gameNumber || detail.gameNumber || currentMeta.gameNumber || null;
+  return {
+    ...detail,
+    gameNumber,
+    subtitle: currentItem?.subtitle || seriesSubtitle({ gameNumber, summary: detail.summary }),
+  };
+}
+
 export default async function handler(req, res) {
   // Top-level try/catch guarantees JSON output — see markets.js for
   // details on why this matters.
@@ -82,9 +177,10 @@ export default async function handler(req, res) {
       await ensurePointsSchema(schemaSql);
 
       const rows = await sql`
-        SELECT m.*,
+        SELECT m.*, pm.source_data AS pending_source_data,
           (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
         FROM points_markets m
+        LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
         WHERE m.id = ${id}
         LIMIT 1
       `;
@@ -111,6 +207,10 @@ export default async function handler(req, res) {
       const resolverCfg = parseJsonb(r.resolver_config, null);
       const resolverType = r.resolver_type || null;
       const resolverSource = resolverCfg?.source || null;
+      const baseSeriesMeta = publicSeriesMetaFromRow(r);
+      const seriesMeta = baseSeriesMeta
+        ? await loadSeriesDetail(sql, r, baseSeriesMeta).catch(() => baseSeriesMeta)
+        : null;
 
       // Crypto-5min direction markets ship a small public metadata
       // bundle so the live-chart UI can render threshold + asset
@@ -279,6 +379,7 @@ export default async function handler(req, res) {
             resolverType,
             resolverSource,
             cryptoMeta,
+            seriesMeta,
             sport: r.sport || null,
             league: r.league || null,
             outcomeImages,
@@ -317,6 +418,7 @@ export default async function handler(req, res) {
           resolverType,
           resolverSource,
           cryptoMeta,
+          seriesMeta,
           sport: r.sport || null,
           league: r.league || null,
           outcomeImages,

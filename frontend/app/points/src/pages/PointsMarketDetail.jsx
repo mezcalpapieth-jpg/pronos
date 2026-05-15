@@ -399,6 +399,128 @@ function formatDeadline(endTime) {
   });
 }
 
+function shortGameDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return '';
+  return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+}
+
+function seriesGameStatus(item, t) {
+  if (item?.status === 'not_needed') return t('points.series.notNeeded');
+  if (item?.placeholder) return t('points.series.pending');
+  if (item?.status === 'resolved') return t('points.series.final');
+  const now = Date.now();
+  const start = item?.startTime ? new Date(item.startTime).getTime() : NaN;
+  const end = item?.endTime ? new Date(item.endTime).getTime() : NaN;
+  if (item?.status === 'active' && Number.isFinite(start) && Number.isFinite(end) && start <= now && end > now) {
+    return t('points.card.live');
+  }
+  if (item?.status === 'active' && Number.isFinite(end) && end < now) {
+    return t('points.detail.statePending');
+  }
+  return t('points.series.open');
+}
+
+function SeriesGameStrip({ seriesMeta, currentMarketId, navigate, t }) {
+  const sequence = Array.isArray(seriesMeta?.sequence) ? seriesMeta.sequence : [];
+  if (sequence.length <= 1) return null;
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'baseline',
+        justifyContent: 'space-between',
+        gap: 12,
+        marginBottom: 10,
+        fontFamily: 'var(--font-mono)',
+        textTransform: 'uppercase',
+        letterSpacing: '0.08em',
+      }}>
+        <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+          {seriesMeta.round || t('points.series.label')}
+        </span>
+        {seriesMeta.summary && (
+          <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
+            {seriesMeta.summary}
+          </span>
+        )}
+      </div>
+      <div style={{
+        display: 'flex',
+        gap: 8,
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        paddingBottom: 2,
+      }}>
+        {sequence.map((item) => {
+          const isCurrent = Number(item.id) === Number(currentMarketId);
+          const clickable = item.id && !isCurrent;
+          const status = seriesGameStatus(item, t);
+          const muted = item.placeholder || item.status === 'not_needed';
+          return (
+            <button
+              key={`${item.gameNumber}-${item.id || item.status}`}
+              type="button"
+              disabled={!clickable}
+              onClick={() => {
+                if (clickable) navigate(`/market?id=${encodeURIComponent(item.id)}`);
+              }}
+              title={item.subtitle || `Game ${item.gameNumber}`}
+              style={{
+                minWidth: 122,
+                padding: '10px 12px',
+                borderRadius: 10,
+                border: `1px solid ${isCurrent ? 'rgba(0,232,122,0.45)' : 'var(--border)'}`,
+                background: isCurrent ? 'rgba(0,232,122,0.10)' : 'var(--surface1)',
+                opacity: muted ? 0.62 : 1,
+                cursor: clickable ? 'pointer' : 'default',
+                textAlign: 'left',
+                flex: '0 0 auto',
+              }}
+            >
+              <span style={{
+                display: 'block',
+                fontFamily: 'var(--font-display)',
+                fontSize: 15,
+                color: isCurrent ? 'var(--green)' : 'var(--text-primary)',
+                marginBottom: 4,
+              }}>
+                Game {item.gameNumber}
+              </span>
+              <span style={{
+                display: 'block',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                color: item.status === 'resolved' ? 'var(--green)'
+                  : item.status === 'not_needed' ? 'var(--text-muted)'
+                  : item.placeholder ? '#f59e0b'
+                  : 'var(--text-secondary)',
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                marginBottom: 4,
+                whiteSpace: 'nowrap',
+              }}>
+                {status}
+              </span>
+              <span style={{
+                display: 'block',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                color: 'var(--text-muted)',
+                letterSpacing: '0.02em',
+                whiteSpace: 'nowrap',
+              }}>
+                {item.startTime ? shortGameDate(item.startTime) : t('points.series.datePending')}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* Ring chart — same shape as MVP's ProbabilityChart, minus on-chain state */
 function ProbabilityRing({ pct, resolved, winner, label }) {
   const radius = 54;
@@ -766,10 +888,23 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               fontSize: 'clamp(26px, 3vw, 38px)',
               lineHeight: 1.2,
               color: 'var(--text-primary)',
-              marginBottom: market.finalScore && isResolved ? 12 : 24,
+              marginBottom: market.seriesMeta?.subtitle ? 8 : (market.finalScore && isResolved ? 12 : 24),
             }}>
               {market.question}
             </h1>
+
+            {market.seriesMeta?.subtitle && (
+              <div style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 12,
+                color: 'var(--text-secondary)',
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                marginBottom: market.finalScore && isResolved ? 12 : 24,
+              }}>
+                {market.seriesMeta.subtitle}
+              </div>
+            )}
 
             {/* Final-score strip — shown right below the question on resolved
                 markets whose resolver filled in a score / result. */}
@@ -939,6 +1074,13 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 )}
               </div>
             </div>
+
+            <SeriesGameStrip
+              seriesMeta={market.seriesMeta}
+              currentMarketId={market.id}
+              navigate={navigate}
+              t={t}
+            />
 
             {/* Parallel markets: voting lives here (below the chart),
                 one row per leg with Sí/No buttons — matches the

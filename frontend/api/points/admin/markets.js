@@ -8,6 +8,7 @@ import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
+import { normalizeSeriesMeta, seriesSubtitle } from '../../_lib/series-markets.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -17,6 +18,26 @@ function parseJsonb(v, fb) {
   if (v && typeof v === 'object') return v;
   if (typeof v !== 'string') return fb;
   try { return JSON.parse(v); } catch { return fb; }
+}
+
+function publicSeriesMetaFromRow(row) {
+  const resolverCfg = parseJsonb(row.resolver_config, null);
+  const sourceData = parseJsonb(row.pending_source_data, null);
+  const meta = normalizeSeriesMeta({ resolverConfig: resolverCfg, sourceData, row });
+  if (!meta?.gameNumber) return null;
+  return {
+    key: meta.key,
+    leaguePath: meta.leaguePath,
+    league: meta.league,
+    sport: meta.sport,
+    gameNumber: meta.gameNumber,
+    bestOf: meta.bestOf,
+    winTarget: meta.winTarget,
+    guaranteedGames: meta.guaranteedGames,
+    round: meta.round,
+    seasonYear: meta.seasonYear,
+    subtitle: seriesSubtitle({ gameNumber: meta.gameNumber }),
+  };
 }
 
 export default async function handler(req, res) {
@@ -30,6 +51,12 @@ export default async function handler(req, res) {
   const filter = ['all', 'active', 'pending', 'resolved', 'archived'].includes(req.query.status) ? req.query.status : 'all';
   const categoryParam = typeof req.query.category === 'string' ? req.query.category.trim().toLowerCase() : '';
   const categoryFilter = categoryParam && categoryParam !== 'all' ? categoryParam : null;
+  const sportParam = typeof req.query.sport === 'string' ? req.query.sport.trim().toLowerCase() : '';
+  const sportFilter = sportParam && sportParam !== 'all' ? sportParam : null;
+  const leagueParam = typeof req.query.league === 'string' ? req.query.league.trim().toLowerCase() : '';
+  const leagueFilter = leagueParam && leagueParam !== 'all' ? leagueParam : null;
+  const cryptoTypeParam = typeof req.query.crypto_type === 'string' ? req.query.crypto_type.trim().toLowerCase() : '';
+  const cryptoTypeFilter = ['5min', 'general'].includes(cryptoTypeParam) ? cryptoTypeParam : null;
   // Same mode split as the public /api/points/markets — lets the MVP
   // admin query only on-chain markets while Points admin stays on
   // off-chain ones. Default 'points' (matches the public endpoint
@@ -61,12 +88,18 @@ export default async function handler(req, res) {
     let rows;
     if (filter === 'archived') {
       rows = await sql`
-        SELECT m.*,
+        SELECT m.*, pm.source_data AS pending_source_data,
           (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id) AS trade_count
         FROM points_markets m
+        LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
         WHERE m.parent_id IS NULL
           AND m.archived_at IS NOT NULL
           AND (${categoryFilter}::text IS NULL OR m.category = ${categoryFilter}::text)
+          AND (${sportFilter}::text IS NULL OR m.sport = ${sportFilter}::text)
+          AND (${leagueFilter}::text IS NULL OR m.league = ${leagueFilter}::text)
+          AND (${cryptoTypeFilter}::text IS NULL
+            OR (${cryptoTypeFilter}::text = '5min' AND m.resolver_config->>'shape' = 'binary-direction')
+            OR (${cryptoTypeFilter}::text = 'general' AND COALESCE(m.resolver_config->>'shape', '') <> 'binary-direction'))
           AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
           AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
         ORDER BY m.archived_at DESC
@@ -74,11 +107,17 @@ export default async function handler(req, res) {
       `;
     } else if (filter === 'all') {
       rows = await sql`
-        SELECT m.*,
+        SELECT m.*, pm.source_data AS pending_source_data,
           (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id) AS trade_count
         FROM points_markets m
+        LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
         WHERE m.parent_id IS NULL
           AND (${categoryFilter}::text IS NULL OR m.category = ${categoryFilter}::text)
+          AND (${sportFilter}::text IS NULL OR m.sport = ${sportFilter}::text)
+          AND (${leagueFilter}::text IS NULL OR m.league = ${leagueFilter}::text)
+          AND (${cryptoTypeFilter}::text IS NULL
+            OR (${cryptoTypeFilter}::text = '5min' AND m.resolver_config->>'shape' = 'binary-direction')
+            OR (${cryptoTypeFilter}::text = 'general' AND COALESCE(m.resolver_config->>'shape', '') <> 'binary-direction'))
           AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
           AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
           AND (${showArchived} OR m.archived_at IS NULL)
@@ -87,14 +126,20 @@ export default async function handler(req, res) {
       `;
     } else if (filter === 'pending') {
       rows = await sql`
-        SELECT m.*,
+        SELECT m.*, pm.source_data AS pending_source_data,
           (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id) AS trade_count
         FROM points_markets m
+        LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
         WHERE m.status = 'active'
           AND m.parent_id IS NULL
           AND m.end_time IS NOT NULL
           AND m.end_time < NOW()
           AND (${categoryFilter}::text IS NULL OR m.category = ${categoryFilter}::text)
+          AND (${sportFilter}::text IS NULL OR m.sport = ${sportFilter}::text)
+          AND (${leagueFilter}::text IS NULL OR m.league = ${leagueFilter}::text)
+          AND (${cryptoTypeFilter}::text IS NULL
+            OR (${cryptoTypeFilter}::text = '5min' AND m.resolver_config->>'shape' = 'binary-direction')
+            OR (${cryptoTypeFilter}::text = 'general' AND COALESCE(m.resolver_config->>'shape', '') <> 'binary-direction'))
           AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
           AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
           AND (${showArchived} OR m.archived_at IS NULL)
@@ -103,11 +148,17 @@ export default async function handler(req, res) {
       `;
     } else {
       rows = await sql`
-        SELECT m.*,
+        SELECT m.*, pm.source_data AS pending_source_data,
           (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id) AS trade_count
         FROM points_markets m
+        LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
         WHERE m.status = ${filter} AND m.parent_id IS NULL
           AND (${categoryFilter}::text IS NULL OR m.category = ${categoryFilter}::text)
+          AND (${sportFilter}::text IS NULL OR m.sport = ${sportFilter}::text)
+          AND (${leagueFilter}::text IS NULL OR m.league = ${leagueFilter}::text)
+          AND (${cryptoTypeFilter}::text IS NULL
+            OR (${cryptoTypeFilter}::text = '5min' AND m.resolver_config->>'shape' = 'binary-direction')
+            OR (${cryptoTypeFilter}::text = 'general' AND COALESCE(m.resolver_config->>'shape', '') <> 'binary-direction'))
           AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
           AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
           AND (${showArchived} OR m.archived_at IS NULL)
@@ -119,6 +170,8 @@ export default async function handler(req, res) {
     return res.status(200).json({
       markets: rows.map(r => ({
         id: r.id,
+        source: r.source || null,
+        sourceEventId: r.source_event_id || null,
         question: r.question,
         category: r.category,
         icon: r.icon,
@@ -143,6 +196,9 @@ export default async function handler(req, res) {
         league: r.league || null,
         archivedAt: r.archived_at || null,
         finalScore: r.final_score || null,
+        resolverConfig: parseJsonb(r.resolver_config, null),
+        crypto5min: parseJsonb(r.resolver_config, null)?.shape === 'binary-direction',
+        seriesMeta: publicSeriesMetaFromRow(r),
       })),
     });
   } catch (e) {

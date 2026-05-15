@@ -214,6 +214,22 @@ export default function PointsMarketCard({ market, userPosition }) {
 
       <div className="mock-card-body">
         <p className="mock-card-title">{market.question}</p>
+        {market.seriesMeta?.subtitle && (
+          <div style={{
+            marginTop: -2,
+            marginBottom: 8,
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            letterSpacing: '0.06em',
+            color: 'var(--text-secondary)',
+            textTransform: 'uppercase',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}>
+            {market.seriesMeta.subtitle}
+          </div>
+        )}
 
         {/* Single-column list of wide rows — logo + label on the left,
             a clickable +gain/% pill on the right. When the market has

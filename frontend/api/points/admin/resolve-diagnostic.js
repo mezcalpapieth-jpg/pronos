@@ -71,11 +71,19 @@ export default async function handler(req, res) {
         category: r.category,
         resolverType: r.resolver_type,
         resolverSource: cfg?.source || null,
+        resolverEventId: cfg?.eventId || null,
+        resolverDateYmd: cfg?.dateYmd || null,
         startTime: r.start_time,
         endTime: r.end_time,
         secondsPastEnd: r.seconds_past_end,
       };
       const pastEnd = Number(r.seconds_past_end || 0) > 0;
+      const startMs = r.start_time ? new Date(r.start_time).getTime() : NaN;
+      const pastEspnMatchFallbackWindow = r.resolver_type === 'sports_api'
+        && cfg?.source === 'espn'
+        && (cfg?.shape === 'binary' || cfg?.shape === 'draw3')
+        && Number.isFinite(startMs)
+        && startMs < Date.now() - 90 * 60_000;
 
       if (r.resolver_type === 'manual') {
         manual.push(entry);
@@ -84,8 +92,10 @@ export default async function handler(req, res) {
       } else if (!AUTO_RESOLVER_TYPES.has(r.resolver_type)) {
         // Unknown resolver type — treat as manual-ish but flag it.
         manual.push({ ...entry, warning: `unknown resolver_type=${r.resolver_type}` });
-      } else if (pastEnd) {
-        resolvable.push(entry);
+      } else if (pastEnd || pastEspnMatchFallbackWindow) {
+        resolvable.push(pastEnd
+          ? entry
+          : { ...entry, warning: 'start_time passed; resolver will verify ESPN eventId even if end_time is late' });
       } else {
         waitingWindow.push(entry);
       }

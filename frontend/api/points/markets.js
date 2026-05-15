@@ -8,6 +8,7 @@ import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { binaryPrices } from '../_lib/amm-math.js';
+import { normalizeSeriesMeta, seriesSubtitle } from '../_lib/series-markets.js';
 
 // Lazy neon client init — defer until the first request so a missing
 // DATABASE_URL at module-load time surfaces as a structured JSON error
@@ -49,6 +50,26 @@ function pricesFromReserves(reserves, outcomeCount) {
   const invs = reserves.map(r => (Number(r) > 0 ? 1 / Number(r) : 0));
   const total = invs.reduce((s, v) => s + v, 0) || 1;
   return invs.map(v => v / total);
+}
+
+function publicSeriesMetaFromRow(row) {
+  const resolverCfg = parseJsonb(row.resolver_config, null);
+  const sourceData = parseJsonb(row.pending_source_data, null);
+  const meta = normalizeSeriesMeta({ resolverConfig: resolverCfg, sourceData, row });
+  if (!meta?.gameNumber) return null;
+  return {
+    key: meta.key,
+    leaguePath: meta.leaguePath,
+    league: meta.league,
+    sport: meta.sport,
+    gameNumber: meta.gameNumber,
+    bestOf: meta.bestOf,
+    winTarget: meta.winTarget,
+    guaranteedGames: meta.guaranteedGames,
+    round: meta.round,
+    seasonYear: meta.seasonYear,
+    subtitle: seriesSubtitle({ gameNumber: meta.gameNumber }),
+  };
 }
 
 export default async function handler(req, res) {
@@ -109,9 +130,10 @@ export default async function handler(req, res) {
     // backward-compat with pre-M3 schemas that hadn't populated the column.
     const rows = category
       ? await sql`
-          SELECT m.*,
+          SELECT m.*, pm.source_data AS pending_source_data,
             (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
           FROM points_markets m
+          LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
           WHERE m.status = ${status} AND m.category = ${category}
             AND m.parent_id IS NULL
             AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
@@ -129,9 +151,10 @@ export default async function handler(req, res) {
         `
       : featuredOnly
         ? await sql`
-            SELECT m.*,
+            SELECT m.*, pm.source_data AS pending_source_data,
               (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
             FROM points_markets m
+            LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
             WHERE m.status = ${status}
               AND m.featured = true
               AND m.parent_id IS NULL
@@ -153,9 +176,10 @@ export default async function handler(req, res) {
             LIMIT ${limit}
           `
         : await sql`
-            SELECT m.*,
+            SELECT m.*, pm.source_data AS pending_source_data,
               (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
             FROM points_markets m
+            LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
             WHERE m.status = ${status}
               AND m.parent_id IS NULL
               AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
@@ -200,6 +224,7 @@ export default async function handler(req, res) {
     const markets = rows.map(r => {
       const outcomes = parseJsonb(r.outcomes, ['Sí', 'No']);
       const ammMode = r.amm_mode || 'unified';
+      const seriesMeta = publicSeriesMetaFromRow(r);
 
       const outcomeImages = parseJsonb(r.outcome_images, null);
 
@@ -238,6 +263,7 @@ export default async function handler(req, res) {
           outcome: r.outcome,
           resolvedAt: r.resolved_at,
           finalScore: r.final_score || null,
+          seriesMeta,
           createdAt: r.created_at,
           sport: r.sport || null,
           league: r.league || null,
@@ -304,6 +330,7 @@ export default async function handler(req, res) {
         outcome: r.outcome,
         resolvedAt: r.resolved_at,
         finalScore: r.final_score || null,
+        seriesMeta,
         createdAt: r.created_at,
         sport: r.sport || null,
         league: r.league || null,

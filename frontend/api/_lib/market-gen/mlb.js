@@ -17,8 +17,11 @@
  * by re-reading the scoreboard after the game and picking the winner.
  */
 
+import { extractEspnSeriesMeta } from '../series-markets.js';
+
 const BASE = 'https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard';
-const HORIZON_DAYS = 3;
+const BASE_HORIZON_DAYS = 3;
+const SERIES_HORIZON_DAYS = 10;
 
 // Marquee franchises — edit this list to change what shows in the
 // queue. A game is kept if EITHER team's abbreviation is in here, so
@@ -44,7 +47,8 @@ function formatDateCompact(d) {
 
 export async function generateMlbMarkets() {
   const now = new Date();
-  const horizon = new Date(now.getTime() + HORIZON_DAYS * 86_400_000);
+  const baseCutoffMs = now.getTime() + BASE_HORIZON_DAYS * 86_400_000;
+  const horizon = new Date(now.getTime() + SERIES_HORIZON_DAYS * 86_400_000);
   const range = `${formatDateCompact(now)}-${formatDateCompact(horizon)}`;
   const url = `${BASE}?dates=${range}&limit=500`;
 
@@ -72,16 +76,27 @@ export async function generateMlbMarkets() {
     const away = comps.find(c => c.homeAway === 'away');
     if (!home?.team?.displayName || !away?.team?.displayName) continue;
 
-    // Drop games that don't feature at least one marquee franchise.
+    const seriesMeta = extractEspnSeriesMeta(ev, {
+      leaguePath: 'baseball/mlb',
+      league: 'mlb',
+      sport: 'baseball',
+      fallbackBestOf: 7,
+    });
+
+    // Drop regular-season games that don't feature at least one
+    // marquee franchise. Postseason series are sparse and contextual,
+    // so keep them even when neither team is in the regular-season
+    // whitelist.
     const homeAbbr = home?.team?.abbreviation;
     const awayAbbr = away?.team?.abbreviation;
-    if (!TEAM_WHITELIST.has(homeAbbr) && !TEAM_WHITELIST.has(awayAbbr)) continue;
+    if (!seriesMeta && !TEAM_WHITELIST.has(homeAbbr) && !TEAM_WHITELIST.has(awayAbbr)) continue;
 
     // Trading stays open through the game. end_time = kickoff + 5h
     // covers a worst-case 3h standard game + potential extra innings
     // + buffer; the auto-resolver benign-skips while ESPN shows the
     // game as still in progress, so this is just a hard close.
     const kickoffMs = new Date(kickoff).getTime();
+    if (!seriesMeta && kickoffMs > baseCutoffMs) continue;
     const startTime = new Date(kickoffMs).toISOString();
     const endTime   = new Date(kickoffMs + 5 * 3600_000).toISOString();
     const dateYmd   = new Date(kickoff).toISOString().slice(0, 10);
@@ -114,6 +129,7 @@ export async function generateMlbMarkets() {
         eventId: ev.id,
         dateYmd,
         shape: 'binary',
+        ...(seriesMeta ? { series: seriesMeta } : {}),
       },
       source_data: {
         eventId: ev.id,
@@ -122,6 +138,7 @@ export async function generateMlbMarkets() {
         home: { id: home?.team?.id, name: home.team.displayName, abbr: home.team.abbreviation },
         away: { id: away?.team?.id, name: away.team.displayName, abbr: away.team.abbreviation },
         venue: comp?.venue?.fullName || null,
+        ...(seriesMeta ? { series: seriesMeta } : {}),
       },
     });
   }

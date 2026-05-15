@@ -17,3 +17,9 @@ test('points buy modal copy translates between Spanish and English', () => {
   assert.equal(translate('points.buy.receivedShares', 'en'), 'Shares you receive');
   assert.equal(translate('points.buy.success', 'en'), 'Purchase complete');
 });
+
+test('points series game strip copy translates between Spanish and English', () => {
+  assert.equal(translate('points.series.open', 'es'), 'Abierto');
+  assert.equal(translate('points.series.open', 'en'), 'Open');
+  assert.equal(translate('points.series.datePending', 'en'), 'Date pending');
+});

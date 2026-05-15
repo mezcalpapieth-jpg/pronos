@@ -35,24 +35,11 @@ function ymdToDateRange(ymd) {
   return `${fmt(start)}-${fmt(end)}`;
 }
 
-export async function readEspnEvent({ leaguePath, eventId, dateYmd }) {
-  if (!leaguePath || !eventId) throw new Error('espn: missing leaguePath/eventId');
-  const dateRange = ymdToDateRange(dateYmd);
-  const q = dateRange ? `?dates=${dateRange}&limit=500` : `?limit=500`;
-  const url = `${ESPN_BASE}/${leaguePath}/scoreboard${q}`;
-  const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-  if (!res.ok) throw new Error(`espn: HTTP ${res.status}`);
-  const data = await res.json();
-  const events = Array.isArray(data?.events) ? data.events : [];
-  const ev = events.find(e => String(e.id) === String(eventId));
-  if (!ev) {
-    // Event not in the scoreboard window — either not started yet or
-    // date drift. Treat as "not done", retry next tick.
-    return { completed: false, winner: null, notFound: true };
-  }
-  const state     = ev?.status?.type?.state;
-  const completed = Boolean(ev?.status?.type?.completed);
-  const comp = Array.isArray(ev.competitions) ? ev.competitions[0] : null;
+function normalizeEspnEvent(ev) {
+  const comp = Array.isArray(ev?.competitions) ? ev.competitions[0] : null;
+  const status = ev?.status || comp?.status || null;
+  const state     = status?.type?.state;
+  const completed = Boolean(status?.type?.completed);
   const ctors = Array.isArray(comp?.competitors) ? comp.competitors : [];
   const home = ctors.find(c => c.homeAway === 'home');
   const away = ctors.find(c => c.homeAway === 'away');
@@ -83,6 +70,36 @@ export async function readEspnEvent({ leaguePath, eventId, dateYmd }) {
     awayTeam: away?.team?.shortDisplayName || away?.team?.displayName || away?.team?.name || null,
     state,
   };
+}
+
+export async function readEspnEvent({ leaguePath, eventId, dateYmd }) {
+  if (!leaguePath || !eventId) throw new Error('espn: missing leaguePath/eventId');
+  const dateRange = ymdToDateRange(dateYmd);
+  const q = dateRange ? `?dates=${dateRange}&limit=500` : `?limit=500`;
+  const url = `${ESPN_BASE}/${leaguePath}/scoreboard${q}`;
+  const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+  if (!res.ok) throw new Error(`espn: HTTP ${res.status}`);
+  const data = await res.json();
+  const events = Array.isArray(data?.events) ? data.events : [];
+  const ev = events.find(e => String(e.id) === String(eventId));
+  if (!ev) {
+    // Event not in the date-window scoreboard. In playoff series the
+    // same teams can play several times in one week, and a stale/bad
+    // dateYmd on the market row should not strand the resolver if the
+    // stable ESPN eventId is still correct. Fall back to ESPN's
+    // per-event summary endpoint, keyed only by eventId.
+    const summaryUrl = `${ESPN_BASE}/${leaguePath}/summary?event=${encodeURIComponent(eventId)}`;
+    const summaryRes = await fetch(summaryUrl, { headers: { 'Accept': 'application/json' } });
+    if (!summaryRes.ok) throw new Error(`espn-summary: HTTP ${summaryRes.status}`);
+    const summary = await summaryRes.json();
+    if (summary?.header?.id && String(summary.header.id) === String(eventId)) {
+      return { ...normalizeEspnEvent(summary.header), dateWindowMiss: true };
+    }
+    // Still not found — either not started yet, removed from ESPN, or
+    // the stored eventId is wrong. Treat as "not done", retry next tick.
+    return { completed: false, winner: null, notFound: true };
+  }
+  return normalizeEspnEvent(ev);
 }
 
 // ─── football-data.org match ───────────────────────────────────────────

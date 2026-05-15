@@ -82,6 +82,21 @@ function roundThreshold(price) {
   return Math.round(price);
 }
 
+export function resolveDirectionOutcome(closePrice, threshold) {
+  const price = Number(closePrice);
+  const line = Number(threshold);
+  if (!Number.isFinite(price) || !Number.isFinite(line)) {
+    throw new Error('crypto-5min: invalid close price or threshold');
+  }
+  if (price > line) return 0;
+  if (price < line) return 1;
+  return null;
+}
+
+export function formatDirectionFinalScore(threshold, closePrice) {
+  return `$${Number(threshold)} -> $${Number(closePrice).toFixed(2)}`;
+}
+
 // Floor a Date to the most recent 5-min boundary (UTC). 12:03:42 → 12:00:00.
 function floorTo5MinBoundary(d) {
   const out = new Date(d);

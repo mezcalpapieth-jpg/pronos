@@ -6,8 +6,11 @@
  * stay [home, away].
  */
 
+import { extractEspnSeriesMeta } from '../series-markets.js';
+
 const BASE = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard';
-const HORIZON_DAYS = 3;
+const BASE_HORIZON_DAYS = 3;
+const SERIES_HORIZON_DAYS = 12;
 
 function formatDateCompact(d) {
   const pad = (n) => String(n).padStart(2, '0');
@@ -16,7 +19,8 @@ function formatDateCompact(d) {
 
 export async function generateNbaMarkets() {
   const now = new Date();
-  const horizon = new Date(now.getTime() + HORIZON_DAYS * 86_400_000);
+  const baseCutoffMs = now.getTime() + BASE_HORIZON_DAYS * 86_400_000;
+  const horizon = new Date(now.getTime() + SERIES_HORIZON_DAYS * 86_400_000);
   const range = `${formatDateCompact(now)}-${formatDateCompact(horizon)}`;
   const url = `${BASE}?dates=${range}&limit=500`;
 
@@ -48,6 +52,13 @@ export async function generateNbaMarkets() {
     // overtime buffer). Auto-resolver waits for ESPN's `completed`
     // flag regardless; this is the hard close.
     const kickoffMs = new Date(kickoff).getTime();
+    const seriesMeta = extractEspnSeriesMeta(ev, {
+      leaguePath: 'basketball/nba',
+      league: 'nba',
+      sport: 'nba',
+      fallbackBestOf: 7,
+    });
+    if (!seriesMeta && kickoffMs > baseCutoffMs) continue;
     const startTime = new Date(kickoffMs).toISOString();
     const endTime   = new Date(kickoffMs + 3 * 3600_000).toISOString();
     const dateYmd   = new Date(kickoff).toISOString().slice(0, 10);
@@ -75,6 +86,7 @@ export async function generateNbaMarkets() {
         eventId: ev.id,
         dateYmd,
         shape: 'binary',
+        ...(seriesMeta ? { series: seriesMeta } : {}),
       },
       source_data: {
         eventId: ev.id,
@@ -83,6 +95,7 @@ export async function generateNbaMarkets() {
         home: { id: home?.team?.id, name: home.team.displayName, abbr: home.team.abbreviation },
         away: { id: away?.team?.id, name: away.team.displayName, abbr: away.team.abbreviation },
         venue: comp?.venue?.fullName || null,
+        ...(seriesMeta ? { series: seriesMeta } : {}),
       },
     });
   }

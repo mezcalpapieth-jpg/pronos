@@ -318,15 +318,18 @@ async function approveOne(pid, reviewer, note, opts = {}) {
       const reserves = initialReserves(seed, outcomes.length);
       const mk = await client.query(
         `INSERT INTO points_markets
-           (question, category, icon, outcomes, reserves, seed_liquidity,
+           (source, source_event_id,
+            question, category, icon, outcomes, reserves, seed_liquidity,
             start_time, end_time, status, created_by, amm_mode,
             resolver_type, resolver_config, sport, league, outcome_images, featured,
             mode, chain_id, chain_market_id, chain_address)
-         VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8, 'active', $9,
-                 'unified', $10, $11::jsonb, $12, $13, $14::jsonb, $15,
-                 $16, $17, $18, $19)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, 'active', $11,
+                 'unified', $12, $13::jsonb, $14, $15, $16::jsonb, $17,
+                 $18, $19, $20, $21)
          RETURNING id`,
         [
+          r.source,
+          r.source_event_id,
           r.question,
           r.category,
           r.icon || null,
@@ -355,15 +358,18 @@ async function approveOne(pid, reviewer, note, opts = {}) {
       const legReserves = initialReserves(seed, 2);
       const parent = await client.query(
         `INSERT INTO points_markets
-           (question, category, icon, outcomes, reserves, seed_liquidity,
+           (source, source_event_id,
+            question, category, icon, outcomes, reserves, seed_liquidity,
             start_time, end_time, status, created_by, amm_mode,
             resolver_type, resolver_config, sport, league, outcome_images, featured,
             mode, chain_id, chain_market_id, chain_address)
-         VALUES ($1, $2, $3, $4::jsonb, '[]'::jsonb, $5, $6, $7, 'active', $8,
-                 'parallel', $9, $10::jsonb, $11, $12, $13::jsonb, $14,
-                 $15, $16, $17, $18)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb, '[]'::jsonb, $7, $8, $9, 'active', $10,
+                 'parallel', $11, $12::jsonb, $13, $14, $15::jsonb, $16,
+                 $17, $18, $19, $20)
          RETURNING id`,
         [
+          r.source,
+          r.source_event_id,
           r.question,
           r.category,
           r.icon || null,

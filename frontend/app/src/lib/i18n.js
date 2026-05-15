@@ -636,6 +636,12 @@ const STRINGS = {
   'points.detail.topHolders': { es: 'Top holders',           en: 'Top holders' },
   'points.detail.comments':   { es: 'Comentarios',           en: 'Comments' },
   'points.detail.optionsVote': { es: 'Opciones · elige Sí o No', en: 'Options · pick Yes or No' },
+  'points.series.label':      { es: 'Serie',                 en: 'Series' },
+  'points.series.open':       { es: 'Abierto',               en: 'Open' },
+  'points.series.final':      { es: 'Final',                 en: 'Final' },
+  'points.series.pending':    { es: 'Pendiente',             en: 'Pending' },
+  'points.series.notNeeded':  { es: 'No necesario',          en: 'Not needed' },
+  'points.series.datePending': { es: 'Fecha pendiente',      en: 'Date pending' },
 
   'points.crypto.title':      { es: '{asset}: sube o baja en 5 minutos', en: '{asset}: up or down in 5 minutes' },
   'points.crypto.currentPrice': { es: 'Precio actual',        en: 'Current price' },

@@ -18,6 +18,8 @@
 const AGGREGATOR_SELECTORS = {
   // keccak256("latestRoundData()").slice(0,8)
   latestRoundData: '0xfeaf968c',
+  // keccak256("getRoundData(uint80)").slice(0,8)
+  getRoundData: '0x9a6fc8f5',
   // keccak256("decimals()").slice(0,8)
   decimals: '0x313ce567',
 };
@@ -75,6 +77,60 @@ function parseUint8(hex) {
   return Number(BigInt(hex));
 }
 
+function strip0x(hex) {
+  return (hex || '').startsWith('0x') ? hex.slice(2) : (hex || '');
+}
+
+function answerToNumber(answer, decimals) {
+  // Convert BigInt with decimals → JS number. For a feed with 8 decimals
+  // and answer=18501200000000, this returns 1850.12. Uses string math
+  // to avoid float precision loss on >2^53 values.
+  const neg = answer < 0n;
+  const abs = neg ? -answer : answer;
+  const base = 10n ** BigInt(decimals);
+  const whole = abs / base;
+  const frac = abs % base;
+  const fracStr = frac.toString().padStart(decimals, '0').slice(0, 12);
+  const joined = `${neg ? '-' : ''}${whole}.${fracStr}`;
+  return Number(joined);
+}
+
+function parseRoundData(roundHex, decimals) {
+  const clean = strip0x(roundHex);
+  if (clean.length < 320) {
+    throw new Error('chainlink: malformed round data');
+  }
+  const word = (i) => '0x' + clean.slice(i * 64, (i + 1) * 64);
+  const roundId = BigInt(word(0));
+  const answer = parseInt256Word(word(1));
+  const startedAt = Number(BigInt(word(2)));
+  const updatedAt = Number(BigInt(word(3)));
+  const answeredInRound = BigInt(word(4));
+  return {
+    roundId,
+    answer,
+    price: answerToNumber(answer, decimals),
+    startedAt,
+    updatedAt,
+    answeredInRound,
+  };
+}
+
+function encodeUint256(value) {
+  const n = BigInt(value);
+  if (n < 0n) throw new Error('chainlink: negative uint');
+  return n.toString(16).padStart(64, '0');
+}
+
+function getRoundDataCall(roundId) {
+  return AGGREGATOR_SELECTORS.getRoundData + encodeUint256(roundId);
+}
+
+async function readRoundData(rpcUrl, feedAddress, roundId, decimals) {
+  const hex = await ethCall(rpcUrl, feedAddress, getRoundDataCall(roundId));
+  return parseRoundData(hex, decimals);
+}
+
 /**
  * Read the latest price from a Chainlink AggregatorV3 feed.
  * Returns the value as a JS number with the feed's native decimals
@@ -93,21 +149,89 @@ export async function readChainlinkPrice({ feedAddress, chainId = 42161 }) {
   // latestRoundData returns 5 × 32-byte words packed in a 0x-prefixed hex:
   //   [roundId, answer, startedAt, updatedAt, answeredInRound]
   // answer is the 2nd word, byte offset 32..64.
-  const clean = (roundHex || '').startsWith('0x') ? roundHex.slice(2) : (roundHex || '');
-  const answerHex = '0x' + clean.slice(64, 128); // second word
-  const answer = parseInt256Word(answerHex);
+  const round = parseRoundData(roundHex, decimals);
 
-  // Convert BigInt with decimals → JS number. For a feed with 8 decimals
-  // and answer=18501200000000, this returns 1850.12. Uses string math
-  // to avoid float precision loss on >2^53 values.
-  const neg = answer < 0n;
-  const abs = neg ? -answer : answer;
-  const base = 10n ** BigInt(decimals);
-  const whole = abs / base;
-  const frac = abs % base;
-  const fracStr = frac.toString().padStart(decimals, '0').slice(0, 12);
-  const joined = `${neg ? '-' : ''}${whole}.${fracStr}`;
-  return Number(joined);
+  return round.price;
+}
+
+/**
+ * Binary-search the current Chainlink phase for the latest round whose
+ * updatedAt is at or before a target timestamp. This lets catch-up jobs
+ * settle missed short-window markets at their close time instead of using
+ * the feed's current price.
+ */
+export async function findChainlinkRoundAtOrBefore({ latestRound, targetTimestamp, readRound }) {
+  if (!latestRound || latestRound.roundId == null || typeof readRound !== 'function') {
+    throw new Error('chainlink: invalid historical lookup arguments');
+  }
+  const target = Math.floor(Number(targetTimestamp));
+  if (!Number.isFinite(target) || target <= 0) {
+    throw new Error('chainlink: invalid target timestamp');
+  }
+
+  if (Number(latestRound.updatedAt) <= target) return latestRound;
+
+  const latestId = BigInt(latestRound.roundId);
+  const phase = latestId >> 64n;
+  let low = (phase << 64n) + 1n;
+  let high = latestId;
+  let best = null;
+
+  while (low <= high) {
+    const mid = (low + high) / 2n;
+    let round;
+    try {
+      round = await readRound(mid);
+    } catch {
+      // Early round ids in the current phase can be absent on proxy feeds.
+      low = mid + 1n;
+      continue;
+    }
+
+    const updatedAt = Number(round?.updatedAt);
+    if (!Number.isFinite(updatedAt) || updatedAt <= 0) {
+      low = mid + 1n;
+      continue;
+    }
+
+    if (updatedAt <= target) {
+      best = round;
+      low = mid + 1n;
+    } else {
+      high = mid - 1n;
+    }
+  }
+
+  if (!best) {
+    throw new Error('chainlink: no round at or before timestamp');
+  }
+  return best;
+}
+
+export async function readChainlinkRoundAtOrBefore({ feedAddress, chainId = 42161, timestamp }) {
+  if (!feedAddress) throw new Error('chainlink: feedAddress required');
+  const targetMs = timestamp instanceof Date
+    ? timestamp.getTime()
+    : (typeof timestamp === 'number' ? timestamp : new Date(timestamp).getTime());
+  if (!Number.isFinite(targetMs)) throw new Error('chainlink: invalid timestamp');
+
+  const rpcUrl = rpcFor(chainId);
+  const [decimalsHex, latestHex] = await Promise.all([
+    ethCall(rpcUrl, feedAddress, AGGREGATOR_SELECTORS.decimals),
+    ethCall(rpcUrl, feedAddress, AGGREGATOR_SELECTORS.latestRoundData),
+  ]);
+  const decimals = parseUint8(decimalsHex);
+  const latestRound = parseRoundData(latestHex, decimals);
+  return findChainlinkRoundAtOrBefore({
+    latestRound,
+    targetTimestamp: Math.floor(targetMs / 1000),
+    readRound: (roundId) => readRoundData(rpcUrl, feedAddress, roundId, decimals),
+  });
+}
+
+export async function readChainlinkPriceAtOrBefore(opts) {
+  const round = await readChainlinkRoundAtOrBefore(opts);
+  return round.price;
 }
 
 /**

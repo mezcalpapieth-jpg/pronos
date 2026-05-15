@@ -25,7 +25,8 @@
 import { neon } from '@neondatabase/serverless';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { withTransaction } from '../_lib/db-tx.js';
-import { readChainlinkPrice, comparePrice } from '../_lib/chainlink.js';
+import { readChainlinkPrice, readChainlinkRoundAtOrBefore, comparePrice } from '../_lib/chainlink.js';
+import { formatDirectionFinalScore, resolveDirectionOutcome } from '../_lib/crypto-5min.js';
 import { bestEffortPersistResolvedCryptoMarketSnapshot } from '../_lib/crypto-chart-snapshot.js';
 import { readFinnhubQuote } from '../_lib/stockprice.js';
 import { readBanxicoLatest } from '../_lib/banxico.js';
@@ -37,6 +38,7 @@ import { readEspnEvent, readFootballDataMatch, readJolpicaF1Result, readJolpicaF
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql   = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
+const MAX_BINARY_DIRECTION_CATCHUP_PER_RUN = 12;
 
 function parseJsonb(v, fb) {
   if (v && typeof v === 'object' && !Array.isArray(v)) return v;
@@ -79,6 +81,9 @@ function buildFinalScore({ resolverType, cfg, result, resolverInfo, outcomes, wi
 
     if (resolverType === 'chainlink_price' || resolverType === 'api_price') {
       const price = resolverInfo?.priceAtResolve;
+      if (cfg.shape === 'binary-direction' && price != null && cfg.threshold != null) {
+        return clip(formatDirectionFinalScore(cfg.threshold, price));
+      }
       if (price != null) {
         const sym = cfg.symbol || cfg.feedAddress || resolverInfo?.source || '';
         const short = sym ? (typeof sym === 'string' ? sym.slice(0, 20) : '') : '';
@@ -110,6 +115,11 @@ function buildFinalScore({ resolverType, cfg, result, resolverInfo, outcomes, wi
  * `{ ok, tookMs, checked, resolved, errors, dryRun }` shape the
  * cron handler used to build inline.
  *
+ * Also acts as a catch-up pass for BTC/ETH 5-minute markets. Their
+ * preferred path is the exact boundary tick in _lib/crypto-5min.js,
+ * but if that tick is missed, this loop resolves them later using the
+ * Chainlink round at the market's close timestamp.
+ *
  * Vercel cron jobs ONLY run on production deployments. On preview
  * URLs the every-15-min schedule never fires, so admins use the
  * admin endpoint to kick this off manually.
@@ -128,8 +138,20 @@ export async function runAutoResolve({ dry = false } = {}) {
       WHERE status = 'active'
         AND resolver_type IN ('chainlink_price', 'api_price', 'weather_api', 'api_chart', 'sports_api')
         AND end_time IS NOT NULL
-        AND end_time < NOW()
+        AND (
+          end_time < NOW()
+          OR (
+            resolver_type = 'sports_api'
+            AND resolver_config->>'source' = 'espn'
+            AND resolver_config->>'shape' IN ('binary', 'draw3')
+            AND start_time IS NOT NULL
+            AND start_time < NOW() - INTERVAL '90 minutes'
+          )
+        )
         AND parent_id IS NULL
+      ORDER BY
+        CASE WHEN resolver_config->>'shape' = 'binary-direction' THEN 1 ELSE 0 END,
+        end_time ASC
       LIMIT 100
     `;
 
@@ -137,8 +159,11 @@ export async function runAutoResolve({ dry = false } = {}) {
       checked: candidates.length,
       resolved: [],
       errors: [],
+      deferred: [],
       dryRun: dry,
     };
+
+    let binaryDirectionCatchups = 0;
 
     for (const m of candidates) {
       const cfg = parseJsonb(m.resolver_config, null);
@@ -146,6 +171,13 @@ export async function runAutoResolve({ dry = false } = {}) {
         report.errors.push({ id: m.id, error: 'missing_resolver_config' });
         continue;
       }
+      const isBinaryDirectionCatchup = m.resolver_type === 'chainlink_price'
+        && cfg.shape === 'binary-direction';
+      if (isBinaryDirectionCatchup && binaryDirectionCatchups >= MAX_BINARY_DIRECTION_CATCHUP_PER_RUN) {
+        report.deferred.push({ id: m.id, reason: 'binary_direction_catchup_limit' });
+        continue;
+      }
+      if (isBinaryDirectionCatchup) binaryDirectionCatchups += 1;
 
       // Compute the winning outcome index per resolver type. Price
       // resolvers hit a feed / API and compare; weather_api resolves by
@@ -157,20 +189,53 @@ export async function runAutoResolve({ dry = false } = {}) {
       // buildFinalScore's branch logic falls back to winLabel.
       let winningIdx = null;
       let resolverInfo = {};
+      let resolverConfigPatch = null;
       let result = null;
       try {
         if (m.resolver_type === 'chainlink_price') {
-          if (!cfg.feedAddress || !cfg.op || cfg.threshold == null || cfg.yesOutcome == null) {
-            throw new Error('invalid chainlink_price config');
+          if (cfg.shape === 'binary-direction') {
+            if (!cfg.feedAddress || cfg.threshold == null) {
+              throw new Error('invalid chainlink_price binary-direction config');
+            }
+            const closesAt = cfg.closesAt || m.end_time;
+            if (!closesAt) throw new Error('binary-direction: missing closesAt');
+
+            const round = await readChainlinkRoundAtOrBefore({
+              feedAddress: cfg.feedAddress,
+              chainId: cfg.chainId,
+              timestamp: closesAt,
+            });
+            winningIdx = resolveDirectionOutcome(round.price, cfg.threshold);
+            if (winningIdx == null) {
+              throw new Error(`binary-direction tie at ${round.price}`);
+            }
+            const roundUpdatedAt = Number.isFinite(Number(round.updatedAt))
+              ? new Date(Number(round.updatedAt) * 1000).toISOString()
+              : null;
+            resolverInfo = {
+              priceAtResolve: round.price,
+              threshold: cfg.threshold,
+              source: cfg.symbol || 'chainlink',
+              roundUpdatedAt,
+            };
+            resolverConfigPatch = {
+              closePrice: round.price,
+              resolvedRoundId: round.roundId?.toString?.() || String(round.roundId),
+              resolvedRoundUpdatedAt: roundUpdatedAt,
+            };
+          } else {
+            if (!cfg.feedAddress || !cfg.op || cfg.threshold == null || cfg.yesOutcome == null) {
+              throw new Error('invalid chainlink_price config');
+            }
+            const price = await readChainlinkPrice({
+              feedAddress: cfg.feedAddress,
+              chainId: cfg.chainId,
+            });
+            const yes = comparePrice(price, cfg.op, Number(cfg.threshold));
+            const yesIdx = Number(cfg.yesOutcome);
+            winningIdx = yes ? yesIdx : (1 - yesIdx);
+            resolverInfo = { priceAtResolve: price, op: cfg.op, threshold: cfg.threshold };
           }
-          const price = await readChainlinkPrice({
-            feedAddress: cfg.feedAddress,
-            chainId: cfg.chainId,
-          });
-          const yes = comparePrice(price, cfg.op, Number(cfg.threshold));
-          const yesIdx = Number(cfg.yesOutcome);
-          winningIdx = yes ? yesIdx : (1 - yesIdx);
-          resolverInfo = { priceAtResolve: price, op: cfg.op, threshold: cfg.threshold };
         } else if (m.resolver_type === 'api_price') {
           // api_price is a family — dispatch on cfg.source to pick the
           // right reader. Each reader returns a scalar price in the
@@ -490,6 +555,14 @@ export async function runAutoResolve({ dry = false } = {}) {
               // 42703 = column doesn't exist; the resolution itself is
               // already committed above, so we just skip the score.
             }
+          }
+          if (resolverConfigPatch && Object.keys(resolverConfigPatch).length > 0) {
+            await client.query(
+              `UPDATE points_markets
+                  SET resolver_config = COALESCE(resolver_config, '{}'::jsonb) || $1::jsonb
+                WHERE id = $2`,
+              [JSON.stringify(resolverConfigPatch), m.id],
+            );
           }
           // Cascade to parallel legs (mirrors admin resolve-market.js):
           // winning leg's YES side pays out; losing legs' NO side pays.
