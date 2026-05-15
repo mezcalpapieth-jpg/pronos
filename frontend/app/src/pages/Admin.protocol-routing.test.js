@@ -44,3 +44,22 @@ test('MVP admin status panel uses protocol mainnet wiring', () => {
   assert.match(statusPanel, /getJson\('\/api\/protocol\/admin\/onchain-status'/);
   assert.doesNotMatch(statusPanel, /\/api\/points\/admin\/onchain-status/);
 });
+
+test('MVP admin category and create form stay aligned with points taxonomy metadata', () => {
+  const createForm = section('function CreateMarketForm', '// ═══ Edit-market modal');
+
+  assert.match(source, /value:\s*'world-cup',\s*label:\s*'Copa del Mundo'/);
+  assert.match(source, /value:\s*'mexico',\s*label:\s*'Mexico & Latam'/);
+  assert.match(createForm, /icon,\s*\n\s*sport:\s*sport \|\| null,/);
+  assert.match(createForm, /league:\s*league \|\| null,/);
+  assert.match(createForm, /outcomeImages:\s*hasAnyImage \? trimmedImages : null,/);
+});
+
+test('MVP generated queue can inspect and re-add rejected markets', () => {
+  const pendingSection = section('function PendingMarketsSection', '// ═══ Create-market form');
+
+  assert.match(pendingSection, /status=\$\{filter\}/);
+  assert.match(pendingSection, /\['pending',\s*'rejected'\]/);
+  assert.match(pendingSection, /action:\s*'readd'/);
+  assert.match(pendingSection, /Reagregar/);
+});

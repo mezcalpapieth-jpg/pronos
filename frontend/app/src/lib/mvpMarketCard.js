@@ -1,11 +1,12 @@
 const CATEGORY_LABEL = {
   general: 'General',
-  mexico: 'México',
+  mexico: 'Mexico & Latam',
   politica: 'Política',
   deportes: 'Deportes',
   finanzas: 'Finanzas',
   crypto: 'Crypto',
   musica: 'Música',
+  'world-cup': 'Copa del Mundo',
 };
 
 const CATEGORY_ICON = {
@@ -16,6 +17,7 @@ const CATEGORY_ICON = {
   finanzas: '💵',
   crypto: '₿',
   musica: '🎵',
+  'world-cup': '🏆',
 };
 
 export function pricesFromReserves(reserves) {
@@ -94,7 +96,7 @@ export function mapProtocolMarketToCard(row) {
     ...row,
     id: row?.id,
     mode: 'onchain',
-    source: 'protocol',
+    source: row?.source || 'protocol',
     _source: 'protocol',
     marketId: row?.marketId,
     poolAddress: row?.poolAddress,
@@ -103,7 +105,7 @@ export function mapProtocolMarketToCard(row) {
     question: row?.question || '',
     category,
     categoryLabel: CATEGORY_LABEL[category] || category,
-    icon: CATEGORY_ICON[category] || '🌎',
+    icon: row?.icon || CATEGORY_ICON[category] || '🌎',
     outcomes,
     prices: normalizedPrices,
     status: row?.status || 'active',
@@ -119,5 +121,15 @@ export function mapProtocolMarketToCard(row) {
     resolvedAt: row?.resolvedAt || null,
     finalScore: row?.finalScore || null,
     outcomeImages: Array.isArray(row?.outcomeImages) ? row.outcomeImages : null,
+    outcomeCountryLabels: Array.isArray(row?.outcomeCountryLabels) ? row.outcomeCountryLabels : null,
+    categoryTags: Array.isArray(row?.categoryTags) ? row.categoryTags : [],
+    geoTags: Array.isArray(row?.geoTags) ? row.geoTags : [],
+    topicTags: Array.isArray(row?.topicTags) ? row.topicTags : [],
+    sport: row?.sport || null,
+    league: row?.league || null,
+    crypto5min: !!row?.crypto5min,
+    sourceEventId: row?.sourceEventId || null,
+    resolverType: row?.resolverType || null,
+    resolverSource: row?.resolverSource || null,
   };
 }

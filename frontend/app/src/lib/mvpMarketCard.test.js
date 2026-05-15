@@ -52,3 +52,36 @@ test('previewGain estimates net gain for a 100 MXNB reference stake', () => {
   assert.equal(previewGain(0.25), 300);
   assert.equal(previewGain(0.99), 1);
 });
+
+test('mapProtocolMarketToCard exposes MVP taxonomy and regional outcome labels', () => {
+  const worldCup = mapProtocolMarketToCard({
+    id: 99,
+    question: '¿México gana la Copa del Mundo 2026?',
+    category: 'world-cup',
+    outcomes: ['Sí', 'No'],
+    prices: [0.4, 0.6],
+    categoryTags: ['world-cup'],
+    geoTags: [],
+    topicTags: ['world-cup'],
+  });
+
+  assert.equal(worldCup.categoryLabel, 'Copa del Mundo');
+  assert.equal(worldCup.icon, '🏆');
+  assert.deepEqual(worldCup.categoryTags, ['world-cup']);
+  assert.deepEqual(worldCup.geoTags, []);
+
+  const fight = mapProtocolMarketToCard({
+    id: 100,
+    question: '¿Quién gana Marlon Vera vs Sean OMalley?',
+    category: 'deportes',
+    outcomes: ['Marlon Vera', 'Sean OMalley'],
+    prices: [0.52, 0.48],
+    sport: 'combate',
+    league: 'ufc',
+    outcomeCountryLabels: ['Ecuador', null],
+  });
+
+  assert.deepEqual(fight.outcomeCountryLabels, ['Ecuador', null]);
+  assert.equal(fight.sport, 'combate');
+  assert.equal(fight.league, 'ufc');
+});

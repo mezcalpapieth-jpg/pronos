@@ -1948,8 +1948,16 @@ function PendingMarketsTable() {
         if (filter === 'pending') {
           return prev.filter(r => r.id !== id);
         }
+        if (filter === 'rejected' && action === 'readd') {
+          return prev.filter(r => r.id !== id);
+        }
+        const nextStatus = action === 'approve'
+          ? 'approved'
+          : action === 'reject'
+            ? 'rejected'
+            : 'pending';
         return prev.map(r => r.id === id
-          ? { ...r, status: action === 'approve' ? 'approved' : 'rejected' }
+          ? { ...r, status: nextStatus }
           : r);
       });
     } catch (e) {
@@ -2266,6 +2274,7 @@ function PendingMarketsTable() {
 
       {!loading && rows?.map(r => {
         const isPending = r.status === 'pending';
+        const isRejected = r.status === 'rejected';
         return (
           <div key={r.id} style={{
             background: 'var(--surface1)',
@@ -2375,16 +2384,39 @@ function PendingMarketsTable() {
                   </button>
                 </div>
               ) : (
-                <span style={{
-                  fontFamily: 'var(--font-mono)', fontSize: 10,
-                  color: r.status === 'approved' ? 'var(--green)' : 'var(--text-muted)',
-                  letterSpacing: '0.04em', textTransform: 'uppercase',
-                }}>
-                  {r.status === 'approved'
-                    ? `✓ Aprobado · #${r.approvedMarketId}`
-                    : '✗ Rechazado'}
-                  {r.reviewer && <> · @{r.reviewer}</>}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                  <span style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 10,
+                    color: r.status === 'approved' ? 'var(--green)' : 'var(--text-muted)',
+                    letterSpacing: '0.04em', textTransform: 'uppercase',
+                  }}>
+                    {r.status === 'approved'
+                      ? `✓ Aprobado · #${r.approvedMarketId}`
+                      : '✗ Rechazado'}
+                    {r.reviewer && <> · @{r.reviewer}</>}
+                  </span>
+                  {isRejected && (
+                    <button
+                      onClick={() => review(r.id, 'readd')}
+                      disabled={busyId === r.id}
+                      title="Mover este mercado rechazado de vuelta a Pendientes"
+                      style={{
+                        padding: '6px 12px',
+                        background: 'rgba(0,232,122,0.12)',
+                        border: '1px solid rgba(0,232,122,0.4)',
+                        borderRadius: 8,
+                        color: 'var(--green)',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 11, letterSpacing: '0.04em',
+                        textTransform: 'uppercase',
+                        cursor: busyId === r.id ? 'not-allowed' : 'pointer',
+                        opacity: busyId === r.id ? 0.5 : 1,
+                      }}
+                    >
+                      Reagregar
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </div>

@@ -19,19 +19,15 @@
  */
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
+import { ensureProtocolSchema } from '../_lib/protocol-schema.js';
+import { buildProtocolMarketPayload } from '../_lib/protocol-market-payload.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
+const schemaSql = neon(process.env.DATABASE_URL);
 
 const ALLOWED_STATUS = new Set(['active', 'resolved', 'all']);
 const DEFAULT_LIMIT = 60;
 const MAX_LIMIT = 200;
-
-function parseJsonb(value, fallback) {
-  if (Array.isArray(value)) return value;
-  if (value && typeof value === 'object') return value;
-  if (typeof value !== 'string') return fallback;
-  try { return JSON.parse(value); } catch { return fallback; }
-}
 
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'GET, OPTIONS', credentials: true });
@@ -51,6 +47,7 @@ export default async function handler(req, res) {
   const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : DEFAULT_LIMIT, 1), MAX_LIMIT);
 
   try {
+    await ensureProtocolSchema(schemaSql);
     // LATERAL join pulls the most recent price snapshot per market.
     // Old PG driver versions complain when the LATERAL alias clashes
     // with main columns, so we prefix the snapshot fields with `s_`.
@@ -58,13 +55,35 @@ export default async function handler(req, res) {
     if (status === 'all') {
       rows = await sql`
         SELECT m.id, m.market_id, m.pool_address, m.factory_address, m.chain_id,
-               m.question, m.category, m.outcomes, m.outcome_count,
+               m.question, m.category, m.icon, m.sport, m.league, m.outcome_images,
+               m.category_tags, m.geo_tags, m.topic_tags,
+               m.source, m.source_event_id, m.resolver_type, m.resolver_config,
+               m.outcomes, m.outcome_count,
                m.protocol_version, m.start_time, m.end_time, m.status, m.outcome,
                m.seed_liquidity, m.tx_hash, m.created_at, m.resolved_at,
+               COALESCE(pmp.icon, pm.icon) AS meta_icon,
+               COALESCE(pmp.sport, pm.sport) AS meta_sport,
+               COALESCE(pmp.league, pm.league) AS meta_league,
+               COALESCE(pmp.outcome_images, pm.outcome_images) AS meta_outcome_images,
+               COALESCE(pmp.category_tags, pm.category_tags) AS meta_category_tags,
+               COALESCE(pmp.geo_tags, pm.geo_tags) AS meta_geo_tags,
+               COALESCE(pmp.topic_tags, pm.topic_tags) AS meta_topic_tags,
+               COALESCE(pmp.source, pm.source) AS meta_source,
+               COALESCE(pmp.source_event_id, pm.source_event_id) AS meta_source_event_id,
+               COALESCE(pmp.resolver_type, pm.resolver_type) AS meta_resolver_type,
+               COALESCE(pmp.resolver_config, pm.resolver_config) AS meta_resolver_config,
+               ppm.source_data AS meta_source_data,
+               COALESCE(pmp.final_score, pm.final_score) AS meta_final_score,
                s.yes_price AS s_yes, s.no_price AS s_no, s.prices AS s_prices,
                s.liquidity AS s_liquidity, s.volume_24h AS s_volume,
                s.snapshot_at AS s_snapshot
           FROM protocol_markets m
+          LEFT JOIN points_markets pm
+            ON COALESCE(pm.mode, 'points') = 'onchain'
+           AND pm.chain_id = m.chain_id
+           AND LOWER(pm.chain_address) = LOWER(m.pool_address)
+          LEFT JOIN points_markets pmp ON pmp.id = pm.parent_id
+          LEFT JOIN points_pending_markets ppm ON ppm.approved_market_id = COALESCE(pm.parent_id, pm.id)
           LEFT JOIN LATERAL (
             SELECT yes_price, no_price, prices, liquidity, volume_24h, snapshot_at
               FROM price_snapshots
@@ -87,13 +106,35 @@ export default async function handler(req, res) {
     } else {
       rows = await sql`
         SELECT m.id, m.market_id, m.pool_address, m.factory_address, m.chain_id,
-               m.question, m.category, m.outcomes, m.outcome_count,
+               m.question, m.category, m.icon, m.sport, m.league, m.outcome_images,
+               m.category_tags, m.geo_tags, m.topic_tags,
+               m.source, m.source_event_id, m.resolver_type, m.resolver_config,
+               m.outcomes, m.outcome_count,
                m.protocol_version, m.start_time, m.end_time, m.status, m.outcome,
                m.seed_liquidity, m.tx_hash, m.created_at, m.resolved_at,
+               COALESCE(pmp.icon, pm.icon) AS meta_icon,
+               COALESCE(pmp.sport, pm.sport) AS meta_sport,
+               COALESCE(pmp.league, pm.league) AS meta_league,
+               COALESCE(pmp.outcome_images, pm.outcome_images) AS meta_outcome_images,
+               COALESCE(pmp.category_tags, pm.category_tags) AS meta_category_tags,
+               COALESCE(pmp.geo_tags, pm.geo_tags) AS meta_geo_tags,
+               COALESCE(pmp.topic_tags, pm.topic_tags) AS meta_topic_tags,
+               COALESCE(pmp.source, pm.source) AS meta_source,
+               COALESCE(pmp.source_event_id, pm.source_event_id) AS meta_source_event_id,
+               COALESCE(pmp.resolver_type, pm.resolver_type) AS meta_resolver_type,
+               COALESCE(pmp.resolver_config, pm.resolver_config) AS meta_resolver_config,
+               ppm.source_data AS meta_source_data,
+               COALESCE(pmp.final_score, pm.final_score) AS meta_final_score,
                s.yes_price AS s_yes, s.no_price AS s_no, s.prices AS s_prices,
                s.liquidity AS s_liquidity, s.volume_24h AS s_volume,
                s.snapshot_at AS s_snapshot
           FROM protocol_markets m
+          LEFT JOIN points_markets pm
+            ON COALESCE(pm.mode, 'points') = 'onchain'
+           AND pm.chain_id = m.chain_id
+           AND LOWER(pm.chain_address) = LOWER(m.pool_address)
+          LEFT JOIN points_markets pmp ON pmp.id = pm.parent_id
+          LEFT JOIN points_pending_markets ppm ON ppm.approved_market_id = COALESCE(pm.parent_id, pm.id)
           LEFT JOIN LATERAL (
             SELECT yes_price, no_price, prices, liquidity, volume_24h, snapshot_at
               FROM price_snapshots
@@ -116,43 +157,7 @@ export default async function handler(req, res) {
       `;
     }
 
-    const markets = rows.map(r => {
-      const outcomes = parseJsonb(r.outcomes, ['Sí', 'No']);
-      const prices = parseJsonb(r.s_prices, null)
-        || (r.s_yes != null ? [Number(r.s_yes), Number(r.s_no)] : null);
-      return {
-        id: r.id,
-        marketId: r.market_id,
-        poolAddress: r.pool_address,
-        factoryAddress: r.factory_address,
-        chainId: Number(r.chain_id),
-        question: r.question,
-        category: r.category,
-        outcomes,
-        outcomeCount: Number(r.outcome_count) || outcomes.length,
-        protocolVersion: r.protocol_version || 'v1',
-        startTime: r.start_time,
-        endTime: r.end_time,
-        // Live = sports market currently in its game window. Mirrors
-        // the ORDER BY computation above so the UI can render a LIVE
-        // badge without re-doing the date math.
-        live: !!(r.start_time
-          && new Date(r.start_time).getTime() <= Date.now()
-          && r.end_time
-          && new Date(r.end_time).getTime() > Date.now()
-          && r.status === 'active'),
-        status: r.status,
-        outcome: r.outcome != null ? Number(r.outcome) : null,
-        seedLiquidity: r.seed_liquidity != null ? Number(r.seed_liquidity) : 0,
-        prices,
-        liquidity: r.s_liquidity != null ? Number(r.s_liquidity) : 0,
-        volume24h: r.s_volume != null ? Number(r.s_volume) : 0,
-        snapshotAt: r.s_snapshot,
-        txHash: r.tx_hash,
-        createdAt: r.created_at,
-        resolvedAt: r.resolved_at,
-      };
-    });
+    const markets = rows.map(r => buildProtocolMarketPayload(r));
 
     res.setHeader('Cache-Control', 'public, s-maxage=10, stale-while-revalidate=60');
     return res.status(200).json({ markets });

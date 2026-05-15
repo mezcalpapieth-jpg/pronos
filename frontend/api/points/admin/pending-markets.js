@@ -4,9 +4,10 @@
  * GET  /api/points/admin/pending-markets?status=pending|approved|rejected
  *   → list rows (most-recent first)
  * POST /api/points/admin/pending-markets
- *   body: { id, action: 'approve' | 'reject', note? }
+ *   body: { id, action: 'approve' | 'reject' | 'readd', note? }
  *   approve → copy spec into points_markets + mark approved
  *   reject  → mark rejected (row stays so re-runs stay idempotent)
+ *   readd   → move a rejected row back to pending review
  *
  * Both operations run inside one transaction so we never half-create a
  * market and forget to mark the queue row.
@@ -122,7 +123,11 @@ async function list(req, res) {
         SELECT p.*, mk.featured AS market_featured, mk.status AS market_status
         FROM points_pending_markets p
         LEFT JOIN points_markets mk ON mk.id = p.approved_market_id
-        ORDER BY p.created_at DESC
+        ORDER BY
+          CASE p.status WHEN 'pending' THEN 0 WHEN 'rejected' THEN 1 ELSE 2 END,
+          CASE WHEN p.status = 'rejected' THEN p.reviewed_at END DESC NULLS LAST,
+          CASE WHEN p.status = 'pending' THEN p.end_time END ASC NULLS LAST,
+          p.created_at DESC
         LIMIT 2000
       `
     : await readSql`
@@ -131,8 +136,8 @@ async function list(req, res) {
         LEFT JOIN points_markets mk ON mk.id = p.approved_market_id
         WHERE p.status = ${status}
         ORDER BY
-          CASE p.status WHEN 'pending' THEN 0 ELSE 1 END,
-          p.end_time ASC NULLS LAST,
+          CASE WHEN p.status = 'rejected' THEN p.reviewed_at END DESC NULLS LAST,
+          CASE WHEN p.status = 'pending' THEN p.end_time END ASC NULLS LAST,
           p.created_at DESC
         LIMIT 2000
       `;
@@ -566,8 +571,37 @@ async function review(req, res, admin) {
   if (!Number.isInteger(pid) || pid <= 0) {
     return res.status(400).json({ error: 'invalid_id' });
   }
-  if (action !== 'approve' && action !== 'reject') {
+  if (action !== 'approve' && action !== 'reject' && action !== 'readd') {
     return res.status(400).json({ error: 'invalid_action' });
+  }
+
+  if (action === 'readd') {
+    const result = await withTransaction(async (client) => {
+      const rowRes = await client.query(
+        `SELECT status FROM points_pending_markets WHERE id = $1 FOR UPDATE`,
+        [pid],
+      );
+      if (rowRes.rows.length === 0) {
+        const err = new Error('pending_not_found'); err.status = 404; throw err;
+      }
+      if (rowRes.rows[0].status !== 'rejected') {
+        const err = new Error('not_rejected'); err.status = 400;
+        err.detail = `status=${rowRes.rows[0].status}`;
+        throw err;
+      }
+      await client.query(
+        `UPDATE points_pending_markets
+           SET status = 'pending',
+               admin_note = NULL,
+               reviewer = NULL,
+               reviewed_at = NULL,
+               approved_market_id = NULL
+         WHERE id = $1`,
+        [pid],
+      );
+      return { ok: true, action: 'readd', id: pid };
+    });
+    return res.status(200).json(result);
   }
 
   if (action === 'reject') {

@@ -19,16 +19,24 @@ import Footer from '../components/Footer.jsx';
 import CategoryBar from '../components/CategoryBar.jsx';
 import MarketCard from '../components/MarketCard.jsx';
 import { mapProtocolMarketToCard } from '../lib/mvpMarketCard.js';
+import { useIsMobile } from '../lib/useIsMobile.js';
+import {
+  MVP_PUBLIC_GEO_FILTERS,
+  marketInCategory,
+  marketInGeo,
+  marketInTopic,
+} from '../lib/mvpCategoryFilters.js';
 
 const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 42161);
 
 const SLUG_LABELS = {
   deportes:    'Deportes',
   musica:      'Música',
-  mexico:      'México',
+  mexico:      'Mexico & Latam',
   politica:    'Política',
   crypto:      'Crypto',
   finanzas:    'Finanzas',
+  'world-cup': 'Copa del Mundo',
   porresolver: 'Por resolver',
   resueltos:   'Resueltos',
 };
@@ -78,17 +86,53 @@ const COMBATE_LEAGUES = [
 const RESOLVED_SLUGS = new Set(['resueltos']);
 const PENDING_SLUGS = new Set(['porresolver']);
 
+const RESUELTOS_CATEGORIES = [
+  { key: 'all',      label: 'Todas' },
+  { key: 'deportes', label: 'Deportes' },
+  { key: 'musica',   label: 'Música' },
+  { key: 'mexico',   label: 'Mexico & Latam' },
+  { key: 'politica', label: 'Política' },
+  { key: 'crypto',   label: 'Crypto' },
+  { key: 'finanzas', label: 'Finanzas' },
+];
+
+const CRYPTO_TYPE_TABS = [
+  { key: 'all',     label: 'Todos' },
+  { key: 'general', label: 'Eventos' },
+  { key: '5min',    label: '5 minutos' },
+];
+
+const MEXICO_TOPIC_TABS = [
+  { key: 'all',      label: 'Todas' },
+  { key: 'general',  label: 'General' },
+  { key: 'politica', label: 'Política' },
+  { key: 'deportes', label: 'Deportes' },
+  { key: 'finanzas', label: 'Finanzas' },
+  { key: 'musica',   label: 'Música' },
+  { key: 'weather',  label: 'Clima' },
+];
+
+const GEO_FILTER_EXCLUDED_CATEGORIES = new Set(['all', 'crypto', 'world-cup', 'porresolver', 'resueltos', 'noticias']);
+
 export default function CategoryPage({ onOpenLogin }) {
   const { slug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const [markets, setMarkets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const isMobile = useIsMobile();
 
   const sport = searchParams.get('sport') || 'all';
   const league = searchParams.get('league') || 'all';
+  const resueltosCat = searchParams.get('cat') || 'all';
+  const cryptoType = searchParams.get('ctype') || 'all';
+  const geo = searchParams.get('geo') || 'all';
+  const topic = searchParams.get('topic') || 'all';
 
   const fetchStatus = RESOLVED_SLUGS.has(slug) ? 'resolved' : 'active';
+  const activeFilterCategory = RESOLVED_SLUGS.has(slug) ? resueltosCat : slug;
+  const supportsGeoFilters = !GEO_FILTER_EXCLUDED_CATEGORIES.has(activeFilterCategory);
+  const supportsTopicFilters = activeFilterCategory === 'mexico';
 
   useEffect(() => {
     let cancelled = false;
@@ -96,11 +140,8 @@ export default function CategoryPage({ onOpenLogin }) {
       setLoading(true);
       setError(null);
       try {
-        const categoryQuery = slug && !PENDING_SLUGS.has(slug) && !RESOLVED_SLUGS.has(slug)
-          ? `&category=${encodeURIComponent(slug)}`
-          : '';
         const res = await fetch(
-          `/api/protocol/markets?status=${fetchStatus}&limit=200&chainId=${CHAIN_ID}${categoryQuery}`,
+          `/api/protocol/markets?status=${fetchStatus}&limit=200&chainId=${CHAIN_ID}`,
           { credentials: 'include' },
         );
         const data = await res.json().catch(() => ({}));
@@ -113,7 +154,7 @@ export default function CategoryPage({ onOpenLogin }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [fetchStatus, slug]);
+  }, [fetchStatus]);
 
   const filtered = useMemo(() => {
     const now = Date.now();
@@ -124,21 +165,39 @@ export default function CategoryPage({ onOpenLogin }) {
     if (PENDING_SLUGS.has(slug)) {
       out = out.filter(isPending);
     } else if (RESOLVED_SLUGS.has(slug)) {
-      // resolved already filtered at fetch time.
+      if (resueltosCat !== 'all') {
+        out = out.filter(m => marketInCategory(m, resueltosCat));
+      }
     } else {
       out = out.filter(m => !isPending(m));
-      out = out.filter(m => (m.category || '').toLowerCase() === slug);
+      out = out.filter(m => marketInCategory(m, slug));
     }
 
-    if (slug === 'deportes' && sport !== 'all') {
+    const inSportsContext = slug === 'deportes'
+      || (RESOLVED_SLUGS.has(slug) && resueltosCat === 'deportes');
+    if (inSportsContext && sport !== 'all') {
       out = out.filter(m => (m.sport || '').toLowerCase() === sport);
       if ((sport === 'soccer' || sport === 'baseball' || sport === 'combate') && league !== 'all') {
         out = out.filter(m => (m.league || '').toLowerCase() === league);
       }
     }
 
+    const inCryptoContext = slug === 'crypto'
+      || (RESOLVED_SLUGS.has(slug) && resueltosCat === 'crypto');
+    if (inCryptoContext && cryptoType !== 'all') {
+      if (cryptoType === '5min') out = out.filter(m => m.crypto5min === true);
+      else if (cryptoType === 'general') out = out.filter(m => !m.crypto5min);
+    }
+
+    if (supportsGeoFilters && geo !== 'all') {
+      out = out.filter(m => marketInGeo(m, geo));
+    }
+    if (supportsTopicFilters && topic !== 'all') {
+      out = out.filter(m => marketInTopic(m, topic));
+    }
+
     return out;
-  }, [markets, slug, sport, league]);
+  }, [markets, slug, sport, league, resueltosCat, cryptoType, geo, topic, supportsGeoFilters, supportsTopicFilters]);
 
   // Sport-tab click updates ?sport= and clears ?league=
   function setSport(next) {
@@ -155,14 +214,52 @@ export default function CategoryPage({ onOpenLogin }) {
     setSearchParams(params, { replace: true });
   }
 
+  function setResueltosCat(next) {
+    const params = new URLSearchParams(searchParams);
+    if (next === 'all') params.delete('cat');
+    else params.set('cat', next);
+    params.delete('sport');
+    params.delete('league');
+    params.delete('ctype');
+    params.delete('geo');
+    params.delete('topic');
+    setSearchParams(params, { replace: true });
+  }
+
+  function setCryptoType(next) {
+    const params = new URLSearchParams(searchParams);
+    if (next === 'all') params.delete('ctype');
+    else params.set('ctype', next);
+    setSearchParams(params, { replace: true });
+  }
+
+  function setGeo(next) {
+    const params = new URLSearchParams(searchParams);
+    if (next === 'all') params.delete('geo');
+    else params.set('geo', next);
+    setSearchParams(params, { replace: true });
+  }
+
+  function setTopic(next) {
+    const params = new URLSearchParams(searchParams);
+    if (next === 'all') params.delete('topic');
+    else params.set('topic', next);
+    setSearchParams(params, { replace: true });
+  }
+
   const title = SLUG_LABELS[slug] || (slug || '').replace(/-/g, ' ');
-  const showSportTabs = slug === 'deportes';
-  const showLeagueSidebar = slug === 'deportes' && (sport === 'soccer' || sport === 'baseball' || sport === 'combate');
+  const isResueltos = RESOLVED_SLUGS.has(slug);
+  const showSportTabs = slug === 'deportes' || (isResueltos && resueltosCat === 'deportes');
+  const showLeagueSidebar = showSportTabs && (sport === 'soccer' || sport === 'baseball' || sport === 'combate');
+  const showCryptoTypeBar = slug === 'crypto' || (isResueltos && resueltosCat === 'crypto');
+  const showGeoBar = supportsGeoFilters;
+  const showTopicBar = supportsTopicFilters;
   const leagueOptions = sport === 'soccer'
     ? SOCCER_LEAGUES
     : sport === 'baseball'
       ? BASEBALL_LEAGUES
       : COMBATE_LEAGUES;
+  const leagueSidebarLabel = sport === 'combate' ? 'Disciplinas' : 'Ligas';
 
   return (
     <>
@@ -182,6 +279,60 @@ export default function CategoryPage({ onOpenLogin }) {
         }}>
           {title}
         </h1>
+
+        {isResueltos && (
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', gap: 8,
+            marginBottom: 16, paddingBottom: 4, overflowX: 'auto',
+          }}>
+            {RESUELTOS_CATEGORIES.map(c => (
+              <button
+                key={c.key}
+                onClick={() => setResueltosCat(c.key)}
+                className={`filter-btn${resueltosCat === c.key ? ' active' : ''}`}
+                style={{ fontSize: 11 }}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {showGeoBar && (
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', gap: 8,
+            marginBottom: 16, paddingBottom: 4, overflowX: 'auto',
+          }}>
+            {MVP_PUBLIC_GEO_FILTERS.map(g => (
+              <button
+                key={g.key}
+                onClick={() => setGeo(g.key)}
+                className={`filter-btn${geo === g.key ? ' active' : ''}`}
+                style={{ fontSize: 11 }}
+              >
+                {g.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {showTopicBar && (
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', gap: 8,
+            marginBottom: 20, paddingBottom: 4, overflowX: 'auto',
+          }}>
+            {MEXICO_TOPIC_TABS.map(item => (
+              <button
+                key={item.key}
+                onClick={() => setTopic(item.key)}
+                className={`filter-btn${topic === item.key ? ' active' : ''}`}
+                style={{ fontSize: 11 }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Sport sub-tabs (only on /c/deportes) */}
         {showSportTabs && (
@@ -203,30 +354,55 @@ export default function CategoryPage({ onOpenLogin }) {
           </div>
         )}
 
+        {showCryptoTypeBar && (
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', gap: 8,
+            marginBottom: 20, paddingBottom: 12,
+            borderBottom: '1px solid var(--border)',
+          }}>
+            {CRYPTO_TYPE_TABS.map(c => (
+              <button
+                key={c.key}
+                onClick={() => setCryptoType(c.key)}
+                className={`filter-btn${cryptoType === c.key ? ' active' : ''}`}
+                style={{ fontSize: 11 }}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Layout: sidebar (leagues) + grid — or just grid */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: showLeagueSidebar ? '200px 1fr' : '1fr',
-          gap: 24,
+          gridTemplateColumns: showLeagueSidebar && !isMobile ? '200px 1fr' : '1fr',
+          gap: isMobile ? 12 : 24,
         }}>
           {showLeagueSidebar && (
             <aside style={{
               padding: 14, borderRadius: 12,
               border: '1px solid var(--border)', background: 'var(--surface1)',
-              alignSelf: 'start', position: 'sticky', top: 96,
+              alignSelf: 'start',
+              position: isMobile ? 'static' : 'sticky',
+              top: isMobile ? undefined : 96,
+              display: isMobile ? 'flex' : 'block',
+              gap: isMobile ? 6 : undefined,
+              flexWrap: isMobile ? 'wrap' : undefined,
             }}>
               <div style={{
                 fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em',
                 color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 10,
+                flexBasis: isMobile ? '100%' : undefined,
               }}>
-                Ligas
+                {leagueSidebarLabel}
               </div>
               {leagueOptions.map(l => (
                 <button
                   key={l.key}
                   onClick={() => setLeague(l.key)}
                   style={{
-                    display: 'block', width: '100%', textAlign: 'left',
+                    display: 'block', width: isMobile ? 'auto' : '100%', textAlign: 'left',
                     padding: '6px 10px', borderRadius: 6,
                     background: league === l.key ? 'rgba(0,232,122,0.1)' : 'transparent',
                     border: league === l.key ? '1px solid rgba(0,232,122,0.3)' : '1px solid transparent',

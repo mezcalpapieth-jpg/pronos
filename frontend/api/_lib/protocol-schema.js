@@ -59,6 +59,20 @@ const PROTOCOL_SCHEMA_MIGRATIONS = [
   `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS protocol_version TEXT NOT NULL DEFAULT 'v1'`,
   `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS outcome_count INTEGER NOT NULL DEFAULT 2`,
   `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS outcomes JSONB`,
+  `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS icon TEXT`,
+  `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS sport TEXT`,
+  `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS league TEXT`,
+  `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS outcome_images JSONB`,
+  `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS category_tags JSONB NOT NULL DEFAULT '[]'::jsonb`,
+  `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS geo_tags JSONB NOT NULL DEFAULT '[]'::jsonb`,
+  `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS topic_tags JSONB NOT NULL DEFAULT '[]'::jsonb`,
+  `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS source TEXT`,
+  `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS source_event_id TEXT`,
+  `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS resolver_type TEXT`,
+  `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS resolver_config JSONB`,
+  `CREATE INDEX IF NOT EXISTS idx_protocol_markets_category_tags ON protocol_markets USING GIN (category_tags)`,
+  `CREATE INDEX IF NOT EXISTS idx_protocol_markets_geo_tags ON protocol_markets USING GIN (geo_tags)`,
+  `CREATE INDEX IF NOT EXISTS idx_protocol_markets_topic_tags ON protocol_markets USING GIN (topic_tags)`,
   // start_time mirrors the points_markets column — kickoff for sports
   // markets, NULL for everything else. The on-chain factory.createMarket
   // doesn't take a start_time; admin sets it via the create-market

@@ -22,6 +22,10 @@ export default function MarketCard({ market, onOpenLogin }) {
     && market.outcomeImages.length === outcomes.length
     ? market.outcomeImages
     : null;
+  const outcomeCountryLabels = Array.isArray(market.outcomeCountryLabels)
+    && market.outcomeCountryLabels.length === outcomes.length
+    ? market.outcomeCountryLabels
+    : null;
   const hasAnyLogo = outcomeImages?.some(Boolean) || false;
   const isResolved = market.status === 'resolved';
   const isLive = !isResolved && !!market.live;
@@ -127,6 +131,7 @@ export default function MarketCard({ market, onOpenLogin }) {
             const isWinner = isResolved && Number(market.outcome) === index;
             const accent = accentForOutcome(index, outcomes.length);
             const logo = outcomeImages?.[index] || null;
+            const countryLabel = outcomeCountryLabels?.[index] || null;
 
             return (
               <div
@@ -179,6 +184,26 @@ export default function MarketCard({ market, onOpenLogin }) {
                   {isWinner && <span style={{ marginRight: 6 }}>🏆</span>}
                   {label}
                 </span>
+                {countryLabel && (
+                  <span style={{
+                    maxWidth: 90,
+                    padding: '3px 7px',
+                    borderRadius: 999,
+                    background: 'var(--surface2)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-secondary)',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 9,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    flexShrink: 0,
+                  }}>
+                    {countryLabel}
+                  </span>
+                )}
                 <span style={{
                   display: 'inline-flex',
                   alignItems: 'center',

@@ -233,15 +233,28 @@ export default function MarketDetail({ onOpenLogin }) {
 
   // ── Derived state ─────────────────────────────────────────────────────────
   const outcomes = Array.isArray(market.outcomes) ? market.outcomes : [];
+  const outcomeImages = Array.isArray(market.outcomeImages)
+    && market.outcomeImages.length === outcomes.length
+    ? market.outcomeImages
+    : null;
+  const outcomeCountryLabels = Array.isArray(market.outcomeCountryLabels)
+    && market.outcomeCountryLabels.length === outcomes.length
+    ? market.outcomeCountryLabels
+    : null;
+  const hasAnyLogo = outcomeImages?.some(Boolean) || false;
   const livePrices = Array.isArray(market.prices) && market.prices.length === outcomes.length
     ? market.prices
     : pricesFromReserves(market.reserves || []);
   const isResolved = market.status === 'resolved';
   const winnerIndex = isResolved && market.outcome != null ? Number(market.outcome) : null;
   const isOnchain = market.mode === 'onchain';
-  const isLive = market.status === 'active' && market.startTime &&
-    new Date(market.startTime).getTime() <= Date.now() &&
-    (!market.endTime || new Date(market.endTime).getTime() > Date.now());
+  const isLive = typeof market.live === 'boolean'
+    ? (!isResolved && market.live)
+    : (
+        market.status === 'active' && market.startTime &&
+        new Date(market.startTime).getTime() <= Date.now() &&
+        (!market.endTime || new Date(market.endTime).getTime() > Date.now())
+      );
   const isPending = !isResolved && market.status === 'active' && market.endTime &&
     new Date(market.endTime).getTime() < Date.now() && !isLive;
 
@@ -381,6 +394,8 @@ export default function MarketDetail({ onOpenLogin }) {
                   {outcomes.map((label, i) => {
                     const pct = pctFor(i);
                     const isWinner = isResolved && winnerIndex === i;
+                    const logo = outcomeImages?.[i] || null;
+                    const countryLabel = outcomeCountryLabels?.[i] || null;
                     return (
                       <div key={i} style={{
                         display: 'flex', alignItems: 'center', gap: 6,
@@ -391,11 +406,34 @@ export default function MarketDetail({ onOpenLogin }) {
                         color: isWinner ? 'var(--green)' : 'var(--text-secondary)',
                         opacity: isResolved && !isWinner ? 0.55 : 1,
                       }}>
+                        {logo ? (
+                          <img
+                            src={logo}
+                            alt=""
+                            style={{ width: 18, height: 18, objectFit: 'contain', flexShrink: 0 }}
+                            onError={(event) => { event.currentTarget.style.display = 'none'; }}
+                          />
+                        ) : hasAnyLogo ? (
+                          <span style={{ width: 18, height: 18, flexShrink: 0 }} aria-hidden="true" />
+                        ) : null}
                         <span style={{
                           display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
                           background: lineColor(i),
                         }} />
                         {label} · {pct}%
+                        {countryLabel && (
+                          <span style={{
+                            maxWidth: 90,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            color: 'var(--text-muted)',
+                            textTransform: 'uppercase',
+                            fontSize: 9,
+                          }}>
+                            {countryLabel}
+                          </span>
+                        )}
                       </div>
                     );
                   })}
@@ -462,6 +500,8 @@ export default function MarketDetail({ onOpenLogin }) {
               {outcomes.map((label, i) => {
                 const pct = pctFor(i);
                 const isWinner = isResolved && winnerIndex === i;
+                const logo = outcomeImages?.[i] || null;
+                const countryLabel = outcomeCountryLabels?.[i] || null;
                 return (
                   <button
                     key={i}
@@ -469,7 +509,7 @@ export default function MarketDetail({ onOpenLogin }) {
                     disabled={isResolved}
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '1fr auto auto',
+                      gridTemplateColumns: 'minmax(0, 1fr) auto auto',
                       alignItems: 'center',
                       gap: 12,
                       padding: '10px 14px',
@@ -483,9 +523,41 @@ export default function MarketDetail({ onOpenLogin }) {
                       opacity: isResolved && !isWinner ? 0.55 : 1,
                     }}
                   >
-                    <span style={{ textAlign: 'left' }}>
-                      {isWinner && <span style={{ marginRight: 6 }}>🏆</span>}
-                      {label}
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, textAlign: 'left' }}>
+                      {logo ? (
+                        <img
+                          src={logo}
+                          alt=""
+                          style={{ width: 28, height: 28, objectFit: 'contain', flexShrink: 0 }}
+                          onError={(event) => { event.currentTarget.style.display = 'none'; }}
+                        />
+                      ) : hasAnyLogo ? (
+                        <span style={{ width: 28, height: 28, flexShrink: 0 }} aria-hidden="true" />
+                      ) : null}
+                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {isWinner && <span style={{ marginRight: 6 }}>🏆</span>}
+                        {label}
+                      </span>
+                      {countryLabel && (
+                        <span style={{
+                          maxWidth: 90,
+                          padding: '3px 7px',
+                          borderRadius: 999,
+                          background: 'var(--surface1)',
+                          border: '1px solid var(--border)',
+                          color: 'var(--text-secondary)',
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 9,
+                          letterSpacing: '0.06em',
+                          textTransform: 'uppercase',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          flexShrink: 0,
+                        }}>
+                          {countryLabel}
+                        </span>
+                      )}
                     </span>
                     <span style={{
                       fontFamily: 'var(--font-mono)', fontSize: 12,

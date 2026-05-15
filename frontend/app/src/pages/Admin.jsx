@@ -23,13 +23,14 @@ import { usePointsAuth } from '../lib/pointsAuth.js';
 import { useT } from '../lib/i18n.js';
 
 const CATEGORIES = [
+  { value: 'general',  label: 'General',        icon: '📊' },
+  { value: 'mexico',   label: 'Mexico & Latam', icon: '🇲🇽' },
+  { value: 'politica', label: 'Política',       icon: '🗳️' },
   { value: 'deportes', label: 'Deportes', icon: '⚽' },
-  { value: 'politica', label: 'Política', icon: '🗳️' },
   { value: 'crypto',   label: 'Crypto',   icon: '₿'  },
   { value: 'finanzas', label: 'Finanzas', icon: '📈' },
-  { value: 'mexico',   label: 'México',   icon: '🇲🇽' },
   { value: 'musica',   label: 'Música',   icon: '🎵' },
-  { value: 'general',  label: 'General',  icon: '📊' },
+  { value: 'world-cup', label: 'Copa del Mundo', icon: '🏆' },
 ];
 
 const MARKET_CATEGORY_FILTERS = [
@@ -50,6 +51,7 @@ const SPORT_OPTIONS = [
   { key: 'f1',       label: 'F1'          },
   { key: 'tennis',   label: 'Tenis'       },
   { key: 'golf',     label: 'Golf'        },
+  { key: 'combate',  label: 'Combate'     },
 ];
 
 const LEAGUE_BY_SPORT = {
@@ -67,6 +69,11 @@ const LEAGUE_BY_SPORT = {
     { key: '',    label: '— ninguna —' },
     { key: 'mlb', label: 'MLB'         },
     { key: 'lmb', label: 'LMB'         },
+  ],
+  combate: [
+    { key: '',        label: '— ninguna —' },
+    { key: 'ufc',     label: 'UFC'         },
+    { key: 'boxing',  label: 'Boxeo'       },
   ],
 };
 
@@ -527,17 +534,18 @@ function ApproveOnchainForm({ pendingId, onSuccess, onCancel }) {
 
 function PendingMarketsSection() {
   const [rows, setRows] = useState([]);
+  const [filter, setFilter] = useState('pending');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [openId, setOpenId] = useState(null);
   const [notice, setNotice] = useState(null);
-  const [rejectingId, setRejectingId] = useState(null);
+  const [workingId, setWorkingId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const { ok, data } = await getJson('/api/points/admin/pending-markets?status=pending');
+      const { ok, data } = await getJson(`/api/points/admin/pending-markets?status=${filter}`);
       if (!ok) throw new Error(data?.error || 'list_failed');
       // API returns `pending`, not `markets` — Points admin uses the
       // right key, MVP was reading the wrong field which is why the
@@ -548,7 +556,7 @@ function PendingMarketsSection() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filter]);
 
   // Only reload on initial mount or explicit Refrescar click. We
   // intentionally don't depend on the global `refreshKey` here:
@@ -581,7 +589,7 @@ function PendingMarketsSection() {
 
   async function handleReject(pid) {
     if (!window.confirm('¿Rechazar este mercado pendiente? No se puede deshacer.')) return;
-    setRejectingId(pid);
+    setWorkingId(pid);
     try {
       const { ok, data } = await postJson('/api/points/admin/pending-markets', { id: pid, action: 'reject' });
       if (!ok) throw new Error(data?.error || 'reject_failed');
@@ -592,9 +600,30 @@ function PendingMarketsSection() {
     } catch (e) {
       setNotice({ type: 'error', msg: e?.message || 'reject_failed' });
     } finally {
-      setRejectingId(null);
+      setWorkingId(null);
     }
   }
+
+  async function handleReadd(pid) {
+    setWorkingId(pid);
+    try {
+      const { ok, data } = await postJson('/api/points/admin/pending-markets', { id: pid, action: 'readd' });
+      if (!ok) throw new Error(data?.error || 'readd_failed');
+      preserveScroll(() => {
+        setNotice({ type: 'success', msg: `Rechazado ${pid} regresó a pendientes.` });
+        setRows(prev => prev.filter(row => row.id !== pid));
+      });
+    } catch (e) {
+      setNotice({ type: 'error', msg: e?.message || 'readd_failed' });
+    } finally {
+      setWorkingId(null);
+    }
+  }
+
+  const label = filter === 'pending' ? 'Pendientes' : 'Rechazados';
+  const emptyText = filter === 'pending'
+    ? 'Nada pendiente. Corre los generadores para crear candidatos.'
+    : 'Nada rechazado.';
 
   return (
     <section style={{
@@ -602,83 +631,120 @@ function PendingMarketsSection() {
       background: 'var(--surface1)', marginBottom: 24,
     }}>
       <SectionHeader
-        title={`Pendientes (${rows.length})`}
-        subtitle="Candidatos de los generadores. Aprobar requiere una dirección on-chain."
+        title={`${label} (${rows.length})`}
+        subtitle={filter === 'pending'
+          ? 'Candidatos de los generadores. Aprobar requiere una dirección on-chain.'
+          : 'Mercados rechazados del generador. Puedes regresarlos a pendientes para aprobarlos on-chain.'}
         right={<button onClick={load} className="btn-ghost" style={{ fontSize: 11 }}>Refrescar</button>}
       />
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        {['pending', 'rejected'].map(s => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => {
+              setOpenId(null);
+              setNotice(null);
+              setFilter(s);
+            }}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 16,
+              border: `1px solid ${filter === s ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
+              background: filter === s ? 'rgba(0,232,122,0.1)' : 'transparent',
+              color: filter === s ? 'var(--green)' : 'var(--text-secondary)',
+              fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer',
+              letterSpacing: '0.06em', textTransform: 'uppercase',
+            }}
+          >
+            {s === 'pending' ? 'Pendientes' : 'Rechazados'}
+          </button>
+        ))}
+      </div>
       <Notice notice={notice} />
 
       {loading && <div style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Cargando…</div>}
       {error && <div style={{ color: 'var(--red)', fontFamily: 'var(--font-mono)' }}>Error: {error}</div>}
       {!loading && !error && rows.length === 0 && (
         <div style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 12, padding: 14, textAlign: 'center' }}>
-          Nada pendiente. Corre los generadores para crear candidatos.
+          {emptyText}
         </div>
       )}
 
-      {rows.map(r => (
-        <div key={r.id} style={{
-          padding: 12, border: '1px solid var(--border)', borderRadius: 10,
-          background: 'var(--surface2)', marginBottom: 10,
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'flex-start' }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--text-primary)', marginBottom: 4 }}>
-                <span style={{ marginRight: 6 }}>{r.icon || '📈'}</span>
-                {r.question}
+      {rows.map(r => {
+        const isPending = r.status === 'pending';
+        const isRejected = r.status === 'rejected';
+        return (
+          <div key={r.id} style={{
+            padding: 12, border: '1px solid var(--border)', borderRadius: 10,
+            background: 'var(--surface2)', marginBottom: 10,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'flex-start' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--text-primary)', marginBottom: 4 }}>
+                  <span style={{ marginRight: 6 }}>{r.icon || '📈'}</span>
+                  {r.question}
+                </div>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
+                  <span>#{r.id}</span>
+                  <span>{(r.outcomes || []).length} outcomes · {r.ammMode || 'unified'}</span>
+                  <span>{r.category || 'general'}</span>
+                  {r.source && <span>src: {r.source}</span>}
+                  {r.endTime && <span>cierra {new Date(r.endTime).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
+                  {r.reviewedAt && <span>rechazado {new Date(r.reviewedAt).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
+                  {r.adminNote && <span>nota: {r.adminNote}</span>}
+                </div>
               </div>
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
-                <span>#{r.id}</span>
-                <span>{(r.outcomes || []).length} outcomes · {r.ammMode || 'unified'}</span>
-                <span>{r.category || 'general'}</span>
-                {r.source && <span>src: {r.source}</span>}
-                {r.endTime && <span>cierra {new Date(r.endTime).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
+              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                {openId !== r.id && isPending && (
+                  <>
+                    <button onClick={() => setOpenId(r.id)} className="btn-primary" style={{ fontSize: 11, padding: '6px 12px' }}>
+                      Aprobar
+                    </button>
+                    <button onClick={() => handleReject(r.id)} disabled={workingId === r.id} className="btn-ghost" style={{ fontSize: 11, padding: '6px 12px' }}>
+                      {workingId === r.id ? '…' : 'Rechazar'}
+                    </button>
+                  </>
+                )}
+                {isRejected && (
+                  <button onClick={() => handleReadd(r.id)} disabled={workingId === r.id} className="btn-primary" style={{ fontSize: 11, padding: '6px 12px' }}>
+                    {workingId === r.id ? '…' : 'Reagregar'}
+                  </button>
+                )}
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-              {openId !== r.id && (
-                <>
-                  <button onClick={() => setOpenId(r.id)} className="btn-primary" style={{ fontSize: 11, padding: '6px 12px' }}>
-                    Aprobar
-                  </button>
-                  <button onClick={() => handleReject(r.id)} disabled={rejectingId === r.id} className="btn-ghost" style={{ fontSize: 11, padding: '6px 12px' }}>
-                    {rejectingId === r.id ? '…' : 'Rechazar'}
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-          {openId === r.id && (
-            <ApproveOnchainForm
-              pendingId={r.id}
-              onSuccess={(data) => {
-                const deployBit = data?.autoDeploy
-                  ? ` · auto-deployed at ${String(data.autoDeploy.chainAddress || '').slice(0, 10)}…`
-                  : '';
-                // Wrap all mutations in preserveScroll so the form-
-                // unmount + row-removal + notice-insert combo doesn't
-                // shift the user's scroll position. We deliberately
-                // do NOT call bumpRefresh() here — refreshKey lives
-                // in the parent's body useMemo dep array, so bumping
-                // it forces the entire admin layout to re-render and
-                // can clobber scroll. The Mercados tab re-fetches on
-                // mount when the user switches to it, so we don't
-                // lose the approved market — it shows up there
-                // naturally on the next visit.
-                preserveScroll(() => {
-                  setOpenId(null);
-                  setNotice({
-                    type: 'success',
-                    msg: `Pendiente ${r.id} aprobado on-chain.${deployBit}`,
+            {openId === r.id && isPending && (
+              <ApproveOnchainForm
+                pendingId={r.id}
+                onSuccess={(data) => {
+                  const deployBit = data?.autoDeploy
+                    ? ` · auto-deployed at ${String(data.autoDeploy.chainAddress || '').slice(0, 10)}…`
+                    : '';
+                  // Wrap all mutations in preserveScroll so the form-
+                  // unmount + row-removal + notice-insert combo doesn't
+                  // shift the user's scroll position. We deliberately
+                  // do NOT call bumpRefresh() here — refreshKey lives
+                  // in the parent's body useMemo dep array, so bumping
+                  // it forces the entire admin layout to re-render and
+                  // can clobber scroll. The Mercados tab re-fetches on
+                  // mount when the user switches to it, so we don't
+                  // lose the approved market — it shows up there
+                  // naturally on the next visit.
+                  preserveScroll(() => {
+                    setOpenId(null);
+                    setNotice({
+                      type: 'success',
+                      msg: `Pendiente ${r.id} aprobado on-chain.${deployBit}`,
+                    });
+                    setRows(prev => prev.filter(row => row.id !== r.id));
                   });
-                  setRows(prev => prev.filter(row => row.id !== r.id));
-                });
-              }}
-              onCancel={() => setOpenId(null)}
-            />
-          )}
-        </div>
-      ))}
+                }}
+                onCancel={() => setOpenId(null)}
+              />
+            )}
+          </div>
+        );
+      })}
     </section>
   );
 }
@@ -746,6 +812,10 @@ function CreateMarketForm({ onCreated, prefill }) {
       const { ok, data } = await postJson('/api/protocol/admin/create-market', {
         question: question.trim(),
         category,
+        icon,
+        sport: sport || null,
+        league: league || null,
+        outcomeImages: hasAnyImage ? trimmedImages : null,
         endTime,
         outcomes: trimmedOutcomes,
         seedAmount: Number(seed),
@@ -830,8 +900,9 @@ function CreateMarketForm({ onCreated, prefill }) {
 
       <Field label="Outcomes (2–8)" hint="Orden importa: el índice se usa al resolver y al firmar trades on-chain.">
         {outcomes.map((o, i) => (
-          <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, marginBottom: 6 }}>
+          <div key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) auto', gap: 8, marginBottom: 6 }}>
             <input type="text" required value={o} onChange={e => updateOutcome(i, e.target.value)} placeholder={`Outcome ${i + 1}`} style={inputStyle} />
+            <input type="url" value={outcomeImages[i] || ''} onChange={e => updateOutcomeImage(i, e.target.value)} placeholder="Logo / imagen URL opcional" style={inputStyle} />
             {outcomes.length > 2 ? (
               <button type="button" onClick={() => removeOutcome(i)} style={{ padding: '6px 10px', borderRadius: 6, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'pointer' }}>×</button>
             ) : (
