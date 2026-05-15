@@ -73,6 +73,43 @@ const PROTOCOL_SCHEMA_MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_protocol_markets_category_tags ON protocol_markets USING GIN (category_tags)`,
   `CREATE INDEX IF NOT EXISTS idx_protocol_markets_geo_tags ON protocol_markets USING GIN (geo_tags)`,
   `CREATE INDEX IF NOT EXISTS idx_protocol_markets_topic_tags ON protocol_markets USING GIN (topic_tags)`,
+  `CREATE TABLE IF NOT EXISTS protocol_pending_markets (
+    id                SERIAL PRIMARY KEY,
+    source            TEXT NOT NULL,
+    source_event_id   TEXT NOT NULL,
+    source_data       JSONB,
+    question          TEXT NOT NULL,
+    category          TEXT NOT NULL,
+    icon              TEXT,
+    outcomes          JSONB NOT NULL,
+    seed_liquidity    NUMERIC(20,6) NOT NULL DEFAULT 1000,
+    start_time        TIMESTAMPTZ,
+    end_time          TIMESTAMPTZ NOT NULL,
+    amm_mode          TEXT NOT NULL DEFAULT 'unified',
+    resolver_type     TEXT,
+    resolver_config   JSONB,
+    sport             TEXT,
+    league            TEXT,
+    outcome_images    JSONB,
+    category_tags     JSONB NOT NULL DEFAULT '[]'::jsonb,
+    geo_tags          JSONB NOT NULL DEFAULT '[]'::jsonb,
+    topic_tags        JSONB NOT NULL DEFAULT '[]'::jsonb,
+    status            TEXT NOT NULL DEFAULT 'pending',
+    admin_note        TEXT,
+    reviewer          TEXT,
+    reviewed_at       TIMESTAMPTZ,
+    approved_protocol_market_id INTEGER REFERENCES protocol_markets(id),
+    created_at        TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(source, source_event_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_protocol_pending_status
+    ON protocol_pending_markets(status, end_time ASC)`,
+  `CREATE INDEX IF NOT EXISTS idx_protocol_pending_category_tags
+    ON protocol_pending_markets USING GIN (category_tags)`,
+  `CREATE INDEX IF NOT EXISTS idx_protocol_pending_geo_tags
+    ON protocol_pending_markets USING GIN (geo_tags)`,
+  `CREATE INDEX IF NOT EXISTS idx_protocol_pending_topic_tags
+    ON protocol_pending_markets USING GIN (topic_tags)`,
   // start_time mirrors the points_markets column — kickoff for sports
   // markets, NULL for everything else. The on-chain factory.createMarket
   // doesn't take a start_time; admin sets it via the create-market

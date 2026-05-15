@@ -2,18 +2,19 @@
  * MVP Admin — dedicated panel for on-chain (Turnkey-signed) markets.
  *
  * Sections:
- *   1. Generadores — trigger /admin/run-generators + /admin/run-auto-resolve
- *      with dry-run toggles. Same engines the Points admin uses; the MVP
- *      simply approves pending markets into `mode='onchain'` rows.
+ *   1. Generadores — trigger protocol/admin/run-generators and points
+ *      auto-resolve diagnostics with dry-run toggles. Same engines the
+ *      Points admin uses, but MVP keeps its own generated review queue.
  *   2. Pendientes — candidate markets produced by generators. Each row
- *      gets an "Aprobar on-chain" form that collects the deployed
- *      contract address before POST-ing to /admin/pending-markets.
+ *      gets an "Aprobar on-chain" form that deploys via MarketFactory
+ *      before POST-ing to protocol/admin/pending-markets.
  *   3. Crear manual — CreateMarketForm deploys MarketFactory/V2 contracts
  *      through /api/protocol/admin/create-market.
  *   4. Mercados — list of indexed protocol_markets filtered by status.
  *      Resolve calls /api/protocol/admin/resolve-market on-chain.
  *
- * Generator/pending/social tooling still lives under /api/points/admin/*.
+ * Generator/pending review for MVP lives under /api/protocol/admin/*.
+ * Social tooling still lives under /api/points/admin/*.
  * Live MVP market create/list/resolve lives under /api/protocol/*.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -330,7 +331,7 @@ function GeneratorsSection() {
     setRunning('generate');
     setNotice(null);
     try {
-      const url = `/api/points/admin/run-generators${dry ? '?dry=1' : ''}`;
+      const url = `/api/protocol/admin/run-generators${dry ? '?dry=1' : ''}`;
       const { ok, data } = await postJson(url, {});
       if (!ok) throw new Error(data?.error || 'generator_failed');
       setLast({ kind: 'generators', data });
@@ -432,14 +433,7 @@ function GeneratorsSection() {
 
 // ═══ Pending-markets review ════════════════════════════════════════════════
 function ApproveOnchainForm({ pendingId, onSuccess, onCancel }) {
-  const [chainId, setChainId] = useState(String(DEFAULT_CHAIN_ID));
-  const [chainAddress, setChainAddress] = useState('');
-  const [chainMarketId, setChainMarketId] = useState('');
   const [note, setNote] = useState('');
-  // Auto-deploy is the default — the whole point of the MVP admin
-  // approving a generated pending row is to have it land on-chain
-  // automatically. Manual paste is the fallback.
-  const [autoDeploy, setAutoDeploy] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState(null);
 
@@ -448,17 +442,10 @@ function ApproveOnchainForm({ pendingId, onSuccess, onCancel }) {
     setErr(null);
     setSubmitting(true);
     try {
-      const { ok, data } = await postJson('/api/points/admin/pending-markets', {
+      const { ok, data } = await postJson('/api/protocol/admin/pending-markets', {
         id: pendingId,
         action: 'approve',
         note: note.trim() || null,
-        mode: 'onchain',
-        chainId: Number(chainId),
-        // When auto-deploying, leave chainAddress / chainMarketId empty;
-        // the backend calls MarketFactory(V1/V2) and fills them in.
-        chainAddress: autoDeploy ? '' : chainAddress.trim(),
-        chainMarketId: autoDeploy ? null : (chainMarketId.trim() || null),
-        autoDeploy,
       });
       if (!ok) throw new Error(data?.error ? `${data.error}${data.detail ? ` · ${data.detail}` : ''}` : 'approve_failed');
       onSuccess?.(data);
@@ -474,46 +461,16 @@ function ApproveOnchainForm({ pendingId, onSuccess, onCancel }) {
       marginTop: 10, padding: 12, borderRadius: 10,
       border: '1px dashed var(--border)', background: 'var(--surface2)',
     }}>
-      <label style={{
-        display: 'flex', alignItems: 'center', gap: 6,
-        marginBottom: 10,
-        fontFamily: 'var(--font-mono)', fontSize: 11,
-        color: autoDeploy ? 'var(--green)' : 'var(--text-secondary)',
+      <div style={{
+        padding: '8px 10px', borderRadius: 6,
+        background: 'rgba(0,232,122,0.06)', border: '1px solid rgba(0,232,122,0.22)',
+        fontFamily: 'var(--font-mono)', fontSize: 10, lineHeight: 1.55,
+        color: 'var(--text-secondary)', marginBottom: 10,
       }}>
-        <input type="checkbox" checked={autoDeploy} onChange={e => setAutoDeploy(e.target.checked)} />
-        Auto-desplegar contrato vía MarketFactory
-      </label>
-
-      {autoDeploy ? (
-        <div style={{
-          padding: '8px 10px', borderRadius: 6,
-          background: 'rgba(0,232,122,0.06)', border: '1px solid rgba(0,232,122,0.22)',
-          fontFamily: 'var(--font-mono)', fontSize: 10, lineHeight: 1.55,
-          color: 'var(--text-secondary)', marginBottom: 10,
-        }}>
-          Backend llamará V1 (binario) o V2 (multi 2..8) según los outcomes
-          del pending. Aprobará seed MXNB hacia el factory y guardará
-          la dirección automáticamente.
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr', gap: 8 }}>
-          <Field label="Chain ID">
-            <input required type="number" min={1} value={chainId} onChange={e => setChainId(e.target.value)} style={inputStyle} />
-          </Field>
-          <Field label="Contract address">
-            <input required pattern="0x[a-fA-F0-9]{40}" value={chainAddress} onChange={e => setChainAddress(e.target.value)} style={inputStyle} placeholder="0x…" />
-          </Field>
-          <Field label="Market ID (opcional)">
-            <input value={chainMarketId} onChange={e => setChainMarketId(e.target.value)} style={inputStyle} placeholder="0 · 1 · …" />
-          </Field>
-        </div>
-      )}
-
-      {autoDeploy && (
-        <Field label="Chain ID">
-          <input required type="number" min={1} value={chainId} onChange={e => setChainId(e.target.value)} style={{ ...inputStyle, maxWidth: 160 }} />
-        </Field>
-      )}
+        Backend llamará V1 (binario) o V2 (multi 2..8) según los outcomes
+        del pending. Aprobará seed MXNB hacia el factory y guardará
+        la dirección en protocol_markets automáticamente.
+      </div>
       <Field label="Nota (opcional)">
         <input value={note} onChange={e => setNote(e.target.value)} style={inputStyle} placeholder="Contexto para el registro" />
       </Field>
@@ -545,7 +502,7 @@ function PendingMarketsSection() {
     setLoading(true);
     setError(null);
     try {
-      const { ok, data } = await getJson(`/api/points/admin/pending-markets?status=${filter}`);
+      const { ok, data } = await getJson(`/api/protocol/admin/pending-markets?status=${filter}`);
       if (!ok) throw new Error(data?.error || 'list_failed');
       // API returns `pending`, not `markets` — Points admin uses the
       // right key, MVP was reading the wrong field which is why the
@@ -591,7 +548,7 @@ function PendingMarketsSection() {
     if (!window.confirm('¿Rechazar este mercado pendiente? No se puede deshacer.')) return;
     setWorkingId(pid);
     try {
-      const { ok, data } = await postJson('/api/points/admin/pending-markets', { id: pid, action: 'reject' });
+      const { ok, data } = await postJson('/api/protocol/admin/pending-markets', { id: pid, action: 'reject' });
       if (!ok) throw new Error(data?.error || 'reject_failed');
       preserveScroll(() => {
         setNotice({ type: 'success', msg: `Pendiente ${pid} rechazado.` });
@@ -607,7 +564,7 @@ function PendingMarketsSection() {
   async function handleReadd(pid) {
     setWorkingId(pid);
     try {
-      const { ok, data } = await postJson('/api/points/admin/pending-markets', { id: pid, action: 'readd' });
+      const { ok, data } = await postJson('/api/protocol/admin/pending-markets', { id: pid, action: 'readd' });
       if (!ok) throw new Error(data?.error || 'readd_failed');
       preserveScroll(() => {
         setNotice({ type: 'success', msg: `Rechazado ${pid} regresó a pendientes.` });
@@ -717,9 +674,11 @@ function PendingMarketsSection() {
               <ApproveOnchainForm
                 pendingId={r.id}
                 onSuccess={(data) => {
-                  const deployBit = data?.autoDeploy
-                    ? ` · auto-deployed at ${String(data.autoDeploy.chainAddress || '').slice(0, 10)}…`
-                    : '';
+                  const deployBit = data?.autoDeploy?.chainAddress
+                    ? ` · auto-deployed at ${String(data.autoDeploy.chainAddress).slice(0, 10)}…`
+                    : Array.isArray(data?.autoDeploy?.legs)
+                      ? ` · auto-deployed ${data.autoDeploy.legs.length} legs`
+                      : '';
                   // Wrap all mutations in preserveScroll so the form-
                   // unmount + row-removal + notice-insert combo doesn't
                   // shift the user's scroll position. We deliberately

@@ -22,100 +22,21 @@
 import { applyCors } from '../../_lib/cors.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { ensureProtocolSchema } from '../../_lib/protocol-schema.js';
-import { deriveMarketTags } from '../../_lib/category-tags.js';
 import {
   deployMarketOnChain,
   deployParallelBinaryOnChain,
   isOnchainReady,
 } from '../../_lib/onchain-trader.js';
+import {
+  ALLOWED_PROTOCOL_CATEGORIES,
+  cleanOptionalText,
+  normalizeOutcomeImages,
+  parallelLegQuestion,
+  upsertProtocolMarketMetadata,
+} from '../../_lib/protocol-market-admin.js';
 import { neon } from '@neondatabase/serverless';
 
-const ALLOWED_CATEGORIES = new Set([
-  'general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup',
-]);
-
 const sql = neon(process.env.DATABASE_URL);
-
-function cleanOptionalText(value) {
-  return typeof value === 'string' && value.trim() ? value.trim() : null;
-}
-
-function factoryAddressForVariant(variant) {
-  const raw = String(variant || '').startsWith('v2')
-    ? process.env.ONCHAIN_MARKET_FACTORY_V2_ADDRESS
-    : process.env.ONCHAIN_MARKET_FACTORY_ADDRESS;
-  return raw ? raw.toLowerCase() : null;
-}
-
-function parallelLegQuestion(parentQuestion, label) {
-  const raw = `${parentQuestion.trim()} — ¿${label}?`;
-  return raw.length > 240 ? `${raw.slice(0, 237)}…` : raw;
-}
-
-async function upsertProtocolMarketMetadata({
-  result,
-  question,
-  category,
-  icon,
-  outcomes,
-  endTime,
-  resolutionSource,
-  seedAmount,
-  sport,
-  league,
-  outcomeImages,
-  factoryVariant,
-}) {
-  const factoryAddress = factoryAddressForVariant(factoryVariant || result.factoryVariant);
-  if (!factoryAddress || !result.marketAddress || result.marketId == null) return;
-
-  const tags = deriveMarketTags({
-    question,
-    category,
-    sport,
-    league,
-  });
-  const protocolVersion = String(factoryVariant || result.factoryVariant || '').startsWith('v2')
-    ? 'v2'
-    : 'v1';
-
-  await sql`
-    INSERT INTO protocol_markets (
-      chain_id, factory_address, pool_address, market_id,
-      question, category, icon, end_time, resolution_src,
-      tx_hash, seed_liquidity, protocol_version, outcome_count, outcomes,
-      sport, league, outcome_images, category_tags, geo_tags, topic_tags
-    )
-    VALUES (
-      ${result.chainId}, ${factoryAddress}, ${String(result.marketAddress).toLowerCase()}, ${result.marketId},
-      ${question}, ${category}, ${icon}, ${endTime}, ${resolutionSource},
-      ${result.txHash || null}, ${seedAmount}, ${protocolVersion}, ${outcomes.length}, ${JSON.stringify(outcomes)}::jsonb,
-      ${sport}, ${league}, ${outcomeImages ? JSON.stringify(outcomeImages) : null}::jsonb,
-      ${JSON.stringify(tags.categoryTags)}::jsonb, ${JSON.stringify(tags.geoTags)}::jsonb, ${JSON.stringify(tags.topicTags)}::jsonb
-    )
-    ON CONFLICT (chain_id, factory_address, market_id) DO UPDATE SET
-      pool_address = EXCLUDED.pool_address,
-      question = EXCLUDED.question,
-      category = EXCLUDED.category,
-      icon = COALESCE(EXCLUDED.icon, protocol_markets.icon),
-      end_time = EXCLUDED.end_time,
-      resolution_src = EXCLUDED.resolution_src,
-      tx_hash = COALESCE(EXCLUDED.tx_hash, protocol_markets.tx_hash),
-      seed_liquidity = CASE
-        WHEN COALESCE(protocol_markets.seed_liquidity, 0) = 0 THEN EXCLUDED.seed_liquidity
-        ELSE protocol_markets.seed_liquidity
-      END,
-      protocol_version = EXCLUDED.protocol_version,
-      outcome_count = EXCLUDED.outcome_count,
-      outcomes = EXCLUDED.outcomes,
-      sport = COALESCE(EXCLUDED.sport, protocol_markets.sport),
-      league = COALESCE(EXCLUDED.league, protocol_markets.league),
-      outcome_images = COALESCE(EXCLUDED.outcome_images, protocol_markets.outcome_images),
-      category_tags = EXCLUDED.category_tags,
-      geo_tags = EXCLUDED.geo_tags,
-      topic_tags = EXCLUDED.topic_tags
-  `;
-}
 
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'POST, OPTIONS', credentials: true });
@@ -149,7 +70,7 @@ export default async function handler(req, res) {
   if (typeof question !== 'string' || question.trim().length < 8) {
     return res.status(400).json({ error: 'invalid_question' });
   }
-  if (!ALLOWED_CATEGORIES.has(category)) {
+  if (!ALLOWED_PROTOCOL_CATEGORIES.has(category)) {
     return res.status(400).json({ error: 'invalid_category' });
   }
   if (!Array.isArray(outcomes) || outcomes.length < 2 || outcomes.length > 8) {
@@ -166,17 +87,9 @@ export default async function handler(req, res) {
   const iconVal = cleanOptionalText(icon);
   const sportVal = cleanOptionalText(sport)?.toLowerCase() || null;
   const leagueVal = cleanOptionalText(league)?.toLowerCase() || null;
-  let cleanedOutcomeImages = null;
-  if (Array.isArray(outcomeImages) && outcomeImages.length > 0) {
-    if (outcomeImages.length !== normalizedOutcomes.length) {
-      return res.status(400).json({ error: 'outcome_images_length_mismatch' });
-    }
-    const cleaned = outcomeImages.map(u => typeof u === 'string' ? u.trim() : '');
-    if (!cleaned.every(u => u === '' || /^https?:\/\//i.test(u))) {
-      return res.status(400).json({ error: 'invalid_outcome_image_url' });
-    }
-    cleanedOutcomeImages = cleaned;
-  }
+  const imageResult = normalizeOutcomeImages(outcomeImages, normalizedOutcomes.length);
+  if (!imageResult.ok) return res.status(400).json({ error: imageResult.error });
+  const cleanedOutcomeImages = imageResult.value;
   const seed = Number(seedAmount);
   if (!Number.isFinite(seed) || seed < 100) {
     return res.status(400).json({ error: 'seed_too_small' });
@@ -209,7 +122,7 @@ export default async function handler(req, res) {
         for (let i = 0; i < result.legs.length; i++) {
           const leg = result.legs[i];
           const label = normalizedOutcomes[i];
-          await upsertProtocolMarketMetadata({
+          await upsertProtocolMarketMetadata(sql, {
             result: {
               ...leg,
               chainId: result.chainId,
@@ -257,7 +170,7 @@ export default async function handler(req, res) {
     });
     let metadataWarning = null;
     try {
-      await upsertProtocolMarketMetadata({
+      await upsertProtocolMarketMetadata(sql, {
         result,
         question: question.trim(),
         category,

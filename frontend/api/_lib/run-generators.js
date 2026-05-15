@@ -14,6 +14,8 @@
  *   upsertPending(sql, specs) — ON CONFLICT DO UPDATE upsert into
  *                          points_pending_markets. WHERE status='pending'
  *                          guard keeps approved/rejected rows frozen.
+ *   upsertProtocolPending(sql, specs) — same generator output, but into
+ *                          protocol_pending_markets for MVP/on-chain review.
  *
  * The `xmax = 0` check in RETURNING is the canonical PG trick to tell
  * an INSERT apart from an UPDATE: xmax is 0 for fresh rows, non-zero
@@ -190,6 +192,112 @@ export async function upsertPending(sql, allSpecs) {
       }
     } catch (e) {
       console.error('[run-generators] insert failed', {
+        source: s.source,
+        source_event_id: s.source_event_id,
+        message: e?.message,
+      });
+      skipped += 1;
+    }
+  }
+  return { inserted, updated, skipped };
+}
+
+export async function upsertProtocolPending(sql, allSpecs) {
+  let inserted = 0;
+  let updated = 0;
+  let skipped = 0;
+  for (const s of allSpecs) {
+    try {
+      const tags = deriveMarketTags(s);
+      const result = await sql`
+        INSERT INTO protocol_pending_markets
+          (source, source_event_id, source_data, question, category, icon,
+           outcomes, seed_liquidity, start_time, end_time, amm_mode,
+           resolver_type, resolver_config, sport, league, outcome_images,
+           category_tags, geo_tags, topic_tags)
+        VALUES (
+          ${s.source},
+          ${s.source_event_id},
+          ${s.source_data ? JSON.stringify(s.source_data) : null}::jsonb,
+          ${s.question},
+          ${s.category},
+          ${s.icon || null},
+          ${JSON.stringify(s.outcomes)}::jsonb,
+          ${s.seed_liquidity ?? 1000},
+          ${s.start_time || null},
+          ${s.end_time},
+          ${s.amm_mode || 'unified'},
+          ${s.resolver_type || null},
+          ${s.resolver_config ? JSON.stringify(s.resolver_config) : null}::jsonb,
+          ${s.sport || null},
+          ${s.league || null},
+          ${s.outcome_images ? JSON.stringify(s.outcome_images) : null}::jsonb,
+          ${JSON.stringify(tags.categoryTags)}::jsonb,
+          ${JSON.stringify(tags.geoTags)}::jsonb,
+          ${JSON.stringify(tags.topicTags)}::jsonb
+        )
+        ON CONFLICT (source, source_event_id) DO UPDATE
+        SET source_data     = EXCLUDED.source_data,
+            question        = EXCLUDED.question,
+            category        = EXCLUDED.category,
+            icon            = EXCLUDED.icon,
+            outcomes        = EXCLUDED.outcomes,
+            seed_liquidity  = EXCLUDED.seed_liquidity,
+            start_time      = EXCLUDED.start_time,
+            end_time        = EXCLUDED.end_time,
+            amm_mode        = EXCLUDED.amm_mode,
+            resolver_type   = EXCLUDED.resolver_type,
+            resolver_config = EXCLUDED.resolver_config,
+            sport           = EXCLUDED.sport,
+            league          = EXCLUDED.league,
+            outcome_images  = EXCLUDED.outcome_images,
+            category_tags   = EXCLUDED.category_tags,
+            geo_tags        = EXCLUDED.geo_tags,
+            topic_tags      = EXCLUDED.topic_tags,
+            status          = CASE
+              WHEN protocol_pending_markets.status = 'rejected'
+               AND protocol_pending_markets.reviewer = 'system'
+               AND protocol_pending_markets.admin_note LIKE 'auto-%'
+              THEN 'pending'
+              ELSE protocol_pending_markets.status
+            END,
+            admin_note      = CASE
+              WHEN protocol_pending_markets.status = 'rejected'
+               AND protocol_pending_markets.reviewer = 'system'
+               AND protocol_pending_markets.admin_note LIKE 'auto-%'
+              THEN NULL
+              ELSE protocol_pending_markets.admin_note
+            END,
+            reviewer        = CASE
+              WHEN protocol_pending_markets.status = 'rejected'
+               AND protocol_pending_markets.reviewer = 'system'
+               AND protocol_pending_markets.admin_note LIKE 'auto-%'
+              THEN NULL
+              ELSE protocol_pending_markets.reviewer
+            END,
+            reviewed_at     = CASE
+              WHEN protocol_pending_markets.status = 'rejected'
+               AND protocol_pending_markets.reviewer = 'system'
+               AND protocol_pending_markets.admin_note LIKE 'auto-%'
+              THEN NULL
+              ELSE protocol_pending_markets.reviewed_at
+            END
+        WHERE protocol_pending_markets.status = 'pending'
+           OR (
+             protocol_pending_markets.status = 'rejected'
+             AND protocol_pending_markets.reviewer = 'system'
+             AND protocol_pending_markets.admin_note LIKE 'auto-%'
+           )
+        RETURNING id, (xmax = 0) AS inserted
+      `;
+      if (result.length > 0) {
+        if (result[0].inserted) inserted += 1;
+        else updated += 1;
+      } else {
+        skipped += 1;
+      }
+    } catch (e) {
+      console.error('[run-generators] protocol insert failed', {
         source: s.source,
         source_event_id: s.source_event_id,
         message: e?.message,

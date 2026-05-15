@@ -63,3 +63,16 @@ test('MVP generated queue can inspect and re-add rejected markets', () => {
   assert.match(pendingSection, /action:\s*'readd'/);
   assert.match(pendingSection, /Reagregar/);
 });
+
+test('MVP generated market review uses protocol-owned queue endpoints', () => {
+  const generatorsSection = section('function GeneratorsSection', '// ═══ Pending-markets review');
+  const pendingSection = section('function PendingMarketsSection', '// ═══ Create-market form');
+  const approveForm = section('function ApproveOnchainForm', 'function PendingMarketsSection');
+
+  assert.match(generatorsSection, /\/api\/protocol\/admin\/run-generators/);
+  assert.match(pendingSection, /\/api\/protocol\/admin\/pending-markets/);
+  assert.match(approveForm, /\/api\/protocol\/admin\/pending-markets/);
+  assert.doesNotMatch(generatorsSection, /\/api\/points\/admin\/run-generators/);
+  assert.doesNotMatch(pendingSection, /\/api\/points\/admin\/pending-markets/);
+  assert.doesNotMatch(approveForm, /\/api\/points\/admin\/pending-markets/);
+});
