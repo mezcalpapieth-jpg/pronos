@@ -30,6 +30,7 @@ import {
 } from './marquee-fighters.js';
 
 const SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard';
+const FIGHT_IMPORT_HORIZON_DAYS = 14;
 
 function formatDateCompact(d) {
   const pad = (n) => String(n).padStart(2, '0');
@@ -49,12 +50,25 @@ function headshot(athleteId) {
     : null;
 }
 
+function isLikelyPlaceholderFightDate(d) {
+  return d.getUTCMonth() === 0 && d.getUTCDate() === 1;
+}
+
+function shouldKeepFightDate(value, now = new Date()) {
+  const atMs = new Date(value).getTime();
+  if (!Number.isFinite(atMs)) return false;
+  const at = new Date(atMs);
+  if (isLikelyPlaceholderFightDate(at)) return false;
+  const nowMs = now.getTime();
+  if (atMs <= nowMs) return false;
+  return atMs <= nowMs + FIGHT_IMPORT_HORIZON_DAYS * 86_400_000;
+}
+
 async function fetchUpcomingEvents() {
-  // 35-day forward window — covers ~5 upcoming UFC events
-  // (numbered + Fight Nights run roughly weekly), enough lead time
-  // for markets to accumulate liquidity before fight night.
+  // Two-week forward window keeps the pending queue focused on fights
+  // admins can approve soon instead of every upcoming card.
   const now = new Date();
-  const horizon = new Date(now.getTime() + 35 * 86_400_000);
+  const horizon = new Date(now.getTime() + FIGHT_IMPORT_HORIZON_DAYS * 86_400_000);
   const dates = `${formatDateCompact(now)}-${formatDateCompact(horizon)}`;
   try {
     const res = await fetch(`${SCOREBOARD}?dates=${dates}&limit=30`, {
@@ -180,6 +194,7 @@ export async function generateUfcMarkets() {
     for (let i = 0; i < fights.length; i++) {
       const fight = fights[i];
       const isLastOnCard = i === lastIdx;
+      if (!shouldKeepFightDate(fight.date || ev.date)) continue;
       if (!shouldGenerateFor(fight, ev.name, isLastOnCard)) continue;
       try {
         specs.push(buildFightMarket(ev, fight, isLastOnCard));
@@ -194,3 +209,7 @@ export async function generateUfcMarkets() {
   }
   return specs;
 }
+
+export const _internal = {
+  shouldKeepFightDate,
+};

@@ -22,6 +22,7 @@ import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
+import { isNextOpponentCheckDue } from '../../_lib/sports-resolver-policy.js';
 
 const sql = neon(process.env.DATABASE_URL);
 const readSql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -73,6 +74,7 @@ export default async function handler(req, res) {
         resolverSource: cfg?.source || null,
         resolverEventId: cfg?.eventId || null,
         resolverDateYmd: cfg?.dateYmd || null,
+        resolverLastCheckedAt: cfg?.nextOpponentLastCheckedAt || null,
         startTime: r.start_time,
         endTime: r.end_time,
         secondsPastEnd: r.seconds_past_end,
@@ -84,6 +86,11 @@ export default async function handler(req, res) {
         && (cfg?.shape === 'binary' || cfg?.shape === 'draw3')
         && Number.isFinite(startMs)
         && startMs < Date.now() - 90 * 60_000;
+      const nextOpponentCheckDue = isNextOpponentCheckDue({
+        resolverType: r.resolver_type,
+        resolverConfig: cfg,
+        endTime: r.end_time,
+      });
 
       if (r.resolver_type === 'manual') {
         manual.push(entry);
@@ -92,10 +99,13 @@ export default async function handler(req, res) {
       } else if (!AUTO_RESOLVER_TYPES.has(r.resolver_type)) {
         // Unknown resolver type — treat as manual-ish but flag it.
         manual.push({ ...entry, warning: `unknown resolver_type=${r.resolver_type}` });
-      } else if (pastEnd || pastEspnMatchFallbackWindow) {
-        resolvable.push(pastEnd
-          ? entry
-          : { ...entry, warning: 'start_time passed; resolver will verify ESPN eventId even if end_time is late' });
+      } else if (pastEnd || pastEspnMatchFallbackWindow || nextOpponentCheckDue) {
+        const warning = pastEnd
+          ? null
+          : pastEspnMatchFallbackWindow
+            ? 'start_time passed; resolver will verify ESPN eventId even if end_time is late'
+            : 'next-opponent booking check is due';
+        resolvable.push(warning ? { ...entry, warning } : entry);
       } else {
         waitingWindow.push(entry);
       }

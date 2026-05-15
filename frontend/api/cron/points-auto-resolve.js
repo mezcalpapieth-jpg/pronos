@@ -35,6 +35,7 @@ import { fetchMaxTempC, bucketIndexFor } from '../_lib/weather.js';
 import { readAppleMxTopArtist } from '../_lib/charts.js';
 import { readYouTubeTopMxChannel } from '../_lib/youtube.js';
 import { readEspnEvent, readFootballDataMatch, readJolpicaF1Result, readJolpicaF1Standings, readEspnPgaWinner, readEspnLivWinner, readLivTeamWinner, readEspnAtpTournamentWinner, readEspnMmaWinner, readOddsApiBoxingWinner, readNextOpponent } from '../_lib/sports-results.js';
+import { NEXT_OPPONENT_RECHECK_INTERVAL_HOURS, findParallelWinnerIndex } from '../_lib/sports-resolver-policy.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql   = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -146,6 +147,16 @@ export async function runAutoResolve({ dry = false } = {}) {
             AND resolver_config->>'shape' IN ('binary', 'draw3')
             AND start_time IS NOT NULL
             AND start_time < NOW() - INTERVAL '90 minutes'
+          )
+          OR (
+            resolver_type = 'sports_api'
+            AND resolver_config->>'source' = 'next-opponent'
+            AND end_time > NOW()
+            AND (
+              resolver_config->>'nextOpponentLastCheckedAt' IS NULL
+              OR NULLIF(resolver_config->>'nextOpponentLastCheckedAt', '')::timestamptz
+                   < NOW() - (${NEXT_OPPONENT_RECHECK_INTERVAL_HOURS}::int * INTERVAL '1 hour')
+            )
           )
         )
         AND parent_id IS NULL
@@ -443,6 +454,11 @@ export async function runAutoResolve({ dry = false } = {}) {
           if (!result.completed) {
             const err = new Error('not_finished_yet');
             err.benign = true;
+            err.info = {
+              source: cfg.source,
+              state: result.state || null,
+              notFound: result.notFound === true,
+            };
             throw err;
           }
 
@@ -460,25 +476,13 @@ export async function runAutoResolve({ dry = false } = {}) {
             else throw new Error(`draw3 sport got null winner`);
           } else if (cfg.shape === 'parallel') {
             // F1 / similar — cfg.legs is [{ label, driverId }]. Match
-            // the winner driverId against the list; fallback to
-            // driver-label case-insensitive; finally fall back to the
+            // the winner driverId against the list; fallback to exact
+            // and loose driver-label matching; finally fall back to the
             // "Otro" leg if present (driverId === null).
             if (!Array.isArray(cfg.legs) || cfg.legs.length === 0) {
               throw new Error('parallel sport: missing cfg.legs');
             }
-            const idNeedle = (result.winnerDriverId || '').trim();
-            const nameNeedle = (result.winnerDriverLabel || '').toLowerCase().trim();
-            let idx = cfg.legs.findIndex(l =>
-              l.driverId && String(l.driverId).trim() === idNeedle,
-            );
-            if (idx < 0) {
-              idx = cfg.legs.findIndex(l =>
-                l.label && String(l.label).toLowerCase().trim() === nameNeedle,
-              );
-            }
-            if (idx < 0) {
-              idx = cfg.legs.findIndex(l => !l.driverId && l.label?.toLowerCase() === 'otro');
-            }
+            const idx = findParallelWinnerIndex(cfg.legs, result);
             if (idx < 0) {
               throw new Error(`no leg matched winner "${result.winnerDriverLabel}"`);
             }
@@ -499,6 +503,30 @@ export async function runAutoResolve({ dry = false } = {}) {
           throw new Error(`unknown resolver_type: ${m.resolver_type}`);
         }
       } catch (e) {
+        if (e?.benign) {
+          const deferred = {
+            id: m.id,
+            reason: e.message || 'deferred',
+            ...(e.info || {}),
+          };
+          if (!dry && m.resolver_type === 'sports_api' && cfg.source === 'next-opponent') {
+            const checkedAt = new Date().toISOString();
+            try {
+              await schemaSql`
+                UPDATE points_markets
+                   SET resolver_config = COALESCE(resolver_config, '{}'::jsonb)
+                     || ${JSON.stringify({ nextOpponentLastCheckedAt: checkedAt })}::jsonb
+                 WHERE id = ${m.id}
+                   AND status = 'active'
+              `;
+              deferred.nextOpponentLastCheckedAt = checkedAt;
+            } catch (patchErr) {
+              deferred.checkPatchError = patchErr?.message?.slice(0, 160) || 'patch_failed';
+            }
+          }
+          report.deferred.push(deferred);
+          continue;
+        }
         report.errors.push({ id: m.id, error: `resolve_failed: ${e.message}` });
         continue;
       }

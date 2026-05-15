@@ -29,6 +29,7 @@ import { isMarqueeBoxer, isMexicanBoxer } from './marquee-fighters.js';
 
 const ODDS_API_BASE = 'https://api.the-odds-api.com/v4';
 const SPORT_KEY = 'boxing_boxing';
+const FIGHT_IMPORT_HORIZON_DAYS = 14;
 
 function authKey() {
   return process.env.ODDS_API_KEY || null;
@@ -54,10 +55,24 @@ async function fetchUpcomingBoxingEvents() {
   }
 }
 
+function isLikelyPlaceholderFightDate(d) {
+  return d.getUTCMonth() === 0 && d.getUTCDate() === 1;
+}
+
+function shouldKeepFightDate(value, now = new Date()) {
+  const atMs = new Date(value).getTime();
+  if (!Number.isFinite(atMs)) return false;
+  const at = new Date(atMs);
+  if (isLikelyPlaceholderFightDate(at)) return false;
+  const nowMs = now.getTime();
+  if (atMs <= nowMs) return false;
+  return atMs <= nowMs + FIGHT_IMPORT_HORIZON_DAYS * 86_400_000;
+}
+
 function shouldGenerateFor(home, away) {
   if (!home || !away) return false;
   if (isMexicanBoxer(home) || isMexicanBoxer(away)) return true;
-  if (isMarqueeBoxer(home) || isMarqueeBoxer(away)) return true;
+  if (isMarqueeBoxer(home) && isMarqueeBoxer(away)) return true;
   return false;
 }
 
@@ -118,6 +133,7 @@ export async function generateBoxingMarkets() {
     const home = ev.home_team;
     const away = ev.away_team;
     if (!shouldGenerateFor(home, away)) continue;
+    if (!shouldKeepFightDate(ev.commence_time)) continue;
     try {
       const spec = buildBoxingMarket(ev);
       if (spec) specs.push(spec);
@@ -130,3 +146,8 @@ export async function generateBoxingMarkets() {
   }
   return specs;
 }
+
+export const _internal = {
+  shouldGenerateFor,
+  shouldKeepFightDate,
+};

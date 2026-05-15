@@ -143,8 +143,41 @@ export async function upsertPending(sql, allSpecs) {
             outcome_images  = EXCLUDED.outcome_images,
             category_tags   = EXCLUDED.category_tags,
             geo_tags        = EXCLUDED.geo_tags,
-            topic_tags      = EXCLUDED.topic_tags
+            topic_tags      = EXCLUDED.topic_tags,
+            status          = CASE
+              WHEN points_pending_markets.status = 'rejected'
+               AND points_pending_markets.reviewer = 'system'
+               AND points_pending_markets.admin_note LIKE 'auto-%'
+              THEN 'pending'
+              ELSE points_pending_markets.status
+            END,
+            admin_note      = CASE
+              WHEN points_pending_markets.status = 'rejected'
+               AND points_pending_markets.reviewer = 'system'
+               AND points_pending_markets.admin_note LIKE 'auto-%'
+              THEN NULL
+              ELSE points_pending_markets.admin_note
+            END,
+            reviewer        = CASE
+              WHEN points_pending_markets.status = 'rejected'
+               AND points_pending_markets.reviewer = 'system'
+               AND points_pending_markets.admin_note LIKE 'auto-%'
+              THEN NULL
+              ELSE points_pending_markets.reviewer
+            END,
+            reviewed_at     = CASE
+              WHEN points_pending_markets.status = 'rejected'
+               AND points_pending_markets.reviewer = 'system'
+               AND points_pending_markets.admin_note LIKE 'auto-%'
+              THEN NULL
+              ELSE points_pending_markets.reviewed_at
+            END
         WHERE points_pending_markets.status = 'pending'
+           OR (
+             points_pending_markets.status = 'rejected'
+             AND points_pending_markets.reviewer = 'system'
+             AND points_pending_markets.admin_note LIKE 'auto-%'
+           )
         RETURNING id, (xmax = 0) AS inserted
       `;
       if (result.length > 0) {

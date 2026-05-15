@@ -76,6 +76,36 @@ async function list(req, res) {
         AND end_time IS NOT NULL
         AND end_time < NOW()
     `;
+    await schemaSql`
+      UPDATE points_pending_markets
+      SET status = 'rejected',
+          admin_note = COALESCE(NULLIF(admin_note, ''), 'auto-rejected: fight outside 14-day import window'),
+          reviewer = COALESCE(reviewer, 'system'),
+          reviewed_at = COALESCE(reviewed_at, NOW())
+      WHERE status = 'pending'
+        AND source IN ('odds-api-boxing', 'espn-mma')
+        AND start_time IS NOT NULL
+        AND (
+          start_time > NOW() + INTERVAL '14 days'
+          OR (
+            EXTRACT(MONTH FROM start_time AT TIME ZONE 'UTC') = 1
+            AND EXTRACT(DAY FROM start_time AT TIME ZONE 'UTC') = 1
+          )
+        )
+    `;
+    await schemaSql`
+      UPDATE points_pending_markets
+      SET status = 'rejected',
+          admin_note = COALESCE(NULLIF(admin_note, ''), 'auto-rejected: NBA tipoff still TBD'),
+          reviewer = COALESCE(reviewer, 'system'),
+          reviewed_at = COALESCE(reviewed_at, NOW())
+      WHERE status = 'pending'
+        AND source = 'espn-nba'
+        AND start_time IS NOT NULL
+        AND resolver_config->'series' IS NOT NULL
+        AND EXTRACT(MINUTE FROM start_time AT TIME ZONE 'UTC') = 0
+        AND EXTRACT(HOUR FROM start_time AT TIME ZONE 'UTC') IN (4, 5)
+    `;
   } catch (e) {
     // Don't block the list on the cleanup query — log and continue.
     // The list itself still returns even if cleanup fails.

@@ -43,6 +43,9 @@ export async function generateNbaMarkets() {
     if (!kickoff) continue;
     const comp = Array.isArray(ev.competitions) ? ev.competitions[0] : null;
     if (!comp) continue;
+    const statusType = ev?.status?.type || {};
+    const timeText = `${statusType.shortDetail || ''} ${statusType.detail || ''}`.toLowerCase();
+    if (comp.timeValid === false || timeText.includes('tbd')) continue;
     const comps = Array.isArray(comp.competitors) ? comp.competitors : [];
     const home = comps.find(c => c.homeAway === 'home');
     const away = comps.find(c => c.homeAway === 'away');
