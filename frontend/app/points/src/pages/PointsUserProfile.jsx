@@ -38,6 +38,23 @@ const STATUS_LABEL = {
   open:    { label: 'Abierta', bg: 'rgba(59,130,246,0.12)', fg: '#60a5fa' },
 };
 
+const SOCIAL_STATUS_LABEL = {
+  approved: { label: 'Aprobada', bg: 'rgba(0,232,122,0.12)', fg: 'var(--green)' },
+  pending:  { label: 'Pendiente', bg: 'rgba(245,158,11,0.12)', fg: '#f59e0b' },
+  rejected: { label: 'Rechazada', bg: 'rgba(255,69,69,0.10)', fg: 'var(--red, #ef4444)' },
+};
+
+function safeExternalHref(value) {
+  if (!value) return null;
+  try {
+    const url = new URL(String(value));
+    if (url.protocol === 'http:' || url.protocol === 'https:') return url.href;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export default function PointsUserProfile() {
   const { username: paramUsername } = useParams();
   const location = useLocation();
@@ -68,7 +85,7 @@ export default function PointsUserProfile() {
     setError(null);
     setData(null);
     fetch(`/api/points/u?username=${encodeURIComponent(paramUsername || '')}`, {
-      credentials: 'omit',
+      credentials: 'include',
     })
       .then(async r => {
         if (cancelled) return;
@@ -130,6 +147,7 @@ export default function PointsUserProfile() {
   }
 
   const { user, stats, active, history } = data;
+  const showAdminSocials = Object.prototype.hasOwnProperty.call(user, 'adminSocials');
 
   return (
     <main style={{ maxWidth: 1100, margin: '0 auto', padding: 'clamp(20px, 4vw, 36px)' }}>
@@ -165,6 +183,10 @@ export default function PointsUserProfile() {
           ← Volver
         </button>
       </div>
+
+      {showAdminSocials && (
+        <AdminSocialsPanel rows={Array.isArray(user.adminSocials) ? user.adminSocials : []} />
+      )}
 
       {/* Stat strip */}
       <div style={{
@@ -211,6 +233,140 @@ export default function PointsUserProfile() {
         <HistoryList rows={history} onOpen={mid => navigate(`/market?id=${mid}`)} />
       )}
     </main>
+  );
+}
+
+function AdminSocialsPanel({ rows }) {
+  return (
+    <section style={{
+      marginTop: 18,
+      marginBottom: 24,
+      padding: 14,
+      background: 'rgba(245,158,11,0.06)',
+      border: '1px solid rgba(245,158,11,0.22)',
+      borderRadius: 12,
+    }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: 12,
+        alignItems: 'center',
+        marginBottom: rows.length ? 10 : 0,
+      }}>
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          color: '#f59e0b',
+        }}>
+          Sociales · admin
+        </div>
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          color: 'var(--text-muted)',
+        }}>
+          {rows.length} envíos
+        </div>
+      </div>
+
+      {rows.length === 0 ? (
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
+          Sin sociales enviados.
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: 8 }}>
+          {rows.map((row) => {
+            const status = SOCIAL_STATUS_LABEL[row.status] || SOCIAL_STATUS_LABEL.pending;
+            const proofHref = safeExternalHref(row.proofUrl);
+            return (
+              <div
+                key={row.id || `${row.taskKey}-${row.createdAt}`}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(0, 1fr) auto',
+                  gap: 12,
+                  alignItems: 'center',
+                  padding: '10px 12px',
+                  background: 'rgba(0,0,0,0.16)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 8,
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{
+                    display: 'flex',
+                    gap: 8,
+                    alignItems: 'center',
+                    marginBottom: 4,
+                    flexWrap: 'wrap',
+                  }}>
+                    <span style={{
+                      padding: '2px 7px',
+                      borderRadius: 6,
+                      background: status.bg,
+                      color: status.fg,
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 9,
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                    }}>
+                      {status.label}
+                    </span>
+                    <span style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 10,
+                      color: 'var(--text-muted)',
+                      textTransform: 'uppercase',
+                    }}>
+                      {row.network}
+                    </span>
+                  </div>
+                  <div style={{
+                    fontFamily: 'var(--font-body)',
+                    fontSize: 13,
+                    color: 'var(--text-primary)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {row.label || row.taskKey}
+                  </div>
+                  {row.rejectionNote && (
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--red, #ef4444)', marginTop: 4 }}>
+                      {row.rejectionNote}
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
+                    +{Number(row.reward || 0)} MXNP
+                  </span>
+                  {proofHref && (
+                    <a
+                      href={proofHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 10,
+                        color: 'var(--green)',
+                        textDecoration: 'underline',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      Ver prueba
+                    </a>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 

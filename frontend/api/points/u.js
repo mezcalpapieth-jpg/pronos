@@ -18,22 +18,29 @@
  *
  * Response:
  *   {
- *     user: { username, joinedAt, totalVolume },
+ *     user: { username, joinedAt, totalVolume, adminSocials? },
  *     stats: { totalPnl, marketsTraded, marketsWon, marketsOpen, winRate },
  *     active: [{ marketId, question, category, outcomeIndex, outcomeLabel,
  *                shares, costBasis, currentValue, unrealizedPnl, ... }],
  *     history: [{ marketId, question, category, outcomeStatus, netPnl,
  *                 trades: [...], resolvedAt, finalScore }]
  *   }
+ *
+ * Admin-only: when the viewer has a valid points admin session,
+ * `user.adminSocials` includes that user's social-task proof rows.
+ * Logged-out / non-admin callers never receive it.
  */
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { binaryPrices, multiPrices } from '../_lib/amm-math.js';
+import { readSession } from '../_lib/session.js';
+import { isAdminUsername } from '../_lib/points-admin.js';
 import {
   buildPublicProfileHistory,
   buildPublicProfileStats,
 } from '../_lib/points-public-profile.js';
+import { buildAdminProfileSocials } from '../_lib/points-profile-socials.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -74,6 +81,13 @@ export default async function handler(req, res) {
   // Without this a search for "Mezcal" misses the row that's stored as
   // "mezcal", and the page shows "user not found" for a user who exists.
   const username = raw.toLowerCase().slice(0, 32);
+  let viewerIsAdmin = false;
+  try {
+    const viewerSession = readSession(req, res);
+    viewerIsAdmin = isAdminUsername(viewerSession?.username);
+  } catch {
+    viewerIsAdmin = false;
+  }
 
   try {
     await ensurePointsSchema(schemaSql);
@@ -164,11 +178,25 @@ export default async function handler(req, res) {
     // ── Aggregate stats ───────────────────────────────────────────────
     const stats = buildPublicProfileStats(history);
 
+    let adminSocials = null;
+    if (viewerIsAdmin) {
+      const socialRows = await sql`
+        SELECT id, task_key, status, reward, proof_url,
+               reviewer, reviewed_at, rejection_note, created_at
+        FROM social_tasks
+        WHERE username = ${username}
+        ORDER BY created_at DESC
+        LIMIT 50
+      `;
+      adminSocials = buildAdminProfileSocials(socialRows);
+    }
+
     return res.status(200).json({
       user: {
         username: userRow[0].username,
         joinedAt: userRow[0].created_at,
         totalVolume: stats.totalVolume,
+        ...(viewerIsAdmin ? { adminSocials } : {}),
       },
       stats: {
         totalPnl: stats.totalPnl,

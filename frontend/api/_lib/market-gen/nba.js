@@ -11,6 +11,7 @@ import { extractEspnSeriesMeta } from '../series-markets.js';
 const BASE = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard';
 const BASE_HORIZON_DAYS = 3;
 const SERIES_HORIZON_DAYS = 12;
+const SCOREBOARD_LOOKBACK_DAYS = 1;
 
 function formatDateCompact(d) {
   const pad = (n) => String(n).padStart(2, '0');
@@ -20,8 +21,9 @@ function formatDateCompact(d) {
 export async function generateNbaMarkets() {
   const now = new Date();
   const baseCutoffMs = now.getTime() + BASE_HORIZON_DAYS * 86_400_000;
+  const scoreboardStart = new Date(now.getTime() - SCOREBOARD_LOOKBACK_DAYS * 86_400_000);
   const horizon = new Date(now.getTime() + SERIES_HORIZON_DAYS * 86_400_000);
-  const range = `${formatDateCompact(now)}-${formatDateCompact(horizon)}`;
+  const range = `${formatDateCompact(scoreboardStart)}-${formatDateCompact(horizon)}`;
   const url = `${BASE}?dates=${range}&limit=500`;
 
   let data;
