@@ -6,6 +6,7 @@ export const CATEGORIES = [
   { key: 'finanzas', label: 'Finanzas' },
   { key: 'crypto',   label: 'Crypto' },
   { key: 'musica',   label: 'Musica' },
+  { key: 'world-cup', label: 'Copa del Mundo' },
 ];
 
 export const MARKET_CATEGORY_FILTERS = [
@@ -56,8 +57,9 @@ export const ADMIN_CRYPTO_FILTERS = [
 
 export const ADMIN_GEO_FILTERS = [
   { key: 'all', label: 'Todos' },
-  { key: 'mexico', label: 'Mexico' },
+  { key: 'mexico', label: 'México' },
   { key: 'latam', label: 'Latam' },
+  { key: 'world', label: 'Mundo' },
 ];
 
 export const ADMIN_MEXICO_TOPIC_FILTERS = [
@@ -66,9 +68,8 @@ export const ADMIN_MEXICO_TOPIC_FILTERS = [
   { key: 'politica', label: 'Politica' },
   { key: 'deportes', label: 'Deportes' },
   { key: 'finanzas', label: 'Finanzas' },
-  { key: 'crypto', label: 'Crypto' },
   { key: 'musica', label: 'Musica' },
-  { key: 'weather', label: 'Weather' },
+  { key: 'weather', label: 'Clima' },
 ];
 
 export function buildAdminMarketsQuery({

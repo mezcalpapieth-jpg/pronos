@@ -28,3 +28,10 @@ test('points Mexico category uses Latam label', () => {
   assert.equal(translate('points.cat.mexico', 'es'), 'Mexico & Latam');
   assert.equal(translate('points.cat.mexico', 'en'), 'Mexico & Latam');
 });
+
+test('points public category filter labels translate region and climate copy', () => {
+  assert.equal(translate('points.geo.world', 'es'), 'Mundo');
+  assert.equal(translate('points.geo.world', 'en'), 'World');
+  assert.equal(translate('points.topic.weather', 'es'), 'Clima');
+  assert.equal(translate('points.topic.weather', 'en'), 'Weather');
+});

@@ -29,7 +29,7 @@ import { deriveMarketTags } from '../../_lib/category-tags.js';
 const sql = neon(process.env.DATABASE_URL);
 
 const ALLOWED_CATEGORIES = new Set([
-  'general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica',
+  'general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup',
 ]);
 
 function parseJsonb(value, fallback) {

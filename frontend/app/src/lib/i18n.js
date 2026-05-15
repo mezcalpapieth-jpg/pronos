@@ -589,6 +589,19 @@ const STRINGS = {
   'points.catpage.eyebrow':   { es: '{n} mercados',           en: '{n} markets' },
   'points.catpage.leagues':   { es: 'Ligas',                  en: 'Leagues' },
 
+  // Region + topic sub-filters — shared by public category pages.
+  'points.geo.all':           { es: 'Todos',                  en: 'All' },
+  'points.geo.mexico':        { es: 'México',                 en: 'Mexico' },
+  'points.geo.latam':         { es: 'Latam',                  en: 'Latam' },
+  'points.geo.world':         { es: 'Mundo',                  en: 'World' },
+  'points.topic.all':         { es: 'Todas',                  en: 'All' },
+  'points.topic.general':     { es: 'General',                en: 'General' },
+  'points.topic.politica':    { es: 'Política',               en: 'Politics' },
+  'points.topic.deportes':    { es: 'Deportes',               en: 'Sports' },
+  'points.topic.finanzas':    { es: 'Finanzas',               en: 'Finance' },
+  'points.topic.musica':      { es: 'Música',                 en: 'Music' },
+  'points.topic.weather':     { es: 'Clima',                  en: 'Weather' },
+
   // Sports sub-filter — /c/deportes
   'points.sport.all':         { es: 'Todos',                  en: 'All' },
   'points.sport.soccer':      { es: '⚽ Fútbol',              en: '⚽ Soccer' },

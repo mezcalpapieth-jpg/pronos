@@ -24,6 +24,7 @@ import { useT } from '@app/lib/i18n.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
 import { fetchMarkets, fetchPositions } from '../lib/pointsApi.js';
+import { marketInCategory, marketInGeo, marketInTopic } from '../lib/pointsCategoryFilters.js';
 import PointsMarketCard from '../components/PointsMarketCard.jsx';
 
 // Slug → i18n key for the page header. Falls back to the category
@@ -118,13 +119,24 @@ const CRYPTO_TYPE_TABS = [
   { key: '5min',    fallback: '5 minutos' },
 ];
 
-function marketInCategory(m, category) {
-  const primary = (m.category || '').toLowerCase();
-  const tags = Array.isArray(m.categoryTags)
-    ? m.categoryTags.map(t => String(t || '').toLowerCase())
-    : [];
-  return primary === category || tags.includes(category);
-}
+const GEO_TABS = [
+  { key: 'all',    tKey: 'points.geo.all' },
+  { key: 'mexico', tKey: 'points.geo.mexico' },
+  { key: 'latam',  tKey: 'points.geo.latam' },
+  { key: 'world',  tKey: 'points.geo.world' },
+];
+
+const MEXICO_TOPIC_TABS = [
+  { key: 'all',      tKey: 'points.topic.all' },
+  { key: 'general',  tKey: 'points.topic.general' },
+  { key: 'politica', tKey: 'points.topic.politica' },
+  { key: 'deportes', tKey: 'points.topic.deportes' },
+  { key: 'finanzas', tKey: 'points.topic.finanzas' },
+  { key: 'musica',   tKey: 'points.topic.musica' },
+  { key: 'weather',  tKey: 'points.topic.weather' },
+];
+
+const GEO_FILTER_EXCLUDED_CATEGORIES = new Set(['all', 'crypto', 'world-cup', 'porresolver', 'resueltos', 'noticias']);
 
 export default function PointsCategoryPage() {
   const { slug } = useParams();
@@ -151,10 +163,15 @@ export default function PointsCategoryPage() {
   // 5-min rollover markets, '5min' shows only them. Applies on
   // /c/crypto and on /c/resueltos?cat=crypto.
   const cryptoType = searchParams.get('ctype') || 'all';
+  const geo = searchParams.get('geo') || 'all';
+  const topic = searchParams.get('topic') || 'all';
 
   // Status to fetch — resueltos loads resolved; everything else fetches
   // active and filters client-side for "pending" if needed.
   const fetchStatus = RESOLVED_SLUGS.has(slug) ? 'resolved' : 'active';
+  const activeFilterCategory = RESOLVED_SLUGS.has(slug) ? resueltosCat : slug;
+  const supportsGeoFilters = !GEO_FILTER_EXCLUDED_CATEGORIES.has(activeFilterCategory);
+  const supportsTopicFilters = activeFilterCategory === 'mexico';
 
   useEffect(() => {
     let cancelled = false;
@@ -247,12 +264,19 @@ export default function PointsCategoryPage() {
       else if (cryptoType === 'general') out = out.filter(m => !m.crypto5min);
     }
 
+    if (supportsGeoFilters && geo !== 'all') {
+      out = out.filter(m => marketInGeo(m, geo));
+    }
+    if (supportsTopicFilters && topic !== 'all') {
+      out = out.filter(m => marketInTopic(m, topic));
+    }
+
     if (q) {
       out = out.filter(m => (m.question || '').toLowerCase().includes(q));
     }
 
     return out;
-  }, [markets, slug, sport, league, resueltosCat, cryptoType, searchQuery]);
+  }, [markets, slug, sport, league, resueltosCat, cryptoType, geo, topic, supportsGeoFilters, supportsTopicFilters, searchQuery]);
 
   function setSport(next) {
     const params = new URLSearchParams(searchParams);
@@ -284,6 +308,8 @@ export default function PointsCategoryPage() {
     params.delete('sport');
     params.delete('league');
     params.delete('ctype');
+    params.delete('geo');
+    params.delete('topic');
     setSearchParams(params, { replace: true });
   }
 
@@ -291,6 +317,20 @@ export default function PointsCategoryPage() {
     const params = new URLSearchParams(searchParams);
     if (next === 'all') params.delete('ctype');
     else params.set('ctype', next);
+    setSearchParams(params, { replace: true });
+  }
+
+  function setGeo(next) {
+    const params = new URLSearchParams(searchParams);
+    if (next === 'all') params.delete('geo');
+    else params.set('geo', next);
+    setSearchParams(params, { replace: true });
+  }
+
+  function setTopic(next) {
+    const params = new URLSearchParams(searchParams);
+    if (next === 'all') params.delete('topic');
+    else params.set('topic', next);
     setSearchParams(params, { replace: true });
   }
 
@@ -305,6 +345,8 @@ export default function PointsCategoryPage() {
   // Crypto-type sub-row: /c/crypto, or /c/resueltos?cat=crypto.
   const showCryptoTypeBar = slug === 'crypto'
     || (isResueltos && resueltosCat === 'crypto');
+  const showGeoBar = supportsGeoFilters;
+  const showTopicBar = supportsTopicFilters;
   const leagueTabs = sport === 'baseball'
     ? BASEBALL_LEAGUES
     : sport === 'combate'
@@ -359,6 +401,52 @@ export default function PointsCategoryPage() {
               onClick={() => setResueltosCat(c.key)}
             >
               {c.tKey ? (t(c.tKey) || c.fallback) : c.fallback}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Region sub-filter — mirrors the admin taxonomy on public
+          category pages without pulling crypto / World Cup into Mexico. */}
+      {showGeoBar && (
+        <div style={{
+          display: 'flex',
+          gap: 8,
+          flexWrap: 'wrap',
+          overflowX: 'auto',
+          marginBottom: 16,
+          paddingBottom: 4,
+        }}>
+          {GEO_TABS.map(g => (
+            <button
+              key={g.key}
+              className={`filter-btn${geo === g.key ? ' active' : ''}`}
+              onClick={() => setGeo(g.key)}
+            >
+              {t(g.tKey)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Mexico & Latam topic sub-filter — public counterpart to the
+          admin topic chips. Weather is labelled "Clima" in Spanish. */}
+      {showTopicBar && (
+        <div style={{
+          display: 'flex',
+          gap: 8,
+          flexWrap: 'wrap',
+          overflowX: 'auto',
+          marginBottom: 20,
+          paddingBottom: 4,
+        }}>
+          {MEXICO_TOPIC_TABS.map(item => (
+            <button
+              key={item.key}
+              className={`filter-btn${topic === item.key ? ' active' : ''}`}
+              onClick={() => setTopic(item.key)}
+            >
+              {t(item.tKey)}
             </button>
           ))}
         </div>

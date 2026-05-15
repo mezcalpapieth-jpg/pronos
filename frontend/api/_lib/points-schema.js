@@ -97,6 +97,7 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_markets_topic_tags ON points_markets USING GIN (topic_tags)`,
   `UPDATE points_markets
      SET category_tags = CASE
+       WHEN category IN ('crypto', 'world-cup') THEN to_jsonb(ARRAY[category])
        WHEN category = 'deportes' AND (
          league IN ('liga-mx', 'lmb')
          OR question ~* '(cruz azul|chivas|guadalajara|america|américa|pumas|tigres|rayados|monterrey|liga mx|diablos rojos|lmb)'
@@ -108,6 +109,7 @@ const POINTS_SCHEMA_MIGRATIONS = [
    WHERE category_tags IS NULL OR category_tags = '[]'::jsonb`,
   `UPDATE points_markets
      SET geo_tags = CASE
+       WHEN category IN ('crypto', 'world-cup') THEN '[]'::jsonb
        WHEN category = 'mexico'
          OR league IN ('liga-mx', 'lmb')
          OR question ~* '(mexico|méxico|cdmx|cruz azul|chivas|guadalajara|america|américa|pumas|tigres|rayados|monterrey|liga mx|diablos rojos|lmb|peso mexicano|mxn|pemex|aeromexico|volaris)'
@@ -119,11 +121,24 @@ const POINTS_SCHEMA_MIGRATIONS = [
    WHERE geo_tags IS NULL OR geo_tags = '[]'::jsonb`,
   `UPDATE points_markets
      SET topic_tags = CASE
+       WHEN category IN ('crypto', 'world-cup') THEN to_jsonb(ARRAY[category])
        WHEN resolver_type = 'weather_api' OR question ~* '(weather|temperatura|lluvia)' THEN '["weather"]'::jsonb
        WHEN category = 'mexico' THEN '["general"]'::jsonb
        ELSE to_jsonb(ARRAY[COALESCE(NULLIF(category, ''), 'general')])
      END
    WHERE topic_tags IS NULL OR topic_tags = '[]'::jsonb`,
+  `UPDATE points_markets
+     SET category_tags = to_jsonb(ARRAY[category])
+   WHERE category IN ('crypto', 'world-cup')
+     AND (category_tags = '[]'::jsonb OR category_tags ? 'mexico' OR NOT (category_tags ? category))`,
+  `UPDATE points_markets
+     SET geo_tags = '[]'::jsonb
+   WHERE category IN ('crypto', 'world-cup')
+     AND geo_tags <> '[]'::jsonb`,
+  `UPDATE points_markets
+     SET topic_tags = to_jsonb(ARRAY[category])
+   WHERE category IN ('crypto', 'world-cup')
+     AND (topic_tags = '[]'::jsonb OR topic_tags ? 'mexico' OR NOT (topic_tags ? category))`,
 
   // amm_mode: 'unified' (default — one pool, N-outcome CPMM) or 'parallel'
   // (Polymarket-style: each outcome is its own binary market, grouped under
@@ -552,6 +567,18 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_pending_category_tags ON points_pending_markets USING GIN (category_tags)`,
   `CREATE INDEX IF NOT EXISTS idx_points_pending_geo_tags ON points_pending_markets USING GIN (geo_tags)`,
   `CREATE INDEX IF NOT EXISTS idx_points_pending_topic_tags ON points_pending_markets USING GIN (topic_tags)`,
+  `UPDATE points_pending_markets
+     SET category_tags = to_jsonb(ARRAY[category])
+   WHERE category IN ('crypto', 'world-cup')
+     AND (category_tags = '[]'::jsonb OR category_tags ? 'mexico' OR NOT (category_tags ? category))`,
+  `UPDATE points_pending_markets
+     SET geo_tags = '[]'::jsonb
+   WHERE category IN ('crypto', 'world-cup')
+     AND geo_tags <> '[]'::jsonb`,
+  `UPDATE points_pending_markets
+     SET topic_tags = to_jsonb(ARRAY[category])
+   WHERE category IN ('crypto', 'world-cup')
+     AND (topic_tags = '[]'::jsonb OR topic_tags ? 'mexico' OR NOT (topic_tags ? category))`,
   // featured mirrors the final column on points_markets so admin can
   // pre-set "show in Trending?" from the pending queue before approval.
   // Default false on pending — admin explicitly ticks the 🔥 to feature.

@@ -6,7 +6,7 @@
  *   seedLiquidity,
  *   ammMode?: 'unified' | 'parallel'  // default 'unified'
  *   featured?: boolean
- *   sport?, league?, outcomeImages?
+ *   sport?, league?, outcomeImages?, geo?
  * }
  *
  * Off-chain MXNP market. Points-app only. The MVP build's on-chain
@@ -33,8 +33,9 @@ import { neon } from '@neondatabase/serverless';
 const schemaSql = neon(process.env.DATABASE_URL);
 
 const ALLOWED_CATEGORIES = new Set([
-  'general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica',
+  'general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup',
 ]);
+const ALLOWED_GEO_TAGS = new Set(['mexico', 'latam', 'world']);
 
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'POST, OPTIONS', credentials: true });
@@ -47,7 +48,7 @@ export default async function handler(req, res) {
   const {
     question, category, icon, endTime, outcomes, seedLiquidity, ammMode,
     featured,
-    sport, league, outcomeImages,
+    sport, league, outcomeImages, geo,
   } = req.body || {};
   const seed = Number(seedLiquidity);
   const mode = ammMode === 'parallel' ? 'parallel' : 'unified';
@@ -62,6 +63,7 @@ export default async function handler(req, res) {
   // crests in outcome rows.
   const sportVal = typeof sport === 'string' && sport.trim() ? sport.trim().toLowerCase() : null;
   const leagueVal = typeof league === 'string' && league.trim() ? league.trim().toLowerCase() : null;
+  const geoVal = typeof geo === 'string' && geo.trim() ? geo.trim().toLowerCase() : null;
   // outcomeImages must be an array of strings (URLs) the same length as
   // `outcomes`. Anything else is rejected to avoid index-misaligned crests.
   let outcomeImagesJson = null;
@@ -89,6 +91,9 @@ export default async function handler(req, res) {
   if (!ALLOWED_CATEGORIES.has(category)) {
     return res.status(400).json({ error: 'invalid_category' });
   }
+  if (geoVal && !ALLOWED_GEO_TAGS.has(geoVal)) {
+    return res.status(400).json({ error: 'invalid_geo' });
+  }
   if (!Array.isArray(outcomes) || outcomes.length < 2 || outcomes.length > 10) {
     return res.status(400).json({ error: 'outcome_count_out_of_range' });
   }
@@ -114,6 +119,7 @@ export default async function handler(req, res) {
     category,
     sport: sportVal,
     league: leagueVal,
+    source_data: geoVal ? { marketRegion: geoVal } : {},
   });
   const categoryTagsJson = JSON.stringify(tagBundle.categoryTags);
   const geoTagsJson = JSON.stringify(tagBundle.geoTags);

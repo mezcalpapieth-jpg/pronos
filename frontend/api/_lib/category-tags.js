@@ -1,6 +1,7 @@
-const CATEGORY_KEYS = new Set(['general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica']);
-const GEO_KEYS = new Set(['mexico', 'latam']);
-const TOPIC_KEYS = new Set(['general', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'weather']);
+const CATEGORY_KEYS = new Set(['general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup']);
+const GEO_KEYS = new Set(['mexico', 'latam', 'world']);
+const TOPIC_KEYS = new Set(['general', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'weather', 'world-cup']);
+const ISOLATED_CATEGORY_KEYS = new Set(['crypto', 'world-cup']);
 
 const MEXICO_LEAGUES = new Set(['liga-mx', 'lmb']);
 const MEXICO_SPORT_KEYWORDS = [
@@ -137,35 +138,64 @@ export function deriveMarketTags(row = {}) {
   const league = normalizeSlug(row.league);
   const source = normalizeSlug(row.source ?? sourceData?.source ?? resolverConfig?.source);
   const resolverType = normalizeSlug(row.resolver_type ?? row.resolverType);
+  const isolatedCategory = ISOLATED_CATEGORY_KEYS.has(category) || league === 'world-cup';
 
   const categoryTags = [];
   const geoTags = [];
   const topicTags = [];
 
-  for (const tag of normalizeTagList(row.category_tags ?? row.categoryTags, CATEGORY_KEYS)) addUnique(categoryTags, tag, CATEGORY_KEYS);
-  for (const tag of normalizeTagList(row.geo_tags ?? row.geoTags, GEO_KEYS)) addUnique(geoTags, tag, GEO_KEYS);
-  for (const tag of normalizeTagList(row.topic_tags ?? row.topicTags, TOPIC_KEYS)) addUnique(topicTags, tag, TOPIC_KEYS);
-  for (const tag of readNestedTags(sourceData, 'categoryTags', CATEGORY_KEYS)) addUnique(categoryTags, tag, CATEGORY_KEYS);
-  for (const tag of readNestedTags(sourceData, 'category_tags', CATEGORY_KEYS)) addUnique(categoryTags, tag, CATEGORY_KEYS);
-  for (const tag of readNestedTags(sourceData, 'geoTags', GEO_KEYS)) addUnique(geoTags, tag, GEO_KEYS);
-  for (const tag of readNestedTags(sourceData, 'geo_tags', GEO_KEYS)) addUnique(geoTags, tag, GEO_KEYS);
-  for (const tag of readNestedTags(sourceData, 'topicTags', TOPIC_KEYS)) addUnique(topicTags, tag, TOPIC_KEYS);
-  for (const tag of readNestedTags(sourceData, 'topic_tags', TOPIC_KEYS)) addUnique(topicTags, tag, TOPIC_KEYS);
+  const explicitCategoryTags = [
+    ...normalizeTagList(row.category_tags ?? row.categoryTags, CATEGORY_KEYS),
+    ...readNestedTags(sourceData, 'categoryTags', CATEGORY_KEYS),
+    ...readNestedTags(sourceData, 'category_tags', CATEGORY_KEYS),
+  ];
+  const explicitGeoTags = [
+    ...normalizeTagList(row.geo_tags ?? row.geoTags, GEO_KEYS),
+    ...readNestedTags(sourceData, 'geoTags', GEO_KEYS),
+    ...readNestedTags(sourceData, 'geo_tags', GEO_KEYS),
+  ];
+  const explicitTopicTags = [
+    ...normalizeTagList(row.topic_tags ?? row.topicTags, TOPIC_KEYS),
+    ...readNestedTags(sourceData, 'topicTags', TOPIC_KEYS),
+    ...readNestedTags(sourceData, 'topic_tags', TOPIC_KEYS),
+  ];
+
+  for (const tag of explicitCategoryTags) {
+    if (!isolatedCategory || tag === category) addUnique(categoryTags, tag, CATEGORY_KEYS);
+  }
+  if (!isolatedCategory) {
+    for (const tag of explicitGeoTags) {
+      addUnique(geoTags, tag, GEO_KEYS);
+      if (tag !== 'world') addUnique(categoryTags, 'mexico', CATEGORY_KEYS);
+    }
+  }
+  for (const tag of explicitTopicTags) {
+    if (!isolatedCategory || tag === category) addUnique(topicTags, tag, TOPIC_KEYS);
+  }
 
   addUnique(categoryTags, category, CATEGORY_KEYS);
 
   const region = normalizeSlug(sourceData?.region ?? sourceData?.marketRegion ?? sourceData?.geo);
-  if (region === 'mexico' || region === 'mx') {
-    addUnique(geoTags, 'mexico', GEO_KEYS);
-    addUnique(categoryTags, 'mexico', CATEGORY_KEYS);
-  } else if (region === 'latam' || region === 'latin-america' || region === 'america-latina') {
-    addUnique(geoTags, 'latam', GEO_KEYS);
-    addUnique(categoryTags, 'mexico', CATEGORY_KEYS);
+  const hasExplicitGeoSignal = !isolatedCategory && (explicitGeoTags.length > 0 || !!region);
+  function addGeoMembership(value) {
+    addUnique(geoTags, value, GEO_KEYS);
+    if (value !== 'world') addUnique(categoryTags, 'mexico', CATEGORY_KEYS);
   }
 
-  if (MEXICO_LEAGUES.has(league)) {
-    addUnique(geoTags, 'mexico', GEO_KEYS);
-    addUnique(categoryTags, 'mexico', CATEGORY_KEYS);
+  if (!isolatedCategory) {
+    if (region === 'mexico' || region === 'mx') {
+      addGeoMembership('mexico');
+    } else if (region === 'latam' || region === 'latin-america' || region === 'america-latina') {
+      addGeoMembership('latam');
+    } else if (region === 'world' || region === 'global' || region === 'mundo' || region === 'us' || region === 'usa' || region === 'international' || region === 'internacional') {
+      addUnique(geoTags, 'world', GEO_KEYS);
+    }
+  }
+
+  const shouldInferRegionalTags = !isolatedCategory && !hasExplicitGeoSignal;
+
+  if (shouldInferRegionalTags && MEXICO_LEAGUES.has(league)) {
+    addGeoMembership('mexico');
   }
 
   const haystack = normalizeText([
@@ -180,13 +210,11 @@ export function deriveMarketTags(row = {}) {
     safeJson(resolverConfig),
   ].filter(Boolean).join(' '));
 
-  if (MEXICO_KEYWORDS.some(word => haystack.includes(word))) {
-    addUnique(geoTags, 'mexico', GEO_KEYS);
-    addUnique(categoryTags, 'mexico', CATEGORY_KEYS);
+  if (shouldInferRegionalTags && MEXICO_KEYWORDS.some(word => haystack.includes(word))) {
+    addGeoMembership('mexico');
   }
-  if (LATAM_KEYWORDS.some(word => haystack.includes(word))) {
-    addUnique(geoTags, 'latam', GEO_KEYS);
-    addUnique(categoryTags, 'mexico', CATEGORY_KEYS);
+  if (shouldInferRegionalTags && LATAM_KEYWORDS.some(word => haystack.includes(word))) {
+    addGeoMembership('latam');
   }
 
   const isWeather = resolverType === 'weather-api'
@@ -197,8 +225,10 @@ export function deriveMarketTags(row = {}) {
     || haystack.includes('lluvia');
   if (isWeather) {
     addUnique(topicTags, 'weather', TOPIC_KEYS);
-    addUnique(categoryTags, 'mexico', CATEGORY_KEYS);
-    if (geoTags.length === 0) addUnique(geoTags, 'mexico', GEO_KEYS);
+    if (!isolatedCategory) {
+      addUnique(categoryTags, 'mexico', CATEGORY_KEYS);
+      if (geoTags.length === 0) addUnique(geoTags, 'mexico', GEO_KEYS);
+    }
   }
 
   if (category !== 'mexico') {

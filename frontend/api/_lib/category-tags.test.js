@@ -51,3 +51,47 @@ test('derives Latam geo membership from generator source metadata', () => {
   assert.deepEqual(tags.geoTags, ['latam']);
   assert.deepEqual(tags.topicTags, ['politica']);
 });
+
+test('keeps BTC and ETH 5-minute markets only in crypto despite CDMX wording', () => {
+  const tags = deriveMarketTags({
+    category: 'crypto',
+    sport: 'crypto',
+    question: 'Bitcoin: ¿sube o baja a las 12:05 CDMX?',
+    resolver_config: { shape: 'binary-direction', asset: 'btc' },
+  });
+
+  assert.deepEqual(tags.categoryTags, ['crypto']);
+  assert.deepEqual(tags.geoTags, []);
+  assert.deepEqual(tags.topicTags, ['crypto']);
+
+  assert.equal(matchesMarketTaxonomy({ ...tags, category: 'crypto' }, { category: 'crypto' }), true);
+  assert.equal(matchesMarketTaxonomy({ ...tags, category: 'crypto' }, { category: 'mexico' }), false);
+});
+
+test('keeps World Cup markets only in the World Cup category', () => {
+  const tags = deriveMarketTags({
+    category: 'world-cup',
+    sport: 'soccer',
+    league: 'world-cup',
+    question: 'México vs Alemania',
+  });
+
+  assert.deepEqual(tags.categoryTags, ['world-cup']);
+  assert.deepEqual(tags.geoTags, []);
+  assert.deepEqual(tags.topicTags, ['world-cup']);
+
+  assert.equal(matchesMarketTaxonomy({ ...tags, category: 'world-cup' }, { category: 'world-cup' }), true);
+  assert.equal(matchesMarketTaxonomy({ ...tags, category: 'world-cup' }, { category: 'mexico' }), false);
+});
+
+test('honors explicit world region without inferring Mexico from the question', () => {
+  const tags = deriveMarketTags({
+    category: 'politica',
+    question: '¿México firma un nuevo tratado global?',
+    source_data: { marketRegion: 'world' },
+  });
+
+  assert.deepEqual(tags.categoryTags, ['politica']);
+  assert.deepEqual(tags.geoTags, ['world']);
+  assert.deepEqual(tags.topicTags, ['politica']);
+});

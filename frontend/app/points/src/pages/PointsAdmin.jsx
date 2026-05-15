@@ -521,6 +521,7 @@ function CreateMarketForm({ prefill }) {
   const [form, setForm] = useState({
     question: prefill?.question || '',
     category: prefill?.category || 'deportes',
+    geo: prefill?.geo || 'auto',
     icon: '⚽',
     endDate: '',   // dd/mm/yyyy (text)
     endHour: '',   // 0-23 (string, validated on submit)
@@ -594,6 +595,7 @@ function CreateMarketForm({ prefill }) {
       const r = await postJson('/api/points/admin/create-market', {
         question: form.question,
         category: form.category,
+        geo: form.geo === 'auto' ? null : form.geo,
         icon: form.icon,
         endTime: endIso,
         outcomes: cleaned,
@@ -674,7 +676,7 @@ function CreateMarketForm({ prefill }) {
         />
       </Field>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 120px', gap: 12 }}>
         <Field label="Categoría">
           <select
             value={form.category}
@@ -683,6 +685,17 @@ function CreateMarketForm({ prefill }) {
           >
             {CATEGORIES.map(c => (
               <option key={c.key} value={c.key}>{c.label}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Región">
+          <select
+            value={form.geo}
+            onChange={e => setForm(f => ({ ...f, geo: e.target.value }))}
+            style={inputStyle}
+          >
+            {[{ key: 'auto', label: 'Auto' }, ...ADMIN_GEO_FILTERS.filter(g => g.key !== 'all')].map(g => (
+              <option key={g.key} value={g.key}>{g.label}</option>
             ))}
           </select>
         </Field>

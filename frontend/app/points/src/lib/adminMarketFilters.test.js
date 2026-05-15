@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  ADMIN_GEO_FILTERS,
+  ADMIN_MEXICO_TOPIC_FILTERS,
+  CATEGORIES,
   buildAdminMarketsQuery,
   formatAdminMarketDate,
 } from './adminMarketFilters.js';
@@ -46,4 +49,10 @@ test('builds sports and crypto admin subfilter queries only in their parent cate
 test('formats admin market dates without relying on component-local helpers', () => {
   assert.equal(formatAdminMarketDate(null), '-');
   assert.match(formatAdminMarketDate('2026-05-15T18:30:00.000Z'), /\d{2}/);
+});
+
+test('exposes Spanish admin labels for World Cup, world region, and weather topic', () => {
+  assert.ok(CATEGORIES.some(c => c.key === 'world-cup' && c.label === 'Copa del Mundo'));
+  assert.ok(ADMIN_GEO_FILTERS.some(c => c.key === 'world' && c.label === 'Mundo'));
+  assert.ok(ADMIN_MEXICO_TOPIC_FILTERS.some(c => c.key === 'weather' && c.label === 'Clima'));
 });
