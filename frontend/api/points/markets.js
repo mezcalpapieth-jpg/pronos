@@ -9,6 +9,7 @@ import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { binaryPrices } from '../_lib/amm-math.js';
 import { normalizeSeriesMeta, seriesSubtitle } from '../_lib/series-markets.js';
+import { deriveMarketTags } from '../_lib/category-tags.js';
 
 // Lazy neon client init — defer until the first request so a missing
 // DATABASE_URL at module-load time surfaces as a structured JSON error
@@ -134,7 +135,8 @@ export default async function handler(req, res) {
             (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
           FROM points_markets m
           LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
-          WHERE m.status = ${status} AND m.category = ${category}
+          WHERE m.status = ${status}
+            AND (m.category = ${category} OR COALESCE(m.category_tags, '[]'::jsonb) ? ${category})
             AND m.parent_id IS NULL
             AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
             AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
@@ -225,6 +227,14 @@ export default async function handler(req, res) {
       const outcomes = parseJsonb(r.outcomes, ['Sí', 'No']);
       const ammMode = r.amm_mode || 'unified';
       const seriesMeta = publicSeriesMetaFromRow(r);
+      const tags = deriveMarketTags({
+        ...r,
+        source_data: parseJsonb(r.pending_source_data, {}),
+        resolver_config: parseJsonb(r.resolver_config, {}),
+        category_tags: parseJsonb(r.category_tags, []),
+        geo_tags: parseJsonb(r.geo_tags, []),
+        topic_tags: parseJsonb(r.topic_tags, []),
+      });
 
       const outcomeImages = parseJsonb(r.outcome_images, null);
 
@@ -267,6 +277,9 @@ export default async function handler(req, res) {
           createdAt: r.created_at,
           sport: r.sport || null,
           league: r.league || null,
+          categoryTags: tags.categoryTags,
+          geoTags: tags.geoTags,
+          topicTags: tags.topicTags,
           outcomeImages: Array.isArray(outcomeImages) && outcomeImages.length === outcomes.length
             ? outcomeImages
             : null,
@@ -334,6 +347,9 @@ export default async function handler(req, res) {
         createdAt: r.created_at,
         sport: r.sport || null,
         league: r.league || null,
+        categoryTags: tags.categoryTags,
+        geoTags: tags.geoTags,
+        topicTags: tags.topicTags,
         outcomeImages: Array.isArray(outcomeImages) && outcomeImages.length === outcomes.length
           ? outcomeImages
           : null,

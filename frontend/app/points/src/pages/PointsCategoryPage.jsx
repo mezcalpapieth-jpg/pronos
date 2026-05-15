@@ -118,6 +118,14 @@ const CRYPTO_TYPE_TABS = [
   { key: '5min',    fallback: '5 minutos' },
 ];
 
+function marketInCategory(m, category) {
+  const primary = (m.category || '').toLowerCase();
+  const tags = Array.isArray(m.categoryTags)
+    ? m.categoryTags.map(t => String(t || '').toLowerCase())
+    : [];
+  return primary === category || tags.includes(category);
+}
+
 export default function PointsCategoryPage() {
   const { slug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -209,12 +217,12 @@ export default function PointsCategoryPage() {
       // top-level category narrower so the page can scope down to a
       // single bucket before any sub-filters fire.
       if (resueltosCat !== 'all') {
-        out = out.filter(m => (m.category || '').toLowerCase() === resueltosCat);
+        out = out.filter(m => marketInCategory(m, resueltosCat));
       }
     } else {
       // Regular category: hide pending from the main grid.
       out = out.filter(m => !isPending(m));
-      out = out.filter(m => (m.category || '').toLowerCase() === slug);
+      out = out.filter(m => marketInCategory(m, slug));
     }
 
     // Sports sub-filter: only when on /c/deportes OR when scoping

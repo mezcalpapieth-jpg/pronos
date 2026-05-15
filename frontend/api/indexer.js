@@ -3,6 +3,8 @@ import { ethers } from 'ethers';
 import { ensureProtocolSchema } from './_lib/protocol-schema.js';
 import { ensurePointsSchema } from './_lib/points-schema.js';
 import { runCrypto5MinTick } from './_lib/crypto-5min.js';
+import { shouldRunMinuteInterval } from './_lib/cron-multiplex.js';
+import { runAutoResolve } from './cron/points-auto-resolve.js';
 
 /**
  * /api/indexer — On-chain event indexer for Pronos protocol.
@@ -164,6 +166,33 @@ export default async function handler(req, res) {
     crypto5MinReport = { error: e?.message || 'crypto_5min_failed' };
   }
 
+  // ── Points auto-resolver multiplex ────────────────────────────────
+  // Vercel's active project config may only schedule /api/indexer, and
+  // Hobby projects have tight cron-slot limits. Piggyback the points
+  // resolver on this already-running minute cron instead of relying on
+  // a separate /api/cron/points-auto-resolve schedule. Manual probe:
+  // /api/indexer?key=...&resolve=1 (add resolveDry=1 for dry-run).
+  let pointsAutoResolveReport = { status: 'skipped', reason: 'not_scheduled' };
+  const forceAutoResolve = req.query.resolve === '1' || req.query.autoResolve === '1';
+  const dryAutoResolve = req.query.resolveDry === '1' || req.query.resolveDry === 'true';
+  const shouldRunPointsAutoResolve = forceAutoResolve
+    || (isVercelCron && shouldRunMinuteInterval({ intervalMinutes: 15 }));
+  if (shouldRunPointsAutoResolve) {
+    try {
+      const result = await runAutoResolve({ dry: dryAutoResolve });
+      pointsAutoResolveReport = { status: 'ok', ...result };
+    } catch (e) {
+      console.error('[indexer] points-auto-resolve failed', {
+        message: e?.message,
+        code: e?.code,
+      });
+      pointsAutoResolveReport = {
+        status: 'error',
+        error: e?.message?.slice(0, 240) || 'points_auto_resolve_failed',
+      };
+    }
+  }
+
   const { factories, rpcUrl, startBlock, lookbackBlocks, maxBatches: configuredMaxBatches } = getIndexerConfig();
 
   if (!factories.length || !rpcUrl) {
@@ -171,6 +200,7 @@ export default async function handler(req, res) {
       status: 'skipped',
       reason: 'MarketFactory address or Arbitrum RPC URL not configured',
       crypto5Min: crypto5MinReport,
+      pointsAutoResolve: pointsAutoResolveReport,
     });
   }
 
@@ -240,6 +270,7 @@ export default async function handler(req, res) {
       factories: factoryRuns,
       processed,
       crypto5Min: crypto5MinReport,
+      pointsAutoResolve: pointsAutoResolveReport,
     });
   } catch (e) {
     console.error('Indexer error:', {

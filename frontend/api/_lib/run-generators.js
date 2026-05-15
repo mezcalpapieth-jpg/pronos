@@ -42,6 +42,7 @@ import { generateUfcMarkets }           from './market-gen/ufc.js';
 import { generateBoxingMarkets }        from './market-gen/boxing.js';
 import { generateNextOpponentMarkets }  from './market-gen/next-opponent.js';
 import { generateF1SeasonMarkets }      from './market-gen/f1-season.js';
+import { deriveMarketTags }             from './category-tags.js';
 
 export const GENERATORS = [
   { name: 'soccer',         run: generateSoccerMarkets        },
@@ -97,11 +98,13 @@ export async function upsertPending(sql, allSpecs) {
   let skipped = 0;
   for (const s of allSpecs) {
     try {
+      const tags = deriveMarketTags(s);
       const result = await sql`
         INSERT INTO points_pending_markets
           (source, source_event_id, source_data, question, category, icon,
            outcomes, seed_liquidity, start_time, end_time, amm_mode,
-           resolver_type, resolver_config, sport, league, outcome_images)
+           resolver_type, resolver_config, sport, league, outcome_images,
+           category_tags, geo_tags, topic_tags)
         VALUES (
           ${s.source},
           ${s.source_event_id},
@@ -118,7 +121,10 @@ export async function upsertPending(sql, allSpecs) {
           ${s.resolver_config ? JSON.stringify(s.resolver_config) : null}::jsonb,
           ${s.sport || null},
           ${s.league || null},
-          ${s.outcome_images ? JSON.stringify(s.outcome_images) : null}::jsonb
+          ${s.outcome_images ? JSON.stringify(s.outcome_images) : null}::jsonb,
+          ${JSON.stringify(tags.categoryTags)}::jsonb,
+          ${JSON.stringify(tags.geoTags)}::jsonb,
+          ${JSON.stringify(tags.topicTags)}::jsonb
         )
         ON CONFLICT (source, source_event_id) DO UPDATE
         SET source_data     = EXCLUDED.source_data,
@@ -134,7 +140,10 @@ export async function upsertPending(sql, allSpecs) {
             resolver_config = EXCLUDED.resolver_config,
             sport           = EXCLUDED.sport,
             league          = EXCLUDED.league,
-            outcome_images  = EXCLUDED.outcome_images
+            outcome_images  = EXCLUDED.outcome_images,
+            category_tags   = EXCLUDED.category_tags,
+            geo_tags        = EXCLUDED.geo_tags,
+            topic_tags      = EXCLUDED.topic_tags
         WHERE points_pending_markets.status = 'pending'
         RETURNING id, (xmax = 0) AS inserted
       `;

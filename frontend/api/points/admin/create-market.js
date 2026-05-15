@@ -27,6 +27,7 @@ import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { initialReserves } from '../../_lib/amm-math.js';
 import { withTransaction } from '../../_lib/db-tx.js';
+import { deriveMarketTags } from '../../_lib/category-tags.js';
 import { neon } from '@neondatabase/serverless';
 
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -108,6 +109,15 @@ export default async function handler(req, res) {
   if (!endDate || isNaN(endDate.getTime()) || endDate <= new Date()) {
     return res.status(400).json({ error: 'invalid_end_time' });
   }
+  const tagBundle = deriveMarketTags({
+    question: question.trim(),
+    category,
+    sport: sportVal,
+    league: leagueVal,
+  });
+  const categoryTagsJson = JSON.stringify(tagBundle.categoryTags);
+  const geoTagsJson = JSON.stringify(tagBundle.geoTags);
+  const topicTagsJson = JSON.stringify(tagBundle.topicTags);
 
   // On-chain auto-deploy used to live here. It moved to
   // /api/protocol/admin/create-market when points-app and the MVP
@@ -126,9 +136,9 @@ export default async function handler(req, res) {
              (question, category, icon, outcomes, reserves, seed_liquidity,
               end_time, status, created_by, amm_mode, featured,
               mode, chain_id, chain_market_id, chain_address,
-              sport, league, outcome_images)
+              sport, league, outcome_images, category_tags, geo_tags, topic_tags)
            VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, 'active', $8, 'unified', $9,
-                   $10, $11, $12, $13, $14, $15, $16::jsonb)
+                   $10, $11, $12, $13, $14, $15, $16::jsonb, $17::jsonb, $18::jsonb, $19::jsonb)
            RETURNING id`,
           [
             question.trim(),
@@ -147,6 +157,9 @@ export default async function handler(req, res) {
             sportVal,
             leagueVal,
             outcomeImagesJson,
+            categoryTagsJson,
+            geoTagsJson,
+            topicTagsJson,
           ],
         );
         return r.rows[0].id;
@@ -177,9 +190,9 @@ export default async function handler(req, res) {
            (question, category, icon, outcomes, reserves, seed_liquidity,
             end_time, status, created_by, amm_mode, featured,
             mode, chain_id, chain_market_id, chain_address,
-            sport, league, outcome_images)
+            sport, league, outcome_images, category_tags, geo_tags, topic_tags)
          VALUES ($1, $2, $3, $4::jsonb, '[]'::jsonb, $5, $6, 'active', $7, 'parallel', $8,
-                 $9, $10, $11, $12, $13, $14, $15::jsonb)
+                 $9, $10, $11, $12, $13, $14, $15::jsonb, $16::jsonb, $17::jsonb, $18::jsonb)
          RETURNING id`,
         [
           question.trim(),
@@ -197,6 +210,9 @@ export default async function handler(req, res) {
           sportVal,
           leagueVal,
           outcomeImagesJson,
+          categoryTagsJson,
+          geoTagsJson,
+          topicTagsJson,
         ],
       );
       const parentId = parent.rows[0].id;
@@ -217,9 +233,11 @@ export default async function handler(req, res) {
           `INSERT INTO points_markets
              (question, category, icon, outcomes, reserves, seed_liquidity,
               end_time, status, created_by, amm_mode, parent_id, leg_label,
-              mode, chain_id, chain_market_id, chain_address)
+              mode, chain_id, chain_market_id, chain_address,
+              category_tags, geo_tags, topic_tags)
            VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, 'active', $8,
-                   'parallel', $9, $10, $11, $12, $13, $14)`,
+                   'parallel', $9, $10, $11, $12, $13, $14,
+                   $15::jsonb, $16::jsonb, $17::jsonb)`,
           [
             // Leg "question" is synthetic — positions.js + portfolio use
             // parent.question + leg_label for display, but keeping a
@@ -238,6 +256,9 @@ export default async function handler(req, res) {
             chainIdNum,
             legChainMarketId,
             legChainAddress,
+            categoryTagsJson,
+            geoTagsJson,
+            topicTagsJson,
           ],
         );
       }

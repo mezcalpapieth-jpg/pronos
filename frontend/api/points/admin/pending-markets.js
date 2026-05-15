@@ -18,6 +18,7 @@ import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 import { initialReserves } from '../../_lib/amm-math.js';
+import { deriveMarketTags } from '../../_lib/category-tags.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -122,6 +123,9 @@ async function list(req, res) {
       ammMode: r.amm_mode,
       resolverType: r.resolver_type,
       resolverConfig: parseJsonb(r.resolver_config, null),
+      categoryTags: parseJsonb(r.category_tags, []),
+      geoTags: parseJsonb(r.geo_tags, []),
+      topicTags: parseJsonb(r.topic_tags, []),
       status: r.status,
       adminNote: r.admin_note,
       reviewer: r.reviewer,
@@ -255,6 +259,17 @@ async function approveOne(pid, reviewer, note, opts = {}) {
       : null;
 
     const pendingFeatured = r.featured === true;
+    const tagBundle = deriveMarketTags({
+      ...r,
+      source_data: parseJsonb(r.source_data, {}),
+      resolver_config: parseJsonb(r.resolver_config, {}),
+      category_tags: parseJsonb(r.category_tags, []),
+      geo_tags: parseJsonb(r.geo_tags, []),
+      topic_tags: parseJsonb(r.topic_tags, []),
+    });
+    const categoryTagsJson = JSON.stringify(tagBundle.categoryTags);
+    const geoTagsJson = JSON.stringify(tagBundle.geoTags);
+    const topicTagsJson = JSON.stringify(tagBundle.topicTags);
 
     // Auto-deploy step — runs BEFORE the INSERT so a failed deploy doesn't
     // leave a half-approved row pointing at no contract. Dispatches V1
@@ -319,13 +334,15 @@ async function approveOne(pid, reviewer, note, opts = {}) {
       const mk = await client.query(
         `INSERT INTO points_markets
            (source, source_event_id,
-            question, category, icon, outcomes, reserves, seed_liquidity,
+           question, category, icon, outcomes, reserves, seed_liquidity,
             start_time, end_time, status, created_by, amm_mode,
             resolver_type, resolver_config, sport, league, outcome_images, featured,
+            category_tags, geo_tags, topic_tags,
             mode, chain_id, chain_market_id, chain_address)
          VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, 'active', $11,
                  'unified', $12, $13::jsonb, $14, $15, $16::jsonb, $17,
-                 $18, $19, $20, $21)
+                 $18::jsonb, $19::jsonb, $20::jsonb,
+                 $21, $22, $23, $24)
          RETURNING id`,
         [
           r.source,
@@ -345,6 +362,9 @@ async function approveOne(pid, reviewer, note, opts = {}) {
           r.league || null,
           outcomeImagesJson,
           pendingFeatured,
+          categoryTagsJson,
+          geoTagsJson,
+          topicTagsJson,
           marketMode,
           chainIdNum,
           chainMarketIdStr,
@@ -362,10 +382,12 @@ async function approveOne(pid, reviewer, note, opts = {}) {
             question, category, icon, outcomes, reserves, seed_liquidity,
             start_time, end_time, status, created_by, amm_mode,
             resolver_type, resolver_config, sport, league, outcome_images, featured,
+            category_tags, geo_tags, topic_tags,
             mode, chain_id, chain_market_id, chain_address)
          VALUES ($1, $2, $3, $4, $5, $6::jsonb, '[]'::jsonb, $7, $8, $9, 'active', $10,
                  'parallel', $11, $12::jsonb, $13, $14, $15::jsonb, $16,
-                 $17, $18, $19, $20)
+                 $17::jsonb, $18::jsonb, $19::jsonb,
+                 $20, $21, $22, $23)
          RETURNING id`,
         [
           r.source,
@@ -384,6 +406,9 @@ async function approveOne(pid, reviewer, note, opts = {}) {
           r.league || null,
           outcomeImagesJson,
           pendingFeatured,
+          categoryTagsJson,
+          geoTagsJson,
+          topicTagsJson,
           marketMode,
           chainIdNum,
           chainMarketIdStr,
@@ -407,9 +432,12 @@ async function approveOne(pid, reviewer, note, opts = {}) {
              (question, category, icon, outcomes, reserves, seed_liquidity,
               start_time, end_time, status, created_by, amm_mode,
               parent_id, leg_label, sport, league, mode,
+              category_tags, geo_tags, topic_tags,
               chain_id, chain_market_id, chain_address)
            VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8, 'active', $9,
-                   'parallel', $10, $11, $12, $13, $14, $15, $16, $17)`,
+                   'parallel', $10, $11, $12, $13, $14,
+                   $15::jsonb, $16::jsonb, $17::jsonb,
+                   $18, $19, $20)`,
           [
             `${r.question} — ${outcomes[i]}`,
             r.category,
@@ -425,6 +453,9 @@ async function approveOne(pid, reviewer, note, opts = {}) {
             r.sport || null,
             r.league || null,
             marketMode,
+            categoryTagsJson,
+            geoTagsJson,
+            topicTagsJson,
             chainIdNum,
             legChainMarketId,
             legChainAddress,

@@ -9,6 +9,7 @@ import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { normalizeSeriesMeta, seriesSubtitle } from '../../_lib/series-markets.js';
+import { deriveMarketTags, matchesMarketTaxonomy } from '../../_lib/category-tags.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -57,6 +58,10 @@ export default async function handler(req, res) {
   const leagueFilter = leagueParam && leagueParam !== 'all' ? leagueParam : null;
   const cryptoTypeParam = typeof req.query.crypto_type === 'string' ? req.query.crypto_type.trim().toLowerCase() : '';
   const cryptoTypeFilter = ['5min', 'general'].includes(cryptoTypeParam) ? cryptoTypeParam : null;
+  const geoParam = typeof req.query.geo === 'string' ? req.query.geo.trim().toLowerCase() : '';
+  const geoFilter = geoParam && geoParam !== 'all' ? geoParam : null;
+  const topicParam = typeof req.query.topic === 'string' ? req.query.topic.trim().toLowerCase() : '';
+  const topicFilter = topicParam && topicParam !== 'all' ? topicParam : null;
   // Same mode split as the public /api/points/markets — lets the MVP
   // admin query only on-chain markets while Points admin stays on
   // off-chain ones. Default 'points' (matches the public endpoint
@@ -94,16 +99,10 @@ export default async function handler(req, res) {
         LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
         WHERE m.parent_id IS NULL
           AND m.archived_at IS NOT NULL
-          AND (${categoryFilter}::text IS NULL OR m.category = ${categoryFilter}::text)
-          AND (${sportFilter}::text IS NULL OR m.sport = ${sportFilter}::text)
-          AND (${leagueFilter}::text IS NULL OR m.league = ${leagueFilter}::text)
-          AND (${cryptoTypeFilter}::text IS NULL
-            OR (${cryptoTypeFilter}::text = '5min' AND m.resolver_config->>'shape' = 'binary-direction')
-            OR (${cryptoTypeFilter}::text = 'general' AND COALESCE(m.resolver_config->>'shape', '') <> 'binary-direction'))
           AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
           AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
         ORDER BY m.archived_at DESC
-        LIMIT 200
+        LIMIT 2000
       `;
     } else if (filter === 'all') {
       rows = await sql`
@@ -112,17 +111,11 @@ export default async function handler(req, res) {
         FROM points_markets m
         LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
         WHERE m.parent_id IS NULL
-          AND (${categoryFilter}::text IS NULL OR m.category = ${categoryFilter}::text)
-          AND (${sportFilter}::text IS NULL OR m.sport = ${sportFilter}::text)
-          AND (${leagueFilter}::text IS NULL OR m.league = ${leagueFilter}::text)
-          AND (${cryptoTypeFilter}::text IS NULL
-            OR (${cryptoTypeFilter}::text = '5min' AND m.resolver_config->>'shape' = 'binary-direction')
-            OR (${cryptoTypeFilter}::text = 'general' AND COALESCE(m.resolver_config->>'shape', '') <> 'binary-direction'))
           AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
           AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
           AND (${showArchived} OR m.archived_at IS NULL)
         ORDER BY m.created_at DESC
-        LIMIT 200
+        LIMIT 2000
       `;
     } else if (filter === 'pending') {
       rows = await sql`
@@ -134,17 +127,11 @@ export default async function handler(req, res) {
           AND m.parent_id IS NULL
           AND m.end_time IS NOT NULL
           AND m.end_time < NOW()
-          AND (${categoryFilter}::text IS NULL OR m.category = ${categoryFilter}::text)
-          AND (${sportFilter}::text IS NULL OR m.sport = ${sportFilter}::text)
-          AND (${leagueFilter}::text IS NULL OR m.league = ${leagueFilter}::text)
-          AND (${cryptoTypeFilter}::text IS NULL
-            OR (${cryptoTypeFilter}::text = '5min' AND m.resolver_config->>'shape' = 'binary-direction')
-            OR (${cryptoTypeFilter}::text = 'general' AND COALESCE(m.resolver_config->>'shape', '') <> 'binary-direction'))
           AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
           AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
           AND (${showArchived} OR m.archived_at IS NULL)
         ORDER BY m.end_time ASC
-        LIMIT 200
+        LIMIT 2000
       `;
     } else {
       rows = await sql`
@@ -153,22 +140,42 @@ export default async function handler(req, res) {
         FROM points_markets m
         LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
         WHERE m.status = ${filter} AND m.parent_id IS NULL
-          AND (${categoryFilter}::text IS NULL OR m.category = ${categoryFilter}::text)
-          AND (${sportFilter}::text IS NULL OR m.sport = ${sportFilter}::text)
-          AND (${leagueFilter}::text IS NULL OR m.league = ${leagueFilter}::text)
-          AND (${cryptoTypeFilter}::text IS NULL
-            OR (${cryptoTypeFilter}::text = '5min' AND m.resolver_config->>'shape' = 'binary-direction')
-            OR (${cryptoTypeFilter}::text = 'general' AND COALESCE(m.resolver_config->>'shape', '') <> 'binary-direction'))
           AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
           AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
           AND (${showArchived} OR m.archived_at IS NULL)
         ORDER BY m.created_at DESC
-        LIMIT 200
+        LIMIT 2000
       `;
     }
 
+    const filteredRows = rows.filter(r => matchesMarketTaxonomy({
+      ...r,
+      source_data: parseJsonb(r.pending_source_data, {}),
+      resolver_config: parseJsonb(r.resolver_config, {}),
+      category_tags: parseJsonb(r.category_tags, []),
+      geo_tags: parseJsonb(r.geo_tags, []),
+      topic_tags: parseJsonb(r.topic_tags, []),
+      crypto5min: parseJsonb(r.resolver_config, null)?.shape === 'binary-direction',
+    }, {
+      category: categoryFilter,
+      sport: sportFilter,
+      league: leagueFilter,
+      cryptoType: cryptoTypeFilter,
+      geo: geoFilter,
+      topic: topicFilter,
+    })).slice(0, 200);
+
     return res.status(200).json({
-      markets: rows.map(r => ({
+      markets: filteredRows.map(r => {
+        const tags = deriveMarketTags({
+          ...r,
+          source_data: parseJsonb(r.pending_source_data, {}),
+          resolver_config: parseJsonb(r.resolver_config, {}),
+          category_tags: parseJsonb(r.category_tags, []),
+          geo_tags: parseJsonb(r.geo_tags, []),
+          topic_tags: parseJsonb(r.topic_tags, []),
+        });
+        return {
         id: r.id,
         source: r.source || null,
         sourceEventId: r.source_event_id || null,
@@ -199,7 +206,11 @@ export default async function handler(req, res) {
         resolverConfig: parseJsonb(r.resolver_config, null),
         crypto5min: parseJsonb(r.resolver_config, null)?.shape === 'binary-direction',
         seriesMeta: publicSeriesMetaFromRow(r),
-      })),
+        categoryTags: tags.categoryTags,
+        geoTags: tags.geoTags,
+        topicTags: tags.topicTags,
+      };
+      }),
     });
   } catch (e) {
     console.error('[admin/markets] error', { message: e?.message, code: e?.code });

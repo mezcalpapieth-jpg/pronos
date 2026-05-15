@@ -71,7 +71,7 @@ export default async function handler(req, res) {
 
         const CATEGORY_LABELS = {
           deportes: 'DEPORTES', politica: 'POLÍTICA INTERNACIONAL',
-          crypto: 'CRYPTO', mexico: 'MÉXICO & CDMX',
+          crypto: 'CRYPTO', mexico: 'MEXICO & LATAM',
           musica: 'MÚSICA & FARÁNDULA', general: 'GENERAL',
         };
 

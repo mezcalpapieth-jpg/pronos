@@ -24,12 +24,20 @@ import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
+import { deriveMarketTags } from '../../_lib/category-tags.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
 const ALLOWED_CATEGORIES = new Set([
   'general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica',
 ]);
+
+function parseJsonb(value, fallback) {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === 'object') return value;
+  if (typeof value !== 'string') return fallback;
+  try { return JSON.parse(value); } catch { return fallback; }
+}
 
 export default async function handler(req, res) {
   try {
@@ -88,7 +96,8 @@ export default async function handler(req, res) {
     await ensurePointsSchema(sql);
 
     const existingRows = await sql`
-      SELECT id, start_time, end_time
+      SELECT id, question, category, start_time, end_time, sport, league,
+             resolver_type, resolver_config, category_tags, geo_tags, topic_tags
       FROM points_markets
       WHERE id = ${mid}
       LIMIT 1
@@ -138,6 +147,24 @@ export default async function handler(req, res) {
       await sql`
         UPDATE points_markets
         SET category = ${nextCategory}
+        WHERE id = ${mid} OR parent_id = ${mid}
+      `;
+    }
+    if (nextQuestion !== null || nextCategory !== null) {
+      const tagBundle = deriveMarketTags({
+        ...existing,
+        question: nextQuestion ?? existing.question,
+        category: nextCategory ?? existing.category,
+        resolver_config: parseJsonb(existing.resolver_config, {}),
+        category_tags: [],
+        geo_tags: [],
+        topic_tags: [],
+      });
+      await sql`
+        UPDATE points_markets
+        SET category_tags = ${JSON.stringify(tagBundle.categoryTags)}::jsonb,
+            geo_tags = ${JSON.stringify(tagBundle.geoTags)}::jsonb,
+            topic_tags = ${JSON.stringify(tagBundle.topicTags)}::jsonb
         WHERE id = ${mid} OR parent_id = ${mid}
       `;
     }

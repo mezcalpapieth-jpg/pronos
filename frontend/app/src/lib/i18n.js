@@ -174,7 +174,7 @@ const STRINGS = {
   // ── Categories ────────────────────────────────────────────────────────────
   'cat.trending':             { es: '🔥 Trending',          en: '🔥 Trending' },
   'cat.all':                  { es: 'Todos',                en: 'All' },
-  'cat.mexico':               { es: '🇲🇽 México & LATAM',   en: '🇲🇽 Mexico & LATAM' },
+  'cat.mexico':               { es: 'Mexico & Latam',       en: 'Mexico & Latam' },
   'cat.politica':             { es: '🌎 Política Internacional', en: '🌎 World Politics' },
   'cat.deportes':             { es: '⚽ Deportes',          en: '⚽ Sports' },
   'cat.finanzas':             { es: '$ Finanzas',           en: '$ Finance' },
@@ -578,7 +578,7 @@ const STRINGS = {
   'points.cat.worldCup':      { es: 'Copa del Mundo',         en: 'World Cup' },
   'points.cat.deportes':      { es: 'Deportes',               en: 'Sports' },
   'points.cat.musica':        { es: 'Música & Farándula',     en: 'Music & Culture' },
-  'points.cat.mexico':        { es: 'México & CDMX',          en: 'Mexico & CDMX' },
+  'points.cat.mexico':        { es: 'Mexico & Latam',         en: 'Mexico & Latam' },
   'points.cat.politica':      { es: 'Política Intl.',         en: 'World Politics' },
   'points.cat.crypto':        { es: 'Crypto',                 en: 'Crypto' },
   'points.cat.finanzas':      { es: 'Finanzas',               en: 'Finance' },

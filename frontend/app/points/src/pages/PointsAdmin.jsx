@@ -30,62 +30,19 @@ import {
   adminToggleFeatured,
   adminProgressWorldCup,
 } from '../lib/pointsApi.js';
-
-const CATEGORIES = [
-  { key: 'general',  label: 'General' },
-  { key: 'mexico',   label: '🇲🇽 México' },
-  { key: 'politica', label: '🌎 Política' },
-  { key: 'deportes', label: '⚽ Deportes' },
-  { key: 'finanzas', label: '$ Finanzas' },
-  { key: 'crypto',   label: '₿ Crypto' },
-  { key: 'musica',   label: '🎵 Música' },
-];
-
-const MARKET_CATEGORY_FILTERS = [
-  { key: 'all', label: 'Todas' },
-  ...CATEGORIES,
-];
-
-const ADMIN_SPORT_FILTERS = [
-  { key: 'all', label: 'Todos' },
-  { key: 'soccer', label: '⚽ Fútbol' },
-  { key: 'baseball', label: '⚾ Béisbol' },
-  { key: 'nba', label: '🏀 NBA' },
-  { key: 'nfl', label: '🏈 NFL' },
-  { key: 'f1', label: '🏁 F1' },
-  { key: 'tennis', label: '🎾 Tenis' },
-  { key: 'golf', label: '⛳ Golf' },
-  { key: 'combate', label: '🥊 Combate' },
-];
-
-const ADMIN_SOCCER_LEAGUES = [
-  { key: 'all', label: 'Todas' },
-  { key: 'uefa-cl', label: 'UEFA Champions' },
-  { key: 'la-liga', label: 'La Liga' },
-  { key: 'premier-league', label: 'Premier' },
-  { key: 'serie-a', label: 'Serie A' },
-  { key: 'bundesliga', label: 'Bundesliga' },
-  { key: 'liga-mx', label: 'Liga MX' },
-  { key: 'mls', label: 'MLS' },
-];
-
-const ADMIN_BASEBALL_LEAGUES = [
-  { key: 'all', label: 'Todas' },
-  { key: 'mlb', label: 'MLB' },
-  { key: 'lmb', label: 'LMB' },
-];
-
-const ADMIN_COMBATE_LEAGUES = [
-  { key: 'all', label: 'Todas' },
-  { key: 'ufc', label: 'UFC' },
-  { key: 'boxing', label: 'Boxeo' },
-];
-
-const ADMIN_CRYPTO_FILTERS = [
-  { key: 'all', label: 'Todos' },
-  { key: 'general', label: 'Eventos' },
-  { key: '5min', label: '5 minutos' },
-];
+import {
+  ADMIN_BASEBALL_LEAGUES,
+  ADMIN_COMBATE_LEAGUES,
+  ADMIN_CRYPTO_FILTERS,
+  ADMIN_GEO_FILTERS,
+  ADMIN_MEXICO_TOPIC_FILTERS,
+  ADMIN_SOCCER_LEAGUES,
+  ADMIN_SPORT_FILTERS,
+  CATEGORIES,
+  MARKET_CATEGORY_FILTERS,
+  buildAdminMarketsQuery,
+  formatAdminMarketDate,
+} from '../lib/adminMarketFilters.js';
 
 // ─── Date helpers (dd/mm/yyyy + HH:mm) ──────────────────────────────────────
 // The native <input type="datetime-local"> defers format entirely to the
@@ -987,6 +944,8 @@ function MarketsTable() {
   const [sportFilter, setSportFilter] = useState('all');
   const [leagueFilter, setLeagueFilter] = useState('all');
   const [cryptoTypeFilter, setCryptoTypeFilter] = useState('all');
+  const [geoFilter, setGeoFilter] = useState('all');
+  const [topicFilter, setTopicFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState(null);
   const [autoResolving, setAutoResolving] = useState(false);
@@ -995,6 +954,7 @@ function MarketsTable() {
 
   const showSportFilters = categoryFilter === 'deportes';
   const showCryptoFilters = categoryFilter === 'crypto';
+  const showMexicoFilters = categoryFilter === 'mexico';
   const showLeagueFilters = showSportFilters
     && (sportFilter === 'soccer' || sportFilter === 'baseball' || sportFilter === 'combate');
   const activeLeagueFilters = sportFilter === 'baseball'
@@ -1006,11 +966,15 @@ function MarketsTable() {
   async function load() {
     setLoading(true);
     try {
-      const q = new URLSearchParams({ status: filter });
-      if (categoryFilter !== 'all') q.set('category', categoryFilter);
-      if (showSportFilters && sportFilter !== 'all') q.set('sport', sportFilter);
-      if (showLeagueFilters && leagueFilter !== 'all') q.set('league', leagueFilter);
-      if (showCryptoFilters && cryptoTypeFilter !== 'all') q.set('crypto_type', cryptoTypeFilter);
+      const q = buildAdminMarketsQuery({
+        status: filter,
+        categoryFilter,
+        sportFilter,
+        leagueFilter,
+        cryptoTypeFilter,
+        geoFilter,
+        topicFilter,
+      });
       const r = await getJson(`/api/points/admin/markets?${q.toString()}`);
       setMarkets(r.markets || []);
     } catch (e) {
@@ -1020,13 +984,23 @@ function MarketsTable() {
     }
   }
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [filter, categoryFilter, sportFilter, leagueFilter, cryptoTypeFilter]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [
+    filter,
+    categoryFilter,
+    sportFilter,
+    leagueFilter,
+    cryptoTypeFilter,
+    geoFilter,
+    topicFilter,
+  ]);
 
   function selectCategoryFilter(next) {
     setCategoryFilter(next);
     setSportFilter('all');
     setLeagueFilter('all');
     setCryptoTypeFilter('all');
+    setGeoFilter('all');
+    setTopicFilter('all');
   }
 
   function selectSportFilter(next) {
@@ -1182,6 +1156,53 @@ function MarketsTable() {
         ))}
       </div>
 
+      {showMexicoFilters && (
+        <>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            {ADMIN_GEO_FILTERS.map(g => (
+              <button
+                key={g.key}
+                onClick={() => setGeoFilter(g.key)}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: 16,
+                  border: `1px solid ${geoFilter === g.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
+                  background: geoFilter === g.key ? 'rgba(0,232,122,0.1)' : 'transparent',
+                  color: geoFilter === g.key ? 'var(--green)' : 'var(--text-secondary)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  cursor: 'pointer',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                {g.label}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            {ADMIN_MEXICO_TOPIC_FILTERS.map(t => (
+              <button
+                key={t.key}
+                onClick={() => setTopicFilter(t.key)}
+                style={{
+                  padding: '5px 10px',
+                  borderRadius: 14,
+                  border: `1px solid ${topicFilter === t.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
+                  background: topicFilter === t.key ? 'rgba(0,232,122,0.1)' : 'transparent',
+                  color: topicFilter === t.key ? 'var(--green)' : 'var(--text-secondary)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  cursor: 'pointer',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
       {showSportFilters && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           {ADMIN_SPORT_FILTERS.map(s => (
@@ -1304,7 +1325,7 @@ function MarketsTable() {
               {m.source && <> · {m.source}</>}
               {(m.resolverConfig?.eventId || m.sourceEventId) && <> · event {m.resolverConfig?.eventId || m.sourceEventId}</>}
               {m.resolverConfig?.dateYmd && <> · fecha {m.resolverConfig.dateYmd}</>}
-              {m.endTime && <> · cierra {formatWhen(m.endTime)}</>}
+              {m.endTime && <> · cierra {formatAdminMarketDate(m.endTime)}</>}
             </div>
             <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.3 }}>
               {m.question}
@@ -2059,15 +2080,6 @@ function PendingMarketsTable() {
     }
   }
 
-  function formatWhen(iso) {
-    if (!iso) return '—';
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return '—';
-    return d.toLocaleString('es-MX', {
-      day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
-    });
-  }
-
   const pendingCount = rows?.filter(r => r.status === 'pending').length || 0;
 
   return (
@@ -2304,7 +2316,7 @@ function PendingMarketsTable() {
                   marginTop: 4, letterSpacing: '0.04em',
                 }}>
                   Opciones: {Array.isArray(r.outcomes) ? r.outcomes.join(' · ') : '—'}
-                  {' · Cierra: '}{formatWhen(r.endTime)}
+                  {' · Cierra: '}{formatAdminMarketDate(r.endTime)}
                   {' · Seed: '}{r.seedLiquidity} MXNP
                 </div>
               </div>

@@ -23,3 +23,8 @@ test('points series game strip copy translates between Spanish and English', () 
   assert.equal(translate('points.series.open', 'en'), 'Open');
   assert.equal(translate('points.series.datePending', 'en'), 'Date pending');
 });
+
+test('points Mexico category uses Latam label', () => {
+  assert.equal(translate('points.cat.mexico', 'es'), 'Mexico & Latam');
+  assert.equal(translate('points.cat.mexico', 'en'), 'Mexico & Latam');
+});

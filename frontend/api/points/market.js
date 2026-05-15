@@ -14,6 +14,7 @@ import {
   seriesSubtitle,
   teamPairKeyFromMeta,
 } from '../_lib/series-markets.js';
+import { deriveMarketTags } from '../_lib/category-tags.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -207,6 +208,14 @@ export default async function handler(req, res) {
       const resolverCfg = parseJsonb(r.resolver_config, null);
       const resolverType = r.resolver_type || null;
       const resolverSource = resolverCfg?.source || null;
+      const tags = deriveMarketTags({
+        ...r,
+        source_data: parseJsonb(r.pending_source_data, {}),
+        resolver_config: resolverCfg,
+        category_tags: parseJsonb(r.category_tags, []),
+        geo_tags: parseJsonb(r.geo_tags, []),
+        topic_tags: parseJsonb(r.topic_tags, []),
+      });
       const baseSeriesMeta = publicSeriesMetaFromRow(r);
       const seriesMeta = baseSeriesMeta
         ? await loadSeriesDetail(sql, r, baseSeriesMeta).catch(() => baseSeriesMeta)
@@ -382,6 +391,9 @@ export default async function handler(req, res) {
             seriesMeta,
             sport: r.sport || null,
             league: r.league || null,
+            categoryTags: tags.categoryTags,
+            geoTags: tags.geoTags,
+            topicTags: tags.topicTags,
             outcomeImages,
             mode: r.mode || 'points',
             chainId: r.chain_id || null,
@@ -421,6 +433,9 @@ export default async function handler(req, res) {
           seriesMeta,
           sport: r.sport || null,
           league: r.league || null,
+          categoryTags: tags.categoryTags,
+          geoTags: tags.geoTags,
+          topicTags: tags.topicTags,
           outcomeImages,
           mode: r.mode || 'points',
           chainId: r.chain_id || null,

@@ -84,6 +84,46 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS chain_address TEXT`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_mode ON points_markets(mode) WHERE mode <> 'points'`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_category ON points_markets(category)`,
+  // category_tags let one market live in multiple browse/admin buckets.
+  // Example: a Liga MX match is primarily category='deportes', but also
+  // carries category_tags=['deportes','mexico'] so it appears under
+  // Mexico & Latam. geo_tags split Mexico vs Latam inside that bucket,
+  // and topic_tags power subfilters such as weather / sports / crypto.
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS category_tags JSONB NOT NULL DEFAULT '[]'::jsonb`,
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS geo_tags JSONB NOT NULL DEFAULT '[]'::jsonb`,
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS topic_tags JSONB NOT NULL DEFAULT '[]'::jsonb`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_category_tags ON points_markets USING GIN (category_tags)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_geo_tags ON points_markets USING GIN (geo_tags)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_topic_tags ON points_markets USING GIN (topic_tags)`,
+  `UPDATE points_markets
+     SET category_tags = CASE
+       WHEN category = 'deportes' AND (
+         league IN ('liga-mx', 'lmb')
+         OR question ~* '(cruz azul|chivas|guadalajara|america|américa|pumas|tigres|rayados|monterrey|liga mx|diablos rojos|lmb)'
+       ) THEN '["deportes","mexico"]'::jsonb
+       WHEN category <> 'mexico' AND question ~* '(mexico|méxico|cdmx|latam|latinoamérica|latinoamerica|américa latina|america latina|argentina|brasil|brazil|colombia|chile|peru|uruguay|peso mexicano|mxn|pemex|aeromexico|volaris)'
+         THEN to_jsonb(ARRAY[COALESCE(NULLIF(category, ''), 'general'), 'mexico'])
+       ELSE to_jsonb(ARRAY[COALESCE(NULLIF(category, ''), 'general')])
+     END
+   WHERE category_tags IS NULL OR category_tags = '[]'::jsonb`,
+  `UPDATE points_markets
+     SET geo_tags = CASE
+       WHEN category = 'mexico'
+         OR league IN ('liga-mx', 'lmb')
+         OR question ~* '(mexico|méxico|cdmx|cruz azul|chivas|guadalajara|america|américa|pumas|tigres|rayados|monterrey|liga mx|diablos rojos|lmb|peso mexicano|mxn|pemex|aeromexico|volaris)'
+         THEN '["mexico"]'::jsonb
+       WHEN question ~* '(latam|latinoamérica|latinoamerica|américa latina|america latina|argentina|brasil|brazil|colombia|chile|peru|uruguay)'
+         THEN '["latam"]'::jsonb
+       ELSE '[]'::jsonb
+     END
+   WHERE geo_tags IS NULL OR geo_tags = '[]'::jsonb`,
+  `UPDATE points_markets
+     SET topic_tags = CASE
+       WHEN resolver_type = 'weather_api' OR question ~* '(weather|temperatura|lluvia)' THEN '["weather"]'::jsonb
+       WHEN category = 'mexico' THEN '["general"]'::jsonb
+       ELSE to_jsonb(ARRAY[COALESCE(NULLIF(category, ''), 'general')])
+     END
+   WHERE topic_tags IS NULL OR topic_tags = '[]'::jsonb`,
 
   // amm_mode: 'unified' (default — one pool, N-outcome CPMM) or 'parallel'
   // (Polymarket-style: each outcome is its own binary market, grouped under
@@ -506,6 +546,12 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `ALTER TABLE points_pending_markets ADD COLUMN IF NOT EXISTS sport TEXT`,
   `ALTER TABLE points_pending_markets ADD COLUMN IF NOT EXISTS league TEXT`,
   `ALTER TABLE points_pending_markets ADD COLUMN IF NOT EXISTS outcome_images JSONB`,
+  `ALTER TABLE points_pending_markets ADD COLUMN IF NOT EXISTS category_tags JSONB NOT NULL DEFAULT '[]'::jsonb`,
+  `ALTER TABLE points_pending_markets ADD COLUMN IF NOT EXISTS geo_tags JSONB NOT NULL DEFAULT '[]'::jsonb`,
+  `ALTER TABLE points_pending_markets ADD COLUMN IF NOT EXISTS topic_tags JSONB NOT NULL DEFAULT '[]'::jsonb`,
+  `CREATE INDEX IF NOT EXISTS idx_points_pending_category_tags ON points_pending_markets USING GIN (category_tags)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_pending_geo_tags ON points_pending_markets USING GIN (geo_tags)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_pending_topic_tags ON points_pending_markets USING GIN (topic_tags)`,
   // featured mirrors the final column on points_markets so admin can
   // pre-set "show in Trending?" from the pending queue before approval.
   // Default false on pending — admin explicitly ticks the 🔥 to feature.
