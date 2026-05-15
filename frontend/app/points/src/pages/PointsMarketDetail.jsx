@@ -110,6 +110,30 @@ function OutcomeLogo({ src }) {
   );
 }
 
+function CountryChip({ label }) {
+  if (!label) return null;
+  return (
+    <span style={{
+      maxWidth: 96,
+      padding: '3px 7px',
+      borderRadius: 999,
+      background: 'var(--surface2)',
+      border: '1px solid var(--border)',
+      color: 'var(--text-secondary)',
+      fontFamily: 'var(--font-mono)',
+      fontSize: 9,
+      letterSpacing: '0.06em',
+      textTransform: 'uppercase',
+      whiteSpace: 'nowrap',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      flexShrink: 0,
+    }}>
+      {label}
+    </span>
+  );
+}
+
 function ScrollableList({ count, children }) {
   if (count <= SCROLL_AT_N) return <>{children}</>;
   return (
@@ -126,13 +150,14 @@ function ScrollableList({ count, children }) {
   );
 }
 
-function UnifiedOutcomeList({ outcomes, prices, outcomeImages, market, onBuyClick }) {
+function UnifiedOutcomeList({ outcomes, prices, outcomeImages, outcomeCountryLabels, market, onBuyClick }) {
   return (
     <ScrollableList count={outcomes.length}>
       {outcomes.map((label, i) => {
         const pct = Math.round((prices[i] ?? 0) * 100);
         const accent = accentFor(i, outcomes.length);
         const logo = outcomeImages?.[i] || null;
+        const countryLabel = outcomeCountryLabels?.[i] || null;
         return (
           <button
             key={i}
@@ -169,6 +194,7 @@ function UnifiedOutcomeList({ outcomes, prices, outcomeImages, market, onBuyClic
             }}>
               {label}
             </span>
+            <CountryChip label={countryLabel} />
             <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, flexShrink: 0 }}>
               {pct}%
             </span>
@@ -186,7 +212,7 @@ function UnifiedOutcomeList({ outcomes, prices, outcomeImages, market, onBuyClic
 // Leg images come from the parent market's `outcomeImages[i]` — the
 // parallel parent stores one image per outcome (e.g. driver portraits
 // when/if we wire that up), index-aligned with the leg order.
-function ParallelLegList({ market, legs, outcomeImages, onBuyClick }) {
+function ParallelLegList({ market, legs, outcomeImages, outcomeCountryLabels, onBuyClick }) {
   // World Cup is locked outside the current cycle — render the row
   // structure but swap the Sí/No buttons for a Próximamente pill so
   // the user still gets the odds preview without any tradeable UI.
@@ -200,6 +226,7 @@ function ParallelLegList({ market, legs, outcomeImages, onBuyClick }) {
           const noPrice  = leg.prices?.[1] ?? 1 - yesPrice;
           const pct = Math.round(yesPrice * 100);
           const logo = outcomeImages?.[i] || null;
+          const countryLabel = outcomeCountryLabels?.[i] || null;
           const legMarket = {
             id: leg.id,
             question: `${market.question} — ${leg.label}`,
@@ -236,6 +263,7 @@ function ParallelLegList({ market, legs, outcomeImages, onBuyClick }) {
               }}>
                 {leg.label}
               </div>
+              <CountryChip label={countryLabel} />
               <div style={{
                 fontFamily: 'var(--font-display)',
                 fontSize: 16,
@@ -301,7 +329,7 @@ function ParallelLegList({ market, legs, outcomeImages, onBuyClick }) {
 // Each row: label on the left (swatch in the outcome's accent), % on the
 // right. No buttons — the actual buying happens in the leg list below
 // the chart. Keeps the sidebar quick to scan.
-function OddsSummary({ outcomes, prices, outcomeImages }) {
+function OddsSummary({ outcomes, prices, outcomeImages, outcomeCountryLabels }) {
   return (
     <ScrollableList count={outcomes.length}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -309,6 +337,7 @@ function OddsSummary({ outcomes, prices, outcomeImages }) {
           const accent = accentFor(i, outcomes.length);
           const pct = Math.round((prices[i] ?? 0) * 100);
           const logo = outcomeImages?.[i] || null;
+          const countryLabel = outcomeCountryLabels?.[i] || null;
           return (
             <div
               key={i}
@@ -345,6 +374,7 @@ function OddsSummary({ outcomes, prices, outcomeImages }) {
               }}>
                 {label}
               </span>
+              <CountryChip label={countryLabel} />
               <span style={{
                 fontFamily: 'var(--font-display)',
                 fontSize: 14,
@@ -1102,6 +1132,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                   market={market}
                   legs={market.legs}
                   outcomeImages={market.outcomeImages}
+                  outcomeCountryLabels={market.outcomeCountryLabels}
                   onBuyClick={handleBuyClick}
                 />
               </div>
@@ -1130,6 +1161,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                   const pct = Math.round((isResolved ? (winnerIndex === i ? 1 : 0) : prices[i]) * 100);
                   const isWin = isResolved && winnerIndex === i;
                   const logo = market.outcomeImages?.[i] || null;
+                  const countryLabel = market.outcomeCountryLabels?.[i] || null;
                   return (
                     <div key={i} style={{
                       padding: '16px',
@@ -1155,6 +1187,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                         }}>
                           {label.toUpperCase()}
                         </div>
+                        <CountryChip label={countryLabel} />
                         <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: isWin ? 'var(--green)' : 'var(--text-primary)' }}>
                           {pct}%
                         </div>
@@ -1385,13 +1418,24 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 odds summary instead of buy buttons + a clear notice. */}
             {!isResolved && !isPendingResolution && (
               (market.category === 'world-cup' || market.league === 'world-cup')
-                ? <OddsSummary outcomes={outcomes} prices={prices} outcomeImages={market.outcomeImages} />
+                ? <OddsSummary
+                    outcomes={outcomes}
+                    prices={prices}
+                    outcomeImages={market.outcomeImages}
+                    outcomeCountryLabels={market.outcomeCountryLabels}
+                  />
                 : market.ammMode === 'parallel'
-                  ? <OddsSummary outcomes={outcomes} prices={prices} outcomeImages={market.outcomeImages} />
+                  ? <OddsSummary
+                      outcomes={outcomes}
+                      prices={prices}
+                      outcomeImages={market.outcomeImages}
+                      outcomeCountryLabels={market.outcomeCountryLabels}
+                    />
                   : <UnifiedOutcomeList
                       outcomes={outcomes}
                       prices={prices}
                       outcomeImages={market.outcomeImages}
+                      outcomeCountryLabels={market.outcomeCountryLabels}
                       market={market}
                       onBuyClick={handleBuyClick}
                     />

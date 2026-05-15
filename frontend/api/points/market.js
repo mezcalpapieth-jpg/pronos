@@ -15,6 +15,7 @@ import {
   teamPairKeyFromMeta,
 } from '../_lib/series-markets.js';
 import { deriveMarketTags } from '../_lib/category-tags.js';
+import { deriveOutcomeCountryLabels } from '../_lib/outcome-country-labels.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -201,6 +202,12 @@ export default async function handler(req, res) {
       const outcomeImages = Array.isArray(outcomeImagesRaw) && outcomeImagesRaw.length === outcomes.length
         ? outcomeImagesRaw
         : null;
+      const sourceData = parseJsonb(r.pending_source_data, {});
+      const outcomeCountryLabels = deriveOutcomeCountryLabels({
+        ...r,
+        outcomes,
+        source_data: sourceData,
+      });
 
       // Expose resolver metadata in a minimal shape — just the type +
       // source name from the config, nothing auth-related. Frontend
@@ -210,7 +217,7 @@ export default async function handler(req, res) {
       const resolverSource = resolverCfg?.source || null;
       const tags = deriveMarketTags({
         ...r,
-        source_data: parseJsonb(r.pending_source_data, {}),
+        source_data: sourceData,
         resolver_config: resolverCfg,
         category_tags: parseJsonb(r.category_tags, []),
         geo_tags: parseJsonb(r.geo_tags, []),
@@ -395,6 +402,7 @@ export default async function handler(req, res) {
             geoTags: tags.geoTags,
             topicTags: tags.topicTags,
             outcomeImages,
+            outcomeCountryLabels,
             mode: r.mode || 'points',
             chainId: r.chain_id || null,
             chainMarketId: r.chain_market_id ? String(r.chain_market_id) : null,
@@ -437,6 +445,7 @@ export default async function handler(req, res) {
           geoTags: tags.geoTags,
           topicTags: tags.topicTags,
           outcomeImages,
+          outcomeCountryLabels,
           mode: r.mode || 'points',
           chainId: r.chain_id || null,
           chainMarketId: r.chain_market_id ? String(r.chain_market_id) : null,

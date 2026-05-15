@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  PUBLIC_GEO_FILTERS,
   marketInCategory,
   marketInGeo,
   marketInTopic,
@@ -29,5 +30,9 @@ test('matches public geo and topic subfilters from derived market tags', () => {
   assert.equal(marketInGeo(weatherMarket, 'mexico'), true);
   assert.equal(marketInGeo(weatherMarket, 'latam'), false);
   assert.equal(marketInTopic(weatherMarket, 'weather'), true);
-  assert.equal(marketInGeo(worldMarket, 'world'), true);
+  assert.equal(marketInGeo(worldMarket, 'world'), false);
+});
+
+test('public geo filters do not expose world as a Mexico and Latam subcategory', () => {
+  assert.deepEqual(PUBLIC_GEO_FILTERS.map(g => g.key), ['all', 'mexico', 'latam']);
 });

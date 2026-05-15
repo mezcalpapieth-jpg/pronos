@@ -63,6 +63,10 @@ export default function PointsMarketCard({ market, userPosition }) {
     && market.outcomeImages.length === outcomes.length
     ? market.outcomeImages
     : null;
+  const outcomeCountryLabels = Array.isArray(market.outcomeCountryLabels)
+    && market.outcomeCountryLabels.length === outcomes.length
+    ? market.outcomeCountryLabels
+    : null;
   const hasAnyLogo = outcomeImages?.some(Boolean) || false;
 
   // Drawer state — when set, render PointsBuyModal in variant="drawer"
@@ -268,6 +272,7 @@ export default function PointsMarketCard({ market, userPosition }) {
             const pct = Math.round((resolvedPrice ?? livePrice) * 100);
             const gain = previewGain(livePrice);
             const logo = outcomeImages?.[i] || null;
+            const countryLabel = outcomeCountryLabels?.[i] || null;
             const rowOnClick = (e) => {
               // Stop the click from reaching the card's outer
               // navigate handler so we can open the drawer in place.
@@ -328,6 +333,26 @@ export default function PointsMarketCard({ market, userPosition }) {
                 }}>
                   {label}
                 </span>
+                {countryLabel && (
+                  <span style={{
+                    maxWidth: 90,
+                    padding: '3px 7px',
+                    borderRadius: 999,
+                    background: 'var(--surface2)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-secondary)',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 9,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    flexShrink: 0,
+                  }}>
+                    {countryLabel}
+                  </span>
+                )}
                 {/* Accent pill — visual cue that this row is the buy
                     target. The whole row is clickable; the pill just
                     gives users something to aim at. */}

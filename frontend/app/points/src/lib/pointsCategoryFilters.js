@@ -4,6 +4,14 @@ function normalizedTags(value) {
     : [];
 }
 
+export const PUBLIC_GEO_FILTERS = [
+  { key: 'all',    tKey: 'points.geo.all' },
+  { key: 'mexico', tKey: 'points.geo.mexico' },
+  { key: 'latam',  tKey: 'points.geo.latam' },
+];
+
+const PUBLIC_GEO_KEYS = new Set(PUBLIC_GEO_FILTERS.map(g => g.key));
+
 export function marketInCategory(m, category) {
   const target = String(category || '').toLowerCase();
   if (!target || target === 'all') return true;
@@ -15,6 +23,7 @@ export function marketInCategory(m, category) {
 export function marketInGeo(m, geo) {
   const target = String(geo || '').toLowerCase();
   if (!target || target === 'all') return true;
+  if (!PUBLIC_GEO_KEYS.has(target)) return false;
   return normalizedTags(m?.geoTags).includes(target);
 }
 

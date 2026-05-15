@@ -39,6 +39,7 @@ import {
   ADMIN_SOCCER_LEAGUES,
   ADMIN_SPORT_FILTERS,
   CATEGORIES,
+  MARKET_CREATION_GEO_OPTIONS,
   MARKET_CATEGORY_FILTERS,
   buildAdminMarketsQuery,
   formatAdminMarketDate,
@@ -694,7 +695,7 @@ function CreateMarketForm({ prefill }) {
             onChange={e => setForm(f => ({ ...f, geo: e.target.value }))}
             style={inputStyle}
           >
-            {[{ key: 'auto', label: 'Auto' }, ...ADMIN_GEO_FILTERS.filter(g => g.key !== 'all')].map(g => (
+            {[{ key: 'auto', label: 'Auto' }, ...MARKET_CREATION_GEO_OPTIONS].map(g => (
               <option key={g.key} value={g.key}>{g.label}</option>
             ))}
           </select>

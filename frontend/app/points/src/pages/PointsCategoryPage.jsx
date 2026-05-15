@@ -24,7 +24,12 @@ import { useT } from '@app/lib/i18n.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
 import { fetchMarkets, fetchPositions } from '../lib/pointsApi.js';
-import { marketInCategory, marketInGeo, marketInTopic } from '../lib/pointsCategoryFilters.js';
+import {
+  PUBLIC_GEO_FILTERS,
+  marketInCategory,
+  marketInGeo,
+  marketInTopic,
+} from '../lib/pointsCategoryFilters.js';
 import PointsMarketCard from '../components/PointsMarketCard.jsx';
 
 // Slug → i18n key for the page header. Falls back to the category
@@ -117,13 +122,6 @@ const CRYPTO_TYPE_TABS = [
   { key: 'all',     fallback: 'Todos'     },
   { key: 'general', fallback: 'Eventos'   },
   { key: '5min',    fallback: '5 minutos' },
-];
-
-const GEO_TABS = [
-  { key: 'all',    tKey: 'points.geo.all' },
-  { key: 'mexico', tKey: 'points.geo.mexico' },
-  { key: 'latam',  tKey: 'points.geo.latam' },
-  { key: 'world',  tKey: 'points.geo.world' },
 ];
 
 const MEXICO_TOPIC_TABS = [
@@ -417,7 +415,7 @@ export default function PointsCategoryPage() {
           marginBottom: 16,
           paddingBottom: 4,
         }}>
-          {GEO_TABS.map(g => (
+          {PUBLIC_GEO_FILTERS.map(g => (
             <button
               key={g.key}
               className={`filter-btn${geo === g.key ? ' active' : ''}`}

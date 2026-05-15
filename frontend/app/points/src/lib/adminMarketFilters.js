@@ -59,8 +59,15 @@ export const ADMIN_GEO_FILTERS = [
   { key: 'all', label: 'Todos' },
   { key: 'mexico', label: 'México' },
   { key: 'latam', label: 'Latam' },
+];
+
+export const MARKET_CREATION_GEO_OPTIONS = [
+  { key: 'mexico', label: 'México' },
+  { key: 'latam', label: 'Latam' },
   { key: 'world', label: 'Mundo' },
 ];
+
+const ADMIN_GEO_FILTER_KEYS = new Set(ADMIN_GEO_FILTERS.map(g => g.key));
 
 export const ADMIN_MEXICO_TOPIC_FILTERS = [
   { key: 'all', label: 'Todas' },
@@ -85,7 +92,7 @@ export function buildAdminMarketsQuery({
   if (categoryFilter !== 'all') q.set('category', categoryFilter);
 
   if (categoryFilter === 'mexico') {
-    if (geoFilter !== 'all') q.set('geo', geoFilter);
+    if (geoFilter !== 'all' && ADMIN_GEO_FILTER_KEYS.has(geoFilter)) q.set('geo', geoFilter);
     if (topicFilter !== 'all') q.set('topic', topicFilter);
     return q;
   }

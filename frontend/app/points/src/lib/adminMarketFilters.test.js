@@ -5,6 +5,7 @@ import {
   ADMIN_GEO_FILTERS,
   ADMIN_MEXICO_TOPIC_FILTERS,
   CATEGORIES,
+  MARKET_CREATION_GEO_OPTIONS,
   buildAdminMarketsQuery,
   formatAdminMarketDate,
 } from './adminMarketFilters.js';
@@ -21,6 +22,19 @@ test('builds admin markets query with Mexico & Latam subfilters', () => {
   });
 
   assert.equal(q.toString(), 'status=all&category=mexico&geo=mexico&topic=weather');
+});
+
+test('keeps world as a creation label but not a Mexico & Latam browse filter', () => {
+  assert.deepEqual(ADMIN_GEO_FILTERS.map(g => g.key), ['all', 'mexico', 'latam']);
+  assert.ok(MARKET_CREATION_GEO_OPTIONS.some(g => g.key === 'world' && g.label === 'Mundo'));
+  assert.equal(
+    buildAdminMarketsQuery({
+      status: 'all',
+      categoryFilter: 'mexico',
+      geoFilter: 'world',
+    }).toString(),
+    'status=all&category=mexico',
+  );
 });
 
 test('builds sports and crypto admin subfilter queries only in their parent categories', () => {
@@ -51,8 +65,8 @@ test('formats admin market dates without relying on component-local helpers', ()
   assert.match(formatAdminMarketDate('2026-05-15T18:30:00.000Z'), /\d{2}/);
 });
 
-test('exposes Spanish admin labels for World Cup, world region, and weather topic', () => {
+test('exposes Spanish admin labels for World Cup, creation world region, and weather topic', () => {
   assert.ok(CATEGORIES.some(c => c.key === 'world-cup' && c.label === 'Copa del Mundo'));
-  assert.ok(ADMIN_GEO_FILTERS.some(c => c.key === 'world' && c.label === 'Mundo'));
+  assert.ok(MARKET_CREATION_GEO_OPTIONS.some(c => c.key === 'world' && c.label === 'Mundo'));
   assert.ok(ADMIN_MEXICO_TOPIC_FILTERS.some(c => c.key === 'weather' && c.label === 'Clima'));
 });
