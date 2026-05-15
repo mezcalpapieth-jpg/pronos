@@ -84,6 +84,7 @@ async function list(req, res) {
           reviewer = COALESCE(reviewer, 'system'),
           reviewed_at = COALESCE(reviewed_at, NOW())
       WHERE status = 'pending'
+        AND (reviewer IS NULL OR reviewer = 'system')
         AND source IN ('odds-api-boxing', 'espn-mma')
         AND start_time IS NOT NULL
         AND (
@@ -101,6 +102,7 @@ async function list(req, res) {
           reviewer = COALESCE(reviewer, 'system'),
           reviewed_at = COALESCE(reviewed_at, NOW())
       WHERE status = 'pending'
+        AND (reviewer IS NULL OR reviewer = 'system')
         AND source = 'espn-nba'
         AND start_time IS NOT NULL
         AND resolver_config->'series' IS NOT NULL
@@ -592,14 +594,14 @@ async function review(req, res, admin) {
       await client.query(
         `UPDATE points_pending_markets
            SET status = 'pending',
-               admin_note = NULL,
-               reviewer = NULL,
-               reviewed_at = NULL,
+               admin_note = COALESCE(NULLIF($2, ''), 'manual-readded from rejected'),
+               reviewer = $3,
+               reviewed_at = NOW(),
                approved_market_id = NULL
          WHERE id = $1`,
-        [pid],
+        [pid, note || null, admin.username || 'admin'],
       );
-      return { ok: true, action: 'readd', id: pid };
+      return { ok: true, action: 'readd', id: pid, status: 'pending' };
     });
     return res.status(200).json(result);
   }

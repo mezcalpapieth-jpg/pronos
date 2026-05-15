@@ -37,3 +37,12 @@ test('protocol pending review endpoint never writes points markets', () => {
   assert.doesNotMatch(pendingSource, /points_pending_markets/);
   assert.doesNotMatch(pendingSource, /points_markets/);
 });
+
+test('protocol readd keeps human-overridden rows pending through auto-reject cleanup', () => {
+  assert.match(pendingSource, /admin_note\s*=\s*COALESCE\(NULLIF\(\$2,\s*''\),\s*'manual-readded from rejected'\)/);
+  assert.match(pendingSource, /reviewer\s*=\s*\$3/);
+  assert.match(pendingSource, /reviewed_at\s*=\s*NOW\(\)/);
+  assert.match(pendingSource, /approved_protocol_market_id\s*=\s*NULL/);
+  const overrideGuardCount = pendingSource.match(/AND \(reviewer IS NULL OR reviewer = 'system'\)/g)?.length || 0;
+  assert.ok(overrideGuardCount >= 2);
+});
