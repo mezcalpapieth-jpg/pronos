@@ -158,10 +158,9 @@ async function fetchCompetitionMatches(apiKey, competitionCode, dateFrom, dateTo
 }
 
 /**
- * Build a single market spec from a football-data.org match object.
+ * Build the primary match-winner market spec from a football-data.org match object.
  * Shape matches points_pending_markets columns so the caller can insert
- * directly. Resolver stays 'manual' for soccer — the auto-resolve cron
- * will get a sports_api variant in a later phase.
+ * directly.
  */
 function matchToMarketSpec(match, competitionCode) {
   const homeName = match?.homeTeam?.shortName
@@ -226,6 +225,58 @@ function matchToMarketSpec(match, competitionCode) {
   };
 }
 
+function championFinalSideMarketSpecs(primarySpec, match, competitionCode) {
+  if (!primarySpec || !isChampionsLeagueFinal(match, competitionCode)) return [];
+  const matchId = match?.id;
+  const baseSourceData = primarySpec.source_data || {};
+  return [
+    {
+      ...primarySpec,
+      source_event_id: `${matchId}:goals-over-2-5`,
+      question: '¿La final tendrá más de 2.5 goles?',
+      outcomes: ['Sí', 'No'],
+      outcome_images: [null, null],
+      resolver_type: 'sports_api',
+      resolver_config: {
+        source: 'football-data',
+        matchId,
+        shape: 'total-goals-over',
+        threshold: 2.5,
+      },
+      source_data: {
+        ...baseSourceData,
+        marketType: 'total-goals-over',
+        parentMatchId: matchId,
+        threshold: 2.5,
+      },
+    },
+    {
+      ...primarySpec,
+      source_event_id: `${matchId}:forward-mvp`,
+      question: '¿Un delantero gana el MVP de la final?',
+      outcomes: ['Sí', 'No'],
+      outcome_images: [null, null],
+      resolver_type: null,
+      resolver_config: null,
+      source_data: {
+        ...baseSourceData,
+        marketType: 'final-forward-mvp',
+        parentMatchId: matchId,
+        manualResolution: true,
+      },
+    },
+  ];
+}
+
+function matchToMarketSpecs(match, competitionCode) {
+  const primary = matchToMarketSpec(match, competitionCode);
+  if (!primary) return [];
+  return [
+    primary,
+    ...championFinalSideMarketSpecs(primary, match, competitionCode),
+  ];
+}
+
 /**
  * Run the soccer generator. Returns an array of market specs ready to be
  * upserted into points_pending_markets.
@@ -255,8 +306,7 @@ export async function generateSoccerMarkets({ horizonDays = 14 } = {}) {
     for (const m of matches) {
       if (seenMatchIds.has(m.id)) continue;
       seenMatchIds.add(m.id);
-      const spec = matchToMarketSpec(m, code);
-      if (spec) specs.push(spec);
+      specs.push(...matchToMarketSpecs(m, code));
     }
   }
 
@@ -269,8 +319,7 @@ export async function generateSoccerMarkets({ horizonDays = 14 } = {}) {
       const awayTla = m?.awayTeam?.tla;
       if (!TEAM_TLA_WHITELIST.has(homeTla) && !TEAM_TLA_WHITELIST.has(awayTla)) continue;
       seenMatchIds.add(m.id);
-      const spec = matchToMarketSpec(m, code);
-      if (spec) specs.push(spec);
+      specs.push(...matchToMarketSpecs(m, code));
     }
   }
 
@@ -284,5 +333,6 @@ export const _internal = {
   COMPETITIONS_TEAM_FILTER,
   isChampionsLeagueFinal,
   matchToMarketSpec,
+  matchToMarketSpecs,
   formatDate,
 };

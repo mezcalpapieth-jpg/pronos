@@ -20,6 +20,11 @@
  */
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  CHAMPIONS_LEAGUE_FINAL_BADGE,
+  CHAMPIONS_LEAGUE_HUB_PATH,
+  isChampionsLeagueFinalWinnerMarket,
+} from '@app/lib/championsLeague.js';
 import { useT } from '@app/lib/i18n.js';
 import PointsBuyModal from './PointsBuyModal.jsx';
 
@@ -121,6 +126,10 @@ export default function PointsMarketCard({ market, userPosition }) {
     && market.status === 'active'
     && market.endTime
     && new Date(market.endTime) < now;
+  const isChampionsFinalCard = isChampionsLeagueFinalWinnerMarket(market);
+  const marketDetailPath = `/market?id=${encodeURIComponent(market.id)}`;
+  const cardTargetPath = isChampionsFinalCard ? CHAMPIONS_LEAGUE_HUB_PATH : marketDetailPath;
+  const navigateToCardTarget = () => navigate(cardTargetPath);
   const volume = market.volume ?? market.tradeVolume ?? 0;
 
   // Card palette is restricted to three hue families — green, yellow,
@@ -156,11 +165,11 @@ export default function PointsMarketCard({ market, userPosition }) {
   return (
     <div
       className="mock-card"
-      onClick={() => navigate(`/market?id=${encodeURIComponent(market.id)}`)}
+      onClick={navigateToCardTarget}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') navigate(`/market?id=${encodeURIComponent(market.id)}`);
+        if (e.key === 'Enter' || e.key === ' ') navigateToCardTarget();
       }}
     >
       <div className="mock-card-header">
@@ -186,6 +195,29 @@ export default function PointsMarketCard({ market, userPosition }) {
             animation: 'pronos-live-pulse 1.4s ease-in-out infinite',
           }}>
             {t('points.card.live')}
+          </span>
+        )}
+        {isChampionsFinalCard && (
+          <span
+            className="mock-card-badge"
+            aria-label="Final Champions League"
+            title="Final Champions League"
+            style={{
+              marginLeft: 'auto',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minWidth: 28,
+              background: 'rgba(59,130,246,0.14)',
+              border: '1px solid rgba(245,200,66,0.45)',
+              color: 'var(--gold)',
+              padding: '3px 8px',
+              borderRadius: 4,
+              fontSize: 13,
+              lineHeight: 1,
+            }}
+          >
+            {CHAMPIONS_LEAGUE_FINAL_BADGE}
           </span>
         )}
         {isPending && !isResolved && !isLive && !isWorldCupLocked && (
@@ -286,7 +318,7 @@ export default function PointsMarketCard({ market, userPosition }) {
               // navigate handler so we can open the drawer in place.
               e.stopPropagation();
               if (canOpenDrawer) setDrawerIndex(i);
-              else navigate(`/market?id=${encodeURIComponent(market.id)}`);
+              else navigateToCardTarget();
             };
             return (
               <div

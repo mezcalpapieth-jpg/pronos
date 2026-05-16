@@ -3,13 +3,15 @@ import Nav from '../components/Nav.jsx';
 import CategoryBar from '../components/CategoryBar.jsx';
 import Footer from '../components/Footer.jsx';
 import ChampionsLeagueHub from '../components/ChampionsLeagueHub.jsx';
-import { findChampionsLeagueFinalMarket } from '../lib/championsLeague.js';
+import BetModal from '../components/BetModal.jsx';
+import { findChampionsLeagueFinalMarkets } from '../lib/championsLeague.js';
 
 const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 42161);
 
 export default function ChampionsLeaguePage({ onOpenLogin }) {
-  const [finalMarket, setFinalMarket] = useState(null);
+  const [finalMarkets, setFinalMarkets] = useState({ winner: null, goals: null, mvp: null });
   const [loadingFinalMarket, setLoadingFinalMarket] = useState(true);
+  const [bet, setBet] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -23,10 +25,10 @@ export default function ChampionsLeaguePage({ onOpenLogin }) {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data?.error || 'load_failed');
         if (!cancelled) {
-          setFinalMarket(findChampionsLeagueFinalMarket(data?.markets || []));
+          setFinalMarkets(findChampionsLeagueFinalMarkets(data?.markets || []));
         }
       } catch {
-        if (!cancelled) setFinalMarket(null);
+        if (!cancelled) setFinalMarkets({ winner: null, goals: null, mvp: null });
       } finally {
         if (!cancelled) setLoadingFinalMarket(false);
       }
@@ -42,9 +44,25 @@ export default function ChampionsLeaguePage({ onOpenLogin }) {
       </div>
       <ChampionsLeagueHub
         surfaceLabel="MVP on-chain"
-        finalMarket={finalMarket}
+        finalMarket={finalMarkets.winner}
+        finalMarkets={finalMarkets}
         finalMarketLoading={loadingFinalMarket}
+        onFinalBet={setBet}
       />
+      {bet && (
+        <BetModal
+          open={!!bet}
+          variant="drawer"
+          onClose={() => setBet(null)}
+          outcome={bet.outcome}
+          outcomePct={bet.outcomePct}
+          outcomeIndex={bet.outcomeIndex}
+          marketId={bet.market?.id}
+          marketTitle={bet.market?.question}
+          market={bet.market}
+          onOpenLogin={onOpenLogin}
+        />
+      )}
       <Footer />
     </>
   );

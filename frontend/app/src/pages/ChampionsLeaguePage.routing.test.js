@@ -5,6 +5,10 @@ import { test } from 'node:test';
 const mvpApp = await readFile(new URL('../App.jsx', import.meta.url), 'utf8');
 const mvpCategory = await readFile(new URL('./CategoryPage.jsx', import.meta.url), 'utf8');
 const championsLeagueHub = await readFile(new URL('../components/ChampionsLeagueHub.jsx', import.meta.url), 'utf8');
+const mvpMarketCard = await readFile(new URL('../components/MarketCard.jsx', import.meta.url), 'utf8');
+const pointsChampionsLeaguePage = await readFile(new URL('../../points/src/pages/PointsChampionsLeaguePage.jsx', import.meta.url), 'utf8');
+const pointsMarketCard = await readFile(new URL('../../points/src/components/PointsMarketCard.jsx', import.meta.url), 'utf8');
+const mvpChampionsLeaguePage = await readFile(new URL('./ChampionsLeaguePage.jsx', import.meta.url), 'utf8');
 const mvpMarketDetail = await readFile(new URL('./MarketDetail.jsx', import.meta.url), 'utf8');
 const pointsApp = await readFile(new URL('../../points/src/App.jsx', import.meta.url), 'utf8');
 const pointsCategory = await readFile(new URL('../../points/src/pages/PointsCategoryPage.jsx', import.meta.url), 'utf8');
@@ -56,9 +60,27 @@ test('Champions League hub public copy hides mock framing and links the real fin
   assert.match(championsLeagueHub, /marketHref/);
 });
 
+test('Champions League hub can open direct side-bet drawers on both apps', () => {
+  assert.match(championsLeagueHub, /onFinalBet/);
+  assert.doesNotMatch(championsLeagueHub, /Apostar/);
+  assert.match(championsLeagueHub, /isHome \? 'PSG' : 'Arsenal'/);
+  assert.match(pointsChampionsLeaguePage, /PointsBuyModal/);
+  assert.match(pointsChampionsLeaguePage, /variant="drawer"/);
+  assert.match(mvpChampionsLeaguePage, /BetModal/);
+  assert.match(mvpChampionsLeaguePage, /variant="drawer"/);
+});
+
 test('Champions League final detail presentation removes draw outcomes on both surfaces', () => {
   for (const source of [pointsMarketDetail, mvpMarketDetail]) {
     assert.match(source, /finalMarketOptions/);
     assert.match(source, /displayOutcomeIndices/);
+  }
+});
+
+test('Champions League final market cards route to the hub and carry a final badge', () => {
+  for (const source of [pointsMarketCard, mvpMarketCard]) {
+    assert.match(source, /isChampionsLeagueFinalWinnerMarket/);
+    assert.match(source, /CHAMPIONS_LEAGUE_HUB_PATH/);
+    assert.match(source, /CHAMPIONS_LEAGUE_FINAL_BADGE/);
   }
 });

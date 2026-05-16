@@ -41,7 +41,7 @@ export function buildAutoResolverFinalScore({
 
   try {
     if (resolverType === 'sports_api') {
-      if (cfg.shape === 'binary' || cfg.shape === 'draw3') {
+      if (cfg.shape === 'binary' || cfg.shape === 'draw3' || cfg.shape === 'total-goals-over') {
         const home = Number.isFinite(result.homeScore) ? result.homeScore : null;
         const away = Number.isFinite(result.awayScore) ? result.awayScore : null;
         const score = home != null && away != null ? `${home}-${away}` : null;
@@ -302,6 +302,14 @@ export async function resolveAutoResolverCandidate(candidate = {}) {
       else if (result.winner === 'draw') winningIdx = 1;
       else if (result.winner === 'away') winningIdx = 2;
       else throw new Error('draw3 sport got null winner');
+    } else if (cfg.shape === 'total-goals-over') {
+      const home = Number(result.homeScore);
+      const away = Number(result.awayScore);
+      const threshold = Number(cfg.threshold ?? 2.5);
+      if (!Number.isFinite(home) || !Number.isFinite(away) || !Number.isFinite(threshold)) {
+        throw new Error('total-goals-over sport got missing score/threshold');
+      }
+      winningIdx = home + away > threshold ? 0 : 1;
     } else if (cfg.shape === 'parallel') {
       if (!Array.isArray(cfg.legs) || cfg.legs.length === 0) {
         throw new Error('parallel sport: missing cfg.legs');
@@ -321,6 +329,10 @@ export async function resolveAutoResolverCandidate(candidate = {}) {
       winner: result.winner,
       homeScore: result.homeScore ?? null,
       awayScore: result.awayScore ?? null,
+      totalGoals: cfg.shape === 'total-goals-over'
+        ? (Number(result.homeScore) + Number(result.awayScore))
+        : null,
+      threshold: cfg.shape === 'total-goals-over' ? Number(cfg.threshold ?? 2.5) : null,
       winnerDriver: result.winnerDriverLabel ?? null,
     };
   } else {

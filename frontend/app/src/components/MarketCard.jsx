@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BetModal from './BetModal.jsx';
+import {
+  CHAMPIONS_LEAGUE_FINAL_BADGE,
+  CHAMPIONS_LEAGUE_HUB_PATH,
+  isChampionsLeagueFinalWinnerMarket,
+} from '../lib/championsLeague.js';
 import { useT } from '../lib/i18n.js';
 import {
   accentForOutcome,
@@ -35,10 +40,13 @@ export default function MarketCard({ market, onOpenLogin }) {
     && market.status === 'active'
     && market.endTime
     && new Date(market.endTime).getTime() < Date.now();
+  const isChampionsFinalCard = isChampionsLeagueFinalWinnerMarket(market);
   const drawerOpen = drawerIndex !== null;
 
   function navigateToDetail() {
-    navigate(`/market?id=${encodeURIComponent(market.id)}`);
+    navigate(isChampionsFinalCard
+      ? CHAMPIONS_LEAGUE_HUB_PATH
+      : `/market?id=${encodeURIComponent(market.id)}`);
   }
 
   function openDrawer(event, index) {
@@ -100,6 +108,26 @@ export default function MarketCard({ market, onOpenLogin }) {
                 }}
               />
               {t('card.live') || 'EN VIVO'}
+            </span>
+          )}
+          {isChampionsFinalCard && (
+            <span
+              className="mock-card-badge"
+              aria-label="Final Champions League"
+              title="Final Champions League"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minWidth: 28,
+                background: 'rgba(59,130,246,0.14)',
+                border: '1px solid rgba(245,200,66,0.45)',
+                color: 'var(--gold)',
+                fontSize: 13,
+                lineHeight: 1,
+              }}
+            >
+              {CHAMPIONS_LEAGUE_FINAL_BADGE}
             </span>
           )}
           {isSeriesPending && (

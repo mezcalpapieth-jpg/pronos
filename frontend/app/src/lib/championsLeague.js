@@ -22,6 +22,9 @@ export const CHAMPIONS_LEAGUE_FINAL = {
   },
 };
 
+export const CHAMPIONS_LEAGUE_HUB_PATH = '/c/deportes/uefa-champions-league';
+export const CHAMPIONS_LEAGUE_FINAL_BADGE = '🏆';
+
 export const CHAMPIONS_LEAGUE_NEXT_SEASON = {
   enabled: false,
   season: '2026/27',
@@ -144,22 +147,57 @@ function isPsgArsenalFinalMarket(market) {
   return hasPsg && hasArsenal && isSoccer && isChampions && sameFinalDate;
 }
 
+export function isChampionsLeagueFinalWinnerMarket(market) {
+  return isPsgArsenalFinalMarket(market);
+}
+
+function isChampionsLeagueFinalSideMarket(market, kind) {
+  const text = marketSearchText(market);
+  const isSoccer = !market?.sport || normalizeFinalText(market.sport) === 'soccer';
+  const isChampions = !market?.league
+    || normalizeFinalText(market.league) === 'uefa-cl'
+    || text.includes('champions league');
+  const marketDate = market?.startTime || market?.start_time || market?.endTime || market?.end_time || null;
+  const sameFinalDate = !marketDate || isoDatePart(marketDate) === CHAMPIONS_LEAGUE_FINAL.kickoffIso.slice(0, 10);
+  if (!isSoccer || !isChampions || !sameFinalDate) return false;
+  if (kind === 'goals') return text.includes('2.5') && text.includes('goles');
+  if (kind === 'mvp') return text.includes('mvp') && text.includes('delantero');
+  return false;
+}
+
+function rankMarketCandidate(market) {
+  const text = marketSearchText(market);
+  const status = normalizeFinalText(market.status);
+  let score = 0;
+  if (status === 'active' || status === 'open') score += 40;
+  if (normalizeFinalText(market.league) === 'uefa-cl') score += 30;
+  if (isoDatePart(market.startTime || market.start_time || market.endTime || market.end_time) === CHAMPIONS_LEAGUE_FINAL.kickoffIso.slice(0, 10)) score += 20;
+  if (text.includes('champions')) score += 10;
+  if (Array.isArray(market.outcomes) && market.outcomes.length >= 2) score += 5;
+  return score;
+}
+
+function bestMarket(markets) {
+  if (!Array.isArray(markets) || markets.length === 0) return null;
+  return markets
+    .map(market => ({ market, score: rankMarketCandidate(market) }))
+    .sort((a, b) => b.score - a.score)[0].market;
+}
+
 export function findChampionsLeagueFinalMarket(markets = []) {
   const candidates = (Array.isArray(markets) ? markets : [])
     .filter(isPsgArsenalFinalMarket);
   if (candidates.length === 0) return null;
-  return candidates
-    .map((market) => {
-      const text = marketSearchText(market);
-      const status = normalizeFinalText(market.status);
-      let score = 0;
-      if (status === 'active' || status === 'open') score += 40;
-      if (normalizeFinalText(market.league) === 'uefa-cl') score += 30;
-      if (text.includes('psg vs arsenal') || text.includes('arsenal vs psg')) score += 15;
-      if (Array.isArray(market.outcomes) && market.outcomes.length >= 2) score += 10;
-      return { market, score };
-    })
-    .sort((a, b) => b.score - a.score)[0].market;
+  return bestMarket(candidates);
+}
+
+export function findChampionsLeagueFinalMarkets(markets = []) {
+  const list = Array.isArray(markets) ? markets : [];
+  return {
+    winner: findChampionsLeagueFinalMarket(list),
+    goals: bestMarket(list.filter(market => isChampionsLeagueFinalSideMarket(market, 'goals'))),
+    mvp: bestMarket(list.filter(market => isChampionsLeagueFinalSideMarket(market, 'mvp'))),
+  };
 }
 
 export function finalMarketOptions(market) {

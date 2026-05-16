@@ -8,7 +8,9 @@ import {
   CHAMPIONS_LEAGUE_ROAD,
   finalMarketOptions,
   findChampionsLeagueFinalMarket,
+  findChampionsLeagueFinalMarkets,
   formatCountdown,
+  isChampionsLeagueFinalWinnerMarket,
 } from './championsLeague.js';
 
 test('Champions League hub models the PSG vs Arsenal final countdown', () => {
@@ -78,4 +80,72 @@ test('Champions League final market helper links the real PSG-Arsenal market wit
       { label: 'Arsenal', pct: 49, outcomeIndex: 2, image: 'arsenal.png' },
     ],
   );
+});
+
+test('Champions League final helper links the winner plus final side markets', () => {
+  const markets = [
+    {
+      id: 34,
+      question: 'PSG vs Arsenal',
+      sport: 'soccer',
+      league: 'uefa-cl',
+      outcomes: ['PSG', 'Arsenal'],
+      prices: [0.51, 0.49],
+      startTime: CHAMPIONS_LEAGUE_FINAL.kickoffIso,
+    },
+    {
+      id: 35,
+      question: '¿La final tendrá más de 2.5 goles?',
+      sport: 'soccer',
+      league: 'uefa-cl',
+      outcomes: ['Sí', 'No'],
+      startTime: CHAMPIONS_LEAGUE_FINAL.kickoffIso,
+    },
+    {
+      id: 36,
+      question: '¿Un delantero gana el MVP de la final?',
+      sport: 'soccer',
+      league: 'uefa-cl',
+      outcomes: ['Sí', 'No'],
+      startTime: CHAMPIONS_LEAGUE_FINAL.kickoffIso,
+    },
+  ];
+
+  assert.deepEqual(findChampionsLeagueFinalMarkets(markets), {
+    winner: markets[0],
+    goals: markets[1],
+    mvp: markets[2],
+  });
+  assert.equal(findChampionsLeagueFinalMarket(markets), markets[0]);
+});
+
+test('Champions League final card predicate only matches the winner market', () => {
+  const winner = {
+    id: 34,
+    question: 'PSG vs Arsenal',
+    sport: 'soccer',
+    league: 'uefa-cl',
+    outcomes: ['PSG', 'Arsenal'],
+    startTime: CHAMPIONS_LEAGUE_FINAL.kickoffIso,
+  };
+  const sideMarket = {
+    id: 35,
+    question: '¿La final tendrá más de 2.5 goles?',
+    sport: 'soccer',
+    league: 'uefa-cl',
+    outcomes: ['Sí', 'No'],
+    startTime: CHAMPIONS_LEAGUE_FINAL.kickoffIso,
+  };
+  const differentMatch = {
+    id: 36,
+    question: 'Barcelona vs Real Madrid',
+    sport: 'soccer',
+    league: 'uefa-cl',
+    outcomes: ['Barcelona', 'Real Madrid'],
+    startTime: CHAMPIONS_LEAGUE_FINAL.kickoffIso,
+  };
+
+  assert.equal(isChampionsLeagueFinalWinnerMarket(winner), true);
+  assert.equal(isChampionsLeagueFinalWinnerMarket(sideMarket), false);
+  assert.equal(isChampionsLeagueFinalWinnerMarket(differentMatch), false);
 });

@@ -198,22 +198,34 @@ function statusPillProps(status) {
   return { label: 'Finalizado', tone: 'closed' };
 }
 
-function MarketArchive({ finalMarket, marketHref }) {
+function marketForArchiveId(finalMarkets, id) {
+  if (id === 'ucl-final-winner') return finalMarkets?.winner || null;
+  if (id === 'ucl-final-goals') return finalMarkets?.goals || null;
+  if (id === 'ucl-final-mvp') return finalMarkets?.mvp || null;
+  return null;
+}
+
+function hrefForMarket(market) {
+  return market?.id ? `/market?id=${encodeURIComponent(market.id)}` : null;
+}
+
+function MarketArchive({ finalMarkets }) {
   const groups = CHAMPIONS_LEAGUE_MARKET_GROUPS.map(group => {
-    if (group.id !== 'final-market' || !finalMarket) return group;
+    if (group.id !== 'final-market') return group;
     return {
       ...group,
-      markets: group.markets.map(market => (
-        market.id === 'ucl-final-winner'
-          ? {
-              ...market,
-              question: finalMarket.question || market.question,
-              result: 'Ir al mercado',
-              status: 'open',
-              href: marketHref,
-            }
-          : market
-      )),
+      markets: group.markets.map(market => {
+        const linkedMarket = marketForArchiveId(finalMarkets, market.id);
+        const href = hrefForMarket(linkedMarket);
+        if (!linkedMarket || !href) return market;
+        return {
+          ...market,
+          question: linkedMarket.question || market.question,
+          result: 'Ir al mercado',
+          status: 'open',
+          href,
+        };
+      }),
     };
   });
 
@@ -435,7 +447,7 @@ function BracketStrip() {
   );
 }
 
-function FinalMarketPanel({ final, finalMarket, finalMarketLoading, marketHref }) {
+function FinalMarketPanel({ final, finalMarket, finalMarketLoading, marketHref, onFinalBet }) {
   const liveOptions = finalMarket ? finalMarketOptions(finalMarket) : [];
   const options = liveOptions.length >= 2
     ? liveOptions
@@ -445,12 +457,10 @@ function FinalMarketPanel({ final, finalMarket, finalMarketLoading, marketHref }
       ];
   const statusLabel = finalMarketLoading ? 'Buscando' : finalMarket ? 'Abierto' : 'Por abrir';
   const statusTone = finalMarket ? 'open' : 'pending';
-  const Panel = marketHref ? Link : 'div';
-  const panelProps = marketHref ? { to: marketHref } : {};
+  const canBet = finalMarket && typeof onFinalBet === 'function';
 
   return (
-    <Panel
-      {...panelProps}
+    <div
       style={{
         textDecoration: 'none',
         border: `1px solid ${finalMarket ? 'rgba(34,197,94,0.32)' : 'rgba(250,204,21,0.2)'}`,
@@ -512,12 +522,44 @@ function FinalMarketPanel({ final, finalMarket, finalMarketLoading, marketHref }
                 borderRadius: 999,
                 background: `linear-gradient(90deg, ${color} ${row.pct}%, rgba(255,255,255,0.08) ${row.pct}%)`,
               }} />
+              <button
+                type="button"
+                disabled={!canBet}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (!canBet) return;
+                  onFinalBet({
+                    market: finalMarket,
+                    outcomeIndex: row.outcomeIndex,
+                    outcome: row.label,
+                    outcomePct: row.pct,
+                    price: row.price,
+                  });
+                }}
+                style={{
+                  gridColumn: '1 / -1',
+                  justifySelf: 'stretch',
+                  border: `1px solid ${canBet ? color : 'rgba(255,255,255,0.12)'}`,
+                  borderRadius: 8,
+                  padding: '8px 10px',
+                  background: canBet ? `${color}22` : 'rgba(255,255,255,0.035)',
+                  color: canBet ? 'var(--text-primary)' : 'var(--text-muted)',
+                  cursor: canBet ? 'pointer' : 'not-allowed',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  letterSpacing: '0.1em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                {isHome ? 'PSG' : 'Arsenal'}
+              </button>
             </div>
           );
         })}
       </div>
       {marketHref && (
-        <div style={{
+        <Link to={marketHref} style={{
           marginTop: 2,
           fontFamily: 'var(--font-mono)',
           fontSize: 10,
@@ -525,19 +567,28 @@ function FinalMarketPanel({ final, finalMarket, finalMarketLoading, marketHref }
           color: 'var(--green)',
           textTransform: 'uppercase',
           textAlign: 'right',
+          textDecoration: 'none',
         }}>
           Abrir mercado
-        </div>
+        </Link>
       )}
-    </Panel>
+    </div>
   );
 }
 
-export default function ChampionsLeagueHub({ surfaceLabel = 'Points', finalMarket = null, finalMarketLoading = false }) {
+export default function ChampionsLeagueHub({
+  surfaceLabel = 'Points',
+  finalMarket = null,
+  finalMarkets = null,
+  finalMarketLoading = false,
+  onFinalBet = null,
+}) {
   const countdown = useFinalCountdown();
   const final = CHAMPIONS_LEAGUE_FINAL;
   const kickoff = useMemo(() => formatKickoff(final.kickoffIso), [final.kickoffIso]);
-  const marketHref = finalMarket?.id ? `/market?id=${encodeURIComponent(finalMarket.id)}` : null;
+  const linkedFinalMarkets = finalMarkets || { winner: finalMarket };
+  const primaryFinalMarket = linkedFinalMarkets?.winner || finalMarket;
+  const marketHref = hrefForMarket(primaryFinalMarket);
 
   return (
     <main style={{
@@ -720,9 +771,10 @@ export default function ChampionsLeagueHub({ surfaceLabel = 'Points', finalMarke
             </div>
             <FinalMarketPanel
               final={final}
-              finalMarket={finalMarket}
+              finalMarket={primaryFinalMarket}
               finalMarketLoading={finalMarketLoading}
               marketHref={marketHref}
+              onFinalBet={onFinalBet}
             />
           </div>
         </div>
@@ -738,7 +790,7 @@ export default function ChampionsLeagueHub({ surfaceLabel = 'Points', finalMarke
       </section>
 
       <BracketStrip />
-      <MarketArchive finalMarket={finalMarket} marketHref={marketHref} />
+      <MarketArchive finalMarkets={linkedFinalMarkets} />
 
       {CHAMPIONS_LEAGUE_NEXT_SEASON.enabled && (
         <section style={{
