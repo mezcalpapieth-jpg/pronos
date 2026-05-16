@@ -27,6 +27,7 @@ const MarketDetail = lazy(() => import('./pages/MarketDetail.jsx'));
 const Portfolio = lazy(() => import('./pages/Portfolio.jsx'));
 const Admin = lazy(() => import('./pages/Admin.jsx'));
 const WorldCupPage = lazy(() => import('./pages/WorldCupPage.jsx'));
+const ChampionsLeaguePage = lazy(() => import('./pages/ChampionsLeaguePage.jsx'));
 const CategoryPage = lazy(() => import('./pages/CategoryPage.jsx'));
 const NewsPage = lazy(() => import('./pages/NewsPage.jsx'));
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy.jsx'));
@@ -96,6 +97,10 @@ export default function App() {
           <Route
             path="/c/world-cup"
             element={<WorldCupPage onOpenLogin={() => setLoginOpen(true)} />}
+          />
+          <Route
+            path="/c/deportes/uefa-champions-league"
+            element={<ChampionsLeaguePage onOpenLogin={() => setLoginOpen(true)} />}
           />
           {/* News feed — registered BEFORE /c/:slug so the specialized
               layout wins over the generic category grid. adminPath

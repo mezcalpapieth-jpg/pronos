@@ -25,6 +25,7 @@ const PointsHome = lazy(() => import('./pages/PointsHome.jsx'));
 const PointsMarketDetail = lazy(() => import('./pages/PointsMarketDetail.jsx'));
 const PointsCategoryPage = lazy(() => import('./pages/PointsCategoryPage.jsx'));
 const PointsWorldCupPage = lazy(() => import('./pages/PointsWorldCupPage.jsx'));
+const PointsChampionsLeaguePage = lazy(() => import('./pages/PointsChampionsLeaguePage.jsx'));
 // Shared news page — same component used by the MVP build, with the
 // admin-handoff destination passed in via the `adminPath` prop.
 const NewsPage = lazy(() => import('@app/pages/NewsPage.jsx'));
@@ -143,6 +144,7 @@ function Shell({ onOpenLogin, isAdmin }) {
               bracket. Registered BEFORE the generic /c/:slug so it
               wins the match. */}
           <Route path="/c/world-cup" element={<PointsWorldCupPage />} />
+          <Route path="/c/deportes/uefa-champions-league" element={<PointsChampionsLeaguePage />} />
           {/* News page — registered BEFORE the generic /c/:slug so the
               specialized layout wins over the standard category grid.
               adminPath='/admin' targets the points-app's own admin. */}

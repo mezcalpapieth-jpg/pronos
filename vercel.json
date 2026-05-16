@@ -33,6 +33,7 @@
     { "source": "/market",     "destination": "/points/market",     "permanent": true },
     { "source": "/r/:username","destination": "/points/r/:username","permanent": true },
     { "source": "/u/:username","destination": "/points/u/:username","permanent": true },
+    { "source": "/c/deportes/uefa-champions-league", "destination": "/points/c/deportes/uefa-champions-league", "permanent": true },
     { "source": "/c/:slug",    "destination": "/points/c/:slug",    "permanent": true }
   ],
   "rewrites": [
@@ -41,6 +42,7 @@
     { "source": "/mvp/market",    "destination": "/mvp/" },
     { "source": "/mvp/portfolio", "destination": "/mvp/" },
     { "source": "/mvp/admin",     "destination": "/mvp/" },
+    { "source": "/mvp/c/deportes/uefa-champions-league", "destination": "/mvp/" },
     { "source": "/mvp/privacy",   "destination": "/mvp/" },
     { "source": "/mvp/terms",     "destination": "/mvp/" },
     { "source": "/points/market",       "destination": "/points/" },
@@ -51,6 +53,7 @@
     { "source": "/points/terms",        "destination": "/points/" },
     { "source": "/points/r/:username",  "destination": "/points/" },
     { "source": "/points/u/:username",  "destination": "/points/" },
+    { "source": "/points/c/deportes/uefa-champions-league", "destination": "/points/" },
     { "source": "/points/c/:slug",      "destination": "/points/" }
   ],
   "headers": [

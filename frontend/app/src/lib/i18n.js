@@ -617,7 +617,7 @@ const STRINGS = {
   'points.league.all':        { es: 'Todas',                  en: 'All' },
   'points.league.ufc':        { es: 'UFC',                    en: 'UFC' },
   'points.league.boxing':     { es: 'Boxeo',                  en: 'Boxing' },
-  'points.league.uefaCl':     { es: 'UEFA Champions',         en: 'UEFA Champions' },
+  'points.league.uefaCl':     { es: 'UEFA Champions League',  en: 'UEFA Champions League' },
   'points.league.laLiga':     { es: 'La Liga',                en: 'La Liga' },
   'points.league.premier':    { es: 'Premier League',         en: 'Premier League' },
   'points.league.serieA':     { es: 'Serie A',                en: 'Serie A' },

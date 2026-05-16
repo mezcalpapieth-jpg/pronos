@@ -13,7 +13,7 @@
  * the generator pipeline when markets are approved.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import Nav from '../components/Nav.jsx';
 import Footer from '../components/Footer.jsx';
 import CategoryBar from '../components/CategoryBar.jsx';
@@ -59,7 +59,7 @@ const SPORT_TABS = [
 
 const SOCCER_LEAGUES = [
   { key: 'all',            label: 'Todas'          },
-  { key: 'uefa-cl',        label: 'Champions'      },
+  { key: 'uefa-cl',        label: 'UEFA Champions League', hubPath: '/c/deportes/uefa-champions-league' },
   { key: 'la-liga',        label: 'La Liga'        },
   { key: 'premier-league', label: 'Premier League' },
   { key: 'serie-a',        label: 'Serie A'        },
@@ -117,6 +117,7 @@ const GEO_FILTER_EXCLUDED_CATEGORIES = new Set(['all', 'crypto', 'world-cup', 'p
 export default function CategoryPage({ onOpenLogin }) {
   const { slug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [markets, setMarkets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -400,13 +401,15 @@ export default function CategoryPage({ onOpenLogin }) {
               {leagueOptions.map(l => (
                 <button
                   key={l.key}
-                  onClick={() => setLeague(l.key)}
+                  onClick={() => l.hubPath ? navigate(l.hubPath) : setLeague(l.key)}
                   style={{
                     display: 'block', width: isMobile ? 'auto' : '100%', textAlign: 'left',
                     padding: '6px 10px', borderRadius: 6,
-                    background: league === l.key ? 'rgba(0,232,122,0.1)' : 'transparent',
-                    border: league === l.key ? '1px solid rgba(0,232,122,0.3)' : '1px solid transparent',
-                    color: league === l.key ? 'var(--green)' : 'var(--text-secondary)',
+                    background: l.hubPath
+                      ? 'linear-gradient(135deg, rgba(59,130,246,0.12), rgba(250,204,21,0.1))'
+                      : league === l.key ? 'rgba(0,232,122,0.1)' : 'transparent',
+                    border: l.hubPath || league === l.key ? '1px solid rgba(0,232,122,0.3)' : '1px solid transparent',
+                    color: l.hubPath || league === l.key ? 'var(--green)' : 'var(--text-secondary)',
                     fontFamily: 'var(--font-mono)', fontSize: 11,
                     cursor: 'pointer', marginBottom: 4, letterSpacing: '0.04em',
                   }}

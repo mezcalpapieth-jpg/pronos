@@ -19,7 +19,7 @@
  * that plumbing will have null values and fall into the "Todos" bucket.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useT } from '@app/lib/i18n.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
@@ -69,7 +69,7 @@ const SPORT_TABS = [
 // espn-soccer generator).
 const SOCCER_LEAGUES = [
   { key: 'all',            tKey: 'points.league.all'           },
-  { key: 'uefa-cl',        tKey: 'points.league.uefaCl'        },
+  { key: 'uefa-cl',        tKey: 'points.league.uefaCl', hubPath: '/c/deportes/uefa-champions-league' },
   { key: 'la-liga',        tKey: 'points.league.laLiga'        },
   { key: 'premier-league', tKey: 'points.league.premier'       },
   { key: 'serie-a',        tKey: 'points.league.serieA'        },
@@ -139,6 +139,7 @@ const GEO_FILTER_EXCLUDED_CATEGORIES = new Set(['all', 'crypto', 'world-cup', 'p
 export default function PointsCategoryPage() {
   const { slug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const t = useT();
   const { authenticated } = usePointsAuth();
   // Drives layout collapses for the league sidebar + page padding on
@@ -533,15 +534,17 @@ export default function PointsCategoryPage() {
             {leagueTabs.map(l => (
               <button
                 key={l.key}
-                onClick={() => setLeague(l.key)}
+                onClick={() => l.hubPath ? navigate(l.hubPath) : setLeague(l.key)}
                 style={{
                   textAlign: 'left',
                   fontFamily: 'var(--font-body)',
                   fontSize: 12,
                   padding: '8px 10px',
-                  background: league === l.key ? 'var(--green-dim)' : 'transparent',
-                  color: league === l.key ? 'var(--green)' : 'var(--text-secondary)',
-                  border: `1px solid ${league === l.key ? 'var(--border-active)' : 'var(--border)'}`,
+                  background: l.hubPath
+                    ? 'linear-gradient(135deg, rgba(59,130,246,0.12), rgba(250,204,21,0.1))'
+                    : league === l.key ? 'var(--green-dim)' : 'transparent',
+                  color: l.hubPath || league === l.key ? 'var(--green)' : 'var(--text-secondary)',
+                  border: `1px solid ${l.hubPath || league === l.key ? 'var(--border-active)' : 'var(--border)'}`,
                   borderRadius: 8,
                   cursor: 'pointer',
                 }}
