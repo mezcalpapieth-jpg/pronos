@@ -5,6 +5,7 @@ import {
   CHAMPIONS_LEAGUE_MARKET_GROUPS,
   CHAMPIONS_LEAGUE_NEXT_SEASON,
   CHAMPIONS_LEAGUE_ROAD,
+  finalMarketOptions,
   formatCountdown,
   formatKickoff,
 } from '../lib/championsLeague.js';
@@ -96,7 +97,9 @@ function CountdownUnit({ value, label }) {
   );
 }
 
-function ClosedPill({ children = 'Cerrado' }) {
+function ClosedPill({ children = 'Finalizado', tone = 'closed' }) {
+  const dot = tone === 'open' ? 'var(--green)' : tone === 'pending' ? '#f59e0b' : '#94a3b8';
+  const color = tone === 'open' ? 'var(--green)' : tone === 'pending' ? '#f59e0b' : 'var(--text-muted)';
   return (
     <span style={{
       display: 'inline-flex',
@@ -106,14 +109,14 @@ function ClosedPill({ children = 'Cerrado' }) {
       borderRadius: 999,
       padding: '5px 9px',
       background: 'rgba(255,255,255,0.045)',
-      color: 'var(--text-muted)',
+      color,
       fontFamily: 'var(--font-mono)',
       fontSize: 9,
       letterSpacing: '0.12em',
       textTransform: 'uppercase',
       whiteSpace: 'nowrap',
     }}>
-      <span style={{ width: 6, height: 6, borderRadius: 999, background: '#f59e0b' }} />
+      <span style={{ width: 6, height: 6, borderRadius: 999, background: dot }} />
       {children}
     </span>
   );
@@ -189,7 +192,31 @@ function TeamColumn({ team, side }) {
   );
 }
 
-function MarketArchive() {
+function statusPillProps(status) {
+  if (status === 'open') return { label: 'Abierto', tone: 'open' };
+  if (status === 'pending') return { label: 'Por abrir', tone: 'pending' };
+  return { label: 'Finalizado', tone: 'closed' };
+}
+
+function MarketArchive({ finalMarket, marketHref }) {
+  const groups = CHAMPIONS_LEAGUE_MARKET_GROUPS.map(group => {
+    if (group.id !== 'final-market' || !finalMarket) return group;
+    return {
+      ...group,
+      markets: group.markets.map(market => (
+        market.id === 'ucl-final-winner'
+          ? {
+              ...market,
+              question: finalMarket.question || market.question,
+              result: 'Ir al mercado',
+              status: 'open',
+              href: marketHref,
+            }
+          : market
+      )),
+    };
+  });
+
   return (
     <section style={{ display: 'grid', gap: 14 }}>
       <div>
@@ -200,17 +227,8 @@ function MarketArchive() {
           color: 'var(--text-primary)',
           margin: 0,
         }}>
-          Mercados cerrados del torneo
+          Mercados del torneo
         </h2>
-        <p style={{
-          margin: '6px 0 0',
-          fontFamily: 'var(--font-body)',
-          fontSize: 14,
-          color: 'var(--text-muted)',
-          lineHeight: 1.5,
-        }}>
-          Mock de archivo para que la Champions tenga historia aunque lleguemos directo a la final.
-        </p>
       </div>
 
       <div style={{
@@ -218,7 +236,7 @@ function MarketArchive() {
         gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
         gap: 14,
       }}>
-        {CHAMPIONS_LEAGUE_MARKET_GROUPS.map(group => (
+        {groups.map(group => (
           <article
             key={group.id}
             style={{
@@ -260,48 +278,62 @@ function MarketArchive() {
               </p>
             </div>
             <div style={{ display: 'grid', gap: 8 }}>
-              {group.markets.map(market => (
-                <div
-                  key={market.id}
-                  style={{
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    borderRadius: 8,
-                    padding: '10px 11px',
-                    background: 'rgba(0,0,0,0.18)',
-                  }}
-                >
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    gap: 12,
-                    alignItems: 'flex-start',
-                  }}>
+              {group.markets.map(market => {
+                const status = statusPillProps(market.status);
+                const content = (
+                  <>
                     <div style={{
-                      fontFamily: 'var(--font-body)',
-                      fontSize: 13,
-                      color: 'var(--text-secondary)',
-                      lineHeight: 1.35,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      alignItems: 'flex-start',
                     }}>
-                      {market.question}
+                      <div style={{
+                        fontFamily: 'var(--font-body)',
+                        fontSize: 13,
+                        color: 'var(--text-secondary)',
+                        lineHeight: 1.35,
+                      }}>
+                        {market.question}
+                      </div>
+                      <ClosedPill tone={status.tone}>{status.label}</ClosedPill>
                     </div>
-                    <ClosedPill />
+                    <div style={{
+                      marginTop: 8,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 10,
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 10,
+                      letterSpacing: '0.06em',
+                      color: 'var(--text-muted)',
+                      textTransform: 'uppercase',
+                    }}>
+                      <span>{market.href ? 'Mercado' : 'Resultado'}</span>
+                      <span style={{ color: market.status === 'open' ? 'var(--green)' : 'var(--text-secondary)' }}>
+                        {market.result}
+                      </span>
+                    </div>
+                  </>
+                );
+                const rowStyle = {
+                  display: 'block',
+                  textDecoration: 'none',
+                  border: market.href ? '1px solid rgba(34,197,94,0.28)' : '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 8,
+                  padding: '10px 11px',
+                  background: market.href ? 'rgba(34,197,94,0.07)' : 'rgba(0,0,0,0.18)',
+                };
+                return market.href ? (
+                  <Link key={market.id} to={market.href} style={rowStyle}>
+                    {content}
+                  </Link>
+                ) : (
+                  <div key={market.id} style={rowStyle}>
+                    {content}
                   </div>
-                  <div style={{
-                    marginTop: 8,
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    gap: 10,
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 10,
-                    letterSpacing: '0.06em',
-                    color: 'var(--text-muted)',
-                    textTransform: 'uppercase',
-                  }}>
-                    <span>Resultado</span>
-                    <span style={{ color: 'var(--green)' }}>{market.result}</span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </article>
         ))}
@@ -403,10 +435,109 @@ function BracketStrip() {
   );
 }
 
-export default function ChampionsLeagueHub({ surfaceLabel = 'Points' }) {
+function FinalMarketPanel({ final, finalMarket, finalMarketLoading, marketHref }) {
+  const liveOptions = finalMarket ? finalMarketOptions(finalMarket) : [];
+  const options = liveOptions.length >= 2
+    ? liveOptions
+    : [
+        { label: final.home.name, pct: 50, image: final.home.crestUrl, outcomeIndex: 0 },
+        { label: final.away.name, pct: 50, image: final.away.crestUrl, outcomeIndex: 1 },
+      ];
+  const statusLabel = finalMarketLoading ? 'Buscando' : finalMarket ? 'Abierto' : 'Por abrir';
+  const statusTone = finalMarket ? 'open' : 'pending';
+  const Panel = marketHref ? Link : 'div';
+  const panelProps = marketHref ? { to: marketHref } : {};
+
+  return (
+    <Panel
+      {...panelProps}
+      style={{
+        textDecoration: 'none',
+        border: `1px solid ${finalMarket ? 'rgba(34,197,94,0.32)' : 'rgba(250,204,21,0.2)'}`,
+        borderRadius: 8,
+        padding: 12,
+        background: finalMarket ? 'rgba(34,197,94,0.07)' : 'rgba(250,204,21,0.055)',
+        display: 'grid',
+        gap: 8,
+      }}
+    >
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: 12,
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        letterSpacing: '0.1em',
+        color: finalMarket ? 'var(--green)' : '#facc15',
+        textTransform: 'uppercase',
+      }}>
+        <span>Mercado principal</span>
+        <ClosedPill tone={statusTone}>{statusLabel}</ClosedPill>
+      </div>
+      <div style={{ display: 'grid', gap: 8 }}>
+        {options.slice(0, 2).map(row => {
+          const isHome = String(row.label).toLowerCase().includes('psg')
+            || String(row.label).toLowerCase().includes('paris');
+          const color = isHome ? final.home.secondary : final.away.secondary;
+          const image = row.image || (isHome ? final.home.crestUrl : final.away.crestUrl);
+          return (
+            <div key={`${row.label}-${row.outcomeIndex}`} style={{
+              display: 'grid',
+              gridTemplateColumns: '28px 1fr 52px',
+              gap: 10,
+              alignItems: 'center',
+              color: 'var(--text-secondary)',
+              fontFamily: 'var(--font-body)',
+              fontSize: 13,
+            }}>
+              <img
+                src={image}
+                alt=""
+                style={{ width: 24, height: 24, objectFit: 'contain' }}
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
+              <span>{row.label}</span>
+              <span style={{
+                color,
+                fontFamily: 'var(--font-mono)',
+                fontSize: 12,
+                textAlign: 'right',
+              }}>
+                {row.pct}%
+              </span>
+              <span style={{
+                gridColumn: '1 / -1',
+                height: 5,
+                borderRadius: 999,
+                background: `linear-gradient(90deg, ${color} ${row.pct}%, rgba(255,255,255,0.08) ${row.pct}%)`,
+              }} />
+            </div>
+          );
+        })}
+      </div>
+      {marketHref && (
+        <div style={{
+          marginTop: 2,
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          letterSpacing: '0.08em',
+          color: 'var(--green)',
+          textTransform: 'uppercase',
+          textAlign: 'right',
+        }}>
+          Abrir mercado
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+export default function ChampionsLeagueHub({ surfaceLabel = 'Points', finalMarket = null, finalMarketLoading = false }) {
   const countdown = useFinalCountdown();
   const final = CHAMPIONS_LEAGUE_FINAL;
   const kickoff = useMemo(() => formatKickoff(final.kickoffIso), [final.kickoffIso]);
+  const marketHref = finalMarket?.id ? `/market?id=${encodeURIComponent(finalMarket.id)}` : null;
 
   return (
     <main style={{
@@ -482,7 +613,7 @@ export default function ChampionsLeagueHub({ surfaceLabel = 'Points' }) {
               }}>
                 {final.competition} · {surfaceLabel}
               </span>
-              <ClosedPill>Mercados cerrados</ClosedPill>
+              <ClosedPill tone="open">Mercados del torneo</ClosedPill>
             </div>
             <h1 style={{
               fontFamily: 'var(--font-display)',
@@ -503,7 +634,7 @@ export default function ChampionsLeagueHub({ surfaceLabel = 'Points' }) {
               fontSize: 16,
               lineHeight: 1.55,
             }}>
-              Una final con tratamiento de torneo: cuenta regresiva, archivo de mercados cerrados,
+              Una final con tratamiento de torneo: cuenta regresiva, mercados del torneo,
               bracket y camino de cada equipo para que la Champions se sienta como una sección viva.
             </p>
             <div style={{
@@ -587,60 +718,12 @@ export default function ChampionsLeagueHub({ surfaceLabel = 'Points' }) {
               <CountdownUnit value={pad(countdown.minutes)} label="min" />
               <CountdownUnit value={pad(countdown.seconds)} label="seg" />
             </div>
-            <div style={{
-              border: '1px solid rgba(250,204,21,0.2)',
-              borderRadius: 8,
-              padding: 12,
-              background: 'rgba(250,204,21,0.055)',
-              display: 'grid',
-              gap: 8,
-            }}>
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                gap: 12,
-                fontFamily: 'var(--font-mono)',
-                fontSize: 10,
-                letterSpacing: '0.1em',
-                color: '#facc15',
-                textTransform: 'uppercase',
-              }}>
-                <span>Mercado principal</span>
-                <span>Cerrado</span>
-              </div>
-              <div style={{ display: 'grid', gap: 6 }}>
-                {[
-                  { team: final.home.name, pct: 52, color: final.home.secondary },
-                  { team: final.away.name, pct: 48, color: final.away.secondary },
-                ].map(row => (
-                  <div key={row.team} style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 52px',
-                    gap: 10,
-                    alignItems: 'center',
-                    color: 'var(--text-secondary)',
-                    fontFamily: 'var(--font-body)',
-                    fontSize: 13,
-                  }}>
-                    <span>{row.team}</span>
-                    <span style={{
-                      color: row.color,
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 12,
-                      textAlign: 'right',
-                    }}>
-                      {row.pct}%
-                    </span>
-                    <span style={{
-                      gridColumn: '1 / -1',
-                      height: 5,
-                      borderRadius: 999,
-                      background: `linear-gradient(90deg, ${row.color} ${row.pct}%, rgba(255,255,255,0.08) ${row.pct}%)`,
-                    }} />
-                  </div>
-                ))}
-              </div>
-            </div>
+            <FinalMarketPanel
+              final={final}
+              finalMarket={finalMarket}
+              finalMarketLoading={finalMarketLoading}
+              marketHref={marketHref}
+            />
           </div>
         </div>
       </section>
@@ -655,7 +738,7 @@ export default function ChampionsLeagueHub({ surfaceLabel = 'Points' }) {
       </section>
 
       <BracketStrip />
-      <MarketArchive />
+      <MarketArchive finalMarket={finalMarket} marketHref={marketHref} />
 
       {CHAMPIONS_LEAGUE_NEXT_SEASON.enabled && (
         <section style={{

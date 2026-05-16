@@ -18,6 +18,10 @@ import {
   formatSeriesScoreSummary,
   formatSeriesSubtitle,
 } from '@app/lib/seriesDisplay.js';
+import {
+  finalMarketOptions,
+  findChampionsLeagueFinalMarket,
+} from '@app/lib/championsLeague.js';
 import Sparkline from '@app/components/Sparkline.jsx';
 import ShareButton from '@app/components/ShareButton.jsx';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
@@ -155,7 +159,7 @@ function ScrollableList({ count, children }) {
   );
 }
 
-function UnifiedOutcomeList({ outcomes, prices, outcomeImages, outcomeCountryLabels, market, onBuyClick }) {
+function UnifiedOutcomeList({ outcomes, prices, outcomeImages, outcomeCountryLabels, outcomeIndices, market, onBuyClick }) {
   return (
     <ScrollableList count={outcomes.length}>
       {outcomes.map((label, i) => {
@@ -163,10 +167,11 @@ function UnifiedOutcomeList({ outcomes, prices, outcomeImages, outcomeCountryLab
         const accent = accentFor(i, outcomes.length);
         const logo = outcomeImages?.[i] || null;
         const countryLabel = outcomeCountryLabels?.[i] || null;
+        const originalIndex = Array.isArray(outcomeIndices) ? outcomeIndices[i] : i;
         return (
           <button
             key={i}
-            onClick={() => onBuyClick(market, i, label)}
+            onClick={() => onBuyClick(market, originalIndex, label)}
             style={{
               width: '100%',
               padding: '10px 14px 10px 10px',
@@ -836,11 +841,31 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   const prices = Array.isArray(market.prices) && market.prices.length === outcomes.length
     ? market.prices
     : outcomes.map((_, i) => (i === 0 ? 0.5 : 1 / outcomes.length));
-  const winnerIndex = market.status === 'resolved' ? Number(market.outcome) : null;
-  const isResolved = winnerIndex != null;
+  const championsFinalOptions = market.ammMode !== 'parallel' && findChampionsLeagueFinalMarket([market])
+    ? finalMarketOptions(market)
+    : null;
+  const displayOutcomeIndices = Array.isArray(championsFinalOptions) && championsFinalOptions.length >= 2
+    ? championsFinalOptions.map(option => option.outcomeIndex)
+    : outcomes.map((_, i) => i);
+  const displayOutcomes = Array.isArray(championsFinalOptions) && championsFinalOptions.length >= 2
+    ? championsFinalOptions.map(option => option.label)
+    : outcomes;
+  const displayPrices = Array.isArray(championsFinalOptions) && championsFinalOptions.length >= 2
+    ? championsFinalOptions.map(option => option.price)
+    : prices;
+  const displayOutcomeImages = displayOutcomeIndices.map(i => market.outcomeImages?.[i] || null);
+  const displayOutcomeCountryLabels = displayOutcomeIndices.map(i => market.outcomeCountryLabels?.[i] || null);
+  const displayHistoryByOutcome = displayOutcomeIndices.map(i => historyByOutcome?.[i] || []);
+  const winnerIndex = market.status === 'resolved' && market.outcome != null ? Number(market.outcome) : null;
+  const isResolved = winnerIndex != null && Number.isFinite(winnerIndex);
+  const displayWinnerIndex = isResolved ? displayOutcomeIndices.indexOf(winnerIndex) : null;
   const isTradingLocked = !isResolved && (market.seriesLocked || market.status !== 'active');
-  const ringIndex = isResolved && winnerIndex != null ? winnerIndex : 0;
+  const ringIndex = isResolved && displayWinnerIndex != null && displayWinnerIndex >= 0 ? displayWinnerIndex : 0;
   const seriesSubtitle = formatSeriesSubtitle(market.seriesMeta, { t });
+  function pctFor(i) {
+    if (isResolved) return displayWinnerIndex === i ? 100 : 0;
+    return Math.round((displayPrices[i] ?? 0) * 100);
+  }
   // isLive wins over isPendingResolution when start_time has passed
   // but end_time hasn't — the game is in progress and trading stays
   // open. Only sports markets set start_time; everything else falls
@@ -973,7 +998,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
             )}
 
             {/* Big probability ring for 2-outcome markets */}
-            {outcomes.length === 2 && (
+            {displayOutcomes.length === 2 && (
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -987,8 +1012,8 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 <ProbabilityRing
                   pct={pctFor(ringIndex)}
                   resolved={isResolved}
-                  winner={isResolved && winnerIndex === ringIndex}
-                  label={outcomes[ringIndex]}
+                  winner={isResolved && displayWinnerIndex === ringIndex}
+                  label={displayOutcomes[ringIndex]}
                 />
                 <div style={{ flex: 1 }}>
                   {isResolved ? (
@@ -997,7 +1022,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                         {t('points.detail.resultOfficial')}
                       </div>
                       <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--green)' }}>
-                        🏆 {outcomes[winnerIndex]}
+                        🏆 {displayWinnerIndex >= 0 ? displayOutcomes[displayWinnerIndex] : outcomes[winnerIndex]}
                       </div>
                       <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 8 }}>
                         {t('points.detail.redeemInstructions')}
@@ -1049,7 +1074,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                     markets we stack smaller sparklines so the user sees
                     every curve — one color per option, matching the buy
                     buttons below. */}
-                {outcomes.length <= 2 ? (
+                {displayOutcomes.length <= 2 ? (
                   <Sparkline
                     height={140}
                     color={OUTCOME_COLORS[0]}
@@ -1058,12 +1083,12 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                     showValue={true}
                     valueWidth={60}
                     data={
-                      historyByOutcome && historyByOutcome[0] && historyByOutcome[0].length > 1
-                        ? historyByOutcome[0]
+                      displayHistoryByOutcome && displayHistoryByOutcome[0] && displayHistoryByOutcome[0].length > 1
+                        ? displayHistoryByOutcome[0]
                         : null
                     }
-                    targetPct={Math.round((prices[0] ?? 0.5) * 100)}
-                    seed={`points-detail-${market.id}-${outcomes[0] || 'yes'}`}
+                    targetPct={pctFor(0)}
+                    seed={`points-detail-${market.id}-${displayOutcomes[0] || 'yes'}`}
                   />
                 ) : (
                   // Chart shows up to FOUR lines. When a market has
@@ -1075,15 +1100,15 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                   // it matches the color in the buy-list below.
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {(() => {
-                      const chartIndices = outcomes.length <= 4
-                        ? outcomes.map((_, i) => i)
-                        : [...outcomes.keys()]
-                            .sort((a, b) => (prices[b] ?? 0) - (prices[a] ?? 0))
+                      const chartIndices = displayOutcomes.length <= 4
+                        ? displayOutcomes.map((_, i) => i)
+                        : [...displayOutcomes.keys()]
+                            .sort((a, b) => (displayPrices[b] ?? 0) - (displayPrices[a] ?? 0))
                             .slice(0, 4);
                       return chartIndices.map((i) => {
-                        const label = outcomes[i];
+                        const label = displayOutcomes[i];
                         const color = OUTCOME_COLORS[i % OUTCOME_COLORS.length];
-                        const series = historyByOutcome && historyByOutcome[i];
+                        const series = displayHistoryByOutcome && displayHistoryByOutcome[i];
                         return (
                           <Sparkline
                             key={i}
@@ -1096,13 +1121,13 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                             label={label.length > 10 ? label.slice(0, 9) + '…' : label}
                             labelWidth={84}
                             data={Array.isArray(series) && series.length > 1 ? series : null}
-                            targetPct={Math.round((prices[i] ?? 1 / outcomes.length) * 100)}
+                            targetPct={pctFor(i)}
                             seed={`points-detail-${market.id}-${label || 'opt' + i}`}
                           />
                         );
                       });
                     })()}
-                    {outcomes.length > 4 && (
+                    {displayOutcomes.length > 4 && (
                       <p style={{
                         fontFamily: 'var(--font-mono)',
                         fontSize: 10,
@@ -1111,7 +1136,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                         margin: '4px 0 0',
                         textAlign: 'right',
                       }}>
-                        {t('points.detail.topOnly', { n: outcomes.length })}
+                        {t('points.detail.topOnly', { n: displayOutcomes.length })}
                       </p>
                     )}
                   </div>
@@ -1157,7 +1182,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 actual voting happens in the right sidebar. Parallel
                 doesn't use this grid — the leg list above already
                 shows every outcome with inline buy buttons. */}
-            {outcomes.length > 2 && market.ammMode !== 'parallel' && (
+            {displayOutcomes.length > 2 && market.ammMode !== 'parallel' && (
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
@@ -1166,16 +1191,16 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 // Many outcomes (rare on unified, but guard anyway):
                 // cap height and scroll so the grid doesn't push the
                 // rest of the page off-screen.
-                ...(outcomes.length > 8 ? {
+                ...(displayOutcomes.length > 8 ? {
                   maxHeight: 320,
                   overflowY: 'auto',
                 } : null),
               }}>
-                {outcomes.map((label, i) => {
-                  const pct = Math.round((isResolved ? (winnerIndex === i ? 1 : 0) : prices[i]) * 100);
-                  const isWin = isResolved && winnerIndex === i;
-                  const logo = market.outcomeImages?.[i] || null;
-                  const countryLabel = market.outcomeCountryLabels?.[i] || null;
+                {displayOutcomes.map((label, i) => {
+                  const pct = pctFor(i);
+                  const isWin = isResolved && displayWinnerIndex === i;
+                  const logo = displayOutcomeImages?.[i] || null;
+                  const countryLabel = displayOutcomeCountryLabels?.[i] || null;
                   return (
                     <div key={i} style={{
                       padding: '16px',
@@ -1433,23 +1458,24 @@ export default function PointsMarketDetail({ onOpenLogin }) {
             {!isResolved && !isPendingResolution && !isTradingLocked && (
               (market.category === 'world-cup' || market.league === 'world-cup')
                 ? <OddsSummary
-                    outcomes={outcomes}
-                    prices={prices}
-                    outcomeImages={market.outcomeImages}
-                    outcomeCountryLabels={market.outcomeCountryLabels}
+                    outcomes={displayOutcomes}
+                    prices={displayPrices}
+                    outcomeImages={displayOutcomeImages}
+                    outcomeCountryLabels={displayOutcomeCountryLabels}
                   />
                 : market.ammMode === 'parallel'
                   ? <OddsSummary
-                      outcomes={outcomes}
-                      prices={prices}
-                      outcomeImages={market.outcomeImages}
-                      outcomeCountryLabels={market.outcomeCountryLabels}
+                      outcomes={displayOutcomes}
+                      prices={displayPrices}
+                      outcomeImages={displayOutcomeImages}
+                      outcomeCountryLabels={displayOutcomeCountryLabels}
                     />
                   : <UnifiedOutcomeList
-                      outcomes={outcomes}
-                      prices={prices}
-                      outcomeImages={market.outcomeImages}
-                      outcomeCountryLabels={market.outcomeCountryLabels}
+                      outcomes={displayOutcomes}
+                      prices={displayPrices}
+                      outcomeImages={displayOutcomeImages}
+                      outcomeCountryLabels={displayOutcomeCountryLabels}
+                      outcomeIndices={displayOutcomeIndices}
                       market={market}
                       onBuyClick={handleBuyClick}
                     />

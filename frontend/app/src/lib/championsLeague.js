@@ -71,7 +71,7 @@ export const CHAMPIONS_LEAGUE_MARKET_GROUPS = [
   {
     id: 'league-phase',
     title: 'Fase de liga',
-    eyebrow: 'Mercados cerrados',
+    eyebrow: 'Historial',
     summary: 'La zona para revivir posiciones, top 8 y clasificación antes del bracket.',
     markets: [
       { id: 'ucl-league-psg-top8', question: '¿PSG termina en top 8 de la fase de liga?', result: 'Sí', status: 'closed' },
@@ -82,8 +82,8 @@ export const CHAMPIONS_LEAGUE_MARKET_GROUPS = [
   {
     id: 'knockouts',
     title: 'Eliminatorias',
-    eyebrow: 'Road to the final',
-    summary: 'Octavos, cuartos y semifinales con cada mercado bloqueado como archivo.',
+    eyebrow: 'Camino a la final',
+    summary: 'Octavos, cuartos y semifinales con el recorrido que trae a PSG y Arsenal a Budapest.',
     markets: [
       { id: 'ucl-ko-psg-semis', question: '¿PSG llega a semifinales?', result: 'Sí', status: 'closed' },
       { id: 'ucl-ko-arsenal-semis', question: '¿Arsenal llega a semifinales?', result: 'Sí', status: 'closed' },
@@ -94,14 +94,95 @@ export const CHAMPIONS_LEAGUE_MARKET_GROUPS = [
     id: 'final-market',
     title: 'Final',
     eyebrow: 'Budapest',
-    summary: 'El mercado central queda cerrado por ahora, pero el escenario ya está listo.',
+    summary: 'El mercado central de la final vive aquí junto al camino del torneo.',
     markets: [
-      { id: 'ucl-final-winner', question: '¿Quién gana la Champions League?', result: 'Cerrado', status: 'closed' },
-      { id: 'ucl-final-goals', question: '¿La final tendrá más de 2.5 goles?', result: 'Cerrado', status: 'closed' },
-      { id: 'ucl-final-mvp', question: '¿Un delantero gana el MVP de la final?', result: 'Cerrado', status: 'closed' },
+      { id: 'ucl-final-winner', question: '¿Quién gana la Champions League?', result: 'Abierto', status: 'open' },
+      { id: 'ucl-final-goals', question: '¿La final tendrá más de 2.5 goles?', result: 'Por abrir', status: 'pending' },
+      { id: 'ucl-final-mvp', question: '¿Un delantero gana el MVP de la final?', result: 'Por abrir', status: 'pending' },
     ],
   },
 ];
+
+function normalizeFinalText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+export function isDrawOutcomeLabel(label) {
+  const text = normalizeFinalText(label);
+  return text === 'empate' || text === 'draw' || text === 'tie';
+}
+
+function marketSearchText(market) {
+  const outcomes = Array.isArray(market?.outcomes) ? market.outcomes : [];
+  return normalizeFinalText([
+    market?.question,
+    market?.league,
+    market?.sport,
+    ...outcomes,
+  ].filter(Boolean).join(' '));
+}
+
+function isoDatePart(value) {
+  const time = new Date(value).getTime();
+  if (!Number.isFinite(time)) return null;
+  return new Date(time).toISOString().slice(0, 10);
+}
+
+function isPsgArsenalFinalMarket(market) {
+  const text = marketSearchText(market);
+  const hasPsg = /\bpsg\b/.test(text) || text.includes('paris saint-germain');
+  const hasArsenal = /\barsenal\b/.test(text);
+  const isSoccer = !market?.sport || normalizeFinalText(market.sport) === 'soccer';
+  const isChampions = !market?.league
+    || normalizeFinalText(market.league) === 'uefa-cl'
+    || text.includes('champions league');
+  const marketDate = market?.startTime || market?.start_time || market?.endTime || market?.end_time || null;
+  const sameFinalDate = !marketDate || isoDatePart(marketDate) === CHAMPIONS_LEAGUE_FINAL.kickoffIso.slice(0, 10);
+  return hasPsg && hasArsenal && isSoccer && isChampions && sameFinalDate;
+}
+
+export function findChampionsLeagueFinalMarket(markets = []) {
+  const candidates = (Array.isArray(markets) ? markets : [])
+    .filter(isPsgArsenalFinalMarket);
+  if (candidates.length === 0) return null;
+  return candidates
+    .map((market) => {
+      const text = marketSearchText(market);
+      const status = normalizeFinalText(market.status);
+      let score = 0;
+      if (status === 'active' || status === 'open') score += 40;
+      if (normalizeFinalText(market.league) === 'uefa-cl') score += 30;
+      if (text.includes('psg vs arsenal') || text.includes('arsenal vs psg')) score += 15;
+      if (Array.isArray(market.outcomes) && market.outcomes.length >= 2) score += 10;
+      return { market, score };
+    })
+    .sort((a, b) => b.score - a.score)[0].market;
+}
+
+export function finalMarketOptions(market) {
+  const outcomes = Array.isArray(market?.outcomes) ? market.outcomes : [];
+  const rawPrices = Array.isArray(market?.prices) && market.prices.length === outcomes.length
+    ? market.prices.map(Number)
+    : outcomes.map(() => outcomes.length > 0 ? 1 / outcomes.length : 0.5);
+  const images = Array.isArray(market?.outcomeImages) ? market.outcomeImages : [];
+  const options = outcomes
+    .map((label, outcomeIndex) => ({
+      label,
+      outcomeIndex,
+      rawPrice: Number.isFinite(rawPrices[outcomeIndex]) ? Math.max(0, rawPrices[outcomeIndex]) : 0,
+      image: images[outcomeIndex] || null,
+    }))
+    .filter(option => !isDrawOutcomeLabel(option.label));
+  const total = options.reduce((sum, option) => sum + option.rawPrice, 0) || options.length || 1;
+  return options.map(option => ({
+    ...option,
+    pct: Math.round((option.rawPrice / total) * 100),
+    price: option.rawPrice / total,
+  }));
+}
 
 export function formatCountdown(targetIso, nowInput = Date.now()) {
   const now = typeof nowInput === 'string' ? new Date(nowInput).getTime() : Number(nowInput);

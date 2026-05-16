@@ -6,6 +6,8 @@ import {
   CHAMPIONS_LEAGUE_MARKET_GROUPS,
   CHAMPIONS_LEAGUE_NEXT_SEASON,
   CHAMPIONS_LEAGUE_ROAD,
+  finalMarketOptions,
+  findChampionsLeagueFinalMarket,
   formatCountdown,
 } from './championsLeague.js';
 
@@ -24,6 +26,56 @@ test('Champions League hub models the PSG vs Arsenal final countdown', () => {
 test('Champions League road keeps current markets closed and future season hidden', () => {
   assert.ok(CHAMPIONS_LEAGUE_ROAD.some(round => round.id === 'final'));
   assert.ok(CHAMPIONS_LEAGUE_ROAD.every(round => round.status === 'closed'));
-  assert.ok(CHAMPIONS_LEAGUE_MARKET_GROUPS.flatMap(group => group.markets).every(m => m.status === 'closed'));
+  const finalGroup = CHAMPIONS_LEAGUE_MARKET_GROUPS.find(group => group.id === 'final-market');
+  const finalWinner = finalGroup.markets.find(market => market.id === 'ucl-final-winner');
+  assert.equal(finalWinner.status, 'open');
   assert.equal(CHAMPIONS_LEAGUE_NEXT_SEASON.enabled, false);
+});
+
+test('Champions League final market helper links the real PSG-Arsenal market without draw', () => {
+  const markets = [
+    {
+      id: 12,
+      question: 'Barcelona vs Real Madrid',
+      sport: 'soccer',
+      league: 'la-liga',
+      outcomes: ['Barcelona', 'Empate', 'Real Madrid'],
+      prices: [0.4, 0.25, 0.35],
+    },
+    {
+      id: 33,
+      question: 'PSG vs Arsenal',
+      sport: 'soccer',
+      league: 'uefa-cl',
+      outcomes: ['PSG', 'Empate', 'Arsenal'],
+      prices: [0.37, 0.27, 0.36],
+      outcomeImages: ['psg.png', null, 'arsenal.png'],
+      startTime: '2026-04-15T19:00:00.000Z',
+    },
+    {
+      id: 34,
+      question: 'PSG vs Arsenal',
+      sport: 'soccer',
+      league: 'uefa-cl',
+      outcomes: ['PSG', 'Empate', 'Arsenal'],
+      prices: [0.37, 0.27, 0.36],
+      outcomeImages: ['psg.png', null, 'arsenal.png'],
+      startTime: CHAMPIONS_LEAGUE_FINAL.kickoffIso,
+    },
+  ];
+
+  const market = findChampionsLeagueFinalMarket(markets);
+  assert.equal(market.id, 34);
+  assert.deepEqual(
+    finalMarketOptions(market).map(option => ({
+      label: option.label,
+      pct: option.pct,
+      outcomeIndex: option.outcomeIndex,
+      image: option.image,
+    })),
+    [
+      { label: 'PSG', pct: 51, outcomeIndex: 0, image: 'psg.png' },
+      { label: 'Arsenal', pct: 49, outcomeIndex: 2, image: 'arsenal.png' },
+    ],
+  );
 });

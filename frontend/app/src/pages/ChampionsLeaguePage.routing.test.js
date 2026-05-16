@@ -4,8 +4,11 @@ import { test } from 'node:test';
 
 const mvpApp = await readFile(new URL('../App.jsx', import.meta.url), 'utf8');
 const mvpCategory = await readFile(new URL('./CategoryPage.jsx', import.meta.url), 'utf8');
+const championsLeagueHub = await readFile(new URL('../components/ChampionsLeagueHub.jsx', import.meta.url), 'utf8');
+const mvpMarketDetail = await readFile(new URL('./MarketDetail.jsx', import.meta.url), 'utf8');
 const pointsApp = await readFile(new URL('../../points/src/App.jsx', import.meta.url), 'utf8');
 const pointsCategory = await readFile(new URL('../../points/src/pages/PointsCategoryPage.jsx', import.meta.url), 'utf8');
+const pointsMarketDetail = await readFile(new URL('../../points/src/pages/PointsMarketDetail.jsx', import.meta.url), 'utf8');
 const rootVercel = JSON.parse(await readFile(new URL('../../../../vercel.json', import.meta.url), 'utf8'));
 const frontendVercel = JSON.parse(await readFile(new URL('../../../vercel.json', import.meta.url), 'utf8'));
 
@@ -43,5 +46,19 @@ test('Vercel rewrites preserve hard refreshes on the nested Champions League hub
       rewrites.some(r => r.source === '/mvp/c/deportes/uefa-champions-league' && r.destination === '/mvp/'),
       'MVP Champions League route should rewrite to MVP SPA',
     );
+  }
+});
+
+test('Champions League hub public copy hides mock framing and links the real final market', () => {
+  assert.doesNotMatch(championsLeagueHub, /Mock de archivo|Mercados cerrados del torneo/);
+  assert.match(championsLeagueHub, /Mercados del torneo/);
+  assert.match(championsLeagueHub, /finalMarket/);
+  assert.match(championsLeagueHub, /marketHref/);
+});
+
+test('Champions League final detail presentation removes draw outcomes on both surfaces', () => {
+  for (const source of [pointsMarketDetail, mvpMarketDetail]) {
+    assert.match(source, /finalMarketOptions/);
+    assert.match(source, /displayOutcomeIndices/);
   }
 });

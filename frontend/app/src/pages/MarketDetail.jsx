@@ -34,6 +34,10 @@ import {
   formatSeriesScoreSummary,
   formatSeriesSubtitle,
 } from '../lib/seriesDisplay.js';
+import {
+  finalMarketOptions,
+  findChampionsLeagueFinalMarket,
+} from '../lib/championsLeague.js';
 
 const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 42161);
 
@@ -368,14 +372,30 @@ export default function MarketDetail({ onOpenLogin }) {
     && market.outcomeCountryLabels.length === outcomes.length
     ? market.outcomeCountryLabels
     : null;
-  const hasAnyLogo = outcomeImages?.some(Boolean) || false;
   const livePrices = Array.isArray(market.prices) && market.prices.length === outcomes.length
     ? market.prices
     : pricesFromReserves(market.reserves || []);
+  const championsFinalOptions = findChampionsLeagueFinalMarket([market])
+    ? finalMarketOptions(market)
+    : null;
+  const displayOutcomeIndices = Array.isArray(championsFinalOptions) && championsFinalOptions.length >= 2
+    ? championsFinalOptions.map(option => option.outcomeIndex)
+    : outcomes.map((_, i) => i);
+  const displayOutcomes = Array.isArray(championsFinalOptions) && championsFinalOptions.length >= 2
+    ? championsFinalOptions.map(option => option.label)
+    : outcomes;
+  const displayPrices = Array.isArray(championsFinalOptions) && championsFinalOptions.length >= 2
+    ? championsFinalOptions.map(option => option.price)
+    : livePrices;
+  const displayOutcomeImages = displayOutcomeIndices.map(i => outcomeImages?.[i] || null);
+  const displayOutcomeCountryLabels = displayOutcomeIndices.map(i => outcomeCountryLabels?.[i] || null);
+  const displayHistoryByOutcome = displayOutcomeIndices.map(i => historyByOutcome?.[i] || []);
+  const hasAnyDisplayLogo = displayOutcomeImages.some(Boolean);
   const isResolved = market.status === 'resolved';
   const winnerIndex = isResolved && market.outcome != null ? Number(market.outcome) : null;
+  const displayWinnerIndex = isResolved ? displayOutcomeIndices.indexOf(winnerIndex) : null;
   const isTradingLocked = !isResolved && (market.seriesLocked || market.status !== 'active');
-  const ringIndex = isResolved && winnerIndex != null ? winnerIndex : 0;
+  const ringIndex = isResolved && displayWinnerIndex != null && displayWinnerIndex >= 0 ? displayWinnerIndex : 0;
   const seriesSubtitle = formatSeriesSubtitle(market.seriesMeta);
   const isOnchain = market.mode === 'onchain';
   const isLive = typeof market.live === 'boolean'
@@ -389,24 +409,25 @@ export default function MarketDetail({ onOpenLogin }) {
     new Date(market.endTime).getTime() < Date.now() && !isLive;
 
   function pctFor(i) {
-    if (isResolved) return winnerIndex === i ? 100 : 0;
-    return Math.round((livePrices[i] || 0) * 100);
+    if (isResolved) return displayWinnerIndex === i ? 100 : 0;
+    return Math.round((displayPrices[i] || 0) * 100);
   }
 
   function handleBet(i) {
     if (isResolved || isTradingLocked) return;
     if (!authenticated) { onOpenLogin?.(); return; }
+    const outcomeIndex = displayOutcomeIndices[i] ?? i;
     setBet({
       market,
-      outcome: outcomes[i],
-      outcomeIndex: i,
+      outcome: displayOutcomes[i],
+      outcomeIndex,
       outcomePct: pctFor(i),
     });
   }
 
   // Sparkline color picker — winner accent on resolved
   const lineColor = (i) => {
-    if (isResolved) return winnerIndex === i ? 'var(--yes)' : 'var(--text-muted)';
+    if (isResolved) return displayWinnerIndex === i ? 'var(--yes)' : 'var(--text-muted)';
     return SERIES_COLORS[i % SERIES_COLORS.length];
   };
 
@@ -507,18 +528,18 @@ export default function MarketDetail({ onOpenLogin }) {
             borderRadius: 14,
             background: 'var(--surface1)',
           }}>
-            {outcomes.length === 2 ? (
+            {displayOutcomes.length === 2 ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 18 }}>
                 <ProbabilityRing
                   pct={pctFor(ringIndex)}
-                  label={outcomes[ringIndex]}
+                  label={displayOutcomes[ringIndex]}
                   resolved={isResolved}
-                  winner={isResolved && winnerIndex === ringIndex}
+                  winner={isResolved && displayWinnerIndex === ringIndex}
                 />
                 <div style={{ flex: 1 }}>
                   {isResolved ? (
                     <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--green)' }}>
-                      🏆 {outcomes[winnerIndex] || '—'}
+                      🏆 {displayWinnerIndex >= 0 ? displayOutcomes[displayWinnerIndex] : outcomes[winnerIndex] || '—'}
                     </div>
                   ) : (
                     <>
@@ -529,7 +550,7 @@ export default function MarketDetail({ onOpenLogin }) {
                         {pctFor(0)}%
                       </div>
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                        {outcomes[0]} · {outcomes[1]} {pctFor(1)}%
+                        {displayOutcomes[0]} · {displayOutcomes[1]} {pctFor(1)}%
                       </div>
                     </>
                   )}
@@ -541,11 +562,11 @@ export default function MarketDetail({ onOpenLogin }) {
                   Probabilidades
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {outcomes.map((label, i) => {
+                  {displayOutcomes.map((label, i) => {
                     const pct = pctFor(i);
-                    const isWinner = isResolved && winnerIndex === i;
-                    const logo = outcomeImages?.[i] || null;
-                    const countryLabel = outcomeCountryLabels?.[i] || null;
+                    const isWinner = isResolved && displayWinnerIndex === i;
+                    const logo = displayOutcomeImages?.[i] || null;
+                    const countryLabel = displayOutcomeCountryLabels?.[i] || null;
                     return (
                       <div key={i} style={{
                         display: 'flex', alignItems: 'center', gap: 6,
@@ -563,7 +584,7 @@ export default function MarketDetail({ onOpenLogin }) {
                             style={{ width: 18, height: 18, objectFit: 'contain', flexShrink: 0 }}
                             onError={(event) => { event.currentTarget.style.display = 'none'; }}
                           />
-                        ) : hasAnyLogo ? (
+                        ) : hasAnyDisplayLogo ? (
                           <span style={{ width: 18, height: 18, flexShrink: 0 }} aria-hidden="true" />
                         ) : null}
                         <span style={{
@@ -609,10 +630,10 @@ export default function MarketDetail({ onOpenLogin }) {
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {outcomes.slice(0, 6).map((label, i) => (
+                  {displayOutcomes.slice(0, 6).map((label, i) => (
                     <Sparkline
                       key={i}
-                      data={historyByOutcome[i] || []}
+                      data={displayHistoryByOutcome[i] || []}
                       color={lineColor(i)}
                       label={label.length > 11 ? `${label.slice(0, 10)}…` : label}
                       labelWidth={70}
@@ -620,9 +641,9 @@ export default function MarketDetail({ onOpenLogin }) {
                       valueWidth={48}
                       targetPct={pctFor(i)}
                       seed={`${market.id}-${i}`}
-                      height={outcomes.length === 2 ? 70 : 36}
-                      fill={i === 0 || (isResolved && winnerIndex === i)}
-                      strokeWidth={isResolved && winnerIndex === i ? 2.4 : 1.8}
+                      height={displayOutcomes.length === 2 ? 70 : 36}
+                      fill={i === 0 || (isResolved && displayWinnerIndex === i)}
+                      strokeWidth={isResolved && displayWinnerIndex === i ? 2.4 : 1.8}
                     />
                   ))}
                 </div>
@@ -647,11 +668,11 @@ export default function MarketDetail({ onOpenLogin }) {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-              {outcomes.map((label, i) => {
+              {displayOutcomes.map((label, i) => {
                 const pct = pctFor(i);
-                const isWinner = isResolved && winnerIndex === i;
-                const logo = outcomeImages?.[i] || null;
-                const countryLabel = outcomeCountryLabels?.[i] || null;
+                const isWinner = isResolved && displayWinnerIndex === i;
+                const logo = displayOutcomeImages?.[i] || null;
+                const countryLabel = displayOutcomeCountryLabels?.[i] || null;
                 return (
                   <button
                     key={i}
@@ -681,7 +702,7 @@ export default function MarketDetail({ onOpenLogin }) {
                           style={{ width: 28, height: 28, objectFit: 'contain', flexShrink: 0 }}
                           onError={(event) => { event.currentTarget.style.display = 'none'; }}
                         />
-                      ) : hasAnyLogo ? (
+                      ) : hasAnyDisplayLogo ? (
                         <span style={{ width: 28, height: 28, flexShrink: 0 }} aria-hidden="true" />
                       ) : null}
                       <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

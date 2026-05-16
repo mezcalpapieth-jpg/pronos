@@ -68,6 +68,15 @@ function formatDate(d) {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+function isChampionsLeagueFinal(match, competitionCode) {
+  if (competitionCode !== 'CL') return false;
+  const stage = String(match?.stage || match?.group || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, '_');
+  return stage === 'FINAL';
+}
+
 // Parse the rate-limit headers that football-data.org returns on every
 // response. Their free tier is 10 req/min; if `remaining` falls low we
 // wait for the reset window before issuing the next request.
@@ -171,8 +180,9 @@ function matchToMarketSpec(match, competitionCode) {
   // benign-skips until football-data returns status=FINISHED, so the
   // end_time is just the hard close if the results feed stalls.
   const kickoffMs = new Date(kickoffUtc).getTime();
+  const winnerOnly = isChampionsLeagueFinal(match, competitionCode);
   const startTime = new Date(kickoffMs).toISOString();
-  const endTime   = new Date(kickoffMs + 2 * 3600_000).toISOString();
+  const endTime   = new Date(kickoffMs + (winnerOnly ? 4 : 2) * 3600_000).toISOString();
   const league    = COMPETITION_TO_LEAGUE[competitionCode] || null;
 
   // Team crests aligned with the 3-way W/D/L outcomes. Draw has no
@@ -191,17 +201,17 @@ function matchToMarketSpec(match, competitionCode) {
     question: `${homeName} vs ${awayName}`,
     category: 'deportes',
     icon: '⚽',
-    outcomes: [homeName, 'Empate', awayName],
-    outcome_images: [homeCrest, null, awayCrest],
+    outcomes: winnerOnly ? [homeName, awayName] : [homeName, 'Empate', awayName],
+    outcome_images: winnerOnly ? [homeCrest, awayCrest] : [homeCrest, null, awayCrest],
     seed_liquidity: 1000,
     start_time: startTime,
     end_time: endTime,
-    amm_mode: 'unified',              // 3-way W/D/L → unified CPMM
+    amm_mode: 'unified',
     resolver_type: 'sports_api',      // auto via /v4/matches/{id} → score.winner
     resolver_config: {
       source: 'football-data',
       matchId: match.id,
-      shape: 'draw3',
+      shape: winnerOnly ? 'binary' : 'draw3',
     },
     source_data: {
       matchId: match.id,
@@ -211,6 +221,7 @@ function matchToMarketSpec(match, competitionCode) {
       kickoffUtc,
       home: { name: homeName, tla: match?.homeTeam?.tla, id: match?.homeTeam?.id },
       away: { name: awayName, tla: match?.awayTeam?.tla, id: match?.awayTeam?.id },
+      knockoutFinal: winnerOnly,
     },
   };
 }
@@ -271,6 +282,7 @@ export const _internal = {
   TEAM_TLA_WHITELIST,
   COMPETITIONS_ALL_FIXTURES,
   COMPETITIONS_TEAM_FILTER,
+  isChampionsLeagueFinal,
   matchToMarketSpec,
   formatDate,
 };
