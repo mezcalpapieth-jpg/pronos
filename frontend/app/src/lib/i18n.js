@@ -655,6 +655,9 @@ const STRINGS = {
   'points.series.pending':    { es: 'Pendiente',             en: 'Pending' },
   'points.series.notNeeded':  { es: 'No necesario',          en: 'Not needed' },
   'points.series.datePending': { es: 'Fecha pendiente',      en: 'Date pending' },
+  'points.series.game':       { es: 'Juego {num}',           en: 'Game {num}' },
+  'points.series.tied':       { es: 'Serie empatada {score}', en: 'Series tied {score}' },
+  'points.series.leads':      { es: '{team} lidera {score}', en: '{team} leads {score}' },
 
   'points.crypto.title':      { es: '{asset}: sube o baja en 5 minutos', en: '{asset}: up or down in 5 minutes' },
   'points.crypto.currentPrice': { es: 'Precio actual',        en: 'Current price' },

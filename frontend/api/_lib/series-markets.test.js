@@ -63,18 +63,41 @@ test('extractEspnSeriesMeta reads NBA playoff game number and best-of metadata',
   assert.match(meta.key, /basketball-nba/);
 });
 
-test('seriesSubtitle includes game number and current series score summary', () => {
+test('seriesSubtitle defaults to Spanish game and score copy', () => {
   assert.equal(seriesScoreSummary({
     teamAWins: 3,
     teamBWins: 0,
     teamAName: 'Thunder',
     teamBName: 'Lakers',
-  }), 'Thunder lead 3-0');
+  }), 'Thunder lidera 3-0');
+
+  assert.equal(seriesScoreSummary({
+    teamAWins: 3,
+    teamBWins: 3,
+    teamAName: 'Thunder',
+    teamBName: 'Lakers',
+  }), 'Serie empatada 3-3');
 
   assert.equal(seriesSubtitle({
     gameNumber: 4,
-    summary: 'Thunder lead 3-0',
-  }), 'Game 4 · Thunder lead 3-0');
+    summary: 'Thunder lidera 3-0',
+  }), 'Juego 4 · Thunder lidera 3-0');
+});
+
+test('seriesSubtitle can format the English translation', () => {
+  assert.equal(seriesScoreSummary({
+    teamAWins: 3,
+    teamBWins: 3,
+    teamAName: 'Thunder',
+    teamBName: 'Lakers',
+    locale: 'en',
+  }), 'Series tied 3-3');
+
+  assert.equal(seriesSubtitle({
+    gameNumber: 4,
+    summary: 'Thunder leads 3-0',
+    locale: 'en',
+  }), 'Game 4 · Thunder leads 3-0');
 });
 
 test('buildSeriesDetail adds conditional pending games until a best-of-seven series is clinched', () => {
@@ -124,7 +147,7 @@ test('buildSeriesDetail adds conditional pending games until a best-of-seven ser
 
   const detail = buildSeriesDetail(meta, markets);
 
-  assert.equal(detail.subtitle, 'Game 4 · Thunder lead 3-0');
+  assert.equal(detail.subtitle, 'Juego 4 · Thunder lidera 3-0');
   assert.deepEqual(detail.sequence.map(g => [g.gameNumber, g.id, g.status, g.placeholder]), [
     [1, 10, 'resolved', false],
     [2, 11, 'resolved', false],
@@ -161,7 +184,7 @@ test('buildSeriesDetail marks remaining conditional games as not needed after cl
 
   const detail = buildSeriesDetail(meta, markets);
 
-  assert.equal(detail.summary, 'Dodgers lead 3-0');
+  assert.equal(detail.summary, 'Dodgers lidera 3-0');
   assert.deepEqual(detail.sequence.map(g => [g.gameNumber, g.status]), [
     [1, 'resolved'],
     [2, 'resolved'],
@@ -247,7 +270,7 @@ test('buildSeriesDetail uses ESPN series wins to keep missing prior games from l
     },
   ]);
 
-  assert.equal(detail.summary, 'Series tied 3-3');
+  assert.equal(detail.summary, 'Serie empatada 3-3');
   assert.deepEqual(detail.sequence.map(g => [g.gameNumber, g.id, g.status, g.placeholder]), [
     [1, null, 'resolved', true],
     [2, null, 'resolved', true],
@@ -290,7 +313,7 @@ test('buildSeriesDetail locks approved optional best-of-seven games until the sc
 
   const detail = buildSeriesDetail(meta, markets);
 
-  assert.equal(detail.summary, 'Thunder lead 2-0');
+  assert.equal(detail.summary, 'Thunder lidera 2-0');
   assert.deepEqual(detail.sequence.map(g => [g.gameNumber, g.id, g.status, g.seriesLocked === true]), [
     [1, 301, 'resolved', false],
     [2, 302, 'resolved', false],
@@ -402,7 +425,7 @@ test('seriesTradeLockFromRows blocks direct buys on locked optional games', () =
 
   assert.equal(locked.locked, true);
   assert.equal(locked.status, 'pending');
-  assert.equal(locked.summary, 'Series tied 1-1');
+  assert.equal(locked.summary, 'Serie empatada 1-1');
 });
 
 test('applySeriesGateToMarket keeps optional listed games pending when no score is available yet', () => {

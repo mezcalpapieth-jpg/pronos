@@ -29,6 +29,11 @@ import Sparkline from '../components/Sparkline.jsx';
 import ShareButton from '../components/ShareButton.jsx';
 import { usePointsAuth } from '../lib/pointsAuth.js';
 import { useIsMobile } from '../lib/useIsMobile.js';
+import {
+  formatSeriesGameLabel,
+  formatSeriesScoreSummary,
+  formatSeriesSubtitle,
+} from '../lib/seriesDisplay.js';
 
 const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 42161);
 
@@ -90,9 +95,9 @@ function SeriesGameStrip({ seriesMeta, currentMarketId, navigate }) {
         <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
           {seriesMeta.round || 'Serie'}
         </span>
-        {seriesMeta.summary && (
+        {formatSeriesScoreSummary(seriesMeta) && (
           <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
-            {seriesMeta.summary}
+            {formatSeriesScoreSummary(seriesMeta)}
           </span>
         )}
       </div>
@@ -116,7 +121,7 @@ function SeriesGameStrip({ seriesMeta, currentMarketId, navigate }) {
               onClick={() => {
                 if (clickable) navigate(`/market?id=${encodeURIComponent(item.id)}`);
               }}
-              title={item.subtitle || `Game ${item.gameNumber}`}
+              title={item.subtitle || formatSeriesGameLabel(item.gameNumber)}
               style={{
                 minWidth: 122,
                 padding: '10px 12px',
@@ -136,7 +141,7 @@ function SeriesGameStrip({ seriesMeta, currentMarketId, navigate }) {
                 color: isCurrent ? 'var(--green)' : 'var(--text-primary)',
                 marginBottom: 4,
               }}>
-                Game {item.gameNumber}
+                {formatSeriesGameLabel(item.gameNumber)}
               </span>
               <span style={{
                 display: 'block',
@@ -370,6 +375,8 @@ export default function MarketDetail({ onOpenLogin }) {
   const isResolved = market.status === 'resolved';
   const winnerIndex = isResolved && market.outcome != null ? Number(market.outcome) : null;
   const isTradingLocked = !isResolved && (market.seriesLocked || market.status !== 'active');
+  const ringIndex = isResolved && winnerIndex != null ? winnerIndex : 0;
+  const seriesSubtitle = formatSeriesSubtitle(market.seriesMeta);
   const isOnchain = market.mode === 'onchain';
   const isLive = typeof market.live === 'boolean'
     ? (!isResolved && market.live)
@@ -443,12 +450,12 @@ export default function MarketDetail({ onOpenLogin }) {
           fontSize: 'clamp(26px, 3vw, 38px)',
           lineHeight: 1.2,
           color: 'var(--text-primary)',
-          marginBottom: market.seriesMeta?.subtitle ? 8 : (isResolved && market.finalScore ? 12 : 22),
+          marginBottom: seriesSubtitle ? 8 : (isResolved && market.finalScore ? 12 : 22),
         }}>
           {market.question}
         </h1>
 
-        {market.seriesMeta?.subtitle && (
+        {seriesSubtitle && (
           <div style={{
             fontFamily: 'var(--font-mono)',
             fontSize: 12,
@@ -457,7 +464,7 @@ export default function MarketDetail({ onOpenLogin }) {
             textTransform: 'uppercase',
             marginBottom: isResolved && market.finalScore ? 12 : 22,
           }}>
-            {market.seriesMeta.subtitle}
+            {seriesSubtitle}
           </div>
         )}
 
@@ -503,10 +510,10 @@ export default function MarketDetail({ onOpenLogin }) {
             {outcomes.length === 2 ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 18 }}>
                 <ProbabilityRing
-                  pct={pctFor(0)}
-                  label={outcomes[0]}
+                  pct={pctFor(ringIndex)}
+                  label={outcomes[ringIndex]}
                   resolved={isResolved}
-                  winner={isResolved && winnerIndex === 0}
+                  winner={isResolved && winnerIndex === ringIndex}
                 />
                 <div style={{ flex: 1 }}>
                   {isResolved ? (

@@ -31,3 +31,17 @@ test('MVP series strip treats virtual completed games as final before pending pl
     'resolved status must be checked before placeholder status',
   );
 });
+
+test('MVP resolved binary ring follows the winning outcome', () => {
+  assert.match(source, /const ringIndex = isResolved && winnerIndex != null \? winnerIndex : 0;/);
+  assert.match(source, /pct=\{pctFor\(ringIndex\)\}/);
+  assert.match(source, /label=\{outcomes\[ringIndex\]\}/);
+  assert.match(source, /winner=\{isResolved && winnerIndex === ringIndex\}/);
+});
+
+test('MVP detail renders series labels in Spanish', () => {
+  assert.doesNotMatch(source, /Game \{item\.gameNumber\}/);
+  assert.doesNotMatch(source, /`Game \$\{item\.gameNumber\}`/);
+  assert.match(source, /formatSeriesGameLabel\(item\.gameNumber\)/);
+  assert.match(source, /formatSeriesScoreSummary\(seriesMeta\)/);
+});

@@ -253,17 +253,23 @@ export function teamPairKeyFromMeta(meta) {
   return teams.sort().map(normalizeKeyPart).join('|');
 }
 
-export function seriesScoreSummary({ teamAWins = 0, teamBWins = 0, teamAName, teamBName } = {}) {
+export function seriesScoreSummary({ teamAWins = 0, teamBWins = 0, teamAName, teamBName, locale = 'es' } = {}) {
   const a = Math.max(0, Number(teamAWins) || 0);
   const b = Math.max(0, Number(teamBWins) || 0);
-  if (a === b) return `Series tied ${a}-${b}`;
-  if (a > b) return `${compact(teamAName) || 'Team A'} lead ${a}-${b}`;
-  return `${compact(teamBName) || 'Team B'} lead ${b}-${a}`;
+  const english = locale === 'en';
+  if (a === b) return english ? `Series tied ${a}-${b}` : `Serie empatada ${a}-${b}`;
+  if (a > b) {
+    const name = compact(teamAName) || (english ? 'Team A' : 'Equipo A');
+    return english ? `${name} leads ${a}-${b}` : `${name} lidera ${a}-${b}`;
+  }
+  const name = compact(teamBName) || (english ? 'Team B' : 'Equipo B');
+  return english ? `${name} leads ${b}-${a}` : `${name} lidera ${b}-${a}`;
 }
 
-export function seriesSubtitle({ gameNumber, summary } = {}) {
+export function seriesSubtitle({ gameNumber, summary, locale = 'es' } = {}) {
   if (!gameNumber) return summary || null;
-  return summary ? `Game ${gameNumber} · ${summary}` : `Game ${gameNumber}`;
+  const label = locale === 'en' ? `Game ${gameNumber}` : `Juego ${gameNumber}`;
+  return summary ? `${label} · ${summary}` : label;
 }
 
 export function seriesGameGate({ bestOf, gameNumber, teamAWins = 0, teamBWins = 0, status } = {}) {
@@ -552,8 +558,8 @@ export function buildSeriesDetail(meta, markets = []) {
   const summary = seriesScoreSummary({
     teamAWins,
     teamBWins,
-    teamAName: shortTeamName(teamA, 'Team A'),
-    teamBName: shortTeamName(teamB, 'Team B'),
+    teamAName: shortTeamName(teamA, 'Equipo A'),
+    teamBName: shortTeamName(teamB, 'Equipo B'),
   });
   const byGame = new Map(normalizedMarkets.map((market) => [Number(market.gameNumber), market]));
   const sequence = [];

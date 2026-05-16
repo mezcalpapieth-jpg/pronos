@@ -119,5 +119,5 @@ test('buildProtocolMarketPayload exposes ESPN playoff series metadata for MVP de
 
   assert.equal(market.seriesMeta.key, 'basketball-nba:2026:series:24-25');
   assert.equal(market.seriesMeta.gameNumber, 1);
-  assert.equal(market.seriesMeta.subtitle, 'Game 1');
+  assert.equal(market.seriesMeta.subtitle, 'Juego 1');
 });

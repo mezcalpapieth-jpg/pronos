@@ -21,15 +21,16 @@ import { useT } from '@app/lib/i18n.js';
 // (used in /c/<slug>) to the i18n key that produces the label.
 // `highlight: true` applies the attention-grabbing tri-color
 // gradient treatment — used for the World Cup tab so it pops.
+// `regional: true` applies a softer green/gold treatment for Mexico & Latam.
 // `news: true` applies a red-gradient + live-dot treatment for the
 // Noticias tab, less loud than world-cup but still distinctive.
 export const CATEGORY_TABS = [
   { slug: 'noticias',    tKey: 'points.cat.noticias',   news: true },
   { slug: 'all',         tKey: 'points.cat.trending'    },
   { slug: 'world-cup',   tKey: 'points.cat.worldCup',   highlight: true },
+  { slug: 'mexico',      tKey: 'points.cat.mexico',      regional: true },
   { slug: 'deportes',    tKey: 'points.cat.deportes'    },
   { slug: 'musica',      tKey: 'points.cat.musica'      },
-  { slug: 'mexico',      tKey: 'points.cat.mexico'      },
   { slug: 'politica',    tKey: 'points.cat.politica'    },
   { slug: 'crypto',      tKey: 'points.cat.crypto'      },
   { slug: 'finanzas',    tKey: 'points.cat.finanzas'    },
@@ -89,6 +90,43 @@ export default function PointsCategoryBar() {
                     letterSpacing: '0.08em',
                   }}
                 >
+                  {t(cat.tKey)}
+                </button>
+              );
+            }
+            if (cat.regional) {
+              // Mexico & Latam should invite exploration without
+              // competing with the louder World Cup tab.
+              return (
+                <button
+                  key={cat.slug}
+                  onClick={() => handleClick(cat.slug)}
+                  className="filter-btn"
+                  aria-label={`${t(cat.tKey)} destacado`}
+                  style={{
+                    background: isActive
+                      ? 'linear-gradient(130deg, rgba(22,163,74,0.24), rgba(245,158,11,0.20))'
+                      : 'linear-gradient(130deg, rgba(22,163,74,0.11), rgba(245,158,11,0.08))',
+                    borderColor: isActive ? 'rgba(245,158,11,0.55)' : 'rgba(245,158,11,0.32)',
+                    color: 'var(--text-primary)',
+                    fontWeight: 700,
+                    letterSpacing: '0.08em',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 7,
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      color: 'var(--gold, #f59e0b)',
+                      fontSize: 10,
+                      lineHeight: 1,
+                      textShadow: '0 0 8px rgba(245,158,11,0.35)',
+                    }}
+                  >
+                    ✦
+                  </span>
                   {t(cat.tKey)}
                 </button>
               );

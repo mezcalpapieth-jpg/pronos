@@ -13,6 +13,11 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchMarket, fetchPriceHistory, fetchPositions } from '../lib/pointsApi.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useT } from '@app/lib/i18n.js';
+import {
+  formatSeriesGameLabel,
+  formatSeriesScoreSummary,
+  formatSeriesSubtitle,
+} from '@app/lib/seriesDisplay.js';
 import Sparkline from '@app/components/Sparkline.jsx';
 import ShareButton from '@app/components/ShareButton.jsx';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
@@ -470,9 +475,9 @@ function SeriesGameStrip({ seriesMeta, currentMarketId, navigate, t }) {
         <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
           {seriesMeta.round || t('points.series.label')}
         </span>
-        {seriesMeta.summary && (
+        {formatSeriesScoreSummary(seriesMeta, { t }) && (
           <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
-            {seriesMeta.summary}
+            {formatSeriesScoreSummary(seriesMeta, { t })}
           </span>
         )}
       </div>
@@ -496,7 +501,7 @@ function SeriesGameStrip({ seriesMeta, currentMarketId, navigate, t }) {
               onClick={() => {
                 if (clickable) navigate(`/market?id=${encodeURIComponent(item.id)}`);
               }}
-              title={item.subtitle || `Game ${item.gameNumber}`}
+              title={item.subtitle || formatSeriesGameLabel(item.gameNumber, { t })}
               style={{
                 minWidth: 122,
                 padding: '10px 12px',
@@ -516,7 +521,7 @@ function SeriesGameStrip({ seriesMeta, currentMarketId, navigate, t }) {
                 color: isCurrent ? 'var(--green)' : 'var(--text-primary)',
                 marginBottom: 4,
               }}>
-                Game {item.gameNumber}
+                {formatSeriesGameLabel(item.gameNumber, { t })}
               </span>
               <span style={{
                 display: 'block',
@@ -834,6 +839,8 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   const winnerIndex = market.status === 'resolved' ? Number(market.outcome) : null;
   const isResolved = winnerIndex != null;
   const isTradingLocked = !isResolved && (market.seriesLocked || market.status !== 'active');
+  const ringIndex = isResolved && winnerIndex != null ? winnerIndex : 0;
+  const seriesSubtitle = formatSeriesSubtitle(market.seriesMeta, { t });
   // isLive wins over isPendingResolution when start_time has passed
   // but end_time hasn't — the game is in progress and trading stays
   // open. Only sports markets set start_time; everything else falls
@@ -925,12 +932,12 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               fontSize: 'clamp(26px, 3vw, 38px)',
               lineHeight: 1.2,
               color: 'var(--text-primary)',
-              marginBottom: market.seriesMeta?.subtitle ? 8 : (market.finalScore && isResolved ? 12 : 24),
+              marginBottom: seriesSubtitle ? 8 : (market.finalScore && isResolved ? 12 : 24),
             }}>
               {market.question}
             </h1>
 
-            {market.seriesMeta?.subtitle && (
+            {seriesSubtitle && (
               <div style={{
                 fontFamily: 'var(--font-mono)',
                 fontSize: 12,
@@ -939,7 +946,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 textTransform: 'uppercase',
                 marginBottom: market.finalScore && isResolved ? 12 : 24,
               }}>
-                {market.seriesMeta.subtitle}
+                {seriesSubtitle}
               </div>
             )}
 
@@ -978,10 +985,10 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 borderRadius: 14,
               }}>
                 <ProbabilityRing
-                  pct={Math.round((isResolved ? (winnerIndex === 0 ? 1 : 0) : prices[0]) * 100)}
+                  pct={pctFor(ringIndex)}
                   resolved={isResolved}
-                  winner={isResolved && winnerIndex === 0}
-                  label="Sí"
+                  winner={isResolved && winnerIndex === ringIndex}
+                  label={outcomes[ringIndex]}
                 />
                 <div style={{ flex: 1 }}>
                   {isResolved ? (
