@@ -49,6 +49,128 @@ function formatDeadline(iso) {
   } catch { return ''; }
 }
 
+function shortGameDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return '';
+  return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+}
+
+function seriesGameStatus(item) {
+  if (item?.status === 'not_needed') return 'No necesario';
+  if (item?.status === 'resolved') return 'Final';
+  if (item?.placeholder) return 'Pendiente';
+  const now = Date.now();
+  const start = item?.startTime ? new Date(item.startTime).getTime() : NaN;
+  const end = item?.endTime ? new Date(item.endTime).getTime() : NaN;
+  if (item?.status === 'active' && Number.isFinite(start) && Number.isFinite(end) && start <= now && end > now) {
+    return 'En vivo';
+  }
+  if (item?.status === 'active' && Number.isFinite(end) && end < now) {
+    return 'Por resolver';
+  }
+  return 'Abierto';
+}
+
+function SeriesGameStrip({ seriesMeta, currentMarketId, navigate }) {
+  const sequence = Array.isArray(seriesMeta?.sequence) ? seriesMeta.sequence : [];
+  if (sequence.length <= 1) return null;
+  return (
+    <div style={{ marginBottom: 22 }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'baseline',
+        justifyContent: 'space-between',
+        gap: 12,
+        marginBottom: 10,
+        fontFamily: 'var(--font-mono)',
+        textTransform: 'uppercase',
+        letterSpacing: '0.08em',
+      }}>
+        <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+          {seriesMeta.round || 'Serie'}
+        </span>
+        {seriesMeta.summary && (
+          <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
+            {seriesMeta.summary}
+          </span>
+        )}
+      </div>
+      <div style={{
+        display: 'flex',
+        gap: 8,
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        paddingBottom: 2,
+      }}>
+        {sequence.map((item) => {
+          const isCurrent = Number(item.id) === Number(currentMarketId);
+          const clickable = item.id && !isCurrent;
+          const status = seriesGameStatus(item);
+          const muted = item.placeholder || item.status === 'not_needed';
+          return (
+            <button
+              key={`${item.gameNumber}-${item.id || item.pendingId || item.status}`}
+              type="button"
+              disabled={!clickable}
+              onClick={() => {
+                if (clickable) navigate(`/market?id=${encodeURIComponent(item.id)}`);
+              }}
+              title={item.subtitle || `Game ${item.gameNumber}`}
+              style={{
+                minWidth: 122,
+                padding: '10px 12px',
+                borderRadius: 10,
+                border: `1px solid ${isCurrent ? 'rgba(0,232,122,0.45)' : 'var(--border)'}`,
+                background: isCurrent ? 'rgba(0,232,122,0.10)' : 'var(--surface1)',
+                opacity: muted ? 0.62 : 1,
+                cursor: clickable ? 'pointer' : 'default',
+                textAlign: 'left',
+                flex: '0 0 auto',
+              }}
+            >
+              <span style={{
+                display: 'block',
+                fontFamily: 'var(--font-display)',
+                fontSize: 15,
+                color: isCurrent ? 'var(--green)' : 'var(--text-primary)',
+                marginBottom: 4,
+              }}>
+                Game {item.gameNumber}
+              </span>
+              <span style={{
+                display: 'block',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                color: item.status === 'resolved' ? 'var(--green)'
+                  : item.status === 'not_needed' ? 'var(--text-muted)'
+                  : item.placeholder ? '#f59e0b'
+                  : 'var(--text-secondary)',
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                marginBottom: 4,
+                whiteSpace: 'nowrap',
+              }}>
+                {status}
+              </span>
+              <span style={{
+                display: 'block',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                color: 'var(--text-muted)',
+                letterSpacing: '0.02em',
+                whiteSpace: 'nowrap',
+              }}>
+                {item.startTime ? shortGameDate(item.startTime) : 'Fecha pendiente'}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Ring chart for binary markets ───────────────────────────────────────────
 function ProbabilityRing({ pct, label, resolved, winner }) {
   const radius = 54;
@@ -319,10 +441,23 @@ export default function MarketDetail({ onOpenLogin }) {
           fontSize: 'clamp(26px, 3vw, 38px)',
           lineHeight: 1.2,
           color: 'var(--text-primary)',
-          marginBottom: isResolved && market.finalScore ? 12 : 22,
+          marginBottom: market.seriesMeta?.subtitle ? 8 : (isResolved && market.finalScore ? 12 : 22),
         }}>
           {market.question}
         </h1>
+
+        {market.seriesMeta?.subtitle && (
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 12,
+            color: 'var(--text-secondary)',
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            marginBottom: isResolved && market.finalScore ? 12 : 22,
+          }}>
+            {market.seriesMeta.subtitle}
+          </div>
+        )}
 
         {/* Final-score strip */}
         {isResolved && market.finalScore && (
@@ -338,6 +473,12 @@ export default function MarketDetail({ onOpenLogin }) {
             <span>{market.finalScore}</span>
           </div>
         )}
+
+        <SeriesGameStrip
+          seriesMeta={market.seriesMeta}
+          currentMarketId={market.id}
+          navigate={navigate}
+        />
 
         {/* Two-column layout: chart + buy panel.
             On phones, stack chart on top of the buy panel (single col)

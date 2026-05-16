@@ -73,6 +73,7 @@ export default async function handler(req, res) {
                COALESCE(pmp.resolver_type, pm.resolver_type) AS meta_resolver_type,
                COALESCE(pmp.resolver_config, pm.resolver_config) AS meta_resolver_config,
                ppm.source_data AS meta_source_data,
+               pppm.source_data AS protocol_source_data,
                COALESCE(pmp.final_score, pm.final_score) AS meta_final_score,
                s.yes_price AS s_yes, s.no_price AS s_no, s.prices AS s_prices,
                s.liquidity AS s_liquidity, s.volume_24h AS s_volume,
@@ -84,6 +85,7 @@ export default async function handler(req, res) {
            AND LOWER(pm.chain_address) = LOWER(m.pool_address)
           LEFT JOIN points_markets pmp ON pmp.id = pm.parent_id
           LEFT JOIN points_pending_markets ppm ON ppm.approved_market_id = COALESCE(pm.parent_id, pm.id)
+          LEFT JOIN protocol_pending_markets pppm ON pppm.approved_protocol_market_id = m.id
           LEFT JOIN LATERAL (
             SELECT yes_price, no_price, prices, liquidity, volume_24h, snapshot_at
               FROM price_snapshots
@@ -124,6 +126,7 @@ export default async function handler(req, res) {
                COALESCE(pmp.resolver_type, pm.resolver_type) AS meta_resolver_type,
                COALESCE(pmp.resolver_config, pm.resolver_config) AS meta_resolver_config,
                ppm.source_data AS meta_source_data,
+               pppm.source_data AS protocol_source_data,
                COALESCE(pmp.final_score, pm.final_score) AS meta_final_score,
                s.yes_price AS s_yes, s.no_price AS s_no, s.prices AS s_prices,
                s.liquidity AS s_liquidity, s.volume_24h AS s_volume,
@@ -135,6 +138,7 @@ export default async function handler(req, res) {
            AND LOWER(pm.chain_address) = LOWER(m.pool_address)
           LEFT JOIN points_markets pmp ON pmp.id = pm.parent_id
           LEFT JOIN points_pending_markets ppm ON ppm.approved_market_id = COALESCE(pm.parent_id, pm.id)
+          LEFT JOIN protocol_pending_markets pppm ON pppm.approved_protocol_market_id = m.id
           LEFT JOIN LATERAL (
             SELECT yes_price, no_price, prices, liquidity, volume_24h, snapshot_at
               FROM price_snapshots

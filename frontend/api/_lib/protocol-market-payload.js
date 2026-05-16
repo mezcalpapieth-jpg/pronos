@@ -1,5 +1,6 @@
 import { deriveMarketTags, isCryptoFiveMinute } from './category-tags.js';
 import { deriveOutcomeCountryLabels } from './outcome-country-labels.js';
+import { normalizeSeriesMeta, seriesSubtitle } from './series-markets.js';
 
 function parseJsonb(value, fallback) {
   if (Array.isArray(value)) return value;
@@ -31,7 +32,12 @@ export function buildProtocolMarketPayload(row = {}) {
   const sourceEventId = firstValue(row.meta_source_event_id, row.source_event_id);
   const resolverType = firstValue(row.meta_resolver_type, row.resolver_type);
   const resolverConfig = parseJsonb(firstValue(row.meta_resolver_config, row.resolver_config), null);
-  const sourceData = parseJsonb(firstValue(row.meta_source_data, row.source_data, row.pending_source_data), {});
+  const sourceData = parseJsonb(firstValue(
+    row.meta_source_data,
+    row.protocol_source_data,
+    row.source_data,
+    row.pending_source_data,
+  ), {});
   const outcomeImagesRaw = parseJsonb(firstValue(row.meta_outcome_images, row.outcome_images), null);
   const outcomeImages = Array.isArray(outcomeImagesRaw) && outcomeImagesRaw.length === outcomes.length
     ? outcomeImagesRaw
@@ -55,6 +61,17 @@ export function buildProtocolMarketPayload(row = {}) {
     sport,
     league,
     source_data: sourceData,
+  });
+  const seriesMeta = normalizeSeriesMeta({
+    resolverConfig,
+    sourceData,
+    row: {
+      ...row,
+      outcomes,
+      sport,
+      league,
+      start_time: row.start_time,
+    },
   });
 
   const startMs = row.start_time ? new Date(row.start_time).getTime() : 0;
@@ -105,6 +122,23 @@ export function buildProtocolMarketPayload(row = {}) {
     topicTags: tags.topicTags,
     outcomeImages,
     outcomeCountryLabels,
+    seriesMeta: seriesMeta ? {
+      key: seriesMeta.key,
+      leaguePath: seriesMeta.leaguePath,
+      league: seriesMeta.league,
+      sport: seriesMeta.sport,
+      gameNumber: seriesMeta.gameNumber,
+      bestOf: seriesMeta.bestOf,
+      winTarget: seriesMeta.winTarget,
+      guaranteedGames: seriesMeta.guaranteedGames,
+      round: seriesMeta.round,
+      seasonYear: seriesMeta.seasonYear,
+      homeTeam: seriesMeta.homeTeam,
+      awayTeam: seriesMeta.awayTeam,
+      teams: seriesMeta.teams,
+      espnSeriesWins: seriesMeta.espnSeriesWins || null,
+      subtitle: seriesSubtitle({ gameNumber: seriesMeta.gameNumber }),
+    } : null,
     crypto5min: isCryptoFiveMinute({
       ...row,
       resolver_config: resolverConfig,

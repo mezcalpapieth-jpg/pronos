@@ -74,3 +74,50 @@ test('buildProtocolMarketPayload keeps World Cup isolated from Mexico taxonomy',
   assert.deepEqual(market.geoTags, []);
   assert.equal(market.crypto5min, false);
 });
+
+test('buildProtocolMarketPayload exposes ESPN playoff series metadata for MVP detail', () => {
+  const market = buildProtocolMarketPayload({
+    id: 11,
+    market_id: 8,
+    pool_address: '0xPool',
+    factory_address: '0xFactory',
+    chain_id: 42161,
+    question: '¿Quién gana San Antonio Spurs @ Oklahoma City Thunder?',
+    category: 'deportes',
+    outcomes: ['Oklahoma City Thunder', 'San Antonio Spurs'],
+    outcome_count: 2,
+    protocol_version: 'v2',
+    start_time: '2026-05-19T00:30:00.000Z',
+    end_time: '2026-05-19T03:30:00.000Z',
+    status: 'active',
+    seed_liquidity: '1000',
+    resolver_type: 'sports_api',
+    resolver_config: {
+      source: 'espn',
+      leaguePath: 'basketball/nba',
+      shape: 'binary',
+      series: {
+        key: 'basketball-nba:2026:series:24-25',
+        leaguePath: 'basketball/nba',
+        league: 'nba',
+        sport: 'nba',
+        gameNumber: 1,
+        bestOf: 7,
+        winTarget: 4,
+        guaranteedGames: 4,
+        seasonYear: 2026,
+        homeTeam: { id: '25', name: 'Oklahoma City Thunder', shortName: 'Thunder', abbreviation: 'OKC' },
+        awayTeam: { id: '24', name: 'San Antonio Spurs', shortName: 'Spurs', abbreviation: 'SA' },
+        teams: [
+          { id: '25', name: 'Oklahoma City Thunder', shortName: 'Thunder', abbreviation: 'OKC' },
+          { id: '24', name: 'San Antonio Spurs', shortName: 'Spurs', abbreviation: 'SA' },
+        ],
+        espnSeriesWins: { homeWins: 0, awayWins: 0 },
+      },
+    },
+  });
+
+  assert.equal(market.seriesMeta.key, 'basketball-nba:2026:series:24-25');
+  assert.equal(market.seriesMeta.gameNumber, 1);
+  assert.equal(market.seriesMeta.subtitle, 'Game 1');
+});
