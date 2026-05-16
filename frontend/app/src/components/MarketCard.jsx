@@ -28,6 +28,7 @@ export default function MarketCard({ market, onOpenLogin }) {
     : null;
   const hasAnyLogo = outcomeImages?.some(Boolean) || false;
   const isResolved = market.status === 'resolved';
+  const isSeriesPending = !isResolved && (market.seriesLocked || market.status === 'pending');
   const isLive = !isResolved && !!market.live;
   const isClosed = !isResolved
     && !isLive
@@ -42,7 +43,11 @@ export default function MarketCard({ market, onOpenLogin }) {
 
   function openDrawer(event, index) {
     event.stopPropagation();
-    if (isResolved || isClosed) return;
+    if (isSeriesPending) {
+      navigateToDetail();
+      return;
+    }
+    if (isResolved || isClosed || market.status !== 'active') return;
     setDrawerIndex(index);
   }
 
@@ -95,6 +100,11 @@ export default function MarketCard({ market, onOpenLogin }) {
                 }}
               />
               {t('card.live') || 'EN VIVO'}
+            </span>
+          )}
+          {isSeriesPending && (
+            <span className="mock-card-badge" style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b' }}>
+              PENDIENTE
             </span>
           )}
           {!isResolved && !isClosed && !isLive && market.trending && (
@@ -151,12 +161,12 @@ export default function MarketCard({ market, onOpenLogin }) {
                   gap: 10,
                   padding: '6px 6px 6px 8px',
                   borderRadius: 8,
-                  cursor: isResolved || isClosed ? 'default' : 'pointer',
+                  cursor: isResolved || isClosed || isSeriesPending ? 'default' : 'pointer',
                   opacity: isResolved && !isWinner ? 0.58 : 1,
                   transition: 'background 0.12s',
                 }}
                 onMouseEnter={(event) => {
-                  if (!isResolved) event.currentTarget.style.background = 'var(--surface2)';
+                  if (!isResolved && !isSeriesPending) event.currentTarget.style.background = 'var(--surface2)';
                 }}
                 onMouseLeave={(event) => { event.currentTarget.style.background = 'transparent'; }}
               >

@@ -29,9 +29,11 @@
 import { ethers } from 'ethers';
 import { applyCors } from '../../_lib/cors.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
+import { collectOnchainReadiness } from '../../_lib/onchain-readiness.js';
 
 const FACTORY_ABI = [
   'function owner() view returns (address)',
+  'function resolver() view returns (address)',
   'function collateral() view returns (address)',
 ];
 const ERC20_ABI = [
@@ -45,13 +47,15 @@ function eqAddr(a, b) {
   return String(a).toLowerCase() === String(b).toLowerCase();
 }
 
-async function probeFactory({ provider, address, deployerAddress, expectedCollateral, label }) {
+async function probeFactory({ provider, address, deployerAddress, resolverAddress, expectedCollateral, label }) {
   const out = {
     address: address || null,
     reachable: false,
     owner: null,
+    resolver: null,
     collateral: null,
     deployerIsOwner: false,
+    resolverMatches: false,
     collateralMatches: false,
     error: null,
   };
@@ -61,19 +65,42 @@ async function probeFactory({ provider, address, deployerAddress, expectedCollat
   }
   try {
     const c = new ethers.Contract(address, FACTORY_ABI, provider);
-    const [owner, collateral] = await Promise.all([
+    const [owner, resolver, collateral] = await Promise.all([
       c.owner(),
+      c.resolver(),
       c.collateral(),
     ]);
     out.reachable = true;
     out.owner = owner;
+    out.resolver = resolver;
     out.collateral = collateral;
     out.deployerIsOwner = deployerAddress ? eqAddr(owner, deployerAddress) : false;
+    out.resolverMatches = resolverAddress ? eqAddr(resolver, resolverAddress) : false;
     out.collateralMatches = expectedCollateral ? eqAddr(collateral, expectedCollateral) : false;
   } catch (e) {
     out.error = e?.message?.slice(0, 240) || 'rpc_call_failed';
   }
   return out;
+}
+
+async function readProtocolPoolAddresses() {
+  const dbUrl = process.env.DATABASE_READ_URL || process.env.DATABASE_URL;
+  if (!dbUrl) return { pools: [], error: null };
+  try {
+    const { neon } = await import('@neondatabase/serverless');
+    const sql = neon(dbUrl);
+    const rows = await sql`
+      SELECT pool_address
+        FROM protocol_markets
+       WHERE pool_address IS NOT NULL
+         AND COALESCE(status, 'active') IN ('active', 'resolved')
+       ORDER BY created_at DESC
+       LIMIT 500
+    `;
+    return { pools: rows.map(r => r.pool_address).filter(Boolean), error: null };
+  } catch (e) {
+    return { pools: [], error: e?.message || 'db_read_failed' };
+  }
 }
 
 export default async function handler(req, res) {
@@ -85,32 +112,23 @@ export default async function handler(req, res) {
     const admin = requirePointsAdmin(req, res);
     if (!admin) return;
 
-    const env = {
-      rpc:               !!process.env.ONCHAIN_RPC_URL,
-      chainId:           Number(process.env.ONCHAIN_CHAIN_ID || 0) || null,
-      factoryV1:         process.env.ONCHAIN_MARKET_FACTORY_ADDRESS || null,
-      factoryV2:         process.env.ONCHAIN_MARKET_FACTORY_V2_ADDRESS || null,
-      collateral:        process.env.ONCHAIN_COLLATERAL_ADDRESS || null,
-      deployerSuborgId:  !!process.env.ONCHAIN_DEPLOYER_SUBORG_ID,
-      deployerAddress:   process.env.ONCHAIN_DEPLOYER_ADDRESS || null,
-      policiesEnabled:   process.env.TURNKEY_POLICIES_ENABLED === 'true',
-    };
-
-    const warnings = [];
-    if (!env.rpc) warnings.push('ONCHAIN_RPC_URL missing');
-    if (!env.chainId) warnings.push('ONCHAIN_CHAIN_ID missing or 0');
-    if (!env.factoryV1) warnings.push('ONCHAIN_MARKET_FACTORY_ADDRESS missing — V1 (binary) auto-deploy disabled');
-    if (!env.factoryV2) warnings.push('ONCHAIN_MARKET_FACTORY_V2_ADDRESS missing — V2 (multi) auto-deploy disabled');
-    if (!env.collateral) warnings.push('ONCHAIN_COLLATERAL_ADDRESS missing');
-    if (!env.deployerSuborgId) warnings.push('ONCHAIN_DEPLOYER_SUBORG_ID missing');
-    if (!env.deployerAddress) warnings.push('ONCHAIN_DEPLOYER_ADDRESS missing');
-    if (!env.policiesEnabled) warnings.push('TURNKEY_POLICIES_ENABLED is not "true" — Turnkey delegation gated off');
+    const poolCoverage = await readProtocolPoolAddresses();
+    const readiness = collectOnchainReadiness({
+      env: process.env,
+      protocolPools: poolCoverage.pools,
+      protocolPoolError: poolCoverage.error,
+    });
+    const { env, deployment, turnkey, policy } = readiness;
+    const warnings = [...readiness.warnings];
 
     if (!env.rpc) {
       // No RPC = nothing else to check on-chain.
       return res.status(200).json({
         ok: false,
         env,
+        deployment,
+        turnkey,
+        policy,
         v1: null,
         v2: null,
         deployer: null,
@@ -125,6 +143,7 @@ export default async function handler(req, res) {
         provider,
         address: env.factoryV1,
         deployerAddress: env.deployerAddress,
+        resolverAddress: env.resolverAddress,
         expectedCollateral: env.collateral,
         label: 'factoryV1',
       }),
@@ -132,6 +151,7 @@ export default async function handler(req, res) {
         provider,
         address: env.factoryV2,
         deployerAddress: env.deployerAddress,
+        resolverAddress: env.resolverAddress,
         expectedCollateral: env.collateral,
         label: 'factoryV2',
       }),
@@ -144,6 +164,12 @@ export default async function handler(req, res) {
     }
     if (v2.reachable && env.deployerAddress && !v2.deployerIsOwner) {
       warnings.push(`V2 factory.owner() = ${v2.owner} but ONCHAIN_DEPLOYER_ADDRESS = ${env.deployerAddress} — auto-deploy will revert with "not owner"`);
+    }
+    if (v1.reachable && env.resolverAddress && !v1.resolverMatches) {
+      warnings.push(`V1 factory.resolver() = ${v1.resolver} but ONCHAIN_RESOLVER_ADDRESS = ${env.resolverAddress} — auto-resolve will revert with "not resolver"`);
+    }
+    if (v2.reachable && env.resolverAddress && !v2.resolverMatches) {
+      warnings.push(`V2 factory.resolver() = ${v2.resolver} but ONCHAIN_RESOLVER_ADDRESS = ${env.resolverAddress} — auto-resolve will revert with "not resolver"`);
     }
     if (v1.reachable && env.collateral && !v1.collateralMatches) {
       warnings.push(`V1 factory.collateral() = ${v1.collateral} but ONCHAIN_COLLATERAL_ADDRESS = ${env.collateral} — UI/balance reads will be wrong`);
@@ -199,6 +225,9 @@ export default async function handler(req, res) {
     return res.status(200).json({
       ok,
       env,
+      deployment,
+      turnkey,
+      policy,
       v1,
       v2,
       deployer,

@@ -22,6 +22,7 @@ import { applyCors } from '../_lib/cors.js';
 import { requireSession } from '../_lib/session.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { buyOnChain } from '../_lib/onchain-trader.js';
+import { seriesTradeLockFromRows } from '../_lib/series-markets.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 
@@ -30,6 +31,28 @@ function parseJsonb(value, fallback) {
   if (value && typeof value === 'object') return value;
   if (typeof value !== 'string') return fallback;
   try { return JSON.parse(value); } catch { return fallback; }
+}
+
+async function readSeriesTradeLock(market) {
+  const cfg = parseJsonb(market.resolver_config, null);
+  if (cfg?.source !== 'espn' || !cfg?.leaguePath) return null;
+  const anchor = market.start_time || market.end_time || market.created_at;
+  if (!anchor) return null;
+  const rows = await sql`
+    SELECT id, question, outcomes, start_time, end_time,
+           status, outcome, resolved_at, final_score,
+           resolver_config, sport, league
+      FROM protocol_markets
+     WHERE chain_id = ${market.chain_id}
+       AND resolver_type = 'sports_api'
+       AND resolver_config->>'source' = 'espn'
+       AND resolver_config->>'leaguePath' = ${cfg.leaguePath}
+       AND start_time >= ${anchor}::timestamptz - INTERVAL '45 days'
+       AND start_time <= ${anchor}::timestamptz + INTERVAL '45 days'
+     ORDER BY start_time ASC NULLS LAST, id ASC
+     LIMIT 80
+  `;
+  return seriesTradeLockFromRows(market, rows);
 }
 
 export default async function handler(req, res) {
@@ -59,7 +82,9 @@ export default async function handler(req, res) {
   try {
     // Resolve the market — must be active + on-chain (has pool_address).
     const marketRows = await sql`
-      SELECT id, status, pool_address, outcomes, outcome_count, end_time, protocol_version
+      SELECT id, question, status, pool_address, outcomes, outcome_count, start_time,
+             end_time, created_at, protocol_version, chain_id, resolver_type,
+             resolver_config, sport, league
       FROM protocol_markets
       WHERE id = ${mid}
       LIMIT 1
@@ -73,6 +98,13 @@ export default async function handler(req, res) {
     }
     if (m.end_time && new Date(m.end_time) <= new Date()) {
       return res.status(400).json({ error: 'market_expired' });
+    }
+    const seriesLock = await readSeriesTradeLock(m);
+    if (seriesLock?.locked) {
+      return res.status(400).json({
+        error: seriesLock.status === 'not_needed' ? 'series_game_not_needed' : 'series_game_pending',
+        detail: seriesLock.summary || seriesLock.reason,
+      });
     }
     const outcomes = parseJsonb(m.outcomes, ['Sí', 'No']);
     if (oi >= outcomes.length) {

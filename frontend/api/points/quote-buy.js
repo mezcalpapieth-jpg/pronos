@@ -11,6 +11,7 @@ import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { binaryBuyQuote, multiBuyQuote } from '../_lib/amm-math.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
+import { seriesTradeLockFromRows } from '../_lib/series-markets.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -20,6 +21,28 @@ function parseJsonb(value, fallback) {
   if (value && typeof value === 'object') return value;
   if (typeof value !== 'string') return fallback;
   try { return JSON.parse(value); } catch { return fallback; }
+}
+
+async function readSeriesTradeLock(market) {
+  const cfg = parseJsonb(market.resolver_config, null);
+  if (cfg?.source !== 'espn' || !cfg?.leaguePath) return null;
+  const anchor = market.start_time || market.end_time || market.created_at;
+  if (!anchor) return null;
+  const rows = await sql`
+    SELECT id, question, outcomes, start_time, end_time,
+           status, outcome, resolved_at, final_score,
+           resolver_config, sport, league
+      FROM points_markets
+     WHERE parent_id IS NULL
+       AND resolver_type = 'sports_api'
+       AND resolver_config->>'source' = 'espn'
+       AND resolver_config->>'leaguePath' = ${cfg.leaguePath}
+       AND start_time >= ${anchor}::timestamptz - INTERVAL '45 days'
+       AND start_time <= ${anchor}::timestamptz + INTERVAL '45 days'
+     ORDER BY start_time ASC NULLS LAST, id ASC
+     LIMIT 80
+  `;
+  return seriesTradeLockFromRows(market, rows);
 }
 
 export default async function handler(req, res) {
@@ -47,7 +70,8 @@ export default async function handler(req, res) {
   try {
     await ensurePointsSchema(schemaSql);
     const rows = await sql`
-      SELECT status, reserves, outcomes
+      SELECT id, question, status, reserves, outcomes, start_time, end_time,
+             created_at, resolver_type, resolver_config, sport, league
       FROM points_markets
       WHERE id = ${mid}
       LIMIT 1
@@ -55,6 +79,13 @@ export default async function handler(req, res) {
     if (rows.length === 0) return res.status(404).json({ error: 'market_not_found' });
     const r = rows[0];
     if (r.status !== 'active') return res.status(400).json({ error: 'market_closed' });
+    const seriesLock = await readSeriesTradeLock(r);
+    if (seriesLock?.locked) {
+      return res.status(400).json({
+        error: seriesLock.status === 'not_needed' ? 'series_game_not_needed' : 'series_game_pending',
+        detail: seriesLock.summary || seriesLock.reason,
+      });
+    }
 
     const reserves = parseJsonb(r.reserves, []).map(Number);
     if (reserves.length < 2) {

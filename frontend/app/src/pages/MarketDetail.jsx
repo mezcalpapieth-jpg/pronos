@@ -59,7 +59,7 @@ function shortGameDate(iso) {
 function seriesGameStatus(item) {
   if (item?.status === 'not_needed') return 'No necesario';
   if (item?.status === 'resolved') return 'Final';
-  if (item?.placeholder) return 'Pendiente';
+  if (item?.placeholder || item?.status === 'pending' || item?.seriesLocked) return 'Pendiente';
   const now = Date.now();
   const start = item?.startTime ? new Date(item.startTime).getTime() : NaN;
   const end = item?.endTime ? new Date(item.endTime).getTime() : NaN;
@@ -105,9 +105,9 @@ function SeriesGameStrip({ seriesMeta, currentMarketId, navigate }) {
       }}>
         {sequence.map((item) => {
           const isCurrent = Number(item.id) === Number(currentMarketId);
-          const clickable = item.id && !isCurrent;
+          const clickable = item.id && !isCurrent && !item.seriesLocked && item.status !== 'pending' && item.status !== 'not_needed';
           const status = seriesGameStatus(item);
-          const muted = item.placeholder || item.status === 'not_needed';
+          const muted = item.placeholder || item.seriesLocked || item.status === 'not_needed';
           return (
             <button
               key={`${item.gameNumber}-${item.id || item.pendingId || item.status}`}
@@ -369,6 +369,7 @@ export default function MarketDetail({ onOpenLogin }) {
     : pricesFromReserves(market.reserves || []);
   const isResolved = market.status === 'resolved';
   const winnerIndex = isResolved && market.outcome != null ? Number(market.outcome) : null;
+  const isTradingLocked = !isResolved && (market.seriesLocked || market.status !== 'active');
   const isOnchain = market.mode === 'onchain';
   const isLive = typeof market.live === 'boolean'
     ? (!isResolved && market.live)
@@ -386,7 +387,7 @@ export default function MarketDetail({ onOpenLogin }) {
   }
 
   function handleBet(i) {
-    if (isResolved) return;
+    if (isResolved || isTradingLocked) return;
     if (!authenticated) { onOpenLogin?.(); return; }
     setBet({
       market,
@@ -423,6 +424,7 @@ export default function MarketDetail({ onOpenLogin }) {
           {isResolved && <span style={{ color: 'var(--green)' }}>· resuelto</span>}
           {isLive && <span style={{ color: '#dc2626', fontWeight: 700 }}>· en vivo</span>}
           {isPending && !isLive && !isResolved && <span style={{ color: '#f59e0b' }}>· por resolver</span>}
+          {isTradingLocked && !isResolved && <span style={{ color: '#f59e0b' }}>· pendiente</span>}
           {isOnchain && (
             <span style={{
               padding: '2px 8px', borderRadius: 6,
@@ -634,7 +636,7 @@ export default function MarketDetail({ onOpenLogin }) {
             top: isMobile ? undefined : 92,
           }}>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 12 }}>
-              {isResolved ? 'Resultado' : 'Apuesta'}
+              {isResolved ? 'Resultado' : isTradingLocked ? 'Pendiente' : 'Apuesta'}
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
@@ -647,7 +649,7 @@ export default function MarketDetail({ onOpenLogin }) {
                   <button
                     key={i}
                     onClick={() => handleBet(i)}
-                    disabled={isResolved}
+                    disabled={isResolved || isTradingLocked}
                     style={{
                       display: 'grid',
                       gridTemplateColumns: 'minmax(0, 1fr) auto auto',
@@ -660,7 +662,7 @@ export default function MarketDetail({ onOpenLogin }) {
                       color: 'var(--text-primary)',
                       fontFamily: 'var(--font-body)',
                       fontSize: 13,
-                      cursor: isResolved ? 'default' : 'pointer',
+                      cursor: isResolved || isTradingLocked ? 'default' : 'pointer',
                       opacity: isResolved && !isWinner ? 0.55 : 1,
                     }}
                   >
@@ -716,7 +718,7 @@ export default function MarketDetail({ onOpenLogin }) {
                       color: isResolved ? (isWinner ? 'var(--green)' : 'var(--text-muted)') : 'var(--green)',
                       letterSpacing: '0.06em',
                     }}>
-                      {isResolved ? (isWinner ? 'GANÓ' : '—') : 'APOSTAR'}
+                      {isResolved ? (isWinner ? 'GANÓ' : '—') : isTradingLocked ? 'PENDIENTE' : 'APOSTAR'}
                     </span>
                   </button>
                 );

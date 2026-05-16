@@ -439,7 +439,7 @@ function shortGameDate(iso) {
 function seriesGameStatus(item, t) {
   if (item?.status === 'not_needed') return t('points.series.notNeeded');
   if (item?.status === 'resolved') return t('points.series.final');
-  if (item?.placeholder) return t('points.series.pending');
+  if (item?.placeholder || item?.status === 'pending' || item?.seriesLocked) return t('points.series.pending');
   const now = Date.now();
   const start = item?.startTime ? new Date(item.startTime).getTime() : NaN;
   const end = item?.endTime ? new Date(item.endTime).getTime() : NaN;
@@ -485,9 +485,9 @@ function SeriesGameStrip({ seriesMeta, currentMarketId, navigate, t }) {
       }}>
         {sequence.map((item) => {
           const isCurrent = Number(item.id) === Number(currentMarketId);
-          const clickable = item.id && !isCurrent;
+          const clickable = item.id && !isCurrent && !item.seriesLocked && item.status !== 'pending' && item.status !== 'not_needed';
           const status = seriesGameStatus(item, t);
-          const muted = item.placeholder || item.status === 'not_needed';
+          const muted = item.placeholder || item.seriesLocked || item.status === 'not_needed';
           return (
             <button
               key={`${item.gameNumber}-${item.id || item.status}`}
@@ -524,7 +524,7 @@ function SeriesGameStrip({ seriesMeta, currentMarketId, navigate, t }) {
                 fontSize: 10,
                 color: item.status === 'resolved' ? 'var(--green)'
                   : item.status === 'not_needed' ? 'var(--text-muted)'
-                  : item.placeholder ? '#f59e0b'
+                  : item.placeholder || item.seriesLocked || item.status === 'pending' ? '#f59e0b'
                   : 'var(--text-secondary)',
                 letterSpacing: '0.06em',
                 textTransform: 'uppercase',
@@ -780,6 +780,9 @@ export default function PointsMarketDetail({ onOpenLogin }) {
         || market?.category === 'world-cup' || market?.league === 'world-cup') {
       return;
     }
+    if (lockTarget?.seriesLocked || lockTarget?.status !== 'active' || market?.seriesLocked || market?.status !== 'active') {
+      return;
+    }
     setBuyState({ market: target, outcomeIndex, outcomeLabel });
   }
 
@@ -830,6 +833,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
     : outcomes.map((_, i) => (i === 0 ? 0.5 : 1 / outcomes.length));
   const winnerIndex = market.status === 'resolved' ? Number(market.outcome) : null;
   const isResolved = winnerIndex != null;
+  const isTradingLocked = !isResolved && (market.seriesLocked || market.status !== 'active');
   // isLive wins over isPendingResolution when start_time has passed
   // but end_time hasn't — the game is in progress and trading stays
   // open. Only sports markets set start_time; everything else falls
@@ -908,6 +912,9 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               )}
               {isPendingResolution && !isResolved && !isLive && (
                 <span style={{ color: '#f59e0b' }}>{t('points.detail.pendingBadge')}</span>
+              )}
+              {isTradingLocked && !isResolved && (
+                <span style={{ color: '#f59e0b' }}>· {t('points.series.pending')}</span>
               )}
               <span style={{ flex: 1 }} />
               <ShareButton marketId={market.id} app="points" question={market.question} />
@@ -1416,7 +1423,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 carries a read-only odds summary to keep scanability.
                 World Cup is locked outside the current cycle — show an
                 odds summary instead of buy buttons + a clear notice. */}
-            {!isResolved && !isPendingResolution && (
+            {!isResolved && !isPendingResolution && !isTradingLocked && (
               (market.category === 'world-cup' || market.league === 'world-cup')
                 ? <OddsSummary
                     outcomes={outcomes}
@@ -1441,7 +1448,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                     />
             )}
 
-            {!isResolved && !isPendingResolution
+            {!isResolved && !isPendingResolution && !isTradingLocked
               && (market.category === 'world-cup' || market.league === 'world-cup') && (
               <div style={{
                 marginTop: 14,
@@ -1459,7 +1466,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               </div>
             )}
 
-            {(isResolved || isPendingResolution) && (
+            {(isResolved || isPendingResolution || isTradingLocked) && (
               <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
                 {isResolved
                   ? t('points.detail.closedHint')

@@ -9,6 +9,7 @@ import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { binaryPrices } from '../_lib/amm-math.js';
 import {
+  applySeriesDetailGateToMarket,
   buildSeriesDetail,
   normalizeSeriesMeta,
   seriesSubtitle,
@@ -429,8 +430,7 @@ export default async function handler(req, res) {
         });
         const seedTotal = legs.reduce((s, l) => s + l.seedLiquidity, 0);
         const tradeTotal = legs.reduce((s, l) => s + l.tradeVolume, 0);
-        return res.status(200).json({
-          market: {
+        const marketPayload = applySeriesDetailGateToMarket({
             id: r.id,
             ammMode: 'parallel',
             question: r.question,
@@ -464,7 +464,9 @@ export default async function handler(req, res) {
             chainId: r.chain_id || null,
             chainMarketId: r.chain_market_id ? String(r.chain_market_id) : null,
             chainAddress: r.chain_address || null,
-          },
+          }, seriesMeta);
+        return res.status(200).json({
+          market: marketPayload,
           legs,
         });
       }
@@ -472,8 +474,7 @@ export default async function handler(req, res) {
       const reserves = parseJsonb(r.reserves, []).map(Number);
       const prices = pricesFromReserves(reserves, outcomes.length);
 
-      return res.status(200).json({
-        market: {
+      const marketPayload = applySeriesDetailGateToMarket({
           id: r.id,
           ammMode: 'unified',
           question: r.question,
@@ -508,7 +509,9 @@ export default async function handler(req, res) {
           chainMarketId: r.chain_market_id ? String(r.chain_market_id) : null,
           chainAddress: r.chain_address || null,
           archivedAt: r.archived_at || null,
-        },
+        }, seriesMeta);
+      return res.status(200).json({
+        market: marketPayload,
       });
     } catch (e) {
       console.error('[points/market] db error', { message: e?.message, code: e?.code });

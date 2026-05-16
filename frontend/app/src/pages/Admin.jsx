@@ -237,7 +237,16 @@ function OnchainStatusPanel() {
                 ['ONCHAIN_COLLATERAL_ADDRESS',       data.env.collateral ? short(data.env.collateral) : '✕'],
                 ['ONCHAIN_DEPLOYER_SUBORG_ID',       data.env.deployerSuborgId ? '✓' : '✕'],
                 ['ONCHAIN_DEPLOYER_ADDRESS',         data.env.deployerAddress ? short(data.env.deployerAddress) : '✕'],
+                ['ONCHAIN_RESOLVER_SUBORG_ID',       data.env.resolverSuborgId ? '✓' : '✕'],
+                ['ONCHAIN_RESOLVER_ADDRESS',         data.env.resolverAddress ? short(data.env.resolverAddress) : '✕'],
                 ['TURNKEY_POLICIES_ENABLED',         data.env.policiesEnabled ? '✓' : '✕'],
+                ['TURNKEY_ORGANIZATION_ID',          data.turnkey?.organizationId ? '✓' : '✕'],
+                ['TURNKEY_API_PUBLIC_KEY',           data.turnkey?.apiPublicKey ? '✓' : '✕'],
+                ['TURNKEY_API_PRIVATE_KEY',          data.turnkey?.apiPrivateKey ? '✓' : '✕'],
+                ['VITE_TURNKEY_ORGANIZATION_ID',     data.turnkey?.clientOrganizationId ? '✓' : '✕'],
+                ['INDEXER_KEY',                      data.env.indexerKey ? '✓' : '✕'],
+                ['CRON_SECRET',                      data.env.cronSecret ? '✓' : '✕'],
+                ['ONCHAIN_MARKET_POOL_ADDRESSES',    data.policy ? `${data.policy.configuredPoolCount || 0} pools` : '✕'],
               ].map(([k, v]) => (
                 <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, color: v === '✕' ? 'var(--red)' : 'var(--text-secondary)' }}>
                   <span style={{ color: 'var(--text-muted)' }}>{k}</span>
@@ -261,6 +270,7 @@ function OnchainStatusPanel() {
                   {f.reachable && (
                     <>
                       <div>owner: {short(f.owner)} <span style={greenChip(f.deployerIsOwner)}>{f.deployerIsOwner ? '== deployer' : 'MISMATCH'}</span></div>
+                      <div>resolver: {short(f.resolver)} <span style={greenChip(f.resolverMatches)}>{f.resolverMatches ? '== resolver' : 'MISMATCH'}</span></div>
                       <div>collateral: {short(f.collateral)} <span style={greenChip(f.collateralMatches)}>{f.collateralMatches ? '== ENV' : 'MISMATCH'}</span></div>
                     </>
                   )}
@@ -291,6 +301,29 @@ function OnchainStatusPanel() {
                       {data.deployer.collateralBalanceUnits.toFixed(2)}
                     </span>
                     {' '}<span style={greenChip(data.deployer.collateralBalanceUnits > 0)}>{data.deployer.collateralBalanceUnits > 0 ? 'OK' : 'NEEDS MXNB'}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Deployment / policy coverage */}
+          {(data.deployment || data.policy) && (
+            <div style={{ marginBottom: 12, padding: 10, borderRadius: 8, background: 'var(--surface2)' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6 }}>
+                Deployment / Turnkey policy
+              </div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, lineHeight: 1.7, color: 'var(--text-secondary)' }}>
+                {data.deployment && (
+                  <>
+                    <div>client chain: {data.deployment.clientChainId || '✕'} · indexer chain: {data.deployment.indexerChainId || '✕'}</div>
+                    <div>indexer factories: V1 {data.deployment.indexerFactoryV1 ? short(data.deployment.indexerFactoryV1) : '✕'} · V2 {data.deployment.indexerFactoryV2 ? short(data.deployment.indexerFactoryV2) : '✕'}</div>
+                  </>
+                )}
+                {data.policy && (
+                  <div>
+                    policy pools: {data.policy.configuredPoolCount || 0} configured · {data.policy.indexedPoolCount || 0} indexed
+                    {' '}<span style={greenChip((data.policy.missingPools?.length || 0) === 0)}>{(data.policy.missingPools?.length || 0) === 0 ? 'OK' : `${data.policy.missingPools.length} MISSING`}</span>
                   </div>
                 )}
               </div>

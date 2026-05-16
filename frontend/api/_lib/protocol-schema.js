@@ -70,6 +70,7 @@ const PROTOCOL_SCHEMA_MIGRATIONS = [
   `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS source_event_id TEXT`,
   `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS resolver_type TEXT`,
   `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS resolver_config JSONB`,
+  `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS final_score TEXT`,
   `CREATE INDEX IF NOT EXISTS idx_protocol_markets_category_tags ON protocol_markets USING GIN (category_tags)`,
   `CREATE INDEX IF NOT EXISTS idx_protocol_markets_geo_tags ON protocol_markets USING GIN (geo_tags)`,
   `CREATE INDEX IF NOT EXISTS idx_protocol_markets_topic_tags ON protocol_markets USING GIN (topic_tags)`,

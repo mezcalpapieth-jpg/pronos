@@ -1,6 +1,6 @@
 import { deriveMarketTags, isCryptoFiveMinute } from './category-tags.js';
 import { deriveOutcomeCountryLabels } from './outcome-country-labels.js';
-import { normalizeSeriesMeta, seriesSubtitle } from './series-markets.js';
+import { applySeriesGateToMarket, normalizeSeriesMeta, seriesSubtitle } from './series-markets.js';
 
 function parseJsonb(value, fallback) {
   if (Array.isArray(value)) return value;
@@ -80,7 +80,7 @@ export function buildProtocolMarketPayload(row = {}) {
   const windowOk = startMs > 0 && endMs > startMs
     && (endMs - startMs) <= 14 * 86_400_000;
 
-  return {
+  const payload = {
     id: row.id,
     marketId: row.market_id,
     poolAddress: row.pool_address,
@@ -145,4 +145,5 @@ export function buildProtocolMarketPayload(row = {}) {
     }),
     mode: 'onchain',
   };
+  return applySeriesGateToMarket(payload, payload.seriesMeta);
 }

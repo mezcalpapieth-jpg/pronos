@@ -13,6 +13,7 @@ import { applyCors } from '../_lib/cors.js';
 import { ensureProtocolSchema } from '../_lib/protocol-schema.js';
 import { buildProtocolMarketPayload } from '../_lib/protocol-market-payload.js';
 import {
+  applySeriesDetailGateToMarket,
   buildSeriesDetail,
   normalizeSeriesMeta,
   seriesSubtitle,
@@ -120,7 +121,7 @@ async function loadSeriesDetail(sqlClient, currentRow, currentMeta) {
 
   const rows = await sqlClient`
     SELECT m.id, m.question, m.outcomes, m.start_time, m.end_time,
-           m.status, m.outcome, m.resolved_at,
+           m.status, m.outcome, m.resolved_at, m.final_score,
            m.resolver_config, m.sport, m.league,
            ppm.source_data AS protocol_source_data
       FROM protocol_markets m
@@ -204,7 +205,7 @@ export default async function handler(req, res) {
              m.source, m.source_event_id, m.resolver_type, m.resolver_config,
              m.outcomes, m.outcome_count,
              m.protocol_version, m.start_time, m.end_time, m.status, m.outcome,
-             m.seed_liquidity, m.tx_hash, m.created_at, m.resolved_at,
+             m.seed_liquidity, m.tx_hash, m.created_at, m.resolved_at, m.final_score,
              m.resolution_src,
              COALESCE(pmp.icon, pm.icon) AS meta_icon,
              COALESCE(pmp.sport, pm.sport) AS meta_sport,
@@ -253,6 +254,7 @@ export default async function handler(req, res) {
         ))
       : null;
     if (seriesMeta) market.seriesMeta = seriesMeta;
+    const gatedMarket = applySeriesDetailGateToMarket(market, seriesMeta);
 
     const trades = await sql`
       SELECT side, is_yes, outcome_index, collateral_amt, shares_amt,
@@ -272,7 +274,7 @@ export default async function handler(req, res) {
 
     res.setHeader('Cache-Control', 'public, s-maxage=10, stale-while-revalidate=60');
     return res.status(200).json({
-      market,
+      market: gatedMarket,
       trades: trades.map(t => ({
         side: t.side,
         isYes: t.is_yes,

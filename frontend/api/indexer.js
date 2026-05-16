@@ -5,6 +5,7 @@ import { ensurePointsSchema } from './_lib/points-schema.js';
 import { runCrypto5MinTick } from './_lib/crypto-5min.js';
 import { shouldRunMinuteInterval } from './_lib/cron-multiplex.js';
 import { runAutoResolve } from './cron/points-auto-resolve.js';
+import { runProtocolAutoResolve } from './cron/protocol-auto-resolve.js';
 
 /**
  * /api/indexer — On-chain event indexer for Pronos protocol.
@@ -193,6 +194,35 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── Protocol auto-resolver multiplex ─────────────────────────────
+  // Same cadence as points, but the write path is an on-chain
+  // resolveMarket() transaction. Manual probe:
+  // /api/indexer?key=...&protocolResolve=1 (protocolResolveDry=1 for dry-run).
+  let protocolAutoResolveReport = { status: 'skipped', reason: 'not_scheduled' };
+  const forceProtocolAutoResolve = forceAutoResolve
+    || req.query.protocolResolve === '1'
+    || req.query.protocolAutoResolve === '1';
+  const dryProtocolAutoResolve = dryAutoResolve
+    || req.query.protocolResolveDry === '1'
+    || req.query.protocolResolveDry === 'true';
+  const shouldRunProtocolAutoResolve = forceProtocolAutoResolve
+    || (isVercelCron && shouldRunMinuteInterval({ intervalMinutes: 15 }));
+  if (shouldRunProtocolAutoResolve) {
+    try {
+      const result = await runProtocolAutoResolve({ dry: dryProtocolAutoResolve });
+      protocolAutoResolveReport = { status: 'ok', ...result };
+    } catch (e) {
+      console.error('[indexer] protocol-auto-resolve failed', {
+        message: e?.message,
+        code: e?.code,
+      });
+      protocolAutoResolveReport = {
+        status: 'error',
+        error: e?.message?.slice(0, 240) || 'protocol_auto_resolve_failed',
+      };
+    }
+  }
+
   const { factories, rpcUrl, startBlock, lookbackBlocks, maxBatches: configuredMaxBatches } = getIndexerConfig();
 
   if (!factories.length || !rpcUrl) {
@@ -201,6 +231,7 @@ export default async function handler(req, res) {
       reason: 'MarketFactory address or Arbitrum RPC URL not configured',
       crypto5Min: crypto5MinReport,
       pointsAutoResolve: pointsAutoResolveReport,
+      protocolAutoResolve: protocolAutoResolveReport,
     });
   }
 
@@ -271,6 +302,7 @@ export default async function handler(req, res) {
       processed,
       crypto5Min: crypto5MinReport,
       pointsAutoResolve: pointsAutoResolveReport,
+      protocolAutoResolve: protocolAutoResolveReport,
     });
   } catch (e) {
     console.error('Indexer error:', {

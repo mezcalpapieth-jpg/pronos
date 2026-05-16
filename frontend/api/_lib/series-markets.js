@@ -266,6 +266,160 @@ export function seriesSubtitle({ gameNumber, summary } = {}) {
   return summary ? `Game ${gameNumber} · ${summary}` : `Game ${gameNumber}`;
 }
 
+export function seriesGameGate({ bestOf, gameNumber, teamAWins = 0, teamBWins = 0, status } = {}) {
+  const game = validGameNumber(gameNumber);
+  const size = bestOf === 5 || bestOf === 7 ? bestOf : 7;
+  const guaranteedGames = size === 5 ? 3 : 4;
+  const winTarget = Math.floor(size / 2) + 1;
+  const a = Math.max(0, Number(teamAWins) || 0);
+  const b = Math.max(0, Number(teamBWins) || 0);
+  const totalWins = a + b;
+  const minWins = Math.min(a, b);
+  const clinched = a >= winTarget || b >= winTarget;
+
+  if (!game || status === 'resolved') {
+    return { status: status || null, seriesLocked: false, reason: null };
+  }
+  if (game <= guaranteedGames) {
+    return { status: status || 'active', seriesLocked: false, reason: null };
+  }
+  if (clinched) {
+    return { status: 'not_needed', seriesLocked: true, reason: 'series_clinched' };
+  }
+
+  const requiredMinWins = game - guaranteedGames;
+  const requiredTotalWins = requiredMinWins * 2;
+  const unlocked = minWins >= requiredMinWins && totalWins >= requiredTotalWins;
+  if (unlocked) {
+    return { status: status || 'active', seriesLocked: false, reason: null };
+  }
+  return {
+    status: 'pending',
+    seriesLocked: true,
+    reason: `requires_series_${requiredMinWins}_${requiredTotalWins - requiredMinWins}`,
+  };
+}
+
+export function applySeriesGateToMarket(market, seriesMeta = market?.seriesMeta) {
+  if (!market || market.status === 'resolved') return market;
+  const gameNumber = validGameNumber(seriesMeta?.gameNumber || market.gameNumber);
+  const wins = validSeriesWins(seriesMeta?.espnSeriesWins);
+  if (!gameNumber) return market;
+  if (gameNumber <= (seriesMeta?.guaranteedGames || (seriesMeta?.bestOf === 5 ? 3 : 4))) return market;
+  const resolvedWins = wins || { homeWins: 0, awayWins: 0 };
+
+  const gate = seriesGameGate({
+    bestOf: seriesMeta?.bestOf,
+    gameNumber,
+    teamAWins: resolvedWins.homeWins,
+    teamBWins: resolvedWins.awayWins,
+    status: market.status,
+  });
+  if (!gate.seriesLocked) return market;
+  return {
+    ...market,
+    actualStatus: market.actualStatus || market.status,
+    status: gate.status,
+    live: false,
+    seriesLocked: true,
+    seriesLockReason: gate.reason,
+  };
+}
+
+export function applySeriesDetailGateToMarket(market, seriesMeta = market?.seriesMeta) {
+  if (!market || market.status === 'resolved') return market;
+  const currentItem = Array.isArray(seriesMeta?.sequence)
+    ? seriesMeta.sequence.find((item) => Number(item.id) === Number(market.id))
+    : null;
+  if (!currentItem?.seriesLocked) {
+    if (!market.actualStatus) return market;
+    const restoredStatus = market.actualStatus;
+    const startMs = market.startTime ? new Date(market.startTime).getTime() : 0;
+    const endMs = market.endTime ? new Date(market.endTime).getTime() : 0;
+    return {
+      ...market,
+      status: restoredStatus,
+      actualStatus: null,
+      seriesLocked: false,
+      seriesLockReason: null,
+      live: restoredStatus === 'active'
+        && startMs > 0
+        && endMs > startMs
+        && startMs <= Date.now()
+        && endMs > Date.now(),
+    };
+  }
+  return {
+    ...market,
+    actualStatus: market.actualStatus || market.status,
+    status: currentItem.status,
+    live: false,
+    seriesLocked: true,
+    seriesLockReason: currentItem.seriesLockReason || null,
+  };
+}
+
+function summarizeSeriesGateRow(row, fallbackMeta, rawMeta = null) {
+  const outcomes = parseJsonMaybe(row?.outcomes, row?.outcomes || ['Sí', 'No']);
+  const meta = rawMeta || normalizeSeriesMeta({
+    resolverConfig: row?.resolver_config ?? row?.resolverConfig,
+    sourceData: row?.pending_source_data ?? row?.protocol_source_data ?? row?.source_data,
+    row,
+  });
+  return {
+    id: row?.id,
+    question: row?.question,
+    outcomes,
+    status: row?.status,
+    outcome: row?.outcome,
+    resolvedAt: row?.resolved_at ?? row?.resolvedAt ?? null,
+    finalScore: row?.final_score ?? row?.finalScore ?? null,
+    startTime: row?.start_time ?? row?.startTime ?? null,
+    endTime: row?.end_time ?? row?.endTime ?? null,
+    seriesMeta: {
+      ...fallbackMeta,
+      gameNumber: meta?.gameNumber || null,
+      espnSeriesWins: meta?.espnSeriesWins || fallbackMeta?.espnSeriesWins || null,
+    },
+  };
+}
+
+export function seriesTradeLockFromRows(currentRow, rows = []) {
+  const currentMeta = normalizeSeriesMeta({
+    resolverConfig: currentRow?.resolver_config ?? currentRow?.resolverConfig,
+    sourceData: currentRow?.pending_source_data ?? currentRow?.protocol_source_data ?? currentRow?.source_data,
+    row: currentRow,
+  });
+  if (!currentMeta?.gameNumber) return null;
+  if (currentMeta.gameNumber <= currentMeta.guaranteedGames) return null;
+  const currentPair = teamPairKeyFromMeta(currentMeta);
+  if (!currentPair) return null;
+  const items = rows
+    .map((row) => {
+      const meta = normalizeSeriesMeta({
+        resolverConfig: row?.resolver_config ?? row?.resolverConfig,
+        sourceData: row?.pending_source_data ?? row?.protocol_source_data ?? row?.source_data,
+        row,
+      });
+      if (!meta || meta.leaguePath !== currentMeta.leaguePath) return null;
+      if (teamPairKeyFromMeta(meta) !== currentPair) return null;
+      return summarizeSeriesGateRow(row, currentMeta, meta);
+    })
+    .filter(Boolean);
+  if (!items.some((item) => Number(item.id) === Number(currentRow.id))) {
+    items.push(summarizeSeriesGateRow(currentRow, currentMeta, currentMeta));
+  }
+  const detail = buildSeriesDetail(currentMeta, items);
+  const currentItem = detail?.sequence?.find((item) => Number(item.id) === Number(currentRow.id));
+  if (!currentItem?.seriesLocked) return null;
+  return {
+    locked: true,
+    status: currentItem.status,
+    reason: currentItem.seriesLockReason || null,
+    summary: detail.summary || null,
+  };
+}
+
 function winnerTeamKey(item) {
   if (item?.status !== 'resolved') return null;
   const outcome = Number(item.outcome);
@@ -406,11 +560,20 @@ export function buildSeriesDetail(meta, markets = []) {
   for (let game = sequenceStart; game <= bestOf; game++) {
     const actual = byGame.get(game);
     if (actual) {
+      const gate = seriesGameGate({
+        bestOf,
+        gameNumber: game,
+        teamAWins,
+        teamBWins,
+        status: actual.status,
+      });
+      const displayStatus = gate.seriesLocked ? gate.status : actual.status;
       sequence.push({
         id: actual.id,
         gameNumber: game,
         question: actual.question,
-        status: actual.status,
+        status: displayStatus,
+        actualStatus: displayStatus !== actual.status ? actual.status : null,
         outcome: actual.outcome ?? null,
         startTime: actual.startTime || actual.start_time || null,
         endTime: actual.endTime || actual.end_time || null,
@@ -418,16 +581,26 @@ export function buildSeriesDetail(meta, markets = []) {
         subtitle: seriesSubtitle({ gameNumber: game, summary }),
         summary,
         placeholder: actual.placeholder === true || actual.id == null,
+        seriesLocked: gate.seriesLocked,
+        seriesLockReason: gate.reason,
       });
       continue;
     }
     if (game <= shouldShowThrough || game > guaranteedGames) {
       const missingCompleted = game <= completedGames;
+      const gate = seriesGameGate({
+        bestOf,
+        gameNumber: game,
+        teamAWins,
+        teamBWins,
+        status: 'active',
+      });
+      const pendingStatus = clinched && game > completedGames ? 'not_needed' : gate.status;
       sequence.push({
         id: null,
         gameNumber: game,
         question: null,
-        status: missingCompleted ? 'resolved' : (clinched && game > completedGames ? 'not_needed' : 'pending'),
+        status: missingCompleted ? 'resolved' : pendingStatus,
         outcome: null,
         startTime: null,
         endTime: null,
@@ -435,6 +608,8 @@ export function buildSeriesDetail(meta, markets = []) {
         subtitle: seriesSubtitle({ gameNumber: game, summary }),
         summary,
         placeholder: true,
+        seriesLocked: !missingCompleted && pendingStatus !== 'active',
+        seriesLockReason: !missingCompleted && pendingStatus !== 'active' ? (gate.reason || 'series_clinched') : null,
       });
     }
   }

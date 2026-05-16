@@ -45,6 +45,19 @@ test('MVP admin status panel uses protocol mainnet wiring', () => {
   assert.doesNotMatch(statusPanel, /\/api\/points\/admin\/onchain-status/);
 });
 
+test('MVP admin status panel surfaces Turnkey and deployment readiness fields', () => {
+  const statusPanel = section('function OnchainStatusPanel', 'function short');
+
+  assert.match(statusPanel, /ONCHAIN_RESOLVER_SUBORG_ID/);
+  assert.match(statusPanel, /ONCHAIN_RESOLVER_ADDRESS/);
+  assert.match(statusPanel, /TURNKEY_ORGANIZATION_ID/);
+  assert.match(statusPanel, /TURNKEY_API_PUBLIC_KEY/);
+  assert.match(statusPanel, /VITE_TURNKEY_ORGANIZATION_ID/);
+  assert.match(statusPanel, /ONCHAIN_MARKET_POOL_ADDRESSES/);
+  assert.match(statusPanel, /INDEXER_KEY/);
+  assert.match(statusPanel, /CRON_SECRET/);
+});
+
 test('MVP admin category and create form stay aligned with points taxonomy metadata', () => {
   const createForm = section('function CreateMarketForm', '// ═══ Edit-market modal');
 

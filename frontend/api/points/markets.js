@@ -8,7 +8,7 @@ import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { binaryPrices } from '../_lib/amm-math.js';
-import { normalizeSeriesMeta, seriesSubtitle } from '../_lib/series-markets.js';
+import { applySeriesGateToMarket, normalizeSeriesMeta, seriesSubtitle } from '../_lib/series-markets.js';
 import { deriveMarketTags } from '../_lib/category-tags.js';
 import { deriveOutcomeCountryLabels } from '../_lib/outcome-country-labels.js';
 
@@ -70,6 +70,10 @@ function publicSeriesMetaFromRow(row) {
     guaranteedGames: meta.guaranteedGames,
     round: meta.round,
     seasonYear: meta.seasonYear,
+    homeTeam: meta.homeTeam,
+    awayTeam: meta.awayTeam,
+    teams: meta.teams,
+    espnSeriesWins: meta.espnSeriesWins || null,
     subtitle: seriesSubtitle({ gameNumber: meta.gameNumber }),
   };
 }
@@ -259,7 +263,7 @@ export default async function handler(req, res) {
         // right leg without an extra round-trip to /api/points/market.
         // Each leg is binary Sí/No, ordered to match `outcomes`.
         const legIds = legs.map(l => l.id);
-        return {
+        return applySeriesGateToMarket({
           id: r.id,
           ammMode: 'parallel',
           question: r.question,
@@ -296,7 +300,7 @@ export default async function handler(req, res) {
           chainMarketId: r.chain_market_id ? String(r.chain_market_id) : null,
           chainAddress: r.chain_address || null,
           crypto5min: false,
-        };
+        });
       }
 
       const reserves = parseJsonb(r.reserves, []).map(Number);
@@ -323,7 +327,7 @@ export default async function handler(req, res) {
       // dedicated "5 minutos" sub-filter — otherwise resueltos and the
       // crypto tab are dominated by 5-min rollover history.
       const crypto5min = cfg?.shape === 'binary-direction';
-      return {
+      return applySeriesGateToMarket({
         id: r.id,
         ammMode: 'unified',
         question: r.question,
@@ -366,7 +370,7 @@ export default async function handler(req, res) {
         chainId: r.chain_id || null,
         chainMarketId: r.chain_market_id ? String(r.chain_market_id) : null,
         chainAddress: r.chain_address || null,
-      };
+      });
     });
 
     return res.status(200).json({ markets });

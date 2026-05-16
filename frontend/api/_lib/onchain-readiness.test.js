@@ -1,0 +1,101 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import { collectOnchainReadiness } from './onchain-readiness.js';
+
+const ADDR = {
+  factoryV1: '0x1111111111111111111111111111111111111111',
+  factoryV2: '0x2222222222222222222222222222222222222222',
+  collateral: '0x3333333333333333333333333333333333333333',
+  deployer: '0x4444444444444444444444444444444444444444',
+  resolver: '0x5555555555555555555555555555555555555555',
+  poolA: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  poolB: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+};
+
+function completeEnv(overrides = {}) {
+  return {
+    DATABASE_URL: 'postgres://db',
+    ONCHAIN_RPC_URL: 'https://arb1.arbitrum.io/rpc',
+    ARB_RPC_URL: 'https://arb1.arbitrum.io/rpc',
+    ONCHAIN_CHAIN_ID: '42161',
+    CHAIN_ID: '42161',
+    PROTOCOL_CHAIN_ID: '42161',
+    ONCHAIN_MARKET_FACTORY_ADDRESS: ADDR.factoryV1,
+    ONCHAIN_MARKET_FACTORY_V2_ADDRESS: ADDR.factoryV2,
+    FACTORY_ADDRESS: ADDR.factoryV1,
+    PRONOS_FACTORY_ADDRESS: ADDR.factoryV1,
+    FACTORY_V2_ADDRESS: ADDR.factoryV2,
+    PRONOS_FACTORY_V2_ADDRESS: ADDR.factoryV2,
+    ONCHAIN_COLLATERAL_ADDRESS: ADDR.collateral,
+    ONCHAIN_DEPLOYER_SUBORG_ID: 'deployer-suborg',
+    ONCHAIN_DEPLOYER_ADDRESS: ADDR.deployer,
+    ONCHAIN_RESOLVER_SUBORG_ID: 'resolver-suborg',
+    ONCHAIN_RESOLVER_ADDRESS: ADDR.resolver,
+    TURNKEY_POLICIES_ENABLED: 'true',
+    TURNKEY_ORGANIZATION_ID: 'parent-org',
+    TURNKEY_API_PUBLIC_KEY: 'pub',
+    TURNKEY_API_PRIVATE_KEY: 'priv',
+    VITE_TURNKEY_ORGANIZATION_ID: 'parent-org',
+    VITE_ONCHAIN_CHAIN_ID: '42161',
+    VITE_PRONOS_ARBITRUM_FACTORY: ADDR.factoryV1,
+    VITE_PRONOS_ARBITRUM_FACTORY_V2: ADDR.factoryV2,
+    VITE_PRONOS_ARBITRUM_TOKEN: ADDR.collateral,
+    INDEXER_KEY: 'indexer-key',
+    CRON_SECRET: 'cron-secret',
+    ONCHAIN_MARKET_POOL_ADDRESSES: ADDR.poolA,
+    ...overrides,
+  };
+}
+
+test('collectOnchainReadiness reports missing Turnkey and deployment env', () => {
+  const result = collectOnchainReadiness({
+    env: { ONCHAIN_CHAIN_ID: '42161' },
+    protocolPools: [],
+  });
+  const warnings = result.warnings.join('\n');
+
+  assert.equal(result.ok, false);
+  assert.equal(result.env.chainId, 42161);
+  assert.equal(result.turnkey.serverConfigured, false);
+  assert.match(warnings, /TURNKEY_ORGANIZATION_ID missing/);
+  assert.match(warnings, /TURNKEY_API_PUBLIC_KEY missing/);
+  assert.match(warnings, /VITE_TURNKEY_ORGANIZATION_ID missing/);
+  assert.match(warnings, /ONCHAIN_DEPLOYER_SUBORG_ID missing/);
+  assert.match(warnings, /ONCHAIN_RESOLVER_SUBORG_ID missing/);
+  assert.match(warnings, /INDEXER_KEY missing/);
+  assert.match(warnings, /CRON_SECRET missing/);
+});
+
+test('collectOnchainReadiness catches deployment alias mismatches', () => {
+  const result = collectOnchainReadiness({
+    env: completeEnv({
+      VITE_ONCHAIN_CHAIN_ID: '421614',
+      FACTORY_ADDRESS: '0xffffffffffffffffffffffffffffffffffffffff',
+      VITE_PRONOS_ARBITRUM_FACTORY_V2: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+      VITE_PRONOS_ARBITRUM_TOKEN: '0xdddddddddddddddddddddddddddddddddddddddd',
+    }),
+    protocolPools: [ADDR.poolA],
+  });
+  const warnings = result.warnings.join('\n');
+
+  assert.equal(result.ok, false);
+  assert.match(warnings, /VITE_ONCHAIN_CHAIN_ID=421614 does not match ONCHAIN_CHAIN_ID=42161/);
+  assert.match(warnings, /FACTORY_ADDRESS does not match ONCHAIN_MARKET_FACTORY_ADDRESS/);
+  assert.match(warnings, /VITE_PRONOS_ARBITRUM_FACTORY_V2 does not match ONCHAIN_MARKET_FACTORY_V2_ADDRESS/);
+  assert.match(warnings, /VITE_PRONOS_ARBITRUM_TOKEN does not match ONCHAIN_COLLATERAL_ADDRESS/);
+});
+
+test('collectOnchainReadiness reports deployed pools missing from Turnkey policy targets', () => {
+  const result = collectOnchainReadiness({
+    env: completeEnv(),
+    protocolPools: [ADDR.poolA, ADDR.poolB],
+  });
+
+  assert.equal(result.policy.configuredPoolCount, 1);
+  assert.deepEqual(result.policy.missingPools, [ADDR.poolB]);
+  assert.match(
+    result.warnings.join('\n'),
+    /ONCHAIN_MARKET_POOL_ADDRESSES missing 1 deployed protocol pool/,
+  );
+});

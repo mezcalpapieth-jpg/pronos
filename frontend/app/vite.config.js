@@ -51,6 +51,37 @@ function manualChunks(id) {
   return 'vendor';
 }
 
+function normalizeViteId(id = '') {
+  return id.replaceAll(path.win32.sep, path.posix.sep);
+}
+
+export function turnkeyBrowserNodecryptoStub() {
+  const stubPath = path.resolve(__dirname, 'src/lib/turnkeyNodecryptoBrowserStub.js');
+
+  return {
+    name: 'turnkey-browser-nodecrypto-stub',
+    enforce: 'pre',
+    resolveId(source, importer) {
+      const normalizedSource = normalizeViteId(source);
+      const normalizedImporter = normalizeViteId(importer);
+      const isNodecryptoImport = normalizedSource === './nodecrypto.mjs'
+        || normalizedSource === './nodecrypto.js'
+        || normalizedSource.endsWith('/node_modules/@turnkey/api-key-stamper/dist/nodecrypto.mjs')
+        || normalizedSource.endsWith('/node_modules/@turnkey/api-key-stamper/dist/nodecrypto.js')
+        || normalizedSource.endsWith('/@turnkey/api-key-stamper/dist/nodecrypto.mjs')
+        || normalizedSource.endsWith('/@turnkey/api-key-stamper/dist/nodecrypto.js');
+      const fromApiKeyStamper = normalizedImporter.endsWith('/node_modules/@turnkey/api-key-stamper/dist/index.mjs')
+        || normalizedImporter.endsWith('/node_modules/@turnkey/api-key-stamper/dist/index.js');
+
+      if (isNodecryptoImport && (fromApiKeyStamper || normalizedSource.includes('/@turnkey/api-key-stamper/dist/'))) {
+        return stubPath;
+      }
+
+      return null;
+    },
+  };
+}
+
 // Two build targets share this Vite project:
 //   - MVP    (Privy, on-chain, USDC)     — default, outputs to ../mvp/    served at /mvp/
 //   - Points (Turnkey, off-chain, MXNP)  — BUILD_TARGET=points, outputs to ../points/ served at /points/
@@ -62,7 +93,7 @@ function manualChunks(id) {
 const isPoints = process.env.BUILD_TARGET === 'points';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [turnkeyBrowserNodecryptoStub(), react()],
   base: isPoints ? '/points/' : '/mvp/',
   root: isPoints ? path.resolve(__dirname, 'points') : __dirname,
   build: {
@@ -80,6 +111,7 @@ export default defineConfig({
     alias: {
       '/css': path.resolve(__dirname, '../css'),
       '@app': path.resolve(__dirname, 'src'),
+      crypto: path.resolve(__dirname, 'src/lib/browserCryptoModule.js'),
     },
   },
   // Dev-server proxy. Default target = localhost vercel-dev so a

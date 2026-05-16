@@ -19,6 +19,7 @@ import { binaryBuyQuote, multiBuyQuote } from '../_lib/amm-math.js';
 import { requireSession } from '../_lib/session.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { withTransaction } from '../_lib/db-tx.js';
+import { seriesTradeLockFromRows } from '../_lib/series-markets.js';
 
 // Lightweight HTTP client used only to run the idempotent schema bootstrap.
 // Transactional work goes through withTransaction() which uses a WS Pool.
@@ -29,6 +30,29 @@ function parseJsonb(value, fallback) {
   if (value && typeof value === 'object') return value;
   if (typeof value !== 'string') return fallback;
   try { return JSON.parse(value); } catch { return fallback; }
+}
+
+async function readSeriesTradeLock(client, market) {
+  const cfg = parseJsonb(market.resolver_config, null);
+  if (cfg?.source !== 'espn' || !cfg?.leaguePath) return null;
+  const anchor = market.start_time || market.end_time || market.created_at;
+  if (!anchor) return null;
+  const siblingResult = await client.query(
+    `SELECT id, question, outcomes, start_time, end_time,
+            status, outcome, resolved_at, final_score,
+            resolver_config, sport, league
+       FROM points_markets
+      WHERE parent_id IS NULL
+        AND resolver_type = 'sports_api'
+        AND resolver_config->>'source' = 'espn'
+        AND resolver_config->>'leaguePath' = $1
+        AND start_time >= $2::timestamptz - INTERVAL '45 days'
+        AND start_time <= $2::timestamptz + INTERVAL '45 days'
+      ORDER BY start_time ASC NULLS LAST, id ASC
+      LIMIT 80`,
+    [cfg.leaguePath, anchor],
+  );
+  return seriesTradeLockFromRows(market, siblingResult.rows);
 }
 
 export default async function handler(req, res) {
@@ -76,7 +100,8 @@ export default async function handler(req, res) {
       // Lock the market row first, then the position row — consistent lock
       // order across buy/sell prevents deadlocks.
       const marketResult = await client.query(
-        `SELECT id, status, reserves, end_time
+        `SELECT id, question, status, reserves, outcomes, start_time, end_time,
+                created_at, resolver_type, resolver_config, sport, league
          FROM points_markets
          WHERE id = $1
          FOR UPDATE`,
@@ -91,6 +116,13 @@ export default async function handler(req, res) {
       }
       if (m.end_time && new Date(m.end_time) <= new Date()) {
         const err = new Error('market_expired'); err.status = 400; throw err;
+      }
+      const seriesLock = await readSeriesTradeLock(client, m);
+      if (seriesLock?.locked) {
+        const err = new Error(seriesLock.status === 'not_needed' ? 'series_game_not_needed' : 'series_game_pending');
+        err.status = 400;
+        err.detail = seriesLock.summary || seriesLock.reason;
+        throw err;
       }
       const reserves = parseJsonb(m.reserves, []).map(Number);
       // Dispatch AMM by outcome count:

@@ -76,6 +76,7 @@ export default function PointsMarketCard({ market, userPosition }) {
   const drawerOpen = drawerIndex !== null;
 
   const isResolved = market.status === 'resolved';
+  const isSeriesPending = !isResolved && (market.seriesLocked || market.status === 'pending');
   // World Cup markets sit outside the current 2-week cycle — kickoff
   // is June 11, so the whole hub is locked to view-only until the
   // cycle that contains it opens. Treat category/league='world-cup'
@@ -94,6 +95,8 @@ export default function PointsMarketCard({ market, userPosition }) {
     : null;
   const canOpenDrawer = !isResolved
     && !isWorldCupLocked
+    && !isSeriesPending
+    && market.status === 'active'
     && (market.ammMode !== 'parallel' || parallelLegs !== null);
   // isLive: only true for fixed-window sports events. The API
   // (/api/points/markets) computes this with two defenses — excludes
@@ -188,6 +191,11 @@ export default function PointsMarketCard({ market, userPosition }) {
         {isPending && !isResolved && !isLive && !isWorldCupLocked && (
           <span className="mock-card-badge" style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 9 }}>
             {t('points.card.pending')}
+          </span>
+        )}
+        {isSeriesPending && !isResolved && !isLive && (
+          <span className="mock-card-badge" style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 9 }}>
+            {t('points.series.pending')}
           </span>
         )}
         {isWorldCupLocked && !isResolved && (
