@@ -93,13 +93,14 @@ function publicSeriesMetaFromRow(row, { requireGameNumber = true } = {}) {
     homeTeam: meta.homeTeam,
     awayTeam: meta.awayTeam,
     teams: meta.teams,
+    espnSeriesWins: meta.espnSeriesWins || null,
     subtitle: seriesSubtitle({ gameNumber: meta.gameNumber }),
   };
 }
 
-function summarizeSeriesMarketRow(row, fallbackMeta) {
+function summarizeSeriesMarketRow(row, fallbackMeta, rawMeta = null) {
   const outcomes = parseJsonb(row.outcomes, ['Sí', 'No']);
-  const rawMeta = publicSeriesMetaFromRow(row, { requireGameNumber: false });
+  const resolvedMeta = rawMeta || publicSeriesMetaFromRow(row, { requireGameNumber: false });
   return {
     id: row.id,
     question: row.question,
@@ -112,7 +113,32 @@ function summarizeSeriesMarketRow(row, fallbackMeta) {
     endTime: row.end_time,
     seriesMeta: {
       ...fallbackMeta,
-      gameNumber: rawMeta?.gameNumber || null,
+      gameNumber: resolvedMeta?.gameNumber || null,
+      espnSeriesWins: resolvedMeta?.espnSeriesWins || fallbackMeta?.espnSeriesWins || null,
+    },
+  };
+}
+
+function summarizePendingSeriesRow(row, fallbackMeta, rawMeta = null) {
+  const outcomes = parseJsonb(row.outcomes, ['Sí', 'No']);
+  const resolvedMeta = rawMeta || publicSeriesMetaFromRow(row, { requireGameNumber: false });
+  const endMs = row.end_time ? new Date(row.end_time).getTime() : NaN;
+  const isPast = Number.isFinite(endMs) && endMs < Date.now();
+  return {
+    id: null,
+    pendingId: row.pending_id || row.id || null,
+    question: row.question,
+    outcomes,
+    status: isPast ? 'resolved' : (row.status || 'pending'),
+    outcome: null,
+    resolvedAt: null,
+    finalScore: null,
+    startTime: row.start_time,
+    endTime: row.end_time,
+    seriesMeta: {
+      ...fallbackMeta,
+      gameNumber: resolvedMeta?.gameNumber || null,
+      espnSeriesWins: resolvedMeta?.espnSeriesWins || fallbackMeta?.espnSeriesWins || null,
     },
   };
 }
@@ -141,17 +167,46 @@ async function loadSeriesDetail(sqlClient, currentRow, currentMeta) {
     LIMIT 80
   `;
 
+  let hasExplicitGameNumber = Boolean(currentMeta.gameNumber);
   const siblings = rows
     .map((row) => {
       const meta = publicSeriesMetaFromRow(row, { requireGameNumber: false });
       if (!meta || meta.leaguePath !== currentMeta.leaguePath) return null;
       if (teamPairKeyFromMeta(meta) !== currentPair) return null;
-      return summarizeSeriesMarketRow(row, currentMeta);
+      if (meta.gameNumber) hasExplicitGameNumber = true;
+      return summarizeSeriesMarketRow(row, currentMeta, meta);
     })
     .filter(Boolean);
 
-  if (siblings.length === 0) return null;
-  const detail = buildSeriesDetail(currentMeta, siblings);
+  const pendingRows = await sqlClient`
+    SELECT p.id AS pending_id, p.question, p.outcomes, p.start_time, p.end_time,
+           p.status, p.resolver_config, p.sport, p.league,
+           p.source_data AS pending_source_data
+    FROM points_pending_markets p
+    WHERE p.approved_market_id IS NULL
+      AND p.resolver_type = 'sports_api'
+      AND p.resolver_config->>'source' = 'espn'
+      AND p.resolver_config->>'leaguePath' = ${currentMeta.leaguePath}
+      AND p.start_time >= ${anchor}::timestamptz - INTERVAL '45 days'
+      AND p.start_time <= ${anchor}::timestamptz + INTERVAL '45 days'
+    ORDER BY p.start_time ASC NULLS LAST, p.id ASC
+    LIMIT 80
+  `;
+
+  const pendingSiblings = pendingRows
+    .map((row) => {
+      const meta = publicSeriesMetaFromRow(row, { requireGameNumber: false });
+      if (!meta || meta.leaguePath !== currentMeta.leaguePath) return null;
+      if (teamPairKeyFromMeta(meta) !== currentPair) return null;
+      if (meta.gameNumber) hasExplicitGameNumber = true;
+      return summarizePendingSeriesRow(row, currentMeta, meta);
+    })
+    .filter(Boolean);
+
+  const seriesItems = [...siblings, ...pendingSiblings];
+  if (seriesItems.length === 0) return null;
+  if (!hasExplicitGameNumber) return null;
+  const detail = buildSeriesDetail(currentMeta, seriesItems);
   if (!detail) return null;
   const currentItem = detail.sequence?.find(item => Number(item.id) === Number(currentRow.id));
   const gameNumber = currentItem?.gameNumber || detail.gameNumber || currentMeta.gameNumber || null;
@@ -223,9 +278,11 @@ export default async function handler(req, res) {
         geo_tags: parseJsonb(r.geo_tags, []),
         topic_tags: parseJsonb(r.topic_tags, []),
       });
-      const baseSeriesMeta = publicSeriesMetaFromRow(r);
+      const baseSeriesMeta = publicSeriesMetaFromRow(r, { requireGameNumber: false });
       const seriesMeta = baseSeriesMeta
-        ? await loadSeriesDetail(sql, r, baseSeriesMeta).catch(() => baseSeriesMeta)
+        ? await loadSeriesDetail(sql, r, baseSeriesMeta).catch(() => (
+            baseSeriesMeta.gameNumber ? baseSeriesMeta : null
+          ))
         : null;
 
       // Crypto-5min direction markets ship a small public metadata

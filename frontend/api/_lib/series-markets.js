@@ -116,6 +116,22 @@ function seriesWinsFromSeriesObject(series, home, away) {
   return { homeWins: homeWins || 0, awayWins: awayWins || 0 };
 }
 
+function validGameNumber(value) {
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 && n <= 9 ? n : null;
+}
+
+function validSeriesWins(value) {
+  if (!value || typeof value !== 'object') return null;
+  const homeWins = Number(value.homeWins);
+  const awayWins = Number(value.awayWins);
+  if (!Number.isFinite(homeWins) || !Number.isFinite(awayWins)) return null;
+  return {
+    homeWins: Math.max(0, homeWins),
+    awayWins: Math.max(0, awayWins),
+  };
+}
+
 export function buildSeriesKey({ leaguePath, seasonYear, round, homeTeam, awayTeam } = {}) {
   const home = teamId(homeTeam);
   const away = teamId(awayTeam);
@@ -227,6 +243,7 @@ export function normalizeSeriesMeta({ resolverConfig, sourceData, row } = {}) {
     homeTeam: home,
     awayTeam: away,
     teams: [home, away],
+    espnSeriesWins: validSeriesWins(series?.espnSeriesWins),
   };
 }
 
@@ -258,19 +275,77 @@ function winnerTeamKey(item) {
   return normalizeKeyPart(label);
 }
 
+function teamKeySet(team) {
+  return new Set([team?.id, team?.name, team?.shortName, team?.abbreviation].map(normalizeKeyPart).filter(Boolean));
+}
+
+function setsOverlap(a, b) {
+  for (const value of a || []) {
+    if (b?.has(value)) return true;
+  }
+  return false;
+}
+
+function officialWinsForTeams(candidateMeta, teamAKeys, teamBKeys) {
+  const wins = validSeriesWins(candidateMeta?.espnSeriesWins);
+  if (!wins) return null;
+  const homeKeys = teamKeySet(candidateMeta?.homeTeam);
+  const awayKeys = teamKeySet(candidateMeta?.awayTeam);
+  let teamAWins = null;
+  let teamBWins = null;
+
+  if (setsOverlap(homeKeys, teamAKeys)) teamAWins = wins.homeWins;
+  if (setsOverlap(homeKeys, teamBKeys)) teamBWins = wins.homeWins;
+  if (setsOverlap(awayKeys, teamAKeys)) teamAWins = wins.awayWins;
+  if (setsOverlap(awayKeys, teamBKeys)) teamBWins = wins.awayWins;
+
+  if (teamAWins == null || teamBWins == null) return null;
+  return { teamAWins, teamBWins };
+}
+
+function compareSeriesTime(a, b) {
+  const at = new Date(a.startTime || a.start_time || a.endTime || a.end_time || 0).getTime();
+  const bt = new Date(b.startTime || b.start_time || b.endTime || b.end_time || 0).getTime();
+  const aHasTime = Number.isFinite(at) && at > 0;
+  const bHasTime = Number.isFinite(bt) && bt > 0;
+  if (aHasTime && bHasTime && at !== bt) return at - bt;
+  if (aHasTime !== bHasTime) return aHasTime ? -1 : 1;
+  const ag = validGameNumber(a.explicitGameNumber);
+  const bg = validGameNumber(b.explicitGameNumber);
+  if (ag != null && bg != null && ag !== bg) return ag - bg;
+  if ((ag != null) !== (bg != null)) return ag != null ? -1 : 1;
+  return (a._ordinal || 0) - (b._ordinal || 0);
+}
+
 export function buildSeriesDetail(meta, markets = []) {
   if (!meta) return null;
   const normalizedMarkets = markets
     .map((market, index) => {
       const marketMeta = market.seriesMeta || normalizeSeriesMeta({ resolverConfig: market.resolverConfig, sourceData: market.sourceData, row: market });
+      const explicitGameNumber = validGameNumber(marketMeta?.gameNumber || market.gameNumber);
       return {
         ...market,
         seriesMeta: marketMeta,
-        gameNumber: marketMeta?.gameNumber || market.gameNumber || null,
+        explicitGameNumber,
+        gameNumber: explicitGameNumber,
         _ordinal: index + 1,
       };
     })
     .filter((market) => market.seriesMeta?.key === meta.key);
+
+  const reservedExplicitGames = new Set(normalizedMarkets.map((market) => market.explicitGameNumber).filter(Boolean));
+  const usedGames = new Set();
+  [...normalizedMarkets].sort(compareSeriesTime).forEach((market, index) => {
+    if (market.explicitGameNumber) {
+      market.gameNumber = market.explicitGameNumber;
+      usedGames.add(market.gameNumber);
+      return;
+    }
+    let inferred = index + 1;
+    while (usedGames.has(inferred) || reservedExplicitGames.has(inferred)) inferred += 1;
+    market.gameNumber = inferred;
+    usedGames.add(inferred);
+  });
 
   normalizedMarkets.sort((a, b) => {
     const ag = a.gameNumber || 999;
@@ -281,14 +356,10 @@ export function buildSeriesDetail(meta, markets = []) {
     return String(at).localeCompare(String(bt)) || Number(a.id || 0) - Number(b.id || 0);
   });
 
-  normalizedMarkets.forEach((market, index) => {
-    if (!market.gameNumber) market.gameNumber = index + 1;
-  });
-
   const teamA = meta.teams?.[0] || meta.homeTeam || {};
   const teamB = meta.teams?.[1] || meta.awayTeam || {};
-  const teamAKeys = new Set([teamA.name, teamA.shortName, teamA.abbreviation].map(normalizeKeyPart).filter(Boolean));
-  const teamBKeys = new Set([teamB.name, teamB.shortName, teamB.abbreviation].map(normalizeKeyPart).filter(Boolean));
+  const teamAKeys = teamKeySet(teamA);
+  const teamBKeys = teamKeySet(teamB);
   let teamAWins = 0;
   let teamBWins = 0;
   for (const market of normalizedMarkets) {
@@ -297,11 +368,30 @@ export function buildSeriesDetail(meta, markets = []) {
     if (teamAKeys.has(winner)) teamAWins += 1;
     else if (teamBKeys.has(winner)) teamBWins += 1;
   }
+  const officialCandidates = [meta, ...normalizedMarkets.map(market => market.seriesMeta)].filter(Boolean);
+  let officialWins = null;
+  for (const candidate of officialCandidates) {
+    const candidateWins = officialWinsForTeams(candidate, teamAKeys, teamBKeys);
+    if (!candidateWins) continue;
+    if (!officialWins || (candidateWins.teamAWins + candidateWins.teamBWins) >= (officialWins.teamAWins + officialWins.teamBWins)) {
+      officialWins = candidateWins;
+    }
+  }
+  if (officialWins && (officialWins.teamAWins + officialWins.teamBWins) >= (teamAWins + teamBWins)) {
+    teamAWins = officialWins.teamAWins;
+    teamBWins = officialWins.teamBWins;
+  }
 
   const bestOf = meta.bestOf === 5 || meta.bestOf === 7 ? meta.bestOf : 7;
   const winTarget = Math.floor(bestOf / 2) + 1;
   const guaranteedGames = bestOf === 5 ? 3 : 4;
   const maxActualGame = Math.max(0, ...normalizedMarkets.map((market) => Number(market.gameNumber) || 0));
+  const completedGames = Math.min(bestOf, Math.max(
+    teamAWins + teamBWins,
+    ...normalizedMarkets
+      .filter((market) => market.status === 'resolved')
+      .map((market) => Number(market.gameNumber) || 0),
+  ));
   const sequenceStart = Math.min(1, ...normalizedMarkets.map((market) => Number(market.gameNumber) || 1));
   const shouldShowThrough = Math.max(maxActualGame, Math.min(bestOf, guaranteedGames));
   const clinched = teamAWins >= winTarget || teamBWins >= winTarget;
@@ -327,16 +417,17 @@ export function buildSeriesDetail(meta, markets = []) {
         finalScore: actual.finalScore || actual.final_score || null,
         subtitle: seriesSubtitle({ gameNumber: game, summary }),
         summary,
-        placeholder: false,
+        placeholder: actual.placeholder === true || actual.id == null,
       });
       continue;
     }
     if (game <= shouldShowThrough || game > guaranteedGames) {
+      const missingCompleted = game <= completedGames;
       sequence.push({
         id: null,
         gameNumber: game,
         question: null,
-        status: clinched && game > maxActualGame ? 'not_needed' : 'pending',
+        status: missingCompleted ? 'resolved' : (clinched && game > completedGames ? 'not_needed' : 'pending'),
         outcome: null,
         startTime: null,
         endTime: null,

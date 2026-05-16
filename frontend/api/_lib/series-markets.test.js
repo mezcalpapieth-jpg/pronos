@@ -168,3 +168,91 @@ test('buildSeriesDetail marks remaining conditional games as not needed after cl
     [5, 'not_needed'],
   ]);
 });
+
+test('buildSeriesDetail infers missing game numbers by chronological order around explicit games', () => {
+  const meta = {
+    key: 'basketball-nba:2026:east-semifinals:5-8',
+    leaguePath: 'basketball/nba',
+    league: 'nba',
+    sport: 'nba',
+    gameNumber: 6,
+    bestOf: 7,
+    winTarget: 4,
+    guaranteedGames: 4,
+    round: 'East Semifinals',
+    seasonYear: 2026,
+    homeTeam: { id: '5', name: 'Detroit Pistons', shortName: 'Pistons', abbreviation: 'DET' },
+    awayTeam: { id: '8', name: 'Cleveland Cavaliers', shortName: 'Cavaliers', abbreviation: 'CLE' },
+    teams: [
+      { id: '5', name: 'Detroit Pistons', shortName: 'Pistons', abbreviation: 'DET' },
+      { id: '8', name: 'Cleveland Cavaliers', shortName: 'Cavaliers', abbreviation: 'CLE' },
+    ],
+  };
+  const outcomes = ['Detroit Pistons', 'Cleveland Cavaliers'];
+  const markets = [
+    { id: 201, status: 'resolved', outcome: 1, outcomes, startTime: '2026-05-05T23:00:00Z', seriesMeta: { ...meta, gameNumber: null } },
+    { id: 202, status: 'resolved', outcome: 1, outcomes, startTime: '2026-05-07T23:00:00Z', seriesMeta: { ...meta, gameNumber: null } },
+    { id: 203, status: 'resolved', outcome: 0, outcomes, startTime: '2026-05-09T19:00:00Z', seriesMeta: { ...meta, gameNumber: null } },
+    { id: 204, status: 'resolved', outcome: 0, outcomes, startTime: '2026-05-12T00:00:00Z', seriesMeta: { ...meta, gameNumber: null } },
+    { id: 205, status: 'resolved', outcome: 1, outcomes, startTime: '2026-05-14T00:00:00Z', seriesMeta: { ...meta, gameNumber: null } },
+    { id: 206, status: 'resolved', outcome: 0, outcomes, startTime: '2026-05-15T23:00:00Z', seriesMeta: { ...meta, gameNumber: 6 } },
+    { id: 207, status: 'active', outcome: null, outcomes, startTime: '2026-05-18T00:00:00Z', seriesMeta: { ...meta, gameNumber: 7 } },
+  ];
+
+  const detail = buildSeriesDetail(meta, markets);
+
+  assert.deepEqual(detail.sequence.map(g => [g.gameNumber, g.id, g.status]), [
+    [1, 201, 'resolved'],
+    [2, 202, 'resolved'],
+    [3, 203, 'resolved'],
+    [4, 204, 'resolved'],
+    [5, 205, 'resolved'],
+    [6, 206, 'resolved'],
+    [7, 207, 'active'],
+  ]);
+});
+
+test('buildSeriesDetail uses ESPN series wins to keep missing prior games from looking pending', () => {
+  const meta = {
+    key: 'basketball-nba:2026:east-semifinals:5-8',
+    leaguePath: 'basketball/nba',
+    league: 'nba',
+    sport: 'nba',
+    gameNumber: 7,
+    bestOf: 7,
+    winTarget: 4,
+    guaranteedGames: 4,
+    round: 'East Semifinals',
+    seasonYear: 2026,
+    homeTeam: { id: '5', name: 'Detroit Pistons', shortName: 'Pistons', abbreviation: 'DET' },
+    awayTeam: { id: '8', name: 'Cleveland Cavaliers', shortName: 'Cavaliers', abbreviation: 'CLE' },
+    teams: [
+      { id: '5', name: 'Detroit Pistons', shortName: 'Pistons', abbreviation: 'DET' },
+      { id: '8', name: 'Cleveland Cavaliers', shortName: 'Cavaliers', abbreviation: 'CLE' },
+    ],
+    espnSeriesWins: { homeWins: 3, awayWins: 3 },
+  };
+
+  const detail = buildSeriesDetail(meta, [
+    {
+      id: 207,
+      question: 'Game 7',
+      status: 'active',
+      outcome: null,
+      outcomes: ['Detroit Pistons', 'Cleveland Cavaliers'],
+      startTime: '2026-05-18T00:00:00Z',
+      seriesMeta: meta,
+    },
+  ]);
+
+  assert.equal(detail.summary, 'Series tied 3-3');
+  assert.deepEqual(detail.sequence.map(g => [g.gameNumber, g.id, g.status, g.placeholder]), [
+    [1, null, 'resolved', true],
+    [2, null, 'resolved', true],
+    [3, null, 'resolved', true],
+    [4, null, 'resolved', true],
+    [5, null, 'resolved', true],
+    [6, null, 'resolved', true],
+    [7, 207, 'active', false],
+  ]);
+});

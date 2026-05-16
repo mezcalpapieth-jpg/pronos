@@ -438,8 +438,8 @@ function shortGameDate(iso) {
 
 function seriesGameStatus(item, t) {
   if (item?.status === 'not_needed') return t('points.series.notNeeded');
-  if (item?.placeholder) return t('points.series.pending');
   if (item?.status === 'resolved') return t('points.series.final');
+  if (item?.placeholder) return t('points.series.pending');
   const now = Date.now();
   const start = item?.startTime ? new Date(item.startTime).getTime() : NaN;
   const end = item?.endTime ? new Date(item.endTime).getTime() : NaN;
