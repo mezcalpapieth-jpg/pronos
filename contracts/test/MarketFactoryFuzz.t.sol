@@ -160,9 +160,9 @@ contract MarketFactoryFuzzTest is Test {
         factory.createMarket("Q", "c", block.timestamp - 1, "manual", ONE_USDC);
     }
 
-    function test_createMarket_only_owner() public {
+    function test_createMarket_only_creator_or_owner() public {
         vm.prank(random);
-        vm.expectRevert(bytes("MarketFactory: not owner"));
+        vm.expectRevert(bytes("MarketFactory: not creator"));
         factory.createMarket("Q", "c", block.timestamp + 1 days, "manual", ONE_USDC);
     }
 

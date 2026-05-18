@@ -12,6 +12,7 @@ Prediction markets for LATAM, with the MVP protocol running on Arbitrum One and 
 | Collateral | MXNB on Arbitrum: `0xF197FFC28c23E0309B5559e7a166f2c6164C80aA` |
 | Auth / signing | Turnkey email wallets + delegated EVM signing |
 | Data | Vercel serverless APIs + Neon Postgres |
+| Automated resolution | Chainlink CRE scaffold + guarded protocol webhook |
 
 ## Active Protocol Path
 
@@ -47,11 +48,39 @@ npm run build
 1. Set MXNB as `COLLATERAL_ADDRESS` and `ONCHAIN_COLLATERAL_ADDRESS`.
 2. Deploy V1 with `contracts/script/DeployProtocol.s.sol`.
 3. Deploy V2 with `contracts/script/DeployProtocolV2.s.sol`.
-4. Transfer owner/resolver roles to Arbitrum One Safes.
-5. Configure Vercel env vars from the deploy script output.
-6. Set `CHAIN_ID=42161`, `ONCHAIN_CHAIN_ID=42161`, `VITE_ONCHAIN_CHAIN_ID=42161`.
-7. Set `INDEXER_START_BLOCK` to the deployment block and run `/api/indexer`.
-8. Create a tiny canary market from `/mvp/admin` before public trading.
+4. Set `MARKET_CREATOR_ADDRESS` / `ONCHAIN_DEPLOYER_ADDRESS` to the Turnkey ops wallet before deployment.
+5. Transfer factory owner roles to an Arbitrum One Safe, while keeping `marketCreator` on the Turnkey ops wallet and `resolver` on the Turnkey resolver wallet.
+6. Configure Vercel env vars from the deploy script output.
+7. Set `CHAIN_ID=42161`, `ONCHAIN_CHAIN_ID=42161`, `VITE_ONCHAIN_CHAIN_ID=42161`.
+8. Set `INDEXER_START_BLOCK` to the deployment block and run `/api/indexer`.
+9. Confirm `/api/protocol/admin/onchain-status` reports that the deployer can create markets and the resolver matches.
+10. Set `CRE_RESOLUTION_WEBHOOK_SECRET`, `CRE_RESOLUTION_MIN_CONFIDENCE_BPS`, and `CRE_RESOLUTION_MAX_AGE_MS`.
+11. Simulate `chainlink/cre/pronos-resolver` and keep CRE configs in `dry-run` until deployment access and testnet rehearsal are ready.
+12. Create a tiny canary market from `/mvp/admin` before public trading.
+
+## Chainlink CRE Readiness
+
+The first CRE workflow lives in `chainlink/cre/pronos-resolver`. It currently
+simulates a Pronos-shaped resolution report and the server accepts reports at
+`/api/protocol/cre/resolve-market`.
+
+The webhook is inactive unless `CRE_RESOLUTION_WEBHOOK_SECRET` is set. It
+validates source identity, event id, market status, outcome bounds, report age,
+and confidence before calling the same Turnkey-backed on-chain resolver used by
+admin resolution.
+
+Local checks:
+
+```bash
+cd chainlink/cre/pronos-resolver/pronos-market-resolver
+bun test
+bun run typecheck
+```
+
+```bash
+cd chainlink/cre/pronos-resolver
+cre workflow simulate pronos-market-resolver --target staging-settings
+```
 
 ## Gas Note
 

@@ -9,7 +9,9 @@ import "./PronosAMM.sol";
 /**
  * @title MarketFactory
  * @notice Creates and manages Pronos prediction markets.
- *         Owner (Safe multisig) can create markets, resolve them, and manage fees.
+ *         Owner (Safe multisig) manages admin powers, while a separate
+ *         marketCreator can create markets without making every create
+ *         action a multisig transaction.
  *
  * Revenue distribution:
  *   70% treasury, 20% liquidity reserve, 10% emergency reserve
@@ -23,8 +25,9 @@ contract MarketFactory is ReentrancyGuard {
     // the deploy script and environment do.
     IERC20      public immutable collateral;
 
-    address public owner;       // Safe multisig
-    address public resolver;    // Can be same as owner or separate multisig (2/3)
+    address public owner;         // Safe multisig
+    address public marketCreator; // Turnkey ops wallet for automatic market creation
+    address public resolver;      // Turnkey resolver, CRE adapter, or owner fallback
 
     // Revenue distribution addresses
     address public treasury;         // receives 70% of fees
@@ -56,6 +59,7 @@ contract MarketFactory is ReentrancyGuard {
     event MarketPaused(uint256 indexed marketId, bool paused);
     event FeesDistributed(uint256 treasury, uint256 liquidity, uint256 emergency);
     event OwnershipTransferred(address indexed oldOwner, address indexed newOwner);
+    event MarketCreatorUpdated(address indexed oldCreator, address indexed newCreator);
     event ResolverUpdated(address indexed oldResolver, address indexed newResolver);
     event FeeCollectorUpdated(address indexed oldCollector, address indexed newCollector);
     event TreasuryUpdated(address indexed oldTreasury, address indexed newTreasury);
@@ -66,6 +70,11 @@ contract MarketFactory is ReentrancyGuard {
 
     modifier onlyOwner() {
         require(msg.sender == owner, "MarketFactory: not owner");
+        _;
+    }
+
+    modifier onlyMarketCreator() {
+        require(msg.sender == marketCreator || msg.sender == owner, "MarketFactory: not creator");
         _;
     }
 
@@ -86,6 +95,7 @@ contract MarketFactory is ReentrancyGuard {
         token             = PronosToken(_token);
         collateral        = IERC20(_collateral);
         owner             = msg.sender;
+        marketCreator     = msg.sender;
         resolver          = msg.sender;
         treasury          = _treasury;
         liquidityReserve  = _liquidityReserve;
@@ -110,7 +120,7 @@ contract MarketFactory is ReentrancyGuard {
         uint256 endTime,
         string calldata resolutionSource,
         uint256 seedAmount
-    ) external onlyOwner returns (uint256 marketId) {
+    ) external onlyMarketCreator returns (uint256 marketId) {
         require(endTime > block.timestamp, "MarketFactory: end time in past");
         require(seedAmount > 0, "MarketFactory: zero seed");
 
@@ -283,6 +293,12 @@ contract MarketFactory is ReentrancyGuard {
         require(newOwner != address(0), "MarketFactory: zero address");
         emit OwnershipTransferred(owner, newOwner);
         owner = newOwner;
+    }
+
+    function setMarketCreator(address newCreator) external onlyOwner {
+        require(newCreator != address(0), "MarketFactory: zero address");
+        emit MarketCreatorUpdated(marketCreator, newCreator);
+        marketCreator = newCreator;
     }
 
     function setResolver(address newResolver) external onlyOwner {

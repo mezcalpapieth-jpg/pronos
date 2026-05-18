@@ -156,6 +156,12 @@ export default function PointsAdmin({ isAdmin }) {
   const navigate = useNavigate();
   const { authenticated, user, loading: authLoading } = usePointsAuth();
   const [tab, setTab] = useState(initialTab); // 'create' | 'markets' | 'stats'
+  const [adminTaskCounts, setAdminTaskCounts] = useState({ pending: 0, markets: 0, social: 0 });
+  const [taskRefreshKey, setTaskRefreshKey] = useState(0);
+
+  function refreshAdminTaskCounts() {
+    setTaskRefreshKey(k => k + 1);
+  }
 
   useEffect(() => {
     if (authLoading) return;
@@ -163,6 +169,37 @@ export default function PointsAdmin({ isAdmin }) {
       navigate('/');
     }
   }, [authLoading, authenticated, navigate]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAdminTaskCounts() {
+      if (!authenticated || !isAdmin) {
+        if (!cancelled) setAdminTaskCounts({ pending: 0, markets: 0, social: 0 });
+        return;
+      }
+
+      const [pendingResult, marketsResult, socialResult] = await Promise.allSettled([
+        adminListPendingMarkets('pending'),
+        getJson('/api/points/admin/markets?status=pending'),
+        adminListSocialTasks('pending'),
+      ]);
+
+      if (cancelled) return;
+      const pendingData = pendingResult.status === 'fulfilled' ? pendingResult.value : null;
+      const marketsData = marketsResult.status === 'fulfilled' ? marketsResult.value : null;
+      const socialData = socialResult.status === 'fulfilled' ? socialResult.value : null;
+
+      setAdminTaskCounts({
+        pending: Array.isArray(pendingData?.pending) ? pendingData.pending.length : 0,
+        markets: Array.isArray(marketsData?.markets) ? marketsData.markets.length : 0,
+        social: Array.isArray(socialData?.tasks) ? socialData.tasks.length : 0,
+      });
+    }
+
+    loadAdminTaskCounts();
+    return () => { cancelled = true; };
+  }, [authenticated, isAdmin, tab, taskRefreshKey]);
 
   if (!authenticated) return null;
   if (!isAdmin) {
@@ -199,6 +236,7 @@ export default function PointsAdmin({ isAdmin }) {
           { id: 'stats',   label: 'Estadísticas' },
         ].map(t => {
           const active = tab === t.id;
+          const taskCount = adminTaskCounts[t.id] || 0;
           return (
             <button
               key={t.id}
@@ -210,18 +248,38 @@ export default function PointsAdmin({ isAdmin }) {
                 color: active ? 'var(--text-primary)' : 'var(--text-muted)',
                 borderBottom: `2px solid ${active ? 'var(--green)' : 'transparent'}`,
                 cursor: 'pointer', marginBottom: -1,
+                display: 'inline-flex', alignItems: 'center', gap: 8,
               }}
             >
               {t.label}
+              {tab !== t.id && taskCount > 0 && (
+                <span style={{
+                  minWidth: 18,
+                  height: 18,
+                  padding: '0 5px',
+                  borderRadius: 999,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'rgba(245,158,11,0.16)',
+                  border: '1px solid rgba(245,158,11,0.45)',
+                  color: '#f59e0b',
+                  fontSize: 10,
+                  letterSpacing: 0,
+                  lineHeight: 1,
+                }}>
+                  {taskCount > 99 ? '99+' : taskCount}
+                </span>
+              )}
             </button>
           );
         })}
       </div>
 
       {tab === 'create' && <CreateMarketForm prefill={createPrefill} />}
-      {tab === 'pending' && <PendingMarketsTable />}
-      {tab === 'markets' && <MarketsTable />}
-      {tab === 'social' && <SocialTasksQueue />}
+      {tab === 'pending' && <PendingMarketsTable onQueueChange={refreshAdminTaskCounts} />}
+      {tab === 'markets' && <MarketsTable onQueueChange={refreshAdminTaskCounts} />}
+      {tab === 'social' && <SocialTasksQueue onQueueChange={refreshAdminTaskCounts} />}
       {tab === 'cycles' && <CyclesPanel />}
       {tab === 'stats' && <StatsPanel />}
     </main>
@@ -380,7 +438,7 @@ function CyclesPanel() {
 }
 
 // ─── Social tasks queue ────────────────────────────────────────────────────
-function SocialTasksQueue() {
+function SocialTasksQueue({ onQueueChange }) {
   const [status, setStatus] = useState('pending');
   const [tasks, setTasks] = useState(null);
   const [working, setWorking] = useState(null); // id of the task being reviewed
@@ -408,6 +466,7 @@ function SocialTasksQueue() {
     try {
       await adminReviewSocialTask(id, action, note);
       await load();
+      onQueueChange?.();
     } catch (e) {
       alert(`No se pudo ${action === 'approve' ? 'aprobar' : 'rechazar'}: ${e.code || e.message}`);
     } finally {
@@ -951,7 +1010,7 @@ const inputStyle = {
 };
 
 // ─── Markets table ───────────────────────────────────────────────────────────
-function MarketsTable() {
+function MarketsTable({ onQueueChange }) {
   const [markets, setMarkets] = useState(null);
   const [filter, setFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -1042,6 +1101,7 @@ function MarketsTable() {
         outcome: winningOutcomeIndex,
         resolvedAt: new Date().toISOString(),
       } : m));
+      onQueueChange?.();
     } catch (e) {
       alert(`No se pudo resolver: ${e.code || e.message}${e.detail ? '\n' + e.detail : ''}`);
     } finally {
@@ -1087,6 +1147,7 @@ function MarketsTable() {
         + (errorSample ? `\nEjemplos de errores:\n${errorSample}` : ''),
       );
       await load();
+      onQueueChange?.();
     } catch (e) {
       alert(`Auto-resolver falló: ${e.code || e.message}${e.detail ? '\n' + e.detail : ''}`);
     } finally {
@@ -1908,7 +1969,7 @@ function StatCard({ label, value }) {
 // points_pending_markets. Admin triages them here: Aprobar copies the
 // spec into points_markets via the API; Rechazar just marks the row so
 // re-runs of the generator skip the same source_event_id.
-function PendingMarketsTable() {
+function PendingMarketsTable({ onQueueChange }) {
   const [rows, setRows] = useState(null);
   const [filter, setFilter] = useState('pending');
   const [loading, setLoading] = useState(true);
@@ -1960,6 +2021,7 @@ function PendingMarketsTable() {
           ? { ...r, status: nextStatus }
           : r);
       });
+      onQueueChange?.();
     } catch (e) {
       alert(`${action} falló: ${e.code || e.message}`);
     } finally {
@@ -1981,6 +2043,7 @@ function PendingMarketsTable() {
         ? `Aprobados ${r.approvedCount} de ${r.checked}. ${r.failedCount} fallaron — revisa el historial.`
         : `✓ ${r.approvedCount} mercados aprobados.`;
       alert(msg);
+      onQueueChange?.();
     } catch (e) {
       alert(`Aprobar todos falló: ${e.code || e.message}`);
     } finally {
@@ -2001,6 +2064,7 @@ function PendingMarketsTable() {
         .map(([k, v]) => `${k}:${v.count}`)
         .join(' · ') || '(sin eventos)';
       alert(`✓ Generación completa.\nInsertados: ${r.inserted} · Actualizados: ${r.updated} · Saltados: ${r.skipped}\n${counts}`);
+      onQueueChange?.();
     } catch (e) {
       alert(`Generar falló: ${e.code || e.message}`);
     } finally {
@@ -2075,6 +2139,7 @@ function PendingMarketsTable() {
         + `Insertados: ${r.inserted || 0} · Actualizados: ${r.updated || 0} · Saltados: ${r.skipped || 0}`,
       );
       await load();
+      onQueueChange?.();
     } catch (e) {
       alert(`Progresar Mundial falló: ${e.code || e.message}${e.detail ? '\n' + e.detail : ''}`);
     } finally {

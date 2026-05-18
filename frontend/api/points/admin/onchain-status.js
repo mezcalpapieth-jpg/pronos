@@ -2,9 +2,10 @@
  * GET /api/points/admin/onchain-status
  *
  * Pre-flight check for the onchain trading + auto-deploy plumbing.
- * Reads every env var we depend on, calls factory.owner() +
- * factory.collateral() on both V1 and V2, and reports the deployer
- * wallet's ETH + collateral balance.
+ * Reads every env var we depend on, calls factory.owner(),
+ * factory.marketCreator(), factory.resolver(), and factory.collateral()
+ * on both V1 and V2, and reports the deployer wallet's ETH +
+ * collateral balance.
  *
  * Use case: hit this endpoint after every contract redeploy / env var
  * change. The response lays out all the things that need to be true
@@ -16,8 +17,8 @@
  *   {
  *     ok: true,
  *     env: { rpc, chainId, factoryV1, factoryV2, collateral, deployerSuborgId, deployerAddress, policiesEnabled },
- *     v1: { reachable: true, owner, collateral, deployerIsOwner: true, collateralMatches: true },
- *     v2: { reachable: true, owner, collateral, deployerIsOwner: true, collateralMatches: true },
+ *     v1: { reachable: true, owner, marketCreator, collateral, deployerCanCreate: true, collateralMatches: true },
+ *     v2: { reachable: true, owner, marketCreator, collateral, deployerCanCreate: true, collateralMatches: true },
  *     deployer: { ethBalanceWei, ethBalanceEther, collateralBalanceRaw, collateralBalanceUnits, decimals },
  *     warnings: [],
  *   }
@@ -30,9 +31,14 @@ import { ethers } from 'ethers';
 import { applyCors } from '../../_lib/cors.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { collectOnchainReadiness } from '../../_lib/onchain-readiness.js';
+import {
+  appendFactoryProbeWarnings,
+  buildFactoryProbeStatus,
+} from '../../_lib/protocol-factory-readiness.js';
 
 const FACTORY_ABI = [
   'function owner() view returns (address)',
+  'function marketCreator() view returns (address)',
   'function resolver() view returns (address)',
   'function collateral() view returns (address)',
 ];
@@ -42,19 +48,17 @@ const ERC20_ABI = [
   'function symbol() view returns (string)',
 ];
 
-function eqAddr(a, b) {
-  if (!a || !b) return false;
-  return String(a).toLowerCase() === String(b).toLowerCase();
-}
-
 async function probeFactory({ provider, address, deployerAddress, resolverAddress, expectedCollateral, label }) {
   const out = {
     address: address || null,
     reachable: false,
     owner: null,
+    marketCreator: null,
     resolver: null,
     collateral: null,
     deployerIsOwner: false,
+    deployerIsMarketCreator: false,
+    deployerCanCreate: false,
     resolverMatches: false,
     collateralMatches: false,
     error: null,
@@ -65,18 +69,26 @@ async function probeFactory({ provider, address, deployerAddress, resolverAddres
   }
   try {
     const c = new ethers.Contract(address, FACTORY_ABI, provider);
-    const [owner, resolver, collateral] = await Promise.all([
+    const [owner, marketCreator, resolver, collateral] = await Promise.all([
       c.owner(),
+      c.marketCreator().catch(() => null),
       c.resolver(),
       c.collateral(),
     ]);
     out.reachable = true;
     out.owner = owner;
+    out.marketCreator = marketCreator;
     out.resolver = resolver;
     out.collateral = collateral;
-    out.deployerIsOwner = deployerAddress ? eqAddr(owner, deployerAddress) : false;
-    out.resolverMatches = resolverAddress ? eqAddr(resolver, resolverAddress) : false;
-    out.collateralMatches = expectedCollateral ? eqAddr(collateral, expectedCollateral) : false;
+    Object.assign(out, buildFactoryProbeStatus({
+      owner,
+      marketCreator,
+      resolver,
+      collateral,
+      deployerAddress,
+      resolverAddress,
+      expectedCollateral,
+    }));
   } catch (e) {
     out.error = e?.message?.slice(0, 240) || 'rpc_call_failed';
   }
@@ -159,24 +171,20 @@ export default async function handler(req, res) {
 
     if (v1.address && !v1.reachable) warnings.push(`V1 factory ${v1.address} unreachable: ${v1.error}`);
     if (v2.address && !v2.reachable) warnings.push(`V2 factory ${v2.address} unreachable: ${v2.error}`);
-    if (v1.reachable && env.deployerAddress && !v1.deployerIsOwner) {
-      warnings.push(`V1 factory.owner() = ${v1.owner} but ONCHAIN_DEPLOYER_ADDRESS = ${env.deployerAddress} — auto-deploy will revert with "not owner"`);
-    }
-    if (v2.reachable && env.deployerAddress && !v2.deployerIsOwner) {
-      warnings.push(`V2 factory.owner() = ${v2.owner} but ONCHAIN_DEPLOYER_ADDRESS = ${env.deployerAddress} — auto-deploy will revert with "not owner"`);
-    }
-    if (v1.reachable && env.resolverAddress && !v1.resolverMatches) {
-      warnings.push(`V1 factory.resolver() = ${v1.resolver} but ONCHAIN_RESOLVER_ADDRESS = ${env.resolverAddress} — auto-resolve will revert with "not resolver"`);
-    }
-    if (v2.reachable && env.resolverAddress && !v2.resolverMatches) {
-      warnings.push(`V2 factory.resolver() = ${v2.resolver} but ONCHAIN_RESOLVER_ADDRESS = ${env.resolverAddress} — auto-resolve will revert with "not resolver"`);
-    }
-    if (v1.reachable && env.collateral && !v1.collateralMatches) {
-      warnings.push(`V1 factory.collateral() = ${v1.collateral} but ONCHAIN_COLLATERAL_ADDRESS = ${env.collateral} — UI/balance reads will be wrong`);
-    }
-    if (v2.reachable && env.collateral && !v2.collateralMatches) {
-      warnings.push(`V2 factory.collateral() = ${v2.collateral} but ONCHAIN_COLLATERAL_ADDRESS = ${env.collateral} — UI/balance reads will be wrong`);
-    }
+    appendFactoryProbeWarnings(warnings, {
+      label: 'V1',
+      probe: v1,
+      deployerAddress: env.deployerAddress,
+      resolverAddress: env.resolverAddress,
+      expectedCollateral: env.collateral,
+    });
+    appendFactoryProbeWarnings(warnings, {
+      label: 'V2',
+      probe: v2,
+      deployerAddress: env.deployerAddress,
+      resolverAddress: env.resolverAddress,
+      expectedCollateral: env.collateral,
+    });
 
     // Deployer wallet balances — needs ETH for gas + collateral for seed.
     let deployer = null;

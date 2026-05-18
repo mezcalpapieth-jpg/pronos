@@ -24,6 +24,8 @@ import {MarketFactory} from "../src/MarketFactory.sol";
  *
  * Optional env vars:
  *   FEE_COLLECTOR_ADDRESS - Wallet that receives fees upfront (defaults to treasury)
+ *   MARKET_CREATOR_ADDRESS - Turnkey ops wallet allowed to create markets.
+ *                            Defaults to ONCHAIN_DEPLOYER_ADDRESS when set.
  *   ADMIN_ADDRESS         - If set, ownership transfers to this address during deploy
  *   RESOLVER_ADDRESS      - If set, resolver role transfers to this address during deploy
  *   ADMIN_SAFE_ADDRESS    - Mainnet-safe alias for ADMIN_ADDRESS; must be deployed
@@ -38,6 +40,8 @@ contract DeployProtocol is Script {
         address liquidityReserve = vm.envAddress("LIQUIDITY_RESERVE");
         address emergencyReserve = vm.envAddress("EMERGENCY_RESERVE");
         address feeCollector = vm.envOr("FEE_COLLECTOR_ADDRESS", treasury);
+        address marketCreator = vm.envOr("MARKET_CREATOR_ADDRESS", address(0));
+        if (marketCreator == address(0)) marketCreator = vm.envOr("ONCHAIN_DEPLOYER_ADDRESS", address(0));
         address adminAddress = vm.envOr("ADMIN_ADDRESS", address(0));
         address resolverAddress = vm.envOr("RESOLVER_ADDRESS", address(0));
         address adminSafe = vm.envOr("ADMIN_SAFE_ADDRESS", address(0));
@@ -84,6 +88,13 @@ contract DeployProtocol is Script {
             console.log("Resolver transferred to:", resolverAddress);
         }
 
+        if (marketCreator != address(0)) {
+            factory.setMarketCreator(marketCreator);
+            console.log("Market creator set to:", marketCreator);
+        } else if (adminAddress != address(0)) {
+            console.log("WARNING: Safe/admin owner set without MARKET_CREATOR_ADDRESS; createMarket will require Safe execution.");
+        }
+
         if (adminAddress != address(0)) {
             factory.transferOwnership(adminAddress);
             console.log("Factory ownership transferred to:", adminAddress);
@@ -96,6 +107,8 @@ contract DeployProtocol is Script {
         console.log("ONCHAIN_CHAIN_ID=42161");
         console.log("ONCHAIN_COLLATERAL_ADDRESS=", collateral);
         console.log("ONCHAIN_MARKET_FACTORY_ADDRESS=", address(factory));
+        console.log("MARKET_CREATOR_ADDRESS=", marketCreator);
+        console.log("ONCHAIN_DEPLOYER_ADDRESS=", marketCreator);
         console.log("VITE_ONCHAIN_CHAIN_ID=42161");
         console.log("VITE_PRONOS_ARBITRUM_FACTORY=", address(factory));
         console.log("VITE_PRONOS_ARBITRUM_TOKEN=", address(token));

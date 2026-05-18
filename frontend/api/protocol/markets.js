@@ -75,6 +75,24 @@ export default async function handler(req, res) {
                ppm.source_data AS meta_source_data,
                pppm.source_data AS protocol_source_data,
                COALESCE(pmp.final_score, pm.final_score) AS meta_final_score,
+               rc.id AS resolution_candidate_id,
+               rc.protocol_market_id AS resolution_candidate_market_id,
+               rc.resolver_type AS resolution_candidate_resolver_type,
+               rc.source AS resolution_candidate_source,
+               rc.source_event_id AS resolution_candidate_source_event_id,
+               rc.outcome_index AS resolution_candidate_outcome_index,
+               rc.outcome_count AS resolution_candidate_outcome_count,
+               rc.confidence_bps AS resolution_candidate_confidence_bps,
+               rc.observed_at AS resolution_candidate_observed_at,
+               rc.final_score AS resolution_candidate_final_score,
+               rc.evidence_url AS resolution_candidate_evidence_url,
+               rc.evidence AS resolution_candidate_evidence,
+               rc.rationale AS resolution_candidate_rationale,
+               rc.status AS resolution_candidate_status,
+               rc.created_at AS resolution_candidate_created_at,
+               rc.reviewed_at AS resolution_candidate_reviewed_at,
+               rc.reviewer AS resolution_candidate_reviewer,
+               rc.admin_note AS resolution_candidate_admin_note,
                s.yes_price AS s_yes, s.no_price AS s_no, s.prices AS s_prices,
                s.liquidity AS s_liquidity, s.volume_24h AS s_volume,
                s.snapshot_at AS s_snapshot
@@ -86,6 +104,17 @@ export default async function handler(req, res) {
           LEFT JOIN points_markets pmp ON pmp.id = pm.parent_id
           LEFT JOIN points_pending_markets ppm ON ppm.approved_market_id = COALESCE(pm.parent_id, pm.id)
           LEFT JOIN protocol_pending_markets pppm ON pppm.approved_protocol_market_id = m.id
+          LEFT JOIN LATERAL (
+            SELECT id, protocol_market_id, resolver_type, source, source_event_id,
+                   outcome_index, outcome_count, confidence_bps, observed_at,
+                   final_score, evidence_url, evidence, rationale, status,
+                   created_at, reviewed_at, reviewer, admin_note
+              FROM protocol_resolution_candidates
+             WHERE protocol_market_id = m.id
+               AND status = 'pending'
+             ORDER BY created_at DESC
+             LIMIT 1
+          ) rc ON TRUE
           LEFT JOIN LATERAL (
             SELECT yes_price, no_price, prices, liquidity, volume_24h, snapshot_at
               FROM price_snapshots
@@ -128,6 +157,24 @@ export default async function handler(req, res) {
                ppm.source_data AS meta_source_data,
                pppm.source_data AS protocol_source_data,
                COALESCE(pmp.final_score, pm.final_score) AS meta_final_score,
+               rc.id AS resolution_candidate_id,
+               rc.protocol_market_id AS resolution_candidate_market_id,
+               rc.resolver_type AS resolution_candidate_resolver_type,
+               rc.source AS resolution_candidate_source,
+               rc.source_event_id AS resolution_candidate_source_event_id,
+               rc.outcome_index AS resolution_candidate_outcome_index,
+               rc.outcome_count AS resolution_candidate_outcome_count,
+               rc.confidence_bps AS resolution_candidate_confidence_bps,
+               rc.observed_at AS resolution_candidate_observed_at,
+               rc.final_score AS resolution_candidate_final_score,
+               rc.evidence_url AS resolution_candidate_evidence_url,
+               rc.evidence AS resolution_candidate_evidence,
+               rc.rationale AS resolution_candidate_rationale,
+               rc.status AS resolution_candidate_status,
+               rc.created_at AS resolution_candidate_created_at,
+               rc.reviewed_at AS resolution_candidate_reviewed_at,
+               rc.reviewer AS resolution_candidate_reviewer,
+               rc.admin_note AS resolution_candidate_admin_note,
                s.yes_price AS s_yes, s.no_price AS s_no, s.prices AS s_prices,
                s.liquidity AS s_liquidity, s.volume_24h AS s_volume,
                s.snapshot_at AS s_snapshot
@@ -139,6 +186,17 @@ export default async function handler(req, res) {
           LEFT JOIN points_markets pmp ON pmp.id = pm.parent_id
           LEFT JOIN points_pending_markets ppm ON ppm.approved_market_id = COALESCE(pm.parent_id, pm.id)
           LEFT JOIN protocol_pending_markets pppm ON pppm.approved_protocol_market_id = m.id
+          LEFT JOIN LATERAL (
+            SELECT id, protocol_market_id, resolver_type, source, source_event_id,
+                   outcome_index, outcome_count, confidence_bps, observed_at,
+                   final_score, evidence_url, evidence, rationale, status,
+                   created_at, reviewed_at, reviewer, admin_note
+              FROM protocol_resolution_candidates
+             WHERE protocol_market_id = m.id
+               AND status = 'pending'
+             ORDER BY created_at DESC
+             LIMIT 1
+          ) rc ON TRUE
           LEFT JOIN LATERAL (
             SELECT yes_price, no_price, prices, liquidity, volume_24h, snapshot_at
               FROM price_snapshots

@@ -50,6 +50,7 @@ contract PronosProtocolTest is Test {
     address liqRes    = address(0x222);
     address emerRes   = address(0x333);
     address feeColl   = address(0x444);
+    address creator   = address(0x555);
     address alice     = address(0xA);
     address bob       = address(0xB);
     address carol     = address(0xC);
@@ -81,6 +82,7 @@ contract PronosProtocolTest is Test {
 
         // Mint USDC for everyone
         usdc.mint(admin, 1_000_000 * ONE_USDC);
+        usdc.mint(creator, 100_000 * ONE_USDC);
         usdc.mint(alice, 100_000 * ONE_USDC);
         usdc.mint(bob,   100_000 * ONE_USDC);
         usdc.mint(carol, 100_000 * ONE_USDC);
@@ -141,6 +143,48 @@ contract PronosProtocolTest is Test {
         assertTrue(active);
     }
 
+    function test_marketCreatorCanCreateAfterSafeOwnsFactory() public {
+        vm.startPrank(admin);
+        factory.setMarketCreator(creator);
+        factory.transferOwnership(bob);
+        vm.stopPrank();
+
+        vm.startPrank(creator);
+        usdc.approve(address(factory), 1_000 * ONE_USDC);
+        uint256 id = factory.createMarket(
+            "Will the creator keep admin market creation automatic?",
+            "deportes",
+            block.timestamp + 30 days,
+            "Pronos admin",
+            1_000 * ONE_USDC
+        );
+        vm.stopPrank();
+
+        assertEq(id, 0);
+        assertEq(factory.owner(), bob);
+        assertEq(factory.marketCreator(), creator);
+        assertEq(factory.marketCount(), 1);
+    }
+
+    function test_nonCreatorCannotCreateAfterSafeOwnsFactory() public {
+        vm.startPrank(admin);
+        factory.setMarketCreator(creator);
+        factory.transferOwnership(bob);
+        vm.stopPrank();
+
+        vm.startPrank(alice);
+        usdc.approve(address(factory), 1_000 * ONE_USDC);
+        vm.expectRevert("MarketFactory: not creator");
+        factory.createMarket(
+            "Can a random wallet create markets?",
+            "deportes",
+            block.timestamp + 30 days,
+            "Pronos admin",
+            1_000 * ONE_USDC
+        );
+        vm.stopPrank();
+    }
+
     function test_createMarket_pool_has_reserves() public {
         _createTestMarket(10_000 * ONE_USDC);
         (address poolAddr,,,,, ) = factory.getMarket(0);
@@ -169,10 +213,10 @@ contract PronosProtocolTest is Test {
         vm.stopPrank();
     }
 
-    function test_createMarket_reverts_non_owner() public {
+    function test_createMarket_reverts_non_creator() public {
         vm.startPrank(alice);
         usdc.approve(address(factory), 10_000 * ONE_USDC);
-        vm.expectRevert("MarketFactory: not owner");
+        vm.expectRevert("MarketFactory: not creator");
         factory.createMarket("test?", "cat", block.timestamp + 1 days, "src", 10_000 * ONE_USDC);
         vm.stopPrank();
     }

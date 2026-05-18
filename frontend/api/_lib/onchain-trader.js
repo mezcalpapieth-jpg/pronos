@@ -77,7 +77,7 @@ const ERC20_ABI = [
 //
 // V1 (binary, PronosAMM):
 //   function createMarket(string q, string cat, uint256 endTime,
-//     string resolutionSource, uint256 seed) onlyOwner returns (uint256);
+//     string resolutionSource, uint256 seed) onlyMarketCreator returns (uint256);
 //   function resolveMarket(uint256 marketId, uint8 outcome) onlyResolver;
 //   event MarketCreated(uint256 indexed marketId, address pool,
 //     string question, string category, uint256 endTime);
@@ -86,19 +86,22 @@ const ERC20_ABI = [
 // V2 (multi-outcome 2..8, PronosAMMMulti):
 //   function createMarket(string q, string cat, uint256 endTime,
 //     string resolutionSource, string[] outcomes, uint256 seed)
-//     onlyOwner returns (uint256);
+//     onlyMarketCreator returns (uint256);
 //   function resolveMarket(uint256 marketId, uint8 outcome) onlyResolver;
 //   event MarketCreated(uint256 indexed marketId, address pool,
 //     string question, string category, uint256 endTime,
 //     string resolutionSource, string[] outcomes);
 //   event MarketResolved(uint256 indexed marketId, uint8 outcome);
 //
-// createMarket is `onlyOwner` ⇒ deployer must equal factory.owner().
+// createMarket is `onlyMarketCreator` ⇒ deployer must equal either
+// factory.marketCreator() or factory.owner(). This lets ownership sit
+// on a Safe while market creation stays automatic through Turnkey.
 // resolveMarket is `onlyResolver` ⇒ resolver wallet must equal
 // factory.resolver() (set via setResolver, defaults to owner at deploy).
 // `pool` is not indexed in MarketCreated, so we decode it from the data field.
 const MARKET_FACTORY_V1_ABI = [
   'function owner() view returns (address)',
+  'function marketCreator() view returns (address)',
   'function resolver() view returns (address)',
   'function collateral() view returns (address)',
   'function createMarket(string question, string category, uint256 endTime, string resolutionSource, uint256 seedAmount) external returns (uint256)',
@@ -109,6 +112,7 @@ const MARKET_FACTORY_V1_ABI = [
 ];
 const MARKET_FACTORY_V2_ABI = [
   'function owner() view returns (address)',
+  'function marketCreator() view returns (address)',
   'function resolver() view returns (address)',
   'function collateral() view returns (address)',
   'function createMarket(string question, string category, uint256 endTime, string resolutionSource, string[] outcomes, uint256 seedAmount) external returns (uint256)',
@@ -566,9 +570,10 @@ export async function redeemOnChain({
 //   · parallel    → caller's responsibility (loop V1 N times); not
 //                   handled here, register manually or via DB tooling
 //
-// Auth: both factories' `createMarket` are `onlyOwner`. The deployer
-// wallet (ONCHAIN_DEPLOYER_ADDRESS) must equal `factory.owner()` on
-// whichever variant is being called. Each factory needs its OWN
+// Auth: both factories' `createMarket` are `onlyMarketCreator`. The
+// deployer wallet (ONCHAIN_DEPLOYER_ADDRESS) must equal either
+// `factory.marketCreator()` or `factory.owner()` on whichever variant
+// is being called. Each factory needs its OWN
 // MAX-approval on the collateral token from the deployer wallet —
 // the helper handles that idempotently.
 //
@@ -637,16 +642,17 @@ export async function deployMarketOnChain({
   const prov = provider();
   const factory = new ethers.Contract(factoryAddr, useV2 ? MARKET_FACTORY_V2_ABI : MARKET_FACTORY_V1_ABI, prov);
   const gasLimit = ethers.BigNumber.from(useV2 ? 6_500_000 : 4_500_000);
-  const [factoryOwner, factoryCollateral, feeData, nativeBalance] = await Promise.all([
+  const [factoryOwner, factoryCreator, factoryCollateral, feeData, nativeBalance] = await Promise.all([
     factory.owner(),
+    factory.marketCreator().catch(() => null),
     factory.collateral(),
     prov.getFeeData(),
     prov.getBalance(deployerAddr),
   ]);
-  if (!sameAddress(factoryOwner, deployerAddr)) {
-    const err = new Error('deployer_not_factory_owner');
+  if (!sameAddress(factoryOwner, deployerAddr) && !sameAddress(factoryCreator, deployerAddr)) {
+    const err = new Error('deployer_not_factory_creator');
     err.status = 400;
-    err.detail = `factory owner=${factoryOwner}, deployer=${deployerAddr}`;
+    err.detail = `factory owner=${factoryOwner}, marketCreator=${factoryCreator || 'unavailable'}, deployer=${deployerAddr}`;
     throw err;
   }
   const collateral = new ethers.Contract(factoryCollateral, ERC20_ABI, prov);

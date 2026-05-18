@@ -1,5 +1,6 @@
 import { deriveMarketTags, isCryptoFiveMinute } from './category-tags.js';
 import { deriveOutcomeCountryLabels } from './outcome-country-labels.js';
+import { formatResolutionCandidate } from './protocol-resolution-candidates.js';
 import { applySeriesGateToMarket, normalizeSeriesMeta, seriesSubtitle } from './series-markets.js';
 
 function parseJsonb(value, fallback) {
@@ -79,6 +80,26 @@ export function buildProtocolMarketPayload(row = {}) {
   const isOpenEnded = resolverConfig?.source === 'next-opponent';
   const windowOk = startMs > 0 && endMs > startMs
     && (endMs - startMs) <= 14 * 86_400_000;
+  const resolutionCandidate = row.resolution_candidate_id ? formatResolutionCandidate({
+    id: row.resolution_candidate_id,
+    protocol_market_id: row.resolution_candidate_market_id,
+    resolver_type: row.resolution_candidate_resolver_type,
+    source: row.resolution_candidate_source,
+    source_event_id: row.resolution_candidate_source_event_id,
+    outcome_index: row.resolution_candidate_outcome_index,
+    outcome_count: row.resolution_candidate_outcome_count,
+    confidence_bps: row.resolution_candidate_confidence_bps,
+    observed_at: row.resolution_candidate_observed_at,
+    final_score: row.resolution_candidate_final_score,
+    evidence_url: row.resolution_candidate_evidence_url,
+    evidence: row.resolution_candidate_evidence,
+    rationale: row.resolution_candidate_rationale,
+    status: row.resolution_candidate_status,
+    created_at: row.resolution_candidate_created_at,
+    reviewed_at: row.resolution_candidate_reviewed_at,
+    reviewer: row.resolution_candidate_reviewer,
+    admin_note: row.resolution_candidate_admin_note,
+  }, outcomes) : null;
 
   const payload = {
     id: row.id,
@@ -122,6 +143,7 @@ export function buildProtocolMarketPayload(row = {}) {
     topicTags: tags.topicTags,
     outcomeImages,
     outcomeCountryLabels,
+    resolutionCandidate,
     seriesMeta: seriesMeta ? {
       key: seriesMeta.key,
       leaguePath: seriesMeta.leaguePath,

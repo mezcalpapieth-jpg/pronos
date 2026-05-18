@@ -1,0 +1,12 @@
+{
+  "schedule": "0 */5 * * * *",
+  "status": "dry-run",
+  "source": "sports-api",
+  "sourceEventId": "production-placeholder",
+  "protocolMarketId": "1",
+  "marketQuestion": "Production placeholder; replace before deployment",
+  "outcomeCount": 2,
+  "dryRunOutcomeIndex": 0,
+  "confidenceBps": 9000,
+  "evidenceUrl": "https://example.com/pronos/cre/placeholder"
+}

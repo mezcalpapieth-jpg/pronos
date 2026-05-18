@@ -18,3 +18,12 @@ test('Points admin exposes a re-add action for rejected generated markets', () =
   assert.match(source, /Reagregar/);
   assert.match(apiSource, /adminReviewPendingMarket\(id,\s*action,\s*note\)/);
 });
+
+test('Points admin tabs show pending-work badges outside the active tab', () => {
+  assert.match(source, /adminTaskCounts/);
+  assert.match(source, /adminListPendingMarkets\('pending'\)/);
+  assert.match(source, /\/api\/points\/admin\/markets\?status=pending/);
+  assert.match(source, /adminListSocialTasks\('pending'\)/);
+  assert.match(source, /tab !== t\.id/);
+  assert.match(source, /taskCount > 0/);
+});

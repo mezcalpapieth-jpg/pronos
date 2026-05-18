@@ -49,6 +49,7 @@ contract PronosProtocolV2Test is Test {
     address liqRes = address(0x222);
     address emerRes = address(0x333);
     address feeColl = address(0x444);
+    address creator = address(0x555);
     address alice = address(0xA);
     address bob = address(0xB);
 
@@ -65,6 +66,7 @@ contract PronosProtocolV2Test is Test {
         vm.stopPrank();
 
         usdc.mint(admin, 1_000_000 * ONE_USDC);
+        usdc.mint(creator, 100_000 * ONE_USDC);
         usdc.mint(alice, 100_000 * ONE_USDC);
         usdc.mint(bob, 100_000 * ONE_USDC);
     }
@@ -103,6 +105,50 @@ contract PronosProtocolV2Test is Test {
         assertEq(pool.reserves(1), 4 * ONE_USDC);
         assertEq(pool.reserves(2), 4 * ONE_USDC);
         assertEq(token.outcomeCounts(marketId), 3);
+    }
+
+    function test_marketCreatorCanCreateAfterSafeOwnsFactory() public {
+        vm.startPrank(admin);
+        factory.setMarketCreator(creator);
+        factory.transferOwnership(bob);
+        vm.stopPrank();
+
+        vm.startPrank(creator);
+        usdc.approve(address(factory), 4 * ONE_USDC);
+        uint256 marketId = factory.createMarket(
+            "Who wins Mexico vs South Africa?",
+            "deportes",
+            block.timestamp + 30 days,
+            "FIFA official results",
+            _outcomes(),
+            4 * ONE_USDC
+        );
+        vm.stopPrank();
+
+        assertEq(marketId, 0);
+        assertEq(factory.owner(), bob);
+        assertEq(factory.marketCreator(), creator);
+        assertEq(factory.marketCount(), 1);
+    }
+
+    function test_nonCreatorCannotCreateAfterSafeOwnsFactory() public {
+        vm.startPrank(admin);
+        factory.setMarketCreator(creator);
+        factory.transferOwnership(bob);
+        vm.stopPrank();
+
+        vm.startPrank(alice);
+        usdc.approve(address(factory), 4 * ONE_USDC);
+        vm.expectRevert("MarketFactoryV2: not creator");
+        factory.createMarket(
+            "Who wins Mexico vs South Africa?",
+            "deportes",
+            block.timestamp + 30 days,
+            "FIFA official results",
+            _outcomes(),
+            4 * ONE_USDC
+        );
+        vm.stopPrank();
     }
 
     function test_initialPricesAreEqual() public {

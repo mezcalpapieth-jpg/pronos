@@ -34,6 +34,10 @@ test('MVP admin market list and resolution use protocol data', () => {
   assert.match(marketsList, /\/api\/protocol\/markets\?/);
   assert.doesNotMatch(marketsList, /\/api\/points\/admin\/markets\?/);
   assert.match(marketsList, /postJson\('\/api\/protocol\/admin\/resolve-market'/);
+  assert.match(marketsList, /postJson\('\/api\/protocol\/admin\/resolution-candidates'/);
+  assert.match(marketsList, /Resolución sugerida/);
+  assert.match(marketsList, /Confirmar resolución/);
+  assert.match(marketsList, /Negar/);
   assert.doesNotMatch(marketsList, /\/api\/points\/admin\/resolve-market/);
 });
 
@@ -88,4 +92,25 @@ test('MVP generated market review uses protocol-owned queue endpoints', () => {
   assert.doesNotMatch(generatorsSection, /\/api\/points\/admin\/run-generators/);
   assert.doesNotMatch(pendingSection, /\/api\/points\/admin\/pending-markets/);
   assert.doesNotMatch(approveForm, /\/api\/points\/admin\/pending-markets/);
+});
+
+test('MVP admin tabs show badges for pending work outside the active tab', () => {
+  const adminShell = source;
+
+  assert.match(adminShell, /adminTaskCounts/);
+  assert.match(adminShell, /\/api\/protocol\/admin\/pending-markets\?status=pending/);
+  assert.match(adminShell, /\/api\/protocol\/admin\/resolution-candidates\?status=pending/);
+  assert.match(adminShell, /\/api\/points\/admin\/social-tasks\?status=pending/);
+  assert.match(adminShell, /overdueCount/);
+  assert.match(adminShell, /tab !== t\.id/);
+  assert.match(adminShell, /taskCount > 0/);
+});
+
+test('MVP admin markets has a Por resolver filter for overdue active markets', () => {
+  const marketsList = source;
+
+  assert.match(marketsList, /value:\s*'pending',\s*label:\s*'Por resolver'/);
+  assert.match(marketsList, /filter === 'pending' \? 'active' : filter/);
+  assert.match(marketsList, /endTime/);
+  assert.match(marketsList, /new Date\(m\.endTime\)\.getTime\(\) <= Date\.now\(\)/);
 });

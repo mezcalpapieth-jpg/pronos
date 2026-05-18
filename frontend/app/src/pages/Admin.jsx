@@ -369,7 +369,7 @@ function GeneratorsSection() {
       if (!ok) throw new Error(data?.error || 'generator_failed');
       setLast({ kind: 'generators', data });
       if (dry) {
-        setNotice({ type: 'success', msg: `Preview: ${data.totalSpecs || 0} specs · ${data.elapsedMs}ms` });
+        setNotice({ type: 'success', msg: `Vista previa: ${data.totalSpecs || 0} specs · ${data.elapsedMs}ms` });
       } else {
         setNotice({ type: 'success', msg: `Inserted ${data.inserted || 0} · updated ${data.updated || 0} · skipped ${data.skipped || 0}` });
       }
@@ -389,7 +389,7 @@ function GeneratorsSection() {
       if (!ok) throw new Error(data?.error || 'resolve_failed');
       setLast({ kind: 'resolve', data });
       const resolved = data?.resolved ?? data?.resolvedCount ?? '?';
-      setNotice({ type: 'success', msg: dry ? `Preview: ${resolved} serían resueltos.` : `Resueltos: ${resolved}` });
+      setNotice({ type: 'success', msg: dry ? `Vista previa: ${resolved} serían resueltos.` : `Resueltos: ${resolved}` });
     } catch (e) {
       setNotice({ type: 'error', msg: e?.message || 'resolve_failed' });
     } finally {
@@ -419,7 +419,7 @@ function GeneratorsSection() {
           </p>
           <div style={{ display: 'flex', gap: 8 }}>
             <button type="button" onClick={() => runGenerators({ dry: true })}  disabled={running !== null} className="btn-ghost" style={{ flex: 1 }}>
-              {running === 'generate' ? '…' : 'Preview'}
+              {running === 'generate' ? '…' : 'Vista previa'}
             </button>
             <button type="button" onClick={() => runGenerators({ dry: false })} disabled={running !== null} className="btn-primary" style={{ flex: 1 }}>
               {running === 'generate' ? '…' : 'Ejecutar'}
@@ -429,14 +429,14 @@ function GeneratorsSection() {
 
         <div style={{ padding: 14, borderRadius: 10, background: 'var(--surface2)', border: '1px solid var(--border)' }}>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 8 }}>
-            Auto-resolve
+            Resolución automática
           </div>
           <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5, margin: '0 0 12px 0' }}>
             Cierra mercados vencidos usando el resolver configurado (Chainlink / UMA / manual).
           </p>
           <div style={{ display: 'flex', gap: 8 }}>
             <button type="button" onClick={() => runAutoResolve({ dry: true })}  disabled={running !== null} className="btn-ghost" style={{ flex: 1 }}>
-              {running === 'resolve' ? '…' : 'Preview'}
+              {running === 'resolve' ? '…' : 'Vista previa'}
             </button>
             <button type="button" onClick={() => runAutoResolve({ dry: false })} disabled={running !== null} className="btn-primary" style={{ flex: 1 }}>
               {running === 'resolve' ? '…' : 'Resolver'}
@@ -500,7 +500,7 @@ function ApproveOnchainForm({ pendingId, onSuccess, onCancel }) {
         fontFamily: 'var(--font-mono)', fontSize: 10, lineHeight: 1.55,
         color: 'var(--text-secondary)', marginBottom: 10,
       }}>
-        Backend llamará V1 (binario) o V2 (multi 2..8) según los outcomes
+        El backend llamará V1 (binario) o V2 (multi 2..8) según los resultados
         del pending. Aprobará seed MXNB hacia el factory y guardará
         la dirección en protocol_markets automáticamente.
       </div>
@@ -522,7 +522,7 @@ function ApproveOnchainForm({ pendingId, onSuccess, onCancel }) {
   );
 }
 
-function PendingMarketsSection() {
+function PendingMarketsSection({ onQueueChange }) {
   const [rows, setRows] = useState([]);
   const [filter, setFilter] = useState('pending');
   const [loading, setLoading] = useState(false);
@@ -587,6 +587,7 @@ function PendingMarketsSection() {
         setNotice({ type: 'success', msg: `Pendiente ${pid} rechazado.` });
         setRows(prev => prev.filter(row => row.id !== pid));
       });
+      onQueueChange?.();
     } catch (e) {
       setNotice({ type: 'error', msg: e?.message || 'reject_failed' });
     } finally {
@@ -603,6 +604,7 @@ function PendingMarketsSection() {
         setNotice({ type: 'success', msg: `Rechazado ${pid} regresó a pendientes.` });
         setRows(prev => prev.filter(row => row.id !== pid));
       });
+      onQueueChange?.();
     } catch (e) {
       setNotice({ type: 'error', msg: e?.message || 'readd_failed' });
     } finally {
@@ -677,7 +679,7 @@ function PendingMarketsSection() {
                 </div>
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
                   <span>#{r.id}</span>
-                  <span>{(r.outcomes || []).length} outcomes · {r.ammMode || 'unified'}</span>
+                  <span>{(r.outcomes || []).length} resultados · {r.ammMode || 'unified'}</span>
                   <span>{r.category || 'general'}</span>
                   {r.source && <span>src: {r.source}</span>}
                   {r.endTime && <span>cierra {new Date(r.endTime).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
@@ -730,6 +732,7 @@ function PendingMarketsSection() {
                     });
                     setRows(prev => prev.filter(row => row.id !== r.id));
                   });
+                  onQueueChange?.();
                 }}
                 onCancel={() => setOpenId(null)}
               />
@@ -791,7 +794,7 @@ function CreateMarketForm({ onCreated, prefill }) {
     setNotice(null);
     const trimmedOutcomes = outcomes.map(o => o.trim()).filter(Boolean);
     if (trimmedOutcomes.length < 2) {
-      setNotice({ type: 'error', msg: 'Necesitas al menos 2 outcomes.' });
+      setNotice({ type: 'error', msg: 'Necesitas al menos 2 resultados.' });
       return;
     }
     setSubmitting(true);
@@ -817,7 +820,7 @@ function CreateMarketForm({ onCreated, prefill }) {
       if (!ok) throw new Error(data?.error ? `${data.error}${data.detail ? ` · ${data.detail}` : ''}` : 'create_failed');
       const deployBit = data.ammMode === 'parallel'
         ? ` · ${data.legs?.length || trimmedOutcomes.length} pools`
-        : ` · market #${data.marketId} · ${String(data.marketAddress || '').slice(0, 10)}…`;
+        : ` · mercado #${data.marketId} · ${String(data.marketAddress || '').slice(0, 10)}…`;
       setNotice({ type: 'success', msg: `Mercado on-chain creado · ${data.ammMode}${deployBit}` });
       setQuestion('');
       setOutcomes(['Sí', 'No']);
@@ -869,7 +872,7 @@ function CreateMarketForm({ onCreated, prefill }) {
       </div>
 
       {/* AMM mode radio */}
-      <Field label="Modo AMM" hint="Unified: una sola pool con N outcomes. Parallel: un parent + N pools binarios (Sí/No).">
+      <Field label="Modo AMM" hint="Unificado: una sola pool con N resultados. Paralelo: un mercado padre + N pools binarios (Sí/No).">
         <div style={{ display: 'flex', gap: 10 }}>
           {[
             { v: 'unified',  label: 'Unified (N-outcome)' },
@@ -890,7 +893,7 @@ function CreateMarketForm({ onCreated, prefill }) {
         </div>
       </Field>
 
-      <Field label="Outcomes (2–8)" hint="Orden importa: el índice se usa al resolver y al firmar trades on-chain.">
+      <Field label="Resultados (2–8)" hint="Orden importa: el índice se usa al resolver y al firmar operaciones on-chain.">
         {outcomes.map((o, i) => (
           <div key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) auto', gap: 8, marginBottom: 6 }}>
             <input type="text" required value={o} onChange={e => updateOutcome(i, e.target.value)} placeholder={`Outcome ${i + 1}`} style={inputStyle} />
@@ -961,7 +964,7 @@ function CreateMarketForm({ onCreated, prefill }) {
             <code> PronosAMM</code>).</>
           ) : (
             <>El backend llamará <code>MarketFactoryV2.createMarket(...)</code> (V2 multi,
-            <code> PronosAMMMulti</code>) con los <strong>{outcomes.length} outcomes</strong> definidos.</>
+            <code> PronosAMMMulti</code>) con los <strong>{outcomes.length} resultados</strong> definidos.</>
           )}
           {' '}El indexer guardará el pool en <code>protocol_markets</code>.
           <br /><br />
@@ -1077,16 +1080,18 @@ function EditMarketModal({ market, onClose, onSaved }) {
 const STATUS_TABS = [
   { value: 'all',      label: 'Todos'        },
   { value: 'active',   label: 'Activos'      },
+  { value: 'pending',  label: 'Por resolver' },
   { value: 'resolved', label: 'Resueltos'    },
 ];
 
-function MarketsList({ refreshKey, bumpRefresh }) {
+function MarketsList({ refreshKey, bumpRefresh, onQueueChange }) {
   const [rows, setRows] = useState([]);
   const [filter, setFilter] = useState('active');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [resolvingId, setResolvingId] = useState(null);
+  const [reviewingCandidateId, setReviewingCandidateId] = useState(null);
   const [featuringId, setFeaturingId] = useState(null);
   const [archivingId, setArchivingId] = useState(null);
   const [bulkArchiving, setBulkArchiving] = useState(false);
@@ -1115,7 +1120,7 @@ function MarketsList({ refreshKey, bumpRefresh }) {
       const confirmMsg =
         `Archivar ${wouldArchive} mercados off-chain (mode=points + legacy NULL).\n\n` +
         '· Se ocultan de las listas públicas y de admin\n' +
-        '· Se mantienen en la base para historial de trades\n' +
+        '· Se mantienen en la base para historial de operaciones\n' +
         '· Solo afecta a mercados off-chain — los onchain no se tocan\n\n' +
         '¿Continuar?';
       if (!window.confirm(confirmMsg)) return;
@@ -1151,8 +1156,9 @@ function MarketsList({ refreshKey, bumpRefresh }) {
     setLoading(true);
     setError(null);
     try {
+      const fetchStatus = filter === 'pending' ? 'active' : filter;
       const q = new URLSearchParams({
-        status: filter,
+        status: fetchStatus,
         chainId: String(DEFAULT_CHAIN_ID),
         limit: '200',
       });
@@ -1161,12 +1167,20 @@ function MarketsList({ refreshKey, bumpRefresh }) {
         `/api/protocol/markets?${q.toString()}`,
       );
       if (!ok) throw new Error(data?.error || 'list_failed');
-      setRows(Array.isArray(data?.markets) ? data.markets.map((m) => ({
+      const rawMarkets = Array.isArray(data?.markets) ? data.markets : [];
+      const dueMarkets = filter === 'pending'
+        ? rawMarkets
+            .filter(m => m.status === 'active'
+              && m.endTime
+              && new Date(m.endTime).getTime() <= Date.now())
+            .sort((a, b) => new Date(a.endTime).getTime() - new Date(b.endTime).getTime())
+        : rawMarkets;
+      setRows(dueMarkets.map((m) => ({
         ...m,
         ammMode: m.protocolVersion === 'v2' ? 'unified-v2' : 'binary-v1',
         chainAddress: m.poolAddress,
         tradeCount: m.tradeCount ?? null,
-      })) : []);
+      })));
     } catch (e) {
       setError(e?.message || 'list_failed');
     } finally {
@@ -1178,7 +1192,7 @@ function MarketsList({ refreshKey, bumpRefresh }) {
 
   async function handleResolve(market) {
     const input = window.prompt(
-      `Índice del outcome ganador para "${market.question}":\n\n` +
+      `Índice del resultado ganador para "${market.question}":\n\n` +
       market.outcomes.map((o, i) => `  ${i}: ${o}`).join('\n'),
     );
     if (input === null) return;
@@ -1217,6 +1231,66 @@ function MarketsList({ refreshKey, bumpRefresh }) {
       setNotice({ type: 'error', msg: e?.message || 'resolve_failed' });
     } finally {
       setResolvingId(null);
+    }
+  }
+
+  async function handleCandidateReview(market, candidate, action) {
+    const isConfirm = action === 'confirm';
+    let note = null;
+    if (isConfirm) {
+      const ok = window.confirm(
+        `Confirmar resolución sugerida para "${market.question}"?\n\n` +
+        `Resultado: ${candidate.label}\n` +
+        `Confianza: ${candidate.confidenceLabel || '—'}\n\n` +
+        'Esto enviará la resolución on-chain.',
+      );
+      if (!ok) return;
+    } else {
+      note = window.prompt('Motivo para negar la resolución sugerida (opcional):', '');
+      if (note === null) return;
+    }
+
+    setReviewingCandidateId(candidate.id);
+    setNotice(null);
+    try {
+      const { ok, data } = await postJson('/api/protocol/admin/resolution-candidates', {
+        candidateId: candidate.id,
+        action,
+        note: note?.trim() || null,
+      });
+      if (!ok) {
+        const parts = [data?.error || 'resolution_candidate_failed'];
+        if (data?.detail) parts.push(data.detail);
+        throw new Error(parts.join(' · '));
+      }
+
+      if (isConfirm) {
+        const outcome = Number.isInteger(Number(data?.outcome))
+          ? Number(data.outcome)
+          : Number(candidate.outcomeIndex);
+        setNotice({ type: 'success', msg: `Resolución confirmada on-chain: ${candidate.label}` });
+        setRows(prev => prev.map(m => m.id === market.id ? {
+          ...m,
+          status: 'resolved',
+          outcome,
+          finalScore: candidate.finalScore || m.finalScore,
+          resolvedAt: new Date().toISOString(),
+          resolutionCandidate: null,
+        } : m));
+        bumpRefresh();
+        onQueueChange?.();
+      } else {
+        setNotice({ type: 'success', msg: 'Resolución sugerida negada. El mercado sigue abierto.' });
+        setRows(prev => prev.map(m => m.id === market.id ? {
+          ...m,
+          resolutionCandidate: null,
+        } : m));
+        onQueueChange?.();
+      }
+    } catch (e) {
+      setNotice({ type: 'error', msg: e?.message || 'resolution_candidate_failed' });
+    } finally {
+      setReviewingCandidateId(null);
     }
   }
 
@@ -1347,52 +1421,150 @@ function MarketsList({ refreshKey, bumpRefresh }) {
       {error && <div style={{ color: 'var(--red)', fontFamily: 'var(--font-mono)' }}>Error: {error}</div>}
       {!loading && !error && visible.length === 0 && (
         <div style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 12, padding: 14 }}>
-          No hay mercados on-chain en esta categoría.
+          {filter === 'pending' ? 'No hay mercados por resolver.' : 'No hay mercados on-chain en esta categoría.'}
         </div>
       )}
 
-      {visible.map(m => (
-        <div key={m.id} style={{
-          padding: 12, border: '1px solid var(--border)', borderRadius: 10,
-          background: 'var(--surface2)', marginBottom: 8,
-          display: 'grid', gridTemplateColumns: '1fr auto', gap: 14, alignItems: 'center',
-        }}>
-          <div>
-            <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--text-primary)', marginBottom: 4 }}>
-              <span style={{ marginRight: 6 }}>{m.icon || '📈'}</span>
-              {m.question}
+      {visible.map(m => {
+        const candidate = m.resolutionCandidate;
+        const evidence = Array.isArray(candidate?.evidence) ? candidate.evidence.slice(0, 3) : [];
+        const reviewing = candidate && reviewingCandidateId === candidate.id;
+        return (
+          <div key={m.id} style={{
+            padding: 12, border: '1px solid var(--border)', borderRadius: 10,
+            background: 'var(--surface2)', marginBottom: 8,
+            display: 'grid', gridTemplateColumns: '1fr auto', gap: 14, alignItems: 'center',
+          }}>
+            <div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--text-primary)', marginBottom: 4 }}>
+                <span style={{ marginRight: 6 }}>{m.icon || '📈'}</span>
+                {m.question}
+              </div>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
+                <span>#{m.id}</span>
+                <span>{m.category || 'general'}</span>
+                <span>{m.ammMode}</span>
+                <span>{(m.outcomes || []).length} resultados</span>
+                <span style={{
+                  color: m.archivedAt ? 'var(--text-muted)'
+                         : m.status === 'active' ? 'var(--green)'
+                         : m.status === 'resolved' ? 'var(--gold)' : 'var(--text-muted)',
+                }}>
+                  {m.archivedAt ? '📦 ARCHIVADO'
+                    : m.status === 'active' ? 'ACTIVO'
+                    : m.status === 'resolved' ? `✓ ${m.outcomes?.[m.outcome ?? 0] || 'resuelto'}`
+                    : m.status}
+                </span>
+                {m.tradeCount != null && <span>{m.tradeCount} operaciones</span>}
+                {m.sport && <span>{m.sport}{m.league ? ` · ${m.league}` : ''}</span>}
+                {m.chainId && <span>cadena {m.chainId}</span>}
+                {m.chainAddress && <span>{m.chainAddress.slice(0, 6)}…{m.chainAddress.slice(-4)}</span>}
+                {m.endTime && <span>cierra {new Date(m.endTime).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}</span>}
+              </div>
+              {candidate && (
+                <div style={{
+                  marginTop: 10,
+                  padding: 12,
+                  borderRadius: 10,
+                  border: '1px solid rgba(255,184,77,0.28)',
+                  background: 'rgba(255,184,77,0.07)',
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    alignItems: 'center',
+                    marginBottom: 8,
+                  }}>
+                    <div style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 10,
+                      letterSpacing: '0.12em',
+                      textTransform: 'uppercase',
+                      color: 'var(--gold)',
+                    }}>
+                      Resolución sugerida
+                    </div>
+                    <div style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 10,
+                      color: 'var(--text-muted)',
+                    }}>
+                      {candidate.statusLabel || 'Sugerida'}
+                    </div>
+                  </div>
+                  <div style={{ color: 'var(--text-primary)', fontSize: 13, lineHeight: 1.45 }}>
+                    Resultado: <strong>{candidate.label}</strong>
+                    {candidate.confidenceLabel && <span style={{ color: 'var(--text-muted)' }}> · confianza {candidate.confidenceLabel}</span>}
+                  </div>
+                  {candidate.finalScore && (
+                    <div style={{ marginTop: 4, color: 'var(--text-secondary)', fontSize: 12 }}>
+                      Prueba: {candidate.finalScore}
+                    </div>
+                  )}
+                  {candidate.rationale && (
+                    <div style={{ marginTop: 4, color: 'var(--text-secondary)', fontSize: 12 }}>
+                      Motivo: {candidate.rationale}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8, fontFamily: 'var(--font-mono)', fontSize: 10 }}>
+                    {candidate.source && <span style={{ color: 'var(--text-muted)' }}>fuente: {candidate.source}</span>}
+                    {candidate.sourceEventId && <span style={{ color: 'var(--text-muted)' }}>evento: {candidate.sourceEventId}</span>}
+                    {candidate.evidenceUrl && (
+                      <a href={candidate.evidenceUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--green)' }}>
+                        Fuente principal ↗
+                      </a>
+                    )}
+                  </div>
+                  {evidence.length > 0 && (
+                    <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
+                      {evidence.map((item, idx) => (
+                        <div key={`${candidate.id}-evidence-${idx}`} style={{ color: 'var(--text-muted)', fontSize: 11, lineHeight: 1.45 }}>
+                          {item.url ? (
+                            <a href={item.url} target="_blank" rel="noreferrer" style={{ color: 'var(--text-secondary)' }}>
+                              {item.title || `Evidencia ${idx + 1}`}
+                            </a>
+                          ) : (
+                            <span>{item.title || `Evidencia ${idx + 1}`}</span>
+                          )}
+                          {item.quote && <span> · {item.quote}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                    <button
+                      type="button"
+                      onClick={() => handleCandidateReview(m, candidate, 'confirm')}
+                      disabled={reviewing}
+                      className="btn-primary"
+                      style={{ fontSize: 11, padding: '6px 10px' }}
+                    >
+                      {reviewing ? '…' : 'Confirmar resolución'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleCandidateReview(m, candidate, 'deny')}
+                      disabled={reviewing}
+                      className="btn-ghost"
+                      style={{ fontSize: 11, padding: '6px 10px' }}
+                    >
+                      {reviewing ? '…' : 'Negar'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
-              <span>#{m.id}</span>
-              <span>{m.category || 'general'}</span>
-              <span>{m.ammMode}</span>
-              <span>{(m.outcomes || []).length} outcomes</span>
-              <span style={{
-                color: m.archivedAt ? 'var(--text-muted)'
-                       : m.status === 'active' ? 'var(--green)'
-                       : m.status === 'resolved' ? 'var(--gold)' : 'var(--text-muted)',
-              }}>
-                {m.archivedAt ? '📦 ARCHIVADO'
-                  : m.status === 'active' ? 'ACTIVO'
-                  : m.status === 'resolved' ? `✓ ${m.outcomes?.[m.outcome ?? 0] || 'resuelto'}`
-                  : m.status}
-              </span>
-              {m.tradeCount != null && <span>{m.tradeCount} trades</span>}
-              {m.sport && <span>{m.sport}{m.league ? ` · ${m.league}` : ''}</span>}
-              {m.chainId && <span>chain {m.chainId}</span>}
-              {m.chainAddress && <span>{m.chainAddress.slice(0, 6)}…{m.chainAddress.slice(-4)}</span>}
-              {m.endTime && <span>cierra {new Date(m.endTime).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}</span>}
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              {m.status === 'active' && (
+                <button onClick={() => handleResolve(m)} disabled={resolvingId === m.id} className="btn-ghost" style={{ fontSize: 11, padding: '6px 10px' }}>
+                  {resolvingId === m.id ? '…' : 'Resolver'}
+                </button>
+              )}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            {m.status === 'active' && (
-              <button onClick={() => handleResolve(m)} disabled={resolvingId === m.id} className="btn-ghost" style={{ fontSize: 11, padding: '6px 10px' }}>
-                {resolvingId === m.id ? '…' : 'Resolver'}
-              </button>
-            )}
-          </div>
-        </div>
-      ))}
+        );
+      })}
 
       {editingMarket && (
         <EditMarketModal
@@ -1410,7 +1582,7 @@ function MarketsList({ refreshKey, bumpRefresh }) {
 }
 
 // ═══ Social tasks queue ═════════════════════════════════════════════════════
-function SocialTasksSection() {
+function SocialTasksSection({ onQueueChange }) {
   const [status, setStatus] = useState('pending');
   const [tasks, setTasks] = useState(null);
   const [working, setWorking] = useState(null);
@@ -1438,6 +1610,7 @@ function SocialTasksSection() {
       const { ok, data } = await postJson('/api/points/admin/social-tasks', { id, action, note });
       if (!ok) throw new Error(data?.error || 'review_failed');
       await load();
+      onQueueChange?.();
     } catch (e) {
       alert(`No se pudo ${action === 'approve' ? 'aprobar' : 'rechazar'}: ${e?.message || 'error'}`);
     } finally {
@@ -1632,9 +1805,9 @@ function StatsSection() {
 const ADMIN_TABS = [
   { id: 'create',   label: 'Crear mercado'   },
   { id: 'generate', label: 'Generar'         },
-  { id: 'pending',  label: 'Por aprobar'     },
-  { id: 'markets',  label: 'Mercados'        },
-  { id: 'social',   label: 'Tareas sociales' },
+  { id: 'pending',  label: 'Por aprobar',     countKey: 'pending' },
+  { id: 'markets',  label: 'Mercados',        countKey: 'markets' },
+  { id: 'social',   label: 'Tareas sociales', countKey: 'social' },
   { id: 'stats',    label: 'Estadísticas'    },
 ];
 
@@ -1643,6 +1816,11 @@ export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
   const { authenticated } = usePointsAuth();
   const [refreshKey, setRefreshKey] = useState(0);
   const bumpRefresh = () => setRefreshKey(k => k + 1);
+  const [adminTaskCounts, setAdminTaskCounts] = useState({
+    pending: 0,
+    markets: 0,
+    social: 0,
+  });
 
   // Read initial tab + create-form seed from query string. Lets the
   // points-app news page hand off "Crear mercado de esta noticia"
@@ -1665,6 +1843,39 @@ export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
   })();
 
   const [tab, setTab] = useState(initialTab);
+
+  const loadAdminTaskCounts = useCallback(async () => {
+    if (!authenticated || !userIsAdmin) {
+      setAdminTaskCounts({ pending: 0, markets: 0, social: 0 });
+      return;
+    }
+
+    const [pendingResult, resolutionResult, socialResult] = await Promise.allSettled([
+      getJson('/api/protocol/admin/pending-markets?status=pending'),
+      getJson('/api/protocol/admin/resolution-candidates?status=pending'),
+      getJson('/api/points/admin/social-tasks?status=pending'),
+    ]);
+
+    const pendingData = pendingResult.status === 'fulfilled' ? pendingResult.value : null;
+    const resolutionData = resolutionResult.status === 'fulfilled' ? resolutionResult.value : null;
+    const socialData = socialResult.status === 'fulfilled' ? socialResult.value : null;
+
+    setAdminTaskCounts({
+      pending: pendingData?.ok && Array.isArray(pendingData.data?.pending)
+        ? pendingData.data.pending.length
+        : 0,
+      markets: resolutionData?.ok
+        ? Number(resolutionData.data?.pendingCount || 0) + Number(resolutionData.data?.overdueCount || 0)
+        : 0,
+      social: socialData?.ok && Array.isArray(socialData.data?.tasks)
+        ? socialData.data.tasks.length
+        : 0,
+    });
+  }, [authenticated, userIsAdmin]);
+
+  useEffect(() => {
+    loadAdminTaskCounts();
+  }, [loadAdminTaskCounts, refreshKey, tab]);
 
   const body = useMemo(() => {
     if (loading) return <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Cargando…</p>;
@@ -1692,6 +1903,8 @@ export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
         }}>
           {ADMIN_TABS.map(t => {
             const active = tab === t.id;
+            const taskCount = t.countKey ? Number(adminTaskCounts[t.countKey] || 0) : 0;
+            const showTaskCount = tab !== t.id && taskCount > 0;
             return (
               <button
                 key={t.id}
@@ -1703,9 +1916,31 @@ export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
                   color: active ? 'var(--text-primary)' : 'var(--text-muted)',
                   borderBottom: `2px solid ${active ? 'var(--green)' : 'transparent'}`,
                   cursor: 'pointer', marginBottom: -1,
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
                 }}
               >
-                {t.label}
+                <span>{t.label}</span>
+                {showTaskCount && (
+                  <span
+                    aria-label={`${taskCount} tareas pendientes`}
+                    style={{
+                      minWidth: 18,
+                      height: 18,
+                      padding: '0 6px',
+                      borderRadius: 999,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'var(--green)',
+                      color: '#00150b',
+                      fontSize: 10,
+                      fontWeight: 800,
+                      letterSpacing: 0,
+                    }}
+                  >
+                    {taskCount > 99 ? '99+' : taskCount}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -1719,13 +1954,13 @@ export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
             <GeneratorsSection />
           </>
         )}
-        {tab === 'pending'  && <PendingMarketsSection />}
-        {tab === 'markets'  && <MarketsList refreshKey={refreshKey} bumpRefresh={bumpRefresh} />}
-        {tab === 'social'   && <SocialTasksSection />}
+        {tab === 'pending'  && <PendingMarketsSection onQueueChange={loadAdminTaskCounts} />}
+        {tab === 'markets'  && <MarketsList refreshKey={refreshKey} bumpRefresh={bumpRefresh} onQueueChange={loadAdminTaskCounts} />}
+        {tab === 'social'   && <SocialTasksSection onQueueChange={loadAdminTaskCounts} />}
         {tab === 'stats'    && <StatsSection />}
       </>
     );
-  }, [authenticated, loading, onOpenLogin, refreshKey, t, tab, userIsAdmin, username]);
+  }, [adminTaskCounts, authenticated, loadAdminTaskCounts, loading, onOpenLogin, refreshKey, t, tab, userIsAdmin, username]);
 
   return (
     <>
