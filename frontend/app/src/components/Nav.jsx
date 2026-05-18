@@ -313,6 +313,9 @@ export default function Nav({ onOpenLogin }) {
                     ${balance.toFixed(2)} <span className="nav-balance-label">MXNB</span>
                   </span>
                 )}
+                <Link to="/funding" className="nav-deposit-link">
+                  {t('nav.deposit')}
+                </Link>
                 <button className="nav-user-pill" onClick={() => setDropdownOpen(o => !o)}>
                   <span className="user-dot" />
                   {userLabel}

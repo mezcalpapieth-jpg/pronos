@@ -58,13 +58,18 @@
 }
 .nav-deposit-link {
   font-size: 10px;
-  color: var(--green);
+  color: var(--orange);
   margin-left: 6px;
   text-decoration: none;
-  border-bottom: 1px dotted rgba(0,232,122,0.4);
+  border-bottom: 1px dotted rgba(255,85,0,0.45);
 }
 .nav-deposit-link:hover {
   border-bottom-style: solid;
+}
+
+.funding-value {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .nav-chain-dot {
   display: inline-block;

@@ -123,6 +123,25 @@ export function collectOnchainReadiness({
       && hasEnv(env, 'TURNKEY_API_PRIVATE_KEY'),
     clientConfigured: hasEnv(env, 'VITE_TURNKEY_ORGANIZATION_ID'),
   };
+  const juno = {
+    apiKey: hasEnv(env, 'JUNO_API_KEY'),
+    apiSecret: hasEnv(env, 'JUNO_API_SECRET'),
+    bearerToken: hasEnv(env, 'JUNO_BEARER_TOKEN'),
+    apiBaseUrl: hasEnv(env, 'JUNO_API_BASE_URL')
+      ? env.JUNO_API_BASE_URL.trim()
+      : null,
+    webhookSecret: hasEnv(env, 'JUNO_WEBHOOK_SECRET'),
+    cardCheckoutEnabled: env.JUNO_CARD_CHECKOUT_ENABLED === 'true',
+    applePayEnabled: env.JUNO_APPLE_PAY_ENABLED === 'true',
+    withdrawalsEnabled: env.JUNO_WITHDRAWALS_ENABLED === 'true',
+  };
+  juno.configured = Boolean(
+    juno.apiKey
+    && juno.apiSecret
+    && juno.bearerToken
+    && juno.apiBaseUrl
+    && juno.webhookSecret,
+  );
 
   const configuredPools = [
     ...parseOnchainAddressList(env.ONCHAIN_MARKET_POOL_ADDRESSES),
@@ -182,6 +201,11 @@ export function collectOnchainReadiness({
   warnMissing(warnings, env, 'VITE_TURNKEY_ORGANIZATION_ID');
   warnMissing(warnings, env, 'INDEXER_KEY');
   warnMissing(warnings, env, 'CRON_SECRET');
+  warnMissing(warnings, env, 'JUNO_API_KEY');
+  warnMissing(warnings, env, 'JUNO_API_SECRET');
+  warnMissing(warnings, env, 'JUNO_BEARER_TOKEN');
+  warnMissing(warnings, env, 'JUNO_API_BASE_URL');
+  warnMissing(warnings, env, 'JUNO_WEBHOOK_SECRET');
 
   if (!indexerRpc) {
     warnings.push('Indexer RPC missing - set ARB_RPC_URL or ARB_MAINNET_RPC');
@@ -223,6 +247,7 @@ export function collectOnchainReadiness({
     ok: warnings.length === 0,
     env: runtimeEnv,
     turnkey,
+    juno,
     deployment,
     policy,
     warnings,

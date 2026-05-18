@@ -130,7 +130,7 @@ export default async function handler(req, res) {
       protocolPools: poolCoverage.pools,
       protocolPoolError: poolCoverage.error,
     });
-    const { env, deployment, turnkey, policy } = readiness;
+    const { env, deployment, turnkey, juno, policy } = readiness;
     const warnings = [...readiness.warnings];
 
     if (!env.rpc) {
@@ -140,6 +140,7 @@ export default async function handler(req, res) {
         env,
         deployment,
         turnkey,
+        juno,
         policy,
         v1: null,
         v2: null,
@@ -235,6 +236,7 @@ export default async function handler(req, res) {
       env,
       deployment,
       turnkey,
+      juno,
       policy,
       v1,
       v2,

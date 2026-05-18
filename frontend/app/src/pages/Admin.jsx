@@ -210,6 +210,14 @@ function OnchainStatusPanel() {
                 ['VITE_TURNKEY_ORGANIZATION_ID',     data.turnkey?.clientOrganizationId ? '✓' : '✕'],
                 ['INDEXER_KEY',                      data.env.indexerKey ? '✓' : '✕'],
                 ['CRON_SECRET',                      data.env.cronSecret ? '✓' : '✕'],
+                ['JUNO_API_KEY',                     data.juno?.apiKey ? '✓' : '✕'],
+                ['JUNO_API_SECRET',                  data.juno?.apiSecret ? '✓' : '✕'],
+                ['JUNO_BEARER_TOKEN',                data.juno?.bearerToken ? '✓' : '✕'],
+                ['JUNO_API_BASE_URL',                data.juno?.apiBaseUrl ? '✓' : '✕'],
+                ['JUNO_WEBHOOK_SECRET',              data.juno?.webhookSecret ? '✓' : '✕'],
+                ['JUNO_CARD_CHECKOUT_ENABLED',       data.juno?.cardCheckoutEnabled ? '✓' : 'off'],
+                ['JUNO_APPLE_PAY_ENABLED',           data.juno?.applePayEnabled ? '✓' : 'off'],
+                ['JUNO_WITHDRAWALS_ENABLED',         data.juno?.withdrawalsEnabled ? '✓' : 'off'],
                 ['ONCHAIN_MARKET_POOL_ADDRESSES',    data.policy ? `${data.policy.configuredPoolCount || 0} pools` : '✕'],
               ].map(([k, v]) => (
                 <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, color: v === '✕' ? 'var(--red)' : 'var(--text-secondary)' }}>
@@ -2059,6 +2067,147 @@ function SocialTasksSection({ onQueueChange }) {
   );
 }
 
+// ═══ Funding monitor ═══════════════════════════════════════════════════════
+function formatFundingAmount(value, asset = 'MXNB') {
+  const n = Number(value || 0);
+  return `${new Intl.NumberFormat('es-MX', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(n) ? n : 0)} ${asset || 'MXNB'}`;
+}
+
+function FundingMonitorSection({ onQueueChange }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { ok, data: body } = await getJson('/api/protocol/admin/funding-monitor');
+      if (!ok) throw new Error(body?.error || 'funding_monitor_failed');
+      setData(body);
+      onQueueChange?.();
+    } catch (e) {
+      setError(e?.message || 'funding_monitor_failed');
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [onQueueChange]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const counts = data?.counts || {};
+  const total = Number(counts.total || 0);
+  const missingAccounts = (data?.accounts || []).filter(a => !a.clabe || !a.blockchain_account_registered);
+  const withdrawals = data?.withdrawals || [];
+  const events = (data?.events || []).filter(e => (
+    ['pending', 'processing', 'failed', 'error', 'rejected'].includes(String(e.transaction_status || '').toLowerCase())
+  ));
+
+  return (
+    <section style={{
+      padding: 20, border: '1px solid var(--border)', borderRadius: 14,
+      background: 'var(--surface1)',
+    }}>
+      <SectionHeader
+        title="Fondeo"
+        subtitle="CLABEs, depósitos, retiros y eventos de proveedor que necesitan revisión antes de mainnet."
+        right={
+          <button onClick={load} className="btn-ghost" disabled={loading} style={{ fontSize: 11 }}>
+            {loading ? '…' : 'Refrescar'}
+          </button>
+        }
+      />
+
+      {error && (
+        <div style={{ marginBottom: 12, color: 'var(--red)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+          Error: {error}
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 18 }}>
+        {[
+          ['Sin CLABE', counts.missingClabe || 0],
+          ['Wallet pendiente', counts.pendingWalletRegistration || 0],
+          ['Retiros', counts.pendingWithdrawals || 0],
+          ['Depósitos atorados', counts.stuckDeposits || 0],
+          ['Eventos con error', counts.failedEvents || 0],
+        ].map(([label, value]) => (
+          <StatCard key={label} label={label} value={Number(value || 0).toLocaleString('es-MX')} />
+        ))}
+      </div>
+
+      {!loading && total === 0 && (
+        <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+          Sin tareas de fondeo por ahora.
+        </p>
+      )}
+
+      {withdrawals.length > 0 && (
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 8 }}>
+            Retiros pendientes
+          </div>
+          {withdrawals.map(w => (
+            <div key={w.id} style={{ padding: 12, borderRadius: 10, background: 'var(--surface2)', border: '1px solid var(--border)', marginBottom: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                <span style={{ color: 'var(--text-primary)' }}>#{w.id} · @{w.username || 'usuario'}</span>
+                <span style={{ color: w.status === 'provider_error' ? 'var(--red)' : 'var(--orange)' }}>{String(w.status || 'pending').toUpperCase()}</span>
+              </div>
+              <div style={{ marginTop: 6, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)' }}>
+                {formatFundingAmount(w.amount, w.asset)} · CLABE {w.destination_clabe || '—'}
+                {w.note ? ` · ${w.note}` : ''}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {missingAccounts.length > 0 && (
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 8 }}>
+            Cuentas incompletas
+          </div>
+          {missingAccounts.slice(0, 20).map(a => (
+            <div key={a.id} style={{ padding: 12, borderRadius: 10, background: 'var(--surface2)', border: '1px solid var(--border)', marginBottom: 8 }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-primary)' }}>
+                @{a.username || 'usuario'} · {a.wallet_address ? short(a.wallet_address) : 'sin wallet'}
+              </div>
+              <div style={{ marginTop: 6, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)' }}>
+                CLABE: {a.clabe || 'pendiente'} · wallet Juno: {a.blockchain_account_registered ? 'registrada' : 'pendiente'}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {events.length > 0 && (
+        <div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 8 }}>
+            Eventos de proveedor
+          </div>
+          {events.slice(0, 20).map(e => (
+            <div key={e.id} style={{ padding: 12, borderRadius: 10, background: 'var(--surface2)', border: '1px solid var(--border)', marginBottom: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                <span style={{ color: 'var(--text-primary)' }}>{e.transaction_type || e.event_type || 'evento'} · @{e.username || 'usuario'}</span>
+                <span style={{ color: ['failed', 'error', 'rejected'].includes(String(e.transaction_status || '').toLowerCase()) ? 'var(--red)' : 'var(--orange)' }}>
+                  {String(e.transaction_status || 'pending').toUpperCase()}
+                </span>
+              </div>
+              <div style={{ marginTop: 6, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)' }}>
+                {formatFundingAmount(e.amount, e.asset)} · {e.tx_hash ? short(e.tx_hash) : e.clabe || 'sin referencia'}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ═══ Stats dashboard ═══════════════════════════════════════════════════════
 function StatCard({ label, value }) {
   return (
@@ -2175,6 +2324,7 @@ const ADMIN_TABS = [
   { id: 'pending',  label: 'Por aprobar',     countKey: 'pending' },
   { id: 'markets',  label: 'Mercados',        countKey: 'markets' },
   { id: 'social',   label: 'Tareas sociales', countKey: 'social' },
+  { id: 'funding',  label: 'Fondeo',          countKey: 'funding' },
   { id: 'stats',    label: 'Estadísticas'    },
 ];
 
@@ -2189,6 +2339,7 @@ export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
     markets: 0,
     disputed: 0,
     social: 0,
+    funding: 0,
   });
 
   // Read initial tab + create-form seed from query string. Lets the
@@ -2198,7 +2349,7 @@ export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
     if (typeof window === 'undefined') return 'create';
     const sp = new URLSearchParams(window.location.search);
     const t = sp.get('tab');
-    return ['create', 'generate', 'pending', 'markets', 'social', 'stats'].includes(t) ? t : 'create';
+    return ['create', 'generate', 'pending', 'markets', 'social', 'funding', 'stats'].includes(t) ? t : 'create';
   })();
   const createSeed = (() => {
     if (typeof window === 'undefined') return null;
@@ -2215,21 +2366,23 @@ export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
 
   const loadAdminTaskCounts = useCallback(async () => {
     if (!authenticated || !userIsAdmin) {
-      setAdminTaskCounts({ pending: 0, pendingResolve: 0, markets: 0, disputed: 0, social: 0 });
+      setAdminTaskCounts({ pending: 0, pendingResolve: 0, markets: 0, disputed: 0, social: 0, funding: 0 });
       return;
     }
 
-    const [pendingResult, resolutionResult, disputedResult, socialResult] = await Promise.allSettled([
+    const [pendingResult, resolutionResult, disputedResult, socialResult, fundingResult] = await Promise.allSettled([
       getJson('/api/protocol/admin/pending-markets?status=pending'),
       getJson('/api/protocol/admin/resolution-candidates?status=pending'),
       getJson(`/api/protocol/markets?status=disputed&chainId=${DEFAULT_CHAIN_ID}&limit=200`),
       getJson('/api/points/admin/social-tasks?status=pending'),
+      getJson('/api/protocol/admin/funding-monitor'),
     ]);
 
     const pendingData = pendingResult.status === 'fulfilled' ? pendingResult.value : null;
     const resolutionData = resolutionResult.status === 'fulfilled' ? resolutionResult.value : null;
     const disputedData = disputedResult.status === 'fulfilled' ? disputedResult.value : null;
     const socialData = socialResult.status === 'fulfilled' ? socialResult.value : null;
+    const fundingData = fundingResult.status === 'fulfilled' ? fundingResult.value : null;
     const pendingResolve = resolutionData?.ok
       ? Number(resolutionData.data?.count || 0)
       : 0;
@@ -2246,6 +2399,9 @@ export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
       disputed,
       social: socialData?.ok && Array.isArray(socialData.data?.tasks)
         ? socialData.data.tasks.length
+        : 0,
+      funding: fundingData?.ok
+        ? Number(fundingData.data?.counts?.total || 0)
         : 0,
     });
   }, [authenticated, userIsAdmin]);
@@ -2342,6 +2498,7 @@ export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
           />
         )}
         {tab === 'social'   && <SocialTasksSection onQueueChange={loadAdminTaskCounts} />}
+        {tab === 'funding'  && <FundingMonitorSection onQueueChange={loadAdminTaskCounts} />}
         {tab === 'stats'    && <StatsSection />}
       </>
     );

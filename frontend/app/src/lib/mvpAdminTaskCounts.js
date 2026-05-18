@@ -5,17 +5,19 @@ async function getJson(url) {
 }
 
 export async function adminListMvpTaskCounts() {
-  const [pendingResult, resolutionResult, disputedResult, socialResult] = await Promise.allSettled([
+  const [pendingResult, resolutionResult, disputedResult, socialResult, fundingResult] = await Promise.allSettled([
     getJson('/api/protocol/admin/pending-markets?status=pending'),
     getJson('/api/protocol/admin/resolution-candidates?status=pending'),
     getJson('/api/protocol/markets?status=disputed&limit=200'),
     getJson('/api/points/admin/social-tasks?status=pending'),
+    getJson('/api/protocol/admin/funding-monitor'),
   ]);
 
   const pendingData = pendingResult.status === 'fulfilled' ? pendingResult.value : null;
   const resolutionData = resolutionResult.status === 'fulfilled' ? resolutionResult.value : null;
   const disputedData = disputedResult.status === 'fulfilled' ? disputedResult.value : null;
   const socialData = socialResult.status === 'fulfilled' ? socialResult.value : null;
+  const fundingData = fundingResult.status === 'fulfilled' ? fundingResult.value : null;
   const pendingResolve = resolutionData?.ok
     ? Number(resolutionData.data?.pendingCount || 0) + Number(resolutionData.data?.overdueCount || 0)
     : 0;
@@ -33,10 +35,13 @@ export async function adminListMvpTaskCounts() {
     social: socialData?.ok && Array.isArray(socialData.data?.tasks)
       ? socialData.data.tasks.length
       : 0,
+    funding: fundingData?.ok
+      ? Number(fundingData.data?.counts?.total || 0)
+      : 0,
   };
 
   return {
     ...counts,
-    total: counts.pending + counts.markets + counts.social,
+    total: counts.pending + counts.markets + counts.social + counts.funding,
   };
 }

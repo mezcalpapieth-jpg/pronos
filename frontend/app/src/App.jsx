@@ -25,6 +25,8 @@ const IS_ROOT_LEGAL = PUBLIC_PATHNAME === '/privacy' || PUBLIC_PATHNAME === '/te
 const Home = lazy(() => import('./pages/Home.jsx'));
 const MarketDetail = lazy(() => import('./pages/MarketDetail.jsx'));
 const Portfolio = lazy(() => import('./pages/Portfolio.jsx'));
+const FundingPage = lazy(() => import('./pages/FundingPage.jsx'));
+const MvpUserProfile = lazy(() => import('./pages/MvpUserProfile.jsx'));
 const Admin = lazy(() => import('./pages/Admin.jsx'));
 const WorldCupPage = lazy(() => import('./pages/WorldCupPage.jsx'));
 const ChampionsLeaguePage = lazy(() => import('./pages/ChampionsLeaguePage.jsx'));
@@ -134,6 +136,14 @@ export default function App() {
           <Route
             path="/portfolio"
             element={<Portfolio onOpenLogin={() => setLoginOpen(true)} />}
+          />
+          <Route
+            path="/funding"
+            element={<FundingPage onOpenLogin={() => setLoginOpen(true)} />}
+          />
+          <Route
+            path="/u/:username"
+            element={<MvpUserProfile onOpenLogin={() => setLoginOpen(true)} />}
           />
           <Route
             path="/admin"

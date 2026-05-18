@@ -43,6 +43,11 @@ function completeEnv(overrides = {}) {
     VITE_PRONOS_ARBITRUM_TOKEN: ADDR.collateral,
     INDEXER_KEY: 'indexer-key',
     CRON_SECRET: 'cron-secret',
+    JUNO_API_KEY: 'juno-key',
+    JUNO_API_SECRET: 'juno-secret',
+    JUNO_BEARER_TOKEN: 'juno-bearer',
+    JUNO_API_BASE_URL: 'https://stage.buildwithjuno.com',
+    JUNO_WEBHOOK_SECRET: 'juno-webhook-secret',
     ONCHAIN_MARKET_POOL_ADDRESSES: ADDR.poolA,
     ...overrides,
   };
@@ -65,6 +70,25 @@ test('collectOnchainReadiness reports missing Turnkey and deployment env', () =>
   assert.match(warnings, /ONCHAIN_RESOLVER_SUBORG_ID missing/);
   assert.match(warnings, /INDEXER_KEY missing/);
   assert.match(warnings, /CRON_SECRET missing/);
+  assert.match(warnings, /JUNO_API_KEY missing/);
+  assert.match(warnings, /JUNO_WEBHOOK_SECRET missing/);
+});
+
+test('collectOnchainReadiness includes Juno funding readiness', () => {
+  const result = collectOnchainReadiness({
+    env: completeEnv({
+      JUNO_CARD_CHECKOUT_ENABLED: 'true',
+      JUNO_APPLE_PAY_ENABLED: 'true',
+      JUNO_WITHDRAWALS_ENABLED: 'false',
+    }),
+    protocolPools: [ADDR.poolA],
+  });
+
+  assert.equal(result.juno.configured, true);
+  assert.equal(result.juno.cardCheckoutEnabled, true);
+  assert.equal(result.juno.applePayEnabled, true);
+  assert.equal(result.juno.withdrawalsEnabled, false);
+  assert.doesNotMatch(result.warnings.join('\n'), /JUNO_API_KEY missing/);
 });
 
 test('collectOnchainReadiness catches deployment alias mismatches', () => {

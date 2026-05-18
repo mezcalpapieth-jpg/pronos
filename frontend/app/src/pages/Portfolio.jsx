@@ -16,6 +16,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import Nav from '../components/Nav.jsx';
 import Footer from '../components/Footer.jsx';
 import EarnMXNP from '../components/EarnMXNP.jsx';
+import MvpLeaderboard from '../components/MvpLeaderboard.jsx';
 import { usePointsAuth, fetchDelegationStatus } from '../lib/pointsAuth.js';
 import DelegationPrompt from '../components/DelegationPrompt.jsx';
 import { useT } from '../lib/i18n.js';
@@ -153,6 +154,7 @@ export default function Portfolio({ onOpenLogin }) {
   const [activeTab, setActiveTab] = useState('activo');
   const [sellingId, setSellingId] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [onchainBalance, setOnchainBalance] = useState(0);
 
   // ── Delegation banner state ────────────────────────────────────────────
   // Legacy points-app accounts (pre-MVP signup) never saw the
@@ -223,6 +225,22 @@ export default function Portfolio({ onOpenLogin }) {
     if (authenticated) loadAll();
   }, [authenticated, loadAll]);
 
+  useEffect(() => {
+    if (!authenticated) {
+      setOnchainBalance(0);
+      return;
+    }
+    let alive = true;
+    getJson('/api/points/onchain-balance')
+      .then(({ data }) => {
+        if (alive) setOnchainBalance(typeof data?.balance === 'number' ? data.balance : 0);
+      })
+      .catch(() => {
+        if (alive) setOnchainBalance(0);
+      });
+    return () => { alive = false; };
+  }, [authenticated, user?.walletAddress]);
+
   async function handleSell(pos) {
     setSellingId(`${pos.marketId}-${pos.outcomeIndex}`);
     setNotice(null);
@@ -270,9 +288,45 @@ export default function Portfolio({ onOpenLogin }) {
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 36, letterSpacing: '0.04em', color: 'var(--text-primary)', marginBottom: 10 }}>
             {t('pf.title') || 'Mi Portafolio'}
           </h1>
-          {authenticated && user?.balance !== undefined && (
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)' }}>
-              Balance: <strong style={{ color: 'var(--green)' }}>${formatNum(user.balance)}</strong>
+          {authenticated && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)' }}>
+                Balance MXNB: <strong style={{ color: 'var(--green)' }}>${formatNum(onchainBalance)}</strong>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Link
+                  to="/funding"
+                  style={{
+                    color: 'var(--orange)',
+                    border: '1px solid rgba(255,85,0,0.34)',
+                    background: 'rgba(255,85,0,0.08)',
+                    borderRadius: 8,
+                    padding: '8px 12px',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11,
+                    letterSpacing: '0.1em',
+                    textTransform: 'uppercase',
+                    textDecoration: 'none',
+                  }}
+                >Depositar</Link>
+                {onchainBalance > 0 && (
+                  <Link
+                    to="/funding?mode=withdraw"
+                    style={{
+                      color: 'var(--yes)',
+                      border: '1px solid rgba(22,163,74,0.38)',
+                      background: 'rgba(22,163,74,0.08)',
+                      borderRadius: 8,
+                      padding: '8px 12px',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 11,
+                      letterSpacing: '0.1em',
+                      textTransform: 'uppercase',
+                      textDecoration: 'none',
+                    }}
+                  >Retirar</Link>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -397,6 +451,8 @@ export default function Portfolio({ onOpenLogin }) {
                 )}
               </div>
             )}
+
+            <MvpLeaderboard currentUsername={user?.username} />
 
             {/* Socials + referrals — plumbing only, no rewards credited until mainnet. */}
             <EarnMXNP />

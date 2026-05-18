@@ -12,6 +12,9 @@
   --surface3: #E4E3DF;
   --border: rgba(0,0,0,0.09);
   --border-active: rgba(255,85,0,0.35);
+  --orange: #FF5500;
+  --orange-bright: #FF7733;
+  --orange-dim: rgba(255,85,0,0.10);
   --green: #FF5500;
   --green-bright: #FF7733;
   --green-dim: rgba(255,85,0,0.10);
@@ -42,6 +45,9 @@ html[data-theme="dark"] {
   --surface3: #1e1e1e;
   --border: rgba(255,255,255,0.07);
   --border-active: rgba(255,85,0,0.35);
+  --orange: #FF5500;
+  --orange-bright: #FF7733;
+  --orange-dim: rgba(255,85,0,0.12);
   --green: #FF5500;
   --green-bright: #FF7733;
   --green-dim: rgba(255,85,0,0.12);

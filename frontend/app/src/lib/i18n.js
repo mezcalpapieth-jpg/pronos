@@ -414,6 +414,27 @@ const STRINGS = {
   'pf.exitSuccess':           { es: 'Posición retirada. Tx: {tx}', en: 'Position exited. Tx: {tx}' },
   'pf.exitError':             { es: 'No se pudo retirar: {msg}', en: 'Could not exit: {msg}' },
 
+  // ── Funding ───────────────────────────────────────────────────────────────
+  'fund.title':               { es: 'Depositar / retirar MXNB', en: 'Deposit / withdraw MXNB' },
+  'fund.subtitle':            { es: 'Tu cuenta opera con una wallet Turnkey y MXNB en Arbitrum.',
+                                en: 'Your account uses a Turnkey wallet and MXNB on Arbitrum.' },
+  'fund.depositTitle':        { es: 'Depositar',             en: 'Deposit' },
+  'fund.withdrawTitle':       { es: 'Retirar',               en: 'Withdraw' },
+  'fund.wallet':              { es: 'Wallet Turnkey',        en: 'Turnkey wallet' },
+  'fund.clabe':               { es: 'CLABE SPEI',            en: 'SPEI CLABE' },
+  'fund.copy':                { es: 'Copiar',                en: 'Copy' },
+  'fund.copied':              { es: 'Copiado',               en: 'Copied' },
+  'fund.balance':             { es: 'Balance disponible',    en: 'Available balance' },
+  'fund.pending':             { es: 'Pendiente',             en: 'Pending' },
+  'fund.notConfigured':       { es: 'Integración Juno pendiente de credenciales.',
+                                en: 'Juno integration is waiting for credentials.' },
+  'fund.ready':               { es: 'Listo para recibir MXNB.',
+                                en: 'Ready to receive MXNB.' },
+  'fund.withdrawPending':     { es: 'Retiro por SPEI pendiente de activar con el proveedor.',
+                                en: 'SPEI withdrawals are waiting for provider activation.' },
+  'fund.login':               { es: 'Inicia sesión para ver tu wallet y depositar.',
+                                en: 'Sign in to view your wallet and deposit.' },
+
   // ── PasswordGate ──────────────────────────────────────────────────────────
   'gate.badge':               { es: 'BETA · ACCESO ANTICIPADO', en: 'BETA · EARLY ACCESS' },
   'gate.title':               { es: 'Ingresa la contraseña para continuar', en: 'Enter the password to continue' },
