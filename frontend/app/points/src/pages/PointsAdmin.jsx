@@ -17,9 +17,11 @@ import {
   postJson,
   adminListSocialTasks,
   adminReviewSocialTask,
+  adminListTaskCounts,
   adminListCycles,
   adminRolloverCycle,
   adminEditMarket,
+  adminCancelMarket,
   adminListPendingMarkets,
   adminReviewPendingMarket,
   adminApproveAllPendingMarkets,
@@ -179,22 +181,10 @@ export default function PointsAdmin({ isAdmin }) {
         return;
       }
 
-      const [pendingResult, marketsResult, socialResult] = await Promise.allSettled([
-        adminListPendingMarkets('pending'),
-        getJson('/api/points/admin/markets?status=pending'),
-        adminListSocialTasks('pending'),
-      ]);
+      const counts = await adminListTaskCounts();
 
       if (cancelled) return;
-      const pendingData = pendingResult.status === 'fulfilled' ? pendingResult.value : null;
-      const marketsData = marketsResult.status === 'fulfilled' ? marketsResult.value : null;
-      const socialData = socialResult.status === 'fulfilled' ? socialResult.value : null;
-
-      setAdminTaskCounts({
-        pending: Array.isArray(pendingData?.pending) ? pendingData.pending.length : 0,
-        markets: Array.isArray(marketsData?.markets) ? marketsData.markets.length : 0,
-        social: Array.isArray(socialData?.tasks) ? socialData.tasks.length : 0,
-      });
+      setAdminTaskCounts(counts);
     }
 
     loadAdminTaskCounts();
@@ -278,7 +268,12 @@ export default function PointsAdmin({ isAdmin }) {
 
       {tab === 'create' && <CreateMarketForm prefill={createPrefill} />}
       {tab === 'pending' && <PendingMarketsTable onQueueChange={refreshAdminTaskCounts} />}
-      {tab === 'markets' && <MarketsTable onQueueChange={refreshAdminTaskCounts} />}
+      {tab === 'markets' && (
+        <MarketsTable
+          onQueueChange={refreshAdminTaskCounts}
+          pendingResolveCount={adminTaskCounts.markets}
+        />
+      )}
       {tab === 'social' && <SocialTasksQueue onQueueChange={refreshAdminTaskCounts} />}
       {tab === 'cycles' && <CyclesPanel />}
       {tab === 'stats' && <StatsPanel />}
@@ -1010,7 +1005,7 @@ const inputStyle = {
 };
 
 // ─── Markets table ───────────────────────────────────────────────────────────
-function MarketsTable({ onQueueChange }) {
+function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
   const [markets, setMarkets] = useState(null);
   const [filter, setFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -1021,6 +1016,7 @@ function MarketsTable({ onQueueChange }) {
   const [topicFilter, setTopicFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState(null);
+  const [canceling, setCanceling] = useState(null);
   const [autoResolving, setAutoResolving] = useState(false);
   // When non-null, render the edit modal for this market.
   const [editing, setEditing] = useState(null);
@@ -1109,6 +1105,41 @@ function MarketsTable({ onQueueChange }) {
     }
   }
 
+  async function cancelMarket(market) {
+    if (!market?.id) return false;
+    const ok = window.confirm(
+      `¿Anular "${market.question}"?\n\n`
+      + 'Se devolverá el costo base de las posiciones abiertas y el mercado ya no contará como ganado o perdido.',
+    );
+    if (!ok) return false;
+    setCanceling(market.id);
+    try {
+      const result = await adminCancelMarket({
+        marketId: market.id,
+        reason: 'Mercado anulado: el evento no ocurrió',
+      });
+      const refunded = Number(result?.totalRefunded || 0);
+      setMarkets(prev => (prev || []).flatMap((m) => {
+        if (m.id !== market.id) return [m];
+        const next = {
+          ...m,
+          status: 'canceled',
+          outcome: null,
+          resolvedAt: new Date().toISOString(),
+        };
+        return (filter === 'all' || filter === 'canceled') ? [next] : [];
+      }));
+      onQueueChange?.();
+      alert(`Mercado anulado. Devuelto: ${refunded.toFixed(2)} MXNP.`);
+      return true;
+    } catch (e) {
+      alert(`No se pudo anular: ${e.code || e.message}${e.detail ? '\n' + e.detail : ''}`);
+      return false;
+    } finally {
+      setCanceling(null);
+    }
+  }
+
   // Toggle 🔥 on an already-created market. Optimistic update; rolls
   // back on server rejection.
   async function toggleFeaturedMarket(m) {
@@ -1163,23 +1194,47 @@ function MarketsTable({ onQueueChange }) {
           { key: 'active',   label: 'Activos' },
           { key: 'pending',  label: 'Por resolver' },
           { key: 'resolved', label: 'Resueltos' },
-        ].map(s => (
-          <button
-            key={s.key}
-            onClick={() => setFilter(s.key)}
-            style={{
-              padding: '6px 14px',
-              borderRadius: 16,
-              border: `1px solid ${filter === s.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
-              background: filter === s.key ? 'rgba(0,232,122,0.1)' : 'transparent',
-              color: filter === s.key ? 'var(--green)' : 'var(--text-secondary)',
-              fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer',
-              letterSpacing: '0.06em', textTransform: 'uppercase',
-            }}
-          >
-            {s.label}
-          </button>
-        ))}
+          { key: 'canceled', label: 'Anulados' },
+        ].map(s => {
+          const taskCount = s.key === 'pending' ? pendingResolveCount : 0;
+          return (
+            <button
+              key={s.key}
+              onClick={() => setFilter(s.key)}
+              style={{
+                padding: '6px 14px',
+                borderRadius: 16,
+                border: `1px solid ${filter === s.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
+                background: filter === s.key ? 'rgba(0,232,122,0.1)' : 'transparent',
+                color: filter === s.key ? 'var(--green)' : 'var(--text-secondary)',
+                fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer',
+                letterSpacing: '0.06em', textTransform: 'uppercase',
+                display: 'inline-flex', alignItems: 'center', gap: 8,
+              }}
+            >
+              {s.label}
+              {taskCount > 0 && (
+                <span style={{
+                  minWidth: 18,
+                  height: 18,
+                  padding: '0 5px',
+                  borderRadius: 999,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'rgba(245,158,11,0.16)',
+                  border: '1px solid rgba(245,158,11,0.45)',
+                  color: '#f59e0b',
+                  fontSize: 10,
+                  letterSpacing: 0,
+                  lineHeight: 1,
+                }}>
+                  {taskCount > 99 ? '99+' : taskCount}
+                </span>
+              )}
+            </button>
+          );
+        })}
 
         {/* Run the auto-resolver now — surfaced only on the Por
             resolver view since that's where candidates live. Vercel
@@ -1426,6 +1481,28 @@ function MarketsTable({ onQueueChange }) {
               >
                 Editar
               </button>
+              {filter === 'pending' && (
+                <button
+                  onClick={() => cancelMarket(m)}
+                  disabled={canceling === m.id}
+                  title="Anular el mercado y devolver el costo base de las posiciones abiertas"
+                  style={{
+                    padding: '6px 10px',
+                    background: 'rgba(239,68,68,0.10)',
+                    border: '1px solid rgba(239,68,68,0.35)',
+                    borderRadius: 8,
+                    color: 'var(--red, #ef4444)',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11,
+                    cursor: canceling === m.id ? 'not-allowed' : 'pointer',
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
+                    opacity: canceling === m.id ? 0.55 : 1,
+                  }}
+                >
+                  {canceling === m.id ? 'Anulando…' : 'Anular mercado'}
+                </button>
+              )}
               <ResolveControls
                 market={m}
                 resolving={resolving === m.id}
@@ -1433,8 +1510,14 @@ function MarketsTable({ onQueueChange }) {
               />
             </>
           ) : (
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--green)' }}>
-              ✓ {m.outcomes[m.outcome]}
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              color: m.status === 'canceled' ? 'var(--text-muted)' : 'var(--green)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+            }}>
+              {m.status === 'canceled' ? 'Anulado' : `✓ ${m.outcomes[m.outcome]}`}
             </span>
           )}
         </div>
@@ -1443,6 +1526,7 @@ function MarketsTable({ onQueueChange }) {
       {editing && (
         <EditMarketModal
           market={editing}
+          onCancel={cancelMarket}
           onClose={() => setEditing(null)}
           onSaved={async () => {
             setEditing(null);
@@ -1459,7 +1543,7 @@ function MarketsTable({ onQueueChange }) {
 // and category. Reserves, outcomes, and status stay locked — mutating
 // those post-creation would desync the AMM or confuse existing holders.
 // Wired to POST /api/points/admin/edit-market.
-function EditMarketModal({ market, onClose, onSaved }) {
+function EditMarketModal({ market, onClose, onSaved, onCancel }) {
   const [question, setQuestion] = useState(market.question || '');
   const [category, setCategory] = useState(market.category || 'general');
   // Split date + time into three plain inputs so format is stable
@@ -1473,6 +1557,7 @@ function EditMarketModal({ market, onClose, onSaved }) {
   const [endMinute, setEndMinute] = useState(isoToMinutePart(market.endTime));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(null);
+  const [actionMode, setActionMode] = useState('save');
 
   const initialStartDate = isoToDdMmYyyy(market.startTime);
   const initialStartHour = isoToHourPart(market.startTime);
@@ -1555,6 +1640,21 @@ function EditMarketModal({ market, onClose, onSaved }) {
       setErr(`${e.code || e.message}${e.detail ? ' · ' + e.detail : ''}`);
       setSaving(false);
     }
+  }
+
+  async function runPrimaryAction() {
+    if (actionMode === 'cancel') {
+      setSaving(true);
+      setErr(null);
+      const ok = await onCancel?.(market);
+      if (ok) {
+        await onSaved?.();
+        return;
+      }
+      setSaving(false);
+      return;
+    }
+    await save();
   }
 
   return (
@@ -1777,6 +1877,18 @@ function EditMarketModal({ market, onClose, onSaved }) {
           Opciones y reservas del AMM no se pueden cambiar después de crear el mercado.
         </p>
 
+        {actionMode === 'cancel' && (
+          <p style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            color: 'var(--red, #ef4444)',
+            lineHeight: 1.5,
+            margin: '0 0 12px',
+          }}>
+            Se devolverá el costo base de las posiciones abiertas y este mercado quedará anulado.
+          </p>
+        )}
+
         {err && (
           <div style={{
             background: 'rgba(239,68,68,0.1)',
@@ -1792,7 +1904,7 @@ function EditMarketModal({ market, onClose, onSaved }) {
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
           <button
             onClick={onClose}
             disabled={saving}
@@ -1812,13 +1924,43 @@ function EditMarketModal({ market, onClose, onSaved }) {
           >
             Cancelar
           </button>
-          <button
-            onClick={save}
+          <select
+            value={actionMode}
+            onChange={(e) => setActionMode(e.target.value)}
             disabled={saving}
-            className="btn-primary"
-            style={{ flex: 1, padding: '10px 14px', fontSize: 11 }}
+            title="Acción principal"
+            style={{
+              minWidth: 126,
+              background: 'var(--surface2)',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+              color: actionMode === 'cancel' ? 'var(--red, #ef4444)' : 'var(--text-primary)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+              padding: '0 10px',
+              cursor: saving ? 'not-allowed' : 'pointer',
+            }}
           >
-            {saving ? 'Guardando…' : 'Guardar'}
+            <option value="save">Guardar</option>
+            <option value="cancel">Anular mercado</option>
+          </select>
+          <button
+            onClick={runPrimaryAction}
+            disabled={saving}
+            className={actionMode === 'cancel' ? 'btn-ghost' : 'btn-primary'}
+            style={{
+              flex: 1,
+              padding: '10px 14px',
+              fontSize: 11,
+              color: actionMode === 'cancel' ? 'var(--red, #ef4444)' : undefined,
+              borderColor: actionMode === 'cancel' ? 'rgba(239,68,68,0.35)' : undefined,
+            }}
+          >
+            {saving
+              ? (actionMode === 'cancel' ? 'Anulando…' : 'Guardando…')
+              : (actionMode === 'cancel' ? 'Anular mercado' : 'Guardar')}
           </button>
         </div>
       </div>

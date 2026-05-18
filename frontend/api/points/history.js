@@ -61,9 +61,20 @@ export default async function handler(req, res) {
         AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
       ORDER BY t.created_at ASC
     `;
+    const refundRows = await sql`
+      SELECT d.id, d.reference_id AS market_id, d.amount, d.created_at,
+             m.question, m.category, m.outcomes, m.reserves,
+             m.status, m.outcome, m.end_time, m.resolved_at
+      FROM points_distributions d
+      JOIN points_markets m ON m.id = d.reference_id
+      WHERE d.username = ${username}
+        AND d.kind IN ('market_cancel_refund', 'void_refund')
+        AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
+      ORDER BY d.created_at ASC
+    `;
 
     const markets = new Map();
-    for (const r of rows) {
+    function ensureMarketBucket(r) {
       const mid = r.market_id;
       if (!markets.has(mid)) {
         const outcomes = parseJsonb(r.outcomes, ['Sí', 'No']);
@@ -90,7 +101,11 @@ export default async function handler(req, res) {
           redeemedByOutcome: new Map(),
         });
       }
-      const bucket = markets.get(mid);
+      return markets.get(mid);
+    }
+
+    for (const r of rows) {
+      const bucket = ensureMarketBucket(r);
 
       const shares = Number(r.shares);
       const collateral = Number(r.collateral);
@@ -123,6 +138,23 @@ export default async function handler(req, res) {
       });
     }
 
+    for (const r of refundRows) {
+      const bucket = ensureMarketBucket(r);
+      const collateral = Number(r.amount || 0);
+      bucket.totalReceived += collateral;
+      bucket.transactions.push({
+        id: `refund-${r.id}`,
+        side: 'refund',
+        outcomeIndex: null,
+        outcomeLabel: 'Reembolso',
+        shares: 0,
+        collateral,
+        fee: 0,
+        priceAtTrade: 0,
+        createdAt: r.created_at,
+      });
+    }
+
     const history = Array.from(markets.values()).map(m => {
       // currentHeld[oi] = heldByOutcome[oi] − redeemedByOutcome[oi]. Users
       // with no unredeemed, unsold shares have currentHeld=0 across the
@@ -134,7 +166,9 @@ export default async function handler(req, res) {
       }
 
       let outcomeStatus = 'open';
-      if (m.status === 'resolved') {
+      if (m.status === 'canceled' || (m.status === 'resolved' && (m.outcome === null || m.outcome === undefined))) {
+        outcomeStatus = 'canceled';
+      } else if (m.status === 'resolved') {
         const winningIdx = Number(m.outcome);
         // Did they hold winning shares at resolution time? heldByOutcome
         // isn't zeroed on redeem so this captures both "already claimed"
@@ -193,7 +227,7 @@ export default async function handler(req, res) {
     });
 
     // Stable sort: open → pending → others newest first
-    const priority = { open: 0, pending: 1, won: 2, lost: 2, exited: 2 };
+    const priority = { open: 0, pending: 1, won: 2, lost: 2, canceled: 2, exited: 2 };
     history.sort((a, b) => {
       const pa = priority[a.outcomeStatus] ?? 3;
       const pb = priority[b.outcomeStatus] ?? 3;
@@ -212,6 +246,7 @@ export default async function handler(req, res) {
         marketsTotal: history.length,
         marketsWon: history.filter(m => m.outcomeStatus === 'won').length,
         marketsLost: history.filter(m => m.outcomeStatus === 'lost').length,
+        marketsCanceled: history.filter(m => m.outcomeStatus === 'canceled').length,
         marketsExited: history.filter(m => m.outcomeStatus === 'exited').length,
         marketsOpen: history.filter(m => m.outcomeStatus === 'open').length,
         marketsPending: history.filter(m => m.outcomeStatus === 'pending').length,

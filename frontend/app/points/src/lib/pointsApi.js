@@ -255,6 +255,28 @@ export async function adminListPendingMarkets(status = 'pending') {
   return getJson(`/api/points/admin/pending-markets?status=${encodeURIComponent(status)}`);
 }
 
+export async function adminListTaskCounts() {
+  const [pendingResult, marketsResult, socialResult] = await Promise.allSettled([
+    adminListPendingMarkets('pending'),
+    getJson('/api/points/admin/markets?status=pending'),
+    adminListSocialTasks('pending'),
+  ]);
+
+  const pendingData = pendingResult.status === 'fulfilled' ? pendingResult.value : null;
+  const marketsData = marketsResult.status === 'fulfilled' ? marketsResult.value : null;
+  const socialData = socialResult.status === 'fulfilled' ? socialResult.value : null;
+  const counts = {
+    pending: Array.isArray(pendingData?.pending) ? pendingData.pending.length : 0,
+    markets: Array.isArray(marketsData?.markets) ? marketsData.markets.length : 0,
+    social: Array.isArray(socialData?.tasks) ? socialData.tasks.length : 0,
+  };
+
+  return {
+    ...counts,
+    total: counts.pending + counts.markets + counts.social,
+  };
+}
+
 export async function adminReviewPendingMarket(id, action, note) {
   return postJson('/api/points/admin/pending-markets', { id, action, note });
 }
@@ -319,6 +341,13 @@ export async function adminEditMarket({ marketId, question, startTime, endTime, 
     startTime,
     endTime,
     category,
+  });
+}
+
+export async function adminCancelMarket({ marketId, reason } = {}) {
+  return postJson('/api/points/admin/cancel-market', {
+    marketId,
+    reason,
   });
 }
 

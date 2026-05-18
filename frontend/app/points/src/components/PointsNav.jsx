@@ -13,7 +13,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useT, useLang, setLang } from '@app/lib/i18n.js';
-import { fetchMarkets } from '../lib/pointsApi.js';
+import { fetchMarkets, adminListTaskCounts } from '../lib/pointsApi.js';
 
 // Public info page on pronos.io that explains prediction markets. The MVP
 // and old landing both link here — we match so the user journey is the same.
@@ -38,6 +38,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
   const [scrolled, setScrolled] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [theme, setTheme] = useState(getInitialTheme);
+  const [adminTaskTotal, setAdminTaskTotal] = useState(0);
   const dropdownRef = useRef(null);
   const t = useT();
   const lang = useLang();
@@ -122,6 +123,32 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAdminTaskTotal() {
+      if (!authenticated || !isAdmin) {
+        if (!cancelled) setAdminTaskTotal(0);
+        return;
+      }
+      try {
+        const counts = await adminListTaskCounts();
+        if (!cancelled) setAdminTaskTotal(Number(counts?.total || 0));
+      } catch {
+        if (!cancelled) setAdminTaskTotal(0);
+      }
+    }
+
+    loadAdminTaskTotal();
+    const intervalId = authenticated && isAdmin
+      ? window.setInterval(loadAdminTaskTotal, 60000)
+      : null;
+    return () => {
+      cancelled = true;
+      if (intervalId) window.clearInterval(intervalId);
+    };
+  }, [authenticated, isAdmin, dropdownOpen]);
 
   useEffect(() => {
     if (!dropdownOpen) return undefined;
@@ -375,8 +402,32 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
                   {t('points.nav.portfolio')}
                 </Link>
                 {isAdmin && (
-                  <Link to="/admin" onClick={() => setDropdownOpen(false)}>
-                    {t('points.nav.admin')}
+                  <Link
+                    to="/admin"
+                    onClick={() => setDropdownOpen(false)}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
+                  >
+                    <span>{t('points.nav.admin')}</span>
+                    {adminTaskTotal > 0 && (
+                      <span style={{
+                        minWidth: 20,
+                        height: 20,
+                        padding: '0 6px',
+                        borderRadius: 999,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: 'rgba(245,158,11,0.16)',
+                        border: '1px solid rgba(245,158,11,0.5)',
+                        color: '#f59e0b',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 11,
+                        lineHeight: 1,
+                        letterSpacing: 0,
+                      }}>
+                        {adminTaskTotal > 99 ? '99+' : adminTaskTotal}
+                      </span>
+                    )}
                   </Link>
                 )}
                 <button onClick={handleLogout}>

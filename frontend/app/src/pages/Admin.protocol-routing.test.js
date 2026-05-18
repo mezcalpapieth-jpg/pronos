@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./Admin.jsx', import.meta.url), 'utf8');
+const navSource = await readFile(new URL('../components/Nav.jsx', import.meta.url), 'utf8');
 
 function section(startMarker, endMarker) {
   const start = source.indexOf(startMarker);
@@ -104,6 +105,20 @@ test('MVP admin tabs show badges for pending work outside the active tab', () =>
   assert.match(adminShell, /overdueCount/);
   assert.match(adminShell, /tab !== t\.id/);
   assert.match(adminShell, /taskCount > 0/);
+});
+
+test('MVP nav surfaces admin work count outside admin', () => {
+  assert.match(navSource, /adminListMvpTaskCounts/);
+  assert.match(navSource, /adminTaskTotal/);
+  assert.match(navSource, /nav\.admin/);
+  assert.match(navSource, /adminTaskTotal > 0/);
+});
+
+test('MVP markets filter surfaces por resolver count while inside Mercados', () => {
+  assert.match(source, /pendingResolveCount=\{adminTaskCounts\.markets\}/);
+  assert.match(source, /function MarketsList\(\{ refreshKey, bumpRefresh, onQueueChange, pendingResolveCount = 0 \}\)/);
+  assert.match(source, /tab\.value === 'pending' \? pendingResolveCount : 0/);
+  assert.match(source, /statusTaskCount > 0/);
 });
 
 test('MVP admin markets has a Por resolver filter for overdue active markets', () => {

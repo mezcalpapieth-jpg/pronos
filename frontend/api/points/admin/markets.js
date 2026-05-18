@@ -49,7 +49,7 @@ export default async function handler(req, res) {
   const admin = requirePointsAdmin(req, res);
   if (!admin) return;
 
-  const filter = ['all', 'active', 'pending', 'resolved', 'archived'].includes(req.query.status) ? req.query.status : 'all';
+  const filter = ['all', 'active', 'pending', 'resolved', 'canceled', 'archived'].includes(req.query.status) ? req.query.status : 'all';
   const categoryParam = typeof req.query.category === 'string' ? req.query.category.trim().toLowerCase() : '';
   const categoryFilter = categoryParam && categoryParam !== 'all' ? categoryParam : null;
   const sportParam = typeof req.query.sport === 'string' ? req.query.sport.trim().toLowerCase() : '';

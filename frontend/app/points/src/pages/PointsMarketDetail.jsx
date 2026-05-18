@@ -856,10 +856,11 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   const displayOutcomeImages = displayOutcomeIndices.map(i => market.outcomeImages?.[i] || null);
   const displayOutcomeCountryLabels = displayOutcomeIndices.map(i => market.outcomeCountryLabels?.[i] || null);
   const displayHistoryByOutcome = displayOutcomeIndices.map(i => historyByOutcome?.[i] || []);
-  const winnerIndex = market.status === 'resolved' && market.outcome != null ? Number(market.outcome) : null;
+  const isCanceled = market.status === 'canceled';
+  const winnerIndex = !isCanceled && market.status === 'resolved' && market.outcome != null ? Number(market.outcome) : null;
   const isResolved = winnerIndex != null && Number.isFinite(winnerIndex);
   const displayWinnerIndex = isResolved ? displayOutcomeIndices.indexOf(winnerIndex) : null;
-  const isTradingLocked = !isResolved && (market.seriesLocked || market.status !== 'active');
+  const isTradingLocked = !isResolved && (isCanceled || market.seriesLocked || market.status !== 'active');
   const ringIndex = isResolved && displayWinnerIndex != null && displayWinnerIndex >= 0 ? displayWinnerIndex : 0;
   const seriesSubtitle = formatSeriesSubtitle(market.seriesMeta, { t });
   function pctFor(i) {
@@ -932,6 +933,9 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               {isResolved && (
                 <span style={{ color: 'var(--green)' }}>{t('points.detail.resolvedBadge')}</span>
               )}
+              {isCanceled && (
+                <span style={{ color: 'var(--text-muted)' }}>ANULADO</span>
+              )}
               {isLive && (
                 <span style={{
                   color: '#dc2626',
@@ -945,7 +949,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               {isPendingResolution && !isResolved && !isLive && (
                 <span style={{ color: '#f59e0b' }}>{t('points.detail.pendingBadge')}</span>
               )}
-              {isTradingLocked && !isResolved && (
+              {isTradingLocked && !isResolved && !isCanceled && (
                 <span style={{ color: '#f59e0b' }}>· {t('points.series.pending')}</span>
               )}
               <span style={{ flex: 1 }} />
@@ -972,6 +976,26 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 marginBottom: market.finalScore && isResolved ? 12 : 24,
               }}>
                 {seriesSubtitle}
+              </div>
+            )}
+
+            {isCanceled && (
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '8px 14px',
+                borderRadius: 10,
+                background: 'var(--surface1)',
+                border: '1px solid var(--border)',
+                marginBottom: 24,
+                fontFamily: 'var(--font-mono)',
+                fontSize: 13,
+                color: 'var(--text-secondary)',
+                letterSpacing: '0.03em',
+              }}>
+                <span style={{ color: 'var(--text-muted)', fontWeight: 700 }}>Mercado anulado</span>
+                <span>Las posiciones abiertas fueron devueltas.</span>
               </div>
             )}
 
@@ -1501,7 +1525,9 @@ export default function PointsMarketDetail({ onOpenLogin }) {
 
             {(isResolved || isPendingResolution || isTradingLocked) && (
               <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-                {isResolved
+                {isCanceled
+                  ? 'Este mercado fue anulado porque el evento no ocurrió. No cuenta como ganado o perdido.'
+                  : isResolved
                   ? t('points.detail.closedHint')
                   : t('points.detail.pendingHint')}
               </p>

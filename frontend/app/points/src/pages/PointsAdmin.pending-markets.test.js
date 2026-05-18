@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./PointsAdmin.jsx', import.meta.url), 'utf8');
+const navSource = await readFile(new URL('../components/PointsNav.jsx', import.meta.url), 'utf8');
 const apiSource = await readFile(new URL('../lib/pointsApi.js', import.meta.url), 'utf8');
 
 test('Points admin exposes a re-add action for rejected generated markets', () => {
@@ -21,9 +22,36 @@ test('Points admin exposes a re-add action for rejected generated markets', () =
 
 test('Points admin tabs show pending-work badges outside the active tab', () => {
   assert.match(source, /adminTaskCounts/);
-  assert.match(source, /adminListPendingMarkets\('pending'\)/);
-  assert.match(source, /\/api\/points\/admin\/markets\?status=pending/);
-  assert.match(source, /adminListSocialTasks\('pending'\)/);
+  assert.match(source, /adminListTaskCounts\(\)/);
+  assert.match(apiSource, /export async function adminListTaskCounts/);
+  assert.match(apiSource, /adminListPendingMarkets\('pending'\)/);
+  assert.match(apiSource, /\/api\/points\/admin\/markets\?status=pending/);
+  assert.match(apiSource, /adminListSocialTasks\('pending'\)/);
+  assert.match(apiSource, /total:/);
   assert.match(source, /tab !== t\.id/);
   assert.match(source, /taskCount > 0/);
+});
+
+test('Points nav surfaces admin work count outside admin', () => {
+  assert.match(navSource, /adminListTaskCounts/);
+  assert.match(navSource, /adminTaskTotal/);
+  assert.match(navSource, /points\.nav\.admin/);
+  assert.match(navSource, /adminTaskTotal > 0/);
+});
+
+test('Points markets filter surfaces por resolver count while inside Mercados', () => {
+  assert.match(source, /pendingResolveCount=\{adminTaskCounts\.markets\}/);
+  assert.match(source, /function MarketsTable\(\{ onQueueChange, pendingResolveCount = 0 \}\)/);
+  assert.match(source, /s\.key === 'pending' \? pendingResolveCount : 0/);
+  assert.match(source, /taskCount > 0/);
+});
+
+test('Points admin can cancel active and por resolver markets', () => {
+  assert.match(source, /adminCancelMarket/);
+  assert.match(source, /Anular mercado/);
+  assert.match(source, /filter === 'pending'/);
+  assert.match(source, /cancelMarket\(m\)/);
+  assert.match(source, /onCancel=\{cancelMarket\}/);
+  assert.match(source, /actionMode === 'cancel'/);
+  assert.match(source, /Se devolverá el costo base/);
 });

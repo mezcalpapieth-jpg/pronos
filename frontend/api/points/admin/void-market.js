@@ -2,13 +2,13 @@
  * POST /api/points/admin/void-market
  * Body: { marketId, reason? }
  *
- * Marks a market as void (resolved without a winner) and refunds
+ * Marks a market as canceled-with-refund and refunds
  * every open position's cost_basis to the holder's balance. Used
  * primarily for boxing draws — the user's spec: "in case of a tie
  * we mark the market as void and send the money back".
  *
  * Side effects, all inside a single Postgres transaction:
- *   1. points_markets row: status='resolved', outcome=NULL,
+ *   1. points_markets row: status='canceled', outcome=NULL,
  *      resolved_at=NOW(), resolved_by=<admin>,
  *      final_score=reason ?? 'Empate · Mercado anulado'
  *   2. For each row in points_positions with shares > 0 on this
@@ -17,7 +17,7 @@
  *   3. Parallel parents cascade to legs — each leg gets the same
  *      treatment so all child positions clear out.
  *
- * Idempotent: a second call on an already-resolved market returns
+ * Idempotent: a second call on a non-active market returns
  * 400 'already_resolved' without further mutation.
  *
  * Admin-gated.
@@ -55,10 +55,10 @@ async function voidOneMarket(client, marketId, reason, adminUsername) {
 
   const finalScore = reason || 'Empate · Mercado anulado';
 
-  // Mark parent resolved with no outcome.
+  // Mark parent canceled with no outcome.
   await client.query(
     `UPDATE points_markets
-        SET status = 'resolved',
+        SET status = 'canceled',
             outcome = NULL,
             resolved_at = NOW(),
             resolved_by = $1
@@ -84,11 +84,11 @@ async function voidOneMarket(client, marketId, reason, adminUsername) {
       [marketId],
     );
     refundIds = legs.rows.map(r => r.id);
-    // Mirror status on each leg so the UI shows them as resolved-no-outcome.
+    // Mirror status on each leg so the UI shows them as canceled.
     for (const legId of refundIds) {
       await client.query(
         `UPDATE points_markets
-            SET status = 'resolved',
+            SET status = 'canceled',
                 outcome = NULL,
                 resolved_at = NOW(),
                 resolved_by = $1

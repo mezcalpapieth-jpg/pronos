@@ -769,6 +769,7 @@ function HistoryView({ history, summary, loading }) {
     won:     { label: '🏆 GANADO',    bg: 'rgba(0,232,122,0.12)',  color: 'var(--green)' },
     lost:    { label: 'PERDIDO',       bg: 'rgba(239,68,68,0.1)',   color: 'var(--red, #ef4444)' },
     exited:  { label: '↗ RETIRADO',    bg: 'rgba(148,163,184,0.08)', color: 'var(--text-secondary)' },
+    canceled:{ label: 'ANULADO',        bg: 'rgba(148,163,184,0.08)', color: 'var(--text-secondary)' },
     pending: { label: '⏳ PENDIENTE',  bg: 'rgba(245,158,11,0.1)',  color: '#f59e0b' },
     open:    { label: 'EN CURSO',      bg: 'rgba(245,200,66,0.08)', color: 'var(--gold, #F5C842)' },
   };
@@ -783,7 +784,7 @@ function HistoryView({ history, summary, loading }) {
           ['Ganados',    summary?.marketsWon ?? 0,   'var(--green)'],
           ['Perdidos',   summary?.marketsLost ?? 0,  'var(--red, #ef4444)'],
           ['Pendientes', summary?.marketsPending ?? 0, '#f59e0b'],
-          ['Retirados',  summary?.marketsExited ?? 0, 'var(--text-secondary)'],
+          ['Anulados',   summary?.marketsCanceled ?? 0, 'var(--text-secondary)'],
         ].map(([label, value, color]) => (
           <div key={label} style={{
             background: 'var(--surface1)', border: '1px solid var(--border)',

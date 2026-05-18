@@ -1084,7 +1084,7 @@ const STATUS_TABS = [
   { value: 'resolved', label: 'Resueltos'    },
 ];
 
-function MarketsList({ refreshKey, bumpRefresh, onQueueChange }) {
+function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCount = 0 }) {
   const [rows, setRows] = useState([]);
   const [filter, setFilter] = useState('active');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -1372,22 +1372,48 @@ function MarketsList({ refreshKey, bumpRefresh, onQueueChange }) {
         display: 'flex', gap: 2, marginBottom: 14,
         borderBottom: '1px solid var(--border)',
       }}>
-        {STATUS_TABS.map(tab => (
-          <button
-            key={tab.value}
-            onClick={() => setFilter(tab.value)}
-            style={{
-              background: 'transparent', border: 'none',
-              padding: '8px 14px',
-              color: filter === tab.value ? 'var(--text-primary)' : 'var(--text-muted)',
-              borderBottom: filter === tab.value ? '2px solid var(--green)' : '2px solid transparent',
-              fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.08em',
-              textTransform: 'uppercase', cursor: 'pointer',
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
+        {STATUS_TABS.map(tab => {
+          const statusTaskCount = tab.value === 'pending' ? pendingResolveCount : 0;
+          return (
+            <button
+              key={tab.value}
+              onClick={() => setFilter(tab.value)}
+              style={{
+                background: 'transparent', border: 'none',
+                padding: '8px 14px',
+                color: filter === tab.value ? 'var(--text-primary)' : 'var(--text-muted)',
+                borderBottom: filter === tab.value ? '2px solid var(--green)' : '2px solid transparent',
+                fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.08em',
+                textTransform: 'uppercase', cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: 8,
+              }}
+            >
+              <span>{tab.label}</span>
+              {statusTaskCount > 0 && (
+                <span
+                  aria-label={`${statusTaskCount} mercados por resolver`}
+                  style={{
+                    minWidth: 18,
+                    height: 18,
+                    padding: '0 6px',
+                    borderRadius: 999,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'rgba(245,158,11,0.16)',
+                    border: '1px solid rgba(245,158,11,0.5)',
+                    color: '#f59e0b',
+                    fontSize: 10,
+                    fontWeight: 800,
+                    letterSpacing: 0,
+                  }}
+                >
+                  {statusTaskCount > 99 ? '99+' : statusTaskCount}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       <div style={{
@@ -1955,7 +1981,14 @@ export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
           </>
         )}
         {tab === 'pending'  && <PendingMarketsSection onQueueChange={loadAdminTaskCounts} />}
-        {tab === 'markets'  && <MarketsList refreshKey={refreshKey} bumpRefresh={bumpRefresh} onQueueChange={loadAdminTaskCounts} />}
+        {tab === 'markets'  && (
+          <MarketsList
+            refreshKey={refreshKey}
+            bumpRefresh={bumpRefresh}
+            onQueueChange={loadAdminTaskCounts}
+            pendingResolveCount={adminTaskCounts.markets}
+          />
+        )}
         {tab === 'social'   && <SocialTasksSection onQueueChange={loadAdminTaskCounts} />}
         {tab === 'stats'    && <StatsSection />}
       </>

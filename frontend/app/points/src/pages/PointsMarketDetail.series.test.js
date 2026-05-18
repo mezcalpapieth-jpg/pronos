@@ -12,10 +12,12 @@ import { readFile } from 'node:fs/promises';
 const source = await readFile(new URL('./PointsMarketDetail.jsx', import.meta.url), 'utf8');
 
 test('points resolved binary ring follows the winning outcome', () => {
-  assert.match(source, /const ringIndex = isResolved && winnerIndex != null \? winnerIndex : 0;/);
+  assert.match(source, /const displayWinnerIndex = isResolved \? displayOutcomeIndices\.indexOf\(winnerIndex\) : null;/);
+  assert.match(source, /const ringIndex = isResolved && displayWinnerIndex != null && displayWinnerIndex >= 0 \? displayWinnerIndex : 0;/);
+  assert.match(source, /if \(isResolved\) return displayWinnerIndex === i \? 100 : 0;/);
   assert.match(source, /pct=\{pctFor\(ringIndex\)\}/);
-  assert.match(source, /label=\{outcomes\[ringIndex\]\}/);
-  assert.match(source, /winner=\{isResolved && winnerIndex === ringIndex\}/);
+  assert.match(source, /label=\{displayOutcomes\[ringIndex\]\}/);
+  assert.match(source, /winner=\{isResolved && displayWinnerIndex === ringIndex\}/);
 });
 
 test('points series strip uses translated game and summary copy', () => {

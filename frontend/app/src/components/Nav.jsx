@@ -11,6 +11,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { usePointsAuth } from '../lib/pointsAuth.js';
 import { useT, useLang, setLang } from '../lib/i18n.js';
 import MARKETS from '../lib/markets.js';
+import { adminListMvpTaskCounts } from '../lib/mvpAdminTaskCounts.js';
 
 // MVP Nav fetches the user's on-chain MXNB balance via a dedicated
 // endpoint instead of reading user.balance from the session — that
@@ -34,6 +35,33 @@ function getInitialTheme() {
 
 const isPublicMarkets = typeof window !== 'undefined' && window.location.pathname.startsWith('/markets');
 
+function AdminTaskBadge({ count }) {
+  if (!count || count <= 0) return null;
+  return (
+    <span
+      aria-label={`${count} tareas pendientes`}
+      style={{
+        minWidth: 18,
+        height: 18,
+        padding: '0 6px',
+        borderRadius: 999,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'rgba(245,158,11,0.16)',
+        border: '1px solid rgba(245,158,11,0.5)',
+        color: '#f59e0b',
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        lineHeight: 1,
+        letterSpacing: 0,
+      }}
+    >
+      {count > 99 ? '99+' : count}
+    </span>
+  );
+}
+
 export default function Nav({ onOpenLogin }) {
   const navigate = useNavigate();
   const t = useT();
@@ -43,6 +71,7 @@ export default function Nav({ onOpenLogin }) {
   const [scrolled, setScrolled] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [theme, setTheme] = useState(getInitialTheme);
+  const [adminTaskTotal, setAdminTaskTotal] = useState(0);
   const dropdownRef = useRef(null);
 
   // Search state
@@ -76,6 +105,32 @@ export default function Nav({ onOpenLogin }) {
   const adminList = (import.meta.env.VITE_POINTS_ADMIN_USERNAMES || 'mezcal,frmm,alex')
     .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
   const adminFlag = !!(username && adminList.includes(username.toLowerCase()));
+
+  useEffect(() => {
+    let alive = true;
+
+    async function loadAdminTaskTotal() {
+      if (!authenticated || !adminFlag) {
+        if (alive) setAdminTaskTotal(0);
+        return;
+      }
+      try {
+        const counts = await adminListMvpTaskCounts();
+        if (alive) setAdminTaskTotal(Number(counts?.total || 0));
+      } catch {
+        if (alive) setAdminTaskTotal(0);
+      }
+    }
+
+    loadAdminTaskTotal();
+    const intervalId = authenticated && adminFlag
+      ? window.setInterval(loadAdminTaskTotal, 60000)
+      : null;
+    return () => {
+      alive = false;
+      if (intervalId) window.clearInterval(intervalId);
+    };
+  }, [authenticated, adminFlag, dropdownOpen]);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -200,7 +255,12 @@ export default function Nav({ onOpenLogin }) {
                 const el = document.getElementById('how-it-works');
                 if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth' }); }
               }}>{t('nav.howItWorks')}</a>
-              {adminFlag && <Link to="/admin">{t('nav.admin')}</Link>}
+              {adminFlag && (
+                <Link to="/admin" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <span>{t('nav.admin')}</span>
+                  {adminTaskTotal > 0 && <AdminTaskBadge count={adminTaskTotal} />}
+                </Link>
+              )}
             </>
           )}
         </div>
@@ -276,8 +336,10 @@ export default function Nav({ onOpenLogin }) {
                         className="nav-dropdown-item"
                         to="/admin"
                         onClick={() => setDropdownOpen(false)}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
                       >
-                        {t('nav.admin')}
+                        <span>{t('nav.admin')}</span>
+                        {adminTaskTotal > 0 && <AdminTaskBadge count={adminTaskTotal} />}
                       </Link>
                     )}
                     <button
