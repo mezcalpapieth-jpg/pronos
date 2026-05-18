@@ -106,9 +106,19 @@ const MARKET_FACTORY_V1_ABI = [
   'function collateral() view returns (address)',
   'function createMarket(string question, string category, uint256 endTime, string resolutionSource, uint256 seedAmount) external returns (uint256)',
   'function resolveMarket(uint256 marketId, uint8 outcome) external',
+  'function cancelMarket(uint256 marketId) external',
+  'function openResolutionDispute(uint256 marketId) external',
+  'function clearResolutionDispute(uint256 marketId) external',
+  'function correctResolution(uint256 marketId, uint8 newOutcome) external',
+  'function pushCancelRefund(uint256 marketId, address[] holders, uint8[][] outcomeIndexes, uint256[][] burnAmounts, uint256[] payouts) external',
   'function getMarket(uint256 marketId) external view returns (address pool, string question, string category, uint256 endTime, string resolutionSource, bool active)',
   'event MarketCreated(uint256 indexed marketId, address pool, string question, string category, uint256 endTime)',
   'event MarketResolved(uint256 indexed marketId, uint8 outcome)',
+  'event MarketCanceled(uint256 indexed marketId)',
+  'event ResolutionDisputeOpened(uint256 indexed marketId)',
+  'event ResolutionDisputeCleared(uint256 indexed marketId)',
+  'event MarketResolutionCorrected(uint256 indexed marketId, uint8 oldOutcome, uint8 newOutcome)',
+  'event CancelRefundPushed(uint256 indexed marketId, address indexed holder, uint256 payout)',
 ];
 const MARKET_FACTORY_V2_ABI = [
   'function owner() view returns (address)',
@@ -117,8 +127,18 @@ const MARKET_FACTORY_V2_ABI = [
   'function collateral() view returns (address)',
   'function createMarket(string question, string category, uint256 endTime, string resolutionSource, string[] outcomes, uint256 seedAmount) external returns (uint256)',
   'function resolveMarket(uint256 marketId, uint8 outcome) external',
+  'function cancelMarket(uint256 marketId) external',
+  'function openResolutionDispute(uint256 marketId) external',
+  'function clearResolutionDispute(uint256 marketId) external',
+  'function correctResolution(uint256 marketId, uint8 newOutcome) external',
+  'function pushCancelRefund(uint256 marketId, address[] holders, uint8[][] outcomeIndexes, uint256[][] burnAmounts, uint256[] payouts) external',
   'event MarketCreated(uint256 indexed marketId, address pool, string question, string category, uint256 endTime, string resolutionSource, string[] outcomes)',
   'event MarketResolved(uint256 indexed marketId, uint8 outcome)',
+  'event MarketCanceled(uint256 indexed marketId)',
+  'event ResolutionDisputeOpened(uint256 indexed marketId)',
+  'event ResolutionDisputeCleared(uint256 indexed marketId)',
+  'event MarketResolutionCorrected(uint256 indexed marketId, uint8 oldOutcome, uint8 newOutcome)',
+  'event CancelRefundPushed(uint256 indexed marketId, address indexed holder, uint256 payout)',
 ];
 
 const MAX_UINT256 = ethers.constants.MaxUint256;
@@ -959,6 +979,178 @@ export async function resolveMarketOnChain({
     marketId: resolvedMarketId || marketIdBn.toString(),
     outcome: resolvedOutcome ?? outcomeNum,
     factoryVariant: useV2 ? 'v2' : 'v1',
+    chainId: chainId(),
+  };
+}
+
+const LIFECYCLE_FUNCTIONS = {
+  cancel: 'cancelMarket',
+  dispute: 'openResolutionDispute',
+  clear_dispute: 'clearResolutionDispute',
+  correct_resolution: 'correctResolution',
+};
+
+function factoryAbiForVariant(factoryVariant) {
+  return String(factoryVariant || '').startsWith('v2') ? MARKET_FACTORY_V2_ABI : MARKET_FACTORY_V1_ABI;
+}
+
+function parseMarketId(marketId) {
+  try {
+    return ethers.BigNumber.from(String(marketId));
+  } catch (_) {
+    throw new Error(`invalid_marketId: ${marketId}`);
+  }
+}
+
+async function requireFactoryOwner({ factoryAddress, abi, ownerAddr }) {
+  const prov = provider();
+  const factory = new ethers.Contract(factoryAddress, abi, prov);
+  const onChainOwner = await factory.owner();
+  if (!sameAddress(onChainOwner, ownerAddr)) {
+    const err = new Error('not_factory_owner');
+    err.status = 400;
+    err.detail = `factory.owner()=${onChainOwner} but ownerAddr=${ownerAddr} — use the Safe path or the owner signer`;
+    throw err;
+  }
+  return { prov, factory, onChainOwner };
+}
+
+export async function lifecycleMarketOnChain({
+  ownerSuborgId, ownerAddr,
+  factoryAddress, factoryVariant,
+  marketId, action, outcome,
+}) {
+  requireReady();
+  if (!ownerSuborgId) throw new Error('ownerSuborgId required');
+  if (!ownerAddr) throw new Error('ownerAddr required');
+  if (!factoryAddress) throw new Error('factoryAddress required');
+
+  const fn = LIFECYCLE_FUNCTIONS[action];
+  if (!fn) {
+    const err = new Error('unsupported_lifecycle_action');
+    err.status = 400;
+    err.detail = `supported actions: ${Object.keys(LIFECYCLE_FUNCTIONS).join(', ')}`;
+    throw err;
+  }
+
+  const marketIdBn = parseMarketId(marketId);
+  const abi = factoryAbiForVariant(factoryVariant);
+  const iface = new ethers.utils.Interface(abi);
+  await requireFactoryOwner({ factoryAddress, abi, ownerAddr });
+
+  let args = [marketIdBn];
+  if (fn === 'correctResolution') {
+    const outcomeNum = Number.parseInt(outcome, 10);
+    if (!Number.isInteger(outcomeNum) || outcomeNum < 0 || outcomeNum > 255) {
+      throw new Error('outcome must be an integer in [0, 255]');
+    }
+    args = [marketIdBn, outcomeNum];
+  }
+  const data = iface.encodeFunctionData(fn, args);
+
+  try {
+    await provider().call({ from: ownerAddr, to: factoryAddress, data });
+  } catch (e) {
+    const err = new Error('factory_lifecycle_simulation_failed');
+    err.status = 400;
+    err.detail = extractRevertDetail(e);
+    throw err;
+  }
+
+  const receipt = await signAndBroadcast({
+    suborgId: ownerSuborgId,
+    from: ownerAddr,
+    to: factoryAddress,
+    data,
+    gasLimit: ethers.BigNumber.from(fn === 'cancelMarket' ? 350_000 : 250_000),
+  });
+
+  return {
+    txHash: receipt.transactionHash,
+    blockNumber: receipt.blockNumber,
+    marketId: marketIdBn.toString(),
+    action,
+    factoryVariant: String(factoryVariant || '').startsWith('v2') ? 'v2' : 'v1',
+    chainId: chainId(),
+  };
+}
+
+function normalizeCancelRefund(refund) {
+  const holder = refund?.holder || refund?.userAddress || refund?.user_address;
+  if (!ethers.utils.isAddress(holder || '')) throw new Error('invalid_refund_holder');
+  const outcomeIndexes = Array.isArray(refund?.outcomeIndexes)
+    ? refund.outcomeIndexes
+    : (Number.isInteger(Number(refund?.outcomeIndex)) ? [Number(refund.outcomeIndex)] : []);
+  const amounts = Array.isArray(refund?.amounts)
+    ? refund.amounts
+    : (refund?.shares != null ? [refund.shares] : []);
+  if (outcomeIndexes.length !== amounts.length) throw new Error('invalid_refund_amounts');
+  const payout = refund?.payout ?? refund?.openCost ?? 0;
+  return {
+    holder,
+    outcomeIndexes: outcomeIndexes.map((index) => {
+      const n = Number.parseInt(index, 10);
+      if (!Number.isInteger(n) || n < 0 || n > 255) throw new Error('invalid_refund_outcome');
+      return n;
+    }),
+    burnAmounts: amounts.map(parseCollateralUnits),
+    payout: parseCollateralUnits(payout),
+  };
+}
+
+export async function pushCancelRefundsOnChain({
+  ownerSuborgId, ownerAddr,
+  factoryAddress, factoryVariant,
+  marketId, refunds,
+}) {
+  requireReady();
+  if (!ownerSuborgId) throw new Error('ownerSuborgId required');
+  if (!ownerAddr) throw new Error('ownerAddr required');
+  if (!factoryAddress) throw new Error('factoryAddress required');
+  if (!Array.isArray(refunds) || refunds.length === 0) throw new Error('refunds required');
+
+  const abi = factoryAbiForVariant(factoryVariant);
+  const iface = new ethers.utils.Interface(abi);
+  await requireFactoryOwner({ factoryAddress, abi, ownerAddr });
+
+  const marketIdBn = parseMarketId(marketId);
+  const normalized = refunds.map(normalizeCancelRefund);
+  const holders = normalized.map((r) => r.holder);
+  const outcomeIndexes = normalized.map((r) => r.outcomeIndexes);
+  const burnAmounts = normalized.map((r) => r.burnAmounts);
+  const payouts = normalized.map((r) => r.payout);
+  const data = iface.encodeFunctionData('pushCancelRefund', [
+    marketIdBn,
+    holders,
+    outcomeIndexes,
+    burnAmounts,
+    payouts,
+  ]);
+
+  try {
+    await provider().call({ from: ownerAddr, to: factoryAddress, data });
+  } catch (e) {
+    const err = new Error('factory_cancel_refund_simulation_failed');
+    err.status = 400;
+    err.detail = extractRevertDetail(e);
+    throw err;
+  }
+
+  const receipt = await signAndBroadcast({
+    suborgId: ownerSuborgId,
+    from: ownerAddr,
+    to: factoryAddress,
+    data,
+    gasLimit: ethers.BigNumber.from(250_000 + (normalized.length * 120_000)),
+  });
+
+  return {
+    txHash: receipt.transactionHash,
+    blockNumber: receipt.blockNumber,
+    marketId: marketIdBn.toString(),
+    refundCount: normalized.length,
+    totalPayout: formatCollateral(payouts.reduce((sum, payout) => sum.add(payout), ethers.constants.Zero)),
+    factoryVariant: String(factoryVariant || '').startsWith('v2') ? 'v2' : 'v1',
     chainId: chainId(),
   };
 }

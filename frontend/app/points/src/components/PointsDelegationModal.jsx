@@ -99,7 +99,7 @@ export default function PointsDelegationModal({ open, onClose, onAuthorized }) {
             fontFamily: 'var(--font-display)', fontSize: 24,
             color: 'var(--text-primary)', margin: 0,
           }}>
-            Firma una vez. Apuesta sin interrupciones.
+            Firma una vez. Compra sin interrupciones.
           </h2>
         </div>
 
@@ -107,7 +107,7 @@ export default function PointsDelegationModal({ open, onClose, onAuthorized }) {
           fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6,
           margin: '0 0 18px',
         }}>
-          Cada apuesta en blockchain requiere una firma criptográfica. Para que
+          Cada operación en blockchain requiere una firma criptográfica. Para que
           no tengas que aprobar cada clic, autorizas una vez a Pronos a firmar
           dentro de límites estrictos. Así funciona:
         </p>

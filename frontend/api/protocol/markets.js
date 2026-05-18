@@ -25,7 +25,7 @@ import { buildProtocolMarketPayload } from '../_lib/protocol-market-payload.js';
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
 
-const ALLOWED_STATUS = new Set(['active', 'resolved', 'all']);
+const ALLOWED_STATUS = new Set(['active', 'resolved', 'canceled', 'disputed', 'all']);
 const DEFAULT_LIMIT = 60;
 const MAX_LIMIT = 200;
 
@@ -59,7 +59,9 @@ export default async function handler(req, res) {
                m.category_tags, m.geo_tags, m.topic_tags,
                m.source, m.source_event_id, m.resolver_type, m.resolver_config,
                m.outcomes, m.outcome_count,
-               m.protocol_version, m.start_time, m.end_time, m.status, m.outcome,
+               m.protocol_version, m.start_time, m.end_time, m.status, m.previous_status,
+               m.lifecycle_note, m.lifecycle_updated_at, m.lifecycle_updated_by,
+               m.canceled_at, m.dispute_opened_at, m.outcome,
                m.seed_liquidity, m.tx_hash, m.created_at, m.resolved_at, m.final_score,
                COALESCE(pmp.icon, pm.icon) AS meta_icon,
                COALESCE(pmp.sport, pm.sport) AS meta_sport,
@@ -141,7 +143,9 @@ export default async function handler(req, res) {
                m.category_tags, m.geo_tags, m.topic_tags,
                m.source, m.source_event_id, m.resolver_type, m.resolver_config,
                m.outcomes, m.outcome_count,
-               m.protocol_version, m.start_time, m.end_time, m.status, m.outcome,
+               m.protocol_version, m.start_time, m.end_time, m.status, m.previous_status,
+               m.lifecycle_note, m.lifecycle_updated_at, m.lifecycle_updated_by,
+               m.canceled_at, m.dispute_opened_at, m.outcome,
                m.seed_liquidity, m.tx_hash, m.created_at, m.resolved_at, m.final_score,
                COALESCE(pmp.icon, pm.icon) AS meta_icon,
                COALESCE(pmp.sport, pm.sport) AS meta_sport,

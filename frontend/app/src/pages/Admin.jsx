@@ -989,7 +989,7 @@ function CreateMarketForm({ onCreated, prefill }) {
 }
 
 // ═══ Edit-market modal ═════════════════════════════════════════════════════
-function EditMarketModal({ market, onClose, onSaved }) {
+function EditMarketModal({ market, onClose, onSaved, onLifecycle }) {
   const [question, setQuestion] = useState(market.question || '');
   const [category, setCategory] = useState(market.category || 'general');
   const [startTime, setStartTime] = useState(
@@ -1000,12 +1000,18 @@ function EditMarketModal({ market, onClose, onSaved }) {
   );
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(null);
+  const [actionMode, setActionMode] = useState('save');
 
   async function handleSubmit(e) {
     e.preventDefault();
     setErr(null);
     setSaving(true);
     try {
+      if (actionMode === 'cancel') {
+        const ok = await onLifecycle?.(market, 'cancel');
+        if (ok) onClose?.();
+        return;
+      }
       if (startTime && endTime && new Date(startTime).getTime() >= new Date(endTime).getTime()) {
         throw new Error('La fecha de inicio debe ser anterior a la fecha de cierre.');
       }
@@ -1065,11 +1071,46 @@ function EditMarketModal({ market, onClose, onSaved }) {
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button type="submit" disabled={saving} className="btn-primary" style={{ flex: 1 }}>
-            {saving ? 'Guardando…' : 'Guardar cambios'}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+          <button type="button" onClick={onClose} disabled={saving} className="btn-ghost" style={{ flex: 1 }}>
+            Cancelar
           </button>
-          <button type="button" onClick={onClose} className="btn-ghost">Cancelar</button>
+          <select
+            value={actionMode}
+            onChange={(e) => setActionMode(e.target.value)}
+            disabled={saving || market.status === 'resolved'}
+            title="Acción principal"
+            style={{
+              minWidth: 134,
+              background: 'var(--surface2)',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+              color: actionMode === 'cancel' ? 'var(--red, #ef4444)' : 'var(--text-primary)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+              padding: '0 10px',
+              cursor: saving ? 'not-allowed' : 'pointer',
+            }}
+          >
+            <option value="save">Guardar</option>
+            {market.status !== 'resolved' && <option value="cancel">Anular mercado</option>}
+          </select>
+          <button
+            type="submit"
+            disabled={saving}
+            className={actionMode === 'cancel' ? 'btn-ghost' : 'btn-primary'}
+            style={{
+              flex: 1,
+              color: actionMode === 'cancel' ? 'var(--red, #ef4444)' : undefined,
+              borderColor: actionMode === 'cancel' ? 'rgba(239,68,68,0.35)' : undefined,
+            }}
+          >
+            {saving
+              ? (actionMode === 'cancel' ? 'Anulando…' : 'Guardando…')
+              : (actionMode === 'cancel' ? 'Anular mercado' : 'Guardar')}
+          </button>
         </div>
       </form>
     </div>
@@ -1082,9 +1123,11 @@ const STATUS_TABS = [
   { value: 'active',   label: 'Activos'      },
   { value: 'pending',  label: 'Por resolver' },
   { value: 'resolved', label: 'Resueltos'    },
+  { value: 'disputed', label: 'En disputa'   },
+  { value: 'canceled', label: 'Anulados'     },
 ];
 
-function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCount = 0 }) {
+function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCount = 0, disputedCount = 0 }) {
   const [rows, setRows] = useState([]);
   const [filter, setFilter] = useState('active');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -1092,6 +1135,7 @@ function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCou
   const [error, setError] = useState(null);
   const [resolvingId, setResolvingId] = useState(null);
   const [reviewingCandidateId, setReviewingCandidateId] = useState(null);
+  const [lifecycleId, setLifecycleId] = useState(null);
   const [featuringId, setFeaturingId] = useState(null);
   const [archivingId, setArchivingId] = useState(null);
   const [bulkArchiving, setBulkArchiving] = useState(false);
@@ -1171,9 +1215,13 @@ function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCou
       const dueMarkets = filter === 'pending'
         ? rawMarkets
             .filter(m => m.status === 'active'
-              && m.endTime
-              && new Date(m.endTime).getTime() <= Date.now())
-            .sort((a, b) => new Date(a.endTime).getTime() - new Date(b.endTime).getTime())
+              && (m.resolutionCandidate
+                || (m.endTime && new Date(m.endTime).getTime() <= Date.now())))
+            .sort((a, b) => {
+              const at = a.endTime ? new Date(a.endTime).getTime() : Number.MAX_SAFE_INTEGER;
+              const bt = b.endTime ? new Date(b.endTime).getTime() : Number.MAX_SAFE_INTEGER;
+              return at - bt;
+            })
         : rawMarkets;
       setRows(dueMarkets.map((m) => ({
         ...m,
@@ -1294,6 +1342,88 @@ function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCou
     }
   }
 
+  async function handleLifecycle(market, action) {
+    const labels = {
+      cancel: 'anular',
+      dispute: 'abrir disputa sobre',
+      clear_dispute: 'cerrar la disputa de',
+      reopen: 'reabrir',
+    };
+    if (!market?.id || !labels[action]) return false;
+
+    let note = null;
+    if (action === 'cancel') {
+      const ok = window.confirm(
+        `¿Anular "${market.question}"?\n\n` +
+        'Esta primera capa bloquea compras/ventas en la app y prepara el reporte de devolución. ' +
+        'Los reembolsos on-chain se harán en la siguiente capa del contrato.',
+      );
+      if (!ok) return false;
+      note = 'Mercado anulado: el evento no ocurrió';
+    } else if (action === 'dispute') {
+      note = window.prompt('Motivo de la disputa (visible para admin):', 'Resolución en disputa');
+      if (note === null) return false;
+    } else if (action === 'clear_dispute') {
+      const ok = window.confirm(`¿Cerrar la disputa de "${market.question}" y volver al estado anterior?`);
+      if (!ok) return false;
+      note = 'Disputa cerrada por admin';
+    } else if (action === 'reopen') {
+      const ok = window.confirm(`¿Reabrir "${market.question}" como mercado activo?`);
+      if (!ok) return false;
+      note = 'Mercado reabierto por admin';
+    }
+
+    setLifecycleId(`${market.id}:${action}`);
+    setNotice(null);
+    try {
+      const { ok, data } = await postJson('/api/protocol/admin/lifecycle-market', {
+        marketId: market.id,
+        action,
+        note,
+      });
+      if (!ok) {
+        const parts = [data?.error || 'lifecycle_failed'];
+        if (data?.detail) parts.push(data.detail);
+        throw new Error(parts.join(' · '));
+      }
+      const updated = data?.market || {};
+      const nextStatus = updated.status || market.status;
+      const refund = data?.refundReport || {};
+      const reportText = action === 'cancel'
+        ? ` · reporte: ${Number(refund.openPositionCount || 0)} posiciones, ${Number(refund.openCost || 0).toFixed(2)} MXNB costo abierto`
+        : '';
+      setNotice({
+        type: 'success',
+        msg: `Mercado actualizado: ${nextStatus}${reportText}.`,
+      });
+      setRows(prev => prev.flatMap((m) => {
+        if (m.id !== market.id) return [m];
+        const next = {
+          ...m,
+          ...updated,
+          status: nextStatus,
+        };
+        if (filter === 'all') return [next];
+        if (filter === 'pending') {
+          return next.status === 'active'
+            && next.endTime
+            && new Date(next.endTime).getTime() <= Date.now()
+            ? [next]
+            : [];
+        }
+        return next.status === filter ? [next] : [];
+      }));
+      bumpRefresh();
+      onQueueChange?.();
+      return true;
+    } catch (e) {
+      setNotice({ type: 'error', msg: e?.message || `${labels[action]}_failed` });
+      return false;
+    } finally {
+      setLifecycleId(null);
+    }
+  }
+
   async function handleToggleFeatured(market) {
     setFeaturingId(market.id);
     const nextFeatured = !market.featured;
@@ -1373,7 +1503,10 @@ function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCou
         borderBottom: '1px solid var(--border)',
       }}>
         {STATUS_TABS.map(tab => {
-          const statusTaskCount = tab.value === 'pending' ? pendingResolveCount : 0;
+          const pendingBadgeCount = filter === 'pending' && !loading ? visible.length : pendingResolveCount;
+          const statusTaskCount = tab.value === 'pending' ? pendingBadgeCount
+            : tab.value === 'disputed' ? disputedCount
+            : 0;
           return (
             <button
               key={tab.value}
@@ -1455,6 +1588,22 @@ function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCou
         const candidate = m.resolutionCandidate;
         const evidence = Array.isArray(candidate?.evidence) ? candidate.evidence.slice(0, 3) : [];
         const reviewing = candidate && reviewingCandidateId === candidate.id;
+        const statusLabel = m.archivedAt ? '📦 ARCHIVADO'
+          : m.status === 'active' ? 'ACTIVO'
+          : m.status === 'resolved' ? `✓ ${m.outcomes?.[m.outcome ?? 0] || 'resuelto'}`
+          : m.status === 'disputed' ? 'EN DISPUTA'
+          : m.status === 'canceled' ? 'ANULADO'
+          : m.status;
+        const statusColor = m.archivedAt ? 'var(--text-muted)'
+          : m.status === 'active' ? 'var(--green)'
+          : m.status === 'resolved' ? 'var(--gold)'
+          : m.status === 'disputed' ? '#f59e0b'
+          : m.status === 'canceled' ? 'var(--red, #ef4444)'
+          : 'var(--text-muted)';
+        const canCancel = m.status === 'active' || m.status === 'disputed';
+        const canDispute = m.status === 'resolved';
+        const canClearDispute = m.status === 'disputed';
+        const canReopen = m.status === 'canceled' && m.previousStatus === 'active';
         return (
           <div key={m.id} style={{
             padding: 12, border: '1px solid var(--border)', borderRadius: 10,
@@ -1472,15 +1621,11 @@ function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCou
                 <span>{m.ammMode}</span>
                 <span>{(m.outcomes || []).length} resultados</span>
                 <span style={{
-                  color: m.archivedAt ? 'var(--text-muted)'
-                         : m.status === 'active' ? 'var(--green)'
-                         : m.status === 'resolved' ? 'var(--gold)' : 'var(--text-muted)',
+                  color: statusColor,
                 }}>
-                  {m.archivedAt ? '📦 ARCHIVADO'
-                    : m.status === 'active' ? 'ACTIVO'
-                    : m.status === 'resolved' ? `✓ ${m.outcomes?.[m.outcome ?? 0] || 'resuelto'}`
-                    : m.status}
+                  {statusLabel}
                 </span>
+                {m.lifecycleNote && <span>nota: {m.lifecycleNote}</span>}
                 {m.tradeCount != null && <span>{m.tradeCount} operaciones</span>}
                 {m.sport && <span>{m.sport}{m.league ? ` · ${m.league}` : ''}</span>}
                 {m.chainId && <span>cadena {m.chainId}</span>}
@@ -1581,10 +1726,53 @@ function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCou
                 </div>
               )}
             </div>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <button onClick={() => setEditingMarket(m)} className="btn-ghost" style={{ fontSize: 11, padding: '6px 10px' }}>
+                Editar
+              </button>
               {m.status === 'active' && (
                 <button onClick={() => handleResolve(m)} disabled={resolvingId === m.id} className="btn-ghost" style={{ fontSize: 11, padding: '6px 10px' }}>
                   {resolvingId === m.id ? '…' : 'Resolver'}
+                </button>
+              )}
+              {canDispute && (
+                <button
+                  onClick={() => handleLifecycle(m, 'dispute')}
+                  disabled={lifecycleId === `${m.id}:dispute`}
+                  className="btn-ghost"
+                  style={{ fontSize: 11, padding: '6px 10px', color: '#f59e0b', borderColor: 'rgba(245,158,11,0.35)' }}
+                >
+                  {lifecycleId === `${m.id}:dispute` ? '…' : 'Abrir disputa'}
+                </button>
+              )}
+              {canClearDispute && (
+                <button
+                  onClick={() => handleLifecycle(m, 'clear_dispute')}
+                  disabled={lifecycleId === `${m.id}:clear_dispute`}
+                  className="btn-ghost"
+                  style={{ fontSize: 11, padding: '6px 10px', color: 'var(--green)', borderColor: 'rgba(0,232,122,0.3)' }}
+                >
+                  {lifecycleId === `${m.id}:clear_dispute` ? '…' : 'Cerrar disputa'}
+                </button>
+              )}
+              {canReopen && (
+                <button
+                  onClick={() => handleLifecycle(m, 'reopen')}
+                  disabled={lifecycleId === `${m.id}:reopen`}
+                  className="btn-ghost"
+                  style={{ fontSize: 11, padding: '6px 10px' }}
+                >
+                  {lifecycleId === `${m.id}:reopen` ? '…' : 'Reabrir'}
+                </button>
+              )}
+              {canCancel && (
+                <button
+                  onClick={() => handleLifecycle(m, 'cancel')}
+                  disabled={lifecycleId === `${m.id}:cancel`}
+                  className="btn-ghost"
+                  style={{ fontSize: 11, padding: '6px 10px', color: 'var(--red, #ef4444)', borderColor: 'rgba(239,68,68,0.35)' }}
+                >
+                  {lifecycleId === `${m.id}:cancel` ? 'Anulando…' : 'Anular mercado'}
                 </button>
               )}
             </div>
@@ -1596,6 +1784,7 @@ function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCou
         <EditMarketModal
           market={editingMarket}
           onClose={() => setEditingMarket(null)}
+          onLifecycle={handleLifecycle}
           onSaved={() => {
             setEditingMarket(null);
             setNotice({ type: 'success', msg: 'Cambios guardados.' });
@@ -1844,7 +2033,9 @@ export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
   const bumpRefresh = () => setRefreshKey(k => k + 1);
   const [adminTaskCounts, setAdminTaskCounts] = useState({
     pending: 0,
+    pendingResolve: 0,
     markets: 0,
+    disputed: 0,
     social: 0,
   });
 
@@ -1872,27 +2063,35 @@ export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
 
   const loadAdminTaskCounts = useCallback(async () => {
     if (!authenticated || !userIsAdmin) {
-      setAdminTaskCounts({ pending: 0, markets: 0, social: 0 });
+      setAdminTaskCounts({ pending: 0, pendingResolve: 0, markets: 0, disputed: 0, social: 0 });
       return;
     }
 
-    const [pendingResult, resolutionResult, socialResult] = await Promise.allSettled([
+    const [pendingResult, resolutionResult, disputedResult, socialResult] = await Promise.allSettled([
       getJson('/api/protocol/admin/pending-markets?status=pending'),
       getJson('/api/protocol/admin/resolution-candidates?status=pending'),
+      getJson(`/api/protocol/markets?status=disputed&chainId=${DEFAULT_CHAIN_ID}&limit=200`),
       getJson('/api/points/admin/social-tasks?status=pending'),
     ]);
 
     const pendingData = pendingResult.status === 'fulfilled' ? pendingResult.value : null;
     const resolutionData = resolutionResult.status === 'fulfilled' ? resolutionResult.value : null;
+    const disputedData = disputedResult.status === 'fulfilled' ? disputedResult.value : null;
     const socialData = socialResult.status === 'fulfilled' ? socialResult.value : null;
+    const pendingResolve = resolutionData?.ok
+      ? Number(resolutionData.data?.count || 0)
+      : 0;
+    const disputed = disputedData?.ok && Array.isArray(disputedData.data?.markets)
+      ? disputedData.data.markets.length
+      : 0;
 
     setAdminTaskCounts({
       pending: pendingData?.ok && Array.isArray(pendingData.data?.pending)
         ? pendingData.data.pending.length
         : 0,
-      markets: resolutionData?.ok
-        ? Number(resolutionData.data?.pendingCount || 0) + Number(resolutionData.data?.overdueCount || 0)
-        : 0,
+      pendingResolve,
+      markets: pendingResolve + disputed,
+      disputed,
       social: socialData?.ok && Array.isArray(socialData.data?.tasks)
         ? socialData.data.tasks.length
         : 0,
@@ -1986,7 +2185,8 @@ export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
             refreshKey={refreshKey}
             bumpRefresh={bumpRefresh}
             onQueueChange={loadAdminTaskCounts}
-            pendingResolveCount={adminTaskCounts.markets}
+            pendingResolveCount={adminTaskCounts.pendingResolve}
+            disputedCount={adminTaskCounts.disputed}
           />
         )}
         {tab === 'social'   && <SocialTasksSection onQueueChange={loadAdminTaskCounts} />}

@@ -71,6 +71,12 @@ const PROTOCOL_SCHEMA_MIGRATIONS = [
   `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS resolver_type TEXT`,
   `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS resolver_config JSONB`,
   `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS final_score TEXT`,
+  `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS previous_status TEXT`,
+  `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS lifecycle_note TEXT`,
+  `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS lifecycle_updated_at TIMESTAMPTZ`,
+  `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS lifecycle_updated_by TEXT`,
+  `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS canceled_at TIMESTAMPTZ`,
+  `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS dispute_opened_at TIMESTAMPTZ`,
   `CREATE TABLE IF NOT EXISTS protocol_resolution_candidates (
     id                 SERIAL PRIMARY KEY,
     protocol_market_id INTEGER NOT NULL REFERENCES protocol_markets(id),

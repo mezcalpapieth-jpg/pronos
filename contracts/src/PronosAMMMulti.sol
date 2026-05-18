@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "./PronosTokenV2.sol";
 
@@ -14,7 +15,7 @@ import "./PronosTokenV2.sol";
  * the net collateral to rebalance reserves. Selling burns complete sets and
  * returns collateral immediately, so users can exit before resolution.
  */
-contract PronosAMMMulti is ERC1155Holder {
+contract PronosAMMMulti is ERC1155Holder, ReentrancyGuard {
     using Math for uint256;
 
     uint256 public constant PRICE_SCALE = 1e6;
@@ -34,16 +35,20 @@ contract PronosAMMMulti is ERC1155Holder {
 
     address public feeCollector;
     uint256 public totalFeesCollected;
+    mapping(address => mapping(uint8 => uint256)) public costBasis;
 
     bool public initialized;
     bool public paused;
     bool public resolved;
+    bool public canceled;
+    bool public disputed;
     uint8 public outcome;
 
     /// @notice block.timestamp when resolve() was called; 0 while
     /// the market is open. Drives the post-resolution grace period
     /// enforced by recoverDust().
     uint256 public resolvedAt;
+    uint256 public totalRedeemed;
 
     /// @notice Window after resolution before the factory can sweep
     /// leftover collateral. Same value as the binary AMM so operators
@@ -56,6 +61,11 @@ contract PronosAMMMulti is ERC1155Holder {
     event MarketResolved(uint256 indexed marketId, uint8 outcome);
     event WinningsRedeemed(address indexed user, uint8 indexed outcomeIndex, uint256 shares, uint256 payout);
     event MarketPaused(bool paused);
+    event MarketCanceled(uint256 indexed marketId);
+    event ResolutionDisputeOpened(uint256 indexed marketId, uint8 outcome);
+    event ResolutionDisputeCleared(uint256 indexed marketId, uint8 outcome);
+    event MarketResolutionCorrected(uint256 indexed marketId, uint8 oldOutcome, uint8 newOutcome);
+    event CancelRefunded(address indexed user, uint256 payout);
     /// @notice Emitted when the factory sweeps the AMM's leftover
     /// collateral after resolution + grace period.
     event DustRecovered(address indexed recipient, uint256 amount);
@@ -90,12 +100,17 @@ contract PronosAMMMulti is ERC1155Holder {
         _;
     }
 
+    modifier whenNotCanceled() {
+        require(!canceled, "PronosAMMMulti: canceled");
+        _;
+    }
+
     modifier whenNotResolved() {
         require(!resolved, "PronosAMMMulti: resolved");
         _;
     }
 
-    function initialize(address provider, uint256 amount) external onlyFactory {
+    function initialize(address provider, uint256 amount) external onlyFactory nonReentrant {
         require(!initialized, "PronosAMMMulti: already initialized");
         require(amount > 0, "PronosAMMMulti: zero amount");
         initialized = true;
@@ -124,8 +139,10 @@ contract PronosAMMMulti is ERC1155Holder {
 
     function buy(uint8 outcomeIndex, uint256 collateralAmount)
         external
+        whenNotCanceled
         whenNotPaused
         whenNotResolved
+        nonReentrant
         returns (uint256 sharesOut)
     {
         return _buy(msg.sender, outcomeIndex, collateralAmount, 0);
@@ -133,8 +150,10 @@ contract PronosAMMMulti is ERC1155Holder {
 
     function buy(uint8 outcomeIndex, uint256 collateralAmount, uint256 minSharesOut)
         external
+        whenNotCanceled
         whenNotPaused
         whenNotResolved
+        nonReentrant
         returns (uint256 sharesOut)
     {
         return _buy(msg.sender, outcomeIndex, collateralAmount, minSharesOut);
@@ -168,6 +187,7 @@ contract PronosAMMMulti is ERC1155Holder {
             reserves[i] += netAmount;
         }
         reserves[outcomeIndex] -= sharesOut;
+        costBasis[buyer][outcomeIndex] += collateralAmount;
 
         token.safeTransferFrom(
             address(this),
@@ -182,8 +202,10 @@ contract PronosAMMMulti is ERC1155Holder {
 
     function sell(uint8 outcomeIndex, uint256 sharesAmount)
         external
+        whenNotCanceled
         whenNotPaused
         whenNotResolved
+        nonReentrant
         returns (uint256 collateralOut)
     {
         return _sell(msg.sender, outcomeIndex, sharesAmount, 0);
@@ -191,8 +213,10 @@ contract PronosAMMMulti is ERC1155Holder {
 
     function sell(uint8 outcomeIndex, uint256 sharesAmount, uint256 minCollateralOut)
         external
+        whenNotCanceled
         whenNotPaused
         whenNotResolved
+        nonReentrant
         returns (uint256 collateralOut)
     {
         return _sell(msg.sender, outcomeIndex, sharesAmount, minCollateralOut);
@@ -209,6 +233,12 @@ contract PronosAMMMulti is ERC1155Holder {
         collateralOut = _estimateSellGross(outcomeIndex, sharesAmount);
         require(collateralOut > 0, "PronosAMMMulti: insufficient output");
         require(collateralOut >= minCollateralOut, "PronosAMMMulti: price moved");
+        _reduceCostBasis(
+            seller,
+            outcomeIndex,
+            sharesAmount,
+            token.balanceOf(seller, token.tokenId(marketId, outcomeIndex))
+        );
 
         token.safeTransferFrom(
             seller,
@@ -288,6 +318,7 @@ contract PronosAMMMulti is ERC1155Holder {
     }
 
     function resolve(uint8 outcomeIndex) external onlyFactory {
+        require(!canceled, "PronosAMMMulti: canceled");
         require(!resolved, "PronosAMMMulti: already resolved");
         _requireOutcome(outcomeIndex);
         resolved = true;
@@ -303,7 +334,9 @@ contract PronosAMMMulti is ERC1155Holder {
     /// redeemable because the burned amount equals what we transfer,
     /// preserving the outstanding_winning_tokens == collateral_balance
     /// invariant. Idempotent.
-    function recoverDust(address recipient) external onlyFactory {
+    function recoverDust(address recipient) external onlyFactory nonReentrant {
+        require(!canceled, "PronosAMMMulti: canceled");
+        require(!disputed, "PronosAMMMulti: disputed");
         require(resolved, "PronosAMMMulti: not resolved");
         require(block.timestamp >= resolvedAt + RECOVER_GRACE_PERIOD, "PronosAMMMulti: grace period not over");
         require(recipient != address(0), "PronosAMMMulti: zero recipient");
@@ -324,25 +357,97 @@ contract PronosAMMMulti is ERC1155Holder {
     /// without them sending a tx. Mirrors PronosAMM.redeemOnBehalf —
     /// the caller (factory) pays gas, the holder always receives
     /// the collateral, no theft vector.
-    function redeemOnBehalf(address holder, uint256 amount) external onlyFactory {
+    function redeemOnBehalf(address holder, uint256 amount) external onlyFactory nonReentrant {
+        require(!canceled, "PronosAMMMulti: canceled");
+        require(!disputed, "PronosAMMMulti: disputed");
         require(resolved, "PronosAMMMulti: not resolved");
         require(amount > 0, "PronosAMMMulti: zero amount");
         require(holder != address(0), "PronosAMMMulti: zero holder");
 
         token.burn(holder, token.tokenId(marketId, outcome), amount);
         require(collateral.transfer(holder, amount), "PronosAMMMulti: transfer failed");
+        totalRedeemed += amount;
 
         emit WinningsRedeemed(holder, outcome, amount, amount);
     }
 
-    function redeem(uint256 amount) external {
+    function redeem(uint256 amount) external nonReentrant {
+        require(!canceled, "PronosAMMMulti: canceled");
+        require(!disputed, "PronosAMMMulti: disputed");
         require(resolved, "PronosAMMMulti: not resolved");
         require(amount > 0, "PronosAMMMulti: zero amount");
 
         token.burn(msg.sender, token.tokenId(marketId, outcome), amount);
         require(collateral.transfer(msg.sender, amount), "PronosAMMMulti: transfer failed");
+        totalRedeemed += amount;
 
         emit WinningsRedeemed(msg.sender, outcome, amount, amount);
+    }
+
+    function cancel() external onlyFactory {
+        require(!canceled, "PronosAMMMulti: already canceled");
+        require(!resolved || disputed, "PronosAMMMulti: resolved");
+        require(totalRedeemed == 0, "PronosAMMMulti: payouts started");
+        canceled = true;
+        disputed = false;
+        paused = true;
+        emit MarketCanceled(marketId);
+        emit MarketPaused(true);
+    }
+
+    function openResolutionDispute() external onlyFactory {
+        require(!canceled, "PronosAMMMulti: canceled");
+        require(resolved, "PronosAMMMulti: not resolved");
+        require(!disputed, "PronosAMMMulti: already disputed");
+        disputed = true;
+        emit ResolutionDisputeOpened(marketId, outcome);
+    }
+
+    function clearResolutionDispute() external onlyFactory {
+        require(disputed, "PronosAMMMulti: not disputed");
+        disputed = false;
+        emit ResolutionDisputeCleared(marketId, outcome);
+    }
+
+    function correctResolution(uint8 newOutcome) external onlyFactory {
+        require(disputed, "PronosAMMMulti: not disputed");
+        require(totalRedeemed == 0, "PronosAMMMulti: payouts started");
+        _requireOutcome(newOutcome);
+        uint8 oldOutcome = outcome;
+        outcome = newOutcome;
+        disputed = false;
+        resolvedAt = block.timestamp;
+        emit MarketResolutionCorrected(marketId, oldOutcome, newOutcome);
+        emit MarketResolved(marketId, newOutcome);
+    }
+
+    function refundOnBehalf(
+        address holder,
+        uint8[] calldata outcomeIndexes,
+        uint256[] calldata amounts,
+        uint256 payout
+    ) external onlyFactory nonReentrant {
+        require(canceled, "PronosAMMMulti: not canceled");
+        require(holder != address(0), "PronosAMMMulti: zero holder");
+        require(outcomeIndexes.length == amounts.length, "PronosAMMMulti: length mismatch");
+        uint256 maxPayout = 0;
+        for (uint256 i = 0; i < outcomeIndexes.length; i++) {
+            _requireOutcome(outcomeIndexes[i]);
+            if (amounts[i] == 0) continue;
+            uint256 tokenIdForOutcome = token.tokenId(marketId, outcomeIndexes[i]);
+            maxPayout += _reduceCostBasis(
+                holder,
+                outcomeIndexes[i],
+                amounts[i],
+                token.balanceOf(holder, tokenIdForOutcome)
+            );
+            token.burn(holder, tokenIdForOutcome, amounts[i]);
+        }
+        require(payout <= maxPayout, "PronosAMMMulti: payout exceeds cost");
+        if (payout > 0) {
+            require(collateral.transfer(holder, payout), "PronosAMMMulti: transfer failed");
+        }
+        emit CancelRefunded(holder, payout);
     }
 
     function setPaused(bool _paused) external onlyFactory {
@@ -353,6 +458,19 @@ contract PronosAMMMulti is ERC1155Holder {
     function setFeeCollector(address _feeCollector) external onlyFactory {
         require(_feeCollector != address(0), "PronosAMMMulti: zero address");
         feeCollector = _feeCollector;
+    }
+
+    function _reduceCostBasis(
+        address holder,
+        uint8 outcomeIndex,
+        uint256 sharesAmount,
+        uint256 balanceBefore
+    ) internal returns (uint256 reduction) {
+        require(balanceBefore >= sharesAmount, "PronosAMMMulti: insufficient shares");
+        uint256 current = costBasis[holder][outcomeIndex];
+        if (current == 0 || sharesAmount == 0 || balanceBefore == 0) return 0;
+        reduction = (current * sharesAmount) / balanceBefore;
+        costBasis[holder][outcomeIndex] = current - reduction;
     }
 
     function _estimateBuyNet(uint8 outcomeIndex, uint256 netAmount) internal view returns (uint256) {

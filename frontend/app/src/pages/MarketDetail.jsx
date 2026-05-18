@@ -15,7 +15,7 @@
  *   - Question h1
  *   - "FINAL · <score>" strip when resolved + finalScore set
  *   - Ring chart (binary) or compact stat for multi-outcome
- *   - Outcome list with prices + "Apostar" buttons (disabled when resolved)
+ *   - Outcome list with prices + choose buttons (disabled when resolved)
  *   - Sparkline-style mini price history with final-point snap on resolved
  *   - Reglas / methodology block
  */
@@ -392,9 +392,12 @@ export default function MarketDetail({ onOpenLogin }) {
   const displayHistoryByOutcome = displayOutcomeIndices.map(i => historyByOutcome?.[i] || []);
   const hasAnyDisplayLogo = displayOutcomeImages.some(Boolean);
   const isResolved = market.status === 'resolved';
+  const isCanceled = market.status === 'canceled';
+  const isDisputed = market.status === 'disputed';
   const winnerIndex = isResolved && market.outcome != null ? Number(market.outcome) : null;
   const displayWinnerIndex = isResolved ? displayOutcomeIndices.indexOf(winnerIndex) : null;
   const isTradingLocked = !isResolved && (market.seriesLocked || market.status !== 'active');
+  const lockedLabel = isCanceled ? 'Anulado' : isDisputed ? 'En disputa' : 'Pendiente';
   const ringIndex = isResolved && displayWinnerIndex != null && displayWinnerIndex >= 0 ? displayWinnerIndex : 0;
   const seriesSubtitle = formatSeriesSubtitle(market.seriesMeta);
   const isOnchain = market.mode === 'onchain';
@@ -450,9 +453,11 @@ export default function MarketDetail({ onOpenLogin }) {
         }}>
           <span>{market.icon ? `${market.icon} ` : ''}{market.category || 'general'}</span>
           {isResolved && <span style={{ color: 'var(--green)' }}>· resuelto</span>}
+          {isCanceled && <span style={{ color: 'var(--red, #ef4444)' }}>· anulado</span>}
+          {isDisputed && <span style={{ color: '#f59e0b' }}>· en disputa</span>}
           {isLive && <span style={{ color: '#dc2626', fontWeight: 700 }}>· en vivo</span>}
           {isPending && !isLive && !isResolved && <span style={{ color: '#f59e0b' }}>· por resolver</span>}
-          {isTradingLocked && !isResolved && <span style={{ color: '#f59e0b' }}>· pendiente</span>}
+          {isTradingLocked && !isResolved && !isCanceled && !isDisputed && <span style={{ color: '#f59e0b' }}>· pendiente</span>}
           {isOnchain && (
             <span style={{
               padding: '2px 8px', borderRadius: 6,
@@ -664,7 +669,7 @@ export default function MarketDetail({ onOpenLogin }) {
             top: isMobile ? undefined : 92,
           }}>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 12 }}>
-              {isResolved ? 'Resultado' : isTradingLocked ? 'Pendiente' : 'Apuesta'}
+              {isResolved ? 'Resultado' : isTradingLocked ? lockedLabel : 'Elige un resultado'}
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
@@ -746,7 +751,7 @@ export default function MarketDetail({ onOpenLogin }) {
                       color: isResolved ? (isWinner ? 'var(--green)' : 'var(--text-muted)') : 'var(--green)',
                       letterSpacing: '0.06em',
                     }}>
-                      {isResolved ? (isWinner ? 'GANÓ' : '—') : isTradingLocked ? 'PENDIENTE' : 'APOSTAR'}
+                      {isResolved ? (isWinner ? 'GANÓ' : '—') : isTradingLocked ? lockedLabel.toUpperCase() : 'ELEGIR'}
                     </span>
                   </button>
                 );

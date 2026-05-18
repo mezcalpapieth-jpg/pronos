@@ -229,7 +229,7 @@ export default function PrivacyPolicy() {
       <H3>2.2 Datos generados al usar la plataforma</H3>
       <Ul>
         <li><b>Wallet asociada:</b> Pronos utiliza Turnkey para crear y firmar transacciones desde una sub-organización vinculada a tu correo. La dirección pública de tu wallet en Arbitrum queda registrada para procesar tus operaciones.</li>
-        <li><b>Historial de actividad:</b> apuestas realizadas, posiciones, pagos, redenciones y resultados. Esta información también queda registrada en la blockchain (Arbitrum), de manera pública y permanente.</li>
+        <li><b>Historial de actividad:</b> operaciones realizadas, posiciones, pagos, redenciones y resultados. Esta información también queda registrada en la blockchain (Arbitrum), de manera pública y permanente.</li>
         <li><b>Datos técnicos:</b> dirección IP (para limitar abuso y aplicar reglas de tarifa por IP), tipo de navegador, sistema operativo y referer.</li>
       </Ul>
 

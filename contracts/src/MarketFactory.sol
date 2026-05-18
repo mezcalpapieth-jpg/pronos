@@ -57,6 +57,12 @@ contract MarketFactory is ReentrancyGuard {
     );
     event MarketResolved(uint256 indexed marketId, uint8 outcome);
     event MarketPaused(uint256 indexed marketId, bool paused);
+    event MarketCanceled(uint256 indexed marketId);
+    event ResolutionDisputeOpened(uint256 indexed marketId);
+    event ResolutionDisputeCleared(uint256 indexed marketId);
+    event MarketResolutionCorrected(uint256 indexed marketId, uint8 oldOutcome, uint8 newOutcome);
+    event CancelRefundPushed(uint256 indexed marketId, address indexed holder, uint256 payout);
+    event MarketRefundFunded(uint256 indexed marketId, uint256 amount);
     event FeesDistributed(uint256 treasury, uint256 liquidity, uint256 emergency);
     event OwnershipTransferred(address indexed oldOwner, address indexed newOwner);
     event MarketCreatorUpdated(address indexed oldCreator, address indexed newCreator);
@@ -177,6 +183,42 @@ contract MarketFactory is ReentrancyGuard {
         emit MarketPaused(marketId, paused);
     }
 
+    function cancelMarket(uint256 marketId) external onlyOwner {
+        require(marketId < markets.length, "MarketFactory: invalid market");
+        Market storage m = markets[marketId];
+        PronosAMM(m.pool).cancel();
+        m.active = false;
+        emit MarketCanceled(marketId);
+    }
+
+    function openResolutionDispute(uint256 marketId) external onlyOwner {
+        require(marketId < markets.length, "MarketFactory: invalid market");
+        PronosAMM(markets[marketId].pool).openResolutionDispute();
+        emit ResolutionDisputeOpened(marketId);
+    }
+
+    function clearResolutionDispute(uint256 marketId) external onlyOwner {
+        require(marketId < markets.length, "MarketFactory: invalid market");
+        PronosAMM(markets[marketId].pool).clearResolutionDispute();
+        emit ResolutionDisputeCleared(marketId);
+    }
+
+    function correctResolution(uint256 marketId, uint8 newOutcome) external onlyOwner {
+        require(marketId < markets.length, "MarketFactory: invalid market");
+        PronosAMM pool = PronosAMM(markets[marketId].pool);
+        uint8 oldOutcome = pool.outcome();
+        pool.correctResolution(newOutcome);
+        emit MarketResolutionCorrected(marketId, oldOutcome, newOutcome);
+        emit MarketResolved(marketId, newOutcome);
+    }
+
+    function fundMarketRefunds(uint256 marketId, uint256 amount) external onlyOwner nonReentrant {
+        require(marketId < markets.length, "MarketFactory: invalid market");
+        require(amount > 0, "MarketFactory: zero amount");
+        require(collateral.transferFrom(msg.sender, markets[marketId].pool, amount), "MarketFactory: transfer failed");
+        emit MarketRefundFunded(marketId, amount);
+    }
+
     /**
      * @notice Sweep a resolved market's leftover collateral to the
      *         given recipient (typically treasury or liquidity reserve).
@@ -225,6 +267,26 @@ contract MarketFactory is ReentrancyGuard {
         PronosAMM pool = PronosAMM(markets[marketId].pool);
         for (uint256 i = 0; i < holders.length; i++) {
             pool.redeemOnBehalf(holders[i], amounts[i]);
+        }
+    }
+
+    function pushCancelRefund(
+        uint256 marketId,
+        address[] calldata holders,
+        uint8[][] calldata outcomeIndexes,
+        uint256[][] calldata burnAmounts,
+        uint256[] calldata payouts
+    ) external onlyOwner {
+        require(marketId < markets.length, "MarketFactory: invalid market");
+        require(holders.length == outcomeIndexes.length, "MarketFactory: length mismatch");
+        require(holders.length == burnAmounts.length, "MarketFactory: length mismatch");
+        require(holders.length == payouts.length, "MarketFactory: length mismatch");
+        require(holders.length > 0, "MarketFactory: empty batch");
+
+        PronosAMM pool = PronosAMM(markets[marketId].pool);
+        for (uint256 i = 0; i < holders.length; i++) {
+            pool.refundOnBehalf(holders[i], outcomeIndexes[i], burnAmounts[i], payouts[i]);
+            emit CancelRefundPushed(marketId, holders[i], payouts[i]);
         }
     }
 

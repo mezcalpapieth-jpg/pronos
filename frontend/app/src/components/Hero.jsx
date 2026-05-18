@@ -1,5 +1,5 @@
 /**
- * MVP Hero — Turnkey-era on-chain testnet.
+ * MVP Hero — Turnkey-era on-chain mainnet path.
  *
  * Chart + carousel ported from the main-branch pronos.io landing
  * (frontend/js/app.js). Each featured market gets:
@@ -10,10 +10,9 @@
  *   - end-point circle dots
  *   - animated floating "+$amount" trade ticks overlaid on the card
  *
- * Markets come from `/api/points/markets?mode=onchain&featured=true`
- * so the /mvp hero only ever shows on-chain markets. If the endpoint
- * returns nothing (empty testnet), we fall back to a small hand-curated
- * list of demo entries so the hero still animates on first paint.
+ * Markets come from `/api/protocol/markets` so the /mvp hero only
+ * shows indexed on-chain protocol markets. Demo entries are allowed
+ * only in local/dev or when explicitly enabled by VITE_MVP_DEMO_MARKETS.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -25,6 +24,7 @@ const AUTO_INTERVAL_MS = 7000;
 const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 42161);
 const TRADE_MIN_MS = 1500;
 const TRADE_MAX_MS = 3800;
+const ENABLE_DEMO_MARKETS = import.meta.env.DEV || import.meta.env.VITE_MVP_DEMO_MARKETS === 'true';
 
 // Color tokens used by the chart lines, outcome chips, trade ticks.
 // Keys match the CSS data-color attributes on .hmc-outcome-btn so
@@ -108,7 +108,7 @@ function hmcPointsToPath(data, W, H) {
   return d;
 }
 
-// Fallback list when /api/points/markets returns empty (pre-seed testnet).
+// Development-only fallback list for local empty-chain work.
 const DEMO_MARKETS = [
   {
     id: 'demo-mundial-2026',
@@ -191,7 +191,7 @@ export default function Hero({ onOpenLogin }) {
   const navigate = useNavigate();
   const { authenticated } = usePointsAuth();
 
-  const [markets, setMarkets] = useState(() => DEMO_MARKETS);
+  const [markets, setMarkets] = useState(() => ENABLE_DEMO_MARKETS ? DEMO_MARKETS : []);
   const [idx, setIdx] = useState(0);
   const [slideDir, setSlideDir] = useState(null);   // 'left' | 'right' | null
   const [period, setPeriod] = useState('1M');
@@ -200,8 +200,8 @@ export default function Hero({ onOpenLogin }) {
   const tradeTimerRef = useRef(null);
   const tickIdRef = useRef(0);
 
-  // Load onchain markets. If none exist yet, stay on the curated demo list
-  // so the hero animates from first paint (fresh testnet has no markets).
+  // Load onchain markets. In production/mainnet an empty protocol table
+  // stays empty so the page never presents demo markets as real ones.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -213,10 +213,16 @@ export default function Hero({ onOpenLogin }) {
           `/api/protocol/markets?status=active&chainId=${CHAIN_ID}`,
           { credentials: 'include' },
         );
-        if (!res.ok) return;
+        if (!res.ok) {
+          if (!ENABLE_DEMO_MARKETS) return;
+          return;
+        }
         const data = await res.json();
         const rows = Array.isArray(data?.markets) ? data.markets : [];
-        if (cancelled || rows.length === 0) return;
+        if (cancelled || rows.length === 0) {
+          if (!ENABLE_DEMO_MARKETS) return;
+          return;
+        }
         const mapped = rows.slice(0, 5).map(apiRowToHeroMarket).filter(Boolean);
         if (mapped.length > 0) setMarkets(mapped);
       } catch { /* keep demos */ }

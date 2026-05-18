@@ -27,7 +27,7 @@ import React, { useState } from 'react';
 import { authorizeDelegation } from '@app/lib/pointsAuth.js';
 
 const BULLETS = [
-  { icon: '✓',  title: 'Apuestas sin interrupciones',  body: 'Pronos firma tus compras y ventas on-chain sin pedirte confirmar cada vez.' },
+  { icon: '✓',  title: 'Compras sin interrupciones',  body: 'Pronos firma tus compras y ventas on-chain sin pedirte confirmar cada vez.' },
   { icon: '$',  title: 'Sin retiros automáticos',       body: 'La autorización no permite enviar MXNB a wallets externas ni exportar llaves.' },
   { icon: '🔒', title: 'Solo contratos de Pronos',      body: 'La firma queda limitada a Arbitrum, contratos permitidos y funciones de trading autorizadas.' },
   { icon: '🚪', title: 'Tus retiros siguen en tus manos', body: 'Para mover MXNB fuera de Pronos vas a confirmar con tu correo. Eso no cambia.' },
@@ -73,13 +73,13 @@ export default function DelegationPrompt({ variant = 'inline', onAuthorized, onS
           color: 'var(--text-primary)', margin: 0, letterSpacing: '0.02em',
           textTransform: 'uppercase',
         }}>
-          Habilita apuestas en blockchain
+          Habilita mercados en blockchain
         </h3>
         <p style={{
           fontSize: 14, color: 'var(--text-secondary)',
           lineHeight: 1.55, margin: 0,
         }}>
-          Autoriza a Pronos una sola vez a firmar tus apuestas on-chain.
+          Autoriza a Pronos una sola vez a firmar tus órdenes on-chain.
           Vigencia de 6 meses, solo en Arbitrum y solo contra contratos y
           funciones de trading autorizadas. Tus retiros siguen requiriendo tu firma.
         </p>
@@ -141,7 +141,7 @@ export default function DelegationPrompt({ variant = 'inline', onAuthorized, onS
         fontSize: 13, color: 'var(--text-secondary)',
         lineHeight: 1.5, margin: 0,
       }}>
-        Un último paso. Autoriza a Pronos una sola vez a firmar tus apuestas
+        Un último paso. Autoriza a Pronos una sola vez a firmar tus órdenes
         on-chain — así no tienes que confirmar cada compra.
       </p>
       <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>

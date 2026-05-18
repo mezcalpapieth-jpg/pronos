@@ -356,7 +356,7 @@ Already set (verify): `DATABASE_URL`, `DATABASE_READ_URL`, `PRIVY_APP_ID`, `ADMI
 **Target: May 31, 2026**
 
 ### 3.1 Mainnet Deployment
-- [ ] Add reentrancy guards to PronosAMM + PronosAMMMulti
+- [x] ~~Add reentrancy guards to PronosAMM + PronosAMMMulti~~
 - [ ] Add `minOut` / slippage protection to protocol buy + sell functions
 - [ ] Deploy all contracts to Arbitrum One
 - [ ] Transfer ownership to production Safe multisig
@@ -407,7 +407,7 @@ Already set (verify): `DATABASE_URL`, `DATABASE_READ_URL`, `PRIVY_APP_ID`, `ADMI
 - ~~No XSS~~ ~~No eval()~~ ~~HTTPS forced (308)~~ ~~No mixed content~~ ~~No X-Powered-By~~ ~~Privy handles sessions correctly~~
 
 #### Smart Contract
-- [ ] Reentrancy guards on buy/sell/redeem (all contracts)
+- [x] ~~Reentrancy guards on buy/sell/redeem (all contracts)~~
 - [ ] Slippage-safe contract API (`minOut`) on buy/sell
 - [ ] PronoBet: add timelock to emergencyWithdraw or deprecate
 - [ ] PronoBet: fix collectFee repeatable-call drain

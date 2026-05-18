@@ -165,7 +165,7 @@ const STRINGS = {
   // ── MarketsGrid / MarketCard ──────────────────────────────────────────────
   'grid.loading':             { es: 'CARGANDO MERCADOS…',   en: 'LOADING MARKETS…' },
   'grid.empty':               { es: 'No hay mercados en esta categoría.', en: 'No markets in this category.' },
-  'grid.fallback':            { es: 'Usando datos locales — API no disponible.', en: 'Using local data — API unavailable.' },
+  'grid.fallback':            { es: 'No pudimos cargar mercados on-chain.', en: 'Could not load on-chain markets.' },
   'card.resolved':            { es: '🏆 RESUELTO',          en: '🏆 RESOLVED' },
   'card.closed':              { es: '🔒 CERRADO',           en: '🔒 CLOSED' },
   'card.trending':            { es: '🔥 TRENDING',          en: '🔥 TRENDING' },
@@ -222,7 +222,7 @@ const STRINGS = {
                                 en: 'Submitting order to Polymarket…' },
   'bet.placingProtocol':      { es: 'Enviando transacción al protocolo…',
                                 en: 'Submitting protocol transaction…' },
-  'bet.placed':               { es: '¡Apuesta colocada! ${amt} MXNB en "{outcome}"',
+  'bet.placed':               { es: '¡Orden enviada! ${amt} MXNB en "{outcome}"',
                                 en: 'Bet placed! ${amt} MXNB on "{outcome}"' },
   'bet.warn.lowVolume':       { es: '⚠️ Volumen bajo: tu compra mueve el precio de {start}% a {end}% (+{pts} pts). Considera reducir el monto.',
                                 en: '⚠️ Low volume: your trade moves the price from {start}% to {end}% (+{pts} pts). Consider reducing the amount.' },
@@ -298,7 +298,7 @@ const STRINGS = {
   'detail.closedAt':          { es: 'Cerró el {date}',      en: 'Closed on {date}' },
   'detail.officialSoon':      { es: 'El resultado oficial se publicará automáticamente en los próximos minutos.',
                                 en: 'The official result will be posted automatically in the next few minutes.' },
-  'detail.betsClosed':        { es: 'Las apuestas ya están cerradas', en: 'Betting is now closed' },
+  'detail.betsClosed':        { es: 'El mercado ya está cerrado', en: 'Betting is now closed' },
   'detail.buyTitle':          { es: 'COMPRAR',              en: 'BUY' },
   'detail.pickOutcome':       { es: 'Elige un resultado para comprar tu posición.',
                                 en: 'Pick an outcome to buy your position.' },
@@ -439,8 +439,8 @@ const STRINGS = {
                                 en: 'BETA — Live markets · MXNB on Arbitrum · No MetaMask' },
   'home.markets':             { es: 'Mercados',             en: 'Markets' },
   'home.live':                { es: 'EN VIVO',              en: 'LIVE' },
-  'home.subtitle':            { es: 'Predicciones en tiempo real de Polymarket + mercados locales.',
-                                en: 'Real-time predictions from Polymarket + local markets.' },
+  'home.subtitle':            { es: 'Predicciones en tiempo real con mercados on-chain en Arbitrum.',
+                                en: 'Real-time predictions with on-chain markets on Arbitrum.' },
 
   // ── Leaderboard ───────────────────────────────────────────────────────────
   'lb.campaign':              { es: 'COMPETENCIA MXNP',     en: 'MXNP COMPETITION' },

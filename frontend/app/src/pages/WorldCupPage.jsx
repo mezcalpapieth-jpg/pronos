@@ -149,7 +149,7 @@ function MarketTile({ m, onBet }) {
                 color: isResolved ? (isWinner ? 'var(--green)' : 'var(--text-muted)') : 'var(--green)',
                 letterSpacing: '0.06em',
               }}>
-                {isResolved ? (isWinner ? 'GANÓ' : '—') : 'APOSTAR'}
+                {isResolved ? (isWinner ? 'GANÓ' : '—') : 'ELEGIR'}
               </span>
             </button>
           );

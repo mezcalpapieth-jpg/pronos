@@ -2,6 +2,8 @@
 pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
+import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "../src/PronosTokenV2.sol";
 import "../src/PronosAMMMulti.sol";
 import "../src/MarketFactoryV2.sol";
@@ -36,6 +38,41 @@ contract MockUSDCV2 {
         allowance[from][msg.sender] -= amount;
         balanceOf[to] += amount;
         return true;
+    }
+}
+
+contract ReenteringMultiBuyer is ERC1155Holder {
+    MockUSDCV2 public immutable usdc;
+    PronosAMMMulti public immutable pool;
+
+    uint8 public reentryOutcome;
+    uint256 public reentryAmount;
+    bool public attempted;
+
+    constructor(MockUSDCV2 _usdc, PronosAMMMulti _pool) {
+        usdc = _usdc;
+        pool = _pool;
+    }
+
+    function armAndBuy(uint8 outcomeIndex, uint256 amount, uint256 _reentryAmount) external {
+        reentryOutcome = outcomeIndex;
+        reentryAmount = _reentryAmount;
+        usdc.approve(address(pool), type(uint256).max);
+        pool.buy(outcomeIndex, amount);
+    }
+
+    function onERC1155Received(
+        address operator,
+        address from,
+        uint256 id,
+        uint256 value,
+        bytes memory data
+    ) public override returns (bytes4) {
+        if (!attempted) {
+            attempted = true;
+            pool.buy(reentryOutcome, reentryAmount);
+        }
+        return super.onERC1155Received(operator, from, id, value, data);
     }
 }
 
@@ -177,6 +214,15 @@ contract PronosProtocolV2Test is Test {
         assertEq(usdc.balanceOf(feeColl), (5 * ONE_USDC * 200) / 10_000);
     }
 
+    function test_multiOutcomeBuyBlocksReceiverReentrancy() public {
+        (, PronosAMMMulti pool) = _createThreeWayMarket(10_000 * ONE_USDC);
+        ReenteringMultiBuyer attacker = new ReenteringMultiBuyer(usdc, pool);
+        usdc.mint(address(attacker), 1_000 * ONE_USDC);
+
+        vm.expectRevert(ReentrancyGuard.ReentrancyGuardReentrantCall.selector);
+        attacker.armAndBuy(0, 100 * ONE_USDC, 1 * ONE_USDC);
+    }
+
     function test_sellOutcomeExitsBeforeResolution() public {
         (, PronosAMMMulti pool) = _createThreeWayMarket(10_000 * ONE_USDC);
 
@@ -210,6 +256,104 @@ contract PronosProtocolV2Test is Test {
         pool.redeem(bobShares);
 
         assertEq(usdc.balanceOf(bob) - beforeBalance, bobShares);
+    }
+
+    function test_cancelMarketBlocksTradingAndPushRefunds() public {
+        (uint256 marketId, PronosAMMMulti pool) = _createThreeWayMarket(10_000 * ONE_USDC);
+
+        vm.startPrank(alice);
+        usdc.approve(address(pool), 100 * ONE_USDC);
+        uint256 aliceShares = pool.buy(0, 100 * ONE_USDC);
+        vm.stopPrank();
+        assertEq(pool.costBasis(alice, 0), 100 * ONE_USDC);
+
+        vm.prank(admin);
+        factory.cancelMarket(marketId);
+
+        (,,,,,, bool active) = factory.getMarket(marketId);
+        assertFalse(active);
+        assertTrue(pool.canceled());
+        assertTrue(pool.paused());
+
+        vm.startPrank(alice);
+        usdc.approve(address(pool), 1 * ONE_USDC);
+        vm.expectRevert(bytes("PronosAMMMulti: canceled"));
+        pool.buy(0, 1 * ONE_USDC);
+        vm.stopPrank();
+
+        address[] memory holders = new address[](1);
+        holders[0] = alice;
+        uint8[][] memory outcomeIndexes = new uint8[][](1);
+        outcomeIndexes[0] = new uint8[](1);
+        outcomeIndexes[0][0] = 0;
+        uint256[][] memory burnAmounts = new uint256[][](1);
+        burnAmounts[0] = new uint256[](1);
+        burnAmounts[0][0] = aliceShares;
+        uint256[] memory payouts = new uint256[](1);
+        payouts[0] = 100 * ONE_USDC;
+
+        uint256 beforeBalance = usdc.balanceOf(alice);
+        vm.prank(admin);
+        factory.pushCancelRefund(marketId, holders, outcomeIndexes, burnAmounts, payouts);
+
+        assertEq(usdc.balanceOf(alice) - beforeBalance, 100 * ONE_USDC);
+        assertEq(token.balanceOf(alice, token.tokenId(marketId, 0)), 0);
+        assertEq(pool.costBasis(alice, 0), 0);
+    }
+
+    function test_disputeBlocksRedeemAndCorrectsResolutionBeforePayout() public {
+        (uint256 marketId, PronosAMMMulti pool) = _createThreeWayMarket(10_000 * ONE_USDC);
+
+        vm.startPrank(alice);
+        usdc.approve(address(pool), 100 * ONE_USDC);
+        pool.buy(0, 100 * ONE_USDC);
+        vm.stopPrank();
+
+        vm.startPrank(bob);
+        usdc.approve(address(pool), 100 * ONE_USDC);
+        uint256 bobShares = pool.buy(2, 100 * ONE_USDC);
+        vm.stopPrank();
+
+        vm.prank(admin);
+        factory.resolveMarket(marketId, 0);
+
+        vm.prank(admin);
+        factory.openResolutionDispute(marketId);
+        assertTrue(pool.disputed());
+
+        vm.prank(alice);
+        vm.expectRevert(bytes("PronosAMMMulti: disputed"));
+        pool.redeem(1);
+
+        vm.prank(admin);
+        factory.correctResolution(marketId, 2);
+        assertFalse(pool.disputed());
+        assertEq(pool.outcome(), 2);
+
+        uint256 beforeBalance = usdc.balanceOf(bob);
+        vm.prank(bob);
+        pool.redeem(bobShares);
+        assertEq(usdc.balanceOf(bob) - beforeBalance, bobShares);
+    }
+
+    function test_correctResolutionRevertsAfterAnyPayout() public {
+        (uint256 marketId, PronosAMMMulti pool) = _createThreeWayMarket(10_000 * ONE_USDC);
+
+        vm.startPrank(alice);
+        usdc.approve(address(pool), 100 * ONE_USDC);
+        uint256 aliceShares = pool.buy(0, 100 * ONE_USDC);
+        vm.stopPrank();
+
+        vm.prank(admin);
+        factory.resolveMarket(marketId, 0);
+        vm.prank(alice);
+        pool.redeem(aliceShares / 2);
+
+        vm.prank(admin);
+        factory.openResolutionDispute(marketId);
+        vm.prank(admin);
+        vm.expectRevert(bytes("PronosAMMMulti: payouts started"));
+        factory.correctResolution(marketId, 2);
     }
 
     function test_revertsInvalidOutcome() public {

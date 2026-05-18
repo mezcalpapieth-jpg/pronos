@@ -89,9 +89,27 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'invalid_status' });
       }
       const rows = await sql`
-        SELECT COUNT(*)::int AS count
-        FROM protocol_resolution_candidates
-        WHERE status = 'pending'
+        SELECT COUNT(DISTINCT market_id)::int AS count
+        FROM (
+          SELECT c.protocol_market_id AS market_id
+          FROM protocol_resolution_candidates c
+          JOIN protocol_markets m ON m.id = c.protocol_market_id
+          WHERE c.status = 'pending'
+            AND m.status = 'active'
+          UNION
+          SELECT m.id AS market_id
+          FROM protocol_markets m
+          WHERE m.status = 'active'
+            AND m.end_time IS NOT NULL
+            AND m.end_time < NOW()
+        ) actionable
+      `;
+      const pendingRows = await sql`
+        SELECT COUNT(DISTINCT c.protocol_market_id)::int AS count
+        FROM protocol_resolution_candidates c
+        JOIN protocol_markets m ON m.id = c.protocol_market_id
+        WHERE c.status = 'pending'
+          AND m.status = 'active'
       `;
       const overdueRows = await sql`
         SELECT COUNT(*)::int AS count
@@ -100,14 +118,15 @@ export default async function handler(req, res) {
           AND end_time IS NOT NULL
           AND end_time < NOW()
       `;
-      const pendingCount = Number(rows[0]?.count || 0);
+      const pendingCount = Number(pendingRows[0]?.count || 0);
       const overdueCount = Number(overdueRows[0]?.count || 0);
+      const count = Number(rows[0]?.count || 0);
       return res.status(200).json({
         ok: true,
         status,
         pendingCount,
         overdueCount,
-        count: pendingCount + overdueCount,
+        count,
       });
     }
 

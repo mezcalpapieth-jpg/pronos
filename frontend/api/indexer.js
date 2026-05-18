@@ -36,6 +36,11 @@ const FACTORY_ABI = [
   'event MarketCreated(uint256 indexed marketId, address pool, string question, string category, uint256 endTime)',
   'event MarketResolved(uint256 indexed marketId, uint8 outcome)',
   'event MarketPaused(uint256 indexed marketId, bool paused)',
+  'event MarketCanceled(uint256 indexed marketId)',
+  'event ResolutionDisputeOpened(uint256 indexed marketId)',
+  'event ResolutionDisputeCleared(uint256 indexed marketId)',
+  'event MarketResolutionCorrected(uint256 indexed marketId, uint8 oldOutcome, uint8 newOutcome)',
+  'event CancelRefundPushed(uint256 indexed marketId, address indexed holder, uint256 payout)',
   'event FeesDistributed(uint256 treasury, uint256 liquidity, uint256 emergency)',
 ];
 
@@ -43,6 +48,11 @@ const FACTORY_V2_ABI = [
   'event MarketCreated(uint256 indexed marketId, address pool, string question, string category, uint256 endTime, string resolutionSource, string[] outcomes)',
   'event MarketResolved(uint256 indexed marketId, uint8 outcome)',
   'event MarketPaused(uint256 indexed marketId, bool paused)',
+  'event MarketCanceled(uint256 indexed marketId)',
+  'event ResolutionDisputeOpened(uint256 indexed marketId)',
+  'event ResolutionDisputeCleared(uint256 indexed marketId)',
+  'event MarketResolutionCorrected(uint256 indexed marketId, uint8 oldOutcome, uint8 newOutcome)',
+  'event CancelRefundPushed(uint256 indexed marketId, address indexed holder, uint256 payout)',
   'event FeesDistributed(uint256 treasury, uint256 liquidity, uint256 emergency)',
 ];
 
@@ -244,7 +254,7 @@ export default async function handler(req, res) {
     const manualFromBlock = isManual ? parseInteger(req.query.fromBlock) : null;
     const manualToBlock = isManual ? parseInteger(req.query.toBlock) : null;
     const maxBatches = Math.min(Math.max(parseInteger(req.query.maxBatches) || configuredMaxBatches, 1), 25);
-    let processed = { markets: 0, liquidity: 0, trades: 0, resolutions: 0, redemptions: 0 };
+    let processed = { markets: 0, liquidity: 0, trades: 0, resolutions: 0, redemptions: 0, lifecycle: 0 };
     const factoryRuns = [];
 
     for (const factoryConfig of factories) {
@@ -280,6 +290,7 @@ export default async function handler(req, res) {
             trades: processed.trades - before.trades,
             resolutions: processed.resolutions - before.resolutions,
             redemptions: processed.redemptions - before.redemptions,
+            lifecycle: processed.lifecycle - before.lifecycle,
           },
         });
         fromBlock = toBlock + 1;
@@ -394,12 +405,119 @@ async function indexFactoryRange(provider, factoryConfig, fromBlock, toBlock, pr
     const { marketId, outcome } = event.args;
     await sql`
       UPDATE protocol_markets
-      SET status = 'resolved', outcome = ${outcome}, resolved_at = NOW()
+      SET status = CASE
+            WHEN status IN ('canceled', 'disputed') THEN status ELSE 'resolved'
+          END,
+          outcome = CASE
+            WHEN status IN ('canceled', 'disputed') THEN outcome ELSE ${outcome}
+          END,
+          resolved_at = CASE
+            WHEN status IN ('canceled', 'disputed') THEN resolved_at ELSE NOW()
+          END
       WHERE chain_id = ${CHAIN_ID}
         AND factory_address = ${factoryConfig.address}
         AND market_id = ${marketId.toNumber()}
     `;
     processed.resolutions++;
+  }
+
+  const cancelEvents = await factory.queryFilter(factory.filters.MarketCanceled(), fromBlock, toBlock);
+  for (const event of cancelEvents) {
+    const { marketId } = event.args;
+    await sql`
+      UPDATE protocol_markets
+      SET previous_status = CASE WHEN status <> 'canceled' THEN status ELSE previous_status END,
+          status = 'canceled',
+          outcome = NULL,
+          lifecycle_note = COALESCE(lifecycle_note, 'Mercado anulado on-chain'),
+          lifecycle_updated_at = NOW(),
+          canceled_at = COALESCE(canceled_at, NOW()),
+          dispute_opened_at = NULL
+      WHERE chain_id = ${CHAIN_ID}
+        AND factory_address = ${factoryConfig.address}
+        AND market_id = ${marketId.toNumber()}
+    `;
+    processed.lifecycle++;
+  }
+
+  const disputeEvents = await factory.queryFilter(factory.filters.ResolutionDisputeOpened(), fromBlock, toBlock);
+  for (const event of disputeEvents) {
+    const { marketId } = event.args;
+    await sql`
+      UPDATE protocol_markets
+      SET previous_status = CASE WHEN status <> 'disputed' THEN status ELSE previous_status END,
+          status = 'disputed',
+          lifecycle_note = COALESCE(lifecycle_note, 'Resolución marcada en disputa on-chain'),
+          lifecycle_updated_at = NOW(),
+          dispute_opened_at = COALESCE(dispute_opened_at, NOW())
+      WHERE chain_id = ${CHAIN_ID}
+        AND factory_address = ${factoryConfig.address}
+        AND market_id = ${marketId.toNumber()}
+    `;
+    processed.lifecycle++;
+  }
+
+  const clearDisputeEvents = await factory.queryFilter(factory.filters.ResolutionDisputeCleared(), fromBlock, toBlock);
+  for (const event of clearDisputeEvents) {
+    const { marketId } = event.args;
+    await sql`
+      UPDATE protocol_markets
+      SET status = CASE
+            WHEN previous_status IN ('active', 'resolved') THEN previous_status
+            ELSE 'resolved'
+          END,
+          lifecycle_note = COALESCE(lifecycle_note, 'Disputa cerrada on-chain'),
+          lifecycle_updated_at = NOW(),
+          dispute_opened_at = NULL
+      WHERE chain_id = ${CHAIN_ID}
+        AND factory_address = ${factoryConfig.address}
+        AND market_id = ${marketId.toNumber()}
+    `;
+    processed.lifecycle++;
+  }
+
+  const correctionEvents = await factory.queryFilter(factory.filters.MarketResolutionCorrected(), fromBlock, toBlock);
+  for (const event of correctionEvents) {
+    const { marketId, newOutcome } = event.args;
+    await sql`
+      UPDATE protocol_markets
+      SET status = 'resolved',
+          outcome = ${newOutcome},
+          resolved_at = NOW(),
+          lifecycle_note = COALESCE(lifecycle_note, 'Resolución corregida on-chain'),
+          lifecycle_updated_at = NOW(),
+          dispute_opened_at = NULL
+      WHERE chain_id = ${CHAIN_ID}
+        AND factory_address = ${factoryConfig.address}
+        AND market_id = ${marketId.toNumber()}
+    `;
+    processed.lifecycle++;
+  }
+
+  const cancelRefundEvents = await factory.queryFilter(factory.filters.CancelRefundPushed(), fromBlock, toBlock);
+  for (const event of cancelRefundEvents) {
+    const { marketId, holder, payout: payoutRaw } = event.args;
+    const payout = parseFloat(ethers.utils.formatUnits(payoutRaw, 6));
+    const rows = await sql`
+      SELECT id
+      FROM protocol_markets
+      WHERE chain_id = ${CHAIN_ID}
+        AND factory_address = ${factoryConfig.address}
+        AND market_id = ${marketId.toNumber()}
+      LIMIT 1
+    `;
+    if (rows.length === 0) continue;
+    const inserted = await insertRedemption({
+      marketId: rows[0].id,
+      userAddress: holder.toLowerCase(),
+      outcomeIndex: null,
+      shares: 0,
+      payout,
+      txHash: event.transactionHash,
+      blockNumber: event.blockNumber,
+      logIndex: event.logIndex,
+    });
+    if (inserted) processed.redemptions++;
   }
 
   const pools = await sql`

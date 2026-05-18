@@ -878,6 +878,110 @@ contract PronosProtocolTest is Test {
         factory.pushRedeem(0, holders, amounts);
     }
 
+    function test_cancelMarketBlocksTradingAndPushRefunds() public {
+        uint256 marketId = _createTestMarket(10_000 * ONE_USDC);
+        (address poolAddr,,,,, ) = factory.getMarket(marketId);
+        PronosAMM pool = PronosAMM(poolAddr);
+
+        vm.startPrank(alice);
+        usdc.approve(address(pool), 100 * ONE_USDC);
+        uint256 aliceShares = pool.buy(true, 100 * ONE_USDC);
+        vm.stopPrank();
+        assertEq(pool.costBasis(alice, 0), 100 * ONE_USDC);
+
+        vm.prank(admin);
+        factory.cancelMarket(marketId);
+
+        (,,,,, bool active) = factory.getMarket(marketId);
+        assertFalse(active);
+        assertTrue(pool.canceled());
+        assertTrue(pool.paused());
+
+        vm.startPrank(alice);
+        usdc.approve(address(pool), 1 * ONE_USDC);
+        vm.expectRevert(bytes("PronosAMM: canceled"));
+        pool.buy(true, 1 * ONE_USDC);
+        vm.stopPrank();
+
+        address[] memory holders = new address[](1);
+        holders[0] = alice;
+        uint8[][] memory outcomeIndexes = new uint8[][](1);
+        outcomeIndexes[0] = new uint8[](1);
+        outcomeIndexes[0][0] = 0;
+        uint256[][] memory burnAmounts = new uint256[][](1);
+        burnAmounts[0] = new uint256[](1);
+        burnAmounts[0][0] = aliceShares;
+        uint256[] memory payouts = new uint256[](1);
+        payouts[0] = 100 * ONE_USDC;
+
+        uint256 beforeBalance = usdc.balanceOf(alice);
+        vm.prank(admin);
+        factory.pushCancelRefund(marketId, holders, outcomeIndexes, burnAmounts, payouts);
+
+        assertEq(usdc.balanceOf(alice) - beforeBalance, 100 * ONE_USDC);
+        assertEq(token.balanceOf(alice, pool.yesId()), 0);
+        assertEq(pool.costBasis(alice, 0), 0);
+    }
+
+    function test_disputeBlocksRedeemAndCorrectsResolutionBeforePayout() public {
+        uint256 marketId = _createTestMarket(10_000 * ONE_USDC);
+        (address poolAddr,,,,, ) = factory.getMarket(marketId);
+        PronosAMM pool = PronosAMM(poolAddr);
+
+        vm.startPrank(alice);
+        usdc.approve(address(pool), 100 * ONE_USDC);
+        pool.buy(true, 100 * ONE_USDC);
+        vm.stopPrank();
+
+        vm.startPrank(bob);
+        usdc.approve(address(pool), 100 * ONE_USDC);
+        uint256 bobNoShares = pool.buy(false, 100 * ONE_USDC);
+        vm.stopPrank();
+
+        vm.prank(admin);
+        factory.resolveMarket(marketId, 1);
+
+        vm.prank(admin);
+        factory.openResolutionDispute(marketId);
+        assertTrue(pool.disputed());
+
+        vm.prank(alice);
+        vm.expectRevert(bytes("PronosAMM: disputed"));
+        pool.redeem(1);
+
+        vm.prank(admin);
+        factory.correctResolution(marketId, 2);
+        assertFalse(pool.disputed());
+        assertEq(pool.outcome(), 2);
+
+        uint256 beforeBalance = usdc.balanceOf(bob);
+        vm.prank(bob);
+        pool.redeem(bobNoShares);
+        assertEq(usdc.balanceOf(bob) - beforeBalance, bobNoShares);
+    }
+
+    function test_correctResolutionRevertsAfterAnyPayout() public {
+        uint256 marketId = _createTestMarket(10_000 * ONE_USDC);
+        (address poolAddr,,,,, ) = factory.getMarket(marketId);
+        PronosAMM pool = PronosAMM(poolAddr);
+
+        vm.startPrank(alice);
+        usdc.approve(address(pool), 100 * ONE_USDC);
+        uint256 aliceShares = pool.buy(true, 100 * ONE_USDC);
+        vm.stopPrank();
+
+        vm.prank(admin);
+        factory.resolveMarket(marketId, 1);
+        vm.prank(alice);
+        pool.redeem(aliceShares / 2);
+
+        vm.prank(admin);
+        factory.openResolutionDispute(marketId);
+        vm.prank(admin);
+        vm.expectRevert(bytes("PronosAMM: payouts started"));
+        factory.correctResolution(marketId, 2);
+    }
+
     function test_redeemOnBehalf_reverts_non_factory() public {
         _createTestMarket(5_000 * ONE_USDC);
         (address poolAddr,,,,, ) = factory.getMarket(0);

@@ -9,6 +9,9 @@ test('resolution candidate review endpoint confirms onchain or denies back to pe
   assert.match(source, /req\.method === 'GET'/);
   assert.match(source, /pendingCount/);
   assert.match(source, /overdueCount/);
+  assert.match(source, /JOIN protocol_markets/);
+  assert.match(source, /m\.status = 'active'/);
+  assert.match(source, /COUNT\(DISTINCT market_id\)::int AS count/);
   assert.match(source, /end_time < NOW\(\)/);
   assert.match(source, /action === 'confirm'/);
   assert.match(source, /action === 'deny'/);

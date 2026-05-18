@@ -121,6 +121,12 @@ export function buildProtocolMarketPayload(row = {}) {
       && endMs > Date.now()
       && row.status === 'active'),
     status: row.status,
+    previousStatus: row.previous_status || null,
+    lifecycleNote: row.lifecycle_note || null,
+    lifecycleUpdatedAt: row.lifecycle_updated_at || null,
+    lifecycleUpdatedBy: row.lifecycle_updated_by || null,
+    canceledAt: row.canceled_at || null,
+    disputeOpenedAt: row.dispute_opened_at || null,
     outcome: row.outcome != null ? Number(row.outcome) : null,
     seedLiquidity: row.seed_liquidity != null ? Number(row.seed_liquidity) : 0,
     prices,

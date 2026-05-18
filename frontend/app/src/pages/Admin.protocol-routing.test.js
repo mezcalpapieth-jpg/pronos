@@ -11,6 +11,7 @@ import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./Admin.jsx', import.meta.url), 'utf8');
 const navSource = await readFile(new URL('../components/Nav.jsx', import.meta.url), 'utf8');
+const taskCountsSource = await readFile(new URL('../lib/mvpAdminTaskCounts.js', import.meta.url), 'utf8');
 
 function section(startMarker, endMarker) {
   const start = source.indexOf(startMarker);
@@ -102,7 +103,7 @@ test('MVP admin tabs show badges for pending work outside the active tab', () =>
   assert.match(adminShell, /\/api\/protocol\/admin\/pending-markets\?status=pending/);
   assert.match(adminShell, /\/api\/protocol\/admin\/resolution-candidates\?status=pending/);
   assert.match(adminShell, /\/api\/points\/admin\/social-tasks\?status=pending/);
-  assert.match(adminShell, /overdueCount/);
+  assert.match(adminShell, /resolutionData\.data\?\.count/);
   assert.match(adminShell, /tab !== t\.id/);
   assert.match(adminShell, /taskCount > 0/);
 });
@@ -115,9 +116,12 @@ test('MVP nav surfaces admin work count outside admin', () => {
 });
 
 test('MVP markets filter surfaces por resolver count while inside Mercados', () => {
-  assert.match(source, /pendingResolveCount=\{adminTaskCounts\.markets\}/);
-  assert.match(source, /function MarketsList\(\{ refreshKey, bumpRefresh, onQueueChange, pendingResolveCount = 0 \}\)/);
-  assert.match(source, /tab\.value === 'pending' \? pendingResolveCount : 0/);
+  assert.match(source, /pendingResolveCount=\{adminTaskCounts\.pendingResolve\}/);
+  assert.match(source, /disputedCount=\{adminTaskCounts\.disputed\}/);
+  assert.match(source, /function MarketsList\(\{ refreshKey, bumpRefresh, onQueueChange, pendingResolveCount = 0, disputedCount = 0 \}\)/);
+  assert.match(source, /filter === 'pending' && !loading \? visible\.length : pendingResolveCount/);
+  assert.match(source, /tab\.value === 'pending' \? pendingBadgeCount/);
+  assert.match(source, /tab\.value === 'disputed' \? disputedCount/);
   assert.match(source, /statusTaskCount > 0/);
 });
 
@@ -127,5 +131,33 @@ test('MVP admin markets has a Por resolver filter for overdue active markets', (
   assert.match(marketsList, /value:\s*'pending',\s*label:\s*'Por resolver'/);
   assert.match(marketsList, /filter === 'pending' \? 'active' : filter/);
   assert.match(marketsList, /endTime/);
+  assert.match(marketsList, /m\.resolutionCandidate/);
   assert.match(marketsList, /new Date\(m\.endTime\)\.getTime\(\) <= Date\.now\(\)/);
+  assert.match(source, /Number\(resolutionData\.data\?\.count \|\| 0\)/);
+  assert.doesNotMatch(source, /Number\(resolutionData\.data\?\.pendingCount \|\| 0\) \+ Number\(resolutionData\.data\?\.overdueCount \|\| 0\)/);
+});
+
+test('MVP admin can cancel and dispute on-chain markets through the protocol lifecycle shell', () => {
+  const marketsList = section('function MarketsList', 'export default function Admin');
+  const editModal = section('function EditMarketModal', '// ═══ Markets list');
+
+  assert.match(source, /value:\s*'disputed',\s*label:\s*'En disputa'/);
+  assert.match(source, /value:\s*'canceled',\s*label:\s*'Anulados'/);
+  assert.match(marketsList, /postJson\('\/api\/protocol\/admin\/lifecycle-market'/);
+  assert.match(marketsList, /handleLifecycle\(m,\s*'cancel'\)/);
+  assert.match(marketsList, /handleLifecycle\(m,\s*'dispute'\)/);
+  assert.match(marketsList, /handleLifecycle\(m,\s*'clear_dispute'\)/);
+  assert.match(marketsList, /Anular mercado/);
+  assert.match(marketsList, /Abrir disputa/);
+  assert.match(marketsList, /Cerrar disputa/);
+  assert.match(editModal, /actionMode === 'cancel'/);
+  assert.match(editModal, /Anular mercado/);
+});
+
+test('MVP admin badges include disputed on-chain markets', () => {
+  assert.match(source, /disputed:\s*0/);
+  assert.match(source, /\/api\/protocol\/markets\?status=disputed/);
+  assert.match(taskCountsSource, /\/api\/protocol\/markets\?status=disputed/);
+  assert.match(taskCountsSource, /disputed/);
+  assert.match(taskCountsSource, /markets:\s*pendingResolve \+ disputed/);
 });
