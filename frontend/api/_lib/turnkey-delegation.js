@@ -13,13 +13,10 @@
  *   - Blocked: withdrawals to external wallets, policy mutation,
  *              key export, sub-org deletion
  *
- * M2 ships the scaffold end-to-end: DB persistence, consent modal,
- * authorize/revoke endpoints. The actual Turnkey `createPolicy`
- * call is GATED behind `TURNKEY_POLICIES_ENABLED` because we don't
- * have on-chain contracts on this branch yet — whitelisting empty
- * addresses would be meaningless. When M3 deploys contracts, we
- * flip the flag + populate `onchainConfig()` below, and every
- * piece of plumbing above it is already live.
+ * The actual Turnkey `createPolicy` call is gated behind
+ * `TURNKEY_POLICIES_ENABLED`. In production, policy targets are the
+ * factories, collateral token, env-configured pools, plus the currently
+ * indexed protocol pools passed by the authorize endpoint.
  */
 
 import {
@@ -41,8 +38,12 @@ export const DELEGATION_ALLOWED_SELECTORS = Object.freeze([
   '0x095ea7b3', // ERC20.approve(address,uint256)
   '0xe24c469b', // PronosAMM.buy(bool,uint256)
   '0xf571c5f3', // PronosAMM.sell(bool,uint256)
+  '0x01a9812c', // PronosAMM.buy(bool,uint256,uint256)
+  '0xde254659', // PronosAMM.sell(bool,uint256,uint256)
   '0x62f791c0', // PronosAMMMulti.buy(uint8,uint256)
   '0xd9515e0b', // PronosAMMMulti.sell(uint8,uint256)
+  '0xf6d956df', // PronosAMMMulti.buy(uint8,uint256,uint256)
+  '0x46280a80', // PronosAMMMulti.sell(uint8,uint256,uint256)
   '0xdb006a75', // redeem(uint256)
 ]);
 
@@ -53,11 +54,12 @@ function parseAddressList(value) {
     .filter(Boolean);
 }
 
-// When M3 adds real contracts, populate this map (via env vars or
-// a deployed-contracts manifest). Keys are chain IDs; values are
-// the contract addresses the policy will allow the backend key to
-// call. Until this returns at least one address, POLICIES_ENABLED
-// stays off and the Turnkey call is short-circuited.
+function normalizeAddress(value) {
+  const s = String(value || '').trim();
+  return /^0x[0-9a-fA-F]{40}$/.test(s) ? s.toLowerCase() : null;
+}
+
+// Contract addresses the policy will allow the backend key to call.
 function onchainConfig() {
   return {
     chainId: Number(process.env.ONCHAIN_CHAIN_ID || 0),
@@ -71,11 +73,28 @@ function onchainConfig() {
   };
 }
 
+export function buildDelegationAllowedTargets({ cfg = onchainConfig(), extraMarketPools = [] } = {}) {
+  const ordered = [
+    cfg.marketFactoryV1,
+    cfg.marketFactoryV2,
+    cfg.collateralToken,
+    ...(Array.isArray(cfg.marketPools) ? cfg.marketPools : []),
+    ...(Array.isArray(extraMarketPools) ? extraMarketPools : []),
+  ];
+  const seen = new Set();
+  const out = [];
+  for (const value of ordered) {
+    const addr = normalizeAddress(value);
+    if (!addr || seen.has(addr)) continue;
+    seen.add(addr);
+    out.push(addr);
+  }
+  return out;
+}
+
 /**
- * Is the on-chain delegation path wired? False on this branch until
- * M3. Endpoints use this to decide whether to hit Turnkey or
- * record a "simulated" policy (stored in DB, flagged, no real
- * signing authority yet).
+ * Is the on-chain delegation path wired? Endpoints use this to decide
+ * whether to hit Turnkey or record a simulated policy.
  */
 export function isDelegationEnabled() {
   if (process.env.TURNKEY_POLICIES_ENABLED !== 'true') return false;
@@ -91,9 +110,7 @@ export function isDelegationEnabled() {
  *
  * Until `isDelegationEnabled()` returns true, we DO NOT call Turnkey —
  * we return a simulated result so the UI flow, DB persistence, and
- * revoke flow can be tested end-to-end. When M3 flips the flag, the
- * Turnkey call replaces the `{ simulated: true }` branch below and
- * every caller downstream (endpoint, DB, UI) works unchanged.
+ * revoke flow can be tested end-to-end.
  *
  * Params:
  *   suborgId   — Turnkey sub-org UUID (from points_users.turnkey_sub_org_id)
@@ -103,7 +120,7 @@ export function isDelegationEnabled() {
  *
  * Returns { policyId, expiresAt, dailyCapMxnb, simulated }.
  */
-export async function createDelegationPolicy({ suborgId, backendApiPublicKey }) {
+export async function createDelegationPolicy({ suborgId, backendApiPublicKey, extraMarketPools = [] }) {
   if (!suborgId) throw new Error('suborgId required');
   const expiresAt = new Date(Date.now() + DELEGATION_DAYS * 86_400_000);
 
@@ -122,16 +139,11 @@ export async function createDelegationPolicy({ suborgId, backendApiPublicKey }) 
   // ── Real Turnkey path ─────────────────────────────────────────────
   // Policy grants the backend API key signing authority for EVM
   // transactions on the configured chain, zero native value, selected
-  // function selectors, and known Pronos targets. Add newly deployed AMM
-  // pools to ONCHAIN_MARKET_POOL_ADDRESSES before asking users to create
-  // fresh policies that can buy/sell/redeem those pools.
+  // function selectors, and known Pronos targets. Env targets are merged
+  // with currently indexed protocol pools so fresh/refresh policies can
+  // trade all deployed markets without hand-editing the env for each pool.
   const cfg = onchainConfig();
-  const allowedTargets = [
-    cfg.marketFactoryV1,
-    cfg.marketFactoryV2,
-    cfg.collateralToken,
-    ...cfg.marketPools,
-  ].filter(Boolean);
+  const allowedTargets = buildDelegationAllowedTargets({ cfg, extraMarketPools });
   if (allowedTargets.length === 0) {
     throw new Error('onchain config missing marketFactory/collateralToken');
   }
@@ -175,11 +187,6 @@ export async function revokeDelegationPolicy({ suborgId, policyId }) {
  * backend API key, leaning on the delegation policy attached to
  * their sub-org.
  *
- * Not wired until M3 — exposed now so the buy/sell endpoints can
- * import + call it, failing loudly if the env flag is off. Keeps
- * us from shipping a half-live signing path.
- */
-/**
  * Sign an unsigned EVM transaction via the delegation policy. The
  * caller passes the user's EVM wallet address (signWithAddress) —
  * usually sourced from points_users.wallet_address, which the

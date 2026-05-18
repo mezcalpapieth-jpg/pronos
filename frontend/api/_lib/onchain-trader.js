@@ -27,21 +27,39 @@ import { ethers } from 'ethers';
 import {
   isDelegationEnabled, signDelegatedTransaction,
 } from './turnkey-delegation.js';
+import {
+  formatProtocolBuyQuote,
+  formatProtocolSellQuote,
+} from './protocol-trade-guards.js';
 
 // ── Config + ABI ────────────────────────────────────────────────────
 
 const BINARY_AMM_ABI = [
   'function buy(bool buyYes, uint256 collateralAmount) external returns (uint256)',
+  'function buy(bool buyYes, uint256 collateralAmount, uint256 minSharesOut) external returns (uint256)',
   'function sell(bool sellYes, uint256 sharesAmount) external returns (uint256)',
+  'function sell(bool sellYes, uint256 sharesAmount, uint256 minCollateralOut) external returns (uint256)',
   'function redeem(uint256 amount) external',
+  'function calculateFee(uint256 amount, bool buyYes) view returns (uint256)',
+  'function estimateBuy(bool buyYes, uint256 collateralAmount) view returns (uint256)',
+  'function estimateSell(bool sellYes, uint256 sharesAmount) view returns (uint256)',
+  'function priceYes() view returns (uint256)',
+  'function priceNo() view returns (uint256)',
   'event SharesBought(address indexed buyer, bool isYes, uint256 collateralIn, uint256 fee, uint256 sharesOut)',
   'event SharesSold(address indexed seller, bool isYes, uint256 sharesIn, uint256 collateralOut, uint256 fee)',
 ];
 
 const MULTI_AMM_ABI = [
   'function buy(uint8 outcomeIndex, uint256 collateralAmount) external returns (uint256)',
+  'function buy(uint8 outcomeIndex, uint256 collateralAmount, uint256 minSharesOut) external returns (uint256)',
   'function sell(uint8 outcomeIndex, uint256 sharesAmount) external returns (uint256)',
+  'function sell(uint8 outcomeIndex, uint256 sharesAmount, uint256 minCollateralOut) external returns (uint256)',
   'function redeem(uint256 amount) external',
+  'function calculateFee(uint256 amount, uint8 outcomeIndex) view returns (uint256)',
+  'function estimateBuy(uint8 outcomeIndex, uint256 collateralAmount) view returns (uint256)',
+  'function estimateSell(uint8 outcomeIndex, uint256 sharesAmount) view returns (uint256)',
+  'function price(uint8 outcomeIndex) view returns (uint256)',
+  'function prices() view returns (uint256[])',
   'event SharesBought(address indexed buyer, uint8 indexed outcomeIndex, uint256 collateralIn, uint256 fee, uint256 sharesOut)',
   'event SharesSold(address indexed seller, uint8 indexed outcomeIndex, uint256 sharesIn, uint256 collateralOut, uint256 fee)',
 ];
@@ -121,6 +139,15 @@ function requireReady() {
     const err = new Error('onchain_not_enabled');
     err.status = 503;
     err.detail = 'set TURNKEY_POLICIES_ENABLED=true + ONCHAIN_RPC_URL + ONCHAIN_COLLATERAL_ADDRESS';
+    throw err;
+  }
+}
+
+function requireReadReady() {
+  if (!process.env.ONCHAIN_RPC_URL) {
+    const err = new Error('onchain_quote_not_enabled');
+    err.status = 503;
+    err.detail = 'set ONCHAIN_RPC_URL';
     throw err;
   }
 }
@@ -215,6 +242,24 @@ function formatCollateral(units) {
   return ethers.utils.formatUnits(units, COLLATERAL_DECIMALS);
 }
 
+function decimalString(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) throw new Error(`invalid decimal value: ${value}`);
+  return n.toFixed(COLLATERAL_DECIMALS);
+}
+
+function parseCollateralUnits(value) {
+  return ethers.utils.parseUnits(decimalString(value), COLLATERAL_DECIMALS);
+}
+
+function toCollateralNumber(units) {
+  return Number(formatCollateral(units));
+}
+
+function priceToNumber(units) {
+  return Number(ethers.utils.formatUnits(units, 6));
+}
+
 function extractRevertDetail(err) {
   const raw = [
     err?.error?.message,
@@ -240,19 +285,43 @@ function ammInterface(market) {
 }
 
 function encodeBuy(market, outcomeIndex, collateralUnits) {
+  return encodeBuyWithMinOut(market, outcomeIndex, collateralUnits, ethers.constants.Zero);
+}
+
+function encodeBuyWithMinOut(market, outcomeIndex, collateralUnits, minSharesUnits) {
   const iface = ammInterface(market);
   if (isBinary(market)) {
-    return iface.encodeFunctionData('buy', [outcomeIndex === 0, collateralUnits]);
+    return iface.encodeFunctionData('buy(bool,uint256,uint256)', [
+      outcomeIndex === 0,
+      collateralUnits,
+      minSharesUnits || ethers.constants.Zero,
+    ]);
   }
-  return iface.encodeFunctionData('buy', [outcomeIndex, collateralUnits]);
+  return iface.encodeFunctionData('buy(uint8,uint256,uint256)', [
+    outcomeIndex,
+    collateralUnits,
+    minSharesUnits || ethers.constants.Zero,
+  ]);
 }
 
 function encodeSell(market, outcomeIndex, sharesUnits) {
+  return encodeSellWithMinOut(market, outcomeIndex, sharesUnits, ethers.constants.Zero);
+}
+
+function encodeSellWithMinOut(market, outcomeIndex, sharesUnits, minCollateralUnits) {
   const iface = ammInterface(market);
   if (isBinary(market)) {
-    return iface.encodeFunctionData('sell', [outcomeIndex === 0, sharesUnits]);
+    return iface.encodeFunctionData('sell(bool,uint256,uint256)', [
+      outcomeIndex === 0,
+      sharesUnits,
+      minCollateralUnits || ethers.constants.Zero,
+    ]);
   }
-  return iface.encodeFunctionData('sell', [outcomeIndex, sharesUnits]);
+  return iface.encodeFunctionData('sell(uint8,uint256,uint256)', [
+    outcomeIndex,
+    sharesUnits,
+    minCollateralUnits || ethers.constants.Zero,
+  ]);
 }
 
 function encodeRedeem(amount) {
@@ -312,8 +381,86 @@ export function requireWalletAddress(row) {
   return addr;
 }
 
+async function readAmmPrices(amm, market, outcomeIndex) {
+  if (isBinary(market)) {
+    const values = await Promise.all([amm.priceYes(), amm.priceNo()]);
+    const prices = values.map(priceToNumber);
+    return {
+      priceBefore: prices[outcomeIndex] ?? null,
+      pricesBefore: prices,
+    };
+  }
+  const values = await amm.prices();
+  const prices = values.map(priceToNumber);
+  return {
+    priceBefore: prices[outcomeIndex] ?? null,
+    pricesBefore: prices,
+  };
+}
+
+export async function quoteBuyOnChain({ market, outcomeIndex, collateral }) {
+  requireReadReady();
+  if (!market?.chain_address) throw new Error('market missing chain_address');
+
+  const amm = new ethers.Contract(
+    market.chain_address,
+    isBinary(market) ? BINARY_AMM_ABI : MULTI_AMM_ABI,
+    provider(),
+  );
+  const collateralUnits = parseCollateralUnits(collateral);
+  const [sharesUnits, feeUnits, prices] = await Promise.all([
+    isBinary(market)
+      ? amm.estimateBuy(outcomeIndex === 0, collateralUnits)
+      : amm.estimateBuy(outcomeIndex, collateralUnits),
+    isBinary(market)
+      ? amm.calculateFee(collateralUnits, outcomeIndex === 0)
+      : amm.calculateFee(collateralUnits, outcomeIndex),
+    readAmmPrices(amm, market, outcomeIndex),
+  ]);
+
+  return formatProtocolBuyQuote({
+    collateral: toCollateralNumber(collateralUnits),
+    fee: toCollateralNumber(feeUnits),
+    sharesOut: toCollateralNumber(sharesUnits),
+    priceBefore: prices.priceBefore,
+    priceAfter: null,
+    pricesBefore: prices.pricesBefore,
+    pricesAfter: null,
+  });
+}
+
+export async function quoteSellOnChain({ market, outcomeIndex, shares }) {
+  requireReadReady();
+  if (!market?.chain_address) throw new Error('market missing chain_address');
+
+  const amm = new ethers.Contract(
+    market.chain_address,
+    isBinary(market) ? BINARY_AMM_ABI : MULTI_AMM_ABI,
+    provider(),
+  );
+  const sharesUnits = parseCollateralUnits(shares);
+  const [outUnits, prices] = await Promise.all([
+    isBinary(market)
+      ? amm.estimateSell(outcomeIndex === 0, sharesUnits)
+      : amm.estimateSell(outcomeIndex, sharesUnits),
+    readAmmPrices(amm, market, outcomeIndex),
+  ]);
+  const out = toCollateralNumber(outUnits);
+
+  return formatProtocolSellQuote({
+    shares: toCollateralNumber(sharesUnits),
+    gross: out,
+    fee: 0,
+    collateralOut: out,
+    priceBefore: prices.priceBefore,
+    priceAfter: null,
+    pricesBefore: prices.pricesBefore,
+    pricesAfter: null,
+  });
+}
+
 export async function buyOnChain({
-  suborgId, ownerAddr, market, outcomeIndex, collateral,
+  suborgId, ownerAddr, market, outcomeIndex, collateral, minSharesOut,
 }) {
   requireReady();
   if (!suborgId) throw new Error('suborgId required');
@@ -321,13 +468,16 @@ export async function buyOnChain({
   if (!market?.chain_address) throw new Error('market missing chain_address');
 
   const ammAddr = market.chain_address;
-  const collateralUnits = ethers.utils.parseUnits(String(collateral), COLLATERAL_DECIMALS);
+  const collateralUnits = parseCollateralUnits(collateral);
+  const minSharesUnits = minSharesOut != null
+    ? parseCollateralUnits(minSharesOut)
+    : ethers.constants.Zero;
 
   await ensureCollateralAllowance({
     suborgId, ownerAddr, ammAddress: ammAddr, amount: collateralUnits,
   });
 
-  const data = encodeBuy(market, outcomeIndex, collateralUnits);
+  const data = encodeBuyWithMinOut(market, outcomeIndex, collateralUnits, minSharesUnits);
   const receipt = await signAndBroadcast({
     suborgId, from: ownerAddr, to: ammAddr, data,
   });
@@ -351,7 +501,7 @@ export async function buyOnChain({
 }
 
 export async function sellOnChain({
-  suborgId, ownerAddr, market, outcomeIndex, shares,
+  suborgId, ownerAddr, market, outcomeIndex, shares, minCollateralOut,
 }) {
   requireReady();
   if (!suborgId) throw new Error('suborgId required');
@@ -359,9 +509,12 @@ export async function sellOnChain({
   if (!market?.chain_address) throw new Error('market missing chain_address');
 
   const ammAddr = market.chain_address;
-  const sharesUnits = ethers.utils.parseUnits(String(shares), COLLATERAL_DECIMALS);
+  const sharesUnits = parseCollateralUnits(shares);
+  const minCollateralUnits = minCollateralOut != null
+    ? parseCollateralUnits(minCollateralOut)
+    : ethers.constants.Zero;
 
-  const data = encodeSell(market, outcomeIndex, sharesUnits);
+  const data = encodeSellWithMinOut(market, outcomeIndex, sharesUnits, minCollateralUnits);
   const receipt = await signAndBroadcast({
     suborgId, from: ownerAddr, to: ammAddr, data,
   });

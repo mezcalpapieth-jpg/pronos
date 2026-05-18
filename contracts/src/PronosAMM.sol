@@ -170,6 +170,23 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
         whenNotResolved
         returns (uint256 sharesOut)
     {
+        return _buy(msg.sender, buyYes, collateralAmount, 0);
+    }
+
+    function buy(bool buyYes, uint256 collateralAmount, uint256 minSharesOut)
+        external
+        nonReentrant
+        whenNotPaused
+        whenNotResolved
+        returns (uint256 sharesOut)
+    {
+        return _buy(msg.sender, buyYes, collateralAmount, minSharesOut);
+    }
+
+    function _buy(address buyer, bool buyYes, uint256 collateralAmount, uint256 minSharesOut)
+        internal
+        returns (uint256 sharesOut)
+    {
         require(initialized, "PronosAMM: not initialized");
         require(collateralAmount > 0, "PronosAMM: zero amount");
 
@@ -184,38 +201,48 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
         // doesn't lose dust to a no-op trade.
         require(netAmount > 0, "PronosAMM: amount below fee");
 
-        // 2. Transfer full amount from user
-        require(collateral.transferFrom(msg.sender, address(this), collateralAmount), "PronosAMM: transfer failed");
-
-        // 3. Send fee directly to fee collector (never enters pool)
-        if (fee > 0) {
-            require(collateral.transfer(feeCollector, fee), "PronosAMM: fee transfer failed");
-            totalFeesCollected += fee;
-        }
-
-        // 4. Mint YES + NO tokens backed by net amount
-        token.mintPair(address(this), marketId, netAmount);
-
-        // 5. Calculate shares out using CPMM
+        // 2. Calculate shares out using CPMM before external transfers so
+        // the min-output guard can fail without moving collateral/tokens.
         uint256 k = reserveYes * reserveNo;
+        uint256 newReserveYes;
+        uint256 newReserveNo;
+        uint256 tokenId;
 
         if (buyYes) {
             uint256 newNo = reserveNo + netAmount;
             uint256 newYes = (k + newNo - 1) / newNo; // round up to protect pool
             sharesOut = (reserveYes + netAmount) - newYes;
-            reserveYes = newYes;
-            reserveNo  = newNo;
-            token.safeTransferFrom(address(this), msg.sender, yesId, sharesOut, "");
+            newReserveYes = newYes;
+            newReserveNo = newNo;
+            tokenId = yesId;
         } else {
             uint256 newYes = reserveYes + netAmount;
             uint256 newNo = (k + newYes - 1) / newYes;
             sharesOut = (reserveNo + netAmount) - newNo;
-            reserveNo  = newNo;
-            reserveYes = newYes;
-            token.safeTransferFrom(address(this), msg.sender, noId, sharesOut, "");
+            newReserveYes = newYes;
+            newReserveNo = newNo;
+            tokenId = noId;
         }
 
-        emit SharesBought(msg.sender, buyYes, collateralAmount, fee, sharesOut);
+        require(sharesOut > 0, "PronosAMM: insufficient output");
+        require(sharesOut >= minSharesOut, "PronosAMM: price moved");
+
+        // 3. Transfer full amount from user.
+        require(collateral.transferFrom(buyer, address(this), collateralAmount), "PronosAMM: transfer failed");
+
+        // 4. Send fee directly to fee collector (never enters pool).
+        if (fee > 0) {
+            require(collateral.transfer(feeCollector, fee), "PronosAMM: fee transfer failed");
+            totalFeesCollected += fee;
+        }
+
+        // 5. Mint YES + NO tokens backed by net amount, then settle state.
+        token.mintPair(address(this), marketId, netAmount);
+        reserveYes = newReserveYes;
+        reserveNo = newReserveNo;
+        token.safeTransferFrom(address(this), buyer, tokenId, sharesOut, "");
+
+        emit SharesBought(buyer, buyYes, collateralAmount, fee, sharesOut);
     }
 
     /**
@@ -235,6 +262,23 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
         whenNotResolved
         returns (uint256 collateralOut)
     {
+        return _sell(msg.sender, sellYes, sharesAmount, 0);
+    }
+
+    function sell(bool sellYes, uint256 sharesAmount, uint256 minCollateralOut)
+        external
+        nonReentrant
+        whenNotPaused
+        whenNotResolved
+        returns (uint256 collateralOut)
+    {
+        return _sell(msg.sender, sellYes, sharesAmount, minCollateralOut);
+    }
+
+    function _sell(address seller, bool sellYes, uint256 sharesAmount, uint256 minCollateralOut)
+        internal
+        returns (uint256 collateralOut)
+    {
         require(initialized, "PronosAMM: not initialized");
         require(sharesAmount > 0, "PronosAMM: zero amount");
 
@@ -243,11 +287,9 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
         uint256 b; // other side reserve
 
         if (sellYes) {
-            token.safeTransferFrom(msg.sender, address(this), yesId, sharesAmount, "");
             a = reserveYes + sharesAmount;
             b = reserveNo;
         } else {
-            token.safeTransferFrom(msg.sender, address(this), noId, sharesAmount, "");
             a = reserveNo + sharesAmount;
             b = reserveYes;
         }
@@ -263,26 +305,32 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
         // way and c rounds DOWN. The pool keeps the rounding crumb;
         // sellers receive at most 1 wei less than the exact solution
         // (negligible at 6-decimal collateral scale).
-        uint256 diff = a > b ? a - b : b - a;
-        uint256 discriminant = diff * diff + 4 * k;
-        uint256 sqrtDisc = _sqrt(discriminant);
-        if (sqrtDisc * sqrtDisc < discriminant) {
-            sqrtDisc += 1; // promote floor to ceil
+        uint256 c;
+        {
+            uint256 diff = a > b ? a - b : b - a;
+            uint256 discriminant = diff * diff + 4 * k;
+            uint256 sqrtDisc = _sqrt(discriminant);
+            if (sqrtDisc * sqrtDisc < discriminant) {
+                sqrtDisc += 1; // promote floor to ceil
+            }
+            require(a + b >= sqrtDisc, "PronosAMM: insufficient output");
+            c = (a + b - sqrtDisc) / 2;
         }
-        require(a + b >= sqrtDisc, "PronosAMM: insufficient output");
-        uint256 c = (a + b - sqrtDisc) / 2;
 
         require(c > 0, "PronosAMM: insufficient output");
 
         // Calculate fee on collateral out (fee based on the side being sold)
         uint256 fee = calculateFee(c, !sellYes); // selling YES = effectively buying NO
         collateralOut = c - fee;
+        require(collateralOut >= minCollateralOut, "PronosAMM: price moved");
 
         // Update reserves
         if (sellYes) {
+            token.safeTransferFrom(seller, address(this), yesId, sharesAmount, "");
             reserveYes = a - c;
             reserveNo  = b - c;
         } else {
+            token.safeTransferFrom(seller, address(this), noId, sharesAmount, "");
             reserveNo  = a - c;
             reserveYes = b - c;
         }
@@ -297,9 +345,9 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
         }
 
         // Send collateral to seller
-        require(collateral.transfer(msg.sender, collateralOut), "PronosAMM: transfer failed");
+        require(collateral.transfer(seller, collateralOut), "PronosAMM: transfer failed");
 
-        emit SharesSold(msg.sender, sellYes, sharesAmount, collateralOut, fee);
+        emit SharesSold(seller, sellYes, sharesAmount, collateralOut, fee);
     }
 
     // ─── View functions ──────────────────────────────────────────────────────

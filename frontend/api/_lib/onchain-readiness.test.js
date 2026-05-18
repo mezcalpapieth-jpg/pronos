@@ -86,16 +86,15 @@ test('collectOnchainReadiness catches deployment alias mismatches', () => {
   assert.match(warnings, /VITE_PRONOS_ARBITRUM_TOKEN does not match ONCHAIN_COLLATERAL_ADDRESS/);
 });
 
-test('collectOnchainReadiness reports deployed pools missing from Turnkey policy targets', () => {
+test('collectOnchainReadiness reports env pool gaps without failing DB-backed policy autofill', () => {
   const result = collectOnchainReadiness({
     env: completeEnv(),
     protocolPools: [ADDR.poolA, ADDR.poolB],
   });
 
+  assert.equal(result.ok, true);
   assert.equal(result.policy.configuredPoolCount, 1);
+  assert.equal(result.policy.autoIncludesIndexedPools, true);
   assert.deepEqual(result.policy.missingPools, [ADDR.poolB]);
-  assert.match(
-    result.warnings.join('\n'),
-    /ONCHAIN_MARKET_POOL_ADDRESSES missing 1 deployed protocol pool/,
-  );
+  assert.doesNotMatch(result.warnings.join('\n'), /ONCHAIN_MARKET_POOL_ADDRESSES missing/);
 });

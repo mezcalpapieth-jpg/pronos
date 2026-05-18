@@ -128,6 +128,22 @@ contract PronosAMMMulti is ERC1155Holder {
         whenNotResolved
         returns (uint256 sharesOut)
     {
+        return _buy(msg.sender, outcomeIndex, collateralAmount, 0);
+    }
+
+    function buy(uint8 outcomeIndex, uint256 collateralAmount, uint256 minSharesOut)
+        external
+        whenNotPaused
+        whenNotResolved
+        returns (uint256 sharesOut)
+    {
+        return _buy(msg.sender, outcomeIndex, collateralAmount, minSharesOut);
+    }
+
+    function _buy(address buyer, uint8 outcomeIndex, uint256 collateralAmount, uint256 minSharesOut)
+        internal
+        returns (uint256 sharesOut)
+    {
         require(initialized, "PronosAMMMulti: not initialized");
         require(collateralAmount > 0, "PronosAMMMulti: zero amount");
         _requireOutcome(outcomeIndex);
@@ -138,8 +154,9 @@ contract PronosAMMMulti is ERC1155Holder {
 
         sharesOut = _estimateBuyNet(outcomeIndex, netAmount);
         require(sharesOut > 0, "PronosAMMMulti: insufficient output");
+        require(sharesOut >= minSharesOut, "PronosAMMMulti: price moved");
 
-        require(collateral.transferFrom(msg.sender, address(this), collateralAmount), "PronosAMMMulti: transfer failed");
+        require(collateral.transferFrom(buyer, address(this), collateralAmount), "PronosAMMMulti: transfer failed");
         if (fee > 0) {
             require(collateral.transfer(feeCollector, fee), "PronosAMMMulti: fee transfer failed");
             totalFeesCollected += fee;
@@ -154,13 +171,13 @@ contract PronosAMMMulti is ERC1155Holder {
 
         token.safeTransferFrom(
             address(this),
-            msg.sender,
+            buyer,
             token.tokenId(marketId, outcomeIndex),
             sharesOut,
             ""
         );
 
-        emit SharesBought(msg.sender, outcomeIndex, collateralAmount, fee, sharesOut);
+        emit SharesBought(buyer, outcomeIndex, collateralAmount, fee, sharesOut);
     }
 
     function sell(uint8 outcomeIndex, uint256 sharesAmount)
@@ -169,15 +186,32 @@ contract PronosAMMMulti is ERC1155Holder {
         whenNotResolved
         returns (uint256 collateralOut)
     {
+        return _sell(msg.sender, outcomeIndex, sharesAmount, 0);
+    }
+
+    function sell(uint8 outcomeIndex, uint256 sharesAmount, uint256 minCollateralOut)
+        external
+        whenNotPaused
+        whenNotResolved
+        returns (uint256 collateralOut)
+    {
+        return _sell(msg.sender, outcomeIndex, sharesAmount, minCollateralOut);
+    }
+
+    function _sell(address seller, uint8 outcomeIndex, uint256 sharesAmount, uint256 minCollateralOut)
+        internal
+        returns (uint256 collateralOut)
+    {
         require(initialized, "PronosAMMMulti: not initialized");
         require(sharesAmount > 0, "PronosAMMMulti: zero amount");
         _requireOutcome(outcomeIndex);
 
         collateralOut = _estimateSellGross(outcomeIndex, sharesAmount);
         require(collateralOut > 0, "PronosAMMMulti: insufficient output");
+        require(collateralOut >= minCollateralOut, "PronosAMMMulti: price moved");
 
         token.safeTransferFrom(
-            msg.sender,
+            seller,
             address(this),
             token.tokenId(marketId, outcomeIndex),
             sharesAmount,
@@ -193,9 +227,9 @@ contract PronosAMMMulti is ERC1155Holder {
         }
 
         token.burnCompleteSet(address(this), marketId, collateralOut);
-        require(collateral.transfer(msg.sender, collateralOut), "PronosAMMMulti: transfer failed");
+        require(collateral.transfer(seller, collateralOut), "PronosAMMMulti: transfer failed");
 
-        emit SharesSold(msg.sender, outcomeIndex, sharesAmount, collateralOut, 0);
+        emit SharesSold(seller, outcomeIndex, sharesAmount, collateralOut, 0);
     }
 
     function price(uint8 outcomeIndex) public view returns (uint256) {

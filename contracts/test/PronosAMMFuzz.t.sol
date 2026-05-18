@@ -206,6 +206,25 @@ contract PronosAMMFuzzTest is Test {
         assertEq(estimated, actual, "estimateBuy diverges from buy()");
     }
 
+    function test_buy_with_min_shares_reverts_when_quote_is_stale() public {
+        uint256 amount = 100 * ONE_USDC;
+        uint256 estimated = pool.estimateBuy(true, amount);
+
+        vm.expectRevert("PronosAMM: price moved");
+        vm.prank(trader);
+        pool.buy(true, amount, estimated + 1);
+    }
+
+    function test_buy_with_min_shares_accepts_current_quote() public {
+        uint256 amount = 100 * ONE_USDC;
+        uint256 estimated = pool.estimateBuy(true, amount);
+
+        vm.prank(trader);
+        uint256 actual = pool.buy(true, amount, estimated);
+
+        assertEq(actual, estimated, "guarded buy changed quote");
+    }
+
     /// @notice estimateSell must equal collOut from sell().
     function testFuzz_estimate_sell_matches_actual(uint256 buyAmount, bool sellYes) public {
         buyAmount = bound(buyAmount, ONE_USDC, 5_000 * ONE_USDC);
@@ -223,6 +242,22 @@ contract PronosAMMFuzzTest is Test {
         vm.prank(trader);
         uint256 actual = pool.sell(sellYes, sellAmount);
         assertEq(estimated, actual, "estimateSell diverges from sell()");
+    }
+
+    function test_sell_with_min_collateral_reverts_when_quote_is_stale() public {
+        uint256 buyAmount = 100 * ONE_USDC;
+        vm.prank(trader);
+        uint256 shares = pool.buy(true, buyAmount);
+
+        vm.prank(trader);
+        token.setApprovalForAll(address(pool), true);
+
+        uint256 sellAmount = shares / 2;
+        uint256 estimated = pool.estimateSell(true, sellAmount);
+
+        vm.expectRevert("PronosAMM: price moved");
+        vm.prank(trader);
+        pool.sell(true, sellAmount, estimated + 1);
     }
 
     // ─── Fuzz: fee monotonicity ──────────────────────────────────────────────

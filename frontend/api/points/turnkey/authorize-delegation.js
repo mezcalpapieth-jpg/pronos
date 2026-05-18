@@ -31,6 +31,24 @@ const readSql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 // who re-auth inside that window just hit idempotent success.
 const REFRESH_THRESHOLD_MS = 14 * 86_400_000;
 
+async function readProtocolPolicyPools() {
+  try {
+    const rows = await readSql`
+      SELECT pool_address, created_at
+      FROM protocol_markets
+      WHERE pool_address IS NOT NULL
+      ORDER BY created_at DESC NULLS LAST
+      LIMIT 500
+    `;
+    const pools = rows.map(r => r.pool_address).filter(Boolean);
+    const latestCreatedAt = rows.find(r => r.created_at)?.created_at || null;
+    return { pools, latestCreatedAt };
+  } catch (e) {
+    console.warn('[turnkey/authorize-delegation] protocol pool lookup failed', { message: e?.message });
+    return { pools: [], latestCreatedAt: null };
+  }
+}
+
 export default async function handler(req, res) {
   try {
     const cors = applyCors(req, res, { methods: 'POST, OPTIONS', credentials: true });
@@ -44,7 +62,7 @@ export default async function handler(req, res) {
     await ensurePointsSchema(sql);
 
     const existing = await readSql`
-      SELECT delegation_policy_id, delegation_expires_at
+      SELECT delegation_policy_id, delegation_expires_at, delegation_authorized_at
       FROM points_users
       WHERE turnkey_sub_org_id = ${session.sub}
       LIMIT 1
@@ -53,21 +71,31 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'user_not_found' });
     }
     const row = existing[0];
+    const poolCoverage = await readProtocolPolicyPools();
     const now = Date.now();
     const expMs = row.delegation_expires_at ? new Date(row.delegation_expires_at).getTime() : 0;
-    if (row.delegation_policy_id && expMs - now > REFRESH_THRESHOLD_MS) {
+    const authMs = row.delegation_authorized_at
+      ? new Date(row.delegation_authorized_at).getTime()
+      : 0;
+    const latestPoolMs = poolCoverage.latestCreatedAt
+      ? new Date(poolCoverage.latestCreatedAt).getTime()
+      : 0;
+    const staleForNewPools = latestPoolMs > authMs;
+    if (row.delegation_policy_id && expMs - now > REFRESH_THRESHOLD_MS && !staleForNewPools) {
       return res.status(200).json({
         ok: true,
         status: 'already_authorized',
         policyId: row.delegation_policy_id,
         expiresAt: row.delegation_expires_at,
         enabled: isDelegationEnabled(),
+        policyPoolCount: poolCoverage.pools.length,
       });
     }
 
     const policy = await createDelegationPolicy({
       suborgId: session.sub,
       backendApiPublicKey: process.env.TURNKEY_API_PUBLIC_KEY || null,
+      extraMarketPools: poolCoverage.pools,
     });
 
     await sql`
@@ -87,6 +115,8 @@ export default async function handler(req, res) {
       dailyCapMxnb: policy.dailyCapMxnb,
       simulated: !!policy.simulated,
       enabled: isDelegationEnabled(),
+      policyPoolCount: poolCoverage.pools.length,
+      refreshedForNewPools: staleForNewPools,
     });
   } catch (e) {
     console.error('[turnkey/authorize-delegation] error', {

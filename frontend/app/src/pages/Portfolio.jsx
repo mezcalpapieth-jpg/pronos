@@ -163,6 +163,7 @@ export default function Portfolio({ onOpenLogin }) {
   // active and the banner disappears naturally.
   const DELEGATION_DISMISS_KEY = 'pronos.delegationBannerDismissed.v1';
   const [delegationActive, setDelegationActive] = useState(null); // null = not loaded yet
+  const [delegationNeedsRefresh, setDelegationNeedsRefresh] = useState(false);
   const [delegationDismissed, setDelegationDismissed] = useState(() => {
     try { return localStorage.getItem(DELEGATION_DISMISS_KEY) === '1'; }
     catch { return false; }
@@ -171,8 +172,17 @@ export default function Portfolio({ onOpenLogin }) {
     if (!authenticated) return;
     let cancelled = false;
     fetchDelegationStatus()
-      .then(s => { if (!cancelled) setDelegationActive(Boolean(s?.active)); })
-      .catch(() => { if (!cancelled) setDelegationActive(false); });
+      .then(s => {
+        if (cancelled) return;
+        setDelegationActive(Boolean(s?.active));
+        setDelegationNeedsRefresh(Boolean(s?.needsRefresh));
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDelegationActive(false);
+          setDelegationNeedsRefresh(false);
+        }
+      });
     return () => { cancelled = true; };
   }, [authenticated]);
 
@@ -189,7 +199,7 @@ export default function Portfolio({ onOpenLogin }) {
   }
   const showDelegationBanner = authenticated
     && delegationActive === false
-    && !delegationDismissed;
+    && (!delegationDismissed || delegationNeedsRefresh);
 
   const loadAll = useCallback(async () => {
     if (!authenticated) return;
@@ -214,15 +224,26 @@ export default function Portfolio({ onOpenLogin }) {
   }, [authenticated, loadAll]);
 
   async function handleSell(pos) {
-    const confirmMsg = `¿Vender ${formatNum(pos.shares, 4)} acciones de "${pos.outcomeLabel || pos.question}"?`;
-    if (!window.confirm(confirmMsg)) return;
     setSellingId(`${pos.marketId}-${pos.outcomeIndex}`);
     setNotice(null);
     try {
+      const quoteRes = await postJson('/api/protocol/quote-sell', {
+        marketId: pos.marketId,
+        outcomeIndex: pos.outcomeIndex,
+        shares: pos.shares,
+      });
+      if (!quoteRes.ok) throw new Error(quoteRes.data?.error || 'quote_failed');
+      const quotedOut = Number(quoteRes.data?.collateralOut || 0);
+      const confirmMsg = quotedOut > 0
+        ? `¿Vender ${formatNum(pos.shares, 4)} acciones de "${pos.outcomeLabel || pos.question}" por aprox. $${formatNum(quotedOut)}?`
+        : `¿Vender ${formatNum(pos.shares, 4)} acciones de "${pos.outcomeLabel || pos.question}"?`;
+      if (!window.confirm(confirmMsg)) return;
+      const minCollateralOut = quotedOut > 0 ? quotedOut * 0.98 : undefined;
       const { ok, data } = await postJson('/api/protocol/sell', {
         marketId: pos.marketId,
         outcomeIndex: pos.outcomeIndex,
         shares: pos.shares,
+        minCollateralOut,
       });
       if (!ok) throw new Error(data?.error || 'sell_failed');
       setNotice({ type: 'success', msg: `Vendido por $${formatNum(data?.collateralOut)}.` });

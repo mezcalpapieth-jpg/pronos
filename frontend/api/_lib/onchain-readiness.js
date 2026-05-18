@@ -138,6 +138,7 @@ export function collectOnchainReadiness({
     indexedPoolCount: indexedPools.length,
     missingPools,
     coverageError: protocolPoolError,
+    autoIncludesIndexedPools: true,
   };
 
   const deployment = {
@@ -218,14 +219,6 @@ export function collectOnchainReadiness({
   if (policy.coverageError) {
     warnings.push(`protocol pool coverage check failed: ${String(policy.coverageError).slice(0, 160)}`);
   }
-  if (policy.configuredPoolCount === 0) {
-    warnings.push('ONCHAIN_MARKET_POOL_ADDRESSES empty - new user delegation policies cannot trade deployed pools');
-  }
-  if (policy.missingPools.length > 0) {
-    const noun = policy.missingPools.length === 1 ? 'pool' : 'pools';
-    warnings.push(`ONCHAIN_MARKET_POOL_ADDRESSES missing ${policy.missingPools.length} deployed protocol ${noun}`);
-  }
-
   return {
     ok: warnings.length === 0,
     env: runtimeEnv,

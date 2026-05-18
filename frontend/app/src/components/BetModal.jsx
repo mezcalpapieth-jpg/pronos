@@ -7,9 +7,10 @@
  * off-chain /api/points/buy endpoint — these two flows are completely
  * separate now (the points-app's MXNP ledger is never on-chain).
  *
- * Slippage preview is currently degraded: there's no /api/protocol/quote-buy
- * endpoint yet, so the modal falls back to a naive fee estimate. TODO: add
- * a chain-aware quote endpoint that calls AMM.estimateBuy / AMM.estimateSell.
+ * Quotes come from /api/protocol/quote-buy, then confirmation sends
+ * minSharesOut/maxAvgPrice guards to /api/protocol/buy. The contract
+ * also receives the min-output guard so mined transactions cannot drift
+ * below the preview tolerance.
  */
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -37,10 +38,6 @@ async function postJson(url, body) {
   return { ok: res.ok, status: res.status, data };
 }
 
-async function postJsonWithQuery(url, body) {
-  return postJson(url, body);
-}
-
 export default function BetModal({
   open,
   onClose,
@@ -64,7 +61,8 @@ export default function BetModal({
   const [quoteError, setQuoteError] = useState('');
 
   const numAmount = parseFloat(amount) || 0;
-  const isLoading = step === STEPS.QUOTING || step === STEPS.PLACING;
+  const isQuoting = step === STEPS.QUOTING;
+  const isLoading = step === STEPS.PLACING;
   const isDrawer = variant === 'drawer';
 
   const balance = typeof user?.balance === 'number' ? user.balance : null;
@@ -74,17 +72,46 @@ export default function BetModal({
   // changes; can be deleted once they're cleaned up.
   const isOnchain = true;
 
-  // Slippage preview is disabled until /api/protocol/quote-buy exists.
-  // The modal handles `quote === null` gracefully (shows a "preview
-  // unavailable" tag and falls back to the naive fee estimate below).
   useEffect(() => {
+    if (!open || !marketId || numAmount <= 0) {
+      setQuote(null);
+      setQuoteError('');
+      setStep(current => (current === STEPS.QUOTING ? STEPS.IDLE : current));
+      return undefined;
+    }
+    let cancelled = false;
     setQuote(null);
     setQuoteError('');
+    setStep(current => (
+      current === STEPS.PLACING || current === STEPS.SUCCESS ? current : STEPS.QUOTING
+    ));
+    const handle = setTimeout(() => {
+      postJson('/api/protocol/quote-buy', {
+        marketId,
+        outcomeIndex,
+        collateral: numAmount,
+      }).then(({ ok, data }) => {
+        if (cancelled) return;
+        if (!ok) {
+          setQuote(null);
+          setQuoteError(data?.error || 'quote_failed');
+        } else {
+          setQuote(data);
+          setQuoteError('');
+        }
+        setStep(current => (current === STEPS.QUOTING ? STEPS.IDLE : current));
+      }).catch((e) => {
+        if (cancelled) return;
+        setQuote(null);
+        setQuoteError(e?.message || 'quote_failed');
+        setStep(current => (current === STEPS.QUOTING ? STEPS.IDLE : current));
+      });
+    }, 220);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
   }, [open, marketId, outcomeIndex, numAmount]);
-  // postJsonWithQuery is unused after the quote removal; keep the
-  // helper around in case the chain-aware quote endpoint shows up
-  // later — its signature already matches.
-  void postJsonWithQuery;
 
   if (!open) return null;
 
@@ -94,10 +121,12 @@ export default function BetModal({
   const naivePayout = outcomePct > 0 && numAmount > 0
     ? (numAmount - fee) / (outcomePct / 100)
     : null;
-  const payout      = quote?.payout ?? (naivePayout !== null ? naivePayout : '—');
-  const profit      = quote?.profit ?? (naivePayout !== null ? naivePayout - numAmount : '—');
+  const payout      = quote?.payout ?? quote?.sharesOut ?? (naivePayout !== null ? naivePayout : '—');
+  const profit      = quote?.profit ?? (typeof payout === 'number' ? payout - numAmount : '—');
   const impliedPct = quote?.currentPrice !== undefined ? Math.round(quote.currentPrice * 100) : outcomePct;
-  const postPct    = quote?.postTradePrice !== undefined ? Math.round(quote.postTradePrice * 100) : null;
+  const postPct    = quote?.postTradePrice !== undefined && quote?.postTradePrice !== null
+    ? Math.round(quote.postTradePrice * 100)
+    : null;
   const slippagePts = quote?.priceImpactPts ?? 0;
   const highSlippage = Math.abs(slippagePts) >= 5;
 
@@ -114,6 +143,11 @@ export default function BetModal({
     if (balance !== null && balance < numAmount && !isOnchain) {
       setStep(STEPS.ERROR);
       setStatusMsg(t('bet.insufficient', { bal: balance.toFixed(2) }));
+      return;
+    }
+    if (!quote) {
+      setStep(STEPS.ERROR);
+      setStatusMsg(t('bet.previewUnavailable') || 'No se pudo cotizar el mercado. Intenta otra vez.');
       return;
     }
 
@@ -382,7 +416,7 @@ export default function BetModal({
           className="btn-primary"
           style={{ width: '100%', opacity: step === STEPS.SUCCESS ? 0.7 : 1 }}
           onClick={step === STEPS.SUCCESS ? handleClose : handleBet}
-          disabled={isLoading}
+          disabled={isLoading || isQuoting}
         >
           {buttonLabel()}
         </button>

@@ -21,8 +21,13 @@ import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { requireSession } from '../_lib/session.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
-import { buyOnChain } from '../_lib/onchain-trader.js';
+import { buyOnChain, quoteBuyOnChain } from '../_lib/onchain-trader.js';
 import { seriesTradeLockFromRows } from '../_lib/series-markets.js';
+import {
+  defaultMinSharesOut,
+  enforceProtocolBuySlippage,
+  optionalFiniteNumber,
+} from '../_lib/protocol-trade-guards.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 
@@ -71,7 +76,7 @@ export default async function handler(req, res) {
   if (!session) return;
   if (!session.sub) return res.status(400).json({ error: 'suborg_required' });
 
-  const { marketId, outcomeIndex, collateral } = req.body || {};
+  const { marketId, outcomeIndex, collateral, minSharesOut, maxAvgPrice } = req.body || {};
   const mid = parseInt(marketId, 10);
   const oi  = parseInt(outcomeIndex, 10);
   const amt = Number(collateral);
@@ -96,6 +101,9 @@ export default async function handler(req, res) {
     if (m.status !== 'active') {
       return res.status(400).json({ error: 'market_closed' });
     }
+    if (!m.pool_address) {
+      return res.status(400).json({ error: 'market_missing_pool' });
+    }
     if (m.end_time && new Date(m.end_time) <= new Date()) {
       return res.status(400).json({ error: 'market_expired' });
     }
@@ -110,6 +118,14 @@ export default async function handler(req, res) {
     if (oi >= outcomes.length) {
       return res.status(400).json({ error: 'invalid_outcome_index' });
     }
+    const quote = await quoteBuyOnChain({
+      market: { chain_address: m.pool_address, outcomes },
+      outcomeIndex: oi,
+      collateral: amt,
+    });
+    enforceProtocolBuySlippage({ quote, minSharesOut, maxAvgPrice });
+    const txMinSharesOut = optionalFiniteNumber(minSharesOut)
+      ?? defaultMinSharesOut(quote);
 
     // Resolve the user's EVM wallet via the suborg → points_users mapping.
     // We share the users table with points-app for auth; only the DB
@@ -130,6 +146,7 @@ export default async function handler(req, res) {
       market: { chain_address: m.pool_address, outcomes },
       outcomeIndex: oi,
       collateral: amt,
+      minSharesOut: txMinSharesOut,
     });
 
     return res.status(200).json({

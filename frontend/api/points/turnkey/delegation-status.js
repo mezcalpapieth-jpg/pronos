@@ -18,6 +18,22 @@ import {
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
 
+async function readLatestProtocolPoolCreatedAt() {
+  try {
+    const rows = await sql`
+      SELECT created_at
+      FROM protocol_markets
+      WHERE pool_address IS NOT NULL
+      ORDER BY created_at DESC NULLS LAST
+      LIMIT 1
+    `;
+    return rows[0]?.created_at || null;
+  } catch (e) {
+    console.warn('[turnkey/delegation-status] protocol pool lookup failed', { message: e?.message });
+    return null;
+  }
+}
+
 export default async function handler(req, res) {
   try {
     const cors = applyCors(req, res, { methods: 'GET, OPTIONS', credentials: true });
@@ -39,11 +55,18 @@ export default async function handler(req, res) {
     `;
     const row = rows[0] || {};
     const expMs = row.delegation_expires_at ? new Date(row.delegation_expires_at).getTime() : 0;
-    const active = Boolean(row.delegation_policy_id) && expMs > Date.now();
+    const latestPoolCreatedAt = await readLatestProtocolPoolCreatedAt();
+    const authMs = row.delegation_authorized_at
+      ? new Date(row.delegation_authorized_at).getTime()
+      : 0;
+    const latestPoolMs = latestPoolCreatedAt ? new Date(latestPoolCreatedAt).getTime() : 0;
+    const needsRefresh = Boolean(row.delegation_policy_id) && latestPoolMs > authMs;
+    const active = Boolean(row.delegation_policy_id) && expMs > Date.now() && !needsRefresh;
     const simulated = String(row.delegation_policy_id || '').startsWith('simulated-');
 
     return res.status(200).json({
       active,
+      needsRefresh,
       simulated,
       // When delegation is disabled at the env level the active
       // column may still be true (a simulated policy exists) but

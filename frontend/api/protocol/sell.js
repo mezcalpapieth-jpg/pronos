@@ -15,7 +15,12 @@ import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { requireSession } from '../_lib/session.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
-import { sellOnChain } from '../_lib/onchain-trader.js';
+import { quoteSellOnChain, sellOnChain } from '../_lib/onchain-trader.js';
+import {
+  defaultMinCollateralOut,
+  enforceProtocolSellSlippage,
+  optionalFiniteNumber,
+} from '../_lib/protocol-trade-guards.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 
@@ -42,7 +47,7 @@ export default async function handler(req, res) {
   if (!session) return;
   if (!session.sub) return res.status(400).json({ error: 'suborg_required' });
 
-  const { marketId, outcomeIndex, shares } = req.body || {};
+  const { marketId, outcomeIndex, shares, minCollateralOut } = req.body || {};
   const mid = parseInt(marketId, 10);
   const oi  = parseInt(outcomeIndex, 10);
   const n   = Number(shares);
@@ -64,6 +69,9 @@ export default async function handler(req, res) {
     if (m.status !== 'active') {
       return res.status(400).json({ error: 'market_closed' });
     }
+    if (!m.pool_address) {
+      return res.status(400).json({ error: 'market_missing_pool' });
+    }
     if (m.end_time && new Date(m.end_time) <= new Date()) {
       return res.status(400).json({ error: 'market_expired' });
     }
@@ -71,6 +79,14 @@ export default async function handler(req, res) {
     if (oi >= outcomes.length) {
       return res.status(400).json({ error: 'invalid_outcome_index' });
     }
+    const quote = await quoteSellOnChain({
+      market: { chain_address: m.pool_address, outcomes },
+      outcomeIndex: oi,
+      shares: n,
+    });
+    enforceProtocolSellSlippage({ quote, minCollateralOut });
+    const txMinCollateralOut = optionalFiniteNumber(minCollateralOut)
+      ?? defaultMinCollateralOut(quote);
 
     const userRows = await sql`
       SELECT wallet_address FROM points_users
@@ -88,6 +104,7 @@ export default async function handler(req, res) {
       market: { chain_address: m.pool_address, outcomes },
       outcomeIndex: oi,
       shares: n,
+      minCollateralOut: txMinCollateralOut,
     });
 
     return res.status(200).json({
