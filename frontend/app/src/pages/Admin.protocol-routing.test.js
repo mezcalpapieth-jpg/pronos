@@ -67,11 +67,31 @@ test('MVP admin status panel surfaces Turnkey and deployment readiness fields', 
 test('MVP admin category and create form stay aligned with points taxonomy metadata', () => {
   const createForm = section('function CreateMarketForm', '// ═══ Edit-market modal');
 
-  assert.match(source, /value:\s*'world-cup',\s*label:\s*'Copa del Mundo'/);
-  assert.match(source, /value:\s*'mexico',\s*label:\s*'Mexico & Latam'/);
+  assert.match(source, /from '\.\.\/lib\/mvpAdminMarketFilters\.js'/);
+  assert.match(source, /DEFAULT_CATEGORY_ICONS/);
+  assert.doesNotMatch(createForm, /\{c\.icon\}\s*\{c\.label\}/);
   assert.match(createForm, /icon,\s*\n\s*sport:\s*sport \|\| null,/);
   assert.match(createForm, /league:\s*league \|\| null,/);
+  assert.match(createForm, /categoryTags:\s*categoryTagsForCreate,/);
+  assert.match(createForm, /geoTags:\s*geoTagsForCreate,/);
+  assert.match(createForm, /topicTags:\s*topicTagsForCreate,/);
+  assert.match(createForm, /category === 'mexico'/);
   assert.match(createForm, /outcomeImages:\s*hasAnyImage \? trimmedImages : null,/);
+});
+
+test('MVP admin market filters are emoji-free and expose category subfilters', () => {
+  const marketsList = section('function MarketsList', 'function SocialTasksSection');
+
+  assert.match(marketsList, /sportFilter/);
+  assert.match(marketsList, /leagueFilter/);
+  assert.match(marketsList, /cryptoTypeFilter/);
+  assert.match(marketsList, /geoFilter/);
+  assert.match(marketsList, /topicFilter/);
+  assert.match(marketsList, /showMexicoFilters/);
+  assert.match(marketsList, /ADMIN_GEO_FILTERS\.map/);
+  assert.match(marketsList, /ADMIN_MEXICO_TOPIC_FILTERS\.map/);
+  assert.match(marketsList, /filterProtocolAdminMarkets/);
+  assert.doesNotMatch(marketsList, /\{tab\.icon\}\s*\{tab\.label\}/);
 });
 
 test('MVP generated queue can inspect and re-add rejected markets', () => {

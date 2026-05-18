@@ -22,61 +22,25 @@ import Nav from '../components/Nav.jsx';
 import Footer from '../components/Footer.jsx';
 import { usePointsAuth } from '../lib/pointsAuth.js';
 import { useT } from '../lib/i18n.js';
-
-const CATEGORIES = [
-  { value: 'general',  label: 'General',        icon: '📊' },
-  { value: 'mexico',   label: 'Mexico & Latam', icon: '🇲🇽' },
-  { value: 'politica', label: 'Política',       icon: '🗳️' },
-  { value: 'deportes', label: 'Deportes', icon: '⚽' },
-  { value: 'crypto',   label: 'Crypto',   icon: '₿'  },
-  { value: 'finanzas', label: 'Finanzas', icon: '📈' },
-  { value: 'musica',   label: 'Música',   icon: '🎵' },
-  { value: 'world-cup', label: 'Copa del Mundo', icon: '🏆' },
-];
-
-const MARKET_CATEGORY_FILTERS = [
-  { value: 'all', label: 'Todas', icon: '◦' },
-  ...CATEGORIES,
-];
+import {
+  ADMIN_BASEBALL_LEAGUES,
+  ADMIN_COMBATE_LEAGUES,
+  ADMIN_CRYPTO_FILTERS,
+  ADMIN_GEO_FILTERS,
+  ADMIN_MEXICO_TOPIC_FILTERS,
+  ADMIN_SOCCER_LEAGUES,
+  ADMIN_SPORT_FILTERS,
+  CATEGORIES,
+  DEFAULT_CATEGORY_ICONS,
+  MARKET_CATEGORY_FILTERS,
+  MARKET_CREATION_GEO_OPTIONS,
+  MARKET_CREATION_LEAGUE_BY_SPORT,
+  MARKET_CREATION_SPORT_OPTIONS,
+  MARKET_CREATION_TOPIC_OPTIONS,
+  filterProtocolAdminMarkets,
+} from '../lib/mvpAdminMarketFilters.js';
 
 const DEFAULT_CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 42161);
-
-// Sport options (keys match market.sport written by generators) + league
-// options per sport. Keep in lockstep with SPORT_TABS in CategoryPage.jsx.
-const SPORT_OPTIONS = [
-  { key: '',         label: '— ninguno —' },
-  { key: 'soccer',   label: 'Soccer'      },
-  { key: 'baseball', label: 'Béisbol'     },
-  { key: 'nba',      label: 'NBA'         },
-  { key: 'nfl',      label: 'NFL'         },
-  { key: 'f1',       label: 'F1'          },
-  { key: 'tennis',   label: 'Tenis'       },
-  { key: 'golf',     label: 'Golf'        },
-  { key: 'combate',  label: 'Combate'     },
-];
-
-const LEAGUE_BY_SPORT = {
-  soccer: [
-    { key: '',               label: '— ninguna —'     },
-    { key: 'uefa-cl',        label: 'Champions League'},
-    { key: 'la-liga',        label: 'La Liga'         },
-    { key: 'premier-league', label: 'Premier League'  },
-    { key: 'serie-a',        label: 'Serie A'         },
-    { key: 'bundesliga',     label: 'Bundesliga'      },
-    { key: 'liga-mx',        label: 'Liga MX'         },
-    { key: 'mls',            label: 'MLS'             },
-  ],
-  baseball: [
-    { key: '',    label: '— ninguna —' },
-    { key: 'mlb', label: 'MLB'         },
-    { key: 'lmb', label: 'LMB'         },
-  ],
-  combate: [
-    { key: '',        label: '— ninguna —' },
-    { key: 'ufc',     label: 'UFC'         },
-    { key: 'boxing',  label: 'Boxeo'       },
-  ],
-};
 
 // ── HTTP helpers ────────────────────────────────────────────────────────────
 async function getJson(url) {
@@ -754,7 +718,7 @@ function CreateMarketForm({ onCreated, prefill }) {
   // initial liquidity in the create form below.
   const [question, setQuestion] = useState(prefill?.question || '');
   const [category, setCategory] = useState(prefill?.category || 'deportes');
-  const [icon, setIcon] = useState('⚽');
+  const [icon, setIcon] = useState(DEFAULT_CATEGORY_ICONS[prefill?.category || 'deportes'] || '📈');
   const [outcomes, setOutcomes] = useState(['Sí', 'No']);
   const [outcomeImages, setOutcomeImages] = useState(['', '']);
   const [endTime, setEndTime] = useState('');
@@ -763,6 +727,8 @@ function CreateMarketForm({ onCreated, prefill }) {
   const [chainId, setChainId] = useState(String(DEFAULT_CHAIN_ID));
   const [sport, setSport] = useState('');
   const [league, setLeague] = useState('');
+  const [geoTag, setGeoTag] = useState('mexico');
+  const [topicTag, setTopicTag] = useState('general');
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState(null);
 
@@ -787,7 +753,10 @@ function CreateMarketForm({ onCreated, prefill }) {
     setSport(next);
     setLeague('');
   }
-  const leagueOptions = LEAGUE_BY_SPORT[sport] || null;
+  const leagueOptions = MARKET_CREATION_LEAGUE_BY_SPORT[sport] || null;
+  const categoryTagsForCreate = category === 'mexico' ? ['mexico'] : null;
+  const geoTagsForCreate = category === 'mexico' ? [geoTag] : null;
+  const topicTagsForCreate = category === 'mexico' ? [topicTag] : null;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -810,6 +779,9 @@ function CreateMarketForm({ onCreated, prefill }) {
         icon,
         sport: sport || null,
         league: league || null,
+        categoryTags: categoryTagsForCreate,
+        geoTags: geoTagsForCreate,
+        topicTags: topicTagsForCreate,
         outcomeImages: hasAnyImage ? trimmedImages : null,
         endTime,
         outcomes: trimmedOutcomes,
@@ -827,6 +799,8 @@ function CreateMarketForm({ onCreated, prefill }) {
       setOutcomeImages(['', '']);
       setSport('');
       setLeague('');
+      setGeoTag('mexico');
+      setTopicTag('general');
       onCreated?.(data.marketId || Date.now());
     } catch (e) {
       setNotice({ type: 'error', msg: e?.message || 'create_failed' });
@@ -851,8 +825,7 @@ function CreateMarketForm({ onCreated, prefill }) {
           <select value={category} onChange={e => {
             const next = e.target.value;
             setCategory(next);
-            const c = CATEGORIES.find(c => c.value === next);
-            if (c) setIcon(c.icon);
+            setIcon(DEFAULT_CATEGORY_ICONS[next] || icon);
             // Sport / league only make sense under 'deportes'. When the
             // user flips to any other category, scrub any sport state
             // they had picked so it isn't posted as ghost metadata.
@@ -860,13 +833,17 @@ function CreateMarketForm({ onCreated, prefill }) {
               setSport('');
               setLeague('');
             }
+            if (next === 'mexico') {
+              setGeoTag('mexico');
+              setTopicTag('general');
+            }
           }} style={inputStyle}>
             {CATEGORIES.map(c => (
-              <option key={c.value} value={c.value}>{c.icon} {c.label}</option>
+              <option key={c.key} value={c.key}>{c.label}</option>
             ))}
           </select>
         </Field>
-        <Field label="Ícono (emoji)">
+        <Field label="Ícono">
           <input type="text" value={icon} onChange={e => setIcon(e.target.value)} style={inputStyle} maxLength={4} />
         </Field>
       </div>
@@ -921,7 +898,7 @@ function CreateMarketForm({ onCreated, prefill }) {
         <div style={{ display: 'grid', gridTemplateColumns: leagueOptions ? '1fr 1fr' : '1fr', gap: 14 }}>
           <Field label="Deporte (opcional)" hint="Alimenta los sub-tabs de /c/deportes (soccer · béisbol · NBA · …).">
             <select value={sport} onChange={e => changeSport(e.target.value)} style={inputStyle}>
-              {SPORT_OPTIONS.map(s => (
+              {MARKET_CREATION_SPORT_OPTIONS.map(s => (
                 <option key={s.key} value={s.key}>{s.label}</option>
               ))}
             </select>
@@ -935,6 +912,25 @@ function CreateMarketForm({ onCreated, prefill }) {
               </select>
             </Field>
           )}
+        </div>
+      )}
+
+      {category === 'mexico' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <Field label="Región" hint="Alimenta las subcategorías de Mexico & Latam en el MVP.">
+            <select value={geoTag} onChange={e => setGeoTag(e.target.value)} style={inputStyle}>
+              {MARKET_CREATION_GEO_OPTIONS.map(g => (
+                <option key={g.key} value={g.key}>{g.label}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Tema" hint="Alimenta los filtros internos de Mexico & Latam.">
+            <select value={topicTag} onChange={e => setTopicTag(e.target.value)} style={inputStyle}>
+              {MARKET_CREATION_TOPIC_OPTIONS.map(t => (
+                <option key={t.key} value={t.key}>{t.label}</option>
+              ))}
+            </select>
+          </Field>
         </div>
       )}
 
@@ -1054,7 +1050,7 @@ function EditMarketModal({ market, onClose, onSaved, onLifecycle }) {
         <Field label="Categoría">
           <select value={category} onChange={e => setCategory(e.target.value)} style={inputStyle}>
             {CATEGORIES.map(c => (
-              <option key={c.value} value={c.value}>{c.icon} {c.label}</option>
+              <option key={c.key} value={c.key}>{c.label}</option>
             ))}
           </select>
         </Field>
@@ -1131,6 +1127,11 @@ function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCou
   const [rows, setRows] = useState([]);
   const [filter, setFilter] = useState('active');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [sportFilter, setSportFilter] = useState('all');
+  const [leagueFilter, setLeagueFilter] = useState('all');
+  const [cryptoTypeFilter, setCryptoTypeFilter] = useState('all');
+  const [geoFilter, setGeoFilter] = useState('all');
+  const [topicFilter, setTopicFilter] = useState('all');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [resolvingId, setResolvingId] = useState(null);
@@ -1141,6 +1142,32 @@ function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCou
   const [bulkArchiving, setBulkArchiving] = useState(false);
   const [editingMarket, setEditingMarket] = useState(null);
   const [notice, setNotice] = useState(null);
+  const showSportFilters = categoryFilter === 'deportes';
+  const showCryptoFilters = categoryFilter === 'crypto';
+  const showMexicoFilters = categoryFilter === 'mexico';
+  const showLeagueFilters = showSportFilters
+    && (sportFilter === 'soccer' || sportFilter === 'baseball' || sportFilter === 'combate');
+  const activeLeagueFilters = sportFilter === 'baseball'
+    ? ADMIN_BASEBALL_LEAGUES
+    : sportFilter === 'combate'
+      ? ADMIN_COMBATE_LEAGUES
+      : ADMIN_SOCCER_LEAGUES;
+
+  function selectCategoryFilter(next) {
+    setCategoryFilter(next);
+    setSportFilter('all');
+    setLeagueFilter('all');
+    setCryptoTypeFilter('all');
+    setGeoFilter('all');
+    setTopicFilter('all');
+  }
+
+  function selectSportFilter(next) {
+    setSportFilter(next);
+    if (next !== 'soccer' && next !== 'baseball' && next !== 'combate') {
+      setLeagueFilter('all');
+    }
+  }
 
   async function handleBulkArchivePoints() {
     setBulkArchiving(true);
@@ -1206,7 +1233,6 @@ function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCou
         chainId: String(DEFAULT_CHAIN_ID),
         limit: '200',
       });
-      if (categoryFilter !== 'all') q.set('category', categoryFilter);
       const { ok, data } = await getJson(
         `/api/protocol/markets?${q.toString()}`,
       );
@@ -1234,7 +1260,7 @@ function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCou
     } finally {
       setLoading(false);
     }
-  }, [categoryFilter, filter]);
+  }, [filter]);
 
   useEffect(() => { load(); }, [load, refreshKey]);
 
@@ -1467,7 +1493,14 @@ function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCou
     }
   }
 
-  const visible = useMemo(() => rows, [rows]);
+  const visible = useMemo(() => filterProtocolAdminMarkets(rows, {
+    categoryFilter,
+    sportFilter,
+    leagueFilter,
+    cryptoTypeFilter,
+    geoFilter,
+    topicFilter,
+  }), [rows, categoryFilter, sportFilter, leagueFilter, cryptoTypeFilter, geoFilter, topicFilter]);
 
   return (
     <section style={{
@@ -1475,7 +1508,7 @@ function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCou
       background: 'var(--surface1)', marginBottom: 24,
     }}>
       <SectionHeader
-        title={`Mercados on-chain (${rows.length})`}
+        title={`Mercados on-chain (${visible.length})`}
         subtitle="protocol_markets indexado. Filtros + resolución on-chain."
         right={
           <div style={{ display: 'flex', gap: 6 }}>
@@ -1555,24 +1588,143 @@ function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCou
       }}>
         {MARKET_CATEGORY_FILTERS.map(tab => (
           <button
-            key={tab.value}
-            onClick={() => setCategoryFilter(tab.value)}
+            key={tab.key}
+            onClick={() => selectCategoryFilter(tab.key)}
             style={{
               padding: '6px 12px',
               borderRadius: 999,
-              border: `1px solid ${categoryFilter === tab.value ? 'rgba(0,232,122,0.35)' : 'var(--border)'}`,
-              background: categoryFilter === tab.value ? 'rgba(0,232,122,0.08)' : 'transparent',
-              color: categoryFilter === tab.value ? 'var(--green)' : 'var(--text-muted)',
+              border: `1px solid ${categoryFilter === tab.key ? 'rgba(0,232,122,0.35)' : 'var(--border)'}`,
+              background: categoryFilter === tab.key ? 'rgba(0,232,122,0.08)' : 'transparent',
+              color: categoryFilter === tab.key ? 'var(--green)' : 'var(--text-muted)',
               fontFamily: 'var(--font-mono)',
               fontSize: 11,
               letterSpacing: '0.04em',
               cursor: 'pointer',
             }}
           >
-            {tab.icon} {tab.label}
+            {tab.label}
           </button>
         ))}
       </div>
+
+      {showMexicoFilters && (
+        <>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            {ADMIN_GEO_FILTERS.map(g => (
+              <button
+                key={g.key}
+                onClick={() => setGeoFilter(g.key)}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: 16,
+                  border: `1px solid ${geoFilter === g.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
+                  background: geoFilter === g.key ? 'rgba(0,232,122,0.1)' : 'transparent',
+                  color: geoFilter === g.key ? 'var(--green)' : 'var(--text-secondary)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  cursor: 'pointer',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                {g.label}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            {ADMIN_MEXICO_TOPIC_FILTERS.map(t => (
+              <button
+                key={t.key}
+                onClick={() => setTopicFilter(t.key)}
+                style={{
+                  padding: '5px 10px',
+                  borderRadius: 14,
+                  border: `1px solid ${topicFilter === t.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
+                  background: topicFilter === t.key ? 'rgba(0,232,122,0.1)' : 'transparent',
+                  color: topicFilter === t.key ? 'var(--green)' : 'var(--text-secondary)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  cursor: 'pointer',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {showSportFilters && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          {ADMIN_SPORT_FILTERS.map(s => (
+            <button
+              key={s.key}
+              onClick={() => selectSportFilter(s.key)}
+              style={{
+                padding: '6px 12px',
+                borderRadius: 16,
+                border: `1px solid ${sportFilter === s.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
+                background: sportFilter === s.key ? 'rgba(0,232,122,0.1)' : 'transparent',
+                color: sportFilter === s.key ? 'var(--green)' : 'var(--text-secondary)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                cursor: 'pointer',
+                letterSpacing: '0.04em',
+              }}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {showLeagueFilters && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          {activeLeagueFilters.map(l => (
+            <button
+              key={l.key}
+              onClick={() => setLeagueFilter(l.key)}
+              style={{
+                padding: '5px 10px',
+                borderRadius: 14,
+                border: `1px solid ${leagueFilter === l.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
+                background: leagueFilter === l.key ? 'rgba(0,232,122,0.1)' : 'transparent',
+                color: leagueFilter === l.key ? 'var(--green)' : 'var(--text-secondary)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                cursor: 'pointer',
+                letterSpacing: '0.04em',
+              }}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {showCryptoFilters && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          {ADMIN_CRYPTO_FILTERS.map(c => (
+            <button
+              key={c.key}
+              onClick={() => setCryptoTypeFilter(c.key)}
+              style={{
+                padding: '6px 12px',
+                borderRadius: 16,
+                border: `1px solid ${cryptoTypeFilter === c.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
+                background: cryptoTypeFilter === c.key ? 'rgba(0,232,122,0.1)' : 'transparent',
+                color: cryptoTypeFilter === c.key ? 'var(--green)' : 'var(--text-secondary)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                cursor: 'pointer',
+                letterSpacing: '0.04em',
+              }}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <Notice notice={notice} />
 

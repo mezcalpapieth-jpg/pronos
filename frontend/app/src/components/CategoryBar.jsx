@@ -4,9 +4,9 @@
  * Order of buttons (visual → route):
  *   Trending       → /
  *   Mundial 2026   → /c/world-cup   (highlighted tri-color gradient)
+ *   Mexico & Latam → /c/mexico      (softer regional spark)
  *   Deportes       → /c/deportes
  *   Música         → /c/musica
- *   México         → /c/mexico
  *   Política       → /c/politica
  *   Crypto         → /c/crypto
  *   Finanzas       → /c/finanzas
@@ -24,9 +24,9 @@ export const CATEGORY_TABS = [
   { slug: 'noticias',    label: 'Noticias',    news: true },
   { slug: 'all',         label: 'Trending'     },
   { slug: 'world-cup',   label: 'Mundial 2026', highlight: true },
+  { slug: 'mexico',      label: 'Mexico & Latam', regional: true },
   { slug: 'deportes',    label: 'Deportes'     },
   { slug: 'musica',      label: 'Música'       },
-  { slug: 'mexico',      label: 'México'       },
   { slug: 'politica',    label: 'Política'     },
   { slug: 'crypto',      label: 'Crypto'       },
   { slug: 'finanzas',    label: 'Finanzas'     },
@@ -74,6 +74,41 @@ export default function CategoryBar() {
                     letterSpacing: '0.08em',
                   }}
                 >
+                  {cat.label}
+                </button>
+              );
+            }
+            if (cat.regional) {
+              return (
+                <button
+                  key={cat.slug}
+                  onClick={() => handleClick(cat.slug)}
+                  className="filter-btn"
+                  aria-label={`${cat.label} destacado`}
+                  style={{
+                    background: isActive
+                      ? 'linear-gradient(130deg, rgba(22,163,74,0.24), rgba(245,158,11,0.20))'
+                      : 'linear-gradient(130deg, rgba(22,163,74,0.11), rgba(245,158,11,0.08))',
+                    borderColor: isActive ? 'rgba(245,158,11,0.55)' : 'rgba(245,158,11,0.32)',
+                    color: 'var(--text-primary)',
+                    fontWeight: 700,
+                    letterSpacing: '0.08em',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 7,
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      color: 'var(--gold, #f59e0b)',
+                      fontSize: 10,
+                      lineHeight: 1,
+                      textShadow: '0 0 8px rgba(245,158,11,0.35)',
+                    }}
+                  >
+                    ✦
+                  </span>
                   {cat.label}
                 </button>
               );

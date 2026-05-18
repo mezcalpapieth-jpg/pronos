@@ -38,6 +38,25 @@ import { neon } from '@neondatabase/serverless';
 
 const sql = neon(process.env.DATABASE_URL);
 
+const TAG_ALLOWLISTS = {
+  categoryTags: new Set(['general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup']),
+  geoTags: new Set(['mexico', 'latam', 'world']),
+  topicTags: new Set(['general', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'weather', 'world-cup']),
+};
+
+function normalizeTagArray(value, allowed) {
+  if (value == null) return null;
+  if (!Array.isArray(value)) return { error: 'invalid_tags' };
+  const out = [];
+  for (const item of value) {
+    const tag = String(item || '').trim().toLowerCase();
+    if (!tag) continue;
+    if (!allowed.has(tag)) return { error: 'invalid_tags' };
+    if (!out.includes(tag)) out.push(tag);
+  }
+  return { value: out.length ? out : null };
+}
+
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'POST, OPTIONS', credentials: true });
   if (cors) return cors;
@@ -65,6 +84,7 @@ export default async function handler(req, res) {
   const {
     question, category, endTime, outcomes, seedAmount,
     resolutionSource, ammMode, icon, sport, league, outcomeImages,
+    categoryTags, geoTags, topicTags,
   } = req.body || {};
 
   if (typeof question !== 'string' || question.trim().length < 8) {
@@ -90,6 +110,12 @@ export default async function handler(req, res) {
   const imageResult = normalizeOutcomeImages(outcomeImages, normalizedOutcomes.length);
   if (!imageResult.ok) return res.status(400).json({ error: imageResult.error });
   const cleanedOutcomeImages = imageResult.value;
+  const normalizedCategoryTags = normalizeTagArray(categoryTags, TAG_ALLOWLISTS.categoryTags);
+  if (normalizedCategoryTags?.error) return res.status(400).json({ error: normalizedCategoryTags.error });
+  const normalizedGeoTags = normalizeTagArray(geoTags, TAG_ALLOWLISTS.geoTags);
+  if (normalizedGeoTags?.error) return res.status(400).json({ error: normalizedGeoTags.error });
+  const normalizedTopicTags = normalizeTagArray(topicTags, TAG_ALLOWLISTS.topicTags);
+  if (normalizedTopicTags?.error) return res.status(400).json({ error: normalizedTopicTags.error });
   const seed = Number(seedAmount);
   if (!Number.isFinite(seed) || seed < 100) {
     return res.status(400).json({ error: 'seed_too_small' });
@@ -139,6 +165,9 @@ export default async function handler(req, res) {
             league: leagueVal,
             outcomeImages: cleanedOutcomeImages?.[i] ? [cleanedOutcomeImages[i], ''] : null,
             factoryVariant: 'v1-binary',
+            categoryTags: normalizedCategoryTags?.value,
+            geoTags: normalizedGeoTags?.value,
+            topicTags: normalizedTopicTags?.value,
           });
         }
       } catch (metadataErr) {
@@ -182,6 +211,9 @@ export default async function handler(req, res) {
         sport: sportVal,
         league: leagueVal,
         outcomeImages: cleanedOutcomeImages,
+        categoryTags: normalizedCategoryTags?.value,
+        geoTags: normalizedGeoTags?.value,
+        topicTags: normalizedTopicTags?.value,
       });
     } catch (metadataErr) {
       metadataWarning = metadataErr?.message || 'metadata_upsert_failed';

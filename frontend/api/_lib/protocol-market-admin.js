@@ -49,6 +49,9 @@ export async function upsertProtocolMarketMetadata(sql, {
   resolverType,
   resolverConfig,
   sourceData,
+  categoryTags,
+  geoTags,
+  topicTags,
 }) {
   const factoryAddress = factoryAddressForVariant(factoryVariant || result.factoryVariant);
   if (!factoryAddress || !result.marketAddress || result.marketId == null) return null;
@@ -63,6 +66,9 @@ export async function upsertProtocolMarketMetadata(sql, {
     source_data: sourceData || {},
     resolver_type: resolverType,
     resolver_config: resolverConfig || {},
+    categoryTags,
+    geoTags,
+    topicTags,
   });
   const protocolVersion = String(factoryVariant || result.factoryVariant || '').startsWith('v2')
     ? 'v2'
