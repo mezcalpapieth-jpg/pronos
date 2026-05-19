@@ -12,13 +12,52 @@ import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { withTransaction } from '../../_lib/db-tx.js';
+import { isDatabaseQuotaError, socialTasksUnavailablePayload } from '../../_lib/db-errors.js';
 
-const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
-const schemaSql = neon(process.env.DATABASE_URL);
+let readSql;
+let schemaSql;
 
 const VALID_STATUSES = new Set(['pending', 'approved', 'rejected']);
 
 export default async function handler(req, res) {
+  try {
+    return await handleSocialTasks(req, res);
+  } catch (e) {
+    console.error('[admin/social-tasks] unhandled error', {
+      message: e?.message,
+      code: e?.code,
+      status: e?.status || e?.statusCode,
+    });
+    return res.status(500).json({ error: 'server_error' });
+  }
+}
+
+function getReadSql() {
+  if (!readSql) {
+    const databaseUrl = process.env.DATABASE_READ_URL || process.env.DATABASE_URL;
+    if (!databaseUrl) {
+      const err = new Error('DATABASE_URL not configured');
+      err.status = 500;
+      throw err;
+    }
+    readSql = neon(databaseUrl);
+  }
+  return readSql;
+}
+
+function getSchemaSql() {
+  if (!schemaSql) {
+    if (!process.env.DATABASE_URL) {
+      const err = new Error('DATABASE_URL not configured');
+      err.status = 500;
+      throw err;
+    }
+    schemaSql = neon(process.env.DATABASE_URL);
+  }
+  return schemaSql;
+}
+
+async function handleSocialTasks(req, res) {
   const cors = applyCors(req, res, { methods: 'GET, POST, OPTIONS', credentials: true });
   if (cors) return cors;
 
@@ -26,9 +65,20 @@ export default async function handler(req, res) {
   if (!admin) return;
 
   try {
-    await ensurePointsSchema(schemaSql);
+    await ensurePointsSchema(getSchemaSql());
   } catch (e) {
-    console.error('[admin/social-tasks] schema error', { message: e?.message });
+    if (req.method === 'GET' && isDatabaseQuotaError(e)) {
+      console.warn('[admin/social-tasks] schema unavailable from DB quota', {
+        message: e?.message,
+        status: e?.status || e?.statusCode,
+      });
+      return res.status(200).json(socialTasksUnavailablePayload());
+    }
+    console.error('[admin/social-tasks] schema error', {
+      message: e?.message,
+      code: e?.code,
+      status: e?.status || e?.statusCode,
+    });
     return res.status(500).json({ error: 'schema_failed' });
   }
 
@@ -44,6 +94,7 @@ export default async function handler(req, res) {
 async function handleList(req, res) {
   const status = VALID_STATUSES.has(req.query.status) ? req.query.status : 'pending';
   try {
+    const sql = getReadSql();
     const rows = await sql`
       SELECT id, username, task_key, status, reward, proof_url,
              reviewer, reviewed_at, rejection_note, created_at
@@ -54,7 +105,18 @@ async function handleList(req, res) {
     `;
     return res.status(200).json({ tasks: rows });
   } catch (e) {
-    console.error('[admin/social-tasks] list error', { message: e?.message });
+    if (isDatabaseQuotaError(e)) {
+      console.warn('[admin/social-tasks] list unavailable from DB quota', {
+        message: e?.message,
+        status: e?.status || e?.statusCode,
+      });
+      return res.status(200).json(socialTasksUnavailablePayload());
+    }
+    console.error('[admin/social-tasks] list error', {
+      message: e?.message,
+      code: e?.code,
+      status: e?.status || e?.statusCode,
+    });
     return res.status(500).json({ error: 'list_failed' });
   }
 }

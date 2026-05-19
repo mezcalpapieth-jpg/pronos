@@ -24,6 +24,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import Nav from '../components/Nav.jsx';
 import Footer from '../components/Footer.jsx';
 import BetModal from '../components/BetModal.jsx';
+import AmmDepthPanel from '../components/AmmDepthPanel.jsx';
 import CategoryBar from '../components/CategoryBar.jsx';
 import Sparkline from '../components/Sparkline.jsx';
 import ShareButton from '../components/ShareButton.jsx';
@@ -249,6 +250,7 @@ export default function MarketDetail({ onOpenLogin }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [bet, setBet] = useState(null);
+  const [depthOutcomeIndex, setDepthOutcomeIndex] = useState(0);
 
   // Fetch the market on mount / id change.
   useEffect(() => {
@@ -325,6 +327,10 @@ export default function MarketDetail({ onOpenLogin }) {
       outcomePct: Math.round((prices[i] || 0) * 100),
     });
   }, [market, preselectedOutcome, authenticated, onOpenLogin]);
+
+  useEffect(() => {
+    setDepthOutcomeIndex(0);
+  }, [id]);
 
   // ── Render shells ────────────────────────────────────────────────────────
   if (loading) {
@@ -417,6 +423,7 @@ export default function MarketDetail({ onOpenLogin }) {
   }
 
   function handleBet(i) {
+    setDepthOutcomeIndex(i);
     if (isResolved || isTradingLocked) return;
     if (!authenticated) { onOpenLogin?.(); return; }
     const outcomeIndex = displayOutcomeIndices[i] ?? i;
@@ -682,6 +689,8 @@ export default function MarketDetail({ onOpenLogin }) {
                   <button
                     key={i}
                     onClick={() => handleBet(i)}
+                    onMouseEnter={() => setDepthOutcomeIndex(i)}
+                    onFocus={() => setDepthOutcomeIndex(i)}
                     disabled={isResolved || isTradingLocked}
                     style={{
                       display: 'grid',
@@ -757,6 +766,13 @@ export default function MarketDetail({ onOpenLogin }) {
                 );
               })}
             </div>
+
+            <AmmDepthPanel
+              marketId={market.id}
+              outcomeIndex={displayOutcomeIndices[depthOutcomeIndex] ?? 0}
+              outcomeLabel={displayOutcomes[depthOutcomeIndex]}
+              disabled={isResolved || isTradingLocked}
+            />
 
             <div style={{
               display: 'flex', justifyContent: 'space-between',

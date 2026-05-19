@@ -418,6 +418,9 @@ const POINTS_SCHEMA_MIGRATIONS = [
     created_at     TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(username, task_key)
   )`,
+  `ALTER TABLE social_tasks ADD COLUMN IF NOT EXISTS reviewer TEXT`,
+  `ALTER TABLE social_tasks ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ`,
+  `ALTER TABLE social_tasks ADD COLUMN IF NOT EXISTS rejection_note TEXT`,
   `CREATE INDEX IF NOT EXISTS idx_social_tasks_status ON social_tasks(status, created_at DESC)`,
 
   // ── Price history snapshots (one row per market per hour) ──────────────
