@@ -54,6 +54,14 @@ test('MVP admin status panel uses protocol mainnet wiring', () => {
 test('MVP admin status panel surfaces Turnkey and deployment readiness fields', () => {
   const statusPanel = section('function OnchainStatusPanel', 'function short');
 
+  assert.match(statusPanel, /Bloqueos de lanzamiento/);
+  assert.match(statusPanel, /Revisar antes de abrir/);
+  assert.match(statusPanel, /data\.launch\?\.blockers/);
+  assert.match(statusPanel, /data\.launch\?\.reviews/);
+  assert.match(statusPanel, /ADMIN_SAFE_ADDRESS/);
+  assert.match(statusPanel, /RESOLVER_SAFE_ADDRESS/);
+  assert.match(statusPanel, /ONCHAIN_OWNER_SUBORG_ID/);
+  assert.match(statusPanel, /ONCHAIN_OWNER_ADDRESS/);
   assert.match(statusPanel, /ONCHAIN_RESOLVER_SUBORG_ID/);
   assert.match(statusPanel, /ONCHAIN_RESOLVER_ADDRESS/);
   assert.match(statusPanel, /TURNKEY_ORGANIZATION_ID/);

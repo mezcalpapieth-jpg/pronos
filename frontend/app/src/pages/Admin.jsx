@@ -185,7 +185,49 @@ function OnchainStatusPanel() {
         <>
           <div style={{ marginBottom: 14 }}>
             <span style={greenChip(data.ok)}>{data.ok ? 'TODO LISTO' : `${data.warnings?.length || 0} ALERTAS`}</span>
+            {data.launch && (
+              <span style={{ ...greenChip(data.launch.ready), marginLeft: 8 }}>
+                {data.launch.ready ? 'SIN BLOQUEOS' : `${data.launch.blockerCount || 0} BLOQUEOS`}
+              </span>
+            )}
           </div>
+
+          {(data.launch?.blockers?.length > 0 || data.launch?.reviews?.length > 0) && (
+            <div style={{ marginBottom: 14, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10 }}>
+              {data.launch?.blockers?.length > 0 && (
+                <div style={{ padding: 10, borderRadius: 8, background: 'rgba(255,69,69,0.06)', border: '1px solid rgba(255,69,69,0.25)' }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--red)', textTransform: 'uppercase', marginBottom: 6 }}>
+                    Bloqueos de lanzamiento
+                  </div>
+                  <ul style={{ margin: 0, padding: '0 0 0 18px', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                    {data.launch.blockers.map((item) => (
+                      <li key={item.id}>
+                        <strong style={{ color: 'var(--text-primary)' }}>{item.title}</strong>
+                        <div>{item.detail}</div>
+                        {item.fix && <div style={{ color: 'var(--orange)' }}>{item.fix}</div>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {data.launch?.reviews?.length > 0 && (
+                <div style={{ padding: 10, borderRadius: 8, background: 'rgba(255,168,0,0.06)', border: '1px solid rgba(255,168,0,0.25)' }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--orange)', textTransform: 'uppercase', marginBottom: 6 }}>
+                    Revisar antes de abrir
+                  </div>
+                  <ul style={{ margin: 0, padding: '0 0 0 18px', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                    {data.launch.reviews.map((item) => (
+                      <li key={item.id}>
+                        <strong style={{ color: 'var(--text-primary)' }}>{item.title}</strong>
+                        <div>{item.detail}</div>
+                        {item.fix && <div style={{ color: 'var(--orange)' }}>{item.fix}</div>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Env vars block */}
           <div style={{ marginBottom: 14 }}>
@@ -203,6 +245,10 @@ function OnchainStatusPanel() {
                 ['ONCHAIN_DEPLOYER_ADDRESS',         data.env.deployerAddress ? short(data.env.deployerAddress) : '✕'],
                 ['ONCHAIN_RESOLVER_SUBORG_ID',       data.env.resolverSuborgId ? '✓' : '✕'],
                 ['ONCHAIN_RESOLVER_ADDRESS',         data.env.resolverAddress ? short(data.env.resolverAddress) : '✕'],
+                ['ADMIN_SAFE_ADDRESS',               data.ownerControls?.adminSafe ? short(data.ownerControls.adminSafe) : '✕'],
+                ['RESOLVER_SAFE_ADDRESS',            data.ownerControls?.resolverSafe ? short(data.ownerControls.resolverSafe) : '✕'],
+                ['ONCHAIN_OWNER_SUBORG_ID',          data.ownerControls?.ownerSuborgId ? '✓' : 'off'],
+                ['ONCHAIN_OWNER_ADDRESS',            data.ownerControls?.ownerAddress ? short(data.ownerControls.ownerAddress) : 'off'],
                 ['TURNKEY_POLICIES_ENABLED',         data.env.policiesEnabled ? '✓' : '✕'],
                 ['TURNKEY_ORGANIZATION_ID',          data.turnkey?.organizationId ? '✓' : '✕'],
                 ['TURNKEY_API_PUBLIC_KEY',           data.turnkey?.apiPublicKey ? '✓' : '✕'],

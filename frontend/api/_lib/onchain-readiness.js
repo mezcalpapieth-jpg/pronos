@@ -53,6 +53,27 @@ function warnChainMismatch(warnings, env, name, expected, expectedName) {
   }
 }
 
+function launchItem(id, title, detail, fix) {
+  return { id, title, detail, fix };
+}
+
+function pushIfMissing(blockers, env, name, id, title, detail) {
+  if (!hasEnv(env, name)) {
+    blockers.push(launchItem(id, title, detail, `Set ${name}`));
+  }
+}
+
+function pushIfAnyMissing(blockers, env, names, id, title, detail) {
+  const missing = names.filter(name => !hasEnv(env, name));
+  if (missing.length > 0) {
+    blockers.push(launchItem(id, title, detail, `Set ${missing.join(', ')}`));
+  }
+}
+
+function uniqueSteps(items) {
+  return Array.from(new Set(items.map(item => item.fix).filter(Boolean)));
+}
+
 export function collectOnchainReadiness({
   env = process.env,
   protocolPools = [],
@@ -108,6 +129,18 @@ export function collectOnchainReadiness({
     indexerKey: hasEnv(env, 'INDEXER_KEY'),
     cronSecret: hasEnv(env, 'CRON_SECRET'),
   };
+  const ownerControls = {
+    adminSafe: firstEnv(env, ['ADMIN_SAFE_ADDRESS', 'VITE_PRONOS_ARBITRUM_ADMIN_SAFE']),
+    resolverSafe: firstEnv(env, ['RESOLVER_SAFE_ADDRESS', 'VITE_PRONOS_ARBITRUM_RESOLVER_SAFE']),
+    ownerSuborgId: hasEnv(env, 'ONCHAIN_OWNER_SUBORG_ID'),
+    ownerAddress: hasEnv(env, 'ONCHAIN_OWNER_ADDRESS')
+      ? env.ONCHAIN_OWNER_ADDRESS.trim()
+      : null,
+  };
+  ownerControls.safeConfigured = Boolean(normalizeAddress(ownerControls.adminSafe));
+  ownerControls.resolverSafeConfigured = Boolean(normalizeAddress(ownerControls.resolverSafe));
+  ownerControls.ownerSignerConfigured = Boolean(ownerControls.ownerSuborgId && ownerControls.ownerAddress);
+  ownerControls.configured = Boolean(ownerControls.safeConfigured || ownerControls.ownerSignerConfigured);
 
   const turnkey = {
     policiesEnabled: runtimeEnv.policiesEnabled,
@@ -178,6 +211,122 @@ export function collectOnchainReadiness({
       ? env.VITE_PRONOS_ARBITRUM_TOKEN.trim()
       : null,
   };
+  const cre = {
+    webhookSecret: hasEnv(env, 'CRE_RESOLUTION_WEBHOOK_SECRET'),
+    minConfidenceBps: intEnv(env, 'CRE_RESOLUTION_MIN_CONFIDENCE_BPS') || 9000,
+    maxAgeMs: intEnv(env, 'CRE_RESOLUTION_MAX_AGE_MS') || 6 * 60 * 60 * 1000,
+  };
+  const gas = {
+    sponsorshipEnabled: env.GAS_SPONSORSHIP_ENABLED === 'true',
+  };
+
+  const blockers = [];
+  pushIfMissing(blockers, env, 'DATABASE_URL', 'database_missing', 'Base de datos sin configurar', 'El API no puede crear usuarios, mercados ni historial.');
+  pushIfMissing(blockers, env, 'ONCHAIN_RPC_URL', 'rpc_missing', 'RPC on-chain faltante', 'No podemos leer balances ni enviar transacciones.');
+  if (!chainId) {
+    blockers.push(launchItem('chain_id_missing', 'Chain ID faltante', 'El backend no sabe en qué red operar.', 'Set ONCHAIN_CHAIN_ID=42161'));
+  } else if (chainId !== ARBITRUM_ONE_CHAIN_ID) {
+    blockers.push(launchItem('chain_id_not_mainnet', 'Chain ID no es Arbitrum One', `ONCHAIN_CHAIN_ID=${chainId}; mainnet requiere ${ARBITRUM_ONE_CHAIN_ID}.`, 'Set ONCHAIN_CHAIN_ID=42161'));
+  }
+  pushIfAnyMissing(
+    blockers,
+    env,
+    ['ONCHAIN_MARKET_FACTORY_ADDRESS', 'ONCHAIN_MARKET_FACTORY_V2_ADDRESS'],
+    'factory_addresses_missing',
+    'Factories no configurados',
+    'Sin V1/V2 no podemos crear mercados binarios y multi-outcome.',
+  );
+  pushIfMissing(blockers, env, 'ONCHAIN_COLLATERAL_ADDRESS', 'collateral_missing', 'MXNB no configurado', 'El protocolo no sabe qué token usar como colateral.');
+  pushIfAnyMissing(
+    blockers,
+    env,
+    ['ONCHAIN_DEPLOYER_SUBORG_ID', 'ONCHAIN_DEPLOYER_ADDRESS'],
+    'deployer_wallet_missing',
+    'Wallet deployer Turnkey faltante',
+    'La creación automática de mercados necesita sub-org y address del deployer.',
+  );
+  pushIfAnyMissing(
+    blockers,
+    env,
+    ['ONCHAIN_RESOLVER_SUBORG_ID', 'ONCHAIN_RESOLVER_ADDRESS'],
+    'resolver_wallet_missing',
+    'Wallet resolver Turnkey faltante',
+    'La resolución automática/manual desde admin necesita sub-org y address del resolver.',
+  );
+  if (!runtimeEnv.policiesEnabled) {
+    blockers.push(launchItem(
+      'turnkey_policies_disabled',
+      'Delegación Turnkey apagada',
+      'Los usuarios no podrán operar sin volver a firmar manualmente.',
+      'Set TURNKEY_POLICIES_ENABLED=true',
+    ));
+  }
+  pushIfAnyMissing(
+    blockers,
+    env,
+    ['TURNKEY_ORGANIZATION_ID', 'TURNKEY_API_PUBLIC_KEY', 'TURNKEY_API_PRIVATE_KEY', 'VITE_TURNKEY_ORGANIZATION_ID'],
+    'turnkey_keys_missing',
+    'Turnkey incompleto',
+    'Faltan llaves de servidor o configuración cliente.',
+  );
+  pushIfAnyMissing(
+    blockers,
+    env,
+    ['INDEXER_KEY', 'CRON_SECRET'],
+    'ops_keys_missing',
+    'Llaves operativas faltantes',
+    'Cron/indexer no deben quedar abiertos ni inoperables en mainnet.',
+  );
+  pushIfAnyMissing(
+    blockers,
+    env,
+    ['JUNO_API_KEY', 'JUNO_API_SECRET', 'JUNO_BEARER_TOKEN', 'JUNO_API_BASE_URL', 'JUNO_WEBHOOK_SECRET'],
+    'juno_provider_missing',
+    'Juno / Bitso incompleto',
+    'El fondeo y los webhooks KYC/onramp no están listos.',
+  );
+  if (!ownerControls.configured) {
+    blockers.push(launchItem(
+      'owner_controls_missing',
+      'Owner controls no configurados',
+      'Cancelaciones, disputas y reembolsos necesitan Safe o signer owner.',
+      'Set ADMIN_SAFE_ADDRESS or ONCHAIN_OWNER_SUBORG_ID + ONCHAIN_OWNER_ADDRESS',
+    ));
+  }
+
+  const reviews = [];
+  if (!juno.withdrawalsEnabled) {
+    reviews.push(launchItem(
+      'juno_withdrawals_manual_queue',
+      'Retiros quedan en cola manual',
+      'El usuario puede pedir retiro, pero Juno no se invoca automáticamente.',
+      'Set JUNO_WITHDRAWALS_ENABLED=true after provider approval',
+    ));
+  }
+  if (!juno.cardCheckoutEnabled && !juno.applePayEnabled) {
+    reviews.push(launchItem(
+      'juno_checkout_optional_off',
+      'Card / Apple Pay apagado',
+      'El depósito principal será CLABE/SPEI hasta que Juno habilite checkout.',
+      'Set JUNO_CARD_CHECKOUT_ENABLED=true or JUNO_APPLE_PAY_ENABLED=true when available',
+    ));
+  }
+  if (!cre.webhookSecret) {
+    reviews.push(launchItem(
+      'cre_webhook_dry_run',
+      'CRE sigue en modo revisión',
+      'Sin secreto, Chainlink CRE no puede enviar resoluciones al webhook.',
+      'Set CRE_RESOLUTION_WEBHOOK_SECRET before enabling CRE workflows',
+    ));
+  }
+  if (!gas.sponsorshipEnabled) {
+    reviews.push(launchItem(
+      'gas_sponsorship_unset',
+      'Gas sponsorship no configurado',
+      'Turnkey quita popups, pero no cubre ETH de Arbitrum para el usuario.',
+      'Set GAS_SPONSORSHIP_ENABLED=true only after relayer/paymaster/funded-wallet support exists',
+    ));
+  }
 
   warnMissing(warnings, env, 'DATABASE_URL');
   warnMissing(warnings, env, 'ONCHAIN_RPC_URL');
@@ -246,10 +395,21 @@ export function collectOnchainReadiness({
   return {
     ok: warnings.length === 0,
     env: runtimeEnv,
+    ownerControls,
     turnkey,
     juno,
+    cre,
+    gas,
     deployment,
     policy,
+    launch: {
+      ready: blockers.length === 0,
+      blockerCount: blockers.length,
+      reviewCount: reviews.length,
+      blockers,
+      reviews,
+      nextSteps: uniqueSteps([...blockers, ...reviews]),
+    },
     warnings,
   };
 }

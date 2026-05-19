@@ -32,6 +32,10 @@ function completeEnv(overrides = {}) {
     ONCHAIN_DEPLOYER_ADDRESS: ADDR.deployer,
     ONCHAIN_RESOLVER_SUBORG_ID: 'resolver-suborg',
     ONCHAIN_RESOLVER_ADDRESS: ADDR.resolver,
+    ADMIN_SAFE_ADDRESS: '0x6666666666666666666666666666666666666666',
+    RESOLVER_SAFE_ADDRESS: '0x7777777777777777777777777777777777777777',
+    ONCHAIN_OWNER_SUBORG_ID: 'owner-suborg',
+    ONCHAIN_OWNER_ADDRESS: '0x8888888888888888888888888888888888888888',
     TURNKEY_POLICIES_ENABLED: 'true',
     TURNKEY_ORGANIZATION_ID: 'parent-org',
     TURNKEY_API_PUBLIC_KEY: 'pub',
@@ -74,6 +78,41 @@ test('collectOnchainReadiness reports missing Turnkey and deployment env', () =>
   assert.match(warnings, /JUNO_WEBHOOK_SECRET missing/);
 });
 
+test('collectOnchainReadiness returns grouped mainnet launch blockers and review checks', () => {
+  const result = collectOnchainReadiness({
+    env: {
+      ONCHAIN_CHAIN_ID: '42161',
+      DATABASE_URL: 'postgres://db',
+      ONCHAIN_RPC_URL: 'https://arb1.arbitrum.io/rpc',
+      ONCHAIN_MARKET_FACTORY_ADDRESS: ADDR.factoryV1,
+      ONCHAIN_MARKET_FACTORY_V2_ADDRESS: ADDR.factoryV2,
+      ONCHAIN_COLLATERAL_ADDRESS: ADDR.collateral,
+      ONCHAIN_DEPLOYER_SUBORG_ID: 'deployer-suborg',
+      ONCHAIN_DEPLOYER_ADDRESS: ADDR.deployer,
+      TURNKEY_POLICIES_ENABLED: 'false',
+      TURNKEY_ORGANIZATION_ID: 'parent-org',
+      TURNKEY_API_PUBLIC_KEY: 'pub',
+      TURNKEY_API_PRIVATE_KEY: 'priv',
+      VITE_TURNKEY_ORGANIZATION_ID: 'parent-org',
+      INDEXER_KEY: 'indexer-key',
+      CRON_SECRET: 'cron-secret',
+    },
+    protocolPools: [],
+  });
+
+  const blockerIds = result.launch.blockers.map(b => b.id);
+  const reviewIds = result.launch.reviews.map(r => r.id);
+
+  assert.equal(result.launch.ready, false);
+  assert.ok(blockerIds.includes('turnkey_policies_disabled'));
+  assert.ok(blockerIds.includes('resolver_wallet_missing'));
+  assert.ok(blockerIds.includes('juno_provider_missing'));
+  assert.ok(blockerIds.includes('owner_controls_missing'));
+  assert.ok(reviewIds.includes('gas_sponsorship_unset'));
+  assert.ok(result.launch.nextSteps.some(step => /JUNO_API_KEY/.test(step)));
+  assert.ok(result.launch.nextSteps.some(step => /ONCHAIN_RESOLVER_SUBORG_ID/.test(step)));
+});
+
 test('collectOnchainReadiness includes Juno funding readiness', () => {
   const result = collectOnchainReadiness({
     env: completeEnv({
@@ -88,6 +127,8 @@ test('collectOnchainReadiness includes Juno funding readiness', () => {
   assert.equal(result.juno.cardCheckoutEnabled, true);
   assert.equal(result.juno.applePayEnabled, true);
   assert.equal(result.juno.withdrawalsEnabled, false);
+  assert.equal(result.launch.ready, true);
+  assert.ok(result.launch.reviews.some(r => r.id === 'juno_withdrawals_manual_queue'));
   assert.doesNotMatch(result.warnings.join('\n'), /JUNO_API_KEY missing/);
 });
 
