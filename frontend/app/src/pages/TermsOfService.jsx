@@ -1,5 +1,6 @@
-import React from 'react';
-import { useLang } from '../lib/i18n.js';
+import React, { useEffect } from 'react';
+import LegalLanguageSwitch from '../components/LegalLanguageSwitch.jsx';
+import { useLang, useT } from '../lib/i18n.js';
 
 /**
  * Terms of Service / Términos y Condiciones
@@ -16,8 +17,14 @@ import { useLang } from '../lib/i18n.js';
  */
 export default function TermsOfService() {
   const lang = useLang();
+  const t = useT();
+  const title = t('legal.terms.title');
   const isEn = lang === 'en';
   const lastUpdated = isEn ? 'May 6, 2026' : '6 de mayo de 2026';
+
+  useEffect(() => {
+    document.title = title;
+  }, [title]);
 
   if (isEn) {
     return (
@@ -29,10 +36,11 @@ export default function TermsOfService() {
         color: 'var(--text-primary)',
         lineHeight: 1.7,
       }}>
+        <LegalLanguageSwitch currentLang={lang} />
         <DraftBanner lang="en" />
 
         <Eyebrow>TERMS · LAST UPDATED {lastUpdated.toUpperCase()}</Eyebrow>
-        <H1>Terms of Service</H1>
+        <H1>{title}</H1>
 
         <P>
           Welcome to Pronos. By accessing the platform or using any of its
@@ -243,10 +251,11 @@ export default function TermsOfService() {
       color: 'var(--text-primary)',
       lineHeight: 1.7,
     }}>
+      <LegalLanguageSwitch currentLang={lang} />
       <DraftBanner />
 
       <Eyebrow>TÉRMINOS · ÚLTIMA ACTUALIZACIÓN {lastUpdated.toUpperCase()}</Eyebrow>
-      <H1>Términos y Condiciones de Uso</H1>
+      <H1>{title}</H1>
 
       <P>
         Bienvenido a Pronos. Al acceder a la plataforma o utilizar

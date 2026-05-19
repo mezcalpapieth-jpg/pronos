@@ -35,3 +35,12 @@ test('points public category filter labels translate region and climate copy', (
   assert.equal(translate('points.topic.weather', 'es'), 'Clima');
   assert.equal(translate('points.topic.weather', 'en'), 'Weather');
 });
+
+test('legal page titles include app name in Spanish and English', () => {
+  assert.equal(translate('legal.privacy.title', 'es'), 'Pronos Política de Privacidad');
+  assert.equal(translate('legal.privacy.title', 'en'), 'Pronos Privacy Policy');
+  assert.equal(translate('legal.terms.title', 'es'), 'Pronos Términos y Condiciones');
+  assert.equal(translate('legal.terms.title', 'en'), 'Pronos Terms of Service');
+  assert.equal(translate('legal.language.es', 'en'), 'Español');
+  assert.equal(translate('legal.language.en', 'es'), 'English');
+});

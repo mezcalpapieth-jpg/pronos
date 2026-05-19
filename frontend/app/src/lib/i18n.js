@@ -364,6 +364,13 @@ const STRINGS = {
   'footer.terms':             { es: 'Términos',             en: 'Terms' },
   'footer.contact':           { es: 'Contacto',             en: 'Contact' },
 
+  // ── Legal pages ──────────────────────────────────────────────────────────
+  'legal.privacy.title':      { es: 'Pronos Política de Privacidad', en: 'Pronos Privacy Policy' },
+  'legal.terms.title':        { es: 'Pronos Términos y Condiciones', en: 'Pronos Terms of Service' },
+  'legal.language.aria':      { es: 'Cambiar idioma del documento legal', en: 'Change legal document language' },
+  'legal.language.es':        { es: 'Español',             en: 'Español' },
+  'legal.language.en':        { es: 'English',             en: 'English' },
+
   // ── HowItWorks ────────────────────────────────────────────────────────────
   'how.label':                { es: 'Simple · Rápido · On-chain', en: 'Simple · Fast · On-chain' },
   'how.title':                { es: 'Cómo funciona',        en: 'How it works' },

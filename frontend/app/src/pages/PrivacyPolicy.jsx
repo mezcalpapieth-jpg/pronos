@@ -1,5 +1,6 @@
-import React from 'react';
-import { useLang } from '../lib/i18n.js';
+import React, { useEffect } from 'react';
+import LegalLanguageSwitch from '../components/LegalLanguageSwitch.jsx';
+import { useLang, useT } from '../lib/i18n.js';
 
 /**
  * Privacy Policy / Política de Privacidad
@@ -16,8 +17,14 @@ import { useLang } from '../lib/i18n.js';
  */
 export default function PrivacyPolicy() {
   const lang = useLang();
+  const t = useT();
+  const title = t('legal.privacy.title');
   const isEn = lang === 'en';
   const lastUpdated = isEn ? 'May 6, 2026' : '6 de mayo de 2026';
+
+  useEffect(() => {
+    document.title = title;
+  }, [title]);
 
   if (isEn) {
     return (
@@ -29,10 +36,11 @@ export default function PrivacyPolicy() {
         color: 'var(--text-primary)',
         lineHeight: 1.7,
       }}>
+        <LegalLanguageSwitch currentLang={lang} />
         <DraftBanner lang="en" />
 
         <Eyebrow>PRIVACY · LAST UPDATED {lastUpdated.toUpperCase()}</Eyebrow>
-        <H1>Privacy Policy</H1>
+        <H1>{title}</H1>
 
         <P>
           At Pronos, we respect your privacy. This policy explains what data
@@ -194,10 +202,11 @@ export default function PrivacyPolicy() {
       color: 'var(--text-primary)',
       lineHeight: 1.7,
     }}>
+      <LegalLanguageSwitch currentLang={lang} />
       <DraftBanner />
 
       <Eyebrow>POLÍTICA · ÚLTIMA ACTUALIZACIÓN {lastUpdated.toUpperCase()}</Eyebrow>
-      <H1>Política de Privacidad</H1>
+      <H1>{title}</H1>
 
       <P>
         En Pronos respetamos tu privacidad. Esta política describe qué datos
