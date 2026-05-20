@@ -272,7 +272,14 @@ export default async function handler(req, res) {
       const resolverCfg = parseJsonb(r.resolver_config, null);
       const resolverType = r.resolver_type || null;
       const resolverSource = resolverCfg?.source || null;
-      const liveScoreConfig = buildEspnLiveScoreConfig({ resolverType, resolverConfig: resolverCfg });
+      const liveScoreConfig = buildEspnLiveScoreConfig({
+        resolverType,
+        resolverConfig: resolverCfg,
+        sourceData,
+        sport: r.sport || null,
+        league: r.league || null,
+        startTime: r.start_time,
+      });
       const tags = deriveMarketTags({
         ...r,
         source_data: sourceData,

@@ -14,9 +14,11 @@ function liveScoreUrl(config) {
   const params = new URLSearchParams({
     source: config.source || 'espn',
     leaguePath: config.leaguePath,
-    eventId: config.eventId,
   });
+  if (config.eventId) params.set('eventId', config.eventId);
   if (config.dateYmd) params.set('dateYmd', config.dateYmd);
+  if (config.homeName) params.set('homeName', config.homeName);
+  if (config.awayName) params.set('awayName', config.awayName);
   return `/api/sports/live-score?${params}`;
 }
 

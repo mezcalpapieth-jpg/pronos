@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   buildEspnLiveScoreConfig,
   normalizeEspnLiveScore,
+  readEspnLiveScore,
 } from './espn-live-score.js';
 
 test('normalizeEspnLiveScore returns basketball period scores and current clock', () => {
@@ -126,4 +127,84 @@ test('buildEspnLiveScoreConfig exposes only the safe ESPN event lookup fields', 
     eventId: '702304',
     dateYmd: '2026-05-20',
   });
+});
+
+test('buildEspnLiveScoreConfig maps UEFA soccer metadata to an ESPN team lookup', () => {
+  const cfg = buildEspnLiveScoreConfig({
+    resolverType: null,
+    resolverConfig: null,
+    source: 'uefa.com',
+    sourceEventId: 'uefa-2026-europa-final',
+    sport: 'soccer',
+    sourceData: {
+      competitionCode: 'EL',
+      kickoffUtc: '2026-05-20T19:00:00.000Z',
+      home: { name: 'Freiburg' },
+      away: { name: 'Aston Villa' },
+    },
+  });
+
+  assert.deepEqual(cfg, {
+    source: 'espn',
+    leaguePath: 'soccer/uefa.europa',
+    eventId: null,
+    dateYmd: '2026-05-20',
+    homeName: 'Freiburg',
+    awayName: 'Aston Villa',
+  });
+
+  const premierLeagueCfg = buildEspnLiveScoreConfig({
+    resolverType: 'sports_api',
+    resolverConfig: { source: 'football-data', matchId: 44, shape: 'draw3' },
+    sport: 'soccer',
+    sourceData: {
+      competitionCode: 'PL',
+      kickoffUtc: '2026-05-20T19:00:00.000Z',
+      home: { name: 'Arsenal' },
+      away: { name: 'Aston Villa' },
+    },
+  });
+
+  assert.equal(premierLeagueCfg.leaguePath, 'soccer/eng.1');
+});
+
+test('readEspnLiveScore can find a soccer event by teams when no event id is stored', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+
+  globalThis.fetch = async (url) => {
+    assert.match(String(url), /soccer\/uefa\.europa\/scoreboard/);
+    return {
+      ok: true,
+      json: async () => ({
+        events: [{
+          id: '401862911',
+          date: '2026-05-20T19:00Z',
+          status: {
+            displayClock: '75:00',
+            type: { state: 'in', completed: false, shortDetail: "75'" },
+          },
+          competitions: [{
+            competitors: [
+              { homeAway: 'home', score: '1', team: { shortDisplayName: 'Freiburg' } },
+              { homeAway: 'away', score: '2', team: { shortDisplayName: 'Aston Villa' } },
+            ],
+          }],
+        }],
+      }),
+    };
+  };
+
+  const live = await readEspnLiveScore({
+    leaguePath: 'soccer/uefa.europa',
+    eventId: null,
+    dateYmd: '2026-05-20',
+    homeName: 'SC Freiburg',
+    awayName: 'Aston Villa FC',
+  });
+
+  assert.equal(live.eventId, '401862911');
+  assert.equal(live.statusLabel, "75'");
+  assert.equal(live.home.score, 1);
+  assert.equal(live.away.score, 2);
 });

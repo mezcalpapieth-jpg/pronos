@@ -12,15 +12,17 @@ export default async function handler(req, res) {
   const leaguePath = String(req.query.leaguePath || '');
   const eventId = String(req.query.eventId || '');
   const dateYmd = req.query.dateYmd ? String(req.query.dateYmd) : null;
+  const homeName = req.query.homeName ? String(req.query.homeName) : null;
+  const awayName = req.query.awayName ? String(req.query.awayName) : null;
 
   if (source !== 'espn') return res.status(400).json({ error: 'unsupported_source' });
-  if (!LEAGUE_PATH_RE.test(leaguePath) || !eventId) {
+  if (!LEAGUE_PATH_RE.test(leaguePath) || (!eventId && !(homeName && awayName))) {
     return res.status(400).json({ error: 'invalid_event_lookup' });
   }
 
   try {
     res.setHeader('Cache-Control', 's-maxage=20, stale-while-revalidate=60');
-    const liveScore = await readEspnLiveScore({ leaguePath, eventId, dateYmd });
+    const liveScore = await readEspnLiveScore({ leaguePath, eventId, dateYmd, homeName, awayName });
     return res.status(200).json({ liveScore });
   } catch (e) {
     console.error('[sports/live-score] ESPN lookup failed', {

@@ -8,6 +8,8 @@ test('LiveScorePanel fetches cached ESPN scores and stays display-only', async (
   assert.match(source, /\/api\/sports\/live-score/);
   assert.match(source, /points\.liveScore\.title/);
   assert.match(source, /setInterval\(load,\s*30_000\)/);
+  assert.match(source, /if \(config\.eventId\) params\.set\('eventId'/);
+  assert.match(source, /if \(config\.homeName\) params\.set\('homeName'/);
   assert.doesNotMatch(source, /\/api\/points\/buy|\/api\/protocol\/buy/);
 });
 

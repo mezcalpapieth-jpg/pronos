@@ -1,4 +1,14 @@
 const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports';
+const ESPN_SOCCER_COMPETITION_PATH = {
+  CL: 'soccer/uefa.champions',
+  EL: 'soccer/uefa.europa',
+  UCL: 'soccer/uefa.europa.conf',
+  CLI: 'soccer/conmebol.libertadores',
+  PD: 'soccer/esp.1',
+  PL: 'soccer/eng.1',
+  SA: 'soccer/ita.1',
+  BL1: 'soccer/ger.1',
+};
 
 function ymdToDateRange(ymd) {
   if (!ymd) return null;
@@ -20,6 +30,22 @@ function parseJsonb(value, fallback) {
 function cleanString(value) {
   const text = String(value || '').trim();
   return text.length > 0 ? text : null;
+}
+
+function normalizeTeamName(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\b(fc|sc|cf|afc|ac|cd|club)\b/g, '')
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+function namesMatch(a, b) {
+  const left = normalizeTeamName(a);
+  const right = normalizeTeamName(b);
+  if (!left || !right) return false;
+  return left === right || left.includes(right) || right.includes(left);
 }
 
 function inferSport(leaguePath) {
@@ -111,6 +137,20 @@ function pickCompetitors(comp) {
   return { home, away };
 }
 
+function eventMatchesTeams(event, homeName, awayName) {
+  if (!homeName || !awayName) return false;
+  const comp = pickCompetition(event);
+  if (!comp) return false;
+  const { home, away } = pickCompetitors(comp);
+  const eventHome = competitorName(home);
+  const eventAway = competitorName(away);
+  return (
+    namesMatch(eventHome, homeName) && namesMatch(eventAway, awayName)
+  ) || (
+    namesMatch(eventHome, awayName) && namesMatch(eventAway, homeName)
+  );
+}
+
 export function normalizeEspnLiveScore({ leaguePath, event }) {
   if (!event) return null;
   const comp = pickCompetition(event);
@@ -148,21 +188,51 @@ export function normalizeEspnLiveScore({ leaguePath, event }) {
   };
 }
 
-export function buildEspnLiveScoreConfig({ resolverType, resolverConfig }) {
+function dateYmdFromValue(value) {
+  const ms = value ? new Date(value).getTime() : NaN;
+  return Number.isFinite(ms) ? new Date(ms).toISOString().slice(0, 10) : null;
+}
+
+export function buildEspnLiveScoreConfig({
+  resolverType,
+  resolverConfig,
+  sourceData,
+  sport,
+  league,
+  startTime,
+}) {
   const cfg = parseJsonb(resolverConfig, null);
-  if (resolverType !== 'sports_api') return null;
-  if (cfg?.source !== 'espn') return null;
-  if (!cfg?.leaguePath || !cfg?.eventId) return null;
+  if (resolverType === 'sports_api' && cfg?.source === 'espn' && cfg?.leaguePath && cfg?.eventId) {
+    return {
+      source: 'espn',
+      leaguePath: String(cfg.leaguePath),
+      eventId: String(cfg.eventId),
+      dateYmd: cfg.dateYmd ? String(cfg.dateYmd) : null,
+    };
+  }
+
+  const data = parseJsonb(sourceData, {});
+  const isSoccer = sport === 'soccer' || data?.competitionCode || league?.startsWith?.('uefa-');
+  if (!isSoccer) return null;
+  const leaguePath = ESPN_SOCCER_COMPETITION_PATH[data?.competitionCode];
+  const homeName = cleanString(data?.home?.name || data?.homeName);
+  const awayName = cleanString(data?.away?.name || data?.awayName);
+  const dateYmd = dateYmdFromValue(data?.kickoffUtc || startTime);
+  if (!leaguePath || !homeName || !awayName || !dateYmd) return null;
   return {
     source: 'espn',
-    leaguePath: String(cfg.leaguePath),
-    eventId: String(cfg.eventId),
-    dateYmd: cfg.dateYmd ? String(cfg.dateYmd) : null,
+    leaguePath,
+    eventId: null,
+    dateYmd,
+    homeName,
+    awayName,
   };
 }
 
-export async function readEspnLiveScore({ leaguePath, eventId, dateYmd }) {
-  if (!leaguePath || !eventId) throw new Error('espn-live-score: missing leaguePath/eventId');
+export async function readEspnLiveScore({ leaguePath, eventId, dateYmd, homeName, awayName }) {
+  if (!leaguePath || (!eventId && !(homeName && awayName))) {
+    throw new Error('espn-live-score: missing leaguePath/event lookup');
+  }
   const dateRange = ymdToDateRange(dateYmd);
   const q = dateRange ? `?dates=${dateRange}&limit=500` : '?limit=500';
   const scoreboardUrl = `${ESPN_BASE}/${leaguePath}/scoreboard${q}`;
@@ -170,8 +240,11 @@ export async function readEspnLiveScore({ leaguePath, eventId, dateYmd }) {
   if (!res.ok) throw new Error(`espn-live-score: HTTP ${res.status}`);
   const data = await res.json();
   const events = Array.isArray(data?.events) ? data.events : [];
-  const event = events.find(e => String(e.id) === String(eventId));
+  const event = eventId
+    ? events.find(e => String(e.id) === String(eventId))
+    : events.find(e => eventMatchesTeams(e, homeName, awayName));
   if (event) return normalizeEspnLiveScore({ leaguePath, event });
+  if (!eventId) return null;
 
   const summaryUrl = `${ESPN_BASE}/${leaguePath}/summary?event=${encodeURIComponent(eventId)}`;
   const summaryRes = await fetch(summaryUrl, { headers: { Accept: 'application/json' } });
