@@ -68,3 +68,19 @@ test('team profiles include Mexican summer and winter baseball leagues', () => {
   assert.equal(findTeamByName('lmp', 'Tomateros de Culiacán')?.slug, 'tomateros-de-culiacan');
   assert.equal(findTeamByName('lmb', 'Diablos Rojos del México')?.slug, 'diablos-rojos-del-mexico');
 });
+
+test('imported LMB team profiles expose logos for directory cards', () => {
+  assert.match(findTeamByName('lmb', 'Acereros de Monclova')?.logoUrl || '', /Acereros\.png$/);
+  assert.match(findTeamByName('lmb', 'Diablos Rojos del México')?.logoUrl || '', /Diablos\.png$/);
+  assert.match(findTeamByName('lmb', 'Charros de Jalisco')?.logoUrl || '', /Charros\.png$/);
+});
+
+test('Mexican baseball directory teams expose static logos', () => {
+  const missing = TEAM_PROFILES
+    .filter(team => team.sport === 'baseball' && (team.league === 'LMB' || team.league === 'LMP'))
+    .filter(team => !team.logoUrl)
+    .map(team => team.name);
+
+  assert.deepEqual(missing, []);
+  assert.match(findTeamByName('lmp', 'Tomateros de Culiacán')?.logoUrl || '', /team-logos\/678\.svg$/);
+});

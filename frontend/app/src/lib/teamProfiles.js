@@ -17,6 +17,43 @@ function espnLogo(kind, id) {
   return `https://a.espncdn.com/i/teamlogos/${kind}/500/${id}.png`;
 }
 
+const LMB_LOGO_BASE = 'https://d11rb39sj794dg.cloudfront.net/public';
+const LMB_LOGOS_BY_SLUG = {
+  'acereros-de-monclova': `${LMB_LOGO_BASE}/2024-04/Acereros.png`,
+  'algodoneros-union-laguna': `${LMB_LOGO_BASE}/2024-04/Algodoneros.png`,
+  'bravos-de-leon': `${LMB_LOGO_BASE}/2024-04/Bravos.png`,
+  'caliente-de-durango': `${LMB_LOGO_BASE}/2025-03/caliente.png`,
+  'charros-de-jalisco-lmb': `${LMB_LOGO_BASE}/2024-04/Charros.png`,
+  'conspiradores-de-queretaro': `${LMB_LOGO_BASE}/2024-04/Conspiradores.png`,
+  'diablos-rojos-del-mexico': `${LMB_LOGO_BASE}/2024-04/Diablos.png`,
+  'dorados-de-chihuahua': `${LMB_LOGO_BASE}/2024-04/Dorados1.png`,
+  'el-aguila-de-veracruz': `${LMB_LOGO_BASE}/2025-05/veracruz.png`,
+  'guerreros-de-oaxaca': `${LMB_LOGO_BASE}/2024-04/Guerreros.png`,
+  'leones-de-yucatan': `${LMB_LOGO_BASE}/2024-04/Leones.png`,
+  'olmecas-de-tabasco': `${LMB_LOGO_BASE}/2026-03/olmecas_azul.png`,
+  'pericos-de-puebla': `${LMB_LOGO_BASE}/2024-04/Pericos.png`,
+  'piratas-de-campeche': `${LMB_LOGO_BASE}/2024-04/Piratas.png`,
+  'rieleros-de-aguascalientes': `${LMB_LOGO_BASE}/2026-01/rieleros_azul.png`,
+  'saraperos-de-saltillo': `${LMB_LOGO_BASE}/2024-04/Saraperos.png`,
+  'sultanes-de-monterrey-lmb': `${LMB_LOGO_BASE}/2024-04/Sultanes.png`,
+  'tecolotes-de-los-dos-laredos': `${LMB_LOGO_BASE}/2024-04/Tecolotes.png`,
+  'tigres-de-quintana-roo': `${LMB_LOGO_BASE}/2025-04/Tigres_2025.png`,
+  'toros-de-tijuana': `${LMB_LOGO_BASE}/2024-04/Toros.png`,
+};
+
+const LMP_LOGOS_BY_SLUG = {
+  'aguilas-de-mexicali': 'https://www.mlbstatic.com/team-logos/673.svg',
+  'algodoneros-de-guasave': 'https://www.mlbstatic.com/team-logos/5482.svg',
+  'caneros-de-los-mochis': 'https://www.mlbstatic.com/team-logos/675.svg',
+  'charros-de-jalisco-lmp': 'https://www.mlbstatic.com/team-logos/674.svg',
+  'jaguares-de-nayarit': 'https://www.mlbstatic.com/team-logos/6483.svg',
+  'mayos-de-navojoa': 'https://www.mlbstatic.com/team-logos/676.svg',
+  'naranjeros-de-hermosillo': 'https://www.mlbstatic.com/team-logos/677.svg',
+  'tomateros-de-culiacan': 'https://www.mlbstatic.com/team-logos/678.svg',
+  'venados-de-mazatlan': 'https://www.mlbstatic.com/team-logos/679.svg',
+  'yaquis-de-ciudad-obregon': 'https://www.mlbstatic.com/team-logos/680.svg',
+};
+
 const SOCCER_ESPN_LEAGUE_PATH = {
   'Premier League': 'soccer/eng.1',
   'La Liga': 'soccer/esp.1',
@@ -242,7 +279,7 @@ const MLB_TEAMS = [
   logoUrl: espnLogo('mlb', espnTeamId),
 }));
 
-function makeMexicanBaseballTeam([slug, name, league, aliases = []]) {
+function makeMexicanBaseballTeam([slug, name, league, aliases = [], extra = {}]) {
   return {
     slug,
     name,
@@ -250,6 +287,8 @@ function makeMexicanBaseballTeam([slug, name, league, aliases = []]) {
     league,
     country: 'México',
     aliases,
+    logoUrl: extra.logoUrl || LMB_LOGOS_BY_SLUG[slug] || LMP_LOGOS_BY_SLUG[slug] || null,
+    ...extra,
   };
 }
 

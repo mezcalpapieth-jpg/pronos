@@ -1,9 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Nav from '../components/Nav.jsx';
 import CategoryBar from '../components/CategoryBar.jsx';
 import Footer from '../components/Footer.jsx';
 import { teamInterestPayload, trackInterest } from '../lib/interest.js';
+import { mergeTeamDirectoryLogos, sortTeamsForDirectory } from '../lib/teamDirectory.js';
 import { TEAM_PROFILES, teamProfilePath } from '../lib/teamProfiles.js';
 
 const SPORT_FILTERS = [
@@ -77,10 +78,26 @@ function TeamSearchBody({ surface }) {
   const [sport, setSport] = useState('all');
   const [soccerLeague, setSoccerLeague] = useState('all');
   const [baseballLeague, setBaseballLeague] = useState('all');
+  const [directoryLogos, setDirectoryLogos] = useState({});
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/team-directory', { credentials: 'include' })
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (!cancelled && data?.logos && typeof data.logos === 'object') {
+          setDirectoryLogos(data.logos);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const teams = useMemo(() => {
     const q = normalize(query.trim());
-    return TEAM_PROFILES
+    const filtered = mergeTeamDirectoryLogos(TEAM_PROFILES, directoryLogos)
       .filter(team => sport === 'all' || team.sport === sport)
       .filter(team => sport !== 'soccer' || soccerTeamInLeague(team, soccerLeague))
       .filter(team => sport !== 'baseball' || baseballTeamInLeague(team, baseballLeague))
@@ -93,13 +110,9 @@ function TeamSearchBody({ surface }) {
           ...(team.aliases || []),
         ].join(' '));
         return text.includes(q);
-      })
-      .sort((a, b) => {
-        if (a.sport !== b.sport) return a.sport.localeCompare(b.sport);
-        if ((a.league || '') !== (b.league || '')) return String(a.league || '').localeCompare(String(b.league || ''));
-        return a.name.localeCompare(b.name);
       });
-  }, [query, sport, soccerLeague, baseballLeague]);
+    return sortTeamsForDirectory(filtered, sport);
+  }, [query, sport, soccerLeague, baseballLeague, directoryLogos]);
 
   return (
     <main style={{

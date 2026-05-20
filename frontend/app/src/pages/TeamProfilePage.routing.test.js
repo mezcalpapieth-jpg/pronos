@@ -50,6 +50,12 @@ test('team search exposes baseball subcategory filters including LMP', () => {
   assert.match(teamSearch, /lmp/);
 });
 
+test('team search hydrates selector logos from the team directory API', () => {
+  assert.match(teamSearch, /\/api\/team-directory/);
+  assert.match(teamSearch, /mergeTeamDirectoryLogos/);
+  assert.match(teamSearch, /sortTeamsForDirectory/);
+});
+
 test('team profile defaults to active and pending rows with a todos toggle', () => {
   assert.match(teamProfile, /active-pending/);
   assert.match(teamProfile, /Todos/);
