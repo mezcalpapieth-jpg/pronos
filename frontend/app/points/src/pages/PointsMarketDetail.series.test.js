@@ -13,11 +13,8 @@ const source = await readFile(new URL('./PointsMarketDetail.jsx', import.meta.ur
 
 test('points resolved binary ring follows the winning outcome', () => {
   assert.match(source, /const displayWinnerIndex = isResolved \? displayOutcomeIndices\.indexOf\(winnerIndex\) : null;/);
-  assert.match(source, /const ringIndex = isResolved && displayWinnerIndex != null && displayWinnerIndex >= 0 \? displayWinnerIndex : 0;/);
   assert.match(source, /if \(isResolved\) return displayWinnerIndex === i \? 100 : 0;/);
-  assert.match(source, /pct=\{pctFor\(ringIndex\)\}/);
-  assert.match(source, /label=\{displayOutcomes\[ringIndex\]\}/);
-  assert.match(source, /winner=\{isResolved && displayWinnerIndex === ringIndex\}/);
+  assert.match(source, /winnerIndex=\{displayWinnerIndex\}/);
 });
 
 test('points series strip uses translated game and summary copy', () => {
@@ -26,4 +23,10 @@ test('points series strip uses translated game and summary copy', () => {
   assert.match(source, /formatSeriesGameLabel\(item\.gameNumber, \{ t \}\)/);
   assert.match(source, /formatSeriesScoreSummary\(seriesMeta, \{ t \}\)/);
   assert.match(source, /formatSeriesSubtitle\(market\.seriesMeta, \{ t \}\)/);
+});
+
+test('points active binary detail keeps only the probability explainer comment', () => {
+  assert.doesNotMatch(source, /t\('points\.detail\.probNow'\)/);
+  assert.match(source, /t\('points\.detail\.probExplain'\)/);
+  assert.match(source, /fontSize: 13, lineHeight: 1\.55/);
 });

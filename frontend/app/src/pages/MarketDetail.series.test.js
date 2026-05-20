@@ -34,11 +34,8 @@ test('MVP series strip treats virtual completed games as final before pending pl
 
 test('MVP resolved binary ring follows the winning outcome', () => {
   assert.match(source, /const displayWinnerIndex = isResolved \? displayOutcomeIndices\.indexOf\(winnerIndex\) : null;/);
-  assert.match(source, /const ringIndex = isResolved && displayWinnerIndex != null && displayWinnerIndex >= 0 \? displayWinnerIndex : 0;/);
   assert.match(source, /if \(isResolved\) return displayWinnerIndex === i \? 100 : 0;/);
-  assert.match(source, /pct=\{pctFor\(ringIndex\)\}/);
-  assert.match(source, /label=\{displayOutcomes\[ringIndex\]\}/);
-  assert.match(source, /winner=\{isResolved && displayWinnerIndex === ringIndex\}/);
+  assert.match(source, /winnerIndex=\{displayWinnerIndex\}/);
 });
 
 test('MVP detail renders series labels in Spanish', () => {
@@ -46,4 +43,10 @@ test('MVP detail renders series labels in Spanish', () => {
   assert.doesNotMatch(source, /`Game \$\{item\.gameNumber\}`/);
   assert.match(source, /formatSeriesGameLabel\(item\.gameNumber\)/);
   assert.match(source, /formatSeriesScoreSummary\(seriesMeta\)/);
+});
+
+test('MVP active binary detail keeps only the probability explainer comment', () => {
+  assert.doesNotMatch(source, /Probabilidad implícita/);
+  assert.match(source, /La probabilidad se ajusta con cada trade/);
+  assert.match(source, /fontSize: 13, lineHeight: 1\.55/);
 });

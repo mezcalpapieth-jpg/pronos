@@ -21,6 +21,8 @@ test('admin stats includes interest panel with day week month lifetime windows',
   assert.match(interestPanel, /Mes/);
   assert.match(interestPanel, /Vida/);
   assert.match(interestPanel, /sparkline/i);
+  assert.doesNotMatch(interestPanel, /Cuenta cada presión/);
+  assert.match(interestPanel, /hasta 5 señales por usuario\/dispositivo al día/);
   assert.match(mvpAdmin, /<AdminInterestPanel interest=\{stats\.interest\}/);
   assert.match(pointsAdmin, /<AdminInterestPanel interest=\{stats\.interest\}/);
 });
@@ -42,6 +44,9 @@ test('team and market surfaces send daily interest events', () => {
 test('points admin stats endpoint returns aggregate interest metrics', () => {
   assert.match(statsApi, /ensureInterestSchema/);
   assert.match(statsApi, /interest_daily_counts/);
+  assert.match(statsApi, /interest_daily_visitors/);
+  assert.match(statsApi, /COUNT\(\*\)::int AS unique_count/);
+  assert.match(statsApi, /v\.action LIKE 'signal%'/);
   assert.match(statsApi, /interest:\s*\{/);
   assert.match(statsApi, /teams/);
   assert.match(statsApi, /markets/);

@@ -2,7 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  INTEREST_DAILY_SIGNAL_CAP,
+  INTEREST_SIGNAL_ACTION,
   INTEREST_WINDOWS,
+  formatInterestRow,
+  interestSignalActionForSlot,
+  normalizeInterestClientId,
   normalizeInterestPayload,
   sanitizeInterestMetadata,
 } from './interest.js';
@@ -63,4 +68,40 @@ test('interest metadata is bounded to admin-safe fields', () => {
     status: 'active',
     source: 'football-data.org',
   });
+});
+
+test('interest rows display unique daily signals instead of raw repeated presses', () => {
+  const row = formatInterestRow({
+    surface: 'points',
+    object_type: 'team',
+    object_id: 'soccer:cruz-azul',
+    label: 'Cruz Azul',
+    day_count: 8,
+    week_count: 12,
+    month_count: 20,
+    lifetime_count: 40,
+    day_unique: 1,
+    week_unique: 3,
+    month_unique: 5,
+    lifetime_unique: 9,
+    series: [
+      { day: '2026-05-20', count: 8, unique: 1 },
+    ],
+  });
+
+  assert.equal(row.counts.day, 1);
+  assert.equal(row.counts.week, 3);
+  assert.equal(row.counts.month, 5);
+  assert.equal(row.counts.lifetime, 9);
+  assert.equal(row.series[0].count, 1);
+});
+
+test('interest visitor identity supports object-level daily de-duping', () => {
+  assert.equal(INTEREST_SIGNAL_ACTION, 'signal');
+  assert.equal(INTEREST_DAILY_SIGNAL_CAP, 5);
+  assert.equal(interestSignalActionForSlot(1), 'signal:1');
+  assert.equal(interestSignalActionForSlot(5), 'signal:5');
+  assert.equal(interestSignalActionForSlot(99), 'signal:5');
+  assert.equal(normalizeInterestClientId('  abcdefghijklmnop  '), 'abcdefghijklmnop');
+  assert.equal(normalizeInterestClientId('short'), null);
 });

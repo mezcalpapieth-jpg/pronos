@@ -1,4 +1,7 @@
 const ENDPOINT = '/api/interest';
+const CLIENT_ID_KEY = 'pronos_interest_client_id';
+const DAILY_PREFIX = 'pronos_interest_daily:';
+export const INTEREST_DAILY_SIGNAL_CAP = 5;
 
 function clean(value, max = 120) {
   const text = String(value || '').trim();
@@ -9,19 +12,67 @@ function surfaceFor(value) {
   return value === 'points' ? 'points' : 'mvp';
 }
 
+function isoDay(date = new Date()) {
+  return date.toISOString().slice(0, 10);
+}
+
+function storageGet(key) {
+  try {
+    return window.localStorage?.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function storageSet(key, value) {
+  try {
+    window.localStorage?.setItem(key, value);
+  } catch {
+    // Interest tracking should never break browsing.
+  }
+}
+
+function getClientId() {
+  if (typeof window === 'undefined') return null;
+  const existing = storageGet(CLIENT_ID_KEY);
+  if (existing) return existing;
+  const generated = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  storageSet(CLIENT_ID_KEY, generated);
+  return generated;
+}
+
+export function interestDailyStorageKey(payload = {}, date = new Date()) {
+  const surface = surfaceFor(payload.surface);
+  const objectType = clean(payload.objectType, 40).toLowerCase();
+  const objectId = clean(payload.objectId, 120);
+  if (!objectType || !objectId) return null;
+  return `${DAILY_PREFIX}${isoDay(date)}:${surface}:${objectType}:${objectId}`;
+}
+
 export function trackInterest(payload) {
   if (typeof window === 'undefined') return;
 
-  const body = JSON.stringify(payload || {});
+  const storageKey = interestDailyStorageKey(payload);
+  const existingSignals = Math.max(0, Number(storageKey ? storageGet(storageKey) : 0) || 0);
+  if (existingSignals >= INTEREST_DAILY_SIGNAL_CAP) return;
+
+  const body = JSON.stringify({
+    ...(payload || {}),
+    clientId: getClientId(),
+  });
   try {
     if (navigator.sendBeacon) {
       const blob = new Blob([body], { type: 'application/json' });
-      if (navigator.sendBeacon(ENDPOINT, blob)) return;
+      if (navigator.sendBeacon(ENDPOINT, blob)) {
+        if (storageKey) storageSet(storageKey, String(existingSignals + 1));
+        return;
+      }
     }
   } catch {
     // Fall through to fetch; tracking should never interrupt navigation.
   }
 
+  if (storageKey) storageSet(storageKey, String(existingSignals + 1));
   fetch(ENDPOINT, {
     method: 'POST',
     credentials: 'include',

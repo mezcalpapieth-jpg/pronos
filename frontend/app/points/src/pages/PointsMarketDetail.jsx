@@ -1157,10 +1157,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                   </>
                 ) : (
                   <>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 8, textTransform: 'uppercase' }}>
-                      {t('points.detail.probNow')}
-                    </div>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.6, margin: 0 }}>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.55, margin: 0 }}>
                       {t('points.detail.probExplain')}
                     </p>
                   </>

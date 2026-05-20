@@ -5,6 +5,9 @@ export const INTEREST_WINDOWS = [
   { key: 'lifetime', label: 'Vida' },
 ];
 
+export const INTEREST_SIGNAL_ACTION = 'signal';
+export const INTEREST_DAILY_SIGNAL_CAP = 5;
+
 const ALLOWED_SURFACES = new Set(['mvp', 'points']);
 const ALLOWED_OBJECT_TYPES = new Set(['team', 'points_market', 'protocol_market']);
 const ALLOWED_ACTIONS = new Set(['click', 'view']);
@@ -56,6 +59,21 @@ export function normalizeInterestPayload(input = {}) {
   };
 }
 
+export function normalizeInterestClientId(value) {
+  const text = cleanToken(value, { max: 128 });
+  return text.length >= 16 ? text : null;
+}
+
+export function interestSignalActionForSlot(slot) {
+  const safeSlot = Math.max(1, Math.min(INTEREST_DAILY_SIGNAL_CAP, Number(slot) || 1));
+  return `${INTEREST_SIGNAL_ACTION}:${safeSlot}`;
+}
+
+function metricValue(row, uniqueKey, rawKey) {
+  if (row?.[uniqueKey] != null) return Number(row[uniqueKey] || 0);
+  return Number(row?.[rawKey] || 0);
+}
+
 export function formatInterestRow(row = {}) {
   const series = Array.isArray(row.series) ? row.series : [];
   return {
@@ -69,10 +87,10 @@ export function formatInterestRow(row = {}) {
     category: row.category || null,
     status: row.status || null,
     counts: {
-      day: Number(row.day_count || 0),
-      week: Number(row.week_count || 0),
-      month: Number(row.month_count || 0),
-      lifetime: Number(row.lifetime_count || 0),
+      day: metricValue(row, 'day_unique', 'day_count'),
+      week: metricValue(row, 'week_unique', 'week_count'),
+      month: metricValue(row, 'month_unique', 'month_count'),
+      lifetime: metricValue(row, 'lifetime_unique', 'lifetime_count'),
     },
     uniques: {
       day: Number(row.day_unique || 0),
@@ -82,7 +100,7 @@ export function formatInterestRow(row = {}) {
     },
     series: series.map(point => ({
       day: point.day,
-      count: Number(point.count || 0),
+      count: point.unique != null ? Number(point.unique || 0) : Number(point.count || 0),
       unique: Number(point.unique || 0),
     })),
     lastSeenAt: row.last_seen_at || null,

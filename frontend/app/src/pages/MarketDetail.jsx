@@ -656,15 +656,17 @@ export default function MarketDetail({ onOpenLogin }) {
           }}>
             {displayOutcomes.length === 2 && (
               <div style={{ marginBottom: 16 }}>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', marginBottom: 7, textTransform: 'uppercase' }}>
-                  {isResolved ? 'Resultado oficial' : 'Probabilidad implícita'}
-                </div>
                 {isResolved ? (
-                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--green)' }}>
-                    🏆 {displayWinnerIndex >= 0 ? displayOutcomes[displayWinnerIndex] : outcomes[winnerIndex] || '—'}
-                  </div>
+                  <>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', marginBottom: 7, textTransform: 'uppercase' }}>
+                      Resultado oficial
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--green)' }}>
+                      🏆 {displayWinnerIndex >= 0 ? displayOutcomes[displayWinnerIndex] : outcomes[winnerIndex] || '—'}
+                    </div>
+                  </>
                 ) : (
-                  <p style={{ margin: 0, color: 'var(--text-secondary)', fontFamily: 'var(--font-body)', fontSize: 15, lineHeight: 1.6 }}>
+                  <p style={{ margin: 0, color: 'var(--text-secondary)', fontFamily: 'var(--font-body)', fontSize: 13, lineHeight: 1.55 }}>
                     La probabilidad se ajusta con cada trade. Compra más barato cuando hay desacuerdo, más caro cuando hay consenso.
                   </p>
                 )}

@@ -46,68 +46,130 @@ export default async function handler(req, res) {
         ORDER BY SUM(ABS(amount)) DESC
       `,
       schemaSql`
+        WITH daily AS (
+          SELECT
+            v.surface,
+            v.object_type,
+            v.object_id,
+            v.day,
+            COUNT(*)::int AS unique_count
+          FROM interest_daily_visitors v
+          WHERE v.object_type = 'team'
+            AND v.action LIKE 'signal%'
+          GROUP BY v.surface, v.object_type, v.object_id, v.day
+        ),
+        meta AS (
+          SELECT
+            surface,
+            object_type,
+            object_id,
+            COALESCE(MAX(metadata->>'label'), object_id) AS label,
+            MAX(metadata->>'question') AS question,
+            MAX(metadata->>'sport') AS sport,
+            MAX(metadata->>'league') AS league,
+            MAX(metadata->>'category') AS category,
+            MAX(metadata->>'status') AS status,
+            MAX(last_seen_at) AS last_seen_at
+          FROM interest_daily_counts
+          WHERE object_type = 'team'
+          GROUP BY surface, object_type, object_id
+        )
         SELECT
-          surface,
-          object_type,
-          object_id,
-          COALESCE(MAX(metadata->>'label'), object_id) AS label,
-          MAX(metadata->>'question') AS question,
-          MAX(metadata->>'sport') AS sport,
-          MAX(metadata->>'league') AS league,
-          MAX(metadata->>'category') AS category,
-          MAX(metadata->>'status') AS status,
-          COALESCE(SUM(count) FILTER (WHERE day = CURRENT_DATE), 0)::int AS day_count,
-          COALESCE(SUM(count) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '6 days'), 0)::int AS week_count,
-          COALESCE(SUM(count) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '29 days'), 0)::int AS month_count,
-          COALESCE(SUM(count), 0)::int AS lifetime_count,
-          COALESCE(SUM(unique_count) FILTER (WHERE day = CURRENT_DATE), 0)::int AS day_unique,
-          COALESCE(SUM(unique_count) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '6 days'), 0)::int AS week_unique,
-          COALESCE(SUM(unique_count) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '29 days'), 0)::int AS month_unique,
-          COALESCE(SUM(unique_count), 0)::int AS lifetime_unique,
-          MAX(last_seen_at) AS last_seen_at,
+          d.surface,
+          d.object_type,
+          d.object_id,
+          COALESCE(MAX(meta.label), d.object_id) AS label,
+          MAX(meta.question) AS question,
+          MAX(meta.sport) AS sport,
+          MAX(meta.league) AS league,
+          MAX(meta.category) AS category,
+          MAX(meta.status) AS status,
+          COALESCE(SUM(d.unique_count) FILTER (WHERE d.day = CURRENT_DATE), 0)::int AS day_count,
+          COALESCE(SUM(d.unique_count) FILTER (WHERE d.day >= CURRENT_DATE - INTERVAL '6 days'), 0)::int AS week_count,
+          COALESCE(SUM(d.unique_count) FILTER (WHERE d.day >= CURRENT_DATE - INTERVAL '29 days'), 0)::int AS month_count,
+          COALESCE(SUM(d.unique_count), 0)::int AS lifetime_count,
+          COALESCE(SUM(d.unique_count) FILTER (WHERE d.day = CURRENT_DATE), 0)::int AS day_unique,
+          COALESCE(SUM(d.unique_count) FILTER (WHERE d.day >= CURRENT_DATE - INTERVAL '6 days'), 0)::int AS week_unique,
+          COALESCE(SUM(d.unique_count) FILTER (WHERE d.day >= CURRENT_DATE - INTERVAL '29 days'), 0)::int AS month_unique,
+          COALESCE(SUM(d.unique_count), 0)::int AS lifetime_unique,
+          MAX(meta.last_seen_at) AS last_seen_at,
           COALESCE(
             jsonb_agg(
-              jsonb_build_object('day', day::text, 'count', count, 'unique', unique_count)
-              ORDER BY day
-            ) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '29 days'),
+              jsonb_build_object('day', d.day::text, 'count', d.unique_count, 'unique', d.unique_count)
+              ORDER BY d.day
+            ) FILTER (WHERE d.day >= CURRENT_DATE - INTERVAL '29 days'),
             '[]'::jsonb
           ) AS series
-        FROM interest_daily_counts
-        WHERE object_type = 'team'
-        GROUP BY surface, object_type, object_id
+        FROM daily d
+        LEFT JOIN meta
+          ON meta.surface = d.surface
+         AND meta.object_type = d.object_type
+         AND meta.object_id = d.object_id
+        GROUP BY d.surface, d.object_type, d.object_id
         ORDER BY month_count DESC, lifetime_count DESC, last_seen_at DESC
         LIMIT 12
       `,
       schemaSql`
+        WITH daily AS (
+          SELECT
+            v.surface,
+            v.object_type,
+            v.object_id,
+            v.day,
+            COUNT(*)::int AS unique_count
+          FROM interest_daily_visitors v
+          WHERE v.object_type IN ('points_market', 'protocol_market')
+            AND v.action LIKE 'signal%'
+          GROUP BY v.surface, v.object_type, v.object_id, v.day
+        ),
+        meta AS (
+          SELECT
+            surface,
+            object_type,
+            object_id,
+            COALESCE(MAX(metadata->>'label'), MAX(metadata->>'question'), object_id) AS label,
+            MAX(metadata->>'question') AS question,
+            MAX(metadata->>'sport') AS sport,
+            MAX(metadata->>'league') AS league,
+            MAX(metadata->>'category') AS category,
+            MAX(metadata->>'status') AS status,
+            MAX(last_seen_at) AS last_seen_at
+          FROM interest_daily_counts
+          WHERE object_type IN ('points_market', 'protocol_market')
+          GROUP BY surface, object_type, object_id
+        )
         SELECT
-          surface,
-          object_type,
-          object_id,
-          COALESCE(MAX(metadata->>'label'), MAX(metadata->>'question'), object_id) AS label,
-          MAX(metadata->>'question') AS question,
-          MAX(metadata->>'sport') AS sport,
-          MAX(metadata->>'league') AS league,
-          MAX(metadata->>'category') AS category,
-          MAX(metadata->>'status') AS status,
-          COALESCE(SUM(count) FILTER (WHERE day = CURRENT_DATE), 0)::int AS day_count,
-          COALESCE(SUM(count) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '6 days'), 0)::int AS week_count,
-          COALESCE(SUM(count) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '29 days'), 0)::int AS month_count,
-          COALESCE(SUM(count), 0)::int AS lifetime_count,
-          COALESCE(SUM(unique_count) FILTER (WHERE day = CURRENT_DATE), 0)::int AS day_unique,
-          COALESCE(SUM(unique_count) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '6 days'), 0)::int AS week_unique,
-          COALESCE(SUM(unique_count) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '29 days'), 0)::int AS month_unique,
-          COALESCE(SUM(unique_count), 0)::int AS lifetime_unique,
-          MAX(last_seen_at) AS last_seen_at,
+          d.surface,
+          d.object_type,
+          d.object_id,
+          COALESCE(MAX(meta.label), d.object_id) AS label,
+          MAX(meta.question) AS question,
+          MAX(meta.sport) AS sport,
+          MAX(meta.league) AS league,
+          MAX(meta.category) AS category,
+          MAX(meta.status) AS status,
+          COALESCE(SUM(d.unique_count) FILTER (WHERE d.day = CURRENT_DATE), 0)::int AS day_count,
+          COALESCE(SUM(d.unique_count) FILTER (WHERE d.day >= CURRENT_DATE - INTERVAL '6 days'), 0)::int AS week_count,
+          COALESCE(SUM(d.unique_count) FILTER (WHERE d.day >= CURRENT_DATE - INTERVAL '29 days'), 0)::int AS month_count,
+          COALESCE(SUM(d.unique_count), 0)::int AS lifetime_count,
+          COALESCE(SUM(d.unique_count) FILTER (WHERE d.day = CURRENT_DATE), 0)::int AS day_unique,
+          COALESCE(SUM(d.unique_count) FILTER (WHERE d.day >= CURRENT_DATE - INTERVAL '6 days'), 0)::int AS week_unique,
+          COALESCE(SUM(d.unique_count) FILTER (WHERE d.day >= CURRENT_DATE - INTERVAL '29 days'), 0)::int AS month_unique,
+          COALESCE(SUM(d.unique_count), 0)::int AS lifetime_unique,
+          MAX(meta.last_seen_at) AS last_seen_at,
           COALESCE(
             jsonb_agg(
-              jsonb_build_object('day', day::text, 'count', count, 'unique', unique_count)
-              ORDER BY day
-            ) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '29 days'),
+              jsonb_build_object('day', d.day::text, 'count', d.unique_count, 'unique', d.unique_count)
+              ORDER BY d.day
+            ) FILTER (WHERE d.day >= CURRENT_DATE - INTERVAL '29 days'),
             '[]'::jsonb
           ) AS series
-        FROM interest_daily_counts
-        WHERE object_type IN ('points_market', 'protocol_market')
-        GROUP BY surface, object_type, object_id
+        FROM daily d
+        LEFT JOIN meta
+          ON meta.surface = d.surface
+         AND meta.object_type = d.object_type
+         AND meta.object_id = d.object_id
+        GROUP BY d.surface, d.object_type, d.object_id
         ORDER BY month_count DESC, lifetime_count DESC, last_seen_at DESC
         LIMIT 12
       `,

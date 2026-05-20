@@ -279,7 +279,7 @@ export default function AdminInterestPanel({ interest }) {
             fontSize: 11,
             lineHeight: 1.45,
           }}>
-            Cuenta cada presión. Si alguien vuelve mañana, vuelve a subir.
+            Cuenta hasta 5 señales por usuario/dispositivo al día. Si vuelve mañana, vuelve a subir.
           </p>
         </aside>
       </div>
