@@ -77,6 +77,9 @@ const PROTOCOL_SCHEMA_MIGRATIONS = [
   `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS lifecycle_updated_by TEXT`,
   `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS canceled_at TIMESTAMPTZ`,
   `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS dispute_opened_at TIMESTAMPTZ`,
+  `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT false`,
+  `CREATE INDEX IF NOT EXISTS idx_protocol_markets_featured_status
+    ON protocol_markets(featured, status) WHERE featured = true`,
   `CREATE TABLE IF NOT EXISTS protocol_resolution_candidates (
     id                 SERIAL PRIMARY KEY,
     protocol_market_id INTEGER NOT NULL REFERENCES protocol_markets(id),

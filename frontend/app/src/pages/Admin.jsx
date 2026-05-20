@@ -1510,7 +1510,7 @@ function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCou
     const nextFeatured = !market.featured;
     setRows(prev => prev.map(m => m.id === market.id ? { ...m, featured: nextFeatured } : m));
     try {
-      const { ok, data } = await postJson('/api/points/admin/toggle-featured', {
+      const { ok, data } = await postJson('/api/protocol/admin/toggle-featured', {
         marketId: market.id,
         featured: nextFeatured,
       });
@@ -1934,6 +1934,23 @@ function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCou
               )}
             </div>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => handleToggleFeatured(m)}
+                disabled={featuringId === m.id}
+                className="btn-ghost"
+                title={m.featured ? 'Quitar de trending' : 'Agregar a trending'}
+                style={{
+                  fontSize: 13,
+                  padding: '6px 10px',
+                  color: m.featured ? '#f59e0b' : 'var(--text-muted)',
+                  borderColor: m.featured ? 'rgba(245,158,11,0.45)' : 'var(--border)',
+                  background: m.featured ? 'rgba(245,158,11,0.12)' : 'transparent',
+                  filter: m.featured ? 'none' : 'grayscale(1)',
+                  opacity: featuringId === m.id ? 0.6 : 1,
+                }}
+              >
+                {featuringId === m.id ? '…' : '🔥'}
+              </button>
               <button onClick={() => setEditingMarket(m)} className="btn-ghost" style={{ fontSize: 11, padding: '6px 10px' }}>
                 Editar
               </button>

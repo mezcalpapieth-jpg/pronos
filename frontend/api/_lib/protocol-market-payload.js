@@ -80,6 +80,12 @@ export function buildProtocolMarketPayload(row = {}) {
   const isOpenEnded = resolverConfig?.source === 'next-opponent';
   const windowOk = startMs > 0 && endMs > startMs
     && (endMs - startMs) <= 14 * 86_400_000;
+  const featured = row.featured === true || row.featured === 'true';
+  const live = !!(!isOpenEnded
+    && windowOk
+    && startMs <= Date.now()
+    && endMs > Date.now()
+    && row.status === 'active');
   const resolutionCandidate = row.resolution_candidate_id ? formatResolutionCandidate({
     id: row.resolution_candidate_id,
     protocol_market_id: row.resolution_candidate_market_id,
@@ -115,11 +121,9 @@ export function buildProtocolMarketPayload(row = {}) {
     protocolVersion: row.protocol_version || 'v1',
     startTime: row.start_time || null,
     endTime: row.end_time || null,
-    live: !!(!isOpenEnded
-      && windowOk
-      && startMs <= Date.now()
-      && endMs > Date.now()
-      && row.status === 'active'),
+    live,
+    featured,
+    trending: featured || live,
     status: row.status,
     previousStatus: row.previous_status || null,
     lifecycleNote: row.lifecycle_note || null,

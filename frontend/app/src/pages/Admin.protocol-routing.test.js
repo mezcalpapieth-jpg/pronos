@@ -37,10 +37,13 @@ test('MVP admin market list and resolution use protocol data', () => {
   assert.doesNotMatch(marketsList, /\/api\/points\/admin\/markets\?/);
   assert.match(marketsList, /postJson\('\/api\/protocol\/admin\/resolve-market'/);
   assert.match(marketsList, /postJson\('\/api\/protocol\/admin\/resolution-candidates'/);
+  assert.match(marketsList, /postJson\('\/api\/protocol\/admin\/toggle-featured'/);
+  assert.match(marketsList, /handleToggleFeatured\(m\)/);
   assert.match(marketsList, /Resolución sugerida/);
   assert.match(marketsList, /Confirmar resolución/);
   assert.match(marketsList, /Negar/);
   assert.doesNotMatch(marketsList, /\/api\/points\/admin\/resolve-market/);
+  assert.doesNotMatch(marketsList, /\/api\/points\/admin\/toggle-featured/);
 });
 
 test('MVP admin status panel uses protocol mainnet wiring', () => {

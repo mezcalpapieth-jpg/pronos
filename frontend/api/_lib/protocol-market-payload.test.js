@@ -75,6 +75,31 @@ test('buildProtocolMarketPayload keeps World Cup isolated from Mexico taxonomy',
   assert.equal(market.crypto5min, false);
 });
 
+test('buildProtocolMarketPayload exposes admin-featured protocol markets as trending', () => {
+  const market = buildProtocolMarketPayload({
+    id: 12,
+    market_id: 5,
+    pool_address: '0xPool',
+    factory_address: '0xFactory',
+    chain_id: 42161,
+    question: '¿Arsenal gana su siguiente partido?',
+    category: 'deportes',
+    outcomes: ['Sí', 'No'],
+    outcome_count: 2,
+    protocol_version: 'v1',
+    start_time: '2026-05-21T18:00:00.000Z',
+    end_time: '2026-05-21T20:00:00.000Z',
+    status: 'active',
+    featured: true,
+    seed_liquidity: '1000',
+    s_yes: '0.52',
+    s_no: '0.48',
+  });
+
+  assert.equal(market.featured, true);
+  assert.equal(market.trending, true);
+});
+
 test('buildProtocolMarketPayload exposes ESPN playoff series metadata for MVP detail', () => {
   const market = buildProtocolMarketPayload({
     id: 11,

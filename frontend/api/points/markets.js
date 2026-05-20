@@ -249,6 +249,20 @@ export default async function handler(req, res) {
       });
 
       const outcomeImages = parseJsonb(r.outcome_images, null);
+      // `featured` is the admin flame. Home fetches featured=all so it
+      // can add user-starred teams on top, therefore the payload itself
+      // must still mark flame-selected rows as trending.
+      const cfg = resolverConfig;
+      const isOpenEnded = cfg?.source === 'next-opponent';
+      const startMs = r.start_time ? new Date(r.start_time).getTime() : 0;
+      const endMs   = r.end_time   ? new Date(r.end_time).getTime()   : 0;
+      const windowOk = startMs > 0 && endMs > startMs
+        && (endMs - startMs) <= 14 * 86_400_000;
+      const live = !!(!isOpenEnded
+        && windowOk
+        && startMs <= Date.now()
+        && endMs > Date.now()
+        && r.status === 'active');
 
       if (ammMode === 'parallel') {
         // Aggregate legs. Each leg is a binary Sí/No market; the parent
@@ -281,6 +295,9 @@ export default async function handler(req, res) {
           tradeVolume: tradeTotal,
           startTime: r.start_time,
           endTime: r.end_time,
+          live,
+          featured: r.featured === true,
+          trending: r.featured === true || live,
           status: r.status,
           outcome: r.outcome,
           resolvedAt: r.resolved_at,
@@ -320,12 +337,6 @@ export default async function handler(req, res) {
       //   (b) duration > 14 days is also excluded as a backstop in
       //       case any other generator ships a long-window market
       //       with start_time set.
-      const cfg = resolverConfig;
-      const isOpenEnded = cfg?.source === 'next-opponent';
-      const startMs = r.start_time ? new Date(r.start_time).getTime() : 0;
-      const endMs   = r.end_time   ? new Date(r.end_time).getTime()   : 0;
-      const windowOk = startMs > 0 && endMs > startMs
-        && (endMs - startMs) <= 14 * 86_400_000;
       // Discriminator for crypto-5min markets (BTC/ETH "sube o baja a
       // las HH:MM CDMX"). Exposed so the category page can offer a
       // dedicated "5 minutos" sub-filter — otherwise resueltos and the
@@ -349,11 +360,9 @@ export default async function handler(req, res) {
         // PointsMarketCard isLive computation but pre-computed here so
         // every consumer (carousel, grid, trending tab) reads the same
         // boolean without re-doing the date math.
-        live: !!(!isOpenEnded
-          && windowOk
-          && startMs <= Date.now()
-          && endMs > Date.now()
-          && r.status === 'active'),
+        live,
+        featured: r.featured === true,
+        trending: r.featured === true || live,
         crypto5min,
         status: r.status,
         outcome: r.outcome,

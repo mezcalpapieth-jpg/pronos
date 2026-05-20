@@ -204,7 +204,7 @@ export default async function handler(req, res) {
              m.category_tags, m.geo_tags, m.topic_tags,
              m.source, m.source_event_id, m.resolver_type, m.resolver_config,
              m.outcomes, m.outcome_count,
-             m.protocol_version, m.start_time, m.end_time, m.status, m.previous_status,
+             m.protocol_version, m.start_time, m.end_time, m.status, m.featured, m.previous_status,
              m.lifecycle_note, m.lifecycle_updated_at, m.lifecycle_updated_by,
              m.canceled_at, m.dispute_opened_at, m.outcome,
              m.seed_liquidity, m.tx_hash, m.created_at, m.resolved_at, m.final_score,

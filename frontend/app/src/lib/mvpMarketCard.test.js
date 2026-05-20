@@ -47,6 +47,37 @@ test('priceForOutcome collapses resolved markets to winner 100 and loser 0', () 
   assert.equal(priceForOutcome(market, 1), 1);
 });
 
+test('mapProtocolMarketToCard keeps admin-featured markets in trending', () => {
+  const card = mapProtocolMarketToCard({
+    id: 77,
+    question: '¿Arsenal gana la final?',
+    category: 'deportes',
+    outcomes: ['PSG', 'Arsenal'],
+    prices: [0.5, 0.5],
+    status: 'active',
+    live: false,
+    featured: true,
+  });
+
+  assert.equal(card.featured, true);
+  assert.equal(card.trending, true);
+});
+
+test('mapProtocolMarketToCard does not mark non-live non-featured markets trending', () => {
+  const card = mapProtocolMarketToCard({
+    id: 78,
+    question: '¿PSG gana la final?',
+    category: 'deportes',
+    outcomes: ['PSG', 'Arsenal'],
+    prices: [0.5, 0.5],
+    status: 'active',
+    live: false,
+    featured: false,
+  });
+
+  assert.equal(card.trending, false);
+});
+
 test('previewGain estimates net gain for a 100 MXNB reference stake', () => {
   assert.equal(previewGain(0.5), 100);
   assert.equal(previewGain(0.25), 300);
