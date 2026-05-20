@@ -7,6 +7,7 @@ import { findTeamByName, findTeamProfile } from '../lib/teamProfiles.js';
 import { teamInterestPayload, trackInterest } from '../lib/interest.js';
 import { mergeScheduleWithMarkets } from '../lib/teamProfileSchedule.js';
 import { isFeaturedTeam, toggleFeaturedTeam } from '../lib/featuredTeams.js';
+import { logoForTeamInRows, marketOnlyRowForTeam } from '../lib/teamProfileRows.js';
 
 const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 42161);
 const ACTIVE_PENDING_STATES = new Set(['open', 'pending', 'por-resolver', 'disputa']);
@@ -56,31 +57,6 @@ function marketMatchesTeam(team, market) {
   const sport = market?.sport || market?.league || team?.sport;
   const outcomes = Array.isArray(market?.outcomes) ? market.outcomes : [];
   return outcomes.some(label => findTeamByName(sport, label)?.slug === team.slug);
-}
-
-function marketOnlyState(market) {
-  if (market?.status === 'resolved') return 'resolved';
-  if (market?.status === 'canceled' || market?.status === 'cancelled') return 'cancelado';
-  if (market?.status === 'disputed') return 'disputa';
-  const endMs = market?.endTime ? new Date(market.endTime).getTime() : 0;
-  if (market?.status === 'active' && endMs > 0 && endMs < Date.now()) return 'por-resolver';
-  if (market?.status === 'active') return 'open';
-  return market?.status || 'pending';
-}
-
-function normalizeMarketOnlyRow(team, market) {
-  const [first, second] = Array.isArray(market?.outcomes) ? market.outcomes : [];
-  const startsAt = market?.startTime || market?.endTime || market?.createdAt || null;
-  return {
-    id: `market:${market?.id}`,
-    source: market?.source || null,
-    sourceEventId: market?.sourceEventId || null,
-    startsAt,
-    homeName: second && first ? second : team.name,
-    awayName: first || null,
-    market,
-    state: marketOnlyState(market),
-  };
 }
 
 async function getJson(url) {
@@ -193,6 +169,7 @@ function TeamProfileBody({ surface }) {
   const navigate = useNavigate();
   const team = findTeamProfile(sport, teamSlug);
   const [schedule, setSchedule] = useState([]);
+  const [sourceTeam, setSourceTeam] = useState(null);
   const [markets, setMarkets] = useState([]);
   const [warning, setWarning] = useState(null);
   const [view, setView] = useState('active-pending');
@@ -213,6 +190,7 @@ function TeamProfileBody({ surface }) {
         ]);
         if (!cancelled) {
           setSchedule(scheduleData.schedule || []);
+          setSourceTeam(scheduleData.team || null);
           setWarning(scheduleData.warning || null);
           setMarkets((marketRows || []).filter(market => marketMatchesTeam(team, market)));
         }
@@ -245,13 +223,17 @@ function TeamProfileBody({ surface }) {
     const attached = new Set(merged.map(row => row.market?.id).filter(Boolean));
     const marketOnly = markets
       .filter(market => !attached.has(market.id))
-      .map(market => normalizeMarketOnlyRow(team, market));
+      .map(market => marketOnlyRowForTeam(team, market));
     return [...merged, ...marketOnly].sort((a, b) => {
       const aMs = a.startsAt ? new Date(a.startsAt).getTime() : 0;
       const bMs = b.startsAt ? new Date(b.startsAt).getTime() : 0;
       return aMs - bMs;
     });
   }, [schedule, markets, team]);
+
+  const profileLogo = useMemo(() => (
+    team?.logoUrl || sourceTeam?.logoUrl || logoForTeamInRows(team, rows)
+  ), [team, sourceTeam, rows]);
 
   const visibleRows = useMemo(() => {
     if (view === 'all') return rows;
@@ -285,9 +267,9 @@ function TeamProfileBody({ surface }) {
         alignItems: 'center',
         marginBottom: 28,
       }}>
-        {team.logoUrl ? (
+        {profileLogo ? (
           <img
-            src={team.logoUrl}
+            src={profileLogo}
             alt=""
             style={{ width: 76, height: 76, objectFit: 'contain', filter: 'drop-shadow(0 12px 22px rgba(0,0,0,0.35))' }}
           />

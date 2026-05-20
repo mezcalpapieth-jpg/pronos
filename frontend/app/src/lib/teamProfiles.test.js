@@ -48,6 +48,17 @@ test('team profiles include full top soccer league directories', () => {
   assert.equal(countLeague('Liga MX'), 18);
 });
 
+test('soccer team profiles include ESPN league paths for schedule lookup', () => {
+  assert.equal(findTeamProfile('soccer', 'cruz-azul')?.espnLeaguePath, 'soccer/mex.1');
+  assert.equal(findTeamProfile('soccer', 'pumas-unam')?.espnLeaguePath, 'soccer/mex.1');
+  assert.equal(findTeamProfile('soccer', 'arsenal')?.espnLeaguePath, 'soccer/eng.1');
+});
+
+test('Liga MX team profiles include ESPN logos for directory cards', () => {
+  assert.equal(findTeamProfile('soccer', 'cruz-azul')?.logoUrl, 'https://a.espncdn.com/i/teamlogos/soccer/500/218.png');
+  assert.equal(findTeamProfile('soccer', 'pumas-unam')?.logoUrl, 'https://a.espncdn.com/i/teamlogos/soccer/500/233.png');
+});
+
 test('team profiles include Mexican summer and winter baseball leagues', () => {
   const baseballTeams = TEAM_PROFILES.filter(team => team.sport === 'baseball');
   const countLeague = league => baseballTeams.filter(team => team.league === league).length;

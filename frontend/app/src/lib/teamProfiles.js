@@ -17,7 +17,18 @@ function espnLogo(kind, id) {
   return `https://a.espncdn.com/i/teamlogos/${kind}/500/${id}.png`;
 }
 
+const SOCCER_ESPN_LEAGUE_PATH = {
+  'Premier League': 'soccer/eng.1',
+  'La Liga': 'soccer/esp.1',
+  'Serie A': 'soccer/ita.1',
+  Bundesliga: 'soccer/ger.1',
+  'Liga MX': 'soccer/mex.1',
+  'Ligue 1': 'soccer/fra.1',
+  MLS: 'soccer/usa.1',
+};
+
 function makeSoccerTeam([slug, name, league, country, aliases = [], extra = {}]) {
+  const espnTeamId = extra.espnTeamId || null;
   return {
     slug,
     name,
@@ -25,6 +36,10 @@ function makeSoccerTeam([slug, name, league, country, aliases = [], extra = {}])
     league,
     country,
     aliases,
+    espnTeamId,
+    espnLeaguePath: extra.espnLeaguePath || SOCCER_ESPN_LEAGUE_PATH[league] || null,
+    espnLogoKind: 'soccer',
+    logoUrl: extra.logoUrl || espnLogo('soccer', espnTeamId),
     ...extra,
   };
 }
@@ -117,24 +132,24 @@ const SOCCER_TEAMS = [
   ['wolfsburg', 'Wolfsburg', 'Bundesliga', 'Alemania', ['VfL Wolfsburg']],
 
   // Liga MX
-  ['america', 'América', 'Liga MX', 'México', ['America', 'Club América', 'Club America']],
-  ['atlas', 'Atlas', 'Liga MX', 'México', ['Atlas FC']],
-  ['atletico-san-luis', 'Atlético San Luis', 'Liga MX', 'México', ['Atletico San Luis', 'Atlético de San Luis']],
-  ['cruz-azul', 'Cruz Azul', 'Liga MX', 'México', ['Cruz Azul FC']],
-  ['guadalajara', 'Guadalajara', 'Liga MX', 'México', ['Chivas', 'Chivas Guadalajara', 'CD Guadalajara']],
-  ['juarez', 'Juárez', 'Liga MX', 'México', ['Juarez', 'FC Juárez', 'FC Juarez']],
-  ['leon', 'León', 'Liga MX', 'México', ['Leon', 'Club León', 'Club Leon']],
-  ['mazatlan', 'Mazatlán', 'Liga MX', 'México', ['Mazatlan', 'Mazatlán FC', 'Mazatlan FC']],
-  ['monterrey', 'Monterrey', 'Liga MX', 'México', ['Rayados', 'CF Monterrey']],
-  ['necaxa', 'Necaxa', 'Liga MX', 'México', ['Club Necaxa']],
-  ['pachuca', 'Pachuca', 'Liga MX', 'México', ['CF Pachuca']],
-  ['puebla', 'Puebla', 'Liga MX', 'México', ['Club Puebla']],
-  ['pumas-unam', 'Pumas UNAM', 'Liga MX', 'México', ['Pumas', 'UNAM']],
-  ['queretaro', 'Querétaro', 'Liga MX', 'México', ['Queretaro', 'Querétaro FC', 'Queretaro FC']],
-  ['santos-laguna', 'Santos Laguna', 'Liga MX', 'México', ['Santos']],
-  ['tigres-uanl', 'Tigres UANL', 'Liga MX', 'México', ['Tigres', 'UANL']],
-  ['tijuana', 'Tijuana', 'Liga MX', 'México', ['Club Tijuana', 'Xolos']],
-  ['toluca', 'Toluca', 'Liga MX', 'México', ['Deportivo Toluca']],
+  ['america', 'América', 'Liga MX', 'México', ['America', 'Club América', 'Club America'], { espnTeamId: 227 }],
+  ['atlas', 'Atlas', 'Liga MX', 'México', ['Atlas FC'], { espnTeamId: 216 }],
+  ['atletico-san-luis', 'Atlético San Luis', 'Liga MX', 'México', ['Atletico San Luis', 'Atlético de San Luis'], { espnTeamId: 15720 }],
+  ['cruz-azul', 'Cruz Azul', 'Liga MX', 'México', ['Cruz Azul FC'], { espnTeamId: 218 }],
+  ['guadalajara', 'Guadalajara', 'Liga MX', 'México', ['Chivas', 'Chivas Guadalajara', 'CD Guadalajara'], { espnTeamId: 219 }],
+  ['juarez', 'Juárez', 'Liga MX', 'México', ['Juarez', 'FC Juárez', 'FC Juarez'], { espnTeamId: 17851 }],
+  ['leon', 'León', 'Liga MX', 'México', ['Leon', 'Club León', 'Club Leon'], { espnTeamId: 228 }],
+  ['mazatlan', 'Mazatlán', 'Liga MX', 'México', ['Mazatlan', 'Mazatlán FC', 'Mazatlan FC'], { espnTeamId: 20702 }],
+  ['monterrey', 'Monterrey', 'Liga MX', 'México', ['Rayados', 'CF Monterrey'], { espnTeamId: 220 }],
+  ['necaxa', 'Necaxa', 'Liga MX', 'México', ['Club Necaxa'], { espnTeamId: 229 }],
+  ['pachuca', 'Pachuca', 'Liga MX', 'México', ['CF Pachuca'], { espnTeamId: 234 }],
+  ['puebla', 'Puebla', 'Liga MX', 'México', ['Club Puebla'], { espnTeamId: 231 }],
+  ['pumas-unam', 'Pumas UNAM', 'Liga MX', 'México', ['Pumas', 'UNAM'], { espnTeamId: 233 }],
+  ['queretaro', 'Querétaro', 'Liga MX', 'México', ['Queretaro', 'Querétaro FC', 'Queretaro FC'], { espnTeamId: 222 }],
+  ['santos-laguna', 'Santos Laguna', 'Liga MX', 'México', ['Santos'], { espnTeamId: 225 }],
+  ['tigres-uanl', 'Tigres UANL', 'Liga MX', 'México', ['Tigres', 'UANL'], { espnTeamId: 232 }],
+  ['tijuana', 'Tijuana', 'Liga MX', 'México', ['Club Tijuana', 'Xolos'], { espnTeamId: 10125 }],
+  ['toluca', 'Toluca', 'Liga MX', 'México', ['Deportivo Toluca'], { espnTeamId: 223 }],
 
   // Extra teams used by imported continental markets.
   ['psg', 'PSG', 'Ligue 1', 'Francia', ['Paris Saint-Germain', 'Paris Saint Germain', 'Paris SG'], { competitions: ['uefa-cl'], footballDataId: 524, espnTeamId: 160, logoUrl: espnLogo('soccer', 160) }],
