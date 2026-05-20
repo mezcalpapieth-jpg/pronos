@@ -40,3 +40,11 @@ test('points translations include the new soccer league labels', () => {
   assert.match(i18n, /points\.league\.europa/);
   assert.match(i18n, /points\.league\.conference/);
 });
+
+test('points and MVP baseball sidebars expose LMP alongside LMB', () => {
+  for (const source of [mvpCategory, pointsCategory, mvpAdminFilters, pointsAdminFilters]) {
+    assert.match(source, /key:\s*'lmb'/);
+    assert.match(source, /key:\s*'lmp'/);
+  }
+  assert.match(i18n, /points\.league\.lmp/);
+});

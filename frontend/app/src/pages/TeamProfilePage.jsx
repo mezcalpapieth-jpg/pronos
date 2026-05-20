@@ -6,6 +6,7 @@ import Footer from '../components/Footer.jsx';
 import { findTeamByName, findTeamProfile } from '../lib/teamProfiles.js';
 import { teamInterestPayload, trackInterest } from '../lib/interest.js';
 import { mergeScheduleWithMarkets } from '../lib/teamProfileSchedule.js';
+import { isFeaturedTeam, toggleFeaturedTeam } from '../lib/featuredTeams.js';
 
 const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 42161);
 const ACTIVE_PENDING_STATES = new Set(['open', 'pending', 'por-resolver', 'disputa']);
@@ -197,6 +198,7 @@ function TeamProfileBody({ surface }) {
   const [view, setView] = useState('active-pending');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [featured, setFeatured] = useState(false);
 
   useEffect(() => {
     if (!team) return;
@@ -222,6 +224,11 @@ function TeamProfileBody({ surface }) {
     })();
     return () => { cancelled = true; };
   }, [surface, team]);
+
+  useEffect(() => {
+    if (!team) return;
+    setFeatured(isFeaturedTeam(team));
+  }, [team]);
 
   useEffect(() => {
     if (!team) return;
@@ -273,7 +280,7 @@ function TeamProfileBody({ surface }) {
 
       <section style={{
         display: 'grid',
-        gridTemplateColumns: 'auto minmax(0, 1fr)',
+        gridTemplateColumns: 'auto minmax(0, 1fr) auto',
         gap: 20,
         alignItems: 'center',
         marginBottom: 28,
@@ -328,7 +335,48 @@ function TeamProfileBody({ surface }) {
             {team.league}{team.country ? ` · ${team.country}` : ''}
           </p>
         </div>
+        <button
+          type="button"
+          aria-label={featured ? 'Quitar equipo destacado' : 'Marcar equipo destacado'}
+          onClick={() => setFeatured(toggleFeaturedTeam(team))}
+          style={{
+            width: 54,
+            height: 54,
+            borderRadius: 999,
+            border: `1px solid ${featured ? 'rgba(250,204,21,0.65)' : 'var(--border)'}`,
+            background: featured ? 'rgba(250,204,21,0.12)' : 'var(--surface1)',
+            color: featured ? '#facc15' : 'var(--text-muted)',
+            cursor: 'pointer',
+            fontSize: 26,
+            lineHeight: 1,
+            boxShadow: featured ? '0 0 24px rgba(250,204,21,0.16)' : 'none',
+          }}
+          title={featured ? 'Destacado' : 'Marcar como destacado'}
+        >
+          {featured ? '★' : '☆'}
+        </button>
       </section>
+
+      {featured && (
+        <div style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 8,
+          margin: '-12px 0 24px',
+          padding: '8px 12px',
+          border: '1px solid rgba(250,204,21,0.32)',
+          borderRadius: 999,
+          background: 'rgba(250,204,21,0.08)',
+          color: '#facc15',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+        }}>
+          <span>★</span>
+          <span>Destacado</span>
+        </div>
+      )}
 
       <section style={{
         display: 'flex',

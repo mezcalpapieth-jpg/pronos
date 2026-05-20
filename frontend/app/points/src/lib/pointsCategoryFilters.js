@@ -4,6 +4,16 @@ function normalizedTags(value) {
     : [];
 }
 
+function normalizedSlug(value) {
+  return String(value || '').toLowerCase();
+}
+
+function isLatamSportsFallback(market) {
+  return normalizedSlug(market?.category) === 'deportes'
+    && normalizedSlug(market?.sport) === 'soccer'
+    && normalizedSlug(market?.league) === 'copa-libertadores';
+}
+
 export const PUBLIC_GEO_FILTERS = [
   { key: 'all',    tKey: 'points.geo.all' },
   { key: 'mexico', tKey: 'points.geo.mexico' },
@@ -13,22 +23,25 @@ export const PUBLIC_GEO_FILTERS = [
 const PUBLIC_GEO_KEYS = new Set(PUBLIC_GEO_FILTERS.map(g => g.key));
 
 export function marketInCategory(m, category) {
-  const target = String(category || '').toLowerCase();
+  const target = normalizedSlug(category);
   if (!target || target === 'all') return true;
-  const primary = String(m?.category || '').toLowerCase();
+  const primary = normalizedSlug(m?.category);
   const tags = normalizedTags(m?.categoryTags);
+  if (target === 'mexico' && isLatamSportsFallback(m)) return true;
   return primary === target || tags.includes(target);
 }
 
 export function marketInGeo(m, geo) {
-  const target = String(geo || '').toLowerCase();
+  const target = normalizedSlug(geo);
   if (!target || target === 'all') return true;
   if (!PUBLIC_GEO_KEYS.has(target)) return false;
+  if (target === 'latam' && isLatamSportsFallback(m)) return true;
   return normalizedTags(m?.geoTags).includes(target);
 }
 
 export function marketInTopic(m, topic) {
-  const target = String(topic || '').toLowerCase();
+  const target = normalizedSlug(topic);
   if (!target || target === 'all') return true;
+  if (target === 'deportes' && isLatamSportsFallback(m)) return true;
   return normalizedTags(m?.topicTags).includes(target);
 }

@@ -33,3 +33,18 @@ test('MVP geo and topic filters match points public filters', () => {
   assert.equal(marketInTopic(weatherMarket, 'weather'), true);
   assert.equal(marketInTopic(weatherMarket, 'deportes'), false);
 });
+
+test('MVP public filters treat legacy Copa Libertadores markets as Latam sports', () => {
+  const libertadoresMarket = {
+    category: 'deportes',
+    sport: 'soccer',
+    league: 'copa-libertadores',
+    categoryTags: [],
+    geoTags: [],
+    topicTags: [],
+  };
+
+  assert.equal(marketInCategory(libertadoresMarket, 'mexico'), true);
+  assert.equal(marketInGeo(libertadoresMarket, 'latam'), true);
+  assert.equal(marketInTopic(libertadoresMarket, 'deportes'), true);
+});

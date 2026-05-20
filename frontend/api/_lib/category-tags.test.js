@@ -52,6 +52,21 @@ test('derives Latam geo membership from generator source metadata', () => {
   assert.deepEqual(tags.topicTags, ['politica']);
 });
 
+test('derives Latam membership for Copa Libertadores sports markets', () => {
+  const tags = deriveMarketTags({
+    category: 'deportes',
+    sport: 'soccer',
+    league: 'copa-libertadores',
+    question: '¿River Plate gana la Copa Libertadores?',
+  });
+
+  assert.deepEqual(tags.categoryTags, ['deportes', 'mexico']);
+  assert.deepEqual(tags.geoTags, ['latam']);
+  assert.deepEqual(tags.topicTags, ['deportes']);
+
+  assert.equal(matchesMarketTaxonomy({ ...tags, category: 'deportes' }, { category: 'mexico', geo: 'latam', topic: 'deportes' }), true);
+});
+
 test('keeps BTC and ETH 5-minute markets only in crypto despite CDMX wording', () => {
   const tags = deriveMarketTags({
     category: 'crypto',

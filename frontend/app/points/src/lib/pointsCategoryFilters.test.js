@@ -36,3 +36,18 @@ test('matches public geo and topic subfilters from derived market tags', () => {
 test('public geo filters do not expose world as a Mexico and Latam subcategory', () => {
   assert.deepEqual(PUBLIC_GEO_FILTERS.map(g => g.key), ['all', 'mexico', 'latam']);
 });
+
+test('points public filters treat legacy Copa Libertadores markets as Latam sports', () => {
+  const libertadoresMarket = {
+    category: 'deportes',
+    sport: 'soccer',
+    league: 'copa-libertadores',
+    categoryTags: [],
+    geoTags: [],
+    topicTags: [],
+  };
+
+  assert.equal(marketInCategory(libertadoresMarket, 'mexico'), true);
+  assert.equal(marketInGeo(libertadoresMarket, 'latam'), true);
+  assert.equal(marketInTopic(libertadoresMarket, 'deportes'), true);
+});

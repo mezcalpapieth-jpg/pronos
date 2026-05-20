@@ -19,6 +19,11 @@ import { fetchMarkets, fetchCurrentCycle, fetchPositions, fetchStats } from '../
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useT } from '@app/lib/i18n.js';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
+import {
+  marketMatchesFeaturedTeam,
+  prioritizeFeaturedMarkets,
+  useFeaturedTeamKeys,
+} from '@app/lib/featuredTeams.js';
 import PointsMarketCard from '../components/PointsMarketCard.jsx';
 
 // Human-readable "2d 14h 37m" style countdown for the cycle deadline.
@@ -50,6 +55,7 @@ export default function PointsHome({ onOpenLogin }) {
   const [error, setError] = useState(null);
   const [cycle, setCycle] = useState(null);
   const [cycleTick, setCycleTick] = useState(0); // forces re-render each minute
+  const featuredTeamKeys = useFeaturedTeamKeys();
   // Aggregate counters from /api/points/stats. Source of truth for
   // the hero's "Mercados activos" number — the grid below only
   // fetches featured markets, so deriving the count from it would
@@ -103,7 +109,7 @@ export default function PointsHome({ onOpenLogin }) {
         // Home is always the "Trending" view — all active markets minus
         // pending (endTime in past). Category routes handle everything
         // else via /c/:slug.
-        const m = await fetchMarkets({ status: 'active' });
+        const m = await fetchMarkets({ status: 'active', featured: 'all' });
         if (cancelled) return;
         setMarkets(m);
         setLoading(false);
@@ -155,9 +161,10 @@ export default function PointsHome({ onOpenLogin }) {
       && m.endTime
       && new Date(m.endTime).getTime() < now;
     let out = markets.filter(m => !isPending(m));
+    out = out.filter(m => m.trending || marketMatchesFeaturedTeam(m, featuredTeamKeys));
     if (q) out = out.filter(m => (m.question || '').toLowerCase().includes(q));
-    return out;
-  }, [markets, searchQuery]);
+    return prioritizeFeaturedMarkets(out, featuredTeamKeys);
+  }, [markets, searchQuery, featuredTeamKeys]);
 
   // Derived stats for the hero. `activeCount` reads from the stats
   // endpoint's aggregate query so it reflects EVERY active market

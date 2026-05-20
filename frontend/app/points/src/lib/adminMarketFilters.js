@@ -44,6 +44,7 @@ export const ADMIN_BASEBALL_LEAGUES = [
   { key: 'all', label: 'Todas' },
   { key: 'mlb', label: 'MLB' },
   { key: 'lmb', label: 'LMB' },
+  { key: 'lmp', label: 'LMP' },
 ];
 
 export const ADMIN_COMBATE_LEAGUES = [

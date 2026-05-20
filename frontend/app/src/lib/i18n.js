@@ -657,6 +657,7 @@ const STRINGS = {
   'points.league.mls':        { es: 'MLS',                    en: 'MLS' },
   'points.league.mlb':        { es: 'MLB',                    en: 'MLB' },
   'points.league.lmb':        { es: 'LMB',                    en: 'LMB' },
+  'points.league.lmp':        { es: 'LMP',                    en: 'LMP' },
 
   'points.card.resolved':     { es: 'RESUELTO',              en: 'RESOLVED' },
   'points.card.pending':      { es: 'PENDIENTE',             en: 'PENDING' },

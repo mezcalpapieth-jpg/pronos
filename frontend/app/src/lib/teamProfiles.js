@@ -17,201 +17,128 @@ function espnLogo(kind, id) {
   return `https://a.espncdn.com/i/teamlogos/${kind}/500/${id}.png`;
 }
 
+function makeSoccerTeam([slug, name, league, country, aliases = [], extra = {}]) {
+  return {
+    slug,
+    name,
+    sport: 'soccer',
+    league,
+    country,
+    aliases,
+    ...extra,
+  };
+}
+
 const SOCCER_TEAMS = [
-  {
-    slug: 'arsenal',
-    name: 'Arsenal',
-    sport: 'soccer',
-    league: 'Premier League',
-    country: 'Inglaterra',
-    aliases: ['Arsenal FC', 'Arsenal London'],
-    competitions: ['uefa-cl'],
-    footballDataId: 57,
-    espnTeamId: 359,
-    logoUrl: espnLogo('soccer', 359),
-  },
-  {
-    slug: 'psg',
-    name: 'PSG',
-    sport: 'soccer',
-    league: 'Ligue 1',
-    country: 'Francia',
-    aliases: ['Paris Saint-Germain', 'Paris Saint Germain', 'Paris SG'],
-    competitions: ['uefa-cl'],
-    footballDataId: 524,
-    espnTeamId: 160,
-    logoUrl: espnLogo('soccer', 160),
-  },
-  {
-    slug: 'real-madrid',
-    name: 'Real Madrid',
-    sport: 'soccer',
-    league: 'La Liga',
-    country: 'España',
-    aliases: ['Real Madrid CF'],
-    footballDataId: 86,
-    espnTeamId: 86,
-    logoUrl: espnLogo('soccer', 86),
-  },
-  {
-    slug: 'barcelona',
-    name: 'Barcelona',
-    sport: 'soccer',
-    league: 'La Liga',
-    country: 'España',
-    aliases: ['FC Barcelona', 'Barça', 'Barca'],
-    footballDataId: 81,
-    espnTeamId: 83,
-    logoUrl: espnLogo('soccer', 83),
-  },
-  {
-    slug: 'atletico-madrid',
-    name: 'Atlético Madrid',
-    sport: 'soccer',
-    league: 'La Liga',
-    country: 'España',
-    aliases: ['Atletico Madrid', 'Atlético de Madrid'],
-    footballDataId: 78,
-    espnTeamId: 1068,
-    logoUrl: espnLogo('soccer', 1068),
-  },
-  {
-    slug: 'chelsea',
-    name: 'Chelsea',
-    sport: 'soccer',
-    league: 'Premier League',
-    country: 'Inglaterra',
-    aliases: ['Chelsea FC'],
-    footballDataId: 61,
-    espnTeamId: 363,
-    logoUrl: espnLogo('soccer', 363),
-  },
-  {
-    slug: 'aston-villa',
-    name: 'Aston Villa',
-    sport: 'soccer',
-    league: 'Premier League',
-    country: 'Inglaterra',
-    aliases: ['Aston Villa FC', 'Villa', 'AVL'],
-    competitions: ['uefa-europa-league'],
-    footballDataId: 58,
-    espnTeamId: 362,
-    logoUrl: espnLogo('soccer', 362),
-  },
-  {
-    slug: 'crystal-palace',
-    name: 'Crystal Palace',
-    sport: 'soccer',
-    league: 'Premier League',
-    country: 'Inglaterra',
-    aliases: ['Crystal Palace FC', 'Palace', 'CRY'],
-    competitions: ['uefa-conference-league'],
-    footballDataId: 354,
-    espnTeamId: 384,
-    logoUrl: espnLogo('soccer', 384),
-  },
-  {
-    slug: 'manchester-city',
-    name: 'Manchester City',
-    sport: 'soccer',
-    league: 'Premier League',
-    country: 'Inglaterra',
-    aliases: ['Man City', 'Manchester City FC'],
-    footballDataId: 65,
-    espnTeamId: 382,
-    logoUrl: espnLogo('soccer', 382),
-  },
-  {
-    slug: 'manchester-united',
-    name: 'Manchester United',
-    sport: 'soccer',
-    league: 'Premier League',
-    country: 'Inglaterra',
-    aliases: ['Man United', 'Man Utd', 'Manchester United FC'],
-    footballDataId: 66,
-    espnTeamId: 360,
-    logoUrl: espnLogo('soccer', 360),
-  },
-  {
-    slug: 'bayern-munich',
-    name: 'Bayern Munich',
-    sport: 'soccer',
-    league: 'Bundesliga',
-    country: 'Alemania',
-    aliases: ['Bayern München', 'FC Bayern München', 'Bayern'],
-    footballDataId: 5,
-    espnTeamId: 132,
-    logoUrl: espnLogo('soccer', 132),
-  },
-  {
-    slug: 'borussia-dortmund',
-    name: 'Borussia Dortmund',
-    sport: 'soccer',
-    league: 'Bundesliga',
-    country: 'Alemania',
-    aliases: ['Dortmund', 'BVB'],
-    footballDataId: 4,
-    espnTeamId: 124,
-    logoUrl: espnLogo('soccer', 124),
-  },
-  {
-    slug: 'bayer-leverkusen',
-    name: 'Bayer Leverkusen',
-    sport: 'soccer',
-    league: 'Bundesliga',
-    country: 'Alemania',
-    aliases: ['Leverkusen', 'Bayer 04 Leverkusen'],
-    footballDataId: 3,
-    espnTeamId: 131,
-    logoUrl: espnLogo('soccer', 131),
-  },
-  {
-    slug: 'freiburg',
-    name: 'Freiburg',
-    sport: 'soccer',
-    league: 'Bundesliga',
-    country: 'Alemania',
-    aliases: ['SC Freiburg', 'Sport-Club Freiburg', 'Freiburg FC', 'SCF'],
-    competitions: ['uefa-europa-league'],
-    footballDataId: 17,
-    espnTeamId: 126,
-    logoUrl: espnLogo('soccer', 126),
-  },
-  {
-    slug: 'juventus',
-    name: 'Juventus',
-    sport: 'soccer',
-    league: 'Serie A',
-    country: 'Italia',
-    aliases: ['Juventus FC', 'Juve'],
-    footballDataId: 109,
-    espnTeamId: 111,
-    logoUrl: espnLogo('soccer', 111),
-  },
-  {
-    slug: 'ac-milan',
-    name: 'AC Milan',
-    sport: 'soccer',
-    league: 'Serie A',
-    country: 'Italia',
-    aliases: ['Milan', 'AC Milan'],
-    footballDataId: 98,
-    espnTeamId: 103,
-    logoUrl: espnLogo('soccer', 103),
-  },
-  {
-    slug: 'rayo-vallecano',
-    name: 'Rayo Vallecano',
-    sport: 'soccer',
-    league: 'La Liga',
-    country: 'España',
-    aliases: ['Rayo Vallecano de Madrid', 'Rayo', 'RAY'],
-    competitions: ['uefa-conference-league'],
-    footballDataId: 87,
-    espnTeamId: 101,
-    logoUrl: espnLogo('soccer', 101),
-  },
-];
+  // Premier League
+  ['arsenal', 'Arsenal', 'Premier League', 'Inglaterra', ['Arsenal FC', 'Arsenal London'], { competitions: ['uefa-cl'], footballDataId: 57, espnTeamId: 359, logoUrl: espnLogo('soccer', 359) }],
+  ['aston-villa', 'Aston Villa', 'Premier League', 'Inglaterra', ['Aston Villa FC', 'Villa', 'AVL'], { competitions: ['uefa-europa-league'], footballDataId: 58, espnTeamId: 362, logoUrl: espnLogo('soccer', 362) }],
+  ['bournemouth', 'Bournemouth', 'Premier League', 'Inglaterra', ['AFC Bournemouth', 'Cherries']],
+  ['brentford', 'Brentford', 'Premier League', 'Inglaterra', ['Brentford FC']],
+  ['brighton', 'Brighton & Hove Albion', 'Premier League', 'Inglaterra', ['Brighton', 'Brighton and Hove Albion', 'BHA']],
+  ['burnley', 'Burnley', 'Premier League', 'Inglaterra', ['Burnley FC']],
+  ['chelsea', 'Chelsea', 'Premier League', 'Inglaterra', ['Chelsea FC'], { footballDataId: 61, espnTeamId: 363, logoUrl: espnLogo('soccer', 363) }],
+  ['crystal-palace', 'Crystal Palace', 'Premier League', 'Inglaterra', ['Crystal Palace FC', 'Palace', 'CRY'], { competitions: ['uefa-conference-league'], footballDataId: 354, espnTeamId: 384, logoUrl: espnLogo('soccer', 384) }],
+  ['everton', 'Everton', 'Premier League', 'Inglaterra', ['Everton FC']],
+  ['fulham', 'Fulham', 'Premier League', 'Inglaterra', ['Fulham FC']],
+  ['leeds-united', 'Leeds United', 'Premier League', 'Inglaterra', ['Leeds', 'Leeds United FC']],
+  ['liverpool', 'Liverpool', 'Premier League', 'Inglaterra', ['Liverpool FC']],
+  ['manchester-city', 'Manchester City', 'Premier League', 'Inglaterra', ['Man City', 'Manchester City FC'], { footballDataId: 65, espnTeamId: 382, logoUrl: espnLogo('soccer', 382) }],
+  ['manchester-united', 'Manchester United', 'Premier League', 'Inglaterra', ['Man United', 'Man Utd', 'Manchester United FC'], { footballDataId: 66, espnTeamId: 360, logoUrl: espnLogo('soccer', 360) }],
+  ['newcastle-united', 'Newcastle United', 'Premier League', 'Inglaterra', ['Newcastle', 'NUFC']],
+  ['nottingham-forest', 'Nottingham Forest', 'Premier League', 'Inglaterra', ['Forest', 'Nottingham Forest FC']],
+  ['sunderland', 'Sunderland', 'Premier League', 'Inglaterra', ['Sunderland AFC']],
+  ['tottenham-hotspur', 'Tottenham Hotspur', 'Premier League', 'Inglaterra', ['Tottenham', 'Spurs', 'Tottenham Hotspur FC']],
+  ['west-ham-united', 'West Ham United', 'Premier League', 'Inglaterra', ['West Ham', 'West Ham United FC']],
+  ['wolverhampton-wanderers', 'Wolverhampton Wanderers', 'Premier League', 'Inglaterra', ['Wolves', 'Wolverhampton']],
+
+  // La Liga
+  ['athletic-club', 'Athletic Club', 'La Liga', 'España', ['Athletic Bilbao']],
+  ['atletico-madrid', 'Atlético Madrid', 'La Liga', 'España', ['Atletico Madrid', 'Atlético de Madrid'], { footballDataId: 78, espnTeamId: 1068, logoUrl: espnLogo('soccer', 1068) }],
+  ['osasuna', 'Osasuna', 'La Liga', 'España', ['CA Osasuna']],
+  ['celta-vigo', 'Celta Vigo', 'La Liga', 'España', ['Celta', 'RC Celta', 'Celta de Vigo']],
+  ['deportivo-alaves', 'Deportivo Alavés', 'La Liga', 'España', ['Alaves', 'Alavés']],
+  ['elche', 'Elche', 'La Liga', 'España', ['Elche CF']],
+  ['barcelona', 'Barcelona', 'La Liga', 'España', ['FC Barcelona', 'Barça', 'Barca'], { footballDataId: 81, espnTeamId: 83, logoUrl: espnLogo('soccer', 83) }],
+  ['getafe', 'Getafe', 'La Liga', 'España', ['Getafe CF']],
+  ['girona', 'Girona', 'La Liga', 'España', ['Girona FC']],
+  ['levante', 'Levante', 'La Liga', 'España', ['Levante UD']],
+  ['mallorca', 'Mallorca', 'La Liga', 'España', ['RCD Mallorca']],
+  ['rayo-vallecano', 'Rayo Vallecano', 'La Liga', 'España', ['Rayo Vallecano de Madrid', 'Rayo', 'RAY'], { competitions: ['uefa-conference-league'], footballDataId: 87, espnTeamId: 101, logoUrl: espnLogo('soccer', 101) }],
+  ['real-betis', 'Real Betis', 'La Liga', 'España', ['Betis', 'Real Betis Balompié', 'Real Betis Balompie']],
+  ['real-madrid', 'Real Madrid', 'La Liga', 'España', ['Real Madrid CF'], { footballDataId: 86, espnTeamId: 86, logoUrl: espnLogo('soccer', 86) }],
+  ['real-oviedo', 'Real Oviedo', 'La Liga', 'España', ['Oviedo']],
+  ['real-sociedad', 'Real Sociedad', 'La Liga', 'España', ['La Real']],
+  ['sevilla', 'Sevilla', 'La Liga', 'España', ['Sevilla FC']],
+  ['valencia', 'Valencia', 'La Liga', 'España', ['Valencia CF']],
+  ['villarreal', 'Villarreal', 'La Liga', 'España', ['Villarreal CF']],
+  ['espanyol', 'Espanyol', 'La Liga', 'España', ['RCD Espanyol']],
+
+  // Serie A
+  ['atalanta', 'Atalanta', 'Serie A', 'Italia', ['Atalanta BC']],
+  ['bologna', 'Bologna', 'Serie A', 'Italia', ['Bologna FC']],
+  ['cagliari', 'Cagliari', 'Serie A', 'Italia', ['Cagliari Calcio']],
+  ['como', 'Como', 'Serie A', 'Italia', ['Como 1907']],
+  ['cremonese', 'Cremonese', 'Serie A', 'Italia', ['US Cremonese']],
+  ['fiorentina', 'Fiorentina', 'Serie A', 'Italia', ['ACF Fiorentina']],
+  ['genoa', 'Genoa', 'Serie A', 'Italia', ['Genoa CFC']],
+  ['hellas-verona', 'Hellas Verona', 'Serie A', 'Italia', ['Verona']],
+  ['inter-milan', 'Inter Milan', 'Serie A', 'Italia', ['Inter', 'Internazionale', 'FC Internazionale Milano']],
+  ['juventus', 'Juventus', 'Serie A', 'Italia', ['Juventus FC', 'Juve'], { footballDataId: 109, espnTeamId: 111, logoUrl: espnLogo('soccer', 111) }],
+  ['lazio', 'Lazio', 'Serie A', 'Italia', ['SS Lazio']],
+  ['lecce', 'Lecce', 'Serie A', 'Italia', ['US Lecce']],
+  ['ac-milan', 'AC Milan', 'Serie A', 'Italia', ['Milan', 'AC Milan'], { footballDataId: 98, espnTeamId: 103, logoUrl: espnLogo('soccer', 103) }],
+  ['napoli', 'Napoli', 'Serie A', 'Italia', ['SSC Napoli']],
+  ['parma', 'Parma', 'Serie A', 'Italia', ['Parma Calcio']],
+  ['pisa', 'Pisa', 'Serie A', 'Italia', ['Pisa SC']],
+  ['roma', 'Roma', 'Serie A', 'Italia', ['AS Roma']],
+  ['sassuolo', 'Sassuolo', 'Serie A', 'Italia', ['US Sassuolo']],
+  ['torino', 'Torino', 'Serie A', 'Italia', ['Torino FC']],
+  ['udinese', 'Udinese', 'Serie A', 'Italia', ['Udinese Calcio']],
+
+  // Bundesliga
+  ['augsburg', 'Augsburg', 'Bundesliga', 'Alemania', ['FC Augsburg']],
+  ['bayer-leverkusen', 'Bayer Leverkusen', 'Bundesliga', 'Alemania', ['Leverkusen', 'Bayer 04 Leverkusen'], { footballDataId: 3, espnTeamId: 131, logoUrl: espnLogo('soccer', 131) }],
+  ['bayern-munich', 'Bayern Munich', 'Bundesliga', 'Alemania', ['Bayern München', 'FC Bayern München', 'Bayern'], { footballDataId: 5, espnTeamId: 132, logoUrl: espnLogo('soccer', 132) }],
+  ['borussia-dortmund', 'Borussia Dortmund', 'Bundesliga', 'Alemania', ['Dortmund', 'BVB'], { footballDataId: 4, espnTeamId: 124, logoUrl: espnLogo('soccer', 124) }],
+  ['borussia-monchengladbach', 'Borussia Mönchengladbach', 'Bundesliga', 'Alemania', ['Borussia Monchengladbach', 'Gladbach']],
+  ['eintracht-frankfurt', 'Eintracht Frankfurt', 'Bundesliga', 'Alemania', ['Frankfurt']],
+  ['freiburg', 'Freiburg', 'Bundesliga', 'Alemania', ['SC Freiburg', 'Sport-Club Freiburg', 'Freiburg FC', 'SCF'], { competitions: ['uefa-europa-league'], footballDataId: 17, espnTeamId: 126, logoUrl: espnLogo('soccer', 126) }],
+  ['hamburg', 'Hamburg', 'Bundesliga', 'Alemania', ['Hamburger SV', 'HSV']],
+  ['heidenheim', 'Heidenheim', 'Bundesliga', 'Alemania', ['1. FC Heidenheim', 'FC Heidenheim']],
+  ['hoffenheim', 'Hoffenheim', 'Bundesliga', 'Alemania', ['TSG Hoffenheim']],
+  ['koln', 'Köln', 'Bundesliga', 'Alemania', ['Koln', 'FC Köln', '1. FC Koln', '1. FC Köln']],
+  ['mainz', 'Mainz', 'Bundesliga', 'Alemania', ['Mainz 05', '1. FSV Mainz 05']],
+  ['rb-leipzig', 'RB Leipzig', 'Bundesliga', 'Alemania', ['Leipzig', 'RasenBallsport Leipzig']],
+  ['st-pauli', 'St. Pauli', 'Bundesliga', 'Alemania', ['FC St. Pauli', 'St Pauli']],
+  ['stuttgart', 'Stuttgart', 'Bundesliga', 'Alemania', ['VfB Stuttgart']],
+  ['union-berlin', 'Union Berlin', 'Bundesliga', 'Alemania', ['1. FC Union Berlin']],
+  ['werder-bremen', 'Werder Bremen', 'Bundesliga', 'Alemania', ['SV Werder Bremen', 'Bremen']],
+  ['wolfsburg', 'Wolfsburg', 'Bundesliga', 'Alemania', ['VfL Wolfsburg']],
+
+  // Liga MX
+  ['america', 'América', 'Liga MX', 'México', ['America', 'Club América', 'Club America']],
+  ['atlas', 'Atlas', 'Liga MX', 'México', ['Atlas FC']],
+  ['atletico-san-luis', 'Atlético San Luis', 'Liga MX', 'México', ['Atletico San Luis', 'Atlético de San Luis']],
+  ['cruz-azul', 'Cruz Azul', 'Liga MX', 'México', ['Cruz Azul FC']],
+  ['guadalajara', 'Guadalajara', 'Liga MX', 'México', ['Chivas', 'Chivas Guadalajara', 'CD Guadalajara']],
+  ['juarez', 'Juárez', 'Liga MX', 'México', ['Juarez', 'FC Juárez', 'FC Juarez']],
+  ['leon', 'León', 'Liga MX', 'México', ['Leon', 'Club León', 'Club Leon']],
+  ['mazatlan', 'Mazatlán', 'Liga MX', 'México', ['Mazatlan', 'Mazatlán FC', 'Mazatlan FC']],
+  ['monterrey', 'Monterrey', 'Liga MX', 'México', ['Rayados', 'CF Monterrey']],
+  ['necaxa', 'Necaxa', 'Liga MX', 'México', ['Club Necaxa']],
+  ['pachuca', 'Pachuca', 'Liga MX', 'México', ['CF Pachuca']],
+  ['puebla', 'Puebla', 'Liga MX', 'México', ['Club Puebla']],
+  ['pumas-unam', 'Pumas UNAM', 'Liga MX', 'México', ['Pumas', 'UNAM']],
+  ['queretaro', 'Querétaro', 'Liga MX', 'México', ['Queretaro', 'Querétaro FC', 'Queretaro FC']],
+  ['santos-laguna', 'Santos Laguna', 'Liga MX', 'México', ['Santos']],
+  ['tigres-uanl', 'Tigres UANL', 'Liga MX', 'México', ['Tigres', 'UANL']],
+  ['tijuana', 'Tijuana', 'Liga MX', 'México', ['Club Tijuana', 'Xolos']],
+  ['toluca', 'Toluca', 'Liga MX', 'México', ['Deportivo Toluca']],
+
+  // Extra teams used by imported continental markets.
+  ['psg', 'PSG', 'Ligue 1', 'Francia', ['Paris Saint-Germain', 'Paris Saint Germain', 'Paris SG'], { competitions: ['uefa-cl'], footballDataId: 524, espnTeamId: 160, logoUrl: espnLogo('soccer', 160) }],
+].map(makeSoccerTeam);
 
 const NBA_TEAMS = [
   ['atlanta-hawks', 'Atlanta Hawks', 1, ['Hawks']],
@@ -300,6 +227,53 @@ const MLB_TEAMS = [
   logoUrl: espnLogo('mlb', espnTeamId),
 }));
 
+function makeMexicanBaseballTeam([slug, name, league, aliases = []]) {
+  return {
+    slug,
+    name,
+    sport: 'baseball',
+    league,
+    country: 'México',
+    aliases,
+  };
+}
+
+const LMB_TEAMS = [
+  ['acereros-de-monclova', 'Acereros de Monclova', 'LMB', ['Acereros']],
+  ['algodoneros-union-laguna', 'Algodoneros Unión Laguna', 'LMB', ['Algodoneros Union Laguna', 'Algodoneros de Unión Laguna', 'Algodoneros de Union Laguna']],
+  ['bravos-de-leon', 'Bravos de León', 'LMB', ['Bravos de Leon']],
+  ['caliente-de-durango', 'Caliente de Durango', 'LMB', ['Caliente Durango']],
+  ['charros-de-jalisco-lmb', 'Charros de Jalisco', 'LMB', ['Charros LMB']],
+  ['conspiradores-de-queretaro', 'Conspiradores de Querétaro', 'LMB', ['Conspiradores de Queretaro']],
+  ['diablos-rojos-del-mexico', 'Diablos Rojos del México', 'LMB', ['Diablos Rojos', 'Diablos Rojos del Mexico']],
+  ['dorados-de-chihuahua', 'Dorados de Chihuahua', 'LMB', ['Dorados']],
+  ['el-aguila-de-veracruz', 'El Águila de Veracruz', 'LMB', ['El Aguila de Veracruz', 'Águila de Veracruz', 'Aguila de Veracruz']],
+  ['guerreros-de-oaxaca', 'Guerreros de Oaxaca', 'LMB', ['Guerreros']],
+  ['leones-de-yucatan', 'Leones de Yucatán', 'LMB', ['Leones de Yucatan']],
+  ['olmecas-de-tabasco', 'Olmecas de Tabasco', 'LMB', ['Olmecas']],
+  ['pericos-de-puebla', 'Pericos de Puebla', 'LMB', ['Pericos']],
+  ['piratas-de-campeche', 'Piratas de Campeche', 'LMB', ['Piratas']],
+  ['rieleros-de-aguascalientes', 'Rieleros de Aguascalientes', 'LMB', ['Rieleros']],
+  ['saraperos-de-saltillo', 'Saraperos de Saltillo', 'LMB', ['Saraperos']],
+  ['sultanes-de-monterrey-lmb', 'Sultanes de Monterrey', 'LMB', ['Sultanes LMB']],
+  ['tecolotes-de-los-dos-laredos', 'Tecolotes de los Dos Laredos', 'LMB', ['Tecolotes Dos Laredos', 'Tecos']],
+  ['tigres-de-quintana-roo', 'Tigres de Quintana Roo', 'LMB', ['Tigres QR']],
+  ['toros-de-tijuana', 'Toros de Tijuana', 'LMB', ['Toros']],
+].map(makeMexicanBaseballTeam);
+
+const LMP_TEAMS = [
+  ['aguilas-de-mexicali', 'Águilas de Mexicali', 'LMP', ['Aguilas de Mexicali', 'Águilas']],
+  ['algodoneros-de-guasave', 'Algodoneros de Guasave', 'LMP', ['Algodoneros Guasave']],
+  ['caneros-de-los-mochis', 'Cañeros de Los Mochis', 'LMP', ['Caneros de Los Mochis', 'Cañeros']],
+  ['charros-de-jalisco-lmp', 'Charros de Jalisco', 'LMP', ['Charros LMP']],
+  ['jaguares-de-nayarit', 'Jaguares de Nayarit', 'LMP', ['Jaguares']],
+  ['mayos-de-navojoa', 'Mayos de Navojoa', 'LMP', ['Mayos']],
+  ['naranjeros-de-hermosillo', 'Naranjeros de Hermosillo', 'LMP', ['Naranjeros']],
+  ['tomateros-de-culiacan', 'Tomateros de Culiacán', 'LMP', ['Tomateros de Culiacan', 'Tomateros']],
+  ['venados-de-mazatlan', 'Venados de Mazatlán', 'LMP', ['Venados de Mazatlan', 'Venados']],
+  ['yaquis-de-ciudad-obregon', 'Yaquis de Ciudad Obregón', 'LMP', ['Yaquis de Obregón', 'Yaquis de Obregon', 'Yaquis']],
+].map(makeMexicanBaseballTeam);
+
 const NFL_TEAMS = [
   ['arizona-cardinals', 'Arizona Cardinals', 22, ['Cardinals']],
   ['atlanta-falcons', 'Atlanta Falcons', 1, ['Falcons']],
@@ -350,13 +324,15 @@ export const TEAM_PROFILES = [
   ...SOCCER_TEAMS,
   ...NBA_TEAMS,
   ...MLB_TEAMS,
+  ...LMB_TEAMS,
+  ...LMP_TEAMS,
   ...NFL_TEAMS,
 ];
 
 export function marketSportToTeamSport(sport) {
   const key = normalizeKey(sport);
   if (key === 'nba') return 'basketball';
-  if (key === 'mlb') return 'baseball';
+  if (key === 'mlb' || key === 'lmb' || key === 'lmp') return 'baseball';
   if (key === 'soccer' || key === 'futbol' || key === 'football soccer') return 'soccer';
   if (key === 'nfl' || key === 'football') return 'nfl';
   if (key === 'baseball' || key === 'basketball') return key;
@@ -372,14 +348,20 @@ export function findTeamProfile(sport, teamSlug) {
 }
 
 export function findTeamByName(sport, label) {
+  const sportKey = normalizeKey(sport);
   const profileSport = marketSportToTeamSport(sport);
   if (!profileSport || !label) return null;
   const key = normalizeKey(label);
-  return TEAM_PROFILES.find(team => {
+  const requestedLeague = sportKey === 'lmb' || sportKey === 'lmp' || sportKey === 'mlb'
+    ? sportKey
+    : null;
+  const matches = (team) => {
     if (team.sport !== profileSport) return false;
+    if (requestedLeague && normalizeKey(team.league) !== requestedLeague) return false;
     const names = [team.name, team.slug, ...(team.aliases || [])];
     return names.some(name => normalizeKey(name) === key);
-  }) || null;
+  };
+  return TEAM_PROFILES.find(matches) || null;
 }
 
 export function teamProfilePath(team) {

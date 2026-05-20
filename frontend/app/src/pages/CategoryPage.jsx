@@ -4,7 +4,7 @@
  * Mirrors PointsCategoryPage, filtered to mode='onchain':
  *   - /c/deportes    → SPORT sub-tabs (soccer, beisbol, NBA, NFL, F1,
  *                      tennis, golf). Soccer + baseball get a league
- *                      sidebar (UCL/La Liga/Premier/…, MLB/LMB).
+ *                      sidebar (UCL/La Liga/Premier/…, MLB/LMB/LMP).
  *   - /c/porresolver → filters active markets whose endTime passed.
  *   - /c/resueltos   → fetches status='resolved'.
  *   - Everything else → category filter only.
@@ -20,6 +20,7 @@ import CategoryBar from '../components/CategoryBar.jsx';
 import MarketCard from '../components/MarketCard.jsx';
 import { mapProtocolMarketToCard } from '../lib/mvpMarketCard.js';
 import { useIsMobile } from '../lib/useIsMobile.js';
+import { prioritizeFeaturedMarkets, useFeaturedTeamKeys } from '../lib/featuredTeams.js';
 import {
   MVP_PUBLIC_GEO_FILTERS,
   marketInCategory,
@@ -75,6 +76,7 @@ const BASEBALL_LEAGUES = [
   { key: 'all', label: 'Todas' },
   { key: 'mlb', label: 'MLB'   },
   { key: 'lmb', label: 'LMB'   },
+  { key: 'lmp', label: 'LMP'   },
 ];
 
 // Combate league sidebar — UFC + Boxing. Matches the points-app's
@@ -125,6 +127,7 @@ export default function CategoryPage({ onOpenLogin }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const isMobile = useIsMobile();
+  const featuredTeamKeys = useFeaturedTeamKeys();
 
   const sport = searchParams.get('sport') || 'all';
   const league = searchParams.get('league') || 'all';
@@ -200,8 +203,8 @@ export default function CategoryPage({ onOpenLogin }) {
       out = out.filter(m => marketInTopic(m, topic));
     }
 
-    return out;
-  }, [markets, slug, sport, league, resueltosCat, cryptoType, geo, topic, supportsGeoFilters, supportsTopicFilters]);
+    return prioritizeFeaturedMarkets(out, featuredTeamKeys);
+  }, [markets, slug, sport, league, resueltosCat, cryptoType, geo, topic, supportsGeoFilters, supportsTopicFilters, featuredTeamKeys]);
 
   // Sport-tab click updates ?sport= and clears ?league=
   function setSport(next) {

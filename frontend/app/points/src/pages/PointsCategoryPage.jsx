@@ -23,6 +23,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useT } from '@app/lib/i18n.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
+import { prioritizeFeaturedMarkets, useFeaturedTeamKeys } from '@app/lib/featuredTeams.js';
 import { fetchMarkets, fetchPositions } from '../lib/pointsApi.js';
 import {
   PUBLIC_GEO_FILTERS,
@@ -81,12 +82,13 @@ const SOCCER_LEAGUES = [
   { key: 'mls',            tKey: 'points.league.mls'           },
 ];
 
-// Baseball leagues sidebar — MLB vs LMB. Both markets live under
+// Baseball leagues sidebar — MLB, LMB, and LMP. All markets live under
 // sport='baseball'; this splits them further.
 const BASEBALL_LEAGUES = [
   { key: 'all', tKey: 'points.league.all' },
   { key: 'mlb', tKey: 'points.league.mlb' },
   { key: 'lmb', tKey: 'points.league.lmb' },
+  { key: 'lmp', tKey: 'points.league.lmp' },
 ];
 
 // Combate (fighting) leagues sidebar — UFC + Boxing today, with
@@ -153,6 +155,7 @@ export default function PointsCategoryPage() {
   const [positionByMarket, setPositionByMarket] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const featuredTeamKeys = useFeaturedTeamKeys();
 
   const searchQuery = (searchParams.get('q') || '').trim();
   const sport  = searchParams.get('sport')  || 'all';
@@ -277,8 +280,8 @@ export default function PointsCategoryPage() {
       out = out.filter(m => (m.question || '').toLowerCase().includes(q));
     }
 
-    return out;
-  }, [markets, slug, sport, league, resueltosCat, cryptoType, geo, topic, supportsGeoFilters, supportsTopicFilters, searchQuery]);
+    return prioritizeFeaturedMarkets(out, featuredTeamKeys);
+  }, [markets, slug, sport, league, resueltosCat, cryptoType, geo, topic, supportsGeoFilters, supportsTopicFilters, searchQuery, featuredTeamKeys]);
 
   function setSport(next) {
     const params = new URLSearchParams(searchParams);

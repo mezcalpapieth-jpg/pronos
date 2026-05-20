@@ -17,6 +17,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import MarketCard from './MarketCard.jsx';
 import { useT } from '../lib/i18n.js';
 import { mapProtocolMarketToCard } from '../lib/mvpMarketCard.js';
+import {
+  marketMatchesFeaturedTeam,
+  prioritizeFeaturedMarkets,
+  useFeaturedTeamKeys,
+} from '../lib/featuredTeams.js';
 
 const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 42161);
 const GRID_CACHE_KEY = 'pronos-protocol-grid-cache-v1';
@@ -44,6 +49,7 @@ export default function MarketsGrid({ activeFilter, onOpenLogin }) {
   const [markets, setMarkets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const featuredTeamKeys = useFeaturedTeamKeys();
 
   const status = activeFilter === 'resueltos' ? 'resolved' : 'active';
 
@@ -85,11 +91,16 @@ export default function MarketsGrid({ activeFilter, onOpenLogin }) {
 
   const filtered = useMemo(() => {
     if (!Array.isArray(markets)) return [];
-    if (activeFilter === 'resueltos') return markets;
-    if (!activeFilter || activeFilter === 'todos') return markets;
-    if (activeFilter === 'trending') return markets.filter(m => m.trending);
-    return markets.filter(m => m.category === activeFilter);
-  }, [markets, activeFilter]);
+    let out = markets;
+    if (activeFilter === 'resueltos') return prioritizeFeaturedMarkets(out, featuredTeamKeys);
+    if (!activeFilter || activeFilter === 'todos') return prioritizeFeaturedMarkets(out, featuredTeamKeys);
+    if (activeFilter === 'trending') {
+      out = out.filter(m => m.trending || marketMatchesFeaturedTeam(m, featuredTeamKeys));
+      return prioritizeFeaturedMarkets(out, featuredTeamKeys);
+    }
+    out = out.filter(m => m.category === activeFilter);
+    return prioritizeFeaturedMarkets(out, featuredTeamKeys);
+  }, [markets, activeFilter, featuredTeamKeys]);
 
   if (loading && filtered.length === 0) {
     return (

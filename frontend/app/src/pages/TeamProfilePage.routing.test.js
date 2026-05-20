@@ -44,10 +44,22 @@ test('team search exposes soccer subcategory filters', () => {
   assert.match(teamSearch, /copa-libertadores/);
 });
 
+test('team search exposes baseball subcategory filters including LMP', () => {
+  assert.match(teamSearch, /BASEBALL_LEAGUE_FILTERS/);
+  assert.match(teamSearch, /lmb/);
+  assert.match(teamSearch, /lmp/);
+});
+
 test('team profile defaults to active and pending rows with a todos toggle', () => {
   assert.match(teamProfile, /active-pending/);
   assert.match(teamProfile, /Todos/);
   assert.match(teamProfile, /visibleRows/);
+});
+
+test('team profile exposes a destacado star toggle', () => {
+  assert.match(teamProfile, /toggleFeaturedTeam/);
+  assert.match(teamProfile, /Destacado/);
+  assert.match(teamProfile, /aria-label=\{featured/);
 });
 
 test('binary detail gauges use logo-based gauge rows instead of outcome text inside rings', () => {

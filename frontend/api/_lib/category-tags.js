@@ -3,7 +3,8 @@ const GEO_KEYS = new Set(['mexico', 'latam', 'world']);
 const TOPIC_KEYS = new Set(['general', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'weather', 'world-cup']);
 const ISOLATED_CATEGORY_KEYS = new Set(['crypto', 'world-cup']);
 
-const MEXICO_LEAGUES = new Set(['liga-mx', 'lmb']);
+const MEXICO_LEAGUES = new Set(['liga-mx', 'lmb', 'lmp']);
+const LATAM_LEAGUES = new Set(['copa-libertadores']);
 const MEXICO_SPORT_KEYWORDS = [
   'cruz azul',
   'chivas',
@@ -59,6 +60,9 @@ const LATAM_KEYWORDS = [
   'guatemala',
   'dominican republic',
   'republica dominicana',
+  'conmebol',
+  'copa libertadores',
+  'libertadores',
 ];
 
 function stripAccents(value) {
@@ -196,6 +200,9 @@ export function deriveMarketTags(row = {}) {
 
   if (shouldInferRegionalTags && MEXICO_LEAGUES.has(league)) {
     addGeoMembership('mexico');
+  }
+  if (shouldInferRegionalTags && LATAM_LEAGUES.has(league)) {
+    addGeoMembership('latam');
   }
 
   const haystack = normalizeText([

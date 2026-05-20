@@ -28,6 +28,13 @@ export const SOCCER_LEAGUE_FILTERS = [
   { key: 'mls', label: 'MLS' },
 ];
 
+export const BASEBALL_LEAGUE_FILTERS = [
+  { key: 'all', label: 'Todo béisbol' },
+  { key: 'mlb', label: 'MLB' },
+  { key: 'lmb', label: 'LMB' },
+  { key: 'lmp', label: 'LMP' },
+];
+
 const SOCCER_LEAGUE_BY_NAME = new Map([
   ['bundesliga', 'bundesliga'],
   ['la liga', 'la-liga'],
@@ -36,6 +43,12 @@ const SOCCER_LEAGUE_BY_NAME = new Map([
   ['mls', 'mls'],
   ['premier league', 'premier-league'],
   ['serie a', 'serie-a'],
+]);
+
+const BASEBALL_LEAGUE_BY_NAME = new Map([
+  ['mlb', 'mlb'],
+  ['lmb', 'lmb'],
+  ['lmp', 'lmp'],
 ]);
 
 function normalize(value) {
@@ -53,17 +66,24 @@ function soccerTeamInLeague(team, leagueKey) {
   return Array.isArray(team.competitions) && team.competitions.includes(leagueKey);
 }
 
+function baseballTeamInLeague(team, leagueKey) {
+  if (leagueKey === 'all') return true;
+  return BASEBALL_LEAGUE_BY_NAME.get(normalize(team.league)) === leagueKey;
+}
+
 function TeamSearchBody({ surface }) {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [sport, setSport] = useState('all');
   const [soccerLeague, setSoccerLeague] = useState('all');
+  const [baseballLeague, setBaseballLeague] = useState('all');
 
   const teams = useMemo(() => {
     const q = normalize(query.trim());
     return TEAM_PROFILES
       .filter(team => sport === 'all' || team.sport === sport)
       .filter(team => sport !== 'soccer' || soccerTeamInLeague(team, soccerLeague))
+      .filter(team => sport !== 'baseball' || baseballTeamInLeague(team, baseballLeague))
       .filter(team => {
         if (!q) return true;
         const text = normalize([
@@ -79,7 +99,7 @@ function TeamSearchBody({ surface }) {
         if ((a.league || '') !== (b.league || '')) return String(a.league || '').localeCompare(String(b.league || ''));
         return a.name.localeCompare(b.name);
       });
-  }, [query, sport, soccerLeague]);
+  }, [query, sport, soccerLeague, baseballLeague]);
 
   return (
     <main style={{
@@ -155,6 +175,7 @@ function TeamSearchBody({ surface }) {
                 onClick={() => {
                   setSport(filter.key);
                   if (filter.key !== 'soccer') setSoccerLeague('all');
+                  if (filter.key !== 'baseball') setBaseballLeague('all');
                 }}
                 style={{
                   border: `1px solid ${sport === filter.key ? 'rgba(255,85,0,0.55)' : 'var(--border)'}`,
@@ -185,6 +206,31 @@ function TeamSearchBody({ surface }) {
                     borderRadius: 999,
                     background: soccerLeague === filter.key ? 'rgba(0,232,122,0.1)' : 'var(--surface2)',
                     color: soccerLeague === filter.key ? 'var(--green)' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    padding: '7px 11px',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 10,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {sport === 'baseball' && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {BASEBALL_LEAGUE_FILTERS.map(filter => (
+                <button
+                  key={filter.key}
+                  type="button"
+                  onClick={() => setBaseballLeague(filter.key)}
+                  style={{
+                    border: `1px solid ${baseballLeague === filter.key ? 'rgba(0,232,122,0.5)' : 'var(--border)'}`,
+                    borderRadius: 999,
+                    background: baseballLeague === filter.key ? 'rgba(0,232,122,0.1)' : 'var(--surface2)',
+                    color: baseballLeague === filter.key ? 'var(--green)' : 'var(--text-secondary)',
                     cursor: 'pointer',
                     padding: '7px 11px',
                     fontFamily: 'var(--font-mono)',
