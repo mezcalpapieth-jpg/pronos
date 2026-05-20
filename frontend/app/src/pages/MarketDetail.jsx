@@ -26,6 +26,7 @@ import Footer from '../components/Footer.jsx';
 import BetModal from '../components/BetModal.jsx';
 import AmmDepthPanel from '../components/AmmDepthPanel.jsx';
 import CategoryBar from '../components/CategoryBar.jsx';
+import LiveScorePanel from '../components/LiveScorePanel.jsx';
 import Sparkline from '../components/Sparkline.jsx';
 import ShareButton from '../components/ShareButton.jsx';
 import TeamMarketStrip from '../components/TeamMarketStrip.jsx';
@@ -620,6 +621,7 @@ export default function MarketDetail({ onOpenLogin }) {
         )}
 
         <TeamMarketStrip market={market} outcomeImages={outcomeImages} />
+        <LiveScorePanel market={market} />
 
         {/* Final-score strip */}
         {isResolved && market.finalScore && (

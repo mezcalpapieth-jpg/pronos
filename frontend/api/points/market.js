@@ -16,6 +16,7 @@ import {
   teamPairKeyFromMeta,
 } from '../_lib/series-markets.js';
 import { deriveMarketTags } from '../_lib/category-tags.js';
+import { buildEspnLiveScoreConfig } from '../_lib/espn-live-score.js';
 import { deriveOutcomeCountryLabels } from '../_lib/outcome-country-labels.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -271,6 +272,7 @@ export default async function handler(req, res) {
       const resolverCfg = parseJsonb(r.resolver_config, null);
       const resolverType = r.resolver_type || null;
       const resolverSource = resolverCfg?.source || null;
+      const liveScoreConfig = buildEspnLiveScoreConfig({ resolverType, resolverConfig: resolverCfg });
       const tags = deriveMarketTags({
         ...r,
         source_data: sourceData,
@@ -451,6 +453,7 @@ export default async function handler(req, res) {
             createdAt: r.created_at,
             resolverType,
             resolverSource,
+            liveScoreConfig,
             cryptoMeta,
             seriesMeta,
             sport: r.sport || null,
@@ -495,6 +498,7 @@ export default async function handler(req, res) {
           createdAt: r.created_at,
           resolverType,
           resolverSource,
+          liveScoreConfig,
           cryptoMeta,
           seriesMeta,
           sport: r.sport || null,

@@ -555,6 +555,8 @@ const STRINGS = {
   'points.detail.redeemInstructions': { es: 'Los ganadores pueden reclamar 1 MXNP por cada acción.', en: 'Winners can claim 1 MXNP per share.' },
   'points.detail.probNow':         { es: 'PROBABILIDAD ACTUAL · SÍ', en: 'CURRENT PROBABILITY · YES' },
   'points.detail.probExplain':     { es: 'La probabilidad se ajusta con cada trade. Compra más barato cuando hay desacuerdo, más caro cuando hay consenso.', en: 'Probability adjusts on every trade. Cheaper when there\'s disagreement, more expensive when there\'s consensus.' },
+  'points.liveScore.title':        { es: 'MARCADOR EN VIVO',  en: 'LIVE SCORE' },
+  'points.liveScore.live':         { es: 'En vivo',           en: 'Live' },
   'points.detail.priceHistory':    { es: 'HISTORIAL DE PRECIO', en: 'PRICE HISTORY' },
   'points.detail.priceRealtime':   { es: 'PRECIO EN TIEMPO REAL', en: 'REAL-TIME PRICE' },
   'points.detail.last30d':         { es: 'ÚLT. 30 DÍAS',       en: 'LAST 30 DAYS' },

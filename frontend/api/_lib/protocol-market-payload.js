@@ -1,4 +1,5 @@
 import { deriveMarketTags, isCryptoFiveMinute } from './category-tags.js';
+import { buildEspnLiveScoreConfig } from './espn-live-score.js';
 import { deriveOutcomeCountryLabels } from './outcome-country-labels.js';
 import { formatResolutionCandidate } from './protocol-resolution-candidates.js';
 import { applySeriesGateToMarket, normalizeSeriesMeta, seriesSubtitle } from './series-markets.js';
@@ -140,6 +141,7 @@ export function buildProtocolMarketPayload(row = {}) {
     resolutionSource: row.resolution_src || null,
     resolverType,
     resolverSource: resolverConfig?.source || null,
+    liveScoreConfig: buildEspnLiveScoreConfig({ resolverType, resolverConfig }),
     txHash: row.tx_hash || null,
     createdAt: row.created_at || null,
     resolvedAt: row.resolved_at || null,

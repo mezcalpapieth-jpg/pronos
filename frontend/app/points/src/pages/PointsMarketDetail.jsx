@@ -23,6 +23,7 @@ import {
   findChampionsLeagueFinalMarket,
 } from '@app/lib/championsLeague.js';
 import Sparkline from '@app/components/Sparkline.jsx';
+import LiveScorePanel from '@app/components/LiveScorePanel.jsx';
 import ShareButton from '@app/components/ShareButton.jsx';
 import TeamMarketStrip from '@app/components/TeamMarketStrip.jsx';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
@@ -1092,6 +1093,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
             )}
 
             <TeamMarketStrip market={market} outcomeImages={market.outcomeImages} />
+            <LiveScorePanel market={market} />
 
             {isCanceled && (
               <div style={{
