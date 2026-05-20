@@ -40,6 +40,7 @@ import {
   finalMarketOptions,
   findChampionsLeagueFinalMarket,
 } from '../lib/championsLeague.js';
+import { marketInterestPayload, trackInterest } from '../lib/interest.js';
 
 const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 42161);
 
@@ -182,36 +183,144 @@ function SeriesGameStrip({ seriesMeta, currentMarketId, navigate }) {
   );
 }
 
+function outcomeInitials(label) {
+  const words = String(label || '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+  return (words.map(word => word[0]).join('') || '?').toUpperCase();
+}
+
 // ── Ring chart for binary markets ───────────────────────────────────────────
-function ProbabilityRing({ pct, label, resolved, winner }) {
+function ProbabilityRing({ pct, label, logo, color = 'var(--yes)', resolved, winner }) {
   const radius = 54;
   const circ = 2 * Math.PI * radius;
-  const dash = (pct / 100) * circ;
-  const color = resolved && !winner ? 'var(--text-muted)' : 'var(--yes)';
+  const safePct = Math.max(0, Math.min(100, Number(pct) || 0));
+  const dash = (safePct / 100) * circ;
+  const ringColor = resolved && !winner ? 'var(--text-muted)' : color;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-      <svg width="140" height="140" viewBox="0 0 140 140">
+    <div
+      aria-label={`${label} ${safePct}%`}
+      style={{
+        position: 'relative',
+        width: 140,
+        height: 140,
+        flexShrink: 0,
+      }}
+    >
+      <svg width="140" height="140" viewBox="0 0 140 140" aria-hidden="true">
         <circle cx="70" cy="70" r={radius} fill="none" stroke="var(--surface3, var(--surface2))" strokeWidth="12" />
         <circle
-          cx="70" cy="70" r={radius} fill="none" stroke={color} strokeWidth="12"
+          cx="70" cy="70" r={radius} fill="none" stroke={ringColor} strokeWidth="12"
           strokeLinecap="round"
           strokeDasharray={`${dash} ${circ}`}
           transform="rotate(-90 70 70)"
-          style={{ filter: winner ? `drop-shadow(0 0 8px ${color})` : 'none' }}
+          style={{ filter: winner ? `drop-shadow(0 0 8px ${ringColor})` : 'none' }}
         />
-        {resolved && winner && (
-          <>
-            <text x="70" y="63" textAnchor="middle" fill="var(--yes)" fontSize="26" fontFamily="var(--font-display)">✓</text>
-            <text x="70" y="82" textAnchor="middle" fill="var(--text-muted)" fontSize="8" fontFamily="var(--font-mono)" letterSpacing="0.1em">GANADOR</text>
-          </>
-        )}
-        {!resolved && (
-          <>
-            <text x="70" y="66" textAnchor="middle" fill="var(--text-primary)" fontSize="22" fontFamily="var(--font-display)">{pct}%</text>
-            <text x="70" y="84" textAnchor="middle" fill="var(--text-muted)" fontSize="9" fontFamily="var(--font-mono)" letterSpacing="0.1em">{label}</text>
-          </>
-        )}
       </svg>
+      <div style={{
+        position: 'absolute',
+        inset: 24,
+        display: 'grid',
+        placeItems: 'center',
+        alignContent: 'center',
+        gap: 5,
+      }}>
+        {logo ? (
+          <img
+            src={logo}
+            alt=""
+            style={{ width: 44, height: 44, objectFit: 'contain', filter: 'drop-shadow(0 8px 14px rgba(0,0,0,0.35))' }}
+            onError={(event) => { event.currentTarget.style.display = 'none'; }}
+          />
+        ) : (
+          <span style={{
+            width: 44,
+            height: 44,
+            display: 'grid',
+            placeItems: 'center',
+            borderRadius: 8,
+            border: '1px solid var(--border)',
+            background: 'var(--surface2)',
+            color: 'var(--text-primary)',
+            fontFamily: 'var(--font-display)',
+            fontSize: 17,
+          }}>
+            {outcomeInitials(label)}
+          </span>
+        )}
+        <span style={{
+          color: winner ? 'var(--green)' : 'var(--text-primary)',
+          fontFamily: 'var(--font-display)',
+          fontSize: 24,
+          lineHeight: 1,
+        }}>
+          {safePct}%
+        </span>
+        {resolved && winner && (
+          <span style={{
+            color: 'var(--green)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 9,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+          }}>
+            Ganador
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProbabilityGaugeRow({ outcomes, outcomeImages, pctFor, isResolved, winnerIndex, lineColor }) {
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+      gap: 12,
+      marginTop: 18,
+    }}>
+      {outcomes.map((label, i) => {
+        const isWinner = isResolved && winnerIndex === i;
+        return (
+          <div
+            key={label}
+            style={{
+              display: 'grid',
+              justifyItems: 'center',
+              gap: 8,
+              padding: '16px 12px',
+              border: `1px solid ${isWinner ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
+              borderRadius: 12,
+              background: isWinner ? 'rgba(0,232,122,0.08)' : 'var(--surface2)',
+              opacity: isResolved && !isWinner ? 0.58 : 1,
+            }}
+          >
+            <ProbabilityRing
+              pct={pctFor(i)}
+              label={label}
+              logo={outcomeImages?.[i] || null}
+              color={lineColor(i)}
+              resolved={isResolved}
+              winner={isWinner}
+            />
+            <div style={{
+              maxWidth: '100%',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              color: isWinner ? 'var(--green)' : 'var(--text-secondary)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+            }}>
+              {label}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -311,6 +420,15 @@ export default function MarketDetail({ onOpenLogin }) {
     return () => { cancelled = true; };
   }, [market]);
 
+  useEffect(() => {
+    if (!market?.id) return;
+    trackInterest({
+      ...marketInterestPayload('mvp', market, 'view'),
+      objectType: 'protocol_market',
+      action: 'view',
+    });
+  }, [market?.id]);
+
   // When the URL has ?outcome=<i> from the Hero deep-link, auto-open
   // the bet modal once the market is loaded so users land in the right
   // buy flow without an extra click.
@@ -405,7 +523,6 @@ export default function MarketDetail({ onOpenLogin }) {
   const displayWinnerIndex = isResolved ? displayOutcomeIndices.indexOf(winnerIndex) : null;
   const isTradingLocked = !isResolved && (market.seriesLocked || market.status !== 'active');
   const lockedLabel = isCanceled ? 'Anulado' : isDisputed ? 'En disputa' : 'Pendiente';
-  const ringIndex = isResolved && displayWinnerIndex != null && displayWinnerIndex >= 0 ? displayWinnerIndex : 0;
   const seriesSubtitle = formatSeriesSubtitle(market.seriesMeta);
   const isOnchain = market.mode === 'onchain';
   const isLive = typeof market.live === 'boolean'
@@ -519,12 +636,6 @@ export default function MarketDetail({ onOpenLogin }) {
           </div>
         )}
 
-        <SeriesGameStrip
-          seriesMeta={market.seriesMeta}
-          currentMarketId={market.id}
-          navigate={navigate}
-        />
-
         {/* Two-column layout: chart + buy panel.
             On phones, stack chart on top of the buy panel (single col)
             so chart + outcome list use the full viewport width. */}
@@ -543,36 +654,80 @@ export default function MarketDetail({ onOpenLogin }) {
             borderRadius: 14,
             background: 'var(--surface1)',
           }}>
-            {displayOutcomes.length === 2 ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 18 }}>
-                <ProbabilityRing
-                  pct={pctFor(ringIndex)}
-                  label={displayOutcomes[ringIndex]}
-                  resolved={isResolved}
-                  winner={isResolved && displayWinnerIndex === ringIndex}
-                />
-                <div style={{ flex: 1 }}>
-                  {isResolved ? (
-                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--green)' }}>
-                      🏆 {displayWinnerIndex >= 0 ? displayOutcomes[displayWinnerIndex] : outcomes[winnerIndex] || '—'}
-                    </div>
-                  ) : (
-                    <>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', marginBottom: 6 }}>
-                        Probabilidad implícita
-                      </div>
-                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--text-primary)' }}>
-                        {pctFor(0)}%
-                      </div>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                        {displayOutcomes[0]} · {displayOutcomes[1]} {pctFor(1)}%
-                      </div>
-                    </>
-                  )}
+            {displayOutcomes.length === 2 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', marginBottom: 7, textTransform: 'uppercase' }}>
+                  {isResolved ? 'Resultado oficial' : 'Probabilidad implícita'}
                 </div>
+                {isResolved ? (
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--green)' }}>
+                    🏆 {displayWinnerIndex >= 0 ? displayOutcomes[displayWinnerIndex] : outcomes[winnerIndex] || '—'}
+                  </div>
+                ) : (
+                  <p style={{ margin: 0, color: 'var(--text-secondary)', fontFamily: 'var(--font-body)', fontSize: 15, lineHeight: 1.6 }}>
+                    La probabilidad se ajusta con cada trade. Compra más barato cuando hay desacuerdo, más caro cuando hay consenso.
+                  </p>
+                )}
               </div>
+            )}
+
+            {/* Price history chart */}
+            <div style={{
+              padding: '10px 4px 4px',
+              borderTop: displayOutcomes.length === 2 ? '1px solid var(--border)' : 'none',
+              marginTop: displayOutcomes.length === 2 ? 8 : 0,
+            }}>
+              <div style={{
+                fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em',
+                color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 10,
+              }}>
+                {isResolved ? 'Historial' : 'Tiempo real'} · 30d
+              </div>
+              {historyByOutcome === null ? (
+                <div style={{ height: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+                  Cargando histórico…
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {displayOutcomes.slice(0, 6).map((label, i) => (
+                    <Sparkline
+                      key={i}
+                      data={displayHistoryByOutcome[i] || []}
+                      color={lineColor(i)}
+                      label={label.length > 11 ? `${label.slice(0, 10)}…` : label}
+                      labelWidth={70}
+                      showValue
+                      valueWidth={48}
+                      targetPct={pctFor(i)}
+                      seed={`${market.id}-${i}`}
+                      height={displayOutcomes.length === 2 ? 70 : 36}
+                      fill={i === 0 || (isResolved && displayWinnerIndex === i)}
+                      strokeWidth={isResolved && displayWinnerIndex === i ? 2.4 : 1.8}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop: 18 }}>
+              <SeriesGameStrip
+                seriesMeta={market.seriesMeta}
+                currentMarketId={market.id}
+                navigate={navigate}
+              />
+            </div>
+
+            {displayOutcomes.length === 2 ? (
+              <ProbabilityGaugeRow
+                outcomes={displayOutcomes}
+                outcomeImages={displayOutcomeImages}
+                pctFor={pctFor}
+                isResolved={isResolved}
+                winnerIndex={displayWinnerIndex}
+                lineColor={lineColor}
+              />
             ) : (
-              <div style={{ marginBottom: 18 }}>
+              <div style={{ marginTop: 18 }}>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', marginBottom: 8 }}>
                   Probabilidades
                 </div>
@@ -626,44 +781,6 @@ export default function MarketDetail({ onOpenLogin }) {
                 </div>
               </div>
             )}
-
-            {/* Price history chart */}
-            <div style={{
-              padding: '10px 4px 4px',
-              borderTop: '1px solid var(--border)',
-              marginTop: 8,
-            }}>
-              <div style={{
-                fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em',
-                color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 10,
-              }}>
-                {isResolved ? 'Historial' : 'Tiempo real'} · 30d
-              </div>
-              {historyByOutcome === null ? (
-                <div style={{ height: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-                  Cargando histórico…
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {displayOutcomes.slice(0, 6).map((label, i) => (
-                    <Sparkline
-                      key={i}
-                      data={displayHistoryByOutcome[i] || []}
-                      color={lineColor(i)}
-                      label={label.length > 11 ? `${label.slice(0, 10)}…` : label}
-                      labelWidth={70}
-                      showValue
-                      valueWidth={48}
-                      targetPct={pctFor(i)}
-                      seed={`${market.id}-${i}`}
-                      height={displayOutcomes.length === 2 ? 70 : 36}
-                      fill={i === 0 || (isResolved && displayWinnerIndex === i)}
-                      strokeWidth={isResolved && displayWinnerIndex === i ? 2.4 : 1.8}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
           </section>
 
           {/* Right: outcomes + buy buttons */}

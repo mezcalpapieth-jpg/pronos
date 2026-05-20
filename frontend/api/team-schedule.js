@@ -55,10 +55,28 @@ function competitorLogo(c) {
     || null;
 }
 
+function normalizeScore(value) {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return n;
+}
+
+function scoreLine(homeScore, awayScore) {
+  if (homeScore == null || awayScore == null) return null;
+  return `${homeScore}-${awayScore}`;
+}
+
+function competitorScore(c) {
+  return normalizeScore(c?.score);
+}
+
 function normalizeEspnEvent(event, profile) {
   const { comp, home, away } = espnCompetitors(event);
   const sourceEventId = String(event?.id || '');
   if (!sourceEventId || !event?.date) return null;
+  const homeScore = competitorScore(home);
+  const awayScore = competitorScore(away);
   return {
     id: `espn:${sourceEventId}`,
     source: 'espn',
@@ -72,6 +90,9 @@ function normalizeEspnEvent(event, profile) {
     awayName: competitorName(away),
     homeLogo: competitorLogo(home),
     awayLogo: competitorLogo(away),
+    homeScore,
+    awayScore,
+    finalScore: scoreLine(homeScore, awayScore),
     venue: comp?.venue?.fullName || null,
   };
 }
@@ -97,6 +118,8 @@ async function fetchEspnSchedule(profile) {
 
 function normalizeFootballDataMatch(match, profile) {
   if (!match?.id || !match?.utcDate) return null;
+  const homeScore = normalizeScore(match?.score?.fullTime?.home ?? match?.score?.regularTime?.home);
+  const awayScore = normalizeScore(match?.score?.fullTime?.away ?? match?.score?.regularTime?.away);
   return {
     id: `football-data.org:${match.id}`,
     source: 'football-data.org',
@@ -110,6 +133,9 @@ function normalizeFootballDataMatch(match, profile) {
     awayName: match?.awayTeam?.shortName || match?.awayTeam?.name || null,
     homeLogo: match?.homeTeam?.crest || null,
     awayLogo: match?.awayTeam?.crest || null,
+    homeScore,
+    awayScore,
+    finalScore: scoreLine(homeScore, awayScore),
     venue: match?.venue || null,
   };
 }

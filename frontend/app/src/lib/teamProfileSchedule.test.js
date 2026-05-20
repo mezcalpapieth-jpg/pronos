@@ -41,6 +41,31 @@ test('team profile schedule links imported markets and marks missing imports pen
   assert.equal(rows[1].market, null);
 });
 
+test('team profile schedule marks past missing-market games closed', () => {
+  const rows = mergeScheduleWithMarkets([
+    {
+      id: 'old-game',
+      source: 'football-data.org',
+      sourceEventId: '200',
+      startsAt: '2020-05-30T16:00:00.000Z',
+      status: 'FINISHED',
+      homeName: 'PSG',
+      awayName: 'Arsenal',
+    },
+    {
+      id: 'future-game',
+      source: 'football-data.org',
+      sourceEventId: '201',
+      startsAt: '2099-06-06T16:00:00.000Z',
+      homeName: 'Arsenal',
+      awayName: 'Chelsea',
+    },
+  ], []);
+
+  assert.equal(rows[0].state, 'closed');
+  assert.equal(rows[1].state, 'pending');
+});
+
 test('team profile schedule can link ESPN markets by resolver event id', () => {
   const rows = mergeScheduleWithMarkets(
     [{ id: '401', source: 'espn', sourceEventId: '401', homeName: 'Spurs', awayName: 'Thunder' }],

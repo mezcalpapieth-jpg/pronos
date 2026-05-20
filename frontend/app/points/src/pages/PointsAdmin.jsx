@@ -11,6 +11,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import AdminInterestPanel from '@app/components/AdminInterestPanel.jsx';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import {
   getJson,
@@ -2086,6 +2087,8 @@ function StatsPanel() {
           </div>
         ))}
       </div>
+
+      <AdminInterestPanel interest={stats.interest} />
     </div>
   );
 }

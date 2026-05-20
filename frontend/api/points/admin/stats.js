@@ -10,6 +10,8 @@ import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
+import { ensureInterestSchema } from '../../_lib/interest-schema.js';
+import { INTEREST_WINDOWS, formatInterestRow } from '../../_lib/interest.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -24,8 +26,9 @@ export default async function handler(req, res) {
 
   try {
     await ensurePointsSchema(schemaSql);
+    await ensureInterestSchema(schemaSql);
 
-    const [userRows, supplyRows, marketRows, distRows] = await Promise.all([
+    const [userRows, supplyRows, marketRows, distRows, teamInterestRows, marketInterestRows] = await Promise.all([
       sql`SELECT COUNT(*)::int AS c FROM points_users`,
       sql`SELECT COALESCE(SUM(balance), 0) AS total FROM points_balances`,
       sql`
@@ -42,6 +45,72 @@ export default async function handler(req, res) {
         GROUP BY kind
         ORDER BY SUM(ABS(amount)) DESC
       `,
+      schemaSql`
+        SELECT
+          surface,
+          object_type,
+          object_id,
+          COALESCE(MAX(metadata->>'label'), object_id) AS label,
+          MAX(metadata->>'question') AS question,
+          MAX(metadata->>'sport') AS sport,
+          MAX(metadata->>'league') AS league,
+          MAX(metadata->>'category') AS category,
+          MAX(metadata->>'status') AS status,
+          COALESCE(SUM(count) FILTER (WHERE day = CURRENT_DATE), 0)::int AS day_count,
+          COALESCE(SUM(count) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '6 days'), 0)::int AS week_count,
+          COALESCE(SUM(count) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '29 days'), 0)::int AS month_count,
+          COALESCE(SUM(count), 0)::int AS lifetime_count,
+          COALESCE(SUM(unique_count) FILTER (WHERE day = CURRENT_DATE), 0)::int AS day_unique,
+          COALESCE(SUM(unique_count) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '6 days'), 0)::int AS week_unique,
+          COALESCE(SUM(unique_count) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '29 days'), 0)::int AS month_unique,
+          COALESCE(SUM(unique_count), 0)::int AS lifetime_unique,
+          MAX(last_seen_at) AS last_seen_at,
+          COALESCE(
+            jsonb_agg(
+              jsonb_build_object('day', day::text, 'count', count, 'unique', unique_count)
+              ORDER BY day
+            ) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '29 days'),
+            '[]'::jsonb
+          ) AS series
+        FROM interest_daily_counts
+        WHERE object_type = 'team'
+        GROUP BY surface, object_type, object_id
+        ORDER BY month_count DESC, lifetime_count DESC, last_seen_at DESC
+        LIMIT 12
+      `,
+      schemaSql`
+        SELECT
+          surface,
+          object_type,
+          object_id,
+          COALESCE(MAX(metadata->>'label'), MAX(metadata->>'question'), object_id) AS label,
+          MAX(metadata->>'question') AS question,
+          MAX(metadata->>'sport') AS sport,
+          MAX(metadata->>'league') AS league,
+          MAX(metadata->>'category') AS category,
+          MAX(metadata->>'status') AS status,
+          COALESCE(SUM(count) FILTER (WHERE day = CURRENT_DATE), 0)::int AS day_count,
+          COALESCE(SUM(count) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '6 days'), 0)::int AS week_count,
+          COALESCE(SUM(count) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '29 days'), 0)::int AS month_count,
+          COALESCE(SUM(count), 0)::int AS lifetime_count,
+          COALESCE(SUM(unique_count) FILTER (WHERE day = CURRENT_DATE), 0)::int AS day_unique,
+          COALESCE(SUM(unique_count) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '6 days'), 0)::int AS week_unique,
+          COALESCE(SUM(unique_count) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '29 days'), 0)::int AS month_unique,
+          COALESCE(SUM(unique_count), 0)::int AS lifetime_unique,
+          MAX(last_seen_at) AS last_seen_at,
+          COALESCE(
+            jsonb_agg(
+              jsonb_build_object('day', day::text, 'count', count, 'unique', unique_count)
+              ORDER BY day
+            ) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '29 days'),
+            '[]'::jsonb
+          ) AS series
+        FROM interest_daily_counts
+        WHERE object_type IN ('points_market', 'protocol_market')
+        GROUP BY surface, object_type, object_id
+        ORDER BY month_count DESC, lifetime_count DESC, last_seen_at DESC
+        LIMIT 12
+      `,
     ]);
 
     return res.status(200).json({
@@ -53,6 +122,11 @@ export default async function handler(req, res) {
         total: Number(r.total),
         count: r.count,
       })),
+      interest: {
+        windows: INTEREST_WINDOWS,
+        teams: teamInterestRows.map(formatInterestRow),
+        markets: marketInterestRows.map(formatInterestRow),
+      },
     });
   } catch (e) {
     console.error('[admin/stats] error', { message: e?.message, code: e?.code });

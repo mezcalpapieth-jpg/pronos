@@ -34,6 +34,7 @@ import {
   buildCryptoMarketSequence,
   cryptoMarketSequenceSignature,
 } from '../lib/cryptoMarketHub.js';
+import { marketInterestPayload, trackInterest } from '@app/lib/interest.js';
 
 // Accent colors for the multi-line price chart. Match the buy-button
 // accents so users recognize the same color for the same outcome.
@@ -562,48 +563,150 @@ function SeriesGameStrip({ seriesMeta, currentMarketId, navigate, t }) {
   );
 }
 
+function outcomeInitials(label) {
+  const words = String(label || '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+  return (words.map(word => word[0]).join('') || '?').toUpperCase();
+}
+
 /* Ring chart — same shape as MVP's ProbabilityChart, minus on-chain state */
-function ProbabilityRing({ pct, resolved, winner, label }) {
+function ProbabilityRing({ pct, resolved, winner, label, logo, color = 'var(--yes)' }) {
   const radius = 54;
   const circ = 2 * Math.PI * radius;
-  const dash = (pct / 100) * circ;
-  const color = resolved ? (winner ? 'var(--yes)' : 'var(--red, #ef4444)') : 'var(--yes)';
+  const safePct = Math.max(0, Math.min(100, Number(pct) || 0));
+  const dash = (safePct / 100) * circ;
+  const ringColor = resolved ? (winner ? 'var(--yes)' : 'var(--red, #ef4444)') : color;
 
   return (
-    <svg width={140} height={140} viewBox="0 0 140 140">
-      <circle cx="70" cy="70" r={radius} fill="none" stroke="var(--surface2)" strokeWidth="12" />
-      <circle
-        cx="70" cy="70" r={radius}
-        fill="none"
-        stroke={color}
-        strokeWidth="12"
-        strokeLinecap="round"
-        strokeDasharray={`${dash} ${circ - dash}`}
-        transform="rotate(-90 70 70)"
-        style={{ transition: 'stroke-dasharray 0.5s' }}
-      />
-      <text
-        x="70" y="70"
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontFamily="var(--font-display)"
-        fontSize="30"
-        fill="var(--text-primary)"
-      >
-        {pct}%
-      </text>
-      <text
-        x="70" y="96"
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontFamily="var(--font-mono)"
-        fontSize="10"
-        fill="var(--text-muted)"
-        letterSpacing="0.1em"
-      >
-        {label}
-      </text>
-    </svg>
+    <div
+      aria-label={`${label} ${safePct}%`}
+      style={{
+        position: 'relative',
+        width: 140,
+        height: 140,
+        flexShrink: 0,
+      }}
+    >
+      <svg width={140} height={140} viewBox="0 0 140 140" aria-hidden="true">
+        <circle cx="70" cy="70" r={radius} fill="none" stroke="var(--surface2)" strokeWidth="12" />
+        <circle
+          cx="70" cy="70" r={radius}
+          fill="none"
+          stroke={ringColor}
+          strokeWidth="12"
+          strokeLinecap="round"
+          strokeDasharray={`${dash} ${circ - dash}`}
+          transform="rotate(-90 70 70)"
+          style={{ transition: 'stroke-dasharray 0.5s' }}
+        />
+      </svg>
+      <div style={{
+        position: 'absolute',
+        inset: 24,
+        display: 'grid',
+        placeItems: 'center',
+        alignContent: 'center',
+        gap: 5,
+      }}>
+        {logo ? (
+          <img
+            src={logo}
+            alt=""
+            style={{ width: 44, height: 44, objectFit: 'contain', filter: 'drop-shadow(0 8px 14px rgba(0,0,0,0.35))' }}
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+          />
+        ) : (
+          <span style={{
+            width: 44,
+            height: 44,
+            display: 'grid',
+            placeItems: 'center',
+            borderRadius: 8,
+            border: '1px solid var(--border)',
+            background: 'var(--surface2)',
+            color: 'var(--text-primary)',
+            fontFamily: 'var(--font-display)',
+            fontSize: 17,
+          }}>
+            {outcomeInitials(label)}
+          </span>
+        )}
+        <span style={{
+          color: winner ? 'var(--green)' : 'var(--text-primary)',
+          fontFamily: 'var(--font-display)',
+          fontSize: 24,
+          lineHeight: 1,
+        }}>
+          {safePct}%
+        </span>
+        {resolved && winner && (
+          <span style={{
+            color: 'var(--green)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 9,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+          }}>
+            Ganador
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProbabilityGaugeRow({ outcomes, outcomeImages, pctFor, isResolved, winnerIndex }) {
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+      gap: 12,
+      marginBottom: 32,
+    }}>
+      {outcomes.map((label, i) => {
+        const isWinner = isResolved && winnerIndex === i;
+        const accent = accentFor(i, outcomes.length);
+        return (
+          <div
+            key={label}
+            style={{
+              display: 'grid',
+              justifyItems: 'center',
+              gap: 8,
+              padding: '16px 12px',
+              border: `1px solid ${isWinner ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
+              borderRadius: 12,
+              background: isWinner ? 'rgba(0,232,122,0.08)' : 'var(--surface1)',
+              opacity: isResolved && !isWinner ? 0.58 : 1,
+            }}
+          >
+            <ProbabilityRing
+              pct={pctFor(i)}
+              resolved={isResolved}
+              winner={isWinner}
+              label={label}
+              logo={outcomeImages?.[i] || null}
+              color={accent.fg}
+            />
+            <div style={{
+              maxWidth: '100%',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              color: isWinner ? 'var(--green)' : 'var(--text-secondary)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+            }}>
+              {label}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -705,6 +808,15 @@ export default function PointsMarketDetail({ onOpenLogin }) {
       .catch(e => { if (!cancelled) { setError(e.code || e.message); setLoading(false); } });
     return () => { cancelled = true; };
   }, [id]);
+
+  useEffect(() => {
+    if (!market?.id) return;
+    trackInterest({
+      ...marketInterestPayload('points', market, 'view'),
+      objectType: 'points_market',
+      action: 'view',
+    });
+  }, [market?.id]);
 
   // Light-touch polling so users on a crypto-5min detail page don't
   // need to refresh to see lifecycle transitions:
@@ -862,7 +974,6 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   const isResolved = winnerIndex != null && Number.isFinite(winnerIndex);
   const displayWinnerIndex = isResolved ? displayOutcomeIndices.indexOf(winnerIndex) : null;
   const isTradingLocked = !isResolved && (isCanceled || market.seriesLocked || market.status !== 'active');
-  const ringIndex = isResolved && displayWinnerIndex != null && displayWinnerIndex >= 0 ? displayWinnerIndex : 0;
   const seriesSubtitle = formatSeriesSubtitle(market.seriesMeta, { t });
   function pctFor(i) {
     if (isResolved) return displayWinnerIndex === i ? 100 : 0;
@@ -1024,48 +1135,36 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               </div>
             )}
 
-            {/* Big probability ring for 2-outcome markets */}
             {displayOutcomes.length === 2 && (
               <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 32,
-                marginBottom: 32,
-                padding: '24px 28px',
+                marginBottom: 24,
+                padding: '18px 20px',
                 background: 'var(--surface1)',
                 border: '1px solid var(--border)',
                 borderRadius: 14,
               }}>
-                <ProbabilityRing
-                  pct={pctFor(ringIndex)}
-                  resolved={isResolved}
-                  winner={isResolved && displayWinnerIndex === ringIndex}
-                  label={displayOutcomes[ringIndex]}
-                />
-                <div style={{ flex: 1 }}>
-                  {isResolved ? (
-                    <>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 8 }}>
-                        {t('points.detail.resultOfficial')}
-                      </div>
-                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--green)' }}>
-                        🏆 {displayWinnerIndex >= 0 ? displayOutcomes[displayWinnerIndex] : outcomes[winnerIndex]}
-                      </div>
-                      <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 8 }}>
-                        {t('points.detail.redeemInstructions')}
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 8 }}>
-                        {t('points.detail.probNow')}
-                      </div>
-                      <p style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.6 }}>
-                        {t('points.detail.probExplain')}
-                      </p>
-                    </>
-                  )}
-                </div>
+                {isResolved ? (
+                  <>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 8, textTransform: 'uppercase' }}>
+                      {t('points.detail.resultOfficial')}
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: 'var(--green)' }}>
+                      🏆 {displayWinnerIndex >= 0 ? displayOutcomes[displayWinnerIndex] : outcomes[winnerIndex]}
+                    </div>
+                    <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '8px 0 0' }}>
+                      {t('points.detail.redeemInstructions')}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 8, textTransform: 'uppercase' }}>
+                      {t('points.detail.probNow')}
+                    </div>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.6, margin: 0 }}>
+                      {t('points.detail.probExplain')}
+                    </p>
+                  </>
+                )}
               </div>
             )}
 
@@ -1177,6 +1276,16 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               navigate={navigate}
               t={t}
             />
+
+            {displayOutcomes.length === 2 && (
+              <ProbabilityGaugeRow
+                outcomes={displayOutcomes}
+                outcomeImages={displayOutcomeImages}
+                pctFor={pctFor}
+                isResolved={isResolved}
+                winnerIndex={displayWinnerIndex}
+              />
+            )}
 
             {/* Parallel markets: voting lives here (below the chart),
                 one row per leg with Sí/No buttons — matches the

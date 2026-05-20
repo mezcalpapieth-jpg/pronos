@@ -19,8 +19,37 @@ function marketEventKeys(market) {
   return keys;
 }
 
+function isFinishedScheduleStatus(value) {
+  const key = String(value || '').toLowerCase();
+  return [
+    'closed',
+    'complete',
+    'completed',
+    'final',
+    'finished',
+    'full_time',
+    'post',
+    'status_final',
+  ].some(status => key === status || key.includes(status));
+}
+
+function isPastScheduleRow(scheduleRow) {
+  const startMs = scheduleRow?.startsAt ? new Date(scheduleRow.startsAt).getTime() : NaN;
+  if (!Number.isFinite(startMs)) return false;
+  return startMs + 3 * 60 * 60 * 1000 < Date.now();
+}
+
 function rowState(scheduleRow, market) {
-  if (!market) return 'pending';
+  if (!market) {
+    if (
+      isFinishedScheduleStatus(scheduleRow?.status)
+      || isFinishedScheduleStatus(scheduleRow?.statusDetail)
+      || isPastScheduleRow(scheduleRow)
+    ) {
+      return 'closed';
+    }
+    return 'pending';
+  }
   if (market.status === 'resolved') return 'resolved';
   if (market.status === 'canceled' || market.status === 'cancelled') return 'cancelado';
   if (market.status === 'disputed') return 'disputa';

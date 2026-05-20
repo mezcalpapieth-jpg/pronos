@@ -20,6 +20,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Nav from '../components/Nav.jsx';
 import Footer from '../components/Footer.jsx';
+import AdminInterestPanel from '../components/AdminInterestPanel.jsx';
 import { usePointsAuth } from '../lib/pointsAuth.js';
 import { useT } from '../lib/i18n.js';
 import {
@@ -2359,6 +2360,8 @@ function StatsSection() {
           </div>
         ))}
       </div>
+
+      <AdminInterestPanel interest={stats.interest} />
     </section>
   );
 }

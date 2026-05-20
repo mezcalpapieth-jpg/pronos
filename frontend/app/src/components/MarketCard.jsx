@@ -15,6 +15,7 @@ import {
   priceForOutcome,
 } from '../lib/mvpMarketCard.js';
 import { findTeamByName, teamProfilePath } from '../lib/teamProfiles.js';
+import { marketInterestPayload, teamInterestPayload, trackInterest } from '../lib/interest.js';
 
 export default function MarketCard({ market, onOpenLogin }) {
   const t = useT();
@@ -45,6 +46,10 @@ export default function MarketCard({ market, onOpenLogin }) {
   const drawerOpen = drawerIndex !== null;
 
   function navigateToDetail() {
+    trackInterest({
+      ...marketInterestPayload('mvp', market, 'click'),
+      objectType: 'protocol_market',
+    });
     navigate(isChampionsFinalCard
       ? CHAMPIONS_LEAGUE_HUB_PATH
       : `/market?id=${encodeURIComponent(market.id)}`);
@@ -63,6 +68,10 @@ export default function MarketCard({ market, onOpenLogin }) {
   function navigateToTeam(event, team) {
     if (!team) return;
     event.stopPropagation();
+    trackInterest({
+      ...teamInterestPayload('mvp', team, 'click'),
+      objectType: 'team',
+    });
     navigate(teamProfilePath(team));
   }
 

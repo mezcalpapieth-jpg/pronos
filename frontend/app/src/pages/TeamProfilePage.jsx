@@ -4,9 +4,11 @@ import Nav from '../components/Nav.jsx';
 import CategoryBar from '../components/CategoryBar.jsx';
 import Footer from '../components/Footer.jsx';
 import { findTeamByName, findTeamProfile } from '../lib/teamProfiles.js';
+import { teamInterestPayload, trackInterest } from '../lib/interest.js';
 import { mergeScheduleWithMarkets } from '../lib/teamProfileSchedule.js';
 
 const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 42161);
+const ACTIVE_PENDING_STATES = new Set(['open', 'pending', 'por-resolver', 'disputa']);
 
 function formatDateTime(value) {
   if (!value) return 'Por definir';
@@ -31,6 +33,8 @@ function stateLabel(state) {
       return { label: 'Abierto', color: 'var(--green)', bg: 'rgba(0,232,122,0.12)' };
     case 'resolved':
       return { label: 'Resuelto', color: 'var(--text-primary)', bg: 'rgba(255,255,255,0.08)' };
+    case 'closed':
+      return { label: 'Cerrado', color: 'var(--text-muted)', bg: 'rgba(255,255,255,0.05)' };
     case 'por-resolver':
       return { label: 'Por resolver', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' };
     case 'cancelado':
@@ -53,6 +57,16 @@ function marketMatchesTeam(team, market) {
   return outcomes.some(label => findTeamByName(sport, label)?.slug === team.slug);
 }
 
+function marketOnlyState(market) {
+  if (market?.status === 'resolved') return 'resolved';
+  if (market?.status === 'canceled' || market?.status === 'cancelled') return 'cancelado';
+  if (market?.status === 'disputed') return 'disputa';
+  const endMs = market?.endTime ? new Date(market.endTime).getTime() : 0;
+  if (market?.status === 'active' && endMs > 0 && endMs < Date.now()) return 'por-resolver';
+  if (market?.status === 'active') return 'open';
+  return market?.status || 'pending';
+}
+
 function normalizeMarketOnlyRow(team, market) {
   const [first, second] = Array.isArray(market?.outcomes) ? market.outcomes : [];
   const startsAt = market?.startTime || market?.endTime || market?.createdAt || null;
@@ -64,7 +78,7 @@ function normalizeMarketOnlyRow(team, market) {
     homeName: second && first ? second : team.name,
     awayName: first || null,
     market,
-    state: market?.status === 'resolved' ? 'resolved' : 'open',
+    state: marketOnlyState(market),
   };
 }
 
@@ -94,6 +108,7 @@ async function loadMarkets(surface) {
 function TeamScheduleRow({ row, onOpen }) {
   const badge = stateLabel(row.state);
   const path = marketPath(row.market);
+  const finalScore = row.market?.finalScore || row.finalScore || null;
   return (
     <div style={{
       display: 'grid',
@@ -144,7 +159,7 @@ function TeamScheduleRow({ row, onOpen }) {
         }}>
           <span>{formatDateTime(row.startsAt)}</span>
           {row.venue && <span>{row.venue}</span>}
-          {row.market?.finalScore && <span style={{ color: 'var(--green)' }}>Final {row.market.finalScore}</span>}
+          {finalScore && <span style={{ color: 'var(--green)' }}>Final {finalScore}</span>}
         </div>
       </div>
       <button
@@ -179,6 +194,7 @@ function TeamProfileBody({ surface }) {
   const [schedule, setSchedule] = useState([]);
   const [markets, setMarkets] = useState([]);
   const [warning, setWarning] = useState(null);
+  const [view, setView] = useState('active-pending');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -207,6 +223,15 @@ function TeamProfileBody({ surface }) {
     return () => { cancelled = true; };
   }, [surface, team]);
 
+  useEffect(() => {
+    if (!team) return;
+    trackInterest({
+      ...teamInterestPayload(surface, team, 'view'),
+      objectType: 'team',
+      action: 'view',
+    });
+  }, [surface, team?.sport, team?.slug]);
+
   const rows = useMemo(() => {
     if (!team) return [];
     const merged = mergeScheduleWithMarkets(schedule, markets);
@@ -220,6 +245,16 @@ function TeamProfileBody({ surface }) {
       return aMs - bMs;
     });
   }, [schedule, markets, team]);
+
+  const visibleRows = useMemo(() => {
+    if (view === 'all') return rows;
+    return rows.filter(row => ACTIVE_PENDING_STATES.has(row.state));
+  }, [rows, view]);
+
+  const activePendingCount = useMemo(
+    () => rows.filter(row => ACTIVE_PENDING_STATES.has(row.state)).length,
+    [rows],
+  );
 
   if (!team) {
     return (
@@ -296,37 +331,53 @@ function TeamProfileBody({ surface }) {
       </section>
 
       <section style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+        display: 'flex',
+        flexWrap: 'wrap',
         gap: 10,
         marginBottom: 28,
       }}>
         {[
-          ['Abiertos', markets.filter(m => m.status === 'active').length],
-          ['Resueltos', markets.filter(m => m.status === 'resolved').length],
-          ['Pendientes', rows.filter(row => row.state === 'pending').length],
-        ].map(([label, value]) => (
-          <div key={label} style={{
-            padding: 16,
-            border: '1px solid var(--border)',
-            borderRadius: 8,
-            background: 'var(--surface1)',
-          }}>
-            <div style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              letterSpacing: '0.12em',
-              color: 'var(--text-muted)',
-              textTransform: 'uppercase',
-              marginBottom: 8,
-            }}>
-              {label}
-            </div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 34, color: 'var(--text-primary)' }}>
-              {value}
-            </div>
-          </div>
-        ))}
+          { key: 'active-pending', label: 'Activos y pendientes', value: activePendingCount },
+          { key: 'all', label: 'Todos', value: rows.length },
+        ].map(tab => {
+          const selected = view === tab.key;
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setView(tab.key)}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(0, 1fr) auto',
+                alignItems: 'center',
+                gap: 14,
+                minWidth: 220,
+                padding: '14px 16px',
+                border: `1px solid ${selected ? 'rgba(255,85,0,0.55)' : 'var(--border)'}`,
+                borderRadius: 8,
+                background: selected ? 'rgba(255,85,0,0.1)' : 'var(--surface1)',
+                color: selected ? 'var(--orange)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+              }}
+            >
+              <span style={{
+                minWidth: 0,
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}>
+                {tab.label}
+              </span>
+              <span style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--text-primary)' }}>
+                {tab.value}
+              </span>
+            </button>
+          );
+        })}
       </section>
 
       <section>
@@ -371,9 +422,14 @@ function TeamProfileBody({ surface }) {
             Calendario no disponible por ahora.
           </div>
         )}
-        {!loading && !error && rows.length > 0 && (
+        {!loading && !error && rows.length > 0 && visibleRows.length === 0 && (
+          <div style={{ padding: 28, border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+            No hay mercados activos o pendientes para este equipo.
+          </div>
+        )}
+        {!loading && !error && visibleRows.length > 0 && (
           <div style={{ display: 'grid', gap: 10 }}>
-            {rows.map(row => (
+            {visibleRows.map(row => (
               <TeamScheduleRow key={row.id} row={row} onOpen={navigate} />
             ))}
           </div>

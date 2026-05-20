@@ -27,6 +27,7 @@ import {
 } from '@app/lib/championsLeague.js';
 import { useT } from '@app/lib/i18n.js';
 import { findTeamByName, teamProfilePath } from '@app/lib/teamProfiles.js';
+import { marketInterestPayload, teamInterestPayload, trackInterest } from '@app/lib/interest.js';
 import PointsBuyModal from './PointsBuyModal.jsx';
 
 const STAKE_PREVIEW = 100; // MXNP reference stake for the card payout preview
@@ -130,12 +131,22 @@ export default function PointsMarketCard({ market, userPosition }) {
   const isChampionsFinalCard = isChampionsLeagueFinalWinnerMarket(market);
   const marketDetailPath = `/market?id=${encodeURIComponent(market.id)}`;
   const cardTargetPath = isChampionsFinalCard ? CHAMPIONS_LEAGUE_HUB_PATH : marketDetailPath;
-  const navigateToCardTarget = () => navigate(cardTargetPath);
+  const navigateToCardTarget = () => {
+    trackInterest({
+      ...marketInterestPayload('points', market, 'click'),
+      objectType: 'points_market',
+    });
+    navigate(cardTargetPath);
+  };
   const volume = market.volume ?? market.tradeVolume ?? 0;
 
   function navigateToTeam(e, team) {
     if (!team) return;
     e.stopPropagation();
+    trackInterest({
+      ...teamInterestPayload('points', team, 'click'),
+      objectType: 'team',
+    });
     navigate(teamProfilePath(team));
   }
 

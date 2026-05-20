@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Nav from '../components/Nav.jsx';
 import CategoryBar from '../components/CategoryBar.jsx';
 import Footer from '../components/Footer.jsx';
+import { teamInterestPayload, trackInterest } from '../lib/interest.js';
 import { TEAM_PROFILES, teamProfilePath } from '../lib/teamProfiles.js';
 
 const SPORT_FILTERS = [
@@ -13,22 +14,56 @@ const SPORT_FILTERS = [
   { key: 'nfl', label: 'NFL' },
 ];
 
+export const SOCCER_LEAGUE_FILTERS = [
+  { key: 'all', label: 'Todo fútbol' },
+  { key: 'uefa-cl', label: 'Champions League' },
+  { key: 'la-liga', label: 'La Liga' },
+  { key: 'premier-league', label: 'Premier League' },
+  { key: 'serie-a', label: 'Serie A' },
+  { key: 'bundesliga', label: 'Bundesliga' },
+  { key: 'copa-libertadores', label: 'Copa Libertadores' },
+  { key: 'uefa-europa-league', label: 'Europa League' },
+  { key: 'uefa-conference-league', label: 'Conference League' },
+  { key: 'liga-mx', label: 'Liga MX' },
+  { key: 'mls', label: 'MLS' },
+];
+
+const SOCCER_LEAGUE_BY_NAME = new Map([
+  ['bundesliga', 'bundesliga'],
+  ['la liga', 'la-liga'],
+  ['liga mx', 'liga-mx'],
+  ['ligue 1', 'ligue-1'],
+  ['mls', 'mls'],
+  ['premier league', 'premier-league'],
+  ['serie a', 'serie-a'],
+]);
+
 function normalize(value) {
   return String(value || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
+    .toLowerCase()
+    .trim();
 }
 
-function TeamSearchBody() {
+function soccerTeamInLeague(team, leagueKey) {
+  if (leagueKey === 'all') return true;
+  const domestic = SOCCER_LEAGUE_BY_NAME.get(normalize(team.league));
+  if (domestic === leagueKey) return true;
+  return Array.isArray(team.competitions) && team.competitions.includes(leagueKey);
+}
+
+function TeamSearchBody({ surface }) {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [sport, setSport] = useState('all');
+  const [soccerLeague, setSoccerLeague] = useState('all');
 
   const teams = useMemo(() => {
     const q = normalize(query.trim());
     return TEAM_PROFILES
       .filter(team => sport === 'all' || team.sport === sport)
+      .filter(team => sport !== 'soccer' || soccerTeamInLeague(team, soccerLeague))
       .filter(team => {
         if (!q) return true;
         const text = normalize([
@@ -44,7 +79,7 @@ function TeamSearchBody() {
         if ((a.league || '') !== (b.league || '')) return String(a.league || '').localeCompare(String(b.league || ''));
         return a.name.localeCompare(b.name);
       });
-  }, [query, sport]);
+  }, [query, sport, soccerLeague]);
 
   return (
     <main style={{
@@ -117,7 +152,10 @@ function TeamSearchBody() {
               <button
                 key={filter.key}
                 type="button"
-                onClick={() => setSport(filter.key)}
+                onClick={() => {
+                  setSport(filter.key);
+                  if (filter.key !== 'soccer') setSoccerLeague('all');
+                }}
                 style={{
                   border: `1px solid ${sport === filter.key ? 'rgba(255,85,0,0.55)' : 'var(--border)'}`,
                   borderRadius: 999,
@@ -135,6 +173,31 @@ function TeamSearchBody() {
               </button>
             ))}
           </div>
+          {sport === 'soccer' && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {SOCCER_LEAGUE_FILTERS.map(filter => (
+                <button
+                  key={filter.key}
+                  type="button"
+                  onClick={() => setSoccerLeague(filter.key)}
+                  style={{
+                    border: `1px solid ${soccerLeague === filter.key ? 'rgba(0,232,122,0.5)' : 'var(--border)'}`,
+                    borderRadius: 999,
+                    background: soccerLeague === filter.key ? 'rgba(0,232,122,0.1)' : 'var(--surface2)',
+                    color: soccerLeague === filter.key ? 'var(--green)' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    padding: '7px 11px',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 10,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -147,7 +210,13 @@ function TeamSearchBody() {
           <button
             key={`${team.sport}-${team.slug}`}
             type="button"
-            onClick={() => navigate(teamProfilePath(team))}
+            onClick={() => {
+              trackInterest({
+                ...teamInterestPayload(surface, team, 'click'),
+                objectType: 'team',
+              });
+              navigate(teamProfilePath(team));
+            }}
             style={{
               display: 'grid',
               gridTemplateColumns: 'auto minmax(0, 1fr)',
@@ -233,7 +302,7 @@ function TeamSearchBody() {
 }
 
 export default function TeamSearchPage({ surface = 'mvp', onOpenLogin }) {
-  const body = <TeamSearchBody />;
+  const body = <TeamSearchBody surface={surface} />;
   if (surface === 'points') return body;
   return (
     <>
