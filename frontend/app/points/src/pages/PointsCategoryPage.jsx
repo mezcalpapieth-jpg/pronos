@@ -70,6 +70,9 @@ const SPORT_TABS = [
 const SOCCER_LEAGUES = [
   { key: 'all',            tKey: 'points.league.all'           },
   { key: 'uefa-cl',        tKey: 'points.league.uefaCl', hubPath: '/c/deportes/uefa-champions-league' },
+  { key: 'copa-libertadores', tKey: 'points.league.libertadores' },
+  { key: 'uefa-europa-league', tKey: 'points.league.europa' },
+  { key: 'uefa-conference-league', tKey: 'points.league.conference' },
   { key: 'la-liga',        tKey: 'points.league.laLiga'        },
   { key: 'premier-league', tKey: 'points.league.premier'       },
   { key: 'serie-a',        tKey: 'points.league.serieA'        },

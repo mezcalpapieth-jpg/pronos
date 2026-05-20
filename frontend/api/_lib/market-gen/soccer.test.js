@@ -74,3 +74,24 @@ test('non-final soccer matches keep the regular three-way draw market', () => {
   assert.equal(spec.resolver_config.shape, 'draw3');
   assert.equal(_internal.matchToMarketSpecs(soccerMatch({ id: 101, stage: 'SEMI_FINALS' }), 'CL').length, 1);
 });
+
+test('continental soccer cups import every fixture with canonical league slugs', () => {
+  assert.deepEqual(_internal.COMPETITIONS_ALL_FIXTURES, ['CL', 'EL', 'UCL', 'CLI']);
+
+  assert.equal(_internal.matchToMarketSpec(soccerMatch(), 'EL').league, 'uefa-europa-league');
+  assert.equal(_internal.matchToMarketSpec(soccerMatch(), 'UCL').league, 'uefa-conference-league');
+  assert.equal(_internal.matchToMarketSpec(soccerMatch(), 'CLI').league, 'copa-libertadores');
+});
+
+test('one-legged continental finals generate binary winner markets', () => {
+  const europaFinal = _internal.matchToMarketSpec(soccerMatch(), 'EL');
+  const conferenceFinal = _internal.matchToMarketSpec(soccerMatch(), 'UCL');
+  const libertadoresFinal = _internal.matchToMarketSpec(soccerMatch(), 'CLI');
+
+  assert.deepEqual(europaFinal.outcomes, ['PSG', 'Arsenal']);
+  assert.deepEqual(conferenceFinal.outcomes, ['PSG', 'Arsenal']);
+  assert.deepEqual(libertadoresFinal.outcomes, ['PSG', 'Arsenal']);
+  assert.equal(europaFinal.resolver_config.shape, 'binary');
+  assert.equal(conferenceFinal.resolver_config.shape, 'binary');
+  assert.equal(libertadoresFinal.resolver_config.shape, 'binary');
+});

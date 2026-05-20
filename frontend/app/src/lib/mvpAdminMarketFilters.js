@@ -46,6 +46,9 @@ export const ADMIN_SPORT_FILTERS = [
 export const ADMIN_SOCCER_LEAGUES = [
   { key: 'all', label: 'Todas' },
   { key: 'uefa-cl', label: 'UEFA Champions' },
+  { key: 'copa-libertadores', label: 'Libertadores' },
+  { key: 'uefa-europa-league', label: 'Europa League' },
+  { key: 'uefa-conference-league', label: 'Conference League' },
   { key: 'la-liga', label: 'La Liga' },
   { key: 'premier-league', label: 'Premier' },
   { key: 'serie-a', label: 'Serie A' },

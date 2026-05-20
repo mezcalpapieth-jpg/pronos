@@ -60,6 +60,9 @@ const SPORT_TABS = [
 const SOCCER_LEAGUES = [
   { key: 'all',            label: 'Todas'          },
   { key: 'uefa-cl',        label: 'UEFA Champions League', hubPath: '/c/deportes/uefa-champions-league' },
+  { key: 'copa-libertadores', label: 'Copa Libertadores' },
+  { key: 'uefa-europa-league', label: 'UEFA Europa League' },
+  { key: 'uefa-conference-league', label: 'UEFA Conference League' },
   { key: 'la-liga',        label: 'La Liga'        },
   { key: 'premier-league', label: 'Premier League' },
   { key: 'serie-a',        label: 'Serie A'        },

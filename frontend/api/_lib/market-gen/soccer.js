@@ -2,7 +2,9 @@
  * Soccer market generator — football-data.org client.
  *
  * Returns an array of market specs for upcoming matches involving the
- * user-defined team whitelist, plus every UEFA Champions League fixture.
+ * user-defined team whitelist, plus every fixture for selected continental
+ * cups: UEFA Champions League, UEFA Europa League, UEFA Conference League,
+ * and Copa Libertadores.
  * Only fixtures within the next `horizonDays` (default 14) are returned,
  * and only those with status=SCHEDULED (so finished/live matches don't
  * show up as "pending to create").
@@ -12,6 +14,9 @@
  *
  * Free-tier competition codes we use:
  *   CL  — UEFA Champions League
+ *   EL  — UEFA Europa League
+ *   UCL — UEFA Conference League
+ *   CLI — Copa Libertadores
  *   PD  — La Liga (Real Madrid, Barcelona, Atlético)
  *   PL  — Premier League (Arsenal, Chelsea, Man City, Man United)
  *   SA  — Serie A (Juventus, AC Milan)
@@ -41,9 +46,9 @@ const TEAM_TLA_WHITELIST = new Set([
   'B04',   // Bayer Leverkusen
 ]);
 
-// Competition codes to pull. CL is always included (every fixture — user
-// wanted all UCL). PD/PL/SA/BL1 are scanned and filtered to the team whitelist.
-const COMPETITIONS_ALL_FIXTURES = ['CL'];
+// Competition codes to pull. Continental cups are always included; domestic
+// leagues are scanned and filtered to the team whitelist.
+const COMPETITIONS_ALL_FIXTURES = ['CL', 'EL', 'UCL', 'CLI'];
 const COMPETITIONS_TEAM_FILTER  = ['PD', 'PL', 'SA', 'BL1'];
 
 // Map football-data competition code → canonical league slug used by
@@ -51,11 +56,16 @@ const COMPETITIONS_TEAM_FILTER  = ['PD', 'PL', 'SA', 'BL1'];
 // PointsCategoryPage.jsx.
 const COMPETITION_TO_LEAGUE = {
   CL:  'uefa-cl',
+  EL:  'uefa-europa-league',
+  UCL: 'uefa-conference-league',
+  CLI: 'copa-libertadores',
   PD:  'la-liga',
   PL:  'premier-league',
   SA:  'serie-a',
   BL1: 'bundesliga',
 };
+
+const ONE_LEGGED_FINAL_COMPETITIONS = new Set(['CL', 'EL', 'UCL', 'CLI']);
 
 const API_BASE = 'https://api.football-data.org/v4';
 
@@ -70,6 +80,11 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function isChampionsLeagueFinal(match, competitionCode) {
   if (competitionCode !== 'CL') return false;
+  return isOneLeggedCupFinal(match, competitionCode);
+}
+
+function isOneLeggedCupFinal(match, competitionCode) {
+  if (!ONE_LEGGED_FINAL_COMPETITIONS.has(competitionCode)) return false;
   const stage = String(match?.stage || match?.group || '')
     .trim()
     .toUpperCase()
@@ -179,7 +194,7 @@ function matchToMarketSpec(match, competitionCode) {
   // benign-skips until football-data returns status=FINISHED, so the
   // end_time is just the hard close if the results feed stalls.
   const kickoffMs = new Date(kickoffUtc).getTime();
-  const winnerOnly = isChampionsLeagueFinal(match, competitionCode);
+  const winnerOnly = isOneLeggedCupFinal(match, competitionCode);
   const startTime = new Date(kickoffMs).toISOString();
   const endTime   = new Date(kickoffMs + (winnerOnly ? 4 : 2) * 3600_000).toISOString();
   const league    = COMPETITION_TO_LEAGUE[competitionCode] || null;
@@ -332,6 +347,7 @@ export const _internal = {
   COMPETITIONS_ALL_FIXTURES,
   COMPETITIONS_TEAM_FILTER,
   isChampionsLeagueFinal,
+  isOneLeggedCupFinal,
   matchToMarketSpec,
   matchToMarketSpecs,
   formatDate,
