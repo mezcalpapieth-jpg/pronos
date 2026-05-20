@@ -14,6 +14,7 @@ import {
   previewGain,
   priceForOutcome,
 } from '../lib/mvpMarketCard.js';
+import { findTeamByName, teamProfilePath } from '../lib/teamProfiles.js';
 
 export default function MarketCard({ market, onOpenLogin }) {
   const t = useT();
@@ -57,6 +58,12 @@ export default function MarketCard({ market, onOpenLogin }) {
     }
     if (isResolved || isClosed || market.status !== 'active') return;
     setDrawerIndex(index);
+  }
+
+  function navigateToTeam(event, team) {
+    if (!team) return;
+    event.stopPropagation();
+    navigate(teamProfilePath(team));
   }
 
   return (
@@ -170,6 +177,7 @@ export default function MarketCard({ market, onOpenLogin }) {
             const accent = accentForOutcome(index, outcomes.length);
             const logo = outcomeImages?.[index] || null;
             const countryLabel = outcomeCountryLabels?.[index] || null;
+            const teamProfile = findTeamByName(market.sport, label);
 
             return (
               <div
@@ -208,7 +216,18 @@ export default function MarketCard({ market, onOpenLogin }) {
                 ) : hasAnyLogo ? (
                   <span style={{ width: 26, height: 26, flexShrink: 0 }} aria-hidden="true" />
                 ) : null}
-                <span style={{
+                <span
+                  role={teamProfile ? 'link' : undefined}
+                  tabIndex={teamProfile ? 0 : undefined}
+                  onClick={(event) => navigateToTeam(event, teamProfile)}
+                  onKeyDown={(event) => {
+                    if (!teamProfile) return;
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      navigateToTeam(event, teamProfile);
+                    }
+                  }}
+                  style={{
                   flex: 1,
                   minWidth: 0,
                   fontFamily: 'var(--font-body)',
@@ -218,6 +237,7 @@ export default function MarketCard({ market, onOpenLogin }) {
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
+                  cursor: teamProfile ? 'pointer' : 'inherit',
                 }}>
                   {isWinner && <span style={{ marginRight: 6 }}>🏆</span>}
                   {label}

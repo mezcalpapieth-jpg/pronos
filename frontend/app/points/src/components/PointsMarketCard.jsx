@@ -26,6 +26,7 @@ import {
   isChampionsLeagueFinalWinnerMarket,
 } from '@app/lib/championsLeague.js';
 import { useT } from '@app/lib/i18n.js';
+import { findTeamByName, teamProfilePath } from '@app/lib/teamProfiles.js';
 import PointsBuyModal from './PointsBuyModal.jsx';
 
 const STAKE_PREVIEW = 100; // MXNP reference stake for the card payout preview
@@ -131,6 +132,12 @@ export default function PointsMarketCard({ market, userPosition }) {
   const cardTargetPath = isChampionsFinalCard ? CHAMPIONS_LEAGUE_HUB_PATH : marketDetailPath;
   const navigateToCardTarget = () => navigate(cardTargetPath);
   const volume = market.volume ?? market.tradeVolume ?? 0;
+
+  function navigateToTeam(e, team) {
+    if (!team) return;
+    e.stopPropagation();
+    navigate(teamProfilePath(team));
+  }
 
   // Card palette is restricted to three hue families — green, yellow,
   // red — with three shades each. Ordered so adjacent indices always
@@ -313,6 +320,7 @@ export default function PointsMarketCard({ market, userPosition }) {
             const gain = previewGain(livePrice);
             const logo = outcomeImages?.[i] || null;
             const countryLabel = outcomeCountryLabels?.[i] || null;
+            const teamProfile = findTeamByName(market.sport, label);
             const rowOnClick = (e) => {
               // Stop the click from reaching the card's outer
               // navigate handler so we can open the drawer in place.
@@ -360,7 +368,18 @@ export default function PointsMarketCard({ market, userPosition }) {
                 ) : hasAnyLogo ? (
                   <span style={{ width: 26, height: 26, flexShrink: 0 }} aria-hidden="true" />
                 ) : null}
-                <span style={{
+                <span
+                  role={teamProfile ? 'link' : undefined}
+                  tabIndex={teamProfile ? 0 : undefined}
+                  onClick={(e) => navigateToTeam(e, teamProfile)}
+                  onKeyDown={(e) => {
+                    if (!teamProfile) return;
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      navigateToTeam(e, teamProfile);
+                    }
+                  }}
+                  style={{
                   flex: 1,
                   minWidth: 0,
                   fontFamily: 'var(--font-body)',
@@ -370,6 +389,7 @@ export default function PointsMarketCard({ market, userPosition }) {
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
+                  cursor: teamProfile ? 'pointer' : 'inherit',
                 }}>
                   {label}
                 </span>

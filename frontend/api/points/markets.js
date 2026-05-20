@@ -233,10 +233,11 @@ export default async function handler(req, res) {
       const ammMode = r.amm_mode || 'unified';
       const seriesMeta = publicSeriesMetaFromRow(r);
       const sourceData = parseJsonb(r.pending_source_data, {});
+      const resolverConfig = parseJsonb(r.resolver_config, null);
       const tags = deriveMarketTags({
         ...r,
         source_data: sourceData,
-        resolver_config: parseJsonb(r.resolver_config, {}),
+        resolver_config: resolverConfig || {},
         category_tags: parseJsonb(r.category_tags, []),
         geo_tags: parseJsonb(r.geo_tags, []),
         topic_tags: parseJsonb(r.topic_tags, []),
@@ -286,6 +287,9 @@ export default async function handler(req, res) {
           finalScore: r.final_score || null,
           seriesMeta,
           createdAt: r.created_at,
+          source: r.source || null,
+          sourceEventId: r.source_event_id || null,
+          resolverConfig,
           sport: r.sport || null,
           league: r.league || null,
           categoryTags: tags.categoryTags,
@@ -316,7 +320,7 @@ export default async function handler(req, res) {
       //   (b) duration > 14 days is also excluded as a backstop in
       //       case any other generator ships a long-window market
       //       with start_time set.
-      const cfg = parseJsonb(r.resolver_config, null);
+      const cfg = resolverConfig;
       const isOpenEnded = cfg?.source === 'next-opponent';
       const startMs = r.start_time ? new Date(r.start_time).getTime() : 0;
       const endMs   = r.end_time   ? new Date(r.end_time).getTime()   : 0;
@@ -357,6 +361,9 @@ export default async function handler(req, res) {
         finalScore: r.final_score || null,
         seriesMeta,
         createdAt: r.created_at,
+        source: r.source || null,
+        sourceEventId: r.source_event_id || null,
+        resolverConfig,
         sport: r.sport || null,
         league: r.league || null,
         categoryTags: tags.categoryTags,
