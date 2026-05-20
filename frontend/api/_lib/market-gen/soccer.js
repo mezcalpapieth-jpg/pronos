@@ -36,7 +36,9 @@ const TEAM_TLA_WHITELIST = new Set([
   'FCB',   // Barcelona
   'ATL',   // Atlético Madrid
   'ARS',   // Arsenal
+  'AVL',   // Aston Villa
   'CHE',   // Chelsea
+  'CRY',   // Crystal Palace
   'MCI',   // Manchester City
   'MUN',   // Manchester United
   'JUV',   // Juventus
@@ -44,6 +46,8 @@ const TEAM_TLA_WHITELIST = new Set([
   'BAY',   // Bayern Munich
   'BVB',   // Borussia Dortmund
   'B04',   // Bayer Leverkusen
+  'SCF',   // Freiburg
+  'RAY',   // Rayo Vallecano
 ]);
 
 // Competition codes to pull. Continental cups are always included; domestic
@@ -69,6 +73,55 @@ const ONE_LEGGED_FINAL_COMPETITIONS = new Set(['CL', 'EL', 'UCL', 'CLI']);
 
 const API_BASE = 'https://api.football-data.org/v4';
 
+const UEFA_FINAL_FALLBACKS = {
+  EL: {
+    id: 'uefa-2026-europa-final',
+    utcDate: '2026-05-20T19:00:00.000Z',
+    stage: 'FINAL',
+    matchday: 'final',
+    competition: { name: 'UEFA Europa League' },
+    source: 'uefa.com',
+    manualResolution: true,
+    homeTeam: {
+      id: 'freiburg',
+      name: 'SC Freiburg',
+      shortName: 'Freiburg',
+      tla: 'SCF',
+      crest: 'https://a.espncdn.com/i/teamlogos/soccer/500/126.png',
+    },
+    awayTeam: {
+      id: 'aston-villa',
+      name: 'Aston Villa FC',
+      shortName: 'Aston Villa',
+      tla: 'AVL',
+      crest: 'https://a.espncdn.com/i/teamlogos/soccer/500/362.png',
+    },
+  },
+  UCL: {
+    id: 'uefa-2026-conference-final',
+    utcDate: '2026-05-27T19:00:00.000Z',
+    stage: 'FINAL',
+    matchday: 'final',
+    competition: { name: 'UEFA Conference League' },
+    source: 'uefa.com',
+    manualResolution: true,
+    homeTeam: {
+      id: 'crystal-palace',
+      name: 'Crystal Palace FC',
+      shortName: 'Crystal Palace',
+      tla: 'CRY',
+      crest: 'https://a.espncdn.com/i/teamlogos/soccer/500/384.png',
+    },
+    awayTeam: {
+      id: 'rayo-vallecano',
+      name: 'Rayo Vallecano de Madrid',
+      shortName: 'Rayo Vallecano',
+      tla: 'RAY',
+      crest: 'https://a.espncdn.com/i/teamlogos/soccer/500/101.png',
+    },
+  },
+};
+
 function formatDate(d) {
   // football-data.org wants YYYY-MM-DD. Use UTC consistently so daylight
   // saving and the user's local tz don't shift the range boundary.
@@ -77,6 +130,17 @@ function formatDate(d) {
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function dateInRange(dateValue, dateFrom, dateTo) {
+  const date = formatDate(new Date(dateValue));
+  return date >= dateFrom && date <= dateTo;
+}
+
+function fallbackFinalMatchesForCompetition(competitionCode, dateFrom, dateTo) {
+  const fallback = UEFA_FINAL_FALLBACKS[competitionCode];
+  if (!fallback || !dateInRange(fallback.utcDate, dateFrom, dateTo)) return [];
+  return [{ ...fallback }];
+}
 
 function isChampionsLeagueFinal(match, competitionCode) {
   if (competitionCode !== 'CL') return false;
@@ -195,6 +259,7 @@ function matchToMarketSpec(match, competitionCode) {
   // end_time is just the hard close if the results feed stalls.
   const kickoffMs = new Date(kickoffUtc).getTime();
   const winnerOnly = isOneLeggedCupFinal(match, competitionCode);
+  const manualResolution = match?.manualResolution === true;
   const startTime = new Date(kickoffMs).toISOString();
   const endTime   = new Date(kickoffMs + (winnerOnly ? 4 : 2) * 3600_000).toISOString();
   const league    = COMPETITION_TO_LEAGUE[competitionCode] || null;
@@ -206,7 +271,7 @@ function matchToMarketSpec(match, competitionCode) {
   const awayCrest = match?.awayTeam?.crest || null;
 
   return {
-    source: 'football-data.org',
+    source: match?.source || 'football-data.org',
     source_event_id: String(match.id),
     sport: 'soccer',
     league,
@@ -221,8 +286,8 @@ function matchToMarketSpec(match, competitionCode) {
     start_time: startTime,
     end_time: endTime,
     amm_mode: 'unified',
-    resolver_type: 'sports_api',      // auto via /v4/matches/{id} → score.winner
-    resolver_config: {
+    resolver_type: manualResolution ? null : 'sports_api',      // auto via /v4/matches/{id} → score.winner
+    resolver_config: manualResolution ? null : {
       source: 'football-data',
       matchId: match.id,
       shape: winnerOnly ? 'binary' : 'draw3',
@@ -233,6 +298,7 @@ function matchToMarketSpec(match, competitionCode) {
       competitionName: match?.competition?.name,
       matchday: match?.matchday,
       kickoffUtc,
+      manualResolution,
       home: { name: homeName, tla: match?.homeTeam?.tla, id: match?.homeTeam?.id },
       away: { name: awayName, tla: match?.awayTeam?.tla, id: match?.awayTeam?.id },
       knockoutFinal: winnerOnly,
@@ -317,7 +383,10 @@ export async function generateSoccerMarkets({ horizonDays = 14 } = {}) {
 
   // UCL — every fixture in-window
   for (const code of COMPETITIONS_ALL_FIXTURES) {
-    const matches = await fetchCompetitionMatches(apiKey, code, dateFrom, dateTo);
+    let matches = await fetchCompetitionMatches(apiKey, code, dateFrom, dateTo);
+    if (matches.length === 0) {
+      matches = fallbackFinalMatchesForCompetition(code, dateFrom, dateTo);
+    }
     for (const m of matches) {
       if (seenMatchIds.has(m.id)) continue;
       seenMatchIds.add(m.id);
@@ -348,6 +417,7 @@ export const _internal = {
   COMPETITIONS_TEAM_FILTER,
   isChampionsLeagueFinal,
   isOneLeggedCupFinal,
+  fallbackFinalMatchesForCompetition,
   matchToMarketSpec,
   matchToMarketSpecs,
   formatDate,

@@ -28,6 +28,7 @@ import AmmDepthPanel from '../components/AmmDepthPanel.jsx';
 import CategoryBar from '../components/CategoryBar.jsx';
 import Sparkline from '../components/Sparkline.jsx';
 import ShareButton from '../components/ShareButton.jsx';
+import TeamMarketStrip from '../components/TeamMarketStrip.jsx';
 import { usePointsAuth } from '../lib/pointsAuth.js';
 import { useIsMobile } from '../lib/useIsMobile.js';
 import {
@@ -500,6 +501,8 @@ export default function MarketDetail({ onOpenLogin }) {
             {seriesSubtitle}
           </div>
         )}
+
+        <TeamMarketStrip market={market} outcomeImages={outcomeImages} />
 
         {/* Final-score strip */}
         {isResolved && market.finalScore && (

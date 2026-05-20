@@ -95,3 +95,31 @@ test('one-legged continental finals generate binary winner markets', () => {
   assert.equal(conferenceFinal.resolver_config.shape, 'binary');
   assert.equal(libertadoresFinal.resolver_config.shape, 'binary');
 });
+
+test('UEFA final fallbacks fill Europa and Conference when upstream is empty', () => {
+  const europa = _internal.fallbackFinalMatchesForCompetition('EL', '2026-05-20', '2026-05-21');
+  const conference = _internal.fallbackFinalMatchesForCompetition('UCL', '2026-05-20', '2026-05-28');
+
+  const europaSpec = _internal.matchToMarketSpec(europa[0], 'EL');
+  const conferenceSpec = _internal.matchToMarketSpec(conference[0], 'UCL');
+
+  assert.equal(europaSpec.question, 'Freiburg vs Aston Villa');
+  assert.deepEqual(europaSpec.outcomes, ['Freiburg', 'Aston Villa']);
+  assert.equal(europaSpec.source, 'uefa.com');
+  assert.equal(europaSpec.resolver_type, null);
+  assert.equal(europaSpec.resolver_config, null);
+  assert.equal(europaSpec.source_event_id, 'uefa-2026-europa-final');
+
+  assert.equal(conferenceSpec.question, 'Crystal Palace vs Rayo Vallecano');
+  assert.deepEqual(conferenceSpec.outcomes, ['Crystal Palace', 'Rayo Vallecano']);
+  assert.equal(conferenceSpec.source, 'uefa.com');
+  assert.equal(conferenceSpec.resolver_type, null);
+  assert.equal(conferenceSpec.resolver_config, null);
+  assert.equal(conferenceSpec.source_event_id, 'uefa-2026-conference-final');
+});
+
+test('UEFA final fallbacks only apply inside the generation window', () => {
+  assert.deepEqual(_internal.fallbackFinalMatchesForCompetition('EL', '2026-05-21', '2026-05-28'), []);
+  assert.deepEqual(_internal.fallbackFinalMatchesForCompetition('UCL', '2026-05-20', '2026-05-26'), []);
+  assert.deepEqual(_internal.fallbackFinalMatchesForCompetition('CL', '2026-05-20', '2026-05-28'), []);
+});

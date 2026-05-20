@@ -60,13 +60,13 @@ const SPORT_TABS = [
 const SOCCER_LEAGUES = [
   { key: 'all',            label: 'Todas'          },
   { key: 'uefa-cl',        label: 'UEFA Champions League', hubPath: '/c/deportes/uefa-champions-league' },
-  { key: 'copa-libertadores', label: 'Copa Libertadores' },
   { key: 'uefa-europa-league', label: 'UEFA Europa League' },
   { key: 'uefa-conference-league', label: 'UEFA Conference League' },
   { key: 'la-liga',        label: 'La Liga'        },
   { key: 'premier-league', label: 'Premier League' },
   { key: 'serie-a',        label: 'Serie A'        },
   { key: 'bundesliga',     label: 'Bundesliga'     },
+  { key: 'copa-libertadores', label: 'Copa Libertadores' },
   { key: 'liga-mx',        label: 'Liga MX'        },
   { key: 'mls',            label: 'MLS'            },
 ];
@@ -355,6 +355,14 @@ export default function CategoryPage({ onOpenLogin }) {
                 {s.label}
               </button>
             ))}
+            <button
+              type="button"
+              onClick={() => navigate('/teams')}
+              className="filter-btn"
+              style={{ fontSize: 11, color: 'var(--orange)', borderColor: 'rgba(255,85,0,0.35)' }}
+            >
+              Equipos
+            </button>
           </div>
         )}
 

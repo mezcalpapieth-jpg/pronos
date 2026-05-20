@@ -26,3 +26,10 @@ test('team profiles expose examples across supported sports', () => {
   assert.equal(findTeamProfile('baseball', 'los-angeles-dodgers')?.name, 'Los Angeles Dodgers');
   assert.equal(findTeamProfile('nfl', 'kansas-city-chiefs')?.name, 'Kansas City Chiefs');
 });
+
+test('team profiles include Europa and Conference League finalists', () => {
+  assert.equal(findTeamByName('soccer', 'Freiburg')?.slug, 'freiburg');
+  assert.equal(findTeamByName('soccer', 'Aston Villa FC')?.slug, 'aston-villa');
+  assert.equal(findTeamByName('soccer', 'Crystal Palace')?.slug, 'crystal-palace');
+  assert.equal(findTeamByName('soccer', 'Rayo Vallecano de Madrid')?.slug, 'rayo-vallecano');
+});

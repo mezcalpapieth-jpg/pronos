@@ -70,13 +70,13 @@ const SPORT_TABS = [
 const SOCCER_LEAGUES = [
   { key: 'all',            tKey: 'points.league.all'           },
   { key: 'uefa-cl',        tKey: 'points.league.uefaCl', hubPath: '/c/deportes/uefa-champions-league' },
-  { key: 'copa-libertadores', tKey: 'points.league.libertadores' },
   { key: 'uefa-europa-league', tKey: 'points.league.europa' },
   { key: 'uefa-conference-league', tKey: 'points.league.conference' },
   { key: 'la-liga',        tKey: 'points.league.laLiga'        },
   { key: 'premier-league', tKey: 'points.league.premier'       },
   { key: 'serie-a',        tKey: 'points.league.serieA'        },
   { key: 'bundesliga',     tKey: 'points.league.bundesliga'    },
+  { key: 'copa-libertadores', tKey: 'points.league.libertadores' },
   { key: 'liga-mx',        tKey: 'points.league.ligaMx'        },
   { key: 'mls',            tKey: 'points.league.mls'           },
 ];
@@ -474,6 +474,14 @@ export default function PointsCategoryPage() {
               {t(s.tKey)}
             </button>
           ))}
+          <button
+            type="button"
+            className="filter-btn"
+            onClick={() => navigate('/teams')}
+            style={{ color: 'var(--orange)', borderColor: 'rgba(255,85,0,0.35)' }}
+          >
+            Equipos
+          </button>
         </div>
       )}
 

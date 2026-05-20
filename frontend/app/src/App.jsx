@@ -32,6 +32,7 @@ const WorldCupPage = lazy(() => import('./pages/WorldCupPage.jsx'));
 const ChampionsLeaguePage = lazy(() => import('./pages/ChampionsLeaguePage.jsx'));
 const CategoryPage = lazy(() => import('./pages/CategoryPage.jsx'));
 const NewsPage = lazy(() => import('./pages/NewsPage.jsx'));
+const TeamSearchPage = lazy(() => import('./pages/TeamSearchPage.jsx'));
 const TeamProfilePage = lazy(() => import('./pages/TeamProfilePage.jsx'));
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy.jsx'));
 const TermsOfService = lazy(() => import('./pages/TermsOfService.jsx'));
@@ -145,6 +146,10 @@ export default function App() {
           <Route
             path="/u/:username"
             element={<MvpUserProfile onOpenLogin={() => setLoginOpen(true)} />}
+          />
+          <Route
+            path="/teams"
+            element={<TeamSearchPage surface="mvp" onOpenLogin={() => setLoginOpen(true)} />}
           />
           <Route
             path="/teams/:sport/:teamSlug"

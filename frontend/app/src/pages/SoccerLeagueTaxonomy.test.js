@@ -16,6 +16,17 @@ test('points and MVP soccer sidebars expose the new continental leagues', () => 
   }
 });
 
+test('Copa Libertadores sits below Bundesliga in soccer league sidebars', () => {
+  for (const source of [mvpCategory, pointsCategory, mvpAdminFilters, pointsAdminFilters]) {
+    const bundesliga = source.indexOf("key: 'bundesliga'");
+    const libertadores = source.indexOf("key: 'copa-libertadores'");
+
+    assert.ok(bundesliga > -1, 'Bundesliga filter exists');
+    assert.ok(libertadores > -1, 'Libertadores filter exists');
+    assert.ok(libertadores > bundesliga, 'Libertadores appears after Bundesliga');
+  }
+});
+
 test('admin soccer league filters and creation options expose the new continental leagues', () => {
   for (const source of [mvpAdminFilters, pointsAdminFilters]) {
     assert.match(source, /key:\s*'copa-libertadores'/);

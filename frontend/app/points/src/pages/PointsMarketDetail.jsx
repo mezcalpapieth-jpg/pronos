@@ -24,6 +24,7 @@ import {
 } from '@app/lib/championsLeague.js';
 import Sparkline from '@app/components/Sparkline.jsx';
 import ShareButton from '@app/components/ShareButton.jsx';
+import TeamMarketStrip from '@app/components/TeamMarketStrip.jsx';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
 import PointsBuyModal from '../components/PointsBuyModal.jsx';
 import MarketComments from '../components/MarketComments.jsx';
@@ -978,6 +979,8 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 {seriesSubtitle}
               </div>
             )}
+
+            <TeamMarketStrip market={market} outcomeImages={market.outcomeImages} />
 
             {isCanceled && (
               <div style={{

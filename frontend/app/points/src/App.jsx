@@ -31,6 +31,7 @@ const PointsChampionsLeaguePage = lazy(() => import('./pages/PointsChampionsLeag
 const NewsPage = lazy(() => import('@app/pages/NewsPage.jsx'));
 const PrivacyPolicy = lazy(() => import('@app/pages/PrivacyPolicy.jsx'));
 const TermsOfService = lazy(() => import('@app/pages/TermsOfService.jsx'));
+const TeamSearchPage = lazy(() => import('@app/pages/TeamSearchPage.jsx'));
 const TeamProfilePage = lazy(() => import('@app/pages/TeamProfilePage.jsx'));
 const PointsPortfolio = lazy(() => import('./pages/PointsPortfolio.jsx'));
 const PointsEarn = lazy(() => import('./pages/PointsEarn.jsx'));
@@ -132,6 +133,7 @@ function Shell({ onOpenLogin, isAdmin }) {
   const showCategoryBar = isHome
     || path.startsWith('/c/')
     || path.startsWith('/market')
+    || path === '/teams'
     || path.startsWith('/teams/');
 
   return (
@@ -158,6 +160,7 @@ function Shell({ onOpenLogin, isAdmin }) {
           <Route path="/admin" element={<PointsAdmin isAdmin={isAdmin} />} />
           <Route path="/r/:username" element={<PointsReferralLanding onOpenLogin={onOpenLogin} />} />
           <Route path="/u/:username" element={<PointsUserProfile />} />
+          <Route path="/teams" element={<TeamSearchPage surface="points" />} />
           <Route path="/teams/:sport/:teamSlug" element={<TeamProfilePage surface="points" />} />
           <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/terms"   element={<TermsOfService />} />
