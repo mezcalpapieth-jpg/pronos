@@ -12,6 +12,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
+import { buildSellPreview } from '../lib/sellPreview.js';
 import {
   fetchPositions,
   fetchHistory,
@@ -29,6 +30,211 @@ function fmt(n) {
   const v = Number(n) || 0;
   const sign = v >= 0 ? '' : '-';
   return `${sign}${Math.abs(v).toFixed(2)}`;
+}
+
+function signedFmt(n) {
+  const v = Number(n) || 0;
+  return `${v >= 0 ? '+' : '-'}${Math.abs(v).toFixed(2)}`;
+}
+
+function SellPreviewModal({ state, onClose, onConfirm }) {
+  if (!state) return null;
+  const { position, preview, loading, error, submitting } = state;
+  const salePositive = Number(preview?.salePnl || 0) >= 0;
+  const impactNegative = Number(preview?.slippageMxnp || 0) < 0;
+
+  return (
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !submitting) onClose();
+      }}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 9999,
+        background: 'rgba(0,0,0,0.68)',
+        backdropFilter: 'blur(4px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 18,
+      }}
+    >
+      <div style={{
+        width: 'min(520px, 100%)',
+        background: 'var(--surface1)',
+        border: '1px solid var(--border)',
+        borderRadius: 16,
+        padding: '26px 24px',
+        boxShadow: '0 24px 70px rgba(0,0,0,0.45)',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', marginBottom: 18 }}>
+          <div>
+            <div style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              letterSpacing: '0.14em',
+              color: 'var(--orange)',
+              textTransform: 'uppercase',
+              marginBottom: 6,
+            }}>
+              Venta anticipada
+            </div>
+            <h2 style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 24,
+              lineHeight: 1.1,
+              margin: 0,
+              color: 'var(--text-primary)',
+            }}>
+              {position?.outcomeLabel}
+            </h2>
+          </div>
+          <button
+            onClick={onClose}
+            disabled={submitting}
+            aria-label="Cerrar"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-muted)',
+              fontSize: 22,
+              cursor: submitting ? 'wait' : 'pointer',
+            }}
+          >
+            x
+          </button>
+        </div>
+
+        <p style={{ color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.45, margin: '0 0 18px' }}>
+          {position?.question}
+        </p>
+
+        {loading ? (
+          <div style={{
+            padding: '28px 0',
+            textAlign: 'center',
+            fontFamily: 'var(--font-mono)',
+            color: 'var(--text-muted)',
+            fontSize: 12,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+          }}>
+            Calculando salida real...
+          </div>
+        ) : error ? (
+          <div style={{
+            background: 'rgba(239,68,68,0.08)',
+            border: '1px solid rgba(239,68,68,0.35)',
+            color: 'var(--red, #ef4444)',
+            borderRadius: 12,
+            padding: '14px 16px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 12,
+            lineHeight: 1.5,
+          }}>
+            No se pudo calcular la venta: {error}
+          </div>
+        ) : (
+          <>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+              gap: 10,
+              marginBottom: 14,
+            }}>
+              {[
+                ['VALOR MARCADO', `${fmt(preview.markValue)} MXNP`, 'var(--text-primary)'],
+                ['SALIDA REAL', `${fmt(preview.collateralOut)} MXNP`, 'var(--green)'],
+                ['PNL MARCADO', `${signedFmt(preview.markPnl)} MXNP`, preview.markPnl >= 0 ? 'var(--green)' : 'var(--red, #ef4444)'],
+                ['PNL AL VENDER', `${signedFmt(preview.salePnl)} MXNP`, salePositive ? 'var(--green)' : 'var(--red, #ef4444)'],
+              ].map(([label, value, color]) => (
+                <div key={label} style={{
+                  background: 'var(--surface2)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 12,
+                  padding: '13px 14px',
+                }}>
+                  <div style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 9,
+                    color: 'var(--text-muted)',
+                    letterSpacing: '0.1em',
+                    textTransform: 'uppercase',
+                    marginBottom: 6,
+                  }}>
+                    {label}
+                  </div>
+                  <div style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 16,
+                    color,
+                    fontWeight: 800,
+                  }}>
+                    {value}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{
+              background: 'rgba(255,91,26,0.07)',
+              border: '1px solid rgba(255,91,26,0.28)',
+              borderRadius: 12,
+              padding: '13px 14px',
+              marginBottom: 18,
+            }}>
+              <div style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                color: 'var(--orange)',
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                marginBottom: 7,
+              }}>
+                IMPACTO POR LIQUIDEZ
+              </div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                La venta mueve el mercado de {fmt(preview.priceBeforePct)}% a {fmt(preview.priceAfterPct)}%.
+                {' '}Recibes {signedFmt(preview.slippageMxnp)} MXNP contra el valor marcado
+                {' '}({signedFmt(preview.slippagePct)}%).
+              </div>
+              {impactNegative && (
+                <div style={{
+                  marginTop: 8,
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  color: 'var(--text-muted)',
+                  lineHeight: 1.5,
+                }}>
+                  El PnL real usa la salida del AMM, no el valor marcado antes de vender.
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button
+            className="btn-ghost"
+            onClick={onClose}
+            disabled={submitting}
+            style={{ padding: '10px 14px', fontSize: 12 }}
+          >
+            Cancelar
+          </button>
+          <button
+            className="btn-primary"
+            onClick={onConfirm}
+            disabled={!preview || loading || error || submitting}
+            style={{ padding: '10px 16px', fontSize: 12, cursor: submitting ? 'wait' : 'pointer' }}
+          >
+            {submitting ? 'Vendiendo...' : 'Confirmar venta'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── Position card ───────────────────────────────────────────────────────────
@@ -511,6 +717,7 @@ export default function PointsPortfolio() {
   const [historySummary, setHistorySummary] = useState(null);
   const [loading, setLoading] = useState(false);
   const [actionState, setActionState] = useState({ id: null, type: null });
+  const [sellPreview, setSellPreview] = useState(null);
   const [msg, setMsg] = useState(null);
 
   useEffect(() => {
@@ -543,19 +750,52 @@ export default function PointsPortfolio() {
   async function handleSell(pos) {
     setMsg(null);
     setActionState({ id: `${pos.marketId}-${pos.outcomeIndex}`, type: 'selling' });
+    setSellPreview({ position: pos, loading: true, error: null, preview: null, quote: null, submitting: false });
     try {
-      // Sell the full position. UX-wise, a more advanced flow would let users
-      // pick an amount — for v1 a single "vender anticipado" button is enough.
-      await executeSell({
+      const quote = await quoteSell({
         marketId: pos.marketId,
         outcomeIndex: pos.outcomeIndex,
         shares: pos.shares,
       });
-      setMsg({ type: 'success', text: `Posición retirada (+${fmt(pos.currentValue)} MXNP estimado)` });
+      const preview = buildSellPreview(pos, quote);
+      setSellPreview({ position: pos, quote, preview, loading: false, error: null, submitting: false });
+    } catch (e) {
+      setSellPreview({ position: pos, loading: false, error: e.code || e.message || 'quote_failed', preview: null, quote: null, submitting: false });
+    } finally {
+      setActionState({ id: null, type: null });
+    }
+  }
+
+  async function confirmSellPreview() {
+    if (!sellPreview?.position || !sellPreview?.preview || sellPreview.submitting) return;
+    const pos = sellPreview.position;
+    const preview = sellPreview.preview;
+    const key = `${pos.marketId}-${pos.outcomeIndex}`;
+    setMsg(null);
+    setActionState({ id: key, type: 'selling' });
+    setSellPreview(prev => prev ? { ...prev, submitting: true, error: null } : prev);
+    try {
+      await executeSell({
+        marketId: pos.marketId,
+        outcomeIndex: pos.outcomeIndex,
+        shares: pos.shares,
+        minCollateralOut: preview.minCollateralOut,
+      });
+      setMsg({
+        type: 'success',
+        text: `Posición retirada: ${fmt(preview.collateralOut)} MXNP (${signedFmt(preview.salePnl)} PnL)`,
+      });
+      setSellPreview(null);
       await refresh();
       await load();
     } catch (e) {
-      setMsg({ type: 'error', text: `No se pudo vender: ${e.code || e.message}` });
+      setSellPreview(prev => prev ? {
+        ...prev,
+        submitting: false,
+        error: e.code === 'price_moved'
+          ? 'El precio se movió. Cierra y vuelve a cotizar.'
+          : (e.code || e.message || 'sell_failed'),
+      } : prev);
     } finally {
       setActionState({ id: null, type: null });
     }
@@ -602,6 +842,7 @@ export default function PointsPortfolio() {
   const balance = Number(user?.balance || 0);
 
   return (
+    <>
     <main style={{ maxWidth: 1160, margin: '0 auto', padding: 'clamp(24px, 5vw, 60px) clamp(14px, 4vw, 24px)' }}>
       <div style={{ marginBottom: 24 }}>
         <h1 style={{
@@ -738,6 +979,14 @@ export default function PointsPortfolio() {
         </aside>
       </div>
     </main>
+    <SellPreviewModal
+      state={sellPreview}
+      onClose={() => {
+        if (!sellPreview?.submitting) setSellPreview(null);
+      }}
+      onConfirm={confirmSellPreview}
+    />
+    </>
   );
 }
 

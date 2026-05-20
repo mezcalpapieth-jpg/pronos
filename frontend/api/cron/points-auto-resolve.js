@@ -35,6 +35,7 @@ import { fetchMaxTempC, bucketIndexFor } from '../_lib/weather.js';
 import { readAppleMxTopArtist } from '../_lib/charts.js';
 import { readYouTubeTopMxChannel } from '../_lib/youtube.js';
 import { readEspnEvent, readFootballDataMatch, readJolpicaF1Result, readJolpicaF1Standings, readEspnPgaWinner, readEspnLivWinner, readLivTeamWinner, readEspnAtpTournamentWinner, readEspnMmaWinner, readOddsApiBoxingWinner, readNextOpponent } from '../_lib/sports-results.js';
+import { buildEspnLiveScoreConfig } from '../_lib/espn-live-score.js';
 import { NEXT_OPPONENT_RECHECK_INTERVAL_HOURS, findParallelWinnerIndex } from '../_lib/sports-resolver-policy.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -133,36 +134,61 @@ export async function runAutoResolve({ dry = false } = {}) {
     // below (weather_api). For price resolvers the market is already
     // unified binary so there's nothing to cascade.
     const candidates = await readSql`
-      SELECT id, question, end_time, resolver_type, resolver_config,
-             outcomes, amm_mode
-      FROM points_markets
-      WHERE status = 'active'
-        AND resolver_type IN ('chainlink_price', 'api_price', 'weather_api', 'api_chart', 'sports_api')
-        AND end_time IS NOT NULL
+      SELECT m.id, m.question, m.start_time, m.end_time, m.resolver_type,
+             m.resolver_config, m.outcomes, m.amm_mode, m.sport, m.league,
+             pm.source_data AS pending_source_data
+      FROM points_markets m
+      LEFT JOIN LATERAL (
+        SELECT source_data
+          FROM points_pending_markets
+         WHERE approved_market_id = m.id
+         ORDER BY id DESC
+         LIMIT 1
+      ) pm ON true
+      WHERE m.status = 'active'
+        AND m.end_time IS NOT NULL
+        AND m.parent_id IS NULL
         AND (
-          end_time < NOW()
-          OR (
-            resolver_type = 'sports_api'
-            AND resolver_config->>'source' = 'espn'
-            AND resolver_config->>'shape' IN ('binary', 'draw3')
-            AND start_time IS NOT NULL
-            AND start_time < NOW() - INTERVAL '90 minutes'
-          )
-          OR (
-            resolver_type = 'sports_api'
-            AND resolver_config->>'source' = 'next-opponent'
-            AND end_time > NOW()
+          (
+            m.resolver_type IN ('chainlink_price', 'api_price', 'weather_api', 'api_chart', 'sports_api')
             AND (
-              resolver_config->>'nextOpponentLastCheckedAt' IS NULL
-              OR NULLIF(resolver_config->>'nextOpponentLastCheckedAt', '')::timestamptz
-                   < NOW() - (${NEXT_OPPONENT_RECHECK_INTERVAL_HOURS}::int * INTERVAL '1 hour')
+              m.end_time < NOW()
+              OR (
+                m.resolver_type = 'sports_api'
+                AND m.resolver_config->>'source' = 'espn'
+                AND m.resolver_config->>'shape' IN ('binary', 'draw3')
+                AND m.start_time IS NOT NULL
+                AND m.start_time < NOW() - INTERVAL '90 minutes'
+              )
+              OR (
+                m.resolver_type = 'sports_api'
+                AND m.resolver_config->>'source' = 'next-opponent'
+                AND m.end_time > NOW()
+                AND (
+                  m.resolver_config->>'nextOpponentLastCheckedAt' IS NULL
+                  OR NULLIF(m.resolver_config->>'nextOpponentLastCheckedAt', '')::timestamptz
+                       < NOW() - (${NEXT_OPPONENT_RECHECK_INTERVAL_HOURS}::int * INTERVAL '1 hour')
+                )
+              )
             )
           )
+          OR (
+            m.resolver_type IS NULL
+            AND m.sport = 'soccer'
+            AND (
+              m.end_time < NOW()
+              OR (
+                m.start_time IS NOT NULL
+                AND m.start_time < NOW() - INTERVAL '90 minutes'
+              )
+            )
+            AND pm.source_data->>'manualResolution' = 'true'
+            AND pm.source_data->>'competitionCode' IN ('CL', 'EL', 'UCL', 'CLI')
+          )
         )
-        AND parent_id IS NULL
       ORDER BY
-        CASE WHEN resolver_config->>'shape' = 'binary-direction' THEN 1 ELSE 0 END,
-        end_time ASC
+        CASE WHEN m.resolver_config->>'shape' = 'binary-direction' THEN 1 ELSE 0 END,
+        m.end_time ASC
       LIMIT 100
     `;
 
@@ -177,12 +203,31 @@ export async function runAutoResolve({ dry = false } = {}) {
     let binaryDirectionCatchups = 0;
 
     for (const m of candidates) {
-      const cfg = parseJsonb(m.resolver_config, null);
+      const marketOutcomes = parseJsonb(m.outcomes, []);
+      let cfg = parseJsonb(m.resolver_config, null);
+      let resolverType = m.resolver_type;
+      if (!cfg) {
+        const fallbackCfg = buildEspnLiveScoreConfig({
+          resolverType: null,
+          resolverConfig: null,
+          sourceData: m.pending_source_data,
+          sport: m.sport,
+          league: m.league,
+          startTime: m.start_time,
+        });
+        if (fallbackCfg) {
+          cfg = {
+            ...fallbackCfg,
+            shape: marketOutcomes.length === 2 ? 'binary' : 'draw3',
+          };
+          resolverType = 'sports_api';
+        }
+      }
       if (!cfg) {
         report.errors.push({ id: m.id, error: 'missing_resolver_config' });
         continue;
       }
-      const isBinaryDirectionCatchup = m.resolver_type === 'chainlink_price'
+      const isBinaryDirectionCatchup = resolverType === 'chainlink_price'
         && cfg.shape === 'binary-direction';
       if (isBinaryDirectionCatchup && binaryDirectionCatchups >= MAX_BINARY_DIRECTION_CATCHUP_PER_RUN) {
         report.deferred.push({ id: m.id, reason: 'binary_direction_catchup_limit' });
@@ -203,7 +248,7 @@ export async function runAutoResolve({ dry = false } = {}) {
       let resolverConfigPatch = null;
       let result = null;
       try {
-        if (m.resolver_type === 'chainlink_price') {
+        if (resolverType === 'chainlink_price') {
           if (cfg.shape === 'binary-direction') {
             if (!cfg.feedAddress || cfg.threshold == null) {
               throw new Error('invalid chainlink_price binary-direction config');
@@ -247,7 +292,7 @@ export async function runAutoResolve({ dry = false } = {}) {
             winningIdx = yes ? yesIdx : (1 - yesIdx);
             resolverInfo = { priceAtResolve: price, op: cfg.op, threshold: cfg.threshold };
           }
-        } else if (m.resolver_type === 'api_price') {
+        } else if (resolverType === 'api_price') {
           // api_price is a family — dispatch on cfg.source to pick the
           // right reader. Each reader returns a scalar price in the
           // same currency as cfg.threshold.
@@ -284,7 +329,7 @@ export async function runAutoResolve({ dry = false } = {}) {
             threshold: cfg.threshold,
             ...readerInfo,
           };
-        } else if (m.resolver_type === 'weather_api') {
+        } else if (resolverType === 'weather_api') {
           if (!cfg.lat || !cfg.lng || !cfg.forecastDateYmd || !Array.isArray(cfg.buckets)) {
             throw new Error('invalid weather_api config');
           }
@@ -302,7 +347,7 @@ export async function runAutoResolve({ dry = false } = {}) {
           if (winningIdx < 0) winningIdx = bucketIndexFor(tempC); // fallback
           if (winningIdx < 0) throw new Error(`temp ${tempC}°C didn't fit any bucket`);
           resolverInfo = { recordedMaxC: tempC, forecastDateYmd: cfg.forecastDateYmd };
-        } else if (m.resolver_type === 'api_chart') {
+        } else if (resolverType === 'api_chart') {
           // Parallel music / trending markets. Each leg has a match
           // rule; the "Otro" leg's rule is all-null and wins when no
           // listed leg matches the current #1.
@@ -347,7 +392,7 @@ export async function runAutoResolve({ dry = false } = {}) {
           }
           winningIdx = pickWinnerIdx;
           resolverInfo = { source: cfg.source, ...readerEcho };
-        } else if (m.resolver_type === 'sports_api') {
+        } else if (resolverType === 'sports_api') {
           // Sports scoreboards (MLB/NBA/F1 via ESPN + Jolpica +
           // football-data). Shape in cfg:
           //   source: 'espn' | 'football-data' | 'jolpica-f1'
@@ -366,6 +411,8 @@ export async function runAutoResolve({ dry = false } = {}) {
               leaguePath: cfg.leaguePath,
               eventId: cfg.eventId,
               dateYmd: cfg.dateYmd,
+              homeName: cfg.homeName,
+              awayName: cfg.awayName,
             });
           } else if (cfg.source === 'football-data') {
             result = await readFootballDataMatch(cfg.matchId);
@@ -512,7 +559,7 @@ export async function runAutoResolve({ dry = false } = {}) {
             winnerDriver: result.winnerDriverLabel ?? null,
           };
         } else {
-          throw new Error(`unknown resolver_type: ${m.resolver_type}`);
+          throw new Error(`unknown resolver_type: ${resolverType}`);
         }
       } catch (e) {
         if (e?.benign) {
@@ -521,7 +568,7 @@ export async function runAutoResolve({ dry = false } = {}) {
             reason: e.message || 'deferred',
             ...(e.info || {}),
           };
-          if (!dry && m.resolver_type === 'sports_api' && cfg.source === 'next-opponent') {
+          if (!dry && resolverType === 'sports_api' && cfg.source === 'next-opponent') {
             const checkedAt = new Date().toISOString();
             try {
               await schemaSql`
@@ -552,9 +599,8 @@ export async function runAutoResolve({ dry = false } = {}) {
       // "🏁 Verstappen", "BTC · 98,421") from the same data we already
       // pulled from the source. Falls back to the winning outcome label
       // when the source doesn't give us a scoreline.
-      const marketOutcomes = parseJsonb(m.outcomes, []);
       const finalScore = buildFinalScore({
-        resolverType: m.resolver_type,
+        resolverType,
         cfg,
         result,
         resolverInfo,
@@ -575,10 +621,12 @@ export async function runAutoResolve({ dry = false } = {}) {
           const r = await client.query(
             `UPDATE points_markets
                SET status = 'resolved', outcome = $1,
-                   resolved_at = NOW(), resolved_by = $2
+                   resolved_at = NOW(), resolved_by = $2,
+                   resolver_type = COALESCE(resolver_type, $4),
+                   resolver_config = COALESCE(resolver_config, $5::jsonb)
              WHERE id = $3 AND status = 'active'
              RETURNING id, amm_mode`,
-            [winningIdx, `resolver:${m.resolver_type}`, m.id],
+            [winningIdx, `resolver:${resolverType}`, m.id, resolverType, JSON.stringify(cfg)],
           );
           if (r.rows.length === 0) {
             const err = new Error('not_active_at_write'); err.benign = true; throw err;
@@ -621,7 +669,7 @@ export async function runAutoResolve({ dry = false } = {}) {
                    SET status = 'resolved', outcome = $1,
                        resolved_at = NOW(), resolved_by = $2
                  WHERE id = $3 AND status = 'active'`,
-                [legWinningOutcome, `resolver:${m.resolver_type}`, legs.rows[i].id],
+                [legWinningOutcome, `resolver:${resolverType}`, legs.rows[i].id],
               );
             }
           }

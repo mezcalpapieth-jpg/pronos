@@ -106,15 +106,24 @@ test('UEFA final fallbacks fill Europa and Conference when upstream is empty', (
   assert.equal(europaSpec.question, 'Freiburg vs Aston Villa');
   assert.deepEqual(europaSpec.outcomes, ['Freiburg', 'Aston Villa']);
   assert.equal(europaSpec.source, 'uefa.com');
-  assert.equal(europaSpec.resolver_type, null);
-  assert.equal(europaSpec.resolver_config, null);
+  assert.equal(europaSpec.resolver_type, 'sports_api');
+  assert.deepEqual(europaSpec.resolver_config, {
+    source: 'espn',
+    leaguePath: 'soccer/uefa.europa',
+    eventId: null,
+    dateYmd: '2026-05-20',
+    homeName: 'Freiburg',
+    awayName: 'Aston Villa',
+    shape: 'binary',
+  });
   assert.equal(europaSpec.source_event_id, 'uefa-2026-europa-final');
 
   assert.equal(conferenceSpec.question, 'Crystal Palace vs Rayo Vallecano');
   assert.deepEqual(conferenceSpec.outcomes, ['Crystal Palace', 'Rayo Vallecano']);
   assert.equal(conferenceSpec.source, 'uefa.com');
-  assert.equal(conferenceSpec.resolver_type, null);
-  assert.equal(conferenceSpec.resolver_config, null);
+  assert.equal(conferenceSpec.resolver_type, 'sports_api');
+  assert.equal(conferenceSpec.resolver_config.leaguePath, 'soccer/uefa.europa.conf');
+  assert.equal(conferenceSpec.resolver_config.shape, 'binary');
   assert.equal(conferenceSpec.source_event_id, 'uefa-2026-conference-final');
 });
 

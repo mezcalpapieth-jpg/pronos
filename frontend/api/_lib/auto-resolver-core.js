@@ -245,6 +245,8 @@ export async function resolveAutoResolverCandidate(candidate = {}) {
         leaguePath: cfg.leaguePath,
         eventId: cfg.eventId,
         dateYmd: cfg.dateYmd,
+        homeName: cfg.homeName,
+        awayName: cfg.awayName,
       });
     } else if (cfg.source === 'football-data') {
       result = await readFootballDataMatch(cfg.matchId);

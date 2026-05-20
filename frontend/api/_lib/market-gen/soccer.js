@@ -69,6 +69,17 @@ const COMPETITION_TO_LEAGUE = {
   BL1: 'bundesliga',
 };
 
+const COMPETITION_TO_ESPN_PATH = {
+  CL:  'soccer/uefa.champions',
+  EL:  'soccer/uefa.europa',
+  UCL: 'soccer/uefa.europa.conf',
+  CLI: 'soccer/conmebol.libertadores',
+  PD:  'soccer/esp.1',
+  PL:  'soccer/eng.1',
+  SA:  'soccer/ita.1',
+  BL1: 'soccer/ger.1',
+};
+
 const ONE_LEGGED_FINAL_COMPETITIONS = new Set(['CL', 'EL', 'UCL', 'CLI']);
 
 const API_BASE = 'https://api.football-data.org/v4';
@@ -263,6 +274,24 @@ function matchToMarketSpec(match, competitionCode) {
   const startTime = new Date(kickoffMs).toISOString();
   const endTime   = new Date(kickoffMs + (winnerOnly ? 4 : 2) * 3600_000).toISOString();
   const league    = COMPETITION_TO_LEAGUE[competitionCode] || null;
+  const espnLeaguePath = COMPETITION_TO_ESPN_PATH[competitionCode] || null;
+  const resolverConfig = manualResolution && espnLeaguePath
+    ? {
+      source: 'espn',
+      leaguePath: espnLeaguePath,
+      eventId: null,
+      dateYmd: startTime.slice(0, 10),
+      homeName,
+      awayName,
+      shape: winnerOnly ? 'binary' : 'draw3',
+    }
+    : manualResolution
+    ? null
+    : {
+      source: 'football-data',
+      matchId: match.id,
+      shape: winnerOnly ? 'binary' : 'draw3',
+    };
 
   // Team crests aligned with the 3-way W/D/L outcomes. Draw has no
   // image. `crest` is the canonical field on football-data.org team
@@ -286,12 +315,8 @@ function matchToMarketSpec(match, competitionCode) {
     start_time: startTime,
     end_time: endTime,
     amm_mode: 'unified',
-    resolver_type: manualResolution ? null : 'sports_api',      // auto via /v4/matches/{id} → score.winner
-    resolver_config: manualResolution ? null : {
-      source: 'football-data',
-      matchId: match.id,
-      shape: winnerOnly ? 'binary' : 'draw3',
-    },
+    resolver_type: resolverConfig ? 'sports_api' : null,
+    resolver_config: resolverConfig,
     source_data: {
       matchId: match.id,
       competitionCode,

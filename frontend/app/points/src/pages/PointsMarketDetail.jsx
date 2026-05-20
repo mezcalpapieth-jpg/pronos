@@ -1137,7 +1137,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               </div>
             )}
 
-            {displayOutcomes.length === 2 && (
+            {displayOutcomes.length === 2 && isResolved && (
               <div style={{
                 marginBottom: 24,
                 padding: '18px 20px',
@@ -1145,25 +1145,15 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 border: '1px solid var(--border)',
                 borderRadius: 14,
               }}>
-                {isResolved ? (
-                  <>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 8, textTransform: 'uppercase' }}>
-                      {t('points.detail.resultOfficial')}
-                    </div>
-                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: 'var(--green)' }}>
-                      🏆 {displayWinnerIndex >= 0 ? displayOutcomes[displayWinnerIndex] : outcomes[winnerIndex]}
-                    </div>
-                    <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '8px 0 0' }}>
-                      {t('points.detail.redeemInstructions')}
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.55, margin: 0 }}>
-                      {t('points.detail.probExplain')}
-                    </p>
-                  </>
-                )}
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 8, textTransform: 'uppercase' }}>
+                  {t('points.detail.resultOfficial')}
+                </div>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: 'var(--green)' }}>
+                  🏆 {displayWinnerIndex >= 0 ? displayOutcomes[displayWinnerIndex] : outcomes[winnerIndex]}
+                </div>
+                <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '8px 0 0' }}>
+                  {t('points.detail.redeemInstructions')}
+                </p>
               </div>
             )}
 
@@ -1654,7 +1644,18 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               letterSpacing: '0.04em',
               lineHeight: 1.6,
             }}>
-              {t('points.detail.mxnpNote')}
+              <p style={{ margin: 0 }}>
+                {t('points.detail.mxnpNote')}
+              </p>
+              {displayOutcomes.length === 2 && !isResolved && !isCanceled && (
+                <p style={{
+                  margin: '10px 0 0',
+                  paddingTop: 10,
+                  borderTop: '1px solid var(--border)',
+                }}>
+                  {t('points.detail.probExplain')}
+                </p>
+              )}
             </div>
           </div>
           </aside>

@@ -72,8 +72,86 @@ function normalizeEspnEvent(ev) {
   };
 }
 
-export async function readEspnEvent({ leaguePath, eventId, dateYmd }) {
-  if (!leaguePath || !eventId) throw new Error('espn: missing leaguePath/eventId');
+function cleanString(value) {
+  const text = String(value || '').trim();
+  return text.length > 0 ? text : null;
+}
+
+function normalizeTeamName(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\b(fc|sc|cf|afc|ac|cd|club)\b/g, '')
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+function namesMatch(a, b) {
+  const left = normalizeTeamName(a);
+  const right = normalizeTeamName(b);
+  if (!left || !right) return false;
+  return left === right || left.includes(right) || right.includes(left);
+}
+
+function pickCompetition(event) {
+  return Array.isArray(event?.competitions) ? event.competitions[0] : null;
+}
+
+function pickCompetitors(comp) {
+  const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
+  const home = competitors.find(c => c.homeAway === 'home') || competitors[0] || null;
+  const away = competitors.find(c => c.homeAway === 'away') || competitors[1] || null;
+  return { home, away };
+}
+
+function competitorName(c) {
+  return cleanString(c?.team?.shortDisplayName)
+    || cleanString(c?.team?.displayName)
+    || cleanString(c?.team?.name)
+    || cleanString(c?.displayName)
+    || null;
+}
+
+function eventTeamOrientation(event, homeName, awayName) {
+  if (!homeName || !awayName) return null;
+  const comp = pickCompetition(event);
+  if (!comp) return null;
+  const { home, away } = pickCompetitors(comp);
+  const eventHome = competitorName(home);
+  const eventAway = competitorName(away);
+  if (namesMatch(eventHome, homeName) && namesMatch(eventAway, awayName)) return 'same';
+  if (namesMatch(eventHome, awayName) && namesMatch(eventAway, homeName)) return 'swapped';
+  return null;
+}
+
+function eventMatchesTeams(event, homeName, awayName) {
+  return eventTeamOrientation(event, homeName, awayName) !== null;
+}
+
+function normalizeEspnEventForMarket(ev, homeName, awayName) {
+  const normalized = normalizeEspnEvent(ev);
+  const orientation = eventTeamOrientation(ev, homeName, awayName);
+  if (orientation !== 'swapped') return normalized;
+  const winner = normalized.winner === 'home'
+    ? 'away'
+    : normalized.winner === 'away'
+    ? 'home'
+    : normalized.winner;
+  return {
+    ...normalized,
+    winner,
+    homeScore: normalized.awayScore,
+    awayScore: normalized.homeScore,
+    homeTeam: normalized.awayTeam,
+    awayTeam: normalized.homeTeam,
+    eventOrientation: 'swapped',
+  };
+}
+
+export async function readEspnEvent({ leaguePath, eventId, dateYmd, homeName, awayName }) {
+  if (!leaguePath || (!eventId && !(homeName && awayName))) {
+    throw new Error('espn: missing leaguePath/event lookup');
+  }
   const dateRange = ymdToDateRange(dateYmd);
   const q = dateRange ? `?dates=${dateRange}&limit=500` : `?limit=500`;
   const url = `${ESPN_BASE}/${leaguePath}/scoreboard${q}`;
@@ -81,8 +159,11 @@ export async function readEspnEvent({ leaguePath, eventId, dateYmd }) {
   if (!res.ok) throw new Error(`espn: HTTP ${res.status}`);
   const data = await res.json();
   const events = Array.isArray(data?.events) ? data.events : [];
-  const ev = events.find(e => String(e.id) === String(eventId));
+  const ev = eventId
+    ? events.find(e => String(e.id) === String(eventId))
+    : events.find(e => eventMatchesTeams(e, homeName, awayName));
   if (!ev) {
+    if (!eventId) return { completed: false, winner: null, notFound: true };
     // Event not in the date-window scoreboard. In playoff series the
     // same teams can play several times in one week, and a stale/bad
     // dateYmd on the market row should not strand the resolver if the
@@ -93,13 +174,13 @@ export async function readEspnEvent({ leaguePath, eventId, dateYmd }) {
     if (!summaryRes.ok) throw new Error(`espn-summary: HTTP ${summaryRes.status}`);
     const summary = await summaryRes.json();
     if (summary?.header?.id && String(summary.header.id) === String(eventId)) {
-      return { ...normalizeEspnEvent(summary.header), dateWindowMiss: true };
+      return { ...normalizeEspnEventForMarket(summary.header, homeName, awayName), dateWindowMiss: true };
     }
     // Still not found — either not started yet, removed from ESPN, or
     // the stored eventId is wrong. Treat as "not done", retry next tick.
     return { completed: false, winner: null, notFound: true };
   }
-  return normalizeEspnEvent(ev);
+  return normalizeEspnEventForMarket(ev, homeName, awayName);
 }
 
 // ─── football-data.org match ───────────────────────────────────────────

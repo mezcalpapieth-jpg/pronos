@@ -66,3 +66,57 @@ test('readEspnEvent falls back to per-event summary when date-window scoreboard 
     globalThis.fetch = originalFetch;
   }
 });
+
+test('readEspnEvent can resolve soccer finals by team names when no ESPN event id is stored', async () => {
+  const originalFetch = globalThis.fetch;
+  const urls = [];
+  globalThis.fetch = async (url) => {
+    urls.push(String(url));
+    if (String(url).includes('/scoreboard')) {
+      return jsonResponse({
+        events: [{
+          id: '401862911',
+          competitions: [{
+            status: { type: { state: 'post', completed: true } },
+            competitors: [
+              {
+                homeAway: 'home',
+                score: '3',
+                winner: true,
+                team: { displayName: 'Aston Villa FC', shortDisplayName: 'Aston Villa' },
+              },
+              {
+                homeAway: 'away',
+                score: '0',
+                winner: false,
+                team: { displayName: 'SC Freiburg', shortDisplayName: 'Freiburg' },
+              },
+            ],
+          }],
+        }],
+      });
+    }
+    throw new Error(`unexpected url ${url}`);
+  };
+
+  try {
+    const result = await readEspnEvent({
+      leaguePath: 'soccer/uefa.europa',
+      eventId: null,
+      dateYmd: '2026-05-20',
+      homeName: 'Freiburg',
+      awayName: 'Aston Villa',
+    });
+
+    assert.equal(result.completed, true);
+    assert.equal(result.winner, 'away');
+    assert.equal(result.homeScore, 0);
+    assert.equal(result.awayScore, 3);
+    assert.equal(result.homeTeam, 'Freiburg');
+    assert.equal(result.awayTeam, 'Aston Villa');
+    assert.equal(urls.length, 1);
+    assert.match(urls[0], /soccer\/uefa\.europa\/scoreboard/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
