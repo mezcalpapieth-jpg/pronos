@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildAdminProfileSocials } from './points-profile-socials.js';
+import {
+  buildAdminProfileSocialLinks,
+  buildAdminProfileSocials,
+} from './points-profile-socials.js';
 
 test('buildAdminProfileSocials returns admin-only social proof rows with catalog labels', () => {
   const socials = buildAdminProfileSocials([
@@ -55,6 +58,32 @@ test('buildAdminProfileSocials returns admin-only social proof rows with catalog
       reviewedAt: null,
       rejectionNote: null,
       createdAt: '2026-05-02T00:00:00.000Z',
+    },
+  ]);
+});
+
+test('buildAdminProfileSocialLinks returns connected handles for admin profile views', () => {
+  const links = buildAdminProfileSocialLinks([
+    {
+      provider: 'tiktok',
+      provider_user_id: 'tk_123',
+      handle: '@frmm',
+      profile_url: 'https://www.tiktok.com/@frmm',
+      reward_credited: true,
+      linked_at: '2026-05-20T12:00:00.000Z',
+    },
+  ]);
+
+  assert.deepEqual(links, [
+    {
+      provider: 'tiktok',
+      label: 'TikTok',
+      network: 'tiktok',
+      providerUserId: 'tk_123',
+      handle: 'frmm',
+      profileUrl: 'https://www.tiktok.com/@frmm',
+      rewardCredited: true,
+      linkedAt: '2026-05-20T12:00:00.000Z',
     },
   ]);
 });

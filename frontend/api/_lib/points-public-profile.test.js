@@ -99,3 +99,36 @@ test('profile stats are derived from corrected per-market statuses', () => {
   assert.equal(stats.marketsLost, 0);
   assert.equal(stats.winRate, 100);
 });
+
+test('profile history orders markets by latest trade first', () => {
+  const history = buildPublicProfileHistory([
+    {
+      ...BASE_ROW,
+      market_id: 7,
+      question: 'Older trade but newer resolution',
+      resolved_at: '2026-05-10T00:00:00.000Z',
+      created_at: '2026-05-01T10:00:00.000Z',
+      side: 'buy',
+      outcome_index: 1,
+      shares: 10,
+      collateral: 10,
+      fee: 0,
+    },
+    {
+      ...BASE_ROW,
+      market_id: 8,
+      question: 'Latest trade',
+      resolved_at: '2026-05-02T00:00:00.000Z',
+      created_at: '2026-05-11T10:00:00.000Z',
+      side: 'buy',
+      outcome_index: 1,
+      shares: 10,
+      collateral: 10,
+      fee: 0,
+    },
+  ], { nowMs: Date.parse('2026-05-12T00:00:00.000Z') });
+
+  assert.equal(history[0].marketId, 8);
+  assert.equal(history[0].lastTradeAt, '2026-05-11T10:00:00.000Z');
+  assert.equal(history[1].marketId, 7);
+});

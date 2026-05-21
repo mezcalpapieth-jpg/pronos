@@ -26,6 +26,12 @@ function currentHeldByOutcome(market) {
   return held;
 }
 
+function timeMs(value) {
+  if (!value) return 0;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+}
+
 function statusAndRedeemValue(market, nowMs) {
   const currentHeld = currentHeldByOutcome(market);
   const stillHeld = hasPositiveValue(currentHeld);
@@ -66,6 +72,7 @@ export function buildPublicProfileHistory(tradeRows, { nowMs = Date.now() } = {}
         marketOutcome: row.m_outcome,
         endTime: row.end_time,
         resolvedAt: row.resolved_at,
+        lastTradeAt: null,
         finalScore: row.final_score,
         buyCollateral: 0,
         buyFees: 0,
@@ -83,6 +90,9 @@ export function buildPublicProfileHistory(tradeRows, { nowMs = Date.now() } = {}
     const shares = Number(row.shares || 0);
     const collateral = Number(row.collateral || 0);
     const fee = Number(row.fee || 0);
+    if (timeMs(row.created_at) > timeMs(market.lastTradeAt)) {
+      market.lastTradeAt = row.created_at;
+    }
 
     if (row.side === 'buy') {
       market.buyCollateral += collateral;
@@ -123,13 +133,14 @@ export function buildPublicProfileHistory(tradeRows, { nowMs = Date.now() } = {}
       buyCollateral: round2(market.buyCollateral),
       sellProceeds: round2(market.sellProceeds),
       resolvedAt: market.resolvedAt,
+      lastTradeAt: market.lastTradeAt,
       finalScore: market.finalScore,
     };
   });
 
   history.sort((a, b) => {
-    const ar = a.resolvedAt ? new Date(a.resolvedAt).getTime() : 0;
-    const br = b.resolvedAt ? new Date(b.resolvedAt).getTime() : 0;
+    const ar = timeMs(a.lastTradeAt) || timeMs(a.resolvedAt);
+    const br = timeMs(b.lastTradeAt) || timeMs(b.resolvedAt);
     return br - ar;
   });
 

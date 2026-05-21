@@ -685,8 +685,8 @@ export default function ChampionsLeagueHub({
               fontSize: 16,
               lineHeight: 1.55,
             }}>
-              Una final con tratamiento de torneo: cuenta regresiva, mercados del torneo,
-              bracket y camino de cada equipo para que la Champions se sienta como una sección viva.
+              La final se vive aquí: cuenta regresiva a Budapest, mercados del partido
+              y el camino de PSG y Arsenal hasta la última noche de la Champions.
             </p>
             <div style={{
               marginTop: 20,

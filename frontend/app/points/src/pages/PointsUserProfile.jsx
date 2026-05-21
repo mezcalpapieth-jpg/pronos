@@ -147,7 +147,8 @@ export default function PointsUserProfile() {
   }
 
   const { user, stats, active, history } = data;
-  const showAdminSocials = Object.prototype.hasOwnProperty.call(user, 'adminSocials');
+  const showAdminSocials = Object.prototype.hasOwnProperty.call(user, 'adminSocials')
+    || Object.prototype.hasOwnProperty.call(user, 'adminSocialLinks');
 
   return (
     <main style={{ maxWidth: 1100, margin: '0 auto', padding: 'clamp(20px, 4vw, 36px)' }}>
@@ -185,7 +186,10 @@ export default function PointsUserProfile() {
       </div>
 
       {showAdminSocials && (
-        <AdminSocialsPanel rows={Array.isArray(user.adminSocials) ? user.adminSocials : []} />
+        <AdminSocialsPanel
+          rows={Array.isArray(user.adminSocials) ? user.adminSocials : []}
+          links={Array.isArray(user.adminSocialLinks) ? user.adminSocialLinks : []}
+        />
       )}
 
       {/* Stat strip */}
@@ -236,7 +240,9 @@ export default function PointsUserProfile() {
   );
 }
 
-function AdminSocialsPanel({ rows }) {
+function AdminSocialsPanel({ rows, links = [] }) {
+  const hasRows = rows.length > 0;
+  const hasLinks = links.length > 0;
   return (
     <section style={{
       marginTop: 18,
@@ -251,7 +257,7 @@ function AdminSocialsPanel({ rows }) {
         justifyContent: 'space-between',
         gap: 12,
         alignItems: 'center',
-        marginBottom: rows.length ? 10 : 0,
+        marginBottom: hasRows || hasLinks ? 10 : 0,
       }}>
         <div style={{
           fontFamily: 'var(--font-mono)',
@@ -267,16 +273,118 @@ function AdminSocialsPanel({ rows }) {
           fontSize: 10,
           color: 'var(--text-muted)',
         }}>
-          {rows.length} envíos
+          {links.length} conectadas · {rows.length} envíos
         </div>
       </div>
 
-      {rows.length === 0 ? (
+      {!hasRows && !hasLinks ? (
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
-          Sin sociales enviados.
+          Sin sociales conectadas ni tareas enviadas.
         </div>
       ) : (
         <div style={{ display: 'grid', gap: 8 }}>
+          {hasLinks && (
+            <div style={{ display: 'grid', gap: 8 }}>
+              <div style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                color: 'var(--text-muted)',
+              }}>
+                Cuentas conectadas
+              </div>
+              {links.map((link) => {
+                const profileHref = safeExternalHref(link.profileUrl);
+                const handle = link.handle ? `@${link.handle}` : 'Sin handle';
+                return (
+                  <div
+                    key={`${link.provider}-${link.providerUserId || link.handle || link.linkedAt}`}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'minmax(0, 1fr) auto',
+                      gap: 12,
+                      alignItems: 'center',
+                      padding: '10px 12px',
+                      background: 'rgba(0,0,0,0.16)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      borderRadius: 8,
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 10,
+                        color: '#f59e0b',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.08em',
+                        marginBottom: 4,
+                      }}>
+                        {link.label || link.provider}
+                      </div>
+                      <div style={{
+                        fontFamily: 'var(--font-body)',
+                        fontSize: 13,
+                        color: 'var(--text-primary)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {handle}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <span style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 10,
+                        color: link.rewardCredited ? 'var(--green)' : 'var(--text-muted)',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {link.rewardCredited ? 'Bono aplicado' : 'Sin bono'}
+                      </span>
+                      {profileHref && (
+                        <a
+                          href={profileHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: 10,
+                            color: 'var(--green)',
+                            textDecoration: 'underline',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          Abrir
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {hasRows && hasLinks && (
+            <div style={{
+              height: 1,
+              background: 'rgba(255,255,255,0.08)',
+              margin: '4px 0',
+            }} />
+          )}
+
+          {hasRows && (
+            <div style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              color: 'var(--text-muted)',
+            }}>
+              Tareas sociales
+            </div>
+          )}
           {rows.map((row) => {
             const status = SOCIAL_STATUS_LABEL[row.status] || SOCIAL_STATUS_LABEL.pending;
             const proofHref = safeExternalHref(row.proofUrl);

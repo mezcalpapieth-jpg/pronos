@@ -21,6 +21,31 @@ const SOCIAL_TASK_META = {
   },
 };
 
+const SOCIAL_LINK_META = {
+  instagram: {
+    label: 'Instagram',
+    network: 'instagram',
+  },
+  tiktok: {
+    label: 'TikTok',
+    network: 'tiktok',
+  },
+  twitter: {
+    label: 'X (Twitter)',
+    network: 'twitter',
+  },
+  x: {
+    label: 'X',
+    network: 'twitter',
+  },
+};
+
+function cleanHandle(value) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim().replace(/^@+/, '');
+  return trimmed || null;
+}
+
 export function buildAdminProfileSocials(rows) {
   return (rows || []).map((row) => {
     const taskKey = String(row.task_key || '');
@@ -41,6 +66,27 @@ export function buildAdminProfileSocials(rows) {
       reviewedAt: row.reviewed_at || null,
       rejectionNote: row.rejection_note || null,
       createdAt: row.created_at || null,
+    };
+  });
+}
+
+export function buildAdminProfileSocialLinks(rows) {
+  return (rows || []).map((row) => {
+    const provider = String(row.provider || '').trim().toLowerCase();
+    const meta = SOCIAL_LINK_META[provider] || {};
+    const profileUrl = typeof row.profile_url === 'string' && row.profile_url.trim()
+      ? row.profile_url.trim()
+      : null;
+
+    return {
+      provider,
+      label: meta.label || provider || 'Social',
+      network: meta.network || provider || 'social',
+      providerUserId: row.provider_user_id || null,
+      handle: cleanHandle(row.handle),
+      profileUrl,
+      rewardCredited: Boolean(row.reward_credited),
+      linkedAt: row.linked_at || null,
     };
   });
 }

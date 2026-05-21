@@ -27,7 +27,8 @@
  *   }
  *
  * Admin-only: when the viewer has a valid points admin session,
- * `user.adminSocials` includes that user's social-task proof rows.
+ * `user.adminSocials` includes that user's social-task proof rows and
+ * `user.adminSocialLinks` includes connected account handles.
  * Logged-out / non-admin callers never receive it.
  */
 import { neon } from '@neondatabase/serverless';
@@ -40,7 +41,10 @@ import {
   buildPublicProfileHistory,
   buildPublicProfileStats,
 } from '../_lib/points-public-profile.js';
-import { buildAdminProfileSocials } from '../_lib/points-profile-socials.js';
+import {
+  buildAdminProfileSocialLinks,
+  buildAdminProfileSocials,
+} from '../_lib/points-profile-socials.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -179,6 +183,7 @@ export default async function handler(req, res) {
     const stats = buildPublicProfileStats(history);
 
     let adminSocials = null;
+    let adminSocialLinks = null;
     if (viewerIsAdmin) {
       const socialRows = await sql`
         SELECT id, task_key, status, reward, proof_url,
@@ -189,6 +194,16 @@ export default async function handler(req, res) {
         LIMIT 50
       `;
       adminSocials = buildAdminProfileSocials(socialRows);
+
+      const socialLinkRows = await sql`
+        SELECT provider, provider_user_id, handle, profile_url,
+               reward_credited, linked_at
+        FROM points_social_links
+        WHERE username = ${username}
+        ORDER BY linked_at DESC
+        LIMIT 20
+      `;
+      adminSocialLinks = buildAdminProfileSocialLinks(socialLinkRows);
     }
 
     return res.status(200).json({
@@ -196,7 +211,7 @@ export default async function handler(req, res) {
         username: userRow[0].username,
         joinedAt: userRow[0].created_at,
         totalVolume: stats.totalVolume,
-        ...(viewerIsAdmin ? { adminSocials } : {}),
+        ...(viewerIsAdmin ? { adminSocials, adminSocialLinks } : {}),
       },
       stats: {
         totalPnl: stats.totalPnl,

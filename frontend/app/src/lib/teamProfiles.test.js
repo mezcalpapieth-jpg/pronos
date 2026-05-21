@@ -46,12 +46,16 @@ test('team profiles include full top soccer league directories', () => {
   assert.equal(countLeague('La Liga'), 20);
   assert.equal(countLeague('Serie A'), 20);
   assert.equal(countLeague('Liga MX'), 18);
+  assert.equal(countLeague('MLS'), 30);
 });
 
 test('soccer team profiles include ESPN league paths for schedule lookup', () => {
   assert.equal(findTeamProfile('soccer', 'cruz-azul')?.espnLeaguePath, 'soccer/mex.1');
   assert.equal(findTeamProfile('soccer', 'pumas-unam')?.espnLeaguePath, 'soccer/mex.1');
   assert.equal(findTeamProfile('soccer', 'arsenal')?.espnLeaguePath, 'soccer/eng.1');
+  assert.equal(findTeamProfile('soccer', 'inter-miami-cf')?.espnLeaguePath, 'soccer/usa.1');
+  assert.equal(findTeamProfile('soccer', 'san-diego-fc')?.espnLeaguePath, 'soccer/usa.1');
+  assert.equal(findTeamByName('soccer', 'Los Angeles Football Club')?.slug, 'los-angeles-fc');
 });
 
 test('Liga MX team profiles include ESPN logos for directory cards', () => {
