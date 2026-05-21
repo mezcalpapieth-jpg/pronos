@@ -23,9 +23,8 @@ import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { readOAuthCookie, clearOAuthCookie, resolveCallbackUrl, redirectToReturn, safeReturnPath } from '../../_lib/oauth.js';
 import { withTransaction } from '../../_lib/db-tx.js';
+import { USER_URL, exchangeXAuthorizationCode } from '../../_lib/x-oauth.js';
 
-const TOKEN_URL = 'https://api.twitter.com/2/oauth2/token';
-const USER_URL  = 'https://api.twitter.com/2/users/me';
 const REWARD_MXNP = 50;
 const DISTRIBUTION_KIND = 'social_link_x';
 
@@ -48,8 +47,8 @@ export default async function handler(req, res) {
   if (state !== cookieState) return bailOut(res, returnTo, 'x', 'state_mismatch');
 
   const clientId = process.env.X_CLIENT_ID;
-  const clientSecret = process.env.X_CLIENT_SECRET;
-  if (!clientId || !clientSecret) return bailOut(res, returnTo, 'x', 'client_not_configured');
+  const clientSecret = process.env.X_CLIENT_SECRET || '';
+  if (!clientId) return bailOut(res, returnTo, 'x', 'client_not_configured');
 
   let redirectUri;
   try { redirectUri = resolveCallbackUrl('x'); }
@@ -58,32 +57,23 @@ export default async function handler(req, res) {
   // ── Step 1: exchange code for token ────────────────────────────
   let accessToken;
   try {
-    const body = new URLSearchParams();
-    body.set('code', String(code));
-    body.set('grant_type', 'authorization_code');
-    body.set('client_id', clientId);
-    body.set('redirect_uri', redirectUri);
-    body.set('code_verifier', verifier);
-    const basic = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-    const r = await fetch(TOKEN_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${basic}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: body.toString(),
+    const token = await exchangeXAuthorizationCode({
+      code: String(code),
+      clientId,
+      clientSecret,
+      redirectUri,
+      verifier,
     });
-    if (!r.ok) {
-      const txt = await r.text().catch(() => '');
-      console.error('[social/x/callback] token exchange failed', { status: r.status, body: txt.slice(0, 240) });
-      return bailOut(res, returnTo, 'x', 'token_exchange_failed');
-    }
-    const data = await r.json();
-    accessToken = data.access_token;
+    accessToken = token.accessToken;
     if (!accessToken) return bailOut(res, returnTo, 'x', 'no_access_token');
   } catch (e) {
-    console.error('[social/x/callback] token fetch threw', { message: e?.message });
-    return bailOut(res, returnTo, 'x', 'token_fetch_failed');
+    console.error('[social/x/callback] token exchange failed', {
+      status: e?.status,
+      mode: e?.mode,
+      body: String(e?.body || '').slice(0, 240),
+      message: e?.message,
+    });
+    return bailOut(res, returnTo, 'x', e?.status ? 'token_exchange_failed' : 'token_fetch_failed');
   }
 
   // ── Step 2: fetch verified profile ─────────────────────────────

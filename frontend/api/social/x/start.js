@@ -7,7 +7,7 @@
  *
  * Env vars required:
  *   X_CLIENT_ID
- *   X_CLIENT_SECRET         (used in callback, not here)
+ *   X_CLIENT_SECRET         (optional in callback for confidential clients)
  *   OAUTH_X_CALLBACK_URL    (optional — falls back to VERCEL_URL)
  *
  * Scopes requested:
@@ -23,7 +23,7 @@ import {
   setOAuthCookie, resolveCallbackUrl, safeReturnPath,
 } from '../../_lib/oauth.js';
 
-const AUTHORIZE_URL = 'https://twitter.com/i/oauth2/authorize';
+const AUTHORIZE_URL = 'https://x.com/i/oauth2/authorize';
 const SCOPES = ['users.read', 'tweet.read', 'offline.access'];
 
 export default function handler(req, res) {
