@@ -65,6 +65,19 @@ function competitorName(c) {
     || null;
 }
 
+function competitorNames(c) {
+  return [
+    c?.team?.shortDisplayName,
+    c?.team?.displayName,
+    c?.team?.name,
+    c?.displayName,
+  ].map(cleanString).filter(Boolean);
+}
+
+function anyNameMatches(names, target) {
+  return names.some(name => namesMatch(name, target));
+}
+
 function competitorLogo(c) {
   return cleanString(c?.team?.logo)
     || cleanString(c?.team?.logos?.[0]?.href)
@@ -142,12 +155,12 @@ function eventMatchesTeams(event, homeName, awayName) {
   const comp = pickCompetition(event);
   if (!comp) return false;
   const { home, away } = pickCompetitors(comp);
-  const eventHome = competitorName(home);
-  const eventAway = competitorName(away);
+  const eventHomeNames = competitorNames(home);
+  const eventAwayNames = competitorNames(away);
   return (
-    namesMatch(eventHome, homeName) && namesMatch(eventAway, awayName)
+    anyNameMatches(eventHomeNames, homeName) && anyNameMatches(eventAwayNames, awayName)
   ) || (
-    namesMatch(eventHome, awayName) && namesMatch(eventAway, homeName)
+    anyNameMatches(eventHomeNames, awayName) && anyNameMatches(eventAwayNames, homeName)
   );
 }
 

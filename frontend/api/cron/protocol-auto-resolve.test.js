@@ -38,3 +38,9 @@ test('protocol markets store and expose auto-resolver final scores', () => {
   assert.match(marketSource, /m\.final_score/);
   assert.match(marketsSource, /m\.final_score/);
 });
+
+test('protocol auto-resolver can use pending metadata for football-data ESPN fallback', () => {
+  assert.match(resolverSource, /resolver_config->>'source'\s+IN\s+\('espn',\s*'football-data'\)/);
+  assert.match(resolverSource, /pm\.source_data AS pending_source_data/);
+  assert.match(resolverSource, /LEFT JOIN LATERAL/);
+});

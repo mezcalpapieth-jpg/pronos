@@ -68,6 +68,12 @@ test('team profile exposes a destacado star toggle', () => {
   assert.match(teamProfile, /aria-label=\{featured/);
 });
 
+test('team profile fetches and renders the team league table', () => {
+  assert.match(teamProfile, /\/api\/team-standings/);
+  assert.match(teamProfile, /LeagueTablePanel/);
+  assert.match(teamProfile, /Tabla de liga/);
+});
+
 test('binary detail gauges use logo-based gauge rows instead of outcome text inside rings', () => {
   for (const source of [mvpDetail, pointsDetail]) {
     assert.match(source, /ProbabilityGaugeRow/);

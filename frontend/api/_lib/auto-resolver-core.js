@@ -19,6 +19,7 @@ import {
   readOddsApiBoxingWinner,
   readNextOpponent,
 } from './sports-results.js';
+import { buildFootballDataEspnFallbackConfig } from './sports-resolver-fallback.js';
 import { findParallelWinnerIndex } from './sports-resolver-policy.js';
 
 export function parseAutoResolverJsonb(value, fallback) {
@@ -96,7 +97,7 @@ export function buildAutoResolverFinalScore({
 }
 
 export async function resolveAutoResolverCandidate(candidate = {}) {
-  const cfg = parseAutoResolverJsonb(candidate.resolver_config, null);
+  let cfg = parseAutoResolverJsonb(candidate.resolver_config, null);
   if (!cfg) throw new Error('missing_resolver_config');
 
   const resolverType = candidate.resolver_type;
@@ -249,7 +250,44 @@ export async function resolveAutoResolverCandidate(candidate = {}) {
         awayName: cfg.awayName,
       });
     } else if (cfg.source === 'football-data') {
-      result = await readFootballDataMatch(cfg.matchId);
+      const footballDataEspnFallback = buildFootballDataEspnFallbackConfig({
+        resolverConfig: cfg,
+        sourceData: candidate.pending_source_data,
+        sport: candidate.sport,
+        league: candidate.league,
+        startTime: candidate.start_time,
+      });
+      const useFootballDataEspnFallback = async () => {
+        cfg = {
+          ...cfg,
+          ...footballDataEspnFallback,
+          originalSource: 'football-data',
+          originalMatchId: cfg.matchId == null ? null : String(cfg.matchId),
+        };
+        resolverConfigPatch = { ...footballDataEspnFallback };
+        return readEspnEvent({
+          leaguePath: cfg.leaguePath,
+          eventId: cfg.eventId,
+          dateYmd: cfg.dateYmd,
+          homeName: cfg.homeName,
+          awayName: cfg.awayName,
+        });
+      };
+
+      if (!process.env.FOOTBALL_DATA_API_KEY && footballDataEspnFallback) {
+        result = await useFootballDataEspnFallback();
+      } else {
+        try {
+          result = await readFootballDataMatch(cfg.matchId);
+          if (!result?.completed && footballDataEspnFallback) {
+            const espnResult = await useFootballDataEspnFallback();
+            if (espnResult?.completed) result = espnResult;
+          }
+        } catch (err) {
+          if (!footballDataEspnFallback) throw err;
+          result = await useFootballDataEspnFallback();
+        }
+      }
     } else if (cfg.source === 'jolpica-f1') {
       result = await readJolpicaF1Result({ season: cfg.season, round: cfg.round });
     } else if (cfg.source === 'jolpica-f1-standings') {

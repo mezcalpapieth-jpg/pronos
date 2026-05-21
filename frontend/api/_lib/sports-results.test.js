@@ -120,3 +120,51 @@ test('readEspnEvent can resolve soccer finals by team names when no ESPN event i
     globalThis.fetch = originalFetch;
   }
 });
+
+test('readEspnEvent matches display names when ESPN short names are abbreviated', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes('/scoreboard')) {
+      return jsonResponse({
+        events: [{
+          id: '401865536',
+          competitions: [{
+            status: { type: { state: 'post', completed: true } },
+            competitors: [
+              {
+                homeAway: 'home',
+                score: '2',
+                winner: false,
+                team: { displayName: 'Cusco FC', shortDisplayName: 'Cusco' },
+              },
+              {
+                homeAway: 'away',
+                score: '3',
+                winner: true,
+                team: { displayName: 'Independiente Medellín', shortDisplayName: 'Ind. Medellín' },
+              },
+            ],
+          }],
+        }],
+      });
+    }
+    throw new Error(`unexpected url ${url}`);
+  };
+
+  try {
+    const result = await readEspnEvent({
+      leaguePath: 'soccer/conmebol.libertadores',
+      eventId: null,
+      dateYmd: '2026-05-21',
+      homeName: 'Cusco',
+      awayName: 'Independiente',
+    });
+
+    assert.equal(result.completed, true);
+    assert.equal(result.winner, 'away');
+    assert.equal(result.homeScore, 2);
+    assert.equal(result.awayScore, 3);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

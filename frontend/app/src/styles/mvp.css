@@ -140,6 +140,115 @@
   color: var(--text-primary);
 }
 
+/* ── Team profile league table ───────────────────────────────── */
+.team-profile-content {
+  display: grid;
+  gap: 18px;
+  align-items: start;
+}
+.team-profile-content.has-table {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+}
+.team-league-table {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface1);
+  overflow: hidden;
+}
+.team-league-table-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.team-league-table-kicker {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--orange);
+  margin-bottom: 8px;
+}
+.team-league-table-header h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 28px;
+  line-height: 0.95;
+  color: var(--text-primary);
+}
+.team-league-table-header > span {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.team-league-table-grid {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 34px 34px 44px;
+  gap: 8px;
+  align-items: center;
+}
+.team-league-table-grid-head {
+  padding: 10px 14px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+.team-league-table-rows {
+  display: grid;
+}
+.team-league-table-row {
+  min-height: 44px;
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.team-league-table-row:last-child {
+  border-bottom: none;
+}
+.team-league-table-row.highlighted {
+  background: rgba(255, 85, 0, 0.12);
+  color: var(--text-primary);
+}
+.team-league-table-team {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.team-league-table-team img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+.team-league-table-team span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 920px) {
+  .team-profile-content.has-table {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── MarketCard badges ───────────────────────────────────────── */
 .mock-card-badge {
   font-family: var(--font-mono);

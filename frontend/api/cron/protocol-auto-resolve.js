@@ -76,35 +76,43 @@ export async function runProtocolAutoResolve({ dry = false, limit = 50 } = {}) {
   const cappedLimit = Math.min(Math.max(Number.parseInt(limit, 10) || 50, 1), 100);
 
   const candidates = await readSql`
-    SELECT id, question, start_time, end_time, resolver_type, resolver_config,
-           outcomes, protocol_version, outcome_count, market_id, factory_address
-      FROM protocol_markets
-     WHERE status = 'active'
-       AND resolver_type IN ('chainlink_price', 'api_price', 'weather_api', 'api_chart', 'sports_api')
-       AND end_time IS NOT NULL
+    SELECT m.id, m.question, m.start_time, m.end_time, m.resolver_type, m.resolver_config,
+           m.outcomes, m.protocol_version, m.outcome_count, m.market_id, m.factory_address,
+           m.sport, m.league, pm.source_data AS pending_source_data
+      FROM protocol_markets m
+      LEFT JOIN LATERAL (
+        SELECT source_data
+          FROM protocol_pending_markets
+         WHERE approved_protocol_market_id = m.id
+         ORDER BY id DESC
+         LIMIT 1
+      ) pm ON true
+     WHERE m.status = 'active'
+       AND m.resolver_type IN ('chainlink_price', 'api_price', 'weather_api', 'api_chart', 'sports_api')
+       AND m.end_time IS NOT NULL
        AND (
-         end_time < NOW()
+         m.end_time < NOW()
          OR (
-           resolver_type = 'sports_api'
-           AND resolver_config->>'source' = 'espn'
-           AND resolver_config->>'shape' IN ('binary', 'draw3')
-           AND start_time IS NOT NULL
-           AND start_time < NOW() - INTERVAL '90 minutes'
+           m.resolver_type = 'sports_api'
+           AND m.resolver_config->>'source' IN ('espn', 'football-data')
+           AND m.resolver_config->>'shape' IN ('binary', 'draw3')
+           AND m.start_time IS NOT NULL
+           AND m.start_time < NOW() - INTERVAL '90 minutes'
          )
          OR (
-           resolver_type = 'sports_api'
-           AND resolver_config->>'source' = 'next-opponent'
-           AND end_time > NOW()
+           m.resolver_type = 'sports_api'
+           AND m.resolver_config->>'source' = 'next-opponent'
+           AND m.end_time > NOW()
            AND (
-             resolver_config->>'nextOpponentLastCheckedAt' IS NULL
-             OR NULLIF(resolver_config->>'nextOpponentLastCheckedAt', '')::timestamptz
+             m.resolver_config->>'nextOpponentLastCheckedAt' IS NULL
+             OR NULLIF(m.resolver_config->>'nextOpponentLastCheckedAt', '')::timestamptz
                   < NOW() - (${NEXT_OPPONENT_RECHECK_INTERVAL_HOURS}::int * INTERVAL '1 hour')
            )
          )
        )
      ORDER BY
-       CASE WHEN resolver_config->>'shape' = 'binary-direction' THEN 1 ELSE 0 END,
-       end_time ASC
+       CASE WHEN m.resolver_config->>'shape' = 'binary-direction' THEN 1 ELSE 0 END,
+       m.end_time ASC
      LIMIT ${cappedLimit}
   `;
 

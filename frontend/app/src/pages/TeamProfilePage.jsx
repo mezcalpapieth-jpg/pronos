@@ -164,6 +164,54 @@ function TeamScheduleRow({ row, onOpen }) {
   );
 }
 
+function statValue(value) {
+  return value == null ? '—' : value;
+}
+
+function LeagueTablePanel({ table }) {
+  const rows = Array.isArray(table?.rows) ? table.rows : [];
+  if (rows.length === 0) return null;
+
+  return (
+    <aside className="team-league-table" aria-label="Tabla de liga">
+      <div className="team-league-table-header">
+        <div>
+          <div className="team-league-table-kicker">Tabla de liga</div>
+          <h3>{table?.league?.name || 'Liga'}</h3>
+        </div>
+        {table?.season?.currentMatchday && (
+          <span>J{table.season.currentMatchday}</span>
+        )}
+      </div>
+
+      <div className="team-league-table-grid team-league-table-grid-head">
+        <span>#</span>
+        <span>Equipo</span>
+        <span>PJ</span>
+        <span>DG</span>
+        <span>PTS</span>
+      </div>
+      <div className="team-league-table-rows">
+        {rows.map(row => (
+          <div
+            key={row.teamId || `${row.position}-${row.teamName}`}
+            className={`team-league-table-grid team-league-table-row${row.highlighted ? ' highlighted' : ''}`}
+          >
+            <span>{statValue(row.position)}</span>
+            <span className="team-league-table-team" title={row.teamName}>
+              {row.logoUrl && <img src={row.logoUrl} alt="" />}
+              <span>{row.teamName}</span>
+            </span>
+            <span>{statValue(row.played)}</span>
+            <span>{statValue(row.goalDifference)}</span>
+            <span>{statValue(row.points)}</span>
+          </div>
+        ))}
+      </div>
+    </aside>
+  );
+}
+
 function TeamProfileBody({ surface }) {
   const { sport, teamSlug } = useParams();
   const navigate = useNavigate();
@@ -171,6 +219,7 @@ function TeamProfileBody({ surface }) {
   const [schedule, setSchedule] = useState([]);
   const [sourceTeam, setSourceTeam] = useState(null);
   const [markets, setMarkets] = useState([]);
+  const [leagueTable, setLeagueTable] = useState(null);
   const [warning, setWarning] = useState(null);
   const [view, setView] = useState('active-pending');
   const [loading, setLoading] = useState(true);
@@ -184,15 +233,17 @@ function TeamProfileBody({ surface }) {
     setError(null);
     (async () => {
       try {
-        const [scheduleData, marketRows] = await Promise.all([
+        const [scheduleData, marketRows, standingsData] = await Promise.all([
           getJson(`/api/team-schedule?sport=${encodeURIComponent(team.sport)}&team=${encodeURIComponent(team.slug)}`),
           loadMarkets(surface),
+          getJson(`/api/team-standings?sport=${encodeURIComponent(team.sport)}&team=${encodeURIComponent(team.slug)}`).catch(() => null),
         ]);
         if (!cancelled) {
           setSchedule(scheduleData.schedule || []);
           setSourceTeam(scheduleData.team || null);
           setWarning(scheduleData.warning || null);
           setMarkets((marketRows || []).filter(market => marketMatchesTeam(team, market)));
+          setLeagueTable(standingsData?.table || null);
         }
       } catch (e) {
         if (!cancelled) setError(e?.message || 'No se pudo cargar el equipo.');
@@ -410,61 +461,65 @@ function TeamProfileBody({ surface }) {
         })}
       </section>
 
-      <section>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 14,
-          marginBottom: 14,
-        }}>
-          <h2 style={{
-            margin: 0,
-            fontFamily: 'var(--font-display)',
-            fontSize: 30,
-            color: 'var(--text-primary)',
+      <div className={`team-profile-content${leagueTable?.rows?.length ? ' has-table' : ''}`}>
+        <section>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 14,
+            marginBottom: 14,
           }}>
-            Calendario y mercados
-          </h2>
-          <span style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 11,
-            letterSpacing: '0.08em',
-            color: 'var(--text-muted)',
-            textTransform: 'uppercase',
-          }}>
-            {surface === 'points' ? 'Points' : 'MVP'}
-          </span>
-        </div>
+            <h2 style={{
+              margin: 0,
+              fontFamily: 'var(--font-display)',
+              fontSize: 30,
+              color: 'var(--text-primary)',
+            }}>
+              Calendario y mercados
+            </h2>
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              letterSpacing: '0.08em',
+              color: 'var(--text-muted)',
+              textTransform: 'uppercase',
+            }}>
+              {surface === 'points' ? 'Points' : 'MVP'}
+            </span>
+          </div>
 
-        {loading && (
-          <div style={{ padding: 28, border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-            Cargando calendario...
-          </div>
-        )}
-        {!loading && error && (
-          <div style={{ padding: 28, border: '1px solid rgba(255,87,87,0.35)', borderRadius: 8, color: '#ff5757', fontFamily: 'var(--font-mono)' }}>
-            {error}
-          </div>
-        )}
-        {!loading && !error && warning && rows.length === 0 && (
-          <div style={{ padding: 28, border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-            Calendario no disponible por ahora.
-          </div>
-        )}
-        {!loading && !error && rows.length > 0 && visibleRows.length === 0 && (
-          <div style={{ padding: 28, border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-            No hay mercados activos o pendientes para este equipo.
-          </div>
-        )}
-        {!loading && !error && visibleRows.length > 0 && (
-          <div style={{ display: 'grid', gap: 10 }}>
-            {visibleRows.map(row => (
-              <TeamScheduleRow key={row.id} row={row} onOpen={navigate} />
-            ))}
-          </div>
-        )}
-      </section>
+          {loading && (
+            <div style={{ padding: 28, border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+              Cargando calendario...
+            </div>
+          )}
+          {!loading && error && (
+            <div style={{ padding: 28, border: '1px solid rgba(255,87,87,0.35)', borderRadius: 8, color: '#ff5757', fontFamily: 'var(--font-mono)' }}>
+              {error}
+            </div>
+          )}
+          {!loading && !error && warning && rows.length === 0 && (
+            <div style={{ padding: 28, border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+              Calendario no disponible por ahora.
+            </div>
+          )}
+          {!loading && !error && rows.length > 0 && visibleRows.length === 0 && (
+            <div style={{ padding: 28, border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+              No hay mercados activos o pendientes para este equipo.
+            </div>
+          )}
+          {!loading && !error && visibleRows.length > 0 && (
+            <div style={{ display: 'grid', gap: 10 }}>
+              {visibleRows.map(row => (
+                <TeamScheduleRow key={row.id} row={row} onOpen={navigate} />
+              ))}
+            </div>
+          )}
+        </section>
+
+        <LeagueTablePanel table={leagueTable} />
+      </div>
     </main>
   );
 }

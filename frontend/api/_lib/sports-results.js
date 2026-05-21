@@ -112,15 +112,28 @@ function competitorName(c) {
     || null;
 }
 
+function competitorNames(c) {
+  return [
+    c?.team?.shortDisplayName,
+    c?.team?.displayName,
+    c?.team?.name,
+    c?.displayName,
+  ].map(cleanString).filter(Boolean);
+}
+
+function anyNameMatches(names, target) {
+  return names.some(name => namesMatch(name, target));
+}
+
 function eventTeamOrientation(event, homeName, awayName) {
   if (!homeName || !awayName) return null;
   const comp = pickCompetition(event);
   if (!comp) return null;
   const { home, away } = pickCompetitors(comp);
-  const eventHome = competitorName(home);
-  const eventAway = competitorName(away);
-  if (namesMatch(eventHome, homeName) && namesMatch(eventAway, awayName)) return 'same';
-  if (namesMatch(eventHome, awayName) && namesMatch(eventAway, homeName)) return 'swapped';
+  const eventHomeNames = competitorNames(home);
+  const eventAwayNames = competitorNames(away);
+  if (anyNameMatches(eventHomeNames, homeName) && anyNameMatches(eventAwayNames, awayName)) return 'same';
+  if (anyNameMatches(eventHomeNames, awayName) && anyNameMatches(eventAwayNames, homeName)) return 'swapped';
   return null;
 }
 

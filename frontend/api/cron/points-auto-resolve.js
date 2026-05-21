@@ -36,6 +36,7 @@ import { readAppleMxTopArtist } from '../_lib/charts.js';
 import { readYouTubeTopMxChannel } from '../_lib/youtube.js';
 import { readEspnEvent, readFootballDataMatch, readJolpicaF1Result, readJolpicaF1Standings, readEspnPgaWinner, readEspnLivWinner, readLivTeamWinner, readEspnAtpTournamentWinner, readEspnMmaWinner, readOddsApiBoxingWinner, readNextOpponent } from '../_lib/sports-results.js';
 import { buildEspnLiveScoreConfig } from '../_lib/espn-live-score.js';
+import { buildFootballDataEspnFallbackConfig } from '../_lib/sports-resolver-fallback.js';
 import { NEXT_OPPONENT_RECHECK_INTERVAL_HOURS, findParallelWinnerIndex } from '../_lib/sports-resolver-policy.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -155,7 +156,7 @@ export async function runAutoResolve({ dry = false } = {}) {
               m.end_time < NOW()
               OR (
                 m.resolver_type = 'sports_api'
-                AND m.resolver_config->>'source' = 'espn'
+                AND m.resolver_config->>'source' IN ('espn', 'football-data')
                 AND m.resolver_config->>'shape' IN ('binary', 'draw3')
                 AND m.start_time IS NOT NULL
                 AND m.start_time < NOW() - INTERVAL '90 minutes'
@@ -415,7 +416,43 @@ export async function runAutoResolve({ dry = false } = {}) {
               awayName: cfg.awayName,
             });
           } else if (cfg.source === 'football-data') {
-            result = await readFootballDataMatch(cfg.matchId);
+            const footballDataEspnFallback = buildFootballDataEspnFallbackConfig({
+              resolverConfig: cfg,
+              sourceData: m.pending_source_data,
+              sport: m.sport,
+              league: m.league,
+              startTime: m.start_time,
+            });
+            const useFootballDataEspnFallback = async () => {
+              cfg = {
+                ...cfg,
+                ...footballDataEspnFallback,
+                originalSource: 'football-data',
+                originalMatchId: cfg.matchId == null ? null : String(cfg.matchId),
+              };
+              return readEspnEvent({
+                leaguePath: cfg.leaguePath,
+                eventId: cfg.eventId,
+                dateYmd: cfg.dateYmd,
+                homeName: cfg.homeName,
+                awayName: cfg.awayName,
+              });
+            };
+
+            if (!process.env.FOOTBALL_DATA_API_KEY && footballDataEspnFallback) {
+              result = await useFootballDataEspnFallback();
+            } else {
+              try {
+                result = await readFootballDataMatch(cfg.matchId);
+                if (!result?.completed && footballDataEspnFallback) {
+                  const espnResult = await useFootballDataEspnFallback();
+                  if (espnResult?.completed) result = espnResult;
+                }
+              } catch (err) {
+                if (!footballDataEspnFallback) throw err;
+                result = await useFootballDataEspnFallback();
+              }
+            }
           } else if (cfg.source === 'jolpica-f1') {
             result = await readJolpicaF1Result({ season: cfg.season, round: cfg.round });
           } else if (cfg.source === 'jolpica-f1-standings') {

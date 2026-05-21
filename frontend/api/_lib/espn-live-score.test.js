@@ -208,3 +208,49 @@ test('readEspnLiveScore can find a soccer event by teams when no event id is sto
   assert.equal(live.home.score, 1);
   assert.equal(live.away.score, 2);
 });
+
+test('readEspnLiveScore matches display names when ESPN short names are abbreviated', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+
+  globalThis.fetch = async (url) => {
+    assert.match(String(url), /soccer\/conmebol\.libertadores\/scoreboard/);
+    return {
+      ok: true,
+      json: async () => ({
+        events: [{
+          id: '401865536',
+          date: '2026-05-21T02:00Z',
+          status: { type: { state: 'post', completed: true } },
+          competitions: [{
+            competitors: [
+              {
+                homeAway: 'home',
+                score: '2',
+                team: { displayName: 'Cusco FC', shortDisplayName: 'Cusco' },
+              },
+              {
+                homeAway: 'away',
+                score: '3',
+                team: { displayName: 'Independiente Medellín', shortDisplayName: 'Ind. Medellín' },
+              },
+            ],
+          }],
+        }],
+      }),
+    };
+  };
+
+  const live = await readEspnLiveScore({
+    leaguePath: 'soccer/conmebol.libertadores',
+    eventId: null,
+    dateYmd: '2026-05-21',
+    homeName: 'Cusco',
+    awayName: 'Independiente',
+  });
+
+  assert.equal(live.eventId, '401865536');
+  assert.equal(live.completed, true);
+  assert.equal(live.home.score, 2);
+  assert.equal(live.away.score, 3);
+});
