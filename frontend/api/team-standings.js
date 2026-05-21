@@ -153,6 +153,11 @@ function translateEspnGroupName(name) {
   return String(name || '').replace(/^\d{4}\s+/, '').trim();
 }
 
+function groupKeyFromName(name, fallback) {
+  const key = normalizeKey(name).replace(/\s+/g, '-');
+  return key || fallback;
+}
+
 function espnStandingsGroups(data) {
   const children = Array.isArray(data?.children) ? data.children : [];
   const groups = children.filter(group => Array.isArray(group?.standings?.entries));
@@ -176,48 +181,63 @@ function espnEntryMatchRow(entry) {
   };
 }
 
-function espnLeagueName(data, group, profile) {
-  const base = profile?.league || data?.abbreviation || data?.name || 'Liga';
-  const groupName = translateEspnGroupName(group?.name || group?.abbreviation);
-  if (!groupName || normalizeKey(groupName) === normalizeKey(base)) return base;
-  return `${base} · ${groupName}`;
+function sortStandingsRows(rows) {
+  return [...rows].sort((a, b) => {
+    const aPosition = Number.isFinite(Number(a.position)) ? Number(a.position) : Number.POSITIVE_INFINITY;
+    const bPosition = Number.isFinite(Number(b.position)) ? Number(b.position) : Number.POSITIVE_INFINITY;
+    if (aPosition !== bPosition) return aPosition - bPosition;
+    return String(a.teamName || '').localeCompare(String(b.teamName || ''), 'es');
+  });
+}
+
+function normalizeEspnEntry(entry, profile, index) {
+  const stats = statMap(entry?.stats);
+  const team = entry?.team || {};
+  return {
+    position: statNumber(stats, 'rank') ?? index + 1,
+    teamId: team.id == null ? null : String(team.id),
+    teamName: displayEspnTeamName(team),
+    logoUrl: espnTeamLogo(team),
+    played: statNumber(stats, 'gamesPlayed'),
+    won: statNumber(stats, 'wins'),
+    draw: statNumber(stats, 'ties'),
+    lost: statNumber(stats, 'losses'),
+    points: statNumber(stats, 'points'),
+    goalsFor: statNumber(stats, 'pointsFor'),
+    goalsAgainst: statNumber(stats, 'pointsAgainst'),
+    goalDifference: statNumber(stats, 'pointDifferential'),
+    highlighted: rowMatchesProfile(espnEntryMatchRow(entry), profile, 'espn'),
+  };
+}
+
+function normalizeEspnGroup(group, profile, index) {
+  const rawName = group?.name || group?.abbreviation || profile?.league || `Grupo ${index + 1}`;
+  const name = translateEspnGroupName(rawName) || rawName;
+  const entries = Array.isArray(group?.standings?.entries) ? group.standings.entries : [];
+  return {
+    key: groupKeyFromName(name, `group-${index + 1}`),
+    name,
+    seasonId: group?.standings?.season || null,
+    rows: sortStandingsRows(entries.map((entry, entryIndex) => normalizeEspnEntry(entry, profile, entryIndex))),
+  };
 }
 
 export function normalizeEspnStandings(data, profile) {
-  const groups = espnStandingsGroups(data);
-  const selected = groups.find(group => (
-    (group.standings?.entries || []).some(entry => rowMatchesProfile(espnEntryMatchRow(entry), profile, 'espn'))
-  )) || groups[0] || null;
-  const entries = Array.isArray(selected?.standings?.entries) ? selected.standings.entries : [];
+  const groups = espnStandingsGroups(data).map((group, index) => normalizeEspnGroup(group, profile, index));
+  const selected = groups.find(group => group.rows.some(row => row.highlighted)) || groups[0] || null;
 
   return {
     league: {
       code: profile?.league || data?.abbreviation || null,
-      name: espnLeagueName(data, selected, profile),
+      name: profile?.league || data?.abbreviation || data?.name || null,
     },
     season: {
-      id: selected?.standings?.season || data?.season?.year || null,
+      id: selected?.seasonId || data?.season?.year || null,
       currentMatchday: null,
     },
-    rows: entries.map((entry, index) => {
-      const stats = statMap(entry?.stats);
-      const team = entry?.team || {};
-      return {
-        position: statNumber(stats, 'rank') ?? index + 1,
-        teamId: team.id == null ? null : String(team.id),
-        teamName: displayEspnTeamName(team),
-        logoUrl: espnTeamLogo(team),
-        played: statNumber(stats, 'gamesPlayed'),
-        won: statNumber(stats, 'wins'),
-        draw: statNumber(stats, 'ties'),
-        lost: statNumber(stats, 'losses'),
-        points: statNumber(stats, 'points'),
-        goalsFor: statNumber(stats, 'pointsFor'),
-        goalsAgainst: statNumber(stats, 'pointsAgainst'),
-        goalDifference: statNumber(stats, 'pointDifferential'),
-        highlighted: rowMatchesProfile(espnEntryMatchRow(entry), profile, 'espn'),
-      };
-    }),
+    defaultGroupKey: selected?.key || null,
+    groups,
+    rows: selected?.rows || [],
   };
 }
 

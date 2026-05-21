@@ -169,7 +169,20 @@ function statValue(value) {
 }
 
 function LeagueTablePanel({ table }) {
-  const rows = Array.isArray(table?.rows) ? table.rows : [];
+  const groups = useMemo(() => (
+    (Array.isArray(table?.groups) ? table.groups : [])
+      .filter(group => group?.key && Array.isArray(group?.rows) && group.rows.length > 0)
+  ), [table]);
+  const groupKeyList = groups.map(group => group.key).join('|');
+  const preferredGroupKey = table?.defaultGroupKey || groups[0]?.key || '';
+  const [selectedLeagueGroupKey, setSelectedLeagueGroupKey] = useState(preferredGroupKey);
+
+  useEffect(() => {
+    setSelectedLeagueGroupKey(preferredGroupKey);
+  }, [preferredGroupKey, groupKeyList]);
+
+  const selectedGroup = groups.find(group => group.key === selectedLeagueGroupKey) || groups[0] || null;
+  const rows = selectedGroup?.rows || (Array.isArray(table?.rows) ? table.rows : []);
   if (rows.length === 0) return null;
 
   return (
@@ -183,6 +196,26 @@ function LeagueTablePanel({ table }) {
           <span>J{table.season.currentMatchday}</span>
         )}
       </div>
+
+      {groups.length > 1 && (
+        <div className="team-league-table-toggle" role="tablist" aria-label="Conferencias">
+          {groups.map(group => {
+            const selected = group.key === selectedGroup?.key;
+            return (
+              <button
+                key={group.key}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                className={selected ? 'active' : ''}
+                onClick={() => setSelectedLeagueGroupKey(group.key)}
+              >
+                {group.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <div className="team-league-table-grid team-league-table-grid-head">
         <span>#</span>

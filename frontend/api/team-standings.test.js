@@ -126,7 +126,7 @@ test('team standings highlights directory teams without football-data ids by ali
   assert.equal(table.rows[0].highlighted, true);
 });
 
-test('team standings normalizes ESPN grouped standings and picks the profile team group', () => {
+test('team standings normalizes ESPN grouped standings with sorted conference groups', () => {
   const table = _internal.normalizeEspnStandings({
     name: 'MLS',
     abbreviation: 'MLS',
@@ -136,25 +136,55 @@ test('team standings normalizes ESPN grouped standings and picks the profile tea
         standings: {
           season: 2026,
           seasonDisplayName: '2026 MLS',
-          entries: [{
-            team: {
-              id: '182',
-              displayName: 'Chicago Fire FC',
-              shortDisplayName: 'Chicago',
-              logos: [{ href: 'chicago.png' }],
+          entries: [
+            {
+              team: {
+                id: '182',
+                displayName: 'Chicago Fire FC',
+                shortDisplayName: 'Chicago',
+                logos: [{ href: 'chicago.png' }],
+              },
+              stats: [
+                { name: 'rank', value: 4, displayValue: '4' },
+                { name: 'gamesPlayed', value: 13, displayValue: '13' },
+                { name: 'wins', value: 7, displayValue: '7' },
+                { name: 'ties', value: 2, displayValue: '2' },
+                { name: 'losses', value: 4, displayValue: '4' },
+                { name: 'points', value: 23, displayValue: '23' },
+                { name: 'pointsFor', value: 25, displayValue: '25' },
+                { name: 'pointsAgainst', value: 15, displayValue: '15' },
+                { name: 'pointDifferential', value: 10, displayValue: '+10' },
+              ],
             },
-            stats: [
-              { name: 'rank', value: 4, displayValue: '4' },
-              { name: 'gamesPlayed', value: 13, displayValue: '13' },
-              { name: 'wins', value: 7, displayValue: '7' },
-              { name: 'ties', value: 2, displayValue: '2' },
-              { name: 'losses', value: 4, displayValue: '4' },
-              { name: 'points', value: 23, displayValue: '23' },
-              { name: 'pointsFor', value: 25, displayValue: '25' },
-              { name: 'pointsAgainst', value: 15, displayValue: '15' },
-              { name: 'pointDifferential', value: 10, displayValue: '+10' },
-            ],
-          }],
+            {
+              team: {
+                id: '160',
+                displayName: 'Columbus Crew',
+                shortDisplayName: 'Columbus',
+                logos: [{ href: 'columbus.png' }],
+              },
+              stats: [
+                { name: 'rank', value: 13, displayValue: '13' },
+                { name: 'gamesPlayed', value: 14, displayValue: '14' },
+                { name: 'points', value: 13, displayValue: '13' },
+                { name: 'pointDifferential', value: -4, displayValue: '-4' },
+              ],
+            },
+            {
+              team: {
+                id: '189',
+                displayName: 'New England Revolution',
+                shortDisplayName: 'New England',
+                logos: [{ href: 'new-england.png' }],
+              },
+              stats: [
+                { name: 'rank', value: 3, displayValue: '3' },
+                { name: 'gamesPlayed', value: 13, displayValue: '13' },
+                { name: 'points', value: 25, displayValue: '25' },
+                { name: 'pointDifferential', value: 5, displayValue: '+5' },
+              ],
+            },
+          ],
         },
       },
       {
@@ -162,25 +192,41 @@ test('team standings normalizes ESPN grouped standings and picks the profile tea
         standings: {
           season: 2026,
           seasonDisplayName: '2026 MLS',
-          entries: [{
-            team: {
-              id: '187',
-              displayName: 'LA Galaxy',
-              shortDisplayName: 'LA Galaxy',
-              logos: [{ href: 'galaxy.png' }],
+          entries: [
+            {
+              team: {
+                id: '187',
+                displayName: 'LA Galaxy',
+                shortDisplayName: 'LA Galaxy',
+                logos: [{ href: 'galaxy.png' }],
+              },
+              stats: [
+                { name: 'rank', value: 3, displayValue: '3' },
+                { name: 'gamesPlayed', value: 13, displayValue: '13' },
+                { name: 'wins', value: 8, displayValue: '8' },
+                { name: 'ties', value: 1, displayValue: '1' },
+                { name: 'losses', value: 4, displayValue: '4' },
+                { name: 'points', value: 25, displayValue: '25' },
+                { name: 'pointsFor', value: 21, displayValue: '21' },
+                { name: 'pointsAgainst', value: 12, displayValue: '12' },
+                { name: 'pointDifferential', value: 9, displayValue: '+9' },
+              ],
             },
-            stats: [
-              { name: 'rank', value: 3, displayValue: '3' },
-              { name: 'gamesPlayed', value: 13, displayValue: '13' },
-              { name: 'wins', value: 8, displayValue: '8' },
-              { name: 'ties', value: 1, displayValue: '1' },
-              { name: 'losses', value: 4, displayValue: '4' },
-              { name: 'points', value: 25, displayValue: '25' },
-              { name: 'pointsFor', value: 21, displayValue: '21' },
-              { name: 'pointsAgainst', value: 12, displayValue: '12' },
-              { name: 'pointDifferential', value: 9, displayValue: '+9' },
-            ],
-          }],
+            {
+              team: {
+                id: '9726',
+                displayName: 'Seattle Sounders FC',
+                shortDisplayName: 'Seattle',
+                logos: [{ href: 'seattle.png' }],
+              },
+              stats: [
+                { name: 'rank', value: 2, displayValue: '2' },
+                { name: 'gamesPlayed', value: 14, displayValue: '14' },
+                { name: 'points', value: 28, displayValue: '28' },
+                { name: 'pointDifferential', value: 12, displayValue: '+12' },
+              ],
+            },
+          ],
         },
       },
     ],
@@ -193,10 +239,14 @@ test('team standings normalizes ESPN grouped standings and picks the profile tea
     espnTeamId: 187,
   });
 
-  assert.equal(table.league.name, 'MLS · Conferencia Oeste');
+  assert.equal(table.league.name, 'MLS');
   assert.equal(table.season.id, 2026);
-  assert.equal(table.rows.length, 1);
-  assert.deepEqual(table.rows[0], {
+  assert.equal(table.defaultGroupKey, 'conferencia-oeste');
+  assert.deepEqual(table.groups.map(group => group.name), ['Conferencia Este', 'Conferencia Oeste']);
+  assert.deepEqual(table.groups[0].rows.map(row => row.position), [3, 4, 13]);
+  assert.deepEqual(table.groups[1].rows.map(row => row.position), [2, 3]);
+  assert.deepEqual(table.rows.map(row => row.teamName), ['Seattle Sounders FC', 'LA Galaxy']);
+  assert.deepEqual(table.rows[1], {
     position: 3,
     teamId: '187',
     teamName: 'LA Galaxy',

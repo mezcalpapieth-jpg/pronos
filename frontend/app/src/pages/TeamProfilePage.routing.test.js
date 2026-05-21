@@ -74,6 +74,13 @@ test('team profile fetches and renders the team league table', () => {
   assert.match(teamProfile, /Tabla de liga/);
 });
 
+test('team profile league table exposes grouped standings as a local toggle', () => {
+  assert.match(teamProfile, /team-league-table-toggle/);
+  assert.match(teamProfile, /selectedLeagueGroupKey/);
+  assert.match(teamProfile, /role="tablist"/);
+  assert.match(teamProfile, /Conferencias/);
+});
+
 test('binary detail gauges use logo-based gauge rows instead of outcome text inside rings', () => {
   for (const source of [mvpDetail, pointsDetail]) {
     assert.match(source, /ProbabilityGaugeRow/);

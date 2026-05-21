@@ -188,6 +188,40 @@
   border: 1px solid var(--border);
   border-radius: 999px;
 }
+.team-league-table-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.015);
+}
+.team-league-table-toggle button {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 10px;
+  background: var(--surface2);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.team-league-table-toggle button:hover {
+  border-color: rgba(255, 85, 0, 0.42);
+  color: var(--text-primary);
+}
+.team-league-table-toggle button.active {
+  border-color: rgba(255, 85, 0, 0.68);
+  background: rgba(255, 85, 0, 0.12);
+  color: var(--orange);
+}
 .team-league-table-grid {
   display: grid;
   grid-template-columns: 32px minmax(0, 1fr) 34px 34px 44px;
