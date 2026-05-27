@@ -36,8 +36,7 @@ function b64urlDecode(str) {
 
 function getSecret() {
   const s = process.env.POINTS_SESSION_SECRET
-        || process.env.MVP_ACCESS_SECRET
-        || process.env.CLOB_SESSION_SECRET;
+        || (process.env.VERCEL_ENV ? null : (process.env.MVP_ACCESS_SECRET || process.env.CLOB_SESSION_SECRET));
   if (!s || s.length < 16) {
     throw new Error('POINTS_SESSION_SECRET not configured');
   }

@@ -21,7 +21,10 @@ import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requireSession } from '../../_lib/session.js';
 import {
-  createDelegationPolicy, isDelegationEnabled, DELEGATION_DAILY_CAP_MXNB,
+  createDelegationPolicy,
+  deriveDelegationPolicyState,
+  isDelegationEnabled,
+  DELEGATION_DAILY_CAP_MXNB,
 } from '../../_lib/turnkey-delegation.js';
 
 const sql = neon(process.env.DATABASE_URL);
@@ -73,21 +76,25 @@ export default async function handler(req, res) {
     const row = existing[0];
     const poolCoverage = await readProtocolPolicyPools();
     const now = Date.now();
-    const expMs = row.delegation_expires_at ? new Date(row.delegation_expires_at).getTime() : 0;
-    const authMs = row.delegation_authorized_at
-      ? new Date(row.delegation_authorized_at).getTime()
-      : 0;
-    const latestPoolMs = poolCoverage.latestCreatedAt
-      ? new Date(poolCoverage.latestCreatedAt).getTime()
-      : 0;
-    const staleForNewPools = latestPoolMs > authMs;
-    if (row.delegation_policy_id && expMs - now > REFRESH_THRESHOLD_MS && !staleForNewPools) {
+    const enabled = isDelegationEnabled();
+    const policyState = deriveDelegationPolicyState({
+      policyId: row.delegation_policy_id,
+      expiresAt: row.delegation_expires_at,
+      authorizedAt: row.delegation_authorized_at,
+      latestPoolCreatedAt: poolCoverage.latestCreatedAt,
+      delegationEnabled: enabled,
+      nowMs: now,
+      refreshThresholdMs: REFRESH_THRESHOLD_MS,
+    });
+    if (policyState.reusable) {
       return res.status(200).json({
         ok: true,
         status: 'already_authorized',
         policyId: row.delegation_policy_id,
         expiresAt: row.delegation_expires_at,
-        enabled: isDelegationEnabled(),
+        enabled,
+        simulated: policyState.simulated,
+        needsRealPolicy: policyState.needsRealPolicy,
         policyPoolCount: poolCoverage.pools.length,
       });
     }
@@ -114,9 +121,10 @@ export default async function handler(req, res) {
       expiresAt: policy.expiresAt,
       dailyCapMxnb: policy.dailyCapMxnb,
       simulated: !!policy.simulated,
-      enabled: isDelegationEnabled(),
+      enabled,
       policyPoolCount: poolCoverage.pools.length,
-      refreshedForNewPools: staleForNewPools,
+      refreshedForNewPools: policyState.staleForNewPools,
+      refreshedForRealPolicy: policyState.needsRealPolicy,
     });
   } catch (e) {
     console.error('[turnkey/authorize-delegation] error', {

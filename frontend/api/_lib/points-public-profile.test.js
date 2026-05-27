@@ -80,6 +80,24 @@ test('resolved profile history does not double-count already redeemed winning sh
   assert.equal(history[0].netPnl, -0.75);
 });
 
+test('resolved profile history values a losing market as the invested loss', () => {
+  const history = buildPublicProfileHistory([
+    {
+      ...BASE_ROW,
+      side: 'buy',
+      outcome_index: 0,
+      shares: 82,
+      collateral: 100,
+      fee: 0,
+    },
+  ], { nowMs: Date.parse('2026-05-02T00:00:00.000Z') });
+
+  assert.equal(history[0].outcomeStatus, 'lost');
+  assert.equal(history[0].buyCollateral, 100);
+  assert.equal(history[0].sellProceeds, 0);
+  assert.equal(history[0].netPnl, -100);
+});
+
 test('profile stats are derived from corrected per-market statuses', () => {
   const history = buildPublicProfileHistory([
     {

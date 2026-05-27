@@ -2,17 +2,23 @@ import crypto from 'crypto';
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from './_lib/cors.js';
 import { ensureInterestSchema } from './_lib/interest-schema.js';
+import { clientIp, rateLimit } from './_lib/rate-limit.js';
 import {
   INTEREST_DAILY_SIGNAL_CAP,
+  INTEREST_GUARD_ACTION,
   INTEREST_SIGNAL_ACTION,
+  buildInterestVisitorKeys,
+  hashInterestVisitorKey,
+  interestGuardActionForSlot,
   interestSignalActionForSlot,
-  normalizeInterestClientId,
   normalizeInterestPayload,
 } from './_lib/interest.js';
 
 const COOKIE_NAME = 'pronos_interest_id';
 const COOKIE_TTL_SECONDS = 60 * 60 * 24 * 365;
 const sql = neon(process.env.DATABASE_URL);
+const INTEREST_POST_RATE_LIMIT = 120;
+const INTEREST_POST_RATE_WINDOW_MS = 60_000;
 
 function parseCookieHeader(header) {
   const cookies = {};
@@ -42,11 +48,20 @@ function setInterestCookie(req, res, value) {
   res.setHeader('Set-Cookie', next);
 }
 
-function visitorKey(req, res, body = {}) {
+function visitorKeys(req, res, body = {}) {
   const cookies = parseCookieHeader(req.headers?.cookie);
-  const raw = normalizeInterestClientId(body.clientId) || cookies[COOKIE_NAME] || crypto.randomUUID();
-  if (!cookies[COOKIE_NAME]) setInterestCookie(req, res, raw);
-  return crypto.createHash('sha256').update(raw).digest('hex');
+  const keys = buildInterestVisitorKeys({
+    bodyClientId: body.clientId,
+    cookieClientId: cookies[COOKIE_NAME],
+    generatedClientId: crypto.randomUUID(),
+    ip: clientIp(req),
+    userAgent: req.headers?.['user-agent'],
+  });
+  if (cookies[COOKIE_NAME] !== keys.cookieClientId) setInterestCookie(req, res, keys.cookieClientId);
+  return {
+    primary: hashInterestVisitorKey(keys.primaryKey),
+    guard: hashInterestVisitorKey(keys.guardKey),
+  };
 }
 
 function requestBody(req) {
@@ -61,6 +76,13 @@ export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'POST, OPTIONS', credentials: true });
   if (cors) return cors;
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
+  const ip = clientIp(req);
+  const limited = rateLimit(req, res, {
+    key: `interest:${ip}`,
+    limit: INTEREST_POST_RATE_LIMIT,
+    windowMs: INTEREST_POST_RATE_WINDOW_MS,
+  });
+  if (limited) return;
 
   const body = requestBody(req);
   let payload;
@@ -72,19 +94,31 @@ export default async function handler(req, res) {
 
   try {
     await ensureInterestSchema(sql);
-    const vKey = visitorKey(req, res, body);
+    const vKeys = visitorKeys(req, res, body);
     const existingSignalRows = await sql`
-      SELECT COUNT(*)::int AS c
+      SELECT
+        COUNT(*) FILTER (
+          WHERE visitor_key = ${vKeys.primary}
+            AND action LIKE ${`${INTEREST_SIGNAL_ACTION}%`}
+        )::int AS primary_c,
+        COUNT(*) FILTER (
+          WHERE visitor_key = ${vKeys.guard}
+            AND action LIKE ${`${INTEREST_GUARD_ACTION}%`}
+        )::int AS guard_c
       FROM interest_daily_visitors
-      WHERE visitor_key = ${vKey}
-        AND surface = ${payload.surface}
+      WHERE surface = ${payload.surface}
         AND object_type = ${payload.objectType}
         AND object_id = ${payload.objectId}
         AND day = CURRENT_DATE
-        AND action LIKE ${`${INTEREST_SIGNAL_ACTION}%`}
+        AND (
+          (visitor_key = ${vKeys.primary} AND action LIKE ${`${INTEREST_SIGNAL_ACTION}%`})
+          OR
+          (visitor_key = ${vKeys.guard} AND action LIKE ${`${INTEREST_GUARD_ACTION}%`})
+        )
     `;
-    const existingSignals = Number(existingSignalRows?.[0]?.c || 0);
-    if (existingSignals >= INTEREST_DAILY_SIGNAL_CAP) {
+    const existingPrimarySignals = Number(existingSignalRows?.[0]?.primary_c || 0);
+    const existingGuardSignals = Number(existingSignalRows?.[0]?.guard_c || 0);
+    if (Math.max(existingPrimarySignals, existingGuardSignals) >= INTEREST_DAILY_SIGNAL_CAP) {
       return res.status(200).json({ ok: true, unique: false, capped: true });
     }
 
@@ -92,10 +126,18 @@ export default async function handler(req, res) {
       INSERT INTO interest_daily_visitors (
         visitor_key, surface, object_type, object_id, action, day
       ) VALUES (
-        ${vKey}, ${payload.surface}, ${payload.objectType}, ${payload.objectId}, ${interestSignalActionForSlot(existingSignals + 1)}, CURRENT_DATE
+        ${vKeys.primary}, ${payload.surface}, ${payload.objectType}, ${payload.objectId}, ${interestSignalActionForSlot(existingPrimarySignals + 1)}, CURRENT_DATE
       )
       ON CONFLICT DO NOTHING
       RETURNING 1
+    `;
+    await sql`
+      INSERT INTO interest_daily_visitors (
+        visitor_key, surface, object_type, object_id, action, day
+      ) VALUES (
+        ${vKeys.guard}, ${payload.surface}, ${payload.objectType}, ${payload.objectId}, ${interestGuardActionForSlot(existingGuardSignals + 1)}, CURRENT_DATE
+      )
+      ON CONFLICT DO NOTHING
     `;
     const signalInc = signalRows.length > 0 ? 1 : 0;
     if (!signalInc) return res.status(200).json({ ok: true, unique: false });

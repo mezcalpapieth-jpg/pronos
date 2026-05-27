@@ -16,6 +16,8 @@ import { ethers } from 'ethers';
 import {
   buildDelegationAllowedTargets,
   DELEGATION_ALLOWED_SELECTORS,
+  deriveDelegationPolicyState,
+  isSimulatedDelegationPolicyId,
 } from './turnkey-delegation.js';
 
 test('new user suborgs do not install the backend API key as a root user', () => {
@@ -90,4 +92,41 @@ test('delegation target builder includes active protocol pools without duplicate
     '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
   ]);
+});
+
+test('simulated delegation policies must refresh once real delegation is enabled', () => {
+  const state = deriveDelegationPolicyState({
+    policyId: 'simulated-suborg-123',
+    expiresAt: '2026-12-01T00:00:00.000Z',
+    authorizedAt: '2026-05-01T00:00:00.000Z',
+    latestPoolCreatedAt: '2026-04-01T00:00:00.000Z',
+    delegationEnabled: true,
+    nowMs: Date.parse('2026-05-20T00:00:00.000Z'),
+    refreshThresholdMs: 14 * 86_400_000,
+  });
+
+  assert.equal(isSimulatedDelegationPolicyId('simulated-suborg-123'), true);
+  assert.equal(state.simulated, true);
+  assert.equal(state.needsRealPolicy, true);
+  assert.equal(state.needsRefresh, true);
+  assert.equal(state.active, false);
+  assert.equal(state.reusable, false);
+});
+
+test('simulated delegation policies remain usable only while real delegation is disabled', () => {
+  const state = deriveDelegationPolicyState({
+    policyId: 'simulated-suborg-123',
+    expiresAt: '2026-12-01T00:00:00.000Z',
+    authorizedAt: '2026-05-01T00:00:00.000Z',
+    latestPoolCreatedAt: '2026-04-01T00:00:00.000Z',
+    delegationEnabled: false,
+    nowMs: Date.parse('2026-05-20T00:00:00.000Z'),
+    refreshThresholdMs: 14 * 86_400_000,
+  });
+
+  assert.equal(state.simulated, true);
+  assert.equal(state.needsRealPolicy, false);
+  assert.equal(state.needsRefresh, false);
+  assert.equal(state.active, true);
+  assert.equal(state.reusable, true);
 });

@@ -16,6 +16,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { historyPnlValue } from '../lib/historyPnl.js';
 
 function fmt(n, d = 2) {
   const v = Number(n);
@@ -577,7 +578,7 @@ function HistoryList({ rows, onOpen }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {rows.map(m => {
         const tag = STATUS_LABEL[m.outcomeStatus] || STATUS_LABEL.open;
-        const pnl = Number(m.netPnl || 0);
+        const pnl = historyPnlValue(m);
         const pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red, #ef4444)' : 'var(--text-primary)';
         return (
           <div

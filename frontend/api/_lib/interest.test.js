@@ -3,9 +3,13 @@ import assert from 'node:assert/strict';
 
 import {
   INTEREST_DAILY_SIGNAL_CAP,
+  INTEREST_GUARD_ACTION,
   INTEREST_SIGNAL_ACTION,
   INTEREST_WINDOWS,
+  buildInterestVisitorKeys,
   formatInterestRow,
+  hashInterestVisitorKey,
+  interestGuardActionForSlot,
   interestSignalActionForSlot,
   normalizeInterestClientId,
   normalizeInterestPayload,
@@ -98,10 +102,37 @@ test('interest rows display unique daily signals instead of raw repeated presses
 
 test('interest visitor identity supports object-level daily de-duping', () => {
   assert.equal(INTEREST_SIGNAL_ACTION, 'signal');
+  assert.equal(INTEREST_GUARD_ACTION, 'guard:signal');
   assert.equal(INTEREST_DAILY_SIGNAL_CAP, 5);
   assert.equal(interestSignalActionForSlot(1), 'signal:1');
   assert.equal(interestSignalActionForSlot(5), 'signal:5');
   assert.equal(interestSignalActionForSlot(99), 'signal:5');
+  assert.equal(interestGuardActionForSlot(1), 'guard:signal:1');
+  assert.equal(interestGuardActionForSlot(99), 'guard:signal:5');
   assert.equal(normalizeInterestClientId('  abcdefghijklmnop  '), 'abcdefghijklmnop');
   assert.equal(normalizeInterestClientId('short'), null);
+});
+
+test('interest visitor guard stays stable when a client rotates local ids', () => {
+  const first = buildInterestVisitorKeys({
+    bodyClientId: 'client-id-aaaaaaaa',
+    cookieClientId: '',
+    generatedClientId: 'generated-11111111',
+    ip: '203.0.113.10',
+    userAgent: 'Mozilla/5.0 Pronos',
+  });
+  const second = buildInterestVisitorKeys({
+    bodyClientId: 'client-id-bbbbbbbb',
+    cookieClientId: '',
+    generatedClientId: 'generated-22222222',
+    ip: '203.0.113.10',
+    userAgent: 'Mozilla/5.0 Pronos',
+  });
+
+  assert.notEqual(first.primaryKey, second.primaryKey);
+  assert.equal(first.guardKey, second.guardKey);
+  assert.equal(first.cookieClientId, 'client-id-aaaaaaaa');
+  assert.match(first.primaryKey, /^client:/);
+  assert.match(first.guardKey, /^guard:/);
+  assert.equal(hashInterestVisitorKey('client:abc'), hashInterestVisitorKey('client:abc'));
 });

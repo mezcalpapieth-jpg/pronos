@@ -1,3 +1,5 @@
+import crypto from 'crypto';
+
 export const INTEREST_WINDOWS = [
   { key: 'day', label: 'Hoy' },
   { key: 'week', label: 'Semana' },
@@ -6,6 +8,7 @@ export const INTEREST_WINDOWS = [
 ];
 
 export const INTEREST_SIGNAL_ACTION = 'signal';
+export const INTEREST_GUARD_ACTION = 'guard:signal';
 export const INTEREST_DAILY_SIGNAL_CAP = 5;
 
 const ALLOWED_SURFACES = new Set(['mvp', 'points']);
@@ -67,6 +70,37 @@ export function normalizeInterestClientId(value) {
 export function interestSignalActionForSlot(slot) {
   const safeSlot = Math.max(1, Math.min(INTEREST_DAILY_SIGNAL_CAP, Number(slot) || 1));
   return `${INTEREST_SIGNAL_ACTION}:${safeSlot}`;
+}
+
+export function interestGuardActionForSlot(slot) {
+  const safeSlot = Math.max(1, Math.min(INTEREST_DAILY_SIGNAL_CAP, Number(slot) || 1));
+  return `${INTEREST_GUARD_ACTION}:${safeSlot}`;
+}
+
+export function hashInterestVisitorKey(value) {
+  return crypto.createHash('sha256').update(String(value || '')).digest('hex');
+}
+
+export function buildInterestVisitorKeys({
+  bodyClientId,
+  cookieClientId,
+  generatedClientId,
+  ip,
+  userAgent,
+} = {}) {
+  const cleanBodyId = normalizeInterestClientId(bodyClientId);
+  const cleanCookieId = normalizeInterestClientId(cookieClientId);
+  const cleanGeneratedId = normalizeInterestClientId(generatedClientId) || crypto.randomUUID();
+  const clientId = cleanBodyId || cleanCookieId || cleanGeneratedId;
+  const ipToken = cleanToken(ip, { max: 80 }).toLowerCase() || 'unknown-ip';
+  const uaToken = cleanToken(userAgent, { max: 180 }).toLowerCase() || 'unknown-agent';
+  const guardDigest = hashInterestVisitorKey(`network:${ipToken}:${uaToken}`);
+
+  return {
+    cookieClientId: clientId,
+    primaryKey: `client:${clientId}`,
+    guardKey: `guard:${guardDigest}`,
+  };
 }
 
 function metricValue(row, uniqueKey, rawKey) {

@@ -12,6 +12,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
+import { historyPnlValue } from '../lib/historyPnl.js';
 import { buildSellPreview } from '../lib/sellPreview.js';
 import {
   fetchPositions,
@@ -1052,7 +1053,8 @@ function HistoryView({ history, summary, loading }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
         {history.map(m => {
           const s = statusMap[m.outcomeStatus] || statusMap.open;
-          const pnlPos = (m.netPnl || 0) >= 0;
+          const pnl = historyPnlValue(m);
+          const pnlPos = pnl >= 0;
           return (
             <div key={m.marketId} style={{
               background: 'var(--surface1)',
@@ -1079,11 +1081,9 @@ function HistoryView({ history, summary, loading }) {
                 fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)',
               }}>
                 <span>{m.transactions?.length || 0} transaccion{(m.transactions?.length || 0) === 1 ? '' : 'es'}</span>
-                {m.outcomeStatus !== 'lost' && (
-                  <span style={{ color: pnlPos ? 'var(--green)' : 'var(--red, #ef4444)', fontWeight: 700 }}>
-                    {pnlPos ? '+' : ''}{fmt(m.netPnl)} MXNP
-                  </span>
-                )}
+                <span style={{ color: pnlPos ? 'var(--green)' : 'var(--red, #ef4444)', fontWeight: 700 }}>
+                  {pnlPos ? '+' : ''}{fmt(pnl)} MXNP
+                </span>
               </div>
             </div>
           );

@@ -103,6 +103,53 @@ export function isDelegationEnabled() {
   return Boolean(cfg.chainId > 0 && (cfg.marketFactoryV1 || cfg.marketFactoryV2) && cfg.collateralToken);
 }
 
+export function isSimulatedDelegationPolicyId(policyId) {
+  return String(policyId || '').startsWith('simulated-');
+}
+
+function timeMs(value) {
+  if (!value) return 0;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+export function deriveDelegationPolicyState({
+  policyId,
+  expiresAt,
+  authorizedAt,
+  latestPoolCreatedAt,
+  delegationEnabled,
+  nowMs = Date.now(),
+  refreshThresholdMs = 0,
+} = {}) {
+  const hasPolicy = Boolean(policyId);
+  const expMs = timeMs(expiresAt);
+  const authMs = timeMs(authorizedAt);
+  const latestPoolMs = timeMs(latestPoolCreatedAt);
+  const simulated = isSimulatedDelegationPolicyId(policyId);
+  const expired = !hasPolicy || expMs <= nowMs;
+  const staleForNewPools = hasPolicy && latestPoolMs > authMs;
+  const needsRealPolicy = hasPolicy && simulated && delegationEnabled === true;
+  const expiringSoon = hasPolicy && !expired && expMs - nowMs <= refreshThresholdMs;
+  const needsRefresh = hasPolicy && (expired || staleForNewPools || needsRealPolicy || expiringSoon);
+  const active = hasPolicy && !expired && !staleForNewPools && !needsRealPolicy;
+  const reusable = active && !expiringSoon;
+
+  return {
+    active,
+    reusable,
+    needsRefresh,
+    simulated,
+    expired,
+    expiringSoon,
+    staleForNewPools,
+    needsRealPolicy,
+    expMs,
+    authMs,
+    latestPoolMs,
+  };
+}
+
 // ── Policy creation ────────────────────────────────────────────────
 
 /**

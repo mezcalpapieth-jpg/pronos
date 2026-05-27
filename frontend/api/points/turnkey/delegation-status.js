@@ -12,7 +12,10 @@ import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requireSession } from '../../_lib/session.js';
 import {
-  isDelegationEnabled, DELEGATION_DAYS, DELEGATION_DAILY_CAP_MXNB,
+  deriveDelegationPolicyState,
+  isDelegationEnabled,
+  DELEGATION_DAYS,
+  DELEGATION_DAILY_CAP_MXNB,
 } from '../../_lib/turnkey-delegation.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -54,26 +57,27 @@ export default async function handler(req, res) {
       LIMIT 1
     `;
     const row = rows[0] || {};
-    const expMs = row.delegation_expires_at ? new Date(row.delegation_expires_at).getTime() : 0;
     const latestPoolCreatedAt = await readLatestProtocolPoolCreatedAt();
-    const authMs = row.delegation_authorized_at
-      ? new Date(row.delegation_authorized_at).getTime()
-      : 0;
-    const latestPoolMs = latestPoolCreatedAt ? new Date(latestPoolCreatedAt).getTime() : 0;
-    const needsRefresh = Boolean(row.delegation_policy_id) && latestPoolMs > authMs;
-    const active = Boolean(row.delegation_policy_id) && expMs > Date.now() && !needsRefresh;
-    const simulated = String(row.delegation_policy_id || '').startsWith('simulated-');
+    const enabled = isDelegationEnabled();
+    const policyState = deriveDelegationPolicyState({
+      policyId: row.delegation_policy_id,
+      expiresAt: row.delegation_expires_at,
+      authorizedAt: row.delegation_authorized_at,
+      latestPoolCreatedAt,
+      delegationEnabled: enabled,
+    });
 
     return res.status(200).json({
-      active,
-      needsRefresh,
-      simulated,
+      active: policyState.active,
+      needsRefresh: policyState.needsRefresh,
+      simulated: policyState.simulated,
+      needsRealPolicy: policyState.needsRealPolicy,
       // When delegation is disabled at the env level the active
       // column may still be true (a simulated policy exists) but
       // signing won't actually work. Flag this explicitly so the
       // UI can show "pending contract deployment" rather than a
       // misleading green tick.
-      enabled: isDelegationEnabled(),
+      enabled,
       policyId: row.delegation_policy_id || null,
       expiresAt: row.delegation_expires_at || null,
       dailyCapMxnb: row.delegation_daily_cap_mxnb

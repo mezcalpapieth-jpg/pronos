@@ -12,3 +12,8 @@ test('portfolio sell flow previews the real AMM quote before executing', () => {
   assert.match(source, /SALIDA REAL/);
   assert.match(source, /IMPACTO POR LIQUIDEZ/);
 });
+
+test('portfolio history displays losing PnL instead of hiding lost rows', () => {
+  assert.match(source, /historyPnlValue\(m\)/);
+  assert.doesNotMatch(source, /outcomeStatus\s*!==\s*'lost'/);
+});
