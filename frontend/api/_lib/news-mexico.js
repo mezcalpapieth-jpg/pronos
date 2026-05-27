@@ -516,6 +516,9 @@ const MAX_TOTAL_ITEMS = 180;       // hard cap across all outlets
 const MAX_AGE_HOURS = 48;
 const CACHE_TTL_MS = 5 * 60_000;
 const FEED_TIMEOUT_MS = 8_000;     // per-outlet timeout (independent)
+const NEWS_FETCH_CONCURRENCY = 4;
+const MIN_HEALTHY_REFRESH_ITEMS = 60;
+const DEGRADED_REFRESH_FAILED_RATIO = 0.5;
 
 // First-seen timestamp tracker for items that have no real publish
 // date (homepage-scraped cards, mostly). Maps canonicalized URL →
@@ -1090,16 +1093,22 @@ async function fetchOgMeta(url) {
 
 // Limit concurrency so we don't open 60 sockets at once. Returns
 // when all input items have been processed (success or failure).
-async function runWithConcurrency(items, worker, n) {
-  let i = 0;
-  async function next() {
-    while (i < items.length) {
-      const idx = i++;
-      await worker(items[idx]);
+export async function runWithConcurrency(items = [], worker, n = NEWS_FETCH_CONCURRENCY) {
+  const list = Array.isArray(items) ? items : [];
+  const limit = Math.max(1, Math.min(Number(n) || 1, list.length || 1));
+  const results = new Array(list.length);
+  let nextIndex = 0;
+
+  async function runWorker() {
+    while (nextIndex < list.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await worker(list[index], index);
     }
   }
-  const runners = Array.from({ length: Math.min(n, items.length) }, () => next());
-  await Promise.all(runners);
+
+  await Promise.all(Array.from({ length: limit }, () => runWorker()));
+  return results;
 }
 
 // Populate `image` AND a real `publishedAt` on items that don't
@@ -1172,6 +1181,18 @@ async function enrichItemsWithImages(items) {
 let cache = { fetchedAt: 0, items: [], debug: {} };
 let inFlight = null;
 
+export function shouldKeepPreviousNewsCache({
+  previousCount = 0,
+  nextCount = 0,
+  failedOutlets = 0,
+  totalOutlets = 0,
+} = {}) {
+  if (previousCount <= 0) return false;
+  const failedRatio = totalOutlets > 0 ? failedOutlets / totalOutlets : 0;
+  const minimumExpected = Math.min(previousCount, MIN_HEALTHY_REFRESH_ITEMS);
+  return nextCount < minimumExpected && failedRatio >= DEGRADED_REFRESH_FAILED_RATIO;
+}
+
 async function refreshCache() {
   const debug = {
     fetchedAt: new Date().toISOString(),
@@ -1182,9 +1203,10 @@ async function refreshCache() {
     // Each outlet gets its own AbortController inside fetchOneOutlet,
     // so one slow source doesn't kill the rest. Failed fetches return
     // an { __error, outletId } sentinel that we surface in `debug`.
-    const results = await Promise.all(OUTLETS.map(o => fetchOneOutlet(o)));
+    const results = await runWithConcurrency(OUTLETS, outlet => fetchOneOutlet(outlet));
 
     let items = [];
+    let failedOutlets = 0;
     for (let i = 0; i < OUTLETS.length; i++) {
       const outlet = OUTLETS[i];
       const r = results[i];
@@ -1192,10 +1214,31 @@ async function refreshCache() {
         debug.perOutlet[outlet.id] = { ok: true, count: r.length };
         items = items.concat(r);
       } else {
+        failedOutlets += 1;
         debug.perOutlet[outlet.id] = { ok: false, error: r?.__error || 'unknown' };
       }
     }
     debug.rawCount = items.length;
+    debug.failedOutletCount = failedOutlets;
+    debug.totalOutletCount = OUTLETS.length;
+
+    if (shouldKeepPreviousNewsCache({
+      previousCount: cache.items?.length || 0,
+      nextCount: items.length,
+      failedOutlets,
+      totalOutlets: OUTLETS.length,
+    })) {
+      cache = {
+        fetchedAt: Date.now(),
+        items: cache.items,
+        debug: {
+          ...cache.debug,
+          keptPreviousOnDegradedRefresh: true,
+          lastDegradedRefresh: debug,
+        },
+      };
+      return;
+    }
 
     // Resolve missing/invalid publishedAt via the first-seen tracker.
     // Scraped homepage cards usually arrive with publishedAt = null —

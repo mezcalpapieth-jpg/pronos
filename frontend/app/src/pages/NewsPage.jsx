@@ -28,7 +28,9 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { fetchNews, adminLinkNews, adminUnlinkNews, adminListActiveMarkets, adminHideNews } from '@app/lib/newsApi.js';
+import NewsMapView from '@app/components/NewsMapView.jsx';
+import { fetchNews, fetchPublicMapMarkets, adminLinkNews, adminUnlinkNews, adminListActiveMarkets, adminHideNews } from '@app/lib/newsApi.js';
+import { enrichNewsItemsWithGeo } from '@app/lib/newsGeo.js';
 import { useT } from '@app/lib/i18n.js';
 
 const SUB_TABS = [
@@ -123,10 +125,15 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
   const t = useT();
 
   const initialSub = (searchParams.get('sub') || 'featured').toLowerCase();
+  const initialView = searchParams.get('view') === 'map' ? 'map' : 'feed';
   const [sub, setSub] = useState(initialSub);
+  const [viewMode, setViewMode] = useState(initialView);
+  const [mapRegion, setMapRegion] = useState('all');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [mapMarkets, setMapMarkets] = useState([]);
+  const [mapMarketsLoaded, setMapMarketsLoaded] = useState(false);
   // Picker state for admin "Vincular existente" — open when linkPickerFor
   // holds a news item, null when closed.
   const [linkPickerFor, setLinkPickerFor] = useState(null);
@@ -175,6 +182,14 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
     }
   }, [sub, searchParams, setSearchParams]);
 
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (viewMode === 'map') next.set('view', 'map');
+    else next.delete('view');
+    const current = searchParams.get('view') === 'map' ? 'map' : 'feed';
+    if (current !== viewMode) setSearchParams(next, { replace: true });
+  }, [viewMode, searchParams, setSearchParams]);
+
   // Fetch ONCE per page visit (and on manual refresh): always pull
   // the full feed regardless of sub-tab so we can drive both the
   // category filter AND the source-filter counts client-side.
@@ -208,6 +223,18 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
     return () => { cancelled = true; };
   }, []);
 
+  useEffect(() => {
+    if (viewMode !== 'map' || mapMarketsLoaded) return;
+    let cancelled = false;
+    fetchPublicMapMarkets({ limit: 160 })
+      .then(markets => {
+        if (!cancelled) setMapMarkets(Array.isArray(markets) ? markets : []);
+      })
+      .catch(() => { if (!cancelled) setMapMarkets([]); })
+      .finally(() => { if (!cancelled) setMapMarketsLoaded(true); });
+    return () => { cancelled = true; };
+  }, [viewMode, mapMarketsLoaded]);
+
   // Source filter is applied client-side BEFORE the hero/rest split
   // so disabled sources don't take hero slots. Counts in the sub-
   // tabs also reflect the filtered set so users see what they can
@@ -217,6 +244,8 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
     if (disabledSources.size === 0) return items;
     return items.filter(i => !disabledSources.has(i.sourceId));
   }, [data, disabledSources]);
+
+  const geoItems = useMemo(() => enrichNewsItemsWithGeo(visibleItems), [visibleItems]);
 
   // Filtered counts per sub-category — drive the sub-tab badges so
   // they reflect what the user actually sees rather than the raw
@@ -407,6 +436,24 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
               onDisableAll={() => setAllSourcesDisabled(data.sources.map(s => s.id))}
             />
           )}
+          <div style={{ display: 'inline-flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className={`filter-btn${viewMode === 'feed' ? ' active' : ''}`}
+              onClick={() => setViewMode('feed')}
+              style={{ fontSize: 11 }}
+            >
+              Noticias
+            </button>
+            <button
+              type="button"
+              className={`filter-btn${viewMode === 'map' ? ' active' : ''}`}
+              onClick={() => setViewMode('map')}
+              style={{ fontSize: 11 }}
+            >
+              Mapa
+            </button>
+          </div>
         </div>
         <p style={{
           fontFamily: 'var(--font-body)',
@@ -427,6 +474,15 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
         )}
       </div>
 
+      {viewMode === 'map' && !loading ? (
+        <NewsMapView
+          items={geoItems}
+          markets={mapMarkets}
+          activeRegion={mapRegion}
+          onRegionChange={setMapRegion}
+        />
+      ) : (
+      <>
       {/* Layout: sub-tab sidebar on the left at desktop widths,
           collapses to a horizontal flex-wrap row at the top on
           tablet/phone (≥900px breakpoint switches between modes). */}
@@ -521,6 +577,8 @@ export default function NewsPage({ isAdmin = false, adminPath = '/admin' }) {
       )}
         </div>{/* /news-main */}
       </div>{/* /news-layout */}
+      </>
+      )}
 
       {linkPickerFor && (
         <NewsLinkPicker

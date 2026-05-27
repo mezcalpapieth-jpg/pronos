@@ -24,6 +24,9 @@ import {
   prioritizeFeaturedMarkets,
   useFeaturedTeamKeys,
 } from '@app/lib/featuredTeams.js';
+import { fetchNews, fetchPublicMapMarkets } from '@app/lib/newsApi.js';
+import { enrichNewsItemsWithGeo } from '@app/lib/newsGeo.js';
+import NewsMapView from '@app/components/NewsMapView.jsx';
 import PointsMarketCard from '../components/PointsMarketCard.jsx';
 
 // Human-readable "2d 14h 37m" style countdown for the cycle deadline.
@@ -38,6 +41,12 @@ function formatCountdown(totalSeconds) {
   if (hours > 0 || days > 0) parts.push(`${hours}h`);
   parts.push(`${minutes}m`);
   return parts.join(' ');
+}
+
+function isPendingMarket(market, now = Date.now()) {
+  return market?.status === 'active'
+    && market?.endTime
+    && new Date(market.endTime).getTime() < now;
 }
 
 export default function PointsHome({ onOpenLogin }) {
@@ -55,6 +64,11 @@ export default function PointsHome({ onOpenLogin }) {
   const [error, setError] = useState(null);
   const [cycle, setCycle] = useState(null);
   const [cycleTick, setCycleTick] = useState(0); // forces re-render each minute
+  const [trendingView, setTrendingView] = useState('markets');
+  const [mapRegion, setMapRegion] = useState('all');
+  const [mapNewsItems, setMapNewsItems] = useState([]);
+  const [sharedMapMarkets, setSharedMapMarkets] = useState([]);
+  const [sharedMapLoaded, setSharedMapLoaded] = useState(false);
   const featuredTeamKeys = useFeaturedTeamKeys();
   // Aggregate counters from /api/points/stats. Source of truth for
   // the hero's "Mercados activos" number — the grid below only
@@ -151,20 +165,48 @@ export default function PointsHome({ onOpenLogin }) {
     return () => { cancelled = true; };
   }, [authenticated]);
 
-  // Home = Trending. Always active, never pending (those live on
-  // /c/porresolver). Search narrows the visible list.
-  const filtered = useMemo(() => {
+  useEffect(() => {
+    if (trendingView !== 'map' || sharedMapLoaded) return;
+    let cancelled = false;
+    Promise.allSettled([
+      fetchNews({ category: 'featured', limit: 120 }),
+      fetchPublicMapMarkets({ limit: 160 }),
+    ]).then(([newsResult, marketResult]) => {
+      if (cancelled) return;
+      if (newsResult.status === 'fulfilled') {
+        const payload = newsResult.value?.data || newsResult.value || {};
+        const items = Array.isArray(payload.items) ? payload.items : [];
+        setMapNewsItems(enrichNewsItemsWithGeo(items));
+      }
+      if (marketResult.status === 'fulfilled') {
+        setSharedMapMarkets(Array.isArray(marketResult.value) ? marketResult.value : []);
+      }
+    }).finally(() => {
+      if (!cancelled) setSharedMapLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, [trendingView, sharedMapLoaded]);
+
+  // Map mode is broader than the home cards: it should expose every
+  // active market with a geo signal, while the card grid stays curated.
+  const mapMarkets = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const now = Date.now();
-    const isPending = (m) =>
-      m.status === 'active'
-      && m.endTime
-      && new Date(m.endTime).getTime() < now;
-    let out = markets.filter(m => !isPending(m));
-    out = out.filter(m => m.trending || marketMatchesFeaturedTeam(m, featuredTeamKeys));
+    let out = markets.filter(m => !isPendingMarket(m, now));
     if (q) out = out.filter(m => (m.question || '').toLowerCase().includes(q));
     return prioritizeFeaturedMarkets(out, featuredTeamKeys);
   }, [markets, searchQuery, featuredTeamKeys]);
+
+  // Home = Trending. Always active, never pending (those live on
+  // /c/porresolver). Search narrows the visible list through mapMarkets.
+  const filtered = useMemo(() => {
+    const out = mapMarkets.filter(m => m.trending || marketMatchesFeaturedTeam(m, featuredTeamKeys));
+    return prioritizeFeaturedMarkets(out, featuredTeamKeys);
+  }, [mapMarkets, featuredTeamKeys]);
+
+  const homeMapMarkets = useMemo(() => (
+    sharedMapLoaded && sharedMapMarkets.length > 0 ? sharedMapMarkets : mapMarkets
+  ), [sharedMapLoaded, sharedMapMarkets, mapMarkets]);
 
   // Derived stats for the hero. `activeCount` reads from the stats
   // endpoint's aggregate query so it reflects EVERY active market
@@ -371,6 +413,33 @@ export default function PointsHome({ onOpenLogin }) {
 
       {/* ── Markets grid ──────────────────────────────────── */}
       <section id="market" style={{ padding: '36px 48px 60px', maxWidth: 1280, margin: '0 auto' }}>
+        {!loading && !error && (
+          <div style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            gap: 8,
+            flexWrap: 'wrap',
+            marginBottom: 16,
+          }}>
+            <button
+              type="button"
+              className={`filter-btn${trendingView === 'markets' ? ' active' : ''}`}
+              onClick={() => setTrendingView('markets')}
+              style={{ fontSize: 11 }}
+            >
+              Mercados
+            </button>
+            <button
+              type="button"
+              className={`filter-btn${trendingView === 'map' ? ' active' : ''}`}
+              onClick={() => setTrendingView('map')}
+              style={{ fontSize: 11 }}
+            >
+              Mapa
+            </button>
+          </div>
+        )}
         {loading && (
           <div style={{
             textAlign: 'center',
@@ -395,7 +464,7 @@ export default function PointsHome({ onOpenLogin }) {
             {t('points.home.loadError', { err: error })}
           </div>
         )}
-        {!loading && !error && filtered.length === 0 && (
+        {!loading && !error && (trendingView === 'map' ? (homeMapMarkets.length + mapNewsItems.length) : filtered.length) === 0 && (
           <div style={{
             textAlign: 'center',
             padding: 60,
@@ -408,12 +477,21 @@ export default function PointsHome({ onOpenLogin }) {
               : `🎯 ${t('points.home.empty')}`}
           </div>
         )}
-        {!loading && !error && filtered.length > 0 && (
-          <div className="markets-grid">
-            {filtered.map(m => (
-              <PointsMarketCard key={m.id} market={m} userPosition={positionByMarket[m.id]} />
-            ))}
-          </div>
+        {!loading && !error && (trendingView === 'map' ? (homeMapMarkets.length + mapNewsItems.length) : filtered.length) > 0 && (
+          trendingView === 'map' ? (
+            <NewsMapView
+              items={mapNewsItems}
+              markets={homeMapMarkets}
+              activeRegion={mapRegion}
+              onRegionChange={setMapRegion}
+            />
+          ) : (
+            <div className="markets-grid">
+              {filtered.map(m => (
+                <PointsMarketCard key={m.id} market={m} userPosition={positionByMarket[m.id]} />
+              ))}
+            </div>
+          )
         )}
       </section>
 

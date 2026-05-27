@@ -15,8 +15,11 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import MarketCard from './MarketCard.jsx';
+import NewsMapView from './NewsMapView.jsx';
 import { useT } from '../lib/i18n.js';
 import { mapProtocolMarketToCard } from '../lib/mvpMarketCard.js';
+import { fetchNews, fetchPublicMapMarkets } from '../lib/newsApi.js';
+import { enrichNewsItemsWithGeo } from '../lib/newsGeo.js';
 import {
   marketMatchesFeaturedTeam,
   prioritizeFeaturedMarkets,
@@ -49,9 +52,40 @@ export default function MarketsGrid({ activeFilter, onOpenLogin }) {
   const [markets, setMarkets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [gridView, setGridView] = useState('markets');
+  const [mapRegion, setMapRegion] = useState('all');
+  const [mapNewsItems, setMapNewsItems] = useState([]);
+  const [sharedMapMarkets, setSharedMapMarkets] = useState([]);
+  const [sharedMapLoaded, setSharedMapLoaded] = useState(false);
   const featuredTeamKeys = useFeaturedTeamKeys();
 
   const status = activeFilter === 'resueltos' ? 'resolved' : 'active';
+
+  useEffect(() => {
+    if (activeFilter !== 'trending') setGridView('markets');
+  }, [activeFilter]);
+
+  useEffect(() => {
+    if (gridView !== 'map' || sharedMapLoaded) return;
+    let cancelled = false;
+    Promise.allSettled([
+      fetchNews({ category: 'featured', limit: 120 }),
+      fetchPublicMapMarkets({ limit: 160 }),
+    ]).then(([newsResult, marketResult]) => {
+      if (cancelled) return;
+      if (newsResult.status === 'fulfilled') {
+        const payload = newsResult.value?.data || newsResult.value || {};
+        const items = Array.isArray(payload.items) ? payload.items : [];
+        setMapNewsItems(enrichNewsItemsWithGeo(items));
+      }
+      if (marketResult.status === 'fulfilled') {
+        setSharedMapMarkets(Array.isArray(marketResult.value) ? marketResult.value : []);
+      }
+    }).finally(() => {
+      if (!cancelled) setSharedMapLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, [gridView, sharedMapLoaded]);
 
   useEffect(() => {
     let cancelled = false;
@@ -102,6 +136,18 @@ export default function MarketsGrid({ activeFilter, onOpenLogin }) {
     return prioritizeFeaturedMarkets(out, featuredTeamKeys);
   }, [markets, activeFilter, featuredTeamKeys]);
 
+  const mapMarkets = useMemo(() => {
+    if (!Array.isArray(markets)) return [];
+    if (activeFilter === 'trending') {
+      return prioritizeFeaturedMarkets(markets, featuredTeamKeys);
+    }
+    return filtered;
+  }, [markets, activeFilter, filtered, featuredTeamKeys]);
+
+  const sharedMapDisplayMarkets = useMemo(() => (
+    sharedMapLoaded && sharedMapMarkets.length > 0 ? sharedMapMarkets : mapMarkets
+  ), [sharedMapLoaded, sharedMapMarkets, mapMarkets]);
+
   if (loading && filtered.length === 0) {
     return (
       <div style={{
@@ -116,6 +162,33 @@ export default function MarketsGrid({ activeFilter, onOpenLogin }) {
 
   return (
     <div>
+      {activeFilter === 'trending' && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          gap: 8,
+          flexWrap: 'wrap',
+          marginBottom: 16,
+        }}>
+          <button
+            type="button"
+            className={`filter-btn${gridView === 'markets' ? ' active' : ''}`}
+            onClick={() => setGridView('markets')}
+            style={{ fontSize: 11 }}
+          >
+            Mercados
+          </button>
+          <button
+            type="button"
+            className={`filter-btn${gridView === 'map' ? ' active' : ''}`}
+            onClick={() => setGridView('map')}
+            style={{ fontSize: 11 }}
+          >
+            Mapa
+          </button>
+        </div>
+      )}
       {error && filtered.length === 0 && (
         <div style={{
           textAlign: 'center', marginBottom: 16,
@@ -125,7 +198,7 @@ export default function MarketsGrid({ activeFilter, onOpenLogin }) {
           {t('grid.fallback')}
         </div>
       )}
-      {filtered.length === 0 ? (
+      {(activeFilter === 'trending' && gridView === 'map' ? (sharedMapDisplayMarkets.length + mapNewsItems.length) : filtered.length) === 0 ? (
         <div style={{
           textAlign: 'center', padding: '60px 0',
           color: 'var(--text-muted)',
@@ -134,11 +207,20 @@ export default function MarketsGrid({ activeFilter, onOpenLogin }) {
           {t('grid.empty')}
         </div>
       ) : (
-        <div className="markets-grid">
-          {filtered.map(market => (
-            <MarketCard key={market.id} market={market} onOpenLogin={onOpenLogin} />
-          ))}
-        </div>
+        activeFilter === 'trending' && gridView === 'map' ? (
+          <NewsMapView
+            items={mapNewsItems}
+            markets={sharedMapDisplayMarkets}
+            activeRegion={mapRegion}
+            onRegionChange={setMapRegion}
+          />
+        ) : (
+          <div className="markets-grid">
+            {filtered.map(market => (
+              <MarketCard key={market.id} market={market} onOpenLogin={onOpenLogin} />
+            ))}
+          </div>
+        )
       )}
     </div>
   );

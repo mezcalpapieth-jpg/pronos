@@ -1,10 +1,24 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import {
+  MVP_ACCESS_COOKIE_NAME,
+  buildMvpAccessCookie,
+  readCookie,
+  verifyMvpAccessCookie,
+  verifyMvpAccessPassword,
+} from '../api/_lib/mvp-access-gate.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dirname, '../..');
 const nodeModuleSegment = `${path.sep}node_modules${path.sep}`;
+
+const rootEnv = loadEnv(process.env.NODE_ENV || 'development', repoRoot, '');
+for (const [key, value] of Object.entries(rootEnv)) {
+  if (process.env[key] == null) process.env[key] = value;
+}
 
 function matchesNodeModule(id, names) {
   return names.some((name) => (
@@ -15,6 +29,60 @@ function matchesNodeModule(id, names) {
 
 function manualChunks(id) {
   if (!id.includes(nodeModuleSegment)) return null;
+
+  if (matchesNodeModule(id, [
+    'react-globe.gl',
+    'globe.gl',
+    'three',
+    'three-globe',
+    'three-render-objects',
+    'three-conic-polygon-geometry',
+    'three-geojson-geometry',
+    'three-slippy-map-globe',
+    '@tweenjs/tween.js',
+    '@turf/boolean-point-in-polygon',
+    'accessor-fn',
+    'd3-array',
+    'd3-color',
+    'd3-delaunay',
+    'd3-format',
+    'd3-geo',
+    'd3-geo-voronoi',
+    'd3-interpolate',
+    'd3-octree',
+    'd3-scale',
+    'd3-scale-chromatic',
+    'd3-selection',
+    'd3-time',
+    'd3-time-format',
+    'd3-tricontour',
+    'data-bind-mapper',
+    'delaunator',
+    'earcut',
+    'float-tooltip',
+    'frame-ticker',
+    'h3-js',
+    'index-array-by',
+    'jerrypick',
+    'kapsule',
+    'lodash-es',
+    'polished',
+    'point-in-polygon-hao',
+    'robust-predicates',
+    'loose-envify',
+    'object-assign',
+    'prop-types',
+    'react-kapsule',
+    'react-is',
+    'tinycolor2',
+    'topojson-client',
+    'tslib',
+    'world-atlas',
+    '@turf/helpers',
+    '@turf/invariant',
+  ])) {
+    return 'globe-vendor';
+  }
 
   if (matchesNodeModule(id, ['react', 'react-dom', 'scheduler'])) {
     return 'react-vendor';
@@ -55,6 +123,103 @@ function normalizeViteId(id = '') {
   return id.replaceAll(path.win32.sep, path.posix.sep);
 }
 
+function readRequestJson(req) {
+  return new Promise((resolve) => {
+    let raw = '';
+    req.on('data', chunk => { raw += chunk; });
+    req.on('end', () => {
+      try {
+        resolve(raw ? JSON.parse(raw) : {});
+      } catch {
+        resolve({});
+      }
+    });
+    req.on('error', () => resolve({}));
+  });
+}
+
+function sendJson(res, status, payload, headers = {}) {
+  res.statusCode = status;
+  res.setHeader('Content-Type', 'application/json');
+  for (const [key, value] of Object.entries(headers)) {
+    res.setHeader(key, value);
+  }
+  res.end(JSON.stringify(payload));
+}
+
+function sendText(res, status, body, headers = {}) {
+  res.statusCode = status;
+  for (const [key, value] of Object.entries(headers)) {
+    res.setHeader(key, value);
+  }
+  res.end(body);
+}
+
+function sharedCssDevMiddleware() {
+  const cssDir = path.resolve(__dirname, '../css');
+  const prefixes = ['/css/', '/mvp/css/', '/points/css/'];
+
+  return {
+    name: 'shared-css-dev-middleware',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = req.url?.split('?')[0] || '';
+        const prefix = prefixes.find(item => url.startsWith(item));
+        if (!prefix) return next();
+
+        const relativePath = decodeURIComponent(url.slice(prefix.length));
+        if (!relativePath || relativePath.includes('..') || path.isAbsolute(relativePath)) {
+          return sendText(res, 400, 'Bad CSS path', { 'Content-Type': 'text/plain' });
+        }
+
+        try {
+          const file = path.join(cssDir, relativePath);
+          const body = await fs.readFile(file, 'utf8');
+          return sendText(res, 200, body, {
+            'Content-Type': 'text/css; charset=utf-8',
+            'Cache-Control': 'no-cache',
+          });
+        } catch {
+          return next();
+        }
+      });
+    },
+  };
+}
+
+function mvpAccessDevGate() {
+  return {
+    name: 'mvp-access-dev-gate',
+    configureServer(server) {
+      server.middlewares.use('/api/mvp-access', async (req, res, next) => {
+        if (req.method === 'OPTIONS') {
+          res.statusCode = 204;
+          return res.end();
+        }
+
+        if (req.method === 'GET') {
+          const cookie = readCookie(req.headers, MVP_ACCESS_COOKIE_NAME);
+          return sendJson(res, 200, { ok: verifyMvpAccessCookie(cookie) });
+        }
+
+        if (req.method !== 'POST') {
+          return sendJson(res, 405, { error: 'GET or POST only' });
+        }
+
+        const body = await readRequestJson(req);
+        const result = verifyMvpAccessPassword(body.password);
+        if (!result.ok) {
+          return sendJson(res, result.status, { error: result.error });
+        }
+
+        return sendJson(res, 200, { ok: true }, {
+          'Set-Cookie': buildMvpAccessCookie({ headers: req.headers }),
+        });
+      });
+    },
+  };
+}
+
 export function turnkeyBrowserNodecryptoStub() {
   const stubPath = path.resolve(__dirname, 'src/lib/turnkeyNodecryptoBrowserStub.js');
 
@@ -93,7 +258,7 @@ export function turnkeyBrowserNodecryptoStub() {
 const isPoints = process.env.BUILD_TARGET === 'points';
 
 export default defineConfig({
-  plugins: [turnkeyBrowserNodecryptoStub(), react()],
+  plugins: [sharedCssDevMiddleware(), mvpAccessDevGate(), turnkeyBrowserNodecryptoStub(), react()],
   base: isPoints ? '/points/' : '/mvp/',
   root: isPoints ? path.resolve(__dirname, 'points') : __dirname,
   build: {
