@@ -95,6 +95,42 @@ function marketUrl(market) {
   return id ? `/market?id=${encodeURIComponent(id)}` : '/c/deportes';
 }
 
+function newsTitle(item) {
+  return item?.title || item?.headline || 'Noticia';
+}
+
+function buildGeoSignal(kind, source = {}) {
+  if (kind === 'market') {
+    return {
+      kind: 'market',
+      id: source.id ?? source.marketId ?? marketTitle(source),
+      title: marketTitle(source),
+      meta: `${source.surface === 'mvp' ? 'MVP' : 'Points'} · ${source.category || source.sport || 'mercado'}`,
+      href: marketUrl(source),
+      rank: 0,
+    };
+  }
+  return {
+    kind: 'news',
+    id: source.url || source.id || newsTitle(source),
+    title: newsTitle(source),
+    meta: source.sourceName || source.source || 'Noticia',
+    href: source.url || null,
+    rank: 1,
+  };
+}
+
+function sortGeoSignals(signals = []) {
+  const deduped = new Map();
+  for (const signal of signals) {
+    const key = `${signal.kind}-${signal.id || signal.title}`;
+    if (!deduped.has(key)) deduped.set(key, signal);
+  }
+  return Array.from(deduped.values()).sort((a, b) => (
+    (a.rank || 0) - (b.rank || 0)
+  ));
+}
+
 function polygonPoints(points, region) {
   return points.map(point => {
     const projected = projectLocation(point, region, { clamp: false });
@@ -117,26 +153,28 @@ export default function NewsMapView({
   const regionItems = useMemo(() => filterGeoItems(items, activeRegion), [items, activeRegion]);
   const locations = useMemo(() => {
     const byId = new Map();
-    const addLocation = (location, kind) => {
+    const addLocation = (location, kind, source) => {
       if (activeRegion !== 'all' && location.region !== activeRegion) return;
       const previous = byId.get(location.id) || {};
+      const signals = [...(previous.signals || []), buildGeoSignal(kind, source)];
       byId.set(location.id, {
         ...location,
         count: (previous.count || 0) + 1,
         newsCount: (previous.newsCount || 0) + (kind === 'news' ? 1 : 0),
         marketCount: (previous.marketCount || 0) + (kind === 'market' ? 1 : 0),
+        signals: sortGeoSignals(signals),
       });
     };
 
     for (const item of regionItems) {
       for (const location of item.geoLocations || []) {
-        addLocation(normalizeGeoLocationToCountry(location), 'news');
+        addLocation(normalizeGeoLocationToCountry(location), 'news', item);
       }
     }
 
     for (const market of markets || []) {
       for (const location of extractMarketLocations(market)) {
-        addLocation(normalizeGeoLocationToCountry(location), 'market');
+        addLocation(normalizeGeoLocationToCountry(location), 'market', market);
       }
     }
     return Array.from(byId.values()).sort((a, b) => b.count - a.count);
@@ -473,7 +511,7 @@ function StaticNewsGlobe({ region, locations, selectedLocationId, onSelectLocati
           <button
             key={location.id}
             type="button"
-            onClick={() => onSelectLocation?.(active ? null : location.id)}
+            onClick={() => onSelectLocation?.(location.id)}
             title={`${location.name} · ${location.count}`}
             style={{
               position: 'absolute',

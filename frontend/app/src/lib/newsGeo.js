@@ -3,10 +3,10 @@ import { findTeamByName } from './teamProfiles.js';
 export const NEWS_GEO_REGIONS = [
   { key: 'all', label: 'Todos', center: { lat: 18, lng: -35 }, zoom: 1.0 },
   { key: 'mexico', label: 'México', center: { lat: 23.6, lng: -102.5 }, zoom: 2.2 },
-  { key: 'latam', label: 'Latam', center: { lat: -12, lng: -64 }, zoom: 1.5 },
+  { key: 'latam', label: 'Latam', center: { lat: -15, lng: -58 }, zoom: 1.0, globeAltitude: 2.15 },
   { key: 'us-canada', label: 'US / Canadá', center: { lat: 46, lng: -101 }, zoom: 1.55 },
   { key: 'europe', label: 'Europa', center: { lat: 51, lng: 12 }, zoom: 1.8 },
-  { key: 'asia', label: 'Asia', center: { lat: 35, lng: 76 }, zoom: 1.45 },
+  { key: 'asia', label: 'Asia', center: { lat: 22, lng: 78 }, zoom: 1.0, globeAltitude: 2.15 },
 ];
 
 const CITY_ENTITIES = [
@@ -45,6 +45,13 @@ const COUNTRY_ENTITIES = [
   { id: 'bolivia', name: 'Bolivia', aliases: ['bolivia'], region: 'latam', country: 'BO', lat: -16.3, lng: -63.6 },
   { id: 'uruguay', name: 'Uruguay', aliases: ['uruguay'], region: 'latam', country: 'UY', lat: -32.5, lng: -55.8 },
   { id: 'venezuela', name: 'Venezuela', aliases: ['venezuela'], region: 'latam', country: 'VE', lat: 6.4, lng: -66.6 },
+  { id: 'guatemala', name: 'Guatemala', aliases: ['guatemala'], region: 'latam', country: 'GT', lat: 15.8, lng: -90.2 },
+  { id: 'belice', name: 'Belice', aliases: ['belice', 'belize'], region: 'latam', country: 'BZ', lat: 17.2, lng: -88.5 },
+  { id: 'honduras', name: 'Honduras', aliases: ['honduras'], region: 'latam', country: 'HN', lat: 15.2, lng: -86.2 },
+  { id: 'el-salvador', name: 'El Salvador', aliases: ['el salvador', 'salvador'], region: 'latam', country: 'SV', lat: 13.8, lng: -88.9 },
+  { id: 'nicaragua', name: 'Nicaragua', aliases: ['nicaragua'], region: 'latam', country: 'NI', lat: 12.9, lng: -85.2 },
+  { id: 'costa-rica', name: 'Costa Rica', aliases: ['costa rica'], region: 'latam', country: 'CR', lat: 9.7, lng: -84.2 },
+  { id: 'panama', name: 'Panamá', aliases: ['panama', 'panamá'], region: 'latam', country: 'PA', lat: 8.5, lng: -80.8 },
   { id: 'estados-unidos', name: 'Estados Unidos', aliases: ['estados unidos', 'eeuu', 'eua', 'usa', 'united states'], region: 'us-canada', country: 'US', lat: 39.8, lng: -98.6 },
   { id: 'canada', name: 'Canadá', aliases: ['canada', 'canadá'], region: 'us-canada', country: 'CA', lat: 56.1, lng: -106.3 },
   { id: 'francia', name: 'Francia', aliases: ['francia', 'france'], region: 'europe', country: 'FR', lat: 46.2, lng: 2.2 },

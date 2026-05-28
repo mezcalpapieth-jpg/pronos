@@ -55,6 +55,15 @@ test('filters and summarizes enriched news by globe region', () => {
   assert.equal(filterGeoItems(items, 'europe').length, 1);
   assert.equal(filterGeoItems(items, 'asia').length, 1);
 
+  const asiaRegion = getNewsGeoRegions().find(region => region.key === 'asia');
+  assert.deepEqual(asiaRegion.center, { lat: 22, lng: 78 });
+  assert.equal(asiaRegion.zoom, 1.0);
+  assert.equal(asiaRegion.globeAltitude, 2.15);
+  const latamRegion = getNewsGeoRegions().find(region => region.key === 'latam');
+  assert.deepEqual(latamRegion.center, { lat: -15, lng: -58 });
+  assert.equal(latamRegion.zoom, 1.0);
+  assert.equal(latamRegion.globeAltitude, 2.15);
+
   const counts = Object.fromEntries(summarizeGeoLocations(items).map(r => [r.key, r.count]));
   assert.equal(counts.all, 5);
   assert.equal(counts.mexico, 1);
@@ -81,6 +90,26 @@ test('routes tournament-specific news to the real host region', () => {
   assert.equal(rolandGarros[0].id, 'roland-garros');
   assert.equal(rolandGarros[0].region, 'europe');
   assert.equal(rolandGarros[0].country, 'FR');
+});
+
+test('routes Central America news into Latam', () => {
+  const panama = extractNewsLocations({
+    title: 'Panamá prepara nuevas elecciones',
+    summary: 'Analistas de Centroamérica siguen la jornada.',
+  });
+  const costaRica = extractNewsLocations({
+    title: 'Costa Rica anuncia paquete económico',
+    summary: 'El gobierno presentó nuevas medidas fiscales.',
+  });
+
+  assert.equal(panama[0].id, 'panama');
+  assert.equal(panama[0].region, 'latam');
+  assert.equal(costaRica[0].id, 'costa-rica');
+  assert.equal(costaRica[0].region, 'latam');
+  assert.equal(filterGeoItems(enrichNewsItemsWithGeo([
+    { title: 'Panamá prepara nuevas elecciones' },
+    { title: 'Costa Rica anuncia paquete económico' },
+  ]), 'latam').length, 2);
 });
 
 test('normalizes city and tournament locations to countries for globe display', () => {
