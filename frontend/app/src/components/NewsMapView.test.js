@@ -161,6 +161,15 @@ test('news globe hover popup stays clickable while moving from globe to links', 
   assert.match(worldGlobe, /onHoverHoldChange=\{handleHoverHoldChange\}/);
 });
 
+test('news globe hover cards are not clipped by the circular globe mask', () => {
+  assert.match(worldGlobe, /const globeShellStyle = \{/);
+  assert.match(worldGlobe, /const globeViewportStyle = \{/);
+  assert.match(worldGlobe, /overflow:\s*'visible'/);
+  assert.match(worldGlobe, /overflow:\s*'hidden'/);
+  assert.match(worldGlobe, /<div style=\{globeViewportStyle\}>[\s\S]*<Canvas/);
+  assert.match(worldGlobe, /<GlobeHoverCard[\s\S]*position=\{hoverPosition\}/);
+});
+
 test('news globe hides the clicked popup on globe interaction without clearing selection', () => {
   assert.match(worldGlobe, /onGlobeInteraction/);
   assert.match(worldGlobe, /const handleGlobeInteraction = useCallback\(\(\) => \{/);

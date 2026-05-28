@@ -564,6 +564,30 @@ function GlobeHoverCard({ location, signals, position, persistent = false, onHov
   );
 }
 
+const globeShellStyle = {
+  position: 'relative',
+  width: 'min(82vw, 620px)',
+  minWidth: 320,
+  aspectRatio: '1 / 1',
+  borderRadius: '50%',
+  overflow: 'visible',
+  display: 'grid',
+  placeItems: 'center',
+  background: 'radial-gradient(circle at 50% 50%, rgba(0,232,122,0.16), transparent 42%)',
+  boxShadow: '0 0 100px rgba(255,85,0,0.14)',
+  isolation: 'isolate',
+};
+
+const globeViewportStyle = {
+  position: 'absolute',
+  inset: 0,
+  borderRadius: '50%',
+  overflow: 'hidden',
+  display: 'grid',
+  placeItems: 'center',
+  zIndex: 0,
+};
+
 export default function NewsWorldGlobe({
   region,
   locations = [],
@@ -705,42 +729,30 @@ export default function NewsWorldGlobe({
   if (renderFailed) return fallback;
 
   return (
-    <div
-      ref={wrapperRef}
-      style={{
-        position: 'relative',
-        width: 'min(82vw, 620px)',
-        minWidth: 320,
-        aspectRatio: '1 / 1',
-        borderRadius: '50%',
-        overflow: 'hidden',
-        display: 'grid',
-        placeItems: 'center',
-        background: 'radial-gradient(circle at 50% 50%, rgba(0,232,122,0.16), transparent 42%)',
-        boxShadow: '0 0 100px rgba(255,85,0,0.14)',
-      }}
-    >
-      <Canvas
-        style={{ width: size, height: size }}
-        camera={{ fov: 38, near: 0.1, far: 1000 }}
-        gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
-        onCreated={({ gl }) => {
-          gl.setClearColor(0x000000, 0);
-        }}
-      >
-        <GlobeScene
-          region={region}
-          pointsData={pointsData}
-          activeCountryIds={activeCountryIds}
-          selectedCountryId={selectedCountryId}
-          locationByCountryId={locationByCountryId}
-          selectedLocationId={selectedLocationId}
-          onSelectLocation={handleSelectLocation}
-          onHoverLocation={handleHoverLocation}
-          onGlobeInteraction={handleGlobeInteraction}
-          onRenderError={handleRenderError}
-        />
-      </Canvas>
+    <div ref={wrapperRef} style={globeShellStyle}>
+      <div style={globeViewportStyle}>
+        <Canvas
+          style={{ width: size, height: size }}
+          camera={{ fov: 38, near: 0.1, far: 1000 }}
+          gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
+          onCreated={({ gl }) => {
+            gl.setClearColor(0x000000, 0);
+          }}
+        >
+          <GlobeScene
+            region={region}
+            pointsData={pointsData}
+            activeCountryIds={activeCountryIds}
+            selectedCountryId={selectedCountryId}
+            locationByCountryId={locationByCountryId}
+            selectedLocationId={selectedLocationId}
+            onSelectLocation={handleSelectLocation}
+            onHoverLocation={handleHoverLocation}
+            onGlobeInteraction={handleGlobeInteraction}
+            onRenderError={handleRenderError}
+          />
+        </Canvas>
+      </div>
       {selectedLocation && selectedPopupVisible ? (
         <GlobeHoverCard location={selectedLocation} signals={selectedSignals} position={selectedPosition} persistent />
       ) : (
@@ -762,6 +774,7 @@ export default function NewsWorldGlobe({
         textTransform: 'uppercase',
         pointerEvents: 'none',
         textShadow: '0 2px 16px rgba(0,0,0,0.7)',
+        zIndex: 1,
       }}>
         {region?.label || 'Mapa'}
       </div>
