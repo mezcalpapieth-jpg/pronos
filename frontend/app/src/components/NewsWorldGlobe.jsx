@@ -4,11 +4,50 @@ import { Canvas, extend, useFrame, useThree } from '@react-three/fiber';
 import ThreeGlobe from 'three-globe';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { geoContains } from 'd3-geo';
+import { geoCentroid, geoContains } from 'd3-geo';
 import { feature } from 'topojson-client';
 import countriesTopology from 'world-atlas/countries-110m.json';
+import {
+  buildSubdivisionPolygonsForCountry,
+  getSubdivisionCountry,
+  getSubdivisionsForCountry,
+} from '../lib/newsGeoSubdivisions.js';
 
 extend({ OrbitControls });
+
+const ROTATE_MOUSE_BUTTONS = {
+  LEFT: THREE.MOUSE.ROTATE,
+  MIDDLE: THREE.MOUSE.DOLLY,
+  RIGHT: THREE.MOUSE.PAN,
+};
+
+const PAN_MOUSE_BUTTONS = {
+  LEFT: THREE.MOUSE.PAN,
+  MIDDLE: THREE.MOUSE.DOLLY,
+  RIGHT: THREE.MOUSE.PAN,
+};
+
+const ROTATE_TOUCHES = {
+  ONE: THREE.TOUCH.ROTATE,
+  TWO: THREE.TOUCH.DOLLY_PAN,
+};
+
+const PAN_TOUCHES = {
+  ONE: THREE.TOUCH.PAN,
+  TWO: THREE.TOUCH.DOLLY_PAN,
+};
+
+const WORLD_VIEW_MIN_DISTANCE = 120;
+const WORLD_VIEW_MAX_DISTANCE = 520;
+const STATE_VIEW_MIN_DISTANCE = 112;
+const STATE_VIEW_MAX_DISTANCE = 320;
+const STATE_VIEW_MIN_PAN_TARGET = 6;
+const STATE_VIEW_MAX_PAN_TARGET = 34;
+const STATE_POLYGON_ALTITUDE = 0.012;
+const SMALL_STATE_HIT_RADIUS_DEGREES = 0.11;
+const MEDIUM_STATE_HIT_RADIUS_DEGREES = 0.07;
+const GLOBE_SURFACE_SPHERE = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 100);
+const GLOBE_SURFACE_POINT = new THREE.Vector3();
 
 const COUNTRY_ID_BY_CODE = {
   AR: '032',
@@ -47,10 +86,85 @@ const COUNTRY_ID_BY_CODE = {
   VE: '862',
 };
 
+const COUNTRY_CODE_BY_ID = Object.fromEntries(
+  Object.entries(COUNTRY_ID_BY_CODE).map(([code, id]) => [id, code]),
+);
+
 const COUNTRIES = feature(
   countriesTopology,
   countriesTopology.objects.countries,
 ).features;
+
+const DRILL_COUNTRY_LOCATIONS = [
+  {
+    id: 'mexico',
+    name: 'Mexico',
+    region: 'mexico',
+    country: 'MX',
+    granularity: 'country',
+    render: 'country-fill',
+    lat: 23.6,
+    lng: -102.5,
+    count: 0,
+    newsCount: 0,
+    marketCount: 0,
+    signals: [],
+  },
+  {
+    id: 'estados-unidos',
+    name: 'Estados Unidos',
+    region: 'us-canada',
+    country: 'US',
+    granularity: 'country',
+    render: 'country-fill',
+    lat: 39.8,
+    lng: -98.6,
+    count: 0,
+    newsCount: 0,
+    marketCount: 0,
+    signals: [],
+  },
+];
+
+function visibleDrillCountryLocations(region) {
+  if (!region || region?.key === 'all') return DRILL_COUNTRY_LOCATIONS;
+  return DRILL_COUNTRY_LOCATIONS.filter(location => location.region === region.key);
+}
+
+function regionForCountryCode(countryCode) {
+  const code = String(countryCode || '').toUpperCase();
+  if (code === 'MX') return 'mexico';
+  if (code === 'US' || code === 'CA') return 'us-canada';
+  if (['AR', 'BO', 'BR', 'BZ', 'CL', 'CO', 'CR', 'EC', 'GT', 'HN', 'NI', 'PA', 'PE', 'PY', 'SV', 'UY', 'VE'].includes(code)) return 'latam';
+  if (['DE', 'ES', 'FR', 'GB', 'HU', 'IT', 'NL', 'PT', 'UA'].includes(code)) return 'europe';
+  if (['CN', 'IL', 'IN', 'IR', 'JP'].includes(code)) return 'asia';
+  return 'all';
+}
+
+function countryLocationFallbacks() {
+  return COUNTRIES.map(country => {
+    const polygonId = String(polygonLocationId(country) || '');
+    const code = COUNTRY_CODE_BY_ID[polygonId] || null;
+    const name = country?.properties?.name || country?.properties?.NAME || code || 'Pais';
+    const [lng, lat] = geoCentroid(country);
+    return {
+      id: `country-${polygonId}`,
+      name,
+      region: regionForCountryCode(code),
+      country: code,
+      countryPolygonId: polygonId,
+      granularity: 'country',
+      render: 'country-fill',
+      lat: Number.isFinite(lat) ? lat : 0,
+      lng: Number.isFinite(lng) ? lng : 0,
+      count: 0,
+      newsCount: 0,
+      marketCount: 0,
+      signals: [],
+      selectableFallback: true,
+    };
+  }).filter(location => location.countryPolygonId);
+}
 
 function clampNumber(value, fallback) {
   const number = Number(value);
@@ -59,22 +173,32 @@ function clampNumber(value, fallback) {
 
 function pointColor(point) {
   if (point.active) return 'rgba(255,255,255,0.96)';
+  if (point.render === 'state-marker') {
+    return Number(point.count || 0) > 0
+      ? 'rgba(255,85,0,0.96)'
+      : 'rgba(255,255,255,0.62)';
+  }
   return point.render === 'country-fill'
     ? 'rgba(255,85,0,0.92)'
     : 'rgba(0,232,122,0.96)';
 }
 
 function buildPoint(location, selectedLocationId) {
-  const count = Math.max(1, Number(location.count) || 1);
+  const rawCount = Math.max(0, Number(location.count) || 0);
+  const count = location.render === 'state-marker' ? rawCount : Math.max(1, rawCount || 1);
+  const active = selectedLocationId === location.id;
+  const stateRadius = active ? 0.13 : count > 0 ? 0.095 : 0.058;
   return {
     ...location,
     lat: clampNumber(location.lat, 0),
     lng: clampNumber(location.lng, 0),
     count,
-    active: selectedLocationId === location.id,
-    radius: location.render === 'country-fill'
-      ? Math.max(0.26, Math.min(0.62, 0.22 + count * 0.08))
-      : Math.max(0.11, Math.min(0.22, 0.09 + count * 0.025)),
+    active,
+    radius: location.render === 'state-marker'
+      ? stateRadius
+      : location.render === 'country-fill'
+        ? Math.max(0.26, Math.min(0.62, 0.22 + count * 0.08))
+        : Math.max(0.11, Math.min(0.22, 0.09 + count * 0.025)),
   };
 }
 
@@ -143,24 +267,62 @@ function GlobeCamera({ region }) {
   return null;
 }
 
-function GlobeControls() {
+function statePanTargetLimit(distance) {
+  const zoomProgress = 1 - (
+    (distance - STATE_VIEW_MIN_DISTANCE)
+    / (STATE_VIEW_MAX_DISTANCE - STATE_VIEW_MIN_DISTANCE)
+  );
+  return THREE.MathUtils.clamp(
+    STATE_VIEW_MIN_PAN_TARGET + zoomProgress * (STATE_VIEW_MAX_PAN_TARGET - STATE_VIEW_MIN_PAN_TARGET),
+    STATE_VIEW_MIN_PAN_TARGET,
+    STATE_VIEW_MAX_PAN_TARGET,
+  );
+}
+
+function clampStatePanTarget(controls, camera) {
+  const distance = camera.position.distanceTo(controls.target);
+  const maxPan = statePanTargetLimit(distance);
+  if (controls.target.length() <= maxPan) return false;
+
+  const clampedTarget = controls.target.clone().setLength(maxPan);
+  const correction = clampedTarget.clone().sub(controls.target);
+  controls.target.copy(clampedTarget);
+  camera.position.add(correction);
+  return true;
+}
+
+function GlobeControls({ locked = false }) {
   const controlsRef = useRef(null);
   const { camera, gl } = useThree();
 
   useFrame(() => {
-    controlsRef.current?.update();
+    const controls = controlsRef.current;
+    if (!controls) return;
+
+    controls.update();
+    if (locked && controls) {
+      const clamped = clampStatePanTarget(controls, camera);
+      if (clamped) controls.update();
+    }
   });
 
   return (
     <orbitControls
       ref={controlsRef}
       args={[camera, gl.domElement]}
-      enableZoom={false}
-      enablePan={false}
+      enableZoom={locked}
+      enablePan={locked}
+      enableRotate={!locked}
       autoRotate={false}
       enableDamping
       dampingFactor={0.08}
-      rotateSpeed={0.42}
+      mouseButtons={locked ? PAN_MOUSE_BUTTONS : ROTATE_MOUSE_BUTTONS}
+      touches={locked ? PAN_TOUCHES : ROTATE_TOUCHES}
+      minDistance={locked ? STATE_VIEW_MIN_DISTANCE : WORLD_VIEW_MIN_DISTANCE}
+      maxDistance={locked ? STATE_VIEW_MAX_DISTANCE : WORLD_VIEW_MAX_DISTANCE}
+      screenSpacePanning={locked}
+      panSpeed={locked ? 0.42 : 0}
+      rotateSpeed={locked ? 0 : 0.42}
     />
   );
 }
@@ -175,11 +337,158 @@ function findObjectData(object) {
   return null;
 }
 
+function polygonLocationId(data) {
+  return (
+    data?.properties?.locationId
+    || data?.data?.properties?.locationId
+    || data?.properties?.id
+    || data?.data?.properties?.id
+    || data?.data?.id
+    || data?.id
+  );
+}
+
+function polygonMarketCount(polygon) {
+  return Math.max(0, Number(polygon?.properties?.marketCount) || 0);
+}
+
+function polygonCount(polygon) {
+  return Math.max(0, Number(polygon?.properties?.count) || 0);
+}
+
+function polygonIsState(polygon) {
+  return polygon?.properties?.granularity === 'state';
+}
+
+function stateHitRadiusForPolygon(polygon) {
+  if (!polygonIsState(polygon)) return 0;
+  const bounds = boundsForFeature(polygon);
+  if (!bounds) return 0;
+  const lngSpan = Math.max(0, bounds.maxLng - bounds.minLng);
+  const latSpan = Math.max(0, bounds.maxLat - bounds.minLat);
+  const area = lngSpan * latSpan;
+  if (area <= 0.25) return SMALL_STATE_HIT_RADIUS_DEGREES;
+  if (area <= 0.9) return MEDIUM_STATE_HIT_RADIUS_DEGREES;
+  return 0;
+}
+
+function featureAreaScore(polygon) {
+  const bounds = boundsForFeature(polygon);
+  if (!bounds) return Infinity;
+  return Math.max(0, bounds.maxLng - bounds.minLng) * Math.max(0, bounds.maxLat - bounds.minLat);
+}
+
+function findContainingStateLocationAtCoords({
+  coords,
+  locationByCountryId,
+  polygonsData,
+}) {
+  let best = null;
+
+  for (const polygon of polygonsData || []) {
+    if (!polygonIsState(polygon)) continue;
+    if (!geoContains(polygon, [coords.lng, coords.lat])) continue;
+    const id = polygonLocationId(polygon);
+    const location = id ? locationByCountryId.get(String(id)) : null;
+    if (!location) continue;
+    const area = featureAreaScore(polygon);
+    if (!best || area < best.area) {
+      best = { location, area };
+    }
+  }
+
+  return best?.location || null;
+}
+
+function signedLngDeltaDegrees(lng, originLng) {
+  return ((lng - originLng + 540) % 360) - 180;
+}
+
+function coordToLocalPoint(coord, origin, feature) {
+  const lng = normalizeSubdivisionLng(feature, coord?.[0]);
+  const lat = Number(coord?.[1]);
+  const latScale = Math.max(0.25, Math.cos(THREE.MathUtils.degToRad(origin.lat)));
+  return {
+    x: signedLngDeltaDegrees(lng, origin.lng) * latScale,
+    y: lat - origin.lat,
+  };
+}
+
+function pointSegmentDistanceDegrees(point, startCoord, endCoord) {
+  const start = coordToLocalPoint(startCoord, point, point.feature);
+  const end = coordToLocalPoint(endCoord, point, point.feature);
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSq = dx * dx + dy * dy;
+  if (lengthSq <= 0) return Math.hypot(start.x, start.y);
+  const t = Math.max(0, Math.min(1, -(start.x * dx + start.y * dy) / lengthSq));
+  return Math.hypot(start.x + dx * t, start.y + dy * t);
+}
+
+function distanceToFeatureDegrees(coords, polygon) {
+  let best = Infinity;
+  const point = { ...coords, feature: polygon };
+  for (const ring of polygonRings(polygon.geometry)) {
+    for (let index = 1; index < ring.length; index += 1) {
+      const distance = pointSegmentDistanceDegrees(point, ring[index - 1], ring[index]);
+      if (distance < best) best = distance;
+    }
+  }
+  return best;
+}
+
+function findNearbyStateLocationForCoords({
+  coords,
+  locationByCountryId,
+  polygonsData,
+}) {
+  let best = null;
+
+  for (const polygon of polygonsData || []) {
+    const radius = stateHitRadiusForPolygon(polygon);
+    if (!radius) continue;
+    const id = polygonLocationId(polygon);
+    const location = id ? locationByCountryId.get(String(id)) : null;
+    if (!location) continue;
+    const distance = distanceToFeatureDegrees(coords, polygon);
+    if (distance <= radius && (!best || distance < best.distance)) {
+      best = { location, distance };
+    }
+  }
+
+  return best?.location || null;
+}
+
+function findStateLocationAtSurfacePoint({
+  raycaster,
+  locationByCountryId,
+  polygonsData,
+}) {
+  const surfacePoint = raycaster.ray.intersectSphere(GLOBE_SURFACE_SPHERE, GLOBE_SURFACE_POINT);
+  if (!surfacePoint) return null;
+  const coords = vector3ToGlobeCoords(surfacePoint);
+  const containingStateLocation = findContainingStateLocationAtCoords({
+    coords,
+    locationByCountryId,
+    polygonsData,
+  });
+  if (containingStateLocation) return containingStateLocation;
+
+  const nearbyStateLocation = findNearbyStateLocationForCoords({
+    coords,
+    locationByCountryId,
+    polygonsData,
+  });
+  if (nearbyStateLocation) return nearbyStateLocation;
+
+  return null;
+}
+
 function findLocationForGlobeObject(object, locationByCountryId, pointsData) {
   const data = findObjectData(object);
   if (!data) return null;
 
-  const countryId = data?.data?.id ?? data?.id;
+  const countryId = polygonLocationId(data);
   const countryLocation = countryId ? locationByCountryId.get(String(countryId)) : null;
   if (countryLocation) return countryLocation;
 
@@ -189,11 +498,32 @@ function findLocationForGlobeObject(object, locationByCountryId, pointsData) {
   return null;
 }
 
-function findCountryLocationForPoint(point, locationByCountryId) {
+function findCountryLocationForPoint(point, locationByCountryId, polygonsData = COUNTRIES) {
   const coords = vector3ToGlobeCoords(point);
-  for (const country of COUNTRIES) {
-    const location = locationByCountryId.get(String(country.id));
-    if (location && geoContains(country, [coords.lng, coords.lat])) return location;
+  for (const polygon of polygonsData) {
+    const id = polygonLocationId(polygon);
+    const location = id ? locationByCountryId.get(String(id)) : null;
+    if (location && geoContains(polygon, [coords.lng, coords.lat])) return location;
+  }
+  return null;
+}
+
+function findExactLocationAtPointer({
+  raycaster,
+  globe,
+  locationByCountryId,
+  pointsData,
+  polygonsData,
+}) {
+  const hits = raycaster.intersectObject(globe, true);
+  const nearestDistance = hits[0]?.distance;
+  for (const hit of hits) {
+    if (hit.distance > nearestDistance + 32) break;
+    const location = (
+      findLocationForGlobeObject(hit.object, locationByCountryId, pointsData)
+      || findCountryLocationForPoint(hit.point, locationByCountryId, polygonsData)
+    );
+    if (location) return location;
   }
   return null;
 }
@@ -207,6 +537,8 @@ function findLocationAtPointer({
   globe,
   locationByCountryId,
   pointsData,
+  polygonsData,
+  interactionLocked,
 }) {
   if (!globe) return null;
   const rect = element.getBoundingClientRect();
@@ -216,16 +548,22 @@ function findLocationAtPointer({
   );
   raycaster.setFromCamera(pointer, camera);
 
-  const hits = raycaster.intersectObject(globe, true);
-  const nearestDistance = hits[0]?.distance;
-  for (const hit of hits) {
-    if (hit.distance > nearestDistance + 32) break;
-    const location = (
-      findLocationForGlobeObject(hit.object, locationByCountryId, pointsData)
-      || findCountryLocationForPoint(hit.point, locationByCountryId)
-    );
-    if (location) return location;
-  }
+  const surfaceStateLocation = interactionLocked ? findStateLocationAtSurfacePoint({
+    raycaster,
+    locationByCountryId,
+    polygonsData,
+  }) : null;
+  if (surfaceStateLocation) return surfaceStateLocation;
+
+  const exactLocation = findExactLocationAtPointer({
+    raycaster,
+    globe,
+    locationByCountryId,
+    pointsData,
+    polygonsData,
+  });
+  if (exactLocation) return exactLocation;
+
   return null;
 }
 
@@ -243,8 +581,180 @@ function clampHoverPosition(event, container, options = {}) {
   };
 }
 
+function normalizeSubdivisionLng(feature, lng) {
+  const value = Number(lng);
+  if (feature?.properties?.locationId === 'us-alaska' && value > 0) return value - 360;
+  return value;
+}
+
+function polygonRings(geometry) {
+  if (geometry?.type === 'Polygon') return geometry.coordinates || [];
+  if (geometry?.type === 'MultiPolygon') return (geometry.coordinates || []).flat();
+  return [];
+}
+
+function boundsForFeature(feature) {
+  const bounds = {
+    minLng: Infinity,
+    maxLng: -Infinity,
+    minLat: Infinity,
+    maxLat: -Infinity,
+  };
+
+  for (const ring of polygonRings(feature.geometry)) {
+    for (const coord of ring || []) {
+      const lng = normalizeSubdivisionLng(feature, coord?.[0]);
+      const lat = Number(coord?.[1]);
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+      bounds.minLng = Math.min(bounds.minLng, lng);
+      bounds.maxLng = Math.max(bounds.maxLng, lng);
+      bounds.minLat = Math.min(bounds.minLat, lat);
+      bounds.maxLat = Math.max(bounds.maxLat, lat);
+    }
+  }
+
+  if (!Number.isFinite(bounds.minLng)) return null;
+  return bounds;
+}
+
+function makeMiniSubdivisionProjector(bounds, width, height, feature) {
+  const lngSpan = Math.max(0.001, bounds.maxLng - bounds.minLng);
+  const latSpan = Math.max(0.001, bounds.maxLat - bounds.minLat);
+  const scale = Math.min((width - 8) / lngSpan, (height - 8) / latSpan);
+  const drawnWidth = lngSpan * scale;
+  const drawnHeight = latSpan * scale;
+  const offsetX = (width - drawnWidth) / 2;
+  const offsetY = (height - drawnHeight) / 2;
+
+  return coord => {
+    const lng = normalizeSubdivisionLng(feature, coord?.[0]);
+    const lat = Number(coord?.[1]);
+    return {
+      x: offsetX + (lng - bounds.minLng) * scale,
+      y: offsetY + (bounds.maxLat - lat) * scale,
+    };
+  };
+}
+
+function miniSubdivisionPath(feature, width = 82, height = 44) {
+  const bounds = boundsForFeature(feature);
+  if (!bounds) return '';
+  const project = makeMiniSubdivisionProjector(bounds, width, height, feature);
+  return polygonRings(feature.geometry)
+    .map(ring => (ring || [])
+      .map((coord, index) => {
+        const point = project(coord);
+        const command = index === 0 ? 'M' : 'L';
+        return `${command}${point.x.toFixed(2)} ${point.y.toFixed(2)}`;
+      })
+      .join(' '))
+    .filter(Boolean)
+    .map(path => `${path} Z`)
+    .join(' ');
+}
+
+function MiniSubdivisionShape({ feature, selected = false }) {
+  const d = useMemo(() => miniSubdivisionPath(feature), [feature]);
+  return (
+    <svg
+      viewBox="0 0 82 44"
+      aria-hidden="true"
+      focusable="false"
+      style={{
+        width: 52,
+        height: 28,
+        display: 'block',
+        overflow: 'visible',
+        filter: selected ? 'drop-shadow(0 0 12px rgba(255,85,0,0.58))' : 'drop-shadow(0 0 8px rgba(0,0,0,0.36))',
+      }}
+    >
+      <path
+        d={d}
+        fill={selected ? 'rgba(120,18,18,0.9)' : 'rgba(0,232,122,0.18)'}
+        stroke={selected ? 'rgba(255,85,0,0.95)' : 'rgba(255,255,255,0.54)'}
+        strokeWidth="1.6"
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  );
+}
+
+function SubdivisionInsetControls({
+  countryCode,
+  polygons,
+  locations,
+  selectedLocationId,
+  onSelectLocation,
+  onHoverLocation,
+}) {
+  const locationsById = useMemo(
+    () => new Map((locations || []).map(location => [location.id, location])),
+    [locations],
+  );
+  const insetFeatures = useMemo(() => {
+    if (countryCode !== 'US') return [];
+    return ['us-alaska', 'us-hawaii']
+      .map(id => {
+        const feature = (polygons || []).find(polygon => polygon?.properties?.locationId === id);
+        const subdivision = locationsById.get(id);
+        return feature && subdivision ? { feature, subdivision } : null;
+      })
+      .filter(Boolean);
+  }, [countryCode, locationsById, polygons]);
+
+  if (!insetFeatures.length) return null;
+
+  return (
+    <div style={{
+      position: 'absolute',
+      left: '50%',
+      bottom: 18,
+      transform: 'translateX(-50%)',
+      display: 'flex',
+      alignItems: 'end',
+      gap: 12,
+      zIndex: 3,
+    }}>
+      {insetFeatures.map(({ feature, subdivision }) => {
+        const active = selectedLocationId === subdivision.id;
+        return (
+          <button
+            key={subdivision.id}
+            type="button"
+            aria-label={subdivision.name}
+            onClick={event => onSelectLocation?.(subdivision.id, event)}
+            onPointerEnter={event => onHoverLocation?.(subdivision, event)}
+            onPointerMove={event => onHoverLocation?.(subdivision, event)}
+            onPointerLeave={() => onHoverLocation?.(null)}
+            style={{
+              appearance: 'none',
+              border: 0,
+              background: 'transparent',
+              color: active ? 'var(--orange)' : 'rgba(255,255,255,0.76)',
+              cursor: 'pointer',
+              display: 'grid',
+              justifyItems: 'center',
+              gap: 2,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 8,
+              letterSpacing: '0.1em',
+              padding: 0,
+              textTransform: 'uppercase',
+            }}
+          >
+            <MiniSubdivisionShape feature={feature} selected={active} />
+            <span>{subdivision.shortName}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function GlobeObject({
   pointsData,
+  polygonsData = COUNTRIES,
+  labelPointsData = [],
   activeCountryIds,
   selectedCountryId,
   globeRef,
@@ -284,27 +794,50 @@ function GlobeObject({
   }, [globe, globeMaterial, onRenderError]);
 
   useEffect(() => {
-    const isSelectedCountry = country => selectedCountryId === String(country.id);
-    const isActiveCountry = country => activeCountryIds.has(String(country.id));
+    const isSelectedCountry = country => selectedCountryId === String(polygonLocationId(country));
+    const isActiveCountry = country => activeCountryIds.has(String(polygonLocationId(country)));
+    const hasStateMarket = country => polygonIsState(country) && polygonMarketCount(country) > 0;
+    const hasStateSignal = country => polygonIsState(country) && polygonCount(country) > 0;
+    const statePolygonsActive = polygonsData.some(polygonIsState);
     try {
       globe
-        .polygonsData(COUNTRIES)
+        .polygonsData(polygonsData)
         .polygonGeoJsonGeometry('geometry')
-        .polygonAltitude(country => (isSelectedCountry(country) ? 0.04 : isActiveCountry(country) ? 0.018 : 0.006))
+        .polygonAltitude(country => (
+          polygonIsState(country)
+            ? STATE_POLYGON_ALTITUDE
+            : isSelectedCountry(country)
+              ? 0.045
+              : hasStateMarket(country)
+                ? 0.034
+                : isActiveCountry(country)
+                  ? 0.018
+                  : 0.006
+        ))
         .polygonCapColor(country => (isSelectedCountry(country)
           ? 'rgba(120,18,18,0.9)'
-          : isActiveCountry(country)
+          : hasStateMarket(country)
+            ? 'rgba(0,232,122,0.42)'
+            : isActiveCountry(country)
             ? 'rgba(255,85,0,0.48)'
-            : 'rgba(0,232,122,0.10)'))
+            : polygonIsState(country)
+              ? 'rgba(0,232,122,0.09)'
+              : 'rgba(0,232,122,0.10)'))
         .polygonSideColor(country => (isSelectedCountry(country)
           ? 'rgba(255,85,0,0.32)'
-          : 'rgba(0,232,122,0.035)'))
+          : hasStateMarket(country)
+            ? 'rgba(0,232,122,0.22)'
+            : 'rgba(0,232,122,0.035)'))
         .polygonStrokeColor(country => (isSelectedCountry(country)
           ? 'rgba(255,85,0,0.95)'
+          : hasStateMarket(country)
+            ? 'rgba(0,232,122,0.88)'
           : isActiveCountry(country)
             ? 'rgba(255,255,255,0.52)'
-            : 'rgba(255,255,255,0.12)'))
-        .polygonsTransitionDuration(500)
+            : polygonIsState(country)
+              ? 'rgba(255,255,255,0.28)'
+              : 'rgba(255,255,255,0.12)'))
+        .polygonsTransitionDuration(statePolygonsActive ? 0 : 500)
         .pointsData(pinPointsData)
         .pointLat('lat')
         .pointLng('lng')
@@ -316,14 +849,29 @@ function GlobeObject({
         .ringsData(pinPointsData)
         .ringLat('lat')
         .ringLng('lng')
-        .ringMaxRadius(() => 3.6)
+        .ringMaxRadius(point => point.render === 'state-marker' && !point.count ? 0.22 : 3.6)
         .ringPropagationSpeed(1.25)
         .ringRepeatPeriod(2600)
-        .ringColor(point => pointColor(point));
+        .ringColor(point => point.render === 'state-marker' && !point.count
+          ? 'rgba(255,255,255,0.0)'
+          : pointColor(point))
+        .labelsData(labelPointsData)
+        .labelLat('lat')
+        .labelLng('lng')
+        .labelText('name')
+        .labelSize(point => point.active ? 0.8 : 0.55)
+        .labelDotRadius(point => point.count > 0 || point.active ? 0.18 : 0.1)
+        .labelColor(point => point.active
+          ? 'rgba(255,255,255,0.96)'
+          : point.count > 0
+            ? 'rgba(255,85,0,0.96)'
+            : 'rgba(255,255,255,0.64)')
+        .labelAltitude(point => point.active ? 0.078 : 0.052)
+        .labelResolution(2);
     } catch {
       onRenderError?.();
     }
-  }, [activeCountryIds, globe, onRenderError, pinPointsData, selectedCountryId]);
+  }, [activeCountryIds, globe, labelPointsData, onRenderError, pinPointsData, polygonsData, selectedCountryId]);
 
   useEffect(() => () => {
     globe._destructor?.();
@@ -336,11 +884,13 @@ function GlobeObject({
 function GlobePointerSelector({
   globeRef,
   pointsData,
+  polygonsData,
   locationByCountryId,
   selectedLocationId,
   onSelectLocation,
   onHoverLocation,
   onGlobeInteraction,
+  interactionLocked,
 }) {
   const { camera, gl } = useThree();
   const pointerDownRef = useRef(null);
@@ -349,7 +899,7 @@ function GlobePointerSelector({
 
   useEffect(() => {
     const element = gl.domElement;
-    element.style.cursor = 'grab';
+    element.style.cursor = interactionLocked ? 'default' : 'grab';
     const getLocation = event => findLocationAtPointer({
       event,
       element,
@@ -359,18 +909,21 @@ function GlobePointerSelector({
       globe: globeRef.current,
       locationByCountryId,
       pointsData,
+      polygonsData,
+      interactionLocked,
     });
     const handlePointerDown = event => {
       pointerDownRef.current = { x: event.clientX, y: event.clientY };
       onHoverLocation?.(null);
       onGlobeInteraction?.();
-      element.style.cursor = 'grabbing';
+      const location = interactionLocked ? getLocation(event) : null;
+      element.style.cursor = interactionLocked ? (location ? 'pointer' : 'default') : 'grabbing';
     };
     const handlePointerMove = event => {
       if (pointerDownRef.current) return;
       const location = getLocation(event);
       onHoverLocation?.(location || null, event);
-      element.style.cursor = location ? 'pointer' : 'grab';
+      element.style.cursor = interactionLocked ? (location ? 'pointer' : 'default') : (location ? 'pointer' : 'grab');
     };
     const handlePointerUp = event => {
       const pointerDown = pointerDownRef.current;
@@ -379,11 +932,11 @@ function GlobePointerSelector({
         pointerDown
         && Math.hypot(event.clientX - pointerDown.x, event.clientY - pointerDown.y) > 7
       ) {
-        element.style.cursor = 'grab';
+        element.style.cursor = interactionLocked ? 'default' : 'grab';
         return;
       }
       const location = getLocation(event);
-      element.style.cursor = location ? 'pointer' : 'grab';
+      element.style.cursor = interactionLocked ? (location ? 'pointer' : 'default') : (location ? 'pointer' : 'grab');
       if (location) {
         event.preventDefault();
         onSelectLocation?.(location.id, event);
@@ -392,7 +945,7 @@ function GlobePointerSelector({
     const handlePointerLeave = () => {
       pointerDownRef.current = null;
       onHoverLocation?.(null);
-      element.style.cursor = 'grab';
+      element.style.cursor = interactionLocked ? 'default' : 'grab';
     };
 
     element.addEventListener('pointerdown', handlePointerDown);
@@ -410,11 +963,13 @@ function GlobePointerSelector({
     camera,
     gl.domElement,
     globeRef,
+    interactionLocked,
     locationByCountryId,
     onHoverLocation,
     onSelectLocation,
     onGlobeInteraction,
     pointer,
+    polygonsData,
     pointsData,
     raycaster,
     selectedLocationId,
@@ -426,6 +981,8 @@ function GlobePointerSelector({
 function GlobeScene({
   region,
   pointsData,
+  polygonsData,
+  labelPointsData,
   activeCountryIds,
   selectedCountryId,
   locationByCountryId,
@@ -433,6 +990,8 @@ function GlobeScene({
   onSelectLocation,
   onHoverLocation,
   onGlobeInteraction,
+  locked,
+  interactionLocked,
   onRenderError,
 }) {
   const globeRef = useRef(null);
@@ -444,9 +1003,11 @@ function GlobeScene({
       <directionalLight position={[180, 160, 240]} intensity={1.5} color="#ffffff" />
       <pointLight position={[-120, -80, 140]} intensity={0.85} color="#ff5a1f" />
       <GlobeCamera region={region} />
-      <GlobeControls />
+      <GlobeControls locked={Boolean(locked)} />
       <GlobeObject
         pointsData={pointsData}
+        polygonsData={polygonsData}
+        labelPointsData={labelPointsData}
         activeCountryIds={activeCountryIds}
         selectedCountryId={selectedCountryId}
         globeRef={globeRef}
@@ -455,11 +1016,13 @@ function GlobeScene({
       <GlobePointerSelector
         globeRef={globeRef}
         pointsData={pointsData}
+        polygonsData={polygonsData}
         locationByCountryId={locationByCountryId}
         selectedLocationId={selectedLocationId}
         onSelectLocation={onSelectLocation}
         onHoverLocation={onHoverLocation}
         onGlobeInteraction={onGlobeInteraction}
+        interactionLocked={interactionLocked}
       />
     </>
   );
@@ -591,8 +1154,10 @@ const globeViewportStyle = {
 export default function NewsWorldGlobe({
   region,
   locations = [],
+  subdivisionLocations = [],
   selectedLocationId,
   onSelectLocation,
+  onExitDrill,
   fallback = null,
 }) {
   const wrapperRef = useRef(null);
@@ -602,6 +1167,7 @@ export default function NewsWorldGlobe({
   const [hoverPosition, setHoverPosition] = useState({ x: 18, y: 18 });
   const [selectedPosition, setSelectedPosition] = useState({ x: 18, y: 18 });
   const [selectedPopupVisible, setSelectedPopupVisible] = useState(false);
+  const [drillCountryCode, setDrillCountryCode] = useState(null);
   const hoverLocationIdRef = useRef(null);
   const hoverClearTimerRef = useRef(null);
   const hoverCardHoldingRef = useRef(false);
@@ -627,17 +1193,77 @@ export default function NewsWorldGlobe({
   const pointsData = useMemo(() => (
     (locations || []).map(location => buildPoint(location, selectedLocationId))
   ), [locations, selectedLocationId]);
+  const countryFallbackLocations = useMemo(() => (
+    countryLocationFallbacks().map(location => buildPoint(location, selectedLocationId))
+  ), [selectedLocationId]);
+  const drillCountryClickPoints = useMemo(() => {
+    const pointsByCountry = new Map();
+    for (const point of pointsData || []) {
+      const country = String(point.country || '').toUpperCase();
+      if (country && !pointsByCountry.has(country)) pointsByCountry.set(country, point);
+    }
+    return visibleDrillCountryLocations(region).map(location => (
+      pointsByCountry.get(location.country) || buildPoint(location, selectedLocationId)
+    ));
+  }, [pointsData, region, selectedLocationId]);
+  const subdivisionBaseLocations = useMemo(
+    () => getSubdivisionsForCountry(drillCountryCode),
+    [drillCountryCode],
+  );
+  const subdivisionPoints = useMemo(() => {
+    const locationById = new Map((subdivisionLocations || []).map(location => [location.id, location]));
+    return subdivisionBaseLocations.map(location => {
+      const enriched = locationById.get(location.id) || {};
+      return buildPoint({
+        ...location,
+        ...enriched,
+        signals: enriched.signals || [],
+      }, selectedLocationId);
+    });
+  }, [selectedLocationId, subdivisionBaseLocations, subdivisionLocations]);
+  const subdivisionPolygonsData = useMemo(
+    () => buildSubdivisionPolygonsForCountry(drillCountryCode, subdivisionPoints),
+    [drillCountryCode, subdivisionPoints],
+  );
+  const polygonsForGlobe = drillCountryCode ? subdivisionPolygonsData : COUNTRIES;
+  const pointsForGlobe = drillCountryCode ? [] : pointsData;
+  const interactionPoints = drillCountryCode ? subdivisionPoints : [...pointsData, ...countryFallbackLocations];
+  const labelPointsData = [];
+  const drillCountry = getSubdivisionCountry(drillCountryCode);
+  const effectiveRegion = useMemo(() => {
+    if (!drillCountry) return region;
+    return {
+      key: `drill-${drillCountryCode}`,
+      label: drillCountry.label,
+      center: drillCountry.center,
+      globeAltitude: drillCountry.globeAltitude,
+    };
+  }, [drillCountry, drillCountryCode, region]);
 
   const activeCountryIds = useMemo(() => {
+    if (drillCountryCode) {
+      return new Set(
+        subdivisionPoints
+          .filter(location => Number(location.count || 0) > 0)
+          .map(location => location.id),
+      );
+    }
     const ids = new Set();
     for (const location of locations || []) {
       const id = COUNTRY_ID_BY_CODE[String(location.country || '').toUpperCase()];
       if (id) ids.add(id);
     }
+    for (const location of visibleDrillCountryLocations(region)) {
+      const id = COUNTRY_ID_BY_CODE[String(location.country || '').toUpperCase()];
+      if (id) ids.add(id);
+    }
     return ids;
-  }, [locations]);
+  }, [drillCountryCode, locations, region, subdivisionPoints]);
 
   const locationByCountryId = useMemo(() => {
+    if (drillCountryCode) {
+      return new Map(subdivisionPoints.map(location => [location.id, location]));
+    }
     const byId = new Map();
     for (const location of pointsData || []) {
       const id = COUNTRY_ID_BY_CODE[String(location.country || '').toUpperCase()];
@@ -653,20 +1279,30 @@ export default function NewsWorldGlobe({
         byId.set(id, location);
       }
     }
+    for (const location of drillCountryClickPoints) {
+      const id = COUNTRY_ID_BY_CODE[String(location.country || '').toUpperCase()];
+      if (id && !byId.has(id)) byId.set(id, location);
+    }
+    for (const location of countryFallbackLocations) {
+      const id = location.countryPolygonId || COUNTRY_ID_BY_CODE[String(location.country || '').toUpperCase()];
+      if (id && !byId.has(id)) byId.set(id, location);
+    }
     return byId;
-  }, [pointsData]);
+  }, [countryFallbackLocations, drillCountryClickPoints, drillCountryCode, pointsData]);
 
   const selectedLocation = useMemo(() => (
-    pointsData.find(location => location.id === selectedLocationId) || null
-  ), [pointsData, selectedLocationId]);
+    interactionPoints.find(location => location.id === selectedLocationId) || null
+  ), [interactionPoints, selectedLocationId]);
   const selectedCountryId = useMemo(() => (
-    selectedLocation
-      ? COUNTRY_ID_BY_CODE[String(selectedLocation.country || '').toUpperCase()] || null
+    drillCountryCode
+      ? selectedLocation?.id || null
+      : selectedLocation
+      ? selectedLocation.countryPolygonId || COUNTRY_ID_BY_CODE[String(selectedLocation.country || '').toUpperCase()] || null
       : null
-  ), [selectedLocation]);
+  ), [drillCountryCode, selectedLocation]);
   const hoveredLocation = useMemo(() => (
-    pointsData.find(location => location.id === hoveredLocationId) || null
-  ), [pointsData, hoveredLocationId]);
+    interactionPoints.find(location => location.id === hoveredLocationId) || null
+  ), [interactionPoints, hoveredLocationId]);
   const hoverSignals = (hoveredLocation?.signals || []).slice(0, 3);
   const selectedSignals = selectedLocation?.signals || [];
   const clearHoverTimer = useCallback(() => {
@@ -675,6 +1311,22 @@ export default function NewsWorldGlobe({
     hoverClearTimerRef.current = null;
   }, []);
   const handleSelectLocation = useCallback((nextId, event) => {
+    const nextLocation = (
+      interactionPoints.find(location => location.id === nextId)
+      || drillCountryClickPoints.find(location => location.id === nextId)
+    );
+    if (!drillCountryCode) {
+      const nextDrillCountry = getSubdivisionCountry(nextLocation?.country);
+      if (nextDrillCountry) {
+        setDrillCountryCode(nextDrillCountry.country);
+        setSelectedPopupVisible(false);
+        clearHoverTimer();
+        hoverLocationIdRef.current = null;
+        setHoveredLocationId(null);
+        onSelectLocation?.(nextId, nextLocation);
+        return;
+      }
+    }
     if (nextId && event && wrapperRef.current) {
       setSelectedPosition(clampHoverPosition(event, wrapperRef.current, { cardHeight: 260 }));
     }
@@ -682,11 +1334,21 @@ export default function NewsWorldGlobe({
     clearHoverTimer();
     hoverLocationIdRef.current = null;
     setHoveredLocationId(null);
-    onSelectLocation?.(nextId);
-  }, [clearHoverTimer, onSelectLocation]);
+    onSelectLocation?.(nextId, nextLocation);
+  }, [clearHoverTimer, drillCountryClickPoints, drillCountryCode, interactionPoints, onSelectLocation]);
   const handleGlobeInteraction = useCallback(() => {
     setSelectedPopupVisible(false);
   }, []);
+  const handleBackToCountries = useCallback(() => {
+    const resetLocationId = null;
+    setDrillCountryCode(null);
+    setSelectedPopupVisible(false);
+    clearHoverTimer();
+    hoverLocationIdRef.current = null;
+    setHoveredLocationId(null);
+    onSelectLocation?.(resetLocationId, null);
+    onExitDrill?.(drillCountryCode);
+  }, [clearHoverTimer, drillCountryCode, onExitDrill, onSelectLocation]);
   const handleHoverHoldChange = useCallback((isHolding) => {
     hoverCardHoldingRef.current = isHolding;
     if (isHolding) {
@@ -724,6 +1386,24 @@ export default function NewsWorldGlobe({
     setRenderFailed(true);
   }, []);
 
+  useEffect(() => {
+    setDrillCountryCode(null);
+    setSelectedPopupVisible(false);
+    clearHoverTimer();
+    hoverLocationIdRef.current = null;
+    setHoveredLocationId(null);
+  }, [clearHoverTimer, region?.key]);
+
+  useEffect(() => {
+    if (!selectedLocationId && drillCountryCode) {
+      setDrillCountryCode(null);
+      setSelectedPopupVisible(false);
+      clearHoverTimer();
+      hoverLocationIdRef.current = null;
+      setHoveredLocationId(null);
+    }
+  }, [clearHoverTimer, drillCountryCode, selectedLocationId]);
+
   useEffect(() => clearHoverTimer, [clearHoverTimer]);
 
   if (renderFailed) return fallback;
@@ -740,8 +1420,10 @@ export default function NewsWorldGlobe({
           }}
         >
           <GlobeScene
-            region={region}
-            pointsData={pointsData}
+            region={effectiveRegion}
+            pointsData={pointsForGlobe}
+            polygonsData={polygonsForGlobe}
+            labelPointsData={labelPointsData}
             activeCountryIds={activeCountryIds}
             selectedCountryId={selectedCountryId}
             locationByCountryId={locationByCountryId}
@@ -749,10 +1431,20 @@ export default function NewsWorldGlobe({
             onSelectLocation={handleSelectLocation}
             onHoverLocation={handleHoverLocation}
             onGlobeInteraction={handleGlobeInteraction}
+            locked={Boolean(drillCountryCode)}
+            interactionLocked={Boolean(drillCountryCode)}
             onRenderError={handleRenderError}
           />
         </Canvas>
       </div>
+      <SubdivisionInsetControls
+        countryCode={drillCountryCode}
+        polygons={subdivisionPolygonsData}
+        locations={subdivisionPoints}
+        selectedLocationId={selectedLocationId}
+        onSelectLocation={handleSelectLocation}
+        onHoverLocation={handleHoverLocation}
+      />
       {selectedLocation && selectedPopupVisible ? (
         <GlobeHoverCard location={selectedLocation} signals={selectedSignals} position={selectedPosition} persistent />
       ) : (
@@ -763,21 +1455,47 @@ export default function NewsWorldGlobe({
           onHoverHoldChange={handleHoverHoldChange}
         />
       )}
-      <div style={{
-        position: 'absolute',
-        left: 22,
-        top: 22,
-        fontFamily: 'var(--font-mono)',
-        fontSize: 11,
-        letterSpacing: '0.14em',
-        color: 'var(--orange)',
-        textTransform: 'uppercase',
-        pointerEvents: 'none',
-        textShadow: '0 2px 16px rgba(0,0,0,0.7)',
-        zIndex: 1,
-      }}>
-        {region?.label || 'Mapa'}
-      </div>
+      {drillCountryCode ? (
+        <button
+          type="button"
+          onClick={handleBackToCountries}
+          style={{
+            position: 'absolute',
+            left: 16,
+            top: 16,
+            border: '1px solid rgba(255,85,0,0.48)',
+            borderRadius: 999,
+            background: 'rgba(10,10,10,0.78)',
+            color: 'var(--text-primary)',
+            cursor: 'pointer',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            letterSpacing: '0.12em',
+            padding: '9px 12px',
+            textTransform: 'uppercase',
+            textShadow: '0 2px 16px rgba(0,0,0,0.7)',
+            zIndex: 3,
+          }}
+        >
+          Volver
+        </button>
+      ) : (
+        <div style={{
+          position: 'absolute',
+          left: 22,
+          top: 22,
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          letterSpacing: '0.14em',
+          color: 'var(--orange)',
+          textTransform: 'uppercase',
+          pointerEvents: 'none',
+          textShadow: '0 2px 16px rgba(0,0,0,0.7)',
+          zIndex: 1,
+        }}>
+          {region?.label || 'Mapa'}
+        </div>
+      )}
     </div>
   );
 }

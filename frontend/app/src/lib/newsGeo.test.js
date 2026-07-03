@@ -11,6 +11,11 @@ import {
   normalizeGeoLocationToCountry,
   summarizeGeoLocations,
 } from './newsGeo.js';
+import {
+  buildSubdivisionPolygonsForCountry,
+  getSubdivisionsForCountry,
+  normalizeGeoLocationToSubdivision,
+} from './newsGeoSubdivisions.js';
 
 test('enriches city news as precise dots and country news as country glows', () => {
   const [guadalajara, iran] = enrichNewsItemsWithGeo([
@@ -131,6 +136,75 @@ test('normalizes city and tournament locations to countries for globe display', 
   assert.equal(madridCountry.render, 'country-fill');
   assert.equal(rolandCountry.name, 'Francia');
   assert.equal(rolandCountry.id, 'francia');
+});
+
+test('keeps Mexico and US state metadata for subdivision drill-downs', () => {
+  const guadalajara = extractNewsLocations({
+    title: 'Guadalajara anuncia nuevas obras',
+    summary: 'El proyecto se presentó en Jalisco.',
+  })[0];
+  const newYork = extractNewsLocations({
+    title: 'Nueva York prepara nuevas reglas financieras',
+    summary: 'Wall Street sigue atento.',
+  })[0];
+
+  assert.equal(guadalajara.subdivisionId, 'mx-jalisco');
+  assert.equal(normalizeGeoLocationToSubdivision(guadalajara).id, 'mx-jalisco');
+  assert.equal(normalizeGeoLocationToSubdivision(guadalajara).name, 'Jalisco');
+  assert.equal(newYork.subdivisionId, 'us-new-york');
+  assert.equal(normalizeGeoLocationToSubdivision(newYork).id, 'us-new-york');
+  assert.ok(getSubdivisionsForCountry('MX').length >= 32);
+  assert.ok(getSubdivisionsForCountry('US').length >= 51);
+});
+
+test('builds clickable subdivision polygons with market glow metadata', () => {
+  const polygons = buildSubdivisionPolygonsForCountry('MX', [
+    {
+      id: 'mx-jalisco',
+      marketCount: 2,
+      newsCount: 1,
+      count: 3,
+      signals: [{ kind: 'market', title: 'Guadalajara vs America' }],
+    },
+  ]);
+
+  const jalisco = polygons.find(feature => feature.properties.locationId === 'mx-jalisco');
+  const sinaloa = polygons.find(feature => feature.properties.locationId === 'mx-sinaloa');
+
+  assert.ok(polygons.length >= 32);
+  assert.equal(jalisco.properties.name, 'Jalisco');
+  assert.equal(jalisco.properties.country, 'MX');
+  assert.equal(jalisco.properties.granularity, 'state');
+  assert.equal(jalisco.properties.boundarySource, 'natural-earth-admin1');
+  assert.equal(jalisco.properties.marketCount, 2);
+  assert.equal(jalisco.properties.count, 3);
+  assert.equal(Array.isArray(jalisco.geometry.coordinates[0]), true);
+  assert.ok(jalisco.geometry.coordinates.flat(4).length > 80);
+  assert.equal(sinaloa.properties.marketCount, 0);
+});
+
+test('keeps Alaska and Hawaii available as clickable US subdivision polygons', () => {
+  const polygons = buildSubdivisionPolygonsForCountry('US', [
+    { id: 'us-alaska', marketCount: 1, count: 1 },
+    { id: 'us-hawaii', newsCount: 2, count: 2 },
+  ]);
+
+  const alaska = polygons.find(feature => feature.properties.locationId === 'us-alaska');
+  const hawaii = polygons.find(feature => feature.properties.locationId === 'us-hawaii');
+  const texas = polygons.find(feature => feature.properties.locationId === 'us-texas');
+
+  assert.ok(alaska);
+  assert.equal(alaska.properties.boundarySource, 'natural-earth-admin1');
+  assert.equal(alaska.properties.granularity, 'state');
+  assert.equal(alaska.properties.marketCount, 1);
+  assert.ok(hawaii);
+  assert.equal(hawaii.properties.boundarySource, 'natural-earth-admin1');
+  assert.equal(hawaii.properties.newsCount, 2);
+  assert.ok(texas);
+  assert.equal(texas.properties.boundarySource, 'natural-earth-admin1');
+  assert.equal('mapInset' in alaska.properties, false);
+  assert.equal('mapInset' in hawaii.properties, false);
+  assert.equal('mapInset' in texas.properties, false);
 });
 
 test('keeps regional tournament markets out of Mexico when category text is broad', () => {

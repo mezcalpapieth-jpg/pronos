@@ -8,6 +8,11 @@ import {
   normalizeGeoLocationToCountry,
   summarizeGeoLocations,
 } from '../lib/newsGeo.js';
+import {
+  getSubdivisionCountry,
+  getSubdivisionsForCountry,
+  normalizeGeoLocationToSubdivision,
+} from '../lib/newsGeoSubdivisions.js';
 
 const NewsWorldGlobe = React.lazy(() => import('./NewsWorldGlobe.jsx'));
 
@@ -131,6 +136,78 @@ function sortGeoSignals(signals = []) {
   ));
 }
 
+function subdivisionCountryCodesForRegion(activeRegion) {
+  if (activeRegion === 'mexico') return ['MX'];
+  if (activeRegion === 'us-canada') return ['US'];
+  if (activeRegion === 'all') return ['MX', 'US'];
+  return [];
+}
+
+function buildSubdivisionLocations({ items = [], markets = [], activeRegion = 'all' } = {}) {
+  const byId = new Map();
+  for (const countryCode of subdivisionCountryCodesForRegion(activeRegion)) {
+    for (const location of getSubdivisionsForCountry(countryCode)) {
+      byId.set(location.id, {
+        ...location,
+        count: 0,
+        newsCount: 0,
+        marketCount: 0,
+        signals: [],
+      });
+    }
+  }
+
+  const addSubdivisionSignal = (location, kind, source) => {
+    const subdivision = normalizeGeoLocationToSubdivision(location);
+    if (!subdivision || !byId.has(subdivision.id)) return;
+    const previous = byId.get(subdivision.id) || subdivision;
+    const signals = [...(previous.signals || []), buildGeoSignal(kind, source)];
+    byId.set(subdivision.id, {
+      ...previous,
+      ...subdivision,
+      count: (previous.count || 0) + 1,
+      newsCount: (previous.newsCount || 0) + (kind === 'news' ? 1 : 0),
+      marketCount: (previous.marketCount || 0) + (kind === 'market' ? 1 : 0),
+      signals: sortGeoSignals(signals),
+    });
+  };
+
+  for (const item of items || []) {
+    for (const location of item.geoLocations || []) {
+      addSubdivisionSignal(location, 'news', item);
+    }
+  }
+
+  for (const market of markets || []) {
+    for (const location of extractMarketLocations(market)) {
+      addSubdivisionSignal(location, 'market', market);
+    }
+  }
+
+  return Array.from(byId.values()).sort((a, b) => (
+    (b.count || 0) - (a.count || 0)
+    || String(a.country || '').localeCompare(String(b.country || ''))
+    || String(a.name || '').localeCompare(String(b.name || ''))
+  ));
+}
+
+function focusCountryForSelection(selectedLocationId, selectedLocation) {
+  if (selectedLocationId === 'mexico') return 'MX';
+  if (selectedLocationId === 'estados-unidos') return 'US';
+  return selectedLocation?.country || null;
+}
+
+function buildReturnFocusRegion(region, countryCode) {
+  if (region?.key !== 'all' || !countryCode) return region;
+  const drillCountry = getSubdivisionCountry(countryCode);
+  if (!drillCountry) return region;
+  return {
+    ...region,
+    center: drillCountry.center,
+    globeAltitude: 2.15,
+  };
+}
+
 function polygonPoints(points, region) {
   return points.map(point => {
     const projected = projectLocation(point, region, { clamp: false });
@@ -149,8 +226,11 @@ export default function NewsMapView({
   const selectedRegion = regions.find(r => r.key === activeRegion) || regions[0];
   const counts = summarizeGeoLocations(items, markets);
   const [selectedLocationId, setSelectedLocationId] = useState(null);
+  const [selectedFallbackLocation, setSelectedFallbackLocation] = useState(null);
+  const [returnFocusCountry, setReturnFocusCountry] = useState(null);
 
   const regionItems = useMemo(() => filterGeoItems(items, activeRegion), [items, activeRegion]);
+  const scopedMarkets = useMemo(() => filterGeoMarkets(markets, activeRegion), [markets, activeRegion]);
   const locations = useMemo(() => {
     const byId = new Map();
     const addLocation = (location, kind, source) => {
@@ -172,34 +252,72 @@ export default function NewsMapView({
       }
     }
 
-    for (const market of markets || []) {
+    for (const market of scopedMarkets || []) {
       for (const location of extractMarketLocations(market)) {
         addLocation(normalizeGeoLocationToCountry(location), 'market', market);
       }
     }
     return Array.from(byId.values()).sort((a, b) => b.count - a.count);
-  }, [regionItems, markets, activeRegion]);
+  }, [regionItems, scopedMarkets, activeRegion]);
+  const subdivisionLocations = useMemo(
+    () => buildSubdivisionLocations({ items: regionItems, markets: scopedMarkets, activeRegion }),
+    [regionItems, scopedMarkets, activeRegion],
+  );
   const selectedLocation = useMemo(() => (
-    locations.find(location => location.id === selectedLocationId) || null
-  ), [locations, selectedLocationId]);
+    locations.find(location => location.id === selectedLocationId)
+    || subdivisionLocations.find(location => location.id === selectedLocationId)
+    || (selectedFallbackLocation?.id === selectedLocationId ? selectedFallbackLocation : null)
+    || null
+  ), [locations, selectedFallbackLocation, subdivisionLocations, selectedLocationId]);
   const selectedLocationLabel = selectedLocation?.name || null;
   const selectedCountry = selectedLocation?.country || null;
+  const selectedSubdivisionId = selectedLocation?.subdivisionId || (
+    selectedLocation?.granularity === 'state' ? selectedLocation.id : null
+  );
   const locationMatchesSelection = (location) => {
     if (!selectedLocationId) return true;
+    if (selectedSubdivisionId && location.subdivisionId === selectedSubdivisionId) return true;
+    if (selectedSubdivisionId) {
+      const subdivisionLocation = normalizeGeoLocationToSubdivision(location);
+      return subdivisionLocation?.id === selectedSubdivisionId;
+    }
     if (selectedCountry && location.country === selectedCountry) return true;
     return location.id === selectedLocationId;
   };
   const visibleItems = useMemo(() => {
     if (!selectedLocationId) return regionItems;
     return regionItems.filter(item => (item.geoLocations || []).some(locationMatchesSelection));
-  }, [regionItems, selectedLocationId, selectedCountry]);
+  }, [regionItems, selectedLocationId, selectedCountry, selectedSubdivisionId]);
   const visibleMarkets = useMemo(() => {
-    const scoped = filterGeoMarkets(markets, activeRegion);
     const visible = selectedLocationId
-      ? scoped.filter(market => extractMarketLocations(market).some(locationMatchesSelection))
-      : scoped;
+      ? scopedMarkets.filter(market => extractMarketLocations(market).some(locationMatchesSelection))
+      : scopedMarkets;
     return visible;
-  }, [markets, activeRegion, selectedLocationId, selectedCountry, showNewsPanel]);
+  }, [scopedMarkets, selectedLocationId, selectedCountry, selectedSubdivisionId, showNewsPanel]);
+  const returnFocusRegion = useMemo(
+    () => buildReturnFocusRegion(selectedRegion, returnFocusCountry),
+    [returnFocusCountry, selectedRegion],
+  );
+  const globeRegion = returnFocusRegion;
+  const handleSelectLocation = (nextLocationId, nextLocation = null) => {
+    setSelectedLocationId(nextLocationId);
+    setSelectedFallbackLocation(nextLocationId && nextLocation?.selectableFallback ? nextLocation : null);
+    if (!nextLocationId) setReturnFocusCountry(null);
+  };
+  const handleRegionSelect = (nextRegionKey) => {
+    const nextFocusCountry = focusCountryForSelection(selectedLocationId, selectedLocation);
+    if (nextRegionKey === 'all') setReturnFocusCountry(nextFocusCountry || returnFocusCountry);
+    else setReturnFocusCountry(null);
+    setSelectedLocationId(null);
+    setSelectedFallbackLocation(null);
+    onRegionChange?.(nextRegionKey);
+  };
+  const handleExitDrill = (countryCode) => {
+    setReturnFocusCountry(countryCode);
+    setSelectedLocationId(null);
+    setSelectedFallbackLocation(null);
+    onRegionChange?.('all');
+  };
 
   return (
     <section style={{ display: 'grid', gap: 18 }}>
@@ -215,10 +333,7 @@ export default function NewsMapView({
             <button
               key={region.key}
               type="button"
-              onClick={() => {
-                setSelectedLocationId(null);
-                onRegionChange?.(region.key);
-              }}
+              onClick={() => handleRegionSelect(region.key)}
               className={`filter-btn${active ? ' active' : ''}`}
               style={{ fontSize: 11 }}
             >
@@ -244,10 +359,12 @@ export default function NewsMapView({
           padding: 'clamp(18px, 4vw, 44px)',
         }}>
           <NewsGlobe
-            region={selectedRegion}
+            region={globeRegion}
             locations={locations}
+            subdivisionLocations={subdivisionLocations}
             selectedLocationId={selectedLocationId}
-            onSelectLocation={setSelectedLocationId}
+            onSelectLocation={handleSelectLocation}
+            onExitDrill={handleExitDrill}
           />
         </div>
       </div>
@@ -381,11 +498,19 @@ export default function NewsMapView({
   );
 }
 
-export function NewsGlobe({ region, locations, selectedLocationId, onSelectLocation }) {
+export function NewsGlobe({
+  region,
+  locations,
+  subdivisionLocations,
+  selectedLocationId,
+  onSelectLocation,
+  onExitDrill,
+}) {
   const staticFallback = (
     <StaticNewsGlobe
       region={region}
       locations={locations}
+      subdivisionLocations={subdivisionLocations}
       selectedLocationId={selectedLocationId}
       onSelectLocation={onSelectLocation}
     />
@@ -399,8 +524,10 @@ export function NewsGlobe({ region, locations, selectedLocationId, onSelectLocat
       <NewsWorldGlobe
         region={region}
         locations={locations}
+        subdivisionLocations={subdivisionLocations}
         selectedLocationId={selectedLocationId}
         onSelectLocation={onSelectLocation}
+        onExitDrill={onExitDrill}
         fallback={staticFallback}
       />
     </Suspense>
@@ -452,7 +579,25 @@ function GlobeLoadingShell({ region }) {
   );
 }
 
-function StaticNewsGlobe({ region, locations, selectedLocationId, onSelectLocation }) {
+function StaticNewsGlobe({
+  region,
+  locations,
+  subdivisionLocations = [],
+  selectedLocationId,
+  onSelectLocation,
+}) {
+  const selectedDrillCountry = selectedLocationId === 'mexico'
+    ? getSubdivisionCountry('MX')
+    : selectedLocationId === 'estados-unidos'
+      ? getSubdivisionCountry('US')
+      : null;
+  const visibleLocations = selectedDrillCountry
+    ? subdivisionLocations.filter(location => location.country === selectedDrillCountry.country)
+    : locations;
+  const effectiveRegion = selectedDrillCountry
+    ? { ...region, center: selectedDrillCountry.center, zoom: region?.zoom || 1.9 }
+    : region;
+
   return (
     <div style={{
       position: 'relative',
@@ -475,7 +620,7 @@ function StaticNewsGlobe({ region, locations, selectedLocationId, onSelectLocati
         border: '1px solid rgba(255,255,255,0.09)',
         borderLeftColor: 'rgba(0,232,122,0.34)',
         borderRightColor: 'rgba(255,85,0,0.28)',
-        transform: `rotate(${region?.center?.lng || 0}deg)`,
+        transform: `rotate(${effectiveRegion?.center?.lng || 0}deg)`,
         transition: 'transform 560ms ease',
       }} />
       <div style={{
@@ -488,7 +633,7 @@ function StaticNewsGlobe({ region, locations, selectedLocationId, onSelectLocati
         borderRadius: '50%',
         border: '1px dashed rgba(255,255,255,0.08)',
       }} />
-      <WorldLandLayer region={region} />
+      <WorldLandLayer region={effectiveRegion} />
       <div style={{
         position: 'absolute',
         left: 20,
@@ -499,10 +644,10 @@ function StaticNewsGlobe({ region, locations, selectedLocationId, onSelectLocati
         color: 'var(--orange)',
         textTransform: 'uppercase',
       }}>
-        {region?.label || 'Mapa'}
+        {selectedDrillCountry?.label || region?.label || 'Mapa'}
       </div>
-      {locations.map(location => {
-        const point = projectLocation(location, region);
+      {visibleLocations.map(location => {
+        const point = projectLocation(location, effectiveRegion);
         const active = selectedLocationId === location.id;
         const size = location.render === 'country-fill'
           ? Math.max(34, Math.min(90, 34 + location.count * 10))
