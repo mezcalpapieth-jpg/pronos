@@ -1,18 +1,9 @@
 /**
  * World Cup 2026 — dedicated category page at /c/world-cup.
  *
- * Sections:
- *   1. Hero with live countdown to the 2026-06-11 Azteca opener
- *   2. Mexico Path — implied-probability projection across stages
- *      (pulled from the group markets the user is trading)
- *   3. Group selector grid with team badges + form tint
- *   4. Per-group match rows with 1/X/2 buy pills → drawer
- *   5. "Winner of Group X" parallel market card
- *   6. Bracket preview (R32 → Final) as a CSS-grid tree
- *
- * Live-only toggle at the top filters the match list to games that
- * are kicking off right now — invisible while the tournament is dark,
- * essential once it starts.
+ * The public surface follows the live tournament state: current
+ * semifinal/final markets first, knockout bracket second, and group
+ * fixtures as history below.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -52,6 +43,46 @@ function pad(n) { return String(n).padStart(2, '0'); }
 function formatDateEs(iso) {
   if (!iso) return '';
   return new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+}
+
+function formatDateTimeEs(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleString('es-MX', {
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function normalizeText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function teamByLabel(label) {
+  const wanted = normalizeText(label);
+  if (!wanted) return null;
+  return Object.values(TEAMS).find(team =>
+    normalizeText(team.name) === wanted
+    || normalizeText(team.espn) === wanted
+    || normalizeText(team.code) === wanted
+  ) || null;
+}
+
+function roundLabel(round) {
+  return {
+    r32: '16vos',
+    r16: 'Octavos',
+    qf: 'Cuartos',
+    sf: 'Semifinal',
+    third: 'Tercer lugar',
+    final: 'Final',
+    knockout: 'Eliminatoria',
+  }[round] || 'Eliminatoria';
 }
 
 // Circular badge — tries ESPN's federation badge first, falls back
@@ -212,6 +243,24 @@ export default function PointsWorldCupPage() {
     () => knockoutMarkets.filter(m => (m.sourceData?.round || m.resolverConfig?.round) === 'sf'),
     [knockoutMarkets],
   );
+  const activeKnockoutMarkets = useMemo(
+    () => knockoutMarkets.filter(m => m.status === 'active'),
+    [knockoutMarkets],
+  );
+  const featuredStageMarkets = useMemo(() => {
+    const semis = semifinalMarkets.filter(m => m.status !== 'resolved');
+    if (semis.length > 0) return semis;
+    const finalMarkets = knockoutMarkets.filter(m => roundFromMarket(m) === 'final' && m.status !== 'resolved');
+    if (finalMarkets.length > 0) return finalMarkets;
+    return knockoutMarkets.filter(m => m.status === 'active').slice(0, 4);
+  }, [knockoutMarkets, semifinalMarkets]);
+  const nextMarket = useMemo(() => (
+    activeKnockoutMarkets
+      .slice()
+      .sort((a, b) => new Date(a.startTime || a.endTime || 0) - new Date(b.startTime || b.endTime || 0))[0] || null
+  ), [activeKnockoutMarkets]);
+  const resolvedCount = allMarkets.filter(m => m.status === 'resolved').length;
+  const activeCount = allMarkets.filter(m => m.status === 'active').length;
 
   // Is any WC market currently in its live window? Used to reveal
   // the LIVE toggle at the top of the page.
@@ -226,7 +275,7 @@ export default function PointsWorldCupPage() {
     );
   }, [markets]);
 
-  const countdown = useCountdown(OPENING_KICKOFF_ISO);
+  const countdown = useCountdown(nextMarket?.startTime || OPENING_KICKOFF_ISO);
   const groupMatches = useMemo(() => {
     const all = GROUP_FIXTURES.filter(f => f.group === activeGroup);
     if (!liveOnly) return all;
@@ -242,8 +291,8 @@ export default function PointsWorldCupPage() {
   }, [activeGroup, liveOnly, markets]);
 
   const mexicoPath = useMemo(
-    () => computeMexicoPath(markets),
-    [markets],
+    () => computeMexicoPath(allMarkets),
+    [allMarkets],
   );
   const semifinalLine = semifinalMarkets.length > 0
     ? semifinalMarkets.map(m => `${m.question}${m.status === 'resolved' ? ' · final' : ''}`).join(' · ')
@@ -296,10 +345,16 @@ export default function PointsWorldCupPage() {
             color: 'var(--text-secondary)', lineHeight: 1.55,
             margin: '0 0 22px', maxWidth: 560,
           }}>
-            48 selecciones. 12 grupos. 104 partidos. La fase de grupos ya dejó resultados, las eliminatorias están vivas y el tablero avanza con ESPN. <strong style={{ color: 'var(--text-primary)' }}>{semifinalLine}</strong>
+            El Mundial ya está en etapa decisiva. La fase de grupos y las primeras llaves quedaron como historial, y los mercados abiertos viven arriba para entrar directo a las semifinales. <strong style={{ color: 'var(--text-primary)' }}>{semifinalLine}</strong>
           </p>
 
-          {!countdown.done ? (
+          <div style={{
+            display: 'flex',
+            gap: 10,
+            flexWrap: 'wrap',
+            alignItems: 'center',
+          }}>
+          {nextMarket && !countdown.done ? (
             <div style={{
               display: 'inline-flex', gap: 8,
               padding: '10px 14px',
@@ -342,7 +397,73 @@ export default function PointsWorldCupPage() {
               🔴 ELIMINATORIAS · Semifinales en curso
             </div>
           )}
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '10px 14px',
+              borderRadius: 12,
+              border: '1px solid rgba(255,255,255,0.14)',
+              background: 'rgba(0,0,0,0.18)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              letterSpacing: '0.08em',
+              color: 'var(--text-secondary)',
+              textTransform: 'uppercase',
+            }}>
+              {activeCount} abiertos · {resolvedCount} resueltos
+            </span>
+          </div>
         </div>
+      </section>
+
+      {/* ── Current stage ───────────────────────────────────────── */}
+      <CurrentStage
+        loading={loading}
+        markets={featuredStageMarkets}
+        nextMarket={nextMarket}
+        onOpen={(market) => navigate(`/market?id=${market.id}`)}
+        onBuy={(market, outcomeIndex, label) => setDrawer({ market, outcomeIndex, label })}
+      />
+
+      {/* ── Bracket ────────────────────────────────────────────── */}
+      <section style={{ marginBottom: 40 }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          gap: 16,
+          marginBottom: 12,
+        }}>
+          <div>
+            <div style={{
+              fontFamily: 'var(--font-mono)', fontSize: 11,
+              letterSpacing: '0.12em', color: 'var(--text-muted)',
+              textTransform: 'uppercase', marginBottom: 6,
+            }}>
+              Llaves · Eliminatorias
+            </div>
+            <h2 style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 'clamp(28px, 4vw, 42px)',
+              color: 'var(--text-primary)',
+              margin: 0,
+              lineHeight: 1,
+            }}>
+              Camino a la final
+            </h2>
+          </div>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            letterSpacing: '0.1em',
+            color: 'var(--text-muted)',
+            textTransform: 'uppercase',
+          }}>
+            {activeKnockoutMarkets.length} mercados abiertos
+          </span>
+        </div>
+        <BracketView markets={knockoutMarkets} onOpen={(market) => navigate(`/market?id=${market.id}`)} />
       </section>
 
       {/* ── Mexico Path ─────────────────────────────────────────── */}
@@ -359,7 +480,7 @@ export default function PointsWorldCupPage() {
             letterSpacing: '0.12em', color: 'var(--text-muted)',
             textTransform: 'uppercase',
           }}>
-            Fase de grupos
+            Historial · Fase de grupos
           </div>
           {anyLive && (
             <button
@@ -462,7 +583,7 @@ export default function PointsWorldCupPage() {
             fontFamily: 'var(--font-display)', fontSize: 24,
             color: 'var(--text-primary)', margin: 0,
           }}>
-            Grupo {activeGroup}
+            Grupo {activeGroup} · Resultados
           </h2>
           <span style={{
             fontFamily: 'var(--font-mono)', fontSize: 11,
@@ -523,18 +644,6 @@ export default function PointsWorldCupPage() {
         </div>
       </section>
 
-      {/* ── Bracket ────────────────────────────────────────────── */}
-      <section>
-        <div style={{
-          fontFamily: 'var(--font-mono)', fontSize: 11,
-          letterSpacing: '0.12em', color: 'var(--text-muted)',
-          textTransform: 'uppercase', marginBottom: 12,
-        }}>
-          Llaves · Eliminatorias
-        </div>
-        <BracketView markets={knockoutMarkets} onOpen={(market) => navigate(`/market?id=${market.id}`)} />
-      </section>
-
       {drawer && (
         <PointsBuyModal
           open={true}
@@ -551,6 +660,288 @@ export default function PointsWorldCupPage() {
 }
 
 // ── Components ────────────────────────────────────────────────────────────
+
+function CurrentStage({ loading, markets, nextMarket, onOpen, onBuy }) {
+  const hasMarkets = markets.length > 0;
+  return (
+    <section style={{ marginBottom: 42 }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'baseline',
+        gap: 16,
+        marginBottom: 14,
+      }}>
+        <div>
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            letterSpacing: '0.12em',
+            color: 'var(--green)',
+            textTransform: 'uppercase',
+            marginBottom: 6,
+          }}>
+            Ahora en juego
+          </div>
+          <h2 style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 'clamp(34px, 5vw, 56px)',
+            color: 'var(--text-primary)',
+            margin: 0,
+            lineHeight: 0.95,
+          }}>
+            Semifinales
+          </h2>
+        </div>
+        {nextMarket?.startTime && (
+          <div style={{
+            textAlign: 'right',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            letterSpacing: '0.08em',
+            color: 'var(--text-muted)',
+            textTransform: 'uppercase',
+          }}>
+            Siguiente mercado
+            <div style={{
+              fontFamily: 'var(--font-body)',
+              fontSize: 14,
+              letterSpacing: 0,
+              textTransform: 'none',
+              color: 'var(--text-secondary)',
+              marginTop: 4,
+            }}>
+              {formatDateTimeEs(nextMarket.startTime)}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {loading && !hasMarkets && (
+        <div style={{
+          background: 'var(--surface1)',
+          border: '1px solid var(--border)',
+          borderRadius: 16,
+          padding: 22,
+          fontFamily: 'var(--font-mono)',
+          color: 'var(--text-muted)',
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+        }}>
+          Cargando semifinales...
+        </div>
+      )}
+
+      {!loading && !hasMarkets && (
+        <div style={{
+          background: 'var(--surface1)',
+          border: '1px solid rgba(245,158,11,0.32)',
+          borderRadius: 16,
+          padding: 22,
+        }}>
+          <div style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 26,
+            color: 'var(--text-primary)',
+            marginBottom: 6,
+          }}>
+            Semifinales por abrir
+          </div>
+          <p style={{
+            margin: 0,
+            color: 'var(--text-muted)',
+            fontFamily: 'var(--font-body)',
+            fontSize: 15,
+            lineHeight: 1.5,
+          }}>
+            En cuanto admin repare o abra los mercados, aparecerán aquí arriba con botones directos.
+          </p>
+        </div>
+      )}
+
+      {hasMarkets && (
+        <div className="wc-stage-grid">
+          {markets.map(market => (
+            <FeaturedKnockoutCard
+              key={market.id}
+              market={market}
+              onOpen={() => onOpen?.(market)}
+              onBuy={(outcomeIndex, label) => onBuy?.(market, outcomeIndex, label)}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function FeaturedKnockoutCard({ market, onOpen, onBuy }) {
+  const outcomes = Array.isArray(market.outcomes) && market.outcomes.length > 0
+    ? market.outcomes
+    : ['Sí', 'No'];
+  const prices = Array.isArray(market.prices) ? market.prices : outcomes.map(() => 1 / outcomes.length);
+  const images = Array.isArray(market.outcomeImages) ? market.outcomeImages : [];
+  const round = roundFromMarket(market);
+  const isResolved = market.status === 'resolved';
+  const isActive = market.status === 'active';
+  const winnerIndex = Number(market.outcome);
+
+  return (
+    <article
+      onClick={onOpen}
+      role="button"
+      style={{
+        position: 'relative',
+        overflow: 'hidden',
+        minHeight: 260,
+        borderRadius: 20,
+        border: `1px solid ${isActive ? 'rgba(0,232,122,0.36)' : 'var(--border)'}`,
+        background: 'radial-gradient(circle at 18% 0%, rgba(0,232,122,0.18), transparent 32%), radial-gradient(circle at 86% 18%, rgba(255,85,0,0.2), transparent 34%), var(--surface1)',
+        padding: 22,
+        cursor: 'pointer',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+      }}
+    >
+      <div aria-hidden style={{
+        position: 'absolute',
+        inset: 0,
+        background: 'linear-gradient(145deg, rgba(255,255,255,0.04), transparent 45%)',
+        pointerEvents: 'none',
+      }} />
+      <div style={{ position: 'relative' }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: 12,
+          alignItems: 'center',
+          marginBottom: 18,
+        }}>
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '7px 11px',
+            borderRadius: 100,
+            border: `1px solid ${isActive ? 'rgba(0,232,122,0.36)' : 'rgba(255,255,255,0.14)'}`,
+            background: isActive ? 'rgba(0,232,122,0.1)' : 'rgba(255,255,255,0.05)',
+            color: isActive ? 'var(--green)' : 'var(--text-muted)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            letterSpacing: '0.1em',
+            textTransform: 'uppercase',
+            fontWeight: 700,
+          }}>
+            {isActive ? 'Abierto' : isResolved ? 'Final' : 'Cerrado'} · {roundLabel(round)}
+          </span>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            letterSpacing: '0.08em',
+            color: 'var(--text-muted)',
+            textTransform: 'uppercase',
+          }}>
+            {formatDateTimeEs(market.startTime || market.endTime)}
+          </span>
+        </div>
+
+        <h3 style={{
+          margin: 0,
+          color: 'var(--text-primary)',
+          fontFamily: 'var(--font-display)',
+          fontSize: 'clamp(26px, 4vw, 42px)',
+          lineHeight: 0.98,
+          letterSpacing: '0.01em',
+        }}>
+          {market.question}
+        </h3>
+      </div>
+
+      <div style={{
+        position: 'relative',
+        display: 'grid',
+        gridTemplateColumns: `repeat(${Math.min(outcomes.length, 2)}, minmax(0, 1fr))`,
+        gap: 10,
+        marginTop: 22,
+      }}>
+        {outcomes.map((label, i) => {
+          const team = teamByLabel(label);
+          const pct = isResolved ? (winnerIndex === i ? 100 : 0) : Math.round((prices[i] ?? 0) * 100);
+          const activeTone = i === 0
+            ? { bg: 'rgba(0,232,122,0.12)', border: 'rgba(0,232,122,0.36)', color: 'var(--green)' }
+            : { bg: 'rgba(255,85,0,0.12)', border: 'rgba(255,85,0,0.34)', color: 'var(--orange)' };
+          return (
+            <button
+              key={`${label}-${i}`}
+              type="button"
+              disabled={!isActive}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (isActive) onBuy?.(i, label);
+              }}
+              style={{
+                minHeight: 78,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '14px 16px',
+                borderRadius: 14,
+                border: `1px solid ${activeTone.border}`,
+                background: activeTone.bg,
+                cursor: isActive ? 'pointer' : 'default',
+                textAlign: 'left',
+                opacity: isResolved && winnerIndex !== i ? 0.58 : 1,
+              }}
+            >
+              {images[i] ? (
+                <img
+                  src={images[i]}
+                  alt=""
+                  style={{ width: 38, height: 38, objectFit: 'contain', flexShrink: 0 }}
+                />
+              ) : (
+                <TeamBadge team={team} size={38} title={label} />
+              )}
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{
+                  display: 'block',
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 22,
+                  color: activeTone.color,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}>
+                  {label}
+                </span>
+                <span style={{
+                  display: 'block',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  letterSpacing: '0.08em',
+                  color: 'var(--text-muted)',
+                  textTransform: 'uppercase',
+                  marginTop: 2,
+                }}>
+                  {isResolved ? 'Resultado' : 'Elegir resultado'}
+                </span>
+              </span>
+              <strong style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: 28,
+                color: activeTone.color,
+                lineHeight: 1,
+              }}>
+                {pct}%
+              </strong>
+            </button>
+          );
+        })}
+      </div>
+    </article>
+  );
+}
 
 function MatchRow({ fixture, home, away, market, onBuy, onOpen }) {
   const hasMarket = Boolean(market);
