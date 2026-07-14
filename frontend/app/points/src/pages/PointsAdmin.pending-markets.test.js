@@ -20,6 +20,16 @@ test('Points admin exposes a re-add action for rejected generated markets', () =
   assert.match(apiSource, /adminReviewPendingMarket\(id,\s*action,\s*note\)/);
 });
 
+test('Points admin can edit generated markets and per-option liquidity before approval', () => {
+  assert.match(source, /PendingMarketEditModal/);
+  assert.match(source, /setEditingPending\(r\)/);
+  assert.match(source, /adminEditPendingMarket/);
+  assert.match(source, /seedLiquidities/);
+  assert.match(source, /Liquidez opción/);
+  assert.match(apiSource, /export async function adminEditPendingMarket/);
+  assert.match(apiSource, /action:\s*'edit'/);
+});
+
 test('Points admin tabs show pending-work badges outside the active tab', () => {
   assert.match(source, /adminTaskCounts/);
   assert.match(source, /adminListTaskCounts\(\)/);

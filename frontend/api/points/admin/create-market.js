@@ -3,7 +3,8 @@
  * Body: {
  *   question, category, icon?, endTime,
  *   outcomes: string[],       // 2 to 10 outcomes
- *   seedLiquidity,
+ *   seedLiquidity,             // legacy scalar fallback
+ *   seedLiquidities?: number[] // index-aligned per-outcome liquidity
  *   ammMode?: 'unified' | 'parallel'  // default 'unified'
  *   featured?: boolean
  *   sport?, league?, outcomeImages?, geo?
@@ -28,6 +29,7 @@ import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { initialReserves } from '../../_lib/amm-math.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 import { deriveMarketTags } from '../../_lib/category-tags.js';
+import { normalizeSeedLiquidities } from '../../_lib/market-liquidity.js';
 import { neon } from '@neondatabase/serverless';
 
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -46,11 +48,10 @@ export default async function handler(req, res) {
   if (!admin) return;
 
   const {
-    question, category, icon, endTime, outcomes, seedLiquidity, ammMode,
+    question, category, icon, endTime, outcomes, seedLiquidity, seedLiquidities, ammMode,
     featured,
     sport, league, outcomeImages, geo,
   } = req.body || {};
-  const seed = Number(seedLiquidity);
   const mode = ammMode === 'parallel' ? 'parallel' : 'unified';
   // Points-app markets are off-chain forever; `marketMode` stays
   // 'points' regardless of body input. Kept as a constant so the
@@ -107,9 +108,17 @@ export default async function handler(req, res) {
   if (lowerSet.size !== normalizedOutcomes.length) {
     return res.status(400).json({ error: 'duplicate_outcomes' });
   }
-  if (!Number.isFinite(seed) || seed < 100) {
-    return res.status(400).json({ error: 'seed_too_small' });
+  const normalizedLiquidity = normalizeSeedLiquidities({
+    outcomes: normalizedOutcomes,
+    seedLiquidity,
+    seedLiquidities,
+  });
+  if (normalizedLiquidity.error) {
+    return res.status(400).json({ error: normalizedLiquidity.error });
   }
+  const seedValues = normalizedLiquidity.values;
+  const seed = normalizedLiquidity.fallback;
+  const seedLiquiditiesJson = JSON.stringify(seedValues);
   const endDate = endTime ? new Date(endTime) : null;
   if (!endDate || isNaN(endDate.getTime()) || endDate <= new Date()) {
     return res.status(400).json({ error: 'invalid_end_time' });
@@ -135,16 +144,16 @@ export default async function handler(req, res) {
     await ensurePointsSchema(schemaSql);
 
     if (mode === 'unified') {
-      const reserves = initialReserves(seed, normalizedOutcomes.length);
+      const reserves = seedValues;
       const result = await withTransaction(async (client) => {
         const r = await client.query(
           `INSERT INTO points_markets
-             (question, category, icon, outcomes, reserves, seed_liquidity,
+             (question, category, icon, outcomes, reserves, seed_liquidity, seed_liquidities,
               end_time, status, created_by, amm_mode, featured,
               mode, chain_id, chain_market_id, chain_address,
               sport, league, outcome_images, category_tags, geo_tags, topic_tags)
-           VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, 'active', $8, 'unified', $9,
-                   $10, $11, $12, $13, $14, $15, $16::jsonb, $17::jsonb, $18::jsonb, $19::jsonb)
+           VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7::jsonb, $8, 'active', $9, 'unified', $10,
+                   $11, $12, $13, $14, $15, $16, $17::jsonb, $18::jsonb, $19::jsonb, $20::jsonb)
            RETURNING id`,
           [
             question.trim(),
@@ -153,6 +162,7 @@ export default async function handler(req, res) {
             JSON.stringify(normalizedOutcomes),
             JSON.stringify(reserves),
             seed,
+            seedLiquiditiesJson,
             endDate.toISOString(),
             admin.username,
             featured === true,
@@ -189,16 +199,15 @@ export default async function handler(req, res) {
     // On-chain parallel markets share the parent's chain_address across
     // legs; each leg's chain_market_id can be patched in later via
     // edit-market (e.g. when the MarketFactory emits the leg ids).
-    const legReserves = initialReserves(seed, 2); // always [seed, seed]
     const result = await withTransaction(async (client) => {
       const parent = await client.query(
         `INSERT INTO points_markets
-           (question, category, icon, outcomes, reserves, seed_liquidity,
+           (question, category, icon, outcomes, reserves, seed_liquidity, seed_liquidities,
             end_time, status, created_by, amm_mode, featured,
             mode, chain_id, chain_market_id, chain_address,
             sport, league, outcome_images, category_tags, geo_tags, topic_tags)
-         VALUES ($1, $2, $3, $4::jsonb, '[]'::jsonb, $5, $6, 'active', $7, 'parallel', $8,
-                 $9, $10, $11, $12, $13, $14, $15::jsonb, $16::jsonb, $17::jsonb, $18::jsonb)
+         VALUES ($1, $2, $3, $4::jsonb, '[]'::jsonb, $5, $6::jsonb, $7, 'active', $8, 'parallel', $9,
+                 $10, $11, $12, $13, $14, $15, $16::jsonb, $17::jsonb, $18::jsonb, $19::jsonb)
          RETURNING id`,
         [
           question.trim(),
@@ -206,6 +215,7 @@ export default async function handler(req, res) {
           icon || null,
           JSON.stringify(normalizedOutcomes),
           seed,
+          seedLiquiditiesJson,
           endDate.toISOString(),
           admin.username,
           featured === true,
@@ -224,6 +234,8 @@ export default async function handler(req, res) {
       const parentId = parent.rows[0].id;
 
       for (let i = 0; i < normalizedOutcomes.length; i++) {
+        const legSeed = seedValues[i];
+        const legReserves = initialReserves(legSeed, 2); // always [legSeed, legSeed]
         // For onchain auto-deployed parallel markets, each leg gets the
         // address of the binary contract we just deployed for it. Manual
         // / off-chain parallel falls back to chainAddressStr (which is
@@ -237,13 +249,13 @@ export default async function handler(req, res) {
 
         await client.query(
           `INSERT INTO points_markets
-             (question, category, icon, outcomes, reserves, seed_liquidity,
+             (question, category, icon, outcomes, reserves, seed_liquidity, seed_liquidities,
               end_time, status, created_by, amm_mode, parent_id, leg_label,
               mode, chain_id, chain_market_id, chain_address,
               category_tags, geo_tags, topic_tags)
-           VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, 'active', $8,
-                   'parallel', $9, $10, $11, $12, $13, $14,
-                   $15::jsonb, $16::jsonb, $17::jsonb)`,
+           VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7::jsonb, $8, 'active', $9,
+                   'parallel', $10, $11, $12, $13, $14, $15,
+                   $16::jsonb, $17::jsonb, $18::jsonb)`,
           [
             // Leg "question" is synthetic — positions.js + portfolio use
             // parent.question + leg_label for display, but keeping a
@@ -253,7 +265,8 @@ export default async function handler(req, res) {
             icon || null,
             JSON.stringify(['Sí', 'No']),
             JSON.stringify(legReserves),
-            seed,
+            legSeed,
+            JSON.stringify([legSeed, legSeed]),
             endDate.toISOString(),
             admin.username,
             parentId,

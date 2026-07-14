@@ -339,6 +339,10 @@ export async function adminReviewPendingMarket(id, action, note) {
   return postJson('/api/points/admin/pending-markets', { id, action, note });
 }
 
+export async function adminEditPendingMarket(id, patch, note) {
+  return postJson('/api/points/admin/pending-markets', { id, action: 'edit', patch, note });
+}
+
 // Bulk-approve every pending row. Backend does per-row transactions so
 // partial failure is tolerated; returns `{ checked, approvedCount, failedCount, failures }`.
 export async function adminApproveAllPendingMarkets(note) {

@@ -20,13 +20,22 @@ test('rejected pending markets list newest reviewed rows first', () => {
 });
 
 test('rejected pending markets can be re-added to the review queue', () => {
-  assert.match(source, /action !== 'approve' && action !== 'reject' && action !== 'readd'/);
+  assert.match(source, /action !== 'approve' && action !== 'reject' && action !== 'readd' && action !== 'edit'/);
   assert.match(source, /if \(action === 'readd'\)/);
   assert.match(source, /status\s*=\s*'pending'/);
   assert.match(source, /admin_note\s*=\s*COALESCE\(NULLIF\(\$2,\s*''\),\s*'manual-readded from rejected'\)/);
   assert.match(source, /reviewer\s*=\s*\$3/);
   assert.match(source, /reviewed_at\s*=\s*NOW\(\)/);
   assert.match(source, /approved_market_id\s*=\s*NULL/);
+});
+
+test('pending generated markets can be edited before approval', () => {
+  assert.match(source, /if \(action === 'edit'\)/);
+  assert.match(source, /async function editPending/);
+  assert.match(source, /normalizeSeedLiquidities/);
+  assert.match(source, /seed_liquidities/);
+  assert.match(source, /seedLiquidities:\s*parseJsonb\(r\.seed_liquidities,\s*null\)/);
+  assert.match(source, /status !== 'pending'/);
 });
 
 test('human re-added sports rows are not immediately auto-rejected again', () => {

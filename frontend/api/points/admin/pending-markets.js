@@ -4,7 +4,7 @@
  * GET  /api/points/admin/pending-markets?status=pending|approved|rejected
  *   → list rows (most-recent first)
  * POST /api/points/admin/pending-markets
- *   body: { id, action: 'approve' | 'reject' | 'readd', note? }
+ *   body: { id, action: 'approve' | 'reject' | 'readd' | 'edit', note?, patch? }
  *   approve → copy spec into points_markets + mark approved
  *   reject  → mark rejected (row stays so re-runs stay idempotent)
  *   readd   → move a rejected row back to pending review
@@ -20,9 +20,13 @@ import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 import { initialReserves } from '../../_lib/amm-math.js';
 import { deriveMarketTags } from '../../_lib/category-tags.js';
+import { normalizeSeedLiquidities } from '../../_lib/market-liquidity.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
+const ALLOWED_CATEGORIES = new Set([
+  'general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup',
+]);
 
 function parseJsonb(v, fb) {
   if (Array.isArray(v)) return v;
@@ -155,6 +159,7 @@ async function list(req, res) {
       icon: r.icon,
       outcomes: parseJsonb(r.outcomes, []),
       seedLiquidity: Number(r.seed_liquidity),
+      seedLiquidities: parseJsonb(r.seed_liquidities, null),
       startTime: r.start_time,
       endTime: r.end_time,
       ammMode: r.amm_mode,
@@ -274,10 +279,17 @@ async function approveOne(pid, reviewer, note, opts = {}) {
     if (!Array.isArray(outcomes) || outcomes.length < 2) {
       const err = new Error('invalid_outcomes'); err.status = 400; throw err;
     }
-    const seed = Number(r.seed_liquidity);
-    if (!Number.isFinite(seed) || seed < 100) {
-      const err = new Error('seed_too_small'); err.status = 400; throw err;
+    const normalizedLiquidity = normalizeSeedLiquidities({
+      outcomes,
+      seedLiquidity: r.seed_liquidity,
+      seedLiquidities: parseJsonb(r.seed_liquidities, null),
+    });
+    if (normalizedLiquidity.error) {
+      const err = new Error(normalizedLiquidity.error); err.status = 400; throw err;
     }
+    const seedValues = normalizedLiquidity.values;
+    const seed = normalizedLiquidity.fallback;
+    const seedLiquiditiesJson = JSON.stringify(seedValues);
     const endDate = r.end_time ? new Date(r.end_time) : null;
     if (!endDate || isNaN(endDate.getTime()) || endDate <= new Date()) {
       const err = new Error('invalid_end_time'); err.status = 400;
@@ -367,19 +379,19 @@ async function approveOne(pid, reviewer, note, opts = {}) {
     }
 
     if (ammMode === 'unified') {
-      const reserves = initialReserves(seed, outcomes.length);
+      const reserves = seedValues;
       const mk = await client.query(
         `INSERT INTO points_markets
            (source, source_event_id,
-           question, category, icon, outcomes, reserves, seed_liquidity,
+           question, category, icon, outcomes, reserves, seed_liquidity, seed_liquidities,
             start_time, end_time, status, created_by, amm_mode,
             resolver_type, resolver_config, sport, league, outcome_images, featured,
             category_tags, geo_tags, topic_tags,
             mode, chain_id, chain_market_id, chain_address)
-         VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, 'active', $11,
-                 'unified', $12, $13::jsonb, $14, $15, $16::jsonb, $17,
-                 $18::jsonb, $19::jsonb, $20::jsonb,
-                 $21, $22, $23, $24)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9::jsonb, $10, $11, 'active', $12,
+                 'unified', $13, $14::jsonb, $15, $16, $17::jsonb, $18,
+                 $19::jsonb, $20::jsonb, $21::jsonb,
+                 $22, $23, $24, $25)
          RETURNING id`,
         [
           r.source,
@@ -390,6 +402,7 @@ async function approveOne(pid, reviewer, note, opts = {}) {
           JSON.stringify(outcomes),
           JSON.stringify(reserves),
           seed,
+          seedLiquiditiesJson,
           startIso,
           endDate.toISOString(),
           reviewer,
@@ -412,19 +425,18 @@ async function approveOne(pid, reviewer, note, opts = {}) {
     } else {
       // Parallel — parent + N legs. Supports F1 / weather / future
       // generators that ship amm_mode='parallel'.
-      const legReserves = initialReserves(seed, 2);
       const parent = await client.query(
         `INSERT INTO points_markets
            (source, source_event_id,
-            question, category, icon, outcomes, reserves, seed_liquidity,
+            question, category, icon, outcomes, reserves, seed_liquidity, seed_liquidities,
             start_time, end_time, status, created_by, amm_mode,
             resolver_type, resolver_config, sport, league, outcome_images, featured,
             category_tags, geo_tags, topic_tags,
             mode, chain_id, chain_market_id, chain_address)
-         VALUES ($1, $2, $3, $4, $5, $6::jsonb, '[]'::jsonb, $7, $8, $9, 'active', $10,
-                 'parallel', $11, $12::jsonb, $13, $14, $15::jsonb, $16,
-                 $17::jsonb, $18::jsonb, $19::jsonb,
-                 $20, $21, $22, $23)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb, '[]'::jsonb, $7, $8::jsonb, $9, $10, 'active', $11,
+                 'parallel', $12, $13::jsonb, $14, $15, $16::jsonb, $17,
+                 $18::jsonb, $19::jsonb, $20::jsonb,
+                 $21, $22, $23, $24)
          RETURNING id`,
         [
           r.source,
@@ -434,6 +446,7 @@ async function approveOne(pid, reviewer, note, opts = {}) {
           r.icon || null,
           JSON.stringify(outcomes),
           seed,
+          seedLiquiditiesJson,
           startIso,
           endDate.toISOString(),
           reviewer,
@@ -454,6 +467,8 @@ async function approveOne(pid, reviewer, note, opts = {}) {
       );
       createdMarketId = parent.rows[0].id;
       for (let i = 0; i < outcomes.length; i++) {
+        const legSeed = seedValues[i];
+        const legReserves = initialReserves(legSeed, 2);
         // Auto-deployed parallel: each leg has its own binary contract.
         // Manual / off-chain falls back to the parent's chainAddressStr
         // (which is null for off-chain points-mode markets).
@@ -466,22 +481,23 @@ async function approveOne(pid, reviewer, note, opts = {}) {
 
         await client.query(
           `INSERT INTO points_markets
-             (question, category, icon, outcomes, reserves, seed_liquidity,
+             (question, category, icon, outcomes, reserves, seed_liquidity, seed_liquidities,
               start_time, end_time, status, created_by, amm_mode,
               parent_id, leg_label, sport, league, mode,
               category_tags, geo_tags, topic_tags,
               chain_id, chain_market_id, chain_address)
-           VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8, 'active', $9,
-                   'parallel', $10, $11, $12, $13, $14,
-                   $15::jsonb, $16::jsonb, $17::jsonb,
-                   $18, $19, $20)`,
+           VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7::jsonb, $8, $9, 'active', $10,
+                   'parallel', $11, $12, $13, $14, $15,
+                   $16::jsonb, $17::jsonb, $18::jsonb,
+                   $19, $20, $21)`,
           [
             `${r.question} — ${outcomes[i]}`,
             r.category,
             r.icon || null,
             JSON.stringify(['Sí', 'No']),
             JSON.stringify(legReserves),
-            seed,
+            legSeed,
+            JSON.stringify([legSeed, legSeed]),
             startIso,
             endDate.toISOString(),
             reviewer,
@@ -512,8 +528,171 @@ async function approveOne(pid, reviewer, note, opts = {}) {
   });
 }
 
+async function editPending(pid, reviewer, patch = {}, note = null) {
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+    const err = new Error('invalid_patch'); err.status = 400; throw err;
+  }
+
+  const has = (key) => Object.prototype.hasOwnProperty.call(patch, key);
+  const cleanIso = (value, field, { nullable = true } = {}) => {
+    if (nullable && (value === null || value === '')) return null;
+    const d = value ? new Date(value) : null;
+    if (!d || Number.isNaN(d.getTime())) {
+      const err = new Error(`invalid_${field}`); err.status = 400; throw err;
+    }
+    return d.toISOString();
+  };
+
+  return withTransaction(async (client) => {
+    const rowRes = await client.query(
+      `SELECT * FROM points_pending_markets WHERE id = $1 FOR UPDATE`,
+      [pid],
+    );
+    if (rowRes.rows.length === 0) {
+      const err = new Error('pending_not_found'); err.status = 404; throw err;
+    }
+    const r = rowRes.rows[0];
+    if (r.status !== 'pending') {
+      const err = new Error('already_reviewed'); err.status = 400;
+      err.detail = `status=${r.status}`;
+      throw err;
+    }
+
+    const question = has('question')
+      ? String(patch.question || '').trim()
+      : String(r.question || '').trim();
+    if (question.length < 8) {
+      const err = new Error('invalid_question'); err.status = 400; throw err;
+    }
+
+    const category = has('category')
+      ? String(patch.category || '').trim()
+      : String(r.category || 'general').trim();
+    if (!ALLOWED_CATEGORIES.has(category)) {
+      const err = new Error('invalid_category'); err.status = 400; throw err;
+    }
+
+    const icon = has('icon')
+      ? String(patch.icon || '').trim().slice(0, 8) || null
+      : r.icon || null;
+
+    const outcomes = has('outcomes')
+      ? patch.outcomes
+      : parseJsonb(r.outcomes, []);
+    if (!Array.isArray(outcomes) || outcomes.length < 2 || outcomes.length > 10) {
+      const err = new Error('outcome_count_out_of_range'); err.status = 400; throw err;
+    }
+    const normalizedOutcomes = outcomes.map(o => String(o || '').trim());
+    if (!normalizedOutcomes.every(Boolean)) {
+      const err = new Error('invalid_outcomes'); err.status = 400; throw err;
+    }
+    const lowerSet = new Set(normalizedOutcomes.map(o => o.toLowerCase()));
+    if (lowerSet.size !== normalizedOutcomes.length) {
+      const err = new Error('duplicate_outcomes'); err.status = 400; throw err;
+    }
+
+    const normalizedLiquidity = normalizeSeedLiquidities({
+      outcomes: normalizedOutcomes,
+      seedLiquidity: has('seedLiquidity') ? patch.seedLiquidity : r.seed_liquidity,
+      seedLiquidities: has('seedLiquidities') ? patch.seedLiquidities : parseJsonb(r.seed_liquidities, null),
+    });
+    if (normalizedLiquidity.error) {
+      const err = new Error(normalizedLiquidity.error); err.status = 400; throw err;
+    }
+    const seedValues = normalizedLiquidity.values;
+
+    const ammMode = has('ammMode')
+      ? String(patch.ammMode || '').trim()
+      : (r.amm_mode || 'unified');
+    if (ammMode !== 'unified' && ammMode !== 'parallel') {
+      const err = new Error('invalid_amm_mode'); err.status = 400; throw err;
+    }
+
+    const nextStartIso = has('startTime')
+      ? cleanIso(patch.startTime, 'start_time', { nullable: true })
+      : (r.start_time ? new Date(r.start_time).toISOString() : null);
+    const nextEndIso = has('endTime')
+      ? cleanIso(patch.endTime, 'end_time', { nullable: false })
+      : (r.end_time ? new Date(r.end_time).toISOString() : null);
+    if (!nextEndIso || new Date(nextEndIso) <= new Date()) {
+      const err = new Error('invalid_end_time'); err.status = 400;
+      err.detail = 'end_time must be in the future';
+      throw err;
+    }
+    if (nextStartIso && new Date(nextStartIso) >= new Date(nextEndIso)) {
+      const err = new Error('invalid_start_time'); err.status = 400;
+      err.detail = 'start_time must be before end_time';
+      throw err;
+    }
+
+    const existingImages = parseJsonb(r.outcome_images, null);
+    const outcomeImages = Array.isArray(existingImages) && existingImages.length === normalizedOutcomes.length
+      ? existingImages
+      : null;
+
+    const tagBundle = deriveMarketTags({
+      ...r,
+      question,
+      category,
+      outcomes: normalizedOutcomes,
+      source_data: parseJsonb(r.source_data, {}),
+      resolver_config: parseJsonb(r.resolver_config, {}),
+      category_tags: parseJsonb(r.category_tags, []),
+      geo_tags: parseJsonb(r.geo_tags, []),
+      topic_tags: parseJsonb(r.topic_tags, []),
+    });
+
+    const updated = await client.query(
+      `UPDATE points_pending_markets
+         SET question = $1,
+             category = $2,
+             icon = $3,
+             outcomes = $4::jsonb,
+             seed_liquidity = $5,
+             seed_liquidities = $6::jsonb,
+             start_time = $7,
+             end_time = $8,
+             amm_mode = $9,
+             outcome_images = $10::jsonb,
+             category_tags = $11::jsonb,
+             geo_tags = $12::jsonb,
+             topic_tags = $13::jsonb,
+             admin_note = COALESCE(NULLIF($14, ''), admin_note),
+             reviewer = $15,
+             reviewed_at = NOW()
+       WHERE id = $16
+       RETURNING id`,
+      [
+        question,
+        category,
+        icon,
+        JSON.stringify(normalizedOutcomes),
+        normalizedLiquidity.fallback,
+        JSON.stringify(seedValues),
+        nextStartIso,
+        nextEndIso,
+        ammMode,
+        outcomeImages ? JSON.stringify(outcomeImages) : null,
+        JSON.stringify(tagBundle.categoryTags),
+        JSON.stringify(tagBundle.geoTags),
+        JSON.stringify(tagBundle.topicTags),
+        note || null,
+        reviewer,
+        pid,
+      ],
+    );
+
+    return {
+      ok: true,
+      action: 'edit',
+      id: updated.rows[0].id,
+      seedLiquidities: seedValues,
+    };
+  });
+}
+
 async function review(req, res, admin) {
-  const { id, action, note, mode, chainId, chainAddress, chainMarketId, autoDeploy } = req.body || {};
+  const { id, action, note, patch, mode, chainId, chainAddress, chainMarketId, autoDeploy } = req.body || {};
   // Shared opts passed to approveOne for both single-row and
   // approve_all paths. Default behaviour (no opts) keeps Points admin
   // approvals off-chain; the MVP admin sends mode='onchain' + chain
@@ -573,8 +752,13 @@ async function review(req, res, admin) {
   if (!Number.isInteger(pid) || pid <= 0) {
     return res.status(400).json({ error: 'invalid_id' });
   }
-  if (action !== 'approve' && action !== 'reject' && action !== 'readd') {
+  if (action !== 'approve' && action !== 'reject' && action !== 'readd' && action !== 'edit') {
     return res.status(400).json({ error: 'invalid_action' });
+  }
+
+  if (action === 'edit') {
+    const result = await editPending(pid, admin.username, patch, note);
+    return res.status(200).json(result);
   }
 
   if (action === 'readd') {

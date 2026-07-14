@@ -84,6 +84,10 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS chain_address TEXT`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_mode ON points_markets(mode) WHERE mode <> 'points'`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_category ON points_markets(category)`,
+  // seed_liquidities is index-aligned with outcomes and lets admin seed
+  // asymmetric AMMs (e.g. favorites get deeper starting liquidity). The
+  // older scalar seed_liquidity stays as a fallback/default for legacy rows.
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS seed_liquidities JSONB`,
   // category_tags let one market live in multiple browse/admin buckets.
   // Example: a Liga MX match is primarily category='deportes', but also
   // carries category_tags=['deportes','mexico'] so it appears under
@@ -555,6 +559,7 @@ const POINTS_SCHEMA_MIGRATIONS = [
     icon              TEXT,
     outcomes          JSONB NOT NULL,
     seed_liquidity    NUMERIC(20,6) NOT NULL DEFAULT 1000,
+    seed_liquidities   JSONB,
     end_time          TIMESTAMPTZ NOT NULL,
     amm_mode          TEXT NOT NULL DEFAULT 'unified',
     resolver_type     TEXT,
@@ -569,6 +574,7 @@ const POINTS_SCHEMA_MIGRATIONS = [
   // start_time on pending rows mirrors the one on points_markets — see
   // comment above. The approve path carries it across unchanged.
   `ALTER TABLE points_pending_markets ADD COLUMN IF NOT EXISTS start_time TIMESTAMPTZ`,
+  `ALTER TABLE points_pending_markets ADD COLUMN IF NOT EXISTS seed_liquidities JSONB`,
   // sport/league mirror the columns on points_markets so the approve
   // path can pass them through verbatim.
   `ALTER TABLE points_pending_markets ADD COLUMN IF NOT EXISTS sport TEXT`,

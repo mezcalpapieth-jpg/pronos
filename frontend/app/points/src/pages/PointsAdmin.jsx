@@ -27,6 +27,7 @@ import {
   adminCancelMarket,
   adminListPendingMarkets,
   adminReviewPendingMarket,
+  adminEditPendingMarket,
   adminApproveAllPendingMarkets,
   adminBackfillResolvers,
   adminResolveDiagnostic,
@@ -677,7 +678,7 @@ function CreateMarketForm({ prefill }) {
     endHour: '',   // 0-23 (string, validated on submit)
     endMinute: '', // 0-59 (string, validated on submit)
     outcomes: ['Sí', 'No'],
-    seedLiquidity: 500,
+    seedLiquidities: [500, 500],
   });
   const [state, setState] = useState({ submitting: false, msg: null, err: null });
 
@@ -689,6 +690,7 @@ function CreateMarketForm({ prefill }) {
       // Reset outcomes to a sane default for the chosen mode so users
       // don't accidentally submit leftover binary labels as a multi.
       outcomes: next === 'binary' ? ['Sí', 'No'] : ['', '', ''],
+      seedLiquidities: next === 'binary' ? [500, 500] : [500, 500, 500],
     }));
   }
 
@@ -703,7 +705,7 @@ function CreateMarketForm({ prefill }) {
   function addOutcome() {
     setForm(f => {
       if (f.outcomes.length >= 10) return f;
-      return { ...f, outcomes: [...f.outcomes, ''] };
+      return { ...f, outcomes: [...f.outcomes, ''], seedLiquidities: [...f.seedLiquidities, 500] };
     });
   }
 
@@ -711,7 +713,16 @@ function CreateMarketForm({ prefill }) {
     setForm(f => {
       if (f.outcomes.length <= 2) return f;
       const next = f.outcomes.filter((_, i) => i !== idx);
-      return { ...f, outcomes: next };
+      const nextLiquidities = f.seedLiquidities.filter((_, i) => i !== idx);
+      return { ...f, outcomes: next, seedLiquidities: nextLiquidities };
+    });
+  }
+
+  function updateOutcomeLiquidity(idx, value) {
+    setForm(f => {
+      const next = [...f.seedLiquidities];
+      next[idx] = value;
+      return { ...f, seedLiquidities: next };
     });
   }
 
@@ -719,13 +730,24 @@ function CreateMarketForm({ prefill }) {
     e.preventDefault();
     // Client-side guardrails so the user sees friendly errors before a
     // round-trip to the server. Server validates these again.
-    const cleaned = form.outcomes.map(o => o.trim()).filter(Boolean);
+    const cleanedPairs = form.outcomes
+      .map((outcome, i) => ({
+        outcome: outcome.trim(),
+        liquidity: form.seedLiquidities[i],
+      }))
+      .filter(p => p.outcome);
+    const cleaned = cleanedPairs.map(p => p.outcome);
+    const cleanedLiquidities = cleanedPairs.map(p => Number(p.liquidity));
     if (cleaned.length < 2) {
       setState({ submitting: false, msg: null, err: 'Al menos 2 opciones con nombre.' });
       return;
     }
     if (cleaned.length > 10) {
       setState({ submitting: false, msg: null, err: 'Máximo 10 opciones.' });
+      return;
+    }
+    if (cleanedLiquidities.some(v => !Number.isFinite(v) || v < 100)) {
+      setState({ submitting: false, msg: null, err: 'La liquidez de cada opción debe ser de al menos 100 MXNP.' });
       return;
     }
     const timeStr = composeHhMm(form.endHour, form.endMinute);
@@ -749,7 +771,8 @@ function CreateMarketForm({ prefill }) {
         icon: form.icon,
         endTime: endIso,
         outcomes: cleaned,
-        seedLiquidity: Number(form.seedLiquidity),
+        seedLiquidity: cleanedLiquidities[0] || 500,
+        seedLiquidities: cleanedLiquidities,
         ammMode: effectiveAmmMode,
       });
       const modeLabel = effectiveAmmMode === 'parallel' ? 'paralelo' : 'unificado';
@@ -765,6 +788,7 @@ function CreateMarketForm({ prefill }) {
         endHour: '',
         endMinute: '',
         outcomes: mode === 'binary' ? ['Sí', 'No'] : ['', '', ''],
+        seedLiquidities: mode === 'binary' ? [500, 500] : [500, 500, 500],
       }));
     } catch (e) {
       setState({ submitting: false, msg: null, err: e.code || e.message });
@@ -992,6 +1016,22 @@ function CreateMarketForm({ prefill }) {
                   : `Opción ${i + 1}`}
                 style={{ ...inputStyle, flex: 1 }}
               />
+              <input
+                type="number"
+                min="100"
+                step="100"
+                value={form.seedLiquidities[i] ?? 500}
+                onChange={e => updateOutcomeLiquidity(i, e.target.value)}
+                aria-label={`Liquidez opción ${i + 1}`}
+                title="Liquidez inicial de esta opción"
+                style={{
+                  ...inputStyle,
+                  width: 132,
+                  flex: '0 0 132px',
+                  fontFamily: 'var(--font-mono)',
+                  textAlign: 'right',
+                }}
+              />
               {mode === 'multi' && form.outcomes.length > 2 && (
                 <button
                   type="button"
@@ -1035,18 +1075,6 @@ function CreateMarketForm({ prefill }) {
             </button>
           )}
         </div>
-      </Field>
-
-      <Field label="Liquidez inicial por opción (MXNP)">
-        <input
-          type="number"
-          min="100"
-          step="100"
-          value={form.seedLiquidity}
-          onChange={e => setForm(f => ({ ...f, seedLiquidity: e.target.value }))}
-          required
-          style={inputStyle}
-        />
       </Field>
 
       {state.msg && (
@@ -2215,6 +2243,7 @@ function PendingMarketsTable({ onQueueChange }) {
   const [busyId, setBusyId] = useState(null);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const [editingPending, setEditingPending] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -2650,12 +2679,34 @@ function PendingMarketsTable({ onQueueChange }) {
                 }}>
                   Opciones: {Array.isArray(r.outcomes) ? r.outcomes.join(' · ') : '—'}
                   {' · Cierra: '}{formatAdminMarketDate(r.endTime)}
-                  {' · Seed: '}{r.seedLiquidity} MXNP
+                  {' · Seed: '}
+                  {Array.isArray(r.seedLiquidities) && r.seedLiquidities.length === r.outcomes?.length
+                    ? r.seedLiquidities.map(v => Number(v).toLocaleString('es-MX')).join(' / ')
+                    : Number(r.seedLiquidity || 0).toLocaleString('es-MX')}
+                  {' MXNP'}
                 </div>
               </div>
 
               {isPending ? (
                 <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    onClick={() => setEditingPending(r)}
+                    disabled={busyId === r.id}
+                    style={{
+                      padding: '6px 12px',
+                      background: 'transparent',
+                      border: '1px solid var(--border)',
+                      borderRadius: 8,
+                      color: 'var(--text-secondary)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 11, letterSpacing: '0.04em',
+                      textTransform: 'uppercase',
+                      cursor: busyId === r.id ? 'not-allowed' : 'pointer',
+                      opacity: busyId === r.id ? 0.5 : 1,
+                    }}
+                  >
+                    Editar
+                  </button>
                   <button
                     onClick={() => review(r.id, 'approve')}
                     disabled={busyId === r.id}
@@ -2732,6 +2783,309 @@ function PendingMarketsTable({ onQueueChange }) {
           </div>
         );
       })}
+
+      {editingPending && (
+        <PendingMarketEditModal
+          row={editingPending}
+          onClose={() => setEditingPending(null)}
+          onSaved={async () => {
+            setEditingPending(null);
+            await load();
+            onQueueChange?.();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function PendingMarketEditModal({ row, onClose, onSaved }) {
+  const initialOutcomes = Array.isArray(row.outcomes) && row.outcomes.length >= 2
+    ? row.outcomes
+    : ['Sí', 'No'];
+  const initialSeeds = Array.isArray(row.seedLiquidities) && row.seedLiquidities.length === initialOutcomes.length
+    ? row.seedLiquidities
+    : initialOutcomes.map(() => Number(row.seedLiquidity || 500));
+
+  const [question, setQuestion] = useState(row.question || '');
+  const [category, setCategory] = useState(row.category || 'general');
+  const [icon, setIcon] = useState(row.icon || '');
+  const [ammMode, setAmmMode] = useState(row.ammMode === 'parallel' ? 'parallel' : 'unified');
+  const [outcomes, setOutcomes] = useState(initialOutcomes);
+  const [seedLiquidities, setSeedLiquidities] = useState(initialSeeds);
+  const [startDate, setStartDate] = useState(isoToDdMmYyyy(row.startTime));
+  const [startHour, setStartHour] = useState(isoToHourPart(row.startTime));
+  const [startMinute, setStartMinute] = useState(isoToMinutePart(row.startTime));
+  const [endDate, setEndDate] = useState(isoToDdMmYyyy(row.endTime));
+  const [endHour, setEndHour] = useState(isoToHourPart(row.endTime));
+  const [endMinute, setEndMinute] = useState(isoToMinutePart(row.endTime));
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
+
+  function updateOutcome(idx, value) {
+    setOutcomes(prev => prev.map((v, i) => i === idx ? value : v));
+  }
+
+  function updateLiquidity(idx, value) {
+    setSeedLiquidities(prev => prev.map((v, i) => i === idx ? value : v));
+  }
+
+  function addOutcome() {
+    if (outcomes.length >= 10) return;
+    setOutcomes(prev => [...prev, '']);
+    setSeedLiquidities(prev => [...prev, 500]);
+  }
+
+  function removeOutcome(idx) {
+    if (outcomes.length <= 2) return;
+    setOutcomes(prev => prev.filter((_, i) => i !== idx));
+    setSeedLiquidities(prev => prev.filter((_, i) => i !== idx));
+  }
+
+  async function save() {
+    const pairs = outcomes
+      .map((outcome, i) => ({ outcome: String(outcome || '').trim(), liquidity: seedLiquidities[i] }))
+      .filter(p => p.outcome);
+    const cleanedOutcomes = pairs.map(p => p.outcome);
+    const cleanedLiquidities = pairs.map(p => Number(p.liquidity));
+    if (question.trim().length < 8) {
+      setErr('La pregunta debe tener al menos 8 caracteres.');
+      return;
+    }
+    if (cleanedOutcomes.length < 2) {
+      setErr('Al menos 2 opciones con nombre.');
+      return;
+    }
+    if (cleanedLiquidities.some(v => !Number.isFinite(v) || v < 100)) {
+      setErr('La liquidez de cada opción debe ser de al menos 100 MXNP.');
+      return;
+    }
+
+    const endTimeStr = composeHhMm(endHour, endMinute);
+    const endIso = endTimeStr ? partsToIso(endDate, endTimeStr) : null;
+    if (!endIso) {
+      setErr('Fecha de cierre inválida. Formato: dd/mm/yyyy y hora 0–23:0–59.');
+      return;
+    }
+
+    const hasStart = [startDate, startHour, startMinute].some(v => String(v || '').trim() !== '');
+    let startIso = null;
+    if (hasStart) {
+      const startTimeStr = composeHhMm(startHour, startMinute);
+      startIso = startTimeStr ? partsToIso(startDate, startTimeStr) : null;
+      if (!startIso) {
+        setErr('Fecha de inicio inválida. Déjala vacía o usa dd/mm/yyyy y hora 0–23:0–59.');
+        return;
+      }
+      if (new Date(startIso).getTime() >= new Date(endIso).getTime()) {
+        setErr('La fecha de inicio debe ser anterior al cierre.');
+        return;
+      }
+    }
+
+    setSaving(true);
+    setErr(null);
+    try {
+      await adminEditPendingMarket(row.id, {
+        question: question.trim(),
+        category,
+        icon: icon.trim() || null,
+        ammMode,
+        outcomes: cleanedOutcomes,
+        seedLiquidity: cleanedLiquidities[0] || 500,
+        seedLiquidities: cleanedLiquidities,
+        startTime: startIso,
+        endTime: endIso,
+      });
+      await onSaved?.();
+    } catch (e) {
+      setErr(`${e.code || e.message}${e.detail ? ' · ' + e.detail : ''}`);
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={(e) => { if (e.target === e.currentTarget && !saving) onClose?.(); }}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 9999,
+        background: 'rgba(0, 0, 0, 0.68)',
+        backdropFilter: 'blur(4px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '24px 16px',
+      }}
+    >
+      <div style={{
+        width: 'min(760px, 100%)',
+        maxHeight: 'min(88vh, 900px)',
+        overflowY: 'auto',
+        background: 'var(--surface1)',
+        border: '1px solid var(--border)',
+        borderRadius: 14,
+        padding: '24px 28px',
+      }}>
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          letterSpacing: '0.12em',
+          color: 'var(--green)',
+          textTransform: 'uppercase',
+          marginBottom: 8,
+        }}>
+          Editar pendiente #{row.id}
+        </div>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, marginTop: 0, marginBottom: 20 }}>
+          Antes de aprobar
+        </h3>
+
+        <Field label="Pregunta">
+          <textarea
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            rows={3}
+            maxLength={500}
+            style={{ ...inputStyle, resize: 'vertical' }}
+          />
+        </Field>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 150px', gap: 12 }}>
+          <Field label="Categoría">
+            <select value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle}>
+              {CATEGORIES.map(c => (
+                <option key={c.key} value={c.key}>{c.label}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Icono">
+            <input value={icon} onChange={(e) => setIcon(e.target.value)} maxLength={4} style={inputStyle} />
+          </Field>
+          <Field label="AMM">
+            <select value={ammMode} onChange={(e) => setAmmMode(e.target.value)} style={inputStyle}>
+              <option value="unified">Unificado</option>
+              <option value="parallel">Paralelo</option>
+            </select>
+          </Field>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <Field label="Inicio">
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 62px 8px 62px', gap: 8, alignItems: 'center' }}>
+              <input value={startDate} onChange={(e) => setStartDate(e.target.value)} placeholder="dd/mm/yyyy" style={inputStyle} />
+              <input type="number" min={0} max={23} value={startHour} onChange={(e) => setStartHour(e.target.value)} placeholder="HH" style={{ ...inputStyle, textAlign: 'center' }} />
+              <span style={{ color: 'var(--text-muted)', textAlign: 'center' }}>:</span>
+              <input type="number" min={0} max={59} value={startMinute} onChange={(e) => setStartMinute(e.target.value)} placeholder="mm" style={{ ...inputStyle, textAlign: 'center' }} />
+            </div>
+          </Field>
+          <Field label="Cierre">
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 62px 8px 62px', gap: 8, alignItems: 'center' }}>
+              <input value={endDate} onChange={(e) => setEndDate(e.target.value)} placeholder="dd/mm/yyyy" style={inputStyle} />
+              <input type="number" min={0} max={23} value={endHour} onChange={(e) => setEndHour(e.target.value)} placeholder="HH" style={{ ...inputStyle, textAlign: 'center' }} />
+              <span style={{ color: 'var(--text-muted)', textAlign: 'center' }}>:</span>
+              <input type="number" min={0} max={59} value={endMinute} onChange={(e) => setEndMinute(e.target.value)} placeholder="mm" style={{ ...inputStyle, textAlign: 'center' }} />
+            </div>
+          </Field>
+        </div>
+
+        <Field label="Opciones y liquidez">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {outcomes.map((outcome, i) => (
+              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span style={{
+                  flexShrink: 0,
+                  width: 24,
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  color: 'var(--text-muted)',
+                  letterSpacing: '0.06em',
+                }}>
+                  {String.fromCharCode(65 + i)}
+                </span>
+                <input
+                  value={outcome}
+                  onChange={(e) => updateOutcome(i, e.target.value)}
+                  placeholder={`Opción ${i + 1}`}
+                  style={{ ...inputStyle, flex: 1 }}
+                />
+                <input
+                  type="number"
+                  min="100"
+                  step="100"
+                  value={seedLiquidities[i] ?? 500}
+                  onChange={(e) => updateLiquidity(i, e.target.value)}
+                  aria-label={`Liquidez opción ${i + 1}`}
+                  style={{
+                    ...inputStyle,
+                    width: 132,
+                    flex: '0 0 132px',
+                    fontFamily: 'var(--font-mono)',
+                    textAlign: 'right',
+                  }}
+                />
+                {outcomes.length > 2 && (
+                  <button
+                    type="button"
+                    onClick={() => removeOutcome(i)}
+                    style={{
+                      padding: '8px 12px',
+                      background: 'transparent',
+                      border: '1px solid var(--border)',
+                      borderRadius: 8,
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 12,
+                    }}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+            {outcomes.length < 10 && (
+              <button
+                type="button"
+                onClick={addOutcome}
+                style={{
+                  alignSelf: 'flex-start',
+                  padding: '8px 14px',
+                  background: 'transparent',
+                  border: '1px dashed var(--border)',
+                  borderRadius: 8,
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                + Agregar opción
+              </button>
+            )}
+          </div>
+        </Field>
+
+        {err && (
+          <div style={{ color: 'var(--red, #ef4444)', fontFamily: 'var(--font-mono)', fontSize: 12, marginBottom: 12 }}>
+            Error: {err}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button type="button" onClick={onClose} disabled={saving} className="btn-ghost" style={{ padding: '10px 16px' }}>
+            Cerrar
+          </button>
+          <button type="button" onClick={save} disabled={saving} className="btn-primary" style={{ padding: '10px 18px' }}>
+            {saving ? 'Guardando…' : 'Guardar'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
