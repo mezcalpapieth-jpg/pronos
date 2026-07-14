@@ -57,8 +57,19 @@ test('points admin exposes deck analytics and invite management', () => {
   assert.match(adminPanelSource, /adminDeckDashboard/);
   assert.match(adminPanelSource, /adminCreateDeckInvite/);
   assert.match(adminPanelSource, /adminRevokeDeckInvite/);
+  assert.match(adminPanelSource, /adminResetDeckInviteCode/);
   assert.match(adminPanelSource, /Crear nombre y contraseña/);
   assert.match(adminPanelSource, /Contraseña\/código/);
+  assert.match(adminPanelSource, /deckInviteMessage/);
+  assert.match(adminPanelSource, /\/deck/);
+  assert.match(adminPanelSource, /navigator\.clipboard\.writeText/);
+  assert.match(adminPanelSource, /mailto:/);
+  assert.match(adminPanelSource, /wa\.me/);
+  assert.match(adminPanelSource, /Reemitir contraseña/);
+  assert.match(adminPanelSource, /expandedSessionIds/);
+  assert.match(adminPanelSource, /slideBreakdown/);
+  assert.match(adminPanelSource, /Ver láminas/);
+  assert.match(adminPanelSource, /Lámina \{row\.slideNumber\}/);
 });
 
 test('points API client exposes deck viewer and admin endpoints', () => {
@@ -67,6 +78,7 @@ test('points API client exposes deck viewer and admin endpoints', () => {
   assert.match(apiSource, /\/api\/deck\/questions/);
   assert.match(apiSource, /\/api\/deck\/admin\/dashboard/);
   assert.match(apiSource, /\/api\/deck\/admin\/invites/);
+  assert.match(apiSource, /action:\s*'reset_code'/);
   assert.match(apiSource, /language = 'en'/);
   assert.match(authSource, /value === 'es' \? 'es' : 'en'/);
 });
@@ -77,5 +89,8 @@ test('vite dev server has a local deck API fallback for localhost review', () =>
   assert.match(viteSource, /deckDevApiMiddleware/);
   assert.match(viteSource, /Francisco M\./);
   assert.match(viteSource, /Chiavari/);
+  assert.match(viteSource, /shareCode:\s*invite\.code/);
+  assert.match(viteSource, /reset_code/);
+  assert.match(viteSource, /slideBreakdown/);
   assert.match(viteSource, /\/api\/deck\/session/);
 });

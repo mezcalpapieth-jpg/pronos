@@ -2,6 +2,7 @@ const migrations = [
   `CREATE TABLE IF NOT EXISTS deck_invites (
     id BIGSERIAL PRIMARY KEY,
     code_hash TEXT UNIQUE NOT NULL,
+    code_ciphertext TEXT,
     label TEXT NOT NULL,
     email_hint TEXT,
     active BOOLEAN NOT NULL DEFAULT true,
@@ -9,6 +10,7 @@ const migrations = [
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     revoked_at TIMESTAMPTZ
   )`,
+  `ALTER TABLE deck_invites ADD COLUMN IF NOT EXISTS code_ciphertext TEXT`,
   `CREATE INDEX IF NOT EXISTS idx_deck_invites_active ON deck_invites(active, revoked_at)`,
 
   `CREATE TABLE IF NOT EXISTS deck_sessions (

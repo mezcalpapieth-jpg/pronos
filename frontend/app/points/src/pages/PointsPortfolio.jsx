@@ -251,15 +251,7 @@ function PositionCard({ position, onSell, onRedeem, onDismiss, selling, redeemin
   const isLostBet = status === 'resolved' && !canRedeem;
 
   return (
-    <div style={{
-      background: 'var(--surface1)',
-      border: '1px solid var(--border)',
-      borderRadius: 14,
-      padding: '20px 24px',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 12,
-    }}>
+    <div className="points-position-card">
       <p style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.4, margin: 0 }}>
         {question}
       </p>
@@ -282,7 +274,7 @@ function PositionCard({ position, onSell, onRedeem, onDismiss, selling, redeemin
         </span>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="points-position-metrics">
         <div>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.08em', marginBottom: 2 }}>
             INVERTIDO
@@ -309,9 +301,7 @@ function PositionCard({ position, onSell, onRedeem, onDismiss, selling, redeemin
         </div>
       </div>
 
-      <div style={{
-        display: 'flex', gap: 10, paddingTop: 12, borderTop: '1px solid var(--border)',
-      }}>
+      <div className="points-position-actions">
         <div style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', alignSelf: 'center' }}>
           {Number(shares).toFixed(2)} acciones
         </div>
@@ -409,17 +399,11 @@ function DailyClaimCard({ onClaimed }) {
   if (status.alreadyClaimedToday) return null;
 
   return (
-    <div style={{
-      background: 'rgba(0,232,122,0.05)',
-      border: '1px solid rgba(0,232,122,0.28)',
-      borderRadius: 14,
-      padding: '18px 22px',
-      marginBottom: 20,
-    }}>
+    <div className="points-daily-claim-card">
       <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--green)', marginBottom: 8 }}>
         ⚡ Reclamo diario
       </div>
-      <p style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5, margin: '0 0 12px' }}>
+      <p className="points-daily-claim-copy">
         Reclama tus MXNP diarios. Mantén la racha para ganar más cada día (+20 por cada día consecutivo).
       </p>
       {state.msg && (
@@ -471,12 +455,7 @@ function MiniLeaderboard({ currentUsername }) {
 
   if (!data) return null;
   return (
-    <div style={{
-      background: 'var(--surface1)',
-      border: '1px solid var(--border)',
-      borderRadius: 14,
-      padding: '18px 20px',
-    }}>
+    <div className="points-sidebar-card">
       <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 12 }}>
         🏆 Top predictores
       </div>
@@ -616,13 +595,7 @@ function CycleHistoryLeaderboard({ currentUsername }) {
   if (!cycles) return null;
   if (cycles.length === 0) return null;
   return (
-    <div style={{
-      background: 'var(--surface1)',
-      border: '1px solid var(--border)',
-      borderRadius: 14,
-      padding: '18px 20px',
-      marginTop: 16,
-    }}>
+    <div className="points-sidebar-card">
       <div style={{
         fontFamily: 'var(--font-mono)', fontSize: 10,
         letterSpacing: '0.1em', color: 'var(--text-muted)',
@@ -844,7 +817,7 @@ export default function PointsPortfolio() {
 
   return (
     <>
-    <main style={{ maxWidth: 1160, margin: '0 auto', padding: 'clamp(24px, 5vw, 60px) clamp(14px, 4vw, 24px)' }}>
+    <main className="points-portfolio-page">
       <div style={{ marginBottom: 24 }}>
         <h1 style={{
           fontFamily: 'var(--font-display)',
@@ -859,7 +832,7 @@ export default function PointsPortfolio() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 28, borderBottom: '1px solid var(--border)' }}>
+      <div className="points-portfolio-tabs">
         {[
           { id: 'activo', label: 'Activo' },
           { id: 'historial', label: 'Historial' },
@@ -884,30 +857,22 @@ export default function PointsPortfolio() {
         })}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 36, alignItems: 'start' }}>
+      <div className="points-portfolio-layout">
         {/* Left: main content */}
-        <div>
+        <div className="points-portfolio-main">
           {tab === 'activo' && (
             <>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: 16,
-                marginBottom: 32,
-              }}>
+              <div className="points-portfolio-stats">
                 {[
                   { label: 'Balance', value: `${fmt(balance)} MXNP`, color: 'var(--green)' },
                   { label: 'En posiciones', value: `${fmt(summary?.currentValue || 0)} MXNP`, color: 'var(--text-primary)' },
                   { label: 'PnL total', value: `${(summary?.pnl || 0) >= 0 ? '+' : ''}${fmt(summary?.pnl || 0)}`, color: (summary?.pnl || 0) >= 0 ? 'var(--green)' : 'var(--red, #ef4444)' },
                 ].map(({ label, value, color }) => (
-                  <div key={label} style={{
-                    background: 'var(--surface1)', border: '1px solid var(--border)',
-                    borderRadius: 12, padding: 20, textAlign: 'center',
-                  }}>
+                  <div key={label} className="points-portfolio-stat-card">
                     <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 8, textTransform: 'uppercase' }}>
                       {label}
                     </div>
-                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, color }}>
+                    <div className="points-portfolio-stat-value" style={{ color }}>
                       {loading ? '…' : value}
                     </div>
                   </div>
@@ -973,7 +938,7 @@ export default function PointsPortfolio() {
         </div>
 
         {/* Right sidebar */}
-        <aside style={{ position: 'sticky', top: 80, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <aside className="points-portfolio-sidebar">
           <DailyClaimCard onClaimed={() => { refresh(); load(); }} />
           <MiniLeaderboard currentUsername={user?.username} />
           <CycleHistoryLeaderboard currentUsername={user?.username} />
@@ -1026,9 +991,7 @@ function HistoryView({ history, summary, loading }) {
 
   return (
     <>
-      <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 18,
-      }}>
+      <div className="points-history-summary-grid">
         {[
           ['Mercados',   summary?.marketsTotal ?? 0, 'var(--text-primary)'],
           ['Ganados',    summary?.marketsWon ?? 0,   'var(--green)'],
@@ -1036,10 +999,7 @@ function HistoryView({ history, summary, loading }) {
           ['Pendientes', summary?.marketsPending ?? 0, '#f59e0b'],
           ['Anulados',   summary?.marketsCanceled ?? 0, 'var(--text-secondary)'],
         ].map(([label, value, color]) => (
-          <div key={label} style={{
-            background: 'var(--surface1)', border: '1px solid var(--border)',
-            borderRadius: 10, padding: '12px 10px', textAlign: 'center',
-          }}>
+          <div key={label} className="points-history-summary-card">
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 4, textTransform: 'uppercase' }}>
               {label}
             </div>
@@ -1090,15 +1050,13 @@ function HistoryView({ history, summary, loading }) {
         })}
       </div>
 
-      <div style={{
-        background: totalPositive ? 'rgba(0,232,122,0.06)' : 'var(--surface1)',
-        border: `1px solid ${totalPositive ? 'rgba(0,232,122,0.3)' : 'var(--border)'}`,
-        borderRadius: 14,
-        padding: '20px 24px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-      }}>
+      <div
+        className="points-history-total-card"
+        style={{
+          background: totalPositive ? 'rgba(0,232,122,0.06)' : 'var(--surface1)',
+          borderColor: totalPositive ? 'rgba(0,232,122,0.3)' : 'var(--border)',
+        }}
+      >
         <div>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>
             PnL Total

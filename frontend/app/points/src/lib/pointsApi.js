@@ -92,6 +92,14 @@ export async function adminRevokeDeckInvite(id) {
   });
 }
 
+export async function adminResetDeckInviteCode({ id, code } = {}) {
+  return postJson('/api/deck/admin/invites', {
+    action: 'reset_code',
+    id,
+    code,
+  });
+}
+
 // ─── Markets ────────────────────────────────────────────────────────────────
 // Aggregate counters for the home hero. Ships only integers so we
 // can show the true total active-market count without fetching

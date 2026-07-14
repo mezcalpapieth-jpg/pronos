@@ -1,6 +1,7 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
 import { ensureDeckSchema } from '../../_lib/deck-schema.js';
+import { decryptDeckCodeForAdmin } from '../../_lib/deck-session.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -20,7 +21,7 @@ export default async function handler(req, res) {
     if (!admin) return;
     await ensureDeckSchema(schemaSql);
 
-    const [summaryRows, slideRows, sessionRows, questionRows, inviteRows] = await Promise.all([
+    const [summaryRows, slideRows, sessionRows, sessionSlideRows, questionRows, inviteRows] = await Promise.all([
       sql`
         SELECT
           (SELECT COUNT(*)::int FROM deck_sessions) AS sessions,
@@ -59,6 +60,26 @@ export default async function handler(req, res) {
         LIMIT 80
       `,
       sql`
+        WITH recent_sessions AS (
+          SELECT id
+          FROM deck_sessions
+          ORDER BY last_seen_at DESC
+          LIMIT 80
+        )
+        SELECT
+          e.session_id,
+          e.deck_language,
+          e.slide_number,
+          COALESCE(SUM(e.duration_ms), 0)::bigint AS total_ms,
+          COUNT(*)::int AS events,
+          MAX(e.created_at) AS last_event_at
+        FROM deck_slide_events e
+        JOIN recent_sessions rs ON rs.id = e.session_id
+        WHERE e.duration_ms > 0
+        GROUP BY e.session_id, e.deck_language, e.slide_number
+        ORDER BY e.session_id ASC, e.deck_language ASC, e.slide_number ASC
+      `,
+      sql`
         SELECT
           q.id,
           q.viewer_email,
@@ -82,6 +103,7 @@ export default async function handler(req, res) {
           di.created_by,
           di.created_at,
           di.revoked_at,
+          di.code_ciphertext,
           COUNT(DISTINCT ds.id)::int AS sessions,
           COUNT(DISTINCT LOWER(ds.viewer_email))::int AS viewers,
           COALESCE(SUM(e.duration_ms), 0)::bigint AS total_ms
@@ -95,6 +117,19 @@ export default async function handler(req, res) {
     ]);
 
     const summary = summaryRows[0] || {};
+    const sessionSlides = new Map();
+    for (const row of sessionSlideRows) {
+      const list = sessionSlides.get(row.session_id) || [];
+      list.push({
+        language: row.deck_language,
+        slideNumber: row.slide_number,
+        totalMinutes: minutes(row.total_ms),
+        events: row.events,
+        lastEventAt: row.last_event_at,
+      });
+      sessionSlides.set(row.session_id, list);
+    }
+
     return res.status(200).json({
       admin: admin.username,
       summary: {
@@ -121,6 +156,7 @@ export default async function handler(req, res) {
         lastSeenAt: r.last_seen_at,
         totalMinutes: minutes(r.total_ms),
         lastSlide: r.last_slide,
+        slideBreakdown: sessionSlides.get(r.id) || [],
       })),
       questions: questionRows.map(r => ({
         id: r.id,
@@ -140,6 +176,7 @@ export default async function handler(req, res) {
         createdBy: r.created_by,
         createdAt: r.created_at,
         revokedAt: r.revoked_at,
+        shareCode: decryptDeckCodeForAdmin(r.code_ciphertext),
         sessions: r.sessions,
         viewers: r.viewers,
         totalMinutes: minutes(r.total_ms),

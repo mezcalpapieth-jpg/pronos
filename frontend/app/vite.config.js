@@ -319,6 +319,22 @@ function deckDevApiMiddleware() {
         const totalMs = sessionEvents.reduce((sum, event) => sum + Number(event.durationMs || 0), 0);
         const lastSlide = sessionEvents.reduce((max, event) => Math.max(max, Number(event.slideNumber || 0)), 0);
         const invite = invites.find(item => item.id === session.inviteId);
+        const bySlide = new Map();
+        for (const event of sessionEvents) {
+          if (!event.durationMs || event.durationMs <= 0) continue;
+          const key = `${event.language || 'en'}:${event.slideNumber || 0}`;
+          const current = bySlide.get(key) || {
+            language: event.language || 'en',
+            slideNumber: event.slideNumber || 0,
+            totalMs: 0,
+            events: 0,
+            lastEventAt: event.createdAt,
+          };
+          current.totalMs += Number(event.durationMs || 0);
+          current.events += 1;
+          if (new Date(event.createdAt) > new Date(current.lastEventAt)) current.lastEventAt = event.createdAt;
+          bySlide.set(key, current);
+        }
         return {
           id: session.id,
           viewerEmail: session.viewerEmail,
@@ -329,6 +345,15 @@ function deckDevApiMiddleware() {
           lastSeenAt: session.lastSeenAt,
           totalMinutes: minutes(totalMs),
           lastSlide,
+          slideBreakdown: [...bySlide.values()]
+            .sort((a, b) => a.language.localeCompare(b.language) || a.slideNumber - b.slideNumber)
+            .map(row => ({
+              language: row.language,
+              slideNumber: row.slideNumber,
+              totalMinutes: minutes(row.totalMs),
+              events: row.events,
+              lastEventAt: row.lastEventAt,
+            })),
         };
       });
 
@@ -366,6 +391,7 @@ function deckDevApiMiddleware() {
           createdBy: invite.createdBy,
           createdAt: invite.createdAt,
           revokedAt: invite.revokedAt,
+          shareCode: invite.code,
           sessions: inviteSessions.length,
           viewers: new Set(inviteSessions.map(session => session.viewerEmail.toLowerCase())).size,
           totalMinutes: minutes(totalMs),
@@ -483,6 +509,31 @@ function deckDevApiMiddleware() {
             return sendJson(res, 200, { ok: true, invite });
           }
 
+          if (body.action === 'reset_code') {
+            const invite = invites.find(item => item.id === Number(body.id) && item.active && !item.revokedAt);
+            if (!invite) return sendJson(res, 404, { error: 'invite_not_found' });
+            const code = String(body.code || `PRONOS-${randomUUID().slice(0, 8).toUpperCase()}`).trim();
+            if (code.length < 6) return sendJson(res, 400, { error: 'code_too_short' });
+            if (invites.some(item => item.id !== invite.id && item.code === code && item.active)) {
+              return sendJson(res, 409, { error: 'invite_code_exists' });
+            }
+            invite.code = code;
+            return sendJson(res, 200, {
+              ok: true,
+              code,
+              invite: {
+                id: invite.id,
+                label: invite.label,
+                emailHint: invite.emailHint || null,
+                active: invite.active,
+                createdBy: invite.createdBy,
+                createdAt: invite.createdAt,
+                revokedAt: invite.revokedAt,
+                shareCode: code,
+              },
+            });
+          }
+
           const label = String(body.label || '').trim().slice(0, 120);
           const emailHint = String(body.emailHint || '').trim().toLowerCase();
           const code = String(body.code || `PRONOS-${randomUUID().slice(0, 8).toUpperCase()}`).trim();
@@ -512,6 +563,7 @@ function deckDevApiMiddleware() {
               active: invite.active,
               createdBy: invite.createdBy,
               createdAt: invite.createdAt,
+              shareCode: code,
             },
           });
         }

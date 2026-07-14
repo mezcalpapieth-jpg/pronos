@@ -344,7 +344,12 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
 
         {mobileMenuOpen && (
           <div className="points-mobile-menu-panel">
-            <Link to="/" onClick={closeMobileMenu}>{t('points.nav.home')}</Link>
+            {authenticated && (
+              <div className="points-mobile-menu-user">
+                <span>{user?.username ? `@${user.username}` : (lang === 'en' ? 'Signed in' : 'Sesión iniciada')}</span>
+                <strong>{balance.toLocaleString('es-MX')} MXNP</strong>
+              </div>
+            )}
             <Link to="/" onClick={closeMobileMenu}>{t('points.nav.markets')}</Link>
             {authenticated && (
               <>

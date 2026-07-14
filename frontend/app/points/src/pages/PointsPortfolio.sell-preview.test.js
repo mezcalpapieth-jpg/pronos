@@ -17,3 +17,11 @@ test('portfolio history displays losing PnL instead of hiding lost rows', () => 
   assert.match(source, /historyPnlValue\(m\)/);
   assert.doesNotMatch(source, /outcomeStatus\s*!==\s*'lost'/);
 });
+
+test('portfolio uses responsive class hooks for mobile layout', () => {
+  assert.match(source, /points-portfolio-layout/);
+  assert.match(source, /points-portfolio-stats/);
+  assert.match(source, /points-portfolio-sidebar/);
+  assert.match(source, /points-daily-claim-card/);
+  assert.match(source, /points-history-summary-grid/);
+});

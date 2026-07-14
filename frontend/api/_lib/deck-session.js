@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from 'crypto';
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'crypto';
 import { clientIp } from './rate-limit.js';
 
 const COOKIE_NAME = 'pronos_deck_session';
@@ -25,6 +25,41 @@ export function normalizeDeckCode(code) {
 export function hashDeckCode(code) {
   const normalized = normalizeDeckCode(code);
   return createHmac('sha256', getSecret()).update(`deck-code:${normalized}`).digest('hex');
+}
+
+function deckCodeCipherKey() {
+  return createHash('sha256').update(`deck-share-code:${getSecret()}`).digest();
+}
+
+export function encryptDeckCodeForAdmin(code) {
+  const normalized = normalizeDeckCode(code);
+  if (!normalized) return null;
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', deckCodeCipherKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(normalized, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return [
+    'v1',
+    iv.toString('base64url'),
+    tag.toString('base64url'),
+    encrypted.toString('base64url'),
+  ].join(':');
+}
+
+export function decryptDeckCodeForAdmin(value) {
+  if (!value || typeof value !== 'string') return null;
+  try {
+    const [version, iv, tag, encrypted] = value.split(':');
+    if (version !== 'v1' || !iv || !tag || !encrypted) return null;
+    const decipher = createDecipheriv('aes-256-gcm', deckCodeCipherKey(), Buffer.from(iv, 'base64url'));
+    decipher.setAuthTag(Buffer.from(tag, 'base64url'));
+    return Buffer.concat([
+      decipher.update(Buffer.from(encrypted, 'base64url')),
+      decipher.final(),
+    ]).toString('utf8');
+  } catch {
+    return null;
+  }
 }
 
 export function hashDeckIp(req) {

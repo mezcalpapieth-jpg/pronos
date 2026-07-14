@@ -49,9 +49,11 @@ test('Points nav surfaces admin work count outside admin', () => {
   assert.match(navSource, /adminTaskTotal > 0/);
 });
 
-test('Points nav exposes a compact mobile menu with home and hidden routes', () => {
+test('Points nav exposes a compact mobile menu with identity and hidden routes', () => {
   assert.match(navSource, /points-mobile-menu/);
-  assert.match(navSource, /points\.nav\.home/);
+  assert.match(navSource, /points-mobile-menu-user/);
+  assert.match(navSource, /user\?\.username/);
+  assert.match(navSource, /balance\.toLocaleString\('es-MX'\)/);
   assert.match(navSource, /points\.nav\.howItWorks/);
   assert.match(navSource, /setMobileMenuOpen/);
 });

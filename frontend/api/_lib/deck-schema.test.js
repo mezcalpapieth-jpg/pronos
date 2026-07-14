@@ -10,6 +10,8 @@ const dashboardSource = await readFile(new URL('../deck/admin/dashboard.js', imp
 test('deck schema stores hashed invite access and DocSend-style analytics tables', () => {
   assert.match(schemaSource, /CREATE TABLE IF NOT EXISTS deck_invites/);
   assert.match(schemaSource, /code_hash TEXT UNIQUE NOT NULL/);
+  assert.match(schemaSource, /code_ciphertext TEXT/);
+  assert.match(schemaSource, /ALTER TABLE deck_invites ADD COLUMN IF NOT EXISTS code_ciphertext TEXT/);
   assert.doesNotMatch(schemaSource, /code TEXT/);
   assert.match(schemaSource, /CREATE TABLE IF NOT EXISTS deck_sessions/);
   assert.match(schemaSource, /deck_language TEXT NOT NULL DEFAULT 'en'/);
@@ -25,6 +27,10 @@ test('deck session helper uses a separate invite cookie and HMAC access-code has
   assert.match(sessionSource, /pronos_deck_session/);
   assert.match(sessionSource, /hashDeckCode/);
   assert.match(sessionSource, /createHmac\('sha256'/);
+  assert.match(sessionSource, /encryptDeckCodeForAdmin/);
+  assert.match(sessionSource, /decryptDeckCodeForAdmin/);
+  assert.match(sessionSource, /createCipheriv\('aes-256-gcm'/);
+  assert.match(sessionSource, /createDecipheriv\('aes-256-gcm'/);
   assert.match(sessionSource, /DECK_ACCESS_SECRET/);
   assert.match(sessionSource, /language:\s*row\.deck_language \|\| 'en'/);
 });
@@ -40,5 +46,9 @@ test('deck admin dashboard aggregates slide time and questions behind points adm
   assert.match(dashboardSource, /requirePointsAdmin/);
   assert.match(dashboardSource, /deck_slide_events/);
   assert.match(dashboardSource, /SUM\(duration_ms\)/);
+  assert.match(dashboardSource, /recent_sessions/);
+  assert.match(dashboardSource, /sessionSlideRows/);
+  assert.match(dashboardSource, /slideBreakdown/);
   assert.match(dashboardSource, /deck_questions/);
+  assert.match(dashboardSource, /decryptDeckCodeForAdmin/);
 });
