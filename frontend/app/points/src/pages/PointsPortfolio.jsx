@@ -12,6 +12,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
+import { useT } from '@app/lib/i18n.js';
 import { historyPnlValue } from '../lib/historyPnl.js';
 import { buildSellPreview } from '../lib/sellPreview.js';
 import {
@@ -683,6 +684,7 @@ function CycleHistoryLeaderboard({ currentUsername }) {
 // ─── Main Portfolio ──────────────────────────────────────────────────────────
 export default function PointsPortfolio() {
   const navigate = useNavigate();
+  const t = useT();
   const { authenticated, user, loading: authLoading, refresh } = usePointsAuth();
   const [tab, setTab] = useState('activo'); // 'activo' | 'historial'
   const [positions, setPositions] = useState([]);
@@ -827,15 +829,15 @@ export default function PointsPortfolio() {
           color: 'var(--text-primary)',
           marginBottom: 8,
         }}>
-          Portafolio
+          {t('points.portfolio.title')}
         </h1>
       </div>
 
       {/* Tabs */}
       <div className="points-portfolio-tabs">
         {[
-          { id: 'activo', label: 'Activo' },
-          { id: 'historial', label: 'Historial' },
+          { id: 'activo', label: t('points.portfolio.tab.open') },
+          { id: 'historial', label: t('points.portfolio.tab.history') },
         ].map(t => {
           const active = tab === t.id;
           return (

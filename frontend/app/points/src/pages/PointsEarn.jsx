@@ -13,6 +13,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
+import { useT } from '@app/lib/i18n.js';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
 import {
   claimDaily,
@@ -626,6 +627,7 @@ export default function PointsEarn({ onOpenLogin }) {
   const navigate = useNavigate();
   const { authenticated, user, loading, refresh } = usePointsAuth();
   const isMobile = useIsMobile();
+  const t = useT();
 
   useEffect(() => {
     if (!loading && !authenticated) {
@@ -646,7 +648,7 @@ export default function PointsEarn({ onOpenLogin }) {
     return (
       <main style={{ padding: '80px 48px', maxWidth: 720, margin: '0 auto', textAlign: 'center' }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 40, marginBottom: 16 }}>
-          Gana MXNP
+          {t('points.earn.title')}
         </h1>
         <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>
           Crea tu cuenta (gratis) para ver tu racha, referir amigos, y completar tareas sociales.
@@ -675,7 +677,7 @@ export default function PointsEarn({ onOpenLogin }) {
           color: 'var(--text-primary)',
           marginBottom: 8,
         }}>
-          Gana MXNP
+          {t('points.earn.title')}
         </h1>
         <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
           Balance actual:&nbsp;

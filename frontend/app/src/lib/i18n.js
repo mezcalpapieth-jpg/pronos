@@ -487,7 +487,7 @@ const STRINGS = {
   'points.nav.markets':       { es: 'El mercado',            en: 'Markets' },
   'points.nav.home':          { es: 'Inicio',                en: 'Home' },
   'points.nav.portfolio':     { es: 'Portafolio',            en: 'Portfolio' },
-  'points.nav.earn':          { es: 'Ganar MXNP',            en: 'Earn MXNP' },
+  'points.nav.earn':          { es: 'Gana MXNP',             en: 'Earn MXNP' },
   'points.nav.admin':         { es: 'Admin',                 en: 'Admin' },
   'points.nav.signIn':        { es: 'Iniciar sesión',        en: 'Sign in' },
   'points.nav.signOut':       { es: 'Cerrar sesión',         en: 'Sign out' },
@@ -744,9 +744,11 @@ const STRINGS = {
   'points.buy.errorPrefix':   { es: 'Error: {code}',          en: 'Error: {code}' },
 
   'points.portfolio.title':   { es: 'Portafolio',            en: 'Portfolio' },
-  'points.portfolio.tab.open': { es: 'Abiertas',             en: 'Open' },
+  'points.portfolio.tab.open': { es: 'Activo',               en: 'Active' },
   'points.portfolio.tab.history': { es: 'Historial',         en: 'History' },
   'points.portfolio.tab.claim': { es: 'Reclamar',            en: 'Claim' },
+
+  'points.earn.title':        { es: 'Gana MXNP',             en: 'Earn MXNP' },
 
   'points.status.won':        { es: '🏆 GANADO',             en: '🏆 WON' },
   'points.status.lost':       { es: 'PERDIDO',               en: 'LOST' },
