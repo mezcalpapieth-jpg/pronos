@@ -108,6 +108,7 @@ function competitorName(c) {
   return cleanString(c?.team?.shortDisplayName)
     || cleanString(c?.team?.displayName)
     || cleanString(c?.team?.name)
+    || cleanString(c?.team?.abbreviation)
     || cleanString(c?.displayName)
     || null;
 }
@@ -117,6 +118,7 @@ function competitorNames(c) {
     c?.team?.shortDisplayName,
     c?.team?.displayName,
     c?.team?.name,
+    c?.team?.abbreviation,
     c?.displayName,
   ].map(cleanString).filter(Boolean);
 }

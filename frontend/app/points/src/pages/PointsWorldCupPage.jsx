@@ -161,16 +161,27 @@ export default function PointsWorldCupPage() {
     return () => { cancelled = true; };
   }, []);
 
+  const allMarkets = useMemo(() => {
+    const idx = new Map();
+    for (const m of [...markets, ...resolvedMarkets]) {
+      if (m?.id != null) idx.set(String(m.id), m);
+    }
+    return [...idx.values()];
+  }, [markets, resolvedMarkets]);
+
   const marketByQuestion = useMemo(() => {
     const idx = {};
-    for (const m of markets) {
+    for (const m of allMarkets) {
       if (!m?.question) continue;
       idx[m.question.trim().toLowerCase()] = m;
+      const matchId = m.sourceData?.matchId;
+      if (matchId) idx[`match:${matchId}`] = m;
     }
     return idx;
-  }, [markets]);
+  }, [allMarkets]);
 
-  function matchMarket(homeCode, awayCode) {
+  function matchMarket(homeCode, awayCode, matchId = null) {
+    if (matchId && marketByQuestion[`match:${matchId}`]) return marketByQuestion[`match:${matchId}`];
     const home = TEAMS[homeCode]?.name;
     const away = TEAMS[awayCode]?.name;
     if (!home || !away) return null;
@@ -180,13 +191,27 @@ export default function PointsWorldCupPage() {
   // "Winner of Group X" parent lookup.
   const groupWinnerByKey = useMemo(() => {
     const idx = {};
-    for (const m of markets) {
+    for (const m of allMarkets) {
       if (m.ammMode !== 'parallel') continue;
       const match = /Grupo\s+([A-L])/i.exec(m.question || '');
       if (match) idx[match[1].toUpperCase()] = m;
     }
     return idx;
-  }, [markets]);
+  }, [allMarkets]);
+
+  const knockoutMarkets = useMemo(() => (
+    allMarkets
+      .filter(m => {
+        const round = m.sourceData?.round || m.resolverConfig?.round;
+        return ['r32', 'r16', 'qf', 'sf', 'third', 'final', 'knockout'].includes(round);
+      })
+      .sort((a, b) => new Date(a.startTime || a.endTime || 0) - new Date(b.startTime || b.endTime || 0))
+  ), [allMarkets]);
+
+  const semifinalMarkets = useMemo(
+    () => knockoutMarkets.filter(m => (m.sourceData?.round || m.resolverConfig?.round) === 'sf'),
+    [knockoutMarkets],
+  );
 
   // Is any WC market currently in its live window? Used to reveal
   // the LIVE toggle at the top of the page.
@@ -207,7 +232,7 @@ export default function PointsWorldCupPage() {
     if (!liveOnly) return all;
     const now = Date.now();
     return all.filter(f => {
-      const market = matchMarket(f.homeCode, f.awayCode);
+      const market = matchMarket(f.homeCode, f.awayCode, f.matchId);
       if (!market?.startTime || !market?.endTime) return false;
       const start = new Date(market.startTime).getTime();
       const end = new Date(market.endTime).getTime();
@@ -220,6 +245,9 @@ export default function PointsWorldCupPage() {
     () => computeMexicoPath(markets),
     [markets],
   );
+  const semifinalLine = semifinalMarkets.length > 0
+    ? semifinalMarkets.map(m => `${m.question}${m.status === 'resolved' ? ' · final' : ''}`).join(' · ')
+    : 'Semifinales abiertas: Francia vs España e Inglaterra vs Argentina.';
 
   return (
     <main style={{ maxWidth: 1280, margin: '0 auto', padding: '28px 24px 80px' }}>
@@ -268,7 +296,7 @@ export default function PointsWorldCupPage() {
             color: 'var(--text-secondary)', lineHeight: 1.55,
             margin: '0 0 22px', maxWidth: 560,
           }}>
-            48 selecciones. 12 grupos. 104 partidos. Arranca el <strong style={{ color: 'var(--text-primary)' }}>11 de junio</strong> en el Azteca y termina el 19 de julio en MetLife. Todos los mercados en un solo lugar.
+            48 selecciones. 12 grupos. 104 partidos. La fase de grupos ya dejó resultados, las eliminatorias están vivas y el tablero avanza con ESPN. <strong style={{ color: 'var(--text-primary)' }}>{semifinalLine}</strong>
           </p>
 
           {!countdown.done ? (
@@ -311,7 +339,7 @@ export default function PointsWorldCupPage() {
               fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase',
               animation: 'pronos-live-pulse 1.4s ease-in-out infinite',
             }}>
-              🔴 EN VIVO · El Mundial ha comenzado
+              🔴 ELIMINATORIAS · Semifinales en curso
             </div>
           )}
         </div>
@@ -360,7 +388,7 @@ export default function PointsWorldCupPage() {
         <div className="wc-group-grid">
           {GROUPS.map(g => {
             const active = activeGroup === g.key;
-            const teams = g.teams.map(c => TEAMS[c]).filter(Boolean);
+            const teams = g.teams.map(c => ({ key: c, ...TEAMS[c] })).filter(Boolean);
             return (
               <button
                 key={g.key}
@@ -386,7 +414,7 @@ export default function PointsWorldCupPage() {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {teams.map(team => {
-                    const form = computeForm(team.code, resolvedMarkets);
+                    const form = computeForm(team.key, resolvedMarkets);
                     return (
                       <div
                         key={team.code}
@@ -454,8 +482,22 @@ export default function PointsWorldCupPage() {
         {groupWinnerByKey[activeGroup] && (
           <GroupWinnerCard
             market={groupWinnerByKey[activeGroup]}
-            onBuy={(idx, label) =>
-              setDrawer({ market: groupWinnerByKey[activeGroup], outcomeIndex: idx, label })}
+            onBuy={(idx, label) => {
+              const parent = groupWinnerByKey[activeGroup];
+              const legId = Array.isArray(parent.legIds) ? parent.legIds[idx] : null;
+              const legPrice = Array.isArray(parent.prices) ? parent.prices[idx] : 0.5;
+              const target = legId
+                ? {
+                    ...parent,
+                    id: legId,
+                    ammMode: 'unified',
+                    outcomes: ['Sí', 'No'],
+                    prices: [legPrice, 1 - legPrice],
+                    outcomeImages: null,
+                  }
+                : parent;
+              setDrawer({ market: target, outcomeIndex: legId ? 0 : idx, label });
+            }}
           />
         )}
 
@@ -464,7 +506,7 @@ export default function PointsWorldCupPage() {
             const home = TEAMS[f.homeCode];
             const away = TEAMS[f.awayCode];
             if (!home || !away) return null;
-            const market = matchMarket(f.homeCode, f.awayCode);
+      const market = matchMarket(f.homeCode, f.awayCode, f.matchId);
             return (
               <MatchRow
                 key={f.matchId}
@@ -490,7 +532,7 @@ export default function PointsWorldCupPage() {
         }}>
           Llaves · Eliminatorias
         </div>
-        <BracketView />
+        <BracketView markets={knockoutMarkets} onOpen={(market) => navigate(`/market?id=${market.id}`)} />
       </section>
 
       {drawer && (
@@ -512,6 +554,11 @@ export default function PointsWorldCupPage() {
 
 function MatchRow({ fixture, home, away, market, onBuy, onOpen }) {
   const hasMarket = Boolean(market);
+  const isResolved = market?.status === 'resolved';
+  const isActive = market?.status === 'active';
+  const outcomeLabels = Array.isArray(market?.outcomes) && market.outcomes.length > 0
+    ? market.outcomes
+    : [home.name, 'Empate', away.name];
   const prices = hasMarket && Array.isArray(market.prices)
     ? market.prices
     : [0.4, 0.25, 0.35];
@@ -566,23 +613,54 @@ function MatchRow({ fixture, home, away, market, onBuy, onOpen }) {
         ))}
       </div>
 
-      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-        {/* World Cup is outside the current 2-week cycle, so the trade
-            buttons are locked across the whole hub until the cycle that
-            actually contains kickoff opens. The market is still
-            clickable — users can read the detail page — but no buys. */}
+      <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        {isResolved ? (
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '7px 11px',
+            background: 'rgba(0,232,122,0.10)',
+            border: '1px solid rgba(0,232,122,0.35)',
+            borderRadius: 100,
+            fontFamily: 'var(--font-mono)', fontSize: 10,
+            letterSpacing: '0.08em', color: 'var(--green)',
+            textTransform: 'uppercase',
+          }}>
+            Final · {market.finalScore || outcomeLabels[Number(market.outcome)] || 'Resultado'}
+          </span>
+        ) : isActive ? outcomeLabels.map((label, i) => (
+          <button
+            key={i}
+            onClick={(e) => { e.stopPropagation(); onBuy(i, label); }}
+            style={{
+              padding: '7px 10px',
+              borderRadius: 100,
+              border: `1px solid ${accent[i % accent.length].border}`,
+              background: accent[i % accent.length].bg,
+              color: accent[i % accent.length].fg,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              letterSpacing: '0.06em',
+              fontWeight: 700,
+              cursor: 'pointer',
+              textTransform: 'uppercase',
+            }}
+          >
+            {label} · {pct(i)}%
+          </button>
+        )) : (
         <span style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
           padding: '6px 10px',
-          background: 'rgba(245,158,11,0.10)',
-          border: '1px solid rgba(245,158,11,0.35)',
+          background: 'var(--surface2)',
+          border: '1px solid var(--border)',
           borderRadius: 100,
           fontFamily: 'var(--font-mono)', fontSize: 10,
-          letterSpacing: '0.1em', color: 'var(--gold, #f59e0b)',
+          letterSpacing: '0.1em', color: 'var(--text-muted)',
           textTransform: 'uppercase',
         }}>
-          🔒 Próximamente
+          Sin mercado
         </span>
+        )}
       </div>
     </div>
   );
@@ -596,6 +674,7 @@ function GroupWinnerCard({ market, onBuy }) {
     ? market.prices
     : outcomes.map(() => 1 / Math.max(1, outcomes.length));
   const images = Array.isArray(market.outcomeImages) ? market.outcomeImages : [];
+  const isResolved = market.status === 'resolved';
   return (
     <div style={{
       background: 'var(--surface1)',
@@ -631,22 +710,22 @@ function GroupWinnerCard({ market, onBuy }) {
       }}>
         {outcomes.map((label, i) => {
           const pct = Math.round((prices[i] ?? 0) * 100);
-          // Group-winner buttons are locked too — same reason as
-          // MatchRow above: World Cup sits outside the current cycle,
-          // no buys until the cycle catches up. Keep the visual but
-          // make it a non-button so the row still reads as a leaderboard.
+          const isWinner = isResolved && Number(market.outcome) === i;
           return (
-            <div
+            <button
               key={i}
+              type="button"
+              disabled={isResolved || market.status !== 'active'}
+              onClick={() => onBuy(i, `${label} — Sí`)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 padding: '8px 10px',
-                background: 'var(--surface2)',
-                border: '1px solid var(--border)',
+                background: isWinner ? 'rgba(0,232,122,0.12)' : 'var(--surface2)',
+                border: `1px solid ${isWinner ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
                 borderRadius: 10,
                 textAlign: 'left',
-                cursor: 'default',
-                opacity: 0.85,
+                cursor: isResolved || market.status !== 'active' ? 'default' : 'pointer',
+                opacity: isResolved && !isWinner ? 0.55 : 1,
               }}
             >
               <img
@@ -665,23 +744,27 @@ function GroupWinnerCard({ market, onBuy }) {
               </span>
               <span style={{
                 fontFamily: 'var(--font-display)', fontSize: 14,
-                color: 'var(--gold, #f59e0b)', minWidth: 36, textAlign: 'right',
+                color: isWinner ? 'var(--green)' : 'var(--gold, #f59e0b)',
+                minWidth: 36,
+                textAlign: 'right',
               }}>
-                {pct}%
+                {isResolved ? (isWinner ? '100%' : '0%') : `${pct}%`}
               </span>
-            </div>
+            </button>
           );
         })}
       </div>
-      <div style={{
-        marginTop: 10,
-        textAlign: 'center',
-        fontFamily: 'var(--font-mono)', fontSize: 10,
-        letterSpacing: '0.1em', color: 'var(--gold, #f59e0b)',
-        textTransform: 'uppercase',
-      }}>
-        🔒 Próximamente — fuera del ciclo actual
-      </div>
+      {isResolved && (
+        <div style={{
+          marginTop: 10,
+          textAlign: 'center',
+          fontFamily: 'var(--font-mono)', fontSize: 10,
+          letterSpacing: '0.1em', color: 'var(--green)',
+          textTransform: 'uppercase',
+        }}>
+          Resultado final · {market.finalScore || outcomes[Number(market.outcome)]}
+        </div>
+      )}
     </div>
   );
 }
@@ -801,20 +884,53 @@ function MexicoPathCard({ path }) {
 // and `justify-content: space-around`, so R16 slots sit at the
 // midpoint between their two parent R32 slots (and so on) without
 // hand-tuned gaps. Styling lives in .wc-bracket / .wc-bracket-col.
-function BracketView() {
-  const columns = [
-    { label: '16vos', slots: BRACKET.r32 },
-    { label: '8vos',  slots: BRACKET.r16 },
-    { label: 'QF',    slots: BRACKET.qf },
-    { label: 'SF',    slots: BRACKET.sf },
-    { label: 'Final', slots: [BRACKET.final] },
-  ];
+function roundFromMarket(market) {
+  return market?.sourceData?.round || market?.resolverConfig?.round || null;
+}
+
+function BracketView({ markets = [], onOpen }) {
+  const marketColumns = [
+    { key: 'r32', label: '16vos', fallback: BRACKET.r32 },
+    { key: 'r16', label: '8vos', fallback: BRACKET.r16 },
+    { key: 'qf', label: 'QF', fallback: BRACKET.qf },
+    { key: 'sf', label: 'SF', fallback: BRACKET.sf },
+    { key: 'final', label: 'Final', fallback: [BRACKET.final] },
+  ].map(col => {
+    const realMarkets = markets.filter(m => roundFromMarket(m) === col.key);
+    return {
+      ...col,
+      markets: realMarkets,
+      slots: realMarkets.length > 0 ? [] : col.fallback,
+    };
+  });
   return (
     <div className="wc-bracket">
-      {columns.map(col => (
+      {marketColumns.map(col => (
         <div key={col.label}>
           <div className="wc-bracket-col-label">{col.label}</div>
           <div className="wc-bracket-col">
+            {col.markets.map(market => (
+              <button
+                key={market.id}
+                type="button"
+                className="wc-bracket-slot"
+                onClick={() => onOpen?.(market)}
+                style={{
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  borderColor: market.status === 'resolved' ? 'rgba(0,232,122,0.32)' : undefined,
+                }}
+              >
+                <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+                  {market.question}
+                </div>
+                <div style={{ color: market.status === 'resolved' ? 'var(--green)' : 'var(--text-muted)', fontSize: 9, letterSpacing: '0.06em' }}>
+                  {market.status === 'resolved'
+                    ? (market.finalScore || 'Final')
+                    : new Date(market.startTime || market.endTime).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
+                </div>
+              </button>
+            ))}
             {col.slots.map(slot => (
               <div key={slot.id} className="wc-bracket-slot">
                 <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>

@@ -2263,25 +2263,32 @@ function PendingMarketsTable({ onQueueChange }) {
     setBulkBusy(true);
     try {
       const preview = await adminProgressWorldCup({ dry: true });
-      if (!preview.complete) {
-        const resolvedCounts = Object.entries(preview.matchesResolved || {})
-          .map(([g, n]) => `${g}:${n}/${(preview.matchesExpected || {})[g] || 6}`)
-          .join(' · ');
-        alert(`Fase de grupos incompleta.\n${resolvedCounts || '(sin datos)'}`);
-        return;
-      }
-      const n = preview.specsToInsert || 0;
+      const n = preview.totalPlanned || 0;
+      const lines = [
+        `Eventos ESPN: ${preview.espnEvents || 0}`,
+        `Partidos de grupo enlazados: ${preview.groupFixturesMatched || 0}/72`,
+        `Parches de resolver: ${preview.groupResolverPatches || 0}`,
+        `Grupos por resolver: ${preview.groupMatchesToResolve || 0}`,
+        `Ganadores de grupo por cerrar: ${preview.groupWinnerMarketsToResolve || 0}`,
+        `Knockouts por crear: ${preview.knockoutMarketsToCreate || 0}`,
+        `Knockouts por resolver: ${preview.knockoutMarketsToResolve || 0}`,
+      ];
       if (n === 0) {
-        alert('Sin R32 por generar (ya existen?).');
+        alert(`Sin cambios pendientes para Mundial.\n\n${lines.join('\n')}`);
         return;
       }
-      if (!confirm(`Generar ${n} partidos de R32 en la cola pendiente? Después los apruebas manualmente.`)) {
+      if (!confirm(`Aplicar reparación ESPN del Mundial?\n\n${lines.join('\n')}`)) {
         return;
       }
       const r = await adminProgressWorldCup({ dry: false });
+      const applied = r.applied || {};
       alert(
-        `✓ R32 generados.\n`
-        + `Insertados: ${r.inserted || 0} · Actualizados: ${r.updated || 0} · Saltados: ${r.skipped || 0}`,
+        `✓ Mundial actualizado.\n`
+        + `Resolvers parchados: ${applied.groupResolverPatches || 0}\n`
+        + `Grupos resueltos: ${applied.groupMatchesResolved || 0}\n`
+        + `Ganadores de grupo: ${applied.groupWinnerMarketsResolved || 0}\n`
+        + `Knockouts creados/parchados: ${applied.knockoutMarketsCreatedOrPatched || 0}\n`
+        + `Knockouts resueltos: ${applied.knockoutMarketsResolved || 0}`,
       );
       await load();
       onQueueChange?.();
@@ -2415,15 +2422,14 @@ function PendingMarketsTable({ onQueueChange }) {
           🔧 Retrofit resolvers
         </button>
 
-        {/* Progress the World Cup — once all 12 groups finish,
-            builds R32 pairings from standings and seeds them into
-            the pending queue for admin approval. Safe to re-run:
-            dry-runs first and alerts if groups are still in
-            progress. */}
+        {/* Repair/progress World Cup from ESPN. Safe to re-run:
+            dry-runs first, then patches existing group rows, resolves
+            completed fixtures, and creates/open knockouts through
+            the current semifinal window. */}
         <button
           onClick={progressWorldCup}
           disabled={bulkBusy}
-          title="Genera partidos R32 del Mundial una vez completa la fase de grupos"
+          title="Parcha y progresa mercados del Mundial con ESPN"
           style={{
             padding: '6px 14px',
             borderRadius: 16,
@@ -2436,7 +2442,7 @@ function PendingMarketsTable({ onQueueChange }) {
             opacity: bulkBusy ? 0.5 : 1,
           }}
         >
-          🏆 Progresar Mundial
+          🏆 Reparar Mundial
         </button>
 
         {/* Resolver diagnostic — read-only "why aren't my markets

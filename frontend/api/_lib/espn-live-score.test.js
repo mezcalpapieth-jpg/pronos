@@ -168,6 +168,30 @@ test('buildEspnLiveScoreConfig maps UEFA soccer metadata to an ESPN team lookup'
   assert.equal(premierLeagueCfg.leaguePath, 'soccer/eng.1');
 });
 
+test('buildEspnLiveScoreConfig maps World Cup metadata to ESPN FIFA World Cup lookup', () => {
+  const cfg = buildEspnLiveScoreConfig({
+    resolverType: 'sports_api',
+    resolverConfig: { source: 'espn', leaguePath: 'soccer/fifa.world', shape: 'draw3' },
+    sport: 'soccer',
+    league: 'world-cup',
+    sourceData: {
+      competitionCode: 'WC',
+      kickoffUtc: '2026-07-14T19:00:00.000Z',
+      home: { name: 'Francia', espn: 'fra' },
+      away: { name: 'España', espn: 'esp' },
+    },
+  });
+
+  assert.deepEqual(cfg, {
+    source: 'espn',
+    leaguePath: 'soccer/fifa.world',
+    eventId: null,
+    dateYmd: '2026-07-14',
+    homeName: 'fra',
+    awayName: 'esp',
+  });
+});
+
 test('readEspnLiveScore can find a soccer event by teams when no event id is stored', async (t) => {
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });

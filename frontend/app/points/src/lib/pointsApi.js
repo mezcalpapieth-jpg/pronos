@@ -324,10 +324,9 @@ export async function adminToggleFeatured({ marketId, pendingId, featured }) {
   return postJson('/api/points/admin/toggle-featured', { marketId, pendingId, featured });
 }
 
-// Spawn World Cup knockout matches once the group stage finishes.
-// Dry-run first so the admin can eyeball the projected R32 pairings
-// before committing. On wet run the specs flow through the normal
-// pending-markets queue; admin still approves each.
+// Repair/progress World Cup markets from ESPN. Dry-run first so the
+// admin can see how many rows will be patched/resolved/created before
+// applying the DB write.
 export async function adminProgressWorldCup({ dry = false } = {}) {
   const q = dry ? '?dry=1' : '';
   return postJson(`/api/points/admin/progress-world-cup${q}`, {});

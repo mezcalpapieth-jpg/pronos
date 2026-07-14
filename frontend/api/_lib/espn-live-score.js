@@ -1,5 +1,6 @@
 const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports';
 const ESPN_SOCCER_COMPETITION_PATH = {
+  WC: 'soccer/fifa.world',
   CL: 'soccer/uefa.champions',
   EL: 'soccer/uefa.europa',
   UCL: 'soccer/uefa.europa.conf',
@@ -61,6 +62,7 @@ function competitorName(c) {
   return cleanString(c?.team?.shortDisplayName)
     || cleanString(c?.team?.displayName)
     || cleanString(c?.team?.name)
+    || cleanString(c?.team?.abbreviation)
     || cleanString(c?.displayName)
     || null;
 }
@@ -70,6 +72,7 @@ function competitorNames(c) {
     c?.team?.shortDisplayName,
     c?.team?.displayName,
     c?.team?.name,
+    c?.team?.abbreviation,
     c?.displayName,
   ].map(cleanString).filter(Boolean);
 }
@@ -228,8 +231,8 @@ export function buildEspnLiveScoreConfig({
   const isSoccer = sport === 'soccer' || data?.competitionCode || league?.startsWith?.('uefa-');
   if (!isSoccer) return null;
   const leaguePath = ESPN_SOCCER_COMPETITION_PATH[data?.competitionCode];
-  const homeName = cleanString(data?.home?.name || data?.homeName);
-  const awayName = cleanString(data?.away?.name || data?.awayName);
+  const homeName = cleanString(data?.home?.espn || data?.home?.name || data?.homeName);
+  const awayName = cleanString(data?.away?.espn || data?.away?.name || data?.awayName);
   const dateYmd = dateYmdFromValue(data?.kickoffUtc || startTime);
   if (!leaguePath || !homeName || !awayName || !dateYmd) return null;
   return {

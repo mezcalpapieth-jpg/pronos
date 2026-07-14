@@ -95,6 +95,24 @@ export function teamsInGroup(groupKey) {
   return g ? g.teams.map(code => TEAMS[code]).filter(Boolean) : [];
 }
 
+export function badgeUrl(team) {
+  if (team?.espn) return `https://a.espncdn.com/i/teamlogos/countries/500/${team.espn}.png`;
+  if (team?.code) return `https://flagcdn.com/w160/${team.code}.png`;
+  return null;
+}
+
+export function flagUrl(team, size = 160) {
+  if (!team?.code) return null;
+  return `https://flagcdn.com/w${size}/${team.code}.png`;
+}
+
+export function teamByEspnCode(code) {
+  const normalized = String(code || '').trim().toLowerCase();
+  if (!normalized) return null;
+  const entry = Object.entries(TEAMS).find(([, team]) => team?.espn === normalized);
+  return entry ? { key: entry[0], ...entry[1] } : null;
+}
+
 // ── Group-stage fixtures — published FIFA schedule ───────────────────────
 // 72 matches, 6 per group. Each entry: { matchId, group, matchday,
 // homeCode, awayCode, kickoffIso, venue }.

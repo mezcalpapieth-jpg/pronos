@@ -7,9 +7,9 @@
  * Notes:
  * - category: 'world-cup'  → naturally excluded from /c/deportes and
  *   from home Trending (unless admin flips featured).
- * - resolver_type: 'manual' for now (football-data free tier doesn't
- *   cover the WC; can swap to 'sports_api' later if we wire in a
- *   paid or alternative source).
+ * - resolver_type: 'sports_api' via ESPN's public FIFA World Cup
+ *   scoreboard. The generator stores ESPN team abbreviations and the
+ *   repair endpoint patches stable event ids as fixtures progress.
  * - outcome_images: flagcdn URLs per team, aligned with outcomes
  *   [home, 'Empate', away].
  *
@@ -17,17 +17,9 @@
  * deduplication does the right thing across re-runs.
  */
 
-import { GROUP_FIXTURES, GROUPS, TEAMS } from '../world-cup-2026.js';
+import { badgeUrl, GROUP_FIXTURES, GROUPS, TEAMS } from '../world-cup-2026.js';
 
-// Prefer ESPN's team-badge art; fall back to the country flag when
-// ESPN doesn't have a slug we know. The UI img tag also has an
-// onerror fallback, so outcome_images carrying the ESPN URL is safe
-// even for the rare 404.
-function badgeUrl(team) {
-  if (team?.espn) return `https://a.espncdn.com/i/teamlogos/countries/500/${team.espn}.png`;
-  if (team?.code) return `https://flagcdn.com/w160/${team.code}.png`;
-  return null;
-}
+export const WORLD_CUP_ESPN_LEAGUE_PATH = 'soccer/fifa.world';
 
 export async function generateWorldCupMarkets() {
   const specs = [];
@@ -57,9 +49,14 @@ export async function generateWorldCupMarkets() {
       start_time: startTime,
       end_time: endTime,
       amm_mode: 'unified',
-      resolver_type: 'manual',
+      resolver_type: 'sports_api',
       resolver_config: {
-        source: 'manual',
+        source: 'espn',
+        leaguePath: WORLD_CUP_ESPN_LEAGUE_PATH,
+        eventId: null,
+        dateYmd: startTime.slice(0, 10),
+        homeName: home.espn,
+        awayName: away.espn,
         matchId: f.matchId,
         group: f.group,
         matchday: f.matchday,
@@ -67,12 +64,14 @@ export async function generateWorldCupMarkets() {
       },
       source_data: {
         matchId: f.matchId,
+        competitionCode: 'WC',
         group: f.group,
+        round: f.round,
         matchday: f.matchday,
         venue: f.venue,
         kickoffIso: f.kickoffIso,
-        home: { code: home.code, name: home.name },
-        away: { code: away.code, name: away.name },
+        home: { code: f.homeCode, flagCode: home.code, espn: home.espn, name: home.name },
+        away: { code: f.awayCode, flagCode: away.code, espn: away.espn, name: away.name },
       },
     });
   }
@@ -117,11 +116,11 @@ export async function generateWorldCupMarkets() {
         source: 'manual',
         group: g.key,
         shape: 'parallel',
-        legs: teams.map(t => ({ label: t.name, teamCode: t.code })),
+        legs: teams.map((t, i) => ({ label: t.name, teamCode: g.teams[i], espn: t.espn })),
       },
       source_data: {
         group: g.key,
-        teams: teams.map(t => ({ code: t.code, name: t.name, espn: t.espn })),
+        teams: teams.map((t, i) => ({ code: g.teams[i], flagCode: t.code, name: t.name, espn: t.espn })),
       },
     });
   }
