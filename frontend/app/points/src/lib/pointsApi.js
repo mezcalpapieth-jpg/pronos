@@ -34,6 +34,64 @@ export async function postJson(url, body) {
   return handle(res);
 }
 
+// ─── Private investor deck ─────────────────────────────────────────────────
+export async function deckLogin({ email, code, language }) {
+  return postJson('/api/deck/auth', { email, code, language });
+}
+
+export async function fetchDeckSession() {
+  return getJson('/api/deck/session');
+}
+
+export async function deckLogout() {
+  const res = await fetch('/api/deck/session', {
+    method: 'DELETE',
+    credentials: 'include',
+  });
+  return handle(res);
+}
+
+export async function trackDeckEvent({
+  slideNumber,
+  durationMs,
+  eventType = 'slide_view',
+  language = 'en',
+  keepalive = false,
+}) {
+  const res = await fetch('/api/deck/events', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slideNumber, durationMs, eventType, language }),
+    keepalive,
+  });
+  return handle(res);
+}
+
+export async function submitDeckQuestion({ question, slideNumber, language }) {
+  return postJson('/api/deck/questions', { question, slideNumber, language });
+}
+
+export async function adminDeckDashboard() {
+  return getJson('/api/deck/admin/dashboard');
+}
+
+export async function adminCreateDeckInvite({ label, emailHint, code }) {
+  return postJson('/api/deck/admin/invites', {
+    action: 'create',
+    label,
+    emailHint,
+    code,
+  });
+}
+
+export async function adminRevokeDeckInvite(id) {
+  return postJson('/api/deck/admin/invites', {
+    action: 'revoke',
+    id,
+  });
+}
+
 // ─── Markets ────────────────────────────────────────────────────────────────
 // Aggregate counters for the home hero. Ships only integers so we
 // can show the true total active-market count without fetching
@@ -352,8 +410,8 @@ export async function adminCancelMarket({ marketId, reason } = {}) {
 
 // ─── Cycles (2-week leaderboard windows) ────────────────────────────────────
 export async function fetchCurrentCycle() {
-  const { cycle } = await getJson('/api/points/cycles/current');
-  return cycle;
+  const data = await getJson('/api/points/cycles/current');
+  return data?.cycle || null;
 }
 
 export async function fetchCycleHistory(limit = 10) {
@@ -369,6 +427,12 @@ export async function adminRolloverCycle(nextCycleLabel) {
   return postJson('/api/points/admin/cycles', {
     action: 'rollover',
     nextCycleLabel: nextCycleLabel || null,
+  });
+}
+
+export async function adminPauseCycles() {
+  return postJson('/api/points/admin/cycles', {
+    action: 'pause',
   });
 }
 

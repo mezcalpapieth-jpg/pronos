@@ -148,8 +148,8 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
                   the competition points. Prices move with demand, like a real
                   market.
                   <br /><br />
-                  Every <strong style={{ color: 'var(--green)' }}>2 weeks</strong>,
-                  the top 3 on the leaderboard win cash prizes:
+                  Prize cycles are paused for now while Pronos opens the next
+                  stage.
                 </>
               ) : (
                 <>
@@ -158,21 +158,19 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
                   — los puntos de la competencia. Los precios se mueven con la
                   demanda, como en un mercado real.
                   <br /><br />
-                  Cada <strong style={{ color: 'var(--green)' }}>2 semanas</strong>,
-                  los Top 3 del leaderboard ganan premios en efectivo:
+                  Los ciclos de premios están pausados por ahora mientras Pronos
+                  abre la siguiente etapa.
                 </>
               )
             }
             bullets={isEn ? [
-              { icon: '🥇', text: '1st place', value: '$5,000 MXN' },
-              { icon: '🥈', text: '2nd place', value: '$3,000 MXN' },
-              { icon: '🥉', text: '3rd place', value: '$2,000 MXN' },
-              { icon: '🎁', text: '4th - 10th place', value: 'surprise prizes' },
+              { icon: '⏳', text: 'Prize cycles', value: 'coming soon' },
+              { icon: '📈', text: 'Markets', value: 'open' },
+              { icon: '🧪', text: 'MXNP', value: 'practice points' },
             ] : [
-              { icon: '🥇', text: '1° lugar', value: '$5,000 MXN' },
-              { icon: '🥈', text: '2° lugar', value: '$3,000 MXN' },
-              { icon: '🥉', text: '3° lugar', value: '$2,000 MXN' },
-              { icon: '🎁', text: '4° – 10° lugar', value: 'premios sorpresa' },
+              { icon: '⏳', text: 'Ciclos de premios', value: 'próximamente' },
+              { icon: '📈', text: 'Mercados', value: 'abiertos' },
+              { icon: '🧪', text: 'MXNP', value: 'puntos de práctica' },
             ]}
           />
 
@@ -273,8 +271,8 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
           lineHeight: 1.6,
         }}>
           {isEn
-            ? 'MXNP are competition points - they do not have direct economic value. Leaderboard prizes are paid in cash (MXN).'
-            : 'MXNP son puntos de la competencia — no tienen valor económico directo. Los premios del leaderboard se pagan en efectivo (MXN).'}
+            ? 'MXNP are competition points - they do not have direct economic value. Prize cycles return soon.'
+            : 'MXNP son puntos de la competencia — no tienen valor económico directo. Los ciclos de premios vuelven pronto.'}
         </p>
       </div>
     </div>

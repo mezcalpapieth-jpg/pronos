@@ -1,9 +1,10 @@
 /**
  * GET /api/points/cycles/current
  *
- * Returns the currently-active competition cycle. If none exists, the
- * endpoint auto-creates one (cycle #1 starts now, ends 14 days out) so
- * the UI can always render a countdown without requiring admin setup.
+ * Returns the currently-active competition cycle when public cycles are open.
+ * If cycles are paused or no active cycle exists, the endpoint returns a
+ * paused "Próximamente" state instead of auto-creating a new countdown. Admin
+ * can restart cycles from /api/points/admin/cycles.
  *
  * Response:
  *   {
@@ -23,23 +24,25 @@ import { ensurePointsSchema } from '../../_lib/points-schema.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
-const CYCLE_DAYS = 14;
+const CYCLES_PAUSED_KEY = 'points_cycles_paused';
 
-function cycleLabel(startIsoDate) {
-  // "Ciclo del 5 abr — 19 abr" — helps humans glance at which cycle is
-  // running without pulling up the admin panel. Server-side formatting
-  // so the label stays stable regardless of viewer locale.
-  try {
-    const start = new Date(startIsoDate);
-    const end = new Date(start.getTime() + CYCLE_DAYS * 24 * 60 * 60 * 1000);
-    const fmt = new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short' });
-    return `Ciclo ${fmt.format(start)} — ${fmt.format(end)}`;
-  } catch {
-    return null;
-  }
+function parseSettingBool(value, fallback = true) {
+  if (typeof value === 'boolean') return value;
+  if (value && typeof value === 'object' && typeof value.paused === 'boolean') return value.paused;
+  return fallback;
 }
 
-async function getOrCreateCurrent() {
+async function cyclesArePaused() {
+  const rows = await sql`
+    SELECT value
+    FROM points_app_settings
+    WHERE key = ${CYCLES_PAUSED_KEY}
+    LIMIT 1
+  `;
+  return parseSettingBool(rows[0]?.value, true);
+}
+
+async function getCurrent() {
   // Look for an existing active cycle whose ends_at is in the future. We
   // don't auto-close expired cycles here — that's the admin rollover's
   // job, so there's always exactly one source of truth for closure.
@@ -50,19 +53,26 @@ async function getOrCreateCurrent() {
     ORDER BY ends_at DESC
     LIMIT 1
   `;
-  if (existing.length > 0) return existing[0];
+  return existing[0] || null;
+}
 
-  // No active cycle — bootstrap cycle #1 starting now.
-  const now = new Date();
-  const startedAt = now.toISOString();
-  const endsAt = new Date(now.getTime() + CYCLE_DAYS * 24 * 60 * 60 * 1000).toISOString();
-  const label = cycleLabel(startedAt);
-  const inserted = await sql`
-    INSERT INTO points_cycles (label, started_at, ends_at, status)
-    VALUES (${label}, ${startedAt}, ${endsAt}, 'active')
-    RETURNING id, label, started_at, ends_at, status, created_at, closed_at
-  `;
-  return inserted[0];
+function pausedPayload() {
+  return {
+    paused: true,
+    label: 'Próximamente',
+    cycle: {
+      id: null,
+      label: 'Próximamente',
+      status: 'paused',
+      paused: true,
+      startedAt: null,
+      endsAt: null,
+      createdAt: null,
+      closedAt: null,
+      secondsRemaining: null,
+      pastDeadline: false,
+    },
+  };
 }
 
 export default async function handler(req, res) {
@@ -72,7 +82,15 @@ export default async function handler(req, res) {
     if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
 
     await ensurePointsSchema(sql);
-    const row = await getOrCreateCurrent();
+    if (await cyclesArePaused()) {
+      return res.status(200).json(pausedPayload());
+    }
+
+    const row = await getCurrent();
+    if (!row) {
+      return res.status(200).json(pausedPayload());
+    }
+
     const endsAtMs = new Date(row.ends_at).getTime();
     const secondsRemaining = Math.max(0, Math.floor((endsAtMs - Date.now()) / 1000));
 

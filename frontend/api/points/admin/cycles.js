@@ -4,11 +4,11 @@
  * Routes (all gated by POINTS_ADMIN_USERNAMES via requirePointsAdmin):
  *
  *   GET /api/points/admin/cycles
- *     Returns the current active cycle + last 10 closed cycles. Drives the
- *     "Ciclos" tab in the admin panel.
+ *     Returns public pause state, the current active cycle + last 10 closed
+ *     cycles. Drives the "Ciclos" tab in the admin panel.
  *
  *   POST /api/points/admin/cycles
- *     Body: { action: 'rollover', nextCycleLabel? }
+ *     Body: { action: 'rollover', nextCycleLabel? } or { action: 'pause' }
  *     Closes the current active cycle:
  *       1. Snapshots the top-100 leaderboard (by balance) into
  *          points_cycle_snapshots.
@@ -34,6 +34,7 @@ import { withTransaction } from '../../_lib/db-tx.js';
 const sql = neon(process.env.DATABASE_URL);
 
 const CYCLE_DAYS = 14;
+const CYCLES_PAUSED_KEY = 'points_cycles_paused';
 
 function cycleLabel(startIso) {
   try {
@@ -44,6 +45,53 @@ function cycleLabel(startIso) {
   } catch {
     return null;
   }
+}
+
+function parseSettingBool(value, fallback = true) {
+  if (typeof value === 'boolean') return value;
+  if (value && typeof value === 'object' && typeof value.paused === 'boolean') return value.paused;
+  if (typeof value === 'string') {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+  }
+  return fallback;
+}
+
+async function getCyclesPaused() {
+  const rows = await sql`
+    SELECT value
+    FROM points_app_settings
+    WHERE key = ${CYCLES_PAUSED_KEY}
+    LIMIT 1
+  `;
+  return parseSettingBool(rows[0]?.value, true);
+}
+
+async function setCyclesPaused(client, paused) {
+  await client.query(
+    `INSERT INTO points_app_settings (key, value, updated_at)
+     VALUES ($1, $2::jsonb, NOW())
+     ON CONFLICT (key) DO UPDATE
+     SET value = EXCLUDED.value,
+         updated_at = NOW()`,
+    [CYCLES_PAUSED_KEY, JSON.stringify(Boolean(paused))],
+  );
+}
+
+async function openNewCycle(client, nextCycleLabel) {
+  const now = new Date();
+  const startIso = now.toISOString();
+  const endIso = new Date(now.getTime() + CYCLE_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const label = nextCycleLabel && typeof nextCycleLabel === 'string'
+    ? nextCycleLabel.slice(0, 80)
+    : cycleLabel(startIso);
+  const inserted = await client.query(
+    `INSERT INTO points_cycles (label, started_at, ends_at, status)
+     VALUES ($1, $2, $3, 'active')
+     RETURNING id, label, started_at, ends_at`,
+    [label, startIso, endIso],
+  );
+  return inserted.rows[0];
 }
 
 async function handleGet(req, res) {
@@ -62,7 +110,9 @@ async function handleGet(req, res) {
     ORDER BY closed_at DESC
     LIMIT 10
   `;
+  const paused = await getCyclesPaused();
   return res.status(200).json({
+    paused,
     current: current[0]
       ? {
           id: current[0].id,
@@ -102,7 +152,17 @@ async function handleRollover(req, res, nextCycleLabel) {
        FOR UPDATE`,
     );
     if (cur.rows.length === 0) {
-      const err = new Error('no_active_cycle'); err.status = 409; throw err;
+      const newCycle = await openNewCycle(client, nextCycleLabel);
+      await setCyclesPaused(client, false);
+      return {
+        restarted: true,
+        closedCycleId: null,
+        newCycle,
+        newCycleId: newCycle.id,
+        snapshotted: 0,
+        resetCount: 0,
+        winners: [],
+      };
     }
     const activeCycle = cur.rows[0];
 
@@ -203,23 +263,14 @@ async function handleRollover(req, res, nextCycleLabel) {
       [activeCycle.id],
     );
 
-    // ── 4. Open the next cycle ──────────────────────────────────────
-    const now = new Date();
-    const startIso = now.toISOString();
-    const endIso = new Date(now.getTime() + CYCLE_DAYS * 24 * 60 * 60 * 1000).toISOString();
-    const label = nextCycleLabel && typeof nextCycleLabel === 'string'
-      ? nextCycleLabel.slice(0, 80)
-      : cycleLabel(startIso);
-    const inserted = await client.query(
-      `INSERT INTO points_cycles (label, started_at, ends_at, status)
-       VALUES ($1, $2, $3, 'active')
-       RETURNING id, label, started_at, ends_at`,
-      [label, startIso, endIso],
-    );
+    // ── 4. Open the next cycle and unpause public cycle UI ───────────
+    const newCycle = await openNewCycle(client, nextCycleLabel);
+    await setCyclesPaused(client, false);
 
     return {
       closedCycleId: activeCycle.id,
-      newCycle: inserted.rows[0],
+      newCycle,
+      newCycleId: newCycle.id,
       snapshotted: top.rows.length,
       resetCount,
       winners: top.rows.slice(0, 3).map((r, i) => ({
@@ -231,6 +282,13 @@ async function handleRollover(req, res, nextCycleLabel) {
   });
 
   return res.status(200).json({ ok: true, ...result });
+}
+
+async function handlePause(req, res) {
+  await withTransaction(async (client) => {
+    await setCyclesPaused(client, true);
+  });
+  return res.status(200).json({ ok: true, paused: true });
 }
 
 export default async function handler(req, res) {
@@ -246,6 +304,9 @@ export default async function handler(req, res) {
     if (req.method === 'GET') return await handleGet(req, res);
     if (req.method === 'POST') {
       const { action, nextCycleLabel } = req.body || {};
+      if (action === 'pause') {
+        return await handlePause(req, res);
+      }
       if (action !== 'rollover') {
         return res.status(400).json({ error: 'invalid_action' });
       }

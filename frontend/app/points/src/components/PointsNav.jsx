@@ -37,9 +37,11 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
   const { authenticated, user, logout } = usePointsAuth();
   const [scrolled, setScrolled] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [theme, setTheme] = useState(getInitialTheme);
   const [adminTaskTotal, setAdminTaskTotal] = useState(0);
   const dropdownRef = useRef(null);
+  const mobileMenuRef = useRef(null);
   const t = useT();
   const lang = useLang();
 
@@ -161,10 +163,26 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [dropdownOpen]);
 
+  useEffect(() => {
+    if (!mobileMenuOpen) return undefined;
+    const handler = (e) => {
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target)) {
+        setMobileMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [mobileMenuOpen]);
+
   async function handleLogout() {
     setDropdownOpen(false);
+    setMobileMenuOpen(false);
     await logout();
     navigate('/');
+  }
+
+  function closeMobileMenu() {
+    setMobileMenuOpen(false);
   }
 
   const balance = Number(user?.balance || 0);
@@ -183,6 +201,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
           AND opens an autocomplete dropdown that jumps straight to a
           market detail when a result is clicked. */}
       <div
+        className="points-nav-search"
         ref={searchRef}
         style={{
           position: 'relative',
@@ -305,6 +324,88 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
                   </button>
                 );
               })
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="points-mobile-menu" ref={mobileMenuRef}>
+        <button
+          type="button"
+          className="points-mobile-menu-button"
+          aria-label={lang === 'en' ? 'Open menu' : 'Abrir menú'}
+          aria-expanded={mobileMenuOpen}
+          onClick={() => setMobileMenuOpen(o => !o)}
+        >
+          <span />
+          <span />
+          <span />
+        </button>
+
+        {mobileMenuOpen && (
+          <div className="points-mobile-menu-panel">
+            <Link to="/" onClick={closeMobileMenu}>{t('points.nav.home')}</Link>
+            <Link to="/" onClick={closeMobileMenu}>{t('points.nav.markets')}</Link>
+            {authenticated && (
+              <>
+                <Link to="/portfolio" onClick={closeMobileMenu}>{t('points.nav.portfolio')}</Link>
+                <Link to="/earn" onClick={closeMobileMenu}>{t('points.nav.earn')}</Link>
+              </>
+            )}
+            <a
+              href={COMO_FUNCIONA_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={closeMobileMenu}
+            >
+              {t('points.nav.howItWorks')}
+            </a>
+            {isAdmin && (
+              <Link
+                to="/admin"
+                onClick={closeMobileMenu}
+                className="points-mobile-menu-row"
+              >
+                <span>{t('points.nav.admin')}</span>
+                {adminTaskTotal > 0 && (
+                  <span className="points-mobile-menu-badge">
+                    {adminTaskTotal > 99 ? '99+' : adminTaskTotal}
+                  </span>
+                )}
+              </Link>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setLang(lang === 'es' ? 'en' : 'es');
+                closeMobileMenu();
+              }}
+            >
+              {lang === 'es' ? 'English' : 'Español'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTheme(th => (th === 'dark' ? 'light' : 'dark'));
+                closeMobileMenu();
+              }}
+            >
+              {theme === 'dark' ? (lang === 'en' ? 'Light mode' : 'Modo claro') : (lang === 'en' ? 'Dark mode' : 'Modo oscuro')}
+            </button>
+            {!authenticated ? (
+              <button
+                type="button"
+                onClick={() => {
+                  closeMobileMenu();
+                  onOpenLogin?.();
+                }}
+              >
+                {t('points.nav.signUp')}
+              </button>
+            ) : (
+              <button type="button" onClick={handleLogout}>
+                {t('points.nav.signOut')}
+              </button>
             )}
           </div>
         )}

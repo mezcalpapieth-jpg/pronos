@@ -130,6 +130,89 @@
 }
 .nav-links a:hover { color: var(--text-primary); }
 
+.points-mobile-menu {
+  display: none;
+  position: relative;
+  flex-shrink: 0;
+}
+.points-mobile-menu-button {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.points-mobile-menu-button:hover {
+  background: var(--surface3);
+  border-color: var(--border-active);
+}
+.points-mobile-menu-button span {
+  width: 15px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--text-primary);
+}
+.points-mobile-menu-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(290px, calc(100vw - 24px));
+  padding: 8px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface1);
+  box-shadow: 0 18px 48px rgba(0,0,0,0.42);
+  z-index: 1100;
+}
+.points-mobile-menu-panel a,
+.points-mobile-menu-panel button {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-decoration: none;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+}
+.points-mobile-menu-panel a:hover,
+.points-mobile-menu-panel button:hover {
+  background: var(--surface2);
+  color: var(--text-primary);
+}
+.points-mobile-menu-badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(245,158,11,0.16);
+  border: 1px solid rgba(245,158,11,0.5);
+  color: #f59e0b;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
 /* ── Nav search bar ──────────────────────────────────────── */
 .nav-search {
   position: relative;
@@ -1953,6 +2036,13 @@ html[data-theme="light"] .btn-theme-toggle::before {
    TABLET RESPONSIVE — components
 ============================================================ */
 @media (max-width: 1024px) {
+  .points-mobile-menu {
+    display: block;
+  }
+  .points-nav-search {
+    max-width: 280px !important;
+    margin: 0 10px !important;
+  }
   .nav-links a {
     display: none; /* hide text links on tablet and below */
   }
@@ -1975,12 +2065,35 @@ html[data-theme="light"] .btn-theme-toggle::before {
     height: 56px;
     gap: 8px;
   }
+  .nav-logo {
+    font-size: 22px;
+  }
+  .points-nav-search {
+    flex: 1 1 130px !important;
+    max-width: 190px !important;
+    margin: 0 4px !important;
+  }
+  .points-nav-search input {
+    height: 34px;
+    padding-top: 7px !important;
+    padding-bottom: 7px !important;
+    font-size: 11px !important;
+  }
+  .points-nav-search > span {
+    top: 10px !important;
+  }
   /* Hide search bar on mobile landing page */
   .nav-search {
     display: none;
   }
   .nav-links {
     gap: 8px;
+  }
+  .nav-links .btn-theme-toggle,
+  .nav-links > button,
+  .nav-links .nav-user-pill-points,
+  .nav-links .nav-signup-cta {
+    display: none !important;
   }
   .nav-links a {
     display: none;

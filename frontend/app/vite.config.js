@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -187,6 +188,29 @@ function sharedCssDevMiddleware() {
   };
 }
 
+function pointsRootDeckDevMiddleware() {
+  return {
+    name: 'points-root-deck-dev-middleware',
+    enforce: 'pre',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (process.env.BUILD_TARGET !== 'points') return next();
+        const rawUrl = req.url || '';
+        const [pathname, query = ''] = rawUrl.split('?');
+        if (pathname === '/deck') {
+          req.url = `/points/${query ? `?${query}` : ''}`;
+          return next();
+        }
+        if (pathname.startsWith('/deck/')) {
+          req.url = `/points/${pathname.slice('/deck/'.length)}${query ? `?${query}` : ''}`;
+          return next();
+        }
+        return next();
+      });
+    },
+  };
+}
+
 function mvpAccessDevGate() {
   return {
     name: 'mvp-access-dev-gate',
@@ -215,6 +239,284 @@ function mvpAccessDevGate() {
         return sendJson(res, 200, { ok: true }, {
           'Set-Cookie': buildMvpAccessCookie({ headers: req.headers }),
         });
+      });
+    },
+  };
+}
+
+function parseCookies(header = '') {
+  const cookies = {};
+  for (const item of String(header || '').split(';')) {
+    const index = item.indexOf('=');
+    if (index < 0) continue;
+    const key = item.slice(0, index).trim();
+    const value = item.slice(index + 1).trim();
+    if (key) cookies[key] = decodeURIComponent(value);
+  }
+  return cookies;
+}
+
+function deckDevApiMiddleware() {
+  const cookieName = 'pronos_deck_session';
+  const now = () => new Date().toISOString();
+  const invites = [{
+    id: 1,
+    label: 'Francisco M.',
+    emailHint: '',
+    code: 'Chiavari',
+    active: true,
+    createdBy: 'dev',
+    createdAt: now(),
+    revokedAt: null,
+  }];
+  const sessions = new Map();
+  const events = [];
+  const questions = [];
+
+  function publicSession(session) {
+    const invite = invites.find(item => item.id === session?.inviteId);
+    if (!session || !invite?.active) return null;
+    return {
+      id: session.id,
+      viewerEmail: session.viewerEmail,
+      language: session.language || 'en',
+      inviteId: session.inviteId,
+      inviteLabel: invite.label,
+      inviteEmailHint: invite.emailHint || null,
+      startedAt: session.startedAt,
+      lastSeenAt: session.lastSeenAt,
+    };
+  }
+
+  function readSession(req) {
+    const sessionId = parseCookies(req.headers.cookie)[cookieName];
+    return publicSession(sessions.get(sessionId));
+  }
+
+  function makeDashboard() {
+    const bySlide = new Map();
+    for (const event of events) {
+      if (!event.durationMs || event.durationMs <= 0) continue;
+      const key = `${event.language || 'en'}:${event.slideNumber || 0}`;
+      const current = bySlide.get(key) || {
+        language: event.language || 'en',
+        slideNumber: event.slideNumber || 0,
+        totalMs: 0,
+        sessions: new Set(),
+        events: 0,
+      };
+      current.totalMs += event.durationMs;
+      current.sessions.add(event.sessionId);
+      current.events += 1;
+      bySlide.set(key, current);
+    }
+
+    const minutes = ms => Math.round((Number(ms || 0) / 60000) * 10) / 10;
+    const sessionRows = [...sessions.values()]
+      .sort((a, b) => new Date(b.lastSeenAt) - new Date(a.lastSeenAt))
+      .map(session => {
+        const sessionEvents = events.filter(event => event.sessionId === session.id);
+        const totalMs = sessionEvents.reduce((sum, event) => sum + Number(event.durationMs || 0), 0);
+        const lastSlide = sessionEvents.reduce((max, event) => Math.max(max, Number(event.slideNumber || 0)), 0);
+        const invite = invites.find(item => item.id === session.inviteId);
+        return {
+          id: session.id,
+          viewerEmail: session.viewerEmail,
+          language: session.language || 'en',
+          inviteLabel: invite?.label || null,
+          inviteEmailHint: invite?.emailHint || null,
+          startedAt: session.startedAt,
+          lastSeenAt: session.lastSeenAt,
+          totalMinutes: minutes(totalMs),
+          lastSlide,
+        };
+      });
+
+    return {
+      admin: 'local-dev',
+      summary: {
+        sessions: sessions.size,
+        viewers: new Set([...sessions.values()].map(session => session.viewerEmail.toLowerCase())).size,
+        totalMinutes: minutes(events.reduce((sum, event) => sum + Number(event.durationMs || 0), 0)),
+        questions: questions.length,
+      },
+      slides: [...bySlide.values()]
+        .sort((a, b) => a.language.localeCompare(b.language) || a.slideNumber - b.slideNumber)
+        .map(row => ({
+          language: row.language,
+          slideNumber: row.slideNumber,
+          totalMinutes: minutes(row.totalMs),
+          avgMinutes: row.sessions.size ? minutes(row.totalMs / row.sessions.size) : 0,
+          sessions: row.sessions.size,
+          events: row.events,
+        })),
+      sessions: sessionRows.slice(0, 80),
+      questions: questions.slice(-100).reverse(),
+      invites: invites.slice().reverse().map(invite => {
+        const inviteSessions = [...sessions.values()].filter(session => session.inviteId === invite.id);
+        const inviteSessionIds = new Set(inviteSessions.map(session => session.id));
+        const totalMs = events
+          .filter(event => inviteSessionIds.has(event.sessionId))
+          .reduce((sum, event) => sum + Number(event.durationMs || 0), 0);
+        return {
+          id: invite.id,
+          label: invite.label,
+          emailHint: invite.emailHint || null,
+          active: invite.active && !invite.revokedAt,
+          createdBy: invite.createdBy,
+          createdAt: invite.createdAt,
+          revokedAt: invite.revokedAt,
+          sessions: inviteSessions.length,
+          viewers: new Set(inviteSessions.map(session => session.viewerEmail.toLowerCase())).size,
+          totalMinutes: minutes(totalMs),
+        };
+      }),
+    };
+  }
+
+  return {
+    name: 'deck-dev-api-middleware',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = new URL(req.url || '/', 'http://localhost');
+        if (!url.pathname.startsWith('/api/deck/')) return next();
+
+        if (req.method === 'OPTIONS') {
+          res.statusCode = 204;
+          return res.end();
+        }
+
+        if (url.pathname === '/api/deck/session' && req.method === 'GET') {
+          const session = readSession(req);
+          if (!session) return sendJson(res, 401, { error: 'deck_session_required' });
+          return sendJson(res, 200, { session });
+        }
+
+        if (url.pathname === '/api/deck/session' && req.method === 'DELETE') {
+          return sendJson(res, 200, { ok: true }, {
+            'Set-Cookie': `${cookieName}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`,
+          });
+        }
+
+        if (url.pathname === '/api/deck/auth' && req.method === 'POST') {
+          const body = await readRequestJson(req);
+          const email = String(body.email || '').trim().toLowerCase();
+          const code = String(body.code || '').trim();
+          const language = body.language === 'es' ? 'es' : 'en';
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return sendJson(res, 400, { error: 'invalid_email' });
+          }
+          const invite = invites.find(item => item.active && !item.revokedAt && item.code === code);
+          if (!invite) return sendJson(res, 401, { error: 'invalid_invite' });
+
+          const session = {
+            id: randomUUID(),
+            inviteId: invite.id,
+            viewerEmail: email,
+            language,
+            startedAt: now(),
+            lastSeenAt: now(),
+          };
+          sessions.set(session.id, session);
+          return sendJson(res, 200, {
+            ok: true,
+            session: publicSession(session),
+            emailMatchesInvite: !invite.emailHint || invite.emailHint.toLowerCase() === email,
+          }, {
+            'Set-Cookie': `${cookieName}=${encodeURIComponent(session.id)}; Path=/; Max-Age=1209600; HttpOnly; SameSite=Lax`,
+          });
+        }
+
+        if (url.pathname === '/api/deck/events' && req.method === 'POST') {
+          const session = readSession(req);
+          if (!session) return sendJson(res, 401, { error: 'deck_session_required' });
+          const body = await readRequestJson(req);
+          const storedSession = sessions.get(session.id);
+          if (storedSession) storedSession.lastSeenAt = now();
+          events.push({
+            id: randomUUID(),
+            sessionId: session.id,
+            slideNumber: Number(body.slideNumber || 0),
+            durationMs: Math.max(0, Number(body.durationMs || 0)),
+            eventType: String(body.eventType || 'slide_view').slice(0, 40),
+            language: body.language === 'es' ? 'es' : 'en',
+            createdAt: now(),
+          });
+          return sendJson(res, 200, { ok: true });
+        }
+
+        if (url.pathname === '/api/deck/questions' && req.method === 'POST') {
+          const session = readSession(req);
+          if (!session) return sendJson(res, 401, { error: 'deck_session_required' });
+          const body = await readRequestJson(req);
+          const question = String(body.question || '').trim().slice(0, 1200);
+          if (!question) return sendJson(res, 400, { error: 'question_required' });
+          const row = {
+            id: randomUUID(),
+            viewerEmail: session.viewerEmail,
+            language: body.language === 'es' ? 'es' : 'en',
+            slideNumber: Number(body.slideNumber || 0) || null,
+            question,
+            status: 'open',
+            createdAt: now(),
+            inviteLabel: session.inviteLabel,
+          };
+          questions.push(row);
+          return sendJson(res, 200, { ok: true, question: { id: row.id, createdAt: row.createdAt } });
+        }
+
+        if (url.pathname === '/api/deck/admin/dashboard' && req.method === 'GET') {
+          return sendJson(res, 200, makeDashboard());
+        }
+
+        if (url.pathname === '/api/deck/admin/invites' && req.method === 'GET') {
+          return sendJson(res, 200, { invites: makeDashboard().invites });
+        }
+
+        if (url.pathname === '/api/deck/admin/invites' && req.method === 'POST') {
+          const body = await readRequestJson(req);
+          if (body.action === 'revoke') {
+            const invite = invites.find(item => item.id === Number(body.id));
+            if (!invite) return sendJson(res, 404, { error: 'invite_not_found' });
+            invite.active = false;
+            invite.revokedAt = now();
+            return sendJson(res, 200, { ok: true, invite });
+          }
+
+          const label = String(body.label || '').trim().slice(0, 120);
+          const emailHint = String(body.emailHint || '').trim().toLowerCase();
+          const code = String(body.code || `PRONOS-${randomUUID().slice(0, 8).toUpperCase()}`).trim();
+          if (!label) return sendJson(res, 400, { error: 'label_required' });
+          if (code.length < 6) return sendJson(res, 400, { error: 'code_too_short' });
+          if (invites.some(item => item.code === code && item.active)) {
+            return sendJson(res, 409, { error: 'invite_code_exists' });
+          }
+          const invite = {
+            id: invites.reduce((max, item) => Math.max(max, item.id), 0) + 1,
+            label,
+            emailHint,
+            code,
+            active: true,
+            createdBy: 'local-dev',
+            createdAt: now(),
+            revokedAt: null,
+          };
+          invites.push(invite);
+          return sendJson(res, 200, {
+            ok: true,
+            code,
+            invite: {
+              id: invite.id,
+              label: invite.label,
+              emailHint: invite.emailHint || null,
+              active: invite.active,
+              createdBy: invite.createdBy,
+              createdAt: invite.createdAt,
+            },
+          });
+        }
+
+        return sendJson(res, 404, { error: 'deck_dev_route_not_found' });
       });
     },
   };
@@ -251,14 +553,13 @@ export function turnkeyBrowserNodecryptoStub() {
 //   - MVP    (Privy, on-chain, USDC)     — default, outputs to ../mvp/    served at /mvp/
 //   - Points (Turnkey, off-chain, MXNP)  — BUILD_TARGET=points, outputs to ../points/ served at /points/
 //
-// Both apps now live under sub-paths so pronos.io/ can serve a static
-// marketing landing page (frontend/index.html, hand-written, not a
-// Vite output). Both builds get isolated output folders that we can
-// safely empty on each build (no shared siblings).
+// Both apps live under sub-paths; pronos.io/ now redirects to /points/
+// and /mvp remains the gated preview. Both builds get isolated output
+// folders that we can safely empty on each build (no shared siblings).
 const isPoints = process.env.BUILD_TARGET === 'points';
 
 export default defineConfig({
-  plugins: [sharedCssDevMiddleware(), mvpAccessDevGate(), turnkeyBrowserNodecryptoStub(), react()],
+  plugins: [pointsRootDeckDevMiddleware(), sharedCssDevMiddleware(), mvpAccessDevGate(), deckDevApiMiddleware(), turnkeyBrowserNodecryptoStub(), react()],
   base: isPoints ? '/points/' : '/mvp/',
   root: isPoints ? path.resolve(__dirname, 'points') : __dirname,
   build: {

@@ -38,6 +38,7 @@ const PointsEarn = lazy(() => import('./pages/PointsEarn.jsx'));
 const PointsAdmin = lazy(() => import('./pages/PointsAdmin.jsx'));
 const PointsReferralLanding = lazy(() => import('./pages/PointsReferralLanding.jsx'));
 const PointsUserProfile = lazy(() => import('./pages/PointsUserProfile.jsx'));
+const InvestorDeck = lazy(() => import('./pages/InvestorDeck.jsx'));
 
 // Admin usernames live in env var VITE_POINTS_ADMIN_USERNAMES so the client
 // can hide the admin nav link without needing a server round-trip. The real
@@ -93,15 +94,16 @@ export default function App() {
 
   const adminList = parseAdminList();
   const isAdmin = !!user?.username && adminList.includes(user.username.toLowerCase());
+  const basename = typeof window !== 'undefined' && window.location.pathname.startsWith('/points')
+    ? '/points'
+    : '/';
 
   return (
-    // basename="/points" — the points-app is mounted at pronos.io/points/*
-    // after the relaunch restructure. All router routes (declared below)
-    // resolve relative to this prefix, so `/portfolio` in the route table
-    // matches the URL `/points/portfolio` in the browser. Existing root-
-    // level shortcuts (`pronos.io/portfolio` etc.) are 301-redirected to
-    // `/points/portfolio` at the Vercel layer; see frontend/vercel.json.
-    <BrowserRouter basename="/points">
+    // The points app normally mounts under /points, but the private deck
+    // intentionally lives at root /deck. Keep the basename dynamic so both
+    // surfaces can share this bundle without redirecting /deck back under
+    // /points.
+    <BrowserRouter basename={basename}>
       <Shell
         onOpenLogin={() => setLoginOpen(true)}
         isAdmin={isAdmin}
@@ -158,6 +160,7 @@ function Shell({ onOpenLogin, isAdmin }) {
           <Route path="/portfolio" element={<PointsPortfolio />} />
           <Route path="/earn" element={<PointsEarn onOpenLogin={onOpenLogin} />} />
           <Route path="/admin" element={<PointsAdmin isAdmin={isAdmin} />} />
+          <Route path="/deck" element={<InvestorDeck />} />
           <Route path="/r/:username" element={<PointsReferralLanding onOpenLogin={onOpenLogin} />} />
           <Route path="/u/:username" element={<PointsUserProfile />} />
           <Route path="/teams" element={<TeamSearchPage surface="points" />} />

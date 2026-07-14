@@ -26,16 +26,16 @@ test('public user profile route has a root shortcut redirect', () => {
   );
 });
 
-test('root serves the marketing landing instead of redirecting to an app', () => {
+test('root redirects to the public points app', () => {
   assert.ok(
-    !hasRule(vercelConfig.redirects, '/', '/mvp/'),
-    'expected / to serve frontend/index.html, not redirect to /mvp/',
+    hasRule(vercelConfig.redirects, '/', '/points/'),
+    'expected / to redirect to /points/',
   );
   assert.ok(
-    !/http-equiv=["']refresh["']/i.test(rootIndexHtml),
-    'expected frontend/index.html to be the marketing landing, not a meta-refresh shell',
+    /http-equiv=["']refresh["']/i.test(rootIndexHtml),
+    'expected frontend/index.html to be a meta-refresh fallback shell',
   );
-  assert.match(rootIndexHtml, /El mercado de predicciones de Latinoamérica/);
+  assert.match(rootIndexHtml, /\/points\//);
 });
 
 test('public user profile route hard-refreshes through the points SPA', () => {
@@ -45,22 +45,37 @@ test('public user profile route hard-refreshes through the points SPA', () => {
   );
 });
 
-test('root legal pages render at root URLs through the MVP SPA', () => {
+test('private deck lives at the root deck path and hard-refreshes through the points SPA', () => {
   assert.ok(
-    !hasRule(vercelConfig.redirects, '/privacy', '/points/privacy'),
-    'expected /privacy to stop redirecting to /points/privacy',
+    hasRule(vercelConfig.redirects, '/points/deck', '/deck'),
+    'expected /points/deck to redirect to /deck',
   );
   assert.ok(
-    !hasRule(vercelConfig.redirects, '/terms', '/points/terms'),
-    'expected /terms to stop redirecting to /points/terms',
+    hasRule(vercelConfig.redirects, '/investors', '/deck'),
+    'expected /investors to redirect to /deck',
   );
   assert.ok(
-    hasRule(vercelConfig.rewrites, '/privacy', '/mvp/'),
-    'expected /privacy to rewrite to /mvp/',
+    hasRule(vercelConfig.rewrites, '/deck', '/points/'),
+    'expected /deck to hard-refresh through the points SPA',
+  );
+});
+
+test('root legal pages redirect into the public points app while MVP legal remains gated under /mvp', () => {
+  assert.ok(
+    hasRule(vercelConfig.redirects, '/privacy', '/points/privacy'),
+    'expected /privacy to redirect to /points/privacy',
   );
   assert.ok(
-    hasRule(vercelConfig.rewrites, '/terms', '/mvp/'),
-    'expected /terms to rewrite to /mvp/',
+    hasRule(vercelConfig.redirects, '/terms', '/points/terms'),
+    'expected /terms to redirect to /points/terms',
+  );
+  assert.ok(
+    !hasRule(vercelConfig.rewrites, '/privacy', '/mvp/'),
+    'expected /privacy to stop rewriting to /mvp/',
+  );
+  assert.ok(
+    !hasRule(vercelConfig.rewrites, '/terms', '/mvp/'),
+    'expected /terms to stop rewriting to /mvp/',
   );
   assert.ok(
     hasRule(vercelConfig.rewrites, '/mvp/privacy', '/mvp/'),

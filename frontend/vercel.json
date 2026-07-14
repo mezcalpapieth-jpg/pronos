@@ -10,8 +10,13 @@
     }
   ],
   "redirects": [
+    { "source": "/",          "destination": "/points/",          "permanent": false },
+    { "source": "/privacy",   "destination": "/points/privacy",   "permanent": false },
+    { "source": "/terms",     "destination": "/points/terms",     "permanent": false },
     { "source": "/portfolio",  "destination": "/points/portfolio",  "permanent": true },
     { "source": "/admin",      "destination": "/points/admin",      "permanent": true },
+    { "source": "/points/deck","destination": "/deck",              "permanent": true },
+    { "source": "/investors",  "destination": "/deck",              "permanent": true },
     { "source": "/earn",       "destination": "/points/earn",       "permanent": true },
     { "source": "/market",     "destination": "/points/market",     "permanent": true },
     { "source": "/teams",      "destination": "/points/teams",      "permanent": true },
@@ -22,8 +27,6 @@
     { "source": "/c/:slug",    "destination": "/points/c/:slug",    "permanent": true }
   ],
   "rewrites": [
-    { "source": "/privacy",      "destination": "/mvp/" },
-    { "source": "/terms",        "destination": "/mvp/" },
     { "source": "/mvp/market",    "destination": "/mvp/" },
     { "source": "/mvp/portfolio", "destination": "/mvp/" },
     { "source": "/mvp/admin",     "destination": "/mvp/" },
@@ -35,6 +38,7 @@
     { "source": "/points/market",       "destination": "/points/" },
     { "source": "/points/portfolio",    "destination": "/points/" },
     { "source": "/points/admin",        "destination": "/points/" },
+    { "source": "/deck",                "destination": "/points/" },
     { "source": "/points/earn",         "destination": "/points/" },
     { "source": "/points/teams",        "destination": "/points/" },
     { "source": "/points/teams/:sport/:teamSlug", "destination": "/points/" },
@@ -75,6 +79,12 @@
     },
     {
       "source": "/points/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache" }
+      ]
+    },
+    {
+      "source": "/deck",
       "headers": [
         { "key": "Cache-Control", "value": "no-store, no-cache" }
       ]

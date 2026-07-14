@@ -539,6 +539,7 @@ export default function PointsWorldCupPage() {
                     return (
                       <div
                         key={team.code}
+                        className="wc-group-team-row"
                         style={{
                           display: 'flex', alignItems: 'center', gap: 8,
                           padding: '3px 6px',
@@ -556,7 +557,7 @@ export default function PointsWorldCupPage() {
                           {team.name}
                         </span>
                         {form && (
-                          <span style={{
+                          <span className="wc-group-form-pill" style={{
                             fontFamily: 'var(--font-mono)', fontSize: 9,
                             color: form.color, fontWeight: 700,
                           }}>
@@ -962,6 +963,7 @@ function MatchRow({ fixture, home, away, market, onBuy, onOpen }) {
 
   return (
     <div
+      className="wc-match-row"
       onClick={onOpen}
       role="button"
       style={{
@@ -979,7 +981,7 @@ function MatchRow({ fixture, home, away, market, onBuy, onOpen }) {
       onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; }}
       onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
     >
-      <div>
+      <div className="wc-match-meta">
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--text-primary)' }}>
           {formatDateEs(fixture.kickoffIso)}
         </div>
@@ -988,7 +990,7 @@ function MatchRow({ fixture, home, away, market, onBuy, onOpen }) {
         </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div className="wc-match-teams" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {[home, away].map((team, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <TeamBadge team={team} size={26} />
@@ -1004,9 +1006,9 @@ function MatchRow({ fixture, home, away, market, onBuy, onOpen }) {
         ))}
       </div>
 
-      <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+      <div className="wc-match-actions" style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         {isResolved ? (
-          <span style={{
+          <span className="wc-match-status-pill" style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,
             padding: '7px 11px',
             background: 'rgba(0,232,122,0.10)',
@@ -1021,6 +1023,7 @@ function MatchRow({ fixture, home, away, market, onBuy, onOpen }) {
         ) : isActive ? outcomeLabels.map((label, i) => (
           <button
             key={i}
+            className="wc-match-odd-btn"
             onClick={(e) => { e.stopPropagation(); onBuy(i, label); }}
             style={{
               padding: '7px 10px',

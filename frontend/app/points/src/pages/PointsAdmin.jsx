@@ -11,6 +11,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import DeckAdminPanel from '../components/DeckAdminPanel.jsx';
 import AdminInterestPanel from '@app/components/AdminInterestPanel.jsx';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import {
@@ -21,6 +22,7 @@ import {
   adminListTaskCounts,
   adminListCycles,
   adminRolloverCycle,
+  adminPauseCycles,
   adminEditMarket,
   adminCancelMarket,
   adminListPendingMarkets,
@@ -144,7 +146,7 @@ export default function PointsAdmin({ isAdmin }) {
     if (typeof window === 'undefined') return 'create';
     const sp = new URLSearchParams(window.location.search);
     const t = sp.get('tab');
-    return ['create', 'markets', 'stats', 'pending', 'social'].includes(t) ? t : 'create';
+    return ['create', 'markets', 'stats', 'pending', 'social', 'deck'].includes(t) ? t : 'create';
   })();
   const createPrefill = (() => {
     if (typeof window === 'undefined') return null;
@@ -223,6 +225,7 @@ export default function PointsAdmin({ isAdmin }) {
           { id: 'pending', label: 'Por aprobar' },
           { id: 'markets', label: 'Mercados' },
           { id: 'social',  label: 'Tareas sociales' },
+          { id: 'deck',    label: 'Deck' },
           { id: 'cycles',  label: 'Ciclos' },
           { id: 'stats',   label: 'Estadísticas' },
         ].map(t => {
@@ -276,6 +279,7 @@ export default function PointsAdmin({ isAdmin }) {
         />
       )}
       {tab === 'social' && <SocialTasksQueue onQueueChange={refreshAdminTaskCounts} />}
+      {tab === 'deck' && <DeckAdminPanel />}
       {tab === 'cycles' && <CyclesPanel />}
       {tab === 'stats' && <StatsPanel />}
     </main>
@@ -283,10 +287,9 @@ export default function PointsAdmin({ isAdmin }) {
 }
 
 // ─── Competition cycles ───────────────────────────────────────────────────
-// Admin tool for closing the current 2-week cycle: snapshots the top-100
-// leaderboard, marks the cycle closed, and opens a new 14-day window.
-// Users keep their MXNP — the rollover is just a checkpoint for
-// distributing off-platform prize payouts.
+// Admin tool for pausing/restarting public prize cycles. Pause is
+// non-destructive; restart/rollover is the deliberate action that snapshots,
+// resets balances, and opens a fresh 14-day window.
 function CyclesPanel() {
   const [data, setData] = useState(null);
   const [working, setWorking] = useState(false);
@@ -311,13 +314,15 @@ function CyclesPanel() {
     // it too early means users lose late-cycle gains; running it late
     // leaves everyone staring at "cierre pendiente" for longer than
     // ideal.
-    const ok = window.confirm(
-      '¿Cerrar el ciclo actual y abrir uno nuevo?\n\n' +
-      '⚠️  Esto es DESTRUCTIVO:\n' +
-      '1. Guarda un snapshot inmutable del top-100.\n' +
-      '2. REINICIA el balance de TODOS los usuarios a 500 MXNP.\n' +
-      '3. Abre un ciclo nuevo de 14 días.\n\n' +
-      '¿Continuar?'
+    const ok = window.confirm(current
+      ? '¿Cerrar el ciclo actual y abrir uno nuevo?\n\n' +
+        '⚠️  Esto es DESTRUCTIVO:\n' +
+        '1. Guarda un snapshot inmutable del top-100.\n' +
+        '2. REINICIA el balance de TODOS los usuarios a 500 MXNP.\n' +
+        '3. Abre un ciclo nuevo de 14 días.\n\n' +
+        '¿Continuar?'
+      : '¿Reanudar los ciclos y abrir un ciclo nuevo de 14 días?\n\n' +
+        'No hay ciclo activo que cerrar, así que esto solo crea el nuevo ciclo.'
     );
     if (!ok) return;
     setWorking(true);
@@ -325,10 +330,34 @@ function CyclesPanel() {
     setErr(null);
     try {
       const r = await adminRolloverCycle();
-      setMsg(
-        `✓ Ciclo #${r.closedCycleId} cerrado — ${r.snapshotted} snapshots, ${r.resetCount || 0} balances reiniciados a 500 MXNP. ` +
-        (r.winners?.[0] ? `🥇 ${r.winners[0].username} (${Math.round(r.winners[0].finalBalance)} MXNP)` : '')
-      );
+      if (r.restarted || !r.closedCycleId) {
+        setMsg(`✓ Ciclos reanudados — ciclo #${r.newCycleId || r.newCycle?.id} abierto.`);
+      } else {
+        setMsg(
+          `✓ Ciclo #${r.closedCycleId} cerrado — ${r.snapshotted} snapshots, ${r.resetCount || 0} balances reiniciados a 500 MXNP. ` +
+          (r.winners?.[0] ? `🥇 ${r.winners[0].username} (${Math.round(r.winners[0].finalBalance)} MXNP)` : '')
+        );
+      }
+      await load();
+    } catch (e) {
+      setErr(`${e.code || e.message}${e.detail ? ' · ' + e.detail : ''}`);
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function pauseCycles() {
+    const ok = window.confirm(
+      '¿Pausar los ciclos públicos?\n\n' +
+      'Esto NO reinicia balances ni cierra snapshots. Solo hace que la página muestre “Próximamente” hasta que reanudes con el botón de reinicio.'
+    );
+    if (!ok) return;
+    setWorking(true);
+    setMsg(null);
+    setErr(null);
+    try {
+      await adminPauseCycles();
+      setMsg('✓ Ciclos pausados — la página pública mostrará Próximamente.');
       await load();
     } catch (e) {
       setErr(`${e.code || e.message}${e.detail ? ' · ' + e.detail : ''}`);
@@ -343,6 +372,7 @@ function CyclesPanel() {
 
   const current = data?.current;
   const closed = data?.closed || [];
+  const paused = data?.paused !== false;
 
   return (
     <div>
@@ -356,6 +386,22 @@ function CyclesPanel() {
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--text-muted)', marginBottom: 8 }}>
           CICLO ACTIVO
         </div>
+        {paused && (
+          <div style={{
+            padding: '10px 12px',
+            marginBottom: 14,
+            borderRadius: 10,
+            border: '1px solid rgba(245,158,11,0.35)',
+            background: 'rgba(245,158,11,0.08)',
+            color: '#f59e0b',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            letterSpacing: '0.04em',
+            lineHeight: 1.5,
+          }}>
+            Ciclos pausados en público. La home muestra “Próximamente” hasta que abras un ciclo nuevo.
+          </div>
+        )}
         {current ? (
           <>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, marginBottom: 8 }}>
@@ -366,14 +412,64 @@ function CyclesPanel() {
               Cierra: {new Date(current.endsAt).toLocaleString('es-MX')}
               {current.pastDeadline && <span style={{ color: '#f59e0b', marginLeft: 8 }}>⏳ DEADLINE PASADO</span>}
             </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                onClick={rollover}
+                disabled={working}
+                style={{
+                  padding: '10px 18px',
+                  background: current.pastDeadline || paused ? 'var(--green)' : 'var(--surface2)',
+                  color: current.pastDeadline || paused ? '#000' : 'var(--text-primary)',
+                  border: `1px solid ${current.pastDeadline || paused ? 'var(--green)' : 'var(--border)'}`,
+                  borderRadius: 8,
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  cursor: working ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {working ? 'Trabajando…' : paused ? '▶ Reanudar con ciclo nuevo' : '▶ Cerrar ciclo y abrir siguiente'}
+              </button>
+              {!paused && (
+                <button
+                  onClick={pauseCycles}
+                  disabled={working}
+                  style={{
+                    padding: '10px 18px',
+                    background: 'transparent',
+                    color: '#f59e0b',
+                    border: '1px solid rgba(245,158,11,0.45)',
+                    borderRadius: 8,
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    cursor: working ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  Pausar ciclos
+                </button>
+              )}
+            </div>
+            {msg && <div style={{ marginTop: 12, color: 'var(--green)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{msg}</div>}
+            {err && <div style={{ marginTop: 12, color: 'var(--red, #ef4444)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>Error: {err}</div>}
+          </>
+        ) : (
+          <>
+            <div style={{ color: 'var(--text-muted)', marginBottom: 14 }}>
+              No hay ciclo activo. La página pública se queda en “Próximamente” hasta que lo reanudes aquí.
+            </div>
             <button
               onClick={rollover}
               disabled={working}
               style={{
                 padding: '10px 18px',
-                background: current.pastDeadline ? 'var(--green)' : 'var(--surface2)',
-                color: current.pastDeadline ? '#000' : 'var(--text-primary)',
-                border: `1px solid ${current.pastDeadline ? 'var(--green)' : 'var(--border)'}`,
+                background: 'var(--green)',
+                color: '#000',
+                border: '1px solid var(--green)',
                 borderRadius: 8,
                 fontFamily: 'var(--font-mono)',
                 fontSize: 12,
@@ -383,13 +479,11 @@ function CyclesPanel() {
                 cursor: working ? 'not-allowed' : 'pointer',
               }}
             >
-              {working ? 'Cerrando ciclo…' : '▶ Cerrar ciclo y abrir siguiente'}
+              {working ? 'Abriendo ciclo…' : '▶ Reanudar ciclos'}
             </button>
             {msg && <div style={{ marginTop: 12, color: 'var(--green)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{msg}</div>}
             {err && <div style={{ marginTop: 12, color: 'var(--red, #ef4444)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>Error: {err}</div>}
           </>
-        ) : (
-          <div style={{ color: 'var(--text-muted)' }}>No hay ciclo activo (visita /api/points/cycles/current para crear uno).</div>
         )}
       </section>
 

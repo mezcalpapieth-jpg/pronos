@@ -438,6 +438,16 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_price_snapshots_market_time
     ON points_price_snapshots(market_id, snapshotted_at DESC)`,
 
+  // ── Lightweight app settings ────────────────────────────────────────────
+  // Small feature switches that need to survive deploys without introducing
+  // a full admin-config service. Values stay JSONB so callers can store booleans
+  // or tiny objects while keeping a single table shape.
+  `CREATE TABLE IF NOT EXISTS points_app_settings (
+    key         TEXT PRIMARY KEY,
+    value       JSONB NOT NULL DEFAULT 'null'::jsonb,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
   // ── Competition cycles (2-week leaderboard periods) ────────────────────
   // One active cycle at a time. Admin can close a cycle (snapshots the
   // leaderboard into points_cycle_snapshots) and automatically opens the

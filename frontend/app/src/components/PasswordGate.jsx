@@ -3,9 +3,8 @@ import { useT } from '../lib/i18n.js';
 
 const STORAGE_KEY = 'pronos-mvp-access';
 
-// Paths that bypass the password gate. Root legal URLs now render
-// through the MVP SPA at pronos.io/privacy and pronos.io/terms; keep
-// the legacy app-prefixed forms public for direct hard-refreshes.
+// Paths that bypass the password gate. The public legal URLs route to
+// Points, while app-prefixed legal pages stay readable on hard refresh.
 const PUBLIC_PATHS = new Set([
   '/privacy', '/terms',
   '/mvp/privacy', '/mvp/terms',

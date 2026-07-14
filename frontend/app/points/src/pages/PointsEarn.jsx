@@ -715,9 +715,8 @@ export default function PointsEarn({ onOpenLogin }) {
         lineHeight: 1.7,
       }}>
         ℹ️ MXNP son puntos de la competencia — no tienen valor económico directo.
-        Los 3 mejores del leaderboard cada 2 semanas reciben $5,000, $3,000 y $2,000 MXN
-        en efectivo. Posiciones 4°–10° reciben premios sorpresa. Verificación manual de
-        tareas sociales en &lt;24 h.
+        Los ciclos de premios están pausados por ahora y vuelven pronto. Verificación
+        manual de tareas sociales en &lt;24 h.
       </div>
     </main>
   );

@@ -39,6 +39,21 @@ test('Points nav surfaces admin work count outside admin', () => {
   assert.match(navSource, /adminTaskTotal > 0/);
 });
 
+test('Points nav exposes a compact mobile menu with home and hidden routes', () => {
+  assert.match(navSource, /points-mobile-menu/);
+  assert.match(navSource, /points\.nav\.home/);
+  assert.match(navSource, /points\.nav\.howItWorks/);
+  assert.match(navSource, /setMobileMenuOpen/);
+});
+
+test('Points admin can pause public cycles and restart them later', () => {
+  assert.match(source, /adminPauseCycles/);
+  assert.match(source, /Pausar ciclos/);
+  assert.match(source, /Reanudar ciclos/);
+  assert.match(apiSource, /export async function adminPauseCycles/);
+  assert.match(apiSource, /action:\s*'pause'/);
+});
+
 test('Points markets filter surfaces por resolver count while inside Mercados', () => {
   assert.match(source, /pendingResolveCount=\{adminTaskCounts\.markets\}/);
   assert.match(source, /function MarketsTable\(\{ onQueueChange, pendingResolveCount = 0 \}\)/);

@@ -77,7 +77,7 @@ export default function PrivacyPolicy() {
         <H3>2.3 Cookies and local storage</H3>
         <Ul>
           <li><b>Session cookie (`pronos-session`):</b> HMAC-signed, HttpOnly + Secure + SameSite=Lax, valid for 30 days. We use it only to keep you signed in.</li>
-          <li><b>MVP access cookie (`pronos_mvp_access`):</b> while the platform is in pre-launch, a soft password protects public access; this cookie indicates that you passed that gate.</li>
+          <li><b>MVP access cookie (`pronos_mvp_access`):</b> only if you enter the gated MVP preview, this cookie indicates that you passed that preview access gate.</li>
           <li><b>localStorage:</b> we store some client preferences (news filters, hidden sources) that never leave your browser.</li>
           <li>We do not use advertising tracking cookies or third-party profiling cookies.</li>
         </Ul>
@@ -245,7 +245,7 @@ export default function PrivacyPolicy() {
       <H3>2.3 Cookies y almacenamiento local</H3>
       <Ul>
         <li><b>Cookie de sesión (`pronos-session`):</b> firmada con HMAC, marcada HttpOnly + Secure + SameSite=Lax, vigencia 30 días. La usamos exclusivamente para mantener tu sesión iniciada.</li>
-        <li><b>Cookie de acceso al MVP (`pronos_mvp_access`):</b> mientras la plataforma está en pre-lanzamiento, una contraseña suave protege el acceso público; esta cookie indica que pasaste esa puerta.</li>
+        <li><b>Cookie de acceso al MVP (`pronos_mvp_access`):</b> solo si entras al preview protegido del MVP, esta cookie indica que pasaste esa puerta de acceso.</li>
         <li><b>localStorage:</b> guardamos algunas preferencias del cliente (filtros de noticias, fuentes ocultadas) que nunca salen de tu navegador.</li>
         <li>No utilizamos cookies de seguimiento publicitario ni de terceros con fines de perfilamiento.</li>
       </Ul>

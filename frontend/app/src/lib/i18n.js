@@ -485,6 +485,7 @@ const STRINGS = {
   // emoji pills). First-pass coverage: nav + home categories + market card +
   // portfolio/admin/earn tab names. Longer prose stays Spanish-only for now.
   'points.nav.markets':       { es: 'El mercado',            en: 'Markets' },
+  'points.nav.home':          { es: 'Inicio',                en: 'Home' },
   'points.nav.portfolio':     { es: 'Portafolio',            en: 'Portfolio' },
   'points.nav.earn':          { es: 'Ganar MXNP',            en: 'Earn MXNP' },
   'points.nav.admin':         { es: 'Admin',                 en: 'Admin' },
@@ -501,16 +502,20 @@ const STRINGS = {
   'points.hero.badge':        { es: 'Beta · Competencia MXNP', en: 'Beta · MXNP competition' },
   'points.hero.headline.a':   { es: 'Predice, gana',         en: 'Predict, win' },
   'points.hero.headline.b':   { es: 'MXNP',                  en: 'MXNP' },
-  'points.hero.headline.c':   { es: 'compite por premios',   en: 'compete for prizes' },
-  'points.hero.sub':          { es: 'Compra acciones en eventos reales con MXNP — la moneda de Pronos. Cada dos semanas los {strong}3 mejores{/strong} del leaderboard ganan {strong}$5,000, $3,000 y $2,000 MXN{/strong} en efectivo. Puestos 4–10 reciben premios sorpresa.',
-                                en: 'Buy shares on real events with MXNP — the Pronos currency. Every two weeks the {strong}top 3{/strong} on the leaderboard win {strong}$5,000, $3,000 and $2,000 MXN{/strong} in cash. Positions 4–10 get surprise prizes.' },
+  'points.hero.headline.c':   { es: 'sigue el mercado',      en: 'follow the market' },
+  'points.hero.sub':          { es: 'Compra acciones en eventos reales con MXNP — la moneda de Pronos. Los ciclos de premios están en pausa mientras abrimos la siguiente etapa.',
+                                en: 'Buy shares on real events with MXNP — the Pronos currency. Prize cycles are paused while we open the next stage.' },
   'points.hero.cta.createAccount': { es: 'Crear cuenta gratis', en: 'Create free account' },
   'points.hero.cta.myPortfolio':  { es: 'Ver mi portafolio',   en: 'View my portfolio' },
   'points.hero.stats.welcomeBonus': { es: 'bono de bienvenida', en: 'welcome bonus' },
   'points.hero.stats.dailyClaim':   { es: 'reclamo diario + racha', en: 'daily claim + streak' },
   'points.hero.stats.activeMarkets':{ es: 'mercados activos',  en: 'active markets' },
   'points.hero.currentCycle': { es: 'CICLO ACTUAL · PREMIOS', en: 'CURRENT CYCLE · PRIZES' },
+  'points.hero.comingSoon':   { es: 'PRÓXIMAMENTE',           en: 'COMING SOON' },
   'points.hero.top10Text':    { es: 'Top 10 del leaderboard cada quincena', en: 'Leaderboard top 10 every two weeks' },
+  'points.hero.cyclesPausedTitle': { es: 'Ciclos de premios', en: 'Prize cycles' },
+  'points.hero.cyclesPausedBody': { es: 'Próximamente. Por ahora puedes seguir explorando mercados, comprar acciones y probar estrategias con MXNP.',
+                                    en: 'Coming soon. For now you can keep exploring markets, buying shares, and testing strategies with MXNP.' },
   'points.hero.closePending': { es: '⏳ Cierre pendiente',    en: '⏳ Closing soon' },
   'points.hero.surprisePrize':{ es: '🎁 Premio sorpresa',     en: '🎁 Surprise prize' },
   'points.hero.eligibility':  { es: 'Para calificar al premio debes participar en al menos {n} mercados durante el ciclo.',
@@ -533,8 +538,8 @@ const STRINGS = {
   'points.how.step1.d':       { es: 'Email + código. Nada más. Recibes 500 MXNP de bienvenida.', en: 'Email + code. Nothing more. Get 500 MXNP as a welcome bonus.' },
   'points.how.step2.t':       { es: 'Predice eventos',        en: 'Predict events' },
   'points.how.step2.d':       { es: 'Compra acciones en mercados de deportes, política, crypto y más. Los precios se mueven con la demanda.', en: 'Buy shares on sports, politics, crypto and more. Prices move with demand.' },
-  'points.how.step3.t':       { es: 'Gana premios reales',    en: 'Win real prizes' },
-  'points.how.step3.d':       { es: 'Acumula MXNP acertando predicciones. Los Top 10 del leaderboard quincenal reciben premios en efectivo.', en: 'Stack MXNP by getting predictions right. The top 10 on the bi-weekly leaderboard win cash prizes.' },
+  'points.how.step3.t':       { es: 'Mejora tu cartera',      en: 'Grow your portfolio' },
+  'points.how.step3.d':       { es: 'Acumula MXNP acertando predicciones. Los ciclos de premios vuelven pronto.', en: 'Stack MXNP by getting predictions right. Prize cycles return soon.' },
 
   // Partners section
   'points.partners.eyebrow':  { es: 'Construido con',        en: 'Built with' },
@@ -578,7 +583,7 @@ const STRINGS = {
   'points.detail.valueLabel':      { es: 'Valor',              en: 'Value' },
   'points.detail.buyMore':         { es: 'Comprar más',        en: 'Buy more' },
   'points.detail.sell':            { es: 'Vender',             en: 'Sell' },
-  'points.detail.mxnpNote':        { es: '💡 MXNP son puntos de la competencia. Los Top 10 del leaderboard quincenal reciben premios en efectivo.', en: '💡 MXNP are competition points. The top 10 on the bi-weekly leaderboard win cash prizes.' },
+  'points.detail.mxnpNote':        { es: '💡 MXNP son puntos de la competencia. Los ciclos de premios vuelven pronto.', en: '💡 MXNP are competition points. Prize cycles return soon.' },
 
   // Comments
   'points.comments.title':         { es: 'Comentarios',         en: 'Comments' },

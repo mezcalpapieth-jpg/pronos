@@ -172,6 +172,8 @@
   gap: 16px;
   overflow-x: auto;
   padding-bottom: 10px;
+  width: 100%;
+  -webkit-overflow-scrolling: touch;
 }
 .wc-bracket-col {
   display: flex;
@@ -209,5 +211,61 @@
    don't have ludicrous vertical padding when a phone can only show
    two columns at a time (the user will scroll horizontally anyway). */
 @media (max-width: 880px) {
-  .wc-bracket { --bracket-h: 560px; }
+  .wc-bracket {
+    --bracket-h: 620px;
+    grid-template-columns: repeat(5, minmax(170px, 170px));
+  }
+}
+
+@media (max-width: 720px) {
+  .wc-group-team-row {
+    align-items: flex-start !important;
+    gap: 7px !important;
+  }
+  .wc-group-team-row > span:not(.wc-group-form-pill) {
+    white-space: normal !important;
+    line-height: 1.25;
+  }
+  .wc-group-form-pill {
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .wc-match-row {
+    grid-template-columns: 1fr !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+  }
+  .wc-match-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .wc-match-teams span {
+    white-space: normal !important;
+    line-height: 1.25;
+  }
+  .wc-match-actions {
+    justify-content: flex-start !important;
+  }
+  .wc-match-odd-btn {
+    max-width: 100%;
+    white-space: normal;
+    line-height: 1.25;
+    text-align: left;
+  }
+  .wc-match-status-pill {
+    max-width: 100%;
+    white-space: normal;
+    line-height: 1.35;
+    border-radius: 10px !important;
+  }
+  .wc-bracket-col-label {
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 1;
+    padding: 4px 0;
+  }
 }
