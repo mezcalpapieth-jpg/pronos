@@ -327,115 +327,116 @@ export default function PointsHome({ onOpenLogin }) {
             </div>
 
             <div className="hmc-question" style={{ marginBottom: 22 }}>
-              {cyclesPaused ? t('points.hero.cyclesPausedTitle') : t('points.hero.top10Text')}
+              {t('points.hero.top10Text')}
             </div>
 
-            {cyclesPaused ? (
-              <div style={{
-                padding: '18px 16px',
-                background: 'rgba(255,85,0,0.08)',
-                border: '1px solid rgba(255,85,0,0.25)',
-                borderRadius: 12,
-                fontFamily: 'var(--font-mono)',
-                fontSize: 12,
-                lineHeight: 1.7,
-                color: 'var(--text-secondary)',
-                letterSpacing: '0.03em',
-              }}>
-                {t('points.hero.cyclesPausedBody')}
-              </div>
-            ) : (
-              <>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
-                  {[
-                    { rank: '🥇 1°',    prize: '$5,000 MXN',         accent: true },
-                    { rank: '🥈 2°',    prize: '$3,000 MXN',         accent: true },
-                    { rank: '🥉 3°',    prize: '$2,000 MXN',         accent: true },
-                    { rank: '4°–10°',    prize: t('points.hero.surprisePrize') },
-                  ].map(p => (
-                    <div key={p.rank} style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '12px 16px',
-                      background: 'var(--surface2)',
-                      border: `1px solid ${p.accent ? 'rgba(0,232,122,0.18)' : 'var(--border)'}`,
-                      borderRadius: 10,
+            <>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
+                {[
+                  { rank: '🥇 1°',    prize: '$5,000 MXN',         accent: true },
+                  { rank: '🥈 2°',    prize: '$3,000 MXN',         accent: true },
+                  { rank: '🥉 3°',    prize: '$2,000 MXN',         accent: true },
+                  { rank: '4°–10°',    prize: t('points.hero.surprisePrize') },
+                ].map(p => (
+                  <div key={p.rank} style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '12px 16px',
+                    background: 'var(--surface2)',
+                    border: `1px solid ${p.accent ? 'rgba(0,232,122,0.18)' : 'var(--border)'}`,
+                    borderRadius: 10,
+                  }}>
+                    <span style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 13,
+                      letterSpacing: '0.04em',
+                      color: 'var(--text-secondary)',
                     }}>
-                      <span style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 13,
-                        letterSpacing: '0.04em',
-                        color: 'var(--text-secondary)',
-                      }}>
-                        {p.rank}
-                      </span>
-                      <span style={{
-                        fontFamily: 'var(--font-display)',
-                        fontSize: 18,
-                        color: p.accent ? 'var(--green)' : 'var(--text-primary)',
-                        letterSpacing: '0.02em',
-                      }}>
-                        {p.prize}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                      {p.rank}
+                    </span>
+                    <span style={{
+                      fontFamily: 'var(--font-display)',
+                      fontSize: 18,
+                      color: p.accent ? 'var(--green)' : 'var(--text-primary)',
+                      letterSpacing: '0.02em',
+                    }}>
+                      {p.prize}
+                    </span>
+                  </div>
+                ))}
+              </div>
 
-                {/* Eligibility rule — users only qualify for cash prizes if
-                    they participated in at least 10 markets during the
-                    cycle. This prevents "claim-and-hoard" strategies that
-                    don't contribute to the market, and keeps the leaderboard
-                    tied to actual prediction activity. */}
+              {/* Eligibility rule — users only qualify for cash prizes if
+                  they participated in at least 10 markets during the
+                  cycle. This prevents "claim-and-hoard" strategies that
+                  don't contribute to the market, and keeps the leaderboard
+                  tied to actual prediction activity. */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 8,
+                padding: '10px 12px',
+                background: 'rgba(255,85,0,0.06)',
+                border: '1px solid rgba(255,85,0,0.25)',
+                borderRadius: 10,
+                marginBottom: 14,
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                lineHeight: 1.6,
+                color: 'var(--text-secondary)',
+                letterSpacing: '0.02em',
+              }}>
+                <span style={{ fontSize: 12, lineHeight: 1, marginTop: 1 }}>⚠️</span>
+                <span>
+                  {(() => {
+                    const raw = t('points.hero.eligibility', { n: '10' });
+                    // Highlight the "10 mercados" run by colouring the digits.
+                    // Simple split since only one number appears in the string.
+                    return raw.split('10').map((chunk, i, arr) => (
+                      <React.Fragment key={i}>
+                        {chunk}
+                        {i < arr.length - 1 && (
+                          <strong style={{ color: '#ff5500' }}>10</strong>
+                        )}
+                      </React.Fragment>
+                    ));
+                  })()}
+                </span>
+              </div>
+
+              {cyclesPaused && (
                 <div style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 8,
-                  padding: '10px 12px',
-                  background: 'rgba(255,85,0,0.06)',
+                  padding: '14px 14px',
+                  background: 'rgba(255,85,0,0.08)',
                   border: '1px solid rgba(255,85,0,0.25)',
                   borderRadius: 10,
                   marginBottom: 14,
                   fontFamily: 'var(--font-mono)',
                   fontSize: 10,
-                  lineHeight: 1.6,
+                  lineHeight: 1.7,
                   color: 'var(--text-secondary)',
-                  letterSpacing: '0.02em',
+                  letterSpacing: '0.03em',
                 }}>
-                  <span style={{ fontSize: 12, lineHeight: 1, marginTop: 1 }}>⚠️</span>
-                  <span>
-                    {(() => {
-                      const raw = t('points.hero.eligibility', { n: '10' });
-                      // Highlight the "10 mercados" run by colouring the digits.
-                      // Simple split since only one number appears in the string.
-                      return raw.split('10').map((chunk, i, arr) => (
-                        <React.Fragment key={i}>
-                          {chunk}
-                          {i < arr.length - 1 && (
-                            <strong style={{ color: '#ff5500' }}>10</strong>
-                          )}
-                        </React.Fragment>
-                      ));
-                    })()}
-                  </span>
+                  {t('points.hero.cyclesPausedBody')}
                 </div>
+              )}
 
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '12px 0 0',
-                  borderTop: '1px solid var(--border)',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 11,
-                  color: 'var(--text-muted)',
-                  letterSpacing: '0.04em',
-                }}>
-                  <span>{t('points.hero.rankBy')}</span>
-                  <span>{t('points.hero.cashPrizes')}</span>
-                </div>
-              </>
-            )}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '12px 0 0',
+                borderTop: '1px solid var(--border)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                color: 'var(--text-muted)',
+                letterSpacing: '0.04em',
+              }}>
+                <span>{t('points.hero.rankBy')}</span>
+                <span>{t('points.hero.cashPrizes')}</span>
+              </div>
+            </>
           </aside>
         </div>
       </section>

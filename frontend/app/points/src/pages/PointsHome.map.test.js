@@ -45,3 +45,19 @@ test('points home map loads the same shared news and market feed as the news glo
   assert.match(loaderBlock, /setMapNewsItems\(enrichNewsItemsWithGeo\(items\)\)/);
   assert.match(loaderBlock, /setSharedMapMarkets/);
 });
+
+test('points home paused prize cycles keep the prize ladder visible', () => {
+  assert.doesNotMatch(source, /points\.hero\.cyclesPausedTitle/);
+
+  const comingSoonIndex = source.indexOf('points.hero.comingSoon');
+  const top10Index = source.indexOf('points.hero.top10Text');
+  const firstPrizeIndex = source.indexOf('$5,000 MXN');
+  const pausedBodyIndex = source.indexOf('points.hero.cyclesPausedBody', firstPrizeIndex);
+  const footerIndex = source.indexOf('points.hero.rankBy', pausedBodyIndex);
+
+  assert.ok(comingSoonIndex > 0, 'paused cycles should still label the topbar as coming soon');
+  assert.ok(top10Index > comingSoonIndex, 'the card title should remain the top 10 leaderboard copy');
+  assert.ok(firstPrizeIndex > top10Index, 'the visible prize ladder should remain under the title');
+  assert.ok(pausedBodyIndex > firstPrizeIndex, 'the paused explanation should be additive below prizes');
+  assert.ok(footerIndex > pausedBodyIndex, 'the cash-prize footer should stay at the bottom of the card');
+});
