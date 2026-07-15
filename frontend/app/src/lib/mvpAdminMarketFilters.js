@@ -20,17 +20,6 @@ export const MARKET_CATEGORY_FILTERS = [
   ...CATEGORIES,
 ];
 
-export const DEFAULT_CATEGORY_ICONS = {
-  general: '📊',
-  mexico: '🇲🇽',
-  politica: '🗳️',
-  deportes: '⚽',
-  finanzas: '📈',
-  crypto: '₿',
-  musica: '🎵',
-  'world-cup': '🏆',
-};
-
 export const ADMIN_SPORT_FILTERS = [
   { key: 'all', label: 'Todos' },
   { key: 'soccer', label: 'Fútbol' },

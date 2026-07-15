@@ -32,7 +32,6 @@ import {
   ADMIN_SOCCER_LEAGUES,
   ADMIN_SPORT_FILTERS,
   CATEGORIES,
-  DEFAULT_CATEGORY_ICONS,
   MARKET_CATEGORY_FILTERS,
   MARKET_CREATION_GEO_OPTIONS,
   MARKET_CREATION_LEAGUE_BY_SPORT,
@@ -693,7 +692,6 @@ function PendingMarketsSection({ onQueueChange }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'flex-start' }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--text-primary)', marginBottom: 4 }}>
-                  <span style={{ marginRight: 6 }}>{r.icon || '📈'}</span>
                   {r.question}
                 </div>
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
@@ -773,7 +771,6 @@ function CreateMarketForm({ onCreated, prefill }) {
   // initial liquidity in the create form below.
   const [question, setQuestion] = useState(prefill?.question || '');
   const [category, setCategory] = useState(prefill?.category || 'deportes');
-  const [icon, setIcon] = useState(DEFAULT_CATEGORY_ICONS[prefill?.category || 'deportes'] || '📈');
   const [outcomes, setOutcomes] = useState(['Sí', 'No']);
   const [outcomeImages, setOutcomeImages] = useState(['', '']);
   const [endTime, setEndTime] = useState('');
@@ -831,7 +828,7 @@ function CreateMarketForm({ onCreated, prefill }) {
       const { ok, data } = await postJson('/api/protocol/admin/create-market', {
         question: question.trim(),
         category,
-        icon,
+        icon: null,
         sport: sport || null,
         league: league || null,
         categoryTags: categoryTagsForCreate,
@@ -875,12 +872,11 @@ function CreateMarketForm({ onCreated, prefill }) {
         <input type="text" required minLength={8} maxLength={200} value={question} onChange={e => setQuestion(e.target.value)} style={inputStyle} placeholder="¿México gana el partido inaugural del Mundial 2026?" />
       </Field>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 14 }}>
         <Field label="Categoría">
           <select value={category} onChange={e => {
             const next = e.target.value;
             setCategory(next);
-            setIcon(DEFAULT_CATEGORY_ICONS[next] || icon);
             // Sport / league only make sense under 'deportes'. When the
             // user flips to any other category, scrub any sport state
             // they had picked so it isn't posted as ghost metadata.
@@ -897,9 +893,6 @@ function CreateMarketForm({ onCreated, prefill }) {
               <option key={c.key} value={c.key}>{c.label}</option>
             ))}
           </select>
-        </Field>
-        <Field label="Ícono">
-          <input type="text" value={icon} onChange={e => setIcon(e.target.value)} style={inputStyle} maxLength={4} />
         </Field>
       </div>
 
@@ -1819,7 +1812,6 @@ function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCou
           }}>
             <div>
               <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--text-primary)', marginBottom: 4 }}>
-                <span style={{ marginRight: 6 }}>{m.icon || '📈'}</span>
                 {m.question}
               </div>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>

@@ -26,6 +26,8 @@ test('Points admin can edit generated markets and per-option liquidity before ap
   assert.match(source, /adminEditPendingMarket/);
   assert.match(source, /seedLiquidities/);
   assert.match(source, /Liquidez opción/);
+  assert.doesNotMatch(source, /Field label="Icono"/);
+  assert.match(source, /icon:\s*null/);
   assert.match(apiSource, /export async function adminEditPendingMarket/);
   assert.match(apiSource, /action:\s*'edit'/);
 });

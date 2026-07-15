@@ -673,7 +673,6 @@ function CreateMarketForm({ prefill }) {
     question: prefill?.question || '',
     category: prefill?.category || 'deportes',
     geo: prefill?.geo || 'auto',
-    icon: '⚽',
     endDate: '',   // dd/mm/yyyy (text)
     endHour: '',   // 0-23 (string, validated on submit)
     endMinute: '', // 0-59 (string, validated on submit)
@@ -768,7 +767,7 @@ function CreateMarketForm({ prefill }) {
         question: form.question,
         category: form.category,
         geo: form.geo === 'auto' ? null : form.geo,
-        icon: form.icon,
+        icon: null,
         endTime: endIso,
         outcomes: cleaned,
         seedLiquidity: cleanedLiquidities[0] || 500,
@@ -850,7 +849,7 @@ function CreateMarketForm({ prefill }) {
         />
       </Field>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 120px', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <Field label="Categoría">
           <select
             value={form.category}
@@ -872,14 +871,6 @@ function CreateMarketForm({ prefill }) {
               <option key={g.key} value={g.key}>{g.label}</option>
             ))}
           </select>
-        </Field>
-        <Field label="Icono">
-          <input
-            value={form.icon}
-            onChange={e => setForm(f => ({ ...f, icon: e.target.value }))}
-            maxLength={2}
-            style={inputStyle}
-          />
         </Field>
       </div>
 
@@ -2565,7 +2556,7 @@ function PendingMarketsTable({ onQueueChange }) {
             opacity: bulkBusy ? 0.5 : 1,
           }}
         >
-          🏆 Reparar Mundial
+          Reparar Mundial
         </button>
 
         {/* Resolver diagnostic — read-only "why aren't my markets
@@ -2670,7 +2661,6 @@ function PendingMarketsTable({ onQueueChange }) {
                   {r.resolverType && <> · resolver: {r.resolverType}</>}
                 </div>
                 <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.35 }}>
-                  {r.icon && <span style={{ marginRight: 6 }}>{r.icon}</span>}
                   {r.question}
                 </div>
                 <div style={{
@@ -2809,7 +2799,6 @@ function PendingMarketEditModal({ row, onClose, onSaved }) {
 
   const [question, setQuestion] = useState(row.question || '');
   const [category, setCategory] = useState(row.category || 'general');
-  const [icon, setIcon] = useState(row.icon || '');
   const [ammMode, setAmmMode] = useState(row.ammMode === 'parallel' ? 'parallel' : 'unified');
   const [outcomes, setOutcomes] = useState(initialOutcomes);
   const [seedLiquidities, setSeedLiquidities] = useState(initialSeeds);
@@ -2889,7 +2878,7 @@ function PendingMarketEditModal({ row, onClose, onSaved }) {
       await adminEditPendingMarket(row.id, {
         question: question.trim(),
         category,
-        icon: icon.trim() || null,
+        icon: null,
         ammMode,
         outcomes: cleanedOutcomes,
         seedLiquidity: cleanedLiquidities[0] || 500,
@@ -2954,16 +2943,13 @@ function PendingMarketEditModal({ row, onClose, onSaved }) {
           />
         </Field>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 150px', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px', gap: 12 }}>
           <Field label="Categoría">
             <select value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle}>
               {CATEGORIES.map(c => (
                 <option key={c.key} value={c.key}>{c.label}</option>
               ))}
             </select>
-          </Field>
-          <Field label="Icono">
-            <input value={icon} onChange={(e) => setIcon(e.target.value)} maxLength={4} style={inputStyle} />
           </Field>
           <Field label="AMM">
             <select value={ammMode} onChange={(e) => setAmmMode(e.target.value)} style={inputStyle}>

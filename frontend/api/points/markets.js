@@ -283,7 +283,7 @@ export default async function handler(req, res) {
           ammMode: 'parallel',
           question: r.question,
           category: r.category,
-          icon: r.icon,
+          icon: null,
           outcomes,
           reserves: [],   // parent has no pool
           prices: legPrices.length === outcomes.length
@@ -347,7 +347,7 @@ export default async function handler(req, res) {
         ammMode: 'unified',
         question: r.question,
         category: r.category,
-        icon: r.icon,
+        icon: null,
         outcomes,
         reserves,
         prices,

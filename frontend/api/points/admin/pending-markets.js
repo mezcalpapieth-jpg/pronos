@@ -156,7 +156,7 @@ async function list(req, res) {
       sourceData: parseJsonb(r.source_data, {}),
       question: r.question,
       category: r.category,
-      icon: r.icon,
+      icon: null,
       outcomes: parseJsonb(r.outcomes, []),
       seedLiquidity: Number(r.seed_liquidity),
       seedLiquidities: parseJsonb(r.seed_liquidities, null),
@@ -398,7 +398,7 @@ async function approveOne(pid, reviewer, note, opts = {}) {
           r.source_event_id,
           r.question,
           r.category,
-          r.icon || null,
+          null,
           JSON.stringify(outcomes),
           JSON.stringify(reserves),
           seed,
@@ -443,7 +443,7 @@ async function approveOne(pid, reviewer, note, opts = {}) {
           r.source_event_id,
           r.question,
           r.category,
-          r.icon || null,
+          null,
           JSON.stringify(outcomes),
           seed,
           seedLiquiditiesJson,
@@ -493,7 +493,7 @@ async function approveOne(pid, reviewer, note, opts = {}) {
           [
             `${r.question} — ${outcomes[i]}`,
             r.category,
-            r.icon || null,
+            null,
             JSON.stringify(['Sí', 'No']),
             JSON.stringify(legReserves),
             legSeed,
@@ -572,9 +572,7 @@ async function editPending(pid, reviewer, patch = {}, note = null) {
       const err = new Error('invalid_category'); err.status = 400; throw err;
     }
 
-    const icon = has('icon')
-      ? String(patch.icon || '').trim().slice(0, 8) || null
-      : r.icon || null;
+    const icon = null;
 
     const outcomes = has('outcomes')
       ? patch.outcomes

@@ -46,6 +46,8 @@ import { generateNextOpponentMarkets }  from './market-gen/next-opponent.js';
 import { generateF1SeasonMarkets }      from './market-gen/f1-season.js';
 import { deriveMarketTags }             from './category-tags.js';
 
+const MARKET_ICON = null;
+
 export const GENERATORS = [
   { name: 'soccer',         run: generateSoccerMarkets        },
   { name: 'espn-soccer',    run: generateEspnSoccerMarkets    },
@@ -113,7 +115,7 @@ export async function upsertPending(sql, allSpecs) {
           ${s.source_data ? JSON.stringify(s.source_data) : null}::jsonb,
           ${s.question},
           ${s.category},
-          ${s.icon || null},
+          ${MARKET_ICON},
           ${JSON.stringify(s.outcomes)}::jsonb,
           ${s.seed_liquidity ?? 1000},
           ${s.start_time || null},
@@ -221,7 +223,7 @@ export async function upsertProtocolPending(sql, allSpecs) {
           ${s.source_data ? JSON.stringify(s.source_data) : null}::jsonb,
           ${s.question},
           ${s.category},
-          ${s.icon || null},
+          ${MARKET_ICON},
           ${JSON.stringify(s.outcomes)}::jsonb,
           ${s.seed_liquidity ?? 1000},
           ${s.start_time || null},

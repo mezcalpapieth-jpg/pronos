@@ -1014,7 +1014,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               color: 'var(--text-muted)',
               marginBottom: 10,
             }}>
-              <span>{market.icon && `${market.icon} `}{market.category || 'General'}</span>
+              <span>{market.category || 'General'}</span>
               {isResolved && (
                 <span style={{ color: 'var(--green)' }}>{t('points.detail.resolvedBadge')}</span>
               )}

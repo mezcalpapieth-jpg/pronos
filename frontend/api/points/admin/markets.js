@@ -181,7 +181,7 @@ export default async function handler(req, res) {
         sourceEventId: r.source_event_id || null,
         question: r.question,
         category: r.category,
-        icon: r.icon,
+        icon: null,
         outcomes: parseJsonb(r.outcomes, ['Sí', 'No']),
         reserves: parseJsonb(r.reserves, []).map(Number),
         seedLiquidity: Number(r.seed_liquidity || 0),

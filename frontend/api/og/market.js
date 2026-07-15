@@ -142,7 +142,6 @@ export default async function handler(req, res) {
     const questionLines = wrapText(r.question || '', 38, 3);
 
     const svg = renderSvg({
-      icon: r.icon || '📈',
       category: (r.category || 'general').toUpperCase(),
       questionLines,
       outcomes,
@@ -166,7 +165,7 @@ export default async function handler(req, res) {
 }
 
 function renderSvg({
-  icon, category, questionLines, outcomes, prices,
+  category, questionLines, outcomes, prices,
   finalScore, isResolved, winnerIdx, isOnchain,
   tradeVolume, deadline,
 }) {
@@ -210,7 +209,7 @@ function renderSvg({
 
   <!-- Category chip -->
   <text x="64" y="138" fill="${PALETTE.textDim}" font-family="DM Mono, ui-monospace, monospace"
-    font-size="20" letter-spacing="3">${esc(icon)} ${esc(category)}</text>
+    font-size="20" letter-spacing="3">${esc(category)}</text>
 
   <!-- Status badge (top-right) -->
   ${renderStatusBadge({ isResolved, isOnchain, W })}
@@ -250,7 +249,7 @@ function renderSvg({
         <!-- Label -->
         <text x="22" y="${rowH / 2 + 8}" fill="${o.isWinner ? PALETTE.green : PALETTE.text}"
           font-family="DM Sans, sans-serif" font-size="22" font-weight="600">
-          ${o.isWinner ? '🏆 ' : ''}${esc(labelTrunc)}
+          ${esc(labelTrunc)}
         </text>
         <!-- Pct (right-aligned) -->
         <text x="${barW - 22}" y="${rowH / 2 + 9}" text-anchor="end"

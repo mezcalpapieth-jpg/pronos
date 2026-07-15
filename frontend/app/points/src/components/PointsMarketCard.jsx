@@ -184,7 +184,6 @@ export default function PointsMarketCard({ market, userPosition }) {
     >
       <div className="mock-card-header">
         <span className="mock-card-cat">
-          {market.icon && <span style={{ marginRight: 4 }}>{market.icon}</span>}
           {market.category || 'General'}
         </span>
         {isResolved && (

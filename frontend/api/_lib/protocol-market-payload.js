@@ -116,7 +116,7 @@ export function buildProtocolMarketPayload(row = {}) {
     chainId: row.chain_id != null ? Number(row.chain_id) : null,
     question: row.question,
     category,
-    icon: firstValue(row.meta_icon, row.icon),
+    icon: null,
     outcomes,
     outcomeCount: Number(row.outcome_count) || outcomes.length,
     protocolVersion: row.protocol_version || 'v1',

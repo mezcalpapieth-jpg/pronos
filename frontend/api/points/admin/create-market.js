@@ -48,7 +48,7 @@ export default async function handler(req, res) {
   if (!admin) return;
 
   const {
-    question, category, icon, endTime, outcomes, seedLiquidity, seedLiquidities, ammMode,
+    question, category, endTime, outcomes, seedLiquidity, seedLiquidities, ammMode,
     featured,
     sport, league, outcomeImages, geo,
   } = req.body || {};
@@ -57,6 +57,7 @@ export default async function handler(req, res) {
   // 'points' regardless of body input. Kept as a constant so the
   // INSERT below doesn't have to special-case the column.
   const marketMode = 'points';
+  const marketIcon = null;
 
   // Sport / league / outcomeImages — optional metadata matching what the
   // generator pipeline writes. Lets manually-registered markets show up
@@ -158,7 +159,7 @@ export default async function handler(req, res) {
           [
             question.trim(),
             category,
-            icon || null,
+            marketIcon,
             JSON.stringify(normalizedOutcomes),
             JSON.stringify(reserves),
             seed,
@@ -212,7 +213,7 @@ export default async function handler(req, res) {
         [
           question.trim(),
           category,
-          icon || null,
+          marketIcon,
           JSON.stringify(normalizedOutcomes),
           seed,
           seedLiquiditiesJson,
@@ -262,7 +263,7 @@ export default async function handler(req, res) {
             // human-readable fallback here helps admin DB inspection.
             `${question.trim()} — ${normalizedOutcomes[i]}`,
             category,
-            icon || null,
+            marketIcon,
             JSON.stringify(['Sí', 'No']),
             JSON.stringify(legReserves),
             legSeed,

@@ -577,7 +577,7 @@ export default function MarketDetail({ onOpenLogin }) {
           letterSpacing: '0.12em', color: 'var(--text-muted)',
           textTransform: 'uppercase', marginBottom: 12,
         }}>
-          <span>{market.icon ? `${market.icon} ` : ''}{market.category || 'general'}</span>
+          <span>{market.category || 'general'}</span>
           {isResolved && <span style={{ color: 'var(--green)' }}>· resuelto</span>}
           {isCanceled && <span style={{ color: 'var(--red, #ef4444)' }}>· anulado</span>}
           {isDisputed && <span style={{ color: '#f59e0b' }}>· en disputa</span>}
@@ -664,7 +664,7 @@ export default function MarketDetail({ onOpenLogin }) {
                       Resultado oficial
                     </div>
                     <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--green)' }}>
-                      🏆 {displayWinnerIndex >= 0 ? displayOutcomes[displayWinnerIndex] : outcomes[winnerIndex] || '—'}
+                      {displayWinnerIndex >= 0 ? displayOutcomes[displayWinnerIndex] : outcomes[winnerIndex] || '—'}
                     </div>
                   </>
                 ) : (
@@ -844,7 +844,6 @@ export default function MarketDetail({ onOpenLogin }) {
                         <span style={{ width: 28, height: 28, flexShrink: 0 }} aria-hidden="true" />
                       ) : null}
                       <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {isWinner && <span style={{ marginRight: 6 }}>🏆</span>}
                         {label}
                       </span>
                       {countryLabel && (

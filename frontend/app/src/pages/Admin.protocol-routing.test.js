@@ -79,9 +79,9 @@ test('MVP admin category and create form stay aligned with points taxonomy metad
   const createForm = section('function CreateMarketForm', '// ═══ Edit-market modal');
 
   assert.match(source, /from '\.\.\/lib\/mvpAdminMarketFilters\.js'/);
-  assert.match(source, /DEFAULT_CATEGORY_ICONS/);
   assert.doesNotMatch(createForm, /\{c\.icon\}\s*\{c\.label\}/);
-  assert.match(createForm, /icon,\s*\n\s*sport:\s*sport \|\| null,/);
+  assert.doesNotMatch(createForm, /Field label="Ícono"/);
+  assert.match(createForm, /icon:\s*null,\s*\n\s*sport:\s*sport \|\| null,/);
   assert.match(createForm, /league:\s*league \|\| null,/);
   assert.match(createForm, /categoryTags:\s*categoryTagsForCreate,/);
   assert.match(createForm, /geoTags:\s*geoTagsForCreate,/);

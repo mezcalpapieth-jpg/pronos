@@ -83,7 +83,7 @@ export default async function handler(req, res) {
 
   const {
     question, category, endTime, outcomes, seedAmount,
-    resolutionSource, ammMode, icon, sport, league, outcomeImages,
+    resolutionSource, ammMode, sport, league, outcomeImages,
     categoryTags, geoTags, topicTags,
   } = req.body || {};
 
@@ -104,7 +104,7 @@ export default async function handler(req, res) {
   if (lowerSet.size !== normalizedOutcomes.length) {
     return res.status(400).json({ error: 'duplicate_outcomes' });
   }
-  const iconVal = cleanOptionalText(icon);
+  const iconVal = null;
   const sportVal = cleanOptionalText(sport)?.toLowerCase() || null;
   const leagueVal = cleanOptionalText(league)?.toLowerCase() || null;
   const imageResult = normalizeOutcomeImages(outcomeImages, normalizedOutcomes.length);

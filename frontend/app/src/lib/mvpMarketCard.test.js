@@ -30,7 +30,7 @@ test('mapProtocolMarketToCard preserves on-chain fields and exposes Points-style
   assert.deepEqual(card.outcomes, ['Sí', 'No']);
   assert.deepEqual(card.prices, [0.64, 0.36]);
   assert.equal(card.categoryLabel, 'Crypto');
-  assert.equal(card.icon, '₿');
+  assert.equal(card.icon, null);
   assert.equal(card.live, true);
   assert.equal(card.volume, 1234.56);
   assert.equal(card.tradeVolume, 89);
@@ -97,7 +97,7 @@ test('mapProtocolMarketToCard exposes MVP taxonomy and regional outcome labels',
   });
 
   assert.equal(worldCup.categoryLabel, 'Copa del Mundo');
-  assert.equal(worldCup.icon, '🏆');
+  assert.equal(worldCup.icon, null);
   assert.deepEqual(worldCup.categoryTags, ['world-cup']);
   assert.deepEqual(worldCup.geoTags, []);
 

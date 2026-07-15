@@ -9,17 +9,6 @@ const CATEGORY_LABEL = {
   'world-cup': 'Copa del Mundo',
 };
 
-const CATEGORY_ICON = {
-  general: '🌎',
-  mexico: '🇲🇽',
-  politica: '🏛️',
-  deportes: '⚽',
-  finanzas: '💵',
-  crypto: '₿',
-  musica: '🎵',
-  'world-cup': '🏆',
-};
-
 export function pricesFromReserves(reserves) {
   if (!Array.isArray(reserves) || reserves.length < 2) return [];
   const invs = reserves.map(r => (Number(r) > 0 ? 1 / Number(r) : 0));
@@ -105,7 +94,7 @@ export function mapProtocolMarketToCard(row) {
     question: row?.question || '',
     category,
     categoryLabel: CATEGORY_LABEL[category] || category,
-    icon: row?.icon || CATEGORY_ICON[category] || '🌎',
+    icon: null,
     outcomes,
     prices: normalizedPrices,
     status: row?.status || 'active',

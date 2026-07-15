@@ -90,7 +90,6 @@ export default function MarketCard({ market, onOpenLogin }) {
     >
       <div className="mock-card-header">
         <span className="mock-card-cat">
-          {market.icon && <span style={{ marginRight: 4 }}>{market.icon}</span>}
           {market.categoryLabel || market.category || 'General'}
         </span>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -248,7 +247,6 @@ export default function MarketCard({ market, onOpenLogin }) {
                   textOverflow: 'ellipsis',
                   cursor: teamProfile ? 'pointer' : 'inherit',
                 }}>
-                  {isWinner && <span style={{ marginRight: 6 }}>🏆</span>}
                   {label}
                 </span>
                 {countryLabel && (
