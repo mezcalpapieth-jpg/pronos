@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useIsMobile } from '@app/lib/useIsMobile.js';
 import { getInvestorDeck } from '../lib/investorDeckManifest.js';
 import {
   deckLogin,
@@ -39,6 +40,7 @@ function preloadDeckImages(slides = []) {
 }
 
 export default function InvestorDeck() {
+  const isMobile = useIsMobile();
   const [language, setLanguage] = useState(DEFAULT_DECK_LANGUAGE);
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -50,6 +52,7 @@ export default function InvestorDeck() {
   const sessionRef = useRef(null);
   const slideRef = useRef(1);
   const languageRef = useRef(language);
+  const touchStartRef = useRef(null);
 
   const deck = useMemo(() => getInvestorDeck(language), [language]);
   const slides = deck.slides || [];
@@ -179,6 +182,66 @@ export default function InvestorDeck() {
     }
   }
 
+  function previousSlide() {
+    setSlideIndex(i => Math.max(0, i - 1));
+  }
+
+  function nextSlide() {
+    setSlideIndex(i => Math.min(maxSlideIndex, i + 1));
+  }
+
+  function handleSlideTouchStart(e) {
+    const touch = e.touches?.[0];
+    if (!touch) return;
+    touchStartRef.current = {
+      x: touch.clientX,
+      y: touch.clientY,
+      at: Date.now(),
+    };
+  }
+
+  function handleSlideTouchEnd(e) {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    const touch = e.changedTouches?.[0];
+    if (!start || !touch) return;
+
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
+    const elapsed = Date.now() - start.at;
+    if (absX < 42 || absX < absY * 1.2 || elapsed > 900) return;
+    if (dx < 0) nextSlide();
+    else previousSlide();
+  }
+
+  useEffect(() => {
+    if (!session) return undefined;
+    function handleDeckKeyDown(e) {
+      const tagName = e.target?.tagName?.toLowerCase();
+      if (tagName === 'input' || tagName === 'textarea' || tagName === 'select' || e.target?.isContentEditable) {
+        return;
+      }
+      if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+        e.preventDefault();
+        nextSlide();
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        previousSlide();
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        setSlideIndex(0);
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        setSlideIndex(maxSlideIndex);
+      }
+    }
+    window.addEventListener('keydown', handleDeckKeyDown);
+    return () => window.removeEventListener('keydown', handleDeckKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.id, maxSlideIndex]);
+
   if (loading && !session) {
     return (
       <main style={styles.page}>
@@ -203,7 +266,7 @@ export default function InvestorDeck() {
 
   return (
     <main style={styles.page}>
-      <section style={styles.viewerHeader}>
+      <section style={isMobile ? { ...styles.viewerHeader, ...styles.viewerHeaderMobile } : styles.viewerHeader}>
         <div>
           <div style={styles.kicker}>PRONOS · CONFIDENCIAL</div>
           <h1 style={styles.title}>{deck.title}</h1>
@@ -215,37 +278,42 @@ export default function InvestorDeck() {
         </div>
       </section>
 
-      <section style={styles.deckGrid}>
-        <aside style={styles.thumbnails} aria-label="Láminas">
+      <section style={isMobile ? styles.deckGridMobile : styles.deckGrid}>
+        <aside style={isMobile ? styles.thumbnailsMobile : styles.thumbnails} aria-label="Láminas">
           {slides.map((s, idx) => (
             <button
               key={`${language}-${idx}`}
               type="button"
               onClick={() => setSlideIndex(idx)}
               style={{
-                ...styles.thumbnail,
+                ...(isMobile ? styles.thumbnailMobile : styles.thumbnail),
                 ...(idx === safeSlideIndex ? styles.thumbnailActive : null),
               }}
             >
               <span style={styles.thumbNumber}>{idx + 1}</span>
-              <span style={styles.thumbTitle}>{s.title}</span>
+              {!isMobile && <span style={styles.thumbTitle}>{s.title}</span>}
             </button>
           ))}
         </aside>
 
-        <div style={styles.stageWrap}>
-          <div style={styles.stageMeta}>
+        <div style={isMobile ? { ...styles.stageWrap, ...styles.stageWrapMobile } : styles.stageWrap}>
+          <div style={isMobile ? { ...styles.stageMeta, ...styles.stageMetaMobile } : styles.stageMeta}>
             <span>Lámina {slideNumber} de {slides.length}</span>
             <span>{session.viewerEmail}</span>
           </div>
-          <div key={slideKey} style={styles.slideStage}>
+          <div
+            key={slideKey}
+            style={isMobile ? { ...styles.slideStage, ...styles.slideStageMobile } : styles.slideStage}
+            onTouchStart={handleSlideTouchStart}
+            onTouchEnd={handleSlideTouchEnd}
+          >
             <Watermark text={watermark} />
             <SlideVisual slide={slide} uploadHint={deck.uploadHint} slideKey={slideKey} />
           </div>
-          <div style={styles.slideControls}>
+          <div style={isMobile ? { ...styles.slideControls, ...styles.slideControlsMobile } : styles.slideControls}>
             <button
               type="button"
-              onClick={() => setSlideIndex(i => Math.max(0, i - 1))}
+              onClick={previousSlide}
               disabled={safeSlideIndex === 0}
               style={styles.navButton}
             >
@@ -256,7 +324,7 @@ export default function InvestorDeck() {
             </div>
             <button
               type="button"
-              onClick={() => setSlideIndex(i => Math.min(maxSlideIndex, i + 1))}
+              onClick={nextSlide}
               disabled={safeSlideIndex >= maxSlideIndex}
               style={styles.navButton}
             >
@@ -266,7 +334,7 @@ export default function InvestorDeck() {
         </div>
       </section>
 
-      <section style={styles.questionBox}>
+      <section style={isMobile ? { ...styles.questionBox, ...styles.questionBoxMobile } : styles.questionBox}>
         <div>
           <div style={styles.kicker}>PREGUNTAS</div>
           <h2 style={styles.sectionTitle}>Déjanos una pregunta</h2>
@@ -530,6 +598,10 @@ const styles = {
     marginBottom: 24,
     flexWrap: 'wrap',
   },
+  viewerHeaderMobile: {
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
   headerActions: {
     display: 'flex',
     gap: 10,
@@ -552,10 +624,24 @@ const styles = {
     gridTemplateColumns: 'minmax(180px, 240px) 1fr',
     gap: 18,
   },
+  deckGridMobile: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 12,
+  },
   thumbnails: {
     display: 'grid',
     gap: 8,
     alignContent: 'start',
+  },
+  thumbnailsMobile: {
+    order: 2,
+    display: 'flex',
+    gap: 8,
+    overflowX: 'auto',
+    padding: '2px 2px 6px',
+    WebkitOverflowScrolling: 'touch',
+    scrollbarWidth: 'none',
   },
   thumbnail: {
     display: 'grid',
@@ -569,6 +655,20 @@ const styles = {
     borderRadius: 8,
     padding: '12px 10px',
     cursor: 'pointer',
+  },
+  thumbnailMobile: {
+    minWidth: 40,
+    height: 40,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: '1px solid var(--border)',
+    background: 'rgba(255,255,255,0.025)',
+    color: 'var(--text-muted)',
+    borderRadius: 999,
+    padding: 0,
+    cursor: 'pointer',
+    flex: '0 0 auto',
   },
   thumbnailActive: {
     borderColor: 'rgba(255,90,31,0.75)',
@@ -589,6 +689,10 @@ const styles = {
   stageWrap: {
     minWidth: 0,
   },
+  stageWrapMobile: {
+    order: 1,
+    width: '100%',
+  },
   stageMeta: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -600,6 +704,14 @@ const styles = {
     textTransform: 'uppercase',
     marginBottom: 10,
   },
+  stageMetaMobile: {
+    alignItems: 'flex-start',
+    flexDirection: 'column',
+    gap: 4,
+    fontSize: 10,
+    lineHeight: 1.35,
+    letterSpacing: '0.09em',
+  },
   slideStage: {
     position: 'relative',
     overflow: 'hidden',
@@ -607,6 +719,11 @@ const styles = {
     border: '1px solid var(--border)',
     borderRadius: 12,
     background: '#0d0d0d',
+    touchAction: 'pan-y',
+  },
+  slideStageMobile: {
+    borderRadius: 10,
+    boxShadow: '0 18px 54px rgba(0,0,0,0.42)',
   },
   slideImage: {
     width: '100%',
@@ -668,6 +785,11 @@ const styles = {
     alignItems: 'center',
     marginTop: 14,
   },
+  slideControlsMobile: {
+    gridTemplateColumns: '92px 1fr 92px',
+    gap: 8,
+    marginTop: 10,
+  },
   navButton: {
     border: '1px solid var(--border)',
     background: 'rgba(255,255,255,0.04)',
@@ -695,6 +817,12 @@ const styles = {
     borderRadius: 12,
     padding: 20,
     background: 'rgba(255,255,255,0.025)',
+  },
+  questionBoxMobile: {
+    gridTemplateColumns: '1fr',
+    gap: 14,
+    padding: 16,
+    marginTop: 18,
   },
   sectionTitle: {
     fontFamily: 'var(--font-display)',

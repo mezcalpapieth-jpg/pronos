@@ -35,6 +35,14 @@ test('investor deck viewer gates access, toggles languages, watermarks slides, a
   assert.match(deckSource, /safeSlideIndex/);
   assert.match(deckSource, /slideKey/);
   assert.match(deckSource, /key=\{slideKey\}/);
+  assert.match(deckSource, /useIsMobile/);
+  assert.match(deckSource, /handleSlideTouchStart/);
+  assert.match(deckSource, /handleSlideTouchEnd/);
+  assert.match(deckSource, /window\.addEventListener\('keydown',\s*handleDeckKeyDown\)/);
+  assert.match(deckSource, /ArrowRight/);
+  assert.match(deckSource, /ArrowLeft/);
+  assert.match(deckSource, /thumbnailsMobile/);
+  assert.match(deckSource, /slideStageMobile/);
   assert.match(deckSource, /No se pudo enviar/);
   assert.doesNotMatch(deckSource, /detect(ar|a).*screenshot/i);
 });
