@@ -68,7 +68,7 @@ export default function PointsReferralLanding({ onOpenLogin }) {
         color: 'var(--text-primary)',
         marginBottom: 12,
       }}>
-        @{username} te invitó 🎁
+        @{username} te invitó
       </div>
       <p>Abriendo formulario de registro…</p>
     </main>

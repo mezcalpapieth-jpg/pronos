@@ -15,7 +15,7 @@ const ITEMS = [
   { label: 'PREMIO 1° LUGAR',  val: '$5,000 MXN',     green: true },
   { label: 'PREMIO 2° LUGAR',  val: '$3,000 MXN' },
   { label: 'PREMIO 3° LUGAR',  val: '$2,000 MXN' },
-  { label: 'PREMIO 4° – 10°',  val: '🎁 SORPRESA' },
+  { label: 'PREMIO 4° – 10°',  val: 'SORPRESA' },
   { label: 'COMISIÓN',         val: 'SOLO EN COMPRAS' },
   // Duplicated so the CSS animation is seamless (the track is twice the
   // width of the viewport).

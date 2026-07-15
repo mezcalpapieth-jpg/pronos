@@ -1121,7 +1121,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                   {t('points.detail.resultOfficial')}
                 </div>
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: 'var(--green)' }}>
-                  🏆 {displayWinnerIndex >= 0 ? displayOutcomes[displayWinnerIndex] : outcomes[winnerIndex]}
+                  {displayWinnerIndex >= 0 ? displayOutcomes[displayWinnerIndex] : outcomes[winnerIndex]}
                 </div>
                 <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '8px 0 0' }}>
                   {t('points.detail.redeemInstructions')}

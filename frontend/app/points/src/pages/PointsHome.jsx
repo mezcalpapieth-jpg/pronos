@@ -321,7 +321,7 @@ export default function PointsHome({ onOpenLogin }) {
                   color: cycleCountdown.seconds === 0 ? '#f59e0b' : 'var(--green)',
                   textTransform: 'uppercase',
                 }}>
-                  {cycleCountdown.seconds === 0 ? t('points.hero.closePending') : `⏳ ${cycleCountdown.label}`}
+                  {cycleCountdown.seconds === 0 ? t('points.hero.closePending') : cycleCountdown.label}
                 </span>
               )}
             </div>
@@ -333,9 +333,9 @@ export default function PointsHome({ onOpenLogin }) {
             <>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
                 {[
-                  { rank: '🥇 1°',    prize: '$5,000 MXN',         accent: true },
-                  { rank: '🥈 2°',    prize: '$3,000 MXN',         accent: true },
-                  { rank: '🥉 3°',    prize: '$2,000 MXN',         accent: true },
+                  { rank: '1°',       prize: '$5,000 MXN',         accent: true },
+                  { rank: '2°',       prize: '$3,000 MXN',         accent: true },
+                  { rank: '3°',       prize: '$2,000 MXN',         accent: true },
                   { rank: '4°–10°',    prize: t('points.hero.surprisePrize') },
                 ].map(p => (
                   <div key={p.rank} style={{
@@ -387,7 +387,6 @@ export default function PointsHome({ onOpenLogin }) {
                 color: 'var(--text-secondary)',
                 letterSpacing: '0.02em',
               }}>
-                <span style={{ fontSize: 12, lineHeight: 1, marginTop: 1 }}>⚠️</span>
                 <span>
                   {(() => {
                     const raw = t('points.hero.eligibility', { n: '10' });
@@ -504,7 +503,7 @@ export default function PointsHome({ onOpenLogin }) {
           }}>
             {searchQuery
               ? t('points.home.emptySearch', { q: searchQuery })
-              : `🎯 ${t('points.home.empty')}`}
+              : t('points.home.empty')}
           </div>
         )}
         {!loading && !error && (trendingView === 'map' ? (homeMapMarkets.length + mapNewsItems.length) : filtered.length) > 0 && (

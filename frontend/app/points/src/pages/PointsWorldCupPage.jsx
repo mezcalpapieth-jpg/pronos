@@ -338,7 +338,7 @@ export default function PointsWorldCupPage() {
             margin: '0 0 18px',
             lineHeight: 1.05,
           }}>
-            🏆 <span style={{ color: 'var(--green)' }}>COPA DEL</span> MUNDO <span style={{ color: 'var(--text-muted)' }}>2026</span>
+            <span style={{ color: 'var(--green)' }}>COPA DEL</span> MUNDO <span style={{ color: 'var(--text-muted)' }}>2026</span>
           </h1>
           <p style={{
             fontFamily: 'var(--font-body)', fontSize: 16,
@@ -394,7 +394,7 @@ export default function PointsWorldCupPage() {
               fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase',
               animation: 'pronos-live-pulse 1.4s ease-in-out infinite',
             }}>
-              🔴 ELIMINATORIAS · Semifinales en curso
+              ELIMINATORIAS · Semifinales en curso
             </div>
           )}
             <span style={{
@@ -1087,7 +1087,7 @@ function GroupWinnerCard({ market, onBuy }) {
             letterSpacing: '0.14em', color: 'var(--gold, #f59e0b)',
             textTransform: 'uppercase', marginBottom: 2,
           }}>
-            🥇 Ganador del grupo
+            Ganador del grupo
           </div>
           <div style={{
             fontFamily: 'var(--font-display)', fontSize: 18,

@@ -16,7 +16,7 @@ test('points category bar puts Mexico and Latam before sports', () => {
   assert.ok(mexicoIndex < sportsIndex, 'Mexico & Latam should appear before Deportes');
 });
 
-test('points category bar gives Mexico and Latam a subtle spark treatment', () => {
+test('points category bar gives Mexico and Latam a subtle text-only treatment', () => {
   assert.match(source, /slug:\s*'mexico'[\s\S]*?regional:\s*true/);
   assert.match(source, /if \(cat\.regional\)/);
   assert.match(source, /aria-label=\{`\$\{t\(cat\.tKey\)\} destacado`\}/);
@@ -25,4 +25,5 @@ test('points category bar gives Mexico and Latam a subtle spark treatment', () =
     source.indexOf('if (cat.news)'),
   );
   assert.doesNotMatch(regionalBlock, /pronos-news-pulse/);
+  assert.doesNotMatch(regionalBlock, /✦/);
 });

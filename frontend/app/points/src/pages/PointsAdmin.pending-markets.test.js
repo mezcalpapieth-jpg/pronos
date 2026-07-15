@@ -55,6 +55,9 @@ test('Points nav exposes a compact mobile menu with identity and hidden routes',
   assert.match(navSource, /user\?\.username/);
   assert.match(navSource, /balance\.toLocaleString\('es-MX'\)/);
   assert.match(navSource, /points\.nav\.howItWorks/);
+  assert.match(navSource, /points-lang-toggle/);
+  assert.match(navSource, /points-theme-toggle/);
+  assert.doesNotMatch(navSource, /🇺🇸|🇲🇽|btn-theme-toggle|☀|☾/);
   assert.match(navSource, /setMobileMenuOpen/);
 });
 

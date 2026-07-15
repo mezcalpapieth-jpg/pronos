@@ -4,7 +4,7 @@
  * Visual parity with the main pronos.io landing:
  *   - `.nav-logo` wordmark with pulsing `.green-dot` next to it
  *   - `.nav-links` row with Markets, Portfolio (if signed-in), Cómo funciona
- *   - `.btn-theme-toggle` circular light/dark switcher
+ *   - circular light/dark switcher
  *   - Green Crear cuenta CTA or balance pill + dropdown when signed-in
  *
  * No wallet-chain UI, no RPC, no Privy — this is an off-chain points app.
@@ -386,7 +386,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
                 closeMobileMenu();
               }}
             >
-              {lang === 'es' ? 'English' : 'Español'}
+              {lang === 'es' ? 'EN' : 'ES'}
             </button>
             <button
               type="button"
@@ -395,7 +395,9 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
                 closeMobileMenu();
               }}
             >
-              {theme === 'dark' ? (lang === 'en' ? 'Light mode' : 'Modo claro') : (lang === 'en' ? 'Dark mode' : 'Modo oscuro')}
+              {lang === 'en'
+                ? `Sun ${theme === 'light' ? 'on' : 'off'}`
+                : `Sol ${theme === 'light' ? 'on' : 'off'}`}
             </button>
             {!authenticated ? (
               <button
@@ -433,45 +435,22 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
           {t('points.nav.howItWorks')}
         </a>
 
-        {/* Language toggle — flag shows the language you'd switch TO.
-            Current ES → 🇺🇸 (click to go English); current EN → 🇲🇽 (go
-            back to Spanish). Intentionally NOT reusing .btn-theme-toggle
-            — that class renders a ::before 🌙/☀️ pseudo-element which
-            would stack on top of the flag. Inline styles mirror the
-            theme-toggle's shape without the pseudo content. */}
         <button
+          className="points-lang-toggle"
           onClick={() => setLang(lang === 'es' ? 'en' : 'es')}
           title={lang === 'es' ? 'Switch to English' : 'Cambiar a español'}
           aria-label={t('points.nav.lang')}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 34,
-            height: 34,
-            borderRadius: '50%',
-            border: '1px solid var(--border)',
-            background: 'var(--surface2)',
-            cursor: 'pointer',
-            fontSize: 16,
-            lineHeight: 1,
-            flexShrink: 0,
-            transition: 'background 0.2s, border-color 0.2s',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface3)'; e.currentTarget.style.borderColor = 'var(--border-active)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface2)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
         >
-          {lang === 'es' ? '🇺🇸' : '🇲🇽'}
+          {lang === 'es' ? 'EN' : 'ES'}
         </button>
 
-        {/* Theme toggle — matches .btn-theme-toggle styling */}
         <button
-          className="btn-theme-toggle"
+          className={`points-theme-toggle ${theme === 'light' ? 'is-on' : ''}`}
           onClick={() => setTheme(th => (th === 'dark' ? 'light' : 'dark'))}
           title={t('points.nav.theme')}
           aria-label={t('points.nav.theme')}
         >
-          {theme === 'dark' ? '☀' : '☾'}
+          <span className="points-theme-sun" aria-hidden="true" />
         </button>
 
         {!authenticated ? (

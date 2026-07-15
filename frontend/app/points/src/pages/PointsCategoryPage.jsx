@@ -631,7 +631,7 @@ function MarketsGrid({ loading, error, filtered, positionByMarket, emptyKey, sea
       }}>
         {searchQuery
           ? t('points.home.emptySearch', { q: searchQuery })
-          : `🎯 ${t(emptyKey)}`}
+          : t(emptyKey)}
       </div>
     );
   }

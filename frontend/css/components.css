@@ -309,12 +309,19 @@
   border-color: var(--border-active);
   transform: rotate(20deg);
 }
-/* Icon via CSS content */
 .btn-theme-toggle::before {
-  content: '🌙';
+  content: '';
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  opacity: 0.45;
+  transition: opacity 0.2s, color 0.2s, box-shadow 0.2s;
 }
 html[data-theme="light"] .btn-theme-toggle::before {
-  content: '☀️';
+  opacity: 1;
+  color: var(--orange);
+  box-shadow: 0 0 12px rgba(255, 90, 31, 0.3);
 }
 
 .btn-nav-cta {

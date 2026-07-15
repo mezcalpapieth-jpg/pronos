@@ -313,7 +313,7 @@ function PositionCard({ position, onSell, onRedeem, onDismiss, selling, redeemin
             disabled={redeeming}
             style={{ padding: '8px 16px', fontSize: 11 }}
           >
-            {redeeming ? 'Cobrando…' : '🏆 Cobrar ganancias'}
+            {redeeming ? 'Cobrando…' : 'Cobrar ganancias'}
           </button>
         ) : status === 'active' ? (
           <button
@@ -344,7 +344,7 @@ function PositionCard({ position, onSell, onRedeem, onDismiss, selling, redeemin
               opacity: dismissing ? 0.6 : 1,
             }}
           >
-            {dismissing ? 'Cerrando…' : '✓ OK'}
+            {dismissing ? 'Cerrando…' : 'OK'}
           </button>
         ) : null}
       </div>
@@ -380,7 +380,7 @@ function DailyClaimCard({ onClaimed }) {
       const r = await claimDaily();
       setState({ loading: false, msg: r.alreadyClaimedToday
         ? `Ya reclamaste hoy (+${r.amount} MXNP, racha ${r.streakDay})`
-        : `+${r.amount} MXNP — Racha día ${r.streakDay} 🔥`, err: null });
+        : `+${r.amount} MXNP — Racha día ${r.streakDay}`, err: null });
       onClaimed?.(r);
       await refreshStatus(); // hides the card
     } catch (e) {
@@ -402,7 +402,7 @@ function DailyClaimCard({ onClaimed }) {
   return (
     <div className="points-daily-claim-card">
       <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--green)', marginBottom: 8 }}>
-        ⚡ Reclamo diario
+        Reclamo diario
       </div>
       <p className="points-daily-claim-copy">
         Reclama tus MXNP diarios. Mantén la racha para ganar más cada día (+20 por cada día consecutivo).
@@ -458,7 +458,7 @@ function MiniLeaderboard({ currentUsername }) {
   return (
     <div className="points-sidebar-card">
       <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 12 }}>
-        🏆 Top predictores
+        Top predictores
       </div>
 
       {/* Username search — Enter submits to /u/:username. Untyped strings
@@ -602,7 +602,7 @@ function CycleHistoryLeaderboard({ currentUsername }) {
         letterSpacing: '0.1em', color: 'var(--text-muted)',
         textTransform: 'uppercase', marginBottom: 12,
       }}>
-        🗓️ Ciclos anteriores
+        Ciclos anteriores
       </div>
       {cycles.map(cycle => {
         const isOpen = openId === cycle.id;
@@ -782,7 +782,7 @@ export default function PointsPortfolio() {
     setActionState({ id: `${pos.marketId}-${pos.outcomeIndex}`, type: 'redeeming' });
     try {
       const r = await redeemWinnings({ marketId: pos.marketId, outcomeIndex: pos.outcomeIndex });
-      setMsg({ type: 'success', text: `🏆 Cobraste ${fmt(r.payout)} MXNP` });
+      setMsg({ type: 'success', text: `Cobraste ${fmt(r.payout)} MXNP` });
       await refresh();
       await load();
     } catch (e) {
@@ -903,7 +903,6 @@ export default function PointsPortfolio() {
                   textAlign: 'center', padding: '60px 24px',
                   border: '1px dashed var(--border)', borderRadius: 16,
                 }}>
-                  <p style={{ fontSize: 32, marginBottom: 12 }}>🎯</p>
                   <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
                     No tienes posiciones activas todavía.
                   </p>
@@ -973,7 +972,6 @@ function HistoryView({ history, summary, loading }) {
         textAlign: 'center', padding: '60px 24px',
         border: '1px dashed var(--border)', borderRadius: 16,
       }}>
-        <p style={{ fontSize: 32, marginBottom: 12 }}>📜</p>
         <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
           Sin actividad aún.
         </p>
@@ -983,11 +981,11 @@ function HistoryView({ history, summary, loading }) {
   const totalPositive = (summary?.totalPnl ?? 0) >= 0;
 
   const statusMap = {
-    won:     { label: '🏆 GANADO',    bg: 'rgba(0,232,122,0.12)',  color: 'var(--green)' },
+    won:     { label: 'GANADO',       bg: 'rgba(0,232,122,0.12)',  color: 'var(--green)' },
     lost:    { label: 'PERDIDO',       bg: 'rgba(239,68,68,0.1)',   color: 'var(--red, #ef4444)' },
     exited:  { label: '↗ RETIRADO',    bg: 'rgba(148,163,184,0.08)', color: 'var(--text-secondary)' },
     canceled:{ label: 'ANULADO',        bg: 'rgba(148,163,184,0.08)', color: 'var(--text-secondary)' },
-    pending: { label: '⏳ PENDIENTE',  bg: 'rgba(245,158,11,0.1)',  color: '#f59e0b' },
+    pending: { label: 'PENDIENTE',    bg: 'rgba(245,158,11,0.1)',  color: '#f59e0b' },
     open:    { label: 'EN CURSO',      bg: 'rgba(245,200,66,0.08)', color: 'var(--gold, #F5C842)' },
   };
 

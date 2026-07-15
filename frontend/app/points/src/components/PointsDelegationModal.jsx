@@ -22,27 +22,27 @@ import { authorizeDelegation } from '../lib/pointsApi.js';
 
 const BULLETS = [
   {
-    icon: '✓',
+    icon: 'OK',
     title: 'Compras y ventas automáticas',
     body: 'Firmamos cada compra, venta, y cobro de ganancias sin pedirte confirmar una y otra vez.',
   },
   {
-    icon: '💰',
+    icon: '01',
     title: 'Límite: 200,000 MXNB por día',
     body: 'Una protección dura — aunque nuestro backend fuera comprometido, no puede gastar más que esto por cuenta.',
   },
   {
-    icon: '🔒',
+    icon: '02',
     title: 'Solo a contratos de Pronos',
     body: 'La firma vive encerrada: únicamente para los contratos de los mercados. No puede enviar fondos a ningún otro lado.',
   },
   {
-    icon: '🚪',
+    icon: '03',
     title: 'Los retiros siguen en tus manos',
     body: 'Para mover MXNB fuera de Pronos vas a confirmar con un correo. Eso no cambia.',
   },
   {
-    icon: '📅',
+    icon: '04',
     title: 'Vigencia: 180 días',
     body: 'Después de medio año te volvemos a pedir autorización. Puedes revocar antes desde tu perfil.',
   },
@@ -180,7 +180,7 @@ export default function PointsDelegationModal({ open, onClose, onAuthorized }) {
               opacity: submitting ? 0.7 : 1,
             }}
           >
-            {submitting ? 'Autorizando…' : '✓ Autorizar'}
+            {submitting ? 'Autorizando…' : 'Autorizar'}
           </button>
         </div>
       </div>

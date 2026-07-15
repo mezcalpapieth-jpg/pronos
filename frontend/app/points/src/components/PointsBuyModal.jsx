@@ -344,7 +344,7 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
             transition: 'opacity 0.15s',
           }}
         >
-          {success ? `✓ ${t('points.buy.success')}` :
+          {success ? t('points.buy.success') :
            submitting ? t('points.buy.submitting') :
            insufficientBalance ? t('points.buy.insufficientBalance') :
            `${t('points.buy.title')} ${numAmount || '—'} MXNP`}

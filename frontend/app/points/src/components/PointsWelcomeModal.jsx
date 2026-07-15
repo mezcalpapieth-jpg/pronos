@@ -106,7 +106,7 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
             textTransform: 'uppercase',
             marginBottom: 10,
           }}>
-            {isEn ? '⚡ Welcome to the beta' : '⚡ Bienvenido a la beta'}
+            {isEn ? 'Welcome to the beta' : 'Bienvenido a la beta'}
           </div>
           <h1
             id="welcome-title"
@@ -164,13 +164,13 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
               )
             }
             bullets={isEn ? [
-              { icon: '⏳', text: 'Prize cycles', value: 'coming soon' },
-              { icon: '📈', text: 'Markets', value: 'open' },
-              { icon: '🧪', text: 'MXNP', value: 'practice points' },
+              { icon: '01', text: 'Prize cycles', value: 'coming soon' },
+              { icon: '02', text: 'Markets', value: 'open' },
+              { icon: '03', text: 'MXNP', value: 'practice points' },
             ] : [
-              { icon: '⏳', text: 'Ciclos de premios', value: 'próximamente' },
-              { icon: '📈', text: 'Mercados', value: 'abiertos' },
-              { icon: '🧪', text: 'MXNP', value: 'puntos de práctica' },
+              { icon: '01', text: 'Ciclos de premios', value: 'próximamente' },
+              { icon: '02', text: 'Mercados', value: 'abiertos' },
+              { icon: '03', text: 'MXNP', value: 'puntos de práctica' },
             ]}
           />
 
@@ -208,13 +208,13 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
             accent="var(--text-muted)"
             eyebrow={isEn ? 'How to earn MXNP without spending it' : 'Cómo ganar MXNP sin gastarlo'}
             bullets={isEn ? [
-              { icon: '⚡', text: 'Daily claim', value: '100 + 20/day streak' },
-              { icon: '🤝', text: 'Each friend you invite', value: '+100 MXNP' },
-              { icon: '📲', text: 'Follow Pronos on social', value: 'up to +85 MXNP' },
+              { icon: '01', text: 'Daily claim', value: '100 + 20/day streak' },
+              { icon: '02', text: 'Each friend you invite', value: '+100 MXNP' },
+              { icon: '03', text: 'Follow Pronos on social', value: 'up to +85 MXNP' },
             ] : [
-              { icon: '⚡', text: 'Reclamo diario', value: '100 + 20/día racha' },
-              { icon: '🤝', text: 'Cada amigo que invites', value: '+100 MXNP' },
-              { icon: '📲', text: 'Seguir a Pronos en redes', value: 'hasta +85 MXNP' },
+              { icon: '01', text: 'Reclamo diario', value: '100 + 20/día racha' },
+              { icon: '02', text: 'Cada amigo que invites', value: '+100 MXNP' },
+              { icon: '03', text: 'Seguir a Pronos en redes', value: 'hasta +85 MXNP' },
             ]}
           />
         </div>

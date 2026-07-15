@@ -71,6 +71,64 @@
   font-weight: 700;
 }
 
+.points-lang-toggle,
+.points-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, transform 0.15s;
+}
+
+.points-lang-toggle {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.points-lang-toggle:hover,
+.points-theme-toggle:hover {
+  background: var(--surface3);
+  border-color: var(--border-active);
+}
+
+.points-theme-sun {
+  position: relative;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  opacity: 0.45;
+  transition: opacity 0.2s, color 0.2s, box-shadow 0.2s;
+}
+
+.points-theme-sun::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  opacity: 0.18;
+}
+
+.points-theme-toggle.is-on {
+  color: var(--orange);
+  border-color: rgba(255, 90, 31, 0.45);
+}
+
+.points-theme-toggle.is-on .points-theme-sun {
+  opacity: 1;
+  box-shadow: 0 0 12px rgba(255, 90, 31, 0.28);
+}
+
 /* Dropdown attached to user pill */
 .nav-dropdown-points {
   position: absolute;

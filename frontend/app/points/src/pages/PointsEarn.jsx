@@ -65,7 +65,7 @@ function DailyClaimCard({ onClaimed, alreadyClaimedToday: initialClaimed, onClai
         claimed: true,
         msg: r.alreadyClaimedToday
           ? `Ya reclamaste hoy (+${r.amount} MXNP, racha día ${r.streakDay})`
-          : `+${r.amount} MXNP — Racha día ${r.streakDay} 🔥`,
+          : `+${r.amount} MXNP — Racha día ${r.streakDay}`,
       });
       onClaimed?.(r);
       onClaim?.(r);
@@ -78,12 +78,12 @@ function DailyClaimCard({ onClaimed, alreadyClaimedToday: initialClaimed, onClai
   const buttonLabel = state.loading
     ? 'Reclamando…'
     : locked
-    ? '✓ Ya reclamaste hoy'
+    ? 'Ya reclamaste hoy'
     : 'Reclamar';
 
   return (
     <section style={panelStyle}>
-      <div style={eyebrowStyle}>⚡ Reclamo diario</div>
+      <div style={eyebrowStyle}>Reclamo diario</div>
       <h3 style={panelTitleStyle}>100 MXNP hoy, +20 MXNP por cada día consecutivo</h3>
       <p style={panelBodyStyle}>
         Día 1 = 100 MXNP. Día 2 = 120. Día 3 = 140. Y así sucesivamente. Entra todos
@@ -184,7 +184,7 @@ function ReferralCard() {
     const link = data?.link;
     if (!link) return;
     const msg = encodeURIComponent(
-      `¡Únete a Pronos y gana MXNP prediciendo eventos reales! 🎯\n${link}`,
+      `¡Únete a Pronos y gana MXNP prediciendo eventos reales!\n${link}`,
     );
     const urls = {
       whatsapp: `https://wa.me/?text=${msg}`,
@@ -198,7 +198,7 @@ function ReferralCard() {
 
   return (
     <section style={panelStyle}>
-      <div style={eyebrowStyle}>🤝 Programa de referidos</div>
+      <div style={eyebrowStyle}>Programa de referidos</div>
       <h3 style={panelTitleStyle}>+100 MXNP por cada amigo que se registre</h3>
       <p style={panelBodyStyle}>
         Comparte tu link único. Cuando alguien crea su cuenta usándolo, tú recibes
@@ -242,7 +242,7 @@ function ReferralCard() {
             minWidth: 80,
           }}
         >
-          {copied ? '✓ COPIADO' : 'COPIAR'}
+          {copied ? 'COPIADO' : 'COPIAR'}
         </button>
       </div>
 
@@ -299,8 +299,8 @@ function SocialTaskRow({ task, onSubmit }) {
 
   const STATUS_COPY = {
     not_submitted: { label: 'Reclamar',        primary: true,  disabled: false },
-    pending:       { label: '⏳ En revisión',   primary: false, disabled: true  },
-    approved:      { label: '✓ Aprobado',       primary: false, disabled: true  },
+    pending:       { label: 'En revisión',      primary: false, disabled: true  },
+    approved:      { label: 'Aprobado',         primary: false, disabled: true  },
     rejected:      { label: 'Rechazado · reintentar', primary: true, disabled: false },
   };
   const ui = STATUS_COPY[task.status] || STATUS_COPY.not_submitted;
@@ -389,7 +389,7 @@ const SOCIAL_PROVIDERS = [
   {
     key: 'instagram',
     label: 'Instagram',
-    icon: '📸',
+    icon: 'IG',
     reward: 50,
     available: false,
     comingSoonNote: 'Esperando aprobación de Meta',
@@ -397,7 +397,7 @@ const SOCIAL_PROVIDERS = [
   {
     key: 'tiktok',
     label: 'TikTok',
-    icon: '🎵',
+    icon: 'TT',
     reward: 50,
     available: true,
     comingSoonNote: null,
@@ -457,7 +457,7 @@ function SocialLinksCard() {
 
   return (
     <section style={panelStyle}>
-      <div style={eyebrowStyle}>🔗 Cuentas verificadas</div>
+      <div style={eyebrowStyle}>Cuentas verificadas</div>
       <h3 style={panelTitleStyle}>Conecta tus redes sociales</h3>
       <p style={panelBodyStyle}>
         Verificamos tu cuenta directamente con la red social — no hace falta capturas
@@ -483,7 +483,9 @@ function SocialLinksCard() {
               }}
             >
               <div style={{
-                fontSize: 20, width: 28, textAlign: 'center',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 12, fontWeight: 700, width: 28, textAlign: 'center',
+                letterSpacing: '0.04em',
                 filter: locked ? 'grayscale(1)' : 'none',
                 opacity: locked ? 0.5 : 1,
               }}>
@@ -501,7 +503,7 @@ function SocialLinksCard() {
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: 'var(--green)' }}>
-                  {isLinked && link.rewardCredited ? '✓' : `+${p.reward}`}
+                  {isLinked && link.rewardCredited ? 'OK' : `+${p.reward}`}
                 </div>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)' }}>MXNP</div>
               </div>
@@ -597,7 +599,7 @@ function SocialTasksCard() {
 
   return (
     <section style={panelStyle}>
-      <div style={eyebrowStyle}>📲 Tareas sociales</div>
+      <div style={eyebrowStyle}>Tareas sociales</div>
       <h3 style={panelTitleStyle}>Sigue a Pronos y gana MXNP</h3>
       <p style={panelBodyStyle}>
         Completa la tarea en la red social y marca "Reclamar". El equipo revisa en

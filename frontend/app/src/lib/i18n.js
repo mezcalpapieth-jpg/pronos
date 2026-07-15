@@ -166,21 +166,21 @@ const STRINGS = {
   'grid.loading':             { es: 'CARGANDO MERCADOS…',   en: 'LOADING MARKETS…' },
   'grid.empty':               { es: 'No hay mercados en esta categoría.', en: 'No markets in this category.' },
   'grid.fallback':            { es: 'No pudimos cargar mercados on-chain.', en: 'Could not load on-chain markets.' },
-  'card.resolved':            { es: '🏆 RESUELTO',          en: '🏆 RESOLVED' },
-  'card.closed':              { es: '🔒 CERRADO',           en: '🔒 CLOSED' },
-  'card.trending':            { es: '🔥 TRENDING',          en: '🔥 TRENDING' },
+  'card.resolved':            { es: 'RESUELTO',             en: 'RESOLVED' },
+  'card.closed':              { es: 'CERRADO',              en: 'CLOSED' },
+  'card.trending':            { es: 'TRENDING',             en: 'TRENDING' },
   'card.live':                { es: 'LIVE',                 en: 'LIVE' },
 
   // ── Categories ────────────────────────────────────────────────────────────
-  'cat.trending':             { es: '🔥 Trending',          en: '🔥 Trending' },
+  'cat.trending':             { es: 'Trending',             en: 'Trending' },
   'cat.all':                  { es: 'Todos',                en: 'All' },
   'cat.mexico':               { es: 'Mexico & Latam',       en: 'Mexico & Latam' },
-  'cat.politica':             { es: '🌎 Política Internacional', en: '🌎 World Politics' },
-  'cat.deportes':             { es: '⚽ Deportes',          en: '⚽ Sports' },
+  'cat.politica':             { es: 'Política Internacional', en: 'World Politics' },
+  'cat.deportes':             { es: 'Deportes',             en: 'Sports' },
   'cat.finanzas':             { es: '$ Finanzas',           en: '$ Finance' },
   'cat.crypto':               { es: '₿ Crypto',             en: '₿ Crypto' },
-  'cat.musica':               { es: '🎵 Música & Farándula', en: '🎵 Music & Pop Culture' },
-  'cat.resueltos':            { es: '🏆 Resueltos',         en: '🏆 Resolved' },
+  'cat.musica':               { es: 'Música & Farándula',  en: 'Music & Pop Culture' },
+  'cat.resueltos':            { es: 'Resueltos',            en: 'Resolved' },
 
   // ── BetModal ───────────────────────────────────────────────────────────────
   'bet.title':                { es: 'COLOCAR APUESTA',      en: 'PLACE BET' },
@@ -199,7 +199,7 @@ const STRINGS = {
   'bet.btn.approving':        { es: 'Aprobando MXNB…',      en: 'Approving MXNB…' },
   'bet.btn.signing':          { es: 'Firmando…',            en: 'Signing…' },
   'bet.btn.placing':          { es: 'Enviando orden…',      en: 'Submitting order…' },
-  'bet.btn.success':          { es: '✓ COMPRA REALIZADA',   en: '✓ TRADE COMPLETE' },
+  'bet.btn.success':          { es: 'COMPRA REALIZADA',     en: 'TRADE COMPLETE' },
   'bet.btn.buyAmount':        { es: 'COMPRAR ${amt} MXNB',  en: 'BUY ${amt} MXNB' },
   'bet.btn.buy':              { es: 'COMPRAR',              en: 'BUY' },
   'bet.btn.unavailable':      { es: 'SIN TRADING EN VIVO',  en: 'LIVE TRADING UNAVAILABLE' },
@@ -215,7 +215,7 @@ const STRINGS = {
                                 en: 'Insufficient balance. You have ${bal} MXNB.' },
   'bet.approving':            { es: 'Aprobando MXNB…',
                                 en: 'Approving MXNB…' },
-  'bet.approved':             { es: 'MXNB aprobado ✓',      en: 'MXNB approved ✓' },
+  'bet.approved':             { es: 'MXNB aprobado',        en: 'MXNB approved' },
   'bet.signing':              { es: 'Firmando autenticación… (1 firma)',
                                 en: 'Signing auth… (1 signature)' },
   'bet.placing':              { es: 'Enviando orden a Polymarket…',
@@ -224,12 +224,12 @@ const STRINGS = {
                                 en: 'Submitting protocol transaction…' },
   'bet.placed':               { es: '¡Orden enviada! ${amt} MXNB en "{outcome}"',
                                 en: 'Bet placed! ${amt} MXNB on "{outcome}"' },
-  'bet.warn.lowVolume':       { es: '⚠️ Volumen bajo: tu compra mueve el precio de {start}% a {end}% (+{pts} pts). Considera reducir el monto.',
-                                en: '⚠️ Low volume: your trade moves the price from {start}% to {end}% (+{pts} pts). Consider reducing the amount.' },
-  'bet.warn.lowLiquidity':    { es: '⚠️ Liquidez insuficiente: solo ${filled} MXNB pueden ejecutarse al precio actual. La orden podría fallar.',
-                                en: '⚠️ Low liquidity: only ${filled} MXNB can fill at the current price. The order might fail.' },
-  'bet.warn.demoMarket':      { es: '📊 Mercado demo: sin libro de órdenes en vivo, no podemos previsualizar slippage para este mercado.',
-                                en: '📊 Demo market: no live order book, slippage preview unavailable for this market.' },
+  'bet.warn.lowVolume':       { es: 'Volumen bajo: tu compra mueve el precio de {start}% a {end}% (+{pts} pts). Considera reducir el monto.',
+                                en: 'Low volume: your trade moves the price from {start}% to {end}% (+{pts} pts). Consider reducing the amount.' },
+  'bet.warn.lowLiquidity':    { es: 'Liquidez insuficiente: solo ${filled} MXNB pueden ejecutarse al precio actual. La orden podría fallar.',
+                                en: 'Low liquidity: only ${filled} MXNB can fill at the current price. The order might fail.' },
+  'bet.warn.demoMarket':      { es: 'Mercado demo: sin libro de órdenes en vivo, no podemos previsualizar slippage para este mercado.',
+                                en: 'Demo market: no live order book, slippage preview unavailable for this market.' },
   'bet.noLiveTrading':        { es: 'Este mercado es informativo por ahora; todavía no tiene trading en vivo.',
                                 en: 'This market is informational for now; live trading is not connected yet.' },
   'bet.protocolUnavailable':  { es: 'Este mercado del protocolo todavía no tiene pool o contratos configurados.',
@@ -250,7 +250,7 @@ const STRINGS = {
                                 en: 'The outcome will be published automatically when available' },
   'detail.toResolve':         { es: 'POR RESOLVER',         en: 'TO RESOLVE' },
   'detail.closed':            { es: 'CERRADO',              en: 'CLOSED' },
-  'detail.lockedClosed':      { es: '🔒 CERRADO',           en: '🔒 CLOSED' },
+  'detail.lockedClosed':      { es: 'CERRADO',              en: 'CLOSED' },
   'detail.volume':            { es: 'VOLUMEN',              en: 'VOLUME' },
   'detail.liquidity':         { es: 'LIQUIDEZ',             en: 'LIQUIDITY' },
   'detail.closesOn':          { es: 'CIERRA',               en: 'CLOSES' },
@@ -276,7 +276,7 @@ const STRINGS = {
   'detail.activity':          { es: 'Actividad',            en: 'Activity' },
   'detail.commentPlaceholder':{ es: 'Agrega un comentario...', en: 'Add a comment...' },
   'detail.publish':           { es: 'Publicar',             en: 'Publish' },
-  'detail.externalWarn':      { es: '⚠️ Cuidado con links externos', en: '⚠️ Be careful with external links' },
+  'detail.externalWarn':      { es: 'Cuidado con links externos', en: 'Be careful with external links' },
   'detail.replies':           { es: '↩ {n} Respuestas',     en: '↩ {n} Replies' },
   'detail.timeAgo':           { es: '{t} atrás',            en: '{t} ago' },
   'detail.pnl':               { es: 'PNL',                  en: 'PnL' },
@@ -337,7 +337,7 @@ const STRINGS = {
   'admin.resolve':            { es: 'Resolver',              en: 'Resolve' },
   'admin.revoke':             { es: 'Revocar',               en: 'Revoke' },
   'admin.translating':        { es: 'Traduciendo…',          en: 'Translating…' },
-  'admin.approved':           { es: '✓ Aprobado',            en: '✓ Approved' },
+  'admin.approved':           { es: 'Aprobado',              en: 'Approved' },
   'admin.pending':            { es: '○ Pendiente',           en: '○ Pending' },
   'admin.autoResolve':        { es: '▶ AUTO-RESOLVER AHORA', en: '▶ AUTO-RESOLVE NOW' },
   'admin.running':            { es: '⟳ CORRIENDO…',         en: '⟳ RUNNING…' },
@@ -455,8 +455,8 @@ const STRINGS = {
   'um.subtitle2':             { es: 'No lo podrás cambiar después.', en: 'You won\'t be able to change it later.' },
   'um.placeholder':           { es: 'tu_username',          en: 'your_username' },
   'um.help':                  { es: '3–20 caracteres · letras, números y _', en: '3–20 chars · letters, numbers and _' },
-  'um.taken':                 { es: '❌ Ese username ya está en uso', en: '❌ That username is already taken' },
-  'um.error':                 { es: '❌ {msg}',             en: '❌ {msg}' },
+  'um.taken':                 { es: 'Ese username ya está en uso', en: 'That username is already taken' },
+  'um.error':                 { es: '{msg}',                en: '{msg}' },
   'um.saving':                { es: 'Guardando...',         en: 'Saving...' },
   'um.enter':                 { es: 'Entrar a Pronos →',    en: 'Enter Pronos →' },
   'um.generating':            { es: 'Generando...',         en: 'Generating...' },
@@ -516,8 +516,8 @@ const STRINGS = {
   'points.hero.cyclesPausedTitle': { es: 'Ciclos de premios', en: 'Prize cycles' },
   'points.hero.cyclesPausedBody': { es: 'Próximamente. Por ahora puedes seguir explorando mercados, comprar acciones y probar estrategias con MXNP.',
                                     en: 'Coming soon. For now you can keep exploring markets, buying shares, and testing strategies with MXNP.' },
-  'points.hero.closePending': { es: '⏳ Cierre pendiente',    en: '⏳ Closing soon' },
-  'points.hero.surprisePrize':{ es: '🎁 Premio sorpresa',     en: '🎁 Surprise prize' },
+  'points.hero.closePending': { es: 'Cierre pendiente',      en: 'Closing soon' },
+  'points.hero.surprisePrize':{ es: 'Premio sorpresa',        en: 'Surprise prize' },
   'points.hero.eligibility':  { es: 'Para calificar al premio debes participar en al menos {n} mercados durante el ciclo.',
                                 en: 'To qualify for the prize you must participate in at least {n} markets during the cycle.' },
   'points.hero.rankBy':       { es: 'RANKING POR CARTERA',   en: 'RANKED BY PORTFOLIO' },
@@ -555,7 +555,7 @@ const STRINGS = {
 
   // Market detail
   'points.detail.resolvedBadge':   { es: '· RESUELTO',        en: '· RESOLVED' },
-  'points.detail.pendingBadge':    { es: '· ⏳ PENDIENTE',    en: '· ⏳ PENDING' },
+  'points.detail.pendingBadge':    { es: '· PENDIENTE',      en: '· PENDING' },
   'points.detail.resultOfficial': { es: 'RESULTADO OFICIAL',  en: 'OFFICIAL RESULT' },
   'points.detail.redeemInstructions': { es: 'Los ganadores pueden reclamar 1 MXNP por cada acción.', en: 'Winners can claim 1 MXNP per share.' },
   'points.detail.probNow':         { es: 'PROBABILIDAD ACTUAL · SÍ', en: 'CURRENT PROBABILITY · YES' },
@@ -583,7 +583,7 @@ const STRINGS = {
   'points.detail.valueLabel':      { es: 'Valor',              en: 'Value' },
   'points.detail.buyMore':         { es: 'Comprar más',        en: 'Buy more' },
   'points.detail.sell':            { es: 'Vender',             en: 'Sell' },
-  'points.detail.mxnpNote':        { es: '💡 MXNP son puntos de la competencia. Los ciclos de premios vuelven pronto.', en: '💡 MXNP are competition points. Prize cycles return soon.' },
+  'points.detail.mxnpNote':        { es: 'MXNP son puntos de la competencia. Los ciclos de premios vuelven pronto.', en: 'MXNP are competition points. Prize cycles return soon.' },
 
   // Comments
   'points.comments.title':         { es: 'Comentarios',         en: 'Comments' },
@@ -604,10 +604,8 @@ const STRINGS = {
   'points.top.title':              { es: 'Top holders',         en: 'Top holders' },
   'points.top.loading':            { es: 'Cargando…',           en: 'Loading…' },
 
-  // Category labels — kept emoji-free so the points-app's CategoryBar
-  // matches the MVP's clean text-only treatment. Earlier copy had
-  // 🔥 / ⚽ / 🎵 / 🇲🇽 etc. in front of each label; user asked to
-  // strip them to match the MVP look.
+  // Category labels: kept free of decorative symbols so the points app
+  // matches the MVP's clean text-only treatment.
   'points.cat.noticias':      { es: 'Noticias',               en: 'News' },
   'points.cat.trending':      { es: 'Trending',               en: 'Trending' },
   'points.cat.worldCup':      { es: 'Copa del Mundo',         en: 'World Cup' },
@@ -639,14 +637,14 @@ const STRINGS = {
 
   // Sports sub-filter — /c/deportes
   'points.sport.all':         { es: 'Todos',                  en: 'All' },
-  'points.sport.soccer':      { es: '⚽ Fútbol',              en: '⚽ Soccer' },
-  'points.sport.baseball':    { es: '⚾ Béisbol',             en: '⚾ Baseball' },
-  'points.sport.nba':         { es: '🏀 NBA',                  en: '🏀 NBA' },
-  'points.sport.nfl':         { es: '🏈 NFL',                  en: '🏈 NFL' },
-  'points.sport.f1':          { es: '🏁 F1',                   en: '🏁 F1' },
-  'points.sport.tennis':      { es: '🎾 Tenis',               en: '🎾 Tennis' },
-  'points.sport.golf':        { es: '⛳ Golf',                 en: '⛳ Golf' },
-  'points.sport.combate':     { es: '🥊 Combate',             en: '🥊 Fighting' },
+  'points.sport.soccer':      { es: 'Fútbol',                en: 'Soccer' },
+  'points.sport.baseball':    { es: 'Béisbol',               en: 'Baseball' },
+  'points.sport.nba':         { es: 'NBA',                    en: 'NBA' },
+  'points.sport.nfl':         { es: 'NFL',                    en: 'NFL' },
+  'points.sport.f1':          { es: 'F1',                     en: 'F1' },
+  'points.sport.tennis':      { es: 'Tenis',                 en: 'Tennis' },
+  'points.sport.golf':        { es: 'Golf',                  en: 'Golf' },
+  'points.sport.combate':     { es: 'Combate',               en: 'Fighting' },
 
   // Soccer / Baseball / Combate leagues sidebar
   'points.league.all':        { es: 'Todas',                  en: 'All' },
@@ -668,13 +666,13 @@ const STRINGS = {
 
   'points.card.resolved':     { es: 'RESUELTO',              en: 'RESOLVED' },
   'points.card.pending':      { es: 'PENDIENTE',             en: 'PENDING' },
-  'points.card.live':         { es: '🔴 EN VIVO',            en: '🔴 LIVE' },
-  'points.card.yourPos':      { es: '✓ Tu posición',         en: '✓ Your position' },
+  'points.card.live':         { es: 'EN VIVO',               en: 'LIVE' },
+  'points.card.yourPos':      { es: 'Tu posición',           en: 'Your position' },
   'points.card.moreOptions':  { es: '+ {n} opciones más',    en: '+ {n} more options' },
   'points.card.ifYouWin':     { es: 'si ganas',              en: 'if you win' },
 
   'points.home.empty':        { es: 'No hay mercados en esta categoría.', en: 'No markets in this category.' },
-  'points.home.emptySearch':  { es: '🔍 No hay resultados para "{q}".', en: '🔍 No results for "{q}".' },
+  'points.home.emptySearch':  { es: 'No hay resultados para "{q}".', en: 'No results for "{q}".' },
   'points.home.emptyPending': { es: 'No hay mercados por resolver.', en: 'No markets to resolve.' },
   'points.home.loading':      { es: 'Cargando mercados…',    en: 'Loading markets…' },
 
@@ -750,7 +748,7 @@ const STRINGS = {
 
   'points.earn.title':        { es: 'Gana MXNP',             en: 'Earn MXNP' },
 
-  'points.status.won':        { es: '🏆 GANADO',             en: '🏆 WON' },
+  'points.status.won':        { es: 'GANADO',                en: 'WON' },
   'points.status.lost':       { es: 'PERDIDO',               en: 'LOST' },
   'points.status.exited':     { es: 'SALIDO',                en: 'EXITED' },
   'points.status.open':       { es: 'ABIERTA',               en: 'OPEN' },
