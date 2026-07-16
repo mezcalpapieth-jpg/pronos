@@ -256,6 +256,17 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
+.wc-final-stage-layout {
+  display: grid;
+  gap: 12px;
+  max-width: 780px;
+  margin: 0 auto;
+}
+.wc-final-stage-layout .wc-knockout-card.is-compact {
+  max-width: 560px;
+  margin: 0 auto;
+  opacity: 0.92;
+}
 @media (max-width: 920px) {
   .wc-stage-grid { grid-template-columns: 1fr; }
 }
@@ -293,6 +304,10 @@
   justify-content: space-around;
   min-height: var(--bracket-h);
 }
+.wc-bracket-col-medal {
+  justify-content: center;
+  gap: 48px;
+}
 .wc-bracket-col-label {
   font-family: var(--font-mono);
   font-size: 10px;
@@ -319,6 +334,25 @@
   flex-direction: column;
   gap: 2px;
 }
+.wc-bracket-slot-small {
+  min-height: 32px;
+  padding: 6px 8px;
+  font-size: 9px;
+  opacity: 0.82;
+}
+.wc-bracket-third-place {
+  display: grid;
+  gap: 6px;
+  transform: translateY(76px);
+}
+.wc-bracket-third-label {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  text-align: center;
+}
 /* Shorter bracket container on small screens so the final stages
    don't have ludicrous vertical padding when a phone can only show
    two columns at a time (the user will scroll horizontally anyway). */
@@ -342,6 +376,15 @@
     min-height: auto;
     justify-content: flex-start;
     gap: 10px;
+  }
+  .wc-bracket-col-medal {
+    gap: 10px;
+  }
+  .wc-bracket-third-place {
+    transform: none;
+  }
+  .wc-bracket-third-label {
+    text-align: left;
   }
   .wc-group-team-row {
     align-items: flex-start !important;

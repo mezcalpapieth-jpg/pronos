@@ -342,8 +342,12 @@ export default function PointsWorldCupPage() {
     [knockoutMarkets],
   );
   const finalWeekendMarkets = useMemo(
-    () => [...thirdPlaceMarkets, ...finalMarkets]
-      .sort((a, b) => new Date(a.startTime || a.endTime || 0) - new Date(b.startTime || b.endTime || 0)),
+    () => [...finalMarkets, ...thirdPlaceMarkets]
+      .sort((a, b) => {
+        const roundWeight = (m) => (roundFromMarket(m) === 'final' ? 0 : 1);
+        return (roundWeight(a) - roundWeight(b))
+          || (new Date(a.startTime || a.endTime || 0) - new Date(b.startTime || b.endTime || 0));
+      }),
     [finalMarkets, thirdPlaceMarkets],
   );
   const activeKnockoutMarkets = useMemo(
@@ -811,11 +815,11 @@ function ThirdPlaceStrip() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: 14,
-      margin: '-10px 0 22px',
-      padding: '12px 14px',
-      maxWidth: 720,
-      borderRadius: 14,
+      gap: 10,
+      margin: '-12px 0 22px',
+      padding: '9px 12px',
+      maxWidth: 560,
+      borderRadius: 12,
       border: '1px solid rgba(255,255,255,0.12)',
       background: 'rgba(0,0,0,0.2)',
       color: 'var(--text-secondary)',
@@ -832,14 +836,14 @@ function ThirdPlaceStrip() {
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 12,
+        gap: 9,
         minWidth: 0,
       }}>
         <FinalMiniTeam side={THIRD_PLACE_MATCHUP.home} />
         <span style={{
           fontFamily: 'var(--font-display)',
           color: 'var(--text-primary)',
-          fontSize: 18,
+          fontSize: 14,
         }}>
           VS
         </span>
@@ -860,12 +864,13 @@ function FinalMiniTeam({ side }) {
       fontFamily: 'var(--font-body)',
       fontWeight: 800,
     }}>
-      <TeamBadge team={side.team} size={24} />
+      <TeamBadge team={side.team} size={20} />
       <span style={{
         whiteSpace: 'nowrap',
         overflow: 'hidden',
         textOverflow: 'ellipsis',
         borderBottom: `2px solid ${side.accent}`,
+        fontSize: 13,
       }}>
         {side.label}
       </span>
@@ -935,6 +940,12 @@ function FinalFactPanel({ item }) {
 function CurrentStage({ loading, markets, nextMarket, stageMeta, onOpen, onBuy }) {
   const hasMarkets = markets.length > 0;
   const meta = stageMeta || stageMetaForRound('knockout');
+  const isFinalStage = meta.key === 'final';
+  const finalMarkets = isFinalStage ? markets.filter(market => roundFromMarket(market) === 'final') : [];
+  const thirdMarkets = isFinalStage ? markets.filter(market => roundFromMarket(market) === 'third') : [];
+  const mainMarkets = isFinalStage
+    ? (finalMarkets.length > 0 ? finalMarkets : markets.filter(market => roundFromMarket(market) !== 'third'))
+    : markets;
   return (
     <section style={{ marginBottom: 42 }}>
       <div style={{
@@ -1031,9 +1042,31 @@ function CurrentStage({ loading, markets, nextMarket, stageMeta, onOpen, onBuy }
         </div>
       )}
 
-      {hasMarkets && (
+      {hasMarkets && isFinalStage && (
+        <div className="wc-final-stage-layout">
+          {mainMarkets.map(market => (
+            <FeaturedKnockoutCard
+              key={market.id}
+              market={market}
+              onOpen={() => onOpen?.(market)}
+              onBuy={(outcomeIndex, label) => onBuy?.(market, outcomeIndex, label)}
+            />
+          ))}
+          {thirdMarkets.map(market => (
+            <FeaturedKnockoutCard
+              key={market.id}
+              market={market}
+              compact
+              onOpen={() => onOpen?.(market)}
+              onBuy={(outcomeIndex, label) => onBuy?.(market, outcomeIndex, label)}
+            />
+          ))}
+        </div>
+      )}
+
+      {hasMarkets && !isFinalStage && (
         <div className="wc-stage-grid">
-          {markets.map(market => (
+          {mainMarkets.map(market => (
             <FeaturedKnockoutCard
               key={market.id}
               market={market}
@@ -1047,7 +1080,7 @@ function CurrentStage({ loading, markets, nextMarket, stageMeta, onOpen, onBuy }
   );
 }
 
-function FeaturedKnockoutCard({ market, onOpen, onBuy }) {
+function FeaturedKnockoutCard({ market, onOpen, onBuy, compact = false }) {
   const outcomes = Array.isArray(market.outcomes) && market.outcomes.length > 0
     ? market.outcomes
     : ['Sí', 'No'];
@@ -1062,14 +1095,15 @@ function FeaturedKnockoutCard({ market, onOpen, onBuy }) {
     <article
       onClick={onOpen}
       role="button"
+      className={compact ? 'wc-knockout-card is-compact' : 'wc-knockout-card'}
       style={{
         position: 'relative',
         overflow: 'hidden',
-        minHeight: 260,
-        borderRadius: 20,
+        minHeight: compact ? 148 : 260,
+        borderRadius: compact ? 16 : 20,
         border: `1px solid ${isActive ? 'rgba(0,232,122,0.36)' : 'var(--border)'}`,
         background: 'radial-gradient(circle at 18% 0%, rgba(0,232,122,0.18), transparent 32%), radial-gradient(circle at 86% 18%, rgba(255,85,0,0.2), transparent 34%), var(--surface1)',
-        padding: 22,
+        padding: compact ? 16 : 22,
         cursor: 'pointer',
         display: 'flex',
         flexDirection: 'column',
@@ -1088,7 +1122,7 @@ function FeaturedKnockoutCard({ market, onOpen, onBuy }) {
           justifyContent: 'space-between',
           gap: 12,
           alignItems: 'center',
-          marginBottom: 18,
+          marginBottom: compact ? 10 : 18,
         }}>
           <span style={{
             display: 'inline-flex',
@@ -1122,7 +1156,7 @@ function FeaturedKnockoutCard({ market, onOpen, onBuy }) {
           margin: 0,
           color: 'var(--text-primary)',
           fontFamily: 'var(--font-display)',
-          fontSize: 'clamp(26px, 4vw, 42px)',
+          fontSize: compact ? 'clamp(19px, 3vw, 28px)' : 'clamp(26px, 4vw, 42px)',
           lineHeight: 0.98,
           letterSpacing: '0.01em',
         }}>
@@ -1134,8 +1168,8 @@ function FeaturedKnockoutCard({ market, onOpen, onBuy }) {
         position: 'relative',
         display: 'grid',
         gridTemplateColumns: `repeat(${Math.min(outcomes.length, 2)}, minmax(0, 1fr))`,
-        gap: 10,
-        marginTop: 22,
+        gap: compact ? 8 : 10,
+        marginTop: compact ? 14 : 22,
       }}>
         {outcomes.map((label, i) => {
           const team = teamByLabel(label);
@@ -1153,12 +1187,12 @@ function FeaturedKnockoutCard({ market, onOpen, onBuy }) {
                 if (isActive) onBuy?.(i, label);
               }}
               style={{
-                minHeight: 78,
+                minHeight: compact ? 54 : 78,
                 display: 'flex',
                 alignItems: 'center',
-                gap: 12,
-                padding: '14px 16px',
-                borderRadius: 14,
+                gap: compact ? 8 : 12,
+                padding: compact ? '9px 11px' : '14px 16px',
+                borderRadius: compact ? 12 : 14,
                 border: `1px solid ${activeTone.border}`,
                 background: activeTone.bg,
                 cursor: isActive ? 'pointer' : 'default',
@@ -1170,16 +1204,16 @@ function FeaturedKnockoutCard({ market, onOpen, onBuy }) {
                 <img
                   src={images[i]}
                   alt=""
-                  style={{ width: 38, height: 38, objectFit: 'contain', flexShrink: 0 }}
+                  style={{ width: compact ? 26 : 38, height: compact ? 26 : 38, objectFit: 'contain', flexShrink: 0 }}
                 />
               ) : (
-                <TeamBadge team={team} size={38} title={label} />
+                <TeamBadge team={team} size={compact ? 26 : 38} title={label} />
               )}
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{
                   display: 'block',
                   fontFamily: 'var(--font-display)',
-                  fontSize: 22,
+                  fontSize: compact ? 16 : 22,
                   color: activeTone.color,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
@@ -1190,7 +1224,7 @@ function FeaturedKnockoutCard({ market, onOpen, onBuy }) {
                 <span style={{
                   display: 'block',
                   fontFamily: 'var(--font-mono)',
-                  fontSize: 10,
+                  fontSize: compact ? 8 : 10,
                   letterSpacing: '0.08em',
                   color: 'var(--text-muted)',
                   textTransform: 'uppercase',
@@ -1201,7 +1235,7 @@ function FeaturedKnockoutCard({ market, onOpen, onBuy }) {
               </span>
               <strong style={{
                 fontFamily: 'var(--font-display)',
-                fontSize: 28,
+                fontSize: compact ? 20 : 28,
                 color: activeTone.color,
                 lineHeight: 1,
               }}>
@@ -1566,52 +1600,77 @@ function BracketView({ markets = [], onOpen }) {
     return {
       ...col,
       markets: realMarkets,
-      slots: realMarkets.length > 0 ? [] : col.fallback,
+      slots: col.key === 'medal' || realMarkets.length === 0 ? col.fallback : [],
     };
   });
+  const renderMarketSlot = (market, className = 'wc-bracket-slot') => (
+    <button
+      key={market.id}
+      type="button"
+      className={className}
+      onClick={() => onOpen?.(market)}
+      style={{
+        cursor: 'pointer',
+        textAlign: 'left',
+        borderColor: market.status === 'resolved' ? 'rgba(0,232,122,0.32)' : undefined,
+      }}
+    >
+      <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+        {market.question}
+      </div>
+      <div style={{ color: market.status === 'resolved' ? 'var(--green)' : 'var(--text-muted)', fontSize: 9, letterSpacing: '0.06em' }}>
+        {market.status === 'resolved'
+          ? (market.finalScore || 'Final')
+          : new Date(market.startTime || market.endTime).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
+      </div>
+    </button>
+  );
+  const renderFallbackSlot = (slot, className = 'wc-bracket-slot') => (
+    <div key={slot.id} className={className}>
+      <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+        {slot.home} <span style={{ color: 'var(--text-muted)' }}>vs</span> {slot.away}
+      </div>
+      {slot.date && (
+        <div style={{ color: 'var(--text-muted)', fontSize: 9, letterSpacing: '0.06em' }}>
+          {new Date(slot.date).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
+        </div>
+      )}
+    </div>
+  );
   return (
     <div className="wc-bracket">
-      {marketColumns.map(col => (
-        <div key={col.label}>
-          <div className="wc-bracket-col-label">{col.label}</div>
-          <div className="wc-bracket-col">
-            {col.markets.map(market => (
-              <button
-                key={market.id}
-                type="button"
-                className="wc-bracket-slot"
-                onClick={() => onOpen?.(market)}
-                style={{
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  borderColor: market.status === 'resolved' ? 'rgba(0,232,122,0.32)' : undefined,
-                }}
-              >
-                <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
-                  {market.question}
-                </div>
-                <div style={{ color: market.status === 'resolved' ? 'var(--green)' : 'var(--text-muted)', fontSize: 9, letterSpacing: '0.06em' }}>
-                  {market.status === 'resolved'
-                    ? (market.finalScore || 'Final')
-                    : new Date(market.startTime || market.endTime).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
-                </div>
-              </button>
-            ))}
-            {col.slots.map(slot => (
-              <div key={slot.id} className="wc-bracket-slot">
-                <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
-                  {slot.home} <span style={{ color: 'var(--text-muted)' }}>vs</span> {slot.away}
-                </div>
-                {slot.date && (
-                  <div style={{ color: 'var(--text-muted)', fontSize: 9, letterSpacing: '0.06em' }}>
-                    {new Date(slot.date).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
-                  </div>
-                )}
-              </div>
-            ))}
+      {marketColumns.map(col => {
+        const isMedal = col.key === 'medal';
+        const finalMarket = isMedal ? col.markets.find(market => roundFromMarket(market) === 'final') : null;
+        const thirdMarket = isMedal ? col.markets.find(market => roundFromMarket(market) === 'third') : null;
+        const finalFallback = isMedal ? col.slots.find(slot => slot.id === BRACKET.final.id) : null;
+        const thirdFallback = isMedal ? col.slots.find(slot => slot.id === BRACKET.third.id) : null;
+        return (
+          <div key={col.label}>
+            <div className="wc-bracket-col-label">{col.label}</div>
+            <div className={`wc-bracket-col ${isMedal ? 'wc-bracket-col-medal' : ''}`}>
+              {isMedal ? (
+                <>
+                  {finalMarket ? renderMarketSlot(finalMarket) : finalFallback && renderFallbackSlot(finalFallback)}
+                  {(thirdMarket || thirdFallback) && (
+                    <div className="wc-bracket-third-place">
+                      <div className="wc-bracket-third-label">Tercer lugar</div>
+                      {thirdMarket
+                        ? renderMarketSlot(thirdMarket, 'wc-bracket-slot wc-bracket-slot-small')
+                        : renderFallbackSlot(thirdFallback, 'wc-bracket-slot wc-bracket-slot-small')}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {col.markets.map(market => renderMarketSlot(market))}
+                  {col.slots.map(slot => renderFallbackSlot(slot))}
+                </>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
