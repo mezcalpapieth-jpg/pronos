@@ -63,6 +63,41 @@ test('World Cup ESPN knockout specs are binary and use Spanish team labels', () 
   assert.equal(spec.source_event_id, 'wc26-espn-760514');
 });
 
+test('World Cup repair creates third-place and final markets with ESPN resolvers', () => {
+  const third = buildWorldCupKnockoutSpec(normalizeWorldCupEspnEvent(espnEvent({
+    id: '760516',
+    date: '2026-07-18T21:00:00Z',
+    homeAbbr: 'FRA',
+    homeName: 'France',
+    awayAbbr: 'ENG',
+    awayName: 'England',
+  })));
+  const final = buildWorldCupKnockoutSpec(normalizeWorldCupEspnEvent(espnEvent({
+    id: '760517',
+    date: '2026-07-19T19:00:00Z',
+    homeAbbr: 'ESP',
+    homeName: 'Spain',
+    awayAbbr: 'ARG',
+    awayName: 'Argentina',
+  })));
+
+  assert.equal(third.source_event_id, 'wc26-espn-760516');
+  assert.equal(third.resolver_type, 'sports_api');
+  assert.equal(third.resolver_config.source, 'espn');
+  assert.equal(third.resolver_config.round, 'third');
+  assert.equal(third.resolver_config.shape, 'binary');
+  assert.deepEqual(third.outcomes, ['Francia', 'Inglaterra']);
+  assert.equal(third.icon, null);
+
+  assert.equal(final.source_event_id, 'wc26-espn-760517');
+  assert.equal(final.resolver_type, 'sports_api');
+  assert.equal(final.resolver_config.source, 'espn');
+  assert.equal(final.resolver_config.round, 'final');
+  assert.equal(final.resolver_config.shape, 'binary');
+  assert.deepEqual(final.outcomes, ['España', 'Argentina']);
+  assert.equal(final.icon, null);
+});
+
 test('World Cup completed knockout events expose winner index and final score', () => {
   const event = normalizeWorldCupEspnEvent(espnEvent({
     id: '760510',

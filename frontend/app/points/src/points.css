@@ -76,9 +76,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
+  width: auto;
+  min-width: 34px;
   height: 34px;
-  border-radius: 50%;
+  border-radius: 999px;
+  padding: 0 12px;
+  gap: 8px;
   border: 1px solid var(--border);
   background: var(--surface2);
   color: var(--text-secondary);
@@ -89,9 +92,10 @@
 
 .points-lang-toggle {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .points-lang-toggle:hover,
@@ -127,6 +131,14 @@
 .points-theme-toggle.is-on .points-theme-sun {
   opacity: 1;
   box-shadow: 0 0 12px rgba(255, 90, 31, 0.28);
+}
+
+.points-theme-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 /* Dropdown attached to user pill */
@@ -252,9 +264,9 @@
   .wc-final-matchup-strip {
     grid-template-columns: 1fr !important;
   }
-  .wc-final-matchup-strip > div:nth-child(2) {
-    justify-self: center;
-    margin: -2px 0;
+  .wc-third-place-strip {
+    align-items: flex-start !important;
+    flex-direction: column;
   }
 }
 
@@ -318,6 +330,19 @@
 }
 
 @media (max-width: 720px) {
+  .wc-bracket {
+    --bracket-h: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    overflow-x: visible;
+    padding-bottom: 0;
+  }
+  .wc-bracket-col {
+    min-height: auto;
+    justify-content: flex-start;
+    gap: 10px;
+  }
   .wc-group-team-row {
     align-items: flex-start !important;
     gap: 7px !important;
@@ -362,11 +387,20 @@
     border-radius: 10px !important;
   }
   .wc-bracket-col-label {
-    position: sticky;
-    top: 0;
-    background: var(--bg);
-    z-index: 1;
-    padding: 4px 0;
+    position: static;
+    text-align: left;
+    margin: 0 0 8px;
+    padding: 0;
+  }
+  .wc-bracket-slot {
+    align-items: flex-start;
+    justify-content: flex-start;
+    min-height: auto;
+    padding: 12px 14px;
+    text-align: left;
+    width: 100%;
+    font-size: 11px;
+    line-height: 1.3;
   }
 }
 

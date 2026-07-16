@@ -5,7 +5,7 @@
  * Repairs and progresses World Cup 2026 markets from ESPN:
  * - patches existing group-stage rows from manual to ESPN sports_api
  * - resolves completed group-stage markets and group-winner markets
- * - creates/patches knockout markets through the current semifinal window
+ * - creates/patches knockout markets through the final weekend
  *
  * Admin-only.
  */

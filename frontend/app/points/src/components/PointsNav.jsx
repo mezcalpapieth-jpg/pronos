@@ -19,6 +19,16 @@ import { fetchMarkets, adminListTaskCounts } from '../lib/pointsApi.js';
 // and old landing both link here — we match so the user journey is the same.
 const COMO_FUNCIONA_URL = 'https://pronos.io/que-son-los-mercados-de-predicciones';
 
+function languageToggleLabel(lang) {
+  return lang === 'es' ? 'English' : 'Español';
+}
+
+function themeToggleLabel(lang, theme) {
+  const targetIsLight = theme === 'dark';
+  if (lang === 'en') return targetIsLight ? 'Light mode' : 'Dark mode';
+  return targetIsLight ? 'Modo claro' : 'Modo oscuro';
+}
+
 function getInitialTheme() {
   try {
     const saved = localStorage.getItem('pronos-theme');
@@ -386,7 +396,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
                 closeMobileMenu();
               }}
             >
-              {lang === 'es' ? 'EN' : 'ES'}
+              {languageToggleLabel(lang)}
             </button>
             <button
               type="button"
@@ -395,9 +405,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
                 closeMobileMenu();
               }}
             >
-              {lang === 'en'
-                ? `Sun ${theme === 'light' ? 'on' : 'off'}`
-                : `Sol ${theme === 'light' ? 'on' : 'off'}`}
+              {themeToggleLabel(lang, theme)}
             </button>
             {!authenticated ? (
               <button
@@ -441,7 +449,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
           title={lang === 'es' ? 'Switch to English' : 'Cambiar a español'}
           aria-label={t('points.nav.lang')}
         >
-          {lang === 'es' ? 'EN' : 'ES'}
+          {languageToggleLabel(lang)}
         </button>
 
         <button
@@ -451,6 +459,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
           aria-label={t('points.nav.theme')}
         >
           <span className="points-theme-sun" aria-hidden="true" />
+          <span className="points-theme-label">{themeToggleLabel(lang, theme)}</span>
         </button>
 
         {!authenticated ? (

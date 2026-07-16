@@ -238,7 +238,7 @@ export function buildWorldCupGroupSpec(fixture, event = null) {
     source_event_id: fixture.matchId,
     question: `${home.name} vs ${away.name}`,
     category: 'world-cup',
-    icon: '🏆',
+    icon: null,
     outcomes: [home.name, 'Empate', away.name],
     outcome_images: [badgeUrl(home), null, badgeUrl(away)],
     seed_liquidity: 1000,
@@ -279,8 +279,7 @@ export function buildWorldCupGroupSpec(fixture, event = null) {
 
 export function buildWorldCupKnockoutSpec(event) {
   if (!event || event.round === 'group' || event.round === 'unknown') return null;
-  if (event.round === 'third' || event.round === 'final') return null;
-  if (event.dateYmd > '2026-07-15') return null;
+  if (event.dateYmd > '2026-07-19') return null;
   const home = event.home;
   const away = event.away;
   const startTime = event.date;
@@ -291,7 +290,7 @@ export function buildWorldCupKnockoutSpec(event) {
     source_event_id: `wc26-espn-${event.eventId}`,
     question: `${home.name} vs ${away.name}`,
     category: 'world-cup',
-    icon: '🏆',
+    icon: null,
     outcomes: [home.name, away.name],
     outcome_images: [home.logo || badgeUrl(home), away.logo || badgeUrl(away)],
     seed_liquidity: 1000,

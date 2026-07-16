@@ -21,20 +21,39 @@ import PointsBuyModal from '../components/PointsBuyModal.jsx';
 const HERO_GRADIENT =
   'linear-gradient(130deg, rgba(22,163,74,0.25) 0%, rgba(220,38,38,0.22) 45%, rgba(59,130,246,0.28) 100%), var(--surface1)';
 
+const FINAL_WEEKEND_START_ISO = '2026-07-16T00:00:00Z';
+
 const FINAL_MATCHUP = {
   home: {
     team: TEAMS.es,
-    accent: '#c60b1e',
-    secondary: '#ffc400',
-    side: 'Roja y oro',
-    note: 'España llega a la final con posesión, control y presión alta.',
+    title: 'España',
+    eyebrow: 'Campeona mundial en 2010',
+    note: 'La selección que hizo de la posesión una identidad vuelve a una final con una generación que mezcla control, extremos jóvenes y oficio europeo.',
   },
   away: {
     team: TEAMS.ar,
-    accent: '#75aadb',
-    secondary: '#f6f6f6',
-    side: 'Celeste y blanco',
-    note: 'Argentina trae oficio de eliminación directa y peso histórico.',
+    title: 'Argentina',
+    eyebrow: 'Tres estrellas: 1978, 1986 y 2022',
+    note: 'Argentina llega con memoria de finales, presión competitiva y una tradición de eliminatorias donde cada detalle pesa.',
+  },
+};
+
+const FINAL_HEAD_TO_HEAD = {
+  eyebrow: 'Historial entre ambas',
+  title: 'Una rivalidad de amistosos grandes',
+  note: 'Argentina ganó 4-1 en Buenos Aires en 2010; España respondió 6-1 en Madrid en 2018. La final convierte esa historia en partido oficial por el título.',
+};
+
+const THIRD_PLACE_MATCHUP = {
+  home: {
+    team: TEAMS.fr,
+    label: 'Francia',
+    accent: '#1d4ed8',
+  },
+  away: {
+    team: TEAMS.eng,
+    label: 'Inglaterra',
+    accent: '#ef4444',
   },
 };
 
@@ -112,10 +131,10 @@ function stageMetaForRound(round) {
       title: 'Final del Mundial',
       loadingText: 'Cargando la final...',
       emptyTitle: 'Final por abrir',
-      emptyBody: 'En cuanto admin abra el mercado de la final, aparecerá aquí arriba con botones directos.',
+      emptyBody: 'En cuanto admin abra los mercados de la final y tercer lugar, aparecerán aquí arriba con botones directos.',
       liveBadge: 'FINAL · Mercado del título',
-      heroText: 'España y Argentina llegan al partido por el título. La fase de grupos y las llaves quedan como historial, y los mercados abiertos viven arriba para entrar directo a la final.',
-      fallbackLine: 'La final se abre aquí en cuanto el mercado quede listo.',
+      heroText: 'España y Argentina llegan al partido por el título. Antes, Francia e Inglaterra juegan por el tercer lugar. La fase de grupos y las llaves quedan como historial, y los mercados abiertos viven arriba para entrar directo al fin de semana final.',
+      fallbackLine: 'La final y el tercer lugar se abren aquí en cuanto los mercados queden listos.',
       bracketTitle: 'Camino al título',
     };
   }
@@ -318,35 +337,46 @@ export default function PointsWorldCupPage() {
     () => knockoutMarkets.filter(m => roundFromMarket(m) === 'final'),
     [knockoutMarkets],
   );
+  const thirdPlaceMarkets = useMemo(
+    () => knockoutMarkets.filter(m => roundFromMarket(m) === 'third'),
+    [knockoutMarkets],
+  );
+  const finalWeekendMarkets = useMemo(
+    () => [...thirdPlaceMarkets, ...finalMarkets]
+      .sort((a, b) => new Date(a.startTime || a.endTime || 0) - new Date(b.startTime || b.endTime || 0)),
+    [finalMarkets, thirdPlaceMarkets],
+  );
   const activeKnockoutMarkets = useMemo(
     () => knockoutMarkets.filter(m => m.status === 'active'),
     [knockoutMarkets],
   );
   const featuredStageMarkets = useMemo(() => {
-    const finals = finalMarkets.filter(m => m.status !== 'resolved');
-    if (finals.length > 0) return finals;
-    if (finalMarkets.length > 0) return finalMarkets;
+    const finalWeekend = finalWeekendMarkets.filter(m => m.status !== 'resolved');
+    if (finalWeekend.length > 0) return finalWeekend;
+    if (finalWeekendMarkets.length > 0) return finalWeekendMarkets;
     const semis = semifinalMarkets.filter(m => m.status !== 'resolved');
     if (semis.length > 0) return semis;
     return knockoutMarkets.filter(m => m.status === 'active').slice(0, 4);
-  }, [finalMarkets, knockoutMarkets, semifinalMarkets]);
+  }, [finalWeekendMarkets, knockoutMarkets, semifinalMarkets]);
+  const finalWeekendStarted = Date.now() >= new Date(FINAL_WEEKEND_START_ISO).getTime();
   const featuredRound = useMemo(() => {
     if (featuredStageMarkets.some(m => roundFromMarket(m) === 'final')) return 'final';
+    if (finalWeekendStarted) return 'final';
     if (featuredStageMarkets.some(m => roundFromMarket(m) === 'sf')) return 'sf';
     return roundFromMarket(featuredStageMarkets[0]) || 'knockout';
-  }, [featuredStageMarkets]);
+  }, [featuredStageMarkets, finalWeekendStarted]);
   const stageMeta = useMemo(() => stageMetaForRound(featuredRound), [featuredRound]);
   const nextMarket = useMemo(() => {
-    const activeFinals = finalMarkets.filter(m => m.status === 'active');
-    if (finalMarkets.length > 0) {
-      return activeFinals
+    const activeFinalWeekend = finalWeekendMarkets.filter(m => m.status === 'active');
+    if (finalWeekendMarkets.length > 0) {
+      return activeFinalWeekend
         .slice()
         .sort((a, b) => new Date(a.startTime || a.endTime || 0) - new Date(b.startTime || b.endTime || 0))[0] || null;
     }
     return activeKnockoutMarkets
       .slice()
       .sort((a, b) => new Date(a.startTime || a.endTime || 0) - new Date(b.startTime || b.endTime || 0))[0] || null;
-  }, [activeKnockoutMarkets, finalMarkets]);
+  }, [activeKnockoutMarkets, finalWeekendMarkets]);
   const resolvedCount = allMarkets.filter(m => m.status === 'resolved').length;
   const activeCount = allMarkets.filter(m => m.status === 'active').length;
 
@@ -436,7 +466,12 @@ export default function PointsWorldCupPage() {
             {stageMeta.heroText} <strong style={{ color: 'var(--text-primary)' }}>{stageLine}</strong>
           </p>
 
-          {stageMeta.key === 'final' && <FinalMatchupStrip />}
+          {stageMeta.key === 'final' && (
+            <>
+              <FinalMatchupStrip />
+              <ThirdPlaceStrip />
+            </>
+          )}
 
           <div style={{
             display: 'flex',
@@ -757,105 +792,141 @@ function FinalMatchupStrip() {
   return (
     <div className="wc-final-matchup-strip" style={{
       display: 'grid',
-      gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
+      gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
       gap: 12,
       alignItems: 'stretch',
       margin: '0 0 22px',
       maxWidth: 720,
     }}>
-      <FinalTeamPanel side={FINAL_MATCHUP.home} index={0} />
-      <div style={{
-        alignSelf: 'center',
-        width: 54,
-        height: 54,
-        borderRadius: '50%',
-        border: '1px solid rgba(255,255,255,0.16)',
-        background: 'rgba(0,0,0,0.26)',
-        color: 'var(--text-primary)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontFamily: 'var(--font-display)',
-        fontSize: 22,
-        letterSpacing: '0.04em',
-      }}>
-        VS
-      </div>
-      <FinalTeamPanel side={FINAL_MATCHUP.away} index={1} />
+      <FinalFactPanel item={FINAL_MATCHUP.home} />
+      <FinalFactPanel item={FINAL_HEAD_TO_HEAD} />
+      <FinalFactPanel item={FINAL_MATCHUP.away} />
     </div>
   );
 }
 
-function FinalTeamPanel({ side, index }) {
+function ThirdPlaceStrip() {
+  return (
+    <div className="wc-third-place-strip" style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 14,
+      margin: '-10px 0 22px',
+      padding: '12px 14px',
+      maxWidth: 720,
+      borderRadius: 14,
+      border: '1px solid rgba(255,255,255,0.12)',
+      background: 'rgba(0,0,0,0.2)',
+      color: 'var(--text-secondary)',
+    }}>
+      <div style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        letterSpacing: '0.12em',
+        textTransform: 'uppercase',
+        color: 'var(--text-muted)',
+      }}>
+        Sábado · Tercer lugar
+      </div>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        minWidth: 0,
+      }}>
+        <FinalMiniTeam side={THIRD_PLACE_MATCHUP.home} />
+        <span style={{
+          fontFamily: 'var(--font-display)',
+          color: 'var(--text-primary)',
+          fontSize: 18,
+        }}>
+          VS
+        </span>
+        <FinalMiniTeam side={THIRD_PLACE_MATCHUP.away} />
+      </div>
+    </div>
+  );
+}
+
+function FinalMiniTeam({ side }) {
+  return (
+    <span style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 8,
+      minWidth: 0,
+      color: 'var(--text-primary)',
+      fontFamily: 'var(--font-body)',
+      fontWeight: 800,
+    }}>
+      <TeamBadge team={side.team} size={24} />
+      <span style={{
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        borderBottom: `2px solid ${side.accent}`,
+      }}>
+        {side.label}
+      </span>
+    </span>
+  );
+}
+
+function FinalFactPanel({ item }) {
+  const team = item.team || null;
   return (
     <div
       style={{
         position: 'relative',
         overflow: 'hidden',
-        minHeight: 118,
+        minHeight: 152,
         padding: '16px 18px',
         borderRadius: 16,
-        border: `1px solid ${side.accent}66`,
-        background: `linear-gradient(135deg, ${side.accent}24, ${side.secondary}18), rgba(0,0,0,0.24)`,
+        border: '1px solid rgba(255,255,255,0.12)',
+        background: 'rgba(0,0,0,0.24)',
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'space-between',
+        gap: 12,
       }}
     >
-      <img
-        src={flagUrl(side.team, 320)}
-        alt=""
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          right: -22,
-          top: -20,
-          width: 150,
-          opacity: 0.12,
-          transform: index === 0 ? 'rotate(-7deg)' : 'rotate(7deg)',
-          pointerEvents: 'none',
-        }}
-      />
       <div style={{
         position: 'relative',
         display: 'flex',
         alignItems: 'center',
-        gap: 12,
+        gap: 10,
       }}>
-        <TeamBadge team={side.team} size={42} />
+        {team && <TeamBadge team={team} size={32} />}
         <div style={{ minWidth: 0 }}>
           <div style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 28,
-            lineHeight: 0.95,
-            color: 'var(--text-primary)',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 9,
+            letterSpacing: '0.12em',
+            color: 'var(--text-muted)',
+            textTransform: 'uppercase',
+            marginBottom: 6,
           }}>
-            {side.team.name}
+            {item.eyebrow}
           </div>
           <div style={{
-            marginTop: 6,
-            fontFamily: 'var(--font-mono)',
-            fontSize: 10,
-            letterSpacing: '0.12em',
-            color: side.secondary === '#f6f6f6' ? 'var(--text-secondary)' : side.secondary,
-            textTransform: 'uppercase',
+            fontFamily: 'var(--font-display)',
+            fontSize: 25,
+            lineHeight: 0.95,
+            color: 'var(--text-primary)',
           }}>
-            {side.side}
+            {item.title}
           </div>
         </div>
       </div>
       <p style={{
         position: 'relative',
-        margin: '14px 0 0',
+        margin: 0,
         color: 'var(--text-secondary)',
         fontFamily: 'var(--font-body)',
         fontSize: 13,
-        lineHeight: 1.35,
+        lineHeight: 1.4,
       }}>
-        {side.note}
+        {item.note}
       </p>
     </div>
   );
@@ -1488,9 +1559,10 @@ function BracketView({ markets = [], onOpen }) {
     { key: 'r16', label: '8vos', fallback: BRACKET.r16 },
     { key: 'qf', label: 'QF', fallback: BRACKET.qf },
     { key: 'sf', label: 'SF', fallback: BRACKET.sf },
-    { key: 'final', label: 'Final', fallback: [BRACKET.final] },
+    { key: 'medal', keys: ['third', 'final'], label: 'Final', fallback: [BRACKET.third, BRACKET.final] },
   ].map(col => {
-    const realMarkets = markets.filter(m => roundFromMarket(m) === col.key);
+    const keys = col.keys || [col.key];
+    const realMarkets = markets.filter(m => keys.includes(roundFromMarket(m)));
     return {
       ...col,
       markets: realMarkets,
