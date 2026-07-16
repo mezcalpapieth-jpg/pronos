@@ -1,9 +1,9 @@
 /**
  * World Cup 2026 — dedicated category page at /c/world-cup.
  *
- * The public surface follows the live tournament state: current
- * semifinal/final markets first, knockout bracket second, and group
- * fixtures as history below.
+ * The public surface follows the live tournament state: current final
+ * markets first, knockout bracket second, and group fixtures as history
+ * below.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -12,7 +12,6 @@ import {
   GROUP_FIXTURES,
   TEAMS,
   BRACKET,
-  OPENING_KICKOFF_ISO,
   badgeUrl,
   flagUrl,
 } from '../lib/worldCup.js';
@@ -22,13 +21,33 @@ import PointsBuyModal from '../components/PointsBuyModal.jsx';
 const HERO_GRADIENT =
   'linear-gradient(130deg, rgba(22,163,74,0.25) 0%, rgba(220,38,38,0.22) 45%, rgba(59,130,246,0.28) 100%), var(--surface1)';
 
+const FINAL_MATCHUP = {
+  home: {
+    team: TEAMS.es,
+    accent: '#c60b1e',
+    secondary: '#ffc400',
+    side: 'Roja y oro',
+    note: 'España llega a la final con posesión, control y presión alta.',
+  },
+  away: {
+    team: TEAMS.ar,
+    accent: '#75aadb',
+    secondary: '#f6f6f6',
+    side: 'Celeste y blanco',
+    note: 'Argentina trae oficio de eliminación directa y peso histórico.',
+  },
+};
+
 function useCountdown(targetIso) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
-  const deltaSec = Math.max(0, Math.floor((new Date(targetIso).getTime() - now) / 1000));
+  const targetMs = targetIso ? new Date(targetIso).getTime() : NaN;
+  const deltaSec = Number.isFinite(targetMs)
+    ? Math.max(0, Math.floor((targetMs - now) / 1000))
+    : 0;
   return {
     done: deltaSec === 0,
     days: Math.floor(deltaSec / 86400),
@@ -83,6 +102,58 @@ function roundLabel(round) {
     final: 'Final',
     knockout: 'Eliminatoria',
   }[round] || 'Eliminatoria';
+}
+
+function stageMetaForRound(round) {
+  if (round === 'final') {
+    return {
+      key: 'final',
+      eyebrow: 'La final',
+      title: 'Final del Mundial',
+      loadingText: 'Cargando la final...',
+      emptyTitle: 'Final por abrir',
+      emptyBody: 'En cuanto admin abra el mercado de la final, aparecerá aquí arriba con botones directos.',
+      liveBadge: 'FINAL · Mercado del título',
+      heroText: 'España y Argentina llegan al partido por el título. La fase de grupos y las llaves quedan como historial, y los mercados abiertos viven arriba para entrar directo a la final.',
+      fallbackLine: 'La final se abre aquí en cuanto el mercado quede listo.',
+      bracketTitle: 'Camino al título',
+    };
+  }
+  if (round === 'sf') {
+    return {
+      key: 'sf',
+      eyebrow: 'Ahora en juego',
+      title: 'Semifinales',
+      loadingText: 'Cargando semifinales...',
+      emptyTitle: 'Semifinales por abrir',
+      emptyBody: 'En cuanto admin repare o abra los mercados, aparecerán aquí arriba con botones directos.',
+      liveBadge: 'ELIMINATORIAS · Semifinales en curso',
+      heroText: 'El Mundial ya está en etapa decisiva. La fase de grupos y las primeras llaves quedaron como historial, y los mercados abiertos viven arriba para entrar directo a las semifinales.',
+      fallbackLine: 'Semifinales por abrir en admin.',
+      bracketTitle: 'Camino a la final',
+    };
+  }
+  return {
+    key: 'knockout',
+    eyebrow: 'Llaves en juego',
+    title: 'Eliminatorias',
+    loadingText: 'Cargando eliminatorias...',
+    emptyTitle: 'Mercados por abrir',
+    emptyBody: 'En cuanto admin abra los mercados de esta ronda, aparecerán aquí arriba con botones directos.',
+    liveBadge: 'ELIMINATORIAS · Mercado abierto',
+    heroText: 'El Mundial ya está en etapa decisiva. La fase de grupos queda como historial, y los mercados abiertos viven arriba para entrar directo a la ronda actual.',
+    fallbackLine: 'Los mercados de eliminatoria aparecerán aquí cuando estén listos.',
+    bracketTitle: 'Camino a la final',
+  };
+}
+
+function describeStageMarket(market) {
+  const status = market.status === 'resolved'
+    ? 'resuelto'
+    : market.status === 'active'
+      ? 'abierto'
+      : 'cerrado';
+  return `${market.question} · ${status}`;
 }
 
 // Circular badge — tries ESPN's federation badge first, falls back
@@ -243,22 +314,39 @@ export default function PointsWorldCupPage() {
     () => knockoutMarkets.filter(m => (m.sourceData?.round || m.resolverConfig?.round) === 'sf'),
     [knockoutMarkets],
   );
+  const finalMarkets = useMemo(
+    () => knockoutMarkets.filter(m => roundFromMarket(m) === 'final'),
+    [knockoutMarkets],
+  );
   const activeKnockoutMarkets = useMemo(
     () => knockoutMarkets.filter(m => m.status === 'active'),
     [knockoutMarkets],
   );
   const featuredStageMarkets = useMemo(() => {
+    const finals = finalMarkets.filter(m => m.status !== 'resolved');
+    if (finals.length > 0) return finals;
+    if (finalMarkets.length > 0) return finalMarkets;
     const semis = semifinalMarkets.filter(m => m.status !== 'resolved');
     if (semis.length > 0) return semis;
-    const finalMarkets = knockoutMarkets.filter(m => roundFromMarket(m) === 'final' && m.status !== 'resolved');
-    if (finalMarkets.length > 0) return finalMarkets;
     return knockoutMarkets.filter(m => m.status === 'active').slice(0, 4);
-  }, [knockoutMarkets, semifinalMarkets]);
-  const nextMarket = useMemo(() => (
-    activeKnockoutMarkets
+  }, [finalMarkets, knockoutMarkets, semifinalMarkets]);
+  const featuredRound = useMemo(() => {
+    if (featuredStageMarkets.some(m => roundFromMarket(m) === 'final')) return 'final';
+    if (featuredStageMarkets.some(m => roundFromMarket(m) === 'sf')) return 'sf';
+    return roundFromMarket(featuredStageMarkets[0]) || 'knockout';
+  }, [featuredStageMarkets]);
+  const stageMeta = useMemo(() => stageMetaForRound(featuredRound), [featuredRound]);
+  const nextMarket = useMemo(() => {
+    const activeFinals = finalMarkets.filter(m => m.status === 'active');
+    if (finalMarkets.length > 0) {
+      return activeFinals
+        .slice()
+        .sort((a, b) => new Date(a.startTime || a.endTime || 0) - new Date(b.startTime || b.endTime || 0))[0] || null;
+    }
+    return activeKnockoutMarkets
       .slice()
-      .sort((a, b) => new Date(a.startTime || a.endTime || 0) - new Date(b.startTime || b.endTime || 0))[0] || null
-  ), [activeKnockoutMarkets]);
+      .sort((a, b) => new Date(a.startTime || a.endTime || 0) - new Date(b.startTime || b.endTime || 0))[0] || null;
+  }, [activeKnockoutMarkets, finalMarkets]);
   const resolvedCount = allMarkets.filter(m => m.status === 'resolved').length;
   const activeCount = allMarkets.filter(m => m.status === 'active').length;
 
@@ -275,7 +363,7 @@ export default function PointsWorldCupPage() {
     );
   }, [markets]);
 
-  const countdown = useCountdown(nextMarket?.startTime || OPENING_KICKOFF_ISO);
+  const countdown = useCountdown(nextMarket?.startTime || null);
   const groupMatches = useMemo(() => {
     const all = GROUP_FIXTURES.filter(f => f.group === activeGroup);
     if (!liveOnly) return all;
@@ -294,9 +382,9 @@ export default function PointsWorldCupPage() {
     () => computeMexicoPath(allMarkets),
     [allMarkets],
   );
-  const semifinalLine = semifinalMarkets.length > 0
-    ? semifinalMarkets.map(m => `${m.question}${m.status === 'resolved' ? ' · final' : ''}`).join(' · ')
-    : 'Semifinales abiertas: Francia vs España e Inglaterra vs Argentina.';
+  const stageLine = featuredStageMarkets.length > 0
+    ? featuredStageMarkets.map(describeStageMarket).join(' · ')
+    : stageMeta.fallbackLine;
 
   return (
     <main style={{ maxWidth: 1280, margin: '0 auto', padding: '28px 24px 80px' }}>
@@ -316,8 +404,8 @@ export default function PointsWorldCupPage() {
           display: 'flex', gap: 8, opacity: 0.12,
           pointerEvents: 'none',
         }}>
-          {['mx', 'us', 'ca', 'ar', 'br', 'fr', 'es', 'gb-eng'].map(c => (
-            <img key={c} src={`https://flagcdn.com/w320/${c}.png`} alt=""
+          {(stageMeta.key === 'final' ? ['es', 'ar', 'es', 'ar'] : ['mx', 'us', 'ca', 'ar', 'br', 'fr', 'es', 'gb-eng']).map((c, i) => (
+            <img key={`${c}-${i}`} src={`https://flagcdn.com/w320/${c}.png`} alt=""
               style={{ width: 180, height: 'auto', borderRadius: 4 }} />
           ))}
         </div>
@@ -345,8 +433,10 @@ export default function PointsWorldCupPage() {
             color: 'var(--text-secondary)', lineHeight: 1.55,
             margin: '0 0 22px', maxWidth: 560,
           }}>
-            El Mundial ya está en etapa decisiva. La fase de grupos y las primeras llaves quedaron como historial, y los mercados abiertos viven arriba para entrar directo a las semifinales. <strong style={{ color: 'var(--text-primary)' }}>{semifinalLine}</strong>
+            {stageMeta.heroText} <strong style={{ color: 'var(--text-primary)' }}>{stageLine}</strong>
           </p>
+
+          {stageMeta.key === 'final' && <FinalMatchupStrip />}
 
           <div style={{
             display: 'flex',
@@ -394,7 +484,7 @@ export default function PointsWorldCupPage() {
               fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase',
               animation: 'pronos-live-pulse 1.4s ease-in-out infinite',
             }}>
-              ELIMINATORIAS · Semifinales en curso
+              {stageMeta.liveBadge}
             </div>
           )}
             <span style={{
@@ -422,6 +512,7 @@ export default function PointsWorldCupPage() {
         loading={loading}
         markets={featuredStageMarkets}
         nextMarket={nextMarket}
+        stageMeta={stageMeta}
         onOpen={(market) => navigate(`/market?id=${market.id}`)}
         onBuy={(market, outcomeIndex, label) => setDrawer({ market, outcomeIndex, label })}
       />
@@ -450,7 +541,7 @@ export default function PointsWorldCupPage() {
               margin: 0,
               lineHeight: 1,
             }}>
-              Camino a la final
+              {stageMeta.bracketTitle}
             </h2>
           </div>
           <span style={{
@@ -662,8 +753,117 @@ export default function PointsWorldCupPage() {
 
 // ── Components ────────────────────────────────────────────────────────────
 
-function CurrentStage({ loading, markets, nextMarket, onOpen, onBuy }) {
+function FinalMatchupStrip() {
+  return (
+    <div className="wc-final-matchup-strip" style={{
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
+      gap: 12,
+      alignItems: 'stretch',
+      margin: '0 0 22px',
+      maxWidth: 720,
+    }}>
+      <FinalTeamPanel side={FINAL_MATCHUP.home} index={0} />
+      <div style={{
+        alignSelf: 'center',
+        width: 54,
+        height: 54,
+        borderRadius: '50%',
+        border: '1px solid rgba(255,255,255,0.16)',
+        background: 'rgba(0,0,0,0.26)',
+        color: 'var(--text-primary)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontFamily: 'var(--font-display)',
+        fontSize: 22,
+        letterSpacing: '0.04em',
+      }}>
+        VS
+      </div>
+      <FinalTeamPanel side={FINAL_MATCHUP.away} index={1} />
+    </div>
+  );
+}
+
+function FinalTeamPanel({ side, index }) {
+  return (
+    <div
+      style={{
+        position: 'relative',
+        overflow: 'hidden',
+        minHeight: 118,
+        padding: '16px 18px',
+        borderRadius: 16,
+        border: `1px solid ${side.accent}66`,
+        background: `linear-gradient(135deg, ${side.accent}24, ${side.secondary}18), rgba(0,0,0,0.24)`,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+      }}
+    >
+      <img
+        src={flagUrl(side.team, 320)}
+        alt=""
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          right: -22,
+          top: -20,
+          width: 150,
+          opacity: 0.12,
+          transform: index === 0 ? 'rotate(-7deg)' : 'rotate(7deg)',
+          pointerEvents: 'none',
+        }}
+      />
+      <div style={{
+        position: 'relative',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+      }}>
+        <TeamBadge team={side.team} size={42} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 28,
+            lineHeight: 0.95,
+            color: 'var(--text-primary)',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}>
+            {side.team.name}
+          </div>
+          <div style={{
+            marginTop: 6,
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            letterSpacing: '0.12em',
+            color: side.secondary === '#f6f6f6' ? 'var(--text-secondary)' : side.secondary,
+            textTransform: 'uppercase',
+          }}>
+            {side.side}
+          </div>
+        </div>
+      </div>
+      <p style={{
+        position: 'relative',
+        margin: '14px 0 0',
+        color: 'var(--text-secondary)',
+        fontFamily: 'var(--font-body)',
+        fontSize: 13,
+        lineHeight: 1.35,
+      }}>
+        {side.note}
+      </p>
+    </div>
+  );
+}
+
+function CurrentStage({ loading, markets, nextMarket, stageMeta, onOpen, onBuy }) {
   const hasMarkets = markets.length > 0;
+  const meta = stageMeta || stageMetaForRound('knockout');
   return (
     <section style={{ marginBottom: 42 }}>
       <div style={{
@@ -682,7 +882,7 @@ function CurrentStage({ loading, markets, nextMarket, onOpen, onBuy }) {
             textTransform: 'uppercase',
             marginBottom: 6,
           }}>
-            Ahora en juego
+            {meta.eyebrow}
           </div>
           <h2 style={{
             fontFamily: 'var(--font-display)',
@@ -691,7 +891,7 @@ function CurrentStage({ loading, markets, nextMarket, onOpen, onBuy }) {
             margin: 0,
             lineHeight: 0.95,
           }}>
-            Semifinales
+            {meta.title}
           </h2>
         </div>
         {nextMarket?.startTime && (
@@ -729,7 +929,7 @@ function CurrentStage({ loading, markets, nextMarket, onOpen, onBuy }) {
           letterSpacing: '0.08em',
           textTransform: 'uppercase',
         }}>
-          Cargando semifinales...
+          {meta.loadingText}
         </div>
       )}
 
@@ -746,7 +946,7 @@ function CurrentStage({ loading, markets, nextMarket, onOpen, onBuy }) {
             color: 'var(--text-primary)',
             marginBottom: 6,
           }}>
-            Semifinales por abrir
+            {meta.emptyTitle}
           </div>
           <p style={{
             margin: 0,
@@ -755,7 +955,7 @@ function CurrentStage({ loading, markets, nextMarket, onOpen, onBuy }) {
             fontSize: 15,
             lineHeight: 1.5,
           }}>
-            En cuanto admin repare o abra los mercados, aparecerán aquí arriba con botones directos.
+            {meta.emptyBody}
           </p>
         </div>
       )}

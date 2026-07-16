@@ -248,6 +248,16 @@
   .wc-stage-grid { grid-template-columns: 1fr; }
 }
 
+@media (max-width: 720px) {
+  .wc-final-matchup-strip {
+    grid-template-columns: 1fr !important;
+  }
+  .wc-final-matchup-strip > div:nth-child(2) {
+    justify-self: center;
+    margin: -2px 0;
+  }
+}
+
 /* World Cup bracket tree. Each round is a flex column, every
    column sharing the same container height (`--bracket-h`).
    `justify-content: space-around` then places 16 / 8 / 4 / 2 / 1
