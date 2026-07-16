@@ -449,7 +449,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
           title={lang === 'es' ? 'Switch to English' : 'Cambiar a español'}
           aria-label={t('points.nav.lang')}
         >
-          {languageToggleLabel(lang)}
+          {lang === 'es' ? 'EN' : 'ES'}
         </button>
 
         <button
@@ -459,7 +459,6 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
           aria-label={t('points.nav.theme')}
         >
           <span className="points-theme-sun" aria-hidden="true" />
-          <span className="points-theme-label">{themeToggleLabel(lang, theme)}</span>
         </button>
 
         {!authenticated ? (

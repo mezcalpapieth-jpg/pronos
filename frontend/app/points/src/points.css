@@ -76,12 +76,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: auto;
-  min-width: 34px;
-  height: 34px;
+  width: 46px;
+  min-width: 46px;
+  height: 46px;
   border-radius: 999px;
-  padding: 0 12px;
-  gap: 8px;
+  padding: 0;
   border: 1px solid var(--border);
   background: var(--surface2);
   color: var(--text-secondary);
@@ -92,9 +91,9 @@
 
 .points-lang-toggle {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
 }
 
@@ -106,8 +105,8 @@
 
 .points-theme-sun {
   position: relative;
-  width: 13px;
-  height: 13px;
+  width: 15px;
+  height: 15px;
   border-radius: 50%;
   border: 2px solid currentColor;
   opacity: 0.45;
@@ -131,14 +130,6 @@
 .points-theme-toggle.is-on .points-theme-sun {
   opacity: 1;
   box-shadow: 0 0 12px rgba(255, 90, 31, 0.28);
-}
-
-.points-theme-label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 /* Dropdown attached to user pill */
