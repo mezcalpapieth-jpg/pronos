@@ -293,6 +293,20 @@ export async function adminReviewSocialTask(id, action, note) {
   return postJson('/api/points/admin/social-tasks', { id, action, note });
 }
 
+// ─── Admin — resolution candidates ─────────────────────────────────────────
+export async function adminListResolutionCandidates() {
+  return getJson('/api/points/admin/resolution-candidates?status=pending');
+}
+
+export async function adminReviewResolutionCandidate({ candidateId, action, outcomeIndex, note } = {}) {
+  return postJson('/api/points/admin/resolution-candidates', {
+    candidateId,
+    action,
+    outcomeIndex,
+    note,
+  });
+}
+
 // ─── Comments ───────────────────────────────────────────────────────────────
 export async function fetchComments(marketId, { limit = 50 } = {}) {
   const { comments = [] } = await getJson(
@@ -322,18 +336,25 @@ export async function adminListPendingMarkets(status = 'pending') {
 }
 
 export async function adminListTaskCounts() {
-  const [pendingResult, marketsResult, socialResult] = await Promise.allSettled([
+  const [pendingResult, marketsResult, resolutionResult, socialResult] = await Promise.allSettled([
     adminListPendingMarkets('pending'),
     getJson('/api/points/admin/markets?status=pending'),
+    adminListResolutionCandidates(),
     adminListSocialTasks('pending'),
   ]);
 
   const pendingData = pendingResult.status === 'fulfilled' ? pendingResult.value : null;
   const marketsData = marketsResult.status === 'fulfilled' ? marketsResult.value : null;
+  const resolutionData = resolutionResult.status === 'fulfilled' ? resolutionResult.value : null;
   const socialData = socialResult.status === 'fulfilled' ? socialResult.value : null;
+  const resolutionCount = Number.isFinite(Number(resolutionData?.count))
+    ? Number(resolutionData.count)
+    : null;
   const counts = {
     pending: Array.isArray(pendingData?.pending) ? pendingData.pending.length : 0,
-    markets: Array.isArray(marketsData?.markets) ? marketsData.markets.length : 0,
+    markets: resolutionCount != null
+      ? resolutionCount
+      : (Array.isArray(marketsData?.markets) ? marketsData.markets.length : 0),
     social: Array.isArray(socialData?.tasks) ? socialData.tasks.length : 0,
   };
 

@@ -34,6 +34,8 @@ test('pending generated markets can be edited before approval', () => {
   assert.match(source, /async function editPending/);
   assert.match(source, /normalizeSeedLiquidities/);
   assert.match(source, /seed_liquidities/);
+  assert.match(source, /const sourceData = parseJsonb\(r\.source_data,\s*\{\}\)/);
+  assert.match(source, /suggestedPricing:\s*sourceData\?\.suggestedPricing\s*\|\|\s*null/);
   assert.match(source, /seedLiquidities:\s*parseJsonb\(r\.seed_liquidities,\s*null\)/);
   assert.match(source, /status !== 'pending'/);
 });

@@ -10,6 +10,7 @@ import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { normalizeSeriesMeta, seriesSubtitle } from '../../_lib/series-markets.js';
 import { deriveMarketTags, matchesMarketTaxonomy } from '../../_lib/category-tags.js';
+import { formatPointsResolutionCandidate } from '../../_lib/points-resolution-candidates.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -165,8 +166,29 @@ export default async function handler(req, res) {
       topic: topicFilter,
     })).slice(0, 200);
 
+    const candidateByMarket = new Map();
+    if (filteredRows.length > 0) {
+      const ids = filteredRows.map(r => Number(r.id)).filter(Number.isInteger);
+      const candidateRows = await sql.query(
+        `SELECT *
+           FROM points_resolution_candidates
+          WHERE status = 'pending'
+            AND points_market_id = ANY($1::int[])
+          ORDER BY created_at DESC`,
+        [ids],
+      );
+      const rowsArray = Array.isArray(candidateRows) ? candidateRows : (candidateRows.rows || []);
+      for (const row of rowsArray) {
+        const marketId = Number(row.points_market_id);
+        if (!candidateByMarket.has(marketId)) {
+          candidateByMarket.set(marketId, row);
+        }
+      }
+    }
+
     return res.status(200).json({
       markets: filteredRows.map(r => {
+        const outcomes = parseJsonb(r.outcomes, ['Sí', 'No']);
         const tags = deriveMarketTags({
           ...r,
           source_data: parseJsonb(r.pending_source_data, {}),
@@ -182,7 +204,7 @@ export default async function handler(req, res) {
         question: r.question,
         category: r.category,
         icon: null,
-        outcomes: parseJsonb(r.outcomes, ['Sí', 'No']),
+        outcomes,
         reserves: parseJsonb(r.reserves, []).map(Number),
         seedLiquidity: Number(r.seed_liquidity || 0),
         startTime: r.start_time,
@@ -209,6 +231,9 @@ export default async function handler(req, res) {
         categoryTags: tags.categoryTags,
         geoTags: tags.geoTags,
         topicTags: tags.topicTags,
+        resolutionCandidate: candidateByMarket.has(Number(r.id))
+          ? formatPointsResolutionCandidate(candidateByMarket.get(Number(r.id)), outcomes)
+          : null,
       };
       }),
     });

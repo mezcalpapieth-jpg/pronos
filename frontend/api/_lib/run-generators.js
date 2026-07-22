@@ -45,6 +45,7 @@ import { generateBoxingMarkets }        from './market-gen/boxing.js';
 import { generateNextOpponentMarkets }  from './market-gen/next-opponent.js';
 import { generateF1SeasonMarkets }      from './market-gen/f1-season.js';
 import { deriveMarketTags }             from './category-tags.js';
+import { attachDefaultSuggestedPricing } from './market-pricing.js';
 
 const MARKET_ICON = null;
 
@@ -79,8 +80,11 @@ export async function runAllGenerators() {
   for (const gen of GENERATORS) {
     try {
       const specs = await gen.run();
-      sourceStats[gen.name] = { count: Array.isArray(specs) ? specs.length : 0 };
-      if (Array.isArray(specs)) allSpecs.push(...specs);
+      const pricedSpecs = Array.isArray(specs)
+        ? specs.map(s => attachDefaultSuggestedPricing(s))
+        : [];
+      sourceStats[gen.name] = { count: pricedSpecs.length };
+      if (pricedSpecs.length) allSpecs.push(...pricedSpecs);
     } catch (e) {
       console.error('[run-generators] generator failed', {
         source: gen.name,
@@ -106,7 +110,7 @@ export async function upsertPending(sql, allSpecs) {
       const result = await sql`
         INSERT INTO points_pending_markets
           (source, source_event_id, source_data, question, category, icon,
-           outcomes, seed_liquidity, start_time, end_time, amm_mode,
+           outcomes, seed_liquidity, seed_liquidities, start_time, end_time, amm_mode,
            resolver_type, resolver_config, sport, league, outcome_images,
            category_tags, geo_tags, topic_tags)
         VALUES (
@@ -118,6 +122,7 @@ export async function upsertPending(sql, allSpecs) {
           ${MARKET_ICON},
           ${JSON.stringify(s.outcomes)}::jsonb,
           ${s.seed_liquidity ?? 1000},
+          ${s.seed_liquidities ? JSON.stringify(s.seed_liquidities) : null}::jsonb,
           ${s.start_time || null},
           ${s.end_time},
           ${s.amm_mode || 'unified'},
@@ -137,6 +142,7 @@ export async function upsertPending(sql, allSpecs) {
             icon            = EXCLUDED.icon,
             outcomes        = EXCLUDED.outcomes,
             seed_liquidity  = EXCLUDED.seed_liquidity,
+            seed_liquidities = EXCLUDED.seed_liquidities,
             start_time      = EXCLUDED.start_time,
             end_time        = EXCLUDED.end_time,
             amm_mode        = EXCLUDED.amm_mode,

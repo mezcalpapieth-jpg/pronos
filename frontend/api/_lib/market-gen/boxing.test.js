@@ -67,3 +67,36 @@ test('boxing generator skips far-future placeholder rows from the odds feed', as
     else process.env.ODDS_API_KEY = originalKey;
   }
 });
+
+test('boxing h2h odds are converted into outcome-aligned suggested probabilities', () => {
+  const consensus = _internal.extractH2hProbabilities({
+    id: 'fight-1',
+    bookmakers: [
+      {
+        title: 'Book A',
+        markets: [{
+          key: 'h2h',
+          outcomes: [
+            { name: 'Canelo Alvarez', price: 1.5 },
+            { name: 'Jaime Munguia', price: 2.7 },
+          ],
+        }],
+      },
+      {
+        title: 'Book B',
+        markets: [{
+          key: 'h2h',
+          outcomes: [
+            { name: 'Canelo Álvarez', price: 1.4 },
+            { name: 'Jaime Munguía', price: 3 },
+          ],
+        }],
+      },
+    ],
+  }, ['Canelo Álvarez', 'Jaime Munguía']);
+
+  assert.equal(consensus.bookmakerCount, 2);
+  assert.equal(consensus.evidence[0].bookmaker, 'Book A');
+  assert.ok(consensus.probabilityPct[0] > 60);
+  assert.ok(consensus.probabilityPct[1] < 40);
+});

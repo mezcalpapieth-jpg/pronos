@@ -20,6 +20,7 @@ import {
   adminListSocialTasks,
   adminReviewSocialTask,
   adminListTaskCounts,
+  adminReviewResolutionCandidate,
   adminListCycles,
   adminRolloverCycle,
   adminPauseCycles,
@@ -137,6 +138,29 @@ function currentTimezoneLabel() {
   } catch {
     return 'hora local';
   }
+}
+
+function pendingSuggestedPricing(row) {
+  return row?.suggestedPricing || row?.sourceData?.suggestedPricing || null;
+}
+
+function formatSuggestedPricing(row) {
+  const pricing = pendingSuggestedPricing(row);
+  const outcomes = Array.isArray(row?.outcomes) ? row.outcomes : [];
+  const pct = Array.isArray(pricing?.probabilityPct) ? pricing.probabilityPct : [];
+  if (!outcomes.length || pct.length !== outcomes.length) return null;
+  return outcomes
+    .map((outcome, i) => `${outcome} ${Number(pct[i]).toLocaleString('es-MX', { maximumFractionDigits: 1 })}%`)
+    .join(' · ');
+}
+
+function formatSuggestedPricingSource(pricing) {
+  if (!pricing?.source) return 'fuente no especificada';
+  if (pricing.source === 'uniform-default') return 'balanceado';
+  if (pricing.source === 'admin-config') return 'config admin';
+  if (pricing.source === 'the-odds-api:h2h') return 'The Odds API';
+  if (String(pricing.source).startsWith('source-signals:')) return 'señales de fuente';
+  return pricing.source;
 }
 
 export default function PointsAdmin({ isAdmin }) {
@@ -1130,6 +1154,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
   const [topicFilter, setTopicFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState(null);
+  const [reviewingCandidate, setReviewingCandidate] = useState(null);
   const [canceling, setCanceling] = useState(null);
   const [autoResolving, setAutoResolving] = useState(false);
   // When non-null, render the edit modal for this market.
@@ -1219,6 +1244,44 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
     }
   }
 
+  async function reviewResolutionCandidate(market, candidate, action, outcomeIndex = null) {
+    if (!candidate?.id || !market?.id) return;
+    const selectedOutcome = outcomeIndex == null ? candidate.outcomeIndex : outcomeIndex;
+    const verb = action === 'confirm' ? 'confirmar' : 'negar';
+    const label = action === 'confirm'
+      ? (market.outcomes?.[selectedOutcome] || `Resultado ${Number(selectedOutcome) + 1}`)
+      : 'la sugerencia';
+    if (!window.confirm(`¿${verb[0].toUpperCase()}${verb.slice(1)} ${label} para "${market.question}"?`)) return;
+
+    setReviewingCandidate(candidate.id);
+    try {
+      await adminReviewResolutionCandidate({
+        candidateId: candidate.id,
+        action,
+        outcomeIndex: action === 'confirm' ? selectedOutcome : null,
+      });
+      setMarkets(prev => (prev || []).flatMap((m) => {
+        if (m.id !== market.id) return [m];
+        const next = action === 'confirm'
+          ? {
+              ...m,
+              status: 'resolved',
+              outcome: selectedOutcome,
+              resolvedAt: new Date().toISOString(),
+              finalScore: candidate.finalScore || m.finalScore,
+              resolutionCandidate: null,
+            }
+          : { ...m, resolutionCandidate: null };
+        return (filter === 'pending' && action === 'confirm') ? [] : [next];
+      }));
+      onQueueChange?.();
+    } catch (e) {
+      alert(`No se pudo ${verb}: ${e.code || e.message}${e.detail ? '\n' + e.detail : ''}`);
+    } finally {
+      setReviewingCandidate(null);
+    }
+  }
+
   async function cancelMarket(market) {
     if (!market?.id) return false;
     const ok = window.confirm(
@@ -1280,6 +1343,8 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
       const resolvedCount = (r.resolved || []).length;
       const errorCount = (r.errors || []).length;
       const deferredCount = (r.deferred || []).length;
+      const reviewCount = (r.deferred || [])
+        .filter(d => String(d.reason || '').includes('manual_review')).length;
       const errorSample = (r.errors || []).slice(0, 3)
         .map(e => `#${e.id}: ${e.error}`)
         .join('\n');
@@ -1287,6 +1352,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
         `✓ Auto-resolver corrido.\n`
         + `Candidatos: ${r.checked || 0}\n`
         + `Resueltos: ${resolvedCount}\n`
+        + `En revisión: ${reviewCount}\n`
         + `Diferidos: ${deferredCount}\n`
         + `Errores: ${errorCount}\n`
         + (errorSample ? `\nEjemplos de errores:\n${errorSample}` : ''),
@@ -1574,6 +1640,19 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
             <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.3 }}>
               {m.question}
             </div>
+            {m.resolutionCandidate && (
+              <ResolutionCandidatePanel
+                market={m}
+                candidate={m.resolutionCandidate}
+                reviewing={reviewingCandidate === m.resolutionCandidate.id}
+                onReview={(action, outcomeIndex) => reviewResolutionCandidate(
+                  m,
+                  m.resolutionCandidate,
+                  action,
+                  outcomeIndex,
+                )}
+              />
+            )}
           </div>
           {m.status === 'active' ? (
             <>
@@ -1617,11 +1696,13 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
                   {canceling === m.id ? 'Anulando…' : 'Anular mercado'}
                 </button>
               )}
-              <ResolveControls
-                market={m}
-                resolving={resolving === m.id}
-                onResolve={(winnerIndex) => resolveMarket(m.id, winnerIndex)}
-              />
+              {m.resolutionCandidate ? null : (
+                <ResolveControls
+                  market={m}
+                  resolving={resolving === m.id}
+                  onResolve={(winnerIndex) => resolveMarket(m.id, winnerIndex)}
+                />
+              )}
             </>
           ) : (
             <span style={{
@@ -2078,6 +2159,127 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ResolutionCandidatePanel({ market, candidate, reviewing, onReview }) {
+  const outcomes = Array.isArray(market.outcomes) ? market.outcomes : [];
+  const initialOutcome = Number.isInteger(candidate.outcomeIndex) ? candidate.outcomeIndex : 0;
+  const [selected, setSelected] = useState(initialOutcome);
+  const evidence = Array.isArray(candidate.evidence) ? candidate.evidence : [];
+
+  return (
+    <div style={{
+      marginTop: 10,
+      padding: '10px 12px',
+      border: '1px solid rgba(245,158,11,0.35)',
+      borderRadius: 10,
+      background: 'rgba(245,158,11,0.08)',
+      display: 'grid',
+      gap: 8,
+    }}>
+      <div style={{
+        display: 'flex',
+        gap: 10,
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        letterSpacing: '0.08em',
+        textTransform: 'uppercase',
+        color: '#f59e0b',
+      }}>
+        <span>Resolución sugerida</span>
+        <span style={{ color: 'var(--text-muted)' }}>
+          {candidate.source || 'manual-review'}
+        </span>
+        {candidate.confidenceLabel && (
+          <span style={{ color: 'var(--text-muted)' }}>
+            Confianza {candidate.confidenceLabel}
+          </span>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <select
+          value={selected}
+          onChange={(e) => setSelected(Number(e.target.value))}
+          disabled={reviewing}
+          style={{
+            padding: '6px 10px',
+            background: 'var(--surface2)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            color: 'var(--text-primary)',
+            cursor: reviewing ? 'not-allowed' : 'pointer',
+            minWidth: 160,
+          }}
+        >
+          {outcomes.map((label, i) => (
+            <option key={i} value={i}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={() => onReview?.('confirm', selected)}
+          disabled={reviewing}
+          className="btn-primary"
+          style={{ padding: '6px 12px', fontSize: 11 }}
+        >
+          {reviewing ? 'Revisando…' : 'Confirmar resolución'}
+        </button>
+        <button
+          onClick={() => onReview?.('deny', null)}
+          disabled={reviewing}
+          className="btn-ghost"
+          style={{
+            padding: '6px 12px',
+            fontSize: 11,
+            color: 'var(--red, #ef4444)',
+            borderColor: 'rgba(239,68,68,0.35)',
+          }}
+        >
+          Negar
+        </button>
+      </div>
+
+      {(candidate.finalScore || candidate.rationale || evidence.length > 0) && (
+        <div style={{
+          display: 'grid',
+          gap: 4,
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          lineHeight: 1.5,
+          color: 'var(--text-muted)',
+        }}>
+          {candidate.finalScore && <div>Marcador / resultado: {candidate.finalScore}</div>}
+          {candidate.rationale && <div>{candidate.rationale}</div>}
+          {evidence.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {evidence.slice(0, 4).map((item, i) => {
+                const label = item?.title || item?.url || `Fuente ${i + 1}`;
+                return item?.url ? (
+                  <a
+                    key={`${label}-${i}`}
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: 'var(--green)', textDecoration: 'underline' }}
+                  >
+                    {label}
+                  </a>
+                ) : (
+                  <span key={`${label}-${i}`}>{label}</span>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -2585,8 +2787,8 @@ function PendingMarketsTable({ onQueueChange }) {
 
       <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.6 }}>
         El agente (cron diario <code>/api/cron/generate-markets-pending</code>) descubre eventos
-        y los deja aquí para revisión. Aprobar crea el mercado con seed 1000 MXNP usando el
-        modo AMM sugerido. Rechazar lo deja marcado — la siguiente corrida lo omite por
+        y los deja aquí para revisión. Aprobar crea el mercado con odds/liquidez sugeridos
+        usando el modo AMM sugerido. Rechazar lo deja marcado — la siguiente corrida lo omite por
         <code> (source, source_event_id)</code>.
       </p>
 
@@ -2605,6 +2807,7 @@ function PendingMarketsTable({ onQueueChange }) {
       {!loading && rows?.map(r => {
         const isPending = r.status === 'pending';
         const isRejected = r.status === 'rejected';
+        const suggestedOdds = formatSuggestedPricing(r);
         return (
           <div key={r.id} style={{
             background: 'var(--surface1)',
@@ -2674,6 +2877,7 @@ function PendingMarketsTable({ onQueueChange }) {
                     ? r.seedLiquidities.map(v => Number(v).toLocaleString('es-MX')).join(' / ')
                     : Number(r.seedLiquidity || 0).toLocaleString('es-MX')}
                   {' MXNP'}
+                  {suggestedOdds && <> · Odds sugeridos: {suggestedOdds}</>}
                 </div>
               </div>
 
@@ -2810,6 +3014,8 @@ function PendingMarketEditModal({ row, onClose, onSaved }) {
   const [endMinute, setEndMinute] = useState(isoToMinutePart(row.endTime));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(null);
+  const suggestedPricing = pendingSuggestedPricing(row);
+  const suggestedOdds = formatSuggestedPricing(row);
 
   function updateOutcome(idx, value) {
     setOutcomes(prev => prev.map((v, i) => i === idx ? value : v));
@@ -2980,6 +3186,29 @@ function PendingMarketEditModal({ row, onClose, onSaved }) {
 
         <Field label="Opciones y liquidez">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {suggestedOdds && (
+              <div style={{
+                border: '1px solid rgba(255,92,0,0.28)',
+                background: 'rgba(255,92,0,0.08)',
+                borderRadius: 10,
+                padding: '10px 12px',
+                color: 'var(--text-secondary)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                lineHeight: 1.55,
+                letterSpacing: '0.04em',
+              }}>
+                <div style={{ color: 'var(--orange)', textTransform: 'uppercase', marginBottom: 4 }}>
+                  Odds sugeridos · {formatSuggestedPricingSource(suggestedPricing)}
+                </div>
+                <div>{suggestedOdds}</div>
+                {suggestedPricing?.rationale && (
+                  <div style={{ color: 'var(--text-muted)', marginTop: 4 }}>
+                    {suggestedPricing.rationale}
+                  </div>
+                )}
+              </div>
+            )}
             {outcomes.map((outcome, i) => (
               <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <span style={{

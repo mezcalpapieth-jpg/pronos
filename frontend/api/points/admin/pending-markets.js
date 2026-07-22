@@ -149,40 +149,44 @@ async function list(req, res) {
       `;
 
   return res.status(200).json({
-    pending: rows.map(r => ({
-      id: r.id,
-      source: r.source,
-      sourceEventId: r.source_event_id,
-      sourceData: parseJsonb(r.source_data, {}),
-      question: r.question,
-      category: r.category,
-      icon: null,
-      outcomes: parseJsonb(r.outcomes, []),
-      seedLiquidity: Number(r.seed_liquidity),
-      seedLiquidities: parseJsonb(r.seed_liquidities, null),
-      startTime: r.start_time,
-      endTime: r.end_time,
-      ammMode: r.amm_mode,
-      resolverType: r.resolver_type,
-      resolverConfig: parseJsonb(r.resolver_config, null),
-      categoryTags: parseJsonb(r.category_tags, []),
-      geoTags: parseJsonb(r.geo_tags, []),
-      topicTags: parseJsonb(r.topic_tags, []),
-      status: r.status,
-      adminNote: r.admin_note,
-      reviewer: r.reviewer,
-      reviewedAt: r.reviewed_at,
-      approvedMarketId: r.approved_market_id,
-      createdAt: r.created_at,
-      // Pending row's own featured flag — the one the 🔥 button on a
-      // Pendientes row toggles pre-approval. Carries into points_markets
-      // when the row is approved.
-      pendingFeatured: r.featured === true,
-      // The already-created market's featured flag, if this row was
-      // approved. null for pending/rejected — nothing to toggle there.
-      marketFeatured: typeof r.market_featured === 'boolean' ? r.market_featured : null,
-      marketStatus: r.market_status || null,
-    })),
+    pending: rows.map(r => {
+      const sourceData = parseJsonb(r.source_data, {});
+      return {
+        id: r.id,
+        source: r.source,
+        sourceEventId: r.source_event_id,
+        sourceData,
+        suggestedPricing: sourceData?.suggestedPricing || null,
+        question: r.question,
+        category: r.category,
+        icon: null,
+        outcomes: parseJsonb(r.outcomes, []),
+        seedLiquidity: Number(r.seed_liquidity),
+        seedLiquidities: parseJsonb(r.seed_liquidities, null),
+        startTime: r.start_time,
+        endTime: r.end_time,
+        ammMode: r.amm_mode,
+        resolverType: r.resolver_type,
+        resolverConfig: parseJsonb(r.resolver_config, null),
+        categoryTags: parseJsonb(r.category_tags, []),
+        geoTags: parseJsonb(r.geo_tags, []),
+        topicTags: parseJsonb(r.topic_tags, []),
+        status: r.status,
+        adminNote: r.admin_note,
+        reviewer: r.reviewer,
+        reviewedAt: r.reviewed_at,
+        approvedMarketId: r.approved_market_id,
+        createdAt: r.created_at,
+        // Pending row's own featured flag — the one the featured button on a
+        // Pendientes row toggles pre-approval. Carries into points_markets
+        // when the row is approved.
+        pendingFeatured: r.featured === true,
+        // The already-created market's featured flag, if this row was
+        // approved. null for pending/rejected — nothing to toggle there.
+        marketFeatured: typeof r.market_featured === 'boolean' ? r.market_featured : null,
+        marketStatus: r.market_status || null,
+      };
+    }),
   });
 }
 

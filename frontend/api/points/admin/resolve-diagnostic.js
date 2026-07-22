@@ -13,7 +13,8 @@
  *                        future. Normal; trading's still open.
  *   - missingResolver  — resolver_type IS NULL. These will NEVER
  *                        auto-resolve until retrofit runs.
- *   - manual           — resolver_type = 'manual'. Admin resolves.
+ *   - manual           — resolver_type = 'manual'/'manual_review'.
+ *                        Admin confirms or denies the queued candidate.
  *
  * Admin-only.
  */
@@ -92,7 +93,7 @@ export default async function handler(req, res) {
         endTime: r.end_time,
       });
 
-      if (r.resolver_type === 'manual') {
+      if (r.resolver_type === 'manual' || r.resolver_type === 'manual_review') {
         manual.push(entry);
       } else if (!r.resolver_type) {
         missingResolver.push(entry);

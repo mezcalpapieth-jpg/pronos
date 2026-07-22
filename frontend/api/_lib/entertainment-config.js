@@ -15,16 +15,17 @@
  * ─── SHAPES ──────────────────────────────────────────────────────────
  *
  * AWARD:  { kind:'award', key, label, ceremonyDate, categories:[
- *           { key, label, nominees:[string] }] }
+ *           { key, label, nominees:[string], probabilities?: number[] }] }
  * REALITY WEEK: { kind:'reality_week', key, showLabel, seasonLabel,
- *           weekNumber, eliminationDate, nominated:[string] }
+ *           weekNumber, eliminationDate, nominated:[string], probabilities?: number[] }
  * REALITY WINNER: { kind:'reality_winner', key, showLabel, seasonLabel,
- *           finaleDate, housemates:[string] }
+ *           finaleDate, housemates:[string], probabilities?: number[] }
  * CONCERT: { kind:'concert', key, question, resolveAt,
- *           artist, venue, category? }
+ *           artist, venue, category?, probabilityYes? }
  *
- * `resolveAt` is an ISO UTC string; close time. `icon` / `category`
- * default sensibly per kind.
+ * `resolveAt` is an ISO UTC string; close time. `probabilities` accepts
+ * either 0–1 values or percentages. These become suggested opening odds
+ * in admin, where they can still be edited before approval.
  */
 
 // ─── Awards (Latin Grammy, Premios Juventud, Premios Lo Nuestro, …) ────

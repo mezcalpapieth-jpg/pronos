@@ -5,6 +5,8 @@
  * AND whose resolver_type is one we know how to settle automatically.
  * Active resolver types: chainlink_price, api_price, weather_api,
  * api_chart, sports_api (espn / espn-pga / espn-liv / etc.).
+ * manual_review/manual markets are not auto-settled; they are queued
+ * into points_resolution_candidates when their close time passes.
  *
  * NOTE: this is now the ONLY auto-resolver. The older
  * /api/cron/auto-resolve was a Polymarket-Gamma mirror for the
@@ -38,6 +40,7 @@ import { readEspnEvent, readFootballDataMatch, readJolpicaF1Result, readJolpicaF
 import { buildEspnLiveScoreConfig } from '../_lib/espn-live-score.js';
 import { buildFootballDataEspnFallbackConfig } from '../_lib/sports-resolver-fallback.js';
 import { NEXT_OPPONENT_RECHECK_INTERVAL_HOURS, findParallelWinnerIndex } from '../_lib/sports-resolver-policy.js';
+import { buildPointsResolutionCandidateInsert } from '../_lib/points-resolution-candidates.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql   = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -112,6 +115,178 @@ function buildFinalScore({ resolverType, cfg, result, resolverInfo, outcomes, wi
   return clip(winLabel);
 }
 
+function normalizeEvidenceItem(item) {
+  if (!item) return null;
+  if (typeof item === 'string') {
+    const text = item.trim();
+    if (!text) return null;
+    return /^https?:\/\//i.test(text)
+      ? { title: text.slice(0, 160), url: text.slice(0, 500) }
+      : { title: text.slice(0, 160), url: null };
+  }
+  if (typeof item === 'object') {
+    const title = String(item.title || item.label || item.source || item.url || '').trim();
+    const url = String(item.url || item.href || '').trim();
+    if (!title && !url) return null;
+    return {
+      title: (title || url).slice(0, 160),
+      url: /^https?:\/\//i.test(url) ? url.slice(0, 500) : null,
+    };
+  }
+  return null;
+}
+
+function compactEvidenceItems(...sources) {
+  const items = [];
+  const visit = (value) => {
+    const parsed = parseJsonb(value, value);
+    if (Array.isArray(parsed)) {
+      for (const item of parsed) visit(item);
+      return;
+    }
+    const normalized = normalizeEvidenceItem(parsed);
+    if (normalized) items.push(normalized);
+  };
+  sources.forEach(visit);
+
+  const seen = new Set();
+  return items.filter((item) => {
+    const key = `${item.title}|${item.url || ''}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 6);
+}
+
+function firstEvidenceUrl(evidence) {
+  const hit = (Array.isArray(evidence) ? evidence : [])
+    .find(item => item?.url && /^https?:\/\//i.test(item.url));
+  return hit?.url || null;
+}
+
+function isManualReviewMarket({ resolverType, cfg, row, sourceData }) {
+  const rt = String(resolverType || '').trim().toLowerCase();
+  if (rt === 'manual' || rt === 'manual_review') return true;
+
+  const source = String(row?.source || cfg?.source || '').trim().toLowerCase();
+  if (['entertainment', 'codex-entertainment', 'codex-premios-juventud-2026'].includes(source)) {
+    return true;
+  }
+  if (String(row?.category || '').trim().toLowerCase() === 'musica') return true;
+
+  const kind = String(sourceData?.kind || '').trim().toLowerCase();
+  return ['award', 'reality_week', 'reality_winner', 'concert'].includes(kind);
+}
+
+function buildManualReviewCandidate({ market, cfg, sourceData, outcomes }) {
+  const evidence = compactEvidenceItems(
+    cfg?.evidence,
+    cfg?.sources,
+    cfg?.sourceUrls,
+    sourceData?.evidence,
+    sourceData?.sources,
+    sourceData?.sourceUrls,
+    sourceData?.url,
+  );
+  const suggestedOutcome = Number(cfg?.suggestedOutcomeIndex ?? cfg?.outcomeIndex);
+  const source = cfg?.source || market.source || sourceData?.kind || 'manual-review';
+  const sourceEventId = cfg?.sourceEventId
+    || market.source_event_id
+    || sourceData?.awardKey
+    || sourceData?.showLabel
+    || sourceData?.artist
+    || String(market.id);
+  const finalScoreText = cfg?.finalScore
+    || cfg?.finalScoreText
+    || sourceData?.finalScore
+    || null;
+
+  return {
+    pointsMarketId: market.id,
+    resolverType: 'manual_review',
+    source,
+    sourceEventId,
+    outcomeIndex: Number.isInteger(suggestedOutcome) ? suggestedOutcome : null,
+    outcomeCount: Array.isArray(outcomes) && outcomes.length > 0 ? outcomes.length : 2,
+    confidenceBps: Number(cfg?.confidenceBps) || 0,
+    observedAt: new Date().toISOString(),
+    finalScoreText,
+    evidenceUrl: cfg?.evidenceUrl || sourceData?.evidenceUrl || firstEvidenceUrl(evidence),
+    evidence,
+    rationale: cfg?.rationale
+      || cfg?.criteria
+      || 'El mercado cerró y requiere revisión manual antes de pagar MXNP.',
+    rawReport: {
+      resolverConfig: cfg || null,
+      sourceData: sourceData || null,
+    },
+  };
+}
+
+async function queueManualReviewCandidate({ market, cfg, sourceData, outcomes, dry, report }) {
+  const candidate = buildPointsResolutionCandidateInsert(
+    buildManualReviewCandidate({ market, cfg, sourceData, outcomes }),
+  );
+
+  if (dry) {
+    report.deferred.push({
+      id: market.id,
+      reason: 'manual_review_candidate',
+      outcomeIndex: candidate.outcome_index,
+      source: candidate.source,
+      dry: true,
+    });
+    return;
+  }
+
+  const result = await schemaSql.query(
+    `INSERT INTO points_resolution_candidates
+       (points_market_id, resolver_type, source, source_event_id,
+        outcome_index, outcome_count, confidence_bps, observed_at,
+        final_score, evidence_url, evidence, rationale, raw_report, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8::timestamptz, NOW()),
+             $9, $10, $11::jsonb, $12, $13::jsonb, 'pending')
+     ON CONFLICT (points_market_id) WHERE status = 'pending'
+     DO UPDATE SET
+       resolver_type = EXCLUDED.resolver_type,
+       source = EXCLUDED.source,
+       source_event_id = EXCLUDED.source_event_id,
+       outcome_index = EXCLUDED.outcome_index,
+       outcome_count = EXCLUDED.outcome_count,
+       confidence_bps = EXCLUDED.confidence_bps,
+       observed_at = EXCLUDED.observed_at,
+       final_score = EXCLUDED.final_score,
+       evidence_url = EXCLUDED.evidence_url,
+       evidence = EXCLUDED.evidence,
+       rationale = EXCLUDED.rationale,
+       raw_report = EXCLUDED.raw_report
+     RETURNING id`,
+    [
+      candidate.points_market_id,
+      candidate.resolver_type,
+      candidate.source,
+      candidate.source_event_id,
+      candidate.outcome_index,
+      candidate.outcome_count,
+      candidate.confidence_bps,
+      candidate.observed_at,
+      candidate.final_score,
+      candidate.evidence_url,
+      JSON.stringify(candidate.evidence),
+      candidate.rationale,
+      JSON.stringify(candidate.raw_report || {}),
+    ],
+  );
+
+  const returnedRows = Array.isArray(result) ? result : (result.rows || []);
+  report.deferred.push({
+    id: market.id,
+    reason: 'manual_review_queued',
+    candidateId: returnedRows[0]?.id || null,
+    source: candidate.source,
+  });
+}
+
 /**
  * Core auto-resolve loop, extracted so the admin "Resolver ahora"
  * endpoint can trigger it without CRON_SECRET. Returns the same
@@ -135,8 +310,9 @@ export async function runAutoResolve({ dry = false } = {}) {
     // below (weather_api). For price resolvers the market is already
     // unified binary so there's nothing to cascade.
     const candidates = await readSql`
-      SELECT m.id, m.question, m.start_time, m.end_time, m.resolver_type,
+      SELECT m.id, m.question, m.category, m.start_time, m.end_time, m.resolver_type,
              m.resolver_config, m.outcomes, m.amm_mode, m.sport, m.league,
+             m.source, m.source_event_id,
              pm.source_data AS pending_source_data
       FROM points_markets m
       LEFT JOIN LATERAL (
@@ -174,6 +350,20 @@ export async function runAutoResolve({ dry = false } = {}) {
             )
           )
           OR (
+            m.end_time < NOW()
+            AND (
+              m.resolver_type IN ('manual', 'manual_review')
+              OR (
+                m.resolver_type IS NULL
+                AND (
+                  m.source IN ('entertainment', 'codex-entertainment', 'codex-premios-juventud-2026')
+                  OR m.category = 'musica'
+                  OR pm.source_data->>'kind' IN ('award', 'reality_week', 'reality_winner', 'concert')
+                )
+              )
+            )
+          )
+          OR (
             m.resolver_type IS NULL
             AND m.sport = 'soccer'
             AND (
@@ -205,13 +395,14 @@ export async function runAutoResolve({ dry = false } = {}) {
 
     for (const m of candidates) {
       const marketOutcomes = parseJsonb(m.outcomes, []);
+      const sourceData = parseJsonb(m.pending_source_data, {});
       let cfg = parseJsonb(m.resolver_config, null);
       let resolverType = m.resolver_type;
       if (!cfg) {
         const fallbackCfg = buildEspnLiveScoreConfig({
           resolverType: null,
           resolverConfig: null,
-          sourceData: m.pending_source_data,
+          sourceData,
           sport: m.sport,
           league: m.league,
           startTime: m.start_time,
@@ -223,6 +414,21 @@ export async function runAutoResolve({ dry = false } = {}) {
           };
           resolverType = 'sports_api';
         }
+      }
+      if (isManualReviewMarket({ resolverType, cfg, row: m, sourceData })) {
+        try {
+          await queueManualReviewCandidate({
+            market: m,
+            cfg,
+            sourceData,
+            outcomes: marketOutcomes,
+            dry,
+            report,
+          });
+        } catch (e) {
+          report.errors.push({ id: m.id, error: `manual_review_queue_failed: ${e.message}` });
+        }
+        continue;
       }
       if (!cfg) {
         report.errors.push({ id: m.id, error: 'missing_resolver_config' });

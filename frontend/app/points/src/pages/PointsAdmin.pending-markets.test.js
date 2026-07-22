@@ -26,6 +26,10 @@ test('Points admin can edit generated markets and per-option liquidity before ap
   assert.match(source, /adminEditPendingMarket/);
   assert.match(source, /seedLiquidities/);
   assert.match(source, /Liquidez opción/);
+  assert.match(source, /pendingSuggestedPricing/);
+  assert.match(source, /formatSuggestedPricing/);
+  assert.match(source, /Odds sugeridos/);
+  assert.match(source, /formatSuggestedPricingSource/);
   assert.doesNotMatch(source, /Field label="Icono"/);
   assert.match(source, /icon:\s*null/);
   assert.match(apiSource, /export async function adminEditPendingMarket/);
@@ -38,6 +42,8 @@ test('Points admin tabs show pending-work badges outside the active tab', () => 
   assert.match(apiSource, /export async function adminListTaskCounts/);
   assert.match(apiSource, /adminListPendingMarkets\('pending'\)/);
   assert.match(apiSource, /\/api\/points\/admin\/markets\?status=pending/);
+  assert.match(apiSource, /adminListResolutionCandidates\(\)/);
+  assert.match(apiSource, /\/api\/points\/admin\/resolution-candidates\?status=pending/);
   assert.match(apiSource, /adminListSocialTasks\('pending'\)/);
   assert.match(apiSource, /total:/);
   assert.match(source, /tab !== t\.id/);
@@ -76,6 +82,16 @@ test('Points markets filter surfaces por resolver count while inside Mercados', 
   assert.match(source, /function MarketsTable\(\{ onQueueChange, pendingResolveCount = 0 \}\)/);
   assert.match(source, /s\.key === 'pending' \? pendingResolveCount : 0/);
   assert.match(source, /taskCount > 0/);
+});
+
+test('Points admin can review scheduler resolution candidates', () => {
+  assert.match(source, /ResolutionCandidatePanel/);
+  assert.match(source, /resolutionCandidate/);
+  assert.match(source, /adminReviewResolutionCandidate/);
+  assert.match(source, /Confirmar resolución/);
+  assert.match(source, /Negar/);
+  assert.match(source, /En revisión/);
+  assert.match(apiSource, /export async function adminReviewResolutionCandidate/);
 });
 
 test('Points admin can cancel active and por resolver markets', () => {

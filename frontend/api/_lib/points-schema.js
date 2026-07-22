@@ -542,6 +542,38 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS resolver_type TEXT`,
   `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS resolver_config JSONB`,
 
+  // ── Resolution candidates (admin review boundary) ─────────────────────────
+  // Used by the scheduler for markets that should wake up at close time but
+  // should not auto-settle without human confirmation (music, awards,
+  // fuzzy/news/sentiment style markets). outcome_index is nullable so a
+  // candidate can simply mean "this market is ready for review".
+  `CREATE TABLE IF NOT EXISTS points_resolution_candidates (
+    id               SERIAL PRIMARY KEY,
+    points_market_id INTEGER NOT NULL REFERENCES points_markets(id) ON DELETE CASCADE,
+    resolver_type    TEXT NOT NULL DEFAULT 'manual_review',
+    source           TEXT,
+    source_event_id  TEXT,
+    outcome_index    SMALLINT,
+    outcome_count    INTEGER NOT NULL DEFAULT 2,
+    confidence_bps   INTEGER NOT NULL DEFAULT 0,
+    observed_at      TIMESTAMPTZ,
+    final_score      TEXT,
+    evidence_url     TEXT,
+    evidence         JSONB NOT NULL DEFAULT '[]'::jsonb,
+    rationale        TEXT,
+    raw_report       JSONB,
+    status           TEXT NOT NULL DEFAULT 'pending',
+    reviewer         TEXT,
+    admin_note       TEXT,
+    reviewed_at      TIMESTAMPTZ,
+    created_at       TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_resolution_candidates_market_status
+    ON points_resolution_candidates(points_market_id, status, created_at DESC)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_points_resolution_candidates_one_pending
+    ON points_resolution_candidates(points_market_id)
+    WHERE status = 'pending'`,
+
   // ── Pending markets (agent-generated, awaiting admin approval) ────────────
   // The daily generator cron writes one row here per discovered event. The
   // admin queue UI reads live rows; approving copies the spec into
