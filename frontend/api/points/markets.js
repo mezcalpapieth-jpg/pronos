@@ -11,6 +11,7 @@ import { binaryPrices } from '../_lib/amm-math.js';
 import { applySeriesGateToMarket, normalizeSeriesMeta, seriesSubtitle } from '../_lib/series-markets.js';
 import { deriveMarketTags } from '../_lib/category-tags.js';
 import { deriveOutcomeCountryLabels } from '../_lib/outcome-country-labels.js';
+import { cachedJson, createApiTimer, setCacheHeaders } from '../_lib/api-performance.js';
 
 // Lazy neon client init — defer until the first request so a missing
 // DATABASE_URL at module-load time surfaces as a structured JSON error
@@ -82,6 +83,7 @@ export default async function handler(req, res) {
   // Top-level try/catch: the home page renders "HTTP 500" raw when this
   // endpoint ever returns non-JSON, so guarantee JSON output no matter
   // what throws. Inner try/catch still handles the specific DB path.
+  const timer = createApiTimer(res, 'points/markets');
   try {
   const cors = applyCors(req, res, { methods: 'GET, OPTIONS', credentials: true });
   if (cors) return cors;
@@ -121,11 +123,22 @@ export default async function handler(req, res) {
   // Explicit ?featured=all bypasses the filter entirely.
   const featuredParam = req.query.featured;
   const featuredOnly = !category && featuredParam !== 'all';
+  const cacheKey = [
+    'points:markets:v2',
+    status,
+    category || 'all',
+    modeFilter || 'all-modes',
+    chainIdFilter || 'all-chains',
+    limit,
+    featuredOnly ? 'featured' : 'all-featured',
+  ].join(':');
 
   try {
-    const schemaSql = getSchemaSql();
-    const sql = getSql();
-    await ensurePointsSchema(schemaSql);
+    setCacheHeaders(res, { scope: 'public', maxAge: 10, sMaxage: 30, staleWhileRevalidate: 120 });
+    const { value: payload, hit } = await cachedJson(cacheKey, 20_000, async () => {
+      const schemaSql = getSchemaSql();
+      const sql = getSql();
+      await timer.time('schema', () => ensurePointsSchema(schemaSql));
 
     // Only fetch parents / unified markets. Legs (parent_id IS NOT NULL)
     // are rolled up below and never surface as standalone rows.
@@ -134,8 +147,8 @@ export default async function handler(req, res) {
     // literal; a CASE/COALESCE around `m.mode = $` keeps the plan simple
     // and indexable. Rows with mode IS NULL are treated as 'points' for
     // backward-compat with pre-M3 schemas that hadn't populated the column.
-    const rows = category
-      ? await sql`
+      const rows = await timer.time('db_markets', () => category
+        ? sql`
           SELECT m.*, pm.source_data AS pending_source_data,
             (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
           FROM points_markets m
@@ -156,8 +169,8 @@ export default async function handler(req, res) {
             m.id ASC
           LIMIT ${limit}
         `
-      : featuredOnly
-        ? await sql`
+        : featuredOnly
+          ? sql`
             SELECT m.*, pm.source_data AS pending_source_data,
               (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
             FROM points_markets m
@@ -182,7 +195,7 @@ export default async function handler(req, res) {
               m.id ASC
             LIMIT ${limit}
           `
-        : await sql`
+          : sql`
             SELECT m.*, pm.source_data AS pending_source_data,
               (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
             FROM points_markets m
@@ -205,30 +218,30 @@ export default async function handler(req, res) {
               m.end_time ASC,
               m.id ASC
             LIMIT ${limit}
-          `;
+            `);
 
     // Collect parallel-parent ids so we can batch-fetch their legs in
     // one query instead of N+1 round-trips.
-    const parallelIds = rows
-      .filter(r => r.amm_mode === 'parallel')
-      .map(r => r.id);
-    let legsByParent = new Map();
-    if (parallelIds.length > 0) {
-      const legs = await sql`
+      const parallelIds = rows
+        .filter(r => r.amm_mode === 'parallel')
+        .map(r => r.id);
+      let legsByParent = new Map();
+      if (parallelIds.length > 0) {
+        const legs = await timer.time('db_legs', () => sql`
         SELECT l.id, l.parent_id, l.leg_label, l.reserves, l.seed_liquidity, l.status, l.outcome,
           (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = l.id) AS trade_volume
         FROM points_markets l
         WHERE l.parent_id = ANY(${parallelIds})
         ORDER BY l.parent_id ASC, l.id ASC
-      `;
-      for (const leg of legs) {
-        const pid = leg.parent_id;
-        if (!legsByParent.has(pid)) legsByParent.set(pid, []);
-        legsByParent.get(pid).push(leg);
+        `);
+        for (const leg of legs) {
+          const pid = leg.parent_id;
+          if (!legsByParent.has(pid)) legsByParent.set(pid, []);
+          legsByParent.get(pid).push(leg);
+        }
       }
-    }
 
-    const markets = rows.map(r => {
+      const markets = rows.map(r => {
       const outcomes = parseJsonb(r.outcomes, ['Sí', 'No']);
       const ammMode = r.amm_mode || 'unified';
       const seriesMeta = publicSeriesMetaFromRow(r);
@@ -389,8 +402,13 @@ export default async function handler(req, res) {
       });
     });
 
-    return res.status(200).json({ markets });
+      return { markets };
+    });
+    res.setHeader('X-Pronos-Cache', hit ? 'hit' : 'miss');
+    timer.end({ cache: hit ? 'hit' : 'miss', markets: payload.markets?.length || 0 });
+    return res.status(200).json(payload);
   } catch (e) {
+    timer.end({ error: 'db_unavailable' });
     console.error('[points/markets] db error', {
       message: e?.message,
       code: e?.code,
@@ -404,6 +422,7 @@ export default async function handler(req, res) {
     });
   }
   } catch (e) {
+    timer.end({ error: 'server_error' });
     console.error('[points/markets] unhandled error', {
       message: e?.message,
       code: e?.code,

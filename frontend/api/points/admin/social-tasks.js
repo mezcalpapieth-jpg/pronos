@@ -1,5 +1,5 @@
 /**
- * GET  /api/points/admin/social-tasks?status=pending|approved|rejected
+ * GET  /api/points/admin/social-tasks?status=pending|approved|rejected|history
  * POST /api/points/admin/social-tasks  { id, action: 'approve' | 'reject', note? }
  *
  * Admin queue for reviewing user-submitted social tasks. GET lists rows
@@ -17,7 +17,7 @@ import { isDatabaseQuotaError, socialTasksUnavailablePayload } from '../../_lib/
 let readSql;
 let schemaSql;
 
-const VALID_STATUSES = new Set(['pending', 'approved', 'rejected']);
+const VALID_STATUSES = new Set(['pending', 'approved', 'rejected', 'history']);
 
 export default async function handler(req, res) {
   try {
@@ -95,14 +95,23 @@ async function handleList(req, res) {
   const status = VALID_STATUSES.has(req.query.status) ? req.query.status : 'pending';
   try {
     const sql = getReadSql();
-    const rows = await sql`
-      SELECT id, username, task_key, status, reward, proof_url,
-             reviewer, reviewed_at, rejection_note, created_at
-      FROM social_tasks
-      WHERE status = ${status}
-      ORDER BY created_at DESC
-      LIMIT 100
-    `;
+    const rows = status === 'history'
+      ? await sql`
+          SELECT id, username, task_key, status, reward, proof_url,
+                 reviewer, reviewed_at, rejection_note, created_at
+          FROM social_tasks
+          WHERE status IN ('approved', 'rejected')
+          ORDER BY COALESCE(reviewed_at, created_at) DESC
+          LIMIT 100
+        `
+      : await sql`
+          SELECT id, username, task_key, status, reward, proof_url,
+                 reviewer, reviewed_at, rejection_note, created_at
+          FROM social_tasks
+          WHERE status = ${status}
+          ORDER BY created_at DESC
+          LIMIT 100
+        `;
     return res.status(200).json({ tasks: rows });
   } catch (e) {
     if (isDatabaseQuotaError(e)) {

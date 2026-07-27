@@ -28,6 +28,7 @@ import { fetchNews, fetchPublicMapMarkets } from '@app/lib/newsApi.js';
 import { enrichNewsItemsWithGeo } from '@app/lib/newsGeo.js';
 import NewsMapView from '@app/components/NewsMapView.jsx';
 import PointsMarketCard from '../components/PointsMarketCard.jsx';
+import { MarketGridSkeleton } from '../components/PointsSkeleton.jsx';
 
 // Human-readable "2d 14h 37m" style countdown for the cycle deadline.
 // Lives at the module scope so React doesn't recreate it each render.
@@ -469,18 +470,7 @@ export default function PointsHome({ onOpenLogin }) {
             </button>
           </div>
         )}
-        {loading && (
-          <div style={{
-            textAlign: 'center',
-            padding: 60,
-            fontFamily: 'var(--font-mono)',
-            fontSize: 12,
-            letterSpacing: '0.1em',
-            color: 'var(--text-muted)',
-          }}>
-            {t('points.home.loading')}
-          </div>
-        )}
+        {loading && <MarketGridSkeleton count={6} />}
         {error && !loading && (
           <div style={{
             textAlign: 'center',

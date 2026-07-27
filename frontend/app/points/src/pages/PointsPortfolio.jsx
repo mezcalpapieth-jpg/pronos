@@ -15,6 +15,7 @@ import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useT } from '@app/lib/i18n.js';
 import { historyPnlValue } from '../lib/historyPnl.js';
 import { buildSellPreview } from '../lib/sellPreview.js';
+import { HistorySkeleton, LeaderboardSkeleton, PositionSkeleton } from '../components/PointsSkeleton.jsx';
 import {
   fetchPositions,
   fetchHistory,
@@ -454,7 +455,16 @@ function MiniLeaderboard({ currentUsername }) {
     gotoProfile(search);
   }
 
-  if (!data) return null;
+  if (!data) {
+    return (
+      <div className="points-sidebar-card">
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 12 }}>
+          Top predictores
+        </div>
+        <LeaderboardSkeleton rows={4} />
+      </div>
+    );
+  }
   return (
     <div className="points-sidebar-card">
       <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 12 }}>
@@ -593,7 +603,20 @@ function CycleHistoryLeaderboard({ currentUsername }) {
       })
       .catch(() => setCycles([]));
   }, []);
-  if (!cycles) return null;
+  if (!cycles) {
+    return (
+      <div className="points-sidebar-card">
+        <div style={{
+          fontFamily: 'var(--font-mono)', fontSize: 10,
+          letterSpacing: '0.1em', color: 'var(--text-muted)',
+          textTransform: 'uppercase', marginBottom: 12,
+        }}>
+          Ciclos anteriores
+        </div>
+        <LeaderboardSkeleton rows={3} />
+      </div>
+    );
+  }
   if (cycles.length === 0) return null;
   return (
     <div className="points-sidebar-card">
@@ -893,11 +916,7 @@ export default function PointsPortfolio() {
                 </div>
               )}
 
-              {loading && positions.length === 0 && (
-                <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-                  Cargando posiciones…
-                </div>
-              )}
+              {loading && positions.length === 0 && <PositionSkeleton count={2} />}
               {!loading && positions.length === 0 && (
                 <div style={{
                   textAlign: 'center', padding: '60px 24px',
@@ -960,11 +979,7 @@ export default function PointsPortfolio() {
 // ─── History view (inlined — mirrors MVP HistoryTab structure) ───────────────
 function HistoryView({ history, summary, loading }) {
   if (loading) {
-    return (
-      <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-        Cargando historial…
-      </div>
-    );
+    return <HistorySkeleton count={4} />;
   }
   if (!history || history.length === 0) {
     return (

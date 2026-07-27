@@ -28,5 +28,5 @@ test('points series strip uses translated game and summary copy', () => {
 test('points active binary detail keeps only the probability explainer comment', () => {
   assert.doesNotMatch(source, /t\('points\.detail\.probNow'\)/);
   assert.match(source, /t\('points\.detail\.probExplain'\)/);
-  assert.match(source, /fontSize: 13, lineHeight: 1\.55/);
+  assert.match(source, /fontSize: 10,[\s\S]*?lineHeight: 1\.6/);
 });

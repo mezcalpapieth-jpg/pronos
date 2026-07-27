@@ -364,6 +364,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
             {authenticated && (
               <>
                 <Link to="/portfolio" onClick={closeMobileMenu}>{t('points.nav.portfolio')}</Link>
+                <Link to="/torneo" onClick={closeMobileMenu}>{t('points.nav.tournament')}</Link>
                 <Link to="/earn" onClick={closeMobileMenu}>{t('points.nav.earn')}</Link>
               </>
             )}
@@ -431,6 +432,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
         {authenticated && (
           <>
             <Link to="/portfolio" style={navLinkStyle}>{t('points.nav.portfolio')}</Link>
+            <Link to="/torneo" style={navLinkStyle}>{t('points.nav.tournament')}</Link>
             <Link to="/earn" style={navLinkStyle}>{t('points.nav.earn')}</Link>
           </>
         )}

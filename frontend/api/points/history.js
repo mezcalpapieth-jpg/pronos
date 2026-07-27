@@ -11,6 +11,7 @@ import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { binaryPrices } from '../_lib/amm-math.js';
 import { requireSession } from '../_lib/session.js';
+import { createApiTimer } from '../_lib/api-performance.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -33,6 +34,7 @@ function labelFor(outcomes, i) {
 }
 
 export default async function handler(req, res) {
+  const timer = createApiTimer(res, 'points/history');
   const cors = applyCors(req, res, { methods: 'GET, OPTIONS', credentials: true });
   if (cors) return cors;
   if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
@@ -49,8 +51,8 @@ export default async function handler(req, res) {
                     : 'points';
 
   try {
-    await ensurePointsSchema(schemaSql);
-    const rows = await sql`
+    await timer.time('schema', () => ensurePointsSchema(schemaSql));
+    const rows = await timer.time('db_trades', () => sql`
       SELECT t.id, t.market_id, t.side, t.outcome_index, t.shares,
              t.collateral, t.fee, t.price_at_trade, t.tx_hash, t.created_at,
              m.question, m.category, m.outcomes, m.reserves,
@@ -60,8 +62,8 @@ export default async function handler(req, res) {
       WHERE t.username = ${username}
         AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
       ORDER BY t.created_at ASC
-    `;
-    const refundRows = await sql`
+    `);
+    const refundRows = await timer.time('db_refunds', () => sql`
       SELECT d.id, d.reference_id AS market_id, d.amount, d.created_at,
              m.question, m.category, m.outcomes, m.reserves,
              m.status, m.outcome, m.end_time, m.resolved_at
@@ -71,7 +73,7 @@ export default async function handler(req, res) {
         AND d.kind IN ('market_cancel_refund', 'void_refund')
         AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
       ORDER BY d.created_at ASC
-    `;
+    `);
 
     const markets = new Map();
     function ensureMarketBucket(r) {
@@ -189,7 +191,15 @@ export default async function handler(req, res) {
         else outcomeStatus = 'open';
       }
 
-      const netPnl = round2(m.totalReceived - m.totalInvested);
+      let claimablePayout = 0;
+      if (outcomeStatus === 'won') {
+        const winningIdx = Number(m.outcome);
+        const winningGross = m.heldByOutcome.get(winningIdx) || 0;
+        const redeemedWinning = m.redeemedByOutcome.get(winningIdx) || 0;
+        claimablePayout = Math.max(0, winningGross - redeemedWinning);
+      }
+      const effectiveReceived = m.totalReceived + claimablePayout;
+      const netPnl = round2(effectiveReceived - m.totalInvested);
       // Snapshot of unsold shares' mark-to-market for "open" rows
       if (outcomeStatus === 'open' || outcomeStatus === 'pending') {
         const reserves = m.reserves;
@@ -207,7 +217,9 @@ export default async function handler(req, res) {
           status: m.status,
           outcomeStatus,
           totalInvested: round2(m.totalInvested),
-          totalReceived: round2(m.totalReceived),
+          totalReceived: round2(effectiveReceived),
+          realizedReceived: round2(m.totalReceived),
+          claimablePayout: round2(claimablePayout),
           markToMarket: round2(mtm),
           netPnl,
           transactions: m.transactions,
@@ -220,7 +232,9 @@ export default async function handler(req, res) {
         status: m.status,
         outcomeStatus,
         totalInvested: round2(m.totalInvested),
-        totalReceived: round2(m.totalReceived),
+        totalReceived: round2(effectiveReceived),
+        realizedReceived: round2(m.totalReceived),
+        claimablePayout: round2(claimablePayout),
         netPnl,
         transactions: m.transactions,
       };
@@ -239,6 +253,7 @@ export default async function handler(req, res) {
 
     const totalPnl = history.reduce((s, m) => s + m.netPnl, 0);
 
+    timer.end({ history: history.length, trades: rows.length, refunds: refundRows.length });
     return res.status(200).json({
       history,
       summary: {
@@ -253,6 +268,7 @@ export default async function handler(req, res) {
       },
     });
   } catch (e) {
+    timer.end({ error: 'history_failed' });
     console.error('[points/history] error', { message: e?.message, code: e?.code });
     return res.status(500).json({ error: 'history_failed' });
   }

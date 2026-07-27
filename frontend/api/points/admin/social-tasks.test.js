@@ -41,3 +41,9 @@ test('social task review columns are added for older existing tables', () => {
     assert.match(migrationSource, /ALTER TABLE social_tasks ADD COLUMN IF NOT EXISTS rejection_note TEXT/);
   }
 });
+
+test('social task admin can load one combined history tab', () => {
+  assert.match(source, /history/);
+  assert.match(source, /status IN \('approved', 'rejected'\)/);
+  assert.match(source, /COALESCE\(reviewed_at, created_at\) DESC/);
+});

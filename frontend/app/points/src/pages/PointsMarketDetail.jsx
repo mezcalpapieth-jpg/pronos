@@ -10,7 +10,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { fetchMarket, fetchPriceHistory, fetchPositions } from '../lib/pointsApi.js';
+import { fetchMarket, fetchOrderBook, fetchPriceHistory, fetchPositions } from '../lib/pointsApi.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useT } from '@app/lib/i18n.js';
 import {
@@ -686,6 +686,329 @@ function ProbabilityGaugeRow({ outcomes, outcomeImages, pctFor, isResolved, winn
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function formatDepthCents(price) {
+  if (!Number.isFinite(Number(price))) return '--';
+  const cents = Math.max(0, Math.min(100, Number(price) * 100));
+  return `${cents.toFixed(cents >= 10 ? 1 : 2)}¢`;
+}
+
+function formatDepthAmount(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '--';
+  if (n >= 1000) return n.toLocaleString('es-MX', { maximumFractionDigits: 0 });
+  if (n >= 100) return n.toLocaleString('es-MX', { maximumFractionDigits: 1 });
+  return n.toLocaleString('es-MX', { maximumFractionDigits: 2 });
+}
+
+function buildOrderBookOptions({ market, displayOutcomes, displayOutcomeIndices, displayOutcomeImages }) {
+  if (!market) return [];
+  if (market.ammMode === 'parallel' && Array.isArray(market.legs)) {
+    return market.legs.map((leg, i) => ({
+      key: `${leg.id}:0`,
+      marketId: leg.id,
+      outcomeIndex: 0,
+      label: leg.label || displayOutcomes[i] || `Opción ${i + 1}`,
+      logo: displayOutcomeImages?.[i] || null,
+      price: Array.isArray(leg.prices) ? leg.prices[0] : null,
+    }));
+  }
+  return displayOutcomes.map((label, i) => ({
+    key: `${market.id}:${displayOutcomeIndices[i] ?? i}`,
+    marketId: market.id,
+    outcomeIndex: displayOutcomeIndices[i] ?? i,
+    label,
+    logo: displayOutcomeImages?.[i] || null,
+    price: Array.isArray(market.prices) ? market.prices[displayOutcomeIndices[i] ?? i] : null,
+  }));
+}
+
+function DepthRows({ rows, side, maxTotal, t }) {
+  const accent = side === 'ask' ? '#ff3b3b' : 'var(--yes)';
+  const bg = side === 'ask' ? 'rgba(255,59,59,0.10)' : 'rgba(0,232,122,0.10)';
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return (
+      <div style={{
+        padding: '12px 10px',
+        border: '1px dashed var(--border)',
+        borderRadius: 10,
+        color: 'var(--text-muted)',
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+      }}>
+        {t('points.detail.orderBookEmpty')}
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {rows.map((row, i) => {
+        const width = maxTotal > 0
+          ? `${Math.max(5, Math.min(100, (Number(row.total) / maxTotal) * 100))}%`
+          : '0%';
+        return (
+          <div
+            key={`${side}-${row.price}-${row.shares}-${i}`}
+            style={{
+              position: 'relative',
+              display: 'grid',
+              gridTemplateColumns: '72px 1fr 74px',
+              alignItems: 'center',
+              gap: 10,
+              minHeight: 30,
+              padding: '7px 10px',
+              borderRadius: 8,
+              overflow: 'hidden',
+              background: 'var(--surface2)',
+              border: '1px solid rgba(255,255,255,0.03)',
+            }}
+          >
+            <span style={{
+              position: 'absolute',
+              inset: '0 auto 0 0',
+              width,
+              background: bg,
+              pointerEvents: 'none',
+            }} />
+            <span style={{ position: 'relative', zIndex: 1, color: accent, fontFamily: 'var(--font-display)', fontSize: 15 }}>
+              {formatDepthCents(row.price)}
+            </span>
+            <span style={{
+              position: 'relative',
+              zIndex: 1,
+              color: 'var(--text-secondary)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              textAlign: 'right',
+            }}>
+              {formatDepthAmount(row.shares)}
+            </span>
+            <span style={{
+              position: 'relative',
+              zIndex: 1,
+              color: 'var(--text-primary)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              textAlign: 'right',
+            }}>
+              {formatDepthAmount(row.total)}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function OrderBookPanel({
+  market,
+  displayOutcomes,
+  displayOutcomeIndices,
+  displayOutcomeImages,
+  disabled,
+}) {
+  const t = useT();
+  const [selected, setSelected] = useState(0);
+  const [book, setBook] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const options = buildOrderBookOptions({
+    market,
+    displayOutcomes,
+    displayOutcomeIndices,
+    displayOutcomeImages,
+  });
+  const optionsSig = options.map((option) => option.key).join('|');
+  const safeSelected = Math.min(selected, Math.max(0, options.length - 1));
+  const selectedOption = options[safeSelected] || null;
+
+  useEffect(() => {
+    setSelected(0);
+  }, [optionsSig]);
+
+  useEffect(() => {
+    if (!selectedOption?.marketId || disabled) {
+      setBook(null);
+      setLoading(false);
+      setError(null);
+      return undefined;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fetchOrderBook({
+      marketId: selectedOption.marketId,
+      outcomeIndex: selectedOption.outcomeIndex,
+      levels: 8,
+    })
+      .then((payload) => {
+        if (!cancelled) setBook(payload);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e.code || e.message || 'orderbook_failed');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [selectedOption?.marketId, selectedOption?.outcomeIndex, disabled]);
+
+  if (!market || options.length === 0) return null;
+
+  const asks = Array.isArray(book?.asks) ? book.asks : [];
+  const bids = Array.isArray(book?.bids) ? book.bids : [];
+  const maxTotal = [...asks, ...bids].reduce((max, row) => Math.max(max, Number(row.total) || 0), 0);
+
+  return (
+    <div style={{
+      background: 'var(--surface1)',
+      border: '1px solid var(--border)',
+      borderRadius: 14,
+      padding: 20,
+    }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: 12,
+        alignItems: 'baseline',
+        marginBottom: 14,
+      }}>
+        <div>
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            letterSpacing: '0.12em',
+            color: 'var(--text-muted)',
+            textTransform: 'uppercase',
+            marginBottom: 4,
+          }}>
+            {t('points.detail.orderBook')}
+          </div>
+          <div style={{
+            fontFamily: 'var(--font-body)',
+            fontSize: 12,
+            color: 'var(--text-secondary)',
+            lineHeight: 1.45,
+          }}>
+            {t('points.detail.orderBookHint')}
+          </div>
+        </div>
+        {book?.spread != null && (
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              {t('points.detail.orderBookSpread')}
+            </div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--text-primary)' }}>
+              {formatDepthCents(book.spread)}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{
+        display: 'flex',
+        gap: 8,
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        paddingBottom: 4,
+        marginBottom: 14,
+      }}>
+        {options.map((option, i) => {
+          const active = i === safeSelected;
+          return (
+            <button
+              key={option.key}
+              type="button"
+              onClick={() => setSelected(i)}
+              style={{
+                minWidth: 92,
+                maxWidth: 148,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '8px 10px',
+                borderRadius: 999,
+                border: `1px solid ${active ? 'rgba(255,85,0,0.55)' : 'var(--border)'}`,
+                background: active ? 'rgba(255,85,0,0.12)' : 'var(--surface2)',
+                color: active ? 'var(--orange)' : 'var(--text-secondary)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                letterSpacing: '0.04em',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <OutcomeLogo src={option.logo} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{option.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '72px 1fr 74px',
+        gap: 10,
+        padding: '0 10px 8px',
+        fontFamily: 'var(--font-mono)',
+        fontSize: 9,
+        color: 'var(--text-muted)',
+        letterSpacing: '0.08em',
+        textTransform: 'uppercase',
+      }}>
+        <span>{t('points.detail.orderBookPrice')}</span>
+        <span style={{ textAlign: 'right' }}>{t('points.detail.orderBookShares')}</span>
+        <span style={{ textAlign: 'right' }}>{t('points.detail.orderBookTotal')}</span>
+      </div>
+
+      {disabled ? (
+        <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+          {t('points.detail.orderBookUnavailable')}
+        </p>
+      ) : loading ? (
+        <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
+          {t('points.detail.orderBookLoading')}
+        </p>
+      ) : error ? (
+        <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--red, #ef4444)' }}>
+          {t('points.detail.orderBookFailed')}
+        </p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <section>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#ff3b3b', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
+              {t('points.detail.orderBookSellSide')}
+            </div>
+            <DepthRows rows={asks} side="ask" maxTotal={maxTotal} t={t} />
+          </section>
+          <section>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--yes)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
+              {t('points.detail.orderBookBuySide')}
+            </div>
+            <DepthRows rows={bids} side="bid" maxTotal={maxTotal} t={t} />
+          </section>
+        </div>
+      )}
+
+      {book?.lastPrice != null && !disabled && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          marginTop: 14,
+          paddingTop: 12,
+          borderTop: '1px solid var(--border)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          color: 'var(--text-muted)',
+          letterSpacing: '0.04em',
+        }}>
+          <span>{t('points.detail.orderBookLast')}: {formatDepthCents(book.lastPrice)}</span>
+          <span>{t('points.detail.orderBookNow')}: {formatDepthCents(book.currentPrice)}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -1603,6 +1926,14 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               )}
             </div>
           </div>
+
+          <OrderBookPanel
+            market={market}
+            displayOutcomes={displayOutcomes}
+            displayOutcomeIndices={displayOutcomeIndices}
+            displayOutcomeImages={displayOutcomeImages}
+            disabled={isResolved || isPendingResolution || isTradingLocked || isCanceled}
+          />
           </aside>
         </div>
       </main>

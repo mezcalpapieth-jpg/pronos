@@ -21,6 +21,7 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
+import { cachedJson, createApiTimer, setCacheHeaders } from '../../_lib/api-performance.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -76,40 +77,46 @@ function pausedPayload() {
 }
 
 export default async function handler(req, res) {
+  const timer = createApiTimer(res, 'points/cycles/current');
   try {
     const cors = applyCors(req, res, { methods: 'GET, OPTIONS' });
     if (cors) return cors;
     if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
 
-    await ensurePointsSchema(sql);
-    if (await cyclesArePaused()) {
-      return res.status(200).json(pausedPayload());
-    }
+    setCacheHeaders(res, { scope: 'public', maxAge: 10, sMaxage: 30, staleWhileRevalidate: 120 });
+    const { value: payload, hit } = await cachedJson('points:cycles:current:v1', 20_000, async () => {
+      await timer.time('schema', () => ensurePointsSchema(sql));
+      if (await timer.time('db_pause', () => cyclesArePaused())) {
+        return pausedPayload();
+      }
 
-    const row = await getCurrent();
-    if (!row) {
-      return res.status(200).json(pausedPayload());
-    }
+      const row = await timer.time('db_current', () => getCurrent());
+      if (!row) return pausedPayload();
 
-    const endsAtMs = new Date(row.ends_at).getTime();
-    const secondsRemaining = Math.max(0, Math.floor((endsAtMs - Date.now()) / 1000));
+      const endsAtMs = new Date(row.ends_at).getTime();
+      const secondsRemaining = Math.max(0, Math.floor((endsAtMs - Date.now()) / 1000));
 
-    return res.status(200).json({
-      cycle: {
-        id: row.id,
-        label: row.label,
-        startedAt: row.started_at,
-        endsAt: row.ends_at,
-        status: row.status,
-        createdAt: row.created_at,
-        closedAt: row.closed_at,
-        secondsRemaining,
-        // Flag the UI can use to show "pendiente de cierre" once the
-        // deadline passes but before an admin rolls over.
-        pastDeadline: secondsRemaining === 0,
-      },
+      return {
+        cycle: {
+          id: row.id,
+          label: row.label,
+          startedAt: row.started_at,
+          endsAt: row.ends_at,
+          status: row.status,
+          createdAt: row.created_at,
+          closedAt: row.closed_at,
+          secondsRemaining,
+          // Flag the UI can use to show "pendiente de cierre" once the
+          // deadline passes but before an admin rolls over.
+          pastDeadline: secondsRemaining === 0,
+        },
+      };
     });
+    res.setHeader('X-Pronos-Cache', hit ? 'hit' : 'miss');
+    timer.end({ cache: hit ? 'hit' : 'miss' });
+    return res.status(200).json(payload);
   } catch (e) {
+    timer.end({ error: 'cycles_current_failed' });
     console.error('[points/cycles/current] error', { message: e?.message, code: e?.code });
     return res.status(500).json({
       error: 'db_unavailable',

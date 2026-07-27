@@ -226,6 +226,15 @@ export async function quoteSell({ marketId, outcomeIndex, shares }) {
   return postJson('/api/points/quote-sell', { marketId, outcomeIndex, shares });
 }
 
+export async function fetchOrderBook({ marketId, outcomeIndex = 0, levels = 8 }) {
+  const q = new URLSearchParams({
+    marketId: String(marketId),
+    outcomeIndex: String(outcomeIndex),
+    levels: String(levels),
+  });
+  return getJson(`/api/points/orderbook?${q}`);
+}
+
 // `minCollateralOut` is the sell-side slippage guard — the lowest
 // MXNP payout the user will accept. Server bails with `price_moved`
 // if the locked quote undershoots.

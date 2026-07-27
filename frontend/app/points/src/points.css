@@ -225,6 +225,78 @@
   to   { transform: translateX(0); }
 }
 
+@keyframes points-skeleton-pulse {
+  0% { background-position: 0% 50%; opacity: 0.62; }
+  50% { background-position: 100% 50%; opacity: 1; }
+  100% { background-position: 0% 50%; opacity: 0.62; }
+}
+
+.points-skeleton-block {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.045), rgba(255, 90, 31, 0.12), rgba(255, 255, 255, 0.045));
+  background-size: 220% 100%;
+  animation: points-skeleton-pulse 1.6s ease-in-out infinite;
+}
+
+.points-market-card-skeleton,
+.points-position-skeleton,
+.points-history-skeleton {
+  background: var(--surface1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.points-market-card-skeleton {
+  min-height: 238px;
+  padding: 22px;
+}
+
+.points-market-card-skeleton-top,
+.points-skeleton-row,
+.points-position-skeleton-grid {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.points-market-card-skeleton-top {
+  justify-content: space-between;
+}
+
+.points-skeleton-list {
+  display: grid;
+  gap: 12px;
+}
+
+.points-skeleton-row {
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.points-position-skeleton,
+.points-history-skeleton {
+  padding: 18px;
+}
+
+.points-position-skeleton-grid {
+  margin-top: 18px;
+  margin-bottom: 18px;
+}
+
+.points-position-skeleton-grid > .points-skeleton-block {
+  flex: 1;
+}
+
+.points-history-skeleton {
+  display: grid;
+  gap: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .points-skeleton-block {
+    animation: none;
+  }
+}
+
 /* World Cup group selector — exactly 4 columns × 3 rows on desktop
    (12 groups = A..L), stepping down to 2 cols on tablet and 1 col
    on narrow phones so long team names don't overflow. Lives in a

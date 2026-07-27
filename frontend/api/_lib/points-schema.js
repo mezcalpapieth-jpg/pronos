@@ -210,6 +210,18 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_live
     ON points_markets(status, end_time) WHERE archived_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_active_parent_end
+    ON points_markets(status, end_time ASC, id ASC)
+    WHERE archived_at IS NULL AND parent_id IS NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_featured_active_end
+    ON points_markets(status, end_time ASC, id ASC)
+    WHERE archived_at IS NULL AND parent_id IS NULL AND featured = true`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_category_status_end
+    ON points_markets(category, status, end_time ASC, id ASC)
+    WHERE archived_at IS NULL AND parent_id IS NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_resolved_parent_time
+    ON points_markets(resolved_at DESC, id ASC)
+    WHERE archived_at IS NULL AND parent_id IS NULL AND status = 'resolved'`,
 
   // source / source_event_id mirror the columns on points_pending_markets
   // so auto-generated markets that bypass the admin queue (e.g. the
@@ -294,6 +306,8 @@ const POINTS_SCHEMA_MIGRATIONS = [
     balance      NUMERIC(20,6) NOT NULL DEFAULT 0,
     updated_at   TIMESTAMPTZ DEFAULT NOW()
   )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_balances_rank
+    ON points_balances(balance DESC, username ASC)`,
 
   // ── Trades (immutable log of every buy/sell) ───────────────────────────
   `CREATE TABLE IF NOT EXISTS points_trades (
@@ -313,6 +327,10 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_trades_user ON points_trades(username)`,
   `CREATE INDEX IF NOT EXISTS idx_points_trades_market ON points_trades(market_id)`,
   `CREATE INDEX IF NOT EXISTS idx_points_trades_user_market ON points_trades(username, market_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_trades_user_created
+    ON points_trades(username, created_at DESC, market_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_trades_market_side_user
+    ON points_trades(market_id, side, username)`,
   // tx_hash: on-chain transaction hash for mode='onchain' trades.
   // NULL for DB-backed trades. UNIQUE so an idempotent retry of a
   // confirmed on-chain trade (e.g. user refreshes mid-await) can't
@@ -396,6 +414,25 @@ const POINTS_SCHEMA_MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_points_distributions_user ON points_distributions(username, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_points_distributions_kind ON points_distributions(kind, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_distributions_user_kind_ref
+    ON points_distributions(username, kind, reference_id, created_at DESC)`,
+
+  // ── Site-time analytics (admin-only aggregate) ─────────────────────────
+  // The client sends a low-frequency heartbeat while an authenticated user
+  // has the page visible. We aggregate by day and username so admin can see
+  // engagement share without storing raw browsing sessions.
+  `CREATE TABLE IF NOT EXISTS points_site_time_daily (
+    username      TEXT NOT NULL,
+    day           DATE NOT NULL DEFAULT CURRENT_DATE,
+    seconds       INTEGER NOT NULL DEFAULT 0,
+    last_path     TEXT,
+    last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (username, day)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_site_time_day
+    ON points_site_time_daily(day DESC, seconds DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_site_time_user
+    ON points_site_time_daily(username, day DESC)`,
 
   // ── Referrals (track referrer/referred pairs; reward on first trade) ──
   `CREATE TABLE IF NOT EXISTS points_referrals (
@@ -426,6 +463,9 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `ALTER TABLE social_tasks ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ`,
   `ALTER TABLE social_tasks ADD COLUMN IF NOT EXISTS rejection_note TEXT`,
   `CREATE INDEX IF NOT EXISTS idx_social_tasks_status ON social_tasks(status, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_social_tasks_review_history
+    ON social_tasks(status, reviewed_at DESC, created_at DESC)
+    WHERE status IN ('approved', 'rejected')`,
 
   // ── Price history snapshots (one row per market per hour) ──────────────
   // Built by /api/cron/points-snapshot-prices. Lets the UI render a
@@ -467,6 +507,9 @@ const POINTS_SCHEMA_MIGRATIONS = [
     closed_at     TIMESTAMPTZ
   )`,
   `CREATE INDEX IF NOT EXISTS idx_points_cycles_status ON points_cycles(status, ends_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_cycles_closed_at
+    ON points_cycles(closed_at DESC)
+    WHERE status = 'closed'`,
 
   // ── Cycle leaderboard snapshots (immutable after rollover) ─────────────
   `CREATE TABLE IF NOT EXISTS points_cycle_snapshots (

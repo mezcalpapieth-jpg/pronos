@@ -258,15 +258,32 @@ const MIGRATIONS = [
     resolved_at     TIMESTAMPTZ,
     resolved_by     TEXT
   )`,
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES points_markets(id)`,
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT true`,
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_status ON points_markets(status)`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_end_time ON points_markets(end_time)`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_category ON points_markets(category)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_active_parent_end
+    ON points_markets(status, end_time ASC, id ASC)
+    WHERE archived_at IS NULL AND parent_id IS NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_featured_active_end
+    ON points_markets(status, end_time ASC, id ASC)
+    WHERE archived_at IS NULL AND parent_id IS NULL AND featured = true`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_category_status_end
+    ON points_markets(category, status, end_time ASC, id ASC)
+    WHERE archived_at IS NULL AND parent_id IS NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_resolved_parent_time
+    ON points_markets(resolved_at DESC, id ASC)
+    WHERE archived_at IS NULL AND parent_id IS NULL AND status = 'resolved'`,
 
   `CREATE TABLE IF NOT EXISTS points_balances (
     username     TEXT PRIMARY KEY,
     balance      NUMERIC(20,6) NOT NULL DEFAULT 0,
     updated_at   TIMESTAMPTZ DEFAULT NOW()
   )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_balances_rank
+    ON points_balances(balance DESC, username ASC)`,
 
   `CREATE TABLE IF NOT EXISTS points_trades (
     id              SERIAL PRIMARY KEY,
@@ -285,6 +302,10 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_trades_user ON points_trades(username)`,
   `CREATE INDEX IF NOT EXISTS idx_points_trades_market ON points_trades(market_id)`,
   `CREATE INDEX IF NOT EXISTS idx_points_trades_user_market ON points_trades(username, market_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_trades_user_created
+    ON points_trades(username, created_at DESC, market_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_trades_market_side_user
+    ON points_trades(market_id, side, username)`,
 
   `CREATE TABLE IF NOT EXISTS points_positions (
     market_id       INTEGER NOT NULL REFERENCES points_markets(id),
@@ -327,6 +348,21 @@ const MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_points_distributions_user ON points_distributions(username, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_points_distributions_kind ON points_distributions(kind, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_distributions_user_kind_ref
+    ON points_distributions(username, kind, reference_id, created_at DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS points_site_time_daily (
+    username      TEXT NOT NULL,
+    day           DATE NOT NULL DEFAULT CURRENT_DATE,
+    seconds       INTEGER NOT NULL DEFAULT 0,
+    last_path     TEXT,
+    last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (username, day)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_site_time_day
+    ON points_site_time_daily(day DESC, seconds DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_site_time_user
+    ON points_site_time_daily(username, day DESC)`,
 
   `CREATE TABLE IF NOT EXISTS points_referrals (
     id             SERIAL PRIMARY KEY,
@@ -355,6 +391,9 @@ const MIGRATIONS = [
   `ALTER TABLE social_tasks ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ`,
   `ALTER TABLE social_tasks ADD COLUMN IF NOT EXISTS rejection_note TEXT`,
   `CREATE INDEX IF NOT EXISTS idx_social_tasks_status ON social_tasks(status, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_social_tasks_review_history
+    ON social_tasks(status, reviewed_at DESC, created_at DESC)
+    WHERE status IN ('approved', 'rejected')`,
 ];
 
 export default async function handler(req, res) {

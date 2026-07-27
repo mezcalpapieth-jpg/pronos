@@ -46,8 +46,10 @@ import { generateNextOpponentMarkets }  from './market-gen/next-opponent.js';
 import { generateF1SeasonMarkets }      from './market-gen/f1-season.js';
 import { deriveMarketTags }             from './category-tags.js';
 import { attachDefaultSuggestedPricing } from './market-pricing.js';
+import { tryAttachPolymarketPricing }    from './polymarket-pricing.js';
 
 const MARKET_ICON = null;
+const PRICING_CONCURRENCY = 4;
 
 export const GENERATORS = [
   { name: 'soccer',         run: generateSoccerMarkets        },
@@ -74,15 +76,32 @@ export const GENERATORS = [
   { name: 'f1-season',      run: generateF1SeasonMarkets       },
 ];
 
+async function attachGeneratorPricing(specs, { concurrency = PRICING_CONCURRENCY } = {}) {
+  if (!Array.isArray(specs) || !specs.length) return [];
+  const priced = new Array(specs.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(concurrency, specs.length);
+
+  async function worker() {
+    while (nextIndex < specs.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      const polymarketPriced = await tryAttachPolymarketPricing(specs[index]);
+      priced[index] = attachDefaultSuggestedPricing(polymarketPriced);
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, worker));
+  return priced;
+}
+
 export async function runAllGenerators() {
   const allSpecs = [];
   const sourceStats = {};
   for (const gen of GENERATORS) {
     try {
       const specs = await gen.run();
-      const pricedSpecs = Array.isArray(specs)
-        ? specs.map(s => attachDefaultSuggestedPricing(s))
-        : [];
+      const pricedSpecs = await attachGeneratorPricing(specs);
       sourceStats[gen.name] = { count: pricedSpecs.length };
       if (pricedSpecs.length) allSpecs.push(...pricedSpecs);
     } catch (e) {

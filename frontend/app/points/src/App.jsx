@@ -11,7 +11,7 @@
  * When an authenticated user doesn't yet have a username, the modal
  * opens automatically in the username step.
  */
-import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import PointsLoginModal from '@app/components/PointsLoginModal.jsx';
@@ -34,6 +34,7 @@ const TermsOfService = lazy(() => import('@app/pages/TermsOfService.jsx'));
 const TeamSearchPage = lazy(() => import('@app/pages/TeamSearchPage.jsx'));
 const TeamProfilePage = lazy(() => import('@app/pages/TeamProfilePage.jsx'));
 const PointsPortfolio = lazy(() => import('./pages/PointsPortfolio.jsx'));
+const PointsTournament = lazy(() => import('./pages/PointsTournament.jsx'));
 const PointsEarn = lazy(() => import('./pages/PointsEarn.jsx'));
 const PointsAdmin = lazy(() => import('./pages/PointsAdmin.jsx'));
 const PointsReferralLanding = lazy(() => import('./pages/PointsReferralLanding.jsx'));
@@ -55,6 +56,65 @@ function RouteFallback() {
       Cargando...
     </div>
   );
+}
+
+function sendSiteTimePulse(seconds, path) {
+  if (!Number.isFinite(seconds) || seconds < 5) return;
+  fetch('/api/points/analytics/pulse', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ seconds, path }),
+    keepalive: true,
+  }).catch(() => {});
+}
+
+function PointsSiteTimeTracker({ enabled }) {
+  const location = useLocation();
+  const enabledRef = useRef(enabled);
+  const lastSeenRef = useRef(Date.now());
+  const pathRef = useRef(`${location.pathname}${location.search || ''}`);
+
+  const flush = useCallback(() => {
+    if (!enabledRef.current) {
+      lastSeenRef.current = Date.now();
+      return;
+    }
+    const now = Date.now();
+    const seconds = Math.floor((now - lastSeenRef.current) / 1000);
+    lastSeenRef.current = now;
+    sendSiteTimePulse(seconds, pathRef.current);
+  }, []);
+
+  useEffect(() => {
+    enabledRef.current = enabled;
+    lastSeenRef.current = Date.now();
+  }, [enabled]);
+
+  useEffect(() => {
+    flush();
+    pathRef.current = `${location.pathname}${location.search || ''}`;
+  }, [flush, location.pathname, location.search]);
+
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flush();
+      else lastSeenRef.current = Date.now();
+    };
+    const onBeforeUnload = () => flush();
+    const intervalId = window.setInterval(flush, 30_000);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      flush();
+    };
+  }, [enabled, flush]);
+
+  return null;
 }
 
 export default function App() {
@@ -104,6 +164,7 @@ export default function App() {
     // surfaces can share this bundle without redirecting /deck back under
     // /points.
     <BrowserRouter basename={basename}>
+      <PointsSiteTimeTracker enabled={authenticated && !!user?.username} />
       <Shell
         onOpenLogin={() => setLoginOpen(true)}
         isAdmin={isAdmin}
@@ -158,6 +219,7 @@ function Shell({ onOpenLogin, isAdmin }) {
           <Route path="/c/:slug" element={<PointsCategoryPage />} />
           <Route path="/market" element={<PointsMarketDetail onOpenLogin={onOpenLogin} />} />
           <Route path="/portfolio" element={<PointsPortfolio />} />
+          <Route path="/torneo" element={<PointsTournament />} />
           <Route path="/earn" element={<PointsEarn onOpenLogin={onOpenLogin} />} />
           <Route path="/admin" element={<PointsAdmin isAdmin={isAdmin} />} />
           <Route path="/deck" element={<InvestorDeck />} />

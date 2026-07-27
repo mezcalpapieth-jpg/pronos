@@ -32,6 +32,7 @@ import {
   marketInTopic,
 } from '../lib/pointsCategoryFilters.js';
 import PointsMarketCard from '../components/PointsMarketCard.jsx';
+import { MarketGridSkeleton } from '../components/PointsSkeleton.jsx';
 
 // Slug → i18n key for the page header. Falls back to the category
 // itself when missing (so adding a new /c/foo route "just works").
@@ -594,18 +595,7 @@ export default function PointsCategoryPage() {
 
 function MarketsGrid({ loading, error, filtered, positionByMarket, emptyKey, searchQuery, t }) {
   if (loading) {
-    return (
-      <div style={{
-        textAlign: 'center',
-        padding: 60,
-        fontFamily: 'var(--font-mono)',
-        fontSize: 12,
-        letterSpacing: '0.1em',
-        color: 'var(--text-muted)',
-      }}>
-        {t('points.home.loading')}
-      </div>
-    );
+    return <MarketGridSkeleton count={6} />;
   }
   if (error) {
     return (

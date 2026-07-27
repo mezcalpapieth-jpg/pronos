@@ -159,6 +159,7 @@ function formatSuggestedPricingSource(pricing) {
   if (pricing.source === 'uniform-default') return 'balanceado';
   if (pricing.source === 'admin-config') return 'config admin';
   if (pricing.source === 'the-odds-api:h2h') return 'The Odds API';
+  if (String(pricing.source).startsWith('polymarket:')) return 'Polymarket';
   if (String(pricing.source).startsWith('source-signals:')) return 'señales de fuente';
   return pricing.source;
 }
@@ -592,21 +593,26 @@ function SocialTasksQueue({ onQueueChange }) {
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        {['pending', 'approved', 'rejected'].map(s => (
+        {[
+          { id: 'pending', label: 'Pendientes' },
+          { id: 'approved', label: 'Aprobadas' },
+          { id: 'rejected', label: 'Rechazadas' },
+          { id: 'history', label: 'Historial' },
+        ].map(s => (
           <button
-            key={s}
-            onClick={() => setStatus(s)}
+            key={s.id}
+            onClick={() => setStatus(s.id)}
             style={{
               padding: '6px 14px',
               borderRadius: 16,
-              border: `1px solid ${status === s ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
-              background: status === s ? 'rgba(0,232,122,0.1)' : 'transparent',
-              color: status === s ? 'var(--green)' : 'var(--text-secondary)',
+              border: `1px solid ${status === s.id ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
+              background: status === s.id ? 'rgba(0,232,122,0.1)' : 'transparent',
+              color: status === s.id ? 'var(--green)' : 'var(--text-secondary)',
               fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer',
               letterSpacing: '0.06em', textTransform: 'uppercase',
             }}
           >
-            {s === 'pending' ? 'Pendientes' : s === 'approved' ? 'Aprobadas' : 'Rechazadas'}
+            {s.label}
           </button>
         ))}
       </div>
@@ -619,63 +625,70 @@ function SocialTasksQueue({ onQueueChange }) {
           Sin tareas en esta categoría.
         </p>
       )}
-      {tasks && tasks.map(t => (
-        <div key={t.id} style={{
-          background: 'var(--surface1)',
-          border: '1px solid var(--border)',
-          borderRadius: 10,
-          padding: '14px 18px',
-          marginBottom: 10,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-        }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>
-              #{t.id} · @{t.username} · {t.task_key} · +{t.reward} MXNP
-            </div>
-            {t.proof_url && (
-              <a
-                href={t.proof_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--green)', textDecoration: 'underline' }}
-              >
-                Ver prueba ↗
-              </a>
-            )}
-            {t.rejection_note && (
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--red, #ef4444)', marginTop: 4 }}>
-                Rechazo: {t.rejection_note}
+      {tasks && tasks.map(t => {
+        const statusLabel = t.status === 'approved'
+          ? 'Aprobada'
+          : t.status === 'rejected'
+            ? 'Rechazada'
+            : 'Pendiente';
+        return (
+          <div key={t.id} style={{
+            background: 'var(--surface1)',
+            border: '1px solid var(--border)',
+            borderRadius: 10,
+            padding: '14px 18px',
+            marginBottom: 10,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+          }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>
+                #{t.id} · @{t.username} · {t.task_key} · {statusLabel} · +{t.reward} MXNP
               </div>
+              {t.proof_url && (
+                <a
+                  href={t.proof_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--green)', textDecoration: 'underline' }}
+                >
+                  Ver prueba
+                </a>
+              )}
+              {t.rejection_note && (
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--red, #ef4444)', marginTop: 4 }}>
+                  Rechazo: {t.rejection_note}
+                </div>
+              )}
+            </div>
+            {t.status === 'pending' ? (
+              <>
+                <button
+                  onClick={() => review(t.id, 'approve')}
+                  disabled={working === t.id}
+                  className="btn-primary"
+                  style={{ padding: '6px 12px', fontSize: 11 }}
+                >
+                  Aprobar
+                </button>
+                <button
+                  onClick={() => review(t.id, 'reject')}
+                  disabled={working === t.id}
+                  className="btn-ghost"
+                  style={{ padding: '6px 12px', fontSize: 11 }}
+                >
+                  Rechazar
+                </button>
+              </>
+            ) : (
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
+                Revisada por @{t.reviewer || 'admin'} · {t.reviewed_at ? new Date(t.reviewed_at).toLocaleDateString('es-MX') : 'sin fecha'}
+              </span>
             )}
           </div>
-          {t.status === 'pending' ? (
-            <>
-              <button
-                onClick={() => review(t.id, 'approve')}
-                disabled={working === t.id}
-                className="btn-primary"
-                style={{ padding: '6px 12px', fontSize: 11 }}
-              >
-                Aprobar
-              </button>
-              <button
-                onClick={() => review(t.id, 'reject')}
-                disabled={working === t.id}
-                className="btn-ghost"
-                style={{ padding: '6px 12px', fontSize: 11 }}
-              >
-                Rechazar
-              </button>
-            </>
-          ) : (
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
-              Revisada por @{t.reviewer} · {new Date(t.reviewed_at).toLocaleDateString('es-MX')}
-            </span>
-          )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -2404,9 +2417,203 @@ function StatsPanel() {
       </div>
 
       <AdminInterestPanel interest={stats.interest} />
+      <AdminVolumePanel volume={stats.volume} />
+      <AdminSiteTimePanel siteTime={stats.siteTime} />
+      <AdminActivityPanel activity={stats.activity} />
     </div>
   );
 }
+
+function adminNumber(value, options = {}) {
+  return Number(value || 0).toLocaleString('es-MX', options);
+}
+
+function adminMxnp(value) {
+  return `${adminNumber(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MXNP`;
+}
+
+function formatAdminDuration(seconds) {
+  const total = Math.max(0, Number(seconds || 0));
+  if (total < 60) return `${Math.round(total)}s`;
+  const minutes = Math.floor(total / 60);
+  const hours = Math.floor(minutes / 60);
+  const remMinutes = minutes % 60;
+  if (hours > 0) return `${hours}h ${remMinutes}m`;
+  return `${minutes}m`;
+}
+
+function adminActionLabel(row) {
+  if (row.kind === 'trade') {
+    if (row.action === 'buy') return 'Compra';
+    if (row.action === 'sell') return 'Venta';
+    if (row.action === 'redeem') return 'Reclamo';
+    return row.action || 'Trade';
+  }
+  const labels = {
+    daily_claim: 'Reclamo diario',
+    signup_bonus: 'Bono de bienvenida',
+    referral_bonus: 'Referido',
+    social_task: 'Tarea social',
+    market_cancel_refund: 'Reembolso por anulación',
+    void_refund: 'Reembolso',
+  };
+  return labels[row.action] || row.action || 'Distribución';
+}
+
+function AdminVolumePanel({ volume }) {
+  const rows = Array.isArray(volume?.markets) ? volume.markets : [];
+  return (
+    <section style={adminPanelStyle}>
+      <div style={adminPanelTitle}>Volumen invertido por mercado</div>
+      {rows.length === 0 ? (
+        <p style={adminEmptyStyle}>Aún no hay volumen de compra registrado.</p>
+      ) : (
+        <div style={{ display: 'grid', gap: 8 }}>
+          {rows.map((row, idx) => (
+            <div key={row.id} style={adminRowGridStyle}>
+              <span style={{ color: 'var(--text-muted)' }}>{idx + 1}.</span>
+              <span style={{
+                minWidth: 0,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                color: 'var(--text-primary)',
+                fontFamily: 'var(--font-body)',
+                fontSize: 14,
+              }}>
+                {row.question}
+              </span>
+              <span style={{ color: 'var(--green)', fontWeight: 700, textAlign: 'right' }}>
+                {adminMxnp(row.investedVolume)}
+              </span>
+              <span style={{ color: 'var(--text-muted)', textAlign: 'right' }}>
+                {row.traders} usuarios · {row.buyCount} compras
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AdminSiteTimePanel({ siteTime }) {
+  const rows = Array.isArray(siteTime?.users) ? siteTime.users : [];
+  return (
+    <section style={adminPanelStyle}>
+      <div style={adminPanelTitle}>Tiempo en el sitio (30 días)</div>
+      {rows.length === 0 ? (
+        <p style={adminEmptyStyle}>Aún no hay señales de tiempo registradas.</p>
+      ) : (
+        <div style={{ display: 'grid', gap: 8 }}>
+          {rows.map(row => (
+            <div key={row.username} style={adminRowGridStyle}>
+              <span style={{ color: 'var(--text-muted)' }}>@</span>
+              <span style={{
+                minWidth: 0,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                color: 'var(--text-primary)',
+                fontFamily: 'var(--font-body)',
+                fontSize: 14,
+              }}>
+                {row.username}
+              </span>
+              <span style={{ color: 'var(--green)', fontWeight: 700, textAlign: 'right' }}>
+                {formatAdminDuration(row.totalSeconds)}
+              </span>
+              <span style={{ color: 'var(--text-muted)', textAlign: 'right' }}>
+                {adminNumber(row.sharePct, { maximumFractionDigits: 1 })}% · {row.lastPath || '/'}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AdminActivityPanel({ activity }) {
+  const rows = Array.isArray(activity) ? activity : [];
+  return (
+    <section style={adminPanelStyle}>
+      <div style={adminPanelTitle}>Actividad por usuario</div>
+      {rows.length === 0 ? (
+        <p style={adminEmptyStyle}>Sin actividad reciente.</p>
+      ) : (
+        <div style={{ display: 'grid', gap: 8 }}>
+          {rows.map((row, idx) => (
+            <div key={`${row.kind}-${row.createdAt}-${idx}`} style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(110px, 0.35fr) minmax(120px, 0.35fr) minmax(0, 1fr) minmax(96px, auto)',
+              gap: 12,
+              alignItems: 'center',
+              padding: '9px 0',
+              borderBottom: '1px solid var(--border)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+            }}>
+              <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-body)', fontSize: 14 }}>
+                @{row.username}
+              </span>
+              <span style={{ color: 'var(--green)' }}>{adminActionLabel(row)}</span>
+              <span style={{
+                minWidth: 0,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                color: 'var(--text-secondary)',
+              }}>
+                {row.question || `Mercado #${row.marketId || '-'}`}
+              </span>
+              <span style={{
+                color: Number(row.amount || 0) >= 0 ? 'var(--green)' : 'var(--red, #ef4444)',
+                textAlign: 'right',
+              }}>
+                {adminMxnp(row.amount)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+const adminPanelStyle = {
+  marginTop: 20,
+  background: 'var(--surface1)',
+  border: '1px solid var(--border)',
+  borderRadius: 12,
+  padding: 20,
+};
+
+const adminPanelTitle = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: 10,
+  letterSpacing: '0.1em',
+  color: 'var(--text-muted)',
+  textTransform: 'uppercase',
+  marginBottom: 12,
+};
+
+const adminEmptyStyle = {
+  color: 'var(--text-muted)',
+  fontFamily: 'var(--font-mono)',
+  fontSize: 12,
+};
+
+const adminRowGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: '28px minmax(0, 1fr) minmax(120px, auto) minmax(130px, auto)',
+  gap: 12,
+  alignItems: 'center',
+  padding: '9px 0',
+  borderBottom: '1px solid var(--border)',
+  fontFamily: 'var(--font-mono)',
+  fontSize: 11,
+};
 
 function StatCard({ label, value }) {
   return (

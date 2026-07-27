@@ -20,6 +20,7 @@ import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { readSession } from '../_lib/session.js';
+import { cachedJson, createApiTimer, setCacheHeaders } from '../_lib/api-performance.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -34,31 +35,35 @@ function round2(n) {
 const CYCLE_STARTING_BALANCE = 500;
 
 export default async function handler(req, res) {
+  const timer = createApiTimer(res, 'points/leaderboard');
   const cors = applyCors(req, res, { methods: 'GET, OPTIONS', credentials: true });
   if (cors) return cors;
   if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
 
   try {
-    await ensurePointsSchema(schemaSql);
+    setCacheHeaders(res, { scope: 'private', maxAge: 15, staleWhileRevalidate: 60 });
 
     // Pull every user with a balance row. LEFT JOIN on points_users so
     // rows without a points_balances entry (edge case: user created but
     // never claimed signup) still show up, ranked at the bottom.
-    const rows = await sql`
-      SELECT u.username, COALESCE(b.balance, 0) AS balance
-      FROM points_users u
-      LEFT JOIN points_balances b ON b.username = u.username
-      WHERE u.username IS NOT NULL
-      ORDER BY balance DESC NULLS LAST, u.username ASC
-      LIMIT 500
-    `;
+    const { value: ranked, hit } = await cachedJson('points:leaderboard:ranked:v1', 15_000, async () => {
+      await timer.time('schema', () => ensurePointsSchema(schemaSql));
+      const rows = await timer.time('db_leaderboard', () => sql`
+        SELECT u.username, COALESCE(b.balance, 0) AS balance
+        FROM points_users u
+        LEFT JOIN points_balances b ON b.username = u.username
+        WHERE u.username IS NOT NULL
+        ORDER BY balance DESC NULLS LAST, u.username ASC
+        LIMIT 500
+      `);
 
-    const ranked = rows.map((r, i) => ({
-      rank: i + 1,
-      username: r.username,
-      balance: round2(r.balance),
-      cycleDelta: round2(Number(r.balance) - CYCLE_STARTING_BALANCE),
-    }));
+      return rows.map((r, i) => ({
+        rank: i + 1,
+        username: r.username,
+        balance: round2(r.balance),
+        cycleDelta: round2(Number(r.balance) - CYCLE_STARTING_BALANCE),
+      }));
+    });
 
     const top = ranked.slice(0, 10);
 
@@ -80,6 +85,8 @@ export default async function handler(req, res) {
       }
     }
 
+    res.setHeader('X-Pronos-Cache', hit ? 'hit' : 'miss');
+    timer.end({ cache: hit ? 'hit' : 'miss', ranked: ranked.length });
     return res.status(200).json({
       top,
       me,
@@ -87,6 +94,7 @@ export default async function handler(req, res) {
       startingBalance: CYCLE_STARTING_BALANCE,
     });
   } catch (e) {
+    timer.end({ error: 'leaderboard_failed' });
     console.error('[points/leaderboard] error', { message: e?.message, code: e?.code });
     return res.status(500).json({ error: 'leaderboard_failed' });
   }

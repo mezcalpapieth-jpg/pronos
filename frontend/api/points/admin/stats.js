@@ -12,11 +12,13 @@ import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { ensureInterestSchema } from '../../_lib/interest-schema.js';
 import { INTEREST_WINDOWS, formatInterestRow } from '../../_lib/interest.js';
+import { cachedJson, createApiTimer, setCacheHeaders } from '../../_lib/api-performance.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
 
 export default async function handler(req, res) {
+  const timer = createApiTimer(res, 'points/admin/stats', { logThresholdMs: 250 });
   const cors = applyCors(req, res, { methods: 'GET, OPTIONS', credentials: true });
   if (cors) return cors;
   if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
@@ -25,10 +27,22 @@ export default async function handler(req, res) {
   if (!admin) return;
 
   try {
-    await ensurePointsSchema(schemaSql);
-    await ensureInterestSchema(schemaSql);
+    setCacheHeaders(res, { scope: 'private', maxAge: 20, staleWhileRevalidate: 60 });
+    const { value: payload, hit } = await cachedJson('points:admin:stats:v2', 20_000, async () => {
+    await timer.time('schema_points', () => ensurePointsSchema(schemaSql));
+    await timer.time('schema_interest', () => ensureInterestSchema(schemaSql));
 
-    const [userRows, supplyRows, marketRows, distRows, teamInterestRows, marketInterestRows] = await Promise.all([
+    const [
+      userRows,
+      supplyRows,
+      marketRows,
+      distRows,
+      teamInterestRows,
+      marketInterestRows,
+      volumeRows,
+      siteTimeRows,
+      activityRows,
+    ] = await timer.time('db_admin_stats', () => Promise.all([
       sql`SELECT COUNT(*)::int AS c FROM points_users`,
       sql`SELECT COALESCE(SUM(balance), 0) AS total FROM points_balances`,
       sql`
@@ -173,9 +187,85 @@ export default async function handler(req, res) {
         ORDER BY month_count DESC, lifetime_count DESC, last_seen_at DESC
         LIMIT 12
       `,
-    ]);
+      sql`
+        SELECT
+          m.id,
+          m.question,
+          m.category,
+          m.status,
+          m.end_time,
+          COALESCE(SUM(CASE WHEN t.side = 'buy' THEN t.collateral ELSE 0 END), 0) AS invested_volume,
+          COALESCE(SUM(t.collateral), 0) AS gross_flow,
+          COUNT(*) FILTER (WHERE t.side = 'buy')::int AS buy_count,
+          COUNT(DISTINCT t.username)::int AS traders
+        FROM points_markets m
+        JOIN points_trades t ON t.market_id = m.id
+        WHERE COALESCE(m.mode, 'points') = 'points'
+        GROUP BY m.id, m.question, m.category, m.status, m.end_time
+        ORDER BY invested_volume DESC, buy_count DESC, m.end_time DESC
+        LIMIT 12
+      `,
+      sql`
+        WITH totals AS (
+          SELECT
+            username,
+            SUM(seconds)::int AS total_seconds,
+            MAX(last_path) AS last_path,
+            MAX(last_seen_at) AS last_seen_at
+          FROM points_site_time_daily
+          WHERE day >= CURRENT_DATE - INTERVAL '29 days'
+          GROUP BY username
+        ),
+        grand AS (
+          SELECT COALESCE(SUM(total_seconds), 0)::int AS total_seconds
+          FROM totals
+        )
+        SELECT
+          t.username,
+          t.total_seconds,
+          t.last_path,
+          t.last_seen_at,
+          grand.total_seconds AS all_seconds,
+          CASE
+            WHEN grand.total_seconds > 0 THEN (t.total_seconds::float / grand.total_seconds::float) * 100
+            ELSE 0
+          END AS share_pct
+        FROM totals t
+        CROSS JOIN grand
+        ORDER BY t.total_seconds DESC, t.last_seen_at DESC
+        LIMIT 12
+      `,
+      sql`
+        SELECT *
+        FROM (
+          SELECT
+            t.created_at,
+            t.username,
+            'trade'::text AS kind,
+            t.side::text AS action,
+            t.collateral AS amount,
+            t.market_id,
+            m.question
+          FROM points_trades t
+          JOIN points_markets m ON m.id = t.market_id
+          WHERE COALESCE(m.mode, 'points') = 'points'
+          UNION ALL
+          SELECT
+            d.created_at,
+            d.username,
+            'distribution'::text AS kind,
+            d.kind::text AS action,
+            d.amount,
+            d.reference_id AS market_id,
+            d.reason AS question
+          FROM points_distributions d
+        ) activity
+        ORDER BY created_at DESC
+        LIMIT 40
+      `,
+    ]));
 
-    return res.status(200).json({
+    return {
       users: userRows[0].c,
       totalSupply: Number(supplyRows[0].total || 0),
       markets: marketRows[0],
@@ -189,8 +279,45 @@ export default async function handler(req, res) {
         teams: teamInterestRows.map(formatInterestRow),
         markets: marketInterestRows.map(formatInterestRow),
       },
+      volume: {
+        markets: volumeRows.map(r => ({
+          id: r.id,
+          question: r.question,
+          category: r.category,
+          status: r.status,
+          endTime: r.end_time,
+          investedVolume: Number(r.invested_volume || 0),
+          grossFlow: Number(r.gross_flow || 0),
+          buyCount: Number(r.buy_count || 0),
+          traders: Number(r.traders || 0),
+        })),
+      },
+      siteTime: {
+        totalSeconds: Number(siteTimeRows[0]?.all_seconds || 0),
+        users: siteTimeRows.map(r => ({
+          username: r.username,
+          totalSeconds: Number(r.total_seconds || 0),
+          sharePct: Number(r.share_pct || 0),
+          lastPath: r.last_path,
+          lastSeenAt: r.last_seen_at,
+        })),
+      },
+      activity: activityRows.map(r => ({
+        createdAt: r.created_at,
+        username: r.username,
+        kind: r.kind,
+        action: r.action,
+        amount: Number(r.amount || 0),
+        marketId: r.market_id,
+        question: r.question,
+      })),
+    };
     });
+    res.setHeader('X-Pronos-Cache', hit ? 'hit' : 'miss');
+    timer.end({ cache: hit ? 'hit' : 'miss' });
+    return res.status(200).json(payload);
   } catch (e) {
+    timer.end({ error: 'stats_failed' });
     console.error('[admin/stats] error', { message: e?.message, code: e?.code });
     return res.status(500).json({ error: 'stats_failed' });
   }
