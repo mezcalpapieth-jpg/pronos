@@ -23,6 +23,41 @@
  */
 
 let pointsSchemaReady = false;
+let pointsSchemaProbeReady = false;
+
+const POINTS_SCHEMA_LOCK_LEASE_SECONDS = 45;
+
+const POINTS_SCHEMA_READY_PROBE = `
+  SELECT
+    to_regclass('public.points_users') IS NOT NULL AS points_users,
+    to_regclass('public.points_markets') IS NOT NULL AS points_markets,
+    to_regclass('public.points_balances') IS NOT NULL AS points_balances,
+    to_regclass('public.points_trades') IS NOT NULL AS points_trades,
+    to_regclass('public.points_positions') IS NOT NULL AS points_positions,
+    to_regclass('public.points_site_time_daily') IS NOT NULL AS points_site_time_daily,
+    to_regclass('public.points_publicity_daily') IS NOT NULL AS points_publicity_daily,
+    to_regclass('public.points_resolution_candidates') IS NOT NULL AS points_resolution_candidates,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'points_markets'
+        AND column_name = 'seed_liquidities'
+    ) AS points_markets_seed_liquidities,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'points_pending_markets'
+        AND column_name = 'seed_liquidities'
+    ) AS points_pending_seed_liquidities
+`;
+
+const POINTS_SCHEMA_LOCK_TABLE = `
+  CREATE TABLE IF NOT EXISTS points_schema_locks (
+    name          TEXT PRIMARY KEY,
+    locked_until  TIMESTAMPTZ NOT NULL,
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )
+`;
 
 const POINTS_SCHEMA_MIGRATIONS = [
   // ── Users (Turnkey-backed identity, scoped to points app) ──────────────
@@ -731,6 +766,12 @@ const IDEMPOTENT_ERROR_CODES = new Set([
   '42P16', // invalid_table_definition (seen when column already exists)
 ]);
 
+const TRANSIENT_MIGRATION_ERROR_CODES = new Set([
+  '40P01', // deadlock_detected
+  '55P03', // lock_not_available
+  '57014', // query_canceled / statement_timeout
+]);
+
 function isIdempotentError(err) {
   if (!err) return false;
   if (IDEMPOTENT_ERROR_CODES.has(err.code)) return true;
@@ -738,21 +779,106 @@ function isIdempotentError(err) {
   return msg.includes('already exists');
 }
 
+function isTransientMigrationError(err) {
+  return !!err && TRANSIENT_MIGRATION_ERROR_CODES.has(err.code);
+}
+
+async function schemaLooksReady(sql) {
+  const rows = await sql.query(POINTS_SCHEMA_READY_PROBE);
+  const row = rows?.[0];
+  return !!row && Object.values(row).every(Boolean);
+}
+
+async function tryAcquireSchemaLock(sql) {
+  try {
+    await sql.query(POINTS_SCHEMA_LOCK_TABLE);
+  } catch (err) {
+    if (!isIdempotentError(err)) throw err;
+  }
+
+  const rows = await sql.query(`
+    INSERT INTO points_schema_locks (name, locked_until, updated_at)
+    VALUES ('points', NOW() + INTERVAL '${POINTS_SCHEMA_LOCK_LEASE_SECONDS} seconds', NOW())
+    ON CONFLICT (name) DO UPDATE
+      SET locked_until = EXCLUDED.locked_until,
+          updated_at = NOW()
+      WHERE points_schema_locks.locked_until < NOW()
+    RETURNING true AS acquired
+  `);
+  return rows?.[0]?.acquired === true;
+}
+
+async function releaseSchemaLock(sql) {
+  try {
+    await sql.query(`
+      UPDATE points_schema_locks
+         SET locked_until = NOW(),
+             updated_at = NOW()
+       WHERE name = 'points'
+    `);
+  } catch {
+    // Best effort. The lease expires quickly if this update cannot run.
+  }
+}
+
+async function runSchemaMigration(sql, migration) {
+  if (typeof sql.transaction === 'function') {
+    await sql.transaction((tx) => [
+      tx.query(`SET LOCAL lock_timeout = '2500ms'`),
+      tx.query(`SET LOCAL statement_timeout = '15000ms'`),
+      tx.query(migration),
+    ]);
+    return;
+  }
+  await sql.query(migration);
+}
+
 export async function ensurePointsSchema(sql) {
   if (pointsSchemaReady) return;
-  for (const migration of POINTS_SCHEMA_MIGRATIONS) {
+  if (!pointsSchemaProbeReady) {
     try {
-      await sql.query(migration);
-    } catch (err) {
-      if (isIdempotentError(err)) {
-        // Another concurrent cold-start already created this object —
-        // end state is correct, keep going.
-        continue;
+      if (await schemaLooksReady(sql)) {
+        pointsSchemaProbeReady = true;
+        pointsSchemaReady = true;
+        return;
       }
-      throw err;
+    } catch {
+      // Fall through to self-healing migrations. The probe is an optimization,
+      // not the source of truth.
     }
   }
-  pointsSchemaReady = true;
+
+  const acquired = await tryAcquireSchemaLock(sql);
+  if (!acquired) {
+    // Another serverless instance is already running DDL. Do not let hot
+    // routes pile up behind relation locks; the request can proceed against
+    // the existing schema, or fail fast if it genuinely needs a missing object.
+    return;
+  }
+
+  try {
+    for (const migration of POINTS_SCHEMA_MIGRATIONS) {
+      try {
+        await runSchemaMigration(sql, migration);
+      } catch (err) {
+        if (isIdempotentError(err)) {
+          // Another concurrent cold-start already created this object —
+          // end state is correct, keep going.
+          continue;
+        }
+        if (isTransientMigrationError(err) && await schemaLooksReady(sql).catch(() => false)) {
+          pointsSchemaProbeReady = true;
+          pointsSchemaReady = true;
+          return;
+        }
+        throw err;
+      }
+    }
+    pointsSchemaProbeReady = true;
+    pointsSchemaReady = true;
+  } finally {
+    await releaseSchemaLock(sql);
+  }
 }
 
 /**
