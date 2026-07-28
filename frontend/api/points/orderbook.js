@@ -10,6 +10,7 @@ import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { buildAmmDepth, AMM_DEPTH_LEVELS } from '../_lib/amm-depth.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
+import { cachedJson, createApiTimer, setCacheHeaders } from '../_lib/api-performance.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -48,69 +49,94 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'invalid_outcome_index' });
   }
 
+  const requestedLevels = levelSet(levels);
+  const timer = createApiTimer(res, 'points/orderbook', { logThresholdMs: 220 });
+  setCacheHeaders(res, {
+    scope: 'public',
+    maxAge: 2,
+    sMaxage: 5,
+    staleWhileRevalidate: 20,
+  });
+
   try {
-    await ensurePointsSchema(schemaSql);
-    const rows = await sql`
-      SELECT id, parent_id, leg_label, question, status, outcomes, reserves
-      FROM points_markets
-      WHERE id = ${marketId}
-      LIMIT 1
-    `;
-    if (rows.length === 0) return res.status(404).json({ error: 'market_not_found' });
+    const cacheKey = `points:orderbook:v1:${marketId}:${outcomeIndex}:${requestedLevels.join(',')}`;
+    const { value: payload, hit } = await cachedJson(cacheKey, 3_000, async () => {
+      await timer.time('schema', () => ensurePointsSchema(schemaSql));
+      const rows = await timer.time('db_market', () => sql`
+        SELECT id, parent_id, leg_label, question, status, outcomes, reserves
+        FROM points_markets
+        WHERE id = ${marketId}
+        LIMIT 1
+      `);
+      if (rows.length === 0) {
+        const err = new Error('market_not_found');
+        err.statusCode = 404;
+        throw err;
+      }
 
-    const market = rows[0];
-    const outcomes = parseJsonb(market.outcomes, ['Sí', 'No']);
-    const reserves = parseJsonb(market.reserves, []).map(Number);
-    const outcomeLabel = market.leg_label || outcomes[outcomeIndex] || `Opción ${outcomeIndex + 1}`;
+      const market = rows[0];
+      const outcomes = parseJsonb(market.outcomes, ['Sí', 'No']);
+      const reserves = parseJsonb(market.reserves, []).map(Number);
+      const outcomeLabel = market.leg_label || outcomes[outcomeIndex] || `Opción ${outcomeIndex + 1}`;
 
-    if (market.status !== 'active') {
-      return res.status(200).json({
+      if (market.status !== 'active') {
+        return {
+          marketId,
+          outcomeIndex,
+          outcomeLabel,
+          status: market.status,
+          currentPrice: null,
+          lastPrice: null,
+          spread: null,
+          asks: [],
+          bids: [],
+        };
+      }
+
+      const depth = buildAmmDepth({
+        reserves,
+        outcomeIndex,
+        levels: requestedLevels,
+      });
+      const lastRows = await timer.time('db_last_trade', () => sql`
+        SELECT price_at_trade
+        FROM points_trades
+        WHERE market_id = ${marketId}
+          AND outcome_index = ${outcomeIndex}
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+      `);
+      const lastPrice = lastRows.length > 0
+        ? Number(lastRows[0].price_at_trade)
+        : depth.currentPrice;
+
+      return {
         marketId,
         outcomeIndex,
         outcomeLabel,
         status: market.status,
-        currentPrice: null,
-        lastPrice: null,
-        spread: null,
-        asks: [],
-        bids: [],
-      });
-    }
-
-    const depth = buildAmmDepth({
-      reserves,
-      outcomeIndex,
-      levels: levelSet(levels),
+        currentPrice: depth.currentPrice,
+        lastPrice: Number.isFinite(lastPrice) ? lastPrice : depth.currentPrice,
+        spread: depth.spread,
+        asks: depth.asks,
+        bids: depth.bids,
+      };
     });
-    const lastRows = await sql`
-      SELECT price_at_trade
-      FROM points_trades
-      WHERE market_id = ${marketId}
-        AND outcome_index = ${outcomeIndex}
-      ORDER BY created_at DESC, id DESC
-      LIMIT 1
-    `;
-    const lastPrice = lastRows.length > 0
-      ? Number(lastRows[0].price_at_trade)
-      : depth.currentPrice;
-
-    return res.status(200).json({
-      marketId,
-      outcomeIndex,
-      outcomeLabel,
-      status: market.status,
-      currentPrice: depth.currentPrice,
-      lastPrice: Number.isFinite(lastPrice) ? lastPrice : depth.currentPrice,
-      spread: depth.spread,
-      asks: depth.asks,
-      bids: depth.bids,
-    });
+    res.setHeader('X-Pronos-Cache', hit ? 'hit' : 'miss');
+    timer.end({ cache: hit ? 'hit' : 'miss' });
+    return res.status(200).json(payload);
   } catch (e) {
+    if (e?.statusCode === 404) {
+      timer.end({ error: 'market_not_found' });
+      return res.status(404).json({ error: 'market_not_found' });
+    }
     const msg = (e?.message || '').toLowerCase();
     if (msg.includes('amm-depth') || msg.includes('amm-math')) {
+      timer.end({ error: 'invalid_orderbook' });
       return res.status(400).json({ error: 'invalid_orderbook', detail: e.message });
     }
     console.error('[points/orderbook] error', { message: e?.message, code: e?.code });
+    timer.end({ error: 'orderbook_failed' });
     return res.status(500).json({ error: 'orderbook_failed' });
   }
 }

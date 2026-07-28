@@ -13,6 +13,7 @@ import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { ensureInterestSchema } from '../../_lib/interest-schema.js';
 import { INTEREST_WINDOWS, formatInterestRow } from '../../_lib/interest.js';
 import { cachedJson, createApiTimer, setCacheHeaders } from '../../_lib/api-performance.js';
+import { PUBLICITY_SOURCES } from '../../_lib/publicity.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -28,7 +29,7 @@ export default async function handler(req, res) {
 
   try {
     setCacheHeaders(res, { scope: 'private', maxAge: 20, staleWhileRevalidate: 60 });
-    const { value: payload, hit } = await cachedJson('points:admin:stats:v2', 20_000, async () => {
+    const { value: payload, hit } = await cachedJson('points:admin:stats:v3', 20_000, async () => {
     await timer.time('schema_points', () => ensurePointsSchema(schemaSql));
     await timer.time('schema_interest', () => ensureInterestSchema(schemaSql));
 
@@ -41,6 +42,7 @@ export default async function handler(req, res) {
       marketInterestRows,
       volumeRows,
       siteTimeRows,
+      publicityRows,
       activityRows,
     ] = await timer.time('db_admin_stats', () => Promise.all([
       sql`SELECT COUNT(*)::int AS c FROM points_users`,
@@ -236,6 +238,26 @@ export default async function handler(req, res) {
         LIMIT 12
       `,
       sql`
+        SELECT
+          source,
+          COALESCE(SUM(visits) FILTER (WHERE day = CURRENT_DATE), 0)::int AS day_visits,
+          COALESCE(SUM(visits) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '6 days'), 0)::int AS week_visits,
+          COALESCE(SUM(visits) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '29 days'), 0)::int AS month_visits,
+          COALESCE(SUM(visits), 0)::int AS lifetime_visits,
+          COALESCE(SUM(unique_visitors) FILTER (WHERE day = CURRENT_DATE), 0)::int AS day_unique,
+          COALESCE(SUM(unique_visitors) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '6 days'), 0)::int AS week_unique,
+          COALESCE(SUM(unique_visitors) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '29 days'), 0)::int AS month_unique,
+          COALESCE(SUM(unique_visitors), 0)::int AS lifetime_unique,
+          COALESCE(SUM(conversions) FILTER (WHERE day = CURRENT_DATE), 0)::int AS day_conversions,
+          COALESCE(SUM(conversions) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '6 days'), 0)::int AS week_conversions,
+          COALESCE(SUM(conversions) FILTER (WHERE day >= CURRENT_DATE - INTERVAL '29 days'), 0)::int AS month_conversions,
+          COALESCE(SUM(conversions), 0)::int AS lifetime_conversions,
+          MAX(last_seen_at) AS last_seen_at
+        FROM points_publicity_daily
+        WHERE source IN ('instagram', 'tiktok', 'x')
+        GROUP BY source
+      `,
+      sql`
         SELECT *
         FROM (
           SELECT
@@ -301,6 +323,30 @@ export default async function handler(req, res) {
           lastPath: r.last_path,
           lastSeenAt: r.last_seen_at,
         })),
+      },
+      publicity: {
+        sources: PUBLICITY_SOURCES.map(sourceMeta => {
+          const row = publicityRows.find(item => item.source === sourceMeta.source) || {};
+          const monthVisits = Number(row.month_visits || 0);
+          const monthConversions = Number(row.month_conversions || 0);
+          return {
+            ...sourceMeta,
+            dayVisits: Number(row.day_visits || 0),
+            weekVisits: Number(row.week_visits || 0),
+            monthVisits,
+            lifetimeVisits: Number(row.lifetime_visits || 0),
+            dayUnique: Number(row.day_unique || 0),
+            weekUnique: Number(row.week_unique || 0),
+            monthUnique: Number(row.month_unique || 0),
+            lifetimeUnique: Number(row.lifetime_unique || 0),
+            dayConversions: Number(row.day_conversions || 0),
+            weekConversions: Number(row.week_conversions || 0),
+            monthConversions,
+            lifetimeConversions: Number(row.lifetime_conversions || 0),
+            monthConversionRate: monthVisits > 0 ? (monthConversions / monthVisits) * 100 : 0,
+            lastSeenAt: row.last_seen_at || null,
+          };
+        }),
       },
       activity: activityRows.map(r => ({
         createdAt: r.created_at,

@@ -364,6 +364,35 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_site_time_user
     ON points_site_time_daily(username, day DESC)`,
 
+  `CREATE TABLE IF NOT EXISTS points_publicity_daily (
+    source          TEXT NOT NULL,
+    day             DATE NOT NULL DEFAULT CURRENT_DATE,
+    visits          INTEGER NOT NULL DEFAULT 0,
+    unique_visitors INTEGER NOT NULL DEFAULT 0,
+    conversions     INTEGER NOT NULL DEFAULT 0,
+    last_seen_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (source, day)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_publicity_daily_day
+    ON points_publicity_daily(day DESC, source)`,
+  `CREATE TABLE IF NOT EXISTS points_publicity_visitors (
+    visitor_key    TEXT NOT NULL,
+    source         TEXT NOT NULL,
+    day            DATE NOT NULL DEFAULT CURRENT_DATE,
+    first_seen_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (visitor_key, source, day)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_publicity_visitors_source_day
+    ON points_publicity_visitors(source, day DESC)`,
+  `CREATE TABLE IF NOT EXISTS points_publicity_attributions (
+    username      TEXT PRIMARY KEY,
+    source        TEXT NOT NULL,
+    visitor_key   TEXT,
+    converted_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_publicity_attributions_source
+    ON points_publicity_attributions(source, converted_at DESC)`,
+
   `CREATE TABLE IF NOT EXISTS points_referrals (
     id             SERIAL PRIMARY KEY,
     referrer       TEXT NOT NULL,

@@ -42,6 +42,11 @@
     { "source": "/c/:slug",    "destination": "/points/c/:slug",    "permanent": true }
   ],
   "rewrites": [
+    { "source": "/i",                  "destination": "/api/points/publicity/redirect?source=instagram" },
+    { "source": "/t",                  "destination": "/api/points/publicity/redirect?source=tiktok" },
+    { "source": "/x",                  "destination": "/api/points/publicity/redirect?source=x" },
+    { "source": "/instagram",          "destination": "/api/points/publicity/redirect?source=instagram" },
+    { "source": "/tiktok",             "destination": "/api/points/publicity/redirect?source=tiktok" },
     { "source": "/mvp/market",    "destination": "/mvp/" },
     { "source": "/mvp/portfolio", "destination": "/mvp/" },
     { "source": "/mvp/admin",     "destination": "/mvp/" },

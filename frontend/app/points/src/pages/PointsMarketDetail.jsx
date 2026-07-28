@@ -8,7 +8,7 @@
  * Data comes from /api/points/market?id=... — the response contains
  * the market row + its current reserves, outcomes, and prices.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchMarket, fetchOrderBook, fetchPriceHistory, fetchPositions } from '../lib/pointsApi.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
@@ -803,6 +803,51 @@ function DepthRows({ rows, side, maxTotal, t }) {
   );
 }
 
+function DepthRowsSkeleton({ side }) {
+  const bg = side === 'ask' ? 'rgba(255,59,59,0.08)' : 'rgba(0,232,122,0.08)';
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div
+          key={`${side}-skeleton-${i}`}
+          style={{
+            position: 'relative',
+            display: 'grid',
+            gridTemplateColumns: '72px 1fr 74px',
+            alignItems: 'center',
+            gap: 10,
+            minHeight: 30,
+            padding: '7px 10px',
+            borderRadius: 8,
+            overflow: 'hidden',
+            background: 'var(--surface2)',
+            border: '1px solid rgba(255,255,255,0.03)',
+          }}
+        >
+          <span style={{
+            position: 'absolute',
+            inset: '0 auto 0 0',
+            width: `${78 - i * 12}%`,
+            background: bg,
+            opacity: 0.75,
+          }} />
+          {[0, 1, 2].map((slot) => (
+            <span key={slot} style={{
+              position: 'relative',
+              zIndex: 1,
+              justifySelf: slot === 0 ? 'start' : 'end',
+              width: slot === 0 ? 42 : slot === 1 ? 56 : 62,
+              height: 10,
+              borderRadius: 999,
+              background: 'rgba(255,255,255,0.08)',
+            }} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function OrderBookPanel({
   market,
   displayOutcomes,
@@ -815,6 +860,7 @@ function OrderBookPanel({
   const [book, setBook] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const bookCacheRef = useRef(new Map());
   const options = buildOrderBookOptions({
     market,
     displayOutcomes,
@@ -827,6 +873,7 @@ function OrderBookPanel({
 
   useEffect(() => {
     setSelected(0);
+    bookCacheRef.current = new Map();
   }, [optionsSig]);
 
   useEffect(() => {
@@ -837,6 +884,14 @@ function OrderBookPanel({
       return undefined;
     }
     let cancelled = false;
+    const cached = bookCacheRef.current.get(selectedOption.key);
+    if (cached) {
+      setBook(cached);
+      setLoading(false);
+      setError(null);
+      return () => { cancelled = true; };
+    }
+    setBook(null);
     setLoading(true);
     setError(null);
     fetchOrderBook({
@@ -845,6 +900,7 @@ function OrderBookPanel({
       levels: 8,
     })
       .then((payload) => {
+        bookCacheRef.current.set(selectedOption.key, payload);
         if (!cancelled) setBook(payload);
       })
       .catch((e) => {
@@ -854,7 +910,42 @@ function OrderBookPanel({
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [selectedOption?.marketId, selectedOption?.outcomeIndex, disabled]);
+  }, [selectedOption?.key, selectedOption?.marketId, selectedOption?.outcomeIndex, disabled]);
+
+  useEffect(() => {
+    if (disabled || options.length <= 1) return undefined;
+    let cancelled = false;
+    const cleanup = [];
+    const prefetchTargets = options
+      .filter((option) => option.key !== selectedOption?.key && !bookCacheRef.current.has(option.key))
+      .slice(0, 5);
+
+    prefetchTargets.forEach((option, i) => {
+      const run = () => {
+        fetchOrderBook({
+          marketId: option.marketId,
+          outcomeIndex: option.outcomeIndex,
+          levels: 8,
+        })
+          .then((payload) => {
+            if (!cancelled) bookCacheRef.current.set(option.key, payload);
+          })
+          .catch(() => {});
+      };
+      if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+        const idleId = window.requestIdleCallback(run, { timeout: 700 + i * 120 });
+        cleanup.push(() => window.cancelIdleCallback?.(idleId));
+      } else if (typeof window !== 'undefined') {
+        const timerId = window.setTimeout(run, 120 + i * 70);
+        cleanup.push(() => window.clearTimeout(timerId));
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      cleanup.forEach((fn) => fn());
+    };
+  }, [optionsSig, selectedOption?.key, disabled]);
 
   if (!market || options.length === 0) return null;
 
@@ -868,6 +959,7 @@ function OrderBookPanel({
       border: '1px solid var(--border)',
       borderRadius: 14,
       padding: 20,
+      marginBottom: 24,
     }}>
       <div style={{
         display: 'flex',
@@ -969,9 +1061,20 @@ function OrderBookPanel({
           {t('points.detail.orderBookUnavailable')}
         </p>
       ) : loading ? (
-        <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
-          {t('points.detail.orderBookLoading')}
-        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <section>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#ff3b3b', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
+              {t('points.detail.orderBookSellSide')}
+            </div>
+            <DepthRowsSkeleton side="ask" />
+          </section>
+          <section>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--yes)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
+              {t('points.detail.orderBookBuySide')}
+            </div>
+            <DepthRowsSkeleton side="bid" />
+          </section>
+        </div>
       ) : error ? (
         <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--red, #ef4444)' }}>
           {t('points.detail.orderBookFailed')}
@@ -1554,6 +1657,14 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               </div>
             </div>
 
+            <OrderBookPanel
+              market={market}
+              displayOutcomes={displayOutcomes}
+              displayOutcomeIndices={displayOutcomeIndices}
+              displayOutcomeImages={displayOutcomeImages}
+              disabled={isResolved || isPendingResolution || isTradingLocked || isCanceled}
+            />
+
             <SeriesGameStrip
               seriesMeta={market.seriesMeta}
               currentMarketId={market.id}
@@ -1927,13 +2038,6 @@ export default function PointsMarketDetail({ onOpenLogin }) {
             </div>
           </div>
 
-          <OrderBookPanel
-            market={market}
-            displayOutcomes={displayOutcomes}
-            displayOutcomeIndices={displayOutcomeIndices}
-            displayOutcomeImages={displayOutcomeImages}
-            disabled={isResolved || isPendingResolution || isTradingLocked || isCanceled}
-          />
           </aside>
         </div>
       </main>

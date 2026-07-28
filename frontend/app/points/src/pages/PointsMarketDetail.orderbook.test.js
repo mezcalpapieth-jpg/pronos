@@ -16,6 +16,19 @@ test('points market detail renders AMM-backed order book depth', () => {
   assert.match(detailSource, /points\.detail\.orderBook/);
   assert.match(detailSource, /points\.detail\.orderBookSellSide/);
   assert.match(detailSource, /points\.detail\.orderBookBuySide/);
+  assert.match(detailSource, /bookCacheRef/);
+  assert.match(detailSource, /requestIdleCallback/);
+});
+
+test('points market detail places orderbook in the left flow before outcome controls', () => {
+  const orderBookIndex = detailSource.indexOf('<OrderBookPanel');
+  const seriesStripIndex = detailSource.indexOf('<SeriesGameStrip');
+  const asideIndex = detailSource.indexOf('<aside style');
+  const gaugeIndex = detailSource.indexOf('<ProbabilityGaugeRow');
+  assert.ok(orderBookIndex > 0, 'expected OrderBookPanel render call');
+  assert.ok(orderBookIndex < seriesStripIndex, 'orderbook should sit right after the chart, before series navigation');
+  assert.ok(orderBookIndex < gaugeIndex, 'orderbook should sit before the outcome question controls');
+  assert.ok(orderBookIndex < asideIndex, 'orderbook should no longer live in the right rail');
 });
 
 test('points API client exposes orderbook endpoint', () => {

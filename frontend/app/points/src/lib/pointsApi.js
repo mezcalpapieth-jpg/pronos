@@ -100,6 +100,17 @@ export async function adminResetDeckInviteCode({ id, code } = {}) {
   });
 }
 
+// ─── Publicity attribution ────────────────────────────────────────────────
+// Source cookies are set by the bio links. When an account is present later
+// in the points app, this records one first-touch conversion.
+export async function trackPublicityLanding(source) {
+  return postJson('/api/points/publicity/landing', { source });
+}
+
+export async function trackPublicityConversion() {
+  return postJson('/api/points/publicity/conversion', {});
+}
+
 // ─── Markets ────────────────────────────────────────────────────────────────
 // Aggregate counters for the home hero. Ships only integers so we
 // can show the true total active-market count without fetching

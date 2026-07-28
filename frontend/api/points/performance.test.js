@@ -10,6 +10,7 @@ const currentCycle = await readFile(new URL('./cycles/current.js', import.meta.u
 const cycleHistory = await readFile(new URL('./cycles/history.js', import.meta.url), 'utf8');
 const history = await readFile(new URL('./history.js', import.meta.url), 'utf8');
 const adminStats = await readFile(new URL('./admin/stats.js', import.meta.url), 'utf8');
+const orderbook = await readFile(new URL('./orderbook.js', import.meta.url), 'utf8');
 const pointsSchema = await readFile(new URL('../_lib/points-schema.js', import.meta.url), 'utf8');
 const migrate = await readFile(new URL('../migrate.js', import.meta.url), 'utf8');
 
@@ -22,7 +23,7 @@ test('shared api performance helper exposes cache headers, memory cache, and Ser
 });
 
 test('public points reads use short cache headers and timing metadata', () => {
-  for (const source of [markets, leaderboard, stats, currentCycle, cycleHistory, adminStats]) {
+  for (const source of [markets, leaderboard, stats, currentCycle, cycleHistory, adminStats, orderbook]) {
     assert.match(source, /cachedJson/);
     assert.match(source, /createApiTimer/);
     assert.match(source, /setCacheHeaders/);

@@ -20,6 +20,7 @@ import PointsTicker from './components/PointsTicker.jsx';
 import PointsCategoryBar from './components/PointsCategoryBar.jsx';
 import Footer from '@app/components/Footer.jsx';
 import PointsWelcomeModal, { hasBeenWelcomed } from './components/PointsWelcomeModal.jsx';
+import { trackPublicityConversion, trackPublicityLanding } from './lib/pointsApi.js';
 
 const PointsHome = lazy(() => import('./pages/PointsHome.jsx'));
 const PointsMarketDetail = lazy(() => import('./pages/PointsMarketDetail.jsx'));
@@ -56,6 +57,49 @@ function RouteFallback() {
       Cargando...
     </div>
   );
+}
+
+function PublicityRedirect({ source }) {
+  useEffect(() => {
+    const q = new URLSearchParams({ source }).toString();
+    window.location.replace(`/api/points/publicity/redirect?${q}`);
+  }, [source]);
+
+  return (
+    <div style={{ textAlign: 'center', padding: '100px 48px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', letterSpacing: '0.1em' }}>
+      Redirigiendo...
+    </div>
+  );
+}
+
+function publicitySourceFromHash(hash) {
+  const marker = String(hash || '').replace(/^#/, '').trim().toLowerCase();
+  const aliases = {
+    a: 'instagram',
+    ig: 'instagram',
+    i: 'instagram',
+    instagram: 'instagram',
+    b: 'tiktok',
+    tt: 'tiktok',
+    t: 'tiktok',
+    tiktok: 'tiktok',
+    c: 'x',
+    x: 'x',
+    twitter: 'x',
+  };
+  return aliases[marker] || null;
+}
+
+function publicitySourceFromSearch(search) {
+  const params = new URLSearchParams(String(search || '').replace(/^\?/, ''));
+  return publicitySourceFromHash(params.get('p'));
+}
+
+function cleanPublicityUrl(pathname, search) {
+  const params = new URLSearchParams(String(search || '').replace(/^\?/, ''));
+  params.delete('p');
+  const nextSearch = params.toString();
+  return `${pathname}${nextSearch ? `?${nextSearch}` : ''}`;
 }
 
 function sendSiteTimePulse(seconds, path) {
@@ -121,6 +165,7 @@ export default function App() {
   const { authenticated, user, loading } = usePointsAuth();
   const [loginOpen, setLoginOpen] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const publicityConversionUsernameRef = useRef(null);
 
   // Track whether we saw `needsUsername: true` in this session so we know
   // the user just claimed their username (vs. already had one on mount).
@@ -152,11 +197,28 @@ export default function App() {
     }
   }, [loading, authenticated, user?.needsUsername, user?.username]);
 
+  useEffect(() => {
+    if (loading || !authenticated || user?.needsUsername || !user?.username) return;
+    if (publicityConversionUsernameRef.current === user.username) return;
+    publicityConversionUsernameRef.current = user.username;
+    trackPublicityConversion().catch(() => {});
+  }, [loading, authenticated, user?.needsUsername, user?.username]);
+
   const adminList = parseAdminList();
   const isAdmin = !!user?.username && adminList.includes(user.username.toLowerCase());
   const basename = typeof window !== 'undefined' && window.location.pathname.startsWith('/points')
     ? '/points'
     : '/';
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const source = publicitySourceFromHash(window.location.hash)
+      || publicitySourceFromSearch(window.location.search);
+    if (!source) return;
+    trackPublicityLanding(source).catch(() => {});
+    const cleanUrl = cleanPublicityUrl(window.location.pathname, window.location.search);
+    window.history.replaceState(null, '', cleanUrl || '/points/');
+  }, []);
 
   return (
     // The points app normally mounts under /points, but the private deck
@@ -206,6 +268,11 @@ function Shell({ onOpenLogin, isAdmin }) {
       {showCategoryBar && <PointsCategoryBar />}
       <Suspense fallback={<RouteFallback />}>
         <Routes>
+          <Route path="/i" element={<PublicityRedirect source="instagram" />} />
+          <Route path="/t" element={<PublicityRedirect source="tiktok" />} />
+          <Route path="/x" element={<PublicityRedirect source="x" />} />
+          <Route path="/instagram" element={<PublicityRedirect source="instagram" />} />
+          <Route path="/tiktok" element={<PublicityRedirect source="tiktok" />} />
           <Route path="/" element={<PointsHome onOpenLogin={onOpenLogin} />} />
           {/* World Cup gets its own page with a hero, groups, and
               bracket. Registered BEFORE the generic /c/:slug so it

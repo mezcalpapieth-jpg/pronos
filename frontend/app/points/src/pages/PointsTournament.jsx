@@ -32,8 +32,8 @@ function TournamentCard({ children, style }) {
     <section style={{
       background: 'var(--surface1)',
       border: '1px solid var(--border)',
-      borderRadius: 12,
-      padding: 'clamp(18px, 3vw, 28px)',
+      borderRadius: 10,
+      padding: 'clamp(16px, 2.4vw, 24px)',
       ...style,
     }}>
       {children}
@@ -45,11 +45,11 @@ function SectionLabel({ children }) {
   return (
     <div style={{
       fontFamily: 'var(--font-mono)',
-      fontSize: 11,
-      letterSpacing: '0.14em',
+      fontSize: 10,
+      letterSpacing: '0.12em',
       color: '#ff5500',
       textTransform: 'uppercase',
-      marginBottom: 12,
+      marginBottom: 10,
     }}>
       {children}
     </div>
@@ -64,15 +64,15 @@ function LeaderboardRow({ row, currentUsername }) {
       to={`/u/${encodeURIComponent(row.username)}`}
       style={{
         display: 'grid',
-        gridTemplateColumns: '44px minmax(0, 1fr) minmax(110px, auto) minmax(90px, auto)',
+        gridTemplateColumns: '38px minmax(0, 1fr) minmax(108px, auto) minmax(84px, auto)',
         gap: 12,
         alignItems: 'center',
-        padding: '13px 0',
+        padding: '11px 0',
         borderBottom: '1px solid var(--border)',
         textDecoration: 'none',
         color: isMe ? 'var(--green)' : 'var(--text-secondary)',
         fontFamily: 'var(--font-mono)',
-        fontSize: 12,
+        fontSize: 11,
       }}
     >
       <span style={{ color: 'var(--text-muted)' }}>{row.rank}.</span>
@@ -83,7 +83,7 @@ function LeaderboardRow({ row, currentUsername }) {
         whiteSpace: 'nowrap',
         color: isMe ? 'var(--green)' : 'var(--text-primary)',
         fontFamily: 'var(--font-body)',
-        fontSize: 15,
+        fontSize: 14,
       }}>
         {isMe ? '(tú) ' : ''}{row.username}
       </strong>
@@ -115,7 +115,7 @@ function PrizeRows({ lang }) {
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 16,
-          padding: '12px 14px',
+          padding: '11px 12px',
           border: '1px solid rgba(0,232,122,0.18)',
           borderRadius: 10,
           background: 'var(--surface2)',
@@ -123,7 +123,7 @@ function PrizeRows({ lang }) {
           <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
             {row.rank}
           </span>
-          <strong style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--green)' }}>
+          <strong style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--green)' }}>
             {row.prize}
           </strong>
         </div>
@@ -173,32 +173,32 @@ export default function PointsTournament() {
     <main style={{
       maxWidth: 1160,
       margin: '0 auto',
-      padding: 'clamp(32px, 6vw, 72px) clamp(16px, 4vw, 28px)',
+      padding: 'clamp(28px, 5vw, 56px) clamp(16px, 4vw, 28px)',
     }}>
-      <section style={{ marginBottom: 28 }}>
+      <section style={{ marginBottom: 22 }}>
         <SectionLabel>{lang === 'en' ? 'Pronos tournament' : 'Torneo Pronos'}</SectionLabel>
         <h1 style={{
           fontFamily: 'var(--font-display)',
-          fontSize: 'clamp(42px, 8vw, 86px)',
-          lineHeight: 0.92,
+          fontSize: 'clamp(30px, 4.6vw, 54px)',
+          lineHeight: 1.02,
           color: 'var(--text-primary)',
           textTransform: 'uppercase',
-          letterSpacing: '0.02em',
+          letterSpacing: '0.01em',
           margin: 0,
         }}>
-          {lang === 'en' ? 'Play the cycle' : 'Juega el ciclo'}
+          {lang === 'en' ? 'Tournament standings' : 'Clasificación del torneo'}
         </h1>
         <p style={{
-          maxWidth: 760,
+          maxWidth: 700,
           color: 'var(--text-secondary)',
           fontFamily: 'var(--font-body)',
-          fontSize: 'clamp(17px, 2.2vw, 24px)',
-          lineHeight: 1.45,
-          margin: '18px 0 0',
+          fontSize: 'clamp(15px, 1.6vw, 18px)',
+          lineHeight: 1.55,
+          margin: '14px 0 0',
         }}>
           {lang === 'en'
-            ? 'Every cycle starts from the same base. Grow your MXNP balance by predicting markets, then the leaderboard closes with cash prizes for the top places.'
-            : 'Cada ciclo empieza desde la misma base. Haz crecer tu balance de MXNP prediciendo mercados, y al cierre el leaderboard reparte premios en efectivo a los primeros lugares.'}
+            ? 'Each cycle starts from the same base. Grow your MXNP balance through market activity; when prizes resume, the final leaderboard determines the cash awards.'
+            : 'Cada ciclo empieza desde la misma base. Haz crecer tu balance de MXNP con actividad en mercados; cuando vuelvan los premios, el cierre del leaderboard define los ganadores.'}
         </p>
       </section>
 
@@ -247,10 +247,10 @@ export default function PointsTournament() {
               lang === 'en' ? 'To qualify for prizes, participate in at least 10 markets during the cycle.' : 'Para calificar a premios, participa en al menos 10 mercados durante el ciclo.',
               lang === 'en' ? 'At close, admin snapshots the leaderboard and opens the next cycle when prizes resume.' : 'Al cierre, admin congela el leaderboard y abre el siguiente ciclo cuando vuelvan los premios.',
             ].map((text, idx) => (
-              <div key={text} style={{ display: 'grid', gridTemplateColumns: '34px minmax(0, 1fr)', gap: 12, alignItems: 'start' }}>
+              <div key={text} style={{ display: 'grid', gridTemplateColumns: '30px minmax(0, 1fr)', gap: 11, alignItems: 'start' }}>
                 <span style={{
-                  width: 28,
-                  height: 28,
+                  width: 24,
+                  height: 24,
                   borderRadius: 999,
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -259,11 +259,11 @@ export default function PointsTournament() {
                   border: '1px solid rgba(255,85,0,0.35)',
                   color: '#ff5500',
                   fontFamily: 'var(--font-mono)',
-                  fontSize: 11,
+                  fontSize: 10,
                 }}>
                   {idx + 1}
                 </span>
-                <p style={{ margin: 0, color: 'var(--text-secondary)', fontFamily: 'var(--font-body)', fontSize: 15, lineHeight: 1.55 }}>
+                <p style={{ margin: 0, color: 'var(--text-secondary)', fontFamily: 'var(--font-body)', fontSize: 14, lineHeight: 1.55 }}>
                   {text}
                 </p>
               </div>
@@ -320,7 +320,7 @@ export default function PointsTournament() {
                   gap: 12,
                   marginBottom: 6,
                 }}>
-                  <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-body)', fontSize: 16 }}>
+                  <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-body)', fontSize: 15 }}>
                     {cycleRow.label || `Ciclo #${cycleRow.id}`}
                   </strong>
                   {cycleRow.closedAt && (
@@ -343,23 +343,24 @@ export default function PointsTournament() {
 
 const metricLabel = {
   fontFamily: 'var(--font-mono)',
-  fontSize: 10,
-  letterSpacing: '0.12em',
+  fontSize: 9,
+  letterSpacing: '0.11em',
   textTransform: 'uppercase',
   color: 'var(--text-muted)',
-  marginBottom: 8,
+  marginBottom: 7,
 };
 
 const metricValue = {
   fontFamily: 'var(--font-display)',
-  fontSize: 'clamp(24px, 3vw, 38px)',
+  fontSize: 'clamp(19px, 2.2vw, 28px)',
   color: 'var(--text-primary)',
   textTransform: 'uppercase',
-  letterSpacing: '0.02em',
+  letterSpacing: '0.01em',
 };
 
 const emptyText = {
   color: 'var(--text-muted)',
   fontFamily: 'var(--font-mono)',
-  fontSize: 12,
+  fontSize: 11,
+  lineHeight: 1.6,
 };

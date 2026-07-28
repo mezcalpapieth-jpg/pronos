@@ -2416,6 +2416,7 @@ function StatsPanel() {
         ))}
       </div>
 
+      <AdminPublicityPanel publicity={stats.publicity} />
       <AdminInterestPanel interest={stats.interest} />
       <AdminVolumePanel volume={stats.volume} />
       <AdminSiteTimePanel siteTime={stats.siteTime} />
@@ -2458,6 +2459,95 @@ function adminActionLabel(row) {
     void_refund: 'Reembolso',
   };
   return labels[row.action] || row.action || 'Distribución';
+}
+
+function AdminPublicityPanel({ publicity }) {
+  const rows = Array.isArray(publicity?.sources) ? publicity.sources : [];
+  const [copiedSource, setCopiedSource] = useState(null);
+
+  const copyLink = async (source, href) => {
+    try {
+      await navigator.clipboard?.writeText(href);
+      setCopiedSource(source);
+      window.setTimeout(() => setCopiedSource(null), 1600);
+    } catch {
+      setCopiedSource(null);
+    }
+  };
+
+  return (
+    <section style={adminPanelStyle}>
+      <div style={adminPanelTitle}>Enlaces de publicidad</div>
+      <p style={{
+        margin: '0 0 14px',
+        color: 'var(--text-muted)',
+        fontFamily: 'var(--font-mono)',
+        fontSize: 12,
+        lineHeight: 1.6,
+      }}>
+        Usa estos links en las bios. Las conversiones cuentan la primera cuenta atribuida a cada canal.
+      </p>
+      {rows.length === 0 ? (
+        <p style={adminEmptyStyle}>Aún no hay enlaces configurados.</p>
+      ) : (
+        <div style={{ display: 'grid', gap: 10 }}>
+          {rows.map(row => {
+            const href = `https://pronos.io${row.path}`;
+            return (
+              <div key={row.source} style={{
+                display: 'grid',
+                gridTemplateColumns: '120px minmax(220px, 1fr) minmax(140px, auto) minmax(150px, auto) 92px',
+                gap: 12,
+                alignItems: 'center',
+                padding: '12px 0',
+                borderBottom: '1px solid var(--border)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+              }}>
+                <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-body)', fontSize: 14, fontWeight: 700 }}>
+                  {row.label}
+                </span>
+                <span style={{
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  color: 'var(--text-secondary)',
+                }}>
+                  {href}
+                </span>
+                <span style={{ color: 'var(--green)', textAlign: 'right', fontWeight: 700 }}>
+                  {adminNumber(row.monthVisits)} visitas 30d
+                </span>
+                <span style={{ color: 'var(--text-muted)', textAlign: 'right' }}>
+                  {adminNumber(row.monthUnique)} únicos · {adminNumber(row.monthConversions)} cuentas
+                  {' '}({adminNumber(row.monthConversionRate, { maximumFractionDigits: 1 })}%)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => copyLink(row.source, href)}
+                  style={{
+                    border: '1px solid var(--border)',
+                    background: copiedSource === row.source ? 'rgba(16, 185, 129, 0.14)' : 'var(--surface2)',
+                    color: copiedSource === row.source ? 'var(--green)' : 'var(--text-secondary)',
+                    borderRadius: 8,
+                    padding: '8px 10px',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 10,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {copiedSource === row.source ? 'Copiado' : 'Copiar'}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
 }
 
 function AdminVolumePanel({ volume }) {
