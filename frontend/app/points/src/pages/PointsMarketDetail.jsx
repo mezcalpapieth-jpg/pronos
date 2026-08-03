@@ -1555,11 +1555,10 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               </div>
             )}
 
-            {/* Price history chart — shows the outcome-0 ("Sí/YES")
-                probability trajectory over the last 30 days. Hourly
-                resolution, filled under the curve, hover for exact
-                timestamp + percentage at each snapshot. Falls back to
-                a seeded mock when no snapshots exist yet. */}
+            {/* Price history chart — shows real probability snapshots
+                over the last 30 days. If there are no snapshots yet,
+                Sparkline renders an explicit flat/empty state instead
+                of inventing movement. */}
             <div style={{
               background: 'var(--surface1)',
               border: '1px solid var(--border)',
@@ -1595,13 +1594,11 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                     fill={true}
                     showValue={true}
                     valueWidth={60}
-                    data={
-                      displayHistoryByOutcome && displayHistoryByOutcome[0] && displayHistoryByOutcome[0].length > 1
-                        ? displayHistoryByOutcome[0]
-                        : null
-                    }
+                    data={displayHistoryByOutcome?.[0] || []}
                     targetPct={pctFor(0)}
                     seed={`points-detail-${market.id}-${displayOutcomes[0] || 'yes'}`}
+                    emptyLabel="Sin actividad todavía"
+                    emptySubLabel="El precio se moverá con el primer trade."
                   />
                 ) : (
                   // Chart shows up to FOUR lines. When a market has
@@ -1633,9 +1630,10 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                             valueWidth={44}
                             label={label.length > 10 ? label.slice(0, 9) + '…' : label}
                             labelWidth={84}
-                            data={Array.isArray(series) && series.length > 1 ? series : null}
+                            data={Array.isArray(series) ? series : []}
                             targetPct={pctFor(i)}
                             seed={`points-detail-${market.id}-${label || 'opt' + i}`}
+                            showEmptyState={i === chartIndices[0]}
                           />
                         );
                       });

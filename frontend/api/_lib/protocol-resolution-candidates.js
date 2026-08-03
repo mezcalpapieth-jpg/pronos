@@ -10,20 +10,28 @@ function intOrNull(value) {
   return Number.isInteger(n) ? n : null;
 }
 
+function nullableOutcomeIndex(value) {
+  const n = intOrNull(value);
+  return n != null && n >= 0 ? n : null;
+}
+
 function trimOrNull(value, maxLength = 500) {
   const s = String(value ?? '').trim();
   return s ? s.slice(0, maxLength) : null;
 }
 
 export function buildResolutionCandidateInsert(report = {}) {
+  const outcomeIndex = nullableOutcomeIndex(report.outcomeIndex);
+  const outcomeCount = Number(report.outcomeCount);
+  const confidenceBps = Number(report.confidenceBps);
   return {
     protocol_market_id: Number(report.protocolMarketId),
     resolver_type: trimOrNull(report.resolverType, 60),
     source: trimOrNull(report.source, 120),
     source_event_id: trimOrNull(report.sourceEventId, 180),
-    outcome_index: Number(report.outcomeIndex),
-    outcome_count: Number(report.outcomeCount),
-    confidence_bps: Number(report.confidenceBps),
+    outcome_index: outcomeIndex,
+    outcome_count: Number.isFinite(outcomeCount) && outcomeCount > 0 ? outcomeCount : 2,
+    confidence_bps: Number.isFinite(confidenceBps) ? Math.max(0, Math.min(10000, Math.round(confidenceBps))) : 0,
     observed_at: report.observedAt || null,
     final_score: trimOrNull(report.finalScoreText, 240),
     evidence_url: trimOrNull(report.evidenceUrl, 500),
@@ -34,7 +42,7 @@ export function buildResolutionCandidateInsert(report = {}) {
 }
 
 export function formatResolutionCandidate(row = {}, outcomes = []) {
-  const outcomeIndex = intOrNull(row.outcome_index ?? row.outcomeIndex) ?? 0;
+  const outcomeIndex = nullableOutcomeIndex(row.outcome_index ?? row.outcomeIndex);
   const confidenceBps = intOrNull(row.confidence_bps ?? row.confidenceBps) ?? 0;
   const status = String(row.status || 'pending');
   const statusLabels = {
@@ -53,9 +61,10 @@ export function formatResolutionCandidate(row = {}, outcomes = []) {
     sourceEventId: row.source_event_id ?? row.sourceEventId ?? null,
     outcomeIndex,
     outcomeCount: intOrNull(row.outcome_count ?? row.outcomeCount) ?? labels.length,
-    label: labels[outcomeIndex] || `Resultado ${outcomeIndex + 1}`,
+    label: outcomeIndex == null ? 'Elegir resultado' : (labels[outcomeIndex] || `Resultado ${outcomeIndex + 1}`),
+    needsOutcome: outcomeIndex == null,
     confidenceBps,
-    confidenceLabel: `${Math.round(confidenceBps / 100)}%`,
+    confidenceLabel: confidenceBps > 0 ? `${Math.round(confidenceBps / 100)}%` : null,
     observedAt: row.observed_at ?? row.observedAt ?? null,
     finalScore: row.final_score ?? row.finalScore ?? null,
     evidenceUrl: row.evidence_url ?? row.evidenceUrl ?? null,

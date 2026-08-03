@@ -21,6 +21,8 @@ import { withTransaction } from '../../_lib/db-tx.js';
 import { initialReserves } from '../../_lib/amm-math.js';
 import { deriveMarketTags } from '../../_lib/category-tags.js';
 import { normalizeSeedLiquidities } from '../../_lib/market-liquidity.js';
+import { attachDefaultSuggestedPricing } from '../../_lib/market-pricing.js';
+import { tryAttachPolymarketPricing } from '../../_lib/polymarket-pricing.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -693,6 +695,93 @@ async function editPending(pid, reviewer, patch = {}, note = null) {
   });
 }
 
+function pendingRowToPricingSpec(r) {
+  return {
+    question: r.question,
+    category: r.category,
+    outcomes: parseJsonb(r.outcomes, []),
+    seed_liquidity: Number(r.seed_liquidity || 1000),
+    seed_liquidities: parseJsonb(r.seed_liquidities, null),
+    source_data: parseJsonb(r.source_data, {}),
+    source: r.source,
+    source_event_id: r.source_event_id,
+    resolver_type: r.resolver_type,
+    resolver_config: parseJsonb(r.resolver_config, null),
+    sport: r.sport,
+    league: r.league,
+  };
+}
+
+async function refreshPendingPricing(pid, reviewer) {
+  const rowRes = await readSql`
+    SELECT * FROM points_pending_markets
+    WHERE id = ${pid}
+    LIMIT 1
+  `;
+  if (rowRes.length === 0) {
+    const err = new Error('pending_not_found'); err.status = 404; throw err;
+  }
+  const row = rowRes[0];
+  if (row.status !== 'pending') {
+    const err = new Error('already_reviewed'); err.status = 400;
+    err.detail = `status=${row.status}`;
+    throw err;
+  }
+
+  const originalSpec = pendingRowToPricingSpec(row);
+  const pricedSpec = attachDefaultSuggestedPricing(
+    await tryAttachPolymarketPricing(originalSpec),
+  );
+  const pricing = pricedSpec?.source_data?.suggestedPricing || null;
+  const seedLiquidities = Array.isArray(pricedSpec?.seed_liquidities)
+    ? pricedSpec.seed_liquidities
+    : parseJsonb(row.seed_liquidities, null);
+  const sourceData = {
+    ...originalSpec.source_data,
+    ...(pricedSpec.source_data || {}),
+  };
+
+  return withTransaction(async (client) => {
+    const lock = await client.query(
+      `SELECT status FROM points_pending_markets WHERE id = $1 FOR UPDATE`,
+      [pid],
+    );
+    if (lock.rows.length === 0) {
+      const err = new Error('pending_not_found'); err.status = 404; throw err;
+    }
+    if (lock.rows[0].status !== 'pending') {
+      const err = new Error('already_reviewed'); err.status = 400;
+      err.detail = `status=${lock.rows[0].status}`;
+      throw err;
+    }
+    await client.query(
+      `UPDATE points_pending_markets
+          SET source_data = $1::jsonb,
+              seed_liquidities = $2::jsonb,
+              seed_liquidity = $3,
+              reviewer = $4,
+              reviewed_at = NOW()
+        WHERE id = $5`,
+      [
+        JSON.stringify(sourceData),
+        seedLiquidities ? JSON.stringify(seedLiquidities) : null,
+        Array.isArray(seedLiquidities) ? Number(seedLiquidities[0]) : Number(row.seed_liquidity || 1000),
+        reviewer,
+        pid,
+      ],
+    );
+    return {
+      ok: true,
+      action: 'refresh_pricing',
+      id: pid,
+      suggestedPricing: pricing,
+      seedLiquidities,
+      source: pricing?.source || null,
+      foundExternalOdds: Boolean(pricing?.source && String(pricing.source).startsWith('polymarket:')),
+    };
+  });
+}
+
 async function review(req, res, admin) {
   const { id, action, note, patch, mode, chainId, chainAddress, chainMarketId, autoDeploy } = req.body || {};
   // Shared opts passed to approveOne for both single-row and
@@ -749,13 +838,56 @@ async function review(req, res, admin) {
     });
   }
 
+  if (action === 'refresh_pricing_all') {
+    const pending = await readSql`
+      SELECT id FROM points_pending_markets
+      WHERE status = 'pending'
+      ORDER BY id ASC
+      LIMIT 100
+    `;
+    const refreshed = [];
+    const failures = [];
+    for (const row of pending) {
+      try {
+        refreshed.push(await refreshPendingPricing(row.id, admin.username));
+      } catch (e) {
+        failures.push({
+          pendingId: row.id,
+          error: e?.message || 'unknown',
+          detail: e?.detail || null,
+        });
+      }
+    }
+    return res.status(200).json({
+      ok: true,
+      action: 'refresh_pricing_all',
+      checked: pending.length,
+      refreshedCount: refreshed.length,
+      foundExternalCount: refreshed.filter(item => item.foundExternalOdds).length,
+      failedCount: failures.length,
+      refreshed,
+      failures,
+    });
+  }
+
   // Single-row approve / reject — requires a valid id.
   const pid = parseInt(id, 10);
   if (!Number.isInteger(pid) || pid <= 0) {
     return res.status(400).json({ error: 'invalid_id' });
   }
-  if (action !== 'approve' && action !== 'reject' && action !== 'readd' && action !== 'edit') {
+  if (
+    action !== 'approve'
+    && action !== 'reject'
+    && action !== 'readd'
+    && action !== 'edit'
+    && action !== 'refresh_pricing'
+  ) {
     return res.status(400).json({ error: 'invalid_action' });
+  }
+
+  if (action === 'refresh_pricing') {
+    const result = await refreshPendingPricing(pid, admin.username);
+    return res.status(200).json(result);
   }
 
   if (action === 'edit') {

@@ -29,6 +29,11 @@ import {
   adminListPendingMarkets,
   adminReviewPendingMarket,
   adminEditPendingMarket,
+  adminRefreshPendingPricing,
+  adminRefreshAllPendingPricing,
+  adminListSupportTickets,
+  adminReplySupportTicket,
+  adminSetSupportTicketStatus,
   adminApproveAllPendingMarkets,
   adminBackfillResolvers,
   adminResolveDiagnostic,
@@ -172,7 +177,7 @@ export default function PointsAdmin({ isAdmin }) {
     if (typeof window === 'undefined') return 'create';
     const sp = new URLSearchParams(window.location.search);
     const t = sp.get('tab');
-    return ['create', 'markets', 'stats', 'pending', 'social', 'deck'].includes(t) ? t : 'create';
+    return ['create', 'markets', 'stats', 'pending', 'social', 'support', 'deck', 'cycles'].includes(t) ? t : 'create';
   })();
   const createPrefill = (() => {
     if (typeof window === 'undefined') return null;
@@ -187,7 +192,7 @@ export default function PointsAdmin({ isAdmin }) {
   const navigate = useNavigate();
   const { authenticated, user, loading: authLoading } = usePointsAuth();
   const [tab, setTab] = useState(initialTab); // 'create' | 'markets' | 'stats'
-  const [adminTaskCounts, setAdminTaskCounts] = useState({ pending: 0, markets: 0, social: 0 });
+  const [adminTaskCounts, setAdminTaskCounts] = useState({ pending: 0, markets: 0, social: 0, support: 0 });
   const [taskRefreshKey, setTaskRefreshKey] = useState(0);
 
   function refreshAdminTaskCounts() {
@@ -206,7 +211,7 @@ export default function PointsAdmin({ isAdmin }) {
 
     async function loadAdminTaskCounts() {
       if (!authenticated || !isAdmin) {
-        if (!cancelled) setAdminTaskCounts({ pending: 0, markets: 0, social: 0 });
+        if (!cancelled) setAdminTaskCounts({ pending: 0, markets: 0, social: 0, support: 0 });
         return;
       }
 
@@ -250,6 +255,7 @@ export default function PointsAdmin({ isAdmin }) {
           { id: 'create',  label: 'Crear mercado' },
           { id: 'pending', label: 'Por aprobar' },
           { id: 'markets', label: 'Mercados' },
+          { id: 'support', label: 'Soporte' },
           { id: 'social',  label: 'Tareas sociales' },
           { id: 'deck',    label: 'Deck' },
           { id: 'cycles',  label: 'Ciclos' },
@@ -305,6 +311,7 @@ export default function PointsAdmin({ isAdmin }) {
         />
       )}
       {tab === 'social' && <SocialTasksQueue onQueueChange={refreshAdminTaskCounts} />}
+      {tab === 'support' && <SupportTicketsQueue onQueueChange={refreshAdminTaskCounts} />}
       {tab === 'deck' && <DeckAdminPanel />}
       {tab === 'cycles' && <CyclesPanel />}
       {tab === 'stats' && <StatsPanel />}
@@ -687,6 +694,251 @@ function SocialTasksQueue({ onQueueChange }) {
               </span>
             )}
           </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Support tickets queue ─────────────────────────────────────────────────
+function SupportTicketsQueue({ onQueueChange }) {
+  const [status, setStatus] = useState('open');
+  const [tickets, setTickets] = useState(null);
+  const [drafts, setDrafts] = useState({});
+  const [working, setWorking] = useState(null);
+  const [error, setError] = useState(null);
+
+  async function load() {
+    setTickets(null);
+    setError(null);
+    try {
+      const r = await adminListSupportTickets(status);
+      setTickets(Array.isArray(r.tickets) ? r.tickets : []);
+    } catch (e) {
+      setError(e.code || e.message);
+      setTickets([]);
+    }
+  }
+
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [status]);
+
+  function setDraft(id, value) {
+    setDrafts(d => ({ ...d, [id]: value }));
+  }
+
+  async function reply(ticket) {
+    const message = String(drafts[ticket.id] || '').trim();
+    if (message.length < 2) return;
+    setWorking(`reply-${ticket.id}`);
+    try {
+      await adminReplySupportTicket({ id: ticket.id, message });
+      setDraft(ticket.id, '');
+      await load();
+      onQueueChange?.();
+    } catch (e) {
+      alert(`No se pudo responder: ${e.code || e.message}`);
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function setTicketStatus(ticket, nextStatus) {
+    setWorking(`status-${ticket.id}`);
+    try {
+      await adminSetSupportTicketStatus({ id: ticket.id, status: nextStatus });
+      await load();
+      onQueueChange?.();
+    } catch (e) {
+      alert(`No se pudo actualizar el ticket: ${e.code || e.message}`);
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        {[
+          { id: 'open', label: 'Abiertos' },
+          { id: 'closed', label: 'Cerrados' },
+          { id: 'all', label: 'Todos' },
+        ].map(s => (
+          <button
+            key={s.id}
+            onClick={() => setStatus(s.id)}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 16,
+              border: `1px solid ${status === s.id ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
+              background: status === s.id ? 'rgba(0,232,122,0.1)' : 'transparent',
+              color: status === s.id ? 'var(--green)' : 'var(--text-secondary)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              cursor: 'pointer',
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+            }}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {error && (
+        <p style={{ color: 'var(--red, #ef4444)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+          Error: {error}
+        </p>
+      )}
+      {tickets === null && (
+        <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Cargando tickets...</p>
+      )}
+      {tickets && tickets.length === 0 && (
+        <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+          Sin tickets en esta categoría.
+        </p>
+      )}
+
+      {tickets && tickets.map(ticket => {
+        const messages = Array.isArray(ticket.messages) ? ticket.messages : [];
+        const isClosed = ticket.status === 'closed';
+        return (
+          <article
+            key={ticket.id}
+            style={{
+              background: 'var(--surface1)',
+              border: '1px solid var(--border)',
+              borderRadius: 12,
+              padding: '16px 18px',
+              marginBottom: 14,
+            }}
+          >
+            <header style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1fr) auto',
+              gap: 14,
+              alignItems: 'start',
+              marginBottom: 14,
+            }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>
+                  #{ticket.id} · @{ticket.username || 'usuario'} · {ticket.email || 'sin correo'} · {ticket.type || 'other'}
+                </div>
+                <h3 style={{ margin: 0, fontSize: 18, color: 'var(--text-primary)' }}>
+                  {ticket.subject || 'Sin asunto'}
+                </h3>
+                <div style={{ marginTop: 6, fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
+                  Actualizado {ticket.updatedAt ? new Date(ticket.updatedAt).toLocaleString('es-MX') : 'sin fecha'}
+                </div>
+              </div>
+              <span style={{
+                justifySelf: 'end',
+                padding: '5px 10px',
+                borderRadius: 999,
+                border: `1px solid ${isClosed ? 'var(--border)' : 'rgba(0,232,122,0.35)'}`,
+                color: isClosed ? 'var(--text-muted)' : 'var(--green)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+              }}>
+                {isClosed ? 'Cerrado' : 'Abierto'}
+              </span>
+            </header>
+
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+              marginBottom: 14,
+              maxHeight: 360,
+              overflowY: 'auto',
+              paddingRight: 4,
+            }}>
+              {messages.map(message => {
+                const isAdminMessage = message.senderType === 'admin';
+                return (
+                  <div
+                    key={message.id}
+                    style={{
+                      alignSelf: isAdminMessage ? 'flex-end' : 'flex-start',
+                      maxWidth: '82%',
+                      border: '1px solid var(--border)',
+                      borderRadius: 10,
+                      padding: '10px 12px',
+                      background: isAdminMessage ? 'rgba(0,232,122,0.06)' : 'var(--surface2)',
+                    }}
+                  >
+                    <div style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 9,
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                      color: 'var(--text-muted)',
+                      marginBottom: 5,
+                    }}>
+                      {isAdminMessage ? `Pronos · @${message.senderUsername || 'admin'}` : `Usuario · @${ticket.username || 'usuario'}`}
+                    </div>
+                    <div style={{ color: 'var(--text-secondary)', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
+                      {message.body}
+                    </div>
+                    <div style={{
+                      marginTop: 6,
+                      display: 'flex',
+                      gap: 8,
+                      flexWrap: 'wrap',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 9,
+                      color: 'var(--text-muted)',
+                    }}>
+                      <span>{message.createdAt ? new Date(message.createdAt).toLocaleString('es-MX') : 'sin fecha'}</span>
+                      {isAdminMessage && <span>{message.emailed ? 'enviado por correo' : 'sin correo'}</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <textarea
+              value={drafts[ticket.id] || ''}
+              onChange={(e) => setDraft(ticket.id, e.target.value)}
+              rows={3}
+              maxLength={4000}
+              placeholder="Responder al usuario..."
+              style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5, marginBottom: 10 }}
+            />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={working === `reply-${ticket.id}` || !String(drafts[ticket.id] || '').trim()}
+                onClick={() => reply(ticket)}
+                style={{ padding: '8px 14px', fontSize: 11 }}
+              >
+                Responder
+              </button>
+              {isClosed ? (
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  disabled={working === `status-${ticket.id}`}
+                  onClick={() => setTicketStatus(ticket, 'open')}
+                  style={{ padding: '8px 14px', fontSize: 11 }}
+                >
+                  Reabrir
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  disabled={working === `status-${ticket.id}`}
+                  onClick={() => setTicketStatus(ticket, 'closed')}
+                  style={{ padding: '8px 14px', fontSize: 11 }}
+                >
+                  Cerrar
+                </button>
+              )}
+            </div>
+          </article>
         );
       })}
     </div>
@@ -2787,6 +3039,58 @@ function PendingMarketsTable({ onQueueChange }) {
     }
   }
 
+  async function refreshPricing(id) {
+    setBusyId(id);
+    try {
+      const r = await adminRefreshPendingPricing(id);
+      setRows(prev => (Array.isArray(prev)
+        ? prev.map(row => row.id === id
+          ? {
+              ...row,
+              suggestedPricing: r.suggestedPricing || row.suggestedPricing || null,
+              sourceData: {
+                ...(row.sourceData || {}),
+                suggestedPricing: r.suggestedPricing || row.sourceData?.suggestedPricing || null,
+              },
+              seedLiquidities: Array.isArray(r.seedLiquidities) ? r.seedLiquidities : row.seedLiquidities,
+              seedLiquidity: Array.isArray(r.seedLiquidities) ? r.seedLiquidities[0] : row.seedLiquidity,
+            }
+          : row)
+        : prev));
+      const source = formatSuggestedPricingSource(r.suggestedPricing);
+      alert(r.foundExternalOdds
+        ? `Odds actualizados con ${source}.`
+        : `No se encontró un match externo confiable. Se quedó en ${source}.`);
+    } catch (e) {
+      alert(`Buscar odds falló: ${e.code || e.message}`);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function refreshAllPricing() {
+    const pendingCount = rows?.filter(r => r.status === 'pending').length || 0;
+    if (pendingCount === 0) return;
+    if (!confirm(`¿Buscar odds para hasta ${Math.min(pendingCount, 100)} mercados pendientes?`)) {
+      return;
+    }
+    setBulkBusy(true);
+    try {
+      const r = await adminRefreshAllPendingPricing();
+      await load();
+      alert(
+        `✓ Odds revisados: ${r.refreshedCount || 0}/${r.checked || 0}.\n`
+        + `Con Polymarket: ${r.foundExternalCount || 0}.\n`
+        + `Fallidos: ${r.failedCount || 0}.`,
+      );
+      onQueueChange?.();
+    } catch (e) {
+      alert(`Buscar odds falló: ${e.code || e.message}`);
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   async function approveAll() {
     const pendingCount = rows?.filter(r => r.status === 'pending').length || 0;
     if (pendingCount === 0) return;
@@ -2989,6 +3293,29 @@ function PendingMarketsTable({ onQueueChange }) {
           </button>
         )}
 
+        {filter === 'pending' && pendingCount > 0 && (
+          <button
+            onClick={refreshAllPricing}
+            disabled={bulkBusy}
+            title={`Buscar odds externos para hasta ${Math.min(pendingCount, 100)} mercados pendientes`}
+            style={{
+              marginLeft: (filter === 'pending' && pendingCount > 0) ? 0 : 'auto',
+              padding: '6px 14px',
+              borderRadius: 16,
+              border: '1px solid rgba(255,92,0,0.45)',
+              background: 'rgba(255,92,0,0.1)',
+              color: 'var(--orange)',
+              fontFamily: 'var(--font-mono)', fontSize: 11,
+              letterSpacing: '0.06em', textTransform: 'uppercase',
+              cursor: bulkBusy ? 'not-allowed' : 'pointer',
+              opacity: bulkBusy ? 0.5 : 1,
+              fontWeight: 600,
+            }}
+          >
+            {bulkBusy ? 'Buscando odds…' : 'Buscar odds'}
+          </button>
+        )}
+
         {/* Generate now — runs every pipeline and upserts. Same code
             path as the daily cron; useful on preview deploys (which
             Vercel doesn't cron) and after editing entertainment-config. */}
@@ -3180,6 +3507,24 @@ function PendingMarketsTable({ onQueueChange }) {
 
               {isPending ? (
                 <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    onClick={() => refreshPricing(r.id)}
+                    disabled={busyId === r.id}
+                    style={{
+                      padding: '6px 12px',
+                      background: 'rgba(255,92,0,0.08)',
+                      border: '1px solid rgba(255,92,0,0.34)',
+                      borderRadius: 8,
+                      color: 'var(--orange)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 11, letterSpacing: '0.04em',
+                      textTransform: 'uppercase',
+                      cursor: busyId === r.id ? 'not-allowed' : 'pointer',
+                      opacity: busyId === r.id ? 0.5 : 1,
+                    }}
+                  >
+                    Buscar odds
+                  </button>
                   <button
                     onClick={() => setEditingPending(r)}
                     disabled={busyId === r.id}

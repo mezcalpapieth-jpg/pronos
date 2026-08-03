@@ -66,3 +66,21 @@ test('formatResolutionCandidate exposes Spanish admin review data', () => {
   assert.equal(formatted.finalScore, 'Se resolvió con evidencia pública');
   assert.deepEqual(formatted.evidence, [{ title: 'Fuente', url: 'https://example.com/source' }]);
 });
+
+test('formatResolutionCandidate does not default missing outcomes to the first answer', () => {
+  const formatted = formatResolutionCandidate({
+    id: 43,
+    protocol_market_id: 1517,
+    resolver_type: 'manual_review',
+    outcome_index: null,
+    outcome_count: 2,
+    confidence_bps: 0,
+    evidence: '[{"title":"Fuente"}]',
+    status: 'pending',
+  }, ['Sí', 'No']);
+
+  assert.equal(formatted.label, 'Elegir resultado');
+  assert.equal(formatted.needsOutcome, true);
+  assert.equal(formatted.confidenceLabel, null);
+  assert.deepEqual(formatted.evidence, [{ title: 'Fuente' }]);
+});

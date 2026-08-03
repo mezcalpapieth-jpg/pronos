@@ -1359,10 +1359,27 @@ function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCou
   async function handleCandidateReview(market, candidate, action) {
     const isConfirm = action === 'confirm';
     let note = null;
+    let selectedOutcomeIndex = null;
+    let selectedOutcomeLabel = candidate.label;
     if (isConfirm) {
+      if (candidate.needsOutcome) {
+        const input = window.prompt(
+          `Este candidato solo trae evidencia, no una respuesta sugerida.\n\n` +
+          `Elige el índice ganador para "${market.question}":\n\n` +
+          (market.outcomes || []).map((o, i) => `  ${i}: ${o}`).join('\n'),
+        );
+        if (input === null) return;
+        const idx = Number.parseInt(input, 10);
+        if (!Number.isInteger(idx) || idx < 0 || idx >= (market.outcomes || []).length) {
+          alert('Índice inválido.');
+          return;
+        }
+        selectedOutcomeIndex = idx;
+        selectedOutcomeLabel = market.outcomes[idx];
+      }
       const ok = window.confirm(
-        `Confirmar resolución sugerida para "${market.question}"?\n\n` +
-        `Resultado: ${candidate.label}\n` +
+        `${candidate.needsOutcome ? 'Confirmar resolución manual' : 'Confirmar resolución sugerida'} para "${market.question}"?\n\n` +
+        `Resultado: ${selectedOutcomeLabel}\n` +
         `Confianza: ${candidate.confidenceLabel || '—'}\n\n` +
         'Esto enviará la resolución on-chain.',
       );
@@ -1378,6 +1395,7 @@ function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCou
       const { ok, data } = await postJson('/api/protocol/admin/resolution-candidates', {
         candidateId: candidate.id,
         action,
+        outcomeIndex: selectedOutcomeIndex,
         note: note?.trim() || null,
       });
       if (!ok) {
@@ -1389,8 +1407,8 @@ function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCou
       if (isConfirm) {
         const outcome = Number.isInteger(Number(data?.outcome))
           ? Number(data.outcome)
-          : Number(candidate.outcomeIndex);
-        setNotice({ type: 'success', msg: `Resolución confirmada on-chain: ${candidate.label}` });
+          : (selectedOutcomeIndex ?? Number(candidate.outcomeIndex));
+        setNotice({ type: 'success', msg: `Resolución confirmada on-chain: ${selectedOutcomeLabel}` });
         setRows(prev => prev.map(m => m.id === market.id ? {
           ...m,
           status: 'resolved',
@@ -1864,9 +1882,14 @@ function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCou
                     </div>
                   </div>
                   <div style={{ color: 'var(--text-primary)', fontSize: 13, lineHeight: 1.45 }}>
-                    Resultado: <strong>{candidate.label}</strong>
+                    Resultado: <strong>{candidate.needsOutcome ? 'Sin sugerencia automática' : candidate.label}</strong>
                     {candidate.confidenceLabel && <span style={{ color: 'var(--text-muted)' }}> · confianza {candidate.confidenceLabel}</span>}
                   </div>
+                  {candidate.needsOutcome && (
+                    <div style={{ marginTop: 4, color: 'var(--text-secondary)', fontSize: 12 }}>
+                      Revisa las fuentes y elige el resultado al confirmar.
+                    </div>
+                  )}
                   {candidate.finalScore && (
                     <div style={{ marginTop: 4, color: 'var(--text-secondary)', fontSize: 12 }}>
                       Prueba: {candidate.finalScore}
@@ -1910,7 +1933,7 @@ function MarketsList({ refreshKey, bumpRefresh, onQueueChange, pendingResolveCou
                       className="btn-primary"
                       style={{ fontSize: 11, padding: '6px 10px' }}
                     >
-                      {reviewing ? '…' : 'Confirmar resolución'}
+                      {reviewing ? '…' : (candidate.needsOutcome ? 'Elegir y confirmar' : 'Confirmar resolución')}
                     </button>
                     <button
                       type="button"

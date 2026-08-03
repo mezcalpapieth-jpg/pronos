@@ -195,7 +195,7 @@ export async function fetchMarket(id) {
  * 0-100, `t` is a unix-seconds timestamp. Usable directly as the `data`
  * prop on the shared Sparkline component.
  */
-export async function fetchPriceHistory(ids, { days = 30, outcome = 0 } = {}) {
+export async function fetchPriceHistory(ids, { days = 30, outcome = 0, limit = 200 } = {}) {
   const list = Array.isArray(ids) ? ids : [ids];
   const cleaned = list.filter(n => Number.isInteger(n) || (typeof n === 'string' && n.length > 0));
   if (cleaned.length === 0) return {};
@@ -203,6 +203,7 @@ export async function fetchPriceHistory(ids, { days = 30, outcome = 0 } = {}) {
     ids: cleaned.join(','),
     days: String(days),
     outcome: String(outcome),
+    limit: String(limit),
   });
   try {
     // Path kept flat (`/api/points/price-history`) to avoid Vercel's
@@ -212,8 +213,8 @@ export async function fetchPriceHistory(ids, { days = 30, outcome = 0 } = {}) {
     return history;
   } catch {
     // Price history is a nice-to-have — don't break the UI if the snapshot
-    // table is empty or the endpoint hiccups. The Sparkline will fall back
-    // to its seeded mock curve.
+    // table is empty or the endpoint hiccups. The Sparkline will render a
+    // truthful empty/flat state instead of inventing movement.
     return {};
   }
 }
@@ -304,6 +305,15 @@ export async function submitSocialTask(taskKey, proofUrl) {
   return postJson('/api/points/social-tasks/submit', { taskKey, proofUrl });
 }
 
+// ─── Support tickets ───────────────────────────────────────────────────────
+export async function fetchSupportTickets() {
+  return getJson('/api/points/support-tickets');
+}
+
+export async function createSupportTicket({ type, subject, message }) {
+  return postJson('/api/points/support-tickets', { type, subject, message });
+}
+
 // ─── Admin — social task queue ──────────────────────────────────────────────
 export async function adminListSocialTasks(status = 'pending') {
   return getJson(`/api/points/admin/social-tasks?status=${encodeURIComponent(status)}`);
@@ -311,6 +321,22 @@ export async function adminListSocialTasks(status = 'pending') {
 
 export async function adminReviewSocialTask(id, action, note) {
   return postJson('/api/points/admin/social-tasks', { id, action, note });
+}
+
+// ─── Admin — support tickets ────────────────────────────────────────────────
+export async function adminListSupportTickets(status = 'open') {
+  return getJson(`/api/points/admin/support-tickets?status=${encodeURIComponent(status)}`);
+}
+
+export async function adminReplySupportTicket({ id, message }) {
+  return postJson('/api/points/admin/support-tickets', { id, action: 'reply', message });
+}
+
+export async function adminSetSupportTicketStatus({ id, status }) {
+  return postJson('/api/points/admin/support-tickets', {
+    id,
+    action: status === 'closed' ? 'close' : 'reopen',
+  });
 }
 
 // ─── Admin — resolution candidates ─────────────────────────────────────────
@@ -356,17 +382,19 @@ export async function adminListPendingMarkets(status = 'pending') {
 }
 
 export async function adminListTaskCounts() {
-  const [pendingResult, marketsResult, resolutionResult, socialResult] = await Promise.allSettled([
+  const [pendingResult, marketsResult, resolutionResult, socialResult, supportResult] = await Promise.allSettled([
     adminListPendingMarkets('pending'),
     getJson('/api/points/admin/markets?status=pending'),
     adminListResolutionCandidates(),
     adminListSocialTasks('pending'),
+    adminListSupportTickets('open'),
   ]);
 
   const pendingData = pendingResult.status === 'fulfilled' ? pendingResult.value : null;
   const marketsData = marketsResult.status === 'fulfilled' ? marketsResult.value : null;
   const resolutionData = resolutionResult.status === 'fulfilled' ? resolutionResult.value : null;
   const socialData = socialResult.status === 'fulfilled' ? socialResult.value : null;
+  const supportData = supportResult.status === 'fulfilled' ? supportResult.value : null;
   const resolutionCount = Number.isFinite(Number(resolutionData?.count))
     ? Number(resolutionData.count)
     : null;
@@ -376,16 +404,25 @@ export async function adminListTaskCounts() {
       ? resolutionCount
       : (Array.isArray(marketsData?.markets) ? marketsData.markets.length : 0),
     social: Array.isArray(socialData?.tasks) ? socialData.tasks.length : 0,
+    support: Array.isArray(supportData?.tickets) ? supportData.tickets.length : 0,
   };
 
   return {
     ...counts,
-    total: counts.pending + counts.markets + counts.social,
+    total: counts.pending + counts.markets + counts.social + counts.support,
   };
 }
 
 export async function adminReviewPendingMarket(id, action, note) {
   return postJson('/api/points/admin/pending-markets', { id, action, note });
+}
+
+export async function adminRefreshPendingPricing(id) {
+  return postJson('/api/points/admin/pending-markets', { id, action: 'refresh_pricing' });
+}
+
+export async function adminRefreshAllPendingPricing() {
+  return postJson('/api/points/admin/pending-markets', { action: 'refresh_pricing_all' });
 }
 
 export async function adminEditPendingMarket(id, patch, note) {

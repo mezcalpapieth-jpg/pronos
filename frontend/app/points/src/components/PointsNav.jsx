@@ -368,6 +368,9 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
                 <Link to="/earn" onClick={closeMobileMenu}>{t('points.nav.earn')}</Link>
               </>
             )}
+            <Link to="/support" onClick={closeMobileMenu}>
+              {lang === 'en' ? 'Support' : 'Soporte'}
+            </Link>
             <a
               href={COMO_FUNCIONA_URL}
               target="_blank"
@@ -495,6 +498,9 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
                 </div>
                 <Link to="/portfolio" onClick={() => setDropdownOpen(false)}>
                   {t('points.nav.portfolio')}
+                </Link>
+                <Link to="/support" onClick={() => setDropdownOpen(false)}>
+                  {lang === 'en' ? 'Support' : 'Soporte'}
                 </Link>
                 {isAdmin && (
                   <Link

@@ -37,6 +37,8 @@ const POINTS_SCHEMA_READY_PROBE = `
     to_regclass('public.points_site_time_daily') IS NOT NULL AS points_site_time_daily,
     to_regclass('public.points_publicity_daily') IS NOT NULL AS points_publicity_daily,
     to_regclass('public.points_resolution_candidates') IS NOT NULL AS points_resolution_candidates,
+    to_regclass('public.points_support_tickets') IS NOT NULL AS points_support_tickets,
+    to_regclass('public.points_support_messages') IS NOT NULL AS points_support_messages,
     EXISTS (
       SELECT 1 FROM information_schema.columns
       WHERE table_schema = 'public'
@@ -414,6 +416,38 @@ const POINTS_SCHEMA_MIGRATIONS = [
     UNIQUE (provider, provider_user_id)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_points_social_links_user ON points_social_links(username)`,
+
+  // ── Support tickets ─────────────────────────────────────────────────────
+  // User-created support threads with admin replies. Outbound email is
+  // best-effort through Resend; Postgres remains the source of truth so
+  // admins can answer from the dashboard even if mail delivery is down.
+  `CREATE TABLE IF NOT EXISTS points_support_tickets (
+    id                 SERIAL PRIMARY KEY,
+    username           TEXT NOT NULL,
+    email              TEXT,
+    type               TEXT NOT NULL DEFAULT 'other',
+    subject            TEXT NOT NULL,
+    status             TEXT NOT NULL DEFAULT 'open',
+    created_at         TIMESTAMPTZ DEFAULT NOW(),
+    updated_at         TIMESTAMPTZ DEFAULT NOW(),
+    last_user_message_at  TIMESTAMPTZ,
+    last_admin_message_at TIMESTAMPTZ
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_support_tickets_user
+    ON points_support_tickets(username, updated_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_support_tickets_status
+    ON points_support_tickets(status, updated_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS points_support_messages (
+    id                 SERIAL PRIMARY KEY,
+    ticket_id          INTEGER NOT NULL REFERENCES points_support_tickets(id) ON DELETE CASCADE,
+    sender_type        TEXT NOT NULL,
+    sender_username    TEXT,
+    body               TEXT NOT NULL,
+    emailed            BOOLEAN NOT NULL DEFAULT false,
+    created_at         TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_support_messages_ticket
+    ON points_support_messages(ticket_id, created_at ASC)`,
 
   // ── Daily claim tracking (prevents double-claim per day) ───────────────
   `CREATE TABLE IF NOT EXISTS daily_claims (

@@ -21,6 +21,7 @@ import { binarySellQuote, multiSellQuote } from '../_lib/amm-math.js';
 import { requireSession } from '../_lib/session.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { withTransaction } from '../_lib/db-tx.js';
+import { bestEffortInsertPointsPriceSnapshot } from '../_lib/points-price-snapshots.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 
@@ -189,6 +190,12 @@ export default async function handler(req, res) {
          VALUES ($1, $2, 'trade_sell', $3, $4)`,
         [username, quote.collateralOut, mid, `Venta anticipada de ${n.toFixed(2)} acciones`],
       );
+
+      await bestEffortInsertPointsPriceSnapshot(client, {
+        marketId: mid,
+        reserves: quote.reservesAfter,
+        logLabel: 'points-sell-price-snapshot',
+      });
 
       return {
         balance: newBalance,

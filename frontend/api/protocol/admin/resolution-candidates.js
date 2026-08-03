@@ -21,19 +21,24 @@ function parsePositiveInt(value) {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
+function parseOutcomeIndex(value) {
+  const n = Number.parseInt(value, 10);
+  return Number.isInteger(n) && n >= 0 ? n : null;
+}
+
 function cleanNote(value) {
   const s = String(value ?? '').trim();
   return s ? s.slice(0, 500) : null;
 }
 
-function candidateAuditPatch(candidate, admin, action) {
+function candidateAuditPatch(candidate, admin, action, outcomeIndex = null) {
   return {
     resolutionCandidate: {
       id: Number(candidate.id),
       resolverType: candidate.resolver_type,
       source: candidate.source,
       sourceEventId: candidate.source_event_id,
-      outcomeIndex: Number(candidate.outcome_index),
+      outcomeIndex,
       confidenceBps: Number(candidate.confidence_bps) || 0,
       observedAt: candidate.observed_at,
       evidenceUrl: candidate.evidence_url,
@@ -160,7 +165,7 @@ export default async function handler(req, res) {
       await sql`
         UPDATE protocol_markets
         SET resolver_config = COALESCE(resolver_config, '{}'::jsonb)
-          || ${JSON.stringify(candidateAuditPatch(candidate, admin, 'deny'))}::jsonb
+          || ${JSON.stringify(candidateAuditPatch(candidate, admin, 'deny', parseOutcomeIndex(candidate.outcome_index)))}::jsonb
         WHERE id = ${candidate.protocol_market_id}
       `;
 
@@ -182,7 +187,9 @@ export default async function handler(req, res) {
     }
 
     const outcomeCount = Number(candidate.market_outcome_count) || 2;
-    const outcome = Number(candidate.outcome_index);
+    const bodyOutcome = parseOutcomeIndex(req.body?.outcomeIndex);
+    const storedOutcome = parseOutcomeIndex(candidate.outcome_index);
+    const outcome = bodyOutcome ?? storedOutcome;
     if (!Number.isInteger(outcome) || outcome < 0 || outcome >= outcomeCount) {
       return res.status(400).json({ error: 'invalid_outcome' });
     }
@@ -214,6 +221,7 @@ export default async function handler(req, res) {
       UPDATE protocol_resolution_candidates
       SET
         status = 'confirmed',
+        outcome_index = ${outcome},
         reviewer = ${admin.username},
         admin_note = ${note},
         reviewed_at = NOW()
@@ -230,7 +238,7 @@ export default async function handler(req, res) {
         resolved_at = NOW(),
         final_score = COALESCE(${candidate.final_score}, final_score),
         resolver_config = COALESCE(resolver_config, '{}'::jsonb)
-          || ${JSON.stringify(candidateAuditPatch(candidate, admin, 'confirm'))}::jsonb
+          || ${JSON.stringify(candidateAuditPatch(candidate, admin, 'confirm', outcome))}::jsonb
       WHERE id = ${candidate.protocol_market_id}
     `;
 

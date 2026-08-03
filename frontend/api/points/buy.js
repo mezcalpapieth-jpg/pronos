@@ -20,6 +20,7 @@ import { requireSession } from '../_lib/session.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { withTransaction } from '../_lib/db-tx.js';
 import { seriesTradeLockFromRows } from '../_lib/series-markets.js';
+import { bestEffortInsertPointsPriceSnapshot } from '../_lib/points-price-snapshots.js';
 
 // Lightweight HTTP client used only to run the idempotent schema bootstrap.
 // Transactional work goes through withTransaction() which uses a WS Pool.
@@ -218,6 +219,12 @@ export default async function handler(req, res) {
           `Compra de ${quote.sharesOut.toFixed(2)} acciones`,
         ],
       );
+
+      await bestEffortInsertPointsPriceSnapshot(client, {
+        marketId: mid,
+        reserves: quote.reservesAfter,
+        logLabel: 'points-buy-price-snapshot',
+      });
 
       return {
         balance: newBalance,

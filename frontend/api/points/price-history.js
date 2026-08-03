@@ -1,7 +1,7 @@
 /**
- * GET /api/points/price-history?ids=1,2,3&days=30
+ * GET /api/points/price-history?ids=1,2,3&days=30&limit=200
  *
- * Returns the hourly price snapshots for one or more markets over the
+ * Returns sampled price snapshots for one or more markets over the
  * last `days` days (default 30, max 60). Used by the home grid and market
  * detail page to render sparkline charts without replaying every trade.
  *
@@ -65,16 +65,54 @@ export default async function handler(req, res) {
     const outcomeRaw = parseInt(req.query.outcome, 10);
     const outcomeIdx = Number.isInteger(outcomeRaw) && outcomeRaw >= 0 ? outcomeRaw : 0;
 
+    // Keep chart payloads bounded even after buy/sell starts inserting
+    // immediate snapshots. Sampling happens per market and preserves the
+    // first/latest points through the bucket math below.
+    const limitRaw = parseInt(req.query.limit, 10);
+    const maxPoints = Number.isInteger(limitRaw)
+      ? Math.max(20, Math.min(500, limitRaw))
+      : 200;
+
     await ensurePointsSchema(schemaSql);
 
     // One SQL round-trip for every market, filtered by the cutoff. The
-    // index (market_id, snapshotted_at DESC) makes this a fast range scan.
+    // index (market_id, snapshotted_at DESC) makes this a fast range scan;
+    // the window/bucket pass downsamples each market independently.
     const rows = await sql`
-      SELECT market_id, prices, snapshotted_at
-      FROM points_price_snapshots
-      WHERE market_id = ANY(${ids}::int[])
-        AND snapshotted_at >= NOW() - (${days} || ' days')::interval
-      ORDER BY market_id ASC, snapshotted_at ASC
+      WITH ranked AS (
+        SELECT
+          market_id,
+          prices,
+          snapshotted_at,
+          ROW_NUMBER() OVER (PARTITION BY market_id ORDER BY snapshotted_at ASC) AS rn,
+          COUNT(*) OVER (PARTITION BY market_id) AS total
+        FROM points_price_snapshots
+        WHERE market_id = ANY(${ids}::int[])
+          AND snapshotted_at >= NOW() - (${days} || ' days')::interval
+      ),
+      sampled AS (
+        SELECT
+          market_id,
+          prices,
+          snapshotted_at,
+          rn,
+          total,
+          CASE
+            WHEN total <= ${maxPoints} THEN rn
+            WHEN rn = 1 THEN 0
+            WHEN rn = total THEN ${maxPoints} - 1
+            ELSE FLOOR(((rn - 1)::numeric * (${maxPoints} - 1)) / GREATEST((total - 1)::numeric, 1))
+          END AS bucket
+        FROM ranked
+      )
+      SELECT DISTINCT ON (market_id, bucket)
+        market_id, prices, snapshotted_at
+      FROM sampled
+      ORDER BY
+        market_id ASC,
+        bucket ASC,
+        CASE WHEN rn = 1 OR rn = total THEN 0 ELSE 1 END ASC,
+        snapshotted_at ASC
     `;
 
     // Group by market_id and project only the requested outcome.
