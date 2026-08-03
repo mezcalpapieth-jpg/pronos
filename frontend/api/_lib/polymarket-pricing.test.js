@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  buildPolymarketSearchQueries,
   shouldUsePolymarketPricing,
   tryAttachPolymarketPricing,
 } from './polymarket-pricing.js';
@@ -188,3 +189,96 @@ test('Polymarket pricing does not override strong existing pricing sources', asy
   assert.equal(calls.length, 0);
 });
 
+test('Polymarket pricing can override weak Anthropic guesses instead of keeping 50/50', async () => {
+  const calls = [];
+  const fetchImpl = makeFetch([
+    {
+      match: '/public-search?',
+      payload: {
+        markets: [{
+          id: 'pm-spotify',
+          slug: 'nalguita-y-teta-number-one-spotify-mexico-july-31',
+          question: 'Will Nalguita y Teta be #1 on Spotify Mexico on July 31?',
+          outcomes: '["Yes","No"]',
+          outcomePrices: '["0.71","0.29"]',
+          clobTokenIds: '["yes-spotify","no-spotify"]',
+        }],
+      },
+    },
+    {
+      match: '/midpoints',
+      method: 'POST',
+      payload: {
+        'yes-spotify': '0.73',
+        'no-spotify': '0.27',
+      },
+    },
+    {
+      match: '/spreads',
+      method: 'POST',
+      payload: {
+        'yes-spotify': '0.03',
+        'no-spotify': '0.03',
+      },
+    },
+  ], calls);
+  const spec = {
+    question: '¿Nalguita y Teta será #1 en Spotify México el 31 de julio?',
+    outcomes: ['Sí', 'No'],
+    seed_liquidity: 1000,
+    source_data: {
+      suggestedPricing: {
+        source: 'anthropic-pricing',
+        probabilities: [0.5, 0.5],
+      },
+    },
+  };
+
+  assert.equal(shouldUsePolymarketPricing(spec), true);
+  const priced = await tryAttachPolymarketPricing(spec, { fetchImpl, minScore: 0.35 });
+
+  assert.ok(calls.some(call => call.url.includes('/public-search?')));
+  assert.equal(priced.source_data.suggestedPricing.source, 'polymarket:midpoint');
+  assert.deepEqual(priced.source_data.suggestedPricing.probabilityPct, [73, 27]);
+  assert.equal(priced.source_data.pricingSearch.polymarket.ok, true);
+});
+
+test('Polymarket search builds targeted queries for Spanish entertainment markets', () => {
+  const queries = buildPolymarketSearchQueries({
+    question: '¿Nalguita y Teta será #1 en Spotify México el 31 de julio?',
+    outcomes: ['Sí', 'No'],
+    source_event_id: 'manual:nalguita-y-teta-spotify-2026-07-31',
+    source_data: {
+      topic: 'Spotify México',
+    },
+  });
+
+  assert.ok(queries.length > 2);
+  assert.ok(queries.some(query => /nalguita.*teta.*spotify/i.test(query)));
+  assert.ok(queries.some(query => /july|julio/i.test(query)));
+});
+
+test('Polymarket pricing keeps miss diagnostics when no external match is found', async () => {
+  const fetchImpl = makeFetch([
+    {
+      match: '/public-search?',
+      payload: { events: [], markets: [] },
+    },
+  ]);
+
+  const priced = await tryAttachPolymarketPricing({
+    question: '¿Un mercado demasiado local sin referencia externa?',
+    outcomes: ['Sí', 'No'],
+    source_data: {
+      suggestedPricing: {
+        source: 'uniform-default',
+        probabilities: [0.5, 0.5],
+      },
+    },
+  }, { fetchImpl });
+
+  assert.equal(priced.source_data.suggestedPricing.source, 'uniform-default');
+  assert.equal(priced.source_data.pricingSearch.polymarket.ok, false);
+  assert.equal(priced.source_data.pricingSearch.polymarket.reason, 'no_candidates');
+  assert.ok(priced.source_data.pricingSearch.polymarket.queries.length > 0);
+});

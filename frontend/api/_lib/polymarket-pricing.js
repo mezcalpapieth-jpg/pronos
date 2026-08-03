@@ -5,12 +5,52 @@ const DEFAULT_CLOB_BASE = 'https://clob.polymarket.com';
 const DEFAULT_TIMEOUT_MS = 3000;
 const DEFAULT_MIN_SCORE = 0.48;
 const DEFAULT_MAX_SPREAD = 0.18;
-const MAX_EVENTS_TO_FETCH = 3;
+const DEFAULT_MAX_EVENTS_TO_FETCH = 8;
+const DEFAULT_MAX_SEARCH_QUERIES = 7;
+const DEFAULT_SEARCH_LIMIT_PER_TYPE = 12;
 
 const STRONG_PRICING_SOURCES = new Set([
   'admin-config',
   'the-odds-api:h2h',
-  'anthropic-pricing',
+]);
+
+const SEARCH_STOPWORDS = new Set([
+  'a', 'al', 'an', 'and', 'ante', 'antes', 'after', 'before', 'con', 'contra',
+  'de', 'del', 'does', 'durante', 'el', 'en', 'es', 'esta', 'este', 'for',
+  'from', 'gana', 'ganador', 'ganadora', 'ganara', 'ganará', 'if', 'la', 'las',
+  'lo', 'los', 'mas', 'más', 'mercado', 'no', 'on', 'para', 'por', 'que',
+  'quien', 'quién', 'recibe', 'recibira', 'recibirá', 'sera', 'será', 'si',
+  'sí', 'su', 'the', 'to', 'un', 'una', 'vs', 'will', 'wins', 'with', 'y',
+]);
+
+const SEARCH_TOKEN_TRANSLATIONS = new Map([
+  ['abril', 'april'],
+  ['agosto', 'august'],
+  ['cancion', 'song'],
+  ['canción', 'song'],
+  ['diciembre', 'december'],
+  ['enero', 'january'],
+  ['febrero', 'february'],
+  ['ganara', 'win'],
+  ['ganará', 'win'],
+  ['julio', 'july'],
+  ['junio', 'june'],
+  ['marzo', 'march'],
+  ['mayo', 'may'],
+  ['mexico', 'mexico'],
+  ['méxico', 'mexico'],
+  ['noviembre', 'november'],
+  ['numero', 'number'],
+  ['número', 'number'],
+  ['octubre', 'october'],
+  ['pelicula', 'movie'],
+  ['película', 'movie'],
+  ['premio', 'award'],
+  ['premios', 'awards'],
+  ['septiembre', 'september'],
+  ['trailer', 'trailer'],
+  ['tráiler', 'trailer'],
+  ['uno', 'one'],
 ]);
 
 function envFlagEnabled(name, fallback = true) {
@@ -43,7 +83,10 @@ export function shouldUsePolymarketPricing(spec = {}) {
   if (!source) return true;
   const normalized = String(source);
   if (STRONG_PRICING_SOURCES.has(normalized)) return false;
-  return normalized === 'uniform-default' || normalized.startsWith('source-signals:');
+  return normalized === 'uniform-default'
+    || normalized === 'anthropic-pricing'
+    || normalized.startsWith('anthropic-pricing:')
+    || normalized.startsWith('source-signals:');
 }
 
 function normalizeText(value) {
@@ -54,6 +97,98 @@ function normalizeText(value) {
     .replace(/&/g, ' and ')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
+}
+
+function displayText(value) {
+  return String(value || '')
+    .replace(/[¿?¡!]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function addUnique(list, value) {
+  const cleaned = displayText(value);
+  if (!cleaned) return;
+  const normalized = normalizeText(cleaned);
+  if (!normalized) return;
+  if (!list.some(item => normalizeText(item) === normalized)) {
+    list.push(cleaned.slice(0, 160));
+  }
+}
+
+function translatedQuery(value) {
+  const normalized = normalizeText(value);
+  if (!normalized) return '';
+  const translated = normalized
+    .split(/\s+/)
+    .map(token => SEARCH_TOKEN_TRANSLATIONS.get(token) || token)
+    .filter(token => token.length > 1 && !SEARCH_STOPWORDS.has(token));
+  return translated.join(' ');
+}
+
+function significantTokens(value, limit = 9) {
+  const normalized = normalizeText(value);
+  if (!normalized) return [];
+  const tokens = [];
+  for (const token of normalized.split(/\s+/)) {
+    if (token.length < 3) continue;
+    if (SEARCH_STOPWORDS.has(token)) continue;
+    if (!tokens.includes(token)) tokens.push(token);
+    if (tokens.length >= limit) break;
+  }
+  return tokens;
+}
+
+function sourceDataSearchParts(sourceData = {}) {
+  return [
+    sourceData.artist,
+    sourceData.song,
+    sourceData.track,
+    sourceData.movie,
+    sourceData.film,
+    sourceData.franchise,
+    sourceData.showLabel,
+    sourceData.seasonLabel,
+    sourceData.awardLabel,
+    sourceData.categoryLabel,
+    sourceData.topic,
+    sourceData.venue,
+    sourceData.city,
+    sourceData.country,
+  ].filter(Boolean);
+}
+
+export function buildPolymarketSearchQueries(spec = {}) {
+  const queries = [];
+  const sourceData = spec.source_data && typeof spec.source_data === 'object'
+    ? spec.source_data
+    : {};
+  const outcomes = Array.isArray(spec.outcomes) ? spec.outcomes : [];
+  const namedOutcomes = outcomes
+    .filter(outcome => !isYesLabel(outcome) && !isNoLabel(outcome) && !isOtherLabel(outcome))
+    .slice(0, 5);
+  const sourceParts = sourceDataSearchParts(sourceData);
+
+  addUnique(queries, spec.question);
+  addUnique(queries, sourceParts.join(' '));
+
+  const questionTokens = significantTokens(spec.question, 10);
+  addUnique(queries, questionTokens.join(' '));
+  addUnique(queries, translatedQuery(spec.question));
+
+  if (sourceParts.length && namedOutcomes.length) {
+    addUnique(queries, `${sourceParts.slice(0, 4).join(' ')} ${namedOutcomes.join(' ')}`);
+  }
+  if (namedOutcomes.length) {
+    const topic = sourceData.awardLabel || sourceData.showLabel || sourceData.topic || sourceData.categoryLabel || '';
+    addUnique(queries, `${namedOutcomes.join(' ')} ${topic}`.trim());
+  }
+
+  if (spec.source_event_id) {
+    addUnique(queries, String(spec.source_event_id).replace(/[:_-]+/g, ' '));
+  }
+
+  return queries.slice(0, DEFAULT_MAX_SEARCH_QUERIES);
 }
 
 function tokenSet(value) {
@@ -129,7 +264,10 @@ function getMarketOutcomes(market) {
 }
 
 function getMarketTokenIds(market) {
-  const raw = safeJson(market?.clobTokenIds) || market?.clobTokenIds;
+  const raw = safeJson(market?.clobTokenIds)
+    || safeJson(market?.clob_token_ids)
+    || market?.clobTokenIds
+    || market?.clob_token_ids;
   if (Array.isArray(raw)) return raw.map(String).filter(Boolean);
 
   const outcomes = safeJson(market?.outcomes) || market?.outcomes;
@@ -143,7 +281,10 @@ function getMarketTokenIds(market) {
 }
 
 function getOutcomePrices(market) {
-  const raw = safeJson(market?.outcomePrices) || market?.outcomePrices;
+  const raw = safeJson(market?.outcomePrices)
+    || safeJson(market?.outcome_prices)
+    || market?.outcomePrices
+    || market?.outcome_prices;
   if (!Array.isArray(raw)) return [];
   return raw.map(asNumber).filter(value => value !== null && value > 0);
 }
@@ -179,50 +320,184 @@ async function fetchJson(url, {
   }
 }
 
-function parseSearchEvents(payload) {
-  if (Array.isArray(payload?.events)) return payload.events;
-  if (Array.isArray(payload?.results)) {
-    return payload.results
-      .map(item => item?.event || item)
-      .filter(item => item?.id || item?.slug);
-  }
-  return [];
+function looksLikeMarket(item) {
+  return Boolean(item && typeof item === 'object' && (
+    item.question
+    || item.conditionId
+    || item.condition_id
+    || item.clobTokenIds
+    || item.clob_token_ids
+    || item.outcomePrices
+    || (item.outcomes && !Array.isArray(item.markets))
+  ));
 }
 
-async function discoverEvents(spec, opts) {
+function eventFromMarket(market, fallbackEvent = null) {
+  const nestedEvent = market?.event && typeof market.event === 'object' ? market.event : null;
+  return {
+    ...(fallbackEvent || {}),
+    ...(nestedEvent || {}),
+    id: nestedEvent?.id || fallbackEvent?.id || market?.eventId || market?.event_id || market?.event_id_string || null,
+    slug: nestedEvent?.slug || fallbackEvent?.slug || market?.eventSlug || market?.event_slug || null,
+    title: nestedEvent?.title || fallbackEvent?.title || market?.eventTitle || market?.groupItemTitle || null,
+  };
+}
+
+function eventKey(event) {
+  if (!event) return null;
+  return event.id ? `id:${event.id}` : event.slug ? `slug:${event.slug}` : null;
+}
+
+function marketKey(market, event = null) {
+  if (!market) return null;
+  if (market.id) return `id:${market.id}`;
+  if (market.conditionId) return `condition:${market.conditionId}`;
+  if (market.condition_id) return `condition:${market.condition_id}`;
+  if (market.slug) return `slug:${market.slug}`;
+  const text = normalizeText(`${event?.slug || event?.title || ''} ${market.question || market.title || ''}`);
+  return text ? `text:${text}` : null;
+}
+
+function addCandidate(map, event, market) {
+  if (!looksLikeMarket(market)) return;
+  const candidateEvent = eventFromMarket(market, event);
+  const key = marketKey(market, candidateEvent);
+  if (!key || map.has(key)) return;
+  map.set(key, { event: candidateEvent, market });
+}
+
+function parseSearchCandidates(payload) {
+  const events = [];
+  const candidates = new Map();
+
+  function addEvent(event) {
+    if (event?.id || event?.slug) events.push(event);
+  }
+
+  function visit(item, fallbackEvent = null) {
+    if (!item || typeof item !== 'object') return;
+    if (item.event && typeof item.event === 'object') addEvent(item.event);
+    if (item.market && typeof item.market === 'object') {
+      addCandidate(candidates, item.event || fallbackEvent, item.market);
+      return;
+    }
+    if (looksLikeMarket(item)) {
+      addCandidate(candidates, fallbackEvent, item);
+      return;
+    }
+    if (Array.isArray(item.markets)) {
+      addEvent(item);
+      for (const market of item.markets) addCandidate(candidates, item, market);
+      return;
+    }
+    if (item.id || item.slug) addEvent(item);
+  }
+
+  if (Array.isArray(payload?.events)) {
+    for (const event of payload.events) visit(event);
+  }
+  if (Array.isArray(payload?.markets)) {
+    for (const market of payload.markets) visit(market);
+  }
+  if (Array.isArray(payload?.results)) {
+    for (const result of payload.results) visit(result);
+  }
+  if (Array.isArray(payload)) {
+    for (const item of payload) visit(item);
+  }
+
+  const eventMap = new Map();
+  for (const event of events) {
+    const key = eventKey(event);
+    if (key && !eventMap.has(key)) eventMap.set(key, event);
+  }
+
+  return {
+    events: [...eventMap.values()],
+    candidates: [...candidates.values()],
+  };
+}
+
+function flattenMarkets(events) {
+  const candidates = new Map();
+  for (const event of events) {
+    for (const market of Array.isArray(event?.markets) ? event.markets : []) {
+      addCandidate(candidates, event, market);
+    }
+  }
+  return [...candidates.values()];
+}
+
+async function discoverMarketCandidates(spec, opts) {
   const gammaBase = opts.gammaBase || process.env.POLYMARKET_GAMMA_BASE || DEFAULT_GAMMA_BASE;
-  const query = [
-    spec.question,
-    spec.source_data?.artist,
-    spec.source_data?.showLabel,
-    spec.source_data?.awardLabel,
-    spec.source_data?.topic,
-  ].filter(Boolean).join(' ');
-  if (!query.trim()) return [];
+  const baseUrl = gammaBase.replace(/\/$/, '');
+  const maxQueries = Math.floor(numericOption(
+    opts.maxSearchQueries ?? process.env.POLYMARKET_PRICING_MAX_SEARCH_QUERIES,
+    DEFAULT_MAX_SEARCH_QUERIES,
+  ));
+  const maxEvents = Math.floor(numericOption(
+    opts.maxEventsToFetch ?? process.env.POLYMARKET_PRICING_MAX_EVENTS,
+    DEFAULT_MAX_EVENTS_TO_FETCH,
+  ));
+  const limitPerType = Math.floor(numericOption(
+    opts.limitPerType ?? process.env.POLYMARKET_PRICING_LIMIT_PER_TYPE,
+    DEFAULT_SEARCH_LIMIT_PER_TYPE,
+  ));
+  const keepClosed = opts.keepClosed ?? envFlagEnabled('POLYMARKET_PRICING_KEEP_CLOSED', false);
+  const queries = buildPolymarketSearchQueries(spec).slice(0, maxQueries);
+  if (!queries.length) return { candidates: [], attemptedQueries: [] };
 
-  const searchUrl = `${gammaBase.replace(/\/$/, '')}/public-search?${new URLSearchParams({ q: query })}`;
-  const search = await fetchJson(searchUrl, opts);
-  const events = parseSearchEvents(search).slice(0, MAX_EVENTS_TO_FETCH);
+  const eventMap = new Map();
+  const directCandidateMap = new Map();
+  const attemptedQueries = [];
 
+  for (const query of queries) {
+    const params = new URLSearchParams({
+      q: query,
+      limit_per_type: String(limitPerType),
+      optimized: 'true',
+      search_tags: 'true',
+    });
+    if (keepClosed) {
+      params.set('keep_closed_markets', 'true');
+    } else {
+      params.set('events_status', 'active');
+    }
+    const searchUrl = `${baseUrl}/public-search?${params}`;
+    attemptedQueries.push(query);
+    const search = await fetchJson(searchUrl, opts);
+    const parsed = parseSearchCandidates(search);
+    for (const event of parsed.events) {
+      const key = eventKey(event);
+      if (key && !eventMap.has(key)) eventMap.set(key, event);
+    }
+    for (const candidate of parsed.candidates) {
+      const key = marketKey(candidate.market, candidate.event);
+      if (key && !directCandidateMap.has(key)) directCandidateMap.set(key, candidate);
+    }
+    if (directCandidateMap.size >= limitPerType && eventMap.size >= maxEvents) break;
+  }
+
+  const events = [...eventMap.values()].slice(0, maxEvents);
   const detailed = [];
   for (const event of events) {
     const idOrSlug = event.id
       ? `events/${encodeURIComponent(event.id)}`
       : `events/slug/${encodeURIComponent(event.slug)}`;
-    const detail = await fetchJson(`${gammaBase.replace(/\/$/, '')}/${idOrSlug}`, opts);
+    const detail = await fetchJson(`${baseUrl}/${idOrSlug}`, opts);
     detailed.push(detail || event);
   }
-  return detailed.filter(Boolean);
-}
 
-function flattenMarkets(events) {
-  const markets = [];
-  for (const event of events) {
-    for (const market of Array.isArray(event?.markets) ? event.markets : []) {
-      markets.push({ event, market });
-    }
+  const detailedCandidates = flattenMarkets(detailed.filter(Boolean));
+  const combined = new Map(directCandidateMap);
+  for (const candidate of detailedCandidates) {
+    const key = marketKey(candidate.market, candidate.event);
+    if (key && !combined.has(key)) combined.set(key, candidate);
   }
-  return markets;
+  return {
+    candidates: [...combined.values()],
+    attemptedQueries,
+  };
 }
 
 async function fetchMidpoints(tokenIds, opts) {
@@ -406,6 +681,29 @@ function buildEvidence(match) {
   };
 }
 
+function attachPolymarketAttempt(spec, attempt) {
+  const sourceData = spec.source_data && typeof spec.source_data === 'object'
+    ? { ...spec.source_data }
+    : {};
+  const pricingSearch = sourceData.pricingSearch && typeof sourceData.pricingSearch === 'object'
+    ? { ...sourceData.pricingSearch }
+    : {};
+  pricingSearch.polymarket = {
+    ok: Boolean(attempt.ok),
+    reason: attempt.reason || null,
+    queries: Array.isArray(attempt.queries) ? attempt.queries.slice(0, DEFAULT_MAX_SEARCH_QUERIES) : [],
+    candidates: Number.isFinite(Number(attempt.candidates)) ? Number(attempt.candidates) : 0,
+    minScore: Number.isFinite(Number(attempt.minScore)) ? Number(attempt.minScore) : null,
+    bestScore: Number.isFinite(Number(attempt.bestScore)) ? Math.round(Number(attempt.bestScore) * 1000) / 1000 : null,
+    checkedAt: new Date().toISOString(),
+  };
+  sourceData.pricingSearch = pricingSearch;
+  return {
+    ...spec,
+    source_data: sourceData,
+  };
+}
+
 export async function tryAttachPolymarketPricing(spec = {}, opts = {}) {
   if (!shouldUsePolymarketPricing(spec)) return spec;
 
@@ -416,9 +714,18 @@ export async function tryAttachPolymarketPricing(spec = {}, opts = {}) {
     timeoutMs,
   };
 
-  const events = await discoverEvents(spec, fetchOpts);
-  const candidates = flattenMarkets(events);
-  if (!candidates.length) return spec;
+  const discovery = await discoverMarketCandidates(spec, fetchOpts);
+  const candidates = discovery.candidates || [];
+  const queries = discovery.attemptedQueries || [];
+  if (!candidates.length) {
+    return attachPolymarketAttempt(spec, {
+      ok: false,
+      reason: queries.length ? 'no_candidates' : 'no_query',
+      queries,
+      candidates: 0,
+      minScore,
+    });
+  }
 
   const tokenIds = candidates.flatMap(({ market }) => getMarketTokenIds(market));
   const [midpoints, spreads] = await Promise.all([
@@ -431,12 +738,28 @@ export async function tryAttachPolymarketPricing(spec = {}, opts = {}) {
     isYesNoOutcomeSet(spec.outcomes || []) ? null : parallelOutcomeMatch(spec, candidates, midpoints, spreads, fetchOpts),
   ].filter(Boolean);
   const best = matches.sort((a, b) => b.score - a.score)[0];
-  if (!best || best.score < minScore) return spec;
+  if (!best || best.score < minScore) {
+    return attachPolymarketAttempt(spec, {
+      ok: false,
+      reason: best ? 'score_below_threshold' : 'no_match',
+      queries,
+      candidates: candidates.length,
+      minScore,
+      bestScore: best?.score ?? null,
+    });
+  }
 
   const currentEvidence = Array.isArray(spec?.source_data?.suggestedPricing?.evidence)
     ? spec.source_data.suggestedPricing.evidence
     : [];
-  return attachSuggestedPricing(spec, {
+  const specWithAttempt = attachPolymarketAttempt(spec, {
+    ok: true,
+    queries,
+    candidates: candidates.length,
+    minScore,
+    bestScore: best.score,
+  });
+  return attachSuggestedPricing(specWithAttempt, {
     source: best.source,
     probabilities: best.probabilities,
     rationale: 'Referencia tomada de Polymarket para abrir con una probabilidad inicial mas realista; admin puede editarla antes de aprobar.',

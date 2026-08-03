@@ -20,7 +20,7 @@ test('rejected pending markets list newest reviewed rows first', () => {
 });
 
 test('rejected pending markets can be re-added to the review queue', () => {
-  assert.match(source, /action !== 'approve' && action !== 'reject' && action !== 'readd' && action !== 'edit'/);
+  assert.match(source, /action !== 'approve'\s*&& action !== 'reject'\s*&& action !== 'readd'\s*&& action !== 'edit'\s*&& action !== 'refresh_pricing'/);
   assert.match(source, /if \(action === 'readd'\)/);
   assert.match(source, /status\s*=\s*'pending'/);
   assert.match(source, /admin_note\s*=\s*COALESCE\(NULLIF\(\$2,\s*''\),\s*'manual-readded from rejected'\)/);
@@ -36,6 +36,7 @@ test('pending generated markets can be edited before approval', () => {
   assert.match(source, /seed_liquidities/);
   assert.match(source, /const sourceData = parseJsonb\(r\.source_data,\s*\{\}\)/);
   assert.match(source, /suggestedPricing:\s*sourceData\?\.suggestedPricing\s*\|\|\s*null/);
+  assert.match(source, /pricingSearch:\s*sourceData\?\.pricingSearch\s*\|\|\s*null/);
   assert.match(source, /seedLiquidities:\s*parseJsonb\(r\.seed_liquidities,\s*null\)/);
   assert.match(source, /status !== 'pending'/);
 });

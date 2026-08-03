@@ -159,6 +159,7 @@ async function list(req, res) {
         sourceEventId: r.source_event_id,
         sourceData,
         suggestedPricing: sourceData?.suggestedPricing || null,
+        pricingSearch: sourceData?.pricingSearch || null,
         question: r.question,
         category: r.category,
         icon: null,
@@ -777,6 +778,7 @@ async function refreshPendingPricing(pid, reviewer) {
       suggestedPricing: pricing,
       seedLiquidities,
       source: pricing?.source || null,
+      pricingSearch: sourceData?.pricingSearch || null,
       foundExternalOdds: Boolean(pricing?.source && String(pricing.source).startsWith('polymarket:')),
     };
   });
