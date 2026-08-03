@@ -12,7 +12,7 @@
  * Two tabs: Activo (open positions) and Historial (all trades).
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import Nav from '../components/Nav.jsx';
 import Footer from '../components/Footer.jsx';
 import EarnMXNP from '../components/EarnMXNP.jsx';
@@ -50,12 +50,17 @@ function formatDeadline(iso) {
   } catch { return ''; }
 }
 
+function portfolioMarketHref(item) {
+  const id = item?.parentMarketId || item?.marketId;
+  return id ? `/market?id=${encodeURIComponent(id)}` : null;
+}
+
 function PositionRow({ pos, onSell, busy }) {
   const t = useT();
-  const navigate = useNavigate();
   const label = pos.outcomeLabel || `Opción ${Number(pos.outcomeIndex) + 1}`;
   const pl = pos.unrealizedPnl ?? ((Number(pos.currentValue || 0) - Number(pos.costBasis || 0)));
   const plPct = pos.costBasis > 0 ? (pl / Number(pos.costBasis)) * 100 : 0;
+  const marketHref = portfolioMarketHref(pos);
 
   return (
     <div style={{
@@ -70,14 +75,27 @@ function PositionRow({ pos, onSell, busy }) {
       marginBottom: 10,
     }}>
       <div>
-        <div
-          onClick={() => navigate(`/market?id=${pos.marketId}`)}
-          style={{ cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--text-primary)', marginBottom: 4 }}
-          role="button"
-          tabIndex={0}
-        >
-          {pos.question || `Market #${pos.marketId}`}
-        </div>
+        {marketHref ? (
+          <Link
+            to={marketHref}
+            style={{
+              display: 'inline-block',
+              cursor: 'pointer',
+              fontFamily: 'var(--font-body)',
+              fontSize: 14,
+              color: 'var(--text-primary)',
+              marginBottom: 4,
+              textDecoration: 'none',
+              fontWeight: 700,
+            }}
+          >
+            {pos.question || `Market #${pos.marketId}`}
+          </Link>
+        ) : (
+          <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--text-primary)', marginBottom: 4, fontWeight: 700 }}>
+            {pos.question || `Market #${pos.marketId}`}
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 16, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
           <span>{label} · {formatNum(pos.shares, 4)} shares</span>
           <span>costo ${formatNum(pos.costBasis)}</span>
@@ -85,6 +103,11 @@ function PositionRow({ pos, onSell, busy }) {
           <span style={{ color: pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
             {pl >= 0 ? '+' : ''}{formatNum(pl)} ({plPct >= 0 ? '+' : ''}{formatNum(plPct, 1)}%)
           </span>
+          {marketHref && (
+            <Link to={marketHref} style={{ color: 'var(--green)', textDecoration: 'none', textTransform: 'uppercase' }}>
+              Ver mercado
+            </Link>
+          )}
         </div>
       </div>
       <button
@@ -102,6 +125,7 @@ function PositionRow({ pos, onSell, busy }) {
 function HistoryRow({ trade }) {
   const side = trade.side === 'buy' ? 'Compra' : trade.side === 'sell' ? 'Venta' : trade.side;
   const color = trade.side === 'buy' ? 'var(--green)' : 'var(--red)';
+  const marketHref = portfolioMarketHref(trade);
   return (
     <div style={{
       padding: '12px 16px',
@@ -127,9 +151,30 @@ function HistoryRow({ trade }) {
         {side}
       </span>
       <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text-primary)' }}>
-        {trade.question || `Market #${trade.marketId}`}
+        {marketHref ? (
+          <Link
+            to={marketHref}
+            style={{
+              color: 'var(--text-primary)',
+              textDecoration: 'none',
+              fontWeight: 700,
+            }}
+          >
+            {trade.question || `Market #${trade.marketId}`}
+          </Link>
+        ) : (
+          trade.question || `Market #${trade.marketId}`
+        )}
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
           {formatNum(trade.shares, 4)} shares @ {formatNum(trade.priceAtTrade * 100, 1)}¢ · {formatDeadline(trade.createdAt)}
+          {marketHref && (
+            <>
+              {' '}·{' '}
+              <Link to={marketHref} style={{ color: 'var(--green)', textDecoration: 'none', textTransform: 'uppercase' }}>
+                Ver mercado
+              </Link>
+            </>
+          )}
         </div>
       </div>
       <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)' }}>

@@ -615,6 +615,26 @@
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }
+.points-portfolio-market-link {
+  color: var(--text-primary);
+  text-decoration: none;
+  font-weight: 700;
+  transition: color 0.14s ease;
+}
+.points-portfolio-market-link:hover,
+.points-portfolio-market-link:focus-visible {
+  color: var(--green);
+}
+.points-portfolio-market-action {
+  color: var(--green);
+  text-decoration: none;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.points-portfolio-market-action:hover,
+.points-portfolio-market-action:focus-visible {
+  color: var(--text-primary);
+}
 .points-history-total-card {
   border: 1px solid var(--border);
   border-radius: 14px;

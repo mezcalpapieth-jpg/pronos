@@ -40,6 +40,11 @@ function signedFmt(n) {
   return `${v >= 0 ? '+' : '-'}${Math.abs(v).toFixed(2)}`;
 }
 
+function portfolioMarketHref(item) {
+  const id = item?.parentMarketId || item?.marketId;
+  return id ? `/market?id=${encodeURIComponent(id)}` : null;
+}
+
 function SellPreviewModal({ state, onClose, onConfirm }) {
   if (!state) return null;
   const { position, preview, loading, error, submitting } = state;
@@ -251,12 +256,23 @@ function PositionCard({ position, onSell, onRedeem, onDismiss, selling, redeemin
   // didn't win, so there's nothing to redeem or sell. Offer an OK
   // button to acknowledge the loss and clear it from the Active tab.
   const isLostBet = status === 'resolved' && !canRedeem;
+  const marketHref = portfolioMarketHref(position);
 
   return (
     <div className="points-position-card">
-      <p style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.4, margin: 0 }}>
-        {question}
-      </p>
+      {marketHref ? (
+        <Link
+          to={marketHref}
+          className="points-portfolio-market-link"
+          style={{ fontFamily: 'var(--font-body)', fontSize: 14, lineHeight: 1.4, margin: 0 }}
+        >
+          {question || `Mercado #${marketId}`}
+        </Link>
+      ) : (
+        <p style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.4, margin: 0 }}>
+          {question || `Mercado #${marketId}`}
+        </p>
+      )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{
@@ -304,8 +320,13 @@ function PositionCard({ position, onSell, onRedeem, onDismiss, selling, redeemin
       </div>
 
       <div className="points-position-actions">
-        <div style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', alignSelf: 'center' }}>
-          {Number(shares).toFixed(2)} acciones
+        <div style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', alignSelf: 'center', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span>{Number(shares).toFixed(2)} acciones</span>
+          {marketHref && (
+            <Link to={marketHref} className="points-portfolio-market-action">
+              Ver mercado
+            </Link>
+          )}
         </div>
         {canRedeem ? (
           <button
@@ -1030,6 +1051,7 @@ function HistoryView({ history, summary, loading }) {
           const s = statusMap[m.outcomeStatus] || statusMap.open;
           const pnl = historyPnlValue(m);
           const pnlPos = pnl >= 0;
+          const marketHref = portfolioMarketHref(m);
           return (
             <div key={m.marketId} style={{
               background: 'var(--surface1)',
@@ -1038,9 +1060,19 @@ function HistoryView({ history, summary, loading }) {
               padding: '16px 18px',
             }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
-                <p style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--text-primary)', margin: 0, flex: 1, lineHeight: 1.4 }}>
-                  {m.question}
-                </p>
+                {marketHref ? (
+                  <Link
+                    to={marketHref}
+                    className="points-portfolio-market-link"
+                    style={{ fontFamily: 'var(--font-body)', fontSize: 14, margin: 0, flex: 1, lineHeight: 1.4 }}
+                  >
+                    {m.question || `Mercado #${m.marketId}`}
+                  </Link>
+                ) : (
+                  <p style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--text-primary)', margin: 0, flex: 1, lineHeight: 1.4 }}>
+                    {m.question || `Mercado #${m.marketId}`}
+                  </p>
+                )}
                 <span style={{
                   fontFamily: 'var(--font-mono)', fontSize: 10,
                   letterSpacing: '0.08em', textTransform: 'uppercase',

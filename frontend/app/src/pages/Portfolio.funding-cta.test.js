@@ -21,3 +21,11 @@ test('MVP routes and nav expose the funding page', () => {
   assert.match(navSource, /to="\/funding"/);
   assert.match(navSource, /t\('nav\.deposit'\)/);
 });
+
+test('MVP portfolio active and history markets link back to market detail', () => {
+  assert.match(portfolioSource, /function portfolioMarketHref\(item\)/);
+  assert.match(portfolioSource, /item\?\.parentMarketId\s*\|\|\s*item\?\.marketId/);
+  assert.match(portfolioSource, /`\/market\?id=\$\{encodeURIComponent\(id\)\}`/);
+  assert.match(portfolioSource, /to=\{marketHref\}/);
+  assert.match(portfolioSource, /Ver mercado/);
+});

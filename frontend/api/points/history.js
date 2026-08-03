@@ -55,20 +55,28 @@ export default async function handler(req, res) {
     const rows = await timer.time('db_trades', () => sql`
       SELECT t.id, t.market_id, t.side, t.outcome_index, t.shares,
              t.collateral, t.fee, t.price_at_trade, t.tx_hash, t.created_at,
-             m.question, m.category, m.outcomes, m.reserves,
+             m.parent_id, m.question, m.category, m.outcomes, m.reserves,
+             pm.id AS parent_market_id,
+             pm.question AS parent_question,
+             pm.category AS parent_category,
              m.status, m.outcome, m.end_time, m.resolved_at
       FROM points_trades t
       JOIN points_markets m ON m.id = t.market_id
+      LEFT JOIN points_markets pm ON pm.id = m.parent_id
       WHERE t.username = ${username}
         AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
       ORDER BY t.created_at ASC
     `);
     const refundRows = await timer.time('db_refunds', () => sql`
       SELECT d.id, d.reference_id AS market_id, d.amount, d.created_at,
-             m.question, m.category, m.outcomes, m.reserves,
+             m.parent_id, m.question, m.category, m.outcomes, m.reserves,
+             pm.id AS parent_market_id,
+             pm.question AS parent_question,
+             pm.category AS parent_category,
              m.status, m.outcome, m.end_time, m.resolved_at
       FROM points_distributions d
       JOIN points_markets m ON m.id = d.reference_id
+      LEFT JOIN points_markets pm ON pm.id = m.parent_id
       WHERE d.username = ${username}
         AND d.kind IN ('market_cancel_refund', 'void_refund')
         AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
@@ -83,8 +91,9 @@ export default async function handler(req, res) {
         const reserves = parseJsonb(r.reserves, []).map(Number);
         markets.set(mid, {
           marketId: mid,
-          question: r.question,
-          category: r.category,
+          parentMarketId: r.parent_market_id || null,
+          question: r.parent_question || r.question,
+          category: r.parent_category || r.category,
           status: r.status,
           outcome: r.outcome,
           outcomes,
@@ -212,6 +221,7 @@ export default async function handler(req, res) {
         }
         return {
           marketId: m.marketId,
+          parentMarketId: m.parentMarketId,
           question: m.question,
           category: m.category,
           status: m.status,
@@ -227,6 +237,7 @@ export default async function handler(req, res) {
       }
       return {
         marketId: m.marketId,
+        parentMarketId: m.parentMarketId,
         question: m.question,
         category: m.category,
         status: m.status,

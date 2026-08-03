@@ -39,3 +39,11 @@ test('portfolio and earn page labels use points translations', () => {
   assert.match(i18nSource, /'points\.nav\.earn':\s*\{\s*es:\s*'Gana MXNP',\s*en:\s*'Earn MXNP'/);
   assert.match(i18nSource, /'points\.earn\.title':\s*\{\s*es:\s*'Gana MXNP',\s*en:\s*'Earn MXNP'/);
 });
+
+test('portfolio active and history markets link back to market detail', () => {
+  assert.match(source, /function portfolioMarketHref\(item\)/);
+  assert.match(source, /item\?\.parentMarketId\s*\|\|\s*item\?\.marketId/);
+  assert.match(source, /`\/market\?id=\$\{encodeURIComponent\(id\)\}`/);
+  assert.match(source, /to=\{marketHref\}/);
+  assert.match(source, /Ver mercado/);
+});
