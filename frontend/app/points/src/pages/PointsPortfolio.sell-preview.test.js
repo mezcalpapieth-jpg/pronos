@@ -33,9 +33,11 @@ test('portfolio and earn page labels use points translations', () => {
   assert.match(source, /points\.portfolio\.title/);
   assert.match(source, /points\.portfolio\.tab\.open/);
   assert.match(source, /points\.portfolio\.tab\.history/);
+  assert.match(source, /points\.portfolio\.tab\.rewards/);
   assert.match(earnSource, /useT\(\)/);
   assert.match(earnSource, /points\.earn\.title/);
   assert.match(i18nSource, /'points\.portfolio\.title':\s*\{\s*es:\s*'Portafolio',\s*en:\s*'Portfolio'/);
+  assert.match(i18nSource, /'points\.portfolio\.tab\.rewards':\s*\{\s*es:\s*'Recompensas',\s*en:\s*'Rewards'/);
   assert.match(i18nSource, /'points\.nav\.earn':\s*\{\s*es:\s*'Gana MXNP',\s*en:\s*'Earn MXNP'/);
   assert.match(i18nSource, /'points\.earn\.title':\s*\{\s*es:\s*'Gana MXNP',\s*en:\s*'Earn MXNP'/);
 });
@@ -46,4 +48,14 @@ test('portfolio active and history markets link back to market detail', () => {
   assert.match(source, /`\/market\?id=\$\{encodeURIComponent\(id\)\}`/);
   assert.match(source, /to=\{marketHref\}/);
   assert.match(source, /Ver mercado/);
+});
+
+test('portfolio shows maker reward payouts in their own market-linked tab', () => {
+  assert.match(source, /fetchMakerRewards/);
+  assert.match(source, /function RewardsView/);
+  assert.match(source, /rewardSummary/);
+  assert.match(source, /points\.portfolio\.rewards\.today/);
+  assert.match(source, /points\.portfolio\.rewards\.total/);
+  assert.match(source, /points\.portfolio\.rewards\.empty/);
+  assert.match(source, /<RewardsView rewards=\{rewards\} summary=\{rewardSummary\} loading=\{loading\}/);
 });

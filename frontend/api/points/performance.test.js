@@ -49,6 +49,8 @@ test('points schema and manual migration include hot-path indexes', () => {
     assert.match(source, /idx_points_balances_rank/);
     assert.match(source, /idx_points_trades_user_created/);
     assert.match(source, /idx_points_trades_market_side_user/);
+    assert.match(source, /idx_points_limit_orders_market_outcome/);
+    assert.match(source, /idx_points_limit_orders_user/);
     assert.match(source, /idx_points_distributions_user_kind_ref/);
   }
 });

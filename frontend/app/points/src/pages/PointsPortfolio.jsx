@@ -1,9 +1,10 @@
 /**
  * Portfolio for the points-app.
  *
- * Two tabs: "Activo" (current positions) and "Historial" (all trades grouped
- * by market). Same visual structure as the MVP's Portfolio with USDC → MXNP
- * swapped and the on-chain sell flow replaced with a server-side call.
+ * Three tabs: "Activo" (current positions), "Historial" (all trades grouped
+ * by market), and "Recompensas" (paid maker-reward credits). Same visual
+ * structure as the MVP's Portfolio with USDC -> MXNP swapped and the
+ * on-chain sell flow replaced with a server-side call.
  *
  * Sidebar: live MXNP balance, streak, daily-claim card, mini leaderboard
  * preview. The campaign's earn/rewards section lives here too so logged-in
@@ -19,6 +20,7 @@ import { HistorySkeleton, LeaderboardSkeleton, PositionSkeleton } from '../compo
 import {
   fetchPositions,
   fetchHistory,
+  fetchMakerRewards,
   fetchLeaderboard,
   fetchCycleHistory,
   quoteSell,
@@ -727,17 +729,121 @@ function CycleHistoryLeaderboard({ currentUsername }) {
   );
 }
 
+function RewardsView({ rewards, summary, loading }) {
+  const t = useT();
+  if (loading) {
+    return <HistorySkeleton count={3} />;
+  }
+  if (!rewards || rewards.length === 0) {
+    return (
+      <div style={{
+        textAlign: 'center', padding: '60px 24px',
+        border: '1px dashed var(--border)', borderRadius: 16,
+      }}>
+        <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
+          {t('points.portfolio.rewards.empty')}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="points-history-summary-grid">
+        {[
+          [t('points.portfolio.rewards.today'), `${fmt(summary?.paidToday || 0)} MXNP`, 'var(--green)'],
+          [t('points.portfolio.rewards.total'), `${fmt(summary?.totalPaid || 0)} MXNP`, 'var(--text-primary)'],
+          [t('points.portfolio.rewards.markets'), summary?.marketsCount ?? 0, 'var(--text-primary)'],
+          [t('points.portfolio.rewards.payouts'), summary?.rewardsCount ?? 0, 'var(--text-primary)'],
+        ].map(([label, value, color]) => (
+          <div key={label} className="points-history-summary-card">
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 4, textTransform: 'uppercase' }}>
+              {label}
+            </div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color }}>
+              {value}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {rewards.map((reward) => {
+          const marketHref = portfolioMarketHref(reward);
+          const body = (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{
+                    fontFamily: 'var(--font-body)',
+                    fontSize: 14,
+                    lineHeight: 1.4,
+                    color: 'var(--text-primary)',
+                    marginBottom: 6,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}>
+                    {reward.question || `Mercado #${reward.marketId}`}
+                  </div>
+                  <div style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 10,
+                    color: 'var(--text-muted)',
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                  }}>
+                    {reward.reason || t('points.portfolio.rewards.reason')} · {reward.createdAt ? new Date(reward.createdAt).toLocaleDateString() : ''}
+                  </div>
+                </div>
+                <div style={{
+                  fontFamily: 'var(--font-display)',
+                  color: 'var(--green)',
+                  fontSize: 24,
+                  whiteSpace: 'nowrap',
+                }}>
+                  +{fmt(reward.amount)} MXNP
+                </div>
+              </div>
+            </>
+          );
+
+          const style = {
+            display: 'block',
+            background: 'var(--surface1)',
+            border: '1px solid var(--border)',
+            borderRadius: 12,
+            padding: '16px 18px',
+            textDecoration: 'none',
+          };
+
+          return marketHref ? (
+            <Link key={reward.id} to={marketHref} style={style}>
+              {body}
+            </Link>
+          ) : (
+            <div key={reward.id} style={style}>
+              {body}
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
 // ─── Main Portfolio ──────────────────────────────────────────────────────────
 export default function PointsPortfolio() {
   const navigate = useNavigate();
   const t = useT();
   const lang = useLang();
   const { authenticated, user, loading: authLoading, refresh } = usePointsAuth();
-  const [tab, setTab] = useState('activo'); // 'activo' | 'historial'
+  const [tab, setTab] = useState('activo'); // 'activo' | 'historial' | 'recompensas'
   const [positions, setPositions] = useState([]);
   const [history, setHistory] = useState([]);
+  const [rewards, setRewards] = useState([]);
   const [summary, setSummary] = useState(null);
   const [historySummary, setHistorySummary] = useState(null);
+  const [rewardSummary, setRewardSummary] = useState(null);
   const [loading, setLoading] = useState(false);
   const [actionState, setActionState] = useState({ id: null, type: null });
   const [sellPreview, setSellPreview] = useState(null);
@@ -760,6 +866,10 @@ export default function PointsPortfolio() {
         const r = await fetchPositions();
         setPositions(r.positions || []);
         setSummary(r.summary || null);
+      } else if (tab === 'recompensas') {
+        const r = await fetchMakerRewards();
+        setRewards(r.rewards || []);
+        setRewardSummary(r.summary || null);
       } else {
         const r = await fetchHistory();
         setHistory(r.history || []);
@@ -885,6 +995,7 @@ export default function PointsPortfolio() {
         {[
           { id: 'activo', label: t('points.portfolio.tab.open') },
           { id: 'historial', label: t('points.portfolio.tab.history') },
+          { id: 'recompensas', label: t('points.portfolio.tab.rewards') },
         ].map(t => {
           const active = tab === t.id;
           return (
@@ -978,6 +1089,10 @@ export default function PointsPortfolio() {
 
           {tab === 'historial' && (
             <HistoryView history={history} summary={historySummary} loading={loading} />
+          )}
+
+          {tab === 'recompensas' && (
+            <RewardsView rewards={rewards} summary={rewardSummary} loading={loading} />
           )}
         </div>
 

@@ -13,6 +13,7 @@ import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 import { bestEffortPersistResolvedCryptoMarketSnapshot } from '../../_lib/crypto-chart-snapshot.js';
 import { formatPointsResolutionCandidate } from '../../_lib/points-resolution-candidates.js';
+import { releaseOpenLimitOrdersForMarkets } from '../../_lib/points-limit-orders.js';
 
 const sql = neon(process.env.DATABASE_URL || process.env.DATABASE_READ_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -228,6 +229,17 @@ export default async function handler(req, res) {
       if (market.parent_id || market.status !== 'active') {
         const err = new Error('market_not_active'); err.status = 400; throw err;
       }
+      const relatedIdsResult = await client.query(
+        `SELECT id FROM points_markets
+          WHERE id = $1 OR parent_id = $1
+          ORDER BY id ASC
+          FOR UPDATE`,
+        [candidate.points_market_id],
+      );
+      const relatedIds = relatedIdsResult.rows.map(row => Number(row.id)).filter(Number.isFinite);
+      await releaseOpenLimitOrdersForMarkets(client, relatedIds.length > 0 ? relatedIds : [candidate.points_market_id], {
+        reason: 'market_resolved',
+      });
 
       const confirmed = await client.query(
         `UPDATE points_resolution_candidates

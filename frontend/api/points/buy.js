@@ -21,6 +21,7 @@ import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { withTransaction } from '../_lib/db-tx.js';
 import { seriesTradeLockFromRows } from '../_lib/series-markets.js';
 import { bestEffortInsertPointsPriceSnapshot } from '../_lib/points-price-snapshots.js';
+import { executeTriggeredLimitOrders } from '../_lib/points-limit-orders.js';
 
 // Lightweight HTTP client used only to run the idempotent schema bootstrap.
 // Transactional work goes through withTransaction() which uses a WS Pool.
@@ -226,12 +227,18 @@ export default async function handler(req, res) {
         logLabel: 'points-buy-price-snapshot',
       });
 
+      const triggeredLimitOrders = await executeTriggeredLimitOrders(client, {
+        marketId: mid,
+        outcomeIndex: oi,
+      });
+
       return {
         balance: newBalance,
         sharesOut: quote.sharesOut,
         fee: quote.fee,
         priceBefore: quote.priceBefore,
         priceAfter: quote.priceAfter,
+        triggeredLimitOrders,
       };
     });
 

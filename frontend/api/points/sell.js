@@ -22,6 +22,7 @@ import { requireSession } from '../_lib/session.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { withTransaction } from '../_lib/db-tx.js';
 import { bestEffortInsertPointsPriceSnapshot } from '../_lib/points-price-snapshots.js';
+import { executeTriggeredLimitOrders, lockedReservedShares } from '../_lib/points-limit-orders.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 
@@ -107,8 +108,9 @@ export default async function handler(req, res) {
       const held = Number(p.shares);
       const costBasis = Number(p.cost_basis);
       const realized = Number(p.realized_pnl || 0);
-      if (held < n) {
-        const err = new Error('insufficient_shares'); err.status = 400; throw err;
+      const reservedShares = await lockedReservedShares(client, { marketId: mid, username, outcomeIndex: oi });
+      if (held - reservedShares < n) {
+        const err = new Error('insufficient_available_shares'); err.status = 400; throw err;
       }
 
       let quote;
@@ -197,6 +199,11 @@ export default async function handler(req, res) {
         logLabel: 'points-sell-price-snapshot',
       });
 
+      const triggeredLimitOrders = await executeTriggeredLimitOrders(client, {
+        marketId: mid,
+        outcomeIndex: oi,
+      });
+
       return {
         balance: newBalance,
         collateralOut: quote.collateralOut,
@@ -204,6 +211,7 @@ export default async function handler(req, res) {
         realizedPnl: addedRealized,
         priceBefore: quote.priceBefore,
         priceAfter: quote.priceAfter,
+        triggeredLimitOrders,
       };
     });
 

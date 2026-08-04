@@ -34,6 +34,7 @@ const POINTS_SCHEMA_READY_PROBE = `
     to_regclass('public.points_balances') IS NOT NULL AS points_balances,
     to_regclass('public.points_trades') IS NOT NULL AS points_trades,
     to_regclass('public.points_positions') IS NOT NULL AS points_positions,
+    to_regclass('public.points_limit_orders') IS NOT NULL AS points_limit_orders,
     to_regclass('public.points_site_time_daily') IS NOT NULL AS points_site_time_daily,
     to_regclass('public.points_publicity_daily') IS NOT NULL AS points_publicity_daily,
     to_regclass('public.points_resolution_candidates') IS NOT NULL AS points_resolution_candidates,
@@ -396,6 +397,52 @@ const POINTS_SCHEMA_MIGRATIONS = [
   // tab. Trades are immutable so Historial still shows the full
   // record; this just hides the line from the open-positions view.
   `ALTER TABLE points_positions ADD COLUMN IF NOT EXISTS dismissed_at TIMESTAMPTZ`,
+
+  // ── Limit orders (reserved bids/asks against the points AMM) ───────────
+  // This is a hybrid order book, not a full off-chain CLOB yet:
+  //   - buy orders reserve MXNP immediately and fill against the AMM when
+  //     the executable average price is at/below the limit.
+  //   - sell orders reserve shares immediately and fill against the AMM
+  //     when the executable average price is at/above the limit.
+  // Keeping reservation in Postgres prevents users from double-spending
+  // cash or shares while their order is open.
+  `CREATE TABLE IF NOT EXISTS points_limit_orders (
+    id                  SERIAL PRIMARY KEY,
+    market_id           INTEGER NOT NULL REFERENCES points_markets(id),
+    username            TEXT NOT NULL,
+    side                TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
+    outcome_index       SMALLINT NOT NULL,
+    limit_price         NUMERIC(10,6) NOT NULL CHECK (limit_price > 0 AND limit_price < 1),
+    amount              NUMERIC(30,18) NOT NULL,
+    remaining_amount    NUMERIC(30,18) NOT NULL,
+    reserved_collateral NUMERIC(20,6) NOT NULL DEFAULT 0,
+    reserved_shares     NUMERIC(30,18) NOT NULL DEFAULT 0,
+    maker_reward_accrued NUMERIC(20,6) NOT NULL DEFAULT 0,
+    maker_reward_paid    NUMERIC(20,6) NOT NULL DEFAULT 0,
+    maker_reward_last_at TIMESTAMPTZ DEFAULT NOW(),
+    status              TEXT NOT NULL DEFAULT 'open'
+                          CHECK (status IN ('open', 'filled', 'cancelled', 'expired')),
+    filled_shares       NUMERIC(30,18) NOT NULL DEFAULT 0,
+    filled_collateral   NUMERIC(20,6) NOT NULL DEFAULT 0,
+    avg_fill_price      NUMERIC(10,6),
+    reason              TEXT,
+    expires_at          TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ DEFAULT NOW(),
+    filled_at           TIMESTAMPTZ,
+    cancelled_at        TIMESTAMPTZ
+  )`,
+  `ALTER TABLE points_limit_orders ADD COLUMN IF NOT EXISTS maker_reward_accrued NUMERIC(20,6) NOT NULL DEFAULT 0`,
+  `ALTER TABLE points_limit_orders ADD COLUMN IF NOT EXISTS maker_reward_paid NUMERIC(20,6) NOT NULL DEFAULT 0`,
+  `ALTER TABLE points_limit_orders ADD COLUMN IF NOT EXISTS maker_reward_last_at TIMESTAMPTZ DEFAULT NOW()`,
+  `CREATE INDEX IF NOT EXISTS idx_points_limit_orders_market_outcome
+    ON points_limit_orders(market_id, outcome_index, status, side, limit_price, created_at)
+    WHERE status = 'open'`,
+  `CREATE INDEX IF NOT EXISTS idx_points_limit_orders_user
+    ON points_limit_orders(username, status, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_limit_orders_expiry
+    ON points_limit_orders(expires_at)
+    WHERE status = 'open' AND expires_at IS NOT NULL`,
 
   // ── Social account links (OAuth-verified) ────────────────────────────────
   // Separate from `social_tasks` (admin-reviewed proofs). When a user

@@ -321,6 +321,43 @@ const MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_points_positions_user ON points_positions(username)`,
 
+  `CREATE TABLE IF NOT EXISTS points_limit_orders (
+    id                   SERIAL PRIMARY KEY,
+    market_id            INTEGER NOT NULL REFERENCES points_markets(id),
+    username             TEXT NOT NULL,
+    side                 TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
+    outcome_index        SMALLINT NOT NULL,
+    limit_price          NUMERIC(10,6) NOT NULL CHECK (limit_price > 0 AND limit_price < 1),
+    amount               NUMERIC(30,18) NOT NULL,
+    remaining_amount     NUMERIC(30,18) NOT NULL,
+    reserved_collateral  NUMERIC(20,6) NOT NULL DEFAULT 0,
+    reserved_shares      NUMERIC(30,18) NOT NULL DEFAULT 0,
+    maker_reward_accrued NUMERIC(20,6) NOT NULL DEFAULT 0,
+    maker_reward_paid    NUMERIC(20,6) NOT NULL DEFAULT 0,
+    maker_reward_last_at TIMESTAMPTZ DEFAULT NOW(),
+    status               TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'filled', 'cancelled', 'expired')),
+    filled_shares        NUMERIC(30,18) NOT NULL DEFAULT 0,
+    filled_collateral    NUMERIC(20,6) NOT NULL DEFAULT 0,
+    avg_fill_price       NUMERIC(10,6),
+    reason               TEXT,
+    expires_at           TIMESTAMPTZ,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    filled_at            TIMESTAMPTZ,
+    cancelled_at         TIMESTAMPTZ
+  )`,
+  `ALTER TABLE points_limit_orders ADD COLUMN IF NOT EXISTS maker_reward_accrued NUMERIC(20,6) NOT NULL DEFAULT 0`,
+  `ALTER TABLE points_limit_orders ADD COLUMN IF NOT EXISTS maker_reward_paid NUMERIC(20,6) NOT NULL DEFAULT 0`,
+  `ALTER TABLE points_limit_orders ADD COLUMN IF NOT EXISTS maker_reward_last_at TIMESTAMPTZ DEFAULT NOW()`,
+  `CREATE INDEX IF NOT EXISTS idx_points_limit_orders_market_outcome
+    ON points_limit_orders(market_id, outcome_index, side, status, limit_price, created_at)
+    WHERE status = 'open'`,
+  `CREATE INDEX IF NOT EXISTS idx_points_limit_orders_user
+    ON points_limit_orders(username, status, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_limit_orders_expiry
+    ON points_limit_orders(expires_at)
+    WHERE status = 'open' AND expires_at IS NOT NULL`,
+
   `CREATE TABLE IF NOT EXISTS daily_claims (
     username      TEXT NOT NULL,
     claim_date    DATE NOT NULL,

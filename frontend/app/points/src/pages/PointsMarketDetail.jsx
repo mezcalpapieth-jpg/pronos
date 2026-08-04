@@ -10,9 +10,18 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { fetchMarket, fetchOrderBook, fetchPriceHistory, fetchPositions } from '../lib/pointsApi.js';
+import {
+  cancelLimitOrder,
+  fetchMarket,
+  fetchMyLimitOrders,
+  fetchOrderBook,
+  fetchPriceHistory,
+  fetchPositions,
+  placeLimitOrder,
+  publicErrorMessage,
+} from '../lib/pointsApi.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
-import { useT } from '@app/lib/i18n.js';
+import { useLang, useT } from '@app/lib/i18n.js';
 import {
   formatSeriesGameLabel,
   formatSeriesScoreSummary,
@@ -704,6 +713,22 @@ function formatDepthAmount(value) {
   return n.toLocaleString('es-MX', { maximumFractionDigits: 2 });
 }
 
+function formatLimitInputPrice(price) {
+  const n = Number(price);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  const cents = n > 1 ? n : n * 100;
+  if (cents >= 10) return cents.toFixed(1).replace(/\.0$/, '');
+  return cents.toFixed(2).replace(/0$/, '').replace(/\.$/, '');
+}
+
+function parseLimitInputPrice(value) {
+  const n = Number(String(value || '').replace(',', '.'));
+  if (!Number.isFinite(n)) return null;
+  const price = n > 1 ? n / 100 : n;
+  if (price <= 0 || price >= 1) return null;
+  return price;
+}
+
 function buildOrderBookOptions({ market, displayOutcomes, displayOutcomeIndices, displayOutcomeImages }) {
   if (!market) return [];
   if (market.ammMode === 'parallel' && Array.isArray(market.legs)) {
@@ -726,7 +751,7 @@ function buildOrderBookOptions({ market, displayOutcomes, displayOutcomeIndices,
   }));
 }
 
-function DepthRows({ rows, side, maxTotal, t }) {
+function DepthRows({ rows, side, maxTotal, t, onPickRow }) {
   const accent = side === 'ask' ? '#ff3b3b' : 'var(--yes)';
   const bg = side === 'ask' ? 'rgba(255,59,59,0.10)' : 'rgba(0,232,122,0.10)';
   if (!Array.isArray(rows) || rows.length === 0) {
@@ -750,8 +775,10 @@ function DepthRows({ rows, side, maxTotal, t }) {
           ? `${Math.max(5, Math.min(100, (Number(row.total) / maxTotal) * 100))}%`
           : '0%';
         return (
-          <div
+          <button
             key={`${side}-${row.price}-${row.shares}-${i}`}
+            type="button"
+            onClick={() => onPickRow?.(row, side)}
             style={{
               position: 'relative',
               display: 'grid',
@@ -764,6 +791,9 @@ function DepthRows({ rows, side, maxTotal, t }) {
               overflow: 'hidden',
               background: 'var(--surface2)',
               border: '1px solid rgba(255,255,255,0.03)',
+              cursor: onPickRow ? 'pointer' : 'default',
+              color: 'inherit',
+              textAlign: 'inherit',
             }}
           >
             <span style={{
@@ -783,8 +813,21 @@ function DepthRows({ rows, side, maxTotal, t }) {
               fontFamily: 'var(--font-mono)',
               fontSize: 10,
               textAlign: 'right',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 2,
             }}>
-              {formatDepthAmount(row.shares)}
+              <span>{formatDepthAmount(row.shares)}</span>
+              <span style={{
+                fontSize: 8,
+                color: row.source === 'limit' ? 'var(--orange)' : 'var(--text-muted)',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+              }}>
+                {row.source === 'limit'
+                  ? t('points.detail.orderBookSourceUsers')
+                  : t('points.detail.orderBookSourceAmm')}
+              </span>
             </span>
             <span style={{
               position: 'relative',
@@ -796,7 +839,7 @@ function DepthRows({ rows, side, maxTotal, t }) {
             }}>
               {formatDepthAmount(row.total)}
             </span>
-          </div>
+          </button>
         );
       })}
     </div>
@@ -854,12 +897,27 @@ function OrderBookPanel({
   displayOutcomeIndices,
   displayOutcomeImages,
   disabled,
+  authenticated,
+  onOpenLogin,
+  onOrderChange,
+  refreshKey,
 }) {
   const t = useT();
+  const lang = useLang();
   const [selected, setSelected] = useState(0);
   const [book, setBook] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [orderSide, setOrderSide] = useState('buy');
+  const [limitPrice, setLimitPrice] = useState('');
+  const [orderAmount, setOrderAmount] = useState('');
+  const [userOrders, setUserOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [orderError, setOrderError] = useState(null);
+  const [orderMessage, setOrderMessage] = useState(null);
+  const [submittingOrder, setSubmittingOrder] = useState(false);
+  const [cancellingOrderId, setCancellingOrderId] = useState(null);
+  const [localRefresh, setLocalRefresh] = useState(0);
   const bookCacheRef = useRef(new Map());
   const options = buildOrderBookOptions({
     market,
@@ -873,8 +931,23 @@ function OrderBookPanel({
 
   useEffect(() => {
     setSelected(0);
+    setLimitPrice('');
+    setOrderAmount('');
     bookCacheRef.current = new Map();
   }, [optionsSig]);
+
+  useEffect(() => {
+    bookCacheRef.current = new Map();
+    setLocalRefresh(v => v + 1);
+  }, [refreshKey]);
+
+  useEffect(() => {
+    if (!selectedOption) return;
+    setLimitPrice(formatLimitInputPrice(selectedOption.price));
+    setOrderAmount('');
+    setOrderError(null);
+    setOrderMessage(null);
+  }, [selectedOption?.key]);
 
   useEffect(() => {
     if (!selectedOption?.marketId || disabled) {
@@ -910,7 +983,30 @@ function OrderBookPanel({
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [selectedOption?.key, selectedOption?.marketId, selectedOption?.outcomeIndex, disabled]);
+  }, [selectedOption?.key, selectedOption?.marketId, selectedOption?.outcomeIndex, disabled, localRefresh]);
+
+  useEffect(() => {
+    if (!authenticated || !selectedOption?.marketId || disabled) {
+      setUserOrders([]);
+      setOrdersLoading(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setOrdersLoading(true);
+    fetchMyLimitOrders({ marketId: selectedOption.marketId })
+      .then((payload) => {
+        if (cancelled) return;
+        const orders = Array.isArray(payload?.orders) ? payload.orders : [];
+        setUserOrders(orders.filter(order => Number(order.outcomeIndex) === Number(selectedOption.outcomeIndex)));
+      })
+      .catch(() => {
+        if (!cancelled) setUserOrders([]);
+      })
+      .finally(() => {
+        if (!cancelled) setOrdersLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [authenticated, selectedOption?.key, selectedOption?.marketId, selectedOption?.outcomeIndex, disabled, localRefresh]);
 
   useEffect(() => {
     if (disabled || options.length <= 1) return undefined;
@@ -952,6 +1048,76 @@ function OrderBookPanel({
   const asks = Array.isArray(book?.asks) ? book.asks : [];
   const bids = Array.isArray(book?.bids) ? book.bids : [];
   const maxTotal = [...asks, ...bids].reduce((max, row) => Math.max(max, Number(row.total) || 0), 0);
+  const selectedOrders = userOrders.filter(order => Number(order.outcomeIndex) === Number(selectedOption?.outcomeIndex));
+
+  function clearBookAndOrders() {
+    if (selectedOption?.key) bookCacheRef.current.delete(selectedOption.key);
+    setLocalRefresh(v => v + 1);
+    onOrderChange?.();
+  }
+
+  function handlePickRow(row, side) {
+    setOrderSide(side === 'ask' ? 'sell' : 'buy');
+    setLimitPrice(formatLimitInputPrice(row.price));
+    setOrderError(null);
+    setOrderMessage(null);
+  }
+
+  async function handleLimitOrderSubmit(event) {
+    event.preventDefault();
+    if (!authenticated) {
+      onOpenLogin?.();
+      return;
+    }
+    if (!selectedOption) return;
+    const price = parseLimitInputPrice(limitPrice);
+    const amount = Number(String(orderAmount || '').replace(',', '.'));
+    if (!price) {
+      setOrderError(publicErrorMessage('invalid_limit_price', lang, 'default'));
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setOrderError(publicErrorMessage('invalid_amount', lang, 'default'));
+      return;
+    }
+
+    setSubmittingOrder(true);
+    setOrderError(null);
+    setOrderMessage(null);
+    try {
+      const result = await placeLimitOrder({
+        marketId: selectedOption.marketId,
+        outcomeIndex: selectedOption.outcomeIndex,
+        side: orderSide,
+        limitPrice: price,
+        amount,
+      });
+      const filled = result?.order?.status === 'filled' || result?.fill?.triggered;
+      setOrderMessage(filled ? t('points.detail.limitOrderFilled') : t('points.detail.limitOrderSuccess'));
+      setOrderAmount('');
+      clearBookAndOrders();
+    } catch (e) {
+      setOrderError(publicErrorMessage(e, lang, 'limit_order_failed'));
+    } finally {
+      setSubmittingOrder(false);
+    }
+  }
+
+  async function handleCancelOrder(orderId) {
+    if (!orderId || cancellingOrderId) return;
+    setCancellingOrderId(orderId);
+    setOrderError(null);
+    setOrderMessage(null);
+    try {
+      await cancelLimitOrder(orderId);
+      setOrderMessage(t('points.detail.limitOrderCancelled'));
+      clearBookAndOrders();
+    } catch (e) {
+      setOrderError(publicErrorMessage(e, lang, 'cancel_limit_order_failed'));
+    } finally {
+      setCancellingOrderId(null);
+    }
+  }
 
   return (
     <div style={{
@@ -1040,6 +1206,314 @@ function OrderBookPanel({
         })}
       </div>
 
+      {!disabled && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+          gap: 12,
+          marginBottom: 16,
+        }}>
+          <form
+            onSubmit={handleLimitOrderSubmit}
+            style={{
+              border: '1px solid var(--border)',
+              borderRadius: 12,
+              padding: 12,
+              background: 'rgba(255,255,255,0.02)',
+            }}
+          >
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 10,
+              marginBottom: 10,
+            }}>
+              <div style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                letterSpacing: '0.1em',
+                color: 'var(--text-secondary)',
+                textTransform: 'uppercase',
+              }}>
+                {t('points.detail.limitOrderTitle')}
+              </div>
+              <div style={{
+                display: 'inline-flex',
+                padding: 2,
+                border: '1px solid var(--border)',
+                borderRadius: 999,
+                background: 'var(--surface2)',
+              }}>
+                {[
+                  ['buy', t('points.detail.limitOrderBuy')],
+                  ['sell', t('points.detail.limitOrderSell')],
+                ].map(([side, label]) => {
+                  const active = orderSide === side;
+                  return (
+                    <button
+                      key={side}
+                      type="button"
+                      onClick={() => {
+                        setOrderSide(side);
+                        setOrderError(null);
+                        setOrderMessage(null);
+                      }}
+                      style={{
+                        border: 'none',
+                        borderRadius: 999,
+                        padding: '6px 10px',
+                        background: active
+                          ? (side === 'buy' ? 'rgba(0,232,122,0.14)' : 'rgba(255,59,59,0.14)')
+                          : 'transparent',
+                        color: active
+                          ? (side === 'buy' ? 'var(--yes)' : '#ff6b6b')
+                          : 'var(--text-muted)',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 9,
+                        letterSpacing: '0.08em',
+                        textTransform: 'uppercase',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <p style={{
+              margin: '0 0 10px',
+              color: 'var(--text-muted)',
+              fontFamily: 'var(--font-body)',
+              fontSize: 11,
+              lineHeight: 1.35,
+            }}>
+              {orderSide === 'buy'
+                ? t('points.detail.limitOrderHintBuy')
+                : t('points.detail.limitOrderHintSell')}
+              {' '}
+              {t('points.detail.limitOrderMakerReward')}
+            </p>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+              gap: 8,
+            }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <span style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 9,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: 'var(--text-muted)',
+                }}>
+                  {t('points.detail.limitOrderPrice')}
+                </span>
+                <input
+                  value={limitPrice}
+                  onChange={(event) => setLimitPrice(event.target.value)}
+                  inputMode="decimal"
+                  placeholder="72.5"
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    border: '1px solid var(--border)',
+                    borderRadius: 9,
+                    background: 'var(--surface2)',
+                    color: 'var(--text-primary)',
+                    padding: '10px 11px',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 12,
+                    outline: 'none',
+                  }}
+                />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <span style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 9,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: 'var(--text-muted)',
+                }}>
+                  {orderSide === 'buy'
+                    ? t('points.detail.limitOrderAmountBuy')
+                    : t('points.detail.limitOrderAmountSell')}
+                </span>
+                <input
+                  value={orderAmount}
+                  onChange={(event) => setOrderAmount(event.target.value)}
+                  inputMode="decimal"
+                  placeholder={orderSide === 'buy' ? '100' : '10'}
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    border: '1px solid var(--border)',
+                    borderRadius: 9,
+                    background: 'var(--surface2)',
+                    color: 'var(--text-primary)',
+                    padding: '10px 11px',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 12,
+                    outline: 'none',
+                  }}
+                />
+              </label>
+            </div>
+            <button
+              type="submit"
+              disabled={submittingOrder}
+              style={{
+                width: '100%',
+                marginTop: 10,
+                border: '1px solid rgba(255,85,0,0.45)',
+                borderRadius: 10,
+                padding: '10px 12px',
+                background: submittingOrder ? 'rgba(255,85,0,0.12)' : 'var(--orange)',
+                color: submittingOrder ? 'var(--orange)' : '#080808',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                fontWeight: 800,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                cursor: submittingOrder ? 'default' : 'pointer',
+              }}
+            >
+              {submittingOrder ? t('points.detail.limitOrderCreating') : t('points.detail.limitOrderCreate')}
+            </button>
+            {!authenticated && (
+              <p style={{ margin: '8px 0 0', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 10 }}>
+                {t('points.detail.limitOrderLogin')}
+              </p>
+            )}
+            {(orderError || orderMessage) && (
+              <p style={{
+                margin: '8px 0 0',
+                color: orderError ? '#ff6b6b' : 'var(--yes)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                lineHeight: 1.45,
+              }}>
+                {orderError || orderMessage}
+              </p>
+            )}
+          </form>
+
+          <div style={{
+            border: '1px solid var(--border)',
+            borderRadius: 12,
+            padding: 12,
+            background: 'rgba(255,255,255,0.02)',
+            minHeight: 128,
+          }}>
+            <div style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              letterSpacing: '0.1em',
+              color: 'var(--text-secondary)',
+              textTransform: 'uppercase',
+              marginBottom: 10,
+            }}>
+              {t('points.detail.limitOrderOpenOrders')}
+            </div>
+            {!authenticated ? (
+              <p style={{ margin: 0, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 10, lineHeight: 1.5 }}>
+                {t('points.detail.limitOrderLogin')}
+              </p>
+            ) : ordersLoading ? (
+              <p style={{ margin: 0, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 10 }}>
+                {t('points.detail.orderBookLoading')}
+              </p>
+            ) : selectedOrders.length === 0 ? (
+              <p style={{ margin: 0, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 10, lineHeight: 1.5 }}>
+                {t('points.detail.limitOrderNoOpenOrders')}
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {selectedOrders.map((order) => {
+                  const liveReward = order.makerRewardEstimated ?? order.makerRewardAccrued ?? 0;
+                  const makerReward = Number(liveReward || 0) + Number(order.makerRewardPaid || 0);
+                  return (
+                    <div
+                      key={order.id}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr auto',
+                        gap: 8,
+                        alignItems: 'center',
+                        padding: '8px 9px',
+                        border: '1px solid rgba(255,255,255,0.05)',
+                        borderRadius: 9,
+                        background: 'var(--surface2)',
+                      }}
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 10,
+                          color: order.side === 'buy' ? 'var(--yes)' : '#ff6b6b',
+                          letterSpacing: '0.06em',
+                          textTransform: 'uppercase',
+                        }}>
+                          {order.side === 'buy' ? t('points.detail.limitOrderBuy') : t('points.detail.limitOrderSell')}
+                          {' · '}
+                          {formatDepthCents(order.limitPrice)}
+                        </div>
+                        <div style={{
+                          marginTop: 3,
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 9,
+                          color: 'var(--text-muted)',
+                        }}>
+                          {formatDepthAmount(order.remainingAmount)}
+                          {' '}
+                          {order.side === 'buy' ? 'MXNP' : t('points.detail.orderBookShares').toLowerCase()}
+                        </div>
+                        {makerReward > 0 && (
+                          <div style={{
+                            marginTop: 3,
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: 9,
+                            color: 'var(--orange)',
+                          }}>
+                            {t('points.detail.limitOrderRewardEarned')}
+                            {': +'}
+                            {formatDepthAmount(makerReward)}
+                            {' MXNP'}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleCancelOrder(order.id)}
+                        disabled={cancellingOrderId === order.id}
+                        style={{
+                          border: '1px solid var(--border)',
+                          borderRadius: 8,
+                          padding: '7px 9px',
+                          background: 'transparent',
+                          color: cancellingOrderId === order.id ? 'var(--text-muted)' : 'var(--text-secondary)',
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 9,
+                          letterSpacing: '0.08em',
+                          textTransform: 'uppercase',
+                          cursor: cancellingOrderId === order.id ? 'default' : 'pointer',
+                        }}
+                      >
+                        {cancellingOrderId === order.id
+                          ? t('points.detail.limitOrderCancelling')
+                          : t('points.detail.limitOrderCancel')}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div style={{
         display: 'grid',
         gridTemplateColumns: '72px 1fr 74px',
@@ -1085,13 +1559,13 @@ function OrderBookPanel({
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#ff3b3b', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
               {t('points.detail.orderBookSellSide')}
             </div>
-            <DepthRows rows={asks} side="ask" maxTotal={maxTotal} t={t} />
+            <DepthRows rows={asks} side="ask" maxTotal={maxTotal} t={t} onPickRow={handlePickRow} />
           </section>
           <section>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--yes)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
               {t('points.detail.orderBookBuySide')}
             </div>
-            <DepthRows rows={bids} side="bid" maxTotal={maxTotal} t={t} />
+            <DepthRows rows={bids} side="bid" maxTotal={maxTotal} t={t} onPickRow={handlePickRow} />
           </section>
         </div>
       )}
@@ -1138,6 +1612,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   //   parallel → the individual leg market (so the buy endpoint hits the
   //              leg's binary CPMM, not the aggregated parent)
   const [buyState, setBuyState] = useState(null);
+  const [orderBookRefresh, setOrderBookRefresh] = useState(0);
   const cryptoSequenceSig = market?.cryptoMeta
     ? cryptoMarketSequenceSignature(buildCryptoMarketSequence(market))
     : '';
@@ -1294,7 +1769,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
       })
       .catch(() => { /* best-effort */ });
     return () => { cancelled = true; };
-  }, [authenticated, id, buyState, market?.cryptoMeta, cryptoSequenceSig]);
+  }, [authenticated, id, buyState, orderBookRefresh, market?.cryptoMeta, cryptoSequenceSig]);
 
   function handleBuyClick(target, outcomeIndex, outcomeLabel) {
     if (!authenticated) {
@@ -1661,6 +2136,16 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               displayOutcomeIndices={displayOutcomeIndices}
               displayOutcomeImages={displayOutcomeImages}
               disabled={isResolved || isPendingResolution || isTradingLocked || isCanceled}
+              authenticated={authenticated}
+              onOpenLogin={onOpenLogin}
+              refreshKey={orderBookRefresh}
+              onOrderChange={async () => {
+                setOrderBookRefresh(v => v + 1);
+                try {
+                  const fresh = await fetchMarket(id);
+                  setMarket(fresh);
+                } catch { /* best-effort */ }
+              }}
             />
 
             <SeriesGameStrip
@@ -2057,6 +2542,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               const fresh = await fetchMarket(id);
               setMarket(fresh);
             } catch { /* no-op */ }
+            setOrderBookRefresh(v => v + 1);
           }}
         />
       )}

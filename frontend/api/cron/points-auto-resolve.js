@@ -41,6 +41,7 @@ import { buildEspnLiveScoreConfig } from '../_lib/espn-live-score.js';
 import { buildFootballDataEspnFallbackConfig } from '../_lib/sports-resolver-fallback.js';
 import { NEXT_OPPONENT_RECHECK_INTERVAL_HOURS, findParallelWinnerIndex } from '../_lib/sports-resolver-policy.js';
 import { buildPointsResolutionCandidateInsert } from '../_lib/points-resolution-candidates.js';
+import { releaseOpenLimitOrdersForMarkets } from '../_lib/points-limit-orders.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql   = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -858,6 +859,9 @@ export async function runAutoResolve({ dry = false } = {}) {
 
       try {
         await withTransaction(async (client) => {
+          await releaseOpenLimitOrdersForMarkets(client, [m.id], {
+            reason: 'market_resolved',
+          });
           // Two-step UPDATE: core resolution must always work; the
           // final_score patch is best-effort (column may not exist on
           // older schemas — treat 42703 as benign skip).
@@ -906,6 +910,9 @@ export async function runAutoResolve({ dry = false } = {}) {
                  FOR UPDATE`,
               [m.id],
             );
+            await releaseOpenLimitOrdersForMarkets(client, legs.rows.map(row => Number(row.id)), {
+              reason: 'market_resolved',
+            });
             for (let i = 0; i < legs.rows.length; i++) {
               const legWinningOutcome = i === winningIdx ? 0 : 1;
               await client.query(

@@ -13,6 +13,7 @@ import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { withTransaction } from '../../_lib/db-tx.js';
+import { releaseOpenLimitOrdersForMarkets } from '../../_lib/points-limit-orders.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 
@@ -70,6 +71,10 @@ export default async function handler(req, res) {
         [mid],
       );
       const marketIds = related.rows.map(r => Number(r.id)).filter(Number.isFinite);
+      await releaseOpenLimitOrdersForMarkets(client, marketIds, {
+        reason: 'market_cancelled',
+        status: 'cancelled',
+      });
 
       await client.query(
         `SELECT market_id, username, outcome_index, shares, cost_basis

@@ -32,9 +32,41 @@ const PUBLIC_ERROR_COPY = {
     es: 'Balance insuficiente.',
     en: 'Insufficient balance.',
   },
+  insufficient_available_balance: {
+    es: 'Balance disponible insuficiente. Tienes MXNP reservado en órdenes abiertas.',
+    en: 'Insufficient available balance. Some MXNP is reserved in open orders.',
+  },
+  insufficient_available_shares: {
+    es: 'Acciones disponibles insuficientes. Tienes acciones reservadas en órdenes abiertas.',
+    en: 'Insufficient available shares. Some shares are reserved in open orders.',
+  },
+  invalid_limit_price: {
+    es: 'Ingresa un precio límite válido entre 1c y 99c.',
+    en: 'Enter a valid limit price between 1c and 99c.',
+  },
+  invalid_amount: {
+    es: 'Ingresa un monto válido.',
+    en: 'Enter a valid amount.',
+  },
+  order_not_open: {
+    es: 'Esa orden ya no está abierta.',
+    en: 'That order is no longer open.',
+  },
+  limit_order_failed: {
+    es: 'No pudimos crear la orden límite. Intenta otra vez.',
+    en: 'Could not create the limit order. Try again.',
+  },
+  cancel_limit_order_failed: {
+    es: 'No pudimos cancelar la orden. Intenta otra vez.',
+    en: 'Could not cancel the order. Try again.',
+  },
   market_closed: {
     es: 'El mercado ya cerró o fue resuelto.',
     en: 'The market already closed or resolved.',
+  },
+  market_expired: {
+    es: 'El mercado ya cerró. No se pueden crear órdenes nuevas.',
+    en: 'The market already closed. New orders are unavailable.',
   },
   market_not_found: {
     es: 'No encontramos ese mercado.',
@@ -301,6 +333,26 @@ export async function fetchOrderBook({ marketId, outcomeIndex = 0, levels = 8 })
   return getJson(`/api/points/orderbook?${q}`);
 }
 
+export async function fetchMyLimitOrders({ marketId }) {
+  const q = new URLSearchParams({ marketId: String(marketId) });
+  return getJson(`/api/points/limit-orders?${q}`);
+}
+
+export async function placeLimitOrder({ marketId, outcomeIndex, side, limitPrice, amount, expiresAt }) {
+  return postJson('/api/points/limit-orders', {
+    marketId,
+    outcomeIndex,
+    side,
+    limitPrice,
+    amount,
+    expiresAt: expiresAt || null,
+  });
+}
+
+export async function cancelLimitOrder(orderId) {
+  return postJson('/api/points/cancel-limit-order', { orderId });
+}
+
 // `minCollateralOut` is the sell-side slippage guard — the lowest
 // MXNP payout the user will accept. Server bails with `price_moved`
 // if the locked quote undershoots.
@@ -321,6 +373,10 @@ export async function fetchPositions() {
 
 export async function fetchHistory() {
   return getJson('/api/points/history');
+}
+
+export async function fetchMakerRewards() {
+  return getJson('/api/points/maker-rewards');
 }
 
 export async function fetchLeaderboard() {

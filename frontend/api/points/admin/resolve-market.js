@@ -22,6 +22,7 @@ import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 import { bestEffortPersistResolvedCryptoMarketSnapshot } from '../../_lib/crypto-chart-snapshot.js';
+import { releaseOpenLimitOrdersForMarkets } from '../../_lib/points-limit-orders.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 
@@ -74,6 +75,18 @@ export default async function handler(req, res) {
       if (m.status !== 'active') {
         const err = new Error('market_not_active'); err.status = 400; throw err;
       }
+
+      const relatedIdsResult = await client.query(
+        `SELECT id FROM points_markets
+          WHERE id = $1 OR parent_id = $1
+          ORDER BY id ASC
+          FOR UPDATE`,
+        [mid],
+      );
+      const relatedIds = relatedIdsResult.rows.map(row => Number(row.id)).filter(Number.isFinite);
+      await releaseOpenLimitOrdersForMarkets(client, relatedIds.length > 0 ? relatedIds : [mid], {
+        reason: 'market_resolved',
+      });
 
       // Resolve in two steps so the core UPDATE doesn't depend on
       // the final_score column existing. If the schema migration that

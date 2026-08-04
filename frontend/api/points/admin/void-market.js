@@ -28,6 +28,7 @@ import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { withTransaction } from '../../_lib/db-tx.js';
+import { releaseOpenLimitOrdersForMarkets } from '../../_lib/points-limit-orders.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 
@@ -97,6 +98,10 @@ async function voidOneMarket(client, marketId, reason, adminUsername) {
       );
     }
   }
+  await releaseOpenLimitOrdersForMarkets(client, refundIds, {
+    reason: 'market_voided',
+    status: 'cancelled',
+  });
 
   // Refund every open position on those markets.
   let refundedCount = 0;
