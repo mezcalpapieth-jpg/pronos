@@ -1,5 +1,5 @@
 /**
- * PointsLoginModal — three-step login for the points-app.
+ * PointsLoginModal — login and username capture for points + MVP.
  *
  * Steps:
  *   1. email        — user types email, we request an OTP
@@ -46,14 +46,19 @@ function humanError(code, detail) {
   return base;
 }
 
-export default function PointsLoginModal({ open, onClose, initialStep = 'email' }) {
+export default function PointsLoginModal({
+  open,
+  onClose,
+  initialStep = 'email',
+  enableDelegationStep = false,
+}) {
   const { initOtp, verifyOtp, setUsername, refresh, user } = usePointsAuth();
 
   // `initialStep` lets a caller (e.g. MVP App.jsx) jump straight to the
   // username step when the user is already authed but missing a username.
   // Defaults to 'email' so existing callers behave unchanged.
-  // 'delegate' is the post-username step where new MVP signups
-  // authorize delegated signing once before they ever try to bet.
+  // 'delegate' is MVP-only: points is off-chain and should not ask
+  // public users to authorize on-chain delegated signing.
   const [step, setStep] = useState(initialStep);    // 'email' | 'code' | 'username' | 'delegate' | 'done'
   const [email, setEmail]   = useState('');
   const [code, setCode]     = useState('');
@@ -140,10 +145,14 @@ export default function PointsLoginModal({ open, onClose, initialStep = 'email' 
     try {
       await setUsername(uname.trim().toLowerCase());
       await refresh();
-      // First-time signup: pivot to the delegation prompt. The
-      // user can authorize now (one tap) or skip — either way the
-      // login completes and we close the modal.
-      setStep('delegate');
+      if (enableDelegationStep) {
+        // MVP signup: pivot to the on-chain delegation prompt. The
+        // user can authorize now or skip; either way login completes.
+        setStep('delegate');
+      } else {
+        // Points signup stays off-chain and completes at username.
+        finishLogin();
+      }
     } catch (e) {
       setErr(humanError(e.code || e.message, e.detail));
     } finally {
@@ -188,7 +197,7 @@ export default function PointsLoginModal({ open, onClose, initialStep = 'email' 
           {step === 'email' && 'Crear cuenta o entrar'}
           {step === 'code' && 'Código enviado'}
           {step === 'username' && 'Elige tu usuario'}
-          {step === 'delegate' && '¡Bienvenido a Pronos!'}
+          {step === 'delegate' && 'Bienvenido a Pronos'}
         </h2>
 
         {step === 'email' && (
@@ -287,7 +296,7 @@ export default function PointsLoginModal({ open, onClose, initialStep = 'email' 
               {pending ? 'Guardando…' : 'Crear cuenta'}
             </button>
             <p style={{ ...helperStyle, marginTop: 10, fontSize: 10 }}>
-              🎁 Recibes 500 MXNP de bienvenida al crear tu usuario.
+              Recibes 500 MXNP de bienvenida al crear tu usuario.
             </p>
           </form>
         )}

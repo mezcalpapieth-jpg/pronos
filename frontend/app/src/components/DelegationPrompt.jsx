@@ -1,9 +1,9 @@
 /**
- * Turnkey delegated-signing prompt — shared between two surfaces:
+ * Turnkey delegated-signing prompt — MVP on-chain signing consent:
  *
- *   1. PointsLoginModal — shown as a step right after a NEW user
- *      claims their username, so the on-chain trade flow doesn't
- *      pop a confirmation modal on every buy.
+ *   1. PointsLoginModal — shown only by the MVP signup path after
+ *      a new user claims their username, so the on-chain trade flow
+ *      does not pop a confirmation modal on every buy.
  *
  *   2. Portfolio banner — shown to LEGACY accounts that signed up in
  *      the points-app (where this prompt didn't exist) and so missed
@@ -27,12 +27,14 @@ import React, { useState } from 'react';
 import { authorizeDelegation } from '@app/lib/pointsAuth.js';
 
 const BULLETS = [
-  { icon: '✓',  title: 'Compras sin interrupciones',  body: 'Pronos firma tus compras y ventas on-chain sin pedirte confirmar cada vez.' },
-  { icon: '$',  title: 'Sin retiros automáticos',       body: 'La autorización no permite enviar MXNB a wallets externas ni exportar llaves.' },
-  { icon: '🔒', title: 'Solo contratos de Pronos',      body: 'La firma queda limitada a Arbitrum, contratos permitidos y funciones de trading autorizadas.' },
-  { icon: '🚪', title: 'Tus retiros siguen en tus manos', body: 'Para mover MXNB fuera de Pronos vas a confirmar con tu correo. Eso no cambia.' },
-  { icon: '📅', title: 'Vigencia: 180 días',            body: 'Después de medio año te volvemos a pedir autorización. Puedes revocar antes desde tu perfil.' },
+  { icon: '01', title: 'Compras sin interrupciones', body: 'Pronos firma tus compras y ventas on-chain sin pedirte confirmar cada vez.' },
+  { icon: '02', title: 'Sin retiros automáticos', body: 'La autorización no permite enviar MXNB a wallets externas ni exportar llaves.' },
+  { icon: '03', title: 'Solo contratos de Pronos', body: 'La firma queda limitada a Arbitrum, contratos permitidos y funciones de trading autorizadas.' },
+  { icon: '04', title: 'Tus retiros siguen en tus manos', body: 'Para mover MXNB fuera de Pronos vas a confirmar con tu correo. Eso no cambia.' },
+  { icon: '05', title: 'Vigencia: 180 días', body: 'Después de medio año te volvemos a pedir autorización. Puedes revocar antes desde tu perfil.' },
 ];
+
+const AUTHORIZATION_ERROR = 'No pudimos completar la autorización. Intenta más tarde o continúa sin autorizar por ahora.';
 
 export default function DelegationPrompt({ variant = 'inline', onAuthorized, onSkip }) {
   const [submitting, setSubmitting] = useState(false);
@@ -45,7 +47,11 @@ export default function DelegationPrompt({ variant = 'inline', onAuthorized, onS
       const r = await authorizeDelegation();
       onAuthorized?.(r);
     } catch (e) {
-      setErr(e?.detail || e?.code || e?.message || 'authorize_failed');
+      console.warn('[delegation-prompt] authorization failed', {
+        code: e?.code,
+        message: e?.message,
+      });
+      setErr(AUTHORIZATION_ERROR);
     } finally {
       setSubmitting(false);
     }
@@ -66,7 +72,7 @@ export default function DelegationPrompt({ variant = 'inline', onAuthorized, onS
           fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em',
           color: 'var(--green)', textTransform: 'uppercase',
         }}>
-          ⚡ Firma delegada · una vez
+          Firma delegada · una vez
         </div>
         <h3 style={{
           fontFamily: 'var(--font-display)', fontSize: 22,
@@ -85,7 +91,7 @@ export default function DelegationPrompt({ variant = 'inline', onAuthorized, onS
         </p>
         {err && (
           <div style={{ fontSize: 12, color: 'var(--red, #ef4444)' }}>
-            Error: {err}
+            {err}
           </div>
         )}
         <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
@@ -147,7 +153,16 @@ export default function DelegationPrompt({ variant = 'inline', onAuthorized, onS
       <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {BULLETS.map((b, i) => (
           <li key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-            <span style={{ fontSize: 16, lineHeight: '20px', flexShrink: 0, width: 22, textAlign: 'center' }}>
+            <span style={{
+              flexShrink: 0,
+              width: 22,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              lineHeight: '20px',
+              color: 'var(--green)',
+              textAlign: 'center',
+              letterSpacing: '0.04em',
+            }}>
               {b.icon}
             </span>
             <div style={{ minWidth: 0 }}>
@@ -163,7 +178,7 @@ export default function DelegationPrompt({ variant = 'inline', onAuthorized, onS
       </ul>
       {err && (
         <div style={{ fontSize: 12, color: 'var(--red, #ef4444)' }}>
-          Error: {err}
+          {err}
         </div>
       )}
       <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>

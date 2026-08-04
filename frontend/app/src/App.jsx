@@ -89,6 +89,7 @@ export default function App() {
           open={showLogin}
           onClose={() => setLoginOpen(false)}
           initialStep={authenticated && needsUsername ? 'username' : 'email'}
+          enableDelegationStep
         />
       )}
 

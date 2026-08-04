@@ -157,8 +157,10 @@ export async function logout() {
 
 // ─── Turnkey delegated signing ───────────────────────────────────────────────
 // Used by:
-//   - PointsLoginModal: prompts new MVP signups right after username
-//   - Portfolio: shows a one-time banner for legacy points-app accounts
+//   - PointsLoginModal in the MVP only: prompts new on-chain signups
+//     right after username
+//   - MVP Portfolio: shows a one-time banner for accounts that skipped
+//     or need to refresh delegated signing
 // Both surfaces call authorizeDelegation() on accept; status check
 // drives whether the prompt/banner shows at all.
 export async function fetchDelegationStatus() {

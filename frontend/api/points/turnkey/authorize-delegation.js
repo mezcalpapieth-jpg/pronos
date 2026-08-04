@@ -132,7 +132,6 @@ export default async function handler(req, res) {
     });
     return res.status(e?.status || 500).json({
       error: 'authorize_failed',
-      detail: e?.message?.slice(0, 240) || null,
     });
   }
 }
