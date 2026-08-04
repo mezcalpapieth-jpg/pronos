@@ -107,6 +107,7 @@ export default async function handler(req, res) {
         const legs = await client.query(
           `SELECT id FROM points_markets
            WHERE parent_id = $1
+             AND status <> 'canceled'
            ORDER BY id ASC
            FOR UPDATE`,
           [mid],

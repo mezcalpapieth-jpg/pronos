@@ -15,6 +15,12 @@ try {
 } catch {
   subdivisions = '';
 }
+let subdivisionPolygons = '';
+try {
+  subdivisionPolygons = await readFile(new URL('../lib/newsGeoSubdivisionPolygons.js', import.meta.url), 'utf8');
+} catch {
+  subdivisionPolygons = '';
+}
 const newsPage = await readFile(new URL('../pages/NewsPage.jsx', import.meta.url), 'utf8');
 const viteConfig = await readFile(new URL('../../vite.config.js', import.meta.url), 'utf8');
 
@@ -78,12 +84,15 @@ test('news globe can drill from Mexico and US countries into clickable state pol
   assert.match(subdivisions, /country:\s*'US'/);
   assert.match(subdivisions, /name:\s*'Jalisco'/);
   assert.match(subdivisions, /name:\s*'California'/);
-  assert.match(subdivisions, /function buildSubdivisionPolygonsForCountry/);
+  assert.doesNotMatch(subdivisions, /newsGeoAdmin1Boundaries/);
+  assert.match(subdivisionPolygons, /newsGeoAdmin1Boundaries/);
+  assert.match(subdivisionPolygons, /function buildSubdivisionPolygonsForCountry/);
   assert.match(mapView, /buildSubdivisionLocations/);
   assert.match(mapView, /subdivisionLocations=\{subdivisionLocations\}/);
   assert.match(worldGlobe, /drillCountryCode/);
   assert.match(worldGlobe, /getSubdivisionsForCountry\(drillCountryCode\)/);
-  assert.match(worldGlobe, /buildSubdivisionPolygonsForCountry\(drillCountryCode,\s*subdivisionPoints\)/);
+  assert.match(worldGlobe, /import\('\.\.\/lib\/newsGeoSubdivisionPolygons\.js'\)/);
+  assert.match(worldGlobe, /setSubdivisionPolygonsData\(buildSubdivisionPolygonsForCountry\(drillCountryCode,\s*subdivisionPoints\)\)/);
   assert.match(worldGlobe, /polygonsForGlobe = drillCountryCode \? subdivisionPolygonsData : COUNTRIES/);
   assert.match(worldGlobe, /pointsForGlobe = drillCountryCode \? \[\] : pointsData/);
   assert.match(worldGlobe, /const labelPointsData = \[\]/);

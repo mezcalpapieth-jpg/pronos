@@ -68,7 +68,7 @@ export default async function handler(req, res) {
       ORDER BY t.created_at ASC
     `);
     const refundRows = await timer.time('db_refunds', () => sql`
-      SELECT d.id, d.reference_id AS market_id, d.amount, d.created_at,
+      SELECT d.id, d.kind, d.reference_id AS market_id, d.amount, d.created_at,
              m.parent_id, m.question, m.category, m.outcomes, m.reserves,
              pm.id AS parent_market_id,
              pm.question AS parent_question,
@@ -78,7 +78,7 @@ export default async function handler(req, res) {
       JOIN points_markets m ON m.id = d.reference_id
       LEFT JOIN points_markets pm ON pm.id = m.parent_id
       WHERE d.username = ${username}
-        AND d.kind IN ('market_cancel_refund', 'void_refund')
+        AND d.kind IN ('market_cancel_refund', 'void_refund', 'invalid_field_refund')
         AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
       ORDER BY d.created_at ASC
     `);
@@ -157,7 +157,7 @@ export default async function handler(req, res) {
         id: `refund-${r.id}`,
         side: 'refund',
         outcomeIndex: null,
-        outcomeLabel: 'Reembolso',
+        outcomeLabel: r.kind === 'invalid_field_refund' ? 'Reembolso por participante fuera del campo' : 'Reembolso',
         shares: 0,
         collateral,
         fee: 0,

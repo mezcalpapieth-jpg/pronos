@@ -35,6 +35,8 @@ test('cancel-market refunds open cost basis and marks the market canceled', () =
 test('points history treats cancel refunds as neutral canceled markets', () => {
   assert.match(historySource, /market_cancel_refund/);
   assert.match(historySource, /void_refund/);
+  assert.match(historySource, /invalid_field_refund/);
+  assert.match(historySource, /Reembolso por participante fuera del campo/);
   assert.match(historySource, /outcomeStatus = 'canceled'/);
   assert.match(historySource, /marketsCanceled/);
   assert.match(historySource, /side: 'refund'/);

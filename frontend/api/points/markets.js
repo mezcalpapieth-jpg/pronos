@@ -232,6 +232,7 @@ export default async function handler(req, res) {
           (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = l.id) AS trade_volume
         FROM points_markets l
         WHERE l.parent_id = ANY(${parallelIds})
+          AND l.status <> 'canceled'
         ORDER BY l.parent_id ASC, l.id ASC
         `);
         for (const leg of legs) {

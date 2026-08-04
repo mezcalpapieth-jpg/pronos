@@ -3,21 +3,21 @@
  *
  * Pulls the nearest upcoming PGA TOUR event from ESPN's scoreboard
  * and emits ONE parallel market ("¿Quién gana el <Tournament>?")
- * with a hardcoded top-tier field of legs plus an "Otro" catchall.
- *
- * Why hardcoded legs: ESPN's free tier doesn't expose the pre-
- * tournament commitment / entries list, so we can't enumerate the
- * field dynamically. The top-12 covers most realistic winners; any
- * longshot win resolves to "Otro".
+ * once ESPN exposes confirmed competitors for that event. Static
+ * ranking lists only prioritize confirmed entrants; they no longer
+ * create markets by themselves.
  *
  * Resolution: sports_api via espn-pga reader (sports-results.js).
  * Once the tournament's status.type.completed flips true on ESPN,
  * the cron auto-resolver picks the position-1 player and matches
- * by driverId (the FIELD entry's `id` below) against the leg list.
- * Dark-horse wins fall through to the "Otro" catchall leg.
+ * by ESPN athlete id or label against the leg list. Dark-horse
+ * wins fall through to the "Otro" catchall leg.
  */
 
 const PGA = 'https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard';
+
+const MAX_FIELD_OUTCOMES = 12;
+const MIN_CONFIRMED_GOLF_FIELD = 8;
 
 // ESPN headshot CDN pattern — confirmed working via HEAD probes
 // against the `golf/players` path (the earlier `pga/players` guess
@@ -27,20 +27,19 @@ function headshot(id) {
   return id ? `https://a.espncdn.com/i/headshots/golf/players/full/${id}.png` : null;
 }
 
-// Top-tier PGA field. IDs verified by mapping ESPN's PGA scoreboard
+// Top-tier PGA priority list. IDs verified by mapping ESPN's PGA scoreboard
 // responses back to athlete display names (a HEAD-200 against the
 // headshot CDN proves the id exists, but NOT that it points at the
 // right person — earlier versions of this file had wrong ids that
-// never matched winners). Edit to refocus the market on a different
-// pool.
+// never matched winners). These names are not market entrants unless
+// ESPN confirms they are in the actual event field.
 //
 // PGA-tour-only golfers below. LIV defectors don't play regular
 // PGA events anymore — they only show up on ESPN's PGA scoreboard
 // when a major (Masters / PGA / US Open / The Open) is on the
 // calendar, since the majors are run by independent bodies and
-// invite both tours. We add the LIV stars in via MAJORS_LIV_EXTRAS
-// only when the upcoming event is one of those four — see
-// isMajorEvent() below.
+// invite both tours. The priority list below still cannot add a
+// golfer unless ESPN's event field includes him.
 const PGA_FIELD = [
   { id: '9478',    name: 'Scottie Scheffler' },
   { id: '3470',    name: 'Rory McIlroy' },
@@ -56,15 +55,115 @@ const PGA_FIELD = [
   { id: '4848',    name: 'Justin Thomas' },
 ];
 
-// LIV golfers who are realistic contenders at the four majors and
-// should appear as outcomes ONLY when the upcoming event is a
-// major. Adding them to non-major PGA events would put a non-entrant
-// on the leaderboard — the market would always resolve to "Otro"
-// for them, which looks broken from the user's side.
+// LIV golfers who are realistic contenders at the four majors. This
+// is also priority-only now: they appear only when ESPN includes
+// them in a major's actual competitor list.
 const MAJORS_LIV_EXTRAS = [
   { id: '10046', name: 'Bryson DeChambeau' },
   { id: '9780',  name: 'Jon Rahm' },
 ];
+
+const GOLF_PRIORITY_FIELD = [...PGA_FIELD, ...MAJORS_LIV_EXTRAS];
+const GOLF_PRIORITY_BY_ID = new Map(GOLF_PRIORITY_FIELD.map((p, index) => [String(p.id), index]));
+const GOLF_PRIORITY_BY_NAME = new Map(GOLF_PRIORITY_FIELD.map((p, index) => [normalizeName(p.name), index]));
+
+function normalizeName(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function displayName(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function numberOrNull(value) {
+  if (value == null || value === '') return null;
+  const num = Number(String(value).replace(/[^0-9.-]+/g, ''));
+  return Number.isFinite(num) ? num : null;
+}
+
+function isPlaceholderGolfName(name) {
+  const normalized = normalizeName(name);
+  return !normalized
+    || normalized === 'tbd'
+    || normalized === 'to be determined'
+    || normalized === 'field'
+    || normalized === 'the field'
+    || normalized === 'other'
+    || normalized === 'others';
+}
+
+function golfCompetitorToEntrant(competitor, order) {
+  const athlete = competitor?.athlete || {};
+  const team = competitor?.team || {};
+  const isTeam = competitor?.type === 'team';
+  const id = isTeam ? null : (String(athlete.id || competitor?.id || '').trim() || null);
+  const name = displayName(
+    athlete.displayName
+      || athlete.fullName
+      || athlete.shortName
+      || team.displayName
+      || team.shortDisplayName
+      || team.name
+      || competitor?.displayName
+      || competitor?.name
+      || competitor?.shortName,
+  );
+  if (isPlaceholderGolfName(name)) return null;
+  return {
+    id,
+    name,
+    type: isTeam ? 'team' : 'athlete',
+    logo: isTeam ? (team.logo || team.logos?.[0]?.href || null) : null,
+    rank: numberOrNull(
+      competitor?.rank
+        || competitor?.curatedRank?.current
+        || athlete.rank
+        || athlete.curatedRank?.current
+        || competitor?.status?.position?.id,
+    ),
+    order: numberOrNull(competitor?.order) ?? order,
+  };
+}
+
+function mergeEntrant(previous, next) {
+  if (!previous) return next;
+  return sortEntrants(next, previous) < 0 ? { ...previous, ...next } : previous;
+}
+
+function fieldPriority(player) {
+  if (player?.id && GOLF_PRIORITY_BY_ID.has(String(player.id))) {
+    return GOLF_PRIORITY_BY_ID.get(String(player.id));
+  }
+  const byName = GOLF_PRIORITY_BY_NAME.get(normalizeName(player?.name));
+  return byName == null ? 9999 : byName;
+}
+
+function sortEntrants(a, b) {
+  return fieldPriority(a) - fieldPriority(b)
+    || (a.rank ?? 9999) - (b.rank ?? 9999)
+    || (a.order ?? 9999) - (b.order ?? 9999)
+    || String(a.name || '').localeCompare(String(b.name || ''));
+}
+
+export function extractGolfEventField(event) {
+  const entrants = new Map();
+  let order = 0;
+  for (const competition of Array.isArray(event?.competitions) ? event.competitions : []) {
+    for (const competitor of Array.isArray(competition?.competitors) ? competition.competitors : []) {
+      const entrant = golfCompetitorToEntrant(competitor, order++);
+      if (!entrant) continue;
+      const key = entrant.id ? `id:${entrant.id}` : `name:${normalizeName(entrant.name)}`;
+      entrants.set(key, mergeEntrant(entrants.get(key), entrant));
+    }
+  }
+  return Array.from(entrants.values()).sort(sortEntrants);
+}
 
 // True when the ESPN event name matches one of the four majors. The
 // Masters Tournament, PGA Championship, U.S. Open, and The Open
@@ -122,13 +221,23 @@ export async function generateGolfMarkets() {
   const startTime = new Date(startMs).toISOString();
   const endTime = new Date(startMs + 5 * 86_400_000).toISOString();
 
-  // Field for THIS event: regular PGA tournaments use PGA_FIELD only;
-  // the four majors (Masters, PGA Championship, US Open, The Open)
-  // also include the LIV stars who actually play those events. See
-  // isMajorEvent() and MAJORS_LIV_EXTRAS for the rule.
-  const eventField = isMajorEvent(ev.name)
-    ? [...PGA_FIELD, ...MAJORS_LIV_EXTRAS]
-    : PGA_FIELD;
+  const fullField = extractGolfEventField(ev);
+  if (fullField.length < MIN_CONFIRMED_GOLF_FIELD) {
+    console.warn('[market-gen/golf] skipped tournament without confirmed field', {
+      eventId: ev.id,
+      name: ev.name,
+      fieldSize: fullField.length,
+    });
+    return [];
+  }
+  const eventField = fullField.slice(0, MAX_FIELD_OUTCOMES).map(player => ({
+    id: player.id,
+    name: player.name,
+    type: player.type,
+    rank: player.rank,
+    order: player.order,
+    logo: player.logo || null,
+  }));
 
   // Include an "Otro" catchall so the market is always resolvable
   // even when a dark-horse wins. Field name `driverId` is the
@@ -150,7 +259,7 @@ export async function generateGolfMarkets() {
     icon: '⛳',
     outcomes: legs.map(l => l.label),
     outcome_images: [
-      ...eventField.map(p => headshot(p.id)),
+      ...eventField.map(p => p.logo || headshot(p.id)),
       null, // Otro
     ],
     seed_liquidity: 1000,
@@ -174,10 +283,12 @@ export async function generateGolfMarkets() {
       tournamentName: ev.name,
       startDateIso: ev.date,
       isMajor: isMajorEvent(ev.name),
-      // Persist the per-event field (with LIV extras for majors) so
-      // backfill-resolvers can rebuild outcome_images and resolver
-      // legs from this row alone, without having to recompute the
-      // major-detection logic later.
+      confirmedFieldSize: fullField.length,
+      fieldSource: 'espn-scoreboard-competitors',
+      fieldUpdatedAt: new Date().toISOString(),
+      rankingFallbackDisabled: true,
+      // Persist the per-event field so backfill-resolvers can rebuild
+      // outcome_images and resolver legs from this row alone.
       field: eventField,
     },
   }];

@@ -8,7 +8,6 @@ import { geoCentroid, geoContains } from 'd3-geo';
 import { feature } from 'topojson-client';
 import countriesTopology from 'world-atlas/countries-110m.json';
 import {
-  buildSubdivisionPolygonsForCountry,
   getSubdivisionCountry,
   getSubdivisionsForCountry,
 } from '../lib/newsGeoSubdivisions.js';
@@ -1168,6 +1167,7 @@ export default function NewsWorldGlobe({
   const [selectedPosition, setSelectedPosition] = useState({ x: 18, y: 18 });
   const [selectedPopupVisible, setSelectedPopupVisible] = useState(false);
   const [drillCountryCode, setDrillCountryCode] = useState(null);
+  const [subdivisionPolygonsData, setSubdivisionPolygonsData] = useState([]);
   const hoverLocationIdRef = useRef(null);
   const hoverClearTimerRef = useRef(null);
   const hoverCardHoldingRef = useRef(false);
@@ -1221,10 +1221,30 @@ export default function NewsWorldGlobe({
       }, selectedLocationId);
     });
   }, [selectedLocationId, subdivisionBaseLocations, subdivisionLocations]);
-  const subdivisionPolygonsData = useMemo(
-    () => buildSubdivisionPolygonsForCountry(drillCountryCode, subdivisionPoints),
-    [drillCountryCode, subdivisionPoints],
-  );
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!drillCountryCode) {
+      setSubdivisionPolygonsData([]);
+      return undefined;
+    }
+
+    setSubdivisionPolygonsData([]);
+    import('../lib/newsGeoSubdivisionPolygons.js')
+      .then(({ buildSubdivisionPolygonsForCountry }) => {
+        if (cancelled) return;
+        setSubdivisionPolygonsData(buildSubdivisionPolygonsForCountry(drillCountryCode, subdivisionPoints));
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.error('[NewsWorldGlobe] subdivision polygons failed', error);
+        setSubdivisionPolygonsData([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [drillCountryCode, subdivisionPoints]);
   const polygonsForGlobe = drillCountryCode ? subdivisionPolygonsData : COUNTRIES;
   const pointsForGlobe = drillCountryCode ? [] : pointsData;
   const interactionPoints = drillCountryCode ? subdivisionPoints : [...pointsData, ...countryFallbackLocations];

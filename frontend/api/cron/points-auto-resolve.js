@@ -901,6 +901,7 @@ export async function runAutoResolve({ dry = false } = {}) {
             const legs = await client.query(
               `SELECT id FROM points_markets
                  WHERE parent_id = $1
+                   AND status <> 'canceled'
                  ORDER BY id ASC
                  FOR UPDATE`,
               [m.id],

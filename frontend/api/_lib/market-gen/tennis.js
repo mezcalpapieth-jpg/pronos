@@ -6,28 +6,26 @@
  * serve and the market never had time to attract liquidity. We now
  * emit ONE parallel market per upcoming top-tier tournament:
  *   "¿Quién gana el <Tournament>?"
- * with a curated top field plus "Otro" for dark-horse winners.
+ * with confirmed draw entrants plus "Otro" for dark-horse winners.
  *
  * Mirrors the golf.js (PGA) generator shape — the cron's parallel-
  * shape leg matcher handles tennis tournament resolution unchanged
  * (id-match → label-match → 'Otro' fallback).
  *
  * Tier filter: Slams + Masters 1000 + ATP 500 only. ATP 250 and
- * regional / "challenger" events are filtered out — they don't draw
- * the whitelisted top names so a market for them would resolve to
- * "Otro" 90% of the time, which reads as broken.
+ * regional / "challenger" events are filtered out. We also skip any
+ * tournament whose ESPN draw has not populated yet; using rankings
+ * alone puts injured/skipping players in markets and reads broken.
  */
 
 const ESPN = 'https://site.api.espn.com/apis/site/v2/sports/tennis/atp/scoreboard';
 
-// Top-12 ATP field for tournament-winner markets. Each ESPN
-// athlete ID was verified by walking the 2026 ATP scoreboard and
-// matching displayNames to competitor.id (HEAD-200 against the
-// headshot CDN proves the URL exists but NOT that it points at the
-// right player — earlier versions of this file had wrong IDs that
-// would never have matched a winner). Holger Rune doesn't appear
-// in 2026 ATP events on ESPN (injured/out); swapped for Alex de
-// Minaur, a consistent top-10 player.
+const MAX_FIELD_OUTCOMES = 12;
+const MIN_CONFIRMED_DRAW_PLAYERS = 8;
+
+// Ranking/favorite priority only. These names are no longer used as
+// market entrants by themselves; they only sort players that ESPN
+// confirms are actually in the tournament draw.
 const FIELD = [
   { id: '3782', name: 'Carlos Alcaraz' },
   { id: '3623', name: 'Jannik Sinner' },
@@ -43,8 +41,118 @@ const FIELD = [
   { id: '2651', name: 'Alex de Minaur' },
 ];
 
+const FIELD_PRIORITY_BY_ID = new Map(FIELD.map((p, index) => [String(p.id), index]));
+const FIELD_PRIORITY_BY_NAME = new Map(FIELD.map((p, index) => [normalizeName(p.name), index]));
+
 function headshot(id) {
   return id ? `https://a.espncdn.com/i/headshots/tennis/players/full/${id}.png` : null;
+}
+
+function normalizeName(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function displayName(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function numberOrNull(value) {
+  if (value == null || value === '') return null;
+  const num = Number(String(value).replace(/[^0-9.-]+/g, ''));
+  return Number.isFinite(num) ? num : null;
+}
+
+function isPlaceholderPlayerName(name) {
+  const normalized = normalizeName(name);
+  return !normalized
+    || normalized === 'bye'
+    || normalized === 'tbd'
+    || normalized === 'to be determined'
+    || normalized === 'qualifier'
+    || normalized === 'lucky loser'
+    || normalized === 'alternate';
+}
+
+function tennisGroupingIsMensSingles(grouping) {
+  const slug = normalizeName(grouping?.grouping?.slug || grouping?.slug);
+  const name = normalizeName(grouping?.grouping?.name || grouping?.name || grouping?.displayName);
+  return slug === 'mens singles'
+    || name === 'mens singles'
+    || name === 'men s singles'
+    || name.includes('men singles')
+    || name.includes('men s singles');
+}
+
+function tennisCompetitorToEntrant(competitor, order) {
+  const athlete = competitor?.athlete || {};
+  const id = String(athlete.id || competitor?.id || '').trim() || null;
+  const name = displayName(
+    athlete.displayName
+      || athlete.fullName
+      || athlete.shortName
+      || competitor?.displayName
+      || competitor?.name
+      || competitor?.shortName,
+  );
+  if (isPlaceholderPlayerName(name)) return null;
+  return {
+    id,
+    name,
+    seed: numberOrNull(competitor?.seed || competitor?.curatedRank?.current),
+    rank: numberOrNull(
+      competitor?.rank
+        || athlete.rank
+        || athlete.curatedRank?.current
+        || competitor?.curatedRank?.current,
+    ),
+    order,
+  };
+}
+
+function mergeEntrant(previous, next) {
+  if (!previous) return next;
+  return sortEntrants(next, previous) < 0 ? { ...previous, ...next } : previous;
+}
+
+function fieldPriority(player) {
+  if (player?.id && FIELD_PRIORITY_BY_ID.has(String(player.id))) {
+    return FIELD_PRIORITY_BY_ID.get(String(player.id));
+  }
+  const byName = FIELD_PRIORITY_BY_NAME.get(normalizeName(player?.name));
+  return byName == null ? 9999 : byName;
+}
+
+function sortEntrants(a, b) {
+  return (a.seed ?? 9999) - (b.seed ?? 9999)
+    || (a.rank ?? 9999) - (b.rank ?? 9999)
+    || fieldPriority(a) - fieldPriority(b)
+    || (a.order ?? 9999) - (b.order ?? 9999)
+    || String(a.name || '').localeCompare(String(b.name || ''));
+}
+
+export function extractAtpMensSinglesField(event) {
+  const groupings = Array.isArray(event?.groupings) ? event.groupings : [];
+  const mens = groupings.find(tennisGroupingIsMensSingles);
+  if (!mens) return [];
+
+  const entrants = new Map();
+  let order = 0;
+  for (const competition of Array.isArray(mens.competitions) ? mens.competitions : []) {
+    for (const competitor of Array.isArray(competition?.competitors) ? competition.competitors : []) {
+      const entrant = tennisCompetitorToEntrant(competitor, order++);
+      if (!entrant) continue;
+      const key = entrant.id ? `id:${entrant.id}` : `name:${normalizeName(entrant.name)}`;
+      entrants.set(key, mergeEntrant(entrants.get(key), entrant));
+    }
+  }
+
+  return Array.from(entrants.values()).sort(sortEntrants);
 }
 
 // Top-tier tournament name matchers. ESPN's `event.major === true`
@@ -128,8 +236,24 @@ export async function generateTennisMarkets({ horizonDays = 60 } = {}) {
     const startTime = new Date(startMs).toISOString();
     const endTime = new Date(endMs + 2 * 86_400_000).toISOString();
 
+    const fullDrawField = extractAtpMensSinglesField(ev);
+    if (fullDrawField.length < MIN_CONFIRMED_DRAW_PLAYERS) {
+      console.warn('[market-gen/tennis] skipped tournament without confirmed draw field', {
+        eventId: ev.id,
+        name: ev.name,
+        fieldSize: fullDrawField.length,
+      });
+      continue;
+    }
+    const eventField = fullDrawField.slice(0, MAX_FIELD_OUTCOMES).map(player => ({
+      id: player.id,
+      name: player.name,
+      seed: player.seed,
+      rank: player.rank,
+    }));
+
     const legs = [
-      ...FIELD.map(p => ({ label: p.name, driverId: p.id })),
+      ...eventField.map(p => ({ label: p.name, driverId: p.id })),
       { label: 'Otro', driverId: null },
     ];
 
@@ -143,7 +267,7 @@ export async function generateTennisMarkets({ horizonDays = 60 } = {}) {
       icon: '🎾',
       outcomes: legs.map(l => l.label),
       outcome_images: [
-        ...FIELD.map(p => headshot(p.id)),
+        ...eventField.map(p => headshot(p.id)),
         null, // Otro
       ],
       seed_liquidity: 1000,
@@ -168,7 +292,11 @@ export async function generateTennisMarkets({ horizonDays = 60 } = {}) {
         startDateIso: ev.date,
         endDateIso: ev.endDate || null,
         isMajor: ev.major === true,
-        field: FIELD,
+        field: eventField,
+        confirmedFieldSize: fullDrawField.length,
+        fieldSource: 'espn-mens-singles-draw',
+        fieldUpdatedAt: new Date().toISOString(),
+        rankingFallbackDisabled: true,
       },
     });
   }

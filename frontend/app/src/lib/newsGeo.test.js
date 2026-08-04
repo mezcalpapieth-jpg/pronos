@@ -12,10 +12,12 @@ import {
   summarizeGeoLocations,
 } from './newsGeo.js';
 import {
-  buildSubdivisionPolygonsForCountry,
   getSubdivisionsForCountry,
   normalizeGeoLocationToSubdivision,
 } from './newsGeoSubdivisions.js';
+import {
+  buildSubdivisionPolygonsForCountry,
+} from './newsGeoSubdivisionPolygons.js';
 
 test('enriches city news as precise dots and country news as country glows', () => {
   const [guadalajara, iran] = enrichNewsItemsWithGeo([

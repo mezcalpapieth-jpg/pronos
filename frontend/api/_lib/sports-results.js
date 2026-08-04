@@ -349,11 +349,10 @@ export async function readEspnAtpTournamentWinner({ eventId }) {
 //         'athlete', id: <athleteId>, athlete: { displayName, ... } }
 //       team (PGA Zurich Classic, Presidents Cup): { type: 'team',
 //         id: <teamId>, team: { displayName: 'Smalley/Springer', ... } }
-//     Team events have no individual athlete to match against the
-//     hardcoded FIELD, so the cron's parallel-shape leg matcher
-//     falls through to "Otro". That's the correct outcome — the
-//     FIELD lists individual players, none of whom can "win" a team
-//     event by themselves.
+//     Team events return a null id but a team label. Newer generated
+//     markets include ESPN's confirmed team entrants, so label match
+//     can resolve them; older individual-field markets still fall
+//     through to "Otro".
 
 const ESPN_GOLF_BASE = 'https://site.api.espn.com/apis/site/v2/sports/golf';
 
