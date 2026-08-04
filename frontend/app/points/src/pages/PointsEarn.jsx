@@ -13,7 +13,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
-import { useT } from '@app/lib/i18n.js';
+import { useLang, useT } from '@app/lib/i18n.js';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
 import {
   claimDaily,
@@ -24,6 +24,7 @@ import {
   fetchSocialLinks,
   unlinkSocial,
   socialLinkStartUrl,
+  publicErrorMessage,
 } from '../lib/pointsApi.js';
 
 function fmt(n) {
@@ -37,6 +38,7 @@ function fmt(n) {
 // already claimed, the button greys out and becomes non-interactive until
 // the next server day (UTC midnight rollover).
 function DailyClaimCard({ onClaimed, alreadyClaimedToday: initialClaimed, onClaim }) {
+  const lang = useLang();
   const [state, setState] = useState({
     loading: false,
     msg: null,
@@ -70,7 +72,7 @@ function DailyClaimCard({ onClaimed, alreadyClaimedToday: initialClaimed, onClai
       onClaimed?.(r);
       onClaim?.(r);
     } catch (e) {
-      setState(s => ({ ...s, loading: false, err: e.code || e.message }));
+      setState(s => ({ ...s, loading: false, err: publicErrorMessage(e, lang, 'default') }));
     }
   }
 
@@ -93,7 +95,7 @@ function DailyClaimCard({ onClaimed, alreadyClaimedToday: initialClaimed, onClai
         <div style={{ ...noticeStyle, color: 'var(--green)' }}>{state.msg}</div>
       )}
       {state.err && (
-        <div style={{ ...noticeStyle, color: 'var(--red, #ef4444)' }}>Error: {state.err}</div>
+        <div style={{ ...noticeStyle, color: 'var(--red, #ef4444)' }}>{state.err}</div>
       )}
       <button
         className="btn-primary"
@@ -405,6 +407,7 @@ const SOCIAL_PROVIDERS = [
 ];
 
 function SocialLinksCard() {
+  const lang = useLang();
   const [links, setLinks] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(null);
@@ -416,7 +419,7 @@ function SocialLinksCard() {
       for (const l of r.links || []) map[l.provider] = l;
       setLinks(map);
     } catch (e) {
-      setErr(e.code || e.message);
+      setErr(publicErrorMessage(e, lang, 'social_link_failed'));
     }
   }
   useEffect(() => { load(); }, []);
@@ -434,7 +437,7 @@ function SocialLinksCard() {
       url.searchParams.delete('link_error');
       window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
     }
-    if (linkError) setErr(linkError);
+    if (linkError) setErr(publicErrorMessage(linkError, lang, 'social_link_failed'));
   }, []);
 
   async function handleConnect(provider) {
@@ -449,7 +452,7 @@ function SocialLinksCard() {
       await unlinkSocial(provider);
       await load();
     } catch (e) {
-      setErr(e.code || e.message);
+      setErr(publicErrorMessage(e, lang, 'social_link_failed'));
     } finally {
       setBusy(null);
     }
@@ -464,7 +467,7 @@ function SocialLinksCard() {
         ni revisión manual. Ganas MXNP en cuanto conectas.
       </p>
       {err && (
-        <div style={{ ...noticeStyle, color: 'var(--red, #ef4444)' }}>Error: {err}</div>
+        <div style={{ ...noticeStyle, color: 'var(--red, #ef4444)' }}>{err}</div>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
         {SOCIAL_PROVIDERS.map(p => {
@@ -575,6 +578,7 @@ function SocialLinksCard() {
 // MVP and the new banner — only the *trigger* lives elsewhere.
 
 function SocialTasksCard() {
+  const lang = useLang();
   const [tasks, setTasks] = useState(null);
   const [err, setErr] = useState(null);
 
@@ -583,7 +587,7 @@ function SocialTasksCard() {
       const r = await fetchSocialTaskCatalog();
       setTasks(r.tasks);
     } catch (e) {
-      setErr(e.code || e.message);
+      setErr(publicErrorMessage(e, lang, 'load_failed'));
     }
   }
   useEffect(() => { load(); }, []);
@@ -593,7 +597,7 @@ function SocialTasksCard() {
       await submitSocialTask(taskKey);
       await load();
     } catch (e) {
-      setErr(e.code || e.message);
+      setErr(publicErrorMessage(e, lang, 'default'));
     }
   }
 
@@ -606,7 +610,7 @@ function SocialTasksCard() {
         menos de 24 h. Si se rechaza, puedes reintentar con nueva captura.
       </p>
       {err && (
-        <div style={{ ...noticeStyle, color: 'var(--red, #ef4444)' }}>Error: {err}</div>
+        <div style={{ ...noticeStyle, color: 'var(--red, #ef4444)' }}>{err}</div>
       )}
       {!tasks && !err && (
         <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', padding: 20 }}>

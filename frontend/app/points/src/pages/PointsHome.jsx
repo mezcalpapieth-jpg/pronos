@@ -166,9 +166,7 @@ export default function PointsHome({ onOpenLogin }) {
         }
       } catch (e) {
         if (!cancelled) {
-          const parts = [e.code || e.message || 'load_failed'];
-          if (e.detail) parts.push(e.detail);
-          setError(parts.join(' · '));
+          setError('load_failed');
           setLoading(false);
         }
       }
@@ -480,7 +478,7 @@ export default function PointsHome({ onOpenLogin }) {
             color: 'var(--red, #ef4444)',
             whiteSpace: 'pre-wrap',
           }}>
-            {t('points.home.loadError', { err: error })}
+            {t('points.home.loadError')}
           </div>
         )}
         {!loading && !error && (trendingView === 'map' ? (homeMapMarkets.length + mapNewsItems.length) : filtered.length) === 0 && (

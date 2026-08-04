@@ -29,7 +29,7 @@ export default async function handler(req, res) {
 
   try {
     setCacheHeaders(res, { scope: 'private', maxAge: 20, staleWhileRevalidate: 60 });
-    const { value: payload, hit } = await cachedJson('points:admin:stats:v3', 20_000, async () => {
+    const { value: payload, hit } = await cachedJson('points:admin:stats:v4', 20_000, async () => {
     await timer.time('schema_points', () => ensurePointsSchema(schemaSql));
     await timer.time('schema_interest', () => ensureInterestSchema(schemaSql));
 
@@ -44,6 +44,8 @@ export default async function handler(req, res) {
       siteTimeRows,
       publicityRows,
       activityRows,
+      distributionUserRows,
+      signupRows,
     ] = await timer.time('db_admin_stats', () => Promise.all([
       sql`SELECT COUNT(*)::int AS c FROM points_users`,
       sql`SELECT COALESCE(SUM(balance), 0) AS total FROM points_balances`,
@@ -285,6 +287,84 @@ export default async function handler(req, res) {
         ORDER BY created_at DESC
         LIMIT 40
       `,
+      sql`
+        WITH user_distributions AS (
+          SELECT
+            kind,
+            username,
+            COALESCE(SUM(amount), 0) AS total,
+            COUNT(*)::int AS count,
+            MAX(created_at) AS last_at
+          FROM points_distributions
+          WHERE created_at > NOW() - INTERVAL '7 days'
+          GROUP BY kind, username
+        ),
+        ranked AS (
+          SELECT
+            *,
+            ROW_NUMBER() OVER (
+              PARTITION BY kind
+              ORDER BY ABS(total) DESC, last_at DESC, username ASC
+            ) AS rn
+          FROM user_distributions
+        )
+        SELECT kind, username, total, count, last_at
+        FROM ranked
+        WHERE rn <= 8
+        ORDER BY kind ASC, ABS(total) DESC, last_at DESC, username ASC
+      `,
+      sql`
+        WITH recent_users AS (
+          SELECT
+            u.username,
+            u.email,
+            u.created_at
+          FROM points_users u
+          WHERE u.username IS NOT NULL
+          ORDER BY u.created_at DESC NULLS LAST, u.username ASC
+          LIMIT 200
+        ),
+        trade_counts AS (
+          SELECT
+            t.username,
+            COUNT(*)::int AS trade_count,
+            MAX(t.created_at) AS last_trade_at
+          FROM points_trades t
+          JOIN recent_users ru
+            ON LOWER(ru.username) = LOWER(t.username)
+          GROUP BY t.username
+        ),
+        signup_bonus AS (
+          SELECT
+            d.username,
+            MAX(d.created_at) AS bonus_at
+          FROM points_distributions d
+          JOIN recent_users ru
+            ON LOWER(ru.username) = LOWER(d.username)
+          WHERE d.kind = 'signup_bonus'
+          GROUP BY d.username
+        )
+        SELECT
+          ru.username,
+          ru.email,
+          ru.created_at,
+          COALESCE(b.balance, 0) AS balance,
+          pa.source AS publicity_source,
+          pa.converted_at AS attributed_at,
+          COALESCE(tc.trade_count, 0)::int AS trade_count,
+          tc.last_trade_at,
+          sb.bonus_at
+        FROM recent_users ru
+        LEFT JOIN points_balances b
+          ON LOWER(b.username) = LOWER(ru.username)
+        LEFT JOIN points_publicity_attributions pa
+          ON LOWER(pa.username) = LOWER(ru.username)
+        LEFT JOIN trade_counts tc
+          ON LOWER(tc.username) = LOWER(ru.username)
+        LEFT JOIN signup_bonus sb
+          ON LOWER(sb.username) = LOWER(ru.username)
+        ORDER BY COALESCE(ru.created_at, sb.bonus_at) DESC NULLS LAST, ru.username ASC
+      `,
     ]));
 
     return {
@@ -295,6 +375,25 @@ export default async function handler(req, res) {
         kind: r.kind,
         total: Number(r.total),
         count: r.count,
+        users: distributionUserRows
+          .filter(u => u.kind === r.kind)
+          .map(u => ({
+            username: u.username,
+            total: Number(u.total || 0),
+            count: Number(u.count || 0),
+            lastAt: u.last_at,
+          })),
+      })),
+      userSignups: signupRows.map(r => ({
+        username: r.username,
+        email: r.email,
+        createdAt: r.created_at,
+        balance: Number(r.balance || 0),
+        publicitySource: r.publicity_source || null,
+        attributedAt: r.attributed_at || null,
+        tradeCount: Number(r.trade_count || 0),
+        lastTradeAt: r.last_trade_at,
+        signupBonusAt: r.bonus_at,
       })),
       interest: {
         windows: INTEREST_WINDOWS,

@@ -2642,31 +2642,8 @@ function StatsPanel() {
         <StatCard label="Mercados (activos / total)" value={`${stats.markets.active} / ${stats.markets.total}`} />
       </div>
 
-      <div style={{
-        background: 'var(--surface1)', border: '1px solid var(--border)',
-        borderRadius: 12, padding: 20,
-      }}>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 12 }}>
-          Distribuciones (últimos 7 días)
-        </div>
-        {stats.recentDistributions.length === 0 && (
-          <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-            Sin actividad reciente.
-          </p>
-        )}
-        {stats.recentDistributions.map(d => (
-          <div key={d.kind} style={{
-            display: 'flex', justifyContent: 'space-between',
-            padding: '6px 0', borderBottom: '1px solid var(--border)',
-            fontFamily: 'var(--font-mono)', fontSize: 12,
-          }}>
-            <span style={{ color: 'var(--text-secondary)' }}>{d.kind}</span>
-            <span style={{ color: d.total >= 0 ? 'var(--green)' : 'var(--red, #ef4444)', fontWeight: 700 }}>
-              {d.total >= 0 ? '+' : ''}{Number(d.total).toLocaleString('es-MX')} MXNP ({d.count})
-            </span>
-          </div>
-        ))}
-      </div>
+      <AdminUserSignupPanel users={stats.userSignups} totalUsers={stats.users} />
+      <AdminDistributionsPanel distributions={stats.recentDistributions} />
 
       <AdminPublicityPanel publicity={stats.publicity} />
       <AdminInterestPanel interest={stats.interest} />
@@ -2683,6 +2660,23 @@ function adminNumber(value, options = {}) {
 
 function adminMxnp(value) {
   return `${adminNumber(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MXNP`;
+}
+
+function adminSignedMxnp(value) {
+  const n = Number(value || 0);
+  return `${n >= 0 ? '+' : ''}${adminMxnp(n)}`;
+}
+
+function adminDateTime(value) {
+  if (!value) return '-';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '-';
+  return d.toLocaleString('es-MX', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 function formatAdminDuration(seconds) {
@@ -2711,6 +2705,196 @@ function adminActionLabel(row) {
     void_refund: 'Reembolso',
   };
   return labels[row.action] || row.action || 'Distribución';
+}
+
+function AdminUserSignupPanel({ users, totalUsers }) {
+  const rows = Array.isArray(users) ? users : [];
+  return (
+    <section style={adminPanelStyle}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+        <div style={adminPanelTitle}>Usuarios registrados</div>
+        <div style={{
+          color: 'var(--text-muted)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+        }}>
+          {adminNumber(totalUsers)} total · últimos {rows.length}
+        </div>
+      </div>
+      {rows.length === 0 ? (
+        <p style={adminEmptyStyle}>Aún no hay usuarios registrados.</p>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <div style={{
+            minWidth: 840,
+            display: 'grid',
+            gap: 0,
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+          }}>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(120px, 0.8fr) minmax(210px, 1.25fr) minmax(90px, 0.55fr) minmax(110px, 0.6fr) minmax(90px, 0.45fr) minmax(125px, 0.6fr)',
+              gap: 12,
+              padding: '0 0 8px',
+              borderBottom: '1px solid var(--border)',
+              color: 'var(--text-muted)',
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+            }}>
+              <span>Usuario</span>
+              <span>Email</span>
+              <span>Origen</span>
+              <span style={{ textAlign: 'right' }}>Balance</span>
+              <span style={{ textAlign: 'right' }}>Trades</span>
+              <span style={{ textAlign: 'right' }}>Alta</span>
+            </div>
+            {rows.map(row => (
+              <div key={row.username} style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(120px, 0.8fr) minmax(210px, 1.25fr) minmax(90px, 0.55fr) minmax(110px, 0.6fr) minmax(90px, 0.45fr) minmax(125px, 0.6fr)',
+                gap: 12,
+                alignItems: 'center',
+                padding: '10px 0',
+                borderBottom: '1px solid var(--border)',
+              }}>
+                <a
+                  href={`/u/${row.username}`}
+                  style={{
+                    minWidth: 0,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    color: 'var(--text-primary)',
+                    fontFamily: 'var(--font-body)',
+                    fontSize: 14,
+                    fontWeight: 700,
+                    textDecoration: 'none',
+                  }}
+                >
+                  @{row.username}
+                </a>
+                <span style={{
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  color: row.email ? 'var(--text-secondary)' : 'var(--text-muted)',
+                }}>
+                  {row.email || 'Sin email'}
+                </span>
+                <span style={{
+                  color: row.publicitySource ? 'var(--orange)' : 'var(--text-muted)',
+                  textTransform: row.publicitySource ? 'uppercase' : 'none',
+                }}>
+                  {row.publicitySource || 'Directo'}
+                </span>
+                <span style={{ color: 'var(--green)', fontWeight: 700, textAlign: 'right' }}>
+                  {adminMxnp(row.balance)}
+                </span>
+                <span style={{ color: 'var(--text-muted)', textAlign: 'right' }}>
+                  {adminNumber(row.tradeCount)}
+                </span>
+                <span style={{ color: 'var(--text-muted)', textAlign: 'right' }}>
+                  {adminDateTime(row.createdAt || row.signupBonusAt)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AdminDistributionsPanel({ distributions }) {
+  const rows = Array.isArray(distributions) ? distributions : [];
+  return (
+    <section style={adminPanelStyle}>
+      <div style={adminPanelTitle}>Distribuciones por usuario (últimos 7 días)</div>
+      {rows.length === 0 ? (
+        <p style={adminEmptyStyle}>Sin actividad reciente.</p>
+      ) : (
+        <div style={{ display: 'grid', gap: 12 }}>
+          {rows.map(d => {
+            const users = Array.isArray(d.users) ? d.users : [];
+            return (
+              <div key={d.kind} style={{
+                borderBottom: '1px solid var(--border)',
+                paddingBottom: 10,
+              }}>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(0, 1fr) minmax(130px, auto) minmax(90px, auto)',
+                  gap: 12,
+                  alignItems: 'center',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 12,
+                }}>
+                  <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-body)', fontSize: 15, fontWeight: 700 }}>
+                    {adminActionLabel({ kind: 'distribution', action: d.kind })}
+                  </span>
+                  <span style={{ color: d.total >= 0 ? 'var(--green)' : 'var(--red, #ef4444)', fontWeight: 700, textAlign: 'right' }}>
+                    {adminSignedMxnp(d.total)}
+                  </span>
+                  <span style={{ color: 'var(--text-muted)', textAlign: 'right' }}>
+                    {adminNumber(d.count)} movs.
+                  </span>
+                </div>
+                {users.length === 0 ? (
+                  <p style={{ ...adminEmptyStyle, margin: '8px 0 0' }}>
+                    Sin usuarios en el desglose.
+                  </p>
+                ) : (
+                  <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
+                    {users.map(userRow => (
+                      <div key={`${d.kind}-${userRow.username}`} style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'minmax(130px, 0.7fr) minmax(110px, auto) minmax(80px, auto) minmax(120px, auto)',
+                        gap: 12,
+                        alignItems: 'center',
+                        padding: '7px 10px',
+                        background: 'rgba(255,255,255,0.025)',
+                        borderRadius: 8,
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 11,
+                      }}>
+                        <a href={`/u/${userRow.username}`} style={{
+                          minWidth: 0,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          color: 'var(--text-secondary)',
+                          textDecoration: 'none',
+                        }}>
+                          @{userRow.username}
+                        </a>
+                        <span style={{
+                          color: userRow.total >= 0 ? 'var(--green)' : 'var(--red, #ef4444)',
+                          textAlign: 'right',
+                          fontWeight: 700,
+                        }}>
+                          {adminSignedMxnp(userRow.total)}
+                        </span>
+                        <span style={{ color: 'var(--text-muted)', textAlign: 'right' }}>
+                          {adminNumber(userRow.count)}x
+                        </span>
+                        <span style={{ color: 'var(--text-muted)', textAlign: 'right' }}>
+                          {adminDateTime(userRow.lastAt)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
 }
 
 function AdminPublicityPanel({ publicity }) {

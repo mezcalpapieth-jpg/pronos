@@ -73,6 +73,8 @@ const POINTS_SCHEMA_MIGRATIONS = [
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_points_users_username_lower ON points_users (LOWER(username))`,
   `CREATE INDEX IF NOT EXISTS idx_points_users_wallet ON points_users(wallet_address)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_users_created_at
+    ON points_users(created_at DESC)`,
   // Turnkey delegated-signing policy (M2). When non-null, the Pronos
   // backend API key can sign on-chain trades on this user's behalf
   // within the policy's scope — up to `delegation_daily_cap_mxnb`
@@ -483,6 +485,8 @@ const POINTS_SCHEMA_MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_points_distributions_user ON points_distributions(username, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_points_distributions_kind ON points_distributions(kind, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_distributions_created_kind_user
+    ON points_distributions(created_at DESC, kind, username)`,
   `CREATE INDEX IF NOT EXISTS idx_points_distributions_user_kind_ref
     ON points_distributions(username, kind, reference_id, created_at DESC)`,
 

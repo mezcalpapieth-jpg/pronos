@@ -11,7 +11,7 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { quoteBuy, executeBuy } from '../lib/pointsApi.js';
+import { quoteBuy, executeBuy, publicErrorMessage } from '../lib/pointsApi.js';
 import { useLang, useT } from '@app/lib/i18n.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 
@@ -58,7 +58,7 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
         .catch(e => {
           if (cancelled) return;
           setQuote(null);
-          setQuoteError(e.code || e.message || 'quote_failed');
+          setQuoteError(publicErrorMessage(e, lang, 'quote_failed'));
           setQuoteState('error');
         });
     }, 200);
@@ -289,7 +289,7 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
           } />
           {quoteState === 'error' && (
             <div style={{ color: 'var(--red, #ef4444)', fontSize: 11, marginTop: 8 }}>
-              {t('points.buy.quoteError', { err: quoteError })}
+              {quoteError || t('points.buy.quoteError')}
             </div>
           )}
         </div>
@@ -380,7 +380,7 @@ function QuoteRow({ label, value, bold, accent, good }) {
 
 function mapError(code, t) {
   if (!code) return t('points.buy.errorGeneric');
-  if (typeof code !== 'string') return String(code);
+  if (typeof code !== 'string') return t('points.buy.errorGeneric');
   if (code.includes('insufficient')) return t('points.buy.errorInsufficient');
   if (code.includes('not_authenticated')) return t('points.buy.errorNotAuth');
   if (code.includes('market_closed')) return t('points.buy.errorMarketClosed');

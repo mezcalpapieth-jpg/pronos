@@ -23,7 +23,7 @@ export const CHAMPIONS_LEAGUE_FINAL = {
 };
 
 export const CHAMPIONS_LEAGUE_HUB_PATH = '/c/deportes/uefa-champions-league';
-export const CHAMPIONS_LEAGUE_FINAL_BADGE = '🏆';
+export const CHAMPIONS_LEAGUE_FINAL_BADGE = 'CL';
 
 export const CHAMPIONS_LEAGUE_NEXT_SEASON = {
   enabled: false,

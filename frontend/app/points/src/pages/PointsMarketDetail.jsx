@@ -903,8 +903,8 @@ function OrderBookPanel({
         bookCacheRef.current.set(selectedOption.key, payload);
         if (!cancelled) setBook(payload);
       })
-      .catch((e) => {
-        if (!cancelled) setError(e.code || e.message || 'orderbook_failed');
+      .catch(() => {
+        if (!cancelled) setError('orderbook_failed');
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -1211,7 +1211,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
           });
         }
       })
-      .catch(e => { if (!cancelled) { setError(e.code || e.message); setLoading(false); } });
+      .catch(() => { if (!cancelled) { setError('load_failed'); setLoading(false); } });
     return () => { cancelled = true; };
   }, [id]);
 

@@ -14,10 +14,17 @@ test('admin stats includes invested volume, site time, publicity links, and per-
   assert.match(statsSource, /PUBLICITY_SOURCES/);
   assert.match(statsSource, /share_pct/);
   assert.match(statsSource, /activityRows/);
+  assert.match(statsSource, /distributionUserRows/);
+  assert.match(statsSource, /signupRows/);
   assert.match(statsSource, /volume:\s*\{/);
   assert.match(statsSource, /siteTime:\s*\{/);
   assert.match(statsSource, /publicity:\s*\{/);
   assert.match(statsSource, /activity: activityRows/);
+  assert.match(statsSource, /userSignups:/);
+  assert.match(statsSource, /points_publicity_attributions/);
+  assert.match(statsSource, /LOWER\(ru\.username\) = LOWER\(t\.username\)/);
+  assert.match(statsSource, /recentDistributions: distRows\.map/);
+  assert.match(statsSource, /users: distributionUserRows/);
 });
 
 test('site-time heartbeat stores only daily aggregate seconds per user', () => {
@@ -37,5 +44,7 @@ test('site-time and publicity analytics tables are present in runtime and manual
     assert.match(migrationSource, /PRIMARY KEY \(source, day\)/);
     assert.match(migrationSource, /PRIMARY KEY \(visitor_key, source, day\)/);
     assert.match(migrationSource, /username\s+TEXT PRIMARY KEY/);
+    assert.match(migrationSource, /idx_points_users_created_at/);
+    assert.match(migrationSource, /idx_points_distributions_created_kind_user/);
   }
 });

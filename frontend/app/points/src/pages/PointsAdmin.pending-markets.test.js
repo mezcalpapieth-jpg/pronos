@@ -12,6 +12,7 @@ import { readFile } from 'node:fs/promises';
 const source = await readFile(new URL('./PointsAdmin.jsx', import.meta.url), 'utf8');
 const navSource = await readFile(new URL('../components/PointsNav.jsx', import.meta.url), 'utf8');
 const apiSource = await readFile(new URL('../lib/pointsApi.js', import.meta.url), 'utf8');
+const statsApiSource = await readFile(new URL('../../../../api/points/admin/stats.js', import.meta.url), 'utf8');
 
 test('Points admin exposes a re-add action for rejected generated markets', () => {
   assert.match(source, /filter === 'rejected'/);
@@ -104,4 +105,18 @@ test('Points admin can cancel active and por resolver markets', () => {
   assert.match(source, /onCancel=\{cancelMarket\}/);
   assert.match(source, /actionMode === 'cancel'/);
   assert.match(source, /Se devolverá el costo base/);
+});
+
+test('Points admin stats shows signup sheet and per-user distribution detail', () => {
+  assert.match(source, /AdminUserSignupPanel/);
+  assert.match(source, /Usuarios registrados/);
+  assert.match(source, /row\.email/);
+  assert.match(source, /row\.publicitySource/);
+  assert.match(source, /AdminDistributionsPanel/);
+  assert.match(source, /Distribuciones por usuario/);
+  assert.match(source, /userRow\.username/);
+  assert.match(source, /adminSignedMxnp/);
+  assert.match(statsApiSource, /userSignups:/);
+  assert.match(statsApiSource, /distributionUserRows/);
+  assert.match(statsApiSource, /points_publicity_attributions/);
 });

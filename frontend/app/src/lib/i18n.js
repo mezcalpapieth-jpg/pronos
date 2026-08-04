@@ -524,7 +524,7 @@ const STRINGS = {
   'points.hero.rankBy':       { es: 'RANKING POR CARTERA',   en: 'RANKED BY PORTFOLIO' },
   'points.hero.cashPrizes':   { es: 'PREMIOS EN EFECTIVO',   en: 'CASH PRIZES' },
 
-  'points.home.loadError':    { es: 'No pudimos cargar los mercados · {err}', en: 'Could not load markets · {err}' },
+  'points.home.loadError':    { es: 'No pudimos cargar los mercados. Intenta otra vez.', en: 'Could not load markets. Try again.' },
 
   // Admin
   'points.admin.filter.all':       { es: 'Todos',          en: 'All' },
@@ -744,7 +744,7 @@ const STRINGS = {
   'points.buy.winProfit':     { es: 'Ganancia si aciertas',   en: 'Profit if correct' },
   'points.buy.priceAfter':    { es: 'Precio tras la compra',  en: 'Price after purchase' },
   'points.buy.calculating':   { es: 'Calculando…',            en: 'Calculating…' },
-  'points.buy.quoteError':    { es: 'No se pudo calcular el precio ({err}).', en: 'Could not calculate the price ({err}).' },
+  'points.buy.quoteError':    { es: 'No se pudo calcular el precio. Intenta otra vez.', en: 'Could not calculate the price. Try again.' },
   'points.buy.insufficientBalance': { es: 'Balance insuficiente', en: 'Insufficient balance' },
   'points.buy.insufficientBalanceDetail': { es: 'Balance insuficiente. Tienes {amount} MXNP.', en: 'Insufficient balance. You have {amount} MXNP.' },
   'points.buy.success':       { es: 'Compra realizada',       en: 'Purchase complete' },
@@ -754,7 +754,7 @@ const STRINGS = {
   'points.buy.errorNotAuth':  { es: 'Tu sesión expiró. Vuelve a iniciar sesión.', en: 'Your session expired. Please sign in again.' },
   'points.buy.errorMarketClosed': { es: 'El mercado cerró o se resolvió.', en: 'The market closed or resolved.' },
   'points.buy.errorMarketNotFound': { es: 'Mercado no encontrado.', en: 'Market not found.' },
-  'points.buy.errorPrefix':   { es: 'Error: {code}',          en: 'Error: {code}' },
+  'points.buy.errorPrefix':   { es: 'No pudimos completar la operación. Intenta otra vez.', en: 'Could not complete the action. Try again.' },
 
   'points.portfolio.title':   { es: 'Portafolio',            en: 'Portfolio' },
   'points.portfolio.tab.open': { es: 'Activo',               en: 'Active' },

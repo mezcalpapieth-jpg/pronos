@@ -18,7 +18,8 @@
  */
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { authorizeDelegation } from '../lib/pointsApi.js';
+import { useLang } from '@app/lib/i18n.js';
+import { authorizeDelegation, publicErrorMessage } from '../lib/pointsApi.js';
 
 const BULLETS = [
   {
@@ -49,6 +50,7 @@ const BULLETS = [
 ];
 
 export default function PointsDelegationModal({ open, onClose, onAuthorized }) {
+  const lang = useLang();
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState(null);
   if (!open) return null;
@@ -60,7 +62,7 @@ export default function PointsDelegationModal({ open, onClose, onAuthorized }) {
       const r = await authorizeDelegation();
       onAuthorized?.(r);
     } catch (e) {
-      setErr(e.detail || e.code || e.message);
+      setErr(publicErrorMessage(e, lang, 'default'));
     } finally {
       setSubmitting(false);
     }

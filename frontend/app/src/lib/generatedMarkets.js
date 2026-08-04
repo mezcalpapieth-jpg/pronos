@@ -65,7 +65,7 @@ export function normalize(row) {
     title: row.title,
     category: row.category || 'general',
     categoryLabel: row.category_label || 'GENERAL',
-    icon: row.icon || '📰',
+    icon: row.icon || null,
     deadline: row.deadline || '',
     options: Array.isArray(row.options) ? row.options : JSON.parse(row.options || '[]'),
     volume: row.volume || '0',

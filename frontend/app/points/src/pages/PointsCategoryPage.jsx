@@ -214,7 +214,7 @@ export default function PointsCategoryPage() {
         }
       } catch (e) {
         if (!cancelled) {
-          setError(e.code || e.message || 'load_failed');
+          setError('load_failed');
           setLoading(false);
         }
       }
@@ -606,7 +606,7 @@ function MarketsGrid({ loading, error, filtered, positionByMarket, emptyKey, sea
         fontSize: 13,
         color: 'var(--red, #ef4444)',
       }}>
-        {t('points.home.loadError', { err: error })}
+        {t('points.home.loadError')}
       </div>
     );
   }

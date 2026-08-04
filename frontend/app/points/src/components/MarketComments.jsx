@@ -9,8 +9,8 @@
  * host page stays quiet on failure.
  */
 import React, { useEffect, useState, useCallback } from 'react';
-import { fetchComments, postComment, deleteComment } from '../lib/pointsApi.js';
-import { useT } from '@app/lib/i18n.js';
+import { fetchComments, postComment, deleteComment, publicErrorMessage } from '../lib/pointsApi.js';
+import { useLang, useT } from '@app/lib/i18n.js';
 
 const MAX_BODY = 1000;
 
@@ -27,6 +27,7 @@ function formatAgo(iso) {
 
 export default function MarketComments({ marketId, authenticated, username, onOpenLogin }) {
   const t = useT();
+  const lang = useLang();
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [body, setBody] = useState('');
@@ -62,7 +63,7 @@ export default function MarketComments({ marketId, authenticated, username, onOp
       setBody('');
       await load();
     } catch (e) {
-      setError(e.code || e.message || 'post_failed');
+      setError(publicErrorMessage(e, lang, 'default'));
     } finally {
       setSubmitting(false);
     }
@@ -74,7 +75,7 @@ export default function MarketComments({ marketId, authenticated, username, onOp
       await deleteComment(id);
       setComments(prev => prev.filter(c => c.id !== id));
     } catch (e) {
-      alert(t('points.comments.deleteFail', { err: e.code || e.message }));
+      alert(t('points.comments.deleteFail', { err: publicErrorMessage(e, lang, 'default') }));
     }
   }
 

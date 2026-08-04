@@ -35,7 +35,7 @@ const PLATFORMS = [
   {
     id: 'whatsapp',
     label: 'WhatsApp',
-    icon: '🟢',
+    icon: 'WA',
     // wa.me allows omitting the recipient phone — opens chat picker
     intent: ({ url, text }) =>
       `https://wa.me/?text=${encodeURIComponent(`${text} ${url}`)}`,
@@ -50,14 +50,14 @@ const PLATFORMS = [
   {
     id: 'telegram',
     label: 'Telegram',
-    icon: '✈',
+    icon: 'TG',
     intent: ({ url, text }) =>
       `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`,
   },
   {
     id: 'instagram',
     label: 'Instagram',
-    icon: '📷',
+    icon: 'IG',
     // Instagram has no URL share intent. We copy the link and toast
     // the user to paste it. This is how every other app handles IG.
     intent: null,
@@ -65,7 +65,7 @@ const PLATFORMS = [
   {
     id: 'email',
     label: 'Email',
-    icon: '✉',
+    icon: 'EMAIL',
     intent: ({ url, text }) =>
       `mailto:?subject=${encodeURIComponent(text)}&body=${encodeURIComponent(url)}`,
   },
@@ -143,7 +143,7 @@ export default function ShareButton({ marketId, app = 'points', question, compac
 
   async function handleCopy() {
     const ok = await copyToClipboard();
-    flashToast(ok ? '✓ Link copiado' : 'No se pudo copiar');
+    flashToast(ok ? 'Link copiado' : 'No se pudo copiar');
     setOpen(false);
   }
 
@@ -161,7 +161,7 @@ export default function ShareButton({ marketId, app = 'points', question, compac
   const hasNativeShare = typeof navigator !== 'undefined' && !!navigator.share;
 
   const triggerLabel = compact
-    ? '🔗'
+    ? 'LINK'
     : (toast || 'Compartir');
 
   const triggerStyle = {
@@ -191,7 +191,7 @@ export default function ShareButton({ marketId, app = 'points', question, compac
         aria-label="Compartir mercado"
         title={shareUrl}
       >
-        {!compact && <span aria-hidden="true">🔗</span>}
+        {!compact && <span aria-hidden="true">LINK</span>}
         {triggerLabel}
       </button>
 
@@ -217,7 +217,7 @@ export default function ShareButton({ marketId, app = 'points', question, compac
           }}
         >
           {hasNativeShare && (
-            <ShareMenuItem icon="📤" label="Compartir…" onClick={handleNative} />
+            <ShareMenuItem icon="SHARE" label="Compartir…" onClick={handleNative} />
           )}
           {PLATFORMS.map(p => (
             <ShareMenuItem
@@ -228,7 +228,7 @@ export default function ShareButton({ marketId, app = 'points', question, compac
             />
           ))}
           <div style={{ height: 1, background: 'var(--border)', margin: '4px 8px' }} />
-          <ShareMenuItem icon="🔗" label="Copiar link" onClick={handleCopy} />
+          <ShareMenuItem icon="LINK" label="Copiar link" onClick={handleCopy} />
         </div>
       )}
     </div>
@@ -258,7 +258,7 @@ function ShareMenuItem({ icon, label, onClick }) {
       onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface2)'; }}
       onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
     >
-      <span aria-hidden="true" style={{ fontSize: 16, width: 20, textAlign: 'center' }}>{icon}</span>
+      <span aria-hidden="true" style={{ fontSize: 10, width: 34, textAlign: 'center', fontFamily: 'var(--font-mono)', color: 'var(--orange)' }}>{icon}</span>
       <span>{label}</span>
     </button>
   );

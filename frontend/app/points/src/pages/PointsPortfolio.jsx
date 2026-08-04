@@ -12,7 +12,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
-import { useT } from '@app/lib/i18n.js';
+import { useLang, useT } from '@app/lib/i18n.js';
 import { historyPnlValue } from '../lib/historyPnl.js';
 import { buildSellPreview } from '../lib/sellPreview.js';
 import { HistorySkeleton, LeaderboardSkeleton, PositionSkeleton } from '../components/PointsSkeleton.jsx';
@@ -27,6 +27,7 @@ import {
   claimDaily,
   fetchDailyStatus,
   dismissPosition,
+  publicErrorMessage,
 } from '../lib/pointsApi.js';
 
 function fmt(n) {
@@ -381,6 +382,7 @@ function PositionCard({ position, onSell, onRedeem, onDismiss, selling, redeemin
 // showing a disabled button. The claim card still appears on /earn with a
 // greyed-out locked state, so the user can see the streak progression.
 function DailyClaimCard({ onClaimed }) {
+  const lang = useLang();
   // `status` = null → still loading, undefined payload → no check ran yet,
   // `{ alreadyClaimedToday: true, ... }` → already claimed (card hidden).
   const [status, setStatus] = useState(null);
@@ -406,7 +408,7 @@ function DailyClaimCard({ onClaimed }) {
       onClaimed?.(r);
       await refreshStatus(); // hides the card
     } catch (e) {
-      setState({ loading: false, msg: null, err: e.code || e.message });
+      setState({ loading: false, msg: null, err: publicErrorMessage(e, lang, 'default') });
     }
   }
 
@@ -436,7 +438,7 @@ function DailyClaimCard({ onClaimed }) {
       )}
       {state.err && (
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--red, #ef4444)', marginBottom: 10 }}>
-          Error: {state.err}
+          {state.err}
         </div>
       )}
       <button
@@ -729,6 +731,7 @@ function CycleHistoryLeaderboard({ currentUsername }) {
 export default function PointsPortfolio() {
   const navigate = useNavigate();
   const t = useT();
+  const lang = useLang();
   const { authenticated, user, loading: authLoading, refresh } = usePointsAuth();
   const [tab, setTab] = useState('activo'); // 'activo' | 'historial'
   const [positions, setPositions] = useState([]);
@@ -780,7 +783,7 @@ export default function PointsPortfolio() {
       const preview = buildSellPreview(pos, quote);
       setSellPreview({ position: pos, quote, preview, loading: false, error: null, submitting: false });
     } catch (e) {
-      setSellPreview({ position: pos, loading: false, error: e.code || e.message || 'quote_failed', preview: null, quote: null, submitting: false });
+      setSellPreview({ position: pos, loading: false, error: publicErrorMessage(e, lang, 'quote_failed'), preview: null, quote: null, submitting: false });
     } finally {
       setActionState({ id: null, type: null });
     }
@@ -813,8 +816,8 @@ export default function PointsPortfolio() {
         ...prev,
         submitting: false,
         error: e.code === 'price_moved'
-          ? 'El precio se movió. Cierra y vuelve a cotizar.'
-          : (e.code || e.message || 'sell_failed'),
+          ? publicErrorMessage(e, lang, 'price_moved')
+          : publicErrorMessage(e, lang, 'default'),
       } : prev);
     } finally {
       setActionState({ id: null, type: null });
@@ -830,7 +833,7 @@ export default function PointsPortfolio() {
       await refresh();
       await load();
     } catch (e) {
-      setMsg({ type: 'error', text: `No se pudo cobrar: ${e.code || e.message}` });
+      setMsg({ type: 'error', text: publicErrorMessage(e, lang, 'default') });
     } finally {
       setActionState({ id: null, type: null });
     }
@@ -852,7 +855,7 @@ export default function PointsPortfolio() {
     try {
       await dismissPosition({ marketId: pos.marketId, outcomeIndex: pos.outcomeIndex });
     } catch (e) {
-      setMsg({ type: 'error', text: `No se pudo cerrar: ${e.code || e.message}` });
+      setMsg({ type: 'error', text: publicErrorMessage(e, lang, 'default') });
       await load(); // rollback
     } finally {
       setActionState({ id: null, type: null });

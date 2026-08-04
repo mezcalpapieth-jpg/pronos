@@ -19,6 +19,60 @@ async function handle(res) {
   return data;
 }
 
+const PUBLIC_ERROR_COPY = {
+  invalid_session: {
+    es: 'Tu sesión expiró. Vuelve a iniciar sesión.',
+    en: 'Your session expired. Please sign in again.',
+  },
+  not_authenticated: {
+    es: 'Inicia sesión para continuar.',
+    en: 'Sign in to continue.',
+  },
+  insufficient_balance: {
+    es: 'Balance insuficiente.',
+    en: 'Insufficient balance.',
+  },
+  market_closed: {
+    es: 'El mercado ya cerró o fue resuelto.',
+    en: 'The market already closed or resolved.',
+  },
+  market_not_found: {
+    es: 'No encontramos ese mercado.',
+    en: 'We could not find that market.',
+  },
+  price_moved: {
+    es: 'El precio se movió. Vuelve a cotizar.',
+    en: 'The price moved. Please quote again.',
+  },
+  quote_failed: {
+    es: 'No pudimos calcular el precio. Intenta otra vez.',
+    en: 'Could not calculate the price. Try again.',
+  },
+  load_failed: {
+    es: 'No pudimos cargar la información. Intenta otra vez.',
+    en: 'Could not load the information. Try again.',
+  },
+  social_link_failed: {
+    es: 'No pudimos conectar esa cuenta. Intenta otra vez.',
+    en: 'Could not connect that account. Try again.',
+  },
+  default: {
+    es: 'Algo salió mal. Intenta otra vez.',
+    en: 'Something went wrong. Try again.',
+  },
+};
+
+export function publicErrorMessage(error, lang = 'es', fallback = 'default') {
+  const raw = typeof error === 'string'
+    ? error
+    : (error?.code || error?.message || fallback);
+  const normalized = String(raw || fallback).toLowerCase();
+  const key = Object.keys(PUBLIC_ERROR_COPY)
+    .find(k => k !== 'default' && normalized.includes(k));
+  const copy = PUBLIC_ERROR_COPY[key || fallback] || PUBLIC_ERROR_COPY.default;
+  return copy[lang] || copy.es;
+}
+
 export async function getJson(url) {
   const res = await fetch(url, { method: 'GET', credentials: 'include' });
   return handle(res);

@@ -616,7 +616,7 @@ function LinkedMarketChip({ linkedMarket }) {
         maxWidth: '100%',
       }}
     >
-      <span aria-hidden="true">{linkedMarket.icon || '📊'}</span>
+      <span aria-hidden="true">{linkedMarket.icon || 'MKT'}</span>
       <span style={{
         whiteSpace: 'nowrap',
         overflow: 'hidden',
@@ -947,7 +947,7 @@ function NewsHeroCarousel({ items, isAdmin, onCreateMarket, onOpenLinkPicker, on
                       onClick={() => onOpenLinkPicker(item)}
                       style={{ ...adminBtnStyle, fontSize: 11, padding: '6px 10px', borderColor: 'var(--text-muted)', color: 'var(--text-secondary)' }}
                     >
-                      🔗 Vincular
+                      Vincular
                     </button>
                   </>
                 )}
@@ -1165,7 +1165,7 @@ function NewsCard({ item, isAdmin, feature, onCreateMarket, onOpenLinkPicker, on
                 onClick={() => onOpenLinkPicker(item)}
                 style={{ ...adminBtnStyle, fontSize: 11, padding: '6px 10px', borderColor: 'var(--text-muted)', color: 'var(--text-secondary)' }}
               >
-                🔗 Vincular
+                Vincular
               </button>
             </>
           )}
@@ -1660,7 +1660,7 @@ function NewsLinkPicker({ item, onClose, onPick }) {
                 }}
               >
                 <span style={{ fontSize: 18, width: 24, textAlign: 'center' }}>
-                  {m.icon || '📈'}
+                  {m.icon || 'MKT'}
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{

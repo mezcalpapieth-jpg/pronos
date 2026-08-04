@@ -240,6 +240,8 @@ const MIGRATIONS = [
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_points_users_username_lower ON points_users (LOWER(username))`,
   `CREATE INDEX IF NOT EXISTS idx_points_users_wallet ON points_users(wallet_address)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_users_created_at
+    ON points_users(created_at DESC)`,
 
   `CREATE TABLE IF NOT EXISTS points_markets (
     id              SERIAL PRIMARY KEY,
@@ -348,6 +350,8 @@ const MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_points_distributions_user ON points_distributions(username, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_points_distributions_kind ON points_distributions(kind, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_distributions_created_kind_user
+    ON points_distributions(created_at DESC, kind, username)`,
   `CREATE INDEX IF NOT EXISTS idx_points_distributions_user_kind_ref
     ON points_distributions(username, kind, reference_id, created_at DESC)`,
 
