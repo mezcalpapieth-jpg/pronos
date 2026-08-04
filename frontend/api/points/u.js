@@ -186,11 +186,13 @@ export default async function handler(req, res) {
     let adminSocialLinks = null;
     if (viewerIsAdmin) {
       const socialRows = await sql`
-        SELECT id, task_key, status, reward, proof_url,
-               reviewer, reviewed_at, rejection_note, created_at
-        FROM social_tasks
-        WHERE username = ${username}
-        ORDER BY created_at DESC
+        SELECT s.id, s.task_key, s.status, s.reward, s.proof_url,
+               s.reviewer, s.reviewed_at, s.rejection_note, s.created_at,
+               c.platform, c.target_url, c.label AS task_label
+        FROM social_tasks s
+        LEFT JOIN social_task_campaigns c ON c.task_key = s.task_key
+        WHERE s.username = ${username}
+        ORDER BY s.created_at DESC
         LIMIT 50
       `;
       adminSocials = buildAdminProfileSocials(socialRows);

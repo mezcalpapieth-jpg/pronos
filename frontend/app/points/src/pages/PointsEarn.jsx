@@ -11,7 +11,7 @@
  * Portfolio page and gives users a clear "here's how to farm MXNP" hub.
  */
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useLang, useT } from '@app/lib/i18n.js';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
@@ -300,7 +300,7 @@ function SocialTaskRow({ task, onSubmit }) {
   const [submitting, setSubmitting] = useState(false);
 
   const STATUS_COPY = {
-    not_submitted: { label: 'Reclamar',        primary: true,  disabled: false },
+    not_submitted: { label: 'Enviar revisión', primary: true,  disabled: false },
     pending:       { label: 'En revisión',      primary: false, disabled: true  },
     approved:      { label: 'Aprobado',         primary: false, disabled: true  },
     rejected:      { label: 'Rechazado · reintentar', primary: true, disabled: false },
@@ -309,9 +309,6 @@ function SocialTaskRow({ task, onSubmit }) {
 
   async function handle() {
     if (ui.disabled) return;
-    // Open the social-network profile in a new tab so the user can complete
-    // the action, then submit the task as "pending review".
-    if (task.url) window.open(task.url, '_blank', 'noopener,noreferrer');
     setSubmitting(true);
     try {
       await onSubmit(task.key);
@@ -349,27 +346,47 @@ function SocialTaskRow({ task, onSubmit }) {
         </div>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)' }}>MXNP</div>
       </div>
-      <button
-        onClick={handle}
-        disabled={ui.disabled || submitting}
-        style={{
-          padding: '8px 14px',
-          background: ui.primary ? 'var(--green)' : 'var(--surface3)',
-          color: ui.primary ? '#000' : 'var(--text-muted)',
-          border: ui.primary ? 'none' : '1px solid var(--border)',
-          borderRadius: 8,
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11,
-          fontWeight: 700,
-          letterSpacing: '0.06em',
-          cursor: ui.disabled || submitting ? 'not-allowed' : 'pointer',
-          minWidth: 120,
-          opacity: ui.disabled || submitting ? 0.6 : 1,
-          textTransform: 'uppercase',
-        }}
-      >
-        {submitting ? '…' : ui.label}
-      </button>
+      <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        {task.url && (
+          <a
+            href={task.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-ghost"
+            style={{
+              padding: '8px 12px',
+              fontSize: 11,
+              textDecoration: 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            Abrir
+          </a>
+        )}
+        <button
+          onClick={handle}
+          disabled={ui.disabled || submitting}
+          style={{
+            padding: '8px 14px',
+            background: ui.primary ? 'var(--green)' : 'var(--surface3)',
+            color: ui.primary ? '#000' : 'var(--text-muted)',
+            border: ui.primary ? 'none' : '1px solid var(--border)',
+            borderRadius: 8,
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: '0.06em',
+            cursor: ui.disabled || submitting ? 'not-allowed' : 'pointer',
+            minWidth: 128,
+            opacity: ui.disabled || submitting ? 0.6 : 1,
+            textTransform: 'uppercase',
+          }}
+        >
+          {submitting ? '…' : ui.label}
+        </button>
+      </div>
     </div>
   );
 }
@@ -401,8 +418,8 @@ const SOCIAL_PROVIDERS = [
     label: 'TikTok',
     icon: 'TT',
     reward: 50,
-    available: true,
-    comingSoonNote: null,
+    available: false,
+    comingSoonNote: 'Esperando aprobación de TikTok',
   },
 ];
 
@@ -579,18 +596,20 @@ function SocialLinksCard() {
 
 function SocialTasksCard() {
   const lang = useLang();
+  const location = useLocation();
+  const taskKey = new URLSearchParams(location.search).get('task');
   const [tasks, setTasks] = useState(null);
   const [err, setErr] = useState(null);
 
   async function load() {
     try {
-      const r = await fetchSocialTaskCatalog();
+      const r = await fetchSocialTaskCatalog(taskKey);
       setTasks(r.tasks);
     } catch (e) {
       setErr(publicErrorMessage(e, lang, 'load_failed'));
     }
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [taskKey]);
 
   async function handleSubmit(taskKey) {
     try {
@@ -604,10 +623,10 @@ function SocialTasksCard() {
   return (
     <section style={panelStyle}>
       <div style={eyebrowStyle}>Tareas sociales</div>
-      <h3 style={panelTitleStyle}>Sigue a Pronos y gana MXNP</h3>
+      <h3 style={panelTitleStyle}>Tareas verificadas de Pronos</h3>
       <p style={panelBodyStyle}>
-        Completa la tarea en la red social y marca "Reclamar". El equipo revisa en
-        menos de 24 h. Si se rechaza, puedes reintentar con nueva captura.
+        Abre la cuenta o post exacto, completa la acción y envíala a revisión.
+        Algunas tareas solo aparecen desde enlaces temporales del equipo.
       </p>
       {err && (
         <div style={{ ...noticeStyle, color: 'var(--red, #ef4444)' }}>{err}</div>

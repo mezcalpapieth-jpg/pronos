@@ -389,6 +389,7 @@ function AdminSocialsPanel({ rows, links = [] }) {
           {rows.map((row) => {
             const status = SOCIAL_STATUS_LABEL[row.status] || SOCIAL_STATUS_LABEL.pending;
             const proofHref = safeExternalHref(row.proofUrl);
+            const targetHref = safeExternalHref(row.targetUrl);
             return (
               <div
                 key={row.id || `${row.taskKey}-${row.createdAt}`}
@@ -452,7 +453,24 @@ function AdminSocialsPanel({ rows, links = [] }) {
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
                     +{Number(row.reward || 0)} MXNP
                   </span>
-                  {proofHref && (
+                  {targetHref && (
+                    <a
+                      href={targetHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 10,
+                        color: 'var(--orange)',
+                        textDecoration: 'underline',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      Ver post
+                    </a>
+                  )}
+                  {proofHref && proofHref !== targetHref && (
                     <a
                       href={proofHref}
                       target="_blank"

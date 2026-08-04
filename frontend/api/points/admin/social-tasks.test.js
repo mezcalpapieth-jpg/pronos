@@ -45,5 +45,29 @@ test('social task review columns are added for older existing tables', () => {
 test('social task admin can load one combined history tab', () => {
   assert.match(source, /history/);
   assert.match(source, /status IN \('approved', 'rejected'\)/);
-  assert.match(source, /COALESCE\(reviewed_at, created_at\) DESC/);
+  assert.match(source, /COALESCE\(s\.reviewed_at, s\.created_at\) DESC/);
+});
+
+test('social task admin supports hidden expiring post campaigns', () => {
+  for (const migrationSource of [pointsSchema, migrate]) {
+    assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS social_task_campaigns/);
+    assert.match(migrationSource, /task_key\s+TEXT UNIQUE NOT NULL/);
+    assert.match(migrationSource, /target_url\s+TEXT NOT NULL/);
+    assert.match(migrationSource, /expires_at\s+TIMESTAMPTZ NOT NULL/);
+    assert.match(migrationSource, /hidden\s+BOOLEAN NOT NULL DEFAULT TRUE/);
+  }
+
+  assert.match(source, /create_campaign/);
+  assert.match(source, /deactivate_campaign/);
+  assert.match(source, /VALID_PLATFORMS/);
+  assert.match(source, /normalizeTargetUrl/);
+  assert.match(source, /status === 'campaigns'/);
+  assert.match(source, /sharePath:\s*`\/earn\?task=/);
+});
+
+test('social task admin review queue includes exact campaign post metadata', () => {
+  assert.match(source, /LEFT JOIN social_task_campaigns c ON c\.task_key = s\.task_key/);
+  assert.match(source, /c\.target_url/);
+  assert.match(source, /c\.label AS task_label/);
+  assert.match(source, /c\.expires_at AS task_expires_at/);
 });

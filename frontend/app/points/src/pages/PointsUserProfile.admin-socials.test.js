@@ -9,3 +9,10 @@ test('admin profile view renders connected social handles as well as social task
   assert.match(SOURCE, /Cuentas conectadas/);
   assert.match(SOURCE, /link\.handle/);
 });
+
+test('admin profile view exposes exact campaign post links for social task review', () => {
+  assert.match(SOURCE, /row\.targetUrl/);
+  assert.match(SOURCE, /targetHref/);
+  assert.match(SOURCE, /Ver post/);
+  assert.match(SOURCE, /proofHref && proofHref !== targetHref/);
+});

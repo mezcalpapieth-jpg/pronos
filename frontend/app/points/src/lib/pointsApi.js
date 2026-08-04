@@ -407,8 +407,9 @@ export async function claimPendingReferral(referrer) {
 }
 
 // ─── Social tasks ───────────────────────────────────────────────────────────
-export async function fetchSocialTaskCatalog() {
-  return getJson('/api/points/social-tasks/catalog');
+export async function fetchSocialTaskCatalog(taskKey = null) {
+  const q = taskKey ? `?task=${encodeURIComponent(taskKey)}` : '';
+  return getJson(`/api/points/social-tasks/catalog${q}`);
 }
 
 export async function submitSocialTask(taskKey, proofUrl) {
@@ -431,6 +432,24 @@ export async function adminListSocialTasks(status = 'pending') {
 
 export async function adminReviewSocialTask(id, action, note) {
   return postJson('/api/points/admin/social-tasks', { id, action, note });
+}
+
+export async function adminCreateSocialTaskCampaign({ platform, targetUrl, reward, expiresInDays, label }) {
+  return postJson('/api/points/admin/social-tasks', {
+    action: 'create_campaign',
+    platform,
+    targetUrl,
+    reward,
+    expiresInDays,
+    label,
+  });
+}
+
+export async function adminDeactivateSocialTaskCampaign(campaignId) {
+  return postJson('/api/points/admin/social-tasks', {
+    action: 'deactivate_campaign',
+    campaignId,
+  });
 }
 
 // ─── Admin — support tickets ────────────────────────────────────────────────

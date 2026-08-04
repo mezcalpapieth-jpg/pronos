@@ -599,6 +599,25 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_referrals_referrer ON points_referrals(referrer)`,
 
   // ── Social tasks (admin-verified claims: IG/TikTok/X follows, likes…) ─
+  `CREATE TABLE IF NOT EXISTS social_task_campaigns (
+    id             SERIAL PRIMARY KEY,
+    task_key       TEXT UNIQUE NOT NULL,
+    platform       TEXT NOT NULL,
+    target_url     TEXT NOT NULL,
+    label          TEXT NOT NULL,
+    description    TEXT,
+    reward         NUMERIC(20,6) NOT NULL DEFAULT 10,
+    hidden         BOOLEAN NOT NULL DEFAULT TRUE,
+    active         BOOLEAN NOT NULL DEFAULT TRUE,
+    expires_at     TIMESTAMPTZ NOT NULL,
+    created_by     TEXT,
+    created_at     TIMESTAMPTZ DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_social_task_campaigns_active_expiry
+    ON social_task_campaigns(active, expires_at DESC, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_social_task_campaigns_platform
+    ON social_task_campaigns(platform, created_at DESC)`,
   `CREATE TABLE IF NOT EXISTS social_tasks (
     id             SERIAL PRIMARY KEY,
     username       TEXT NOT NULL,

@@ -120,3 +120,20 @@ test('Points admin stats shows signup sheet and per-user distribution detail', (
   assert.match(statsApiSource, /distributionUserRows/);
   assert.match(statsApiSource, /points_publicity_attributions/);
 });
+
+test('Points admin has a command center for hidden expiring social post tasks', () => {
+  assert.match(source, /adminCreateSocialTaskCampaign/);
+  assert.match(source, /adminDeactivateSocialTaskCampaign/);
+  assert.match(source, /Centro de tareas/);
+  assert.match(source, /Posts ocultos/);
+  assert.match(source, /URL del post/);
+  assert.match(source, /Crear link/);
+  assert.match(source, /Links temporales/);
+  assert.match(source, /campaignShareUrl/);
+  assert.match(source, /Ver post/);
+  assert.match(source, /t\.proof_url && t\.proof_url !== t\.target_url/);
+  assert.match(apiSource, /export async function adminCreateSocialTaskCampaign/);
+  assert.match(apiSource, /action:\s*'create_campaign'/);
+  assert.match(apiSource, /export async function adminDeactivateSocialTaskCampaign/);
+  assert.match(apiSource, /action:\s*'deactivate_campaign'/);
+});

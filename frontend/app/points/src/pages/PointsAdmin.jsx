@@ -19,6 +19,8 @@ import {
   postJson,
   adminListSocialTasks,
   adminReviewSocialTask,
+  adminCreateSocialTaskCampaign,
+  adminDeactivateSocialTaskCampaign,
   adminListTaskCounts,
   adminReviewResolutionCandidate,
   adminListCycles,
@@ -566,6 +568,15 @@ function CyclesPanel() {
 function SocialTasksQueue({ onQueueChange }) {
   const [status, setStatus] = useState('pending');
   const [tasks, setTasks] = useState(null);
+  const [campaigns, setCampaigns] = useState([]);
+  const [campaignForm, setCampaignForm] = useState({
+    platform: 'x',
+    targetUrl: '',
+    reward: '10',
+    expiresInDays: '7',
+    label: '',
+  });
+  const [campaignMsg, setCampaignMsg] = useState(null);
   const [working, setWorking] = useState(null); // id of the task being reviewed
 
   async function load() {
@@ -578,6 +589,69 @@ function SocialTasksQueue({ onQueueChange }) {
     }
   }
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [status]);
+
+  async function loadCampaigns() {
+    try {
+      const r = await adminListSocialTasks('campaigns');
+      setCampaigns(Array.isArray(r.campaigns) ? r.campaigns : []);
+    } catch {
+      setCampaigns([]);
+    }
+  }
+  useEffect(() => { loadCampaigns(); }, []);
+
+  function campaignShareUrl(campaign) {
+    const key = campaign?.task_key;
+    if (!key) return '';
+    return `${window.location.origin}/earn?task=${encodeURIComponent(key)}`;
+  }
+
+  async function copyCampaignLink(campaign) {
+    const url = campaignShareUrl(campaign);
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCampaignMsg('Link copiado.');
+    } catch {
+      setCampaignMsg(url);
+    }
+  }
+
+  async function createCampaign(e) {
+    e.preventDefault();
+    setCampaignMsg(null);
+    setWorking('campaign-create');
+    try {
+      const r = await adminCreateSocialTaskCampaign({
+        platform: campaignForm.platform,
+        targetUrl: campaignForm.targetUrl,
+        reward: Number(campaignForm.reward),
+        expiresInDays: Number(campaignForm.expiresInDays),
+        label: campaignForm.label,
+      });
+      const url = `${window.location.origin}${r.sharePath || `/earn?task=${encodeURIComponent(r.campaign?.task_key || '')}`}`;
+      setCampaignMsg(`Tarea creada: ${url}`);
+      setCampaignForm(form => ({ ...form, targetUrl: '', label: '' }));
+      await loadCampaigns();
+      onQueueChange?.();
+    } catch (e2) {
+      setCampaignMsg(`No se pudo crear: ${e2.code || e2.message}`);
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function deactivateCampaign(campaignId) {
+    setWorking(`campaign-${campaignId}`);
+    try {
+      await adminDeactivateSocialTaskCampaign(campaignId);
+      await loadCampaigns();
+    } catch (e) {
+      alert(`No se pudo desactivar: ${e.code || e.message}`);
+    } finally {
+      setWorking(null);
+    }
+  }
 
   async function review(id, action) {
     let note = null;
@@ -601,6 +675,139 @@ function SocialTasksQueue({ onQueueChange }) {
 
   return (
     <div>
+      <section style={{
+        background: 'var(--surface1)',
+        border: '1px solid var(--border)',
+        borderRadius: 12,
+        padding: 18,
+        marginBottom: 20,
+      }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: 16,
+          alignItems: 'flex-start',
+          marginBottom: 14,
+        }}>
+          <div>
+            <div style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              letterSpacing: '0.12em',
+              color: 'var(--orange)',
+              textTransform: 'uppercase',
+              marginBottom: 6,
+            }}>
+              Centro de tareas
+            </div>
+            <h3 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 26 }}>
+              Posts ocultos
+            </h3>
+          </div>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
+            Links temporales
+          </span>
+        </div>
+
+        <form onSubmit={createCampaign} style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+          gap: 10,
+          alignItems: 'center',
+        }}>
+          <select
+            value={campaignForm.platform}
+            onChange={e => setCampaignForm(form => ({ ...form, platform: e.target.value }))}
+            style={inputStyle}
+          >
+            <option value="x">X</option>
+            <option value="instagram">Instagram</option>
+            <option value="tiktok">TikTok</option>
+          </select>
+          <input
+            value={campaignForm.targetUrl}
+            onChange={e => setCampaignForm(form => ({ ...form, targetUrl: e.target.value }))}
+            placeholder="URL del post"
+            style={{ ...inputStyle, gridColumn: 'span 2' }}
+          />
+          <input
+            value={campaignForm.reward}
+            onChange={e => setCampaignForm(form => ({ ...form, reward: e.target.value }))}
+            placeholder="MXNP"
+            inputMode="decimal"
+            style={inputStyle}
+          />
+          <input
+            value={campaignForm.expiresInDays}
+            onChange={e => setCampaignForm(form => ({ ...form, expiresInDays: e.target.value }))}
+            placeholder="Días"
+            inputMode="numeric"
+            style={inputStyle}
+          />
+          <input
+            value={campaignForm.label}
+            onChange={e => setCampaignForm(form => ({ ...form, label: e.target.value }))}
+            placeholder="Texto interno opcional"
+            style={{ ...inputStyle, gridColumn: 'span 2' }}
+          />
+          <button
+            type="submit"
+            className="btn-primary"
+            disabled={working === 'campaign-create'}
+            style={{ padding: '10px 14px', fontSize: 11, whiteSpace: 'nowrap' }}
+          >
+            Crear link
+          </button>
+        </form>
+        {campaignMsg && (
+          <div style={{ marginTop: 10, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)', wordBreak: 'break-all' }}>
+            {campaignMsg}
+          </div>
+        )}
+
+        {campaigns.length > 0 && (
+          <div style={{ display: 'grid', gap: 8, marginTop: 14 }}>
+            {campaigns.slice(0, 8).map(c => {
+              const expired = c.expires_at ? new Date(c.expires_at).getTime() <= Date.now() : false;
+              return (
+                <div key={c.id} style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(0, 1fr) auto auto',
+                  gap: 10,
+                  alignItems: 'center',
+                  border: '1px solid var(--border)',
+                  borderRadius: 10,
+                  padding: '10px 12px',
+                }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontFamily: 'var(--font-body)', color: 'var(--text-primary)', fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {c.label}
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: 10, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {String(c.platform || '').toUpperCase()} · +{Number(c.reward || 0)} MXNP · {c.active ? (expired ? 'expirado' : 'activo') : 'desactivado'} · {campaignShareUrl(c)}
+                    </div>
+                  </div>
+                  <button type="button" className="btn-ghost" onClick={() => copyCampaignLink(c)} style={{ padding: '7px 10px', fontSize: 10 }}>
+                    Copiar
+                  </button>
+                  {c.active && !expired && (
+                    <button
+                      type="button"
+                      className="btn-ghost"
+                      onClick={() => deactivateCampaign(c.id)}
+                      disabled={working === `campaign-${c.id}`}
+                      style={{ padding: '7px 10px', fontSize: 10 }}
+                    >
+                      Desactivar
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         {[
           { id: 'pending', label: 'Pendientes' },
@@ -653,9 +860,19 @@ function SocialTasksQueue({ onQueueChange }) {
           }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>
-                #{t.id} · @{t.username} · {t.task_key} · {statusLabel} · +{t.reward} MXNP
+                #{t.id} · @{t.username} · {t.task_label || t.task_key} · {t.platform ? String(t.platform).toUpperCase() : 'SOCIAL'} · {statusLabel} · +{t.reward} MXNP
               </div>
-              {t.proof_url && (
+              {t.target_url && (
+                <a
+                  href={t.target_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--orange)', textDecoration: 'underline', marginRight: 14 }}
+                >
+                  Ver post
+                </a>
+              )}
+              {t.proof_url && t.proof_url !== t.target_url && (
                 <a
                   href={t.proof_url}
                   target="_blank"

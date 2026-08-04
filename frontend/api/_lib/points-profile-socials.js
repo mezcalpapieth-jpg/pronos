@@ -11,14 +11,6 @@ const SOCIAL_TASK_META = {
     label: 'Seguir @pronos_io en X (Twitter)',
     network: 'twitter',
   },
-  instagram_repost: {
-    label: 'Repostear una historia de @pronos.latam',
-    network: 'instagram',
-  },
-  tiktok_like: {
-    label: 'Dar me-gusta a un video de @pronos.io',
-    network: 'tiktok',
-  },
 };
 
 const SOCIAL_LINK_META = {
@@ -53,15 +45,20 @@ export function buildAdminProfileSocials(rows) {
     const proofUrl = typeof row.proof_url === 'string' && row.proof_url.trim()
       ? row.proof_url.trim()
       : null;
+    const targetUrl = typeof row.target_url === 'string' && row.target_url.trim()
+      ? row.target_url.trim()
+      : null;
+    const network = row.platform ? String(row.platform).trim().toLowerCase() : null;
 
     return {
       id: Number(row.id),
       taskKey,
-      label: meta.label || taskKey,
-      network: meta.network || 'social',
+      label: row.task_label || meta.label || taskKey,
+      network: network || meta.network || 'social',
       status: row.status || 'pending',
       reward: Number(row.reward || 0),
       proofUrl,
+      targetUrl,
       reviewer: row.reviewer || null,
       reviewedAt: row.reviewed_at || null,
       rejectionNote: row.rejection_note || null,

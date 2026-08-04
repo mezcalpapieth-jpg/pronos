@@ -14,7 +14,7 @@ import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requireSession } from '../../_lib/session.js';
 import { rateLimit, clientIp } from '../../_lib/rate-limit.js';
-import { TASK_CATALOG } from './catalog.js';
+import { findSocialTaskByKey } from './catalog.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -36,23 +36,23 @@ export default async function handler(req, res) {
 
   const { taskKey, proofUrl } = req.body || {};
   const key = String(taskKey || '').trim();
-  const task = TASK_CATALOG.find(t => t.key === key);
-  if (!task) return res.status(400).json({ error: 'invalid_task_key' });
-
   if (proofUrl && typeof proofUrl === 'string' && proofUrl.length > 2048) {
     return res.status(400).json({ error: 'proof_url_too_long' });
   }
 
   try {
     await ensurePointsSchema(sql);
+    const task = await findSocialTaskByKey(sql, key);
+    if (!task) return res.status(400).json({ error: 'invalid_task_key' });
 
     const username = session.username.toLowerCase();
+    const storedProofUrl = proofUrl || task.url || null;
     // UPSERT: first-time inserts a pending row. Re-submissions only
     // allowed if the existing row was previously rejected (the user
     // can fix their mistake and try again).
     const result = await sql`
       INSERT INTO social_tasks (username, task_key, status, reward, proof_url)
-      VALUES (${username}, ${task.key}, 'pending', ${task.reward}, ${proofUrl || null})
+      VALUES (${username}, ${task.key}, 'pending', ${task.reward}, ${storedProofUrl})
       ON CONFLICT (username, task_key) DO UPDATE
       SET status = CASE
             WHEN social_tasks.status = 'rejected' THEN 'pending'

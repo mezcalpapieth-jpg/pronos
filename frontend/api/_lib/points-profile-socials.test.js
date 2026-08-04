@@ -41,6 +41,7 @@ test('buildAdminProfileSocials returns admin-only social proof rows with catalog
       status: 'approved',
       reward: 25,
       proofUrl: 'https://x.com/some_user',
+      targetUrl: null,
       reviewer: 'mezcal',
       reviewedAt: '2026-05-01T00:00:00.000Z',
       rejectionNote: null,
@@ -54,10 +55,47 @@ test('buildAdminProfileSocials returns admin-only social proof rows with catalog
       status: 'pending',
       reward: 10,
       proofUrl: null,
+      targetUrl: null,
       reviewer: null,
       reviewedAt: null,
       rejectionNote: null,
       createdAt: '2026-05-02T00:00:00.000Z',
+    },
+  ]);
+});
+
+test('buildAdminProfileSocials includes hidden campaign post targets', () => {
+  const socials = buildAdminProfileSocials([
+    {
+      id: 14,
+      task_key: 'x_post_abc123',
+      task_label: 'Like al post de lanzamiento',
+      platform: 'x',
+      target_url: 'https://x.com/pronos_io/status/123',
+      status: 'pending',
+      reward: '15',
+      proof_url: 'https://x.com/pronos_io/status/123',
+      reviewer: null,
+      reviewed_at: null,
+      rejection_note: null,
+      created_at: '2026-08-04T00:00:00.000Z',
+    },
+  ]);
+
+  assert.deepEqual(socials, [
+    {
+      id: 14,
+      taskKey: 'x_post_abc123',
+      label: 'Like al post de lanzamiento',
+      network: 'x',
+      status: 'pending',
+      reward: 15,
+      proofUrl: 'https://x.com/pronos_io/status/123',
+      targetUrl: 'https://x.com/pronos_io/status/123',
+      reviewer: null,
+      reviewedAt: null,
+      rejectionNote: null,
+      createdAt: '2026-08-04T00:00:00.000Z',
     },
   ]);
 });
