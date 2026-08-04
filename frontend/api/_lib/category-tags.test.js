@@ -150,3 +150,28 @@ test('routes reality entertainment into TV and farandula topics', () => {
   assert.equal(matchesMarketTaxonomy({ ...tags, category: 'mexico' }, { category: 'mexico', topic: 'farandula' }), true);
   assert.equal(matchesMarketTaxonomy({ ...tags, category: 'mexico' }, { category: 'mexico', topic: 'tv' }), true);
 });
+
+test('keeps global sports markets out of Mexico entertainment topics', () => {
+  const row = {
+    category: 'deportes',
+    sport: 'f1',
+    league: 'f1',
+    question: '¿Quién gana el Dutch Grand Prix 2026?',
+    topic_tags: ['cine'],
+    source_data: {
+      region: 'north-america',
+      suggestedPricing: {
+        source: 'polymarket',
+        rationale: 'Referencia de cine mal pegada desde odds externas.',
+      },
+    },
+  };
+  const tags = deriveMarketTags(row);
+
+  assert.deepEqual(tags.categoryTags, ['deportes']);
+  assert.deepEqual(tags.geoTags, []);
+  assert.deepEqual(tags.topicTags, ['deportes']);
+
+  assert.equal(matchesMarketTaxonomy(row, { category: 'mexico', topic: 'cine' }), false);
+  assert.equal(matchesMarketTaxonomy(row, { category: 'deportes', sport: 'f1' }), true);
+});

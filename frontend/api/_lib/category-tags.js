@@ -14,6 +14,7 @@ const TOPIC_KEYS = new Set([
   'world-cup',
 ]);
 const ISOLATED_CATEGORY_KEYS = new Set(['crypto', 'world-cup']);
+const FLEXIBLE_TOPIC_CATEGORY_KEYS = new Set(['general', 'mexico', 'musica']);
 
 const MEXICO_LEAGUES = new Set(['liga-mx', 'lmb', 'lmp']);
 const LATAM_LEAGUES = new Set(['copa-libertadores']);
@@ -21,7 +22,6 @@ const MEXICO_SPORT_KEYWORDS = [
   'cruz azul',
   'chivas',
   'guadalajara',
-  'america',
   'club america',
   'pumas',
   'tigres',
@@ -224,6 +224,12 @@ export function deriveMarketTags(row = {}) {
   const source = normalizeSlug(row.source ?? sourceData?.source ?? resolverConfig?.source);
   const resolverType = normalizeSlug(row.resolver_type ?? row.resolverType);
   const isolatedCategory = ISOLATED_CATEGORY_KEYS.has(category) || league === 'world-cup';
+  const entertainmentKind = normalizeSlug(sourceData?.kind);
+  const explicitEntertainmentSource = source === 'entertainment'
+    || entertainmentKind === 'award'
+    || entertainmentKind === 'concert'
+    || entertainmentKind.startsWith('reality');
+  const flexibleTopicCategory = FLEXIBLE_TOPIC_CATEGORY_KEYS.has(category);
 
   const categoryTags = [];
   const geoTags = [];
@@ -255,7 +261,11 @@ export function deriveMarketTags(row = {}) {
     }
   }
   for (const tag of explicitTopicTags) {
-    if (!isolatedCategory || tag === category) addUnique(topicTags, tag, TOPIC_KEYS);
+    if (isolatedCategory) {
+      if (tag === category) addUnique(topicTags, tag, TOPIC_KEYS);
+    } else if (flexibleTopicCategory || tag === category) {
+      addUnique(topicTags, tag, TOPIC_KEYS);
+    }
   }
 
   addUnique(categoryTags, category, CATEGORY_KEYS);
@@ -319,7 +329,6 @@ export function deriveMarketTags(row = {}) {
     }
   }
 
-  const entertainmentKind = normalizeSlug(sourceData?.kind);
   const entertainmentHaystack = normalizeText([
     haystack,
     sourceData?.awardLabel,
@@ -328,23 +337,21 @@ export function deriveMarketTags(row = {}) {
     sourceData?.categoryKey,
     sourceData?.showLabel,
   ].filter(Boolean).join(' '));
+  const hasEntertainmentKeyword = hasAnyKeyword(entertainmentHaystack, [
+    'premios',
+    'oscar',
+    'emmy',
+    'grammy',
+    'cine',
+    'pelicula',
+    'spotify',
+    'la casa de los famosos',
+    'famosos',
+  ]);
   const isEntertainment = !isolatedCategory && (
     category === 'musica'
-    || source === 'entertainment'
-    || entertainmentKind === 'award'
-    || entertainmentKind === 'concert'
-    || entertainmentKind.startsWith('reality')
-    || hasAnyKeyword(entertainmentHaystack, [
-      'premios',
-      'oscar',
-      'emmy',
-      'grammy',
-      'cine',
-      'pelicula',
-      'spotify',
-      'la casa de los famosos',
-      'famosos',
-    ])
+    || explicitEntertainmentSource
+    || ((category === 'mexico' || category === 'general') && !sport && !league && hasEntertainmentKeyword)
   );
   if (isEntertainment) {
     if (entertainmentKind === 'concert') addUnique(topicTags, 'musica', TOPIC_KEYS);
