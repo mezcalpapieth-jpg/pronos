@@ -62,6 +62,12 @@ test('team profile defaults to active and pending rows with a todos toggle', () 
   assert.match(teamProfile, /visibleRows/);
 });
 
+test('team profile todos keeps upcoming first and history newest first', () => {
+  assert.match(teamProfile, /sortRowsForTeamView/);
+  assert.match(teamProfile, /view !== 'all'/);
+  assert.match(teamProfile, /aHistorical \? bMs - aMs : aMs - bMs/);
+});
+
 test('team profile exposes a destacado star toggle', () => {
   assert.match(teamProfile, /toggleFeaturedTeam/);
   assert.match(teamProfile, /Destacado/);

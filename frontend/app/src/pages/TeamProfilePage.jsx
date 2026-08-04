@@ -59,6 +59,31 @@ function marketMatchesTeam(team, market) {
   return outcomes.some(label => findTeamByName(sport, label)?.slug === team.slug);
 }
 
+function rowTimeMs(row) {
+  if (!row?.startsAt) return 0;
+  const ms = new Date(row.startsAt).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function isHistoricalRow(row) {
+  if (['closed', 'resolved', 'cancelado'].includes(row?.state)) return true;
+  const ms = rowTimeMs(row);
+  return ms > 0 && ms < Date.now();
+}
+
+function sortRowsForTeamView(rows, view) {
+  return [...rows].sort((a, b) => {
+    const aMs = rowTimeMs(a);
+    const bMs = rowTimeMs(b);
+    if (view !== 'all') return aMs - bMs;
+
+    const aHistorical = isHistoricalRow(a);
+    const bHistorical = isHistoricalRow(b);
+    if (aHistorical !== bHistorical) return aHistorical ? 1 : -1;
+    return aHistorical ? bMs - aMs : aMs - bMs;
+  });
+}
+
 async function getJson(url) {
   const res = await fetch(url, { credentials: 'include' });
   const data = await res.json().catch(() => ({}));
@@ -309,9 +334,7 @@ function TeamProfileBody({ surface }) {
       .filter(market => !attached.has(market.id))
       .map(market => marketOnlyRowForTeam(team, market));
     return [...merged, ...marketOnly].sort((a, b) => {
-      const aMs = a.startsAt ? new Date(a.startsAt).getTime() : 0;
-      const bMs = b.startsAt ? new Date(b.startsAt).getTime() : 0;
-      return aMs - bMs;
+      return rowTimeMs(a) - rowTimeMs(b);
     });
   }, [schedule, markets, team]);
 
@@ -320,8 +343,8 @@ function TeamProfileBody({ surface }) {
   ), [team, sourceTeam, rows]);
 
   const visibleRows = useMemo(() => {
-    if (view === 'all') return rows;
-    return rows.filter(row => ACTIVE_PENDING_STATES.has(row.state));
+    const scopedRows = view === 'all' ? rows : rows.filter(row => ACTIVE_PENDING_STATES.has(row.state));
+    return sortRowsForTeamView(scopedRows, view);
   }, [rows, view]);
 
   const activePendingCount = useMemo(
