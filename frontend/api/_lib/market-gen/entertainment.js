@@ -78,6 +78,41 @@ function binaryProbabilitiesFromYes(value, fallback = 0.45) {
   return [yes, 1 - yes];
 }
 
+function normalizeTopicText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function awardTopic(award = {}, cat = {}) {
+  const text = normalizeTopicText([
+    award.key,
+    award.label,
+    cat.key,
+    cat.label,
+  ].filter(Boolean).join(' '));
+  if (/(oscar|cine|pelicula|film|actor|actriz|director)/.test(text)) return 'cine';
+  if (/(emmy|tv|television|serie|show|reality)/.test(text)) return 'tv';
+  if (/(grammy|musica|musical|cancion|album|artista|juventud|lo nuestro|billboard)/.test(text)) return 'musica';
+  return 'musica';
+}
+
+function withEntertainmentTopic(spec, topicTags) {
+  const tags = Array.isArray(topicTags) ? topicTags.filter(Boolean) : [];
+  return {
+    ...spec,
+    topic_tags: tags,
+    source_data: {
+      ...(spec.source_data || {}),
+      categorization: {
+        ...(spec.source_data?.categorization || {}),
+        topicTags: tags,
+      },
+    },
+  };
+}
+
 async function suggestPricingWithAnthropic(spec) {
   if (!aiPricingEnabled()) return null;
   const outcomes = Array.isArray(spec.outcomes) ? spec.outcomes : [];
@@ -179,7 +214,7 @@ function awardSpecs(award) {
         ceremonyDate: award.ceremonyDate,
       },
     };
-    specs.push(attachSuggestedPricing(spec, {
+    specs.push(attachSuggestedPricing(withEntertainmentTopic(spec, [awardTopic(award, cat)]), {
       probabilities: configuredProbabilities(cat, outcomes.length, awardProbabilities(outcomes.length)),
       source: Array.isArray(cat.probabilities) || Array.isArray(cat.probabilityPct)
         ? 'admin-config'
@@ -219,7 +254,7 @@ function realityWeekSpec(ev) {
       weekNumber: ev.weekNumber,
     },
   };
-  return attachSuggestedPricing(spec, {
+  return attachSuggestedPricing(withEntertainmentTopic(spec, ['tv', 'farandula']), {
     probabilities: configuredProbabilities(ev, nominated.length, uniformProbabilities(nominated.length)),
     source: Array.isArray(ev.probabilities) || Array.isArray(ev.probabilityPct)
       ? 'admin-config'
@@ -255,7 +290,7 @@ function realityWinnerSpec(ev) {
       seasonLabel: ev.seasonLabel,
     },
   };
-  return attachSuggestedPricing(spec, {
+  return attachSuggestedPricing(withEntertainmentTopic(spec, ['tv', 'farandula']), {
     probabilities: configuredProbabilities(ev, housemates.length, uniformProbabilities(housemates.length)),
     source: Array.isArray(ev.probabilities) || Array.isArray(ev.probabilityPct)
       ? 'admin-config'
@@ -291,7 +326,7 @@ function concertSpec(ev) {
       venue: ev.venue,
     },
   };
-  return attachSuggestedPricing(spec, {
+  return attachSuggestedPricing(withEntertainmentTopic(spec, ['musica']), {
     probabilities: configuredProbabilities(
       ev,
       2,

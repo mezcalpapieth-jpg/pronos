@@ -38,6 +38,32 @@ const ALLOWED_CATEGORIES = new Set([
   'general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup',
 ]);
 const ALLOWED_GEO_TAGS = new Set(['mexico', 'latam', 'world']);
+const ALLOWED_TOPIC_TAGS = new Set([
+  'general',
+  'politica',
+  'deportes',
+  'finanzas',
+  'crypto',
+  'musica',
+  'cine',
+  'tv',
+  'farandula',
+  'weather',
+  'world-cup',
+]);
+
+function normalizeTagArray(value, allowed) {
+  if (value == null) return null;
+  if (!Array.isArray(value)) return { error: 'invalid_tags' };
+  const out = [];
+  for (const item of value) {
+    const tag = String(item || '').trim().toLowerCase();
+    if (!tag) continue;
+    if (!allowed.has(tag)) return { error: 'invalid_tags' };
+    if (!out.includes(tag)) out.push(tag);
+  }
+  return { value: out.length ? out : null };
+}
 
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'POST, OPTIONS', credentials: true });
@@ -50,7 +76,7 @@ export default async function handler(req, res) {
   const {
     question, category, endTime, outcomes, seedLiquidity, seedLiquidities, ammMode,
     featured,
-    sport, league, outcomeImages, geo,
+    sport, league, outcomeImages, geo, topicTags,
   } = req.body || {};
   const mode = ammMode === 'parallel' ? 'parallel' : 'unified';
   // Points-app markets are off-chain forever; `marketMode` stays
@@ -96,6 +122,8 @@ export default async function handler(req, res) {
   if (geoVal && !ALLOWED_GEO_TAGS.has(geoVal)) {
     return res.status(400).json({ error: 'invalid_geo' });
   }
+  const normalizedTopicTags = normalizeTagArray(topicTags, ALLOWED_TOPIC_TAGS);
+  if (normalizedTopicTags?.error) return res.status(400).json({ error: normalizedTopicTags.error });
   if (!Array.isArray(outcomes) || outcomes.length < 2 || outcomes.length > 10) {
     return res.status(400).json({ error: 'outcome_count_out_of_range' });
   }
@@ -130,6 +158,7 @@ export default async function handler(req, res) {
     sport: sportVal,
     league: leagueVal,
     source_data: geoVal ? { marketRegion: geoVal } : {},
+    topicTags: normalizedTopicTags?.value,
   });
   const categoryTagsJson = JSON.stringify(tagBundle.categoryTags);
   const geoTagsJson = JSON.stringify(tagBundle.geoTags);

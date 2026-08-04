@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   ADMIN_CRYPTO_FILTERS,
+  ADMIN_ENTERTAINMENT_TOPIC_FILTERS,
   ADMIN_GEO_FILTERS,
   ADMIN_MEXICO_TOPIC_FILTERS,
   ADMIN_SPORT_FILTERS,
@@ -13,10 +14,14 @@ import {
 
 test('MVP admin categories are text-only and expose subcategory controls', () => {
   assert.ok(CATEGORIES.some(c => c.key === 'mexico' && c.label === 'Mexico & Latam'));
+  assert.ok(CATEGORIES.some(c => c.key === 'musica' && c.label === 'Entretenimiento'));
   assert.ok(CATEGORIES.every(c => !('icon' in c)), 'admin category labels should not carry emoji fields');
   assert.deepEqual(ADMIN_GEO_FILTERS.map(g => g.key), ['all', 'mexico', 'latam']);
   assert.ok(MARKET_CREATION_GEO_OPTIONS.some(g => g.key === 'world' && g.label === 'Mundo'));
   assert.ok(ADMIN_MEXICO_TOPIC_FILTERS.some(t => t.key === 'weather' && t.label === 'Clima'));
+  assert.ok(ADMIN_ENTERTAINMENT_TOPIC_FILTERS.some(t => t.key === 'cine' && t.label === 'Cine'));
+  assert.ok(ADMIN_ENTERTAINMENT_TOPIC_FILTERS.some(t => t.key === 'tv' && t.label === 'TV'));
+  assert.ok(ADMIN_ENTERTAINMENT_TOPIC_FILTERS.some(t => t.key === 'farandula' && t.label === 'Farándula'));
   assert.ok(ADMIN_SPORT_FILTERS.some(s => s.key === 'combate'));
   assert.ok(ADMIN_CRYPTO_FILTERS.some(c => c.key === '5min'));
 });
@@ -45,6 +50,12 @@ test('MVP admin market filters include Mexico and Latam tag subcategories', () =
       categoryTags: ['crypto'],
       crypto5min: true,
     },
+    {
+      id: 'spider-man',
+      category: 'musica',
+      categoryTags: ['musica'],
+      topicTags: ['cine'],
+    },
   ];
 
   assert.deepEqual(
@@ -71,5 +82,13 @@ test('MVP admin market filters include Mexico and Latam tag subcategories', () =
       cryptoTypeFilter: '5min',
     }).map(m => m.id),
     ['crypto-5m'],
+  );
+
+  assert.deepEqual(
+    filterProtocolAdminMarkets(rows, {
+      categoryFilter: 'musica',
+      topicFilter: 'cine',
+    }).map(m => m.id),
+    ['spider-man'],
   );
 });

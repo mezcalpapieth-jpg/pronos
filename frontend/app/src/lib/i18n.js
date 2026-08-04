@@ -179,7 +179,7 @@ const STRINGS = {
   'cat.deportes':             { es: 'Deportes',             en: 'Sports' },
   'cat.finanzas':             { es: '$ Finanzas',           en: '$ Finance' },
   'cat.crypto':               { es: '₿ Crypto',             en: '₿ Crypto' },
-  'cat.musica':               { es: 'Música & Farándula',  en: 'Music & Pop Culture' },
+  'cat.musica':               { es: 'Entretenimiento',     en: 'Entertainment' },
   'cat.resueltos':            { es: 'Resueltos',            en: 'Resolved' },
 
   // ── BetModal ───────────────────────────────────────────────────────────────
@@ -647,7 +647,7 @@ const STRINGS = {
   'points.cat.trending':      { es: 'Trending',               en: 'Trending' },
   'points.cat.worldCup':      { es: 'Copa del Mundo',         en: 'World Cup' },
   'points.cat.deportes':      { es: 'Deportes',               en: 'Sports' },
-  'points.cat.musica':        { es: 'Música & Farándula',     en: 'Music & Culture' },
+  'points.cat.musica':        { es: 'Entretenimiento',        en: 'Entertainment' },
   'points.cat.mexico':        { es: 'Mexico & Latam',         en: 'Mexico & Latam' },
   'points.cat.politica':      { es: 'Política Intl.',         en: 'World Politics' },
   'points.cat.crypto':        { es: 'Crypto',                 en: 'Crypto' },
@@ -670,6 +670,9 @@ const STRINGS = {
   'points.topic.deportes':    { es: 'Deportes',               en: 'Sports' },
   'points.topic.finanzas':    { es: 'Finanzas',               en: 'Finance' },
   'points.topic.musica':      { es: 'Música',                 en: 'Music' },
+  'points.topic.cine':        { es: 'Cine',                   en: 'Film' },
+  'points.topic.tv':          { es: 'TV',                     en: 'TV' },
+  'points.topic.farandula':   { es: 'Farándula',              en: 'Pop Culture' },
   'points.topic.weather':     { es: 'Clima',                  en: 'Weather' },
 
   // Sports sub-filter — /c/deportes

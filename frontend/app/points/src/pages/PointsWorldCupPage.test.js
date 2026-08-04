@@ -15,9 +15,11 @@ test('World Cup page prioritizes final markets over stale semifinal markets', ()
   assert.match(source, /if \(finalWeekendMarkets\.length > 0\) return finalWeekendMarkets/);
 });
 
-test('World Cup page uses final stage copy and avoids stale opening kickoff fallback', () => {
-  assert.match(source, /title:\s*'Final del Mundial'/);
-  assert.match(source, /liveBadge:\s*'FINAL · Mercado del título'/);
+test('World Cup page uses completed champion copy and avoids stale opening kickoff fallback', () => {
+  assert.match(source, /WORLD_CUP_COMPLETE = true/);
+  assert.match(source, /title:\s*'España campeona del mundo'/);
+  assert.match(source, /liveBadge:\s*'TORNEO FINALIZADO · ESPAÑA CAMPEONA'/);
+  assert.match(source, /WORLD_CUP_CHAMPION_LINE/);
   assert.match(source, /stageMeta=\{stageMeta\}/);
   assert.doesNotMatch(source, /OPENING_KICKOFF_ISO/);
 });
@@ -26,7 +28,9 @@ test('World Cup final hero is personalized for Spain and Argentina', () => {
   assert.match(source, /FINAL_MATCHUP/);
   assert.match(source, /TEAMS\.es/);
   assert.match(source, /TEAMS\.ar/);
-  assert.match(source, /España y Argentina llegan al partido por el título/);
+  assert.match(source, /Campeona mundial 2026/);
+  assert.match(source, /Subcampeona mundial 2026/);
+  assert.match(source, /La Copa del Mundo 2026 terminó con España campeona/);
   assert.match(source, /wc-final-matchup-strip/);
 });
 
@@ -34,7 +38,7 @@ test('World Cup final weekend also surfaces the third-place match', () => {
   assert.match(source, /THIRD_PLACE_MATCHUP/);
   assert.match(source, /TEAMS\.fr/);
   assert.match(source, /TEAMS\.eng/);
-  assert.match(source, /Francia e Inglaterra juegan por el tercer lugar/);
+  assert.match(source, /Tercer lugar · finalizado/);
   assert.match(source, /wc-third-place-strip/);
   assert.match(source, /keys:\s*\['third', 'final'\]/);
 });

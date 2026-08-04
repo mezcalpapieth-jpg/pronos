@@ -1,6 +1,18 @@
 const CATEGORY_KEYS = new Set(['general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup']);
 const GEO_KEYS = new Set(['mexico', 'latam', 'world']);
-const TOPIC_KEYS = new Set(['general', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'weather', 'world-cup']);
+const TOPIC_KEYS = new Set([
+  'general',
+  'politica',
+  'deportes',
+  'finanzas',
+  'crypto',
+  'musica',
+  'cine',
+  'tv',
+  'farandula',
+  'weather',
+  'world-cup',
+]);
 const ISOLATED_CATEGORY_KEYS = new Set(['crypto', 'world-cup']);
 
 const MEXICO_LEAGUES = new Set(['liga-mx', 'lmb', 'lmp']);
@@ -64,6 +76,71 @@ const LATAM_KEYWORDS = [
   'copa libertadores',
   'libertadores',
 ];
+const ENTERTAINMENT_TOPIC_KEYWORDS = {
+  musica: [
+    'musica',
+    'cancion',
+    'album',
+    'sencillo',
+    'artista',
+    'cantante',
+    'spotify',
+    'billboard',
+    'grammy',
+    'latin grammy',
+    'premios juventud',
+    'premios lo nuestro',
+    'concierto',
+    'tour',
+  ],
+  cine: [
+    'cine',
+    'pelicula',
+    'film',
+    'taquilla',
+    'estreno',
+    'actor',
+    'actriz',
+    'director',
+    'oscar',
+    'oscars',
+    'spider-man',
+    'spiderman',
+    'marvel',
+    'dc studios',
+    'hollywood',
+    'the odyssey',
+  ],
+  tv: [
+    'tv',
+    'television',
+    'serie',
+    'emmy',
+    'emmys',
+    'reality',
+    'streaming',
+    'netflix',
+    'hbo',
+    'disney',
+    'la casa de los famosos',
+  ],
+  farandula: [
+    'farandula',
+    'celebridad',
+    'celebridades',
+    'influencer',
+    'tiktok',
+    'instagram',
+    'famosos',
+    'famosa',
+    'noviazgo',
+    'boda',
+    'divorcio',
+    'escandalo',
+    'romance',
+    'pareja',
+  ],
+};
 
 function stripAccents(value) {
   return String(value || '')
@@ -110,6 +187,10 @@ function addUnique(list, value, allowed = null) {
   if (!normalized) return;
   if (allowed && !allowed.has(normalized)) return;
   if (!list.includes(normalized)) list.push(normalized);
+}
+
+function hasAnyKeyword(haystack, words) {
+  return words.some(word => haystack.includes(word));
 }
 
 export function normalizeTagList(value, allowed = null) {
@@ -238,7 +319,52 @@ export function deriveMarketTags(row = {}) {
     }
   }
 
-  if (category !== 'mexico') {
+  const entertainmentKind = normalizeSlug(sourceData?.kind);
+  const entertainmentHaystack = normalizeText([
+    haystack,
+    sourceData?.awardLabel,
+    sourceData?.awardKey,
+    sourceData?.categoryLabel,
+    sourceData?.categoryKey,
+    sourceData?.showLabel,
+  ].filter(Boolean).join(' '));
+  const isEntertainment = !isolatedCategory && (
+    category === 'musica'
+    || source === 'entertainment'
+    || entertainmentKind === 'award'
+    || entertainmentKind === 'concert'
+    || entertainmentKind.startsWith('reality')
+    || hasAnyKeyword(entertainmentHaystack, [
+      'premios',
+      'oscar',
+      'emmy',
+      'grammy',
+      'cine',
+      'pelicula',
+      'spotify',
+      'la casa de los famosos',
+      'famosos',
+    ])
+  );
+  if (isEntertainment) {
+    if (entertainmentKind === 'concert') addUnique(topicTags, 'musica', TOPIC_KEYS);
+    if (entertainmentKind.startsWith('reality')) {
+      addUnique(topicTags, 'tv', TOPIC_KEYS);
+      addUnique(topicTags, 'farandula', TOPIC_KEYS);
+    }
+
+    for (const [topicKey, words] of Object.entries(ENTERTAINMENT_TOPIC_KEYWORDS)) {
+      if (hasAnyKeyword(entertainmentHaystack, words)) addUnique(topicTags, topicKey, TOPIC_KEYS);
+    }
+
+    if (entertainmentKind === 'award' && topicTags.length === 0) {
+      addUnique(topicTags, 'musica', TOPIC_KEYS);
+    }
+  }
+
+  if (category === 'musica') {
+    if (topicTags.length === 0) addUnique(topicTags, 'musica', TOPIC_KEYS);
+  } else if (category !== 'mexico') {
     addUnique(topicTags, category, TOPIC_KEYS);
   } else if (topicTags.length === 0) {
     addUnique(topicTags, 'general', TOPIC_KEYS);

@@ -1,9 +1,9 @@
 /**
  * World Cup 2026 — dedicated category page at /c/world-cup.
  *
- * The public surface follows the live tournament state: current final
- * markets first, knockout bracket second, and group fixtures as history
- * below.
+ * The public surface now keeps the tournament as an archive: champion
+ * state first, resolved markets and knockout bracket second, and group
+ * fixtures as history below.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -22,26 +22,29 @@ const HERO_GRADIENT =
   'linear-gradient(130deg, rgba(22,163,74,0.25) 0%, rgba(220,38,38,0.22) 45%, rgba(59,130,246,0.28) 100%), var(--surface1)';
 
 const FINAL_WEEKEND_START_ISO = '2026-07-16T00:00:00Z';
+const WORLD_CUP_COMPLETE = true;
+const WORLD_CUP_CHAMPION_LINE =
+  'España campeona del mundo 2026 · Argentina subcampeona · Torneo finalizado';
 
 const FINAL_MATCHUP = {
   home: {
     team: TEAMS.es,
     title: 'España',
-    eyebrow: 'Campeona mundial en 2010',
-    note: 'La selección que hizo de la posesión una identidad vuelve a una final con una generación que mezcla control, extremos jóvenes y oficio europeo.',
+    eyebrow: 'Campeona mundial 2026',
+    note: 'España cierra el torneo levantando la Copa del Mundo 2026 y suma este título a la estrella de 2010.',
   },
   away: {
     team: TEAMS.ar,
     title: 'Argentina',
-    eyebrow: 'Tres estrellas: 1978, 1986 y 2022',
-    note: 'Argentina llega con memoria de finales, presión competitiva y una tradición de eliminatorias donde cada detalle pesa.',
+    eyebrow: 'Subcampeona mundial 2026',
+    note: 'Argentina termina como finalista después de otra campaña profunda de eliminatorias y presión competitiva.',
   },
 };
 
 const FINAL_HEAD_TO_HEAD = {
-  eyebrow: 'Historial entre ambas',
-  title: 'Una rivalidad de amistosos grandes',
-  note: 'Argentina ganó 4-1 en Buenos Aires en 2010; España respondió 6-1 en Madrid en 2018. La final convierte esa historia en partido oficial por el título.',
+  eyebrow: 'Final cerrada',
+  title: 'España levanta la Copa',
+  note: 'La final convirtió el historial entre ambas selecciones en partido oficial por el título. El archivo del torneo queda con España como campeona.',
 };
 
 const THIRD_PLACE_MATCHUP = {
@@ -127,15 +130,16 @@ function stageMetaForRound(round) {
   if (round === 'final') {
     return {
       key: 'final',
-      eyebrow: 'La final',
-      title: 'Final del Mundial',
-      loadingText: 'Cargando la final...',
-      emptyTitle: 'Final por abrir',
-      emptyBody: 'En cuanto admin abra los mercados de la final y tercer lugar, aparecerán aquí arriba con botones directos.',
-      liveBadge: 'FINAL · Mercado del título',
-      heroText: 'España y Argentina llegan al partido por el título. Antes, Francia e Inglaterra juegan por el tercer lugar. La fase de grupos y las llaves quedan como historial, y los mercados abiertos viven arriba para entrar directo al fin de semana final.',
-      fallbackLine: 'La final y el tercer lugar se abren aquí en cuanto los mercados queden listos.',
-      bracketTitle: 'Camino al título',
+      archived: true,
+      eyebrow: 'Torneo finalizado',
+      title: 'España campeona del mundo',
+      loadingText: 'Cargando historial del Mundial...',
+      emptyTitle: 'Mundial finalizado',
+      emptyBody: 'La Copa del Mundo ya terminó. Cuando los mercados resueltos terminen de cargar, esta sección queda como archivo del torneo.',
+      liveBadge: 'TORNEO FINALIZADO · ESPAÑA CAMPEONA',
+      heroText: 'La Copa del Mundo 2026 terminó con España campeona. Argentina queda como finalista y la fase de grupos, llaves y mercados resueltos permanecen aquí como historial del torneo.',
+      fallbackLine: 'España campeona del mundo 2026.',
+      bracketTitle: 'Camino de España al título',
     };
   }
   if (round === 'sf') {
@@ -370,7 +374,9 @@ export default function PointsWorldCupPage() {
     return roundFromMarket(featuredStageMarkets[0]) || 'knockout';
   }, [featuredStageMarkets, finalWeekendStarted]);
   const stageMeta = useMemo(() => stageMetaForRound(featuredRound), [featuredRound]);
+  const tournamentComplete = WORLD_CUP_COMPLETE && stageMeta.key === 'final';
   const nextMarket = useMemo(() => {
+    if (WORLD_CUP_COMPLETE) return null;
     const activeFinalWeekend = finalWeekendMarkets.filter(m => m.status === 'active');
     if (finalWeekendMarkets.length > 0) {
       return activeFinalWeekend
@@ -416,9 +422,14 @@ export default function PointsWorldCupPage() {
     () => computeMexicoPath(allMarkets),
     [allMarkets],
   );
-  const stageLine = featuredStageMarkets.length > 0
-    ? featuredStageMarkets.map(describeStageMarket).join(' · ')
-    : stageMeta.fallbackLine;
+  const stageLine = tournamentComplete
+    ? WORLD_CUP_CHAMPION_LINE
+    : featuredStageMarkets.length > 0
+      ? featuredStageMarkets.map(describeStageMarket).join(' · ')
+      : stageMeta.fallbackLine;
+  const marketCountLine = tournamentComplete
+    ? `${resolvedCount} resueltos · torneo cerrado`
+    : `${activeCount} abiertos · ${resolvedCount} resueltos`;
 
   return (
     <main style={{ maxWidth: 1280, margin: '0 auto', padding: '28px 24px 80px' }}>
@@ -483,7 +494,7 @@ export default function PointsWorldCupPage() {
             flexWrap: 'wrap',
             alignItems: 'center',
           }}>
-          {nextMarket && !countdown.done ? (
+          {nextMarket && !countdown.done && !tournamentComplete ? (
             <div style={{
               display: 'inline-flex', gap: 8,
               padding: '10px 14px',
@@ -515,13 +526,13 @@ export default function PointsWorldCupPage() {
             <div style={{
               display: 'inline-block',
               padding: '10px 14px',
-              background: 'rgba(220,38,38,0.18)',
-              border: '1px solid rgba(220,38,38,0.4)',
+              background: tournamentComplete ? 'rgba(0,232,122,0.12)' : 'rgba(220,38,38,0.18)',
+              border: tournamentComplete ? '1px solid rgba(0,232,122,0.36)' : '1px solid rgba(220,38,38,0.4)',
               borderRadius: 12,
-              color: '#dc2626',
+              color: tournamentComplete ? 'var(--green)' : '#dc2626',
               fontFamily: 'var(--font-mono)', fontSize: 12,
               fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase',
-              animation: 'pronos-live-pulse 1.4s ease-in-out infinite',
+              animation: tournamentComplete ? 'none' : 'pronos-live-pulse 1.4s ease-in-out infinite',
             }}>
               {stageMeta.liveBadge}
             </div>
@@ -540,7 +551,7 @@ export default function PointsWorldCupPage() {
               color: 'var(--text-secondary)',
               textTransform: 'uppercase',
             }}>
-              {activeCount} abiertos · {resolvedCount} resueltos
+              {marketCountLine}
             </span>
           </div>
         </div>
@@ -552,6 +563,7 @@ export default function PointsWorldCupPage() {
         markets={featuredStageMarkets}
         nextMarket={nextMarket}
         stageMeta={stageMeta}
+        archived={tournamentComplete}
         onOpen={(market) => navigate(`/market?id=${market.id}`)}
         onBuy={(market, outcomeIndex, label) => setDrawer({ market, outcomeIndex, label })}
       />
@@ -590,7 +602,7 @@ export default function PointsWorldCupPage() {
             color: 'var(--text-muted)',
             textTransform: 'uppercase',
           }}>
-            {activeKnockoutMarkets.length} mercados abiertos
+            {tournamentComplete ? `${resolvedCount} mercados resueltos` : `${activeKnockoutMarkets.length} mercados abiertos`}
           </span>
         </div>
         <BracketView markets={knockoutMarkets} onOpen={(market) => navigate(`/market?id=${market.id}`)} />
@@ -831,7 +843,7 @@ function ThirdPlaceStrip() {
         textTransform: 'uppercase',
         color: 'var(--text-muted)',
       }}>
-        Sábado · Tercer lugar
+        Tercer lugar · finalizado
       </div>
       <div style={{
         display: 'flex',
@@ -937,10 +949,11 @@ function FinalFactPanel({ item }) {
   );
 }
 
-function CurrentStage({ loading, markets, nextMarket, stageMeta, onOpen, onBuy }) {
+function CurrentStage({ loading, markets, nextMarket, stageMeta, archived = false, onOpen, onBuy }) {
   const hasMarkets = markets.length > 0;
   const meta = stageMeta || stageMetaForRound('knockout');
   const isFinalStage = meta.key === 'final';
+  const isArchived = archived || Boolean(meta.archived);
   const finalMarkets = isFinalStage ? markets.filter(market => roundFromMarket(market) === 'final') : [];
   const thirdMarkets = isFinalStage ? markets.filter(market => roundFromMarket(market) === 'third') : [];
   const mainMarkets = isFinalStage
@@ -1048,6 +1061,7 @@ function CurrentStage({ loading, markets, nextMarket, stageMeta, onOpen, onBuy }
             <FeaturedKnockoutCard
               key={market.id}
               market={market}
+              archived={isArchived}
               onOpen={() => onOpen?.(market)}
               onBuy={(outcomeIndex, label) => onBuy?.(market, outcomeIndex, label)}
             />
@@ -1057,6 +1071,7 @@ function CurrentStage({ loading, markets, nextMarket, stageMeta, onOpen, onBuy }
               key={market.id}
               market={market}
               compact
+              archived={isArchived}
               onOpen={() => onOpen?.(market)}
               onBuy={(outcomeIndex, label) => onBuy?.(market, outcomeIndex, label)}
             />
@@ -1070,6 +1085,7 @@ function CurrentStage({ loading, markets, nextMarket, stageMeta, onOpen, onBuy }
             <FeaturedKnockoutCard
               key={market.id}
               market={market}
+              archived={isArchived}
               onOpen={() => onOpen?.(market)}
               onBuy={(outcomeIndex, label) => onBuy?.(market, outcomeIndex, label)}
             />
@@ -1080,16 +1096,17 @@ function CurrentStage({ loading, markets, nextMarket, stageMeta, onOpen, onBuy }
   );
 }
 
-function FeaturedKnockoutCard({ market, onOpen, onBuy, compact = false }) {
+function FeaturedKnockoutCard({ market, onOpen, onBuy, compact = false, archived = false }) {
   const outcomes = Array.isArray(market.outcomes) && market.outcomes.length > 0
     ? market.outcomes
     : ['Sí', 'No'];
   const prices = Array.isArray(market.prices) ? market.prices : outcomes.map(() => 1 / outcomes.length);
   const images = Array.isArray(market.outcomeImages) ? market.outcomeImages : [];
   const round = roundFromMarket(market);
-  const isResolved = market.status === 'resolved';
-  const isActive = market.status === 'active';
+  const isResolved = archived || market.status === 'resolved';
+  const isActive = !archived && market.status === 'active';
   const winnerIndex = Number(market.outcome);
+  const hasWinner = Number.isInteger(winnerIndex) && winnerIndex >= 0 && winnerIndex < outcomes.length;
 
   return (
     <article
@@ -1139,7 +1156,7 @@ function FeaturedKnockoutCard({ market, onOpen, onBuy, compact = false }) {
             textTransform: 'uppercase',
             fontWeight: 700,
           }}>
-            {isActive ? 'Abierto' : isResolved ? 'Final' : 'Cerrado'} · {roundLabel(round)}
+            {isActive ? 'Abierto' : isResolved ? 'Resuelto' : 'Cerrado'} · {roundLabel(round)}
           </span>
           <span style={{
             fontFamily: 'var(--font-mono)',
@@ -1173,7 +1190,7 @@ function FeaturedKnockoutCard({ market, onOpen, onBuy, compact = false }) {
       }}>
         {outcomes.map((label, i) => {
           const team = teamByLabel(label);
-          const pct = isResolved ? (winnerIndex === i ? 100 : 0) : Math.round((prices[i] ?? 0) * 100);
+          const pct = isResolved && hasWinner ? (winnerIndex === i ? 100 : 0) : Math.round((prices[i] ?? 0) * 100);
           const activeTone = i === 0
             ? { bg: 'rgba(0,232,122,0.12)', border: 'rgba(0,232,122,0.36)', color: 'var(--green)' }
             : { bg: 'rgba(255,85,0,0.12)', border: 'rgba(255,85,0,0.34)', color: 'var(--orange)' };

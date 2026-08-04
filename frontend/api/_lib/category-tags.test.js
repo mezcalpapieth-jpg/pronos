@@ -110,3 +110,43 @@ test('honors explicit world region without inferring Mexico from the question', 
   assert.deepEqual(tags.geoTags, ['world']);
   assert.deepEqual(tags.topicTags, ['politica']);
 });
+
+test('routes entertainment awards into their subject topic instead of a premios bucket', () => {
+  const tags = deriveMarketTags({
+    category: 'musica',
+    source: 'entertainment',
+    question: '¿Spider-Man: Brand New Day gana mejor película en los Oscars?',
+    source_data: {
+      kind: 'award',
+      awardLabel: 'Oscars',
+      categoryLabel: 'Mejor película',
+    },
+  });
+
+  assert.deepEqual(tags.categoryTags, ['musica']);
+  assert.deepEqual(tags.geoTags, []);
+  assert.deepEqual(tags.topicTags, ['cine']);
+
+  assert.equal(matchesMarketTaxonomy({ ...tags, category: 'musica' }, { category: 'musica', topic: 'cine' }), true);
+  assert.equal(matchesMarketTaxonomy({ ...tags, category: 'musica' }, { category: 'musica', topic: 'musica' }), false);
+});
+
+test('routes reality entertainment into TV and farandula topics', () => {
+  const tags = deriveMarketTags({
+    category: 'mexico',
+    source: 'entertainment',
+    question: '¿Quién sale de La Casa de los Famosos esta semana?',
+    source_data: {
+      kind: 'reality_week',
+      marketRegion: 'mexico',
+      showLabel: 'La Casa de los Famosos',
+    },
+  });
+
+  assert.deepEqual(tags.categoryTags, ['mexico']);
+  assert.deepEqual(tags.geoTags, ['mexico']);
+  assert.deepEqual(tags.topicTags, ['tv', 'farandula']);
+
+  assert.equal(matchesMarketTaxonomy({ ...tags, category: 'mexico' }, { category: 'mexico', topic: 'farandula' }), true);
+  assert.equal(matchesMarketTaxonomy({ ...tags, category: 'mexico' }, { category: 'mexico', topic: 'tv' }), true);
+});

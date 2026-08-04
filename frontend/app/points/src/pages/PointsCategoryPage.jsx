@@ -137,7 +137,18 @@ const MEXICO_TOPIC_TABS = [
   { key: 'deportes', tKey: 'points.topic.deportes' },
   { key: 'finanzas', tKey: 'points.topic.finanzas' },
   { key: 'musica',   tKey: 'points.topic.musica' },
+  { key: 'cine',     tKey: 'points.topic.cine' },
+  { key: 'tv',       tKey: 'points.topic.tv' },
+  { key: 'farandula', tKey: 'points.topic.farandula' },
   { key: 'weather',  tKey: 'points.topic.weather' },
+];
+
+const ENTERTAINMENT_TOPIC_TABS = [
+  { key: 'all',      tKey: 'points.topic.all' },
+  { key: 'musica',   tKey: 'points.topic.musica' },
+  { key: 'cine',     tKey: 'points.topic.cine' },
+  { key: 'tv',       tKey: 'points.topic.tv' },
+  { key: 'farandula', tKey: 'points.topic.farandula' },
 ];
 
 const GEO_FILTER_EXCLUDED_CATEGORIES = new Set(['all', 'crypto', 'world-cup', 'porresolver', 'resueltos', 'noticias']);
@@ -177,7 +188,7 @@ export default function PointsCategoryPage() {
   const fetchStatus = RESOLVED_SLUGS.has(slug) ? 'resolved' : 'active';
   const activeFilterCategory = RESOLVED_SLUGS.has(slug) ? resueltosCat : slug;
   const supportsGeoFilters = !GEO_FILTER_EXCLUDED_CATEGORIES.has(activeFilterCategory);
-  const supportsTopicFilters = activeFilterCategory === 'mexico';
+  const supportsTopicFilters = activeFilterCategory === 'mexico' || activeFilterCategory === 'musica';
 
   useEffect(() => {
     let cancelled = false;
@@ -353,6 +364,9 @@ export default function PointsCategoryPage() {
     || (isResueltos && resueltosCat === 'crypto');
   const showGeoBar = supportsGeoFilters;
   const showTopicBar = supportsTopicFilters;
+  const topicTabs = activeFilterCategory === 'musica'
+    ? ENTERTAINMENT_TOPIC_TABS
+    : MEXICO_TOPIC_TABS;
   const leagueTabs = sport === 'baseball'
     ? BASEBALL_LEAGUES
     : sport === 'combate'
@@ -435,8 +449,8 @@ export default function PointsCategoryPage() {
         </div>
       )}
 
-      {/* Mexico & Latam topic sub-filter — public counterpart to the
-          admin topic chips. Weather is labelled "Clima" in Spanish. */}
+      {/* Topic sub-filter — Mexico & Latam uses broad subject buckets;
+          Entertainment narrows to Música / Cine / TV / Farándula. */}
       {showTopicBar && (
         <div style={{
           display: 'flex',
@@ -446,7 +460,7 @@ export default function PointsCategoryPage() {
           marginBottom: 20,
           paddingBottom: 4,
         }}>
-          {MEXICO_TOPIC_TABS.map(item => (
+          {topicTabs.map(item => (
             <button
               key={item.key}
               className={`filter-btn${topic === item.key ? ' active' : ''}`}

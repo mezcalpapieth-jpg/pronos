@@ -46,12 +46,14 @@ import {
   ADMIN_BASEBALL_LEAGUES,
   ADMIN_COMBATE_LEAGUES,
   ADMIN_CRYPTO_FILTERS,
+  ADMIN_ENTERTAINMENT_TOPIC_FILTERS,
   ADMIN_GEO_FILTERS,
   ADMIN_MEXICO_TOPIC_FILTERS,
   ADMIN_SOCCER_LEAGUES,
   ADMIN_SPORT_FILTERS,
   CATEGORIES,
   MARKET_CREATION_GEO_OPTIONS,
+  MARKET_CREATION_TOPIC_OPTIONS,
   MARKET_CATEGORY_FILTERS,
   buildAdminMarketsQuery,
   formatAdminMarketDate,
@@ -962,6 +964,7 @@ function CreateMarketForm({ prefill }) {
     question: prefill?.question || '',
     category: prefill?.category || 'deportes',
     geo: prefill?.geo || 'auto',
+    topic: prefill?.topic || (prefill?.category === 'musica' ? 'musica' : 'general'),
     endDate: '',   // dd/mm/yyyy (text)
     endHour: '',   // 0-23 (string, validated on submit)
     endMinute: '', // 0-59 (string, validated on submit)
@@ -1056,6 +1059,7 @@ function CreateMarketForm({ prefill }) {
         question: form.question,
         category: form.category,
         geo: form.geo === 'auto' ? null : form.geo,
+        topicTags: (form.category === 'mexico' || form.category === 'musica') ? [form.topic] : null,
         icon: null,
         endTime: endIso,
         outcomes: cleaned,
@@ -1082,6 +1086,19 @@ function CreateMarketForm({ prefill }) {
       setState({ submitting: false, msg: null, err: e.code || e.message });
     }
   }
+
+  function updateCategory(next) {
+    setForm(f => ({
+      ...f,
+      category: next,
+      topic: next === 'musica' ? 'musica' : 'general',
+    }));
+  }
+
+  const showTopicField = form.category === 'mexico' || form.category === 'musica';
+  const topicOptions = form.category === 'musica'
+    ? ADMIN_ENTERTAINMENT_TOPIC_FILTERS.filter(t => t.key !== 'all')
+    : MARKET_CREATION_TOPIC_OPTIONS;
 
   return (
     <form onSubmit={handleSubmit} style={{
@@ -1142,7 +1159,7 @@ function CreateMarketForm({ prefill }) {
         <Field label="Categoría">
           <select
             value={form.category}
-            onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+            onChange={e => updateCategory(e.target.value)}
             style={inputStyle}
           >
             {CATEGORIES.map(c => (
@@ -1162,6 +1179,20 @@ function CreateMarketForm({ prefill }) {
           </select>
         </Field>
       </div>
+
+      {showTopicField && (
+        <Field label={form.category === 'musica' ? 'Subcategoría' : 'Tema'}>
+          <select
+            value={form.topic}
+            onChange={e => setForm(f => ({ ...f, topic: e.target.value }))}
+            style={inputStyle}
+          >
+            {topicOptions.map(t => (
+              <option key={t.key} value={t.key}>{t.label}</option>
+            ))}
+          </select>
+        </Field>
+      )}
 
       <Field label="Fecha de cierre">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 8px 70px', gap: 8, alignItems: 'center' }}>
@@ -1427,9 +1458,13 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
 
   const showSportFilters = categoryFilter === 'deportes';
   const showCryptoFilters = categoryFilter === 'crypto';
-  const showMexicoFilters = categoryFilter === 'mexico';
+  const showGeoFilters = categoryFilter === 'mexico';
+  const showTopicFilters = categoryFilter === 'mexico' || categoryFilter === 'musica';
   const showLeagueFilters = showSportFilters
     && (sportFilter === 'soccer' || sportFilter === 'baseball' || sportFilter === 'combate');
+  const activeTopicFilters = categoryFilter === 'musica'
+    ? ADMIN_ENTERTAINMENT_TOPIC_FILTERS
+    : ADMIN_MEXICO_TOPIC_FILTERS;
   const activeLeagueFilters = sportFilter === 'baseball'
     ? ADMIN_BASEBALL_LEAGUES
     : sportFilter === 'combate'
@@ -1731,7 +1766,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
         ))}
       </div>
 
-      {showMexicoFilters && (
+      {showGeoFilters && (
         <>
           <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
             {ADMIN_GEO_FILTERS.map(g => (
@@ -1754,28 +1789,31 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
               </button>
             ))}
           </div>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-            {ADMIN_MEXICO_TOPIC_FILTERS.map(t => (
-              <button
-                key={t.key}
-                onClick={() => setTopicFilter(t.key)}
-                style={{
-                  padding: '5px 10px',
-                  borderRadius: 14,
-                  border: `1px solid ${topicFilter === t.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
-                  background: topicFilter === t.key ? 'rgba(0,232,122,0.1)' : 'transparent',
-                  color: topicFilter === t.key ? 'var(--green)' : 'var(--text-secondary)',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 10,
-                  cursor: 'pointer',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
         </>
+      )}
+
+      {showTopicFilters && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          {activeTopicFilters.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setTopicFilter(t.key)}
+              style={{
+                padding: '5px 10px',
+                borderRadius: 14,
+                border: `1px solid ${topicFilter === t.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
+                background: topicFilter === t.key ? 'rgba(0,232,122,0.1)' : 'transparent',
+                color: topicFilter === t.key ? 'var(--green)' : 'var(--text-secondary)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                cursor: 'pointer',
+                letterSpacing: '0.04em',
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       )}
 
       {showSportFilters && (

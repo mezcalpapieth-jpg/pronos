@@ -32,7 +32,7 @@ const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 42161);
 
 const SLUG_LABELS = {
   deportes:    'Deportes',
-  musica:      'Música',
+  musica:      'Entretenimiento',
   mexico:      'Mexico & Latam',
   politica:    'Política',
   crypto:      'Crypto',
@@ -94,7 +94,7 @@ const PENDING_SLUGS = new Set(['porresolver']);
 const RESUELTOS_CATEGORIES = [
   { key: 'all',      label: 'Todas' },
   { key: 'deportes', label: 'Deportes' },
-  { key: 'musica',   label: 'Música' },
+  { key: 'musica',   label: 'Entretenimiento' },
   { key: 'mexico',   label: 'Mexico & Latam' },
   { key: 'politica', label: 'Política' },
   { key: 'crypto',   label: 'Crypto' },
@@ -114,7 +114,18 @@ const MEXICO_TOPIC_TABS = [
   { key: 'deportes', label: 'Deportes' },
   { key: 'finanzas', label: 'Finanzas' },
   { key: 'musica',   label: 'Música' },
+  { key: 'cine',     label: 'Cine' },
+  { key: 'tv',       label: 'TV' },
+  { key: 'farandula', label: 'Farándula' },
   { key: 'weather',  label: 'Clima' },
+];
+
+const ENTERTAINMENT_TOPIC_TABS = [
+  { key: 'all',      label: 'Todas' },
+  { key: 'musica',   label: 'Música' },
+  { key: 'cine',     label: 'Cine' },
+  { key: 'tv',       label: 'TV' },
+  { key: 'farandula', label: 'Farándula' },
 ];
 
 const GEO_FILTER_EXCLUDED_CATEGORIES = new Set(['all', 'crypto', 'world-cup', 'porresolver', 'resueltos', 'noticias']);
@@ -139,7 +150,7 @@ export default function CategoryPage({ onOpenLogin }) {
   const fetchStatus = RESOLVED_SLUGS.has(slug) ? 'resolved' : 'active';
   const activeFilterCategory = RESOLVED_SLUGS.has(slug) ? resueltosCat : slug;
   const supportsGeoFilters = !GEO_FILTER_EXCLUDED_CATEGORIES.has(activeFilterCategory);
-  const supportsTopicFilters = activeFilterCategory === 'mexico';
+  const supportsTopicFilters = activeFilterCategory === 'mexico' || activeFilterCategory === 'musica';
 
   useEffect(() => {
     let cancelled = false;
@@ -261,6 +272,9 @@ export default function CategoryPage({ onOpenLogin }) {
   const showCryptoTypeBar = slug === 'crypto' || (isResueltos && resueltosCat === 'crypto');
   const showGeoBar = supportsGeoFilters;
   const showTopicBar = supportsTopicFilters;
+  const topicTabs = activeFilterCategory === 'musica'
+    ? ENTERTAINMENT_TOPIC_TABS
+    : MEXICO_TOPIC_TABS;
   const leagueOptions = sport === 'soccer'
     ? SOCCER_LEAGUES
     : sport === 'baseball'
@@ -328,7 +342,7 @@ export default function CategoryPage({ onOpenLogin }) {
             display: 'flex', flexWrap: 'wrap', gap: 8,
             marginBottom: 20, paddingBottom: 4, overflowX: 'auto',
           }}>
-            {MEXICO_TOPIC_TABS.map(item => (
+            {topicTabs.map(item => (
               <button
                 key={item.key}
                 onClick={() => setTopic(item.key)}

@@ -5,7 +5,7 @@ const CATEGORY_LABEL = {
   deportes: 'Deportes',
   finanzas: 'Finanzas',
   crypto: 'Crypto',
-  musica: 'Música',
+  musica: 'Entretenimiento',
   'world-cup': 'Copa del Mundo',
 };
 

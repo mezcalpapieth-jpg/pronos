@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  ADMIN_ENTERTAINMENT_TOPIC_FILTERS,
   ADMIN_GEO_FILTERS,
   ADMIN_MEXICO_TOPIC_FILTERS,
   CATEGORIES,
@@ -67,6 +68,23 @@ test('formats admin market dates without relying on component-local helpers', ()
 
 test('exposes Spanish admin labels for World Cup, creation world region, and weather topic', () => {
   assert.ok(CATEGORIES.some(c => c.key === 'world-cup' && c.label === 'Copa del Mundo'));
+  assert.ok(CATEGORIES.some(c => c.key === 'musica' && c.label === 'Entretenimiento'));
   assert.ok(MARKET_CREATION_GEO_OPTIONS.some(c => c.key === 'world' && c.label === 'Mundo'));
   assert.ok(ADMIN_MEXICO_TOPIC_FILTERS.some(c => c.key === 'weather' && c.label === 'Clima'));
+  assert.ok(ADMIN_ENTERTAINMENT_TOPIC_FILTERS.some(c => c.key === 'cine' && c.label === 'Cine'));
+  assert.ok(ADMIN_ENTERTAINMENT_TOPIC_FILTERS.some(c => c.key === 'tv' && c.label === 'TV'));
+  assert.ok(ADMIN_ENTERTAINMENT_TOPIC_FILTERS.some(c => c.key === 'farandula' && c.label === 'Farándula'));
+});
+
+test('builds entertainment admin subfilter queries under the legacy musica key', () => {
+  assert.equal(
+    buildAdminMarketsQuery({
+      status: 'all',
+      categoryFilter: 'musica',
+      topicFilter: 'cine',
+      geoFilter: 'mexico',
+      sportFilter: 'soccer',
+    }).toString(),
+    'status=all&category=musica&topic=cine',
+  );
 });

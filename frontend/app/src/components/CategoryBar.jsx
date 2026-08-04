@@ -6,7 +6,7 @@
  *   Mundial 2026   → /c/world-cup   (highlighted tri-color gradient)
  *   Mexico & Latam → /c/mexico      (softer regional spark)
  *   Deportes       → /c/deportes
- *   Música         → /c/musica
+ *   Entretenimiento → /c/musica
  *   Política       → /c/politica
  *   Crypto         → /c/crypto
  *   Finanzas       → /c/finanzas
@@ -26,7 +26,7 @@ export const CATEGORY_TABS = [
   { slug: 'world-cup',   label: 'Mundial 2026', highlight: true },
   { slug: 'mexico',      label: 'Mexico & Latam', regional: true },
   { slug: 'deportes',    label: 'Deportes'     },
-  { slug: 'musica',      label: 'Música'       },
+  { slug: 'musica',      label: 'Entretenimiento' },
   { slug: 'politica',    label: 'Política'     },
   { slug: 'crypto',      label: 'Crypto'       },
   { slug: 'finanzas',    label: 'Finanzas'     },

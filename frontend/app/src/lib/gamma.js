@@ -24,7 +24,7 @@ export const CATEGORY_META = {
   politica: { label: 'POLÍTICA INTERNACIONAL', icon: '' },
   crypto:   { label: 'CRYPTO',                 icon: '' },
   finanzas: { label: 'FINANZAS',               icon: '' },
-  musica:   { label: 'MÚSICA & FARÁNDULA',     icon: '' },
+  musica:   { label: 'ENTRETENIMIENTO',        icon: '' },
   mexico:   { label: 'MÉXICO & LATAM',         icon: '' },
 };
 

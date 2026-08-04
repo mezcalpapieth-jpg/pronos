@@ -11,7 +11,7 @@ export const CATEGORIES = [
   { key: 'deportes', label: 'Deportes' },
   { key: 'finanzas', label: 'Finanzas' },
   { key: 'crypto', label: 'Crypto' },
-  { key: 'musica', label: 'Música' },
+  { key: 'musica', label: 'Entretenimiento' },
   { key: 'world-cup', label: 'Copa del Mundo' },
 ];
 
@@ -84,7 +84,18 @@ export const ADMIN_MEXICO_TOPIC_FILTERS = [
   { key: 'deportes', label: 'Deportes' },
   { key: 'finanzas', label: 'Finanzas' },
   { key: 'musica', label: 'Música' },
+  { key: 'cine', label: 'Cine' },
+  { key: 'tv', label: 'TV' },
+  { key: 'farandula', label: 'Farándula' },
   { key: 'weather', label: 'Clima' },
+];
+
+export const ADMIN_ENTERTAINMENT_TOPIC_FILTERS = [
+  { key: 'all', label: 'Todas' },
+  { key: 'musica', label: 'Música' },
+  { key: 'cine', label: 'Cine' },
+  { key: 'tv', label: 'TV' },
+  { key: 'farandula', label: 'Farándula' },
 ];
 
 export const MARKET_CREATION_TOPIC_OPTIONS = ADMIN_MEXICO_TOPIC_FILTERS
@@ -127,6 +138,11 @@ export function filterProtocolAdminMarkets(rows = [], {
 
     if (categoryFilter === 'mexico') {
       if (!marketInGeo(market, geoFilter)) return false;
+      if (!marketInTopic(market, topicFilter)) return false;
+      return true;
+    }
+
+    if (categoryFilter === 'musica') {
       if (!marketInTopic(market, topicFilter)) return false;
       return true;
     }

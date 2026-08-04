@@ -41,7 +41,19 @@ const sql = neon(process.env.DATABASE_URL);
 const TAG_ALLOWLISTS = {
   categoryTags: new Set(['general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup']),
   geoTags: new Set(['mexico', 'latam', 'world']),
-  topicTags: new Set(['general', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'weather', 'world-cup']),
+  topicTags: new Set([
+    'general',
+    'politica',
+    'deportes',
+    'finanzas',
+    'crypto',
+    'musica',
+    'cine',
+    'tv',
+    'farandula',
+    'weather',
+    'world-cup',
+  ]),
 };
 
 function normalizeTagArray(value, allowed) {
