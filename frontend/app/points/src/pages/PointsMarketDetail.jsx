@@ -68,6 +68,7 @@ const OUTCOME_COLORS = [
 ];
 
 const DETAIL_CHART_RANGES = [
+  { key: '4h', hours: 4, days: 1, buckets: 48, limit: 240, labelKey: 'points.detail.range4h' },
   { key: '1', days: 1, buckets: 48, limit: 500, labelKey: 'points.detail.range24h' },
   { key: '7', days: 7, buckets: 56, limit: 500, labelKey: 'points.detail.range7d' },
   { key: '30', days: 30, buckets: 60, limit: 500, labelKey: 'points.detail.range30d' },
@@ -1845,14 +1846,14 @@ export default function PointsMarketDetail({ onOpenLogin }) {
       if (market.ammMode === 'parallel' && Array.isArray(market.legs)) {
         const series = await Promise.all(
           market.legs.map((leg, i) =>
-            fetchPriceHistory([leg.id], { days: range.days, outcome: 0, limit: range.limit })
+            fetchPriceHistory([leg.id], { days: range.days, hours: range.hours, outcome: 0, limit: range.limit })
               .then(h => withTail(h[leg.id] || [], i))
               .catch(() => withTail([], i)),
           ),
         );
         const activity = await Promise.all(
           market.legs.map((leg) =>
-            fetchTradeActivity([leg.id], { days: range.days, outcome: 'all', buckets: range.buckets })
+            fetchTradeActivity([leg.id], { days: range.days, hours: range.hours, outcome: 'all', buckets: range.buckets })
               .then(a => a[leg.id] || [])
               .catch(() => []),
           ),
@@ -1875,21 +1876,21 @@ export default function PointsMarketDetail({ onOpenLogin }) {
       const n = market.outcomes.length;
       const series = await Promise.all(
         Array.from({ length: n }, (_, i) =>
-          fetchPriceHistory([market.id], { days: range.days, outcome: i, limit: range.limit })
+          fetchPriceHistory([market.id], { days: range.days, hours: range.hours, outcome: i, limit: range.limit })
             .then(h => withTail(h[market.id] || [], i))
             .catch(() => withTail([], i)),
         ),
       );
       const activity = n <= 2
         ? [
-            await fetchTradeActivity([market.id], { days: range.days, outcome: 'all', buckets: range.buckets })
+            await fetchTradeActivity([market.id], { days: range.days, hours: range.hours, outcome: 'all', buckets: range.buckets })
               .then(a => a[market.id] || [])
               .catch(() => []),
             [],
           ]
         : await Promise.all(
             Array.from({ length: n }, (_, i) =>
-              fetchTradeActivity([market.id], { days: range.days, outcome: i, buckets: range.buckets })
+              fetchTradeActivity([market.id], { days: range.days, hours: range.hours, outcome: i, buckets: range.buckets })
                 .then(a => a[market.id] || [])
                 .catch(() => []),
             ),

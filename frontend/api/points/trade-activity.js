@@ -1,6 +1,6 @@
 /**
  * GET /api/points/trade-activity?ids=1,2&days=1&outcome=0&buckets=48
- * GET /api/points/trade-activity?ids=1,2&days=1&outcome=all&buckets=48
+ * GET /api/points/trade-activity?ids=1,2&hours=4&outcome=all&buckets=48
  *
  * Returns bucketed, anonymous buy/sell activity from the immutable trade log.
  * The chart uses this as an activity layer under the real price line; it does
@@ -52,13 +52,14 @@ export default async function handler(req, res) {
   }
 
   const days = parsePositiveInt(req.query.days, 1, { min: 1, max: 60 });
+  const windowHours = parsePositiveInt(req.query.hours, days * 24, { min: 1, max: 60 * 24 });
   const outcomeParam = typeof req.query.outcome === 'string' ? req.query.outcome.trim().toLowerCase() : '0';
   const allOutcomes = outcomeParam === 'all';
   const outcomeIdx = allOutcomes
     ? null
     : parsePositiveInt(outcomeParam, 0, { min: 0, max: 200 });
   const buckets = parsePositiveInt(req.query.buckets, 48, { min: 12, max: 120 });
-  const bucketSeconds = Math.max(60, Math.ceil((days * 86_400) / buckets));
+  const bucketSeconds = Math.max(60, Math.ceil((windowHours * 3_600) / buckets));
 
   setCacheHeaders(res, {
     scope: 'public',
@@ -69,7 +70,7 @@ export default async function handler(req, res) {
 
   try {
     const cacheOutcome = allOutcomes ? 'all' : outcomeIdx;
-    const cacheKey = `points:trade-activity:v2:${ids.join(',')}:${days}:${cacheOutcome}:${buckets}`;
+    const cacheKey = `points:trade-activity:v3:${ids.join(',')}:${windowHours}:${cacheOutcome}:${buckets}`;
     const { value: payload, hit } = await cachedJson(cacheKey, 2_000, async () => {
       await timer.time('schema', () => ensurePointsSchema(schemaSql));
       const rows = await timer.time('db_trade_activity', () => {
@@ -86,7 +87,7 @@ export default async function handler(req, res) {
               FROM points_trades
               WHERE market_id = ANY(${ids}::int[])
                 AND side IN ('buy', 'sell')
-                AND created_at >= NOW() - (${days} || ' days')::interval
+                AND created_at >= NOW() - (${windowHours} || ' hours')::interval
             )
             SELECT
               market_id,
@@ -113,7 +114,7 @@ export default async function handler(req, res) {
             WHERE market_id = ANY(${ids}::int[])
               AND outcome_index = ${outcomeIdx}
               AND side IN ('buy', 'sell')
-              AND created_at >= NOW() - (${days} || ' days')::interval
+              AND created_at >= NOW() - (${windowHours} || ' hours')::interval
           )
           SELECT
             market_id,
@@ -144,7 +145,7 @@ export default async function handler(req, res) {
     });
 
     res.setHeader('X-Pronos-Cache', hit ? 'hit' : 'miss');
-    timer.end({ hit, ids: ids.length, days, outcome: cacheOutcome, buckets });
+    timer.end({ hit, ids: ids.length, hours: windowHours, outcome: cacheOutcome, buckets });
     return res.status(200).json(payload);
   } catch (e) {
     timer.end({ error: true });

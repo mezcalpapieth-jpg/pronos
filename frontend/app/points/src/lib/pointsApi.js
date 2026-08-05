@@ -276,12 +276,12 @@ export async function fetchMarket(id) {
 }
 
 /**
- * Batch-fetch the last-N-days price history for one or more market ids.
+ * Batch-fetch price history for one or more market ids.
  * Returns a map of `{ [marketId]: [{t, p}] }` — `p` is the probability
  * 0-100, `t` is a unix-seconds timestamp. Usable directly as the `data`
  * prop on the shared Sparkline component.
  */
-export async function fetchPriceHistory(ids, { days = 30, outcome = 0, limit = 200 } = {}) {
+export async function fetchPriceHistory(ids, { days = 30, hours, outcome = 0, limit = 200 } = {}) {
   const list = Array.isArray(ids) ? ids : [ids];
   const cleaned = list.filter(n => Number.isInteger(n) || (typeof n === 'string' && n.length > 0));
   if (cleaned.length === 0) return {};
@@ -291,6 +291,7 @@ export async function fetchPriceHistory(ids, { days = 30, outcome = 0, limit = 2
     outcome: String(outcome),
     limit: String(limit),
   });
+  if (hours != null) q.set('hours', String(hours));
   try {
     // Path kept flat (`/api/points/price-history`) to avoid Vercel's
     // filesystem-routing conflict where a `markets/` directory would
@@ -305,7 +306,7 @@ export async function fetchPriceHistory(ids, { days = 30, outcome = 0, limit = 2
   }
 }
 
-export async function fetchTradeActivity(ids, { days = 1, outcome = 0, buckets = 48 } = {}) {
+export async function fetchTradeActivity(ids, { days = 1, hours, outcome = 0, buckets = 48 } = {}) {
   const list = Array.isArray(ids) ? ids : [ids];
   const cleaned = list.filter(n => Number.isInteger(n) || (typeof n === 'string' && n.length > 0));
   if (cleaned.length === 0) return {};
@@ -315,6 +316,7 @@ export async function fetchTradeActivity(ids, { days = 1, outcome = 0, buckets =
     outcome: String(outcome),
     buckets: String(buckets),
   });
+  if (hours != null) q.set('hours', String(hours));
   try {
     const { activity = {} } = await getJson(`/api/points/trade-activity?${q}`);
     return activity;

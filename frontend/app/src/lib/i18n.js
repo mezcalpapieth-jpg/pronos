@@ -567,6 +567,7 @@ const STRINGS = {
   'points.detail.priceRealtime':   { es: 'PRECIO EN TIEMPO REAL', en: 'REAL-TIME PRICE' },
   'points.detail.last30d':         { es: 'ÚLT. 30 DÍAS',       en: 'LAST 30 DAYS' },
   'points.detail.chartRange':      { es: 'Rango del gráfico',   en: 'Chart range' },
+  'points.detail.range4h':         { es: '4H',                  en: '4H' },
   'points.detail.range24h':        { es: '24H',                 en: '24H' },
   'points.detail.range7d':         { es: '7D',                  en: '7D' },
   'points.detail.range30d':        { es: '30D',                 en: '30D' },

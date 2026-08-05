@@ -1,5 +1,6 @@
 /**
  * GET /api/points/price-history?ids=1,2,3&days=30&limit=200
+ * GET /api/points/price-history?ids=1,2,3&hours=4&limit=200
  *
  * Returns sampled price snapshots for one or more markets over the
  * last `days` days (default 30, max 60). Used by the home grid and market
@@ -56,9 +57,15 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'invalid_ids' });
     }
 
-    // Clamp days to [1, 60] so a caller can't force a huge result set.
+    // Clamp windows so a caller can't force a huge result set. `hours`
+    // lets the detail page show short ranges such as 4H without pretending
+    // a fractional day exists.
     const daysRaw = parseInt(req.query.days, 10);
     const days = Number.isInteger(daysRaw) ? Math.max(1, Math.min(60, daysRaw)) : 30;
+    const hoursRaw = parseInt(req.query.hours, 10);
+    const windowHours = Number.isInteger(hoursRaw)
+      ? Math.max(1, Math.min(60 * 24, hoursRaw))
+      : days * 24;
 
     // Outcome index (default 0 = Sí/YES). The sparkline only shows one
     // curve per card, so we only return one outcome to keep payload small.
@@ -88,7 +95,7 @@ export default async function handler(req, res) {
           COUNT(*) OVER (PARTITION BY market_id) AS total
         FROM points_price_snapshots
         WHERE market_id = ANY(${ids}::int[])
-          AND snapshotted_at >= NOW() - (${days} || ' days')::interval
+          AND snapshotted_at >= NOW() - (${windowHours} || ' hours')::interval
       ),
       sampled AS (
         SELECT

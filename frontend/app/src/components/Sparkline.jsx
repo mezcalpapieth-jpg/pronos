@@ -23,7 +23,6 @@ import React, { useMemo, useState, useId } from 'react';
  * @param {number} valueWidth - Width reserved for the right-side label (default 44)
  * @param {string} label - Optional left-side label (e.g. option name)
  * @param {number} labelWidth - Width reserved for the left-side label
- * @param {boolean} showActivityMarkers - Render activity dots on the line
  */
 
 function formatTimestamp(unixSeconds) {
@@ -56,7 +55,6 @@ export default function Sparkline({
   showYAxis,
   activity = [],
   showActivity = true,
-  showActivityMarkers = true,
   style = {},
 }) {
   const uid = useId().replace(/:/g, '');
@@ -158,23 +156,6 @@ export default function Sparkline({
     };
   });
 
-  const yForX = (x) => {
-    if (coords.length === 0) return height / 2;
-    if (x <= coords[0].x) return coords[0].y;
-    for (let i = 1; i < coords.length; i++) {
-      const prev = coords[i - 1];
-      const next = coords[i];
-      const minX = Math.min(prev.x, next.x);
-      const maxX = Math.max(prev.x, next.x);
-      if (x >= minX && x <= maxX) {
-        const span = next.x - prev.x;
-        const ratio = span === 0 ? 0 : (x - prev.x) / span;
-        return prev.y + (next.y - prev.y) * ratio;
-      }
-    }
-    return coords[coords.length - 1].y;
-  };
-
   const activityPoints = useMemo(() => {
     const source = Array.isArray(activity) ? activity : [];
     return source
@@ -208,22 +189,6 @@ export default function Sparkline({
     1.5,
     Math.min(7, w / Math.max(12, activityPoints.length * 1.35)),
   );
-  const activityMarkers = showActivityMarkers && hasActivity
-    ? activityPoints.map((pt, i) => {
-        const metric = pt.volume > 0 ? pt.volume : pt.count;
-        const x = xForTime(pt.t, i);
-        const sellHeavy = pt.sellVolume > pt.buyVolume;
-        return {
-          ...pt,
-          x,
-          y: yForX(x),
-          metric,
-          sellHeavy,
-          r: Math.max(2.3, Math.min(5.4, 2.3 + (metric / maxActivity) * 3.1)),
-        };
-      })
-    : [];
-
   const linePath = (pts) => {
     if (pts.length < 2) return '';
     let d = `M${pts[0].x.toFixed(2)},${pts[0].y.toFixed(2)}`;
@@ -328,9 +293,9 @@ export default function Sparkline({
                   y={height - padY - barHeight}
                   width={activityBarWidth}
                   height={barHeight}
-                  rx={activityBarWidth / 2}
+                  rx={0.8}
                   fill={sellHeavy ? '#ff3b3b' : color}
-                  opacity={sellHeavy ? 0.36 : 0.28}
+                  opacity={sellHeavy ? 0.22 : 0.2}
                 />
               );
             })}
@@ -349,24 +314,6 @@ export default function Sparkline({
           vectorEffect="non-scaling-stroke"
           opacity={hasRealHistory ? 1 : 0.45}
         />
-
-        {activityMarkers.length > 0 && (
-          <g>
-            {activityMarkers.map((pt, i) => (
-              <circle
-                key={`${pt.t}-marker-${i}`}
-                cx={pt.x}
-                cy={pt.y}
-                r={pt.r}
-                fill={pt.sellHeavy ? '#ff3b3b' : color}
-                stroke="var(--surface1)"
-                strokeWidth={1.2}
-                opacity={0.82}
-                vectorEffect="non-scaling-stroke"
-              />
-            ))}
-          </g>
-        )}
 
         {/* Hovered crosshair + dot */}
         {hPt && (
