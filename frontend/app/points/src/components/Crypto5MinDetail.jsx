@@ -33,6 +33,7 @@ import {
 import LivePriceChart from '@app/components/LivePriceChart.jsx';
 import { useLang, useT } from '@app/lib/i18n.js';
 import PointsBuyModal from './PointsBuyModal.jsx';
+import { publicErrorMessage, redeemWinnings } from '../lib/pointsApi.js';
 
 function fmt(n, d = 2) {
   if (n == null || !Number.isFinite(Number(n))) return '—';
@@ -205,6 +206,7 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
   // Buy modal state — same shape as other binary markets so PointsBuyModal
   // works without modification.
   const [buyState, setBuyState] = useState(null);
+  const [redeemState, setRedeemState] = useState({ key: null, message: null, error: null });
 
   useEffect(() => {
     if (sequence.length === 0) return;
@@ -404,6 +406,30 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
     });
   }
 
+  async function handleRedeem(position) {
+    if (!position?.canRedeem) return;
+    const key = `${position.marketId}-${position.outcomeIndex}`;
+    setRedeemState({ key, message: null, error: null });
+    try {
+      const r = await redeemWinnings({
+        marketId: position.marketId,
+        outcomeIndex: position.outcomeIndex,
+      });
+      setRedeemState({
+        key: null,
+        message: t('points.detail.claimSuccess', { n: Number(r.payout || 0).toFixed(2) }),
+        error: null,
+      });
+      await onTradeSuccess?.();
+    } catch (e) {
+      setRedeemState({
+        key: null,
+        message: null,
+        error: publicErrorMessage(e, lang, 'default'),
+      });
+    }
+  }
+
   const subePrice = selectedMarket.prices?.[0] ?? 0.5;
   const bajaPrice = selectedMarket.prices?.[1] ?? 0.5;
   const direction = currentPrice != null && meta.threshold != null
@@ -585,11 +611,27 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
             }}>
               {t('points.crypto.position')}
             </div>
+            {(redeemState.message || redeemState.error) && (
+              <div style={{
+                padding: '8px 10px',
+                borderRadius: 8,
+                border: `1px solid ${redeemState.error ? 'rgba(239,68,68,0.35)' : 'rgba(0,232,122,0.28)'}`,
+                background: redeemState.error ? 'rgba(239,68,68,0.08)' : 'rgba(0,232,122,0.08)',
+                color: redeemState.error ? 'var(--red, #ef4444)' : 'var(--green)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                lineHeight: 1.4,
+              }}>
+                {redeemState.error || redeemState.message}
+              </div>
+            )}
             {selectedPositions.map((p, i) => {
               const oi = Number(p.outcomeIndex);
               const shares = Number(p.shares) || 0;
               const currentSharePrice = Number(p.currentPrice ?? selectedMarket.prices?.[oi] ?? 0);
               const value = shares * currentSharePrice;
+              const redeemKey = `${p.marketId}-${oi}`;
+              const isRedeeming = redeemState.key === redeemKey;
               return (
                 <div
                   key={`${p.marketId}-${oi}-${i}`}
@@ -617,6 +659,21 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
                     <br />
                     {fmt(value, 2)} MXNP
                   </div>
+                  {isResolved && p.canRedeem && (
+                    <button
+                      className="btn-primary"
+                      onClick={() => handleRedeem(p)}
+                      disabled={isRedeeming}
+                      style={{
+                        marginTop: 10,
+                        padding: '9px 12px',
+                        fontSize: 11,
+                        width: '100%',
+                      }}
+                    >
+                      {isRedeeming ? t('points.detail.claiming') : t('points.detail.claim')}
+                    </button>
+                  )}
                 </div>
               );
             })}

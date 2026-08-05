@@ -21,6 +21,7 @@ import {
   placeLimitOrder,
   publicErrorMessage,
   quoteSell,
+  redeemWinnings,
 } from '../lib/pointsApi.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useLang, useT } from '@app/lib/i18n.js';
@@ -1620,6 +1621,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   const [sellPreview, setSellPreview] = useState(null);
   const [orderBookRefresh, setOrderBookRefresh] = useState(0);
   const [positionRefreshNonce, setPositionRefreshNonce] = useState(0);
+  const [redeemState, setRedeemState] = useState({ key: null, message: null, error: null });
   const cryptoSequenceSig = market?.cryptoMeta
     ? cryptoMarketSequenceSignature(buildCryptoMarketSequence(market))
     : '';
@@ -1868,6 +1870,34 @@ export default function PointsMarketDetail({ onOpenLogin }) {
           ? publicErrorMessage(e, lang, 'price_moved')
           : publicErrorMessage(e, lang, 'default'),
       } : prev);
+    }
+  }
+
+  async function handleRedeemPosition(position) {
+    if (!authenticated) {
+      onOpenLogin?.();
+      return;
+    }
+    if (!position?.canRedeem) return;
+    const key = `${position.marketId}-${position.outcomeIndex}`;
+    setRedeemState({ key, message: null, error: null });
+    try {
+      const r = await redeemWinnings({
+        marketId: position.marketId,
+        outcomeIndex: position.outcomeIndex,
+      });
+      setRedeemState({
+        key: null,
+        message: t('points.detail.claimSuccess', { n: Number(r.payout || 0).toFixed(2) }),
+        error: null,
+      });
+      await handleTradeSuccess();
+    } catch (e) {
+      setRedeemState({
+        key: null,
+        message: null,
+        error: publicErrorMessage(e, lang, 'default'),
+      });
     }
   }
 
@@ -2440,6 +2470,21 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 }}>
                   {t('points.detail.yourPos')}
                 </div>
+                {(redeemState.message || redeemState.error) && (
+                  <div style={{
+                    marginBottom: 10,
+                    padding: '8px 10px',
+                    borderRadius: 8,
+                    border: `1px solid ${redeemState.error ? 'rgba(239,68,68,0.35)' : 'rgba(0,232,122,0.28)'}`,
+                    background: redeemState.error ? 'rgba(239,68,68,0.08)' : 'rgba(0,232,122,0.08)',
+                    color: redeemState.error ? 'var(--red, #ef4444)' : 'var(--green)',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11,
+                    lineHeight: 1.4,
+                  }}>
+                    {redeemState.error || redeemState.message}
+                  </div>
+                )}
                 {userPositions.map(p => {
                   const oi = Number(p.outcomeIndex);
                   // Prefer positions.js's composed label ("Leg — Sí/No"
@@ -2461,6 +2506,8 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                   const buyTarget = p.parentMarketId
                     ? { id: p.marketId, question: `${market.question} — ${label}` }
                     : market;
+                  const redeemKey = `${p.marketId}-${oi}`;
+                  const isRedeeming = redeemState.key === redeemKey;
                   return (
                     <div key={`${p.marketId}-${oi}`} style={{
                       padding: '10px 0',
@@ -2522,6 +2569,16 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                             {t('points.detail.sell')}
                           </button>
                         </div>
+                      )}
+                      {isResolved && p.canRedeem && (
+                        <button
+                          onClick={() => handleRedeemPosition(p)}
+                          className="btn-primary"
+                          disabled={isRedeeming}
+                          style={{ padding: '9px 12px', fontSize: 11 }}
+                        >
+                          {isRedeeming ? t('points.detail.claiming') : t('points.detail.claim')}
+                        </button>
                       )}
                     </div>
                   );

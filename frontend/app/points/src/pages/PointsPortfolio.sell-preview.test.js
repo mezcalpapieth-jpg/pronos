@@ -27,6 +27,14 @@ test('market detail opens the same sell preview in place instead of routing to p
   assert.doesNotMatch(detailSource, /navigate\('\/portfolio'\)/);
 });
 
+test('market detail lets winning resolved positions claim in place', () => {
+  assert.match(detailSource, /redeemWinnings/);
+  assert.match(detailSource, /async function handleRedeemPosition\(position\)/);
+  assert.match(detailSource, /isResolved && p\.canRedeem/);
+  assert.match(detailSource, /points\.detail\.claim/);
+  assert.match(i18nSource, /'points\.detail\.claim':\s*\{\s*es:\s*'Reclamar',\s*en:\s*'Claim'/);
+});
+
 test('portfolio history displays losing PnL instead of hiding lost rows', () => {
   assert.match(source, /historyPnlValue\(m\)/);
   assert.doesNotMatch(source, /outcomeStatus\s*!==\s*'lost'/);

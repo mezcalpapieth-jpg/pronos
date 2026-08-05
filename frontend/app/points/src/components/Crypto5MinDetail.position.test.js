@@ -10,6 +10,9 @@ test('crypto 5-minute markets show and refresh the current user position after b
   assert.match(cryptoSource, /gridTemplateColumns:\s*isMobile \|\| selectedPositions\.length === 0/);
   assert.match(cryptoSource, /selectedPositions\.map/);
   assert.match(cryptoSource, /await onTradeSuccess\?\.\(\)/);
+  assert.match(cryptoSource, /redeemWinnings/);
+  assert.match(cryptoSource, /isResolved && p\.canRedeem/);
+  assert.match(cryptoSource, /points\.detail\.claim/);
 
   assert.match(detailSource, /positionRefreshNonce/);
   assert.match(detailSource, /async function handleTradeSuccess\(\)/);
