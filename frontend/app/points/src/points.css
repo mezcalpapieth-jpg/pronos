@@ -132,6 +132,32 @@
   box-shadow: 0 0 12px rgba(255, 90, 31, 0.28);
 }
 
+.points-nav-link-alert {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.points-nav-alert-badge,
+.points-mobile-menu-badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 232, 122, 0.12);
+  border: 1px solid rgba(0, 232, 122, 0.45);
+  color: var(--green);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Dropdown attached to user pill */
 .nav-dropdown-points {
   position: absolute;

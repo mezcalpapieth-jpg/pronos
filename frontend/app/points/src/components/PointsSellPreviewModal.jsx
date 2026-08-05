@@ -11,9 +11,12 @@ function signedFmt(n) {
   return `${v >= 0 ? '+' : '-'}${Math.abs(v).toFixed(2)}`;
 }
 
-export default function PointsSellPreviewModal({ state, onClose, onConfirm }) {
+export default function PointsSellPreviewModal({ state, onClose, onConfirm, onSharesChange }) {
   if (!state) return null;
   const { position, preview, loading, error, submitting } = state;
+  const maxShares = Math.max(0, Number(preview?.maxShares ?? state.maxShares ?? position?.shares) || 0);
+  const selectedShares = Math.max(0, Math.min(maxShares || 0, Number(state.selectedShares ?? preview?.shares ?? maxShares) || 0));
+  const selectedPct = maxShares > 0 ? Math.round((selectedShares / maxShares) * 100) : 100;
   const salePositive = Number(preview?.salePnl || 0) >= 0;
   const impactNegative = Number(preview?.slippageMxnp || 0) < 0;
 
@@ -83,6 +86,68 @@ export default function PointsSellPreviewModal({ state, onClose, onConfirm }) {
         <p style={{ color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.45, margin: '0 0 18px' }}>
           {position?.question}
         </p>
+
+        {maxShares > 0 && (
+          <div style={{
+            background: 'var(--surface2)',
+            border: '1px solid var(--border)',
+            borderRadius: 12,
+            padding: '14px 14px 13px',
+            marginBottom: 14,
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 12,
+              alignItems: 'baseline',
+              marginBottom: 10,
+            }}>
+              <span style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                color: 'var(--text-muted)',
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+              }}>
+                Acciones a vender
+              </span>
+              <strong style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 12,
+                color: 'var(--text-primary)',
+                fontVariantNumeric: 'tabular-nums',
+              }}>
+                {fmt(selectedShares)} / {fmt(maxShares)}
+              </strong>
+            </div>
+            <input
+              type="range"
+              min={Math.min(0.01, maxShares)}
+              max={maxShares}
+              step="0.01"
+              value={selectedShares}
+              disabled={submitting}
+              onChange={(e) => onSharesChange?.(Number(e.target.value))}
+              style={{
+                width: '100%',
+                accentColor: 'var(--orange)',
+                cursor: submitting ? 'wait' : 'pointer',
+              }}
+            />
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              marginTop: 8,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              color: 'var(--text-muted)',
+              fontVariantNumeric: 'tabular-nums',
+            }}>
+              <span>{selectedPct}%</span>
+              <span>{loading ? 'Actualizando cotización...' : 'Cotización real del AMM'}</span>
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <div style={{

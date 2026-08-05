@@ -114,12 +114,14 @@ export default function Sparkline({
     points.length > 0 && typeof points[0] === 'object' && points[0] !== null && 't' in points[0],
   [points]);
 
-  const chartWidth = Math.max(20, width - labelWidth - (showValue ? valueWidth : 0));
   const padX = 3;
   const padY = 4;
-  const w = chartWidth - padX * 2;
-  const h = height - padY * 2;
   const shouldShowYAxis = typeof showYAxis === 'boolean' ? showYAxis : height >= 100;
+  const chartWidth = Math.max(20, width - labelWidth - (showValue ? valueWidth : 0));
+  const yAxisGutter = shouldShowYAxis ? Math.min(46, Math.max(36, chartWidth * 0.13)) : 0;
+  const plotRight = Math.max(20, chartWidth - yAxisGutter);
+  const w = Math.max(20, plotRight - padX * 2);
+  const h = height - padY * 2;
 
   const timeBounds = useMemo(() => {
     if (!hasTimestamps) return null;
@@ -289,7 +291,7 @@ export default function Sparkline({
               return (
                 <rect
                   key={`${pt.t}-${i}`}
-                  x={Math.max(0, Math.min(chartWidth - activityBarWidth, x))}
+                  x={Math.max(0, Math.min(plotRight - activityBarWidth, x))}
                   y={height - padY - barHeight}
                   width={activityBarWidth}
                   height={barHeight}
@@ -361,6 +363,7 @@ export default function Sparkline({
             position: 'absolute',
             top: 0,
             right: 0,
+            width: yAxisGutter,
             height,
             display: 'flex',
             flexDirection: 'column',

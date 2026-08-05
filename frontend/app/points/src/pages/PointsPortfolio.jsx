@@ -10,12 +10,12 @@
  * preview. The campaign's earn/rewards section lives here too so logged-in
  * users have one dashboard for everything.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useLang, useT } from '@app/lib/i18n.js';
 import { historyPnlValue } from '../lib/historyPnl.js';
-import { buildSellPreview } from '../lib/sellPreview.js';
+import { buildSellPreview, normalizeSellShares } from '../lib/sellPreview.js';
 import { HistorySkeleton, LeaderboardSkeleton, PositionSkeleton } from '../components/PointsSkeleton.jsx';
 import PointsSellPreviewModal from '../components/PointsSellPreviewModal.jsx';
 import {
@@ -649,6 +649,12 @@ export default function PointsPortfolio() {
   const [actionState, setActionState] = useState({ id: null, type: null });
   const [sellPreview, setSellPreview] = useState(null);
   const [msg, setMsg] = useState(null);
+  const sellQuoteSeqRef = useRef(0);
+  const sellQuoteTimerRef = useRef(null);
+
+  useEffect(() => () => {
+    if (sellQuoteTimerRef.current) window.clearTimeout(sellQuoteTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (authLoading) return;
@@ -681,23 +687,74 @@ export default function PointsPortfolio() {
     }
   }
 
-  async function handleSell(pos) {
-    setMsg(null);
-    setActionState({ id: `${pos.marketId}-${pos.outcomeIndex}`, type: 'selling' });
-    setSellPreview({ position: pos, loading: true, error: null, preview: null, quote: null, submitting: false });
+  async function loadSellPreviewQuote(pos, shares) {
+    const selectedShares = normalizeSellShares(pos, shares);
+    const seq = sellQuoteSeqRef.current + 1;
+    sellQuoteSeqRef.current = seq;
+    setSellPreview(prev => ({
+      position: pos,
+      selectedShares,
+      maxShares: Number(pos.shares) || 0,
+      loading: true,
+      error: null,
+      preview: prev?.position === pos ? prev.preview : null,
+      quote: prev?.position === pos ? prev.quote : null,
+      submitting: false,
+    }));
     try {
       const quote = await quoteSell({
         marketId: pos.marketId,
         outcomeIndex: pos.outcomeIndex,
-        shares: pos.shares,
+        shares: selectedShares,
       });
+      if (sellQuoteSeqRef.current !== seq) return;
       const preview = buildSellPreview(pos, quote);
-      setSellPreview({ position: pos, quote, preview, loading: false, error: null, submitting: false });
+      setSellPreview({
+        position: pos,
+        selectedShares: preview.shares,
+        maxShares: preview.maxShares,
+        quote,
+        preview,
+        loading: false,
+        error: null,
+        submitting: false,
+      });
     } catch (e) {
-      setSellPreview({ position: pos, loading: false, error: publicErrorMessage(e, lang, 'quote_failed'), preview: null, quote: null, submitting: false });
-    } finally {
-      setActionState({ id: null, type: null });
+      if (sellQuoteSeqRef.current !== seq) return;
+      setSellPreview({
+        position: pos,
+        selectedShares,
+        maxShares: Number(pos.shares) || 0,
+        loading: false,
+        error: publicErrorMessage(e, lang, 'quote_failed'),
+        preview: null,
+        quote: null,
+        submitting: false,
+      });
     }
+  }
+
+  async function handleSell(pos) {
+    setMsg(null);
+    setActionState({ id: `${pos.marketId}-${pos.outcomeIndex}`, type: 'selling' });
+    await loadSellPreviewQuote(pos, pos.shares);
+    setActionState({ id: null, type: null });
+  }
+
+  function handleSellPreviewSharesChange(shares) {
+    if (!sellPreview?.position || sellPreview.submitting) return;
+    const pos = sellPreview.position;
+    const selectedShares = normalizeSellShares(pos, shares);
+    setSellPreview(prev => prev ? {
+      ...prev,
+      selectedShares,
+      loading: true,
+      error: null,
+    } : prev);
+    if (sellQuoteTimerRef.current) window.clearTimeout(sellQuoteTimerRef.current);
+    sellQuoteTimerRef.current = window.setTimeout(() => {
+      loadSellPreviewQuote(pos, selectedShares);
+    }, 220);
   }
 
   async function confirmSellPreview() {
@@ -712,7 +769,7 @@ export default function PointsPortfolio() {
       await executeSell({
         marketId: pos.marketId,
         outcomeIndex: pos.outcomeIndex,
-        shares: pos.shares,
+        shares: preview.shares,
         minCollateralOut: preview.minCollateralOut,
       });
       setMsg({
@@ -911,6 +968,7 @@ export default function PointsPortfolio() {
         if (!sellPreview?.submitting) setSellPreview(null);
       }}
       onConfirm={confirmSellPreview}
+      onSharesChange={handleSellPreviewSharesChange}
     />
     </>
   );

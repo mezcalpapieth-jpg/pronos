@@ -391,6 +391,10 @@ export async function fetchPositions() {
   return getJson('/api/points/positions');
 }
 
+export async function fetchClaimableSummary() {
+  return getJson('/api/points/claimable');
+}
+
 export async function fetchHistory() {
   return getJson('/api/points/history');
 }

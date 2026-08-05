@@ -12,10 +12,17 @@ test('portfolio sell flow previews the real AMM quote before executing', () => {
   assert.match(source, /setSellPreview\(/);
   assert.match(source, /quoteSell\(\{/);
   assert.match(source, /buildSellPreview\(/);
+  assert.match(source, /normalizeSellShares/);
+  assert.match(source, /function handleSellPreviewSharesChange\(shares\)/);
+  assert.match(source, /shares:\s*preview\.shares/);
   assert.match(source, /minCollateralOut:\s*preview\.minCollateralOut/);
   assert.match(source, /PointsSellPreviewModal/);
+  assert.match(source, /onSharesChange=\{handleSellPreviewSharesChange\}/);
   assert.match(sellModalSource, /SALIDA REAL/);
   assert.match(sellModalSource, /IMPACTO POR LIQUIDEZ/);
+  assert.match(sellModalSource, /Acciones a vender/);
+  assert.match(sellModalSource, /type="range"/);
+  assert.match(sellModalSource, /onSharesChange/);
 });
 
 test('market detail opens the same sell preview in place instead of routing to portfolio', () => {
@@ -23,6 +30,9 @@ test('market detail opens the same sell preview in place instead of routing to p
   assert.match(detailSource, /quoteSell\(\{/);
   assert.match(detailSource, /buildSellPreview\(position,\s*quote\)/);
   assert.match(detailSource, /executeSell\(\{/);
+  assert.match(detailSource, /function handleSellPreviewSharesChange\(shares\)/);
+  assert.match(detailSource, /shares:\s*preview\.shares/);
+  assert.match(detailSource, /onSharesChange=\{handleSellPreviewSharesChange\}/);
   assert.match(detailSource, /PointsSellPreviewModal/);
   assert.doesNotMatch(detailSource, /navigate\('\/portfolio'\)/);
 });

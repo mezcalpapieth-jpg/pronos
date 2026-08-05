@@ -26,7 +26,7 @@ import {
 } from '../lib/pointsApi.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useLang, useT } from '@app/lib/i18n.js';
-import { buildSellPreview } from '../lib/sellPreview.js';
+import { buildSellPreview, normalizeSellShares } from '../lib/sellPreview.js';
 import {
   formatSeriesGameLabel,
   formatSeriesScoreSummary,
@@ -1786,9 +1786,15 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   const [orderBookRefresh, setOrderBookRefresh] = useState(0);
   const [positionRefreshNonce, setPositionRefreshNonce] = useState(0);
   const [redeemState, setRedeemState] = useState({ key: null, message: null, error: null });
+  const sellQuoteSeqRef = useRef(0);
+  const sellQuoteTimerRef = useRef(null);
   const cryptoSequenceSig = market?.cryptoMeta
     ? cryptoMarketSequenceSignature(buildCryptoMarketSequence(market))
     : '';
+
+  useEffect(() => () => {
+    if (sellQuoteTimerRef.current) window.clearTimeout(sellQuoteTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -2022,14 +2028,14 @@ export default function PointsMarketDetail({ onOpenLogin }) {
     setBuyState({ market: target, outcomeIndex, outcomeLabel });
   }
 
-  async function handleSellClick(position) {
-    if (!authenticated) {
-      onOpenLogin?.();
-      return;
-    }
-    if (!position || market?.status !== 'active') return;
+  async function loadSellPreviewQuote(position, shares) {
+    const selectedShares = normalizeSellShares(position, shares);
+    const seq = sellQuoteSeqRef.current + 1;
+    sellQuoteSeqRef.current = seq;
     setSellPreview({
       position,
+      selectedShares,
+      maxShares: Number(position.shares) || 0,
       loading: true,
       error: null,
       preview: null,
@@ -2040,11 +2046,14 @@ export default function PointsMarketDetail({ onOpenLogin }) {
       const quote = await quoteSell({
         marketId: position.marketId,
         outcomeIndex: position.outcomeIndex,
-        shares: position.shares,
+        shares: selectedShares,
       });
+      if (sellQuoteSeqRef.current !== seq) return;
       const preview = buildSellPreview(position, quote);
       setSellPreview({
         position,
+        selectedShares: preview.shares,
+        maxShares: preview.maxShares,
         quote,
         preview,
         loading: false,
@@ -2052,8 +2061,11 @@ export default function PointsMarketDetail({ onOpenLogin }) {
         submitting: false,
       });
     } catch (e) {
+      if (sellQuoteSeqRef.current !== seq) return;
       setSellPreview({
         position,
+        selectedShares,
+        maxShares: Number(position.shares) || 0,
         loading: false,
         error: publicErrorMessage(e, lang, 'quote_failed'),
         preview: null,
@@ -2061,6 +2073,31 @@ export default function PointsMarketDetail({ onOpenLogin }) {
         submitting: false,
       });
     }
+  }
+
+  async function handleSellClick(position) {
+    if (!authenticated) {
+      onOpenLogin?.();
+      return;
+    }
+    if (!position || market?.status !== 'active') return;
+    await loadSellPreviewQuote(position, position.shares);
+  }
+
+  function handleSellPreviewSharesChange(shares) {
+    if (!sellPreview?.position || sellPreview.submitting) return;
+    const position = sellPreview.position;
+    const selectedShares = normalizeSellShares(position, shares);
+    setSellPreview(prev => prev ? {
+      ...prev,
+      selectedShares,
+      loading: true,
+      error: null,
+    } : prev);
+    if (sellQuoteTimerRef.current) window.clearTimeout(sellQuoteTimerRef.current);
+    sellQuoteTimerRef.current = window.setTimeout(() => {
+      loadSellPreviewQuote(position, selectedShares);
+    }, 220);
   }
 
   async function confirmSellPreview() {
@@ -2072,7 +2109,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
       await executeSell({
         marketId: position.marketId,
         outcomeIndex: position.outcomeIndex,
-        shares: position.shares,
+        shares: preview.shares,
         minCollateralOut: preview.minCollateralOut,
       });
       setSellPreview(null);
@@ -2082,6 +2119,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
         setMarket(fresh);
       } catch { /* no-op */ }
       setOrderBookRefresh(v => v + 1);
+      setPositionRefreshNonce(v => v + 1);
     } catch (e) {
       setSellPreview(prev => prev ? {
         ...prev,
@@ -2970,6 +3008,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
           if (!sellPreview?.submitting) setSellPreview(null);
         }}
         onConfirm={confirmSellPreview}
+        onSharesChange={handleSellPreviewSharesChange}
       />
     </>
   );

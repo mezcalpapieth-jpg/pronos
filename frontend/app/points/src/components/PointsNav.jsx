@@ -13,7 +13,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useT, useLang, setLang } from '@app/lib/i18n.js';
-import { fetchMarkets, adminListTaskCounts } from '../lib/pointsApi.js';
+import { fetchMarkets, adminListTaskCounts, fetchClaimableSummary } from '../lib/pointsApi.js';
 
 // Public info page on pronos.io that explains prediction markets. The MVP
 // and old landing both link here — we match so the user journey is the same.
@@ -50,6 +50,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [theme, setTheme] = useState(getInitialTheme);
   const [adminTaskTotal, setAdminTaskTotal] = useState(0);
+  const [claimableCount, setClaimableCount] = useState(0);
   const dropdownRef = useRef(null);
   const mobileMenuRef = useRef(null);
   const t = useT();
@@ -161,6 +162,32 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
       if (intervalId) window.clearInterval(intervalId);
     };
   }, [authenticated, isAdmin, dropdownOpen]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadClaimableCount() {
+      if (!authenticated) {
+        if (!cancelled) setClaimableCount(0);
+        return;
+      }
+      try {
+        const summary = await fetchClaimableSummary();
+        if (!cancelled) setClaimableCount(Number(summary?.count || 0));
+      } catch {
+        if (!cancelled) setClaimableCount(0);
+      }
+    }
+
+    loadClaimableCount();
+    const intervalId = authenticated
+      ? window.setInterval(loadClaimableCount, 60000)
+      : null;
+    return () => {
+      cancelled = true;
+      if (intervalId) window.clearInterval(intervalId);
+    };
+  }, [authenticated, user?.username, location.pathname]);
 
   useEffect(() => {
     if (!dropdownOpen) return undefined;
@@ -367,7 +394,14 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
             <Link to="/" onClick={closeMobileMenu}>{t('points.nav.markets')}</Link>
             {authenticated && (
               <>
-                <Link to="/portfolio" onClick={closeMobileMenu}>{t('points.nav.portfolio')}</Link>
+                <Link to="/portfolio" onClick={closeMobileMenu} className="points-mobile-menu-row">
+                  <span>{t('points.nav.portfolio')}</span>
+                  {claimableCount > 0 && (
+                    <span className="points-mobile-menu-badge">
+                      {claimableCount > 99 ? '99+' : claimableCount}
+                    </span>
+                  )}
+                </Link>
                 <Link to="/torneo" onClick={closeMobileMenu}>{t('points.nav.tournament')}</Link>
                 <Link to="/earn" onClick={closeMobileMenu}>{t('points.nav.earn')}</Link>
               </>
@@ -438,7 +472,14 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
         <Link to="/" style={navLinkStyle}>{t('points.nav.markets')}</Link>
         {authenticated && (
           <>
-            <Link to="/portfolio" style={navLinkStyle}>{t('points.nav.portfolio')}</Link>
+            <Link to="/portfolio" style={navLinkStyle} className="points-nav-link-alert">
+              <span>{t('points.nav.portfolio')}</span>
+              {claimableCount > 0 && (
+                <span className="points-nav-alert-badge">
+                  {claimableCount > 99 ? '99+' : claimableCount}
+                </span>
+              )}
+            </Link>
             <Link to="/torneo" style={navLinkStyle}>{t('points.nav.tournament')}</Link>
             <Link to="/earn" style={navLinkStyle}>{t('points.nav.earn')}</Link>
           </>
@@ -500,8 +541,17 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
                       : <>Elige un usuario para completar tu cuenta.</>
                   )}
                 </div>
-                <Link to="/portfolio" onClick={() => setDropdownOpen(false)}>
-                  {t('points.nav.portfolio')}
+                <Link
+                  to="/portfolio"
+                  onClick={() => setDropdownOpen(false)}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
+                >
+                  <span>{t('points.nav.portfolio')}</span>
+                  {claimableCount > 0 && (
+                    <span className="points-nav-alert-badge">
+                      {claimableCount > 99 ? '99+' : claimableCount}
+                    </span>
+                  )}
                 </Link>
                 <Link to="/support" onClick={() => setDropdownOpen(false)}>
                   {lang === 'en' ? 'Support' : 'Soporte'}

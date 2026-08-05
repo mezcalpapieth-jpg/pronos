@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildSellPreview } from './sellPreview.js';
+import { buildSellPreview, normalizeSellShares } from './sellPreview.js';
 
 test('buildSellPreview shows realized sale math after AMM slippage', () => {
   const preview = buildSellPreview(
@@ -43,4 +43,39 @@ test('buildSellPreview guards empty quotes without showing NaN', () => {
   assert.equal(preview.slippageMxnp, 0);
   assert.equal(preview.slippagePct, 0);
   assert.equal(preview.minCollateralOut, 0);
+});
+
+test('buildSellPreview prorates position math for a partial early sell', () => {
+  const preview = buildSellPreview(
+    {
+      shares: 100,
+      costBasis: 80,
+      currentValue: 120,
+      pnl: 40,
+    },
+    {
+      shares: 25,
+      collateralOut: 28,
+      priceBefore: 0.6,
+      priceAfter: 0.57,
+      priceImpactPts: -3,
+    },
+  );
+
+  assert.equal(preview.shares, 25);
+  assert.equal(preview.maxShares, 100);
+  assert.equal(preview.sharePct, 25);
+  assert.equal(preview.markValue, 30);
+  assert.equal(preview.costBasis, 20);
+  assert.equal(preview.markPnl, 10);
+  assert.equal(preview.salePnl, 8);
+  assert.equal(preview.slippageMxnp, -2);
+  assert.equal(preview.minCollateralOut, 27.72);
+});
+
+test('normalizeSellShares clamps slider values to the held position', () => {
+  assert.equal(normalizeSellShares({ shares: 10 }, 3.5), 3.5);
+  assert.equal(normalizeSellShares({ shares: 10 }, 99), 10);
+  assert.equal(normalizeSellShares({ shares: 10 }, -1), 0.01);
+  assert.equal(normalizeSellShares({ shares: 0 }, 5), 0);
 });

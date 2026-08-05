@@ -28,6 +28,14 @@ test('public points search uses all active markets and does not render stored ma
   assert.match(navSource, /background:\s*'var\(--orange\)'/);
 });
 
+test('portfolio nav surfaces claimable resolved winnings count', () => {
+  assert.match(apiSource, /export async function fetchClaimableSummary/);
+  assert.match(navSource, /fetchClaimableSummary/);
+  assert.match(navSource, /claimableCount/);
+  assert.match(navSource, /points-nav-alert-badge/);
+  assert.match(navSource, /points-mobile-menu-badge/);
+});
+
 test('public points errors use safe user copy instead of backend details', () => {
   assert.match(apiSource, /export function publicErrorMessage/);
   assert.match(homeSource, /setError\('load_failed'\)/);

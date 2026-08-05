@@ -14,6 +14,8 @@ test('sparkline renders real trade activity without synthetic price smoothing', 
   assert.doesNotMatch(source, /activityMarkers|showActivityMarkers|-marker-/);
   assert.match(source, /timeBounds/);
   assert.match(source, /xForTime/);
+  assert.match(source, /yAxisGutter/);
+  assert.match(source, /plotRight/);
   assert.match(source, /Straight segments so every vertex represents an actual snapshot/);
   assert.doesNotMatch(source, /curveBasis|curveMonotone|Math\.random/);
 });
