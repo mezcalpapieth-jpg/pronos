@@ -9,3 +9,13 @@ test('admin public profile payload includes connected social links', () => {
   assert.match(SOURCE, /buildAdminProfileSocialLinks/);
   assert.match(SOURCE, /adminSocialLinks/);
 });
+
+test('public profile lookup falls back to public points activity rows', () => {
+  assert.match(SOURCE, /WITH candidates AS/);
+  assert.match(SOURCE, /FROM points_balances/);
+  assert.match(SOURCE, /FROM points_trades/);
+  assert.match(SOURCE, /FROM points_positions/);
+  assert.match(SOURCE, /FROM points_distributions/);
+  assert.match(SOURCE, /FROM points_cycle_snapshots/);
+  assert.match(SOURCE, /ORDER BY priority ASC/);
+});

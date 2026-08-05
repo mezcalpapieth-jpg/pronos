@@ -67,7 +67,8 @@
     { "source": "/points/r/:username",  "destination": "/points/" },
     { "source": "/points/u/:username",  "destination": "/points/" },
     { "source": "/points/c/deportes/uefa-champions-league", "destination": "/points/" },
-    { "source": "/points/c/:slug",      "destination": "/points/" }
+    { "source": "/points/c/:slug",      "destination": "/points/" },
+    { "source": "/points/:path*",       "destination": "/points/" }
   ],
   "headers": [
     {

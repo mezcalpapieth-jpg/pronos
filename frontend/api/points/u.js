@@ -96,12 +96,54 @@ export default async function handler(req, res) {
   try {
     await ensurePointsSchema(schemaSql);
 
-    // Confirm the user exists. We treat absence as 404 — same response
-    // shape as MVP /api/user, no information leak about other rows.
+    // Confirm the user exists. Public surfaces can link usernames from
+    // historical balances/trades/cycle snapshots even if a legacy user
+    // does not have a points_users identity row, so resolve from the
+    // full public points footprint and prefer points_users when present.
     const userRow = await sql`
+      WITH candidates AS (
+        SELECT LOWER(username) AS username, created_at, 0 AS priority
+        FROM points_users
+        WHERE username IS NOT NULL
+          AND LOWER(username) = ${username}
+
+        UNION ALL
+        SELECT LOWER(username) AS username, updated_at AS created_at, 1 AS priority
+        FROM points_balances
+        WHERE username IS NOT NULL
+          AND LOWER(username) = ${username}
+
+        UNION ALL
+        SELECT LOWER(username) AS username, MIN(created_at) AS created_at, 2 AS priority
+        FROM points_trades
+        WHERE username IS NOT NULL
+          AND LOWER(username) = ${username}
+        GROUP BY LOWER(username)
+
+        UNION ALL
+        SELECT LOWER(username) AS username, MIN(updated_at) AS created_at, 3 AS priority
+        FROM points_positions
+        WHERE username IS NOT NULL
+          AND LOWER(username) = ${username}
+        GROUP BY LOWER(username)
+
+        UNION ALL
+        SELECT LOWER(username) AS username, MIN(created_at) AS created_at, 4 AS priority
+        FROM points_distributions
+        WHERE username IS NOT NULL
+          AND LOWER(username) = ${username}
+        GROUP BY LOWER(username)
+
+        UNION ALL
+        SELECT LOWER(username) AS username, MIN(created_at) AS created_at, 5 AS priority
+        FROM points_cycle_snapshots
+        WHERE username IS NOT NULL
+          AND LOWER(username) = ${username}
+        GROUP BY LOWER(username)
+      )
       SELECT username, created_at
-      FROM points_users
-      WHERE username = ${username}
+      FROM candidates
+      ORDER BY priority ASC, created_at ASC NULLS LAST
       LIMIT 1
     `;
     if (userRow.length === 0) {

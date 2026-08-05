@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./PointsPortfolio.jsx', import.meta.url), 'utf8');
+const sellModalSource = await readFile(new URL('../components/PointsSellPreviewModal.jsx', import.meta.url), 'utf8');
+const detailSource = await readFile(new URL('./PointsMarketDetail.jsx', import.meta.url), 'utf8');
 const earnSource = await readFile(new URL('./PointsEarn.jsx', import.meta.url), 'utf8');
 const i18nSource = await readFile(new URL('../../../src/lib/i18n.js', import.meta.url), 'utf8');
 
@@ -11,8 +13,18 @@ test('portfolio sell flow previews the real AMM quote before executing', () => {
   assert.match(source, /quoteSell\(\{/);
   assert.match(source, /buildSellPreview\(/);
   assert.match(source, /minCollateralOut:\s*preview\.minCollateralOut/);
-  assert.match(source, /SALIDA REAL/);
-  assert.match(source, /IMPACTO POR LIQUIDEZ/);
+  assert.match(source, /PointsSellPreviewModal/);
+  assert.match(sellModalSource, /SALIDA REAL/);
+  assert.match(sellModalSource, /IMPACTO POR LIQUIDEZ/);
+});
+
+test('market detail opens the same sell preview in place instead of routing to portfolio', () => {
+  assert.match(detailSource, /handleSellClick\(p\)/);
+  assert.match(detailSource, /quoteSell\(\{/);
+  assert.match(detailSource, /buildSellPreview\(position,\s*quote\)/);
+  assert.match(detailSource, /executeSell\(\{/);
+  assert.match(detailSource, /PointsSellPreviewModal/);
+  assert.doesNotMatch(detailSource, /navigate\('\/portfolio'\)/);
 });
 
 test('portfolio history displays losing PnL instead of hiding lost rows', () => {

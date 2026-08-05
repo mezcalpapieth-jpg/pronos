@@ -65,6 +65,14 @@ export default async function handler(req, res) {
           rejection_note = CASE
             WHEN social_tasks.status = 'rejected' THEN NULL
             ELSE social_tasks.rejection_note
+          END,
+          reviewer = CASE
+            WHEN social_tasks.status = 'rejected' THEN NULL
+            ELSE social_tasks.reviewer
+          END,
+          reviewed_at = CASE
+            WHEN social_tasks.status = 'rejected' THEN NULL
+            ELSE social_tasks.reviewed_at
           END
       RETURNING status, id
     `;

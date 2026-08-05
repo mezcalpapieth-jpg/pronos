@@ -42,10 +42,23 @@ test('social task review columns are added for older existing tables', () => {
   }
 });
 
+test('social task reviews are append-only and power reviewed tabs', () => {
+  for (const migrationSource of [pointsSchema, migrate]) {
+    assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS social_task_reviews/);
+    assert.match(migrationSource, /social_task_id INTEGER REFERENCES social_tasks\(id\) ON DELETE SET NULL/);
+    assert.match(migrationSource, /action\s+TEXT NOT NULL CHECK \(action IN \('approved', 'rejected'\)\)/);
+    assert.match(migrationSource, /idx_social_task_reviews_status_time/);
+  }
+  assert.match(source, /INSERT INTO social_task_reviews/);
+  assert.match(source, /r\.action = \$\{status\}/);
+  assert.match(source, /r\.social_task_id = s\.id/);
+});
+
 test('social task admin can load one combined history tab', () => {
   assert.match(source, /history/);
   assert.match(source, /status IN \('approved', 'rejected'\)/);
-  assert.match(source, /COALESCE\(s\.reviewed_at, s\.created_at\) DESC/);
+  assert.match(source, /FROM social_task_reviews r/);
+  assert.match(source, /COALESCE\(e\.reviewed_at, e\.created_at\) DESC/);
 });
 
 test('social task admin supports hidden expiring post campaigns', () => {

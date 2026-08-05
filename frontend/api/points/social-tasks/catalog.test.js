@@ -34,3 +34,11 @@ test('submit API can resolve static and campaign tasks through a shared lookup',
   assert.match(submitSource, /findSocialTaskByKey/);
   assert.match(submitSource, /task\.url/);
 });
+
+test('resubmitting a rejected task clears current review metadata', async () => {
+  const submitSource = await readFile(new URL('./submit.js', import.meta.url), 'utf8');
+  assert.match(submitSource, /WHEN social_tasks\.status = 'rejected' THEN 'pending'/);
+  assert.match(submitSource, /reviewer = CASE/);
+  assert.match(submitSource, /reviewed_at = CASE/);
+  assert.match(submitSource, /WHEN social_tasks\.status = 'rejected' THEN NULL/);
+});

@@ -137,19 +137,64 @@ async function handleList(req, res) {
     }
     const rows = status === 'history'
       ? await sql`
-          SELECT s.id, s.username, s.task_key, s.status, s.reward, s.proof_url,
-                 s.reviewer, s.reviewed_at, s.rejection_note, s.created_at,
-                 c.platform, c.target_url, c.label AS task_label,
+          WITH review_events AS (
+            SELECT r.id AS review_id, r.social_task_id AS id, r.username, r.task_key,
+                   r.action AS status, r.reward, r.proof_url, r.reviewer,
+                   r.reviewed_at, r.rejection_note, r.created_at
+            FROM social_task_reviews r
+            UNION ALL
+            SELECT NULL::INTEGER AS review_id, s.id, s.username, s.task_key,
+                   s.status, s.reward, s.proof_url, s.reviewer,
+                   s.reviewed_at, s.rejection_note, s.created_at
+            FROM social_tasks s
+            WHERE s.status IN ('approved', 'rejected')
+              AND NOT EXISTS (
+                SELECT 1
+                FROM social_task_reviews r
+                WHERE r.social_task_id = s.id
+              )
+          )
+          SELECT e.review_id, e.id, e.username, e.task_key, e.status, e.reward,
+                 e.proof_url, e.reviewer, e.reviewed_at, e.rejection_note,
+                 e.created_at, c.platform, c.target_url, c.label AS task_label,
                  c.expires_at AS task_expires_at
-          FROM social_tasks s
-          LEFT JOIN social_task_campaigns c ON c.task_key = s.task_key
-          WHERE s.status IN ('approved', 'rejected')
-          ORDER BY COALESCE(s.reviewed_at, s.created_at) DESC
+          FROM review_events e
+          LEFT JOIN social_task_campaigns c ON c.task_key = e.task_key
+          ORDER BY COALESCE(e.reviewed_at, e.created_at) DESC, e.review_id DESC NULLS LAST
           LIMIT 100
         `
-      : await sql`
+      : status === 'approved' || status === 'rejected'
+        ? await sql`
+          WITH review_events AS (
+            SELECT r.id AS review_id, r.social_task_id AS id, r.username, r.task_key,
+                   r.action AS status, r.reward, r.proof_url, r.reviewer,
+                   r.reviewed_at, r.rejection_note, r.created_at
+            FROM social_task_reviews r
+            WHERE r.action = ${status}
+            UNION ALL
+            SELECT NULL::INTEGER AS review_id, s.id, s.username, s.task_key,
+                   s.status, s.reward, s.proof_url, s.reviewer,
+                   s.reviewed_at, s.rejection_note, s.created_at
+            FROM social_tasks s
+            WHERE s.status = ${status}
+              AND NOT EXISTS (
+                SELECT 1
+                FROM social_task_reviews r
+                WHERE r.social_task_id = s.id
+              )
+          )
+          SELECT e.review_id, e.id, e.username, e.task_key, e.status, e.reward,
+                 e.proof_url, e.reviewer, e.reviewed_at, e.rejection_note,
+                 e.created_at, c.platform, c.target_url, c.label AS task_label,
+                 c.expires_at AS task_expires_at
+          FROM review_events e
+          LEFT JOIN social_task_campaigns c ON c.task_key = e.task_key
+          ORDER BY COALESCE(e.reviewed_at, e.created_at) DESC, e.review_id DESC NULLS LAST
+          LIMIT 100
+        `
+        : await sql`
           SELECT s.id, s.username, s.task_key, s.status, s.reward, s.proof_url,
-                 s.reviewer, s.reviewed_at, s.rejection_note, s.created_at,
+                 NULL::INTEGER AS review_id, s.reviewer, s.reviewed_at, s.rejection_note, s.created_at,
                  c.platform, c.target_url, c.label AS task_label,
                  c.expires_at AS task_expires_at
           FROM social_tasks s
@@ -198,7 +243,7 @@ async function handleReview(req, res, adminUsername) {
   try {
     const result = await withTransaction(async (client) => {
       const current = await client.query(
-        `SELECT id, username, task_key, status, reward
+        `SELECT id, username, task_key, status, reward, proof_url
          FROM social_tasks
          WHERE id = $1
          FOR UPDATE`,
@@ -218,6 +263,13 @@ async function handleReview(req, res, adminUsername) {
            SET status = 'approved', reviewer = $1, reviewed_at = NOW()
            WHERE id = $2`,
           [adminUsername, taskId],
+        );
+        await client.query(
+          `INSERT INTO social_task_reviews (
+             social_task_id, username, task_key, action, reward, proof_url, reviewer
+           )
+           VALUES ($1, $2, $3, 'approved', $4, $5, $6)`,
+          [taskId, task.username, task.task_key, Number(task.reward), task.proof_url || null, adminUsername],
         );
 
         // Credit the user their reward + audit entry.
@@ -248,6 +300,21 @@ async function handleReview(req, res, adminUsername) {
                rejection_note = $2
            WHERE id = $3`,
           [adminUsername, note.trim().slice(0, 500), taskId],
+        );
+        await client.query(
+          `INSERT INTO social_task_reviews (
+             social_task_id, username, task_key, action, reward, proof_url, reviewer, rejection_note
+           )
+           VALUES ($1, $2, $3, 'rejected', $4, $5, $6, $7)`,
+          [
+            taskId,
+            task.username,
+            task.task_key,
+            Number(task.reward),
+            task.proof_url || null,
+            adminUsername,
+            note.trim().slice(0, 500),
+          ],
         );
       }
 

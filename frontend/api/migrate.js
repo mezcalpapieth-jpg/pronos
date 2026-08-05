@@ -483,6 +483,25 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_social_tasks_review_history
     ON social_tasks(status, reviewed_at DESC, created_at DESC)
     WHERE status IN ('approved', 'rejected')`,
+  `CREATE TABLE IF NOT EXISTS social_task_reviews (
+    id             SERIAL PRIMARY KEY,
+    social_task_id INTEGER REFERENCES social_tasks(id) ON DELETE SET NULL,
+    username       TEXT NOT NULL,
+    task_key       TEXT NOT NULL,
+    action         TEXT NOT NULL CHECK (action IN ('approved', 'rejected')),
+    reward         NUMERIC(20,6) NOT NULL DEFAULT 0,
+    proof_url      TEXT,
+    reviewer       TEXT,
+    rejection_note TEXT,
+    reviewed_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at     TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_social_task_reviews_status_time
+    ON social_task_reviews(action, reviewed_at DESC, id DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_social_task_reviews_task
+    ON social_task_reviews(social_task_id, reviewed_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_social_task_reviews_user_time
+    ON social_task_reviews(username, reviewed_at DESC)`,
 ];
 
 export default async function handler(req, res) {

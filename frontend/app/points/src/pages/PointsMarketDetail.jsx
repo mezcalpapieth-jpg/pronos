@@ -17,11 +17,14 @@ import {
   fetchOrderBook,
   fetchPriceHistory,
   fetchPositions,
+  executeSell,
   placeLimitOrder,
   publicErrorMessage,
+  quoteSell,
 } from '../lib/pointsApi.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useLang, useT } from '@app/lib/i18n.js';
+import { buildSellPreview } from '../lib/sellPreview.js';
 import {
   formatSeriesGameLabel,
   formatSeriesScoreSummary,
@@ -37,6 +40,7 @@ import ShareButton from '@app/components/ShareButton.jsx';
 import TeamMarketStrip from '@app/components/TeamMarketStrip.jsx';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
 import PointsBuyModal from '../components/PointsBuyModal.jsx';
+import PointsSellPreviewModal from '../components/PointsSellPreviewModal.jsx';
 import MarketComments from '../components/MarketComments.jsx';
 import Crypto5MinDetail from '../components/Crypto5MinDetail.jsx';
 import TopHolders from '../components/TopHolders.jsx';
@@ -1594,8 +1598,9 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const id = searchParams.get('id');
-  const { authenticated, user } = usePointsAuth();
+  const { authenticated, user, refresh } = usePointsAuth();
   const t = useT();
+  const lang = useLang();
   // Collapses the 360px buy panel to a single column on phones so the
   // chart + outcome list can use the full viewport width.
   const isMobile = useIsMobile();
@@ -1612,6 +1617,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   //   parallel → the individual leg market (so the buy endpoint hits the
   //              leg's binary CPMM, not the aggregated parent)
   const [buyState, setBuyState] = useState(null);
+  const [sellPreview, setSellPreview] = useState(null);
   const [orderBookRefresh, setOrderBookRefresh] = useState(0);
   const cryptoSequenceSig = market?.cryptoMeta
     ? cryptoMarketSequenceSignature(buildCryptoMarketSequence(market))
@@ -1781,6 +1787,77 @@ export default function PointsMarketDetail({ onOpenLogin }) {
       return;
     }
     setBuyState({ market: target, outcomeIndex, outcomeLabel });
+  }
+
+  async function handleSellClick(position) {
+    if (!authenticated) {
+      onOpenLogin?.();
+      return;
+    }
+    if (!position || market?.status !== 'active') return;
+    setSellPreview({
+      position,
+      loading: true,
+      error: null,
+      preview: null,
+      quote: null,
+      submitting: false,
+    });
+    try {
+      const quote = await quoteSell({
+        marketId: position.marketId,
+        outcomeIndex: position.outcomeIndex,
+        shares: position.shares,
+      });
+      const preview = buildSellPreview(position, quote);
+      setSellPreview({
+        position,
+        quote,
+        preview,
+        loading: false,
+        error: null,
+        submitting: false,
+      });
+    } catch (e) {
+      setSellPreview({
+        position,
+        loading: false,
+        error: publicErrorMessage(e, lang, 'quote_failed'),
+        preview: null,
+        quote: null,
+        submitting: false,
+      });
+    }
+  }
+
+  async function confirmSellPreview() {
+    if (!sellPreview?.position || !sellPreview?.preview || sellPreview.submitting) return;
+    const position = sellPreview.position;
+    const preview = sellPreview.preview;
+    setSellPreview(prev => prev ? { ...prev, submitting: true, error: null } : prev);
+    try {
+      await executeSell({
+        marketId: position.marketId,
+        outcomeIndex: position.outcomeIndex,
+        shares: position.shares,
+        minCollateralOut: preview.minCollateralOut,
+      });
+      setSellPreview(null);
+      await refresh?.();
+      try {
+        const fresh = await fetchMarket(id);
+        setMarket(fresh);
+      } catch { /* no-op */ }
+      setOrderBookRefresh(v => v + 1);
+    } catch (e) {
+      setSellPreview(prev => prev ? {
+        ...prev,
+        submitting: false,
+        error: e.code === 'price_moved'
+          ? publicErrorMessage(e, lang, 'price_moved')
+          : publicErrorMessage(e, lang, 'default'),
+      } : prev);
+    }
   }
 
   if (loading) {
@@ -2326,11 +2403,9 @@ export default function PointsMarketDetail({ onOpenLogin }) {
           }}>
 
             {/* ── Tu posición ───────────────────────────────────────
-                Shows shares held per outcome when the user is signed in
-                and holds anything on this market. Each row has a
-                "Vender" shortcut that jumps to /portfolio where the
-                sell flow is already wired. Keeps the user from having
-                to leave the market detail to manage existing exposure.
+                Shows shares held per outcome when the user is signed in.
+                "Vender" opens the same quote-first AMM preview used in
+                Portfolio, without leaving the market detail.
             */}
             {authenticated && userPositions.length > 0 && (
               <div style={{
@@ -2413,7 +2488,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                             {t('points.detail.buyMore')}
                           </button>
                           <button
-                            onClick={() => navigate('/portfolio')}
+                            onClick={() => handleSellClick(p)}
                             style={{
                               flex: 1,
                               padding: '8px 10px',
@@ -2546,6 +2621,13 @@ export default function PointsMarketDetail({ onOpenLogin }) {
           }}
         />
       )}
+      <PointsSellPreviewModal
+        state={sellPreview}
+        onClose={() => {
+          if (!sellPreview?.submitting) setSellPreview(null);
+        }}
+        onConfirm={confirmSellPreview}
+      />
     </>
   );
 }

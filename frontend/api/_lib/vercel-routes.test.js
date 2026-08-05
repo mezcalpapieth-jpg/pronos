@@ -45,6 +45,18 @@ test('public user profile route hard-refreshes through the points SPA', () => {
   );
 });
 
+test('all points app subroutes hard-refresh through the points SPA', () => {
+  assert.ok(
+    hasRule(vercelConfig.rewrites, '/points/:path*', '/points/'),
+    'expected /points/:path* to rewrite to /points/',
+  );
+  assert.ok(
+    hasRule(vercelConfig.rewrites, '/points/torneo', '/points/')
+      || hasRule(vercelConfig.rewrites, '/points/:path*', '/points/'),
+    'expected /points/torneo to be covered by an SPA rewrite',
+  );
+});
+
 test('private deck lives at the root deck path and hard-refreshes through the points SPA', () => {
   assert.ok(
     hasRule(vercelConfig.redirects, '/points/deck', '/deck'),

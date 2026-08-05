@@ -606,6 +606,13 @@ function SocialTasksQueue({ onQueueChange }) {
     return `${window.location.origin}/earn?task=${encodeURIComponent(key)}`;
   }
 
+  function emptySocialCopy() {
+    if (status === 'approved') return 'Sin tareas aprobadas todavía.';
+    if (status === 'rejected') return 'Sin tareas rechazadas todavía.';
+    if (status === 'history') return 'Sin historial de revisiones todavía.';
+    return 'Sin tareas pendientes.';
+  }
+
   async function copyCampaignLink(campaign) {
     const url = campaignShareUrl(campaign);
     if (!url) return;
@@ -838,7 +845,7 @@ function SocialTasksQueue({ onQueueChange }) {
       )}
       {tasks && tasks.length === 0 && (
         <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-          Sin tareas en esta categoría.
+          {emptySocialCopy()}
         </p>
       )}
       {tasks && tasks.map(t => {
@@ -847,8 +854,11 @@ function SocialTasksQueue({ onQueueChange }) {
           : t.status === 'rejected'
             ? 'Rechazada'
             : 'Pendiente';
+        const reviewedLabel = t.reviewed_at ? adminDateTime(t.reviewed_at) : null;
+        const submittedLabel = t.created_at ? adminDateTime(t.created_at) : null;
+        const rowKey = `${t.review_id ? `review-${t.review_id}` : `task-${t.id}`}-${t.status}`;
         return (
-          <div key={t.id} style={{
+          <div key={rowKey} style={{
             background: 'var(--surface1)',
             border: '1px solid var(--border)',
             borderRadius: 10,
@@ -860,7 +870,21 @@ function SocialTasksQueue({ onQueueChange }) {
           }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>
-                #{t.id} · @{t.username} · {t.task_label || t.task_key} · {t.platform ? String(t.platform).toUpperCase() : 'SOCIAL'} · {statusLabel} · +{t.reward} MXNP
+                #{t.review_id ? `rev-${t.review_id}` : t.id} · @{t.username} · {t.task_label || t.task_key} · {t.platform ? String(t.platform).toUpperCase() : 'SOCIAL'} · {statusLabel} · +{t.reward} MXNP
+              </div>
+              <div style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '6px 12px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                color: 'var(--text-secondary)',
+                marginBottom: 8,
+              }}>
+                <span>Usuario: @{t.username}</span>
+                {submittedLabel && <span>Enviada: {submittedLabel}</span>}
+                {reviewedLabel && <span>Revisada: {reviewedLabel}</span>}
+                {t.reviewer && <span>Admin: @{t.reviewer}</span>}
               </div>
               {t.target_url && (
                 <a
@@ -909,7 +933,7 @@ function SocialTasksQueue({ onQueueChange }) {
               </>
             ) : (
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
-                Revisada por @{t.reviewer || 'admin'} · {t.reviewed_at ? new Date(t.reviewed_at).toLocaleDateString('es-MX') : 'sin fecha'}
+                Revisada por @{t.reviewer || 'admin'} · {reviewedLabel || 'sin fecha'}
               </span>
             )}
           </div>

@@ -137,3 +137,14 @@ test('Points admin has a command center for hidden expiring social post tasks', 
   assert.match(apiSource, /export async function adminDeactivateSocialTaskCampaign/);
   assert.match(apiSource, /action:\s*'deactivate_campaign'/);
 });
+
+test('Points admin social task tabs show review history details', () => {
+  assert.match(source, /Sin tareas aprobadas todavía/);
+  assert.match(source, /Sin tareas rechazadas todavía/);
+  assert.match(source, /Sin historial de revisiones todavía/);
+  assert.match(source, /review_id/);
+  assert.match(source, /Usuario: @/);
+  assert.match(source, /Enviada:/);
+  assert.match(source, /Revisada:/);
+  assert.match(source, /Admin: @/);
+});
