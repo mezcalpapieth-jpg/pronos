@@ -7,6 +7,7 @@ import React, { useMemo, useState, useId } from 'react';
  * - Optional right-side percentage label
  * - Hover anywhere on the chart to see timestamp + value tooltip
  * - Straight segments so every vertex represents an actual snapshot
+ * - Optional activity bars show real trade volume/count under the line
  * - Supports both `number[]` (mock) and `{t, p}[]` (real CLOB history)
  *
  * @param {number[]|{t:number,p:number}[]} data - Probability values (0-100)
@@ -17,6 +18,7 @@ import React, { useMemo, useState, useId } from 'react';
  * @param {string} color - Line color (CSS var or hex)
  * @param {boolean} fill - Show gradient fill under line
  * @param {number} strokeWidth - Line thickness
+ * @param {{t:number,count?:number,volume?:number,buyVolume?:number,sellVolume?:number}[]} activity
  * @param {boolean} showValue - Render the percentage label to the right of the chart
  * @param {number} valueWidth - Width reserved for the right-side label (default 44)
  * @param {string} label - Optional left-side label (e.g. option name)
@@ -51,6 +53,8 @@ export default function Sparkline({
   emptySubLabel = 'El precio se moverá con el primer trade.',
   showEmptyState = true,
   showYAxis,
+  activity = [],
+  showActivity = true,
   style = {},
 }) {
   const uid = useId().replace(/:/g, '');
@@ -117,11 +121,74 @@ export default function Sparkline({
   const h = height - padY * 2;
   const shouldShowYAxis = typeof showYAxis === 'boolean' ? showYAxis : height >= 100;
 
-  const coords = values.map((v, i) => ({
-    x: padX + (i / (values.length - 1)) * w,
-    y: padY + h - (v / 100) * h,
-    v,
-  }));
+  const timeBounds = useMemo(() => {
+    if (!hasTimestamps) return null;
+    const priceTimes = points
+      .map(pt => Number(pt?.t))
+      .filter(t => Number.isFinite(t) && t > 0);
+    const activityTimes = (Array.isArray(activity) ? activity : [])
+      .map(pt => Number(pt?.t))
+      .filter(t => Number.isFinite(t) && t > 0);
+    const times = [...priceTimes, ...activityTimes];
+    if (times.length < 2) return null;
+    const min = Math.min(...times);
+    const max = Math.max(...times);
+    return max > min ? { min, max } : null;
+  }, [activity, hasTimestamps, points]);
+
+  const xForTime = (t, fallbackIdx = 0) => {
+    const time = Number(t);
+    if (timeBounds && Number.isFinite(time)) {
+      const clamped = Math.max(timeBounds.min, Math.min(timeBounds.max, time));
+      return padX + ((clamped - timeBounds.min) / (timeBounds.max - timeBounds.min)) * w;
+    }
+    const denom = Math.max(1, values.length - 1);
+    return padX + (fallbackIdx / denom) * w;
+  };
+
+  const coords = values.map((v, i) => {
+    const pt = points[i];
+    return {
+      x: xForTime(typeof pt === 'object' && pt !== null ? pt.t : null, i),
+      y: padY + h - (v / 100) * h,
+      v,
+      t: typeof pt === 'object' && pt !== null ? pt.t : null,
+    };
+  });
+
+  const activityPoints = useMemo(() => {
+    const source = Array.isArray(activity) ? activity : [];
+    return source
+      .map((pt) => {
+        const t = Number(pt?.t);
+        const count = Number(pt?.count || 0);
+        const volume = Number(pt?.volume || 0);
+        const buyVolume = Number(pt?.buyVolume || 0);
+        const sellVolume = Number(pt?.sellVolume || 0);
+        if (!Number.isFinite(t) || t <= 0) return null;
+        if (!Number.isFinite(count) && !Number.isFinite(volume)) return null;
+        return {
+          t,
+          count: Number.isFinite(count) ? Math.max(0, count) : 0,
+          volume: Number.isFinite(volume) ? Math.max(0, volume) : 0,
+          buyVolume: Number.isFinite(buyVolume) ? Math.max(0, buyVolume) : 0,
+          sellVolume: Number.isFinite(sellVolume) ? Math.max(0, sellVolume) : 0,
+        };
+      })
+      .filter(Boolean);
+  }, [activity]);
+  const hasActivity = activityPoints.length > 0;
+  const maxActivity = Math.max(
+    1,
+    ...activityPoints.map(pt => (pt.volume > 0 ? pt.volume : pt.count)),
+  );
+  const activityBandHeight = showActivity && hasActivity
+    ? Math.max(12, Math.min(24, height * 0.2))
+    : 0;
+  const activityBarWidth = Math.max(
+    1.5,
+    Math.min(7, w / Math.max(12, activityPoints.length * 1.35)),
+  );
 
   const linePath = (pts) => {
     if (pts.length < 2) return '';
@@ -142,9 +209,17 @@ export default function Sparkline({
   // Hover tracking — map mouse X to nearest data index
   function handleMouseMove(e) {
     const rect = e.currentTarget.getBoundingClientRect();
-    const relX = (e.clientX - rect.left) / rect.width;
-    const idx = Math.round(relX * (values.length - 1));
-    setHoveredIdx(Math.max(0, Math.min(values.length - 1, idx)));
+    const relX = ((e.clientX - rect.left) / rect.width) * chartWidth;
+    let bestIdx = 0;
+    let bestDistance = Infinity;
+    for (let i = 0; i < coords.length; i++) {
+      const distance = Math.abs(coords[i].x - relX);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIdx = i;
+      }
+    }
+    setHoveredIdx(Math.max(0, Math.min(values.length - 1, bestIdx)));
   }
 
   const hPt = hoveredIdx !== null ? coords[hoveredIdx] : null;
@@ -204,6 +279,29 @@ export default function Sparkline({
             <stop offset="100%" stopColor={color} stopOpacity="0" />
           </linearGradient>
         </defs>
+
+        {showActivity && hasActivity && (
+          <g opacity="0.9">
+            {activityPoints.map((pt, i) => {
+              const metric = pt.volume > 0 ? pt.volume : pt.count;
+              const barHeight = Math.max(2, (metric / maxActivity) * activityBandHeight);
+              const x = xForTime(pt.t, i) - activityBarWidth / 2;
+              const sellHeavy = pt.sellVolume > pt.buyVolume;
+              return (
+                <rect
+                  key={`${pt.t}-${i}`}
+                  x={Math.max(0, Math.min(chartWidth - activityBarWidth, x))}
+                  y={height - padY - barHeight}
+                  width={activityBarWidth}
+                  height={barHeight}
+                  rx={activityBarWidth / 2}
+                  fill={sellHeavy ? '#ff3b3b' : color}
+                  opacity={sellHeavy ? 0.36 : 0.28}
+                />
+              );
+            })}
+          </g>
+        )}
 
         {fill && hasRealHistory && <path d={fillD} fill={`url(#${gradientId})`} />}
 
@@ -281,7 +379,7 @@ export default function Sparkline({
         </div>
       )}
 
-      {showEmptyState && !hasRealHistory && (
+      {showEmptyState && !hasRealHistory && !hasActivity && (
         <div
           style={{
             position: 'absolute',

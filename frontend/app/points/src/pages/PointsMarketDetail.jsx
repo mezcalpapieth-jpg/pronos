@@ -17,6 +17,7 @@ import {
   fetchOrderBook,
   fetchPriceHistory,
   fetchPositions,
+  fetchTradeActivity,
   executeSell,
   placeLimitOrder,
   publicErrorMessage,
@@ -65,6 +66,16 @@ const OUTCOME_COLORS = [
   '#ec4899',               // pink
   '#84cc16',               // lime
 ];
+
+const DETAIL_CHART_RANGES = [
+  { key: '1', days: 1, buckets: 48, limit: 500, labelKey: 'points.detail.range24h' },
+  { key: '7', days: 7, buckets: 56, limit: 500, labelKey: 'points.detail.range7d' },
+  { key: '30', days: 30, buckets: 60, limit: 500, labelKey: 'points.detail.range30d' },
+];
+
+function detailChartRangeFor(key) {
+  return DETAIL_CHART_RANGES.find(r => r.key === String(key)) || DETAIL_CHART_RANGES[0];
+}
 
 const MULTI_ACCENTS = [
   { border: 'rgba(22,163,74,0.25)',  bg: 'var(--yes-dim, rgba(22,163,74,0.1))', fg: 'var(--yes)' },
@@ -1610,6 +1621,9 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   // historyByOutcome[i] = [{t, p}] for outcome i. Populated for every
   // outcome so the chart can render one line per option on multi markets.
   const [historyByOutcome, setHistoryByOutcome] = useState(null);
+  const [activityByOutcome, setActivityByOutcome] = useState(null);
+  const [chartRange, setChartRange] = useState('1');
+  const chartRangeTouchedRef = useRef(false);
   const [userPositions, setUserPositions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -1631,73 +1645,122 @@ export default function PointsMarketDetail({ onOpenLogin }) {
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setHistoryByOutcome(null);
+    setActivityByOutcome(null);
+    chartRangeTouchedRef.current = false;
     fetchMarket(id)
       .then(m => {
         if (cancelled) return;
         setMarket(m);
         setLoading(false);
         if (!m) return;
-
-        // For resolved markets, append a final synthesized point at
-        // resolved_at so the chart's right edge snaps to 100 (winner) /
-        // 0 (loser). Without this the line ended at whatever the last
-        // live tick was, which contradicted the ring chart + cards
-        // that already collapse to 100/0 on resolution.
-        const tailPointFor = (outcomeIdx) => {
-          if (m.status !== 'resolved' || m.outcome == null) return null;
-          const t = m.resolvedAt
-            ? Math.floor(new Date(m.resolvedAt).getTime() / 1000)
-            : Math.floor(Date.now() / 1000);
-          const p = Number(m.outcome) === outcomeIdx ? 100 : 0;
-          return { t, p };
-        };
-        const withTail = (series, outcomeIdx) => {
-          const tail = tailPointFor(outcomeIdx);
-          if (!tail) return series;
-          // Drop any in-history points after resolved_at so the snap is
-          // the unambiguous final point.
-          const filtered = series.filter(pt => pt.t <= tail.t);
-          // If the existing last point already matches the resolved
-          // value we don't need a duplicate; skip the append.
-          const last = filtered[filtered.length - 1];
-          if (last && last.t === tail.t && Math.abs(last.p - tail.p) < 0.5) {
-            return filtered;
-          }
-          return [...filtered, tail];
-        };
-
-        // Fire-and-forget price-history fetch. Shape differs by AMM mode:
-        //   Unified: one call per outcome on the parent market id (the
-        //   snapshot job stores a price per outcome in one row).
-        //   Parallel: one call per leg — each leg is its own binary
-        //   market, snapshotted independently — and we pull the YES
-        //   (outcome 0) series to plot the per-outcome line.
-        if (m.ammMode === 'parallel' && Array.isArray(m.legs)) {
-          Promise.all(
-            m.legs.map((leg, i) =>
-              fetchPriceHistory([leg.id], { days: 30, outcome: 0 })
-                .then(h => withTail(h[leg.id] || [], i))
-                .catch(() => withTail([], i)),
-            ),
-          ).then(series => {
-            if (!cancelled) setHistoryByOutcome(series);
-          });
-        } else if (Array.isArray(m.outcomes)) {
-          const n = m.outcomes.length;
-          Promise.all(
-            Array.from({ length: n }, (_, i) =>
-              fetchPriceHistory([m.id], { days: 30, outcome: i })
-                .then(h => withTail(h[m.id] || [], i))
-                .catch(() => withTail([], i)),
-            ),
-          ).then(series => {
-            if (!cancelled) setHistoryByOutcome(series);
-          });
-        }
       })
       .catch(() => { if (!cancelled) { setError('load_failed'); setLoading(false); } });
     return () => { cancelled = true; };
   }, [id]);
+
+  useEffect(() => {
+    if (!market?.id) return undefined;
+
+    if (!chartRangeTouchedRef.current) {
+      const preferredRange = market.status === 'resolved' ? '30' : '1';
+      if (chartRange !== preferredRange) {
+        setChartRange(preferredRange);
+        return undefined;
+      }
+    }
+
+    let cancelled = false;
+    const range = detailChartRangeFor(chartRange);
+
+    const tailPointFor = (outcomeIdx) => {
+      if (market.status !== 'resolved' || market.outcome == null) return null;
+      const t = market.resolvedAt
+        ? Math.floor(new Date(market.resolvedAt).getTime() / 1000)
+        : Math.floor(Date.now() / 1000);
+      const p = Number(market.outcome) === outcomeIdx ? 100 : 0;
+      return { t, p };
+    };
+    const withTail = (series, outcomeIdx) => {
+      const tail = tailPointFor(outcomeIdx);
+      if (!tail) return series;
+      const filtered = series.filter(pt => pt.t <= tail.t);
+      const last = filtered[filtered.length - 1];
+      if (last && last.t === tail.t && Math.abs(last.p - tail.p) < 0.5) {
+        return filtered;
+      }
+      return [...filtered, tail];
+    };
+
+    const load = async () => {
+      if (market.ammMode === 'parallel' && Array.isArray(market.legs)) {
+        const series = await Promise.all(
+          market.legs.map((leg, i) =>
+            fetchPriceHistory([leg.id], { days: range.days, outcome: 0, limit: range.limit })
+              .then(h => withTail(h[leg.id] || [], i))
+              .catch(() => withTail([], i)),
+          ),
+        );
+        const activity = await Promise.all(
+          market.legs.map((leg) =>
+            fetchTradeActivity([leg.id], { days: range.days, outcome: 0, buckets: range.buckets })
+              .then(a => a[leg.id] || [])
+              .catch(() => []),
+          ),
+        );
+        if (!cancelled) {
+          setHistoryByOutcome(series);
+          setActivityByOutcome(activity);
+        }
+        return;
+      }
+
+      if (!Array.isArray(market.outcomes)) {
+        if (!cancelled) {
+          setHistoryByOutcome([]);
+          setActivityByOutcome([]);
+        }
+        return;
+      }
+
+      const n = market.outcomes.length;
+      const series = await Promise.all(
+        Array.from({ length: n }, (_, i) =>
+          fetchPriceHistory([market.id], { days: range.days, outcome: i, limit: range.limit })
+            .then(h => withTail(h[market.id] || [], i))
+            .catch(() => withTail([], i)),
+        ),
+      );
+      const activity = await Promise.all(
+        Array.from({ length: n }, (_, i) =>
+          fetchTradeActivity([market.id], { days: range.days, outcome: i, buckets: range.buckets })
+            .then(a => a[market.id] || [])
+            .catch(() => []),
+        ),
+      );
+      if (!cancelled) {
+        setHistoryByOutcome(series);
+        setActivityByOutcome(activity);
+      }
+    };
+
+    load().catch(() => {
+      if (!cancelled) {
+        setHistoryByOutcome([]);
+        setActivityByOutcome([]);
+      }
+    });
+
+    return () => { cancelled = true; };
+  }, [
+    chartRange,
+    market?.ammMode,
+    market?.id,
+    market?.outcome,
+    market?.resolvedAt,
+    market?.status,
+    orderBookRefresh,
+  ]);
 
   useEffect(() => {
     if (!market?.id) return;
@@ -1966,6 +2029,8 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   const displayOutcomeImages = displayOutcomeIndices.map(i => market.outcomeImages?.[i] || null);
   const displayOutcomeCountryLabels = displayOutcomeIndices.map(i => market.outcomeCountryLabels?.[i] || null);
   const displayHistoryByOutcome = displayOutcomeIndices.map(i => historyByOutcome?.[i] || []);
+  const displayActivityByOutcome = displayOutcomeIndices.map(i => activityByOutcome?.[i] || []);
+  const activeChartRange = detailChartRangeFor(chartRange);
   const isCanceled = market.status === 'canceled';
   const winnerIndex = !isCanceled && market.status === 'resolved' && market.outcome != null ? Number(market.outcome) : null;
   const isResolved = winnerIndex != null && Number.isFinite(winnerIndex);
@@ -2154,7 +2219,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
             )}
 
             {/* Price history chart — shows real probability snapshots
-                over the last 30 days. If there are no snapshots yet,
+                plus real trade activity. If there are no snapshots yet,
                 Sparkline renders an explicit flat/empty state instead
                 of inventing movement. */}
             <div style={{
@@ -2175,7 +2240,47 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 color: 'var(--text-muted)',
               }}>
                 <span>{isResolved ? t('points.detail.priceHistory') : t('points.detail.priceRealtime')}</span>
-                <span>{t('points.detail.last30d')}</span>
+                <div
+                  role="group"
+                  aria-label={t('points.detail.chartRange')}
+                  style={{
+                    display: 'inline-flex',
+                    gap: 4,
+                    padding: 3,
+                    border: '1px solid var(--border)',
+                    borderRadius: 999,
+                    background: 'rgba(255,255,255,0.02)',
+                  }}
+                >
+                  {DETAIL_CHART_RANGES.map((range) => {
+                    const active = range.key === activeChartRange.key;
+                    return (
+                      <button
+                        key={range.key}
+                        type="button"
+                        onClick={() => {
+                          chartRangeTouchedRef.current = true;
+                          setChartRange(range.key);
+                        }}
+                        style={{
+                          border: 0,
+                          borderRadius: 999,
+                          padding: '5px 9px',
+                          background: active ? 'rgba(255,85,0,0.16)' : 'transparent',
+                          color: active ? 'var(--orange)' : 'var(--text-muted)',
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 9,
+                          fontWeight: 700,
+                          letterSpacing: '0.08em',
+                          textTransform: 'uppercase',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {t(range.labelKey)}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <div style={{ padding: '20px 20px 18px' }}>
                 {/* One sparkline per outcome. For binary markets we show
@@ -2193,6 +2298,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                     showValue={true}
                     valueWidth={60}
                     data={displayHistoryByOutcome?.[0] || []}
+                    activity={displayActivityByOutcome?.[0] || []}
                     targetPct={pctFor(0)}
                     seed={`points-detail-${market.id}-${displayOutcomes[0] || 'yes'}`}
                     emptyLabel="Sin actividad todavía"
@@ -2229,6 +2335,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                             label={label.length > 10 ? label.slice(0, 9) + '…' : label}
                             labelWidth={84}
                             data={Array.isArray(series) ? series : []}
+                            activity={displayActivityByOutcome?.[i] || []}
                             targetPct={pctFor(i)}
                             seed={`points-detail-${market.id}-${label || 'opt' + i}`}
                             showEmptyState={i === chartIndices[0]}
