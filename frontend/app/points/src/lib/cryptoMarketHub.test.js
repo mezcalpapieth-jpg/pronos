@@ -118,3 +118,17 @@ test('cryptoMarketSequenceSignature changes when lifecycle metadata changes', ()
     cryptoMarketSequenceSignature(promoted),
   );
 });
+
+test('cryptoMarketSequenceSignature changes when prices move after a trade', () => {
+  const sequence = buildCryptoMarketSequence(baseMarket);
+  const traded = sequence.map((market) => (
+    market.id === 42
+      ? { ...market, prices: [0.57, 0.43] }
+      : market
+  ));
+
+  assert.notEqual(
+    cryptoMarketSequenceSignature(sequence),
+    cryptoMarketSequenceSignature(traded),
+  );
+});

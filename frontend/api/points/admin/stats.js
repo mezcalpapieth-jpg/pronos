@@ -302,15 +302,15 @@ export default async function handler(req, res) {
         ranked AS (
           SELECT
             *,
+            COUNT(*) OVER (PARTITION BY kind)::int AS total_users,
             ROW_NUMBER() OVER (
               PARTITION BY kind
               ORDER BY ABS(total) DESC, last_at DESC, username ASC
             ) AS rn
           FROM user_distributions
         )
-        SELECT kind, username, total, count, last_at
+        SELECT kind, username, total, count, last_at, total_users
         FROM ranked
-        WHERE rn <= 8
         ORDER BY kind ASC, ABS(total) DESC, last_at DESC, username ASC
       `,
       sql`
@@ -371,19 +371,22 @@ export default async function handler(req, res) {
       users: userRows[0].c,
       totalSupply: Number(supplyRows[0].total || 0),
       markets: marketRows[0],
-      recentDistributions: distRows.map(r => ({
-        kind: r.kind,
-        total: Number(r.total),
-        count: r.count,
-        users: distributionUserRows
-          .filter(u => u.kind === r.kind)
-          .map(u => ({
+      recentDistributions: distRows.map(r => {
+        const usersForKind = distributionUserRows.filter(u => u.kind === r.kind);
+        const totalUsers = Math.max(0, ...usersForKind.map(u => Number(u.total_users || 0)));
+        return {
+          kind: r.kind,
+          total: Number(r.total),
+          count: r.count,
+          hiddenUsers: Math.max(0, totalUsers - usersForKind.length),
+          users: usersForKind.map(u => ({
             username: u.username,
             total: Number(u.total || 0),
             count: Number(u.count || 0),
             lastAt: u.last_at,
           })),
-      })),
+        };
+      }),
       userSignups: signupRows.map(r => ({
         username: r.username,
         email: r.email,

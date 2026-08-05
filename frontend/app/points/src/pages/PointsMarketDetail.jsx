@@ -1619,6 +1619,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   const [buyState, setBuyState] = useState(null);
   const [sellPreview, setSellPreview] = useState(null);
   const [orderBookRefresh, setOrderBookRefresh] = useState(0);
+  const [positionRefreshNonce, setPositionRefreshNonce] = useState(0);
   const cryptoSequenceSig = market?.cryptoMeta
     ? cryptoMarketSequenceSignature(buildCryptoMarketSequence(market))
     : '';
@@ -1775,7 +1776,17 @@ export default function PointsMarketDetail({ onOpenLogin }) {
       })
       .catch(() => { /* best-effort */ });
     return () => { cancelled = true; };
-  }, [authenticated, id, buyState, orderBookRefresh, market?.cryptoMeta, cryptoSequenceSig]);
+  }, [authenticated, id, buyState, orderBookRefresh, positionRefreshNonce, market?.cryptoMeta, cryptoSequenceSig]);
+
+  async function handleTradeSuccess() {
+    await refresh?.();
+    try {
+      const fresh = await fetchMarket(id);
+      setMarket(fresh);
+    } catch { /* no-op */ }
+    setPositionRefreshNonce(v => v + 1);
+    setOrderBookRefresh(v => v + 1);
+  }
 
   function handleBuyClick(target, outcomeIndex, outcomeLabel) {
     if (!authenticated) {
@@ -1896,7 +1907,12 @@ export default function PointsMarketDetail({ onOpenLogin }) {
         maxWidth: 1160,
         margin: '0 auto',
       }}>
-        <Crypto5MinDetail market={market} userPositions={userPositions} />
+        <Crypto5MinDetail
+          market={market}
+          userPositions={userPositions}
+          onTradeSuccess={handleTradeSuccess}
+          isMobile={isMobile}
+        />
       </main>
     );
   }
@@ -2612,12 +2628,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
           onClose={() => setBuyState(null)}
           onSuccess={async () => {
             setBuyState(null);
-            // Refresh the market so prices + volume update after the trade.
-            try {
-              const fresh = await fetchMarket(id);
-              setMarket(fresh);
-            } catch { /* no-op */ }
-            setOrderBookRefresh(v => v + 1);
+            await handleTradeSuccess();
           }}
         />
       )}

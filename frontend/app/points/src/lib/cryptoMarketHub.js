@@ -142,6 +142,7 @@ export function cryptoMarketSequenceSignature(sequence) {
       market.outcome ?? '',
       market.startTime || '',
       market.endTime || '',
+      Array.isArray(market.prices) ? market.prices.map((p) => Number(p).toFixed(6)).join(',') : '',
       meta.threshold ?? '',
       meta.openPrice ?? '',
       meta.closePrice ?? '',

@@ -3090,6 +3090,16 @@ function AdminUserSignupPanel({ users, totalUsers }) {
 
 function AdminDistributionsPanel({ distributions }) {
   const rows = Array.isArray(distributions) ? distributions : [];
+  const [expandedKinds, setExpandedKinds] = useState(() => new Set());
+  const toggleKind = (kind) => {
+    setExpandedKinds((prev) => {
+      const next = new Set(prev);
+      if (next.has(kind)) next.delete(kind);
+      else next.add(kind);
+      return next;
+    });
+  };
+
   return (
     <section style={adminPanelStyle}>
       <div style={adminPanelTitle}>Distribuciones por usuario (últimos 7 días)</div>
@@ -3099,6 +3109,11 @@ function AdminDistributionsPanel({ distributions }) {
         <div style={{ display: 'grid', gap: 12 }}>
           {rows.map(d => {
             const users = Array.isArray(d.users) ? d.users : [];
+            const isExpanded = expandedKinds.has(d.kind);
+            const visibleUsers = isExpanded ? users : users.slice(0, 8);
+            const hiddenInPanel = Math.max(0, users.length - visibleUsers.length);
+            const hiddenInBackend = Number(d.hiddenUsers || 0);
+            const totalHidden = hiddenInPanel + hiddenInBackend;
             return (
               <div key={d.kind} style={{
                 borderBottom: '1px solid var(--border)',
@@ -3128,7 +3143,7 @@ function AdminDistributionsPanel({ distributions }) {
                   </p>
                 ) : (
                   <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
-                    {users.map(userRow => (
+                    {visibleUsers.map(userRow => (
                       <div key={`${d.kind}-${userRow.username}`} style={{
                         display: 'grid',
                         gridTemplateColumns: 'minmax(130px, 0.7fr) minmax(110px, auto) minmax(80px, auto) minmax(120px, auto)',
@@ -3165,6 +3180,27 @@ function AdminDistributionsPanel({ distributions }) {
                         </span>
                       </div>
                     ))}
+                    {(users.length > 8 || hiddenInBackend > 0) && (
+                      <button
+                        type="button"
+                        onClick={() => toggleKind(d.kind)}
+                        style={{
+                          justifySelf: 'start',
+                          border: '1px solid var(--border)',
+                          borderRadius: 999,
+                          background: 'rgba(255,255,255,0.03)',
+                          color: 'var(--text-secondary)',
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 11,
+                          padding: '7px 12px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {isExpanded
+                          ? 'Ver menos'
+                          : `Ver todos${totalHidden > 0 ? ` · +${adminNumber(totalHidden)}` : ''}`}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

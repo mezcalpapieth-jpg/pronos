@@ -24,7 +24,9 @@ test('admin stats includes invested volume, site time, publicity links, and per-
   assert.match(statsSource, /points_publicity_attributions/);
   assert.match(statsSource, /LOWER\(ru\.username\) = LOWER\(t\.username\)/);
   assert.match(statsSource, /recentDistributions: distRows\.map/);
-  assert.match(statsSource, /users: distributionUserRows/);
+  assert.match(statsSource, /usersForKind = distributionUserRows\.filter/);
+  assert.match(statsSource, /hiddenUsers:/);
+  assert.doesNotMatch(statsSource, /rn <= CASE WHEN kind = 'referral_bonus'/);
 });
 
 test('site-time heartbeat stores only daily aggregate seconds per user', () => {

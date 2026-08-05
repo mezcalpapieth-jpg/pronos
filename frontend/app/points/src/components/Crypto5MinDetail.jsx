@@ -178,7 +178,7 @@ function pointsForMarketWindow(points, market) {
   });
 }
 
-export default function Crypto5MinDetail({ market, userPositions = [] }) {
+export default function Crypto5MinDetail({ market, userPositions = [], onTradeSuccess, isMobile = false }) {
   const navigate = useNavigate();
   const t = useT();
   const lang = useLang();
@@ -543,8 +543,18 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
         </div>
       </div>
 
-      {/* Chart */}
-      <div style={{ marginBottom: 20 }}>
+      {/* Chart + current user position. The 5-minute window turns over
+          quickly, so keep the user's active side visible beside the live
+          price instead of burying it below the controls. */}
+      <div style={{
+        marginBottom: 20,
+        display: 'grid',
+        gridTemplateColumns: isMobile || selectedPositions.length === 0
+          ? 'minmax(0, 1fr)'
+          : 'minmax(0, 1fr) 230px',
+        gap: 12,
+        alignItems: 'stretch',
+      }}>
         <LivePriceChart
           history={chartHistory}
           threshold={meta.threshold ?? null}
@@ -554,6 +564,64 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
           highlightStart={selectedWindow.start ?? undefined}
           highlightEnd={selectedWindow.end ?? undefined}
         />
+        {selectedPositions.length > 0 && (
+          <div style={{
+            padding: '14px 16px',
+            borderRadius: 12,
+            background: 'rgba(0,232,122,0.08)',
+            border: '1px solid rgba(0,232,122,0.28)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            gap: 12,
+            minHeight: 160,
+          }}>
+            <div style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              letterSpacing: '0.12em',
+              textTransform: 'uppercase',
+              color: 'var(--green)',
+            }}>
+              {t('points.crypto.position')}
+            </div>
+            {selectedPositions.map((p, i) => {
+              const oi = Number(p.outcomeIndex);
+              const shares = Number(p.shares) || 0;
+              const currentSharePrice = Number(p.currentPrice ?? selectedMarket.prices?.[oi] ?? 0);
+              const value = shares * currentSharePrice;
+              return (
+                <div
+                  key={`${p.marketId}-${oi}-${i}`}
+                  style={{
+                    paddingTop: i === 0 ? 0 : 10,
+                    borderTop: i === 0 ? 'none' : '1px solid rgba(0,232,122,0.18)',
+                  }}
+                >
+                  <div style={{
+                    fontFamily: 'var(--font-display)',
+                    fontSize: 20,
+                    lineHeight: 1,
+                    color: oi === 0 ? 'var(--yes, #00C96B)' : 'var(--red, #FF4545)',
+                    marginBottom: 6,
+                  }}>
+                    {cryptoOutcomeLabel(oi, t)}
+                  </div>
+                  <div style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11,
+                    lineHeight: 1.6,
+                    color: 'var(--text-secondary)',
+                  }}>
+                    {fmt(shares, 2)} {t('points.crypto.shares')}
+                    <br />
+                    {fmt(value, 2)} MXNP
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Resolved banner OR buy buttons OR pending message */}
@@ -792,24 +860,6 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
         </div>
       )}
 
-      {/* User position panel — minimal display matching the rest of detail */}
-      {selectedPositions.length > 0 && (
-        <div style={{
-          padding: 12, borderRadius: 8,
-          background: 'var(--surface2)', border: '1px solid var(--border)',
-          fontFamily: 'var(--font-mono)', fontSize: 11,
-          color: 'var(--text-secondary)',
-          marginBottom: 12,
-        }}>
-          {t('points.crypto.position')}:
-          {selectedPositions.map((p, i) => (
-            <span key={i} style={{ marginLeft: 10 }}>
-              {cryptoOutcomeLabel(p.outcomeIndex, t) || `${t('points.crypto.outcome')} ${p.outcomeIndex}`} · {fmt(p.shares, 2)} {t('points.crypto.shares')}
-            </span>
-          ))}
-        </div>
-      )}
-
       {buyState && (
         <PointsBuyModal
           open
@@ -817,7 +867,10 @@ export default function Crypto5MinDetail({ market, userPositions = [] }) {
           outcomeIndex={buyState.outcomeIndex}
           outcomeLabel={buyState.outcomeLabel}
           onClose={() => setBuyState(null)}
-          onSuccess={() => setBuyState(null)}
+          onSuccess={async () => {
+            setBuyState(null);
+            await onTradeSuccess?.();
+          }}
         />
       )}
     </div>
