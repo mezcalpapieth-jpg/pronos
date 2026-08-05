@@ -22,6 +22,10 @@ test('points market detail overlays real activity and range controls on the char
   assert.match(detailSource, /activityByOutcome/);
   assert.match(detailSource, /summarizeActivity/);
   assert.match(detailSource, /MarketActivityStrip/);
+  assert.match(
+    detailSource,
+    /export default function PointsMarketDetail[\s\S]*const lang = useLang\(\);\n\s+const numberLocale = lang === 'en' \? 'en-US' : 'es-MX';/
+  );
   assert.match(detailSource, /outcome: 'all'/);
   assert.match(detailSource, /activity=\{displayActivityByOutcome\?\.\[0\] \|\| \[\]\}/);
   assert.match(detailSource, /activity=\{displayActivityByOutcome\?\.\[i\] \|\| \[\]\}/);

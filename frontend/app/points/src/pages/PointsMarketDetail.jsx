@@ -130,7 +130,7 @@ function formatActivityAge(unixSeconds, t) {
   return t('points.detail.activityDaysAgo', { n: days });
 }
 
-function MarketActivityStrip({ summary, rangeLabel, locale, t }) {
+function MarketActivityStrip({ summary, rangeLabel, locale = 'es-MX', t }) {
   if (!summary || summary.count <= 0) {
     return (
       <div style={{
@@ -1761,6 +1761,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   const { authenticated, user, refresh } = usePointsAuth();
   const t = useT();
   const lang = useLang();
+  const numberLocale = lang === 'en' ? 'en-US' : 'es-MX';
   // Collapses the 360px buy panel to a single column on phones so the
   // chart + outcome list can use the full viewport width.
   const isMobile = useIsMobile();
