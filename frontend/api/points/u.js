@@ -227,27 +227,36 @@ export default async function handler(req, res) {
     let adminSocials = null;
     let adminSocialLinks = null;
     if (viewerIsAdmin) {
-      const socialRows = await sql`
-        SELECT s.id, s.task_key, s.status, s.reward, s.proof_url,
-               s.reviewer, s.reviewed_at, s.rejection_note, s.created_at,
-               c.platform, c.target_url, c.label AS task_label
-        FROM social_tasks s
-        LEFT JOIN social_task_campaigns c ON c.task_key = s.task_key
-        WHERE s.username = ${username}
-        ORDER BY s.created_at DESC
-        LIMIT 50
-      `;
-      adminSocials = buildAdminProfileSocials(socialRows);
+      try {
+        const socialRows = await sql`
+          SELECT s.id, s.task_key, s.status, s.reward, s.proof_url,
+                 s.reviewer, s.reviewed_at, s.rejection_note, s.created_at,
+                 c.platform, c.target_url, c.label AS task_label
+          FROM social_tasks s
+          LEFT JOIN social_task_campaigns c ON c.task_key = s.task_key
+          WHERE s.username = ${username}
+          ORDER BY s.created_at DESC
+          LIMIT 50
+        `;
+        adminSocials = buildAdminProfileSocials(socialRows);
 
-      const socialLinkRows = await sql`
-        SELECT provider, provider_user_id, handle, profile_url,
-               reward_credited, linked_at
-        FROM points_social_links
-        WHERE username = ${username}
-        ORDER BY linked_at DESC
-        LIMIT 20
-      `;
-      adminSocialLinks = buildAdminProfileSocialLinks(socialLinkRows);
+        const socialLinkRows = await sql`
+          SELECT provider, provider_user_id, handle, profile_url,
+                 reward_credited, linked_at
+          FROM points_social_links
+          WHERE username = ${username}
+          ORDER BY linked_at DESC
+          LIMIT 20
+        `;
+        adminSocialLinks = buildAdminProfileSocialLinks(socialLinkRows);
+      } catch (socialError) {
+        console.error('[points/u] admin_socials_failed', {
+          message: socialError?.message,
+          code: socialError?.code,
+        });
+        adminSocials = [];
+        adminSocialLinks = [];
+      }
     }
 
     return res.status(200).json({

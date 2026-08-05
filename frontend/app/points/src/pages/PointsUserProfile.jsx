@@ -56,16 +56,30 @@ function safeExternalHref(value) {
   return null;
 }
 
-function usernameFromProfileLocation(paramUsername, pathname) {
+function decodeUsername(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function usernameFromProfileLocation(paramUsername, pathname, search) {
   const direct = String(paramUsername || '').trim();
   if (direct) return direct;
-  const match = String(pathname || '').match(/(?:^|\/)u\/([^/?#]+)/);
-  if (!match?.[1]) return '';
-  try {
-    return decodeURIComponent(match[1]);
-  } catch {
-    return match[1];
-  }
+
+  const pathMatch = String(pathname || '').match(/(?:^|\/)u\/([^/?#]+)/);
+  if (pathMatch?.[1]) return decodeUsername(pathMatch[1]);
+
+  const params = new URLSearchParams(String(search || '').replace(/^\?/, ''));
+  const rewrittenUsername = params.get('username') || params.get('profile') || params.get('u');
+  if (rewrittenUsername) return String(rewrittenUsername).trim();
+
+  const rewrittenPath = String(params.get('path') || '').trim();
+  const queryPathMatch = rewrittenPath.match(/(?:^|\/)u\/([^/?#]+)/);
+  if (queryPathMatch?.[1]) return decodeUsername(queryPathMatch[1]);
+
+  return '';
 }
 
 export default function PointsUserProfile() {
@@ -80,8 +94,8 @@ export default function PointsUserProfile() {
     ? location.state.from
     : null;
   const profileUsername = useMemo(
-    () => usernameFromProfileLocation(paramUsername, location.pathname),
-    [paramUsername, location.pathname],
+    () => usernameFromProfileLocation(paramUsername, location.pathname, location.search),
+    [paramUsername, location.pathname, location.search],
   );
 
   function handleBack() {
@@ -108,16 +122,22 @@ export default function PointsUserProfile() {
         return;
       }
       const base = `/api/points/u?username=${encodeURIComponent(username)}`;
-      const urls = [base, `${base}&_=${Date.now()}`];
-      for (let i = 0; i < urls.length; i += 1) {
-        const r = await fetch(urls[i], {
-          credentials: 'include',
+      const attempts = [
+        { url: base, credentials: 'include' },
+        { url: `${base}&_=${Date.now()}`, credentials: 'include' },
+        { url: `${base}&public=1&_=${Date.now()}`, credentials: 'omit' },
+      ];
+      for (let i = 0; i < attempts.length; i += 1) {
+        const attempt = attempts[i];
+        const r = await fetch(attempt.url, {
+          credentials: attempt.credentials,
           cache: 'no-store',
           headers: { 'Cache-Control': 'no-cache' },
         });
         if (cancelled) return;
         if (r.status === 404 && i === 0) continue;
         if (r.status === 404) { setError('user_not_found'); return; }
+        if (!r.ok && attempt.credentials !== 'omit') continue;
         if (!r.ok) { setError('load_failed'); return; }
         const json = await r.json().catch(() => null);
         if (!json?.user) { setError('load_failed'); return; }
@@ -147,7 +167,7 @@ export default function PointsUserProfile() {
     );
   }
 
-  if (error === 'user_not_found' || !data) {
+  if (error === 'user_not_found') {
     return (
       <main style={{ maxWidth: 720, margin: '0 auto', padding: 'clamp(20px, 4vw, 36px)' }}>
         <div style={{
@@ -171,6 +191,36 @@ export default function PointsUserProfile() {
             }}
           >
             ← Volver
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <main style={{ maxWidth: 720, margin: '0 auto', padding: 'clamp(20px, 4vw, 36px)' }}>
+        <div style={{
+          padding: 40, textAlign: 'center',
+          background: 'var(--surface1)', border: '1px solid var(--border)',
+          borderRadius: 14,
+        }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, marginBottom: 8 }}>
+            No pudimos cargar el perfil
+          </div>
+          <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)' }}>
+            El perfil existe, pero hubo un error al cargarlo. Recarga la página o intenta de nuevo.
+          </p>
+          <button
+            onClick={() => { window.location.reload(); }}
+            style={{
+              marginTop: 12, padding: '10px 18px', background: 'var(--surface2)',
+              border: '1px solid var(--border)', borderRadius: 8,
+              color: 'var(--text-primary)', cursor: 'pointer',
+              fontFamily: 'var(--font-mono)', fontSize: 12,
+            }}
+          >
+            Recargar
           </button>
         </div>
       </main>

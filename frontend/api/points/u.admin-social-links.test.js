@@ -10,6 +10,14 @@ test('admin public profile payload includes connected social links', () => {
   assert.match(SOURCE, /adminSocialLinks/);
 });
 
+test('admin-only social profile data cannot break the public profile response', () => {
+  assert.match(SOURCE, /try\s*\{\s*const socialRows = await sql/);
+  assert.match(SOURCE, /catch \(socialError\)/);
+  assert.match(SOURCE, /\[points\/u\] admin_socials_failed/);
+  assert.match(SOURCE, /adminSocials = \[\]/);
+  assert.match(SOURCE, /adminSocialLinks = \[\]/);
+});
+
 test('public profile lookup falls back to public points activity rows', () => {
   assert.match(SOURCE, /WITH candidates AS/);
   assert.match(SOURCE, /FROM points_balances/);

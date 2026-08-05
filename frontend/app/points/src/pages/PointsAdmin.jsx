@@ -3040,7 +3040,7 @@ function AdminUserSignupPanel({ users, totalUsers }) {
                 borderBottom: '1px solid var(--border)',
               }}>
                 <a
-                  href={`/u/${row.username}`}
+                  href={`/points/u/${encodeURIComponent(row.username)}`}
                   style={{
                     minWidth: 0,
                     overflow: 'hidden',
@@ -3140,7 +3140,7 @@ function AdminDistributionsPanel({ distributions }) {
                         fontFamily: 'var(--font-mono)',
                         fontSize: 11,
                       }}>
-                        <a href={`/u/${userRow.username}`} style={{
+                        <a href={`/points/u/${encodeURIComponent(userRow.username)}`} style={{
                           minWidth: 0,
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',

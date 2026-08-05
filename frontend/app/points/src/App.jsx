@@ -11,7 +11,7 @@
  * When an authenticated user doesn't yet have a username, the modal
  * opens automatically in the username step.
  */
-import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import PointsLoginModal from '@app/components/PointsLoginModal.jsx';
@@ -58,6 +58,19 @@ function RouteFallback() {
       Cargando...
     </div>
   );
+}
+
+function PointsHomeEntry({ onOpenLogin }) {
+  const location = useLocation();
+  const routeLooksLikeProfile = useMemo(() => {
+    const params = new URLSearchParams(String(location.search || '').replace(/^\?/, ''));
+    const path = String(params.get('path') || '').trim();
+    return Boolean(params.get('username') || params.get('profile') || params.get('u'))
+      || /(?:^|\/)u\/[^/?#]+/.test(path);
+  }, [location.search]);
+
+  if (routeLooksLikeProfile) return <PointsUserProfile />;
+  return <PointsHome onOpenLogin={onOpenLogin} />;
 }
 
 function PublicityRedirect({ source }) {
@@ -274,7 +287,7 @@ function Shell({ onOpenLogin, isAdmin }) {
           <Route path="/x" element={<PublicityRedirect source="x" />} />
           <Route path="/instagram" element={<PublicityRedirect source="instagram" />} />
           <Route path="/tiktok" element={<PublicityRedirect source="tiktok" />} />
-          <Route path="/" element={<PointsHome onOpenLogin={onOpenLogin} />} />
+          <Route path="/" element={<PointsHomeEntry onOpenLogin={onOpenLogin} />} />
           {/* World Cup gets its own page with a hero, groups, and
               bracket. Registered BEFORE the generic /c/:slug so it
               wins the match. */}
@@ -294,6 +307,7 @@ function Shell({ onOpenLogin, isAdmin }) {
           <Route path="/deck" element={<InvestorDeck />} />
           <Route path="/r/:username" element={<PointsReferralLanding onOpenLogin={onOpenLogin} />} />
           <Route path="/u/:username" element={<PointsUserProfile />} />
+          <Route path="/points/u/:username" element={<PointsUserProfile />} />
           <Route path="/teams" element={<TeamSearchPage surface="points" />} />
           <Route path="/teams/:sport/:teamSlug" element={<TeamProfilePage surface="points" />} />
           <Route path="/privacy" element={<PrivacyPolicy />} />
