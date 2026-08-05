@@ -118,7 +118,7 @@ export default function Sparkline({
   const padY = 4;
   const shouldShowYAxis = typeof showYAxis === 'boolean' ? showYAxis : height >= 100;
   const chartWidth = Math.max(20, width - labelWidth - (showValue ? valueWidth : 0));
-  const yAxisGutter = shouldShowYAxis ? Math.min(46, Math.max(36, chartWidth * 0.13)) : 0;
+  const yAxisGutter = shouldShowYAxis ? Math.min(34, Math.max(28, chartWidth * 0.06)) : 0;
   const plotRight = Math.max(20, chartWidth - yAxisGutter);
   const w = Math.max(20, plotRight - padX * 2);
   const h = height - padY * 2;
@@ -128,15 +128,11 @@ export default function Sparkline({
     const priceTimes = points
       .map(pt => Number(pt?.t))
       .filter(t => Number.isFinite(t) && t > 0);
-    const activityTimes = (Array.isArray(activity) ? activity : [])
-      .map(pt => Number(pt?.t))
-      .filter(t => Number.isFinite(t) && t > 0);
-    const times = [...priceTimes, ...activityTimes];
-    if (times.length < 2) return null;
-    const min = Math.min(...times);
-    const max = Math.max(...times);
+    if (priceTimes.length < 2) return null;
+    const min = Math.min(...priceTimes);
+    const max = Math.max(...priceTimes);
     return max > min ? { min, max } : null;
-  }, [activity, hasTimestamps, points]);
+  }, [hasTimestamps, points]);
 
   const xForTime = (t, fallbackIdx = 0) => {
     const time = Number(t);

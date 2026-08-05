@@ -51,6 +51,7 @@ import {
   cryptoMarketSequenceSignature,
 } from '../lib/cryptoMarketHub.js';
 import { marketInterestPayload, trackInterest } from '@app/lib/interest.js';
+import { emitPointsRefresh } from '../lib/pointsLiveRefresh.js';
 
 // Accent colors for the multi-line price chart. Match the buy-button
 // accents so users recognize the same color for the same outcome.
@@ -129,6 +130,36 @@ function formatActivityAge(unixSeconds, t) {
   if (hours < 48) return t('points.detail.activityHoursAgo', { n: hours });
   const days = Math.floor(hours / 24);
   return t('points.detail.activityDaysAgo', { n: days });
+}
+
+function signatureNumber(value, digits = 4) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toFixed(digits) : '0';
+}
+
+function marketLiveSignature(market) {
+  if (!market) return '';
+  const prices = Array.isArray(market.prices)
+    ? market.prices.map(p => signatureNumber(p))
+    : [];
+  const reserves = Array.isArray(market.reserves)
+    ? market.reserves.map(r => signatureNumber(r, 2))
+    : [];
+  return JSON.stringify({
+    id: market.id,
+    status: market.status,
+    outcome: market.outcome ?? null,
+    resolvedAt: market.resolvedAt ?? null,
+    tradeVolume: signatureNumber(market.tradeVolume || market.volume, 2),
+    prices,
+    reserves,
+    next: market.cryptoMeta?.nextMarketId ?? null,
+    prev: market.cryptoMeta?.prevMarketId ?? null,
+    threshold: market.cryptoMeta?.threshold ?? null,
+    sequence: market.cryptoMeta
+      ? cryptoMarketSequenceSignature(buildCryptoMarketSequence(market))
+      : '',
+  });
 }
 
 function MarketActivityStrip({ summary, rangeLabel, locale = 'es-MX', t }) {
@@ -1786,11 +1817,18 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   const [orderBookRefresh, setOrderBookRefresh] = useState(0);
   const [positionRefreshNonce, setPositionRefreshNonce] = useState(0);
   const [redeemState, setRedeemState] = useState({ key: null, message: null, error: null });
+  const marketRefreshSigRef = useRef('');
   const sellQuoteSeqRef = useRef(0);
   const sellQuoteTimerRef = useRef(null);
   const cryptoSequenceSig = market?.cryptoMeta
     ? cryptoMarketSequenceSignature(buildCryptoMarketSequence(market))
     : '';
+
+  function applyFreshMarket(fresh) {
+    if (!fresh) return;
+    marketRefreshSigRef.current = marketLiveSignature(fresh);
+    setMarket(fresh);
+  }
 
   useEffect(() => () => {
     if (sellQuoteTimerRef.current) window.clearTimeout(sellQuoteTimerRef.current);
@@ -1807,7 +1845,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
     fetchMarket(id)
       .then(m => {
         if (cancelled) return;
-        setMarket(m);
+        applyFreshMarket(m);
         setLoading(false);
         if (!m) return;
       })
@@ -1934,48 +1972,45 @@ export default function PointsMarketDetail({ onOpenLogin }) {
     });
   }, [market?.id]);
 
-  // Light-touch polling so users on a crypto-5min detail page don't
-  // need to refresh to see lifecycle transitions:
-  //   - status flips pending → active (the cron tick stamps a
-  //     threshold and openPrice). Without polling the user is stuck
-  //     looking at "Próximo: 0:00" until they reload.
-  //   - cryptoMeta.nextMarketId appears once the cron pre-creates the
-  //     upcoming window. Subsequent markets can then surface their
-  //     "Próximo mercado" CTA without a manual refresh.
-  // Non-crypto markets stop once resolved. Crypto 5-minute pages keep
-  // polling because this detail screen acts like an asset-level hub:
-  // the selected market can resolve while the next BTC/ETH window
-  // appears in the bottom strip.
+  // Light-touch polling keeps market pages alive while users are
+  // watching them. Status/resolver changes matter, but so do normal
+  // trade updates: another user's buy should move the price line,
+  // orderbook, holders, and the signed-in user's mark-to-market values
+  // without forcing a full page refresh.
   useEffect(() => {
     if (!id || !market) return undefined;
     if (market.status === 'resolved' && !market.cryptoMeta) return undefined;
-    // 10s is a nice middle ground: the cron tick runs every minute on
-    // production, so any state change lands within one or two polls
-    // and there's no avalanche of fetches when many tabs are open on
-    // the same market.
-    const interval = setInterval(() => {
+    const interval = window.setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       fetchMarket(id)
         .then(fresh => {
           if (!fresh) return;
-          setMarket(prev => {
-            if (!prev) return fresh;
-            // Skip the re-render if nothing meaningful changed — keeps
-            // the chart from re-keying and losing accumulated WS
-            // history mid-poll.
-            const sameStatus = prev.status === fresh.status;
-            const sameNext   = prev.cryptoMeta?.nextMarketId === fresh.cryptoMeta?.nextMarketId;
-            const samePrev   = prev.cryptoMeta?.prevMarketId === fresh.cryptoMeta?.prevMarketId;
-            const sameThreshold = prev.cryptoMeta?.threshold === fresh.cryptoMeta?.threshold;
-            const sameSequence = cryptoMarketSequenceSignature(buildCryptoMarketSequence(prev))
-              === cryptoMarketSequenceSignature(buildCryptoMarketSequence(fresh));
-            if (sameStatus && sameNext && samePrev && sameThreshold && sameSequence) return prev;
-            return fresh;
-          });
+          const nextSig = marketLiveSignature(fresh);
+          if (nextSig && nextSig === marketRefreshSigRef.current) return;
+          const didResolve = market.status !== 'resolved' && fresh.status === 'resolved';
+          const statusChanged = market.status !== fresh.status || market.outcome !== fresh.outcome;
+          applyFreshMarket(fresh);
+          setOrderBookRefresh(v => v + 1);
+          if (authenticated) setPositionRefreshNonce(v => v + 1);
+          if (didResolve || statusChanged) {
+            refresh?.();
+            emitPointsRefresh({ source: didResolve ? 'resolved' : 'market_poll', marketId: fresh.id });
+          }
         })
         .catch(() => { /* transient — next tick will retry */ });
-    }, 10_000);
-    return () => clearInterval(interval);
-  }, [id, market?.status, market?.cryptoMeta?.nextMarketId, market?.cryptoMeta?.prevMarketId, market?.cryptoMeta?.threshold, cryptoSequenceSig]);
+    }, 15_000);
+    return () => window.clearInterval(interval);
+  }, [
+    authenticated,
+    id,
+    market?.outcome,
+    market?.status,
+    market?.cryptoMeta?.nextMarketId,
+    market?.cryptoMeta?.prevMarketId,
+    market?.cryptoMeta?.threshold,
+    cryptoSequenceSig,
+    refresh,
+  ]);
 
   // Fetch the signed-in user's positions. For parallel markets, positions
   // live on leg ids but positions.js surfaces the parent id via
@@ -2010,10 +2045,11 @@ export default function PointsMarketDetail({ onOpenLogin }) {
     await refresh?.();
     try {
       const fresh = await fetchMarket(id);
-      setMarket(fresh);
+      applyFreshMarket(fresh);
     } catch { /* no-op */ }
     setPositionRefreshNonce(v => v + 1);
     setOrderBookRefresh(v => v + 1);
+    emitPointsRefresh({ source: 'trade_success', marketId: id });
   }
 
   function handleBuyClick(target, outcomeIndex, outcomeLabel) {
@@ -2116,10 +2152,11 @@ export default function PointsMarketDetail({ onOpenLogin }) {
       await refresh?.();
       try {
         const fresh = await fetchMarket(id);
-        setMarket(fresh);
+        applyFreshMarket(fresh);
       } catch { /* no-op */ }
       setOrderBookRefresh(v => v + 1);
       setPositionRefreshNonce(v => v + 1);
+      emitPointsRefresh({ source: 'sell', marketId: position.marketId });
     } catch (e) {
       setSellPreview(prev => prev ? {
         ...prev,
@@ -2579,7 +2616,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 setOrderBookRefresh(v => v + 1);
                 try {
                   const fresh = await fetchMarket(id);
-                  setMarket(fresh);
+                  applyFreshMarket(fresh);
                 } catch { /* best-effort */ }
               }}
             />
@@ -2899,10 +2936,9 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               </div>
             )}
 
-          {/* Top holders — read-only social-proof panel. Refreshes when
-              buyState flips so the list reflects the user's own trades
-              after closing the modal. */}
-          <TopHolders marketId={market.id} refreshKey={buyState ? 'open' : 'closed'} />
+          {/* Top holders — read-only social-proof panel. Refreshes after
+              local trades and remote polling so it reflects live movement. */}
+          <TopHolders marketId={market.id} refreshKey={orderBookRefresh} />
 
           <div style={{
             background: 'var(--surface1)',

@@ -32,6 +32,7 @@ import {
   dismissPosition,
   publicErrorMessage,
 } from '../lib/pointsApi.js';
+import { emitPointsRefresh, onPointsRefresh } from '../lib/pointsLiveRefresh.js';
 
 function fmt(n) {
   const v = Number(n) || 0;
@@ -666,8 +667,8 @@ export default function PointsPortfolio() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, authenticated, tab]);
 
-  async function load() {
-    setLoading(true);
+  async function load({ silent = false } = {}) {
+    if (!silent) setLoading(true);
     try {
       if (tab === 'activo') {
         const r = await fetchPositions();
@@ -683,9 +684,25 @@ export default function PointsPortfolio() {
         setHistorySummary(r.summary || null);
       }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (!authenticated) return undefined;
+    const refreshPortfolio = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      refresh?.();
+      load({ silent: true });
+    };
+    const removeRefreshListener = onPointsRefresh(refreshPortfolio);
+    const intervalId = window.setInterval(refreshPortfolio, tab === 'activo' ? 25000 : 45000);
+    return () => {
+      removeRefreshListener();
+      window.clearInterval(intervalId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authenticated, tab]);
 
   async function loadSellPreviewQuote(pos, shares) {
     const selectedShares = normalizeSellShares(pos, shares);
@@ -779,6 +796,7 @@ export default function PointsPortfolio() {
       setSellPreview(null);
       await refresh();
       await load();
+      emitPointsRefresh({ source: 'sell', marketId: pos.marketId });
     } catch (e) {
       setSellPreview(prev => prev ? {
         ...prev,
@@ -800,6 +818,7 @@ export default function PointsPortfolio() {
       setMsg({ type: 'success', text: `Cobraste ${fmt(r.payout)} MXNP` });
       await refresh();
       await load();
+      emitPointsRefresh({ source: 'redeem', marketId: pos.marketId });
     } catch (e) {
       setMsg({ type: 'error', text: publicErrorMessage(e, lang, 'default') });
     } finally {
@@ -956,7 +975,11 @@ export default function PointsPortfolio() {
 
         {/* Right sidebar */}
         <aside className="points-portfolio-sidebar">
-          <DailyClaimCard onClaimed={() => { refresh(); load(); }} />
+          <DailyClaimCard onClaimed={() => {
+            refresh();
+            load();
+            emitPointsRefresh({ source: 'daily_claim' });
+          }} />
           <MiniLeaderboard currentUsername={user?.username} />
           <CycleHistoryLeaderboard currentUsername={user?.username} />
         </aside>

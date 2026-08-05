@@ -10,6 +10,9 @@ import { readFile } from 'node:fs/promises';
 const detailSource = await readFile(new URL('./PointsMarketDetail.jsx', import.meta.url), 'utf8');
 const apiSource = await readFile(new URL('../lib/pointsApi.js', import.meta.url), 'utf8');
 const i18nSource = await readFile(new URL('../../../src/lib/i18n.js', import.meta.url), 'utf8');
+const navSource = await readFile(new URL('../components/PointsNav.jsx', import.meta.url), 'utf8');
+const portfolioSource = await readFile(new URL('./PointsPortfolio.jsx', import.meta.url), 'utf8');
+const buyModalSource = await readFile(new URL('../components/PointsBuyModal.jsx', import.meta.url), 'utf8');
 
 test('points market detail overlays real activity and range controls on the chart', () => {
   assert.match(detailSource, /fetchTradeActivity/);
@@ -51,4 +54,26 @@ test('chart range copy is translated', () => {
   assert.match(i18nSource, /'points\.detail\.activityTrades'/);
   assert.match(i18nSource, /'points\.detail\.activityVolume'/);
   assert.match(i18nSource, /'points\.detail\.activityPressure'/);
+});
+
+test('points surfaces refresh live after trades, claims, and remote market movement', () => {
+  assert.match(detailSource, /function marketLiveSignature/);
+  assert.match(detailSource, /prices\.map\(p => signatureNumber\(p\)\)/);
+  assert.match(detailSource, /reserves\.map\(r => signatureNumber\(r, 2\)\)/);
+  assert.match(detailSource, /window\.setInterval\(\(\) => \{/);
+  assert.match(detailSource, /15_000/);
+  assert.match(detailSource, /setOrderBookRefresh\(v => v \+ 1\)/);
+  assert.match(detailSource, /setPositionRefreshNonce\(v => v \+ 1\)/);
+  assert.match(detailSource, /emitPointsRefresh\(\{ source: didResolve \? 'resolved' : 'market_poll'/);
+  assert.match(detailSource, /<TopHolders marketId=\{market\.id\} refreshKey=\{orderBookRefresh\}/);
+
+  assert.match(navSource, /onPointsRefresh/);
+  assert.match(navSource, /window\.setInterval\(loadClaimableCount, 20000\)/);
+  assert.match(navSource, /window\.setInterval\(refreshBalance, 30000\)/);
+
+  assert.match(portfolioSource, /onPointsRefresh\(refreshPortfolio\)/);
+  assert.match(portfolioSource, /window\.setInterval\(refreshPortfolio, tab === 'activo' \? 25000 : 45000\)/);
+  assert.match(portfolioSource, /emitPointsRefresh\(\{ source: 'redeem'/);
+
+  assert.match(buyModalSource, /emitPointsRefresh\(\{ source: 'buy'/);
 });

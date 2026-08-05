@@ -14,6 +14,7 @@ import { createPortal } from 'react-dom';
 import { quoteBuy, executeBuy, publicErrorMessage } from '../lib/pointsApi.js';
 import { useLang, useT } from '@app/lib/i18n.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
+import { emitPointsRefresh } from '../lib/pointsLiveRefresh.js';
 
 const QUICK_AMOUNTS = [5, 10, 25, 50, 100];
 
@@ -92,6 +93,7 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
         minSharesOut,
       });
       await refresh();
+      emitPointsRefresh({ source: 'buy', marketId: market.id });
       setSuccess(true);
       // Give the user a beat to see the success state, then close.
       setTimeout(() => {

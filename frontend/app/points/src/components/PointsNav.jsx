@@ -14,6 +14,7 @@ import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-do
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useT, useLang, setLang } from '@app/lib/i18n.js';
 import { fetchMarkets, adminListTaskCounts, fetchClaimableSummary } from '../lib/pointsApi.js';
+import { onPointsRefresh } from '../lib/pointsLiveRefresh.js';
 
 // Public info page on pronos.io that explains prediction markets. The MVP
 // and old landing both link here — we match so the user journey is the same.
@@ -44,7 +45,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { authenticated, user, logout } = usePointsAuth();
+  const { authenticated, user, logout, refresh } = usePointsAuth();
   const [scrolled, setScrolled] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -180,14 +181,32 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
     }
 
     loadClaimableCount();
+    const removeRefreshListener = onPointsRefresh(() => {
+      loadClaimableCount();
+    });
     const intervalId = authenticated
-      ? window.setInterval(loadClaimableCount, 60000)
+      ? window.setInterval(loadClaimableCount, 20000)
       : null;
     return () => {
       cancelled = true;
+      removeRefreshListener();
       if (intervalId) window.clearInterval(intervalId);
     };
   }, [authenticated, user?.username, location.pathname]);
+
+  useEffect(() => {
+    if (!authenticated || !refresh) return undefined;
+    const refreshBalance = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      refresh();
+    };
+    const intervalId = window.setInterval(refreshBalance, 30000);
+    const removeRefreshListener = onPointsRefresh(refreshBalance);
+    return () => {
+      window.clearInterval(intervalId);
+      removeRefreshListener();
+    };
+  }, [authenticated, refresh]);
 
   useEffect(() => {
     if (!dropdownOpen) return undefined;
