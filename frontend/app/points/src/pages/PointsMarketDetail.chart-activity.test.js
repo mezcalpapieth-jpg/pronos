@@ -20,6 +20,9 @@ test('points market detail overlays real activity and range controls on the char
   assert.match(detailSource, /chartRangeTouchedRef/);
   assert.match(detailSource, /market\.status === 'resolved' \? '30' : '1'/);
   assert.match(detailSource, /activityByOutcome/);
+  assert.match(detailSource, /summarizeActivity/);
+  assert.match(detailSource, /MarketActivityStrip/);
+  assert.match(detailSource, /outcome: 'all'/);
   assert.match(detailSource, /activity=\{displayActivityByOutcome\?\.\[0\] \|\| \[\]\}/);
   assert.match(detailSource, /activity=\{displayActivityByOutcome\?\.\[i\] \|\| \[\]\}/);
   assert.match(detailSource, /orderBookRefresh/);
@@ -36,4 +39,7 @@ test('chart range copy is translated', () => {
   assert.match(i18nSource, /'points\.detail\.range24h'/);
   assert.match(i18nSource, /'points\.detail\.range7d'/);
   assert.match(i18nSource, /'points\.detail\.range30d'/);
+  assert.match(i18nSource, /'points\.detail\.activityTrades'/);
+  assert.match(i18nSource, /'points\.detail\.activityVolume'/);
+  assert.match(i18nSource, /'points\.detail\.activityPressure'/);
 });

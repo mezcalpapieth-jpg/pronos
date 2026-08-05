@@ -311,6 +311,9 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_trades_market_outcome_created
     ON points_trades(market_id, outcome_index, created_at DESC)
     WHERE side IN ('buy', 'sell')`,
+  `CREATE INDEX IF NOT EXISTS idx_points_trades_market_created
+    ON points_trades(market_id, created_at DESC)
+    WHERE side IN ('buy', 'sell')`,
 
   `CREATE TABLE IF NOT EXISTS points_positions (
     market_id       INTEGER NOT NULL REFERENCES points_markets(id),

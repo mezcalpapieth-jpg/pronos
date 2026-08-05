@@ -374,6 +374,9 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_trades_market_outcome_created
     ON points_trades(market_id, outcome_index, created_at DESC)
     WHERE side IN ('buy', 'sell')`,
+  `CREATE INDEX IF NOT EXISTS idx_points_trades_market_created
+    ON points_trades(market_id, created_at DESC)
+    WHERE side IN ('buy', 'sell')`,
   // tx_hash: on-chain transaction hash for mode='onchain' trades.
   // NULL for DB-backed trades. UNIQUE so an idempotent retry of a
   // confirmed on-chain trade (e.g. user refreshes mid-await) can't

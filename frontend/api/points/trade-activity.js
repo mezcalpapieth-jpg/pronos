@@ -1,9 +1,12 @@
 /**
  * GET /api/points/trade-activity?ids=1,2&days=1&outcome=0&buckets=48
+ * GET /api/points/trade-activity?ids=1,2&days=1&outcome=all&buckets=48
  *
  * Returns bucketed, anonymous buy/sell activity from the immutable trade log.
  * The chart uses this as an activity layer under the real price line; it does
- * not synthesize prices or expose individual users.
+ * not synthesize prices or expose individual users. `outcome=all` is useful
+ * for binary market detail charts because a buy on NO still moves the YES
+ * price, so the activity layer should show both sides.
  */
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
@@ -49,7 +52,11 @@ export default async function handler(req, res) {
   }
 
   const days = parsePositiveInt(req.query.days, 1, { min: 1, max: 60 });
-  const outcomeIdx = parsePositiveInt(req.query.outcome, 0, { min: 0, max: 200 });
+  const outcomeParam = typeof req.query.outcome === 'string' ? req.query.outcome.trim().toLowerCase() : '0';
+  const allOutcomes = outcomeParam === 'all';
+  const outcomeIdx = allOutcomes
+    ? null
+    : parsePositiveInt(outcomeParam, 0, { min: 0, max: 200 });
   const buckets = parsePositiveInt(req.query.buckets, 48, { min: 12, max: 120 });
   const bucketSeconds = Math.max(60, Math.ceil((days * 86_400) / buckets));
 
@@ -61,35 +68,65 @@ export default async function handler(req, res) {
   });
 
   try {
-    const cacheKey = `points:trade-activity:v1:${ids.join(',')}:${days}:${outcomeIdx}:${buckets}`;
+    const cacheOutcome = allOutcomes ? 'all' : outcomeIdx;
+    const cacheKey = `points:trade-activity:v2:${ids.join(',')}:${days}:${cacheOutcome}:${buckets}`;
     const { value: payload, hit } = await cachedJson(cacheKey, 2_000, async () => {
       await timer.time('schema', () => ensurePointsSchema(schemaSql));
-      const rows = await timer.time('db_trade_activity', () => sql`
-        WITH raw AS (
+      const rows = await timer.time('db_trade_activity', () => {
+        if (allOutcomes) {
+          return sql`
+            WITH raw AS (
+              SELECT
+                market_id,
+                side,
+                collateral,
+                TO_TIMESTAMP(
+                  FLOOR(EXTRACT(EPOCH FROM created_at) / ${bucketSeconds}) * ${bucketSeconds}
+                ) AS bucket_at
+              FROM points_trades
+              WHERE market_id = ANY(${ids}::int[])
+                AND side IN ('buy', 'sell')
+                AND created_at >= NOW() - (${days} || ' days')::interval
+            )
+            SELECT
+              market_id,
+              bucket_at,
+              COUNT(*)::int AS count,
+              COALESCE(SUM(collateral), 0)::text AS volume,
+              COALESCE(SUM(CASE WHEN side = 'buy' THEN collateral ELSE 0 END), 0)::text AS buy_volume,
+              COALESCE(SUM(CASE WHEN side = 'sell' THEN collateral ELSE 0 END), 0)::text AS sell_volume
+            FROM raw
+            GROUP BY market_id, bucket_at
+            ORDER BY market_id ASC, bucket_at ASC
+          `;
+        }
+        return sql`
+          WITH raw AS (
+            SELECT
+              market_id,
+              side,
+              collateral,
+              TO_TIMESTAMP(
+                FLOOR(EXTRACT(EPOCH FROM created_at) / ${bucketSeconds}) * ${bucketSeconds}
+              ) AS bucket_at
+            FROM points_trades
+            WHERE market_id = ANY(${ids}::int[])
+              AND outcome_index = ${outcomeIdx}
+              AND side IN ('buy', 'sell')
+              AND created_at >= NOW() - (${days} || ' days')::interval
+          )
           SELECT
             market_id,
-            side,
-            collateral,
-            TO_TIMESTAMP(
-              FLOOR(EXTRACT(EPOCH FROM created_at) / ${bucketSeconds}) * ${bucketSeconds}
-            ) AS bucket_at
-          FROM points_trades
-          WHERE market_id = ANY(${ids}::int[])
-            AND outcome_index = ${outcomeIdx}
-            AND side IN ('buy', 'sell')
-            AND created_at >= NOW() - (${days} || ' days')::interval
-        )
-        SELECT
-          market_id,
-          bucket_at,
-          COUNT(*)::int AS count,
-          COALESCE(SUM(collateral), 0)::text AS volume,
-          COALESCE(SUM(CASE WHEN side = 'buy' THEN collateral ELSE 0 END), 0)::text AS buy_volume,
-          COALESCE(SUM(CASE WHEN side = 'sell' THEN collateral ELSE 0 END), 0)::text AS sell_volume
-        FROM raw
-        GROUP BY market_id, bucket_at
-        ORDER BY market_id ASC, bucket_at ASC
-      `);
+            bucket_at,
+            COUNT(*)::int AS count,
+            COALESCE(SUM(collateral), 0)::text AS volume,
+            COALESCE(SUM(CASE WHEN side = 'buy' THEN collateral ELSE 0 END), 0)::text AS buy_volume,
+            COALESCE(SUM(CASE WHEN side = 'sell' THEN collateral ELSE 0 END), 0)::text AS sell_volume
+          FROM raw
+          GROUP BY market_id, bucket_at
+          ORDER BY market_id ASC, bucket_at ASC
+        `;
+      });
 
       const activity = {};
       for (const id of ids) activity[id] = [];
@@ -107,7 +144,7 @@ export default async function handler(req, res) {
     });
 
     res.setHeader('X-Pronos-Cache', hit ? 'hit' : 'miss');
-    timer.end({ hit, ids: ids.length, days, outcome: outcomeIdx, buckets });
+    timer.end({ hit, ids: ids.length, days, outcome: cacheOutcome, buckets });
     return res.status(200).json(payload);
   } catch (e) {
     timer.end({ error: true });

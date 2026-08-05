@@ -8,7 +8,7 @@
  * Data comes from /api/points/market?id=... — the response contains
  * the market row + its current reserves, outcomes, and prices.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   cancelLimitOrder,
@@ -75,6 +75,153 @@ const DETAIL_CHART_RANGES = [
 
 function detailChartRangeFor(key) {
   return DETAIL_CHART_RANGES.find(r => r.key === String(key)) || DETAIL_CHART_RANGES[0];
+}
+
+function summarizeActivity(activitySets) {
+  const points = (Array.isArray(activitySets) ? activitySets : [])
+    .flatMap(set => (Array.isArray(set) ? set : []))
+    .filter(Boolean);
+  const summary = points.reduce((acc, pt) => {
+    const count = Number(pt.count || 0);
+    const volume = Number(pt.volume || 0);
+    const buyVolume = Number(pt.buyVolume || 0);
+    const sellVolume = Number(pt.sellVolume || 0);
+    const t = Number(pt.t || 0);
+    return {
+      count: acc.count + (Number.isFinite(count) ? count : 0),
+      volume: acc.volume + (Number.isFinite(volume) ? volume : 0),
+      buyVolume: acc.buyVolume + (Number.isFinite(buyVolume) ? buyVolume : 0),
+      sellVolume: acc.sellVolume + (Number.isFinite(sellVolume) ? sellVolume : 0),
+      lastAt: Number.isFinite(t) && t > acc.lastAt ? t : acc.lastAt,
+    };
+  }, {
+    count: 0,
+    volume: 0,
+    buyVolume: 0,
+    sellVolume: 0,
+    lastAt: 0,
+  });
+  const directionalVolume = summary.buyVolume + summary.sellVolume;
+  return {
+    ...summary,
+    buyShare: directionalVolume > 0 ? summary.buyVolume / directionalVolume : null,
+  };
+}
+
+function formatCompactMxnp(value, locale = 'es-MX') {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return '0';
+  return new Intl.NumberFormat(locale, {
+    notation: n >= 1000 ? 'compact' : 'standard',
+    maximumFractionDigits: n >= 1000 ? 1 : 0,
+  }).format(n);
+}
+
+function formatActivityAge(unixSeconds, t) {
+  const ts = Number(unixSeconds);
+  if (!Number.isFinite(ts) || ts <= 0) return t('points.detail.activityNoTrades');
+  const seconds = Math.max(0, Math.floor(Date.now() / 1000) - ts);
+  if (seconds < 60) return t('points.detail.activityNow');
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return t('points.detail.activityMinutesAgo', { n: minutes });
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return t('points.detail.activityHoursAgo', { n: hours });
+  const days = Math.floor(hours / 24);
+  return t('points.detail.activityDaysAgo', { n: days });
+}
+
+function MarketActivityStrip({ summary, rangeLabel, locale, t }) {
+  if (!summary || summary.count <= 0) {
+    return (
+      <div style={{
+        marginTop: 14,
+        paddingTop: 12,
+        borderTop: '1px solid var(--border)',
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        color: 'var(--text-muted)',
+        letterSpacing: '0.06em',
+        textTransform: 'uppercase',
+      }}>
+        {t('points.detail.activityEmpty')}
+      </div>
+    );
+  }
+  const buyShare = summary.buyShare == null ? null : Math.round(summary.buyShare * 100);
+  const sellShare = buyShare == null ? null : Math.max(0, 100 - buyShare);
+  const pressureLabel = buyShare == null
+    ? t('points.detail.activityNeutral')
+    : buyShare >= 55
+      ? t('points.detail.activityBuyPressure', { n: buyShare })
+      : sellShare >= 55
+        ? t('points.detail.activitySellPressure', { n: sellShare })
+        : t('points.detail.activityBalanced');
+  return (
+    <div style={{
+      marginTop: 14,
+      paddingTop: 12,
+      borderTop: '1px solid var(--border)',
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+      gap: 10,
+    }}>
+      <ActivityMetric
+        label={t('points.detail.activityRange', { range: rangeLabel })}
+        value={t('points.detail.activityTrades', { n: summary.count })}
+      />
+      <ActivityMetric
+        label={t('points.detail.activityVolume')}
+        value={`${formatCompactMxnp(summary.volume, locale)} MXNP`}
+      />
+      <ActivityMetric
+        label={t('points.detail.activityPressure')}
+        value={pressureLabel}
+        tone={buyShare != null && buyShare >= 55 ? 'buy' : sellShare != null && sellShare >= 55 ? 'sell' : 'neutral'}
+      />
+      <ActivityMetric
+        label={t('points.detail.activityLast')}
+        value={formatActivityAge(summary.lastAt, t)}
+      />
+    </div>
+  );
+}
+
+function ActivityMetric({ label, value, tone = 'neutral' }) {
+  const color = tone === 'buy' ? 'var(--green)' : tone === 'sell' ? '#ff3b3b' : 'var(--text-primary)';
+  return (
+    <div style={{
+      minWidth: 0,
+      padding: '9px 10px',
+      borderRadius: 9,
+      background: 'var(--surface2)',
+      border: '1px solid var(--border)',
+    }}>
+      <div style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: 9,
+        color: 'var(--text-muted)',
+        letterSpacing: '0.08em',
+        textTransform: 'uppercase',
+        marginBottom: 4,
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+      }}>
+        {label}
+      </div>
+      <div style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: 11,
+        color,
+        fontWeight: 700,
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+      }}>
+        {value}
+      </div>
+    </div>
+  );
 }
 
 const MULTI_ACCENTS = [
@@ -920,6 +1067,7 @@ function OrderBookPanel({
 }) {
   const t = useT();
   const lang = useLang();
+  const numberLocale = lang === 'en' ? 'en-US' : 'es-MX';
   const [selected, setSelected] = useState(0);
   const [book, setBook] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -1703,7 +1851,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
         );
         const activity = await Promise.all(
           market.legs.map((leg) =>
-            fetchTradeActivity([leg.id], { days: range.days, outcome: 0, buckets: range.buckets })
+            fetchTradeActivity([leg.id], { days: range.days, outcome: 'all', buckets: range.buckets })
               .then(a => a[leg.id] || [])
               .catch(() => []),
           ),
@@ -1731,13 +1879,20 @@ export default function PointsMarketDetail({ onOpenLogin }) {
             .catch(() => withTail([], i)),
         ),
       );
-      const activity = await Promise.all(
-        Array.from({ length: n }, (_, i) =>
-          fetchTradeActivity([market.id], { days: range.days, outcome: i, buckets: range.buckets })
-            .then(a => a[market.id] || [])
-            .catch(() => []),
-        ),
-      );
+      const activity = n <= 2
+        ? [
+            await fetchTradeActivity([market.id], { days: range.days, outcome: 'all', buckets: range.buckets })
+              .then(a => a[market.id] || [])
+              .catch(() => []),
+            [],
+          ]
+        : await Promise.all(
+            Array.from({ length: n }, (_, i) =>
+              fetchTradeActivity([market.id], { days: range.days, outcome: i, buckets: range.buckets })
+                .then(a => a[market.id] || [])
+                .catch(() => []),
+            ),
+          );
       if (!cancelled) {
         setHistoryByOutcome(series);
         setActivityByOutcome(activity);
@@ -2031,6 +2186,11 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   const displayHistoryByOutcome = displayOutcomeIndices.map(i => historyByOutcome?.[i] || []);
   const displayActivityByOutcome = displayOutcomeIndices.map(i => activityByOutcome?.[i] || []);
   const activeChartRange = detailChartRangeFor(chartRange);
+  const activitySummary = summarizeActivity(
+    displayOutcomes.length <= 2
+      ? [displayActivityByOutcome?.[0] || []]
+      : displayActivityByOutcome,
+  );
   const isCanceled = market.status === 'canceled';
   const winnerIndex = !isCanceled && market.status === 'resolved' && market.outcome != null ? Number(market.outcome) : null;
   const isResolved = winnerIndex != null && Number.isFinite(winnerIndex);
@@ -2357,6 +2517,12 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                     )}
                   </div>
                 )}
+                <MarketActivityStrip
+                  summary={activitySummary}
+                  rangeLabel={t(activeChartRange.labelKey)}
+                  locale={numberLocale}
+                  t={t}
+                />
               </div>
             </div>
 

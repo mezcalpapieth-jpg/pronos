@@ -8,6 +8,9 @@ const migrate = await readFile(new URL('../migrate.js', import.meta.url), 'utf8'
 
 test('points trade activity is anonymous, bucketed, and bounded', () => {
   assert.match(source, /GET \/api\/points\/trade-activity/);
+  assert.match(source, /outcome=all/);
+  assert.match(source, /outcomeParam === 'all'/);
+  assert.match(source, /if \(allOutcomes\)/);
   assert.match(source, /points_trades/);
   assert.match(source, /side IN \('buy', 'sell'\)/);
   assert.match(source, /GROUP BY market_id, bucket_at/);
@@ -23,6 +26,8 @@ test('trade activity query has a market/outcome/time index', () => {
   for (const migrationSource of [schema, migrate]) {
     assert.match(migrationSource, /idx_points_trades_market_outcome_created/);
     assert.match(migrationSource, /ON points_trades\(market_id, outcome_index, created_at DESC\)/);
+    assert.match(migrationSource, /idx_points_trades_market_created/);
+    assert.match(migrationSource, /ON points_trades\(market_id, created_at DESC\)/);
     assert.match(migrationSource, /WHERE side IN \('buy', 'sell'\)/);
   }
 });

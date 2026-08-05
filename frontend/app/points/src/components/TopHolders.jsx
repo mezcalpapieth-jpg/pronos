@@ -5,7 +5,7 @@
  * shareholders ranked by current mark-to-market value. Compact — the
  * panel sits alongside "Tu posición" + "Odds actuales" / the trade buttons.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { fetchTopHolders } from '../lib/pointsApi.js';
 import { useT } from '@app/lib/i18n.js';
 
@@ -13,6 +13,10 @@ export default function TopHolders({ marketId, refreshKey }) {
   const t = useT();
   const [holders, setHolders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const maxValue = useMemo(() => Math.max(
+    1,
+    ...holders.map(h => Number(h.value || 0)).filter(Number.isFinite),
+  ), [holders]);
 
   useEffect(() => {
     if (!marketId) return undefined;
@@ -58,21 +62,40 @@ export default function TopHolders({ marketId, refreshKey }) {
         </p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {holders.map((h, i) => (
-            <div
-              key={`${h.username}-${i}`}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '18px minmax(0, 1fr) auto',
-                alignItems: 'baseline',
-                gap: 6,
-                padding: '6px 8px',
-                borderRadius: 8,
-                background: i === 0 ? 'rgba(0,232,122,0.06)' : 'var(--surface2)',
-                border: `1px solid ${i === 0 ? 'rgba(0,232,122,0.25)' : 'var(--border)'}`,
-              }}
-            >
+          {holders.map((h, i) => {
+            const value = Number(h.value || 0);
+            const width = Math.max(4, Math.min(100, (value / maxValue) * 100));
+            return (
+              <div
+                key={`${h.username}-${i}`}
+                style={{
+                  position: 'relative',
+                  overflow: 'hidden',
+                  display: 'grid',
+                  gridTemplateColumns: '18px minmax(0, 1fr) auto',
+                  alignItems: 'baseline',
+                  gap: 6,
+                  padding: '8px 8px',
+                  borderRadius: 8,
+                  background: i === 0 ? 'rgba(0,232,122,0.06)' : 'var(--surface2)',
+                  border: `1px solid ${i === 0 ? 'rgba(0,232,122,0.25)' : 'var(--border)'}`,
+                }}
+              >
+              <span
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: `${width}%`,
+                  background: i === 0 ? 'rgba(0,232,122,0.13)' : 'rgba(255,85,0,0.08)',
+                  pointerEvents: 'none',
+                }}
+              />
               <span style={{
+                position: 'relative',
+                zIndex: 1,
                 fontFamily: 'var(--font-mono)',
                 fontSize: 10,
                 color: i === 0 ? 'var(--green)' : 'var(--text-muted)',
@@ -80,7 +103,7 @@ export default function TopHolders({ marketId, refreshKey }) {
               }}>
                 {i + 1}
               </span>
-              <div style={{ minWidth: 0 }}>
+              <div style={{ minWidth: 0, position: 'relative', zIndex: 1 }}>
                 <div style={{
                   fontFamily: 'var(--font-mono)',
                   fontSize: 11,
@@ -104,6 +127,8 @@ export default function TopHolders({ marketId, refreshKey }) {
                 </div>
               </div>
               <span style={{
+                position: 'relative',
+                zIndex: 1,
                 fontFamily: 'var(--font-mono)',
                 fontSize: 11,
                 color: 'var(--text-primary)',
@@ -113,7 +138,8 @@ export default function TopHolders({ marketId, refreshKey }) {
                 {Math.round(h.value).toLocaleString('es-MX')}
               </span>
             </div>
-          ))}
+          );
+        })}
         </div>
       )}
     </section>
