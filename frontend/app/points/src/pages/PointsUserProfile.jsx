@@ -56,6 +56,18 @@ function safeExternalHref(value) {
   return null;
 }
 
+function usernameFromProfileLocation(paramUsername, pathname) {
+  const direct = String(paramUsername || '').trim();
+  if (direct) return direct;
+  const match = String(pathname || '').match(/(?:^|\/)u\/([^/?#]+)/);
+  if (!match?.[1]) return '';
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
 export default function PointsUserProfile() {
   const { username: paramUsername } = useParams();
   const location = useLocation();
@@ -67,6 +79,10 @@ export default function PointsUserProfile() {
   const backTarget = typeof location.state?.from === 'string' && location.state.from.startsWith('/')
     ? location.state.from
     : null;
+  const profileUsername = useMemo(
+    () => usernameFromProfileLocation(paramUsername, location.pathname),
+    [paramUsername, location.pathname],
+  );
 
   function handleBack() {
     if (backTarget) {
@@ -82,24 +98,38 @@ export default function PointsUserProfile() {
 
   useEffect(() => {
     let cancelled = false;
+    const username = String(profileUsername || '').trim();
     setLoading(true);
     setError(null);
     setData(null);
-    fetch(`/api/points/u?username=${encodeURIComponent(paramUsername || '')}`, {
-      credentials: 'include',
-    })
-      .then(async r => {
+    async function loadProfile() {
+      if (!username) {
+        setError('user_not_found');
+        return;
+      }
+      const base = `/api/points/u?username=${encodeURIComponent(username)}`;
+      const urls = [base, `${base}&_=${Date.now()}`];
+      for (let i = 0; i < urls.length; i += 1) {
+        const r = await fetch(urls[i], {
+          credentials: 'include',
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' },
+        });
         if (cancelled) return;
+        if (r.status === 404 && i === 0) continue;
         if (r.status === 404) { setError('user_not_found'); return; }
         if (!r.ok) { setError('load_failed'); return; }
         const json = await r.json().catch(() => null);
-        if (!json) { setError('load_failed'); return; }
+        if (!json?.user) { setError('load_failed'); return; }
         setData(json);
-      })
+        return;
+      }
+    }
+    loadProfile()
       .catch(() => { if (!cancelled) setError('load_failed'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [paramUsername]);
+  }, [profileUsername]);
 
   const pnlColor = useMemo(() => {
     if (!data) return 'var(--text-primary)';
@@ -129,7 +159,7 @@ export default function PointsUserProfile() {
             Usuario no encontrado
           </div>
           <p style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)' }}>
-            No tenemos un perfil para <strong>@{paramUsername}</strong>.
+            No tenemos un perfil para <strong>@{profileUsername || paramUsername}</strong>.
           </p>
           <button
             onClick={handleBack}

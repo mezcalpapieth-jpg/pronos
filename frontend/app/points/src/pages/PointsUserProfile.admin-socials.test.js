@@ -16,3 +16,18 @@ test('admin profile view exposes exact campaign post links for social task revie
   assert.match(SOURCE, /Ver post/);
   assert.match(SOURCE, /proofHref && proofHref !== targetHref/);
 });
+
+test('public profile page can recover the username from the URL path', () => {
+  assert.match(SOURCE, /function usernameFromProfileLocation/);
+  assert.match(SOURCE, /useLocation\(\)/);
+  assert.match(SOURCE, /profileUsername = useMemo/);
+  assert.match(SOURCE, /usernameFromProfileLocation\(paramUsername, location\.pathname\)/);
+  assert.match(SOURCE, /match\(\s*\/\(\?:\^\|\\\/\)u\\\/\(\[\^\/\?#\]\+\)\/\s*\)/);
+});
+
+test('public profile fetch bypasses stale not-found responses before giving up', () => {
+  assert.match(SOURCE, /cache: 'no-store'/);
+  assert.match(SOURCE, /'Cache-Control': 'no-cache'/);
+  assert.match(SOURCE, /Date\.now\(\)/);
+  assert.match(SOURCE, /r\.status === 404 && i === 0\) continue/);
+});
