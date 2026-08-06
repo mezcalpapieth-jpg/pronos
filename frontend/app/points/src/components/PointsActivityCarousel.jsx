@@ -714,7 +714,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                                 flexShrink: 0,
                                 textAlign: 'right',
                               }}>
-                                \u2212{formatCompact(sell)}
+                                -{formatCompact(sell)}
                               </span>
                             )}
                           </div>

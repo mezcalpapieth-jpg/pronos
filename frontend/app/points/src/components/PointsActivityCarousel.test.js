@@ -35,6 +35,11 @@ test('flow counts both sides of a binary market', () => {
   assert.match(carousel, /outcome: 'all'/);
 });
 
+test('flow sell amounts render as human-readable negative values', () => {
+  assert.match(carousel, /-\{formatCompact\(sell\)\}/);
+  assert.doesNotMatch(carousel, /\\u2212\{formatCompact\(sell\)\}/);
+});
+
 test('an empty poll never blanks a slide already on screen', () => {
   assert.match(carousel, /!Array\.isArray\(buckets\) \|\| buckets\.length === 0/);
 });
