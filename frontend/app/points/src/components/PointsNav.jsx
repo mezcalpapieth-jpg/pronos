@@ -421,10 +421,11 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
                     </span>
                   )}
                 </Link>
-                <Link to="/torneo" onClick={closeMobileMenu}>{t('points.nav.tournament')}</Link>
                 <Link to="/earn" onClick={closeMobileMenu}>{t('points.nav.earn')}</Link>
               </>
             )}
+            {/* Public — see the desktop nav for why this one isn't gated. */}
+            <Link to="/torneo" onClick={closeMobileMenu}>{t('points.nav.tournament')}</Link>
             <Link to="/support" onClick={closeMobileMenu}>
               {lang === 'en' ? 'Support' : 'Soporte'}
             </Link>
@@ -499,10 +500,17 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
                 </span>
               )}
             </Link>
-            <Link to="/torneo" style={navLinkStyle}>{t('points.nav.tournament')}</Link>
             <Link to="/earn" style={navLinkStyle}>{t('points.nav.earn')}</Link>
           </>
         )}
+        {/* Tournament is public and needs no account to read — it renders
+            the prize ladder and the live leaderboard either way. It is
+            also the ONLY place the prize ladder lives now that the home
+            hero is gone, so gating the link would leave a logged-out
+            visitor with no way to find out what they'd be playing for.
+            Portfolio and Earn stay gated: both are personal and require
+            an account to do anything with. */}
+        <Link to="/torneo" style={navLinkStyle}>{t('points.nav.tournament')}</Link>
         <a
           href={COMO_FUNCIONA_URL}
           target="_blank"
