@@ -83,7 +83,9 @@ test('points surfaces refresh live after trades, claims, and remote market movem
   assert.match(buyModalSource, /emitPointsRefresh\(\{ source: 'buy'/);
 });
 
-test('points market cards display traded volume before seed liquidity', () => {
-  assert.match(marketCardSource, /const volume = market\.tradeVolume \?\? market\.volume \?\? 0/);
-  assert.doesNotMatch(marketCardSource, /const volume = market\.volume \?\? market\.tradeVolume \?\? 0/);
+test('points market cards display seed liquidity plus traded volume', () => {
+  assert.match(marketCardSource, /function displayedMarketVolume\(market\)/);
+  assert.match(marketCardSource, /const seed = Number\(market\?\.volume \|\| 0\)/);
+  assert.match(marketCardSource, /const traded = Number\(market\?\.tradeVolume \|\| 0\)/);
+  assert.match(marketCardSource, /return seed \+ traded/);
 });

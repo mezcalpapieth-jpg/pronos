@@ -45,6 +45,12 @@ function formatVolume(n) {
   return v.toFixed(0);
 }
 
+function displayedMarketVolume(market) {
+  const seed = Number(market?.volume || 0);
+  const traded = Number(market?.tradeVolume || 0);
+  return seed + traded;
+}
+
 // Very rough gain estimate: at price p, 100 MXNP buys ~100/p shares,
 // which pay out 100/p MXNP if the outcome wins. Net = 100/p − 100.
 // Ignores fees and price impact on purpose — cards are preview text,
@@ -130,7 +136,7 @@ export default function PointsMarketCard({ market, userPosition }) {
     });
     navigate(cardTargetPath);
   };
-  const volume = market.tradeVolume ?? market.volume ?? 0;
+  const volume = displayedMarketVolume(market);
 
   function navigateToTeam(e, team) {
     if (!team) return;

@@ -12,7 +12,7 @@
  * — the same anonymous, bucketed feed the market detail chart already uses.
  * That endpoint deliberately never exposes individual users, so the tape
  * shows hourly buy/sell flow rather than a per-user fill ticker.
- *   - slotting     → hidden editorial mix of 1h interaction, volume, activity, BTC 5m
+ *   - slotting     → hidden editorial mix of 1h interaction, volume, 7d activity, BTC 5m
  *   - chart        → /api/points/price-history (outcome 0, last 30d)
  *   - tape rows    → one row per hour that actually traded
  *   - pressure bar → buy vs sell volume across the window
@@ -39,9 +39,10 @@ import { fetchPriceHistory, fetchTradeActivity } from '../lib/pointsApi.js';
 const SLIDE_MS = 8000;      // autoplay dwell per slide
 const TAPE_POLL_MS = 25_000; // how often the visible slide refetches its flow
 const TAPE_ROWS = 7;
-// Largest window needed by the slot picker. The endpoint returns hourly
-// buckets for this whole window, then the UI derives 1h / 4h / 24h scores.
-const WINDOW_HOURS = 24;
+// Largest window needed by the slot picker. The endpoint returns buckets for
+// this whole window, then the UI derives 1h / 4h / 7d scores.
+const WINDOW_HOURS = 24 * 7;
+const WINDOW_BUCKETS = 120;
 // Ask about a wide set so a newer, fast-moving market can beat older
 // high-volume markets in the 1h / 4h slots.
 const CANDIDATE_POOL = 120;
@@ -52,8 +53,8 @@ const SLOT_DEFS = [
   { key: '4h-activity', hours: 4, metric: 'count' },
   { key: '4h-volume', hours: 4, metric: 'volume' },
   { key: 'total-volume', hours: null, metric: 'totalVolume' },
-  { key: '24h-activity', hours: 24, metric: 'count' },
-  { key: '24h-volume', hours: 24, metric: 'volume' },
+  { key: '7d-activity', hours: WINDOW_HOURS, metric: 'count' },
+  { key: '7d-volume', hours: WINDOW_HOURS, metric: 'volume' },
 ];
 
 const BUY_COLOR = 'var(--yes)';
@@ -72,12 +73,14 @@ function formatCompact(n) {
   return v.toFixed(0);
 }
 
-// Bucket start → "14:00". The window is 24h so the hour alone is
-// unambiguous, and it lines up in tabular figures.
+// Bucket start → compact local date + time. The tape now spans a week,
+// so hour-only labels would be ambiguous.
 function formatHour(unixSeconds) {
   if (!unixSeconds) return '';
-  return new Date(Number(unixSeconds) * 1000)
-    .toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const d = new Date(Number(unixSeconds) * 1000);
+  const date = d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+  const time = d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
+  return `${date}, ${time}`;
 }
 
 function bucketsForWindow(buckets, hours, nowSeconds) {
@@ -136,7 +139,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [history, setHistory] = useState({});
-  // Bucketed fills for the last WINDOW_HOURS, keyed by market id. One
+  // Bucketed fills for the last seven days, keyed by market id. One
   // fetch feeds all three things on screen: who gets a slide, the
   // pressure bar, and the tape rows. Null until it lands — no slides
   // before we know who actually traded.
@@ -172,7 +175,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
   const candidatesKey = candidateIds.join(',');
 
   // Ask the activity endpoint which of those actually traded inside the
-  // window. The slot picker below then derives hidden 1h / 4h / 24h leaders
+  // window. The slot picker below then derives hidden 1h / 4h / 7d leaders
   // from these same buckets.
   useEffect(() => {
     if (candidateIds.length === 0) {
@@ -185,7 +188,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
     fetchTradeActivity(candidateIds, {
       hours: WINDOW_HOURS,
       outcome: 'all',
-      buckets: WINDOW_HOURS,
+      buckets: WINDOW_BUCKETS,
     }).then(a => {
       if (!cancelled) setRecent(a || {});
     });
@@ -219,17 +222,21 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
       const [entry] = rankedByWindowMetric(candidates, recent, slot, used, nowSeconds);
       if (!entry) return;
       used.add(entry.market.id);
-      const totals = entry.totals;
+      const historyBuckets = bucketsForWindow(recent[entry.market.id] || [], WINDOW_HOURS, nowSeconds);
+      const historyTotals = bucketTotals(historyBuckets);
       picked.push({
         ...entry.market,
         _slotKey: slot.key,
         _slotMetric: slot.metric,
         _windowHours: slot.hours,
-        _buckets: [...entry.buckets].sort((a, b) => Number(b.t) - Number(a.t)),
-        _count: totals.count,
-        _displayVolume: totals.volume,
-        _buy24: totals.buy,
-        _sell24: totals.sell,
+        // Selection can be 1H or 4H, but the visible tape should tell
+        // the whole recent story for that market, not only the narrow
+        // signal that got it into the carousel.
+        _buckets: [...historyBuckets].sort((a, b) => Number(b.t) - Number(a.t)),
+        _count: historyTotals.count,
+        _displayVolume: historyTotals.volume,
+        _buyWindow: historyTotals.buy,
+        _sellWindow: historyTotals.sell,
       });
     };
 
@@ -248,8 +255,8 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
         _buckets: [...buckets].sort((a, b) => Number(b.t) - Number(a.t)),
         _count: totals.count,
         _displayVolume: Number(m._vol || 0),
-        _buy24: totals.buy,
-        _sell24: totals.sell,
+        _buyWindow: totals.buy,
+        _sellWindow: totals.sell,
       });
     };
 
@@ -259,13 +266,13 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
     }
 
     // If one of the fixed slots had no eligible market, fill the empty
-    // space with the next strongest 24h volume leader so the carousel
+    // space with the next strongest 7d volume leader so the carousel
     // still feels alive without duplicating a market.
     while (picked.length < nonPinnedLimit) {
       const [entry] = rankedByWindowMetric(
         candidates,
         recent,
-        { key: '24h-volume-extra', hours: WINDOW_HOURS, metric: 'volume' },
+        { key: '7d-volume-extra', hours: WINDOW_HOURS, metric: 'volume' },
         used,
         nowSeconds,
       );
@@ -274,14 +281,14 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
       const totals = entry.totals;
       picked.push({
         ...entry.market,
-        _slotKey: '24h-volume-extra',
+        _slotKey: '7d-volume-extra',
         _slotMetric: 'volume',
         _windowHours: WINDOW_HOURS,
         _buckets: [...entry.buckets].sort((a, b) => Number(b.t) - Number(a.t)),
         _count: totals.count,
         _displayVolume: totals.volume,
-        _buy24: totals.buy,
-        _sell24: totals.sell,
+        _buyWindow: totals.buy,
+        _sellWindow: totals.sell,
       });
     }
 
@@ -298,8 +305,8 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
         _buckets: [],
         _count: 0,
         _displayVolume: 0,
-        _buy24: 0,
-        _sell24: 0,
+        _buyWindow: 0,
+        _sellWindow: 0,
       });
     }
 
@@ -338,7 +345,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
       fetchTradeActivity([active.id], {
         hours: WINDOW_HOURS,
         outcome: 'all',
-        buckets: WINDOW_HOURS,
+        buckets: WINDOW_BUCKETS,
       }).then(a => {
         const buckets = a?.[active.id];
         // An empty poll (endpoint hiccup, cache miss) must not blank out
@@ -384,8 +391,8 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
   // Pressure comes from the bucketed activity, not from the tape rows —
   // the tape only holds the last handful of fills, while these are the
   // real buy/sell totals across the whole window.
-  const buyPressure = active?._buy24 || 0;
-  const sellPressure = active?._sell24 || 0;
+  const buyPressure = active?._buyWindow || 0;
+  const sellPressure = active?._sellWindow || 0;
   const pressureTotal = buyPressure + sellPressure;
   const buyPct = pressureTotal > 0 ? (buyPressure / pressureTotal) * 100 : 50;
 

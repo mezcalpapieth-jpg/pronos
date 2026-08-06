@@ -27,7 +27,8 @@ test('admission is recent real trading, never seed liquidity', () => {
   // Seed liquidity never enters the shortlist, and recent slots score by
   // bucketed traded activity/volume.
   assert.match(carousel, /rankedByWindowMetric/);
-  assert.match(carousel, /const WINDOW_HOURS = 24/);
+  assert.match(carousel, /const WINDOW_HOURS = 24 \* 7/);
+  assert.match(carousel, /const WINDOW_BUCKETS = 120/);
 });
 
 test('carousel uses hidden activity and volume slots before the bitcoin 5 minute slot', () => {
@@ -36,11 +37,21 @@ test('carousel uses hidden activity and volume slots before the bitcoin 5 minute
   assert.match(carousel, /key: '4h-activity', hours: 4, metric: 'count'/);
   assert.match(carousel, /key: '4h-volume', hours: 4, metric: 'volume'/);
   assert.match(carousel, /key: 'total-volume', hours: null, metric: 'totalVolume'/);
-  assert.match(carousel, /key: '24h-activity', hours: 24, metric: 'count'/);
-  assert.match(carousel, /key: '24h-volume', hours: 24, metric: 'volume'/);
+  assert.match(carousel, /key: '7d-activity', hours: WINDOW_HOURS, metric: 'count'/);
+  assert.match(carousel, /key: '7d-volume', hours: WINDOW_HOURS, metric: 'volume'/);
   assert.match(carousel, /_slotKey: 'btc5m'/);
   assert.doesNotMatch(carousel, /_slotLabelKey/);
   assert.doesNotMatch(carousel, /points\.activity\.slot1h/);
+});
+
+test('hidden one-hour signals still display the full recent flow history', () => {
+  assert.match(carousel, /const historyBuckets = bucketsForWindow\(recent\[entry\.market\.id\] \|\| \[\], WINDOW_HOURS, nowSeconds\)/);
+  assert.match(carousel, /const historyTotals = bucketTotals\(historyBuckets\)/);
+  assert.match(carousel, /_buckets: \[...historyBuckets\]\.sort/);
+  assert.match(carousel, /_count: historyTotals\.count/);
+  assert.match(carousel, /_displayVolume: historyTotals\.volume/);
+  assert.match(carousel, /_buyWindow: historyTotals\.buy/);
+  assert.match(carousel, /_sellWindow: historyTotals\.sell/);
 });
 
 test('music category displays as entertainment in the carousel', () => {
