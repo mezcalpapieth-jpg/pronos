@@ -93,9 +93,9 @@ export default async function handler(req, res) {
               market_id,
               bucket_at,
               COUNT(*)::int AS count,
-              COALESCE(SUM(collateral), 0)::text AS volume,
-              COALESCE(SUM(CASE WHEN side = 'buy' THEN collateral ELSE 0 END), 0)::text AS buy_volume,
-              COALESCE(SUM(CASE WHEN side = 'sell' THEN collateral ELSE 0 END), 0)::text AS sell_volume
+              COALESCE(SUM(ABS(collateral)), 0)::text AS volume,
+              COALESCE(SUM(CASE WHEN side = 'buy' THEN ABS(collateral) ELSE 0 END), 0)::text AS buy_volume,
+              COALESCE(SUM(CASE WHEN side = 'sell' THEN ABS(collateral) ELSE 0 END), 0)::text AS sell_volume
             FROM raw
             GROUP BY market_id, bucket_at
             ORDER BY market_id ASC, bucket_at ASC
@@ -120,9 +120,9 @@ export default async function handler(req, res) {
             market_id,
             bucket_at,
             COUNT(*)::int AS count,
-            COALESCE(SUM(collateral), 0)::text AS volume,
-            COALESCE(SUM(CASE WHEN side = 'buy' THEN collateral ELSE 0 END), 0)::text AS buy_volume,
-            COALESCE(SUM(CASE WHEN side = 'sell' THEN collateral ELSE 0 END), 0)::text AS sell_volume
+            COALESCE(SUM(ABS(collateral)), 0)::text AS volume,
+            COALESCE(SUM(CASE WHEN side = 'buy' THEN ABS(collateral) ELSE 0 END), 0)::text AS buy_volume,
+            COALESCE(SUM(CASE WHEN side = 'sell' THEN ABS(collateral) ELSE 0 END), 0)::text AS sell_volume
           FROM raw
           GROUP BY market_id, bucket_at
           ORDER BY market_id ASC, bucket_at ASC

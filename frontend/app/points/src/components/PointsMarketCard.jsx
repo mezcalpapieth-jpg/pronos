@@ -130,7 +130,7 @@ export default function PointsMarketCard({ market, userPosition }) {
     });
     navigate(cardTargetPath);
   };
-  const volume = market.volume ?? market.tradeVolume ?? 0;
+  const volume = market.tradeVolume ?? market.volume ?? 0;
 
   function navigateToTeam(e, team) {
     if (!team) return;

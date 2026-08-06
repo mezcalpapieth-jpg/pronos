@@ -13,6 +13,7 @@ const i18nSource = await readFile(new URL('../../../src/lib/i18n.js', import.met
 const navSource = await readFile(new URL('../components/PointsNav.jsx', import.meta.url), 'utf8');
 const portfolioSource = await readFile(new URL('./PointsPortfolio.jsx', import.meta.url), 'utf8');
 const buyModalSource = await readFile(new URL('../components/PointsBuyModal.jsx', import.meta.url), 'utf8');
+const marketCardSource = await readFile(new URL('../components/PointsMarketCard.jsx', import.meta.url), 'utf8');
 
 test('points market detail overlays real activity and range controls on the chart', () => {
   assert.match(detailSource, /fetchTradeActivity/);
@@ -76,4 +77,9 @@ test('points surfaces refresh live after trades, claims, and remote market movem
   assert.match(portfolioSource, /emitPointsRefresh\(\{ source: 'redeem'/);
 
   assert.match(buyModalSource, /emitPointsRefresh\(\{ source: 'buy'/);
+});
+
+test('points market cards display traded volume before seed liquidity', () => {
+  assert.match(marketCardSource, /const volume = market\.tradeVolume \?\? market\.volume \?\? 0/);
+  assert.doesNotMatch(marketCardSource, /const volume = market\.volume \?\? market\.tradeVolume \?\? 0/);
 });

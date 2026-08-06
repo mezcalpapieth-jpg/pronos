@@ -150,7 +150,7 @@ export default async function handler(req, res) {
       const rows = await timer.time('db_markets', () => category
         ? sql`
           SELECT m.*, pm.source_data AS pending_source_data,
-            (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
+            (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
           FROM points_markets m
           LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
           WHERE m.status = ${status}
@@ -172,7 +172,7 @@ export default async function handler(req, res) {
         : featuredOnly
           ? sql`
             SELECT m.*, pm.source_data AS pending_source_data,
-              (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
+              (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
             FROM points_markets m
             LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
             WHERE m.status = ${status}
@@ -197,7 +197,7 @@ export default async function handler(req, res) {
           `
           : sql`
             SELECT m.*, pm.source_data AS pending_source_data,
-              (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
+              (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
             FROM points_markets m
             LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
             WHERE m.status = ${status}
@@ -229,7 +229,7 @@ export default async function handler(req, res) {
       if (parallelIds.length > 0) {
         const legs = await timer.time('db_legs', () => sql`
         SELECT l.id, l.parent_id, l.leg_label, l.reserves, l.seed_liquidity, l.status, l.outcome,
-          (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = l.id) AS trade_volume
+          (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = l.id) AS trade_volume
         FROM points_markets l
         WHERE l.parent_id = ANY(${parallelIds})
           AND l.status <> 'canceled'

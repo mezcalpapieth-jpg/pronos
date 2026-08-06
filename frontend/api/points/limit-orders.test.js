@@ -42,6 +42,7 @@ test('limit-order helper reserves funds, rewards makers, and fills against AMM q
   assert.match(helperSource, /export async function createLimitOrder/);
   assert.match(helperSource, /export async function cancelLimitOrder/);
   assert.match(helperSource, /export async function executeTriggeredLimitOrders/);
+  assert.match(helperSource, /resolveTriggeredOutcomeIndices/);
   assert.match(helperSource, /export async function lockedReservedShares/);
   assert.match(helperSource, /export async function payDailyMakerRewards/);
   assert.match(helperSource, /export function estimateMakerReward/);
@@ -134,8 +135,9 @@ test('portfolio and cron expose daily maker-reward payouts', () => {
 });
 
 test('market writes trigger orders and close paths release open reserves', () => {
-  assert.match(buySource, /executeTriggeredLimitOrders/);
-  assert.match(sellSource, /executeTriggeredLimitOrders/);
+  assert.match(buySource, /executeTriggeredLimitOrders\(client, \{\s*marketId: mid,\s*\}\)/s);
+  assert.match(sellSource, /executeTriggeredLimitOrders\(client, \{\s*marketId: mid,\s*\}\)/s);
+  assert.match(helperSource, /const outcomeIndices = await resolveTriggeredOutcomeIndices/);
   assert.match(sellSource, /lockedReservedShares/);
   for (const source of [resolveSource, cancelMarketSource, voidMarketSource, cronResolveSource]) {
     assert.match(source, /releaseOpenLimitOrdersForMarkets/);

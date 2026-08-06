@@ -745,36 +745,88 @@ export async function executeTriggeredLimitOrders(client, {
 } = {}) {
   const filled = [];
   const skipped = [];
+  const skippedKeys = new Set();
+  const outcomeIndices = await resolveTriggeredOutcomeIndices(client, { marketId, outcomeIndex });
+  const limit = Math.max(1, Number.parseInt(maxOrders, 10) || MAX_TRIGGERED_PER_PASS);
   const sides = [
     { side: 'sell', order: 'limit_price ASC, created_at ASC, id ASC' },
     { side: 'buy', order: 'limit_price DESC, created_at ASC, id ASC' },
   ];
 
-  for (const cfg of sides) {
-    for (let i = 0; i < maxOrders; i++) {
-      const result = await client.query(
-        `SELECT id
-           FROM points_limit_orders
-          WHERE market_id = $1
-            AND outcome_index = $2
-            AND side = $3
-            AND status = 'open'
-          ORDER BY ${cfg.order}
-          LIMIT 1`,
-        [marketId, outcomeIndex, cfg.side],
-      );
-      if (result.rows.length === 0) break;
-      const orderId = result.rows[0].id;
-      const execution = await executeLimitOrderById(client, orderId);
-      if (execution.triggered) {
-        filled.push({ orderId: Number(orderId), side: cfg.side, ...execution });
-        continue;
+  for (let pass = 0; pass < limit && filled.length < limit; pass++) {
+    let filledThisPass = 0;
+
+    for (const triggerOutcomeIndex of outcomeIndices) {
+      for (const cfg of sides) {
+        if (filled.length >= limit) break;
+
+        const result = await client.query(
+          `SELECT id
+             FROM points_limit_orders
+            WHERE market_id = $1
+              AND outcome_index = $2
+              AND side = $3
+              AND status = 'open'
+            ORDER BY ${cfg.order}
+            LIMIT 1`,
+          [marketId, triggerOutcomeIndex, cfg.side],
+        );
+        if (result.rows.length === 0) continue;
+
+        const orderId = result.rows[0].id;
+        const execution = await executeLimitOrderById(client, orderId);
+        if (execution.triggered) {
+          filled.push({
+            orderId: Number(orderId),
+            outcomeIndex: triggerOutcomeIndex,
+            side: cfg.side,
+            ...execution,
+          });
+          filledThisPass++;
+          continue;
+        }
+
+        const skippedKey = `${orderId}:${cfg.side}`;
+        if (!skippedKeys.has(skippedKey)) {
+          skippedKeys.add(skippedKey);
+          skipped.push({
+            orderId: Number(orderId),
+            outcomeIndex: triggerOutcomeIndex,
+            side: cfg.side,
+            status: execution.status,
+          });
+        }
       }
-      skipped.push({ orderId: Number(orderId), side: cfg.side, status: execution.status });
-      break;
     }
+
+    if (filledThisPass === 0) break;
   }
-  return { filled, skipped };
+  return { filled, skipped, outcomeIndices };
+}
+
+async function resolveTriggeredOutcomeIndices(client, { marketId, outcomeIndex } = {}) {
+  const explicitOutcomeIndex = Number(outcomeIndex);
+  if (Number.isInteger(explicitOutcomeIndex) && explicitOutcomeIndex >= 0) {
+    return [explicitOutcomeIndex];
+  }
+
+  const result = await client.query(
+    `SELECT reserves, outcomes
+       FROM points_markets
+      WHERE id = $1`,
+    [marketId],
+  );
+  const row = result.rows[0];
+  if (!row) return [];
+
+  const reserves = parseJsonb(row.reserves, []);
+  const outcomes = parseJsonb(row.outcomes, []);
+  const count = Math.max(
+    Array.isArray(reserves) ? reserves.length : 0,
+    Array.isArray(outcomes) ? outcomes.length : 0,
+  );
+
+  return Array.from({ length: count }, (_, index) => index);
 }
 
 export function aggregateLimitOrderRows(rows = []) {

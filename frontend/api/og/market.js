@@ -117,7 +117,7 @@ export default async function handler(req, res) {
 
     const rows = await sql`
       SELECT m.*,
-        (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
+        (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
       FROM points_markets m
       WHERE m.id = ${id} AND m.archived_at IS NULL
       LIMIT 1

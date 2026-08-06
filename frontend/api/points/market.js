@@ -237,7 +237,7 @@ export default async function handler(req, res) {
 
       const rows = await sql`
         SELECT m.*, pm.source_data AS pending_source_data,
-          (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
+          (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
         FROM points_markets m
         LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
         WHERE m.id = ${id}
@@ -417,7 +417,7 @@ export default async function handler(req, res) {
       if (ammMode === 'parallel') {
         const legRows = await sql`
           SELECT l.id, l.leg_label, l.reserves, l.seed_liquidity, l.status, l.outcome,
-            (SELECT COALESCE(SUM(collateral), 0) FROM points_trades t WHERE t.market_id = l.id) AS trade_volume
+            (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = l.id) AS trade_volume
           FROM points_markets l
           WHERE l.parent_id = ${r.id}
             AND l.status <> 'canceled'

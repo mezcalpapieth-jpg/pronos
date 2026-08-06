@@ -39,7 +39,7 @@ export default async function handler(req, res) {
           COUNT(*) FILTER (WHERE status = 'active'   AND parent_id IS NULL
                            AND end_time IS NOT NULL AND end_time < NOW())                        AS pending_count,
           COALESCE(SUM(CASE WHEN status = 'active' AND parent_id IS NULL
-                            THEN (SELECT COALESCE(SUM(collateral), 0)
+                            THEN (SELECT COALESCE(SUM(ABS(collateral)), 0)
                                   FROM points_trades t WHERE t.market_id = m.id)
                             ELSE 0 END), 0)                                                       AS active_volume
         FROM points_markets m

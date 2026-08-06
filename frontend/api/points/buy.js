@@ -229,7 +229,6 @@ export default async function handler(req, res) {
 
       const triggeredLimitOrders = await executeTriggeredLimitOrders(client, {
         marketId: mid,
-        outcomeIndex: oi,
       });
 
       return {
