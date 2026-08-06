@@ -36,7 +36,7 @@ import {
   finalMarketOptions,
   findChampionsLeagueFinalMarket,
 } from '@app/lib/championsLeague.js';
-import Sparkline from '@app/components/Sparkline.jsx';
+import Sparkline, { priceDomain } from '@app/components/Sparkline.jsx';
 import LiveScorePanel from '@app/components/LiveScorePanel.jsx';
 import ShareButton from '@app/components/ShareButton.jsx';
 import TeamMarketStrip from '@app/components/TeamMarketStrip.jsx';
@@ -2260,9 +2260,52 @@ export default function PointsMarketDetail({ onOpenLogin }) {
     : prices;
   const displayOutcomeImages = displayOutcomeIndices.map(i => market.outcomeImages?.[i] || null);
   const displayOutcomeCountryLabels = displayOutcomeIndices.map(i => market.outcomeCountryLabels?.[i] || null);
-  const displayHistoryByOutcome = displayOutcomeIndices.map(i => historyByOutcome?.[i] || []);
+  const rawHistoryByOutcome = displayOutcomeIndices.map(i => historyByOutcome?.[i] || []);
   const displayActivityByOutcome = displayOutcomeIndices.map(i => activityByOutcome?.[i] || []);
   const activeChartRange = detailChartRangeFor(chartRange);
+
+  // A market opens at even odds and genuinely sits there until someone
+  // trades — but the snapshot table only starts recording at the first
+  // trade, so the line used to appear already at 88% with no sign of
+  // where it came from. When the market was created inside the visible
+  // window we seed that real opening price, so the chart shows the move
+  // off 50/50 instead of starting mid-story. Outside the window the
+  // price really was elsewhere before it opened, so we leave it alone
+  // rather than draw a 50% that was never true.
+  // Parallel markets run each outcome as its own independent binary
+  // (their prices sum well past 100%), so every leg opens at 50%.
+  // Standard multi-outcome markets split one book N ways.
+  const openingPct = market.ammMode === 'parallel'
+    ? 50
+    : 100 / Math.max(2, market.outcomes?.length || displayOutcomes.length || 2);
+  const marketOpenedAt = market.createdAt
+    ? Math.floor(new Date(market.createdAt).getTime() / 1000)
+    : null;
+  const chartWindowStart = Math.floor(Date.now() / 1000) - (
+    activeChartRange.hours != null
+      ? activeChartRange.hours * 3600
+      : activeChartRange.days * 86400
+  );
+  const withOpeningBaseline = (series) => {
+    if (!Array.isArray(series) || series.length === 0) return series;
+    if (!Number.isFinite(marketOpenedAt) || marketOpenedAt < chartWindowStart) return series;
+    const firstT = Number(series[0]?.t);
+    if (!Number.isFinite(firstT) || firstT <= marketOpenedAt) return series;
+    return [{ t: marketOpenedAt, p: openingPct }, ...series];
+  };
+  const displayHistoryByOutcome = rawHistoryByOutcome.map(withOpeningBaseline);
+
+  // Movement across the visible window, so the headline number carries
+  // the same context the chart does.
+  const chartDelta = (() => {
+    const series = displayHistoryByOutcome?.[0];
+    if (!Array.isArray(series) || series.length < 2) return null;
+    const valueAt = (pt) => (pt && typeof pt === 'object' && 'p' in pt ? Number(pt.p) : Number(pt));
+    const first = valueAt(series[0]);
+    const last = valueAt(series[series.length - 1]);
+    if (!Number.isFinite(first) || !Number.isFinite(last)) return null;
+    return Math.round(last) - Math.round(first);
+  })();
   const activitySummary = summarizeActivity(
     displayOutcomes.length <= 2
       ? [displayActivityByOutcome?.[0] || []]
@@ -2520,6 +2563,45 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 </div>
               </div>
               <div style={{ padding: '20px 20px 18px' }}>
+                {displayOutcomes.length <= 2 && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    gap: 10,
+                    marginBottom: 10,
+                  }}>
+                    <span style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 30,
+                      fontWeight: 700,
+                      lineHeight: 1,
+                      color: OUTCOME_COLORS[0],
+                      fontVariantNumeric: 'tabular-nums',
+                    }}>
+                      {Math.round(pctFor(0))}%
+                    </span>
+                    {chartDelta != null && chartDelta !== 0 && (
+                      <span style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: chartDelta > 0 ? 'var(--yes)' : '#ff3b3b',
+                        fontVariantNumeric: 'tabular-nums',
+                      }}>
+                        {chartDelta > 0 ? '▲' : '▼'} {Math.abs(chartDelta)}%
+                      </span>
+                    )}
+                    <span style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 10,
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                      color: 'var(--text-muted)',
+                    }}>
+                      {t(activeChartRange.labelKey)}
+                    </span>
+                  </div>
+                )}
                 {/* One sparkline per outcome. For binary markets we show
                     a taller chart with just the YES line (equivalent to
                     the NO line mirrored, no extra info). For 3+ outcome
@@ -2528,12 +2610,11 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                     buttons below. */}
                 {displayOutcomes.length <= 2 ? (
                   <Sparkline
-                    height={140}
+                    height={200}
                     color={OUTCOME_COLORS[0]}
-                    strokeWidth={2.4}
-                    fill={true}
-                    showValue={true}
-                    valueWidth={60}
+                    strokeWidth={2}
+                    fill={false}
+                    showValue={false}
                     data={displayHistoryByOutcome?.[0] || []}
                     activity={displayActivityByOutcome?.[0] || []}
                     targetPct={pctFor(0)}
@@ -2556,17 +2637,33 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                         : [...displayOutcomes.keys()]
                             .sort((a, b) => (displayPrices[b] ?? 0) - (displayPrices[a] ?? 0))
                             .slice(0, 4);
-                      return chartIndices.map((i) => {
+                      // One domain across every charted outcome, so the
+                      // stacked rows stay visually comparable.
+                      const sharedValues = chartIndices.flatMap((i) => {
+                        const s = displayHistoryByOutcome?.[i];
+                        return Array.isArray(s)
+                          ? s.map(pt => (pt && typeof pt === 'object' && 'p' in pt ? Number(pt.p) : Number(pt)))
+                              .filter(Number.isFinite)
+                          : [];
+                      });
+                      const sharedDomain = sharedValues.length >= 2 ? priceDomain(sharedValues) : null;
+                      return chartIndices.map((i, slot) => {
                         const label = displayOutcomes[i];
                         const color = OUTCOME_COLORS[i % OUTCOME_COLORS.length];
                         const series = displayHistoryByOutcome && displayHistoryByOutcome[i];
+                        // Stacked lines share one time axis, carried by
+                        // the bottom row so it reads as a single chart.
+                        const carriesAxis = slot === chartIndices.length - 1;
                         return (
                           <Sparkline
                             key={i}
-                            height={48}
+                            height={carriesAxis ? 66 : 48}
+                            showXAxis={carriesAxis}
+                            domainMin={sharedDomain?.min}
+                            domainMax={sharedDomain?.max}
                             color={color}
                             strokeWidth={2}
-                            fill={i === chartIndices[0]}
+                            fill={false}
                             showValue={true}
                             valueWidth={44}
                             label={label.length > 10 ? label.slice(0, 9) + '…' : label}
