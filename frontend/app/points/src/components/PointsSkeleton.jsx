@@ -36,6 +36,62 @@ export function MarketGridSkeleton({ count = 6 }) {
   );
 }
 
+/**
+ * Placeholder for the activity carousel. It sits above the hero, so
+ * without it the whole page shifts down by the carousel's height the
+ * moment the data lands — the reader loses their place mid-sentence.
+ * Matches the real slide's two-column shape and height.
+ */
+export function ActivityCarouselSkeleton({ isMobile = false }) {
+  return (
+    <section
+      aria-hidden="true"
+      style={{
+        padding: isMobile ? '24px 16px 8px' : '32px 48px 8px',
+        maxWidth: 1280,
+        margin: '0 auto',
+      }}
+    >
+      <div style={{ marginBottom: 14 }}>
+        <SkeletonBlock style={{ width: 140, height: 11, borderRadius: 4, marginBottom: 8 }} />
+        <SkeletonBlock style={{ width: 280, height: isMobile ? 26 : 32, borderRadius: 6 }} />
+      </div>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : 'minmax(0,1.45fr) minmax(260px,1fr)',
+        background: 'var(--surface1)',
+        border: '1px solid var(--border)',
+        borderRadius: 16,
+        overflow: 'hidden',
+      }}>
+        <div style={{ padding: isMobile ? 18 : 24 }}>
+          <SkeletonBlock style={{ width: 190, height: 20, borderRadius: 999, marginBottom: 14 }} />
+          <SkeletonBlock style={{ width: '88%', height: 22, borderRadius: 6, marginBottom: 18 }} />
+          <SkeletonBlock style={{ width: '100%', height: isMobile ? 110 : 148, borderRadius: 10 }} />
+          <SkeletonBlock style={{ width: 220, height: 24, borderRadius: 999, marginTop: 14 }} />
+        </div>
+        <div style={{
+          background: 'var(--surface2)',
+          padding: isMobile ? 18 : 20,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6,
+        }}>
+          <SkeletonBlock style={{ width: '100%', height: 14, borderRadius: 4, marginBottom: 8 }} />
+          {Array.from({ length: 5 }, (_, i) => (
+            <SkeletonBlock key={i} style={{ width: '100%', height: 28, borderRadius: 7 }} />
+          ))}
+        </div>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 14 }}>
+        {Array.from({ length: 5 }, (_, i) => (
+          <SkeletonBlock key={i} style={{ width: i === 0 ? 22 : 8, height: 8, borderRadius: 999 }} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function LeaderboardSkeleton({ rows = 5 }) {
   return (
     <div className="points-skeleton-list" aria-label="Cargando leaderboard">

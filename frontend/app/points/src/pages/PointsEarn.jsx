@@ -95,7 +95,7 @@ function DailyClaimCard({ onClaimed, alreadyClaimedToday: initialClaimed, onClai
         <div style={{ ...noticeStyle, color: 'var(--green)' }}>{state.msg}</div>
       )}
       {state.err && (
-        <div style={{ ...noticeStyle, color: 'var(--red, #ef4444)' }}>{state.err}</div>
+        <div style={{ ...noticeStyle, color: 'var(--danger)' }}>{state.err}</div>
       )}
       <button
         className="btn-primary"
@@ -109,7 +109,7 @@ function DailyClaimCard({ onClaimed, alreadyClaimedToday: initialClaimed, onClai
           // `.btn-primary` accent so it's visually obvious the action is
           // unavailable until tomorrow.
           ...(locked && {
-            background: 'var(--surface3, #2a2a2a)',
+            background: 'var(--surface3)',
             color: 'var(--text-muted)',
             cursor: 'not-allowed',
             opacity: 0.8,
@@ -335,7 +335,7 @@ function SocialTaskRow({ task, onSubmit }) {
           {task.description}
         </div>
         {task.status === 'rejected' && task.rejectionNote && (
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--red, #ef4444)', marginTop: 4 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--danger)', marginTop: 4 }}>
             Motivo: {task.rejectionNote}
           </div>
         )}
@@ -484,7 +484,7 @@ function SocialLinksCard() {
         ni revisión manual. Ganas MXNP en cuanto conectas.
       </p>
       {err && (
-        <div style={{ ...noticeStyle, color: 'var(--red, #ef4444)' }}>{err}</div>
+        <div style={{ ...noticeStyle, color: 'var(--danger)' }}>{err}</div>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
         {SOCIAL_PROVIDERS.map(p => {
@@ -629,7 +629,7 @@ function SocialTasksCard() {
         Algunas tareas solo aparecen desde enlaces temporales del equipo.
       </p>
       {err && (
-        <div style={{ ...noticeStyle, color: 'var(--red, #ef4444)' }}>{err}</div>
+        <div style={{ ...noticeStyle, color: 'var(--danger)' }}>{err}</div>
       )}
       {!tasks && !err && (
         <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', padding: 20 }}>

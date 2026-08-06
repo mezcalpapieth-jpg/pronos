@@ -165,7 +165,7 @@ export default function PointsSellPreviewModal({ state, onClose, onConfirm, onSh
           <div style={{
             background: 'rgba(239,68,68,0.08)',
             border: '1px solid rgba(239,68,68,0.35)',
-            color: 'var(--red, #ef4444)',
+            color: 'var(--danger)',
             borderRadius: 12,
             padding: '14px 16px',
             fontFamily: 'var(--font-mono)',
@@ -185,8 +185,8 @@ export default function PointsSellPreviewModal({ state, onClose, onConfirm, onSh
               {[
                 ['VALOR MARCADO', `${fmt(preview.markValue)} MXNP`, 'var(--text-primary)'],
                 ['SALIDA REAL', `${fmt(preview.collateralOut)} MXNP`, 'var(--green)'],
-                ['PNL MARCADO', `${signedFmt(preview.markPnl)} MXNP`, preview.markPnl >= 0 ? 'var(--green)' : 'var(--red, #ef4444)'],
-                ['PNL AL VENDER', `${signedFmt(preview.salePnl)} MXNP`, salePositive ? 'var(--green)' : 'var(--red, #ef4444)'],
+                ['PNL MARCADO', `${signedFmt(preview.markPnl)} MXNP`, preview.markPnl >= 0 ? 'var(--green)' : 'var(--danger)'],
+                ['PNL AL VENDER', `${signedFmt(preview.salePnl)} MXNP`, salePositive ? 'var(--green)' : 'var(--danger)'],
               ].map(([label, value, color]) => (
                 <div key={label} style={{
                   background: 'var(--surface2)',

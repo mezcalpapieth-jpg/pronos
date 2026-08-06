@@ -145,7 +145,7 @@ export default function PointsDelegationModal({ open, onClose, onAuthorized }) {
             borderRadius: 8,
             background: 'rgba(239,68,68,0.1)',
             border: '1px solid rgba(239,68,68,0.3)',
-            color: 'var(--red, #ef4444)',
+            color: 'var(--danger)',
             fontFamily: 'var(--font-mono)', fontSize: 11,
           }}>
             No pudimos autorizar: {err}

@@ -501,8 +501,8 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
           <div style={{
             fontFamily: 'var(--font-display)',
             fontSize: 'clamp(28px, 6vw, 44px)',
-            color: direction === 'sube' ? 'var(--yes, #00C96B)'
-                 : direction === 'baja' ? 'var(--red, #FF4545)'
+            color: direction === 'sube' ? 'var(--success)'
+                 : direction === 'baja' ? 'var(--danger)'
                  : 'var(--text-primary)',
             letterSpacing: '0.02em',
             transition: 'color 0.4s',
@@ -702,7 +702,7 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
             color: 'var(--text-primary)',
           }}>
             <strong style={{
-              color: selectedMarket.outcome === 0 ? 'var(--yes, #00C96B)' : 'var(--red, #FF4545)',
+              color: selectedMarket.outcome === 0 ? 'var(--success)' : 'var(--danger)',
             }}>
               {cryptoOutcomeLabel(selectedMarket.outcome, t)}
             </strong>
@@ -745,8 +745,8 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
               padding: '18px 16px',
               borderRadius: 12,
               background: 'var(--yes-dim, rgba(0,201,107,0.1))',
-              border: '1px solid var(--yes, #00C96B)',
-              color: 'var(--yes, #00C96B)',
+              border: '1px solid var(--success)',
+              color: 'var(--success)',
               cursor: 'pointer',
               fontFamily: 'var(--font-display)',
               fontSize: 18,
@@ -768,8 +768,8 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
               padding: '18px 16px',
               borderRadius: 12,
               background: 'var(--red-dim, rgba(255,69,69,0.1))',
-              border: '1px solid var(--red, #FF4545)',
-              color: 'var(--red, #FF4545)',
+              border: '1px solid var(--danger)',
+              color: 'var(--danger)',
               cursor: 'pointer',
               fontFamily: 'var(--font-display)',
               fontSize: 18,
@@ -814,11 +814,11 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
                 const itemAbove = currentPrice != null && itemMeta.threshold != null && currentPrice > itemMeta.threshold;
                 const itemBelow = currentPrice != null && itemMeta.threshold != null && currentPrice < itemMeta.threshold;
                 const accent = item.status === 'resolved'
-                  ? (item.outcome === 0 ? 'var(--yes, #00C96B)' : 'var(--red, #FF4545)')
+                  ? (item.outcome === 0 ? 'var(--success)' : 'var(--danger)')
                   : itemAbove
-                    ? 'var(--yes, #00C96B)'
+                    ? 'var(--success)'
                     : itemBelow
-                      ? 'var(--red, #FF4545)'
+                      ? 'var(--danger)'
                       : 'var(--text-secondary)';
                 return (
                   <button

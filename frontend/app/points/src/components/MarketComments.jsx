@@ -145,7 +145,7 @@ export default function MarketComments({ marketId, authenticated, username, onOp
           <span style={{
             fontFamily: 'var(--font-mono)',
             fontSize: 10,
-            color: body.length > MAX_BODY * 0.9 ? '#f59e0b' : 'var(--text-muted)',
+            color: body.length > MAX_BODY * 0.9 ? 'var(--warning)' : 'var(--text-muted)',
           }}>
             {body.length}/{MAX_BODY}
           </span>
@@ -173,7 +173,7 @@ export default function MarketComments({ marketId, authenticated, username, onOp
           <div style={{
             fontFamily: 'var(--font-mono)',
             fontSize: 11,
-            color: 'var(--red, #ef4444)',
+            color: 'var(--danger)',
             marginTop: 6,
           }}>
             {error}

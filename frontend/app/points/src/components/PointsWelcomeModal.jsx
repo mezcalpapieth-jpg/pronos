@@ -186,7 +186,7 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
                   <strong>Pesos</strong> on real events, with automatic
                   settlement and no intermediaries.
                   <br /><br />
-                  Active competitors today will get <strong style={{ color: '#ff5500' }}>
+                  Active competitors today will get <strong style={{ color: 'var(--orange)' }}>
                   priority access</strong> when we open Peso trading.
                 </>
               ) : (
@@ -197,7 +197,7 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
                   <strong>Pesos</strong> sobre eventos reales, con liquidación
                   automática y sin intermediarios.
                   <br /><br />
-                  Los competidores activos hoy tendrán <strong style={{ color: '#ff5500' }}>
+                  Los competidores activos hoy tendrán <strong style={{ color: 'var(--orange)' }}>
                   acceso prioritario</strong> cuando abramos trading en Pesos.
                 </>
               )

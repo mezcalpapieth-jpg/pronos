@@ -152,7 +152,7 @@ export default function PointsSupport({ onOpenLogin }) {
               placeholder={lang === 'en' ? 'Tell us what happened...' : 'Cuéntanos qué pasó...'}
             />
 
-            {err && <p style={{ color: '#ef4444', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{err}</p>}
+            {err && <p style={{ color: 'var(--danger)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{err}</p>}
             {ok && <p style={{ color: 'var(--green)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{ok}</p>}
 
             <button type="submit" className="btn-primary" disabled={busy} style={{ width: '100%', marginTop: 10 }}>

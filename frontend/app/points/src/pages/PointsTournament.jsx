@@ -47,7 +47,7 @@ function SectionLabel({ children }) {
       fontFamily: 'var(--font-mono)',
       fontSize: 10,
       letterSpacing: '0.12em',
-      color: '#ff5500',
+      color: 'var(--orange)',
       textTransform: 'uppercase',
       marginBottom: 10,
     }}>
@@ -91,7 +91,7 @@ function LeaderboardRow({ row, currentUsername }) {
         {fmt(row.balance ?? row.finalBalance)} MXNP
       </span>
       <span style={{
-        color: delta >= 0 ? 'var(--green)' : 'var(--red, #ef4444)',
+        color: delta >= 0 ? 'var(--green)' : 'var(--danger)',
         textAlign: 'right',
       }}>
         {delta >= 0 ? '+' : ''}{fmt(delta)}
@@ -257,7 +257,7 @@ export default function PointsTournament() {
                   justifyContent: 'center',
                   background: 'rgba(255,85,0,0.12)',
                   border: '1px solid rgba(255,85,0,0.35)',
-                  color: '#ff5500',
+                  color: 'var(--orange)',
                   fontFamily: 'var(--font-mono)',
                   fontSize: 10,
                 }}>

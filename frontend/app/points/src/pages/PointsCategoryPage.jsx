@@ -618,7 +618,7 @@ function MarketsGrid({ loading, error, filtered, positionByMarket, emptyKey, sea
         padding: 40,
         fontFamily: 'var(--font-mono)',
         fontSize: 13,
-        color: 'var(--red, #ef4444)',
+        color: 'var(--danger)',
       }}>
         {t('points.home.loadError')}
       </div>

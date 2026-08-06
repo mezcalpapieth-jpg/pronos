@@ -108,7 +108,7 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
   }
 
   const isYes = outcomeIndex === 0;
-  const accent = isYes ? 'var(--yes)' : '#ff3b3b';
+  const accent = isYes ? 'var(--yes)' : 'var(--danger)';
 
   const isDrawer = variant === 'drawer';
 
@@ -290,7 +290,7 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
             '—'
           } />
           {quoteState === 'error' && (
-            <div style={{ color: 'var(--red, #ef4444)', fontSize: 11, marginTop: 8 }}>
+            <div style={{ color: 'var(--danger)', fontSize: 11, marginTop: 8 }}>
               {quoteError || t('points.buy.quoteError')}
             </div>
           )}
@@ -300,7 +300,7 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
           <div style={{
             background: 'rgba(255,59,59,0.08)',
             border: '1px solid rgba(255,59,59,0.3)',
-            color: '#ff3b3b',
+            color: 'var(--danger)',
             fontFamily: 'var(--font-mono)',
             fontSize: 11,
             padding: '10px 12px',
@@ -315,7 +315,7 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
           <div style={{
             background: 'rgba(255,59,59,0.08)',
             border: '1px solid rgba(255,59,59,0.3)',
-            color: '#ff3b3b',
+            color: 'var(--danger)',
             fontFamily: 'var(--font-mono)',
             fontSize: 11,
             padding: '10px 12px',
