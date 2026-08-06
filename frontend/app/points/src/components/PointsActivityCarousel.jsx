@@ -1,6 +1,6 @@
 /**
- * "Más activos" carousel — the markets with the most transactions, one
- * slide each, chart on the left and a live trade tape on the right.
+ * "Más activos" carousel — the markets with the strongest recent flow,
+ * one slide each, chart on the left and a live trade tape on the right.
  *
  * Reference: Polymarket's market page, where the price chart sits next to
  * a running feed of fills. Ours keeps the Pronos card language (mono
@@ -12,15 +12,14 @@
  * — the same anonymous, bucketed feed the market detail chart already uses.
  * That endpoint deliberately never exposes individual users, so the tape
  * shows hourly buy/sell flow rather than a per-user fill ticker.
- *   - ranking      → fills inside the window, newest bucket wins ties
+ *   - slotting     → hidden editorial mix of 1h interaction, volume, activity, BTC 5m
  *   - chart        → /api/points/price-history (outcome 0, last 30d)
  *   - tape rows    → one row per hour that actually traded
  *   - pressure bar → buy vs sell volume across the window
  *
- * Admission is by RECENT trading, not all-time: a market needs real fills
- * inside the last WINDOW_HOURS to get a slide. All-time `tradeVolume` only
- * builds the shortlist we ask about — and never `volume`, which is seed
- * liquidity and is non-zero on every market ever created, traded or not.
+ * Admission is by real trading, not seed liquidity. Most slots require
+ * recent fills, while the all-time volume slot uses `tradeVolume` to keep the
+ * deepest market visible even if it has gone quiet in the last few hours.
  *
  * The tape re-staggers its rows on every slide change and re-polls every
  * 25s, so it reads as live without inventing flow that never happened.
@@ -40,16 +39,31 @@ import { fetchPriceHistory, fetchTradeActivity } from '../lib/pointsApi.js';
 const SLIDE_MS = 8000;      // autoplay dwell per slide
 const TAPE_POLL_MS = 25_000; // how often the visible slide refetches its flow
 const TAPE_ROWS = 7;
-// Recency window that decides who makes the carousel. All-time volume
-// surfaces markets that were busy last month and are dead today; this is
-// "what is Mexico trading right now".
+// Largest window needed by the slot picker. The endpoint returns hourly
+// buckets for this whole window, then the UI derives 1h / 4h / 24h scores.
 const WINDOW_HOURS = 24;
-// Markets we ask about. Wider than the slide count because most won't
-// have traded inside the window.
-const CANDIDATE_POOL = 20;
+// Ask about a wide set so a newer, fast-moving market can beat older
+// high-volume markets in the 1h / 4h slots.
+const CANDIDATE_POOL = 120;
+
+const SLOT_DEFS = [
+  { key: '1h-interactions', hours: 1, metric: 'count' },
+  { key: '1h-volume', hours: 1, metric: 'volume' },
+  { key: '4h-activity', hours: 4, metric: 'count' },
+  { key: '4h-volume', hours: 4, metric: 'volume' },
+  { key: 'total-volume', hours: null, metric: 'totalVolume' },
+  { key: '24h-activity', hours: 24, metric: 'count' },
+  { key: '24h-volume', hours: 24, metric: 'volume' },
+];
 
 const BUY_COLOR = 'var(--yes)';
 const SELL_COLOR = 'var(--danger)';
+
+function displayCategory(category) {
+  const key = String(category || 'general').trim().toLowerCase();
+  if (key === 'musica') return 'Entretenimiento';
+  return category || 'General';
+}
 
 function formatCompact(n) {
   const v = Number(n || 0);
@@ -64,6 +78,48 @@ function formatHour(unixSeconds) {
   if (!unixSeconds) return '';
   return new Date(Number(unixSeconds) * 1000)
     .toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function bucketsForWindow(buckets, hours, nowSeconds) {
+  if (!Array.isArray(buckets)) return [];
+  if (!hours) return buckets;
+  const cutoff = nowSeconds - (hours * 60 * 60);
+  // Keep the overlapping floor bucket so the "last hour" slot does not
+  // disappear for trades that happened just before the current hour mark.
+  return buckets.filter(b => Number(b.t || 0) >= cutoff - 3600);
+}
+
+function bucketTotals(buckets) {
+  return buckets.reduce((acc, b) => ({
+    count: acc.count + Number(b.count || 0),
+    volume: acc.volume + Number(b.volume || 0),
+    buy: acc.buy + Number(b.buyVolume || 0),
+    sell: acc.sell + Number(b.sellVolume || 0),
+  }), { count: 0, volume: 0, buy: 0, sell: 0 });
+}
+
+function rankedByWindowMetric(markets, recent, slot, used, nowSeconds) {
+  const metric = slot?.metric || 'volume';
+  return markets
+    .filter(m => !used.has(m.id))
+    .map(m => {
+      const buckets = bucketsForWindow(recent[m.id] || [], slot?.hours, nowSeconds);
+      const totals = bucketTotals(buckets);
+      return { market: m, buckets, totals };
+    })
+    .filter(entry => (metric === 'count' ? entry.totals.count > 0 : entry.totals.volume > 0))
+    .sort((a, b) => {
+      if (metric === 'count') {
+        return (b.totals.count - a.totals.count) || (b.totals.volume - a.totals.volume);
+      }
+      return (b.totals.volume - a.totals.volume) || (b.totals.count - a.totals.count);
+    });
+}
+
+function rankedByAllTimeVolume(markets, used) {
+  return markets
+    .filter(m => !used.has(m.id) && Number(m._vol || 0) > 0)
+    .sort((a, b) => Number(b._vol || 0) - Number(a._vol || 0));
 }
 
 function prefersReducedMotion() {
@@ -116,8 +172,8 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
   const candidatesKey = candidateIds.join(',');
 
   // Ask the activity endpoint which of those actually traded inside the
-  // window, then rank by that. `_count` / `_vol24` are real fills from
-  // the last WINDOW_HOURS — not all-time totals.
+  // window. The slot picker below then derives hidden 1h / 4h / 24h leaders
+  // from these same buckets.
   useEffect(() => {
     if (candidateIds.length === 0) {
       setRecent({});
@@ -153,34 +209,101 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
 
   const slides = useMemo(() => {
     if (!recent) return [];
-    return candidates
-      .map(m => {
-        const buckets = (recent[m.id] || []).filter(b => Number(b.count || 0) > 0);
-        return {
-          ...m,
-          // Newest hour first — the tape reads top-down like a ticker.
-          _buckets: [...buckets].sort((a, b) => Number(b.t) - Number(a.t)),
-          _count: buckets.reduce((s, b) => s + Number(b.count || 0), 0),
-          _vol24: buckets.reduce((s, b) => s + Number(b.volume || 0), 0),
-          _buy24: buckets.reduce((s, b) => s + Number(b.buyVolume || 0), 0),
-          _sell24: buckets.reduce((s, b) => s + Number(b.sellVolume || 0), 0),
-        };
-      })
-      .filter(m => m._count > 0)
-      .sort((a, b) => (b._count - a._count) || (b._vol24 - a._vol24))
-      // Pinned market takes one of the `count` slots, so traded markets
-      // fill the rest. It goes last: it earned the slot on movement, not
-      // on volume, so it shouldn't outrank markets people actually traded.
-      .slice(0, pinned ? count - 1 : count)
-      .concat(pinned ? [{
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const used = new Set();
+    const picked = [];
+    const nonPinnedLimit = pinned ? Math.max(0, count - 1) : count;
+
+    const addWindowSlot = (slot) => {
+      if (picked.length >= nonPinnedLimit) return;
+      const [entry] = rankedByWindowMetric(candidates, recent, slot, used, nowSeconds);
+      if (!entry) return;
+      used.add(entry.market.id);
+      const totals = entry.totals;
+      picked.push({
+        ...entry.market,
+        _slotKey: slot.key,
+        _slotMetric: slot.metric,
+        _windowHours: slot.hours,
+        _buckets: [...entry.buckets].sort((a, b) => Number(b.t) - Number(a.t)),
+        _count: totals.count,
+        _displayVolume: totals.volume,
+        _buy24: totals.buy,
+        _sell24: totals.sell,
+      });
+    };
+
+    const addTotalSlot = (slot) => {
+      if (picked.length >= nonPinnedLimit) return;
+      const [m] = rankedByAllTimeVolume(candidates, used);
+      if (!m) return;
+      const buckets = bucketsForWindow(recent[m.id] || [], WINDOW_HOURS, nowSeconds);
+      const totals = bucketTotals(buckets);
+      used.add(m.id);
+      picked.push({
+        ...m,
+        _slotKey: slot.key,
+        _slotMetric: slot.metric,
+        _windowHours: WINDOW_HOURS,
+        _buckets: [...buckets].sort((a, b) => Number(b.t) - Number(a.t)),
+        _count: totals.count,
+        _displayVolume: Number(m._vol || 0),
+        _buy24: totals.buy,
+        _sell24: totals.sell,
+      });
+    };
+
+    for (const slot of SLOT_DEFS) {
+      if (slot.metric === 'totalVolume') addTotalSlot(slot);
+      else addWindowSlot(slot);
+    }
+
+    // If one of the fixed slots had no eligible market, fill the empty
+    // space with the next strongest 24h volume leader so the carousel
+    // still feels alive without duplicating a market.
+    while (picked.length < nonPinnedLimit) {
+      const [entry] = rankedByWindowMetric(
+        candidates,
+        recent,
+        { key: '24h-volume-extra', hours: WINDOW_HOURS, metric: 'volume' },
+        used,
+        nowSeconds,
+      );
+      if (!entry) break;
+      used.add(entry.market.id);
+      const totals = entry.totals;
+      picked.push({
+        ...entry.market,
+        _slotKey: '24h-volume-extra',
+        _slotMetric: 'volume',
+        _windowHours: WINDOW_HOURS,
+        _buckets: [...entry.buckets].sort((a, b) => Number(b.t) - Number(a.t)),
+        _count: totals.count,
+        _displayVolume: totals.volume,
+        _buy24: totals.buy,
+        _sell24: totals.sell,
+      });
+    }
+
+    // Pinned market takes the final slot. It earns its place on price
+    // movement, not fills, so its flow panel states plainly when nobody
+    // has traded it.
+    if (pinned && picked.length < count && !used.has(pinned.id)) {
+      picked.push({
         ...pinned,
         _pinned: true,
+        _slotKey: 'btc5m',
+        _slotMetric: 'price',
+        _windowHours: null,
         _buckets: [],
         _count: 0,
-        _vol24: 0,
+        _displayVolume: 0,
         _buy24: 0,
         _sell24: 0,
-      }] : []);
+      });
+    }
+
+    return picked.slice(0, count);
   }, [candidates, recent, count, pinned]);
 
   const slideIds = useMemo(() => slides.map(m => m.id), [slides]);
@@ -208,7 +331,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
   const active = slides[index] || null;
 
   // Keep the visible slide's flow warm. Only the market on screen polls —
-  // refreshing all five would be five times the load for rows nobody sees.
+  // refreshing every slide would multiply the load for rows nobody sees.
   useEffect(() => {
     if (!active || paused) return undefined;
     const id = setInterval(() => {
@@ -440,10 +563,10 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                         background: 'var(--orange-dim)',
                       }}>
                         {m._pinned
-                          ? t('points.activity.moving')
+                          ? t('points.activity.slotBtc')
                           : `#${i + 1} ${t('points.activity.rank')}`}
                       </span>
-                      <span style={chipStyle}>{m.category || 'General'}</span>
+                      <span style={chipStyle}>{displayCategory(m.category)}</span>
                       {m.live && (
                         <span style={{
                           ...chipStyle,
@@ -589,17 +712,16 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                         }} />
                         {t('points.activity.flow')}
                       </span>
-                      {/* Real fill count inside the window. Ranked slides
-                          always cleared this bar; the pinned one reads 0,
-                          which is the truth about it. The window marker
-                          keeps it from reading as an all-time total. */}
+                      {/* Real traded volume for the signal that selected
+                          the slide. We keep the actual signal hidden and
+                          only show a compact volume cue. */}
                       <span style={{
                         fontFamily: 'var(--font-mono)',
                         fontSize: 'var(--fs-2xs)',
                         color: 'var(--text-muted)',
                         fontVariantNumeric: 'tabular-nums',
                       }}>
-                        {WINDOW_HOURS}H · {formatCompact(m._count)} {t('points.activity.txs')}
+                        {`${t('points.activity.volumeShort')} · ${formatCompact(m._displayVolume)} MXNP`}
                       </span>
                     </div>
 
@@ -743,14 +865,14 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                             letterSpacing: '0.06em',
                             textTransform: 'uppercase',
                           }}>
-                            {t('points.activity.noBuys')}
+                            {m._pinned ? t('points.activity.noBuys') : t('points.activity.noRecent')}
                           </span>
                           <span style={{
                             fontFamily: 'var(--font-body)',
                             fontSize: 'var(--fs-sm)',
                             color: 'var(--text-muted)',
                           }}>
-                            {t('points.activity.noBuysSub')}
+                            {m._pinned ? t('points.activity.noBuysSub') : t('points.activity.noRecentSub')}
                           </span>
                         </div>
                       )}
@@ -772,7 +894,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                     }}>
                       <span>
                         VOL <strong style={{ color: 'var(--text-primary)' }}>
-                          {formatCompact(m._vol24)}
+                          {formatCompact(m._displayVolume)}
                         </strong> MXNP
                       </span>
                       <button

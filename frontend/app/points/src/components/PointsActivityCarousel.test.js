@@ -24,9 +24,29 @@ test('admission is recent real trading, never seed liquidity', () => {
   // traded or not. Only `tradeVolume` reflects money that changed hands.
   assert.match(carousel, /_vol: Number\(m\.tradeVolume \|\| 0\)/);
   assert.doesNotMatch(carousel, /m\.tradeVolume \?\? m\.volume/);
-  // All-time volume only builds the shortlist; fills inside the window decide.
-  assert.match(carousel, /\.filter\(m => m\._count > 0\)/);
+  // Seed liquidity never enters the shortlist, and recent slots score by
+  // bucketed traded activity/volume.
+  assert.match(carousel, /rankedByWindowMetric/);
   assert.match(carousel, /const WINDOW_HOURS = 24/);
+});
+
+test('carousel uses hidden activity and volume slots before the bitcoin 5 minute slot', () => {
+  assert.match(carousel, /key: '1h-interactions', hours: 1, metric: 'count'/);
+  assert.match(carousel, /key: '1h-volume', hours: 1, metric: 'volume'/);
+  assert.match(carousel, /key: '4h-activity', hours: 4, metric: 'count'/);
+  assert.match(carousel, /key: '4h-volume', hours: 4, metric: 'volume'/);
+  assert.match(carousel, /key: 'total-volume', hours: null, metric: 'totalVolume'/);
+  assert.match(carousel, /key: '24h-activity', hours: 24, metric: 'count'/);
+  assert.match(carousel, /key: '24h-volume', hours: 24, metric: 'volume'/);
+  assert.match(carousel, /_slotKey: 'btc5m'/);
+  assert.doesNotMatch(carousel, /_slotLabelKey/);
+  assert.doesNotMatch(carousel, /points\.activity\.slot1h/);
+});
+
+test('music category displays as entertainment in the carousel', () => {
+  assert.match(carousel, /function displayCategory\(category\)/);
+  assert.match(carousel, /key === 'musica'\) return 'Entretenimiento'/);
+  assert.match(carousel, /displayCategory\(m\.category\)/);
 });
 
 test('flow counts both sides of a binary market', () => {
@@ -46,12 +66,13 @@ test('an empty poll never blanks a slide already on screen', () => {
 
 test('the pinned market states it has no buys instead of implying activity', () => {
   // The live BTC rollover is admitted on price movement, not fills. It must
-  // not wear a rank it did not earn, and its empty flow panel must say why.
+  // not wear a generic rank it did not earn, and its empty flow panel must say why.
   assert.match(carousel, /_pinned: true/);
-  assert.match(carousel, /m\._pinned\s*\?\s*t\('points\.activity\.moving'\)/);
+  assert.match(carousel, /m\._pinned\s*\?\s*t\('points\.activity\.slotBtc'\)/);
   assert.match(carousel, /points\.activity\.noBuys/);
 });
 
-test('home caps the carousel at five slides', () => {
-  assert.match(home, /<PointsActivityCarousel markets=\{markets\} count=\{5\} \/>/);
+test('home caps the carousel at seven hidden editorial slots', () => {
+  assert.match(home, /<PointsActivityCarousel markets=\{markets\} count=\{7\} \/>/);
+  assert.match(home, /Seven hidden editorial slots/);
 });

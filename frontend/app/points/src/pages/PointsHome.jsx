@@ -159,17 +159,18 @@ export default function PointsHome() {
     <>
 
       {/* ── Most-traded carousel ──────────────────────────────
-          Ranked by real fills in the last 24h (/api/points/trade-activity),
-          each slide
-          pairing the price chart with a live buy/sell tape. Reads from
-          the same `markets` list the grid below already fetched, so it
-          costs no extra market call — only the chart + tape batches it
-          fires itself. Hidden while searching: a query means the user is
-          hunting for one market, not browsing what's hot. */}
+          Seven hidden editorial slots: last-hour interaction, recent
+          volume/activity, all-time volume, and the live Bitcoin 5-minute
+          market when available. Each slide pairs the price chart with a
+          live buy/sell tape. Reads from the same `markets` list the grid
+          below already fetched, so it costs no extra market call — only
+          the chart + tape batches it fires itself. Hidden while searching:
+          a query means the user is hunting for one market, not browsing
+          what's hot. */}
       {!error && !searchQuery && trendingView === 'markets' && (
         loading
           ? <ActivityCarouselSkeleton isMobile={isMobile} />
-          : <PointsActivityCarousel markets={markets} count={5} />
+          : <PointsActivityCarousel markets={markets} count={7} />
       )}
 
       {/* ── Markets grid ──────────────────────────────────── */}
