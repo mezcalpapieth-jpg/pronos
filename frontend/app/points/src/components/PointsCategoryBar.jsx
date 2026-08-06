@@ -132,7 +132,7 @@ export default function PointsCategoryBar() {
                     background: isActive
                       ? 'linear-gradient(130deg, rgba(220,38,38,0.35), rgba(255,69,69,0.20))'
                       : 'linear-gradient(130deg, rgba(220,38,38,0.16), rgba(255,69,69,0.08))',
-                    borderColor: isActive ? 'var(--red, #FF4545)' : 'rgba(255,69,69,0.35)',
+                    borderColor: isActive ? 'var(--danger)' : 'rgba(255,69,69,0.35)',
                     color: 'var(--text-primary)',
                     fontWeight: 700,
                     letterSpacing: '0.08em',
@@ -148,7 +148,7 @@ export default function PointsCategoryBar() {
                       width: 7,
                       height: 7,
                       borderRadius: '50%',
-                      background: 'var(--red, #FF4545)',
+                      background: 'var(--danger)',
                       boxShadow: '0 0 0 3px rgba(255,69,69,0.18)',
                       animation: 'pronos-news-pulse 1.6s ease-in-out infinite',
                     }}

@@ -33,16 +33,16 @@ function fmtDate(iso) {
 
 const STATUS_LABEL = {
   won:     { label: 'Ganó',    bg: 'rgba(0,232,122,0.12)', fg: 'var(--green)' },
-  lost:    { label: 'Perdió',  bg: 'rgba(255,69,69,0.10)',  fg: 'var(--red, #ef4444)' },
-  pending: { label: 'Pendiente', bg: 'rgba(245,158,11,0.12)', fg: '#f59e0b' },
+  lost:    { label: 'Perdió',  bg: 'rgba(255,69,69,0.10)',  fg: 'var(--danger)' },
+  pending: { label: 'Pendiente', bg: 'rgba(245,158,11,0.12)', fg: 'var(--warning)' },
   exited:  { label: 'Salió',   bg: 'var(--surface2)',       fg: 'var(--text-muted)' },
-  open:    { label: 'Abierta', bg: 'rgba(59,130,246,0.12)', fg: '#60a5fa' },
+  open:    { label: 'Abierta', bg: 'rgba(59,130,246,0.12)', fg: 'var(--info)' },
 };
 
 const SOCIAL_STATUS_LABEL = {
   approved: { label: 'Aprobada', bg: 'rgba(0,232,122,0.12)', fg: 'var(--green)' },
-  pending:  { label: 'Pendiente', bg: 'rgba(245,158,11,0.12)', fg: '#f59e0b' },
-  rejected: { label: 'Rechazada', bg: 'rgba(255,69,69,0.10)', fg: 'var(--red, #ef4444)' },
+  pending:  { label: 'Pendiente', bg: 'rgba(245,158,11,0.12)', fg: 'var(--warning)' },
+  rejected: { label: 'Rechazada', bg: 'rgba(255,69,69,0.10)', fg: 'var(--danger)' },
 };
 
 function safeExternalHref(value) {
@@ -154,7 +154,7 @@ export default function PointsUserProfile() {
   const pnlColor = useMemo(() => {
     if (!data) return 'var(--text-primary)';
     return data.stats.totalPnl > 0 ? 'var(--green)'
-      : data.stats.totalPnl < 0 ? 'var(--red, #ef4444)' : 'var(--text-primary)';
+      : data.stats.totalPnl < 0 ? 'var(--danger)' : 'var(--text-primary)';
   }, [data]);
 
   if (loading) {
@@ -282,7 +282,7 @@ export default function PointsUserProfile() {
         <Stat label="PnL total"     value={`${stats.totalPnl > 0 ? '+' : ''}${fmt(stats.totalPnl)} MXNP`} color={pnlColor} />
         <Stat label="Mercados"      value={String(stats.marketsTraded)} />
         <Stat label="Ganados"       value={String(stats.marketsWon)}  color="var(--green)" />
-        <Stat label="Perdidos"      value={String(stats.marketsLost)} color="var(--red, #ef4444)" />
+        <Stat label="Perdidos"      value={String(stats.marketsLost)} color="var(--danger)" />
         <Stat label="Abiertos"      value={String(stats.marketsOpen)} />
         <Stat label="% Aciertos"
           value={stats.winRate == null ? '—' : `${fmt(stats.winRate, 1)}%`}
@@ -345,7 +345,7 @@ function AdminSocialsPanel({ rows, links = [] }) {
           fontSize: 10,
           letterSpacing: '0.12em',
           textTransform: 'uppercase',
-          color: '#f59e0b',
+          color: 'var(--warning)',
         }}>
           Sociales · admin
         </div>
@@ -396,7 +396,7 @@ function AdminSocialsPanel({ rows, links = [] }) {
                       <div style={{
                         fontFamily: 'var(--font-mono)',
                         fontSize: 10,
-                        color: '#f59e0b',
+                        color: 'var(--warning)',
                         textTransform: 'uppercase',
                         letterSpacing: '0.08em',
                         marginBottom: 4,
@@ -524,7 +524,7 @@ function AdminSocialsPanel({ rows, links = [] }) {
                     {row.label || row.taskKey}
                   </div>
                   {row.rejectionNote && (
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--red, #ef4444)', marginTop: 4 }}>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--danger)', marginTop: 4 }}>
                       {row.rejectionNote}
                     </div>
                   )}
@@ -611,7 +611,7 @@ function ActiveList({ rows, onOpen }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {rows.map(p => {
         const pnl = Number(p.unrealizedPnl || 0);
-        const pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red, #ef4444)' : 'var(--text-primary)';
+        const pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--danger)' : 'var(--text-primary)';
         return (
           <div
             key={`${p.marketId}-${p.outcomeIndex}`}
@@ -677,7 +677,7 @@ function HistoryList({ rows, onOpen }) {
       {rows.map(m => {
         const tag = STATUS_LABEL[m.outcomeStatus] || STATUS_LABEL.open;
         const pnl = historyPnlValue(m);
-        const pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red, #ef4444)' : 'var(--text-primary)';
+        const pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--danger)' : 'var(--text-primary)';
         return (
           <div
             key={m.marketId}

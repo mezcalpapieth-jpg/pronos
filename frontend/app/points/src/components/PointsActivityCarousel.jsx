@@ -1,0 +1,829 @@
+/**
+ * "Más activos" carousel — the markets with the most transactions, one
+ * slide each, chart on the left and a live trade tape on the right.
+ *
+ * Reference: Polymarket's market page, where the price chart sits next to
+ * a running feed of fills. Ours keeps the Pronos card language (mono
+ * micro-labels, Bebas numbers, surface1 panels) and the trading palette
+ * the rest of the app already uses — green (--yes) for buys, red
+ * (--danger) for sells. Never --green, which is the brand orange here.
+ *
+ * Everything on screen is real data, all of it from /api/points/trade-activity
+ * — the same anonymous, bucketed feed the market detail chart already uses.
+ * That endpoint deliberately never exposes individual users, so the tape
+ * shows hourly buy/sell flow rather than a per-user fill ticker.
+ *   - ranking      → fills inside the window, newest bucket wins ties
+ *   - chart        → /api/points/price-history (outcome 0, last 30d)
+ *   - tape rows    → one row per hour that actually traded
+ *   - pressure bar → buy vs sell volume across the window
+ *
+ * Admission is by RECENT trading, not all-time: a market needs real fills
+ * inside the last WINDOW_HOURS to get a slide. All-time `tradeVolume` only
+ * builds the shortlist we ask about — and never `volume`, which is seed
+ * liquidity and is non-zero on every market ever created, traded or not.
+ *
+ * The tape re-staggers its rows on every slide change and re-polls every
+ * 25s, so it reads as live without inventing flow that never happened.
+ *
+ * Props:
+ *   markets — rows from /api/points/markets (the home grid's own list)
+ *   count   — how many slides to build (default 6)
+ */
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import Sparkline from '@app/components/Sparkline.jsx';
+import { useIsMobile } from '@app/lib/useIsMobile.js';
+import { useT } from '@app/lib/i18n.js';
+import { ActivityCarouselSkeleton } from './PointsSkeleton.jsx';
+import { fetchPriceHistory, fetchTradeActivity } from '../lib/pointsApi.js';
+
+const SLIDE_MS = 8000;      // autoplay dwell per slide
+const TAPE_POLL_MS = 25_000; // how often the visible slide refetches its flow
+const TAPE_ROWS = 7;
+// Recency window that decides who makes the carousel. All-time volume
+// surfaces markets that were busy last month and are dead today; this is
+// "what is Mexico trading right now".
+const WINDOW_HOURS = 24;
+// Markets we ask about. Wider than the slide count because most won't
+// have traded inside the window.
+const CANDIDATE_POOL = 20;
+
+const BUY_COLOR = 'var(--yes)';
+const SELL_COLOR = 'var(--danger)';
+
+function formatCompact(n) {
+  const v = Number(n || 0);
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
+  return v.toFixed(0);
+}
+
+// Bucket start → "14:00". The window is 24h so the hour alone is
+// unambiguous, and it lines up in tabular figures.
+function formatHour(unixSeconds) {
+  if (!unixSeconds) return '';
+  return new Date(Number(unixSeconds) * 1000)
+    .toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function prefersReducedMotion() {
+  return typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+export default function PointsActivityCarousel({ markets = [], count = 6 }) {
+  const navigate = useNavigate();
+  const isMobile = useIsMobile();
+  const t = useT();
+
+  const [index, setIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const [history, setHistory] = useState({});
+  // Bucketed fills for the last WINDOW_HOURS, keyed by market id. One
+  // fetch feeds all three things on screen: who gets a slide, the
+  // pressure bar, and the tape rows. Null until it lands — no slides
+  // before we know who actually traded.
+  const [recent, setRecent] = useState(null);
+  // Bumped on every slide change so the tape rows remount and replay
+  // their stagger — the panel reads as freshly filled, not static.
+  const [tapeEpoch, setTapeEpoch] = useState(0);
+  const touchStartX = useRef(null);
+
+  // Candidates: markets with evidence of REAL trading at some point.
+  // `tradeVolume` is the sum of actual fills — never `volume`, which is
+  // seed liquidity and is non-zero on every market ever created, traded
+  // or not. This is only the shortlist we ask about; the recency filter
+  // below is what actually decides.
+  const candidates = useMemo(() => {
+    const now = Date.now();
+    return markets
+      .filter(m => m.status === 'active'
+        && !m.seriesLocked
+        // Pending = deadline passed, awaiting resolution. Nothing trades
+        // there, so it has no business in an activity carousel.
+        && !(m.endTime && new Date(m.endTime).getTime() < now))
+      .map(m => ({
+        ...m,
+        _vol: Number(m.tradeVolume || 0),
+      }))
+      .filter(m => m._vol > 0)
+      .sort((a, b) => b._vol - a._vol)
+      .slice(0, CANDIDATE_POOL);
+  }, [markets]);
+
+  const candidateIds = useMemo(() => candidates.map(m => m.id), [candidates]);
+  const candidatesKey = candidateIds.join(',');
+
+  // Ask the activity endpoint which of those actually traded inside the
+  // window, then rank by that. `_count` / `_vol24` are real fills from
+  // the last WINDOW_HOURS — not all-time totals.
+  useEffect(() => {
+    if (candidateIds.length === 0) {
+      setRecent({});
+      return undefined;
+    }
+    let cancelled = false;
+    // outcome=all, not 0: on a binary market a buy on NO still moves the
+    // YES price, so counting only outcome 0 would hide half the flow.
+    fetchTradeActivity(candidateIds, {
+      hours: WINDOW_HOURS,
+      outcome: 'all',
+      buckets: WINDOW_HOURS,
+    }).then(a => {
+      if (!cancelled) setRecent(a || {});
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidatesKey]);
+
+  // Pinned slot: the live BTC market earns its place on price movement,
+  // not on fills — the 5-minute rollovers tick constantly from Chainlink
+  // but often carry zero user trades. It is the one market allowed in
+  // without clearing the fills bar, so its flow panel states plainly
+  // that nobody has traded it rather than implying activity.
+  const pinned = useMemo(() => {
+    const now = Date.now();
+    return markets.find(m => m.status === 'active'
+      && m.live
+      && m.crypto5min
+      && /bitcoin|btc/i.test(m.question || '')
+      && !(m.endTime && new Date(m.endTime).getTime() < now)) || null;
+  }, [markets]);
+
+  const slides = useMemo(() => {
+    if (!recent) return [];
+    return candidates
+      .map(m => {
+        const buckets = (recent[m.id] || []).filter(b => Number(b.count || 0) > 0);
+        return {
+          ...m,
+          // Newest hour first — the tape reads top-down like a ticker.
+          _buckets: [...buckets].sort((a, b) => Number(b.t) - Number(a.t)),
+          _count: buckets.reduce((s, b) => s + Number(b.count || 0), 0),
+          _vol24: buckets.reduce((s, b) => s + Number(b.volume || 0), 0),
+          _buy24: buckets.reduce((s, b) => s + Number(b.buyVolume || 0), 0),
+          _sell24: buckets.reduce((s, b) => s + Number(b.sellVolume || 0), 0),
+        };
+      })
+      .filter(m => m._count > 0)
+      .sort((a, b) => (b._count - a._count) || (b._vol24 - a._vol24))
+      // Pinned market takes one of the `count` slots, so traded markets
+      // fill the rest. It goes last: it earned the slot on movement, not
+      // on volume, so it shouldn't outrank markets people actually traded.
+      .slice(0, pinned ? count - 1 : count)
+      .concat(pinned ? [{
+        ...pinned,
+        _pinned: true,
+        _buckets: [],
+        _count: 0,
+        _vol24: 0,
+        _buy24: 0,
+        _sell24: 0,
+      }] : []);
+  }, [candidates, recent, count, pinned]);
+
+  const slideIds = useMemo(() => slides.map(m => m.id), [slides]);
+  const idsKey = slideIds.join(',');
+
+  // Clamp the cursor when the ranking shrinks under it (markets resolve,
+  // search narrows the list) so we never park on a removed slide.
+  useEffect(() => {
+    setIndex(i => (slides.length === 0 ? 0 : Math.min(i, slides.length - 1)));
+  }, [slides.length]);
+
+  // Charts for the markets that made the cut. fetchPriceHistory swallows
+  // its own errors and resolves to {}, so a cold snapshot table degrades
+  // to the Sparkline's flat state instead of taking down home.
+  useEffect(() => {
+    if (slideIds.length === 0) return undefined;
+    let cancelled = false;
+    fetchPriceHistory(slideIds, { days: 30, outcome: 0, limit: 120 }).then(h => {
+      if (!cancelled) setHistory(h || {});
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idsKey]);
+
+  const active = slides[index] || null;
+
+  // Keep the visible slide's flow warm. Only the market on screen polls —
+  // refreshing all five would be five times the load for rows nobody sees.
+  useEffect(() => {
+    if (!active || paused) return undefined;
+    const id = setInterval(() => {
+      fetchTradeActivity([active.id], {
+        hours: WINDOW_HOURS,
+        outcome: 'all',
+        buckets: WINDOW_HOURS,
+      }).then(a => {
+        const buckets = a?.[active.id];
+        // An empty poll (endpoint hiccup, cache miss) must not blank out
+        // a slide the user is looking at — keep the flow we already have.
+        if (!Array.isArray(buckets) || buckets.length === 0) return;
+        setRecent(prev => {
+          const prevTop = prev?.[active.id]?.[0];
+          const nextTop = buckets[0];
+          // Same newest bucket with the same count = nothing traded since
+          // the last poll, so don't replay the stagger for no reason.
+          if (prevTop && nextTop
+            && Number(prevTop.t) === Number(nextTop.t)
+            && Number(prevTop.count) === Number(nextTop.count)) return prev;
+          setTapeEpoch(e => e + 1);
+          return { ...prev, [active.id]: buckets };
+        });
+      });
+    }, TAPE_POLL_MS);
+    return () => clearInterval(id);
+  }, [active, paused]);
+
+  const go = useCallback((next) => {
+    if (slides.length === 0) return;
+    const wrapped = ((next % slides.length) + slides.length) % slides.length;
+    setIndex(wrapped);
+    setTapeEpoch(e => e + 1);
+  }, [slides.length]);
+
+  // Autoplay. Pauses on hover / focus / touch, and never runs for users
+  // who asked for reduced motion.
+  useEffect(() => {
+    if (paused || slides.length <= 1 || prefersReducedMotion()) return undefined;
+    const id = setInterval(() => go(index + 1), SLIDE_MS);
+    return () => clearInterval(id);
+  }, [paused, slides.length, index, go]);
+
+  // Still asking who traded: hold the space so the hero below doesn't
+  // jump once the answer arrives. Once we know and nobody qualifies,
+  // collapse to nothing rather than showing an empty frame.
+  if (recent === null) return <ActivityCarouselSkeleton isMobile={isMobile} />;
+  if (slides.length === 0) return null;
+
+  // Pressure comes from the bucketed activity, not from the tape rows —
+  // the tape only holds the last handful of fills, while these are the
+  // real buy/sell totals across the whole window.
+  const buyPressure = active?._buy24 || 0;
+  const sellPressure = active?._sell24 || 0;
+  const pressureTotal = buyPressure + sellPressure;
+  const buyPct = pressureTotal > 0 ? (buyPressure / pressureTotal) * 100 : 50;
+
+  const series = (active && history[active.id]) || [];
+  const outcomes = Array.isArray(active?.outcomes) ? active.outcomes : ['Sí', 'No'];
+  const prices = Array.isArray(active?.prices) ? active.prices : [];
+  const leadPct = Math.round((prices[0] ?? 0.5) * 100);
+  // Movement over the loaded window — the number under the chart.
+  const delta = series.length >= 2 ? series[series.length - 1].p - series[0].p : 0;
+  const deltaColor = delta > 0.05 ? BUY_COLOR : delta < -0.05 ? SELL_COLOR : 'var(--text-muted)';
+
+  const chipStyle = {
+    fontFamily: 'var(--font-mono)',
+    fontSize: 'var(--fs-2xs)',
+    letterSpacing: '0.1em',
+    textTransform: 'uppercase',
+    padding: '4px 8px',
+    borderRadius: 999,
+    border: '1px solid var(--border)',
+    color: 'var(--text-secondary)',
+    background: 'var(--surface2)',
+    whiteSpace: 'nowrap',
+  };
+
+  const arrowStyle = {
+    width: 34,
+    height: 34,
+    borderRadius: '50%',
+    border: '1px solid var(--border)',
+    background: 'var(--surface1)',
+    color: 'var(--text-secondary)',
+    fontFamily: 'var(--font-mono)',
+    fontSize: 'var(--fs-sm)',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'border-color 0.16s, color 0.16s',
+  };
+
+  return (
+    <section
+      className="points-activity"
+      aria-roledescription="carousel"
+      aria-label={t('points.activity.title')}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocusCapture={() => setPaused(true)}
+      onBlurCapture={() => setPaused(false)}
+      style={{
+        padding: isMobile ? '24px 16px 8px' : '32px 48px 8px',
+        maxWidth: 1280,
+        margin: '0 auto',
+      }}
+    >
+      {/* Section head — title left, position + arrows right */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'flex-end',
+        justifyContent: 'space-between',
+        gap: 16,
+        marginBottom: 14,
+        flexWrap: 'wrap',
+      }}>
+        <div>
+          <div className="section-eyebrow" style={{ marginBottom: 4 }}>
+            {t('points.activity.eyebrow')}
+          </div>
+          <div style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: isMobile ? 26 : 32,
+            letterSpacing: '0.02em',
+            color: 'var(--text-primary)',
+            textTransform: 'uppercase',
+            lineHeight: 1,
+          }}>
+            {t('points.activity.title')}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 'var(--fs-xs)',
+            color: 'var(--text-muted)',
+            fontVariantNumeric: 'tabular-nums',
+          }}>
+            {String(index + 1).padStart(2, '0')} / {String(slides.length).padStart(2, '0')}
+          </span>
+          <button
+            type="button"
+            aria-label={t('points.activity.prev')}
+            onClick={() => go(index - 1)}
+            style={arrowStyle}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--orange)'; e.currentTarget.style.color = 'var(--orange)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+          >
+            ←
+          </button>
+          <button
+            type="button"
+            aria-label={t('points.activity.next')}
+            onClick={() => go(index + 1)}
+            style={arrowStyle}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--orange)'; e.currentTarget.style.color = 'var(--orange)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+          >
+            →
+          </button>
+        </div>
+      </div>
+
+      {/* Viewport. Slides live in a translated flex track so the browser
+          animates one transform instead of six repaints. */}
+      <div
+        style={{ overflow: 'hidden', borderRadius: 16 }}
+        onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; setPaused(true); }}
+        onTouchEnd={(e) => {
+          const start = touchStartX.current;
+          touchStartX.current = null;
+          setPaused(false);
+          if (start === null) return;
+          const dx = e.changedTouches[0].clientX - start;
+          if (Math.abs(dx) > 45) go(index + (dx < 0 ? 1 : -1));
+        }}
+      >
+        <div style={{
+          display: 'flex',
+          transform: `translateX(-${index * 100}%)`,
+          transition: prefersReducedMotion() ? 'none' : 'transform 0.5s cubic-bezier(0.22,0.8,0.3,1)',
+        }}>
+          {slides.map((m, i) => {
+            const isActive = i === index;
+            const mOutcomes = Array.isArray(m.outcomes) ? m.outcomes : ['Sí', 'No'];
+            const mPrices = Array.isArray(m.prices) ? m.prices : [];
+            const mSeries = history[m.id] || [];
+            return (
+              <div
+                key={m.id}
+                role="group"
+                aria-roledescription="slide"
+                aria-label={`${i + 1} / ${slides.length}`}
+                aria-hidden={!isActive}
+                style={{
+                  flex: '0 0 100%',
+                  minWidth: 0,
+                  padding: 1,
+                  opacity: isActive ? 1 : 0.35,
+                  transition: 'opacity 0.4s',
+                  // Off-screen slides are aria-hidden, so their controls
+                  // must leave the tab order too — a focusable node inside
+                  // aria-hidden is a screen-reader trap.
+                  pointerEvents: isActive ? 'auto' : 'none',
+                }}
+              >
+                <article style={{
+                  display: 'grid',
+                  gridTemplateColumns: isMobile ? '1fr' : 'minmax(0,1.45fr) minmax(260px,1fr)',
+                  background: 'var(--surface1)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 16,
+                  overflow: 'hidden',
+                }}>
+
+                  {/* ── Left: identity + chart ─────────────────── */}
+                  <div style={{ padding: isMobile ? 18 : 24, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                      {/* The pinned market didn't earn a rank — it's here
+                          for price movement — so it must not wear a
+                          "#N más activo" badge it didn't win. */}
+                      <span style={{
+                        ...chipStyle,
+                        color: 'var(--orange)',
+                        borderColor: 'var(--border-active)',
+                        background: 'var(--orange-dim)',
+                      }}>
+                        {m._pinned
+                          ? t('points.activity.moving')
+                          : `#${i + 1} ${t('points.activity.rank')}`}
+                      </span>
+                      <span style={chipStyle}>{m.category || 'General'}</span>
+                      {m.live && (
+                        <span style={{
+                          ...chipStyle,
+                          color: 'var(--danger)',
+                          background: 'var(--danger-dim)',
+                          borderColor: 'rgba(212,32,32,0.3)',
+                          animation: 'pronos-live-pulse 1.4s ease-in-out infinite',
+                        }}>
+                          {t('points.card.live')}
+                        </span>
+                      )}
+                    </div>
+
+                    <h3
+                      role="link"
+                      tabIndex={isActive ? 0 : -1}
+                      onClick={() => navigate(`/market?id=${encodeURIComponent(m.id)}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          navigate(`/market?id=${encodeURIComponent(m.id)}`);
+                        }
+                      }}
+                      style={{
+                        fontFamily: 'var(--font-body)',
+                        fontSize: isMobile ? 'var(--fs-lg)' : 'var(--fs-xl)',
+                        fontWeight: 700,
+                        lineHeight: 1.3,
+                        color: 'var(--text-primary)',
+                        margin: '0 0 16px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {m.question}
+                    </h3>
+
+                    {/* Chart. Outcome 0 only — that's what the history
+                        endpoint returns per call, and on a binary market
+                        the NO curve is just this one mirrored. */}
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 4 }}>
+                      <span style={{
+                        fontFamily: 'var(--font-display)',
+                        fontSize: 34,
+                        lineHeight: 1,
+                        color: 'var(--text-primary)',
+                      }}>
+                        {isActive ? leadPct : Math.round((mPrices[0] ?? 0.5) * 100)}%
+                      </span>
+                      <span style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 'var(--fs-xs)',
+                        color: 'var(--text-secondary)',
+                        letterSpacing: '0.06em',
+                        minWidth: 0,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {mOutcomes[0]}
+                      </span>
+                      {isActive && mSeries.length >= 2 && (
+                        <span style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 'var(--fs-xs)',
+                          color: deltaColor,
+                          fontVariantNumeric: 'tabular-nums',
+                        }}>
+                          {delta >= 0 ? '▲' : '▼'} {Math.abs(delta).toFixed(1)} pp · 30d
+                        </span>
+                      )}
+                    </div>
+
+                    <Sparkline
+                      height={isMobile ? 110 : 148}
+                      color={BUY_COLOR}
+                      strokeWidth={2.2}
+                      fill
+                      // The big % above the chart already states the
+                      // level; Sparkline's auto y-axis (on at h>=100)
+                      // would only collide with the end dot here.
+                      showYAxis={false}
+                      data={mSeries}
+                      targetPct={Math.round((mPrices[0] ?? 0.5) * 100)}
+                      emptyLabel={t('points.activity.noHistory')}
+                      emptySubLabel={t('points.activity.noHistorySub')}
+                    />
+
+                    {/* Outcome legend — every option, current odds. */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 14 }}>
+                      {mOutcomes.slice(0, 4).map((label, oi) => (
+                        <span key={oi} style={{
+                          ...chipStyle,
+                          textTransform: 'none',
+                          letterSpacing: '0.03em',
+                          fontSize: 'var(--fs-xs)',
+                          maxWidth: 190,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}>
+                          {label} <strong style={{ color: 'var(--text-primary)' }}>
+                            {Math.round((mPrices[oi] ?? 0) * 100)}%
+                          </strong>
+                        </span>
+                      ))}
+                      {mOutcomes.length > 4 && (
+                        <span style={chipStyle}>+{mOutcomes.length - 4}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── Right: live trade tape ─────────────────── */}
+                  <div style={{
+                    background: 'var(--surface2)',
+                    borderLeft: isMobile ? 'none' : '1px solid var(--border)',
+                    borderTop: isMobile ? '1px solid var(--border)' : 'none',
+                    padding: isMobile ? 18 : 20,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    minWidth: 0,
+                  }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginBottom: 12,
+                    }}>
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 'var(--fs-2xs)',
+                        letterSpacing: '0.12em',
+                        textTransform: 'uppercase',
+                        color: 'var(--text-muted)',
+                      }}>
+                        <span style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: '50%',
+                          background: BUY_COLOR,
+                          animation: 'pronos-live-pulse 1.4s ease-in-out infinite',
+                        }} />
+                        {t('points.activity.flow')}
+                      </span>
+                      {/* Real fill count inside the window. Ranked slides
+                          always cleared this bar; the pinned one reads 0,
+                          which is the truth about it. The window marker
+                          keeps it from reading as an all-time total. */}
+                      <span style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 'var(--fs-2xs)',
+                        color: 'var(--text-muted)',
+                        fontVariantNumeric: 'tabular-nums',
+                      }}>
+                        {WINDOW_HOURS}H · {formatCompact(m._count)} {t('points.activity.txs')}
+                      </span>
+                    </div>
+
+                    {/* Buy/sell pressure across the loaded fills. */}
+                    {isActive && pressureTotal > 0 && (
+                      <div style={{ marginBottom: 14 }}>
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 'var(--fs-2xs)',
+                          fontVariantNumeric: 'tabular-nums',
+                          marginBottom: 5,
+                        }}>
+                          <span style={{ color: BUY_COLOR }}>
+                            {t('points.activity.buys')} {formatCompact(buyPressure)}
+                          </span>
+                          <span style={{ color: SELL_COLOR }}>
+                            {formatCompact(sellPressure)} {t('points.activity.sells')}
+                          </span>
+                        </div>
+                        <div style={{
+                          height: 4,
+                          borderRadius: 999,
+                          background: SELL_COLOR,
+                          overflow: 'hidden',
+                        }}>
+                          <div style={{
+                            width: `${buyPct}%`,
+                            height: '100%',
+                            background: BUY_COLOR,
+                            transition: 'width 0.5s ease',
+                          }} />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* The tape. One row per hour that actually traded,
+                        newest first. The feed is anonymous by design, so a
+                        row is aggregate flow — not a named user's fill. */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
+                      {(m._buckets || []).slice(0, TAPE_ROWS).map((b, ti) => {
+                        const buy = Number(b.buyVolume || 0);
+                        const sell = Number(b.sellVolume || 0);
+                        // Which side dominated this hour decides the row's
+                        // tint; both numbers are still printed.
+                        const buyLed = buy >= sell;
+                        return (
+                          <div
+                            key={`${tapeEpoch}-${b.t}`}
+                            className="points-tape-row"
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              padding: '6px 8px',
+                              borderRadius: 7,
+                              background: buyLed ? 'var(--yes-dim)' : 'var(--danger-dim)',
+                              animationDelay: `${ti * 70}ms`,
+                            }}
+                          >
+                            <span style={{
+                              fontFamily: 'var(--font-mono)',
+                              fontSize: 'var(--fs-2xs)',
+                              fontWeight: 700,
+                              color: buyLed ? BUY_COLOR : SELL_COLOR,
+                              letterSpacing: '0.06em',
+                              flexShrink: 0,
+                            }}>
+                              {buyLed ? '\u25b2' : '\u25bc'}
+                            </span>
+                            <span style={{
+                              flex: 1,
+                              minWidth: 0,
+                              fontFamily: 'var(--font-mono)',
+                              fontSize: 'var(--fs-2xs)',
+                              color: 'var(--text-secondary)',
+                              fontVariantNumeric: 'tabular-nums',
+                              whiteSpace: 'nowrap',
+                            }}>
+                              {formatHour(b.t)}
+                            </span>
+                            <span style={{
+                              fontFamily: 'var(--font-mono)',
+                              fontSize: 'var(--fs-2xs)',
+                              color: 'var(--text-muted)',
+                              fontVariantNumeric: 'tabular-nums',
+                              flexShrink: 0,
+                            }}>
+                              {b.count}×
+                            </span>
+                            {buy > 0 && (
+                              <span style={{
+                                fontFamily: 'var(--font-display)',
+                                fontSize: 'var(--fs-md)',
+                                color: BUY_COLOR,
+                                fontVariantNumeric: 'tabular-nums',
+                                letterSpacing: '0.02em',
+                                flexShrink: 0,
+                                textAlign: 'right',
+                              }}>
+                                +{formatCompact(buy)}
+                              </span>
+                            )}
+                            {sell > 0 && (
+                              <span style={{
+                                fontFamily: 'var(--font-display)',
+                                fontSize: 'var(--fs-md)',
+                                color: SELL_COLOR,
+                                fontVariantNumeric: 'tabular-nums',
+                                letterSpacing: '0.02em',
+                                flexShrink: 0,
+                                textAlign: 'right',
+                              }}>
+                                \u2212{formatCompact(sell)}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {/* Only the pinned market can land here: it's in the
+                          carousel for price movement, not for fills. Say
+                          exactly that instead of leaving a blank panel
+                          that implies activity nobody produced. */}
+                      {(m._buckets || []).length === 0 && (
+                        <div style={{
+                          flex: 1,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 6,
+                          textAlign: 'center',
+                          padding: '18px 6px',
+                        }}>
+                          <span style={{
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: 'var(--fs-xs)',
+                            color: 'var(--text-secondary)',
+                            letterSpacing: '0.06em',
+                            textTransform: 'uppercase',
+                          }}>
+                            {t('points.activity.noBuys')}
+                          </span>
+                          <span style={{
+                            fontFamily: 'var(--font-body)',
+                            fontSize: 'var(--fs-sm)',
+                            color: 'var(--text-muted)',
+                          }}>
+                            {t('points.activity.noBuysSub')}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 8,
+                      marginTop: 14,
+                      paddingTop: 12,
+                      borderTop: '1px solid var(--border)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 'var(--fs-2xs)',
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                      color: 'var(--text-muted)',
+                    }}>
+                      <span>
+                        VOL <strong style={{ color: 'var(--text-primary)' }}>
+                          {formatCompact(m._vol24)}
+                        </strong> MXNP
+                      </span>
+                      <button
+                        type="button"
+                        tabIndex={isActive ? 0 : -1}
+                        onClick={() => navigate(`/market?id=${encodeURIComponent(m.id)}`)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          cursor: 'pointer',
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 'var(--fs-2xs)',
+                          letterSpacing: '0.08em',
+                          textTransform: 'uppercase',
+                          color: 'var(--orange)',
+                        }}
+                      >
+                        {t('points.activity.open')} →
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Dots */}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 14 }}>
+        {slides.map((m, i) => (
+          <button
+            key={m.id}
+            type="button"
+            aria-label={`${t('points.activity.goTo')} ${i + 1}`}
+            aria-current={i === index}
+            onClick={() => go(i)}
+            style={{
+              width: i === index ? 22 : 8,
+              height: 8,
+              padding: 0,
+              borderRadius: 999,
+              border: 'none',
+              cursor: 'pointer',
+              background: i === index ? 'var(--orange)' : 'var(--border)',
+              transition: 'width 0.25s, background 0.25s',
+            }}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}

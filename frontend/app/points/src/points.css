@@ -732,3 +732,24 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── "Más activos" carousel ──
+   Rows in the live trade tape fade up as the panel fills. The stagger
+   comes from an inline animation-delay so the list reads top-down like a
+   printing ticker. Honors reduced-motion below. */
+@keyframes points-tape-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.points-tape-row {
+  opacity: 0;
+  animation: points-tape-in 0.32s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .points-tape-row {
+    opacity: 1;
+    animation: none;
+  }
+}

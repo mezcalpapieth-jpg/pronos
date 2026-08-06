@@ -34,6 +34,39 @@
   --font-display: 'Bebas Neue', sans-serif;
   --font-body: 'DM Sans', sans-serif;
   --font-mono: 'DM Mono', monospace;
+
+  /* ── Semantic state tokens ──
+     Aliases resolve against the theme-scoped vars above, so they
+     follow light/dark automatically. Components should use these,
+     never raw hex. */
+  --danger: var(--red);
+  --danger-dim: var(--red-dim);
+  --success: var(--yes);
+  --success-dim: var(--yes-dim);
+  --warning: #B45309;
+  --warning-dim: rgba(180,83,9,0.10);
+  --info: #2563EB;
+  --info-dim: rgba(37,99,235,0.10);
+
+  /* ── Type scale (snap font sizes to these) ── */
+  --fs-2xs: 10px;  /* micro-labels only, never body copy */
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --fs-2xl: 24px;
+  --fs-3xl: 32px;
+
+  /* ── Spacing scale (4px grid) ── */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-12: 48px;
 }
 
 /* ── Dark theme overrides ── */
@@ -64,6 +97,12 @@ html[data-theme="dark"] {
   --text-muted: #555;
   --base-blue: #0052FF;
   --btn-text: #fff;
+
+  /* Dark-theme values for non-aliased semantic tokens */
+  --warning: #F59E0B;
+  --warning-dim: rgba(245,158,11,0.12);
+  --info: #60A5FA;
+  --info-dim: rgba(96,165,250,0.12);
 }
 
 html { scroll-behavior: smooth; }

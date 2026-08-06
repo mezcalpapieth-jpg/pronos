@@ -59,7 +59,7 @@ import { emitPointsRefresh } from '../lib/pointsLiveRefresh.js';
 // border / background variant for the buy buttons.
 const OUTCOME_COLORS = [
   'var(--yes)',            // green
-  'var(--gold, #f59e0b)',  // gold
+  'var(--gold)',  // gold
   '#ff3b3b',               // red
   '#3b82f6',               // blue
   '#a855f7',               // purple
@@ -257,8 +257,8 @@ function ActivityMetric({ label, value, tone = 'neutral' }) {
 }
 
 const MULTI_ACCENTS = [
-  { border: 'rgba(22,163,74,0.25)',  bg: 'var(--yes-dim, rgba(22,163,74,0.1))', fg: 'var(--yes)' },
-  { border: 'rgba(184,144,10,0.3)',  bg: 'rgba(184,144,10,0.08)',              fg: 'var(--gold, #f59e0b)' },
+  { border: 'rgba(22,163,74,0.25)',  bg: 'var(--yes-dim)', fg: 'var(--yes)' },
+  { border: 'rgba(184,144,10,0.3)',  bg: 'rgba(184,144,10,0.08)',              fg: 'var(--gold)' },
   { border: 'rgba(255,59,59,0.25)',  bg: 'rgba(255,59,59,0.08)',               fg: '#ff3b3b' },
   { border: 'rgba(59,130,246,0.3)',  bg: 'rgba(59,130,246,0.08)',              fg: '#3b82f6' },
   { border: 'rgba(168,85,247,0.3)',  bg: 'rgba(168,85,247,0.08)',              fg: '#a855f7' },
@@ -506,7 +506,7 @@ function ParallelLegList({ market, legs, outcomeImages, outcomeCountryLabels, on
                 </button>
                 <button
                   onClick={() => onBuyClick(legMarket, 1, `${leg.label} — No`)}
-                  style={legButtonStyle('#ff3b3b', 'rgba(255,59,59,0.12)', 'rgba(255,59,59,0.4)')}
+                  style={legButtonStyle('var(--danger)', 'rgba(255,59,59,0.12)', 'rgba(255,59,59,0.4)')}
                   onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
                   onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
                 >
@@ -720,7 +720,7 @@ function SeriesGameStrip({ seriesMeta, currentMarketId, navigate, t }) {
                 fontSize: 10,
                 color: item.status === 'resolved' ? 'var(--green)'
                   : item.status === 'not_needed' ? 'var(--text-muted)'
-                  : item.placeholder || item.seriesLocked || item.status === 'pending' ? '#f59e0b'
+                  : item.placeholder || item.seriesLocked || item.status === 'pending' ? 'var(--warning)'
                   : 'var(--text-secondary)',
                 letterSpacing: '0.06em',
                 textTransform: 'uppercase',
@@ -761,7 +761,7 @@ function ProbabilityRing({ pct, resolved, winner, label, logo, color = 'var(--ye
   const circ = 2 * Math.PI * radius;
   const safePct = Math.max(0, Math.min(100, Number(pct) || 0));
   const dash = (safePct / 100) * circ;
-  const ringColor = resolved ? (winner ? 'var(--yes)' : 'var(--red, #ef4444)') : color;
+  const ringColor = resolved ? (winner ? 'var(--yes)' : 'var(--danger)') : color;
 
   return (
     <div
@@ -947,7 +947,7 @@ function buildOrderBookOptions({ market, displayOutcomes, displayOutcomeIndices,
 }
 
 function DepthRows({ rows, side, maxTotal, t, onPickRow }) {
-  const accent = side === 'ask' ? '#ff3b3b' : 'var(--yes)';
+  const accent = side === 'ask' ? 'var(--danger)' : 'var(--yes)';
   const bg = side === 'ask' ? 'rgba(255,59,59,0.10)' : 'rgba(0,232,122,0.10)';
   if (!Array.isArray(rows) || rows.length === 0) {
     return (
@@ -1463,7 +1463,7 @@ function OrderBookPanel({
                           ? (side === 'buy' ? 'rgba(0,232,122,0.14)' : 'rgba(255,59,59,0.14)')
                           : 'transparent',
                         color: active
-                          ? (side === 'buy' ? 'var(--yes)' : '#ff6b6b')
+                          ? (side === 'buy' ? 'var(--yes)' : 'var(--danger)')
                           : 'var(--text-muted)',
                         fontFamily: 'var(--font-mono)',
                         fontSize: 9,
@@ -1586,7 +1586,7 @@ function OrderBookPanel({
             {(orderError || orderMessage) && (
               <p style={{
                 margin: '8px 0 0',
-                color: orderError ? '#ff6b6b' : 'var(--yes)',
+                color: orderError ? 'var(--danger)' : 'var(--yes)',
                 fontFamily: 'var(--font-mono)',
                 fontSize: 10,
                 lineHeight: 1.45,
@@ -1648,7 +1648,7 @@ function OrderBookPanel({
                         <div style={{
                           fontFamily: 'var(--font-mono)',
                           fontSize: 10,
-                          color: order.side === 'buy' ? 'var(--yes)' : '#ff6b6b',
+                          color: order.side === 'buy' ? 'var(--yes)' : 'var(--danger)',
                           letterSpacing: '0.06em',
                           textTransform: 'uppercase',
                         }}>
@@ -1733,7 +1733,7 @@ function OrderBookPanel({
       ) : loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <section>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#ff3b3b', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--danger)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
               {t('points.detail.orderBookSellSide')}
             </div>
             <DepthRowsSkeleton side="ask" />
@@ -1746,13 +1746,13 @@ function OrderBookPanel({
           </section>
         </div>
       ) : error ? (
-        <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--red, #ef4444)' }}>
+        <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--danger)' }}>
           {t('points.detail.orderBookFailed')}
         </p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <section>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#ff3b3b', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--danger)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
               {t('points.detail.orderBookSellSide')}
             </div>
             <DepthRows rows={asks} side="ask" maxTotal={maxTotal} t={t} onPickRow={handlePickRow} />
@@ -2349,7 +2349,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               )}
               {isLive && (
                 <span style={{
-                  color: '#dc2626',
+                  color: 'var(--danger)',
                   fontWeight: 700,
                   letterSpacing: '0.08em',
                   animation: 'pronos-live-pulse 1.4s ease-in-out infinite',
@@ -2358,10 +2358,10 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 </span>
               )}
               {isPendingResolution && !isResolved && !isLive && (
-                <span style={{ color: '#f59e0b' }}>{t('points.detail.pendingBadge')}</span>
+                <span style={{ color: 'var(--warning)' }}>{t('points.detail.pendingBadge')}</span>
               )}
               {isTradingLocked && !isResolved && !isCanceled && (
-                <span style={{ color: '#f59e0b' }}>· {t('points.series.pending')}</span>
+                <span style={{ color: 'var(--warning)' }}>· {t('points.series.pending')}</span>
               )}
               <span style={{ flex: 1 }} />
               <ShareButton marketId={market.id} app="points" question={market.question} />
@@ -2768,8 +2768,8 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                   fontSize: 13,
                   fontWeight: isLive ? 700 : 400,
                   color: isResolved ? 'var(--green)'
-                       : isLive ? '#dc2626'
-                       : isPendingResolution ? '#f59e0b'
+                       : isLive ? 'var(--danger)'
+                       : isPendingResolution ? 'var(--warning)'
                        : 'var(--text-primary)',
                 }}>
                   {isResolved ? t('points.detail.stateResolved')
@@ -2887,7 +2887,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                         <span style={{ color: 'var(--text-muted)' }}>
                           {t('points.detail.valueLabel')}: <span style={{ color: 'var(--text-primary)' }}>{markValue.toFixed(2)} MXNP</span>
                         </span>
-                        <span style={{ color: pnlPos ? 'var(--green)' : 'var(--red, #ef4444)' }}>
+                        <span style={{ color: pnlPos ? 'var(--green)' : 'var(--danger)' }}>
                           {pnlPos ? '+' : ''}{pnl.toFixed(2)} PnL
                         </span>
                       </div>

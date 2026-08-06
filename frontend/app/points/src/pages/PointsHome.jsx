@@ -3,19 +3,22 @@
  *
  * Styled to match the main pronos.io landing (not the MVP):
  *   - PointsTicker strip across the top (in App.jsx, not here)
- *   - Hero with two columns: copy + stats on the left, featured card on the right
- *   - Category filter bar under the hero
+ *   - Most-traded carousel
  *   - Markets grid
  *   - How-it-works section
  *
+ * There is no hero here any more. The pitch copy and the prize table moved
+ * out: the copy to PointsIntroModal (shown to logged-out first-time
+ * visitors, who are the only ones who needed it), and the prize table to
+ * /torneo, which already renders it alongside the live leaderboard. Home
+ * opens straight onto what people came for — the markets.
+ *
  * The shared CSS at /css/base.css + /css/components.css + /css/sections.css
- * provides .hero-inner, .hero-left, .hero-badge, .hero-headline, .hero-sub,
- * .hero-btns, .hero-stats, .category-bar, .markets-grid, etc. We reuse the
- * same class names so the look matches pixel-for-pixel.
+ * provides .category-bar, .markets-grid, .section-header, etc.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { fetchMarkets, fetchCurrentCycle, fetchPositions, fetchStats } from '../lib/pointsApi.js';
+import { useSearchParams } from 'react-router-dom';
+import { fetchMarkets, fetchPositions } from '../lib/pointsApi.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useT } from '@app/lib/i18n.js';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
@@ -28,21 +31,8 @@ import { fetchNews, fetchPublicMapMarkets } from '@app/lib/newsApi.js';
 import { enrichNewsItemsWithGeo } from '@app/lib/newsGeo.js';
 import NewsMapView from '@app/components/NewsMapView.jsx';
 import PointsMarketCard from '../components/PointsMarketCard.jsx';
-import { MarketGridSkeleton } from '../components/PointsSkeleton.jsx';
-
-// Human-readable "2d 14h 37m" style countdown for the cycle deadline.
-// Lives at the module scope so React doesn't recreate it each render.
-function formatCountdown(totalSeconds) {
-  if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) return 'ciclo terminó';
-  const days = Math.floor(totalSeconds / 86400);
-  const hours = Math.floor((totalSeconds % 86400) / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const parts = [];
-  if (days > 0) parts.push(`${days}d`);
-  if (hours > 0 || days > 0) parts.push(`${hours}h`);
-  parts.push(`${minutes}m`);
-  return parts.join(' ');
-}
+import PointsActivityCarousel from '../components/PointsActivityCarousel.jsx';
+import { ActivityCarouselSkeleton, MarketGridSkeleton } from '../components/PointsSkeleton.jsx';
 
 function isPendingMarket(market, now = Date.now()) {
   return market?.status === 'active'
@@ -50,8 +40,7 @@ function isPendingMarket(market, now = Date.now()) {
     && new Date(market.endTime).getTime() < now;
 }
 
-export default function PointsHome({ onOpenLogin }) {
-  const navigate = useNavigate();
+export default function PointsHome() {
   const { authenticated } = usePointsAuth();
   const t = useT();
   const [searchParams] = useSearchParams();
@@ -63,68 +52,16 @@ export default function PointsHome({ onOpenLogin }) {
   const [positionByMarket, setPositionByMarket] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [cycle, setCycle] = useState(null);
-  const [cycleTick, setCycleTick] = useState(0); // forces re-render each minute
   const [trendingView, setTrendingView] = useState('markets');
   const [mapRegion, setMapRegion] = useState('all');
   const [mapNewsItems, setMapNewsItems] = useState([]);
   const [sharedMapMarkets, setSharedMapMarkets] = useState([]);
   const [sharedMapLoaded, setSharedMapLoaded] = useState(false);
   const featuredTeamKeys = useFeaturedTeamKeys();
-  // Aggregate counters from /api/points/stats. Source of truth for
-  // the hero's "Mercados activos" number — the grid below only
-  // fetches featured markets, so deriving the count from it would
-  // under-report the total.
-  const [globalStats, setGlobalStats] = useState(null);
-
-  // Fetch aggregate counts once on mount. Endpoint is edge-cached
-  // for 60s so this is effectively free on repeat loads.
-  useEffect(() => {
-    let cancelled = false;
-    fetchStats()
-      .then(s => { if (!cancelled) setGlobalStats(s); })
-      .catch(() => { /* non-critical — hero falls back to grid count */ });
-    return () => { cancelled = true; };
-  }, []);
-
   // Search value comes from the nav input (mirrored to ?q=<text>). Living
   // in the URL keeps deep-links work and lets the nav share state without
   // a React context.
   const searchQuery = searchParams.get('q') || '';
-
-  // Load the current cycle once on mount. The countdown updates each
-  // minute via a local interval — cheaper than refetching and responsive
-  // enough for a 2-week window. When the browser tab is backgrounded,
-  // setInterval may fire less often, but re-fetching on mount still gives
-  // us a fresh deadline if the admin rolled over while the tab was idle.
-  useEffect(() => {
-    let cancelled = false;
-    let intervalId = null;
-    fetchCurrentCycle()
-      .then(c => {
-        if (cancelled) return;
-        setCycle(c);
-        if (!c?.paused) {
-          intervalId = setInterval(() => setCycleTick(t => t + 1), 60_000);
-        }
-      })
-      .catch(() => { /* non-critical — home still works without the badge */ });
-    return () => {
-      cancelled = true;
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, []);
-
-  // Compute remaining time fresh each render tick so the countdown
-  // visibly ticks down without extra server calls.
-  const cycleCountdown = useMemo(() => {
-    if (cycle?.paused || !cycle?.endsAt) return null;
-    const sec = Math.max(0, Math.floor((new Date(cycle.endsAt).getTime() - Date.now()) / 1000));
-    return { seconds: sec, label: formatCountdown(sec) };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cycle, cycleTick]);
-
-  const cyclesPaused = cycle?.paused || cycle?.status === 'paused';
 
   useEffect(() => {
     let cancelled = false;
@@ -218,226 +155,22 @@ export default function PointsHome({ onOpenLogin }) {
     sharedMapLoaded && sharedMapMarkets.length > 0 ? sharedMapMarkets : mapMarkets
   ), [sharedMapLoaded, sharedMapMarkets, mapMarkets]);
 
-  // Derived stats for the hero. `activeCount` reads from the stats
-  // endpoint's aggregate query so it reflects EVERY active market
-  // across all categories, not just the featured slice the grid
-  // rendered. Volume stays derived from the (featured) grid — it's
-  // a display heuristic, not a critical number.
-  const stats = useMemo(() => {
-    const gridCount = markets.filter(m => m.status === 'active').length;
-    const activeCount = globalStats?.activeCount ?? gridCount;
-    const totalVolume = markets.reduce((s, m) => s + (Number(m.tradeVolume || 0)), 0);
-    return { activeCount, totalVolume };
-  }, [markets, globalStats]);
-
   return (
     <>
 
-      {/* ── Hero ───────────────────────────────────────────────
-          Grid layout mirrors #hero > .hero-inner from the main site:
-          left column = copy + stats, right column = a compact featured
-          market card. */}
-      <section id="hero">
-        <div className="hero-inner">
-
-          {/* Left column */}
-          <div className="hero-left">
-            <div className="hero-badge">
-              <span className="dot" />
-              <span>{t('points.hero.badge')}</span>
-            </div>
-
-            <h1 className="hero-headline">
-              {t('points.hero.headline.a')}<br />
-              <span className="accent">{t('points.hero.headline.b')}</span>,<br />
-              {t('points.hero.headline.c')}
-            </h1>
-
-            {/* Hero subtitle — split on sentinel tags so the two {strong}
-                runs render as <strong> without needing dangerouslySetInnerHTML. */}
-            <p className="hero-sub">
-              {(() => {
-                const raw = t('points.hero.sub');
-                const parts = raw.split(/\{\/?strong\}/g);
-                return parts.map((chunk, i) => i % 2 === 1
-                  ? <strong key={i}>{chunk}</strong>
-                  : <React.Fragment key={i}>{chunk}</React.Fragment>);
-              })()}
-            </p>
-
-            <div className="hero-btns">
-              {!authenticated ? (
-                <button className="btn-primary" onClick={onOpenLogin}>
-                  {t('points.hero.cta.createAccount')}
-                </button>
-              ) : (
-                <button className="btn-primary" onClick={() => navigate('/portfolio')}>
-                  {t('points.hero.cta.myPortfolio')}
-                </button>
-              )}
-              <a href="#how-it-works" className="btn-ghost">{t('points.nav.howItWorks')}</a>
-            </div>
-
-            <div className="hero-stats">
-              <div className="hero-stat">
-                <span className="hero-stat-val">
-                  <span className="green">500</span> MXNP
-                </span>
-                <span className="hero-stat-label">{t('points.hero.stats.welcomeBonus')}</span>
-              </div>
-              <div className="hero-stat">
-                <span className="hero-stat-val">
-                  <span className="green">100</span>+20/día
-                </span>
-                <span className="hero-stat-label">{t('points.hero.stats.dailyClaim')}</span>
-              </div>
-              <div className="hero-stat">
-                <span className="hero-stat-val">
-                  <span className="green">{stats.activeCount}</span>
-                </span>
-                <span className="hero-stat-label">{t('points.hero.stats.activeMarkets')}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Right column: prize-pool hero card */}
-          <aside className="hmc" style={{
-            background: 'var(--surface1)',
-            border: '1px solid var(--border)',
-            borderRadius: 16,
-            padding: 24,
-          }}>
-            <div className="hmc-topbar" style={{ marginBottom: 18 }}>
-              <div className="hmc-cat">
-                <div className="hmc-live-dot" />
-                <span>{cyclesPaused ? t('points.hero.comingSoon') : (cycle?.label ? cycle.label.toUpperCase() : t('points.hero.currentCycle'))}</span>
-              </div>
-              {!cyclesPaused && cycleCountdown && (
-                <span style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 10,
-                  letterSpacing: '0.08em',
-                  color: cycleCountdown.seconds === 0 ? '#f59e0b' : 'var(--green)',
-                  textTransform: 'uppercase',
-                }}>
-                  {cycleCountdown.seconds === 0 ? t('points.hero.closePending') : cycleCountdown.label}
-                </span>
-              )}
-            </div>
-
-            <div className="hmc-question" style={{ marginBottom: 22 }}>
-              {t('points.hero.top10Text')}
-            </div>
-
-            <>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
-                {[
-                  { rank: '1°',       prize: '$5,000 MXN',         accent: true },
-                  { rank: '2°',       prize: '$3,000 MXN',         accent: true },
-                  { rank: '3°',       prize: '$2,000 MXN',         accent: true },
-                  { rank: '4°–10°',    prize: t('points.hero.surprisePrize') },
-                ].map(p => (
-                  <div key={p.rank} style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '12px 16px',
-                    background: 'var(--surface2)',
-                    border: `1px solid ${p.accent ? 'rgba(0,232,122,0.18)' : 'var(--border)'}`,
-                    borderRadius: 10,
-                  }}>
-                    <span style={{
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 13,
-                      letterSpacing: '0.04em',
-                      color: 'var(--text-secondary)',
-                    }}>
-                      {p.rank}
-                    </span>
-                    <span style={{
-                      fontFamily: 'var(--font-display)',
-                      fontSize: 18,
-                      color: p.accent ? 'var(--green)' : 'var(--text-primary)',
-                      letterSpacing: '0.02em',
-                    }}>
-                      {p.prize}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Eligibility rule — users only qualify for cash prizes if
-                  they participated in at least 10 markets during the
-                  cycle. This prevents "claim-and-hoard" strategies that
-                  don't contribute to the market, and keeps the leaderboard
-                  tied to actual prediction activity. */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: 8,
-                padding: '10px 12px',
-                background: 'rgba(255,85,0,0.06)',
-                border: '1px solid rgba(255,85,0,0.25)',
-                borderRadius: 10,
-                marginBottom: 14,
-                fontFamily: 'var(--font-mono)',
-                fontSize: 10,
-                lineHeight: 1.6,
-                color: 'var(--text-secondary)',
-                letterSpacing: '0.02em',
-              }}>
-                <span>
-                  {(() => {
-                    const raw = t('points.hero.eligibility', { n: '10' });
-                    // Highlight the "10 mercados" run by colouring the digits.
-                    // Simple split since only one number appears in the string.
-                    return raw.split('10').map((chunk, i, arr) => (
-                      <React.Fragment key={i}>
-                        {chunk}
-                        {i < arr.length - 1 && (
-                          <strong style={{ color: '#ff5500' }}>10</strong>
-                        )}
-                      </React.Fragment>
-                    ));
-                  })()}
-                </span>
-              </div>
-
-              {cyclesPaused && (
-                <div style={{
-                  padding: '14px 14px',
-                  background: 'rgba(255,85,0,0.08)',
-                  border: '1px solid rgba(255,85,0,0.25)',
-                  borderRadius: 10,
-                  marginBottom: 14,
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 10,
-                  lineHeight: 1.7,
-                  color: 'var(--text-secondary)',
-                  letterSpacing: '0.03em',
-                }}>
-                  {t('points.hero.cyclesPausedBody')}
-                </div>
-              )}
-
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '12px 0 0',
-                borderTop: '1px solid var(--border)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 11,
-                color: 'var(--text-muted)',
-                letterSpacing: '0.04em',
-              }}>
-                <span>{t('points.hero.rankBy')}</span>
-                <span>{t('points.hero.cashPrizes')}</span>
-              </div>
-            </>
-          </aside>
-        </div>
-      </section>
+      {/* ── Most-traded carousel ──────────────────────────────
+          Ranked by real fills in the last 24h (/api/points/trade-activity),
+          each slide
+          pairing the price chart with a live buy/sell tape. Reads from
+          the same `markets` list the grid below already fetched, so it
+          costs no extra market call — only the chart + tape batches it
+          fires itself. Hidden while searching: a query means the user is
+          hunting for one market, not browsing what's hot. */}
+      {!error && !searchQuery && trendingView === 'markets' && (
+        loading
+          ? <ActivityCarouselSkeleton isMobile={isMobile} />
+          : <PointsActivityCarousel markets={markets} count={5} />
+      )}
 
       {/* ── Markets grid ──────────────────────────────────── */}
       <section id="market" style={{ padding: '36px 48px 60px', maxWidth: 1280, margin: '0 auto' }}>
@@ -475,7 +208,7 @@ export default function PointsHome({ onOpenLogin }) {
             padding: 40,
             fontFamily: 'var(--font-mono)',
             fontSize: 13,
-            color: 'var(--red, #ef4444)',
+            color: 'var(--danger)',
             whiteSpace: 'pre-wrap',
           }}>
             {t('points.home.loadError')}

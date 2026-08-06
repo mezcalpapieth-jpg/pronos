@@ -150,8 +150,8 @@ export default function PointsMarketCard({ market, userPosition }) {
   // feedback (traffic-light feel, no blues/purples bleeding in).
   const ACCENTS = [
     // Medium row — also the W/D/L default for 3-outcome markets.
-    { bg: 'var(--yes-dim, rgba(22,163,74,0.1))', border: 'rgba(22,163,74,0.25)', fg: 'var(--yes)' },            // green-medium
-    { bg: 'rgba(245,158,11,0.1)',                border: 'rgba(245,158,11,0.3)',  fg: 'var(--gold, #f59e0b)' }, // gold (yellow-medium)
+    { bg: 'var(--yes-dim)', border: 'rgba(22,163,74,0.25)', fg: 'var(--yes)' },            // green-medium
+    { bg: 'rgba(245,158,11,0.1)',                border: 'rgba(245,158,11,0.3)',  fg: 'var(--gold)' }, // gold (yellow-medium)
     { bg: 'rgba(255,59,59,0.08)',                border: 'rgba(255,59,59,0.3)',   fg: '#ff3b3b' },              // red-medium
     // Light row
     { bg: 'rgba(74,222,128,0.1)',                border: 'rgba(74,222,128,0.3)',  fg: '#4ade80' },              // green-light
@@ -194,7 +194,7 @@ export default function PointsMarketCard({ market, userPosition }) {
         {isLive && (
           <span className="mock-card-badge" style={{
             background: 'rgba(220,38,38,0.18)',
-            color: '#dc2626',
+            color: 'var(--danger)',
             padding: '2px 6px',
             borderRadius: 4,
             fontFamily: 'var(--font-mono)',
@@ -230,12 +230,12 @@ export default function PointsMarketCard({ market, userPosition }) {
           </span>
         )}
         {isPending && !isResolved && !isLive && (
-          <span className="mock-card-badge" style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 9 }}>
+          <span className="mock-card-badge" style={{ background: 'rgba(245,158,11,0.12)', color: 'var(--warning)', padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 9 }}>
             {t('points.card.pending')}
           </span>
         )}
         {isSeriesPending && !isResolved && !isLive && (
-          <span className="mock-card-badge" style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 9 }}>
+          <span className="mock-card-badge" style={{ background: 'rgba(245,158,11,0.12)', color: 'var(--warning)', padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 9 }}>
             {t('points.series.pending')}
           </span>
         )}

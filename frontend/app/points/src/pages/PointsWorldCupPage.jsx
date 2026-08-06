@@ -251,9 +251,9 @@ function computeForm(teamCode, markets) {
   }
   if (played === 0) return null;
   const points = wins * 3 + draws;
-  const color = wins > losses ? '#22c55e'
-              : losses > wins ? '#ef4444'
-              : '#f59e0b';
+  const color = wins > losses ? 'var(--success)'
+              : losses > wins ? 'var(--danger)'
+              : 'var(--warning)';
   return { played, wins, draws, losses, points, color };
 }
 
@@ -529,7 +529,7 @@ export default function PointsWorldCupPage() {
               background: tournamentComplete ? 'rgba(0,232,122,0.12)' : 'rgba(220,38,38,0.18)',
               border: tournamentComplete ? '1px solid rgba(0,232,122,0.36)' : '1px solid rgba(220,38,38,0.4)',
               borderRadius: 12,
-              color: tournamentComplete ? 'var(--green)' : '#dc2626',
+              color: tournamentComplete ? 'var(--green)' : 'var(--danger)',
               fontFamily: 'var(--font-mono)', fontSize: 12,
               fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase',
               animation: tournamentComplete ? 'none' : 'pronos-live-pulse 1.4s ease-in-out infinite',
@@ -632,7 +632,7 @@ export default function PointsWorldCupPage() {
                 borderRadius: 100,
                 border: `1px solid ${liveOnly ? 'rgba(220,38,38,0.5)' : 'var(--border)'}`,
                 background: liveOnly ? 'rgba(220,38,38,0.15)' : 'var(--surface1)',
-                color: liveOnly ? '#dc2626' : 'var(--text-secondary)',
+                color: liveOnly ? 'var(--danger)' : 'var(--text-secondary)',
                 fontFamily: 'var(--font-mono)', fontSize: 11,
                 letterSpacing: '0.08em', textTransform: 'uppercase',
                 fontWeight: 600, cursor: 'pointer',
@@ -641,7 +641,7 @@ export default function PointsWorldCupPage() {
             >
               <span style={{
                 width: 6, height: 6, borderRadius: '50%',
-                background: '#dc2626',
+                background: 'var(--danger)',
                 animation: liveOnly ? 'pronos-live-pulse 1.4s ease-in-out infinite' : 'none',
               }} />
               {liveOnly ? 'Solo en vivo' : 'Ver solo en vivo'}
@@ -1278,8 +1278,8 @@ function MatchRow({ fixture, home, away, market, onBuy, onOpen }) {
     : [0.4, 0.25, 0.35];
   const pct = (i) => Math.round((prices[i] ?? 0) * 100);
   const accent = [
-    { bg: 'var(--yes-dim, rgba(22,163,74,0.1))', border: 'rgba(22,163,74,0.3)', fg: 'var(--yes)' },
-    { bg: 'rgba(245,158,11,0.1)',                border: 'rgba(245,158,11,0.3)', fg: 'var(--gold, #f59e0b)' },
+    { bg: 'var(--yes-dim)', border: 'rgba(22,163,74,0.3)', fg: 'var(--yes)' },
+    { bg: 'rgba(245,158,11,0.1)',                border: 'rgba(245,158,11,0.3)', fg: 'var(--gold)' },
     { bg: 'rgba(255,59,59,0.08)',                border: 'rgba(255,59,59,0.3)',  fg: '#ff3b3b' },
   ];
 
@@ -1406,7 +1406,7 @@ function GroupWinnerCard({ market, onBuy }) {
         <div>
           <div style={{
             fontFamily: 'var(--font-mono)', fontSize: 10,
-            letterSpacing: '0.14em', color: 'var(--gold, #f59e0b)',
+            letterSpacing: '0.14em', color: 'var(--gold)',
             textTransform: 'uppercase', marginBottom: 2,
           }}>
             Ganador del grupo
@@ -1460,7 +1460,7 @@ function GroupWinnerCard({ market, onBuy }) {
               </span>
               <span style={{
                 fontFamily: 'var(--font-display)', fontSize: 14,
-                color: isWinner ? 'var(--green)' : 'var(--gold, #f59e0b)',
+                color: isWinner ? 'var(--green)' : 'var(--gold)',
                 minWidth: 36,
                 textAlign: 'right',
               }}>

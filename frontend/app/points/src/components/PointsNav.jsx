@@ -593,7 +593,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
                         justifyContent: 'center',
                         background: 'rgba(245,158,11,0.16)',
                         border: '1px solid rgba(245,158,11,0.5)',
-                        color: '#f59e0b',
+                        color: 'var(--warning)',
                         fontFamily: 'var(--font-mono)',
                         fontSize: 11,
                         lineHeight: 1,

@@ -81,7 +81,7 @@ function PositionCard({ position, onSell, onRedeem, onDismiss, selling, redeemin
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{
-          background: 'var(--yes-dim, rgba(22,163,74,0.1))',
+          background: 'var(--yes-dim)',
           color: 'var(--yes)',
           fontFamily: 'var(--font-mono)',
           fontSize: 11,
@@ -118,7 +118,7 @@ function PositionCard({ position, onSell, onRedeem, onDismiss, selling, redeemin
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.08em', marginBottom: 2 }}>
             PnL
           </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700, color: pnlPos ? 'var(--green)' : 'var(--red, #ef4444)' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700, color: pnlPos ? 'var(--green)' : 'var(--danger)' }}>
             {pnlPos ? '+' : ''}{fmt(pnl)}
           </div>
         </div>
@@ -241,7 +241,7 @@ function DailyClaimCard({ onClaimed }) {
         </div>
       )}
       {state.err && (
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--red, #ef4444)', marginBottom: 10 }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--danger)', marginBottom: 10 }}>
           {state.err}
         </div>
       )}
@@ -396,7 +396,7 @@ function MiniLeaderboard({ currentUsername }) {
               width: 56,
               textAlign: 'right',
               fontSize: 10,
-              color: deltaPos ? 'var(--green)' : 'var(--red, #ef4444)',
+              color: deltaPos ? 'var(--green)' : 'var(--danger)',
             }}>
               {deltaPos ? '+' : ''}{fmt(delta)}
             </span>
@@ -515,7 +515,7 @@ function CycleHistoryLeaderboard({ currentUsername }) {
                         width: 56,
                         textAlign: 'right',
                         fontSize: 10,
-                        color: pnlPos ? 'var(--green)' : 'var(--red, #ef4444)',
+                        color: pnlPos ? 'var(--green)' : 'var(--danger)',
                       }}>
                         {pnlPos ? '+' : ''}{fmt(pnl)}
                       </span>
@@ -903,7 +903,7 @@ export default function PointsPortfolio() {
                 {[
                   { label: 'Balance', value: `${fmt(balance)} MXNP`, color: 'var(--green)' },
                   { label: 'En posiciones', value: `${fmt(summary?.currentValue || 0)} MXNP`, color: 'var(--text-primary)' },
-                  { label: 'PnL total', value: `${(summary?.pnl || 0) >= 0 ? '+' : ''}${fmt(summary?.pnl || 0)}`, color: (summary?.pnl || 0) >= 0 ? 'var(--green)' : 'var(--red, #ef4444)' },
+                  { label: 'PnL total', value: `${(summary?.pnl || 0) >= 0 ? '+' : ''}${fmt(summary?.pnl || 0)}`, color: (summary?.pnl || 0) >= 0 ? 'var(--green)' : 'var(--danger)' },
                 ].map(({ label, value, color }) => (
                   <div key={label} className="points-portfolio-stat-card">
                     <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 8, textTransform: 'uppercase' }}>
@@ -920,7 +920,7 @@ export default function PointsPortfolio() {
                 <div style={{
                   background: msg.type === 'error' ? 'rgba(239,68,68,0.08)' : 'rgba(0,232,122,0.08)',
                   border: `1px solid ${msg.type === 'error' ? 'rgba(239,68,68,0.3)' : 'rgba(0,232,122,0.3)'}`,
-                  color: msg.type === 'error' ? 'var(--red, #ef4444)' : 'var(--green)',
+                  color: msg.type === 'error' ? 'var(--danger)' : 'var(--green)',
                   padding: '12px 14px', borderRadius: 10, marginBottom: 20,
                   fontFamily: 'var(--font-mono)', fontSize: 12,
                 }}>
@@ -1018,11 +1018,11 @@ function HistoryView({ history, summary, loading }) {
 
   const statusMap = {
     won:     { label: 'GANADO',       bg: 'rgba(0,232,122,0.12)',  color: 'var(--green)' },
-    lost:    { label: 'PERDIDO',       bg: 'rgba(239,68,68,0.1)',   color: 'var(--red, #ef4444)' },
+    lost:    { label: 'PERDIDO',       bg: 'rgba(239,68,68,0.1)',   color: 'var(--danger)' },
     exited:  { label: '↗ RETIRADO',    bg: 'rgba(148,163,184,0.08)', color: 'var(--text-secondary)' },
     canceled:{ label: 'ANULADO',        bg: 'rgba(148,163,184,0.08)', color: 'var(--text-secondary)' },
-    pending: { label: 'PENDIENTE',    bg: 'rgba(245,158,11,0.1)',  color: '#f59e0b' },
-    open:    { label: 'EN CURSO',      bg: 'rgba(245,200,66,0.08)', color: 'var(--gold, #F5C842)' },
+    pending: { label: 'PENDIENTE',    bg: 'rgba(245,158,11,0.1)',  color: 'var(--warning)' },
+    open:    { label: 'EN CURSO',      bg: 'rgba(245,200,66,0.08)', color: 'var(--gold)' },
   };
 
   return (
@@ -1031,8 +1031,8 @@ function HistoryView({ history, summary, loading }) {
         {[
           ['Mercados',   summary?.marketsTotal ?? 0, 'var(--text-primary)'],
           ['Ganados',    summary?.marketsWon ?? 0,   'var(--green)'],
-          ['Perdidos',   summary?.marketsLost ?? 0,  'var(--red, #ef4444)'],
-          ['Pendientes', summary?.marketsPending ?? 0, '#f59e0b'],
+          ['Perdidos',   summary?.marketsLost ?? 0,  'var(--danger)'],
+          ['Pendientes', summary?.marketsPending ?? 0, 'var(--warning)'],
           ['Anulados',   summary?.marketsCanceled ?? 0, 'var(--text-secondary)'],
         ].map(([label, value, color]) => (
           <div key={label} className="points-history-summary-card">
@@ -1088,7 +1088,7 @@ function HistoryView({ history, summary, loading }) {
                 fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)',
               }}>
                 <span>{m.transactions?.length || 0} transaccion{(m.transactions?.length || 0) === 1 ? '' : 'es'}</span>
-                <span style={{ color: pnlPos ? 'var(--green)' : 'var(--red, #ef4444)', fontWeight: 700 }}>
+                <span style={{ color: pnlPos ? 'var(--green)' : 'var(--danger)', fontWeight: 700 }}>
                   {pnlPos ? '+' : ''}{fmt(pnl)} MXNP
                 </span>
               </div>

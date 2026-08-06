@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./PointsHome.jsx', import.meta.url), 'utf8');
+const tournament = await readFile(new URL('./PointsTournament.jsx', import.meta.url), 'utf8');
 
 test('points home trending can switch from market cards to a market globe', () => {
   assert.match(source, /NewsMapView/);
@@ -29,7 +30,7 @@ test('points home keeps cards curated but feeds all active markets to the map', 
   assert.doesNotMatch(mapMarketsBlock, /m\.trending/);
   assert.doesNotMatch(mapMarketsBlock, /marketMatchesFeaturedTeam/);
 
-  const filteredBlock = source.slice(filteredIndex, source.indexOf('// Derived stats'));
+  const filteredBlock = source.slice(filteredIndex, source.indexOf('const homeMapMarkets'));
   assert.match(filteredBlock, /m\.trending/);
   assert.match(filteredBlock, /marketMatchesFeaturedTeam/);
 });
@@ -46,18 +47,26 @@ test('points home map loads the same shared news and market feed as the news glo
   assert.match(loaderBlock, /setSharedMapMarkets/);
 });
 
-test('points home paused prize cycles keep the prize ladder visible', () => {
-  assert.doesNotMatch(source, /points\.hero\.cyclesPausedTitle/);
+test('the prize ladder lives on the tournament page, not home', () => {
+  // Home used to carry the prize card in its hero. That hero is gone: the
+  // pitch moved to PointsIntroModal and the prize ladder to /torneo, which
+  // already renders it next to the live leaderboard. Home must not grow a
+  // second copy that can drift out of sync with the tournament page.
+  assert.doesNotMatch(source, /points\.hero\./);
+  assert.doesNotMatch(source, /\$5,000 MXN/);
+  assert.doesNotMatch(source, /section id="hero"/);
+});
 
-  const comingSoonIndex = source.indexOf('points.hero.comingSoon');
-  const top10Index = source.indexOf('points.hero.top10Text');
-  const firstPrizeIndex = source.indexOf('$5,000 MXN');
-  const pausedBodyIndex = source.indexOf('points.hero.cyclesPausedBody', firstPrizeIndex);
-  const footerIndex = source.indexOf('points.hero.rankBy', pausedBodyIndex);
+test('paused prize cycles still show the full prize ladder on the tournament page', () => {
+  const firstPrizeIndex = tournament.indexOf('$5,000 MXN');
+  const secondPrizeIndex = tournament.indexOf('$3,000 MXN');
+  const thirdPrizeIndex = tournament.indexOf('$2,000 MXN');
 
-  assert.ok(comingSoonIndex > 0, 'paused cycles should still label the topbar as coming soon');
-  assert.ok(top10Index > comingSoonIndex, 'the card title should remain the top 10 leaderboard copy');
-  assert.ok(firstPrizeIndex > top10Index, 'the visible prize ladder should remain under the title');
-  assert.ok(pausedBodyIndex > firstPrizeIndex, 'the paused explanation should be additive below prizes');
-  assert.ok(footerIndex > pausedBodyIndex, 'the cash-prize footer should stay at the bottom of the card');
+  assert.ok(firstPrizeIndex > 0, 'the tournament page should render the prize ladder');
+  assert.ok(secondPrizeIndex > firstPrizeIndex, 'second place follows first');
+  assert.ok(thirdPrizeIndex > secondPrizeIndex, 'third place follows second');
+  // The ladder is rendered from a plain list, not gated behind cycle state,
+  // so pausing cycles cannot hide it.
+  assert.match(tournament, /rank: '1', prize: '\$5,000 MXN'/);
+  assert.match(tournament, /fetchLeaderboard/);
 });

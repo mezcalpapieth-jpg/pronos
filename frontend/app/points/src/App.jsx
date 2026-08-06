@@ -20,6 +20,7 @@ import PointsTicker from './components/PointsTicker.jsx';
 import PointsCategoryBar from './components/PointsCategoryBar.jsx';
 import Footer from '@app/components/Footer.jsx';
 import PointsWelcomeModal, { hasBeenWelcomed } from './components/PointsWelcomeModal.jsx';
+import PointsIntroModal, { hasSeenIntro } from './components/PointsIntroModal.jsx';
 import { trackPublicityConversion, trackPublicityLanding } from './lib/pointsApi.js';
 
 const PointsHome = lazy(() => import('./pages/PointsHome.jsx'));
@@ -60,7 +61,7 @@ function RouteFallback() {
   );
 }
 
-function PointsHomeEntry({ onOpenLogin }) {
+function PointsHomeEntry() {
   const location = useLocation();
   const routeLooksLikeProfile = useMemo(() => {
     const params = new URLSearchParams(String(location.search || '').replace(/^\?/, ''));
@@ -70,7 +71,9 @@ function PointsHomeEntry({ onOpenLogin }) {
   }, [location.search]);
 
   if (routeLooksLikeProfile) return <PointsUserProfile />;
-  return <PointsHome onOpenLogin={onOpenLogin} />;
+  // Home no longer takes onOpenLogin — its only login CTA was the hero,
+  // which moved to PointsIntroModal (mounted at the App root).
+  return <PointsHome />;
 }
 
 function PublicityRedirect({ source }) {
@@ -179,7 +182,24 @@ export default function App() {
   const { authenticated, user, loading } = usePointsAuth();
   const [loginOpen, setLoginOpen] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const [introOpen, setIntroOpen] = useState(false);
   const publicityConversionUsernameRef = useRef(null);
+
+  // Intro pitch for logged-out first-time visitors — the copy that used to
+  // be the home hero. Gated on auth having RESOLVED (`!loading`), otherwise
+  // it would flash for a returning user during the session check.
+  //
+  // Skipped for deep links: someone arriving at a specific market, a
+  // referral, or the tournament came for that page, and a pitch modal over
+  // it is an obstacle. Home is the only surface that gets the pitch.
+  useEffect(() => {
+    if (loading || authenticated) return;
+    const path = window.location.pathname.replace(/\/+$/, '');
+    const isHome = path === '' || path.endsWith('/points');
+    if (!isHome || window.location.search) return;
+    if (hasSeenIntro()) return;
+    setIntroOpen(true);
+  }, [loading, authenticated]);
 
   // Track whether we saw `needsUsername: true` in this session so we know
   // the user just claimed their username (vs. already had one on mount).
@@ -254,6 +274,11 @@ export default function App() {
         username={user?.username}
         onClose={() => setWelcomeOpen(false)}
       />
+      <PointsIntroModal
+        open={introOpen}
+        onClose={() => setIntroOpen(false)}
+        onCreateAccount={() => setLoginOpen(true)}
+      />
     </BrowserRouter>
   );
 }
@@ -287,7 +312,7 @@ function Shell({ onOpenLogin, isAdmin }) {
           <Route path="/x" element={<PublicityRedirect source="x" />} />
           <Route path="/instagram" element={<PublicityRedirect source="instagram" />} />
           <Route path="/tiktok" element={<PublicityRedirect source="tiktok" />} />
-          <Route path="/" element={<PointsHomeEntry onOpenLogin={onOpenLogin} />} />
+          <Route path="/" element={<PointsHomeEntry />} />
           {/* World Cup gets its own page with a hero, groups, and
               bracket. Registered BEFORE the generic /c/:slug so it
               wins the match. */}
