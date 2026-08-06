@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useId } from 'react';
+import React, { useMemo, useState, useId, useRef, useLayoutEffect } from 'react';
 
 /**
  * SVG sparkline chart for market probability history.
@@ -6,14 +6,16 @@ import React, { useMemo, useState, useId } from 'react';
  * - If history is missing, renders a flat line at the current price.
  * - Optional right-side percentage label
  * - Hover anywhere on the chart to see timestamp + value tooltip
- * - Straight segments so every vertex represents an actual snapshot
+ * - Step segments: price holds flat between trades, then jumps
+ * - Y axis fits the data instead of always spanning 0-100
+ * - Optional bottom time axis (hours for intraday ranges, dates beyond that)
  * - Optional activity bars show real trade volume/count under the line
  * - Supports both `number[]` (mock) and `{t, p}[]` (real CLOB history)
  *
  * @param {number[]|{t:number,p:number}[]} data - Probability values (0-100)
  * @param {number} targetPct - Target percentage the line should end near (0-100)
  * @param {string} seed - Legacy prop kept for caller compatibility; no longer used.
- * @param {number} width - SVG width
+ * @param {number} width - Fallback SVG width used before the container is measured
  * @param {number} height - SVG height
  * @param {string} color - Line color (CSS var or hex)
  * @param {boolean} fill - Show gradient fill under line
@@ -25,15 +27,65 @@ import React, { useMemo, useState, useId } from 'react';
  * @param {number} labelWidth - Width reserved for the left-side label
  */
 
+const MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
 function formatTimestamp(unixSeconds) {
   if (!unixSeconds) return '';
   const d = new Date(unixSeconds * 1000);
-  const months = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   const day = d.getDate();
-  const mon = months[d.getMonth()];
+  const mon = MONTHS_SHORT[d.getMonth()];
   const hour = d.getHours().toString().padStart(2, '0');
   const min = d.getMinutes().toString().padStart(2, '0');
   return `${day} ${mon}, ${hour}:${min}`;
+}
+
+// Intraday ranges read as clock time; multi-day ranges read as dates.
+// `datetime` is the fallback for windows only a few days wide, where
+// plain dates would repeat across neighbouring ticks.
+function formatAxisTick(unixSeconds, mode) {
+  const d = new Date(unixSeconds * 1000);
+  const hh = d.getHours().toString().padStart(2, '0');
+  const mm = d.getMinutes().toString().padStart(2, '0');
+  if (mode === 'clock') return `${hh}:${mm}`;
+  if (mode === 'clockSec') return `${hh}:${mm}:${d.getSeconds().toString().padStart(2, '0')}`;
+  const date = `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`;
+  return mode === 'datetime' ? `${date} ${hh}h` : date;
+}
+
+// Rounded gridline steps for a 0-100 probability axis.
+const TICK_STEPS = [1, 2, 5, 10, 20, 25, 50];
+
+function axisTicks(min, max, target = 4) {
+  const span = Math.max(1e-6, max - min);
+  const step = TICK_STEPS.find(s => span / s <= target + 1) || 50;
+  const first = Math.ceil(min / step) * step;
+  const out = [];
+  for (let v = first; v <= max + 1e-6; v += step) out.push(Math.round(v));
+  return out.length >= 2 ? out : [Math.round(min), Math.round(max)];
+}
+
+// Never zoom in so far that ordinary noise reads as a crash.
+const MIN_DOMAIN_SPAN = 12;
+
+export function priceDomain(values) {
+  let lo = Math.min(...values);
+  let hi = Math.max(...values);
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return { min: 0, max: 100 };
+  const span = hi - lo;
+  if (span < MIN_DOMAIN_SPAN) {
+    const mid = (lo + hi) / 2;
+    lo = mid - MIN_DOMAIN_SPAN / 2;
+    hi = mid + MIN_DOMAIN_SPAN / 2;
+  } else {
+    const pad = span * 0.12;
+    lo -= pad;
+    hi += pad;
+  }
+  // Slide the window back inside [0,100] rather than collapsing it.
+  const windowSpan = Math.min(100, hi - lo);
+  if (lo < 0) { lo = 0; hi = windowSpan; }
+  if (hi > 100) { hi = 100; lo = 100 - windowSpan; }
+  return { min: Math.max(0, lo), max: Math.min(100, hi) };
 }
 
 export default function Sparkline({
@@ -53,14 +105,37 @@ export default function Sparkline({
   emptySubLabel = 'El precio se moverá con el primer trade.',
   showEmptyState = true,
   showYAxis,
+  showXAxis,
+  domainMin,
+  domainMax,
   activity = [],
   showActivity = true,
   style = {},
 }) {
   const uid = useId().replace(/:/g, '');
   const [hoveredIdx, setHoveredIdx] = useState(null);
+  const plotRef = useRef(null);
+  const [measuredWidth, setMeasuredWidth] = useState(0);
 
   void seed;
+
+  // The SVG used to be drawn in a fixed 280-unit coordinate space and
+  // stretched to fit, which distorted every horizontal measurement (bar
+  // widths, dash patterns, corner radii). Measuring the container keeps
+  // the viewBox 1:1 with rendered pixels instead.
+  useLayoutEffect(() => {
+    const el = plotRef.current;
+    if (!el) return undefined;
+    const apply = () => {
+      const next = el.getBoundingClientRect().width;
+      if (next > 0) setMeasuredWidth(next);
+    };
+    apply();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const target = typeof targetPct === 'number' && Number.isFinite(targetPct)
     ? Math.max(0, Math.min(100, targetPct))
@@ -117,11 +192,44 @@ export default function Sparkline({
   const padX = 3;
   const padY = 4;
   const shouldShowYAxis = typeof showYAxis === 'boolean' ? showYAxis : height >= 100;
-  const chartWidth = Math.max(20, width - labelWidth - (showValue ? valueWidth : 0));
+  const shouldShowXAxis = typeof showXAxis === 'boolean' ? showXAxis : height >= 100;
+  const chartWidth = measuredWidth > 0
+    ? measuredWidth
+    : Math.max(20, width - labelWidth - (showValue ? valueWidth : 0));
   const yAxisGutter = shouldShowYAxis ? Math.min(34, Math.max(28, chartWidth * 0.06)) : 0;
+  const xAxisHeight = shouldShowXAxis ? 18 : 0;
   const plotRight = Math.max(20, chartWidth - yAxisGutter);
+  const plotBottom = Math.max(16, height - xAxisHeight);
   const w = Math.max(20, plotRight - padX * 2);
-  const h = height - padY * 2;
+  const h = Math.max(10, plotBottom - padY * 2);
+
+  // Domain rules, in order:
+  //   1. An explicit domain always wins — stacked outcome rows pass a
+  //      shared one so their heights stay comparable; a per-row fit
+  //      would make 30% look as tall as 96%.
+  //   2. Otherwise fit to the data only when the Y axis is actually
+  //      drawn. Without labels there is nothing to tell the reader the
+  //      scale moved, so a bare sparkline stays on the full 0-100 and
+  //      keeps reading like every other bare sparkline in the app.
+  const domain = useMemo(() => {
+    if (Number.isFinite(domainMin) && Number.isFinite(domainMax) && domainMax > domainMin) {
+      return { min: domainMin, max: domainMax };
+    }
+    return shouldShowYAxis ? priceDomain(values) : { min: 0, max: 100 };
+  }, [values, domainMin, domainMax, shouldShowYAxis]);
+  const yTicks = useMemo(
+    () => (shouldShowYAxis ? axisTicks(domain.min, domain.max) : []),
+    [shouldShowYAxis, domain],
+  );
+
+  const yForValue = (v) => {
+    const range = Math.max(1e-6, domain.max - domain.min);
+    const clamped = Math.max(domain.min, Math.min(domain.max, v));
+    return padY + h - ((clamped - domain.min) / range) * h;
+  };
+
+  // A tick sitting on the baseline would collide with the time axis.
+  const visibleYTicks = yTicks.filter(tick => yForValue(tick) < plotBottom - padY - 6);
 
   const timeBounds = useMemo(() => {
     if (!hasTimestamps) return null;
@@ -144,11 +252,35 @@ export default function Sparkline({
     return padX + (fallbackIdx / denom) * w;
   };
 
+  // Evenly spaced time labels across the visible window. Under ~2 days
+  // the useful unit is the clock; past that it's the date.
+  const xTicks = useMemo(() => {
+    if (!shouldShowXAxis || !timeBounds) return [];
+    const span = timeBounds.max - timeBounds.min;
+    const count = chartWidth < 420 ? 3 : 5;
+    const times = [];
+    for (let i = 0; i < count; i++) {
+      times.push(timeBounds.min + (span * i) / (count - 1));
+    }
+    const build = (mode) => times.map(t => ({ t, labelText: formatAxisTick(t, mode) }));
+    // Narrow windows collide at the chosen precision — a few days wide
+    // repeats the calendar day, a few minutes wide repeats the minute.
+    // Step up precision until no two neighbouring labels match.
+    const modes = span <= 48 * 3600 ? ['clock', 'clockSec'] : ['date', 'datetime'];
+    for (const mode of modes) {
+      const built = build(mode);
+      if (!built.some((tick, i) => i > 0 && tick.labelText === built[i - 1].labelText)) {
+        return built;
+      }
+    }
+    return build(modes[modes.length - 1]);
+  }, [shouldShowXAxis, timeBounds, chartWidth]);
+
   const coords = values.map((v, i) => {
     const pt = points[i];
     return {
       x: xForTime(typeof pt === 'object' && pt !== null ? pt.t : null, i),
-      y: padY + h - (v / 100) * h,
+      y: yForValue(v),
       v,
       t: typeof pt === 'object' && pt !== null ? pt.t : null,
     };
@@ -181,16 +313,21 @@ export default function Sparkline({
     ...activityPoints.map(pt => (pt.volume > 0 ? pt.volume : pt.count)),
   );
   const activityBandHeight = showActivity && hasActivity
-    ? Math.max(12, Math.min(24, height * 0.2))
+    ? Math.max(12, Math.min(24, plotBottom * 0.2))
     : 0;
   const activityBarWidth = Math.max(
     1.5,
     Math.min(7, w / Math.max(12, activityPoints.length * 1.35)),
   );
+
+  // Step-after: the price holds where it was until the next trade, then
+  // jumps. Diagonals would draw continuous drift that never happened
+  // between two sparse snapshots.
   const linePath = (pts) => {
     if (pts.length < 2) return '';
     let d = `M${pts[0].x.toFixed(2)},${pts[0].y.toFixed(2)}`;
     for (let i = 1; i < pts.length; i++) {
+      d += ` L${pts[i].x.toFixed(2)},${pts[i - 1].y.toFixed(2)}`;
       d += ` L${pts[i].x.toFixed(2)},${pts[i].y.toFixed(2)}`;
     }
     return d;
@@ -198,7 +335,7 @@ export default function Sparkline({
 
   const pathD = linePath(coords);
   const lastPt = coords[coords.length - 1];
-  const fillD = `${pathD} L${lastPt.x.toFixed(2)},${height} L${coords[0].x.toFixed(2)},${height} Z`;
+  const fillD = `${pathD} L${lastPt.x.toFixed(2)},${plotBottom.toFixed(2)} L${coords[0].x.toFixed(2)},${plotBottom.toFixed(2)} Z`;
   const lastVal = Math.round(values[values.length - 1]);
 
   const gradientId = `sg-${uid}`;
@@ -258,6 +395,7 @@ export default function Sparkline({
       )}
 
       <div
+        ref={plotRef}
         style={{ position: 'relative', flex: 1, minWidth: 0, height }}
         onMouseMove={handleMouseMove}
         onMouseLeave={() => setHoveredIdx(null)}
@@ -266,7 +404,6 @@ export default function Sparkline({
         width="100%"
         height={height}
         viewBox={`0 0 ${chartWidth} ${height}`}
-        preserveAspectRatio="none"
         style={{ display: 'block', overflow: 'visible' }}
       >
         <defs>
@@ -276,6 +413,21 @@ export default function Sparkline({
             <stop offset="100%" stopColor={color} stopOpacity="0" />
           </linearGradient>
         </defs>
+
+        {/* Horizontal rules so a value can be read off the line */}
+        {shouldShowYAxis && visibleYTicks.map((tick) => (
+          <line
+            key={`grid-${tick}`}
+            x1={padX}
+            y1={yForValue(tick)}
+            x2={plotRight}
+            y2={yForValue(tick)}
+            stroke="var(--border)"
+            strokeWidth={1}
+            strokeDasharray="2,4"
+            opacity={0.5}
+          />
+        ))}
 
         {showActivity && hasActivity && (
           <g opacity="0.9">
@@ -288,7 +440,7 @@ export default function Sparkline({
                 <rect
                   key={`${pt.t}-${i}`}
                   x={Math.max(0, Math.min(plotRight - activityBarWidth, x))}
-                  y={height - padY - barHeight}
+                  y={plotBottom - padY - barHeight}
                   width={activityBarWidth}
                   height={barHeight}
                   rx={0.8}
@@ -318,7 +470,7 @@ export default function Sparkline({
           <>
             <line
               x1={hPt.x} y1={0}
-              x2={hPt.x} y2={height}
+              x2={hPt.x} y2={plotBottom}
               stroke={color}
               strokeWidth={0.7}
               strokeDasharray="3,3"
@@ -352,19 +504,17 @@ export default function Sparkline({
         />
       )}
 
-      {shouldShowYAxis && (
-        <div
+      {shouldShowYAxis && visibleYTicks.map((tick) => (
+        <span
+          key={`ylabel-${tick}`}
           aria-hidden="true"
           style={{
             position: 'absolute',
-            top: 0,
             right: 0,
+            top: yForValue(tick),
+            transform: 'translateY(-50%)',
             width: yAxisGutter,
-            height,
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            alignItems: 'flex-end',
+            textAlign: 'right',
             fontFamily: 'var(--font-mono)',
             fontSize: 10.5,
             color: 'var(--text-muted)',
@@ -373,9 +523,33 @@ export default function Sparkline({
             fontVariantNumeric: 'tabular-nums',
           }}
         >
-          {[100, 75, 50, 25, 0].map(v => <span key={v}>{v}%</span>)}
-        </div>
-      )}
+          {tick}%
+        </span>
+      ))}
+
+      {shouldShowXAxis && xTicks.map((tick, i) => (
+        <span
+          key={`xlabel-${tick.t}-${i}`}
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            left: `${(xForTime(tick.t, i) / chartWidth) * 100}%`,
+            bottom: 0,
+            transform: i === 0
+              ? 'none'
+              : (i === xTicks.length - 1 ? 'translateX(-100%)' : 'translateX(-50%)'),
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            color: 'var(--text-muted)',
+            opacity: 0.6,
+            whiteSpace: 'nowrap',
+            pointerEvents: 'none',
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          {tick.labelText}
+        </span>
+      ))}
 
       {showEmptyState && !hasRealHistory && !hasActivity && (
         <div
