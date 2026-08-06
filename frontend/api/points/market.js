@@ -237,7 +237,8 @@ export default async function handler(req, res) {
 
       const rows = await sql`
         SELECT m.*, pm.source_data AS pending_source_data,
-          (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume
+          (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume,
+          (SELECT MAX(created_at) FROM points_trades t WHERE t.market_id = m.id) AS last_trade_at
         FROM points_markets m
         LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
         WHERE m.id = ${id}
@@ -417,7 +418,8 @@ export default async function handler(req, res) {
       if (ammMode === 'parallel') {
         const legRows = await sql`
           SELECT l.id, l.leg_label, l.reserves, l.seed_liquidity, l.status, l.outcome,
-            (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = l.id) AS trade_volume
+            (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = l.id) AS trade_volume,
+            (SELECT MAX(created_at) FROM points_trades t WHERE t.market_id = l.id) AS last_trade_at
           FROM points_markets l
           WHERE l.parent_id = ${r.id}
             AND l.status <> 'canceled'
@@ -434,12 +436,20 @@ export default async function handler(req, res) {
             prices: lp,                     // [YES, NO] for the leg
             seedLiquidity: Number(l.seed_liquidity || 0),
             tradeVolume: Number(l.trade_volume || 0),
+            lastTradeAt: l.last_trade_at,
             status: l.status,
             outcome: l.outcome,             // 0 if this leg's YES won, 1 if NO won
           };
         });
         const seedTotal = legs.reduce((s, l) => s + l.seedLiquidity, 0);
         const tradeTotal = legs.reduce((s, l) => s + l.tradeVolume, 0);
+        const lastTradeAt = legs.reduce((latest, leg) => {
+          const next = leg.lastTradeAt ? new Date(leg.lastTradeAt).getTime() : NaN;
+          const current = latest ? new Date(latest).getTime() : NaN;
+          return Number.isFinite(next) && (!Number.isFinite(current) || next > current)
+            ? leg.lastTradeAt
+            : latest;
+        }, r.last_trade_at || null);
         const marketPayload = applySeriesDetailGateToMarket({
             id: r.id,
             ammMode: 'parallel',
@@ -452,6 +462,7 @@ export default async function handler(req, res) {
             seedLiquidity: seedTotal,
             volume: seedTotal,
             tradeVolume: tradeTotal,
+            lastTradeAt,
             startTime: r.start_time,
             endTime: r.end_time,
             status: r.status,
@@ -497,6 +508,7 @@ export default async function handler(req, res) {
           seedLiquidity: Number(r.seed_liquidity || 0),
           volume: Number(r.seed_liquidity || 0),
           tradeVolume: Number(r.trade_volume || 0),
+          lastTradeAt: r.last_trade_at,
           startTime: r.start_time,
           endTime: r.end_time,
           status: r.status,

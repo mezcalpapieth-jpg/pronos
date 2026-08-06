@@ -132,6 +132,12 @@ function formatActivityAge(unixSeconds, t) {
   return t('points.detail.activityDaysAgo', { n: days });
 }
 
+function unixSecondsFromDateLike(value) {
+  if (!value) return 0;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? Math.floor(time / 1000) : 0;
+}
+
 function signatureNumber(value, digits = 4) {
   const n = Number(value);
   return Number.isFinite(n) ? n.toFixed(digits) : '0';
@@ -150,6 +156,7 @@ function marketLiveSignature(market) {
     status: market.status,
     outcome: market.outcome ?? null,
     resolvedAt: market.resolvedAt ?? null,
+    lastTradeAt: market.lastTradeAt ?? null,
     tradeVolume: signatureNumber(market.tradeVolume || market.volume, 2),
     prices,
     reserves,
@@ -162,8 +169,17 @@ function marketLiveSignature(market) {
   });
 }
 
-function MarketActivityStrip({ summary, rangeLabel, locale = 'es-MX', t }) {
-  if (!summary || summary.count <= 0) {
+function MarketActivityStrip({ summary, rangeLabel, lastTradeAt, locale = 'es-MX', t }) {
+  const safeSummary = summary || {
+    count: 0,
+    volume: 0,
+    buyVolume: 0,
+    sellVolume: 0,
+    lastAt: 0,
+    buyShare: null,
+  };
+  const latestTradeAt = Number(lastTradeAt) || Number(summary?.lastAt || 0);
+  if ((!summary || summary.count <= 0) && latestTradeAt <= 0) {
     return (
       <div style={{
         marginTop: 14,
@@ -179,7 +195,7 @@ function MarketActivityStrip({ summary, rangeLabel, locale = 'es-MX', t }) {
       </div>
     );
   }
-  const buyShare = summary.buyShare == null ? null : Math.round(summary.buyShare * 100);
+  const buyShare = safeSummary.buyShare == null ? null : Math.round(safeSummary.buyShare * 100);
   const sellShare = buyShare == null ? null : Math.max(0, 100 - buyShare);
   const pressureLabel = buyShare == null
     ? t('points.detail.activityNeutral')
@@ -188,6 +204,8 @@ function MarketActivityStrip({ summary, rangeLabel, locale = 'es-MX', t }) {
       : sellShare >= 55
         ? t('points.detail.activitySellPressure', { n: sellShare })
         : t('points.detail.activityBalanced');
+  const count = Number(safeSummary.count || 0);
+  const volume = Number(safeSummary.volume || 0);
   return (
     <div style={{
       marginTop: 14,
@@ -199,11 +217,11 @@ function MarketActivityStrip({ summary, rangeLabel, locale = 'es-MX', t }) {
     }}>
       <ActivityMetric
         label={t('points.detail.activityRange', { range: rangeLabel })}
-        value={t('points.detail.activityTrades', { n: summary.count })}
+        value={t('points.detail.activityTrades', { n: count })}
       />
       <ActivityMetric
-        label={t('points.detail.activityVolume')}
-        value={`${formatCompactMxnp(summary.volume, locale)} MXNP`}
+        label={t('points.detail.activityVolumeRange', { range: rangeLabel })}
+        value={`${formatCompactMxnp(volume, locale)} MXNP · ${t('points.detail.activityOpsShort', { n: count })}`}
       />
       <ActivityMetric
         label={t('points.detail.activityPressure')}
@@ -212,7 +230,7 @@ function MarketActivityStrip({ summary, rangeLabel, locale = 'es-MX', t }) {
       />
       <ActivityMetric
         label={t('points.detail.activityLast')}
-        value={formatActivityAge(summary.lastAt, t)}
+        value={formatActivityAge(latestTradeAt, t)}
       />
     </div>
   );
@@ -2268,6 +2286,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
       ? [displayActivityByOutcome?.[0] || []]
       : displayActivityByOutcome,
   );
+  const latestTradeAt = unixSecondsFromDateLike(market.lastTradeAt) || activitySummary.lastAt;
   const isCanceled = market.status === 'canceled';
   const winnerIndex = !isCanceled && market.status === 'resolved' && market.outcome != null ? Number(market.outcome) : null;
   const isResolved = winnerIndex != null && Number.isFinite(winnerIndex);
@@ -2597,6 +2616,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 <MarketActivityStrip
                   summary={activitySummary}
                   rangeLabel={t(activeChartRange.labelKey)}
+                  lastTradeAt={latestTradeAt}
                   locale={numberLocale}
                   t={t}
                 />

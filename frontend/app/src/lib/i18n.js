@@ -575,6 +575,8 @@ const STRINGS = {
   'points.detail.activityRange':   { es: 'Actividad {range}',   en: '{range} activity' },
   'points.detail.activityTrades':  { es: '{n} operaciones',     en: '{n} trades' },
   'points.detail.activityVolume':  { es: 'Volumen',             en: 'Volume' },
+  'points.detail.activityVolumeRange': { es: 'Volumen {range}', en: '{range} volume' },
+  'points.detail.activityOpsShort': { es: '{n} ops',             en: '{n} ops' },
   'points.detail.activityPressure': { es: 'Presión',            en: 'Pressure' },
   'points.detail.activityLast':    { es: 'Último movimiento',   en: 'Last movement' },
   'points.detail.activityNeutral': { es: 'Neutral',             en: 'Neutral' },

@@ -19,3 +19,9 @@ test('points volume is additive traded collateral, never signed net flow', () =>
     assert.doesNotMatch(source, /SUM\(collateral\)/);
   }
 });
+
+test('points market detail exposes latest trade timestamp separately from selected chart range', () => {
+  assert.match(marketDetailSource, /MAX\(created_at\) FROM points_trades/);
+  assert.match(marketDetailSource, /AS last_trade_at/);
+  assert.match(marketDetailSource, /lastTradeAt: r\.last_trade_at/);
+});

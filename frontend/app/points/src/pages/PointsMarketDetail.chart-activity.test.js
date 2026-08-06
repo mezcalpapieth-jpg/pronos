@@ -27,7 +27,9 @@ test('points market detail overlays real activity and range controls on the char
   assert.match(detailSource, /market\.status === 'resolved' \? '30' : '1'/);
   assert.match(detailSource, /activityByOutcome/);
   assert.match(detailSource, /summarizeActivity/);
+  assert.match(detailSource, /unixSecondsFromDateLike\(market\.lastTradeAt\) \|\| activitySummary\.lastAt/);
   assert.match(detailSource, /MarketActivityStrip/);
+  assert.match(detailSource, /lastTradeAt=\{latestTradeAt\}/);
   assert.match(
     detailSource,
     /export default function PointsMarketDetail[\s\S]*const lang = useLang\(\);\n\s+const numberLocale = lang === 'en' \? 'en-US' : 'es-MX';/
@@ -54,6 +56,8 @@ test('chart range copy is translated', () => {
   assert.match(i18nSource, /'points\.detail\.range30d'/);
   assert.match(i18nSource, /'points\.detail\.activityTrades'/);
   assert.match(i18nSource, /'points\.detail\.activityVolume'/);
+  assert.match(i18nSource, /'points\.detail\.activityVolumeRange'/);
+  assert.match(i18nSource, /'points\.detail\.activityOpsShort'/);
   assert.match(i18nSource, /'points\.detail\.activityPressure'/);
 });
 
