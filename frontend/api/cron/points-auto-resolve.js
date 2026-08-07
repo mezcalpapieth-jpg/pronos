@@ -46,6 +46,10 @@ import { releaseOpenLimitOrdersForMarkets } from '../_lib/points-limit-orders.js
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql   = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const MAX_BINARY_DIRECTION_CATCHUP_PER_RUN = 12;
+const AUTO_RESOLVABLE_API_CHART_SOURCES = new Set([
+  'apple-mx-songs',
+  'youtube-trending-mx',
+]);
 
 function parseJsonb(v, fb) {
   if (v && typeof v === 'object' && !Array.isArray(v)) return v;
@@ -165,11 +169,19 @@ function firstEvidenceUrl(evidence) {
   return hit?.url || null;
 }
 
+function isAutoResolvableApiChart({ resolverType, source }) {
+  const rt = String(resolverType || '').trim().toLowerCase();
+  const src = String(source || '').trim().toLowerCase();
+  return rt === 'api_chart' && AUTO_RESOLVABLE_API_CHART_SOURCES.has(src);
+}
+
 function isManualReviewMarket({ resolverType, cfg, row, sourceData }) {
   const rt = String(resolverType || '').trim().toLowerCase();
   if (rt === 'manual' || rt === 'manual_review') return true;
 
   const source = String(row?.source || cfg?.source || '').trim().toLowerCase();
+  if (isAutoResolvableApiChart({ resolverType: rt, source })) return false;
+
   if (['entertainment', 'codex-entertainment', 'codex-premios-juventud-2026'].includes(source)) {
     return true;
   }
@@ -285,6 +297,24 @@ async function queueManualReviewCandidate({ market, cfg, sourceData, outcomes, d
     reason: 'manual_review_queued',
     candidateId: returnedRows[0]?.id || null,
     source: candidate.source,
+  });
+}
+
+async function queueApiChartFallbackReview({ market, cfg, sourceData, outcomes, dry, report, error }) {
+  const message = error?.message || 'No se pudo leer la fuente automática.';
+  const reviewCfg = {
+    ...(cfg || {}),
+    confidenceBps: 0,
+    suggestedOutcomeIndex: null,
+    rationale: `El lector automático de charts no pudo confirmar el resultado: ${message}. Requiere revisión manual antes de pagar MXNP.`,
+  };
+  await queueManualReviewCandidate({
+    market,
+    cfg: reviewCfg,
+    sourceData,
+    outcomes,
+    dry,
+    report,
   });
 }
 
@@ -828,6 +858,26 @@ export async function runAutoResolve({ dry = false } = {}) {
             }
           }
           report.deferred.push(deferred);
+          continue;
+        }
+        if (isAutoResolvableApiChart({ resolverType, source: cfg?.source })) {
+          try {
+            await queueApiChartFallbackReview({
+              market: m,
+              cfg,
+              sourceData,
+              outcomes: marketOutcomes,
+              dry,
+              report,
+              error: e,
+            });
+            continue;
+          } catch (queueErr) {
+            report.errors.push({
+              id: m.id,
+              error: `resolve_failed: ${e.message}; api_chart_manual_review_queue_failed: ${queueErr.message}`,
+            });
+          }
           continue;
         }
         report.errors.push({ id: m.id, error: `resolve_failed: ${e.message}` });
