@@ -36,7 +36,8 @@ import {
   finalMarketOptions,
   findChampionsLeagueFinalMarket,
 } from '@app/lib/championsLeague.js';
-import Sparkline, { priceDomain } from '@app/components/Sparkline.jsx';
+import Sparkline from '@app/components/Sparkline.jsx';
+import MultiSparkline from '@app/components/MultiSparkline.jsx';
 import LiveScorePanel from '@app/components/LiveScorePanel.jsx';
 import ShareButton from '@app/components/ShareButton.jsx';
 import TeamMarketStrip from '@app/components/TeamMarketStrip.jsx';
@@ -2631,12 +2632,13 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                     </span>
                   </div>
                 )}
-                {/* One sparkline per outcome. For binary markets we show
-                    a taller chart with just the YES line (equivalent to
-                    the NO line mirrored, no extra info). For 3+ outcome
-                    markets we stack smaller sparklines so the user sees
-                    every curve — one color per option, matching the buy
-                    buttons below. */}
+                {/* Binary markets show one taller chart with just the YES
+                    line (the NO line is its mirror, no extra info). For
+                    3+ outcomes every curve is drawn on ONE shared axis —
+                    stacked rows each had their own baseline, so a 20%
+                    line and a 95% line looked the same height and the
+                    reader could not compare them. One color per option,
+                    matching the buy buttons below. */}
                 {displayOutcomes.length <= 2 ? (
                   <Sparkline
                     height={200}
@@ -2659,66 +2661,42 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                   // flat zero-ish trace crowding the chart. Color
                   // stays tied to the outcome's ORIGINAL index so
                   // it matches the color in the buy-list below.
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {(() => {
-                      const chartIndices = displayOutcomes.length <= 4
-                        ? displayOutcomes.map((_, i) => i)
-                        : [...displayOutcomes.keys()]
-                            .sort((a, b) => (displayPrices[b] ?? 0) - (displayPrices[a] ?? 0))
-                            .slice(0, 4);
-                      // One domain across every charted outcome, so the
-                      // stacked rows stay visually comparable.
-                      const sharedValues = chartIndices.flatMap((i) => {
-                        const s = displayHistoryByOutcome?.[i];
-                        return Array.isArray(s)
-                          ? s.map(pt => (pt && typeof pt === 'object' && 'p' in pt ? Number(pt.p) : Number(pt)))
-                              .filter(Number.isFinite)
-                          : [];
-                      });
-                      const sharedDomain = sharedValues.length >= 2 ? priceDomain(sharedValues) : null;
-                      return chartIndices.map((i, slot) => {
-                        const label = displayOutcomes[i];
-                        const color = OUTCOME_COLORS[i % OUTCOME_COLORS.length];
-                        const series = displayHistoryByOutcome && displayHistoryByOutcome[i];
-                        // Stacked lines share one time axis, carried by
-                        // the bottom row so it reads as a single chart.
-                        const carriesAxis = slot === chartIndices.length - 1;
-                        return (
-                          <Sparkline
-                            key={i}
-                            height={carriesAxis ? 66 : 48}
-                            showXAxis={carriesAxis}
-                            domainMin={sharedDomain?.min}
-                            domainMax={sharedDomain?.max}
-                            color={color}
-                            strokeWidth={2}
-                            fill={false}
-                            showValue={true}
-                            valueWidth={44}
-                            label={label.length > 10 ? label.slice(0, 9) + '…' : label}
-                            labelWidth={84}
-                            data={Array.isArray(series) ? series : []}
-                            activity={displayActivityByOutcome?.[i] || []}
-                            targetPct={pctFor(i)}
-                            seed={`points-detail-${market.id}-${label || 'opt' + i}`}
-                            showEmptyState={i === chartIndices[0]}
-                          />
-                        );
-                      });
-                    })()}
-                    {displayOutcomes.length > 4 && (
-                      <p style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 10,
-                        color: 'var(--text-muted)',
-                        letterSpacing: '0.04em',
-                        margin: '4px 0 0',
-                        textAlign: 'right',
-                      }}>
-                        {t('points.detail.topOnly', { n: displayOutcomes.length })}
-                      </p>
-                    )}
-                  </div>
+                  (() => {
+                    const chartIndices = displayOutcomes.length <= 4
+                      ? displayOutcomes.map((_, i) => i)
+                      : [...displayOutcomes.keys()]
+                          .sort((a, b) => (displayPrices[b] ?? 0) - (displayPrices[a] ?? 0))
+                          .slice(0, 4);
+                    return (
+                      <MultiSparkline
+                        height={240}
+                        strokeWidth={2}
+                        series={chartIndices.map((i) => ({
+                          key: `opt-${i}`,
+                          label: displayOutcomes[i],
+                          color: OUTCOME_COLORS[i % OUTCOME_COLORS.length],
+                          data: Array.isArray(displayHistoryByOutcome?.[i])
+                            ? displayHistoryByOutcome[i]
+                            : [],
+                          targetPct: pctFor(i),
+                        }))}
+                        activity={chartIndices.map(i => displayActivityByOutcome?.[i] || [])}
+                        emptyLabel="Sin actividad todavía"
+                        emptySubLabel="El precio se moverá con el primer trade."
+                        legendNote={displayOutcomes.length > 4 ? (
+                          <span style={{
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: 10,
+                            color: 'var(--text-muted)',
+                            letterSpacing: '0.04em',
+                            alignSelf: 'center',
+                          }}>
+                            {t('points.detail.topOnly', { n: displayOutcomes.length })}
+                          </span>
+                        ) : null}
+                      />
+                    );
+                  })()
                 )}
                 <MarketActivityStrip
                   summary={activitySummary}

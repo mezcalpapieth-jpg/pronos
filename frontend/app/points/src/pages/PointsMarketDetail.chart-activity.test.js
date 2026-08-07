@@ -14,6 +14,7 @@ const navSource = await readFile(new URL('../components/PointsNav.jsx', import.m
 const portfolioSource = await readFile(new URL('./PointsPortfolio.jsx', import.meta.url), 'utf8');
 const buyModalSource = await readFile(new URL('../components/PointsBuyModal.jsx', import.meta.url), 'utf8');
 const marketCardSource = await readFile(new URL('../components/PointsMarketCard.jsx', import.meta.url), 'utf8');
+const multiSource = await readFile(new URL('../../../src/components/MultiSparkline.jsx', import.meta.url), 'utf8');
 
 test('points market detail overlays real activity and range controls on the chart', () => {
   assert.match(detailSource, /fetchTradeActivity/);
@@ -36,8 +37,30 @@ test('points market detail overlays real activity and range controls on the char
   );
   assert.match(detailSource, /outcome: 'all'/);
   assert.match(detailSource, /activity=\{displayActivityByOutcome\?\.\[0\] \|\| \[\]\}/);
-  assert.match(detailSource, /activity=\{displayActivityByOutcome\?\.\[i\] \|\| \[\]\}/);
+  // Multi-outcome markets pass every outcome's activity to one chart,
+  // which merges them into a single volume band.
+  assert.match(detailSource, /activity=\{chartIndices\.map\(i => displayActivityByOutcome\?\.\[i\] \|\| \[\]\)\}/);
   assert.match(detailSource, /orderBookRefresh/);
+});
+
+test('multi-outcome markets draw every line on one shared axis', () => {
+  // Stacked one-row-per-outcome sparklines gave each line its own
+  // baseline, so lines at 20% and 95% looked identical.
+  assert.match(detailSource, /import MultiSparkline from '@app\/components\/MultiSparkline\.jsx'/);
+  assert.match(detailSource, /<MultiSparkline/);
+  assert.doesNotMatch(detailSource, /domainMin=\{sharedDomain\?\.min\}/);
+  assert.doesNotMatch(detailSource, /carriesAxis/);
+
+  assert.match(multiSource, /export default function MultiSparkline/);
+  assert.match(multiSource, /priceDomain/);
+  // One domain and one time axis shared by every series.
+  assert.match(multiSource, /const domain = useMemo/);
+  assert.match(multiSource, /const timeBounds = useMemo/);
+  // Step-after holds, same as the single-line chart.
+  assert.match(multiSource, /L\$\{coords\[i\]\.x\.toFixed\(2\)\},\$\{coords\[i - 1\]\.y\.toFixed\(2\)\}/);
+  // Legend replaces per-row labels and doubles as the hover readout.
+  assert.match(multiSource, /hoverReadouts/);
+  assert.doesNotMatch(multiSource, /Math\.random/);
 });
 
 test('points API client exposes anonymous trade activity endpoint', () => {
