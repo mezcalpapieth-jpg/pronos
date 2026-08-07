@@ -57,8 +57,8 @@ test('chart range copy is translated', () => {
   assert.match(i18nSource, /'points\.detail\.activityTrades'/);
   assert.match(i18nSource, /'points\.detail\.activityVolume'/);
   assert.match(i18nSource, /'points\.detail\.activityVolumeRange'/);
-  assert.match(i18nSource, /'points\.detail\.activityOpsShort'/);
   assert.match(i18nSource, /'points\.detail\.activityPressure'/);
+  assert.doesNotMatch(detailSource, /activityOpsShort/);
 });
 
 test('points surfaces refresh live after trades, claims, and remote market movement', () => {

@@ -221,7 +221,7 @@ function MarketActivityStrip({ summary, rangeLabel, lastTradeAt, locale = 'es-MX
       />
       <ActivityMetric
         label={t('points.detail.activityVolumeRange', { range: rangeLabel })}
-        value={`${formatCompactMxnp(volume, locale)} MXNP · ${t('points.detail.activityOpsShort', { n: count })}`}
+        value={`${formatCompactMxnp(volume, locale)} MXNP`}
       />
       <ActivityMetric
         label={t('points.detail.activityPressure')}
