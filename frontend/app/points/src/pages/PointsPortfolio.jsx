@@ -30,8 +30,10 @@ import {
   claimDaily,
   fetchDailyStatus,
   dismissPosition,
+  fetchPnlHistory,
   publicErrorMessage,
 } from '../lib/pointsApi.js';
+import PnlChartCard from '../components/PnlChartCard.jsx';
 import { emitPointsRefresh, onPointsRefresh } from '../lib/pointsLiveRefresh.js';
 
 function fmt(n) {
@@ -138,7 +140,7 @@ function PositionCard({ position, onSell, onRedeem, onDismiss, selling, redeemin
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.08em', marginBottom: 2 }}>
             PnL
           </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700, color: pnlPos ? 'var(--green)' : 'var(--danger)' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700, color: pnlPos ? 'var(--success)' : 'var(--danger)' }}>
             {pnlPos ? '+' : ''}{fmt(pnl)}
           </div>
         </div>
@@ -416,7 +418,7 @@ function MiniLeaderboard({ currentUsername }) {
               width: 56,
               textAlign: 'right',
               fontSize: 10,
-              color: deltaPos ? 'var(--green)' : 'var(--danger)',
+              color: deltaPos ? 'var(--success)' : 'var(--danger)',
             }}>
               {deltaPos ? '+' : ''}{fmt(delta)}
             </span>
@@ -535,7 +537,7 @@ function CycleHistoryLeaderboard({ currentUsername }) {
                         width: 56,
                         textAlign: 'right',
                         fontSize: 10,
-                        color: pnlPos ? 'var(--green)' : 'var(--danger)',
+                        color: pnlPos ? 'var(--success)' : 'var(--danger)',
                       }}>
                         {pnlPos ? '+' : ''}{fmt(pnl)}
                       </span>
@@ -670,6 +672,9 @@ export default function PointsPortfolio() {
   const [actionState, setActionState] = useState({ id: null, type: null });
   const [sellPreview, setSellPreview] = useState(null);
   const [msg, setMsg] = useState(null);
+  const [pnlSeries, setPnlSeries] = useState([]);
+  const [pnlLoading, setPnlLoading] = useState(true);
+  const [pnlRange, setPnlRange] = useState(0); // 0 = since first trade
   const sellQuoteSeqRef = useRef(0);
   const sellQuoteTimerRef = useRef(null);
 
@@ -686,6 +691,18 @@ export default function PointsPortfolio() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, authenticated, tab]);
+
+  // Separate from load(): switching the chart range must not refetch
+  // positions and history and flash the whole page.
+  useEffect(() => {
+    if (!authenticated || tab !== 'activo') return undefined;
+    let cancelled = false;
+    setPnlLoading(true);
+    fetchPnlHistory({ days: pnlRange })
+      .then(({ series }) => { if (!cancelled) setPnlSeries(series || []); })
+      .finally(() => { if (!cancelled) setPnlLoading(false); });
+    return () => { cancelled = true; };
+  }, [authenticated, tab, pnlRange]);
 
   async function load({ silent = false } = {}) {
     if (!silent) setLoading(true);
@@ -931,8 +948,8 @@ export default function PointsPortfolio() {
                 {[
                   { label: 'Balance', value: `${fmt(balance)} MXNP`, color: 'var(--green)' },
                   { label: 'En posiciones', value: `${fmt(summary?.currentValue || 0)} MXNP`, color: 'var(--text-primary)' },
-                  { label: 'PnL abierto', value: signedFmt(openPnl), color: openPnl >= 0 ? 'var(--green)' : 'var(--danger)' },
-                  { label: 'PnL total', value: signedFmt(totalPnl), color: totalPnl >= 0 ? 'var(--green)' : 'var(--danger)' },
+                  { label: 'PnL abierto', value: signedFmt(openPnl), color: openPnl >= 0 ? 'var(--success)' : 'var(--danger)' },
+                  { label: 'PnL total', value: signedFmt(totalPnl), color: totalPnl >= 0 ? 'var(--success)' : 'var(--danger)' },
                 ].map(({ label, value, color }) => (
                   <div key={label} className="points-portfolio-stat-card">
                     <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 8, textTransform: 'uppercase' }}>
@@ -944,6 +961,13 @@ export default function PointsPortfolio() {
                   </div>
                 ))}
               </div>
+
+              <PnlChartCard
+                series={pnlSeries}
+                range={pnlRange}
+                onRangeChange={setPnlRange}
+                loading={pnlLoading}
+              />
 
               {msg && (
                 <div style={{
@@ -1125,7 +1149,7 @@ function HistoryView({ history, summary, loading }) {
                   )}
                   <span>{m.transactions?.length || 0} transaccion{(m.transactions?.length || 0) === 1 ? '' : 'es'}</span>
                 </span>
-                <span style={{ color: pnlPos ? 'var(--green)' : 'var(--danger)', fontWeight: 700 }}>
+                <span style={{ color: pnlPos ? 'var(--success)' : 'var(--danger)', fontWeight: 700 }}>
                   {pnlPos ? '+' : ''}{fmt(pnl)} MXNP
                 </span>
               </div>
@@ -1151,7 +1175,7 @@ function HistoryView({ history, summary, loading }) {
         </div>
         <div style={{
           fontFamily: 'var(--font-display)', fontSize: 32,
-          color: totalPositive ? 'var(--green)' : 'var(--text-secondary)',
+          color: totalPositive ? 'var(--success)' : 'var(--text-secondary)',
         }}>
           {totalPositive ? '+' : ''}{fmt(summary?.totalPnl)}
         </div>

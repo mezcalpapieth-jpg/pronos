@@ -17,6 +17,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { historyPnlValue } from '../lib/historyPnl.js';
+import { fetchPnlHistory } from '../lib/pointsApi.js';
+import PnlChartCard from '../components/PnlChartCard.jsx';
 
 function fmt(n, d = 2) {
   const v = Number(n);
@@ -110,6 +112,9 @@ export default function PointsUserProfile() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [tab, setTab] = useState('activo'); // 'activo' | 'historial'
+  const [pnlSeries, setPnlSeries] = useState([]);
+  const [pnlLoading, setPnlLoading] = useState(true);
+  const [pnlRange, setPnlRange] = useState(0); // 0 = since first trade
   const backTarget = typeof location.state?.from === 'string' && location.state.from.startsWith('/')
     ? location.state.from
     : null;
@@ -171,9 +176,22 @@ export default function PointsUserProfile() {
     return () => { cancelled = true; };
   }, [profileUsername]);
 
+  // Kept out of the profile fetch above: the chart is additive, so it must
+  // never delay or fail the page that carries the actual profile data.
+  useEffect(() => {
+    let cancelled = false;
+    const username = String(profileUsername || '').trim();
+    if (!username) { setPnlSeries([]); setPnlLoading(false); return undefined; }
+    setPnlLoading(true);
+    fetchPnlHistory({ username, days: pnlRange })
+      .then(({ series }) => { if (!cancelled) setPnlSeries(series || []); })
+      .finally(() => { if (!cancelled) setPnlLoading(false); });
+    return () => { cancelled = true; };
+  }, [profileUsername, pnlRange]);
+
   const pnlColor = useMemo(() => {
     if (!data) return 'var(--text-primary)';
-    return data.stats.totalPnl > 0 ? 'var(--green)'
+    return data.stats.totalPnl > 0 ? 'var(--success)'
       : data.stats.totalPnl < 0 ? 'var(--danger)' : 'var(--text-primary)';
   }, [data]);
 
@@ -309,6 +327,14 @@ export default function PointsUserProfile() {
           color={stats.winRate != null && stats.winRate >= 50 ? 'var(--green)' : 'var(--text-primary)'}
         />
       </div>
+
+      <PnlChartCard
+        series={pnlSeries}
+        range={pnlRange}
+        onRangeChange={setPnlRange}
+        loading={pnlLoading}
+        emptySubLabel="Este usuario aún no tiene predicciones cerradas."
+      />
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 18, borderBottom: '1px solid var(--border)' }}>
@@ -631,7 +657,7 @@ function ActiveList({ rows, onOpen }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {rows.map(p => {
         const pnl = Number(p.unrealizedPnl || 0);
-        const pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--danger)' : 'var(--text-primary)';
+        const pnlColor = pnl > 0 ? 'var(--success)' : pnl < 0 ? 'var(--danger)' : 'var(--text-primary)';
         return (
           <div
             key={`${p.marketId}-${p.outcomeIndex}`}
@@ -697,7 +723,7 @@ function HistoryList({ rows, onOpen }) {
       {rows.map(m => {
         const tag = STATUS_LABEL[m.outcomeStatus] || STATUS_LABEL.open;
         const pnl = historyPnlValue(m);
-        const pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--danger)' : 'var(--text-primary)';
+        const pnlColor = pnl > 0 ? 'var(--success)' : pnl < 0 ? 'var(--danger)' : 'var(--text-primary)';
         const pickedLabel = m.pickedOutcomeLabel || pickedOutcomeLabelFromTransactions(m.transactions);
         return (
           <div

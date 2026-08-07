@@ -3004,7 +3004,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                         <span style={{ color: 'var(--text-muted)' }}>
                           {t('points.detail.valueLabel')}: <span style={{ color: 'var(--text-primary)' }}>{markValue.toFixed(2)} MXNP</span>
                         </span>
-                        <span style={{ color: pnlPos ? 'var(--green)' : 'var(--danger)' }}>
+                        <span style={{ color: pnlPos ? 'var(--success)' : 'var(--danger)' }}>
                           {pnlPos ? '+' : ''}{pnl.toFixed(2)} PnL
                         </span>
                       </div>

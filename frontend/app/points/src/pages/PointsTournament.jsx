@@ -91,7 +91,7 @@ function LeaderboardRow({ row, currentUsername }) {
         {fmt(row.balance ?? row.finalBalance)} MXNP
       </span>
       <span style={{
-        color: delta >= 0 ? 'var(--green)' : 'var(--danger)',
+        color: delta >= 0 ? 'var(--success)' : 'var(--danger)',
         textAlign: 'right',
       }}>
         {delta >= 0 ? '+' : ''}{fmt(delta)}

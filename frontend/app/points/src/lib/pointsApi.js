@@ -314,6 +314,25 @@ export async function fetchPriceHistory(ids, { days = 30, hours, outcome = 0, li
   }
 }
 
+/**
+ * Cumulative PnL series for the chart on the portfolio and public profiles.
+ * Pass `username` for a public profile; omit it for the signed-in user.
+ * `days: 0` (the default) means "since the first trade".
+ */
+export async function fetchPnlHistory({ username, days = 0 } = {}) {
+  const q = new URLSearchParams();
+  if (username) q.set('username', username);
+  if (days > 0) q.set('days', String(days));
+  try {
+    const { series = [], current = 0 } = await getJson(`/api/points/pnl-history?${q}`);
+    return { series, current };
+  } catch {
+    // Same posture as price history: the chart is additive, so a failure
+    // renders the truthful empty state rather than breaking the page.
+    return { series: [], current: 0 };
+  }
+}
+
 export async function fetchTradeActivity(ids, { days = 1, hours, outcome = 0, buckets = 48 } = {}) {
   const list = Array.isArray(ids) ? ids : [ids];
   const cleaned = list.filter(n => Number.isInteger(n) || (typeof n === 'string' && n.length > 0));
