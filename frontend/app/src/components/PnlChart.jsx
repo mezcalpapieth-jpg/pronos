@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useId, useRef, useLayoutEffect } from 'react';
+import { pnlDomain } from '../lib/pnlDomain.js';
 
 /**
  * Cumulative PnL chart — a signed line with a zero baseline.
@@ -41,21 +42,6 @@ function formatStamp(unixSeconds, withTime) {
 
 const TICK_STEPS = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000];
 
-/**
- * Signed domain that always contains zero — the baseline is the whole
- * reference for reading this chart, so a series that never crosses zero
- * still has to show it rather than floating in a zoomed band.
- */
-export function pnlDomain(values) {
-  const finite = values.filter(v => Number.isFinite(v));
-  if (finite.length === 0) return { min: -1, max: 1 };
-  let lo = Math.min(0, ...finite);
-  let hi = Math.max(0, ...finite);
-  if (lo === hi) return { min: lo - 1, max: hi + 1 };
-  const pad = (hi - lo) * 0.12;
-  return { min: lo - (lo < 0 ? pad : 0), max: hi + (hi > 0 ? pad : 0) };
-}
-
 function axisTicks(min, max, target = 4) {
   const span = Math.max(1e-6, max - min);
   const step = TICK_STEPS.find(s => span / s <= target + 1) || Math.ceil(span / target);
@@ -73,7 +59,7 @@ function compactTick(n) {
 
 export default function PnlChart({
   data = [],
-  height = 200,
+  height = 300,
   formatValue = defaultFormat,
   valueSuffix = '',
   emptyLabel = 'Sin actividad todavía',
@@ -126,7 +112,7 @@ export default function PnlChart({
   };
 
   const zeroY = y(0);
-  const last = points[points.length - 1];
+  const last = points.length ? points[points.length - 1] : null;
   const positive = (last?.v ?? 0) >= 0;
   const lineColor = positive ? GAIN : LOSS;
 
@@ -138,7 +124,7 @@ export default function PnlChart({
   // Area is closed against the zero rule, not the chart floor, so the
   // shaded region reads as "distance from break-even".
   const areaPath = useMemo(() => {
-    if (points.length === 0) return '';
+    if (points.length === 0 || !last) return '';
     const first = points[0];
     return `${linePath} L${x(last.t).toFixed(2)},${zeroY.toFixed(2)} L${x(first.t).toFixed(2)},${zeroY.toFixed(2)} Z`;
   }, [linePath, points, zeroY]);
@@ -163,27 +149,29 @@ export default function PnlChart({
     setHoveredIdx(best);
   }
 
-  if (points.length === 0) {
-    return (
-      <div style={{
-        height, display: 'flex', flexDirection: 'column', alignItems: 'center',
-        justifyContent: 'center', gap: 6, border: '1px solid var(--border)',
-        borderRadius: 10, background: 'var(--surface1)', ...style,
-      }}>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)' }}>
-          {emptyLabel}
-        </div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
-          {emptySubLabel}
-        </div>
-      </div>
-    );
-  }
+  const hovered = hoveredIdx != null ? points[hoveredIdx] ?? null : null;
 
-  const hovered = hoveredIdx != null ? points[hoveredIdx] : null;
-
+  // The ref'd wrapper renders in EVERY state, including empty. It used to be
+  // skipped on the empty branch, so the first render (series still loading)
+  // never attached the ref, the ResizeObserver was never created, and the
+  // chart stayed pinned at the fallback width for the life of the component.
   return (
     <div ref={plotRef} style={{ position: 'relative', width: '100%', ...style }}>
+      {points.length === 0 ? (
+        <div style={{
+          height, display: 'flex', flexDirection: 'column', alignItems: 'center',
+          justifyContent: 'center', gap: 6, border: '1px solid var(--border)',
+          borderRadius: 10, background: 'var(--surface1)',
+        }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)' }}>
+            {emptyLabel}
+          </div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
+            {emptySubLabel}
+          </div>
+        </div>
+      ) : (
+        <>
       <svg
         width="100%"
         height={height}
@@ -314,6 +302,8 @@ export default function PnlChart({
             {formatStamp(hovered.t, true)}
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

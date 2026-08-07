@@ -30,7 +30,7 @@ export default function PnlChartCard({
   title = 'Evolución del PnL',
   emptyLabel,
   emptySubLabel,
-  height = 200,
+  height = 300,
 }) {
   const last = series.length ? series[series.length - 1].v : 0;
   const positive = last >= 0;
