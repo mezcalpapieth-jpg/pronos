@@ -7,10 +7,12 @@ const source = await readFile(new URL('./run-generators.js', import.meta.url), '
 test('runAllGenerators attaches suggested pricing to generated specs before upsert', () => {
   assert.match(source, /attachDefaultSuggestedPricing/);
   assert.match(source, /tryAttachPolymarketPricing/);
+  assert.match(source, /attachMarketContextBlocks/);
   assert.match(source, /attachGeneratorPricing/);
   assert.match(source, /PRICING_CONCURRENCY/);
   assert.match(source, /await tryAttachPolymarketPricing\(specs\[index\]\)/);
   assert.match(source, /attachDefaultSuggestedPricing\(polymarketPriced\)/);
+  assert.match(source, /pricedSpecs\.map\(spec => attachMarketContextBlocks\(spec\)\)/);
 });
 
 test('points pending upsert persists per-option seed liquidities', () => {

@@ -7,7 +7,9 @@
  *   seedLiquidities?: number[] // index-aligned per-outcome liquidity
  *   ammMode?: 'unified' | 'parallel'  // default 'unified'
  *   featured?: boolean
- *   sport?, league?, outcomeImages?, geo?
+ *   sport?, league?, outcomeImages?, geo?,
+ *   resolverType?, resolverConfig?, resolutionSource?, resolutionCriteria?,
+ *   source?, sourceEventId?
  * }
  *
  * Off-chain MXNP market. Points-app only. The MVP build's on-chain
@@ -30,6 +32,7 @@ import { initialReserves } from '../../_lib/amm-math.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 import { deriveMarketTags } from '../../_lib/category-tags.js';
 import { normalizeSeedLiquidities } from '../../_lib/market-liquidity.js';
+import { buildMarketContextBlocks } from '../../_lib/market-context-blocks.js';
 import { neon } from '@neondatabase/serverless';
 
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -38,6 +41,7 @@ const ALLOWED_CATEGORIES = new Set([
   'general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup',
 ]);
 const ALLOWED_GEO_TAGS = new Set(['mexico', 'latam', 'world']);
+const ALLOWED_MANUAL_RESOLVERS = new Set(['manual', 'manual_review']);
 const ALLOWED_TOPIC_TAGS = new Set([
   'general',
   'politica',
@@ -65,6 +69,115 @@ function normalizeTagArray(value, allowed) {
   return { value: out.length ? out : null };
 }
 
+function trimOrNull(value, maxLen = 500) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, maxLen);
+}
+
+function normalizeUrlArray(value) {
+  if (value == null) return [];
+  const values = Array.isArray(value) ? value : [value];
+  const out = [];
+  for (const item of values) {
+    const url = trimOrNull(item, 1000);
+    if (!url) continue;
+    if (!/^https?:\/\//i.test(url)) return { error: 'invalid_resolution_source' };
+    if (!out.includes(url)) out.push(url);
+  }
+  return { value: out };
+}
+
+function inferSourceFromUrl(url) {
+  if (!url) return null;
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    if (host.includes('inegi.org.mx')) return 'inegi';
+    if (host.includes('polymarket.com')) return 'polymarket';
+  } catch {}
+  return null;
+}
+
+function normalizeResolverPayload({
+  resolverType,
+  resolverConfig,
+  resolutionSource,
+  resolutionCriteria,
+  source,
+  sourceEventId,
+}) {
+  const type = trimOrNull(resolverType, 40);
+  const sourceVal = trimOrNull(source, 120);
+  const sourceEventIdVal = trimOrNull(sourceEventId, 180);
+  const evidenceUrl = trimOrNull(resolutionSource, 1000);
+  const criteria = trimOrNull(resolutionCriteria, 1500);
+
+  if (resolverConfig != null && (typeof resolverConfig !== 'object' || Array.isArray(resolverConfig))) {
+    return { error: 'invalid_resolver_config' };
+  }
+
+  const cfg = resolverConfig ? { ...resolverConfig } : {};
+  const hasConfig = Object.keys(cfg).length > 0;
+  if (!type && !sourceVal && !sourceEventIdVal && !evidenceUrl && !criteria && !hasConfig) {
+    return {
+      value: {
+        resolverType: null,
+        resolverConfig: null,
+        source: null,
+        sourceEventId: null,
+      },
+    };
+  }
+
+  const normalizedType = type || 'manual_review';
+  if (!ALLOWED_MANUAL_RESOLVERS.has(normalizedType)) {
+    return { error: 'unsupported_resolver_type' };
+  }
+
+  const sourceUrls = normalizeUrlArray(cfg.sourceUrls || cfg.sources);
+  if (sourceUrls.error) return sourceUrls;
+  if (evidenceUrl && !/^https?:\/\//i.test(evidenceUrl)) {
+    return { error: 'invalid_resolution_source' };
+  }
+
+  const normalizedSource = sourceVal
+    || trimOrNull(cfg.source, 120)
+    || inferSourceFromUrl(evidenceUrl)
+    || 'admin-manual-review';
+  const normalizedSourceEventId = sourceEventIdVal || trimOrNull(cfg.sourceEventId, 180);
+  const normalizedConfig = {
+    ...cfg,
+    source: normalizedSource,
+  };
+
+  if (normalizedSourceEventId) normalizedConfig.sourceEventId = normalizedSourceEventId;
+  if (evidenceUrl) normalizedConfig.evidenceUrl = evidenceUrl;
+  if (criteria) {
+    normalizedConfig.criteria = criteria;
+    normalizedConfig.rationale = trimOrNull(normalizedConfig.rationale, 1500) || criteria;
+  } else if (normalizedConfig.criteria && !normalizedConfig.rationale) {
+    normalizedConfig.rationale = normalizedConfig.criteria;
+  }
+
+  const allSourceUrls = [
+    ...(sourceUrls.value || []),
+    ...(evidenceUrl ? [evidenceUrl] : []),
+  ];
+  if (allSourceUrls.length) {
+    normalizedConfig.sourceUrls = [...new Set(allSourceUrls)];
+  }
+
+  return {
+    value: {
+      resolverType: normalizedType,
+      resolverConfig: normalizedConfig,
+      source: normalizedSource,
+      sourceEventId: normalizedSourceEventId || null,
+    },
+  };
+}
+
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'POST, OPTIONS', credentials: true });
   if (cors) return cors;
@@ -77,6 +190,7 @@ export default async function handler(req, res) {
     question, category, endTime, outcomes, seedLiquidity, seedLiquidities, ammMode,
     featured,
     sport, league, outcomeImages, geo, topicTags,
+    resolverType, resolverConfig, resolutionSource, resolutionCriteria, source, sourceEventId,
   } = req.body || {};
   const mode = ammMode === 'parallel' ? 'parallel' : 'unified';
   // Points-app markets are off-chain forever; `marketMode` stays
@@ -164,6 +278,38 @@ export default async function handler(req, res) {
   const geoTagsJson = JSON.stringify(tagBundle.geoTags);
   const topicTagsJson = JSON.stringify(tagBundle.topicTags);
 
+  const normalizedResolver = normalizeResolverPayload({
+    resolverType,
+    resolverConfig,
+    resolutionSource,
+    resolutionCriteria,
+    source,
+    sourceEventId,
+  });
+  if (normalizedResolver.error) {
+    return res.status(400).json({ error: normalizedResolver.error });
+  }
+  const resolverTypeVal = normalizedResolver.value.resolverType;
+  const resolverConfigVal = normalizedResolver.value.resolverConfig;
+  const sourceVal = normalizedResolver.value.source;
+  const sourceEventIdVal = normalizedResolver.value.sourceEventId;
+  const resolverConfigWithContext = resolverConfigVal
+    ? {
+        ...resolverConfigVal,
+        contextBlocks: buildMarketContextBlocks({
+          question: question.trim(),
+          category,
+          outcomes: normalizedOutcomes,
+          end_time: endDate.toISOString(),
+          source: sourceVal,
+          source_event_id: sourceEventIdVal,
+          resolver_type: resolverTypeVal,
+          resolver_config: resolverConfigVal,
+        }),
+      }
+    : null;
+  const resolverConfigJson = resolverConfigWithContext ? JSON.stringify(resolverConfigWithContext) : null;
+
   // On-chain auto-deploy used to live here. It moved to
   // /api/protocol/admin/create-market when points-app and the MVP
   // were split; off-chain MXNP markets never touch the chain.
@@ -178,14 +324,22 @@ export default async function handler(req, res) {
       const result = await withTransaction(async (client) => {
         const r = await client.query(
           `INSERT INTO points_markets
-             (question, category, icon, outcomes, reserves, seed_liquidity, seed_liquidities,
+             (source, source_event_id, resolver_type, resolver_config,
+              question, category, icon, outcomes, reserves, seed_liquidity, seed_liquidities,
               end_time, status, created_by, amm_mode, featured,
               mode, chain_id, chain_market_id, chain_address,
               sport, league, outcome_images, category_tags, geo_tags, topic_tags)
-           VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7::jsonb, $8, 'active', $9, 'unified', $10,
-                   $11, $12, $13, $14, $15, $16, $17::jsonb, $18::jsonb, $19::jsonb, $20::jsonb)
+           VALUES ($1, $2, $3, $4::jsonb,
+                   $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11::jsonb,
+                   $12, 'active', $13, 'unified', $14,
+                   $15, $16, $17, $18,
+                   $19, $20, $21::jsonb, $22::jsonb, $23::jsonb, $24::jsonb)
            RETURNING id`,
           [
+            sourceVal,
+            sourceEventIdVal,
+            resolverTypeVal,
+            resolverConfigJson,
             question.trim(),
             category,
             marketIcon,
@@ -232,14 +386,22 @@ export default async function handler(req, res) {
     const result = await withTransaction(async (client) => {
       const parent = await client.query(
         `INSERT INTO points_markets
-           (question, category, icon, outcomes, reserves, seed_liquidity, seed_liquidities,
+           (source, source_event_id, resolver_type, resolver_config,
+            question, category, icon, outcomes, reserves, seed_liquidity, seed_liquidities,
             end_time, status, created_by, amm_mode, featured,
             mode, chain_id, chain_market_id, chain_address,
             sport, league, outcome_images, category_tags, geo_tags, topic_tags)
-         VALUES ($1, $2, $3, $4::jsonb, '[]'::jsonb, $5, $6::jsonb, $7, 'active', $8, 'parallel', $9,
-                 $10, $11, $12, $13, $14, $15, $16::jsonb, $17::jsonb, $18::jsonb, $19::jsonb)
+         VALUES ($1, $2, $3, $4::jsonb,
+                 $5, $6, $7, $8::jsonb, '[]'::jsonb, $9, $10::jsonb,
+                 $11, 'active', $12, 'parallel', $13,
+                 $14, $15, $16, $17,
+                 $18, $19, $20::jsonb, $21::jsonb, $22::jsonb, $23::jsonb)
          RETURNING id`,
         [
+          sourceVal,
+          sourceEventIdVal,
+          resolverTypeVal,
+          resolverConfigJson,
           question.trim(),
           category,
           marketIcon,

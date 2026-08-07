@@ -47,6 +47,7 @@ import { generateF1SeasonMarkets }      from './market-gen/f1-season.js';
 import { deriveMarketTags }             from './category-tags.js';
 import { attachDefaultSuggestedPricing } from './market-pricing.js';
 import { tryAttachPolymarketPricing }    from './polymarket-pricing.js';
+import { attachMarketContextBlocks }      from './market-context-blocks.js';
 
 const MARKET_ICON = null;
 const PRICING_CONCURRENCY = 4;
@@ -102,8 +103,9 @@ export async function runAllGenerators() {
     try {
       const specs = await gen.run();
       const pricedSpecs = await attachGeneratorPricing(specs);
-      sourceStats[gen.name] = { count: pricedSpecs.length };
-      if (pricedSpecs.length) allSpecs.push(...pricedSpecs);
+      const contextualSpecs = pricedSpecs.map(spec => attachMarketContextBlocks(spec));
+      sourceStats[gen.name] = { count: contextualSpecs.length };
+      if (contextualSpecs.length) allSpecs.push(...contextualSpecs);
     } catch (e) {
       console.error('[run-generators] generator failed', {
         source: gen.name,

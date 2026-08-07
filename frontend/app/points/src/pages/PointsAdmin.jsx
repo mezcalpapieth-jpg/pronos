@@ -1209,6 +1209,8 @@ function CreateMarketForm({ prefill }) {
     endDate: '',   // dd/mm/yyyy (text)
     endHour: '',   // 0-23 (string, validated on submit)
     endMinute: '', // 0-59 (string, validated on submit)
+    resolutionSource: prefill?.resolutionSource || prefill?.sourceUrl || '',
+    resolutionCriteria: prefill?.resolutionCriteria || '',
     outcomes: ['Sí', 'No'],
     seedLiquidities: [500, 500],
   });
@@ -1295,6 +1297,15 @@ function CreateMarketForm({ prefill }) {
     setState({ submitting: true, msg: null, err: null });
     // Binary markets are always unified (parallel = unified at N=2).
     const effectiveAmmMode = mode === 'binary' ? 'unified' : ammMode;
+    const resolutionSource = form.resolutionSource.trim();
+    const resolutionCriteria = form.resolutionCriteria.trim();
+    const resolutionPayload = (resolutionSource || resolutionCriteria)
+      ? {
+          resolverType: 'manual_review',
+          resolutionSource,
+          resolutionCriteria,
+        }
+      : {};
     try {
       const r = await postJson('/api/points/admin/create-market', {
         question: form.question,
@@ -1307,6 +1318,7 @@ function CreateMarketForm({ prefill }) {
         seedLiquidity: cleanedLiquidities[0] || 500,
         seedLiquidities: cleanedLiquidities,
         ammMode: effectiveAmmMode,
+        ...resolutionPayload,
       });
       const modeLabel = effectiveAmmMode === 'parallel' ? 'paralelo' : 'unificado';
       setState({
@@ -1320,6 +1332,8 @@ function CreateMarketForm({ prefill }) {
         endDate: '',
         endHour: '',
         endMinute: '',
+        resolutionSource: '',
+        resolutionCriteria: '',
         outcomes: mode === 'binary' ? ['Sí', 'No'] : ['', '', ''],
         seedLiquidities: mode === 'binary' ? [500, 500] : [500, 500, 500],
       }));
@@ -1483,6 +1497,35 @@ function CreateMarketForm({ prefill }) {
         }}>
           Horas 0–23, minutos 0–59. Se guarda en zona: <strong>{currentTimezoneLabel()}</strong>.
         </p>
+      </Field>
+
+      <Field label="Fuente de resolución">
+        <input
+          type="url"
+          value={form.resolutionSource}
+          onChange={e => setForm(f => ({ ...f, resolutionSource: e.target.value }))}
+          placeholder="https://en.www.inegi.org.mx/app/saladeprensa/"
+          style={inputStyle}
+        />
+        <p style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          color: 'var(--text-muted)',
+          margin: '6px 0 0',
+          letterSpacing: '0.04em',
+        }}>
+          Si agregas fuente o criterio, el mercado se enviará a Por resolver cuando cierre.
+        </p>
+      </Field>
+
+      <Field label="Criterio de resolución">
+        <textarea
+          value={form.resolutionCriteria}
+          onChange={e => setForm(f => ({ ...f, resolutionCriteria: e.target.value }))}
+          rows={3}
+          placeholder="Se resuelve con el comunicado oficial de INEGI del INPC de diciembre de 2026. Gana el rango que contenga la variación anual reportada."
+          style={{ ...inputStyle, resize: 'vertical' }}
+        />
       </Field>
 
       {/* ── AMM mode toggle (only meaningful for multi) ─────
