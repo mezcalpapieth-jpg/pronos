@@ -13,9 +13,15 @@ test('crypto 5-minute markets show and refresh the current user position after b
   assert.match(cryptoSource, /redeemWinnings/);
   assert.match(cryptoSource, /isResolved && p\.canRedeem/);
   assert.match(cryptoSource, /points\.detail\.claim/);
+  assert.match(cryptoSource, /const canTrade = marketStillOpen/);
+  assert.doesNotMatch(cryptoSource, /settlementLocked/);
+  assert.doesNotMatch(cryptoSource, /CRYPTO_TRADE_LOCK_MS/);
+  assert.match(cryptoSource, /selectedEndMs > nowMs/);
+  assert.match(cryptoSource, /setSelectedMarketId\(nextMarket\.id\)/);
 
   assert.match(detailSource, /positionRefreshNonce/);
   assert.match(detailSource, /async function handleTradeSuccess\(\)/);
   assert.match(detailSource, /onTradeSuccess=\{handleTradeSuccess\}/);
   assert.match(detailSource, /setPositionRefreshNonce\(v => v \+ 1\)/);
+  assert.match(detailSource, /const pollMs = isCryptoMarket \? 5_000 : 15_000/);
 });

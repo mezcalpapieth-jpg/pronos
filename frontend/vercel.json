@@ -21,12 +21,12 @@
     { "source": "/market",     "destination": "/points/market",     "permanent": true },
     { "source": "/teams",      "destination": "/points/teams",      "permanent": true },
     { "source": "/teams/:sport/:teamSlug", "destination": "/points/teams/:sport/:teamSlug", "permanent": true },
-    { "source": "/r/:username","destination": "/points/r/:username","permanent": true },
     { "source": "/u/:username","destination": "/points/u/:username","permanent": true },
     { "source": "/c/deportes/uefa-champions-league", "destination": "/points/c/deportes/uefa-champions-league", "permanent": true },
     { "source": "/c/:slug",    "destination": "/points/c/:slug",    "permanent": true }
   ],
   "rewrites": [
+    { "source": "/r/:username",        "destination": "/api/share/referral?username=:username" },
     { "source": "/mvp/market",    "destination": "/mvp/" },
     { "source": "/mvp/portfolio", "destination": "/mvp/" },
     { "source": "/mvp/admin",     "destination": "/mvp/" },

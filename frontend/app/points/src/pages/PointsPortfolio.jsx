@@ -50,6 +50,26 @@ function portfolioMarketHref(item) {
   return id ? `/market?id=${encodeURIComponent(id)}` : null;
 }
 
+function pickedOutcomeLabelFromTransactions(transactions = []) {
+  const picked = new Map();
+  for (const tx of transactions || []) {
+    if (tx?.side !== 'buy') continue;
+    const label = String(tx.outcomeLabel || '').trim();
+    if (!label || label === '—') continue;
+    const key = Number.isInteger(Number(tx.outcomeIndex))
+      ? String(tx.outcomeIndex)
+      : label.toLowerCase();
+    const current = picked.get(key) || { label, collateral: 0, shares: 0 };
+    current.collateral += Number(tx.collateral || 0);
+    current.shares += Number(tx.shares || 0);
+    picked.set(key, current);
+  }
+  return Array.from(picked.values())
+    .sort((a, b) => (b.collateral - a.collateral) || (b.shares - a.shares))
+    .map(item => item.label)
+    .join(', ');
+}
+
 // ─── Position card ───────────────────────────────────────────────────────────
 function PositionCard({ position, onSell, onRedeem, onDismiss, selling, redeeming, dismissing }) {
   const {
@@ -671,9 +691,15 @@ export default function PointsPortfolio() {
     if (!silent) setLoading(true);
     try {
       if (tab === 'activo') {
-        const r = await fetchPositions();
-        setPositions(r.positions || []);
-        setSummary(r.summary || null);
+        const [positionsResult, historyResult] = await Promise.all([
+          fetchPositions(),
+          fetchHistory().catch(() => null),
+        ]);
+        setPositions(positionsResult.positions || []);
+        setSummary(positionsResult.summary || null);
+        if (historyResult?.summary) {
+          setHistorySummary(historyResult.summary);
+        }
       } else if (tab === 'recompensas') {
         const r = await fetchMakerRewards();
         setRewards(r.rewards || []);
@@ -850,6 +876,8 @@ export default function PointsPortfolio() {
   }
 
   const balance = Number(user?.balance || 0);
+  const openPnl = Number(summary?.pnl || 0);
+  const totalPnl = Number(historySummary?.totalPnl ?? openPnl);
 
   return (
     <>
@@ -903,7 +931,8 @@ export default function PointsPortfolio() {
                 {[
                   { label: 'Balance', value: `${fmt(balance)} MXNP`, color: 'var(--green)' },
                   { label: 'En posiciones', value: `${fmt(summary?.currentValue || 0)} MXNP`, color: 'var(--text-primary)' },
-                  { label: 'PnL total', value: `${(summary?.pnl || 0) >= 0 ? '+' : ''}${fmt(summary?.pnl || 0)}`, color: (summary?.pnl || 0) >= 0 ? 'var(--green)' : 'var(--danger)' },
+                  { label: 'PnL abierto', value: signedFmt(openPnl), color: openPnl >= 0 ? 'var(--green)' : 'var(--danger)' },
+                  { label: 'PnL total', value: signedFmt(totalPnl), color: totalPnl >= 0 ? 'var(--green)' : 'var(--danger)' },
                 ].map(({ label, value, color }) => (
                   <div key={label} className="points-portfolio-stat-card">
                     <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 8, textTransform: 'uppercase' }}>
@@ -1052,6 +1081,7 @@ function HistoryView({ history, summary, loading }) {
           const pnl = historyPnlValue(m);
           const pnlPos = pnl >= 0;
           const marketHref = portfolioMarketHref(m);
+          const pickedLabel = m.pickedOutcomeLabel || pickedOutcomeLabelFromTransactions(m.transactions);
           return (
             <div key={m.marketId} style={{
               background: 'var(--surface1)',
@@ -1084,10 +1114,17 @@ function HistoryView({ history, summary, loading }) {
                 </span>
               </div>
               <div style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
                 fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)',
               }}>
-                <span>{m.transactions?.length || 0} transaccion{(m.transactions?.length || 0) === 1 ? '' : 'es'}</span>
+                <span style={{ display: 'flex', gap: 10, flexWrap: 'wrap', minWidth: 0 }}>
+                  {pickedLabel && (
+                    <span>
+                      Elegiste: <strong style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{pickedLabel}</strong>
+                    </span>
+                  )}
+                  <span>{m.transactions?.length || 0} transaccion{(m.transactions?.length || 0) === 1 ? '' : 'es'}</span>
+                </span>
                 <span style={{ color: pnlPos ? 'var(--green)' : 'var(--danger)', fontWeight: 700 }}>
                   {pnlPos ? '+' : ''}{fmt(pnl)} MXNP
                 </span>

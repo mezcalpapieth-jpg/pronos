@@ -22,6 +22,7 @@ import { withTransaction } from '../_lib/db-tx.js';
 import { seriesTradeLockFromRows } from '../_lib/series-markets.js';
 import { bestEffortInsertPointsPriceSnapshot } from '../_lib/points-price-snapshots.js';
 import { executeTriggeredLimitOrders } from '../_lib/points-limit-orders.js';
+import { assertCryptoTradeAllowed } from '../_lib/points-crypto-trade-guard.js';
 
 // Lightweight HTTP client used only to run the idempotent schema bootstrap.
 // Transactional work goes through withTransaction() which uses a WS Pool.
@@ -119,6 +120,7 @@ export default async function handler(req, res) {
       if (m.end_time && new Date(m.end_time) <= new Date()) {
         const err = new Error('market_expired'); err.status = 400; throw err;
       }
+      assertCryptoTradeAllowed(m);
       const seriesLock = await readSeriesTradeLock(client, m);
       if (seriesLock?.locked) {
         const err = new Error(seriesLock.status === 'not_needed' ? 'series_game_not_needed' : 'series_game_pending');

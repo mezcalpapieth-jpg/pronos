@@ -219,9 +219,35 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
   const closesAt = useMemo(() => meta.closesAt ? new Date(meta.closesAt) : (selectedMarket.endTime ? new Date(selectedMarket.endTime) : null), [meta.closesAt, selectedMarket.endTime]);
   const opensAt = useMemo(() => selectedMarket.startTime ? new Date(selectedMarket.startTime) : null, [selectedMarket.startTime]);
 
-  const canTrade = status === 'active' && closesAt && closesAt.getTime() > Date.now();
-  const isPending = status === 'pending' || (status === 'active' && opensAt && opensAt.getTime() > Date.now());
+  const closeMs = closesAt ? closesAt.getTime() : NaN;
+  const openMs = opensAt ? opensAt.getTime() : NaN;
+  const msUntilClose = Number.isFinite(closeMs) ? closeMs - nowMs : null;
+  const marketHasOpened = !Number.isFinite(openMs) || openMs <= nowMs;
+  const marketStillOpen = status === 'active' && marketHasOpened && msUntilClose != null && msUntilClose > 0;
+  const canTrade = marketStillOpen;
+  const isPending = status === 'pending' || (status === 'active' && !marketHasOpened);
   const isResolved = status === 'resolved';
+
+  useEffect(() => {
+    if (!market?.id || String(selectedMarketId) !== String(market.id)) return;
+    const selectedEndMs = dateMs(selectedMarket?.cryptoMeta?.closesAt || selectedMarket?.endTime);
+    if (!selectedEndMs || selectedEndMs > nowMs) return;
+    const nextMarket = sequence.find((item) => {
+      if (String(item.id) === String(selectedMarket.id)) return false;
+      const itemStartMs = dateMs(item.startTime || item.cryptoMeta?.openedAt);
+      return Number.isFinite(itemStartMs) && itemStartMs >= selectedEndMs;
+    });
+    if (nextMarket?.id) setSelectedMarketId(nextMarket.id);
+  }, [
+    market?.id,
+    nowMs,
+    selectedMarket?.cryptoMeta?.closesAt,
+    selectedMarket?.endTime,
+    selectedMarket?.id,
+    selectedMarketId,
+    sequence,
+    sequenceSig,
+  ]);
 
   const graphFrame = useMemo(
     () => computeCryptoGraphFrame(sequence, { nowMs, history }),

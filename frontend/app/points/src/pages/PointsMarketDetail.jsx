@@ -2004,7 +2004,9 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   // without forcing a full page refresh.
   useEffect(() => {
     if (!id || !market) return undefined;
-    if (market.status === 'resolved' && !market.cryptoMeta) return undefined;
+    const isCryptoMarket = Boolean(market.cryptoMeta);
+    if (market.status === 'resolved' && !isCryptoMarket) return undefined;
+    const pollMs = isCryptoMarket ? 5_000 : 15_000;
     const interval = window.setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       fetchMarket(id)
@@ -2023,7 +2025,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
           }
         })
         .catch(() => { /* transient — next tick will retry */ });
-    }, 15_000);
+    }, pollMs);
     return () => window.clearInterval(interval);
   }, [
     authenticated,

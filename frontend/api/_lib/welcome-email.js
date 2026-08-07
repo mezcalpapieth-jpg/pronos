@@ -1,7 +1,7 @@
 /**
  * Welcome email for the points-app (sent when a user sets their username).
  *
- * Reuses the same RESEND_API_KEY + "Simon <simon@pronos.io>" sender the
+ * Reuses the same RESEND_API_KEY + "Pronos <support@pronos.io>" sender the
  * waitlist uses, so no new vendor setup. If the key isn't set, the
  * function no-ops and returns false — callers should treat it as
  * best-effort (never block signup on a mail provider outage).
@@ -14,7 +14,7 @@
  */
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
-const FROM_EMAIL = 'Simon <simon@pronos.io>';
+const FROM_EMAIL = 'Pronos <support@pronos.io>';
 
 // Defensive HTML-entity escape. Username is regex-validated upstream
 // (lowercase + digits + underscore), so this is belt-and-suspenders —

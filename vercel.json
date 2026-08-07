@@ -40,7 +40,6 @@
     { "source": "/investors",  "destination": "/deck",              "permanent": true },
     { "source": "/earn",       "destination": "/points/earn",       "permanent": true },
     { "source": "/market",     "destination": "/points/market",     "permanent": true },
-    { "source": "/r/:username","destination": "/points/r/:username","permanent": true },
     { "source": "/u/:username","destination": "/points/u/:username","permanent": true },
     { "source": "/c/deportes/uefa-champions-league", "destination": "/points/c/deportes/uefa-champions-league", "permanent": true },
     { "source": "/c/:slug",    "destination": "/points/c/:slug",    "permanent": true }
@@ -51,6 +50,7 @@
     { "source": "/x",                  "destination": "/api/points/publicity/redirect?source=x" },
     { "source": "/instagram",          "destination": "/api/points/publicity/redirect?source=instagram" },
     { "source": "/tiktok",             "destination": "/api/points/publicity/redirect?source=tiktok" },
+    { "source": "/r/:username",        "destination": "/api/share/referral?username=:username" },
     { "source": "/mvp/market",    "destination": "/mvp/" },
     { "source": "/mvp/portfolio", "destination": "/mvp/" },
     { "source": "/mvp/admin",     "destination": "/mvp/" },

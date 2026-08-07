@@ -10,6 +10,24 @@ function displayQuestionFor(row) {
   return row.question;
 }
 
+function parseOutcomes(value) {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === 'object') return value;
+  if (typeof value !== 'string') return ['Sí', 'No'];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : ['Sí', 'No'];
+  } catch {
+    return ['Sí', 'No'];
+  }
+}
+
+function labelFor(outcomes, i) {
+  if (!Array.isArray(outcomes)) return '—';
+  const index = Number(i);
+  return outcomes[index] || `Opción ${index + 1}`;
+}
+
 function hasPositiveValue(map) {
   for (const value of map.values()) {
     if (Number(value) > 0.000001) return true;
@@ -30,6 +48,27 @@ function timeMs(value) {
   if (!value) return 0;
   const ms = new Date(value).getTime();
   return Number.isFinite(ms) ? ms : 0;
+}
+
+function addPickedOutcome(market, outcomeIndex, { collateral = 0, shares = 0 } = {}) {
+  const label = String(labelFor(market.outcomes, outcomeIndex) || '').trim();
+  if (!label || label === '—') return;
+  const key = Number.isInteger(Number(outcomeIndex)) ? String(outcomeIndex) : label.toLowerCase();
+  const current = market.pickedByOutcome.get(key) || { label, collateral: 0, shares: 0 };
+  current.collateral += Number(collateral || 0);
+  current.shares += Number(shares || 0);
+  market.pickedByOutcome.set(key, current);
+}
+
+function pickedOutcomeSummary(market) {
+  const labels = Array.from(market.pickedByOutcome.values())
+    .sort((a, b) => (b.collateral - a.collateral) || (b.shares - a.shares))
+    .map(item => item.label);
+
+  return {
+    pickedOutcomeLabels: labels,
+    pickedOutcomeLabel: labels.join(', '),
+  };
 }
 
 function statusAndRedeemValue(market, nowMs) {
@@ -70,6 +109,7 @@ export function buildPublicProfileHistory(tradeRows, { nowMs = Date.now() } = {}
         category: row.category,
         status: row.status,
         marketOutcome: row.m_outcome,
+        outcomes: parseOutcomes(row.outcomes),
         endTime: row.end_time,
         resolvedAt: row.resolved_at,
         lastTradeAt: null,
@@ -82,6 +122,7 @@ export function buildPublicProfileHistory(tradeRows, { nowMs = Date.now() } = {}
         redeemFees: 0,
         heldByOutcome: new Map(),
         redeemedByOutcome: new Map(),
+        pickedByOutcome: new Map(),
       });
     }
 
@@ -97,6 +138,7 @@ export function buildPublicProfileHistory(tradeRows, { nowMs = Date.now() } = {}
     if (row.side === 'buy') {
       market.buyCollateral += collateral;
       market.buyFees += fee;
+      addPickedOutcome(market, outcomeIndex, { collateral, shares });
       market.heldByOutcome.set(
         outcomeIndex,
         (market.heldByOutcome.get(outcomeIndex) || 0) + shares,
@@ -135,6 +177,7 @@ export function buildPublicProfileHistory(tradeRows, { nowMs = Date.now() } = {}
       resolvedAt: market.resolvedAt,
       lastTradeAt: market.lastTradeAt,
       finalScore: market.finalScore,
+      ...pickedOutcomeSummary(market),
     };
   });
 

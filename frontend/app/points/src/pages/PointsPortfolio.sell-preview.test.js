@@ -50,6 +50,13 @@ test('portfolio history displays losing PnL instead of hiding lost rows', () => 
   assert.doesNotMatch(source, /outcomeStatus\s*!==\s*'lost'/);
 });
 
+test('portfolio history displays the option selected by the user', () => {
+  assert.match(source, /function pickedOutcomeLabelFromTransactions\(transactions = \[\]\)/);
+  assert.match(source, /tx\?\.side !== 'buy'/);
+  assert.match(source, /m\.pickedOutcomeLabel \|\| pickedOutcomeLabelFromTransactions\(m\.transactions\)/);
+  assert.match(source, /Elegiste:/);
+});
+
 test('portfolio uses responsive class hooks for mobile layout', () => {
   assert.match(source, /points-portfolio-layout/);
   assert.match(source, /points-portfolio-stats/);
@@ -88,4 +95,12 @@ test('portfolio shows maker reward payouts in their own market-linked tab', () =
   assert.match(source, /points\.portfolio\.rewards\.total/);
   assert.match(source, /points\.portfolio\.rewards\.empty/);
   assert.match(source, /<RewardsView rewards=\{rewards\} summary=\{rewardSummary\} loading=\{loading\}/);
+});
+
+test('portfolio separates open PnL from total account PnL', () => {
+  assert.match(source, /Promise\.all\(\[\s*fetchPositions\(\),\s*fetchHistory\(\)\.catch\(\(\) => null\),\s*\]\)/s);
+  assert.match(source, /const openPnl = Number\(summary\?\.pnl \|\| 0\)/);
+  assert.match(source, /const totalPnl = Number\(historySummary\?\.totalPnl \?\? openPnl\)/);
+  assert.match(source, /label: 'PnL abierto'/);
+  assert.match(source, /label: 'PnL total'/);
 });

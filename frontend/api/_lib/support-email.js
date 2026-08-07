@@ -1,6 +1,6 @@
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
-const DEFAULT_FROM_EMAIL = 'Simon <simon@pronos.io>';
-const DEFAULT_SUPPORT_EMAIL = 'simon@pronos.io';
+const DEFAULT_FROM_EMAIL = 'Pronos <support@pronos.io>';
+const DEFAULT_SUPPORT_EMAIL = 'support@pronos.io';
 
 function escapeHtml(s) {
   return String(s || '')

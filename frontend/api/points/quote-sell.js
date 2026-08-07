@@ -10,6 +10,7 @@ import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { binarySellQuote, multiSellQuote } from '../_lib/amm-math.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
+import { cryptoTradeLock } from '../_lib/points-crypto-trade-guard.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -43,10 +44,20 @@ export default async function handler(req, res) {
 
   try {
     await ensurePointsSchema(schemaSql);
-    const rows = await sql`SELECT status, reserves FROM points_markets WHERE id = ${mid} LIMIT 1`;
+    const rows = await sql`SELECT status, reserves, end_time, resolver_config FROM points_markets WHERE id = ${mid} LIMIT 1`;
     if (rows.length === 0) return res.status(404).json({ error: 'market_not_found' });
     const r = rows[0];
     if (r.status !== 'active') return res.status(400).json({ error: 'market_closed' });
+    if (r.end_time && new Date(r.end_time) <= new Date()) {
+      return res.status(400).json({ error: 'market_expired' });
+    }
+    const cryptoLock = cryptoTradeLock(r);
+    if (cryptoLock) {
+      return res.status(cryptoLock.status).json({
+        error: cryptoLock.error,
+        detail: cryptoLock.detail,
+      });
+    }
 
     const reserves = parseJsonb(r.reserves, []).map(Number);
     if (reserves.length < 2) return res.status(400).json({ error: 'degenerate_reserves' });

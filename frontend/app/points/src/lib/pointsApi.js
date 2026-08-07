@@ -60,6 +60,14 @@ const PUBLIC_ERROR_COPY = {
     es: 'No pudimos cancelar la orden. Intenta otra vez.',
     en: 'Could not cancel the order. Try again.',
   },
+  pwa_bonus_not_eligible: {
+    es: 'Abre Pronos desde el icono de tu pantalla de inicio para reclamar este bono.',
+    en: 'Open Pronos from your home screen icon to claim this bonus.',
+  },
+  pwa_bonus_claim_failed: {
+    es: 'No pudimos reclamar el bono de instalación. Intenta otra vez.',
+    en: 'Could not claim the install bonus. Try again.',
+  },
   market_closed: {
     es: 'El mercado ya cerró o fue resuelto.',
     en: 'The market already closed or resolved.',
@@ -419,6 +427,15 @@ export async function claimDaily() {
  */
 export async function fetchDailyStatus() {
   return getJson('/api/points/daily-status');
+}
+
+// ─── Mobile web-app install bonus ──────────────────────────────────────────
+export async function fetchPwaInstallStatus() {
+  return getJson('/api/points/pwa-install-status');
+}
+
+export async function claimPwaInstallBonus(payload = {}) {
+  return postJson('/api/points/pwa-install-bonus', payload);
 }
 
 // ─── Referrals ──────────────────────────────────────────────────────────────

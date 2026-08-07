@@ -45,6 +45,21 @@ test('public user profile route hard-refreshes through the points SPA', () => {
   );
 });
 
+test('root referral route serves a share wrapper while app referral links stay in the points SPA', () => {
+  assert.ok(
+    hasRule(vercelConfig.rewrites, '/r/:username', '/api/share/referral?username=:username'),
+    'expected /r/:username to rewrite to the referral share wrapper',
+  );
+  assert.ok(
+    !hasRule(vercelConfig.redirects, '/r/:username', '/points/r/:username'),
+    'expected /r/:username to avoid a crawler-hostile redirect',
+  );
+  assert.ok(
+    hasRule(vercelConfig.rewrites, '/points/r/:username', '/points/'),
+    'expected /points/r/:username to rewrite to /points/',
+  );
+});
+
 test('all points app subroutes hard-refresh through the points SPA', () => {
   assert.ok(
     hasRule(vercelConfig.rewrites, '/points/:path*', '/points/'),

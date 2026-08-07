@@ -7,36 +7,18 @@
  *   "Gasolina Regular cierre de abril > $24.00"
  *
  * resolver_type='api_price', resolver_config.source='cre-gasolina'.
- * The auto-resolver re-reads the average at close (last UTC minute of
- * the month) and compares to the stored threshold.
+ * The auto-resolver re-reads the average at close (23:59 Mexico City
+ * on the last day of the month) and compares to the stored threshold.
  *
  * Idempotent across re-runs within the same month because
  * source_event_id encodes fuel type + month + strike.
  */
 import { readCreAverages, FUEL_TYPES, fuelLabel } from '../fuel.js';
+import { endOfMexicoMonthClose, mexicoMonthKey, mexicoMonthNameEs } from './mexico-time.js';
 
 function nextRoundStrike(current, step) {
   return Math.ceil(current / step) * step;
 }
-
-// Last UTC second of the current calendar month. Using UTC consistently
-// with the rest of the generator pool so end_time compares cleanly
-// against NOW() in the DB. Admin can edit in local tz if needed.
-function endOfMonthUtc(now = new Date()) {
-  // first day of NEXT month at 00:00 UTC, minus 1 minute
-  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0));
-  d.setUTCMinutes(d.getUTCMinutes() - 1);
-  return d;
-}
-
-function monthKey(d) {
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-}
-
-const MONTH_ES = [
-  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
-];
 
 export async function generateFuelMarkets() {
   let averages;
@@ -47,10 +29,10 @@ export async function generateFuelMarkets() {
     return [];
   }
 
-  const end = endOfMonthUtc();
+  const end = endOfMexicoMonthClose();
   const endIso = end.toISOString();
-  const month = MONTH_ES[end.getUTCMonth()];
-  const mKey = monthKey(end);
+  const month = mexicoMonthNameEs(end);
+  const mKey = mexicoMonthKey(end);
 
   const specs = [];
   for (const fuelType of FUEL_TYPES) {

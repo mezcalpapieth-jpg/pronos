@@ -39,6 +39,12 @@ test('public profile fetch bypasses stale not-found responses before giving up',
   assert.match(SOURCE, /No pudimos cargar el perfil/);
 });
 
+test('public profile history displays the selected outcome for support review', () => {
+  assert.match(SOURCE, /function pickedOutcomeLabelFromTransactions\(transactions = \[\]\)/);
+  assert.match(SOURCE, /m\.pickedOutcomeLabel \|\| pickedOutcomeLabelFromTransactions\(m\.transactions\)/);
+  assert.match(SOURCE, /Eligió \$\{pickedLabel\}/);
+});
+
 test('points router handles Vercel profile rewrite fallbacks', () => {
   assert.match(APP_SOURCE, /function PointsHomeEntry/);
   assert.match(APP_SOURCE, /routeLooksLikeProfile/);

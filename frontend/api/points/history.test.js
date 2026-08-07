@@ -15,3 +15,11 @@ test('history still exposes realized received separately from claimable payout',
   assert.match(source, /realizedReceived: round2\(m\.totalReceived\)/);
   assert.match(source, /totalReceived: round2\(effectiveReceived\)/);
 });
+
+test('portfolio history exposes the bought outcome at market level', () => {
+  assert.match(source, /function pickedOutcomeSummary\(transactions = \[\]\)/);
+  assert.match(source, /tx\?\.side !== 'buy'/);
+  assert.match(source, /pickedOutcomeLabels: labels/);
+  assert.match(source, /pickedOutcomeLabel: labels\.join\(', '\)/);
+  assert.match(source, /\.\.\.pickedOutcome/);
+});

@@ -33,6 +33,31 @@ function labelFor(outcomes, i) {
   return outcomes[i] || `Opción ${i + 1}`;
 }
 
+function pickedOutcomeSummary(transactions = []) {
+  const picked = new Map();
+  for (const tx of transactions) {
+    if (tx?.side !== 'buy') continue;
+    const label = String(tx.outcomeLabel || '').trim();
+    if (!label || label === '—') continue;
+    const key = Number.isInteger(Number(tx.outcomeIndex))
+      ? String(tx.outcomeIndex)
+      : label.toLowerCase();
+    const current = picked.get(key) || { label, collateral: 0, shares: 0 };
+    current.collateral += Number(tx.collateral || 0);
+    current.shares += Number(tx.shares || 0);
+    picked.set(key, current);
+  }
+
+  const labels = Array.from(picked.values())
+    .sort((a, b) => (b.collateral - a.collateral) || (b.shares - a.shares))
+    .map(item => item.label);
+
+  return {
+    pickedOutcomeLabels: labels,
+    pickedOutcomeLabel: labels.join(', '),
+  };
+}
+
 export default async function handler(req, res) {
   const timer = createApiTimer(res, 'points/history');
   const cors = applyCors(req, res, { methods: 'GET, OPTIONS', credentials: true });
@@ -209,6 +234,7 @@ export default async function handler(req, res) {
       }
       const effectiveReceived = m.totalReceived + claimablePayout;
       const netPnl = round2(effectiveReceived - m.totalInvested);
+      const pickedOutcome = pickedOutcomeSummary(m.transactions);
       // Snapshot of unsold shares' mark-to-market for "open" rows
       if (outcomeStatus === 'open' || outcomeStatus === 'pending') {
         const reserves = m.reserves;
@@ -232,6 +258,7 @@ export default async function handler(req, res) {
           claimablePayout: round2(claimablePayout),
           markToMarket: round2(mtm),
           netPnl,
+          ...pickedOutcome,
           transactions: m.transactions,
         };
       }
@@ -247,6 +274,7 @@ export default async function handler(req, res) {
         realizedReceived: round2(m.totalReceived),
         claimablePayout: round2(claimablePayout),
         netPnl,
+        ...pickedOutcome,
         transactions: m.transactions,
       };
     });

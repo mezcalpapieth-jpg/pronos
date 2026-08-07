@@ -7,6 +7,7 @@ import {
   multiSellQuote,
 } from './amm-math.js';
 import { bestEffortInsertPointsPriceSnapshot } from './points-price-snapshots.js';
+import { assertCryptoTradeAllowed, cryptoTradeLock } from './points-crypto-trade-guard.js';
 
 const EPSILON = 0.000001;
 const MAX_TRIGGERED_PER_PASS = 24;
@@ -247,7 +248,7 @@ export function normalizeLimitPrice(value) {
 
 async function lockMarket(client, marketId) {
   const result = await client.query(
-    `SELECT id, question, status, reserves, outcomes, end_time
+    `SELECT id, question, status, reserves, outcomes, end_time, resolver_config
        FROM points_markets
       WHERE id = $1
       FOR UPDATE`,
@@ -266,6 +267,7 @@ function assertMarketCanTrade(market) {
   if (market.end_time && new Date(market.end_time) <= new Date()) {
     const err = new Error('market_expired'); err.status = 400; throw err;
   }
+  assertCryptoTradeAllowed(market);
 }
 
 function reservesForMarket(market, outcomeIndex) {
@@ -538,6 +540,15 @@ export async function executeLimitOrderById(client, orderId) {
     const makerReward = await payMakerRewardForOrder(client, order.id, 'Mercado cerrado');
     await expireOrders(client, [order], 'market_closed');
     return { ok: true, status: 'expired', triggered: false, makerReward };
+  }
+  const cryptoLock = cryptoTradeLock(market);
+  if (cryptoLock) {
+    return {
+      ok: true,
+      status: 'open',
+      triggered: false,
+      detail: cryptoLock.error,
+    };
   }
 
   try {

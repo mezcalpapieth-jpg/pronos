@@ -82,6 +82,26 @@ function usernameFromProfileLocation(paramUsername, pathname, search) {
   return '';
 }
 
+function pickedOutcomeLabelFromTransactions(transactions = []) {
+  const picked = new Map();
+  for (const tx of transactions || []) {
+    if (tx?.side !== 'buy') continue;
+    const label = String(tx.outcomeLabel || '').trim();
+    if (!label || label === '—') continue;
+    const key = Number.isInteger(Number(tx.outcomeIndex))
+      ? String(tx.outcomeIndex)
+      : label.toLowerCase();
+    const current = picked.get(key) || { label, collateral: 0, shares: 0 };
+    current.collateral += Number(tx.collateral || 0);
+    current.shares += Number(tx.shares || 0);
+    picked.set(key, current);
+  }
+  return Array.from(picked.values())
+    .sort((a, b) => (b.collateral - a.collateral) || (b.shares - a.shares))
+    .map(item => item.label)
+    .join(', ');
+}
+
 export default function PointsUserProfile() {
   const { username: paramUsername } = useParams();
   const location = useLocation();
@@ -678,6 +698,7 @@ function HistoryList({ rows, onOpen }) {
         const tag = STATUS_LABEL[m.outcomeStatus] || STATUS_LABEL.open;
         const pnl = historyPnlValue(m);
         const pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--danger)' : 'var(--text-primary)';
+        const pickedLabel = m.pickedOutcomeLabel || pickedOutcomeLabelFromTransactions(m.transactions);
         return (
           <div
             key={m.marketId}
@@ -722,6 +743,8 @@ function HistoryList({ rows, onOpen }) {
                 {m.question}
               </div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                {pickedLabel ? `Eligió ${pickedLabel}` : ''}
+                {pickedLabel && m.resolvedAt ? ' · ' : ''}
                 {m.resolvedAt ? `Resuelto ${fmtDate(m.resolvedAt)}` : ''}
               </div>
             </div>

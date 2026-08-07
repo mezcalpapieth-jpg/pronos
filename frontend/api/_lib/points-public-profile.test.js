@@ -98,6 +98,41 @@ test('resolved profile history values a losing market as the invested loss', () 
   assert.equal(history[0].netPnl, -100);
 });
 
+test('profile history exposes the options the user bought', () => {
+  const history = buildPublicProfileHistory([
+    {
+      ...BASE_ROW,
+      outcomes: ['Sí', 'No'],
+      side: 'buy',
+      outcome_index: 0,
+      shares: 12,
+      collateral: 10,
+      fee: 0,
+    },
+    {
+      ...BASE_ROW,
+      outcomes: ['Sí', 'No'],
+      side: 'buy',
+      outcome_index: 1,
+      shares: 50,
+      collateral: 80,
+      fee: 0,
+    },
+    {
+      ...BASE_ROW,
+      outcomes: ['Sí', 'No'],
+      side: 'sell',
+      outcome_index: 0,
+      shares: 5,
+      collateral: 4,
+      fee: 0,
+    },
+  ], { nowMs: Date.parse('2026-05-02T00:00:00.000Z') });
+
+  assert.deepEqual(history[0].pickedOutcomeLabels, ['No', 'Sí']);
+  assert.equal(history[0].pickedOutcomeLabel, 'No, Sí');
+});
+
 test('profile stats are derived from corrected per-market statuses', () => {
   const history = buildPublicProfileHistory([
     {

@@ -12,6 +12,7 @@ import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { binaryBuyQuote, multiBuyQuote } from '../_lib/amm-math.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { seriesTradeLockFromRows } from '../_lib/series-markets.js';
+import { cryptoTradeLock } from '../_lib/points-crypto-trade-guard.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -79,6 +80,16 @@ export default async function handler(req, res) {
     if (rows.length === 0) return res.status(404).json({ error: 'market_not_found' });
     const r = rows[0];
     if (r.status !== 'active') return res.status(400).json({ error: 'market_closed' });
+    if (r.end_time && new Date(r.end_time) <= new Date()) {
+      return res.status(400).json({ error: 'market_expired' });
+    }
+    const cryptoLock = cryptoTradeLock(r);
+    if (cryptoLock) {
+      return res.status(cryptoLock.status).json({
+        error: cryptoLock.error,
+        detail: cryptoLock.detail,
+      });
+    }
     const seriesLock = await readSeriesTradeLock(r);
     if (seriesLock?.locked) {
       return res.status(400).json({

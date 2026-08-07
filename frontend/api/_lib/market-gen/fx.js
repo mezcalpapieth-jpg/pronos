@@ -13,30 +13,10 @@
  * is namespaced by the Friday-of-week date + strike.
  */
 import { readBanxicoLatest, SERIES } from '../banxico.js';
+import { formatMexicoDateEs, formatMexicoDateYmd, nextMexicoFridayClose } from './mexico-time.js';
 
 function nextRoundStrike(current, step) {
   return Math.ceil(current / step) * step;
-}
-
-// Roll forward to next Friday 21:00 UTC (end of US trading + past
-// Banxico's 12:00 CDT FIX publish). If today IS Friday, skip to the
-// one after so the market has a full week of depth to build up.
-function nextFridayCloseUtc(now = new Date()) {
-  const d = new Date(now);
-  const day = d.getUTCDay();                // 0=Sun, 5=Fri
-  const daysAhead = ((5 - day + 7) % 7) || 7; // today Fri → next Fri
-  d.setUTCDate(d.getUTCDate() + daysAhead);
-  d.setUTCHours(21, 0, 0, 0);
-  return d;
-}
-
-function formatDateYmd(d) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
-}
-function formatDateEs(d) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
 }
 
 export async function generateFxMarkets() {
@@ -54,10 +34,10 @@ export async function generateFxMarkets() {
   }
   if (!Number.isFinite(latest?.value) || latest.value <= 0) return [];
 
-  const end = nextFridayCloseUtc();
+  const end = nextMexicoFridayClose();
   const endIso = end.toISOString();
-  const endYmd = formatDateYmd(end);
-  const endEs  = formatDateEs(end);
+  const endYmd = formatMexicoDateYmd(end);
+  const endEs  = formatMexicoDateEs(end);
 
   // 0.25 MXN step → natural round numbers like $20.25 / $20.50 / $20.75.
   // Peso moves maybe 0.5-1% in a week, so a 0.25 strike keeps the

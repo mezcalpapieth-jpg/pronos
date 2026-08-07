@@ -156,7 +156,7 @@ export default function TermsOfService() {
           content published by those media outlets. If you own rights to any
           aggregated content and believe its use exceeds editorial fair use,
           write to{' '}
-          <a href="mailto:simon@pronos.io" style={linkStyle}>simon@pronos.io</a>{' '}
+          <a href="mailto:support@pronos.io" style={linkStyle}>support@pronos.io</a>{' '}
           and we will remove it.
         </P>
 
@@ -192,7 +192,7 @@ export default function TermsOfService() {
           violated these terms, if a competent authority requires it, or if we
           stop operating the service. You may close your account whenever you
           want by writing to{' '}
-          <a href="mailto:simon@pronos.io" style={linkStyle}>simon@pronos.io</a>.
+          <a href="mailto:support@pronos.io" style={linkStyle}>support@pronos.io</a>.
         </P>
         <P>
           After cancellation, activity already settled on blockchain remains
@@ -236,7 +236,7 @@ export default function TermsOfService() {
         <H2>18. Contact</H2>
         <P>
           Questions about these terms? Write to{' '}
-          <a href="mailto:simon@pronos.io" style={linkStyle}>simon@pronos.io</a>.
+          <a href="mailto:support@pronos.io" style={linkStyle}>support@pronos.io</a>.
         </P>
       </div>
     );
@@ -379,7 +379,7 @@ export default function TermsOfService() {
         eres titular de derechos sobre alguno de los contenidos
         agregados y consideras que su uso excede el fair-use editorial,
         escríbenos a{' '}
-        <a href="mailto:simon@pronos.io" style={linkStyle}>simon@pronos.io</a>{' '}
+        <a href="mailto:support@pronos.io" style={linkStyle}>support@pronos.io</a>{' '}
         y lo retiraremos.
       </P>
 
@@ -419,7 +419,7 @@ export default function TermsOfService() {
         consideramos que has violado estos términos, si lo requiere una
         autoridad competente, o si dejamos de operar el servicio. Tienes
         el derecho de cerrar tu cuenta cuando quieras escribiendo a{' '}
-        <a href="mailto:simon@pronos.io" style={linkStyle}>simon@pronos.io</a>.
+        <a href="mailto:support@pronos.io" style={linkStyle}>support@pronos.io</a>.
       </P>
       <P>
         Tras la cancelación, las operaciones ya liquidadas en blockchain
@@ -466,7 +466,7 @@ export default function TermsOfService() {
       <H2>18. Contacto</H2>
       <P>
         ¿Dudas sobre estos términos? Escríbenos a{' '}
-        <a href="mailto:simon@pronos.io" style={linkStyle}>simon@pronos.io</a>.
+        <a href="mailto:support@pronos.io" style={linkStyle}>support@pronos.io</a>.
       </P>
     </div>
   );

@@ -846,6 +846,16 @@ const STRINGS = {
   'points.portfolio.rewards.reason': { es: 'Recompensa por liquidez', en: 'Liquidity reward' },
 
   'points.earn.title':        { es: 'Gana MXNP',             en: 'Earn MXNP' },
+  'points.earn.install.eyebrow': { es: 'App en pantalla de inicio', en: 'Home screen app' },
+  'points.earn.install.title': { es: 'Instala Pronos y reclama 50 MXNP', en: 'Install Pronos and claim 50 MXNP' },
+  'points.earn.install.body': { es: 'Agrega Pronos a la pantalla de inicio para entrar más rápido y mantener tu racha.', en: 'Add Pronos to your home screen for faster access and streak retention.' },
+  'points.earn.install.ios': { es: 'En Safari, toca Compartir y luego Agregar a pantalla de inicio. Abre Pronos desde ese icono para reclamar.', en: 'In Safari, tap Share, then Add to Home Screen. Open Pronos from that icon to claim.' },
+  'points.earn.install.android': { es: 'En Chrome, instala Pronos desde el aviso o desde el menú. Abre Pronos desde ese icono para reclamar.', en: 'In Chrome, install Pronos from the prompt or menu. Open Pronos from that icon to claim.' },
+  'points.earn.install.ready': { es: 'Ya estás en la app instalada. Reclama tu bono una sola vez.', en: 'You are in the installed app. Claim your one-time bonus.' },
+  'points.earn.install.claim': { es: 'Reclamar 50 MXNP', en: 'Claim 50 MXNP' },
+  'points.earn.install.installButton': { es: 'Instalar Pronos', en: 'Install Pronos' },
+  'points.earn.install.claimed': { es: 'Bono reclamado', en: 'Bonus claimed' },
+  'points.earn.install.openFromHome': { es: 'Abre Pronos desde el icono de tu pantalla de inicio para activar el reclamo.', en: 'Open Pronos from your home screen icon to activate the claim.' },
 
   'points.status.won':        { es: 'GANADO',                en: 'WON' },
   'points.status.lost':       { es: 'PERDIDO',               en: 'LOST' },

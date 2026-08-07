@@ -54,7 +54,7 @@ export default function PrivacyPolicy() {
         <P>
           The Pronos operating team is responsible for processing your personal
           data. For anything related to this policy, you can contact us at{' '}
-          <a href="mailto:simon@pronos.io" style={linkStyle}>simon@pronos.io</a>.
+          <a href="mailto:support@pronos.io" style={linkStyle}>support@pronos.io</a>.
         </P>
 
         <H2>2. What data we collect</H2>
@@ -140,7 +140,7 @@ export default function PrivacyPolicy() {
         </Ul>
         <P>
           To exercise any of these rights, write to{' '}
-          <a href="mailto:simon@pronos.io" style={linkStyle}>simon@pronos.io</a>{' '}
+          <a href="mailto:support@pronos.io" style={linkStyle}>support@pronos.io</a>{' '}
           with the subject "ARCO Request". We commit to responding within the
           applicable legal period (20 business days).
         </P>
@@ -187,7 +187,7 @@ export default function PrivacyPolicy() {
         <H2>11. Contact</H2>
         <P>
           Questions, complaints, or ARCO requests? Write to{' '}
-          <a href="mailto:simon@pronos.io" style={linkStyle}>simon@pronos.io</a>.
+          <a href="mailto:support@pronos.io" style={linkStyle}>support@pronos.io</a>.
         </P>
       </div>
     );
@@ -222,7 +222,7 @@ export default function PrivacyPolicy() {
         El responsable del tratamiento de tus datos personales es el equipo
         operador de Pronos. Para cualquier asunto relacionado con esta
         política puedes escribirnos a{' '}
-        <a href="mailto:simon@pronos.io" style={linkStyle}>simon@pronos.io</a>.
+        <a href="mailto:support@pronos.io" style={linkStyle}>support@pronos.io</a>.
       </P>
 
       <H2>2. Qué datos recolectamos</H2>
@@ -311,7 +311,7 @@ export default function PrivacyPolicy() {
       </Ul>
       <P>
         Para ejercer cualquiera de estos derechos, escríbenos a{' '}
-        <a href="mailto:simon@pronos.io" style={linkStyle}>simon@pronos.io</a>{' '}
+        <a href="mailto:support@pronos.io" style={linkStyle}>support@pronos.io</a>{' '}
         con el asunto “Solicitud ARCO”. Nos comprometemos a responder
         dentro del plazo legal aplicable (20 días hábiles).
       </P>
@@ -361,7 +361,7 @@ export default function PrivacyPolicy() {
       <H2>11. Contacto</H2>
       <P>
         ¿Dudas, quejas, solicitudes ARCO? Escríbenos a{' '}
-        <a href="mailto:simon@pronos.io" style={linkStyle}>simon@pronos.io</a>.
+        <a href="mailto:support@pronos.io" style={linkStyle}>support@pronos.io</a>.
       </P>
     </div>
   );

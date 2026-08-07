@@ -23,6 +23,7 @@ import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { withTransaction } from '../_lib/db-tx.js';
 import { bestEffortInsertPointsPriceSnapshot } from '../_lib/points-price-snapshots.js';
 import { executeTriggeredLimitOrders, lockedReservedShares } from '../_lib/points-limit-orders.js';
+import { assertCryptoTradeAllowed } from '../_lib/points-crypto-trade-guard.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 
@@ -69,7 +70,7 @@ export default async function handler(req, res) {
 
     const result = await withTransaction(async (client) => {
       const marketResult = await client.query(
-        `SELECT id, status, reserves, end_time
+        `SELECT id, status, reserves, end_time, resolver_config
          FROM points_markets
          WHERE id = $1
          FOR UPDATE`,
@@ -85,6 +86,7 @@ export default async function handler(req, res) {
       if (m.end_time && new Date(m.end_time) <= new Date()) {
         const err = new Error('market_expired'); err.status = 400; throw err;
       }
+      assertCryptoTradeAllowed(m);
       const reserves = parseJsonb(m.reserves, []).map(Number);
       // AMM dispatch, same rules as buy.js: N=2 binary, N≥3 unified multi.
       if (reserves.length < 2) {

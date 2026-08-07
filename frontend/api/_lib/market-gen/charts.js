@@ -18,33 +18,7 @@
  * Idempotent — one source_event_id per calendar week.
  */
 import { readAppleMxSongs } from '../charts.js';
-
-function endOfWeekFriUtc(now = new Date()) {
-  // Roll to the next Friday 21:00 UTC. If today IS Friday, skip to the
-  // next one so the market always has a full week of depth.
-  const d = new Date(now);
-  const day = d.getUTCDay();                // 5 = Fri
-  const daysAhead = ((5 - day + 7) % 7) || 7;
-  d.setUTCDate(d.getUTCDate() + daysAhead);
-  d.setUTCHours(21, 0, 0, 0);
-  return d;
-}
-
-function isoWeekKey(d) {
-  // Use ISO-ish week-of-year so the source_event_id is stable within a
-  // given Monday-to-Sunday window regardless of when the generator runs.
-  const copy = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-  // Thursday in current week = ISO week owner.
-  copy.setUTCDate(copy.getUTCDate() + 4 - (copy.getUTCDay() || 7));
-  const yearStart = new Date(Date.UTC(copy.getUTCFullYear(), 0, 1));
-  const weekNo = Math.ceil((((copy - yearStart) / 86_400_000) + 1) / 7);
-  return `${copy.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
-}
-
-function formatDateEs(d) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
-}
+import { formatMexicoDateEs, mexicoIsoWeekKey, nextMexicoFridayClose } from './mexico-time.js';
 
 // How many distinct artists to include as legs. 4 real + 1 "Otro" =
 // 5 legs total, which matches the ≥4 threshold where we've tested the
@@ -86,13 +60,13 @@ export async function generateChartsMarkets() {
     { artist: null, label: 'Otro' },
   ];
 
-  const end = endOfWeekFriUtc();
-  const weekKey = isoWeekKey(end);
+  const end = nextMexicoFridayClose();
+  const weekKey = mexicoIsoWeekKey(end);
 
   return [{
     source: 'apple-music',
     source_event_id: `charts:apple-mx-songs:${weekKey}`,
-    question: `¿Quién tendrá la canción #1 en México este viernes (${formatDateEs(end)})?`,
+    question: `¿Quién tendrá la canción #1 en México este viernes (${formatMexicoDateEs(end)})?`,
     category: 'musica',
     icon: '🎵',
     outcomes: legs.map(l => l.label),

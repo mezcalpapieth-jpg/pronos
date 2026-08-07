@@ -6,7 +6,11 @@
  * exactly one window; resolves automatically at the next boundary using
  * the same Chainlink price read that opens the next window.
  *
- * Lifecycle, run by cron every minute (only does work AT 5-min boundaries):
+ * Lifecycle, run by cron every minute:
+ *
+ *   Between boundaries:
+ *     - Pre-create upcoming pending windows so the UI can already show
+ *       the next market before it needs to activate.
  *
  *   At T = 12:00:00 (hh:mm where mm % 5 === 0):
  *     1. Read Chainlink BTC/USD and ETH/USD on Arbitrum One
@@ -67,6 +71,7 @@ const ASSETS = [
 
 const WINDOW_MS = 5 * 60_000;
 const ARCHIVE_AFTER_MS = 24 * 60 * 60_000; // 24 h
+const DEFAULT_LOOKAHEAD_WINDOWS = 2;
 
 // Outcome labels and indices. Index 0 = SUBE (HIGHER), 1 = BAJA (LOWER).
 // Match the "parallel-shape" semantics already used elsewhere: outcome
@@ -97,12 +102,26 @@ export function formatDirectionFinalScore(threshold, closePrice) {
   return `$${Number(threshold)} -> $${Number(closePrice).toFixed(2)}`;
 }
 
-// Floor a Date to the most recent 5-min boundary (UTC). 12:03:42 → 12:00:00.
-function floorTo5MinBoundary(d) {
+// Floor a Date to the most recent 5-min boundary (UTC). 12:03:42 -> 12:00:00.
+export function floorTo5MinBoundary(d) {
   const out = new Date(d);
   out.setUTCSeconds(0, 0);
   out.setUTCMinutes(out.getUTCMinutes() - (out.getUTCMinutes() % 5));
   return out;
+}
+
+export function crypto5MinWindowsForTick(nowInput = new Date()) {
+  const now = nowInput instanceof Date ? nowInput : new Date(nowInput);
+  const boundary = floorTo5MinBoundary(now);
+  const sinceBoundaryMs = now.getTime() - boundary.getTime();
+  const nextBoundary = new Date(boundary.getTime() + WINDOW_MS);
+  return {
+    now,
+    boundary,
+    sinceBoundaryMs,
+    nextBoundary,
+    msUntilNextBoundary: nextBoundary.getTime() - now.getTime(),
+  };
 }
 
 // Build the stable (source, source_event_id) pair for a window. The
@@ -142,15 +161,26 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
   }
 
   const now = new Date();
-  const boundary = floorTo5MinBoundary(now);
-  const sinceBoundaryMs = now.getTime() - boundary.getTime();
+  const { boundary, sinceBoundaryMs } = crypto5MinWindowsForTick(now);
+  const precreateReport = await ensureUpcomingCryptoMarkets(sql, {
+    now,
+    dry,
+    lookaheadWindows: DEFAULT_LOOKAHEAD_WINDOWS,
+  });
 
   // We only do real work in the first ~60s after a 5-min boundary.
-  // Outside that window the cron tick is a no-op (returns quickly).
-  // This keeps the cron lightweight on the 4 minutes per 5 where
-  // there's nothing to do.
+  // Outside that window the tick still pre-creates future pending
+  // windows, but skips Chainlink reads and settlement writes.
   if (sinceBoundaryMs > 60_000) {
-    return { processed: false, reason: 'between_boundaries', boundaryAt: boundary.toISOString() };
+    return {
+      processed: false,
+      reason: 'between_boundaries',
+      boundaryAt: boundary.toISOString(),
+      precreated: precreateReport.precreated,
+      precreateExisting: precreateReport.existing,
+      precreate: precreateReport.windows,
+      dry,
+    };
   }
 
   // Read both Chainlink prices in parallel. If a feed errors, skip
@@ -172,6 +202,9 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
   const report = {
     processed: true,
     boundaryAt: boundary.toISOString(),
+    precreated: precreateReport.precreated,
+    precreateExisting: precreateReport.existing,
+    precreate: precreateReport.windows,
     perAsset: [],
     archived: 0,
     dry,
@@ -330,6 +363,59 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
 }
 
 // ─── Insertion ──────────────────────────────────────────────────────────────
+
+export async function ensureUpcomingCryptoMarkets(sql, {
+  now = new Date(),
+  dry = false,
+  lookaheadWindows = DEFAULT_LOOKAHEAD_WINDOWS,
+} = {}) {
+  if (!sql) throw new Error('crypto-5min: sql client required');
+
+  const count = Math.max(0, Math.floor(Number(lookaheadWindows) || 0));
+  const { nextBoundary } = crypto5MinWindowsForTick(now);
+  const windows = [];
+  let precreated = 0;
+  let existing = 0;
+
+  for (let offset = 0; offset < count; offset++) {
+    const windowStart = new Date(nextBoundary.getTime() + offset * WINDOW_MS);
+    const windowEnd = new Date(windowStart.getTime() + WINDOW_MS);
+
+    for (const asset of ASSETS) {
+      const key = eventKey(asset.key, windowStart.toISOString());
+      const entry = {
+        asset: asset.key,
+        source: key.source,
+        sourceEventId: key.source_event_id,
+        windowStart: windowStart.toISOString(),
+        windowEnd: windowEnd.toISOString(),
+      };
+
+      if (dry) {
+        windows.push({ ...entry, dry: true });
+        continue;
+      }
+
+      const created = await insertCryptoMarket(sql, {
+        asset,
+        windowStart,
+        windowEnd,
+        status: 'pending',
+        threshold: null,
+        openPrice: null,
+      });
+      if (created?.id) {
+        precreated += 1;
+        windows.push({ ...entry, createdId: created.id });
+      } else {
+        existing += 1;
+        windows.push({ ...entry, alreadyExists: true });
+      }
+    }
+  }
+
+  return { precreated, existing, windows, dry };
+}
 
 // Insert a 5-min crypto market. ON CONFLICT DO NOTHING on the
 // (source, source_event_id) pair — re-running the cron can't dupe rows.

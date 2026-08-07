@@ -18,6 +18,8 @@ import { useIsMobile } from '@app/lib/useIsMobile.js';
 import {
   claimDaily,
   fetchDailyStatus,
+  fetchPwaInstallStatus,
+  claimPwaInstallBonus,
   fetchReferralStats,
   fetchSocialTaskCatalog,
   submitSocialTask,
@@ -30,6 +32,22 @@ import {
 function fmt(n) {
   const v = Number(n) || 0;
   return v.toLocaleString('es-MX', { maximumFractionDigits: 2 });
+}
+
+function isStandaloneDisplay() {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia?.('(display-mode: standalone)')?.matches
+    || window.navigator?.standalone === true;
+}
+
+function installPlatform() {
+  if (typeof navigator === 'undefined') return 'unknown';
+  const ua = navigator.userAgent || '';
+  if (/iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+    return 'ios';
+  }
+  if (/Android/i.test(ua)) return 'android';
+  return 'mobile';
 }
 
 // ─── Daily claim card ────────────────────────────────────────────────────────
@@ -291,6 +309,163 @@ function ReferralCard() {
           <div style={{ ...statValStyle, color: 'var(--green)' }}>+{fmt(data.totalEarned)}</div>
         </div>
       </div>
+    </section>
+  );
+}
+
+function InstallAppBonusCard({ onClaimed }) {
+  const lang = useLang();
+  const t = useT();
+  const isMobile = useIsMobile();
+  const [status, setStatus] = useState(null);
+  const [standalone, setStandalone] = useState(() => isStandaloneDisplay());
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    fetchPwaInstallStatus()
+      .then(r => { if (active) setStatus(r); })
+      .catch(() => {
+        if (active) setStatus({ claimed: false, amount: 50, mobileEligible: isMobile });
+      });
+    return () => { active = false; };
+  }, [isMobile]);
+
+  useEffect(() => {
+    function update() {
+      setStandalone(isStandaloneDisplay());
+    }
+    update();
+    const mq = window.matchMedia?.('(display-mode: standalone)');
+    mq?.addEventListener?.('change', update);
+    mq?.addListener?.(update);
+    return () => {
+      mq?.removeEventListener?.('change', update);
+      mq?.removeListener?.(update);
+    };
+  }, []);
+
+  useEffect(() => {
+    function handleBeforeInstallPrompt(event) {
+      event.preventDefault();
+      setDeferredPrompt(event);
+    }
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
+
+  if (!isMobile && !standalone) return null;
+
+  const claimed = !!status?.claimed;
+  const platform = installPlatform();
+  const canClaim = standalone && !claimed;
+  const detail = claimed
+    ? t('points.earn.install.claimed')
+    : canClaim
+    ? t('points.earn.install.ready')
+    : platform === 'ios'
+    ? t('points.earn.install.ios')
+    : t('points.earn.install.android');
+
+  async function handleInstall() {
+    if (!deferredPrompt) return;
+    setErr(null);
+    setMsg(null);
+    try {
+      await deferredPrompt.prompt();
+      const choice = await deferredPrompt.userChoice.catch(() => null);
+      if (choice?.outcome === 'accepted') {
+        setMsg(t('points.earn.install.openFromHome'));
+      }
+    } finally {
+      setDeferredPrompt(null);
+    }
+  }
+
+  async function handleClaim() {
+    if (!canClaim || busy) return;
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      const result = await claimPwaInstallBonus({
+        standalone: true,
+        displayMode: 'standalone',
+        platform,
+      });
+      setStatus({
+        claimed: true,
+        amount: result.amount || 50,
+        claimedAt: result.claimedAt || new Date().toISOString(),
+        mobileEligible: true,
+      });
+      setMsg(result.alreadyClaimed
+        ? t('points.earn.install.claimed')
+        : `+${fmt(result.amount || 50)} MXNP`);
+      onClaimed?.(result);
+    } catch (e) {
+      setErr(publicErrorMessage(e, lang, 'pwa_bonus_claim_failed'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section style={panelStyle}>
+      <div style={eyebrowStyle}>{t('points.earn.install.eyebrow')}</div>
+      <h3 style={panelTitleStyle}>{t('points.earn.install.title')}</h3>
+      <p style={panelBodyStyle}>{t('points.earn.install.body')}</p>
+      <p style={{ ...panelBodyStyle, marginTop: 10, color: 'var(--text-muted)' }}>
+        {detail}
+      </p>
+
+      {msg && (
+        <div style={{ ...noticeStyle, color: 'var(--green)' }}>{msg}</div>
+      )}
+      {err && (
+        <div style={{ ...noticeStyle, color: 'var(--danger)' }}>{err}</div>
+      )}
+
+      {deferredPrompt && !standalone && !claimed && (
+        <button
+          className="btn-primary"
+          onClick={handleInstall}
+          style={{ width: '100%', padding: '12px 20px', marginTop: 16 }}
+        >
+          {t('points.earn.install.installButton')}
+        </button>
+      )}
+
+      {canClaim && (
+        <button
+          className="btn-primary"
+          onClick={handleClaim}
+          disabled={busy}
+          style={{ width: '100%', padding: '12px 20px', marginTop: 16 }}
+        >
+          {busy ? '...' : t('points.earn.install.claim')}
+        </button>
+      )}
+
+      {claimed && (
+        <div style={{
+          width: '100%',
+          padding: '12px 20px',
+          marginTop: 16,
+          background: 'var(--surface3)',
+          color: 'var(--text-muted)',
+          border: '1px solid var(--border)',
+          borderRadius: 10,
+          fontFamily: 'var(--font-body)',
+          fontWeight: 700,
+          textAlign: 'center',
+        }}>
+          {t('points.earn.install.claimed')}
+        </div>
+      )}
     </section>
   );
 }
@@ -720,6 +895,7 @@ export default function PointsEarn({ onOpenLogin }) {
       }}>
         <DailyClaimCardWithStatus onClaimed={refresh} />
         <ReferralCard />
+        <InstallAppBonusCard onClaimed={refresh} />
       </div>
 
       <div style={{ marginTop: 24 }}>
@@ -741,7 +917,7 @@ export default function PointsEarn({ onOpenLogin }) {
         color: 'var(--text-muted)',
         lineHeight: 1.7,
       }}>
-        ℹ️ MXNP son puntos de la competencia — no tienen valor económico directo.
+        MXNP son puntos de la competencia — no tienen valor económico directo.
         Los ciclos de premios están pausados por ahora y vuelven pronto. Verificación
         manual de tareas sociales en &lt;24 h.
       </div>

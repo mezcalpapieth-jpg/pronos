@@ -515,6 +515,18 @@ const POINTS_SCHEMA_MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_daily_claims_user ON daily_claims(username, claim_date DESC)`,
 
+  // ── Installed web app bonus (one-time retention reward) ───────────────
+  `CREATE TABLE IF NOT EXISTS points_pwa_install_claims (
+    username      TEXT PRIMARY KEY,
+    amount        NUMERIC(20,6) NOT NULL DEFAULT 50,
+    user_agent    TEXT,
+    display_mode  TEXT,
+    platform      TEXT,
+    claimed_at    TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_pwa_install_claims_claimed
+    ON points_pwa_install_claims(claimed_at DESC)`,
+
   // ── Streaks (current + best per user) ──────────────────────────────────
   `CREATE TABLE IF NOT EXISTS points_streaks (
     username        TEXT PRIMARY KEY,
