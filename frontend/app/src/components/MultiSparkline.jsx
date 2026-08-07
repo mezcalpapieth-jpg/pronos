@@ -79,6 +79,8 @@ export default function MultiSparkline({
   emptySubLabel = 'El precio se moverá con el primer trade.',
   showEmptyState = true,
   legendNote = null,
+  domainMin,
+  domainMax,
   style = {},
 }) {
   const uid = useId().replace(/:/g, '');
@@ -158,10 +160,17 @@ export default function MultiSparkline({
   // One domain across every line — that is the whole point of putting
   // them on the same axis. Series without history still count, so a
   // flat 7% line doesn't fall outside the window.
+  //
+  // An explicit domain wins over the auto-fit. The detail page pins 0–100
+  // so a 3-point move reads as the small move it is, instead of the
+  // auto-fit zooming in until it fills the card and looks dramatic.
   const domain = useMemo(() => {
+    if (Number.isFinite(domainMin) && Number.isFinite(domainMax) && domainMax > domainMin) {
+      return { min: domainMin, max: domainMax };
+    }
     const values = lines.flatMap(l => (l.hasHistory ? l.points.map(p => p.p) : [l.target]));
     return values.length >= 2 ? priceDomain(values) : { min: 0, max: 100 };
-  }, [lines]);
+  }, [lines, domainMin, domainMax]);
 
   const yForValue = (v) => {
     const range = Math.max(1e-6, domain.max - domain.min);

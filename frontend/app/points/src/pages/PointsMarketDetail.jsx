@@ -2648,6 +2648,8 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                     strokeWidth={2}
                     fill={false}
                     showValue={false}
+                    domainMin={0}
+                    domainMax={100}
                     data={displayHistoryByOutcome?.[0] || []}
                     activity={displayActivityByOutcome?.[0] || []}
                     targetPct={pctFor(0)}
@@ -2673,6 +2675,8 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                       <MultiSparkline
                         height={240}
                         strokeWidth={2}
+                        domainMin={0}
+                        domainMax={100}
                         series={chartIndices.map((i) => ({
                           key: `opt-${i}`,
                           label: displayOutcomes[i],
