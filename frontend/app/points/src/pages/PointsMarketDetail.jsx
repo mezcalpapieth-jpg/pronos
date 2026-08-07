@@ -458,9 +458,15 @@ function ParallelLegList({ market, legs, outcomeImages, outcomeCountryLabels, on
           const pct = Math.round(yesPrice * 100);
           const logo = outcomeImages?.[i] || null;
           const countryLabel = outcomeCountryLabels?.[i] || null;
+          // Carry the leg's own gating fields through — handleBuyClick
+          // checks status/seriesLocked on whatever target it gets, so a
+          // synthetic leg market missing them reads as "not active" and
+          // the buy click is silently swallowed.
           const legMarket = {
             id: leg.id,
             question: `${market.question} — ${leg.label}`,
+            status: leg.status ?? market.status,
+            seriesLocked: leg.seriesLocked ?? market.seriesLocked,
           };
           return (
             <div
@@ -2076,7 +2082,11 @@ export default function PointsMarketDetail({ onOpenLogin }) {
       return;
     }
     const lockTarget = target || market;
-    if (lockTarget?.seriesLocked || lockTarget?.status !== 'active' || market?.seriesLocked || market?.status !== 'active') {
+    // Leg targets are synthesised client-side and may not carry gating
+    // fields. Fall back to the parent's status rather than treating a
+    // missing one as "not active" — that silently kills the click.
+    const targetStatus = lockTarget?.status ?? market?.status;
+    if (lockTarget?.seriesLocked || targetStatus !== 'active' || market?.seriesLocked || market?.status !== 'active') {
       return;
     }
     setBuyState({ market: target, outcomeIndex, outcomeLabel });
@@ -2969,9 +2979,19 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                   const pnl = markValue - costBasis;
                   const pnlPos = pnl >= 0;
                   // "Comprar más" opens the modal against the leg
-                  // market for parallel, parent for unified.
+                  // market for parallel, parent for unified. The leg's
+                  // gating fields have to come along or handleBuyClick
+                  // reads the target as inactive and does nothing.
+                  const positionLeg = p.parentMarketId
+                    ? market.legs?.find(l => Number(l.id) === Number(p.marketId))
+                    : null;
                   const buyTarget = p.parentMarketId
-                    ? { id: p.marketId, question: `${market.question} — ${label}` }
+                    ? {
+                        id: p.marketId,
+                        question: `${market.question} — ${label}`,
+                        status: positionLeg?.status ?? market.status,
+                        seriesLocked: positionLeg?.seriesLocked ?? market.seriesLocked,
+                      }
                     : market;
                   const redeemKey = `${p.marketId}-${oi}`;
                   const isRedeeming = redeemState.key === redeemKey;
