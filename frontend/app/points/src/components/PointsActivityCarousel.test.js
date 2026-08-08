@@ -66,6 +66,33 @@ test('flow counts both sides of a binary market', () => {
   assert.match(carousel, /outcome: 'all'/);
 });
 
+test('parallel parent activity rolls up from leg ids', () => {
+  // Multi-option parallel markets display as one parent card, but fills are
+  // written to the individual leg rows. The carousel must ask for both and
+  // merge activity back onto the parent before ranking.
+  assert.match(carousel, /function activityRequestForMarkets\(markets/);
+  assert.match(carousel, /m\.ammMode === 'parallel' && Array\.isArray\(m\.legIds\)/);
+  assert.match(carousel, /ownerById\.set\(key, parentId\)/);
+  assert.match(carousel, /fetchTradeActivity\(activityIds/);
+  assert.match(carousel, /rollupActivityByParent\(a \|\| \{\}, activityRequest\)/);
+});
+
+test('parallel carousel charts fetch the first leg history and remap it to the parent', () => {
+  // Parent rows do not receive leg price snapshots, so the slide chart needs
+  // the first leg's history to avoid an empty sparkline on multi-option cards.
+  assert.match(carousel, /function priceHistoryRequestForMarkets\(markets\)/);
+  assert.match(carousel, /m\.ammMode === 'parallel' && Array\.isArray\(m\.legIds\) && m\.legIds\[0\]/);
+  assert.match(carousel, /fetchPriceHistory\(priceHistoryIds/);
+  assert.match(carousel, /remapHistoryByParent\(h \|\| \{\}, priceHistoryRequest\)/);
+});
+
+test('visible parallel slide polling keeps querying leg activity', () => {
+  assert.match(carousel, /const request = activityRequestForMarkets\(\[active\]\)/);
+  assert.match(carousel, /fetchTradeActivity\(request\.ids/);
+  assert.match(carousel, /rollupActivityByParent\(a \|\| \{\}, request\)/);
+  assert.match(carousel, /const buckets = rolled\?\.\[active\.id\]/);
+});
+
 test('flow sell amounts render as human-readable negative values', () => {
   assert.match(carousel, /-\{formatCompact\(sell\)\}/);
   assert.doesNotMatch(carousel, /\\u2212\{formatCompact\(sell\)\}/);

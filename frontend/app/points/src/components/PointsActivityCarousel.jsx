@@ -46,6 +46,9 @@ const WINDOW_BUCKETS = 120;
 // Ask about a wide set so a newer, fast-moving market can beat older
 // high-volume markets in the 1h / 4h slots.
 const CANDIDATE_POOL = 120;
+// The API bounds ids to 200. Parallel markets add one id per leg, so build
+// requests in ranked order and let lower-volume candidates fall off first.
+const MAX_ACTIVITY_IDS = 200;
 
 const SLOT_DEFS = [
   { key: '1h-interactions', hours: 1, metric: 'count' },
@@ -81,6 +84,116 @@ function formatHour(unixSeconds) {
   const date = d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
   const time = d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
   return `${date}, ${time}`;
+}
+
+function marketIdKey(id) {
+  return String(id);
+}
+
+function activityRequestForMarkets(markets, maxIds = MAX_ACTIVITY_IDS) {
+  const ids = [];
+  const ownerById = new Map();
+  const parentIds = new Set();
+
+  const add = (id, ownerId) => {
+    if (id == null) return true;
+    const key = marketIdKey(id);
+    if (ownerById.has(key)) return true;
+    if (ids.length >= maxIds) return false;
+    ids.push(id);
+    const parentId = marketIdKey(ownerId);
+    ownerById.set(key, parentId);
+    parentIds.add(parentId);
+    return true;
+  };
+
+  for (const m of markets || []) {
+    if (!m?.id) continue;
+    const parentId = m.id;
+    if (!add(parentId, parentId)) break;
+    if (m.ammMode === 'parallel' && Array.isArray(m.legIds)) {
+      for (const legId of m.legIds) {
+        if (!add(legId, parentId)) break;
+      }
+    }
+  }
+
+  return { ids, ownerById, parentIds };
+}
+
+function rollupActivityByParent(activity, request) {
+  const ownerById = request?.ownerById || new Map();
+  const grouped = new Map();
+  for (const parentId of request?.parentIds || []) grouped.set(parentId, new Map());
+
+  for (const [sourceId, buckets] of Object.entries(activity || {})) {
+    const parentId = ownerById.get(marketIdKey(sourceId));
+    if (!parentId || !Array.isArray(buckets)) continue;
+    if (!grouped.has(parentId)) grouped.set(parentId, new Map());
+    const bucketMap = grouped.get(parentId);
+
+    for (const b of buckets) {
+      const t = Number(b.t || 0);
+      if (!Number.isFinite(t) || t <= 0) continue;
+      const current = bucketMap.get(t) || {
+        t,
+        count: 0,
+        volume: 0,
+        buyVolume: 0,
+        sellVolume: 0,
+      };
+      current.count += Number(b.count || 0);
+      current.volume += Number(b.volume || 0);
+      current.buyVolume += Number(b.buyVolume || 0);
+      current.sellVolume += Number(b.sellVolume || 0);
+      bucketMap.set(t, current);
+    }
+  }
+
+  const rolled = {};
+  for (const [parentId, bucketMap] of grouped.entries()) {
+    rolled[parentId] = [...bucketMap.values()]
+      .sort((a, b) => Number(a.t) - Number(b.t))
+      .map(b => ({
+        t: b.t,
+        count: b.count,
+        volume: Math.round(b.volume * 100) / 100,
+        buyVolume: Math.round(b.buyVolume * 100) / 100,
+        sellVolume: Math.round(b.sellVolume * 100) / 100,
+      }));
+  }
+  return rolled;
+}
+
+function priceHistoryRequestForMarkets(markets) {
+  const ids = [];
+  const ownerById = new Map();
+
+  for (const m of markets || []) {
+    if (!m?.id) continue;
+    const sourceId = m.ammMode === 'parallel' && Array.isArray(m.legIds) && m.legIds[0]
+      ? m.legIds[0]
+      : m.id;
+    const key = marketIdKey(sourceId);
+    if (ownerById.has(key)) continue;
+    ids.push(sourceId);
+    ownerById.set(key, marketIdKey(m.id));
+  }
+
+  return { ids, ownerById };
+}
+
+function remapHistoryByParent(history, request) {
+  const mapped = {};
+  for (const parentId of request?.ownerById?.values?.() || []) mapped[parentId] = [];
+
+  for (const [sourceId, points] of Object.entries(history || {})) {
+    const parentId = request?.ownerById?.get?.(marketIdKey(sourceId));
+    if (!parentId) continue;
+    mapped[parentId] = Array.isArray(points) ? points : [];
+  }
+
+  return mapped;
 }
 
 function bucketsForWindow(buckets, hours, nowSeconds) {
@@ -139,8 +252,9 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [history, setHistory] = useState({});
-  // Bucketed fills for the last seven days, keyed by market id. One
-  // fetch feeds all three things on screen: who gets a slide, the
+  // Bucketed fills for the last seven days, keyed by display market id.
+  // Parallel legs are rolled back onto their parent before this lands.
+  // One fetch feeds all three things on screen: who gets a slide, the
   // pressure bar, and the tape rows. Null until it lands — no slides
   // before we know who actually traded.
   const [recent, setRecent] = useState(null);
@@ -171,30 +285,33 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
       .slice(0, CANDIDATE_POOL);
   }, [markets]);
 
-  const candidateIds = useMemo(() => candidates.map(m => m.id), [candidates]);
-  const candidatesKey = candidateIds.join(',');
+  const activityRequest = useMemo(() => activityRequestForMarkets(candidates), [candidates]);
+  const activityIds = activityRequest.ids;
+  const activityKey = activityIds.join(',');
 
   // Ask the activity endpoint which of those actually traded inside the
   // window. The slot picker below then derives hidden 1h / 4h / 7d leaders
   // from these same buckets.
   useEffect(() => {
-    if (candidateIds.length === 0) {
+    if (activityIds.length === 0) {
       setRecent({});
       return undefined;
     }
     let cancelled = false;
     // outcome=all, not 0: on a binary market a buy on NO still moves the
     // YES price, so counting only outcome 0 would hide half the flow.
-    fetchTradeActivity(candidateIds, {
+    // Parallel parents store fills on leg ids, so request parent + legs
+    // and roll the activity back to the parent card.
+    fetchTradeActivity(activityIds, {
       hours: WINDOW_HOURS,
       outcome: 'all',
       buckets: WINDOW_BUCKETS,
     }).then(a => {
-      if (!cancelled) setRecent(a || {});
+      if (!cancelled) setRecent(rollupActivityByParent(a || {}, activityRequest));
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candidatesKey]);
+  }, [activityKey, activityRequest]);
 
   // Pinned slot: the live BTC market earns its place on price movement,
   // not on fills — the 5-minute rollovers tick constantly from Chainlink
@@ -313,8 +430,9 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
     return picked.slice(0, count);
   }, [candidates, recent, count, pinned]);
 
-  const slideIds = useMemo(() => slides.map(m => m.id), [slides]);
-  const idsKey = slideIds.join(',');
+  const priceHistoryRequest = useMemo(() => priceHistoryRequestForMarkets(slides), [slides]);
+  const priceHistoryIds = priceHistoryRequest.ids;
+  const idsKey = priceHistoryIds.join(',');
 
   // Clamp the cursor when the ranking shrinks under it (markets resolve,
   // search narrows the list) so we never park on a removed slide.
@@ -326,14 +444,14 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
   // its own errors and resolves to {}, so a cold snapshot table degrades
   // to the Sparkline's flat state instead of taking down home.
   useEffect(() => {
-    if (slideIds.length === 0) return undefined;
+    if (priceHistoryIds.length === 0) return undefined;
     let cancelled = false;
-    fetchPriceHistory(slideIds, { days: 30, outcome: 0, limit: 120 }).then(h => {
-      if (!cancelled) setHistory(h || {});
+    fetchPriceHistory(priceHistoryIds, { days: 30, outcome: 0, limit: 120 }).then(h => {
+      if (!cancelled) setHistory(remapHistoryByParent(h || {}, priceHistoryRequest));
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idsKey]);
+  }, [idsKey, priceHistoryRequest]);
 
   const active = slides[index] || null;
 
@@ -341,19 +459,23 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
   // refreshing every slide would multiply the load for rows nobody sees.
   useEffect(() => {
     if (!active || paused) return undefined;
+    const request = activityRequestForMarkets([active]);
+    if (request.ids.length === 0) return undefined;
     const id = setInterval(() => {
-      fetchTradeActivity([active.id], {
+      fetchTradeActivity(request.ids, {
         hours: WINDOW_HOURS,
         outcome: 'all',
         buckets: WINDOW_BUCKETS,
       }).then(a => {
-        const buckets = a?.[active.id];
+        const rolled = rollupActivityByParent(a || {}, request);
+        const buckets = rolled?.[active.id];
         // An empty poll (endpoint hiccup, cache miss) must not blank out
         // a slide the user is looking at — keep the flow we already have.
         if (!Array.isArray(buckets) || buckets.length === 0) return;
         setRecent(prev => {
-          const prevTop = prev?.[active.id]?.[0];
-          const nextTop = buckets[0];
+          const prevBuckets = prev?.[active.id] || [];
+          const prevTop = prevBuckets[prevBuckets.length - 1];
+          const nextTop = buckets[buckets.length - 1];
           // Same newest bucket with the same count = nothing traded since
           // the last poll, so don't replay the stagger for no reason.
           if (prevTop && nextTop

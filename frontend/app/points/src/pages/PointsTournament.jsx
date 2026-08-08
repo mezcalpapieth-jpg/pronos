@@ -10,7 +10,7 @@ const DEFAULT_RULES = {
   startingBalance: 1500,
   minEntryMxnp: 300,
   maxSharesPerMarket: 6000,
-  qualifyingMarkets: 3,
+  qualifyingMarkets: 10,
   inactivityPenalty: 50,
   rewards: {
     dailyBase: 150,
@@ -140,7 +140,8 @@ function LeaderboardRow({ row, currentUsername, rules, compact = false, lang = '
   const penalty = Number(row.inactivityPenalty ?? 0);
   const qualified = Boolean(row.qualified);
   const qualifyingMarkets = Number(row.qualifyingMarkets || 0);
-  const neededMarkets = Math.max(0, Number(rules?.qualifyingMarkets || 3) - qualifyingMarkets);
+  const requiredMarkets = Number(rules?.qualifyingMarkets || DEFAULT_RULES.qualifyingMarkets);
+  const neededMarkets = Math.max(0, requiredMarkets - qualifyingMarkets);
   return (
     <Link
       to={`/u/${encodeURIComponent(row.username)}`}
