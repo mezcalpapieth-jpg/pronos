@@ -3,7 +3,7 @@
  *
  * GET  /api/points/support-tickets
  * POST /api/points/support-tickets
- *   body: { type: 'socials'|'markets'|'other', subject, message }
+ *   body: { type: 'socials'|'markets'|'other', subject, message, attachments? }
  */
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
@@ -11,6 +11,10 @@ import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { requireSession } from '../_lib/session.js';
 import { withTransaction } from '../_lib/db-tx.js';
 import { notifySupportTicketCreated } from '../_lib/support-email.js';
+import {
+  normalizeSupportAttachments,
+  serializeSupportAttachments,
+} from '../_lib/support-attachments.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -31,6 +35,7 @@ function serializeTicket(row, messages = []) {
       senderType: m.sender_type,
       senderUsername: m.sender_username,
       body: m.body,
+      attachments: serializeSupportAttachments(m.attachments),
       emailed: m.emailed,
       createdAt: m.created_at,
     })),
@@ -96,6 +101,12 @@ async function createTicket(req, res, session) {
   const message = cleanText(req.body?.message, { min: 8, max: 4000 });
   if (!subject) return res.status(400).json({ error: 'invalid_subject' });
   if (!message) return res.status(400).json({ error: 'invalid_message' });
+  let attachments = [];
+  try {
+    attachments = normalizeSupportAttachments(req.body?.attachments);
+  } catch (e) {
+    return res.status(400).json({ error: e.code || 'invalid_attachments', detail: e.detail || null });
+  }
 
   const result = await withTransaction(async (client) => {
     const ticket = await client.query(
@@ -107,10 +118,10 @@ async function createTicket(req, res, session) {
     );
     const msg = await client.query(
       `INSERT INTO points_support_messages
-         (ticket_id, sender_type, sender_username, body)
-       VALUES ($1, 'user', $2, $3)
+         (ticket_id, sender_type, sender_username, body, attachments)
+       VALUES ($1, 'user', $2, $3, $4::jsonb)
        RETURNING *`,
-      [ticket.rows[0].id, session.username, message],
+      [ticket.rows[0].id, session.username, message, JSON.stringify(attachments)],
     );
     return { ticket: ticket.rows[0], message: msg.rows[0] };
   });

@@ -943,6 +943,60 @@ function SocialTasksQueue({ onQueueChange }) {
   );
 }
 
+function SupportTicketAttachments({ attachments }) {
+  const items = Array.isArray(attachments) ? attachments.filter(a => a?.dataUrl) : [];
+  if (!items.length) return null;
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(92px, 1fr))',
+      gap: 8,
+      marginTop: 10,
+      maxWidth: 360,
+    }}>
+      {items.map((attachment, index) => (
+        <a
+          key={`${attachment.name || 'captura'}-${index}`}
+          href={attachment.dataUrl}
+          target="_blank"
+          rel="noreferrer"
+          download={attachment.name || `captura-${index + 1}`}
+          style={{
+            display: 'block',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            overflow: 'hidden',
+            background: 'rgba(255,255,255,0.03)',
+            textDecoration: 'none',
+          }}
+        >
+          <img
+            src={attachment.dataUrl}
+            alt={attachment.name || 'captura'}
+            style={{
+              display: 'block',
+              width: '100%',
+              height: 68,
+              objectFit: 'cover',
+            }}
+          />
+          <div style={{
+            padding: '5px 6px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 9,
+            color: 'var(--text-muted)',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}>
+            {attachment.name || `captura-${index + 1}`}
+          </div>
+        </a>
+      ))}
+    </div>
+  );
+}
+
 // ─── Support tickets queue ─────────────────────────────────────────────────
 function SupportTicketsQueue({ onQueueChange }) {
   const [status, setStatus] = useState('open');
@@ -1124,6 +1178,7 @@ function SupportTicketsQueue({ onQueueChange }) {
                     <div style={{ color: 'var(--text-secondary)', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
                       {message.body}
                     </div>
+                    <SupportTicketAttachments attachments={message.attachments} />
                     <div style={{
                       marginTop: 6,
                       display: 'flex',

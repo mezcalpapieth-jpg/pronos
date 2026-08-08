@@ -10,12 +10,138 @@ const TYPE_LABELS = {
   other: { es: 'Otro', en: 'Other' },
 };
 
+const SUPPORT_ATTACHMENT_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']);
+const MAX_SUPPORT_ATTACHMENTS = 3;
+const MAX_SUPPORT_ATTACHMENT_BYTES = 1_500_000;
+const MAX_SUPPORT_ATTACHMENT_TOTAL_BYTES = 3_000_000;
+
+function formatAttachmentSize(bytes) {
+  const n = Number(bytes);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(n / 1000))} KB`;
+}
+
+function attachmentErrorMessage(code, lang) {
+  const messages = {
+    too_many: {
+      es: 'Puedes adjuntar máximo 3 imágenes.',
+      en: 'You can attach up to 3 images.',
+    },
+    unsupported: {
+      es: 'Solo aceptamos imágenes JPG, PNG, WEBP, HEIC o HEIF.',
+      en: 'Only JPG, PNG, WEBP, HEIC, or HEIF images are supported.',
+    },
+    too_large: {
+      es: 'Cada imagen debe pesar menos de 1.5 MB.',
+      en: 'Each image must be under 1.5 MB.',
+    },
+    total_too_large: {
+      es: 'Las imágenes juntas deben pesar menos de 3 MB.',
+      en: 'Images together must be under 3 MB.',
+    },
+    read_failed: {
+      es: 'No se pudo leer una imagen. Intenta con otra captura.',
+      en: 'Could not read one image. Try another screenshot.',
+    },
+  };
+  return messages[code]?.[lang] || messages.read_failed[lang];
+}
+
+function inferAttachmentType(file) {
+  const type = String(file?.type || '').toLowerCase();
+  if (SUPPORT_ATTACHMENT_TYPES.has(type)) return type;
+  const name = String(file?.name || '').toLowerCase();
+  if (/\.(jpe?g)$/.test(name)) return 'image/jpeg';
+  if (/\.png$/.test(name)) return 'image/png';
+  if (/\.webp$/.test(name)) return 'image/webp';
+  if (/\.heic$/.test(name)) return 'image/heic';
+  if (/\.heif$/.test(name)) return 'image/heif';
+  return '';
+}
+
+function readAttachmentFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const type = inferAttachmentType(file);
+      const rawDataUrl = String(reader.result || '');
+      const dataUrl = rawDataUrl.startsWith('data:;base64,') && type
+        ? rawDataUrl.replace('data:;base64,', `data:${type};base64,`)
+        : rawDataUrl;
+      resolve({
+        name: file.name,
+        type,
+        size: file.size,
+        dataUrl,
+      });
+    };
+    reader.onerror = () => reject(new Error('read_failed'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function SupportAttachments({ attachments, compact = false }) {
+  const items = Array.isArray(attachments) ? attachments.filter(a => a?.dataUrl) : [];
+  if (!items.length) return null;
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: compact ? 'repeat(auto-fit, minmax(74px, 1fr))' : 'repeat(auto-fit, minmax(94px, 1fr))',
+      gap: 8,
+      marginTop: 8,
+      maxWidth: compact ? 260 : '100%',
+    }}>
+      {items.map((attachment, index) => (
+        <a
+          key={`${attachment.name || 'img'}-${index}`}
+          href={attachment.dataUrl}
+          target="_blank"
+          rel="noreferrer"
+          download={attachment.name || `captura-${index + 1}`}
+          style={{
+            display: 'block',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            overflow: 'hidden',
+            background: 'rgba(255,255,255,0.03)',
+            textDecoration: 'none',
+          }}
+        >
+          <img
+            src={attachment.dataUrl}
+            alt={attachment.name || 'captura'}
+            style={{
+              display: 'block',
+              width: '100%',
+              height: compact ? 58 : 76,
+              objectFit: 'cover',
+            }}
+          />
+          <div style={{
+            padding: '5px 6px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 9,
+            color: 'var(--text-muted)',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}>
+            {attachment.name || `captura-${index + 1}`}
+          </div>
+        </a>
+      ))}
+    </div>
+  );
+}
+
 export default function PointsSupport({ onOpenLogin }) {
   const lang = useLang();
   const isMobile = useIsMobile();
   const { authenticated, user, loading } = usePointsAuth();
   const [tickets, setTickets] = useState([]);
   const [form, setForm] = useState({ type: 'markets', subject: '', message: '' });
+  const [attachments, setAttachments] = useState([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [ok, setOk] = useState(null);
@@ -37,8 +163,9 @@ export default function PointsSupport({ onOpenLogin }) {
     setErr(null);
     setOk(null);
     try {
-      await createSupportTicket(form);
+      await createSupportTicket({ ...form, attachments });
       setForm({ type: form.type, subject: '', message: '' });
+      setAttachments([]);
       setOk(lang === 'en' ? 'Ticket sent.' : 'Ticket enviado.');
       await load();
     } catch (error) {
@@ -46,6 +173,48 @@ export default function PointsSupport({ onOpenLogin }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function handleAttachmentFiles(e) {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!files.length) return;
+    setErr(null);
+    setOk(null);
+
+    if (attachments.length + files.length > MAX_SUPPORT_ATTACHMENTS) {
+      setErr(attachmentErrorMessage('too_many', lang));
+      return;
+    }
+
+    const next = [...attachments];
+    let totalBytes = next.reduce((sum, item) => sum + (Number(item.size) || 0), 0);
+    for (const file of files) {
+      if (!inferAttachmentType(file)) {
+        setErr(attachmentErrorMessage('unsupported', lang));
+        return;
+      }
+      if (file.size > MAX_SUPPORT_ATTACHMENT_BYTES) {
+        setErr(attachmentErrorMessage('too_large', lang));
+        return;
+      }
+      totalBytes += file.size;
+      if (totalBytes > MAX_SUPPORT_ATTACHMENT_TOTAL_BYTES) {
+        setErr(attachmentErrorMessage('total_too_large', lang));
+        return;
+      }
+      try {
+        next.push(await readAttachmentFile(file));
+      } catch {
+        setErr(attachmentErrorMessage('read_failed', lang));
+        return;
+      }
+    }
+    setAttachments(next);
+  }
+
+  function removeAttachment(index) {
+    setAttachments(items => items.filter((_, i) => i !== index));
   }
 
   if (loading) {
@@ -152,6 +321,83 @@ export default function PointsSupport({ onOpenLogin }) {
               placeholder={lang === 'en' ? 'Tell us what happened...' : 'Cuéntanos qué pasó...'}
             />
 
+            <label style={labelStyle}>
+              {lang === 'en' ? 'Screenshots' : 'Capturas'}
+            </label>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+              multiple
+              onChange={handleAttachmentFiles}
+              disabled={busy || attachments.length >= MAX_SUPPORT_ATTACHMENTS}
+              style={inputStyle}
+            />
+            <p style={{
+              margin: '6px 0 0',
+              color: 'var(--text-muted)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              lineHeight: 1.5,
+            }}>
+              {lang === 'en'
+                ? 'Up to 3 images, 1.5 MB each and 3 MB total. Do not upload passwords, keys, IDs, or sensitive documents.'
+                : 'Hasta 3 imágenes, 1.5 MB cada una y 3 MB en total. No subas contraseñas, llaves, identificaciones ni documentos sensibles.'}
+            </p>
+
+            {attachments.length > 0 && (
+              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {attachments.map((attachment, index) => (
+                  <div
+                    key={`${attachment.name}-${index}`}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '52px minmax(0, 1fr) auto',
+                      gap: 10,
+                      alignItems: 'center',
+                      border: '1px solid var(--border)',
+                      borderRadius: 9,
+                      padding: 8,
+                      background: 'rgba(255,255,255,0.025)',
+                    }}
+                  >
+                    <img
+                      src={attachment.dataUrl}
+                      alt={attachment.name}
+                      style={{
+                        width: 52,
+                        height: 42,
+                        objectFit: 'cover',
+                        borderRadius: 6,
+                        border: '1px solid var(--border)',
+                      }}
+                    />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{
+                        color: 'var(--text-primary)',
+                        fontSize: 12,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}>
+                        {attachment.name}
+                      </div>
+                      <div style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 10 }}>
+                        {formatAttachmentSize(attachment.size)}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-ghost"
+                      onClick={() => removeAttachment(index)}
+                      style={{ padding: '6px 10px', fontSize: 10 }}
+                    >
+                      {lang === 'en' ? 'Remove' : 'Quitar'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {err && <p style={{ color: 'var(--danger)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{err}</p>}
             {ok && <p style={{ color: 'var(--green)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{ok}</p>}
 
@@ -208,6 +454,7 @@ export default function PointsSupport({ onOpenLogin }) {
                         </span>
                         <br />
                         {message.body}
+                        <SupportAttachments attachments={message.attachments} compact />
                       </div>
                     ))}
                   </div>

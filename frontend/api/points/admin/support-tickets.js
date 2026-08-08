@@ -11,6 +11,7 @@ import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 import { notifySupportTicketReply } from '../../_lib/support-email.js';
+import { serializeSupportAttachments } from '../../_lib/support-attachments.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -32,6 +33,7 @@ function serializeTicket(row, messages = []) {
       senderType: m.sender_type,
       senderUsername: m.sender_username,
       body: m.body,
+      attachments: serializeSupportAttachments(m.attachments),
       emailed: m.emailed,
       createdAt: m.created_at,
     })),

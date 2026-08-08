@@ -481,8 +481,8 @@ export async function fetchSupportTickets() {
   return getJson('/api/points/support-tickets');
 }
 
-export async function createSupportTicket({ type, subject, message }) {
-  return postJson('/api/points/support-tickets', { type, subject, message });
+export async function createSupportTicket({ type, subject, message, attachments = [] }) {
+  return postJson('/api/points/support-tickets', { type, subject, message, attachments });
 }
 
 // ─── Admin — social task queue ──────────────────────────────────────────────

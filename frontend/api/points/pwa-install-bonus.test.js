@@ -17,6 +17,7 @@ const earnSource = await readFile(new URL('../../app/points/src/pages/PointsEarn
 
 test('pwa install bonus is a one-time audited points credit', () => {
   assert.match(schemaSource, /points_pwa_install_claims/);
+  assert.match(schemaSource, /to_regclass\('public\.points_pwa_install_claims'\) IS NOT NULL AS points_pwa_install_claims/);
   assert.match(schemaSource, /username\s+TEXT PRIMARY KEY/);
   assert.match(bonusSource, /ON CONFLICT \(username\) DO NOTHING/);
   assert.match(bonusSource, /points_distributions/);

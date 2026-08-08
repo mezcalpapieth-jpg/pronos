@@ -40,6 +40,7 @@ const POINTS_SCHEMA_READY_PROBE = `
     to_regclass('public.points_resolution_candidates') IS NOT NULL AS points_resolution_candidates,
     to_regclass('public.points_support_tickets') IS NOT NULL AS points_support_tickets,
     to_regclass('public.points_support_messages') IS NOT NULL AS points_support_messages,
+    to_regclass('public.points_pwa_install_claims') IS NOT NULL AS points_pwa_install_claims,
     EXISTS (
       SELECT 1 FROM information_schema.columns
       WHERE table_schema = 'public'
@@ -51,7 +52,13 @@ const POINTS_SCHEMA_READY_PROBE = `
       WHERE table_schema = 'public'
         AND table_name = 'points_pending_markets'
         AND column_name = 'seed_liquidities'
-    ) AS points_pending_seed_liquidities
+    ) AS points_pending_seed_liquidities,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'points_support_messages'
+        AND column_name = 'attachments'
+    ) AS points_support_message_attachments
 `;
 
 const POINTS_SCHEMA_LOCK_TABLE = `
@@ -499,8 +506,11 @@ const POINTS_SCHEMA_MIGRATIONS = [
     sender_username    TEXT,
     body               TEXT NOT NULL,
     emailed            BOOLEAN NOT NULL DEFAULT false,
+    attachments        JSONB NOT NULL DEFAULT '[]'::jsonb,
     created_at         TIMESTAMPTZ DEFAULT NOW()
   )`,
+  `ALTER TABLE points_support_messages
+    ADD COLUMN IF NOT EXISTS attachments JSONB NOT NULL DEFAULT '[]'::jsonb`,
   `CREATE INDEX IF NOT EXISTS idx_points_support_messages_ticket
     ON points_support_messages(ticket_id, created_at ASC)`,
 
