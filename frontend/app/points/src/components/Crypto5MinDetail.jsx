@@ -40,7 +40,7 @@ function fmt(n, d = 2) {
   return Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
-const SNAPSHOT_STORAGE_PREFIX = 'pronos-crypto-chart:';
+const SNAPSHOT_STORAGE_PREFIX = 'pronos-crypto-chart:v2:';
 const SNAPSHOT_PERSIST_MS = 5_000;
 
 // Compute MM:SS until a target Date. Returns '0:00' if past.
@@ -89,6 +89,7 @@ function loadStoredSnapshot(marketId, windowBounds) {
     const raw = window.localStorage.getItem(key);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
+    if (parsed?.version !== 2) return [];
     const points = Array.isArray(parsed?.points) ? parsed.points : [];
     return normalizeChartPoints(points, windowBounds);
   } catch {
@@ -104,6 +105,7 @@ function persistSnapshot(marketId, points) {
   if (normalized.length < 2) return;
   try {
     window.localStorage.setItem(key, JSON.stringify({
+      version: 2,
       savedAt: Date.now(),
       points: normalized,
     }));
@@ -113,6 +115,11 @@ function persistSnapshot(marketId, points) {
 function dateMs(value) {
   const ms = value ? new Date(value).getTime() : NaN;
   return Number.isFinite(ms) ? ms : null;
+}
+
+function isTrustedClosePriceSource(source) {
+  const value = String(source || '').toLowerCase();
+  return value === 'coinbase-candle' || value === 'coinbase-candle-correction';
 }
 
 function marketWindowBounds(market) {
@@ -406,8 +413,13 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
   const chartHistory = useMemo(() => {
     const closeAnchors = sequence.flatMap((item) => {
       const itemMeta = item.cryptoMeta || {};
-      const closeT = dateMs(itemMeta.closesAt || item.endTime);
-      if (item.status !== 'resolved' || !closeT || itemMeta.closePrice == null) return [];
+      const closeT = dateMs(itemMeta.closePriceAt || itemMeta.closesAt || item.endTime);
+      if (
+        item.status !== 'resolved'
+        || !closeT
+        || itemMeta.closePrice == null
+        || !isTrustedClosePriceSource(itemMeta.closePriceSource)
+      ) return [];
       return [{ t: closeT, price: Number(itemMeta.closePrice) }];
     });
     return normalizeChartPoints([...liveChartHistory, ...closeAnchors], snapshotWindow);

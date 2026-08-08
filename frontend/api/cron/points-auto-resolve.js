@@ -29,6 +29,7 @@ import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { withTransaction } from '../_lib/db-tx.js';
 import { readChainlinkPrice, readChainlinkRoundAtOrBefore, comparePrice } from '../_lib/chainlink.js';
 import { formatDirectionFinalScore, resolveDirectionOutcome } from '../_lib/crypto-5min.js';
+import { readCoinbaseBoundaryPrice } from '../_lib/crypto-price-source.js';
 import { bestEffortPersistResolvedCryptoMarketSnapshot } from '../_lib/crypto-chart-snapshot.js';
 import { readFinnhubQuote } from '../_lib/stockprice.js';
 import { readBanxicoLatest } from '../_lib/banxico.js';
@@ -494,29 +495,52 @@ export async function runAutoResolve({ dry = false } = {}) {
             const closesAt = cfg.closesAt || m.end_time;
             if (!closesAt) throw new Error('binary-direction: missing closesAt');
 
-            const round = await readChainlinkRoundAtOrBefore({
-              feedAddress: cfg.feedAddress,
-              chainId: cfg.chainId,
-              timestamp: closesAt,
-            });
-            winningIdx = resolveDirectionOutcome(round.price, cfg.threshold);
-            if (winningIdx == null) {
-              throw new Error(`binary-direction tie at ${round.price}`);
+            if (cfg.coinbaseProductId) {
+              const boundary = await readCoinbaseBoundaryPrice({
+                productId: cfg.coinbaseProductId,
+                timestamp: closesAt,
+              });
+              winningIdx = resolveDirectionOutcome(boundary.price, cfg.threshold);
+              if (winningIdx == null) {
+                throw new Error(`binary-direction tie at ${boundary.price}`);
+              }
+              resolverInfo = {
+                priceAtResolve: boundary.price,
+                threshold: cfg.threshold,
+                source: boundary.source,
+                priceAt: boundary.capturedAt,
+                productId: boundary.productId,
+              };
+              resolverConfigPatch = {
+                closePrice: boundary.price,
+                closePriceSource: boundary.source,
+                closePriceAt: boundary.capturedAt,
+              };
+            } else {
+              const round = await readChainlinkRoundAtOrBefore({
+                feedAddress: cfg.feedAddress,
+                chainId: cfg.chainId,
+                timestamp: closesAt,
+              });
+              winningIdx = resolveDirectionOutcome(round.price, cfg.threshold);
+              if (winningIdx == null) {
+                throw new Error(`binary-direction tie at ${round.price}`);
+              }
+              const roundUpdatedAt = Number.isFinite(Number(round.updatedAt))
+                ? new Date(Number(round.updatedAt) * 1000).toISOString()
+                : null;
+              resolverInfo = {
+                priceAtResolve: round.price,
+                threshold: cfg.threshold,
+                source: cfg.symbol || 'chainlink',
+                roundUpdatedAt,
+              };
+              resolverConfigPatch = {
+                closePrice: round.price,
+                resolvedRoundId: round.roundId?.toString?.() || String(round.roundId),
+                resolvedRoundUpdatedAt: roundUpdatedAt,
+              };
             }
-            const roundUpdatedAt = Number.isFinite(Number(round.updatedAt))
-              ? new Date(Number(round.updatedAt) * 1000).toISOString()
-              : null;
-            resolverInfo = {
-              priceAtResolve: round.price,
-              threshold: cfg.threshold,
-              source: cfg.symbol || 'chainlink',
-              roundUpdatedAt,
-            };
-            resolverConfigPatch = {
-              closePrice: round.price,
-              resolvedRoundId: round.roundId?.toString?.() || String(round.roundId),
-              resolvedRoundUpdatedAt: roundUpdatedAt,
-            };
           } else {
             if (!cfg.feedAddress || !cfg.op || cfg.threshold == null || cfg.yesOutcome == null) {
               throw new Error('invalid chainlink_price config');

@@ -80,3 +80,44 @@ test('auto resolver core falls back from football-data to ESPN soccer scoreboard
     originalMatchId: '557093',
   });
 });
+
+test('auto resolver core settles crypto binary-direction markets from Coinbase boundary candles', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async (url) => {
+    assert.match(String(url), /products\/BTC-USD\/candles/);
+    return jsonResponse([
+      [1786180140, 64940, 64970, 64950, 64963.49, 3.1],
+    ]);
+  };
+
+  const decision = await resolveAutoResolverCandidate({
+    resolver_type: 'chainlink_price',
+    resolver_config: {
+      source: 'chainlink',
+      feedAddress: '0x6ce185860a4963106506C203335A2910413708e9',
+      chainId: 42161,
+      symbol: 'BTC/USD',
+      shape: 'binary-direction',
+      asset: 'btc',
+      coinbaseProductId: 'BTC-USD',
+      threshold: 64957,
+      closesAt: '2026-08-08T09:10:00.000Z',
+    },
+    end_time: '2026-08-08T09:10:00.000Z',
+    outcomes: ['SUBE', 'BAJA'],
+  });
+
+  assert.equal(decision.winningIdx, 0);
+  assert.equal(decision.resolverInfo.priceAtResolve, 64963.49);
+  assert.equal(decision.resolverInfo.source, 'coinbase-candle');
+  assert.equal(decision.finalScore, '$64957 -> $64963.49');
+  assert.deepEqual(decision.resolverConfigPatch, {
+    closePrice: 64963.49,
+    closePriceSource: 'coinbase-candle',
+    closePriceAt: '2026-08-08T09:10:00.000Z',
+  });
+});

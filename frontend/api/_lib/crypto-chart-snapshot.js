@@ -41,9 +41,27 @@ function normalizePoints(points) {
   return deduped;
 }
 
-function buildSnapshotPoints({ tickRows, openedAt, closesAt, openPrice, closePrice }) {
+function isTrustedClosePriceSource(source) {
+  const value = String(source || '').toLowerCase();
+  return value === 'coinbase-candle' || value === 'coinbase-candle-correction';
+}
+
+function dateMs(value) {
+  const ms = value ? new Date(value).getTime() : NaN;
+  return Number.isFinite(ms) ? ms : NaN;
+}
+
+function buildSnapshotPoints({
+  tickRows,
+  openedAt,
+  closesAt,
+  openPrice,
+  closePrice,
+  closePriceSource = null,
+  closePriceAt = null,
+}) {
   const openedAtMs = openedAt ? new Date(openedAt).getTime() : NaN;
-  const closesAtMs = closesAt ? new Date(closesAt).getTime() : NaN;
+  const closesAtMs = dateMs(closesAt);
 
   const base = normalizePoints((tickRows || []).map((row) => ({
     t: new Date(row.captured_at).getTime(),
@@ -56,10 +74,18 @@ function buildSnapshotPoints({ tickRows, openedAt, closesAt, openPrice, closePri
     }
   }
 
-  if (Number.isFinite(closesAtMs) && Number.isFinite(Number(closePrice))) {
-    const nextClose = { t: closesAtMs, price: Number(closePrice) };
+  if (
+    Number.isFinite(closesAtMs)
+    && Number.isFinite(Number(closePrice))
+    && isTrustedClosePriceSource(closePriceSource)
+  ) {
+    const closePriceAtMs = dateMs(closePriceAt);
+    const closeT = Number.isFinite(closePriceAtMs) && Math.abs(closePriceAtMs - closesAtMs) <= 90_000
+      ? closePriceAtMs
+      : closesAtMs;
+    const nextClose = { t: closeT, price: Number(closePrice) };
     const lastT = base.length > 0 ? base[base.length - 1].t : -Infinity;
-    if (lastT >= closesAtMs - 30_000) {
+    if (lastT >= closeT - 30_000) {
       if (base.length === 0) base.push(nextClose);
       else base[base.length - 1] = nextClose;
     } else {
@@ -116,6 +142,8 @@ export async function persistResolvedCryptoMarketSnapshot(client, marketId) {
     closesAt,
     openPrice: cfg.openPrice,
     closePrice: cfg.closePrice,
+    closePriceSource: cfg.closePriceSource,
+    closePriceAt: cfg.closePriceAt,
   });
 
   if (points.length === 0) {

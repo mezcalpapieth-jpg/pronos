@@ -4,7 +4,9 @@
  * Polymarket-style "will BTC be higher or lower than $T at the next 5-min
  * boundary?" markets. New market opens every 5 minutes per asset; lasts
  * exactly one window; resolves automatically at the next boundary using
- * the same Chainlink price read that opens the next window.
+ * the Coinbase candle close for that boundary. Chainlink stays recorded
+ * on the row for audit/compatibility, but it is too sparse for 5-min
+ * settlement.
  *
  * Lifecycle, run by cron every minute:
  *
@@ -13,7 +15,7 @@
  *       the next market before it needs to activate.
  *
  *   At T = 12:00:00 (hh:mm where mm % 5 === 0):
- *     1. Read Chainlink BTC/USD and ETH/USD on Arbitrum One
+ *     1. Read Coinbase BTC/USD and ETH/USD minute candles at the boundary
  *     2. For each asset:
  *        a. RESOLVE  the [11:55, 12:00] market that just closed
  *           - Compare price vs that market's stored threshold
@@ -43,10 +45,11 @@
  * void as a paper rule for that edge case).
  */
 
-import { readChainlinkPrice, FEEDS_ARBITRUM_ONE } from './chainlink.js';
+import { FEEDS_ARBITRUM_ONE } from './chainlink.js';
 import { initialReserves } from './amm-math.js';
 import { withTransaction } from './db-tx.js';
 import { bestEffortPersistResolvedCryptoMarketSnapshot } from './crypto-chart-snapshot.js';
+import { readCoinbaseBoundaryPrice } from './crypto-price-source.js';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -170,7 +173,7 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
 
   // We only do real work in the first ~60s after a 5-min boundary.
   // Outside that window the tick still pre-creates future pending
-  // windows, but skips Chainlink reads and settlement writes.
+  // windows, but skips price reads and settlement writes.
   if (sinceBoundaryMs > 60_000) {
     return {
       processed: false,
@@ -183,13 +186,16 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
     };
   }
 
-  // Read both Chainlink prices in parallel. If a feed errors, skip
+  // Read both boundary prices in parallel. If a feed errors, skip
   // that asset for this tick — its window will be retried next minute
   // (the per-tick gate above) so transient failures self-heal.
   const priceResults = await Promise.all(ASSETS.map(a =>
-    readChainlinkPrice(a.feed)
-      .then(p => ({ ok: true, price: p }))
-      .catch(e => ({ ok: false, error: e?.message || 'chainlink_failed' })),
+    readCoinbaseBoundaryPrice({
+      productId: a.coinbaseProductId,
+      timestamp: boundary,
+    })
+      .then(p => ({ ok: true, ...p }))
+      .catch(e => ({ ok: false, error: e?.message || 'boundary_price_failed' })),
   ));
 
   const closingStart = new Date(boundary.getTime() - WINDOW_MS);
@@ -213,7 +219,12 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
   for (let i = 0; i < ASSETS.length; i++) {
     const asset = ASSETS[i];
     const pr = priceResults[i];
-    const entry = { asset: asset.key, price: pr.ok ? pr.price : null };
+    const entry = {
+      asset: asset.key,
+      price: pr.ok ? pr.price : null,
+      priceSource: pr.ok ? pr.source : null,
+      priceAt: pr.ok ? pr.capturedAt : null,
+    };
 
     if (!pr.ok) {
       entry.error = pr.error;
@@ -227,7 +238,7 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
 
     // ── 1. RESOLVE the market that just closed (if any). ─────────────
     // Outcome is decided in SQL — we compare the row's stored
-    // resolver_config.threshold against the current price in a single
+    // resolver_config.threshold against the boundary price in a single
     // CASE expression, so we don't need to read-then-write here.
     const closing = eventKey(asset.key, closingStart.toISOString());
 
@@ -249,13 +260,18 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
                                   to_char($1::numeric, 'FM999999990.00'),
                     resolved_at = NOW(),
                     resolved_by = 'system',
-                    resolver_config = jsonb_set(resolver_config, '{closePrice}', to_jsonb($1::numeric))
+                    resolver_config = COALESCE(resolver_config, '{}'::jsonb)
+                      || jsonb_build_object(
+                        'closePrice', $1::numeric,
+                        'closePriceSource', $4::text,
+                        'closePriceAt', $5::text
+                      )
               WHERE source = $2
                 AND source_event_id = $3
                 AND status = 'active'
                 AND outcome IS NULL
             RETURNING id, outcome`,
-            [price, closing.source, closing.source_event_id],
+            [price, closing.source, closing.source_event_id, pr.source, pr.capturedAt],
           );
           if (resolveRows.rows.length === 0) return null;
 
@@ -292,7 +308,9 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
                 || jsonb_build_object(
                   'threshold',  ${threshold}::numeric,
                   'openPrice',  ${price}::numeric,
-                  'openedAt',   ${openingStart.toISOString()}::text
+                  'openedAt',   ${openingStart.toISOString()}::text,
+                  'openPriceSource', ${pr.source}::text,
+                  'openPriceAt', ${pr.capturedAt}::text
                 )
           WHERE source = ${opening.source}
             AND source_event_id = ${opening.source_event_id}
@@ -311,6 +329,8 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
             status: 'active',
             threshold,
             openPrice: price,
+            openPriceSource: pr.source,
+            openPriceAt: pr.capturedAt,
           });
           if (created?.id) entry.activatedId = created.id;
         }
@@ -421,7 +441,16 @@ export async function ensureUpcomingCryptoMarkets(sql, {
 // (source, source_event_id) pair — re-running the cron can't dupe rows.
 // We use the "raw" points_markets row shape so this bypasses the admin
 // pending queue entirely (no human review on auto-generated 5-min markets).
-async function insertCryptoMarket(sql, { asset, windowStart, windowEnd, status, threshold, openPrice }) {
+async function insertCryptoMarket(sql, {
+  asset,
+  windowStart,
+  windowEnd,
+  status,
+  threshold,
+  openPrice,
+  openPriceSource = null,
+  openPriceAt = null,
+}) {
   const key = eventKey(asset.key, windowStart.toISOString());
   const question = thresholdQuestion(asset, threshold, windowEnd);
   const resolverConfig = {
@@ -434,6 +463,8 @@ async function insertCryptoMarket(sql, { asset, windowStart, windowEnd, status, 
     coinbaseProductId: asset.coinbaseProductId,
     threshold: threshold == null ? null : Number(threshold),
     openPrice: openPrice == null ? null : Number(openPrice),
+    openPriceSource: openPriceSource || null,
+    openPriceAt: openPriceAt || null,
     openedAt: status === 'active' ? windowStart.toISOString() : null,
     closesAt: windowEnd.toISOString(),
     rounding: 1, // dollars
