@@ -104,10 +104,10 @@ function DailyClaimCard({ onClaimed, alreadyClaimedToday: initialClaimed, onClai
   return (
     <section style={panelStyle}>
       <div style={eyebrowStyle}>Reclamo diario</div>
-      <h3 style={panelTitleStyle}>100 MXNP hoy, +20 MXNP por cada día consecutivo</h3>
+      <h3 style={panelTitleStyle}>150 MXNP hoy, +15 MXNP por cada día consecutivo</h3>
       <p style={panelBodyStyle}>
-        Día 1 = 100 MXNP. Día 2 = 120. Día 3 = 140. Y así sucesivamente. Entra todos
-        los días para mantener la racha — si te saltas un día, vuelves al día 1.
+        Día 1 = 150 MXNP. Día 2 = 165. Día 3 = 180. El reclamo llega hasta 225 MXNP.
+        Entra todos los días para mantener la racha; si te saltas un día, vuelves al día 1.
       </p>
       {state.msg && (
         <div style={{ ...noticeStyle, color: 'var(--green)' }}>{state.msg}</div>
@@ -219,11 +219,12 @@ function ReferralCard() {
   return (
     <section style={panelStyle}>
       <div style={eyebrowStyle}>Programa de referidos</div>
-      <h3 style={panelTitleStyle}>+100 MXNP por cada amigo que se registre</h3>
+      <h3 style={panelTitleStyle}>+375 MXNP por cada amigo que se registre</h3>
       <p style={panelBodyStyle}>
         Comparte tu link único. Cuando alguien crea su cuenta usándolo, tú recibes
-        <strong style={{ color: 'var(--green)' }}> 100 MXNP</strong> y ellos reciben
-        <strong style={{ color: 'var(--green)' }}> 50 MXNP</strong> de bienvenida extra.
+        <strong style={{ color: 'var(--green)' }}> 375 MXNP</strong> y ellos reciben
+        <strong style={{ color: 'var(--green)' }}> 300 MXNP</strong>. El bono de invitador
+        cuenta hasta 10 referidos por ciclo.
       </p>
 
       <div style={{
@@ -576,7 +577,7 @@ const SOCIAL_PROVIDERS = [
     key: 'x',
     label: 'X (Twitter)',
     icon: '𝕏',
-    reward: 50,
+    reward: 300,
     available: true,
     comingSoonNote: null,
   },
@@ -584,7 +585,7 @@ const SOCIAL_PROVIDERS = [
     key: 'instagram',
     label: 'Instagram',
     icon: 'IG',
-    reward: 50,
+    reward: 300,
     available: false,
     comingSoonNote: 'Esperando aprobación de Meta',
   },
@@ -592,7 +593,7 @@ const SOCIAL_PROVIDERS = [
     key: 'tiktok',
     label: 'TikTok',
     icon: 'TT',
-    reward: 50,
+    reward: 300,
     available: false,
     comingSoonNote: 'Esperando aprobación de TikTok',
   },
@@ -917,7 +918,7 @@ export default function PointsEarn({ onOpenLogin }) {
         color: 'var(--text-muted)',
         lineHeight: 1.7,
       }}>
-        MXNP son puntos de la competencia — no tienen valor económico directo.
+        MXNP son puntos de la competencia. No tienen valor económico directo.
         Los ciclos de premios están pausados por ahora y vuelven pronto. Verificación
         manual de tareas sociales en &lt;24 h.
       </div>

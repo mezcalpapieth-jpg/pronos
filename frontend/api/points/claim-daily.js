@@ -1,7 +1,7 @@
 /**
  * POST /api/points/claim-daily
  *
- * Daily MXNP drip with streak bonus (+20 per consecutive day). Atomic:
+ * Daily MXNP drip with configured streak bonus. Atomic:
  * the claim insert, streak update, balance credit, and audit entry all
  * commit together.
  *
@@ -14,17 +14,26 @@ import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { requireSession } from '../_lib/session.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { withTransaction } from '../_lib/db-tx.js';
+import {
+  TOURNAMENT_RANKING_CUTOFF_ISO,
+  TOURNAMENT_REWARDS,
+  TOURNAMENT_START_ISO,
+  mexicoDateKey,
+  previousMexicoDateKey,
+} from '../_lib/points-tournament-config.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 
-const BASE_REWARD = 100;
-const STREAK_BONUS = 20;
+const BASE_REWARD = TOURNAMENT_REWARDS.dailyBase;
+const STREAK_BONUS = TOURNAMENT_REWARDS.dailyStep;
+const MAX_DAILY_REWARD = TOURNAMENT_REWARDS.dailyMax;
+const RESCUE_FLOOR = TOURNAMENT_REWARDS.rescueFloor;
+const RESCUE_MAX_CLAIMS = TOURNAMENT_REWARDS.rescueMaxClaims;
 
-function todayIso() { return new Date().toISOString().slice(0, 10); }
-function yesterdayIso() {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() - 1);
-  return d.toISOString().slice(0, 10);
+function claimDateKey(value) {
+  if (!value) return null;
+  if (typeof value === 'string') return value.slice(0, 10);
+  return new Date(value).toISOString().slice(0, 10);
 }
 
 export default async function handler(req, res) {
@@ -44,7 +53,9 @@ export default async function handler(req, res) {
   if (!session.username) return res.status(400).json({ error: 'username_required' });
 
   const username = session.username;
-  const today = todayIso();
+  const now = new Date();
+  const today = mexicoDateKey(now);
+  const yesterday = previousMexicoDateKey(now);
 
   try {
     await ensurePointsSchema(schemaSql);
@@ -70,13 +81,11 @@ export default async function handler(req, res) {
         [username],
       );
       const prev = streakResult.rows[0] || { current_streak: 0, last_claim_date: null, best_streak: 0 };
-      const prevDate = prev.last_claim_date
-        ? new Date(prev.last_claim_date).toISOString().slice(0, 10)
-        : null;
-      const streakDay = prevDate === yesterdayIso()
+      const prevDate = claimDateKey(prev.last_claim_date);
+      const streakDay = prevDate === yesterday
         ? Number(prev.current_streak || 0) + 1
         : 1;
-      const amount = BASE_REWARD + (streakDay - 1) * STREAK_BONUS;
+      const amount = Math.min(MAX_DAILY_REWARD, BASE_REWARD + (streakDay - 1) * STREAK_BONUS);
       const bestStreak = Math.max(Number(prev.best_streak || 0), streakDay);
 
       // Atomic idempotency gate: this INSERT either succeeds (we won the
@@ -111,7 +120,27 @@ export default async function handler(req, res) {
         [username],
       );
       const currentBalance = balanceResult.rows.length > 0 ? Number(balanceResult.rows[0].balance) : 0;
-      const newBalance = currentBalance + amount;
+      let newBalance = currentBalance + amount;
+      let rescueBonus = 0;
+      let rescueClaimsUsed = 0;
+      if (newBalance < RESCUE_FLOOR && RESCUE_MAX_CLAIMS > 0) {
+        const rescueRows = await client.query(
+          `SELECT id
+             FROM points_distributions
+            WHERE username = $1
+              AND kind = 'rescue_bonus'
+              AND created_at >= $2::timestamptz
+              AND created_at <= $3::timestamptz
+            FOR UPDATE`,
+          [username, TOURNAMENT_START_ISO, TOURNAMENT_RANKING_CUTOFF_ISO],
+        );
+        rescueClaimsUsed = rescueRows.rows.length;
+        if (rescueClaimsUsed < RESCUE_MAX_CLAIMS) {
+          rescueBonus = RESCUE_FLOOR - newBalance;
+          newBalance += rescueBonus;
+          rescueClaimsUsed += 1;
+        }
+      }
       if (balanceResult.rows.length === 0) {
         await client.query(
           `INSERT INTO points_balances (username, balance) VALUES ($1, $2)`,
@@ -145,7 +174,15 @@ export default async function handler(req, res) {
         [username, amount, `Racha día ${streakDay} · +${amount} MXNP`],
       );
 
-      return { alreadyClaimedToday: false, amount, streakDay, balance: newBalance };
+      if (rescueBonus > 0) {
+        await client.query(
+          `INSERT INTO points_distributions (username, amount, kind, reason)
+           VALUES ($1, $2, 'rescue_bonus', $3)`,
+          [username, rescueBonus, `Rescate de ciclo · balance mínimo ${RESCUE_FLOOR} MXNP`],
+        );
+      }
+
+      return { alreadyClaimedToday: false, amount, streakDay, balance: newBalance, rescueBonus, rescueClaimsUsed };
     });
 
     return res.status(200).json({ ok: true, ...result });

@@ -22,7 +22,7 @@ test('tournament page shows current leaderboard, past leaderboards, countdown an
   assert.match(pageSource, /Leaderboard actual/);
   assert.match(pageSource, /Leaderboards anteriores/);
   assert.match(pageSource, /Cuenta regresiva/);
-  assert.match(pageSource, /Cómo funciona/);
+  assert.match(pageSource, /Reglas/);
 });
 
 test('points app records authenticated site-time pulses from the router', () => {

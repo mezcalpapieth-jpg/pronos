@@ -10,26 +10,30 @@
  *   POST /api/points/admin/cycles
  *     Body: { action: 'rollover', nextCycleLabel? } or { action: 'pause' }
  *     Closes the current active cycle:
- *       1. Snapshots the top-100 leaderboard (by balance) into
+ *       1. Snapshots the top-100 leaderboard (by tournament score) into
  *          points_cycle_snapshots.
  *       2. Marks the cycle as 'closed' with closed_at = now.
- *       3. **Resets every user's balance to 500 MXNP** so the next
+ *       3. **Resets every user's balance to the tournament starting balance**
  *          cycle starts on a level playing field — per product decision:
- *          "every cycle all wallets reset to 500 MXNP". Each reset is
+ *          "every cycle all wallets reset". Each reset is
  *          audited in points_distributions (kind='cycle_reset') with a
- *          delta of (500 - previous_balance) so the ledger stays
- *          balanced.
+ *          delta of (tournament starting balance - previous_balance) so
+ *          the ledger stays balanced.
  *       4. Opens a new active cycle starting now, ends_at in 14 days.
  *
  * Response on rollover:
  *   { ok: true, closedCycleId, newCycleId, snapshotted, resetCount,
- *     winners: [top 3] }
+ *     winners: [top 5] }
  */
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { withTransaction } from '../../_lib/db-tx.js';
+import {
+  TOURNAMENT_STARTING_BALANCE,
+} from '../../_lib/points-tournament-config.js';
+import { buildTournamentLeaderboardRows } from '../../_lib/points-tournament-leaderboard.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -134,10 +138,9 @@ async function handleGet(req, res) {
   });
 }
 
-// Every cycle restarts at this balance. Must match claim-daily's and
-// username.js's signup bonus so a fresh account and a cycle-reset
-// account have the same starting point.
-const CYCLE_STARTING_BALANCE = 500;
+// Every cycle restarts at the tournament starting balance. A fresh
+// account and a cycle-reset account should begin from the same baseline.
+const CYCLE_STARTING_BALANCE = TOURNAMENT_STARTING_BALANCE;
 
 async function handleRollover(req, res, nextCycleLabel) {
   const result = await withTransaction(async (client) => {
@@ -166,36 +169,43 @@ async function handleRollover(req, res, nextCycleLabel) {
     }
     const activeCycle = cur.rows[0];
 
-    // ── 1. Snapshot the top 100 users by final balance ──────────────
-    // final_pnl = balance - 500 (the cycle start). This matches the
-    // new leaderboard ranking (balance-based) so the snapshot is the
-    // canonical record of "who won what" for this cycle.
-    const top = await client.query(
-      `SELECT u.username,
-              COALESCE(b.balance, 0) AS final_balance,
-              COALESCE(b.balance, 0) - ${CYCLE_STARTING_BALANCE} AS final_pnl
-       FROM points_users u
-       LEFT JOIN points_balances b ON b.username = u.username
-       WHERE u.username IS NOT NULL
-       ORDER BY final_balance DESC NULLS LAST
-       LIMIT 100`,
-    );
+    // ── 1. Snapshot the top 100 users by tournament score ───────────
+    const top = await buildTournamentLeaderboardRows(client, { limit: 100, now: new Date() });
 
     let rank = 0;
-    for (const row of top.rows) {
+    for (const row of top) {
       rank += 1;
       await client.query(
-        `INSERT INTO points_cycle_snapshots (cycle_id, username, final_balance, final_pnl, rank)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO points_cycle_snapshots (
+           cycle_id, username, final_balance, final_pnl, rank,
+           tournament_score, market_pnl, current_position_value,
+           inactivity_penalty, inactive_days, active_days,
+           qualifying_markets, qualified
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          ON CONFLICT (cycle_id, username) DO NOTHING`,
-        [activeCycle.id, row.username, row.final_balance, row.final_pnl, rank],
+        [
+          activeCycle.id,
+          row.username,
+          row.balance,
+          row.score,
+          rank,
+          row.score,
+          row.marketPnl,
+          row.currentPositionValue,
+          row.inactivityPenalty,
+          row.inactiveDays,
+          row.activeDays,
+          row.qualifyingMarkets,
+          row.qualified,
+        ],
       );
     }
 
     // ── 2. Reset every wallet to the starting balance ──────────────
     // Per product decision: each cycle is a level playing field. The
     // reset happens for EVERY balance row (not just top-100) so users
-    // outside the leaderboard also restart at 500. We also audit each
+    // outside the leaderboard also restart at the same baseline. We also audit each
     // reset as a signed distribution so the ledger stays balanced.
     //
     // We need the *pre-reset* balances to compute the audit deltas, so
@@ -271,12 +281,13 @@ async function handleRollover(req, res, nextCycleLabel) {
       closedCycleId: activeCycle.id,
       newCycle,
       newCycleId: newCycle.id,
-      snapshotted: top.rows.length,
+      snapshotted: top.length,
       resetCount,
-      winners: top.rows.slice(0, 3).map((r, i) => ({
+      winners: top.slice(0, 5).map((r, i) => ({
         rank: i + 1,
         username: r.username,
-        finalBalance: Number(r.final_balance),
+        finalBalance: Number(r.balance),
+        score: Number(r.score),
       })),
     };
   });

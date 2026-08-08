@@ -10,20 +10,21 @@ import React from 'react';
 const ITEMS = [
   { label: 'BETA',             val: 'PRONOS',         green: true },
   { label: 'MONEDA',           val: 'MXNP · PUNTOS' },
-  { label: 'BONO INICIAL',     val: '500 MXNP',       green: true },
+  { label: 'BONO INICIAL',     val: '1,500 MXNP',     green: true },
   { label: 'CICLO',            val: '2 SEMANAS' },
-  { label: 'PREMIO 1° LUGAR',  val: '$5,000 MXN',     green: true },
-  { label: 'PREMIO 2° LUGAR',  val: '$3,000 MXN' },
-  { label: 'PREMIO 3° LUGAR',  val: '$2,000 MXN' },
-  { label: 'PREMIO 4° – 10°',  val: 'SORPRESA' },
+  { label: 'PREMIO 1° LUGAR',  val: '$3,500 MXN',     green: true },
+  { label: 'PREMIO 2° LUGAR',  val: '$2,500 MXN' },
+  { label: 'PREMIO 3° LUGAR',  val: '$1,800 MXN' },
+  { label: 'PREMIO 4° LUGAR',  val: '$1,200 MXN' },
+  { label: 'PREMIO 5° LUGAR',  val: '$1,000 MXN' },
   { label: 'COMISIÓN',         val: 'SOLO EN COMPRAS' },
   // Duplicated so the CSS animation is seamless (the track is twice the
   // width of the viewport).
   { label: 'BETA',             val: 'PRONOS',         green: true },
   { label: 'MONEDA',           val: 'MXNP · PUNTOS' },
-  { label: 'BONO INICIAL',     val: '500 MXNP',       green: true },
+  { label: 'BONO INICIAL',     val: '1,500 MXNP',     green: true },
   { label: 'CICLO',            val: '2 SEMANAS' },
-  { label: 'PREMIO 1° LUGAR',  val: '$5,000 MXN',     green: true },
+  { label: 'PREMIO 1° LUGAR',  val: '$3,500 MXN',     green: true },
 ];
 
 export default function PointsTicker() {

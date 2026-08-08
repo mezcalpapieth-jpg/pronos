@@ -8,6 +8,11 @@ import {
 } from './amm-math.js';
 import { bestEffortInsertPointsPriceSnapshot } from './points-price-snapshots.js';
 import { assertCryptoTradeAllowed, cryptoTradeLock } from './points-crypto-trade-guard.js';
+import {
+  TOURNAMENT_MAX_SHARES_PER_MARKET,
+  TOURNAMENT_MIN_ENTRY_MXNP,
+  tournamentRulesActive,
+} from './points-tournament-config.js';
 
 const EPSILON = 0.000001;
 const MAX_TRIGGERED_PER_PASS = 24;
@@ -300,6 +305,25 @@ async function setBalance(client, username, balance) {
   );
 }
 
+async function assertTournamentShareCap(client, { marketId, username, additionalShares }) {
+  if (!tournamentRulesActive()) return;
+  const rows = await client.query(
+    `SELECT shares
+       FROM points_positions
+      WHERE market_id = $1
+        AND username = $2
+      FOR UPDATE`,
+    [marketId, username],
+  );
+  const currentShares = rows.rows.reduce((sum, row) => sum + Number(row.shares || 0), 0);
+  if (currentShares + Number(additionalShares || 0) > TOURNAMENT_MAX_SHARES_PER_MARKET + EPSILON) {
+    const err = new Error('tournament_share_cap');
+    err.status = 400;
+    err.detail = `Máximo ${TOURNAMENT_MAX_SHARES_PER_MARKET.toLocaleString('es-MX')} acciones por mercado en el torneo.`;
+    throw err;
+  }
+}
+
 export async function lockedReservedShares(client, { marketId, username, outcomeIndex }) {
   const rows = await client.query(
     `SELECT id, remaining_amount
@@ -355,6 +379,12 @@ async function fillBuyOrder(client, { order, market, reserves }) {
   if (quote.avgPrice > Number(order.limit_price) + EPSILON) {
     return { ok: true, status: 'open', triggered: false };
   }
+
+  await assertTournamentShareCap(client, {
+    marketId: order.market_id,
+    username: order.username,
+    additionalShares: quote.sharesOut,
+  });
 
   await client.query(
     `UPDATE points_markets SET reserves = $1::jsonb WHERE id = $2`,
@@ -581,6 +611,12 @@ export async function createLimitOrder(client, {
   }
   if (!Number.isFinite(qty) || qty <= 0) {
     const err = new Error('invalid_amount'); err.status = 400; throw err;
+  }
+  if (normalizedSide === 'buy' && tournamentRulesActive() && qty < TOURNAMENT_MIN_ENTRY_MXNP) {
+    const err = new Error('tournament_min_entry');
+    err.status = 400;
+    err.detail = `El mínimo por entrada durante el torneo es ${TOURNAMENT_MIN_ENTRY_MXNP} MXNP.`;
+    throw err;
   }
 
   const market = await lockMarket(client, marketId);

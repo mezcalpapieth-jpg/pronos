@@ -2,9 +2,9 @@
  * GET /api/points/cycles/current
  *
  * Returns the currently-active competition cycle when public cycles are open.
- * If cycles are paused or no active cycle exists, the endpoint returns a
- * paused "Próximamente" state instead of auto-creating a new countdown. Admin
- * can restart cycles from /api/points/admin/cycles.
+ * The launch tournament window is configured in code so the public page can
+ * count down even while the old admin pause flag remains set. Admin can still
+ * close and reopen future cycles from /api/points/admin/cycles.
  *
  * Response:
  *   {
@@ -22,6 +22,10 @@ import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { cachedJson, createApiTimer, setCacheHeaders } from '../../_lib/api-performance.js';
+import {
+  getTournamentWindow,
+  tournamentRulesPayload,
+} from '../../_lib/points-tournament-config.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -58,20 +62,56 @@ async function getCurrent() {
 }
 
 function pausedPayload() {
+  const window = getTournamentWindow();
   return {
     paused: true,
-    label: 'Próximamente',
+    label: window.label || 'Próximamente',
+    window,
+    rules: tournamentRulesPayload(),
     cycle: {
       id: null,
-      label: 'Próximamente',
-      status: 'paused',
+      label: window.label || 'Próximamente',
+      status: window.status === 'scheduled' ? 'scheduled' : 'paused',
       paused: true,
-      startedAt: null,
-      endsAt: null,
+      scheduled: window.scheduled,
+      startedAt: window.startsAt,
+      startsAt: window.startsAt,
+      operationCloseAt: window.operationCloseAt,
+      rankingCutoffAt: window.rankingCutoffAt,
+      endsAt: window.endsAt,
       createdAt: null,
       closedAt: null,
-      secondsRemaining: null,
-      pastDeadline: false,
+      secondsUntilStart: window.secondsUntilStart,
+      secondsUntilOperationClose: window.secondsUntilOperationClose,
+      secondsRemaining: window.secondsRemaining,
+      pastDeadline: window.pastDeadline,
+    },
+  };
+}
+
+function tournamentPayload(window = getTournamentWindow()) {
+  return {
+    paused: false,
+    label: window.label,
+    window,
+    rules: tournamentRulesPayload(),
+    cycle: {
+      id: null,
+      label: window.label,
+      status: window.status,
+      paused: false,
+      scheduled: window.scheduled,
+      startedAt: window.startsAt,
+      startsAt: window.startsAt,
+      operationCloseAt: window.operationCloseAt,
+      rankingCutoffAt: window.rankingCutoffAt,
+      endsAt: window.endsAt,
+      createdAt: null,
+      closedAt: null,
+      secondsUntilStart: window.secondsUntilStart,
+      secondsUntilOperationClose: window.secondsUntilOperationClose,
+      secondsRemaining: window.secondsRemaining,
+      pastDeadline: window.pastDeadline,
     },
   };
 }
@@ -84,27 +124,44 @@ export default async function handler(req, res) {
     if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
 
     setCacheHeaders(res, { scope: 'public', maxAge: 10, sMaxage: 30, staleWhileRevalidate: 120 });
-    const { value: payload, hit } = await cachedJson('points:cycles:current:v1', 20_000, async () => {
+    const { value: payload, hit } = await cachedJson('points:cycles:current:v2', 20_000, async () => {
       await timer.time('schema', () => ensurePointsSchema(sql));
-      if (await timer.time('db_pause', () => cyclesArePaused())) {
+      const window = getTournamentWindow();
+      const paused = await timer.time('db_pause', () => cyclesArePaused());
+      if (paused && window.status === 'closed') {
         return pausedPayload();
       }
 
+      if (window.status !== 'closed') {
+        return tournamentPayload(window);
+      }
+
       const row = await timer.time('db_current', () => getCurrent());
-      if (!row) return pausedPayload();
+      if (!row) {
+        return tournamentPayload(window);
+      }
 
       const endsAtMs = new Date(row.ends_at).getTime();
       const secondsRemaining = Math.max(0, Math.floor((endsAtMs - Date.now()) / 1000));
 
       return {
+        paused: false,
+        label: row.label || window.label,
+        window,
+        rules: tournamentRulesPayload(),
         cycle: {
           id: row.id,
-          label: row.label,
+          label: row.label || window.label,
           startedAt: row.started_at,
+          startsAt: row.started_at,
+          operationCloseAt: window.operationCloseAt,
+          rankingCutoffAt: window.rankingCutoffAt,
           endsAt: row.ends_at,
           status: row.status,
           createdAt: row.created_at,
           closedAt: row.closed_at,
+          secondsUntilStart: window.secondsUntilStart,
+          secondsUntilOperationClose: window.secondsUntilOperationClose,
           secondsRemaining,
           // Flag the UI can use to show "pendiente de cierre" once the
           // deadline passes but before an admin rolls over.

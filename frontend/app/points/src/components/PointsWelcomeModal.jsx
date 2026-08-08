@@ -2,10 +2,10 @@
  * Welcome modal — shown once right after a user claims their username.
  *
  * The goal is to make the "what is Pronos?" moment feel considered:
- *   1. Hero with a celebratory headline + the 500 MXNP bonus call-out.
+ *   1. Hero with a concise headline + the 1,500 MXNP bonus call-out.
  *   2. "What Pronos is TODAY" — off-chain competition, 2-week cycles,
  *      cash prizes for the top of the leaderboard.
- *   3. "What's coming NEXT" — on-chain USDC markets, priority access
+ *   3. "What's coming NEXT" - on-chain Pesos markets, priority access
  *      for the active competitors we have now.
  *   4. "How to earn without spending" — daily claim, referrals, social.
  *   5. CTA row: primary → claim today's daily, secondary → dismiss.
@@ -91,7 +91,7 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
         maxHeight: 'calc(100vh - 48px)',
         overflowY: 'auto',
       }}>
-        {/* ── Hero ───────────────────────────────────────────── */}
+          {/* Hero */}
         <div style={{
           padding: '40px 36px 28px',
           textAlign: 'center',
@@ -128,14 +128,14 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
             margin: 0,
           }}>
             {isEn ? (
-              <>You already have <strong style={{ color: 'var(--green)' }}>500 MXNP</strong> as a welcome bonus to start predicting.</>
+              <>You already have <strong style={{ color: 'var(--green)' }}>1,500 MXNP</strong> as a welcome bonus to start predicting.</>
             ) : (
-              <>Ya tienes <strong style={{ color: 'var(--green)' }}>500 MXNP</strong> de bienvenida para empezar a predecir.</>
+              <>Ya tienes <strong style={{ color: 'var(--green)' }}>1,500 MXNP</strong> de bienvenida para empezar a predecir.</>
             )}
           </p>
         </div>
 
-        {/* ── Sections ────────────────────────────────────────── */}
+        {/* Sections */}
         <div style={{ padding: '26px 36px 12px' }}>
           <WelcomeSection
             accent="var(--green)"
@@ -144,33 +144,33 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
               isEn ? (
                 <>
                   A <strong>prediction competition</strong>. You buy shares on
-                  real events (sports, politics, crypto, culture) with MXNP -
+                  real events (sports, politics, crypto, entertainment) with MXNP -
                   the competition points. Prices move with demand, like a real
                   market.
                   <br /><br />
-                  Prize cycles are paused for now while Pronos opens the next
-                  stage.
+                  The next tournament starts on August 12. The Top 5 win cash prizes,
+                  and the leaderboard is scored by market PnL.
                 </>
               ) : (
                 <>
                   Una <strong>competencia de predicciones</strong>. Compras acciones
-                  en eventos reales (deportes, política, crypto, cultura) con MXNP
-                  — los puntos de la competencia. Los precios se mueven con la
+                  en eventos reales (deportes, política, crypto, entretenimiento) con MXNP,
+                  los puntos de la competencia. Los precios se mueven con la
                   demanda, como en un mercado real.
                   <br /><br />
-                  Los ciclos de premios están pausados por ahora mientras Pronos
-                  abre la siguiente etapa.
+                  El próximo torneo empieza el 12 de agosto. El Top 5 gana premios
+                  en efectivo, y el leaderboard se mide por PnL de mercados.
                 </>
               )
             }
             bullets={isEn ? [
-              { icon: '01', text: 'Prize cycles', value: 'coming soon' },
+              { icon: '01', text: 'Tournament', value: 'Aug 12' },
               { icon: '02', text: 'Markets', value: 'open' },
-              { icon: '03', text: 'MXNP', value: 'practice points' },
+              { icon: '03', text: 'Starting balance', value: '1,500 MXNP' },
             ] : [
-              { icon: '01', text: 'Ciclos de premios', value: 'próximamente' },
+              { icon: '01', text: 'Torneo', value: '12 ago' },
               { icon: '02', text: 'Mercados', value: 'abiertos' },
-              { icon: '03', text: 'MXNP', value: 'puntos de práctica' },
+              { icon: '03', text: 'Balance inicial', value: '1,500 MXNP' },
             ]}
           />
 
@@ -193,7 +193,7 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
                 <>
                   Estamos construyendo el primer <strong>mercado de predicciones
                   on-chain</strong> diseñado para Latinoamérica. Lo que usas ahora
-                  con MXNP es el calentamiento — pronto podrás invertir{' '}
+                  con MXNP es el calentamiento; pronto podrás invertir{' '}
                   <strong>Pesos</strong> sobre eventos reales, con liquidación
                   automática y sin intermediarios.
                   <br /><br />
@@ -208,18 +208,18 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
             accent="var(--text-muted)"
             eyebrow={isEn ? 'How to earn MXNP without spending it' : 'Cómo ganar MXNP sin gastarlo'}
             bullets={isEn ? [
-              { icon: '01', text: 'Daily claim', value: '100 + 20/day streak' },
-              { icon: '02', text: 'Each friend you invite', value: '+100 MXNP' },
-              { icon: '03', text: 'Follow Pronos on social', value: 'up to +85 MXNP' },
+              { icon: '01', text: 'Daily claim', value: '150 + 15/day streak' },
+              { icon: '02', text: 'Each friend you invite', value: '+375 MXNP' },
+              { icon: '03', text: 'Approved social tasks', value: '+300 to +750 MXNP' },
             ] : [
-              { icon: '01', text: 'Reclamo diario', value: '100 + 20/día racha' },
-              { icon: '02', text: 'Cada amigo que invites', value: '+100 MXNP' },
-              { icon: '03', text: 'Seguir a Pronos en redes', value: 'hasta +85 MXNP' },
+              { icon: '01', text: 'Reclamo diario', value: '150 + 15/día racha' },
+              { icon: '02', text: 'Cada amigo que invites', value: '+375 MXNP' },
+              { icon: '03', text: 'Tareas sociales aprobadas', value: '+300 a +750 MXNP' },
             ]}
           />
         </div>
 
-        {/* ── CTAs ────────────────────────────────────────────── */}
+        {/* CTAs */}
         <div style={{
           padding: '20px 36px 32px',
           display: 'flex',
@@ -271,8 +271,8 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
           lineHeight: 1.6,
         }}>
           {isEn
-            ? 'MXNP are competition points - they do not have direct economic value. Prize cycles return soon.'
-            : 'MXNP son puntos de la competencia — no tienen valor económico directo. Los ciclos de premios vuelven pronto.'}
+            ? 'MXNP are competition points - they do not have direct economic value. Tournament prizes are paid in cash.'
+            : 'MXNP son puntos de la competencia, no tienen valor económico directo. Los premios del torneo se pagan en efectivo.'}
         </p>
       </div>
     </div>

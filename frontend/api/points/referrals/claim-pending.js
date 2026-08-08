@@ -8,8 +8,8 @@
  * credited here atomically.
  *
  * Rules (from the campaign doc):
- *   - Referrer:  +100 MXNP per confirmed referral
- *   - Referred:  +50  MXNP bonus
+ *   - Referrer:  configured MXNP per confirmed referral, capped per cycle
+ *   - Referred:  configured MXNP bonus
  *   - One-time per referred account. Duplicate calls are no-ops.
  *   - Self-referral rejected.
  *   - Referrer must already exist as a user (prevents typos paying out).
@@ -19,11 +19,17 @@ import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requireSession } from '../../_lib/session.js';
 import { withTransaction } from '../../_lib/db-tx.js';
+import {
+  TOURNAMENT_RANKING_CUTOFF_ISO,
+  TOURNAMENT_REWARDS,
+  TOURNAMENT_START_ISO,
+} from '../../_lib/points-tournament-config.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 
-const REFERRER_REWARD = 100;
-const REFERRED_REWARD = 50;
+const REFERRER_REWARD = TOURNAMENT_REWARDS.referrerReward;
+const REFERRED_REWARD = TOURNAMENT_REWARDS.referredReward;
+const REFERRAL_CYCLE_CAP = TOURNAMENT_REWARDS.referralCycleCap;
 const USERNAME_RE = /^[a-z][a-z0-9_]{2,19}$/;
 
 export default async function handler(req, res) {
@@ -51,21 +57,37 @@ export default async function handler(req, res) {
       // Confirm the referrer exists — protects against typos and attempted
       // credit to non-users.
       const referrerExists = await client.query(
-        `SELECT username FROM points_users WHERE LOWER(username) = $1 LIMIT 1`,
+        `SELECT username
+           FROM points_users
+          WHERE LOWER(username) = $1
+          LIMIT 1
+          FOR UPDATE`,
         [ref],
       );
       if (referrerExists.rows.length === 0) {
         const err = new Error('referrer_not_found'); err.status = 404; throw err;
       }
 
+      const rewardedThisCycle = await client.query(
+        `SELECT id
+           FROM points_referrals
+          WHERE referrer = $1
+            AND rewarded = TRUE
+            AND rewarded_at >= $2::timestamptz
+            AND rewarded_at <= $3::timestamptz
+          FOR UPDATE`,
+        [ref, TOURNAMENT_START_ISO, TOURNAMENT_RANKING_CUTOFF_ISO],
+      );
+      const referrerCanEarn = rewardedThisCycle.rows.length < REFERRAL_CYCLE_CAP;
+
       // Insert referral pair; ON CONFLICT means this is a no-op for any
       // later attempt (referred is UNIQUE in the schema).
       const inserted = await client.query(
         `INSERT INTO points_referrals (referrer, referred, rewarded, rewarded_at)
-         VALUES ($1, $2, TRUE, NOW())
+         VALUES ($1, $2, $3, CASE WHEN $3::boolean THEN NOW() ELSE NULL END)
          ON CONFLICT (referred) DO NOTHING
          RETURNING id`,
-        [ref, session.username.toLowerCase()],
+        [ref, session.username.toLowerCase(), referrerCanEarn],
       );
       if (inserted.rows.length === 0) {
         // Pair already existed — don't double-credit.
@@ -73,16 +95,20 @@ export default async function handler(req, res) {
       }
 
       // Credit both sides.
-      await creditBalance(client, ref, REFERRER_REWARD, 'referral_bonus',
-        `Referiste a @${session.username}`);
+      if (referrerCanEarn) {
+        await creditBalance(client, ref, REFERRER_REWARD, 'referral_bonus',
+          `Referiste a @${session.username}`);
+      }
       await creditBalance(client, session.username.toLowerCase(), REFERRED_REWARD, 'referral_bonus',
         `Bono por registrarte con @${ref}`);
 
       return {
         alreadyClaimed: false,
         referrer: ref,
-        referrerReward: REFERRER_REWARD,
+        referrerReward: referrerCanEarn ? REFERRER_REWARD : 0,
         referredReward: REFERRED_REWARD,
+        referralCycleCap: REFERRAL_CYCLE_CAP,
+        referrerCapReached: !referrerCanEarn,
       };
     });
 

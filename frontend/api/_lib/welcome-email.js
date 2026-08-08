@@ -34,7 +34,7 @@ export async function sendPointsWelcomeEmail({ email, username }) {
   if (!key || !email) return false;
 
   const handle = username ? `@${escapeHtml(username)}` : 'participante';
-  const subject = username ? `¡Bienvenido a Pronos, @${username}! 🎯` : `¡Bienvenido a Pronos! 🎯`;
+  const subject = username ? `Bienvenido a Pronos, @${username}` : 'Bienvenido a Pronos';
 
   const html = `
 <div style="font-family:'DM Sans',Helvetica,Arial,sans-serif;max-width:600px;margin:0 auto;background:#080808;border-radius:14px;overflow:hidden;color:#f0f0f0;">
@@ -46,7 +46,7 @@ export async function sendPointsWelcomeEmail({ email, username }) {
       ¡Bienvenido, ${handle}!
     </h1>
     <p style="font-size:15px;color:#999;line-height:1.6;margin:0 0 28px;">
-      Ya tienes <strong style="color:#00e87a;">500 MXNP</strong> en tu cuenta para empezar a predecir.
+      Ya tienes <strong style="color:#00e87a;">1,500 MXNP</strong> en tu cuenta para empezar a predecir.
     </p>
   </div>
 
@@ -57,17 +57,18 @@ export async function sendPointsWelcomeEmail({ email, username }) {
       </div>
       <p style="font-size:14px;color:#ccc;line-height:1.7;margin:0 0 14px;">
         Una <strong>competencia de predicciones en Latinoamérica</strong>. Compras acciones
-        en eventos reales (deportes, política, crypto, cultura) usando MXNP — los puntos
+        en eventos reales (deportes, política, crypto, entretenimiento) usando MXNP, los puntos
         de la competencia. Los precios se mueven con la demanda, como en un mercado real.
       </p>
       <p style="font-size:14px;color:#ccc;line-height:1.7;margin:0;">
-        Cada <strong style="color:#00e87a;">2 semanas</strong>, los Top&nbsp;3 del leaderboard ganan premios reales en efectivo:
+        Cada <strong style="color:#00e87a;">2 semanas</strong>, los Top&nbsp;5 del leaderboard ganan premios reales en efectivo:
       </p>
       <div style="margin-top:14px;font-size:14px;color:#ccc;line-height:1.9;">
-        🥇 1° lugar → <strong style="color:#00e87a;">$5,000 MXN</strong><br/>
-        🥈 2° lugar → <strong style="color:#00e87a;">$3,000 MXN</strong><br/>
-        🥉 3° lugar → <strong style="color:#00e87a;">$2,000 MXN</strong><br/>
-        🎁 Puestos 4° a 10° → premios sorpresa
+        1° lugar: <strong style="color:#00e87a;">$3,500 MXN</strong><br/>
+        2° lugar: <strong style="color:#00e87a;">$2,500 MXN</strong><br/>
+        3° lugar: <strong style="color:#00e87a;">$1,800 MXN</strong><br/>
+        4° lugar: <strong style="color:#00e87a;">$1,200 MXN</strong><br/>
+        5° lugar: <strong style="color:#00e87a;">$1,000 MXN</strong>
       </div>
     </div>
 
@@ -77,7 +78,7 @@ export async function sendPointsWelcomeEmail({ email, username }) {
       </div>
       <p style="font-size:14px;color:#ccc;line-height:1.7;margin:0 0 12px;">
         Estamos construyendo el primer <strong>mercado de predicciones on-chain</strong>
-        diseñado para Latinoamérica. Lo que estás usando ahora con MXNP es el calentamiento —
+        diseñado para Latinoamérica. Lo que estás usando ahora con MXNP es el calentamiento:
         pronto podrás invertir <strong>Pesos</strong> sobre eventos reales, con liquidación
         automática y sin intermediarios.
       </p>
@@ -93,26 +94,27 @@ export async function sendPointsWelcomeEmail({ email, username }) {
         Cómo ganar MXNP sin gastarlo
       </div>
       <div style="font-size:14px;color:#ccc;line-height:2;">
-        ⚡ <strong>Reclamo diario:</strong> 100 MXNP + 20 extra por cada día consecutivo<br/>
-        🤝 <strong>Referidos:</strong> 100 MXNP por cada amigo que invites<br/>
-        📲 <strong>Redes sociales:</strong> hasta 85 MXNP siguiendo a Pronos
+        <strong>Reclamo diario:</strong> 150 MXNP + 15 extra por día de racha, hasta 225<br/>
+        <strong>Referidos:</strong> 375 MXNP por amigo, máximo 10 por ciclo<br/>
+        <strong>Nuevo referido:</strong> 300 MXNP para quien entra con tu link<br/>
+        <strong>Redes sociales:</strong> 300 MXNP por follow/post y 750 MXNP por story aprobada
       </div>
     </div>
 
     <div style="text-align:center;margin-top:32px;">
       <a href="https://pronos.io" style="display:inline-block;padding:14px 32px;background:#00e87a;color:#000;text-decoration:none;border-radius:10px;font-weight:700;font-size:14px;letter-spacing:0.04em;text-transform:uppercase;">
-        Empezar a predecir →
+        Empezar a predecir
       </a>
     </div>
 
     <p style="font-size:12px;color:#666;line-height:1.6;margin-top:32px;text-align:center;">
-      MXNP son puntos de la competencia — no tienen valor económico directo.<br/>
+      MXNP son puntos de la competencia, no tienen valor económico directo.<br/>
       Los premios del leaderboard se pagan en efectivo (MXN).
     </p>
 
     <div style="margin-top:28px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.07);text-align:center;">
       <p style="font-size:12px;color:#555;margin:0;">
-        — Simon, fundador de Pronos<br/>
+        Simon, fundador de Pronos<br/>
         <a href="https://x.com/pronosmarket" style="color:#888;text-decoration:none;">@pronosmarket</a>
       </p>
     </div>

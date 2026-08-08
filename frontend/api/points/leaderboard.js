@@ -1,17 +1,9 @@
 /**
  * GET /api/points/leaderboard
  *
- * Top predictors ranked by current wallet balance (MXNP). Since all
- * balances reset to 500 MXNP on each 2-week cycle rollover, whoever has
- * the highest balance at the end of the cycle is whoever grew their
- * initial stake the most through trading + daily claims.
- *
- * Product note: this used to rank by PnL aggregated from positions, but
- * we switched to balance-based ranking because:
- *   1. Balance naturally includes daily-claim gains (rewards engagement).
- *   2. Cycle rollover resets to 500, so balance *is* the per-cycle PnL.
- *   3. Way simpler query — one SELECT instead of mark-to-market math
- *      across every open position.
+ * Top predictors ranked by tournament score: market PnL marked to the
+ * current AMM price, minus friendly inactivity penalties. Bonuses and
+ * referrals fund the account but do not directly lift the tournament score.
  *
  * Unauthenticated caller gets the public leaderboard. Authenticated
  * caller additionally receives their own rank + balance.
@@ -21,18 +13,14 @@ import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { readSession } from '../_lib/session.js';
 import { cachedJson, createApiTimer, setCacheHeaders } from '../_lib/api-performance.js';
+import {
+  TOURNAMENT_STARTING_BALANCE,
+  tournamentRulesPayload,
+} from '../_lib/points-tournament-config.js';
+import { buildTournamentLeaderboardRows } from '../_lib/points-tournament-leaderboard.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
-
-function round2(n) {
-  const v = Number(n);
-  return Number.isFinite(v) ? Math.round(v * 100) / 100 : 0;
-}
-
-// Same amount we seed new users with; the leaderboard reports the
-// delta from this so users can see cycle-to-date growth.
-const CYCLE_STARTING_BALANCE = 500;
 
 export default async function handler(req, res) {
   const timer = createApiTimer(res, 'points/leaderboard');
@@ -43,26 +31,9 @@ export default async function handler(req, res) {
   try {
     setCacheHeaders(res, { scope: 'private', maxAge: 15, staleWhileRevalidate: 60 });
 
-    // Pull every user with a balance row. LEFT JOIN on points_users so
-    // rows without a points_balances entry (edge case: user created but
-    // never claimed signup) still show up, ranked at the bottom.
-    const { value: ranked, hit } = await cachedJson('points:leaderboard:ranked:v1', 15_000, async () => {
+    const { value: ranked, hit } = await cachedJson('points:leaderboard:ranked:v2', 15_000, async () => {
       await timer.time('schema', () => ensurePointsSchema(schemaSql));
-      const rows = await timer.time('db_leaderboard', () => sql`
-        SELECT u.username, COALESCE(b.balance, 0) AS balance
-        FROM points_users u
-        LEFT JOIN points_balances b ON b.username = u.username
-        WHERE u.username IS NOT NULL
-        ORDER BY balance DESC NULLS LAST, u.username ASC
-        LIMIT 500
-      `);
-
-      return rows.map((r, i) => ({
-        rank: i + 1,
-        username: r.username,
-        balance: round2(r.balance),
-        cycleDelta: round2(Number(r.balance) - CYCLE_STARTING_BALANCE),
-      }));
+      return await timer.time('db_leaderboard', () => buildTournamentLeaderboardRows(sql, { limit: 500 }));
     });
 
     const top = ranked.slice(0, 10);
@@ -80,7 +51,14 @@ export default async function handler(req, res) {
           rank: null,
           username: session.username,
           balance: 0,
-          cycleDelta: -CYCLE_STARTING_BALANCE,
+          score: 0,
+          cycleDelta: 0,
+          marketPnl: 0,
+          inactivityPenalty: 0,
+          inactiveDays: 0,
+          activeDays: 0,
+          qualifyingMarkets: 0,
+          qualified: false,
         };
       }
     }
@@ -91,7 +69,8 @@ export default async function handler(req, res) {
       top,
       me,
       totalParticipants: ranked.length,
-      startingBalance: CYCLE_STARTING_BALANCE,
+      startingBalance: TOURNAMENT_STARTING_BALANCE,
+      rules: tournamentRulesPayload(),
     });
   } catch (e) {
     timer.end({ error: 'leaderboard_failed' });

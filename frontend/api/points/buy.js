@@ -23,6 +23,11 @@ import { seriesTradeLockFromRows } from '../_lib/series-markets.js';
 import { bestEffortInsertPointsPriceSnapshot } from '../_lib/points-price-snapshots.js';
 import { executeTriggeredLimitOrders } from '../_lib/points-limit-orders.js';
 import { assertCryptoTradeAllowed } from '../_lib/points-crypto-trade-guard.js';
+import {
+  TOURNAMENT_MAX_SHARES_PER_MARKET,
+  TOURNAMENT_MIN_ENTRY_MXNP,
+  tournamentRulesActive,
+} from '../_lib/points-tournament-config.js';
 
 // Lightweight HTTP client used only to run the idempotent schema bootstrap.
 // Transactional work goes through withTransaction() which uses a WS Pool.
@@ -58,6 +63,25 @@ async function readSeriesTradeLock(client, market) {
   return seriesTradeLockFromRows(market, siblingResult.rows);
 }
 
+async function assertTournamentShareCap(client, { marketId, username, additionalShares }) {
+  if (!tournamentRulesActive()) return;
+  const rows = await client.query(
+    `SELECT outcome_index, shares
+       FROM points_positions
+      WHERE market_id = $1
+        AND username = $2
+      FOR UPDATE`,
+    [marketId, username],
+  );
+  const currentShares = rows.rows.reduce((sum, row) => sum + Number(row.shares || 0), 0);
+  if (currentShares + Number(additionalShares || 0) > TOURNAMENT_MAX_SHARES_PER_MARKET + 0.000001) {
+    const err = new Error('tournament_share_cap');
+    err.status = 400;
+    err.detail = `Máximo ${TOURNAMENT_MAX_SHARES_PER_MARKET.toLocaleString('es-MX')} acciones por mercado en el torneo.`;
+    throw err;
+  }
+}
+
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'POST, OPTIONS', credentials: true });
   if (cors) return cors;
@@ -83,6 +107,12 @@ export default async function handler(req, res) {
   // reserves count (binary=2 or trinary=3). Just guard the lower bound here.
   if (!Number.isInteger(oi) || oi < 0)    return res.status(400).json({ error: 'invalid_outcome_index' });
   if (!Number.isFinite(amt) || amt <= 0)   return res.status(400).json({ error: 'invalid_amount' });
+  if (tournamentRulesActive() && amt < TOURNAMENT_MIN_ENTRY_MXNP) {
+    return res.status(400).json({
+      error: 'tournament_min_entry',
+      detail: `El mínimo por entrada durante el torneo es ${TOURNAMENT_MIN_ENTRY_MXNP} MXNP.`,
+    });
+  }
 
   // Slippage guards (optional). Client sends what it quoted; server
   // rejects with `price_moved` if the locked quote exceeds the
@@ -175,6 +205,12 @@ export default async function handler(req, res) {
         err.detail = `avg_price=${quote.avgPrice.toFixed(6)} above max=${maxPrice}`;
         throw err;
       }
+
+      await assertTournamentShareCap(client, {
+        marketId: mid,
+        username,
+        additionalShares: quote.sharesOut,
+      });
 
       // Persist reserves + balance + trade + position + audit log.
       await client.query(

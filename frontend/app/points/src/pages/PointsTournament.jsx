@@ -6,25 +6,81 @@ import { useLang } from '@app/lib/i18n.js';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
 import { LeaderboardSkeleton } from '../components/PointsSkeleton.jsx';
 
-function fmt(n) {
+const DEFAULT_RULES = {
+  startingBalance: 1500,
+  minEntryMxnp: 300,
+  maxSharesPerMarket: 6000,
+  qualifyingMarkets: 3,
+  inactivityPenalty: 50,
+  rewards: {
+    dailyBase: 150,
+    dailyStep: 15,
+    dailyMax: 225,
+    referralCycleCap: 10,
+    referrerReward: 375,
+    referredReward: 300,
+    rescueFloor: 300,
+    rescueMaxClaims: 3,
+  },
+  prizes: [
+    { rank: '1', amount: 3500, prize: '$3,500 MXN' },
+    { rank: '2', amount: 2500, prize: '$2,500 MXN' },
+    { rank: '3', amount: 1800, prize: '$1,800 MXN' },
+    { rank: '4', amount: 1200, prize: '$1,200 MXN' },
+    { rank: '5', amount: 1000, prize: '$1,000 MXN' },
+  ],
+};
+
+function fmt(n, digits = 2) {
   return Number(n || 0).toLocaleString('es-MX', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
   });
+}
+
+function fmtInteger(n) {
+  return Number(n || 0).toLocaleString('es-MX', { maximumFractionDigits: 0 });
 }
 
 function formatCountdown(totalSeconds, lang) {
   if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) {
-    return lang === 'en' ? 'Closing pending' : 'Cierre pendiente';
+    return lang === 'en' ? 'Pending' : 'Pendiente';
   }
   const days = Math.floor(totalSeconds / 86400);
   const hours = Math.floor((totalSeconds % 86400) / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = Math.floor(totalSeconds % 60);
   const parts = [];
   if (days > 0) parts.push(`${days}d`);
-  if (hours > 0 || days > 0) parts.push(`${hours}h`);
+  parts.push(`${hours}h`);
   parts.push(`${minutes}m`);
+  if (days === 0 && hours === 0) parts.push(`${seconds}s`);
   return parts.join(' ');
+}
+
+function statusCopy(status, lang) {
+  const copies = {
+    scheduled: { es: 'Programado', en: 'Scheduled' },
+    active: { es: 'Activo', en: 'Active' },
+    closing: { es: 'Cierre final', en: 'Final close' },
+    closed: { es: 'Cerrado', en: 'Closed' },
+    paused: { es: 'Pausado', en: 'Paused' },
+  };
+  return (copies[status] || copies.scheduled)[lang] || copies.scheduled.es;
+}
+
+function targetForCycle(cycle) {
+  if (!cycle) return null;
+  if (cycle.status === 'scheduled') {
+    return { label: { es: 'Inicia en', en: 'Starts in' }, iso: cycle.startsAt || cycle.startedAt };
+  }
+  if (cycle.status === 'active') {
+    return { label: { es: 'Operación cierra en', en: 'Trading closes in' }, iso: cycle.operationCloseAt || cycle.endsAt };
+  }
+  if (cycle.status === 'closing') {
+    return { label: { es: 'Ranking cierra en', en: 'Ranking closes in' }, iso: cycle.rankingCutoffAt || cycle.endsAt };
+  }
+  return { label: { es: 'Estado', en: 'Status' }, iso: cycle.endsAt };
 }
 
 function TournamentCard({ children, style }) {
@@ -56,18 +112,44 @@ function SectionLabel({ children }) {
   );
 }
 
-function LeaderboardRow({ row, currentUsername }) {
+function Metric({ label, value, tone = 'primary', sub }) {
+  const color = tone === 'green'
+    ? 'var(--green)'
+    : tone === 'orange'
+      ? 'var(--orange)'
+      : 'var(--text-primary)';
+  return (
+    <div style={{
+      minWidth: 0,
+      border: '1px solid var(--border)',
+      borderRadius: 8,
+      padding: '14px 14px 13px',
+      background: 'var(--surface2)',
+    }}>
+      <div style={metricLabel}>{label}</div>
+      <div style={{ ...metricValue, color }}>{value}</div>
+      {sub && <div style={metricSub}>{sub}</div>}
+    </div>
+  );
+}
+
+function LeaderboardRow({ row, currentUsername, rules, compact = false, lang = 'es' }) {
   const isMe = row.username === currentUsername;
-  const delta = Number(row.cycleDelta ?? row.finalPnl ?? 0);
+  const score = Number(row.score ?? row.cycleDelta ?? row.finalPnl ?? 0);
+  const pnl = Number(row.marketPnl ?? 0);
+  const penalty = Number(row.inactivityPenalty ?? 0);
+  const qualified = Boolean(row.qualified);
+  const qualifyingMarkets = Number(row.qualifyingMarkets || 0);
+  const neededMarkets = Math.max(0, Number(rules?.qualifyingMarkets || 3) - qualifyingMarkets);
   return (
     <Link
       to={`/u/${encodeURIComponent(row.username)}`}
       style={{
         display: 'grid',
-        gridTemplateColumns: '38px minmax(0, 1fr) minmax(108px, auto) minmax(84px, auto)',
+        gridTemplateColumns: compact ? '30px minmax(0, 1fr) minmax(92px, auto)' : '36px minmax(0, 1fr) minmax(112px, auto) minmax(116px, auto)',
         gap: 12,
         alignItems: 'center',
-        padding: '11px 0',
+        padding: compact ? '10px 0' : '12px 0',
         borderBottom: '1px solid var(--border)',
         textDecoration: 'none',
         color: isMe ? 'var(--green)' : 'var(--text-secondary)',
@@ -76,39 +158,55 @@ function LeaderboardRow({ row, currentUsername }) {
       }}
     >
       <span style={{ color: 'var(--text-muted)' }}>{row.rank}.</span>
+      <span style={{ minWidth: 0 }}>
+        <strong style={{
+          display: 'block',
+          minWidth: 0,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          color: isMe ? 'var(--green)' : 'var(--text-primary)',
+          fontFamily: 'var(--font-body)',
+          fontSize: compact ? 13 : 14,
+        }}>
+          {isMe ? '(tú) ' : ''}{row.username}
+        </strong>
+        {!compact && (
+          <span style={{ display: 'block', marginTop: 4, color: 'var(--text-muted)' }}>
+            {qualified
+              ? `${qualifyingMarkets} ${lang === 'en' ? 'markets · qualified' : 'mercados · califica'}`
+              : `${qualifyingMarkets} ${lang === 'en' ? `markets · ${neededMarkets} left` : `mercados · faltan ${neededMarkets}`}`}
+          </span>
+        )}
+      </span>
+      {!compact && (
+        <span style={{ color: pnl >= 0 ? 'var(--green)' : 'var(--danger)', textAlign: 'right' }}>
+          PnL {pnl >= 0 ? '+' : ''}{fmt(pnl)}
+          {penalty > 0 && (
+            <span style={{ display: 'block', color: 'var(--text-muted)', marginTop: 4 }}>
+              -{fmt(penalty)} {lang === 'en' ? 'inactive' : 'inactividad'}
+            </span>
+          )}
+        </span>
+      )}
       <strong style={{
-        minWidth: 0,
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
-        color: isMe ? 'var(--green)' : 'var(--text-primary)',
-        fontFamily: 'var(--font-body)',
-        fontSize: 14,
-      }}>
-        {isMe ? '(tú) ' : ''}{row.username}
-      </strong>
-      <span style={{ color: 'var(--text-primary)', textAlign: 'right' }}>
-        {fmt(row.balance ?? row.finalBalance)} MXNP
-      </span>
-      <span style={{
-        color: delta >= 0 ? 'var(--success)' : 'var(--danger)',
+        color: score >= 0 ? 'var(--text-primary)' : 'var(--danger)',
         textAlign: 'right',
+        fontFamily: 'var(--font-body)',
+        fontSize: compact ? 13 : 15,
       }}>
-        {delta >= 0 ? '+' : ''}{fmt(delta)}
-      </span>
+        {score >= 0 ? '+' : ''}{fmt(score)}
+      </strong>
     </Link>
   );
 }
 
-function PrizeRows({ lang }) {
-  const rows = [
-    { rank: '1', prize: '$5,000 MXN' },
-    { rank: '2', prize: '$3,000 MXN' },
-    { rank: '3', prize: '$2,000 MXN' },
-    { rank: '4-10', prize: lang === 'en' ? 'Surprise prize' : 'Premio sorpresa' },
-  ];
+function PrizeRows({ rules }) {
+  const rows = Array.isArray(rules?.prizes) && rules.prizes.length > 0
+    ? rules.prizes
+    : DEFAULT_RULES.prizes;
   return (
-    <div style={{ display: 'grid', gap: 10 }}>
+    <div style={{ display: 'grid', gap: 9 }}>
       {rows.map(row => (
         <div key={row.rank} style={{
           display: 'flex',
@@ -117,15 +215,94 @@ function PrizeRows({ lang }) {
           gap: 16,
           padding: '11px 12px',
           border: '1px solid rgba(0,232,122,0.18)',
-          borderRadius: 10,
+          borderRadius: 8,
           background: 'var(--surface2)',
         }}>
           <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
             {row.rank}
           </span>
-          <strong style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--green)' }}>
+          <strong style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: 'var(--green)' }}>
             {row.prize}
           </strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RuleList({ lang, rules }) {
+  const r = rules || DEFAULT_RULES;
+  const items = lang === 'en' ? [
+    `Ranking score is market PnL marked to current prices, minus ${fmtInteger(r.inactivityPenalty)} MXNP for each inactive day.`,
+    `Bonuses fund your account, but signup, streak, social, and referral rewards do not directly add to the score.`,
+    `You qualify with ${fmtInteger(r.qualifyingMarkets)} entries in distinct markets. Each entry has a ${fmtInteger(r.minEntryMxnp)} MXNP minimum.`,
+    `Each user can hold up to ${fmtInteger(r.maxSharesPerMarket)} shares per market.`,
+    'Ties break by fewer inactive days, more distinct liquidated markets, then older registration.',
+  ] : [
+    `El puntaje es el PnL de mercados marcado a precio actual, menos ${fmtInteger(r.inactivityPenalty)} MXNP por cada día inactivo.`,
+    'Los bonos fondean tu cuenta, pero registro, racha, redes y referidos no suman directo al puntaje.',
+    `Calificas con ${fmtInteger(r.qualifyingMarkets)} entradas en mercados distintos. Cada entrada tiene mínimo de ${fmtInteger(r.minEntryMxnp)} MXNP.`,
+    `Cada usuario puede tener hasta ${fmtInteger(r.maxSharesPerMarket)} acciones por mercado.`,
+    'Empates: menos días inactivos, más mercados distintos liquidados y registro más antiguo.',
+  ];
+  return (
+    <div style={{ display: 'grid', gap: 12 }}>
+      {items.map((text, idx) => (
+        <div key={text} style={{ display: 'grid', gridTemplateColumns: '26px minmax(0, 1fr)', gap: 11, alignItems: 'start' }}>
+          <span style={{
+            width: 22,
+            height: 22,
+            borderRadius: 999,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(255,85,0,0.11)',
+            border: '1px solid rgba(255,85,0,0.34)',
+            color: 'var(--orange)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+          }}>
+            {idx + 1}
+          </span>
+          <p style={{ margin: 0, color: 'var(--text-secondary)', fontFamily: 'var(--font-body)', fontSize: 14, lineHeight: 1.55 }}>
+            {text}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RewardList({ lang, rules }) {
+  const rewards = rules?.rewards || DEFAULT_RULES.rewards;
+  const rows = lang === 'en' ? [
+    ['Daily claim', `${fmtInteger(rewards.dailyBase)} MXNP + ${fmtInteger(rewards.dailyStep)} per streak day, max ${fmtInteger(rewards.dailyMax)}`],
+    ['Referrals', `${fmtInteger(rewards.referrerReward)} MXNP to inviter, max ${fmtInteger(rewards.referralCycleCap)} per cycle`],
+    ['New referred user', `${fmtInteger(rewards.referredReward)} MXNP`],
+    ['Rescue top-up', `Up to ${fmtInteger(rewards.rescueFloor)} MXNP, max ${fmtInteger(rewards.rescueMaxClaims)} times per cycle`],
+  ] : [
+    ['Reclamo diario', `${fmtInteger(rewards.dailyBase)} MXNP + ${fmtInteger(rewards.dailyStep)} por día de racha, máximo ${fmtInteger(rewards.dailyMax)}`],
+    ['Referidos', `${fmtInteger(rewards.referrerReward)} MXNP para quien invita, máximo ${fmtInteger(rewards.referralCycleCap)} por ciclo`],
+    ['Usuario referido', `${fmtInteger(rewards.referredReward)} MXNP`],
+    ['Rescate de saldo', `Hasta ${fmtInteger(rewards.rescueFloor)} MXNP, máximo ${fmtInteger(rewards.rescueMaxClaims)} veces por ciclo`],
+  ];
+  return (
+    <div style={{ display: 'grid', gap: 10 }}>
+      {rows.map(([label, value]) => (
+        <div key={label} style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 0.8fr) minmax(0, 1.2fr)',
+          gap: 12,
+          alignItems: 'baseline',
+          borderBottom: '1px solid var(--border)',
+          paddingBottom: 9,
+        }}>
+          <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 13 }}>
+            {label}
+          </span>
+          <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11, lineHeight: 1.45 }}>
+            {value}
+          </span>
         </div>
       ))}
     </div>
@@ -153,21 +330,30 @@ export default function PointsTournament() {
       setLeaderboard(leaderboardData);
       setHistory(Array.isArray(historyData) ? historyData : []);
     });
-    const id = window.setInterval(() => setTick(t => t + 1), 60_000);
+    const id = window.setInterval(() => setTick(t => t + 1), 1000);
     return () => {
       cancelled = true;
       window.clearInterval(id);
     };
   }, []);
 
+  const rules = leaderboard?.rules || cycle?.rules || DEFAULT_RULES;
+  const countdownTarget = targetForCycle(cycle);
   const countdown = useMemo(() => {
-    if (cycle?.paused || !cycle?.endsAt) return null;
-    const seconds = Math.max(0, Math.floor((new Date(cycle.endsAt).getTime() - Date.now()) / 1000));
+    if (!countdownTarget?.iso || cycle?.status === 'closed') return statusCopy(cycle?.status || 'scheduled', lang);
+    const seconds = Math.max(0, Math.floor((new Date(countdownTarget.iso).getTime() - Date.now()) / 1000));
     return formatCountdown(seconds, lang);
-  }, [cycle, lang, tick]);
+  }, [countdownTarget?.iso, cycle?.status, lang, tick]);
 
   const top = Array.isArray(leaderboard?.top) ? leaderboard.top : [];
   const cycles = Array.isArray(history) ? history : [];
+  const status = cycle?.status || 'scheduled';
+  const me = leaderboard?.me || null;
+  const qualifiedCount = top.filter(row => row.qualified).length;
+  const prizeRows = Array.isArray(rules.prizes) && rules.prizes.length > 0
+    ? rules.prizes
+    : DEFAULT_RULES.prizes;
+  const prizePool = prizeRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
 
   return (
     <main style={{
@@ -179,96 +365,79 @@ export default function PointsTournament() {
         <SectionLabel>{lang === 'en' ? 'Pronos tournament' : 'Torneo Pronos'}</SectionLabel>
         <h1 style={{
           fontFamily: 'var(--font-display)',
-          fontSize: 'clamp(30px, 4.6vw, 54px)',
-          lineHeight: 1.02,
+          fontSize: 'clamp(30px, 4.2vw, 52px)',
+          lineHeight: 1.03,
           color: 'var(--text-primary)',
           textTransform: 'uppercase',
           letterSpacing: '0.01em',
           margin: 0,
         }}>
-          {lang === 'en' ? 'Tournament standings' : 'Clasificación del torneo'}
+          {lang === 'en' ? 'The next cycle starts soon' : 'El próximo ciclo empieza pronto'}
         </h1>
         <p style={{
-          maxWidth: 700,
+          maxWidth: 760,
           color: 'var(--text-secondary)',
           fontFamily: 'var(--font-body)',
-          fontSize: 'clamp(15px, 1.6vw, 18px)',
+          fontSize: 'clamp(15px, 1.5vw, 17px)',
           lineHeight: 1.55,
           margin: '14px 0 0',
         }}>
           {lang === 'en'
-            ? 'Each cycle starts from the same base. Grow your MXNP balance through market activity; when prizes resume, the final leaderboard determines the cash awards.'
-            : 'Cada ciclo empieza desde la misma base. Haz crecer tu balance de MXNP con actividad en mercados; cuando vuelvan los premios, el cierre del leaderboard define los ganadores.'}
+            ? 'Everyone starts from the same base. The leaderboard rewards real market performance, not passive bonuses: score comes from market PnL, adjusted by a small inactivity penalty.'
+            : 'Todos arrancan desde la misma base. El leaderboard premia desempeño real en mercados, no bonos pasivos: el puntaje sale del PnL de mercados, ajustado por una penalización pequeña de inactividad.'}
         </p>
       </section>
 
       <div style={{
         display: 'grid',
-        gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1.3fr) minmax(280px, 0.7fr)',
+        gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1.28fr) minmax(300px, 0.72fr)',
         gap: 18,
         marginBottom: 18,
       }}>
         <TournamentCard>
-          <SectionLabel>{cycle?.paused ? (lang === 'en' ? 'Coming soon' : 'Próximamente') : (cycle?.label || (lang === 'en' ? 'Current cycle' : 'Ciclo actual'))}</SectionLabel>
+          <SectionLabel>{cycle?.label || (lang === 'en' ? 'Current cycle' : 'Ciclo actual')}</SectionLabel>
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
-            <div>
-              <div style={metricLabel}>{lang === 'en' ? 'Status' : 'Estado'}</div>
-              <div style={metricValue}>{cycle?.paused ? (lang === 'en' ? 'Paused' : 'Pausado') : (lang === 'en' ? 'Open' : 'Abierto')}</div>
-            </div>
-            <div>
-              <div style={metricLabel}>{lang === 'en' ? 'Countdown' : 'Cuenta regresiva'}</div>
-              <div style={metricValue}>{countdown || (lang === 'en' ? 'Soon' : 'Pronto')}</div>
-            </div>
-            <div>
-              <div style={metricLabel}>{lang === 'en' ? 'Participants' : 'Participantes'}</div>
-              <div style={metricValue}>{Number(leaderboard?.totalParticipants || 0).toLocaleString('es-MX')}</div>
-            </div>
+            <Metric
+              label={lang === 'en' ? 'Status' : 'Estado'}
+              value={statusCopy(status, lang)}
+              tone={status === 'active' ? 'green' : 'orange'}
+              sub={cycle?.startsAt ? new Date(cycle.startsAt).toLocaleString(lang === 'en' ? 'en-US' : 'es-MX', {
+                day: 'numeric',
+                month: 'short',
+                hour: '2-digit',
+                minute: '2-digit',
+              }) : null}
+            />
+            <Metric
+              label={countdownTarget?.label?.[lang] || (lang === 'en' ? 'Countdown' : 'Cuenta regresiva')}
+              value={countdown}
+              tone="orange"
+              sub={lang === 'en' ? 'Mexico City time' : 'Hora Ciudad de México'}
+            />
+            <Metric
+              label={lang === 'en' ? 'Prize pool' : 'Bolsa'}
+              value={`$${fmtInteger(prizePool)} MXN`}
+              tone="green"
+              sub={lang === 'en' ? 'Top 5 winners' : 'Top 5 lugares'}
+            />
           </div>
         </TournamentCard>
 
         <TournamentCard>
-          <SectionLabel>{lang === 'en' ? 'Prizes' : 'Premios'}</SectionLabel>
-          <PrizeRows lang={lang} />
+          <SectionLabel>{lang === 'en' ? 'Cash prizes' : 'Premios en efectivo'}</SectionLabel>
+          <PrizeRows rules={rules} />
         </TournamentCard>
       </div>
 
       <div style={{
         display: 'grid',
-        gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 0.9fr) minmax(0, 1.1fr)',
+        gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 0.92fr) minmax(0, 1.08fr)',
         gap: 18,
         marginBottom: 18,
       }}>
         <TournamentCard>
-          <SectionLabel>{lang === 'en' ? 'How it works' : 'Cómo funciona'}</SectionLabel>
-          <div style={{ display: 'grid', gap: 14 }}>
-            {[
-              lang === 'en' ? 'Start with 500 MXNP in the cycle wallet.' : 'Empiezas con 500 MXNP en la cartera del ciclo.',
-              lang === 'en' ? 'Buy and sell shares across real markets. Your balance moves with every trade and reward.' : 'Compras y vendes acciones en mercados reales. Tu balance se mueve con cada trade y recompensa.',
-              lang === 'en' ? 'To qualify for prizes, participate in at least 10 markets during the cycle.' : 'Para calificar a premios, participa en al menos 10 mercados durante el ciclo.',
-              lang === 'en' ? 'At close, admin snapshots the leaderboard and opens the next cycle when prizes resume.' : 'Al cierre, admin congela el leaderboard y abre el siguiente ciclo cuando vuelvan los premios.',
-            ].map((text, idx) => (
-              <div key={text} style={{ display: 'grid', gridTemplateColumns: '30px minmax(0, 1fr)', gap: 11, alignItems: 'start' }}>
-                <span style={{
-                  width: 24,
-                  height: 24,
-                  borderRadius: 999,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: 'rgba(255,85,0,0.12)',
-                  border: '1px solid rgba(255,85,0,0.35)',
-                  color: 'var(--orange)',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 10,
-                }}>
-                  {idx + 1}
-                </span>
-                <p style={{ margin: 0, color: 'var(--text-secondary)', fontFamily: 'var(--font-body)', fontSize: 14, lineHeight: 1.55 }}>
-                  {text}
-                </p>
-              </div>
-            ))}
-          </div>
+          <SectionLabel>{lang === 'en' ? 'Rules' : 'Reglas'}</SectionLabel>
+          <RuleList lang={lang} rules={rules} />
         </TournamentCard>
 
         <TournamentCard>
@@ -280,9 +449,9 @@ export default function PointsTournament() {
           ) : (
             <div>
               {top.map(row => (
-                <LeaderboardRow key={row.username} row={row} currentUsername={user?.username} />
+                <LeaderboardRow key={row.username} row={row} currentUsername={user?.username} rules={rules} compact={isMobile} lang={lang} />
               ))}
-              {leaderboard?.me && leaderboard.me.rank > 10 && (
+              {me && me.rank > top.length && (
                 <div style={{
                   marginTop: 12,
                   paddingTop: 12,
@@ -290,12 +459,49 @@ export default function PointsTournament() {
                   fontFamily: 'var(--font-mono)',
                   color: 'var(--green)',
                   fontSize: 12,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 12,
                 }}>
-                  {lang === 'en' ? 'Your place' : 'Tu posición'}: {leaderboard.me.rank} - {fmt(leaderboard.me.balance)} MXNP
+                  <span>{lang === 'en' ? 'Your place' : 'Tu posición'}: {me.rank || '-'}</span>
+                  <strong>{Number(me.score || 0) >= 0 ? '+' : ''}{fmt(me.score)} MXNP</strong>
                 </div>
               )}
             </div>
           )}
+        </TournamentCard>
+      </div>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 0.8fr) minmax(0, 1.2fr)',
+        gap: 18,
+        marginBottom: 18,
+      }}>
+        <TournamentCard>
+          <SectionLabel>{lang === 'en' ? 'Cycle rewards' : 'Bonos del ciclo'}</SectionLabel>
+          <RewardList lang={lang} rules={rules} />
+        </TournamentCard>
+
+        <TournamentCard>
+          <SectionLabel>{lang === 'en' ? 'Tournament snapshot' : 'Resumen del torneo'}</SectionLabel>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
+            <Metric
+              label={lang === 'en' ? 'Participants' : 'Participantes'}
+              value={fmtInteger(leaderboard?.totalParticipants || 0)}
+              sub={lang === 'en' ? 'with account balance' : 'con balance registrado'}
+            />
+            <Metric
+              label={lang === 'en' ? 'Qualified in top 10' : 'Califican en top 10'}
+              value={fmtInteger(qualifiedCount)}
+              sub={`${fmtInteger(rules.qualifyingMarkets)} ${lang === 'en' ? 'markets minimum' : 'mercados mínimo'}`}
+            />
+            <Metric
+              label={lang === 'en' ? 'Start balance' : 'Balance inicial'}
+              value={`${fmtInteger(rules.startingBalance)} MXNP`}
+              sub={lang === 'en' ? 'same for everyone' : 'igual para todos'}
+            />
+          </div>
         </TournamentCard>
       </div>
 
@@ -330,7 +536,7 @@ export default function PointsTournament() {
                   )}
                 </div>
                 {(cycleRow.top || []).slice(0, 10).map(row => (
-                  <LeaderboardRow key={`${cycleRow.id}-${row.username}`} row={row} currentUsername={user?.username} />
+                  <LeaderboardRow key={`${cycleRow.id}-${row.username}`} row={row} currentUsername={user?.username} rules={rules} compact={isMobile} lang={lang} />
                 ))}
               </div>
             ))}
@@ -352,10 +558,19 @@ const metricLabel = {
 
 const metricValue = {
   fontFamily: 'var(--font-display)',
-  fontSize: 'clamp(19px, 2.2vw, 28px)',
+  fontSize: 'clamp(18px, 2vw, 25px)',
   color: 'var(--text-primary)',
   textTransform: 'uppercase',
   letterSpacing: '0.01em',
+  whiteSpace: 'nowrap',
+};
+
+const metricSub = {
+  marginTop: 6,
+  color: 'var(--text-muted)',
+  fontFamily: 'var(--font-mono)',
+  fontSize: 10,
+  lineHeight: 1.45,
 };
 
 const emptyText = {

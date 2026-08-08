@@ -58,15 +58,15 @@ test('the prize ladder lives on the tournament page, not home', () => {
 });
 
 test('paused prize cycles still show the full prize ladder on the tournament page', () => {
-  const firstPrizeIndex = tournament.indexOf('$5,000 MXN');
-  const secondPrizeIndex = tournament.indexOf('$3,000 MXN');
-  const thirdPrizeIndex = tournament.indexOf('$2,000 MXN');
+  const firstPrizeIndex = tournament.indexOf('$3,500 MXN');
+  const secondPrizeIndex = tournament.indexOf('$2,500 MXN');
+  const thirdPrizeIndex = tournament.indexOf('$1,800 MXN');
 
   assert.ok(firstPrizeIndex > 0, 'the tournament page should render the prize ladder');
   assert.ok(secondPrizeIndex > firstPrizeIndex, 'second place follows first');
   assert.ok(thirdPrizeIndex > secondPrizeIndex, 'third place follows second');
   // The ladder is rendered from a plain list, not gated behind cycle state,
   // so pausing cycles cannot hide it.
-  assert.match(tournament, /rank: '1', prize: '\$5,000 MXN'/);
+  assert.match(tournament, /rank: '1', amount: 3500, prize: '\$3,500 MXN'/);
   assert.match(tournament, /fetchLeaderboard/);
 });

@@ -58,7 +58,13 @@ const POINTS_SCHEMA_READY_PROBE = `
       WHERE table_schema = 'public'
         AND table_name = 'points_support_messages'
         AND column_name = 'attachments'
-    ) AS points_support_message_attachments
+    ) AS points_support_message_attachments,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'points_cycle_snapshots'
+        AND column_name = 'tournament_score'
+    ) AS points_cycle_snapshot_tournament_score
 `;
 
 const POINTS_SCHEMA_LOCK_TABLE = `
@@ -743,6 +749,14 @@ const POINTS_SCHEMA_MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_points_cycle_snapshots_cycle_rank
     ON points_cycle_snapshots(cycle_id, rank ASC)`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS tournament_score NUMERIC(20,6)`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS market_pnl NUMERIC(20,6)`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS current_position_value NUMERIC(20,6)`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS inactivity_penalty NUMERIC(20,6)`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS inactive_days INTEGER`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS active_days INTEGER`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS qualifying_markets INTEGER`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS qualified BOOLEAN`,
 
   // ── Crypto price ticks (server-side history for the 5-min chart) ─────────
   // Recorded by /api/points/crypto-tick every ~5s for each asset (BTC, ETH)

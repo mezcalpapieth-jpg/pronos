@@ -48,6 +48,14 @@ const PUBLIC_ERROR_COPY = {
     es: 'Ingresa un monto válido.',
     en: 'Enter a valid amount.',
   },
+  tournament_min_entry: {
+    es: 'Durante el torneo, cada entrada debe ser de al menos 300 MXNP.',
+    en: 'During the tournament, each entry must be at least 300 MXNP.',
+  },
+  tournament_share_cap: {
+    es: 'Llegaste al máximo de acciones permitido por mercado en este torneo.',
+    en: 'You reached the maximum shares allowed per market in this tournament.',
+  },
   order_not_open: {
     es: 'Esa orden ya no está abierta.',
     en: 'That order is no longer open.',

@@ -334,13 +334,13 @@ async function handleReview(req, res, adminUsername) {
 async function handleCreateCampaign(req, res, adminUsername) {
   const platform = normalizePlatform(req.body?.platform);
   const targetUrl = normalizeTargetUrl(req.body?.targetUrl);
-  const reward = Number(req.body?.reward ?? 10);
+  const reward = Number(req.body?.reward ?? 300);
   const expiresInDays = Number(req.body?.expiresInDays ?? 7);
   const customLabel = String(req.body?.label || '').trim();
 
   if (!VALID_PLATFORMS.has(platform)) return res.status(400).json({ error: 'invalid_platform' });
   if (!targetUrl) return res.status(400).json({ error: 'invalid_target_url' });
-  if (!Number.isFinite(reward) || reward <= 0 || reward > 500) {
+  if (!Number.isFinite(reward) || reward <= 0 || reward > 1000) {
     return res.status(400).json({ error: 'invalid_reward' });
   }
   if (!Number.isFinite(expiresInDays) || expiresInDays < 1 || expiresInDays > 30) {

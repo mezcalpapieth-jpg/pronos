@@ -9,7 +9,7 @@
  *     cycles: [
  *       {
  *         id, label, startedAt, endsAt, closedAt,
- *         top: [{ rank, username, finalBalance, finalPnl }, ...]
+ *         top: [{ rank, username, finalBalance, score, marketPnl }, ...]
  *       }
  *     ]
  *   }
@@ -35,7 +35,7 @@ export default async function handler(req, res) {
     const limit = Number.isInteger(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 50) : 10;
     setCacheHeaders(res, { scope: 'public', maxAge: 30, sMaxage: 60, staleWhileRevalidate: 300 });
 
-    const { value: payload, hit } = await cachedJson(`points:cycles:history:v1:${limit}`, 60_000, async () => {
+    const { value: payload, hit } = await cachedJson(`points:cycles:history:v2:${limit}`, 60_000, async () => {
       await timer.time('schema', () => ensurePointsSchema(schemaSql));
       const cycles = await timer.time('db_cycles', () => sql`
         SELECT id, label, started_at, ends_at, closed_at
@@ -51,7 +51,10 @@ export default async function handler(req, res) {
       // N per cycle without an extra round-trip per row.
       const ids = cycles.map(c => c.id);
       const snaps = await timer.time('db_snapshots', () => sql`
-        SELECT cycle_id, username, final_balance, final_pnl, rank
+        SELECT cycle_id, username, final_balance, final_pnl, rank,
+               tournament_score, market_pnl, current_position_value,
+               inactivity_penalty, inactive_days, active_days,
+               qualifying_markets, qualified
         FROM points_cycle_snapshots
         WHERE cycle_id = ANY(${ids}::int[])
           AND rank <= 10
@@ -66,6 +69,15 @@ export default async function handler(req, res) {
           username: s.username,
           finalBalance: Number(s.final_balance),
           finalPnl: Number(s.final_pnl),
+          score: Number(s.tournament_score ?? s.final_pnl ?? 0),
+          cycleDelta: Number(s.tournament_score ?? s.final_pnl ?? 0),
+          marketPnl: Number(s.market_pnl ?? s.final_pnl ?? 0),
+          currentPositionValue: Number(s.current_position_value ?? 0),
+          inactivityPenalty: Number(s.inactivity_penalty ?? 0),
+          inactiveDays: Number(s.inactive_days ?? 0),
+          activeDays: Number(s.active_days ?? 0),
+          qualifyingMarkets: Number(s.qualifying_markets ?? 0),
+          qualified: s.qualified === true,
         });
         byCycle.set(s.cycle_id, arr);
       }

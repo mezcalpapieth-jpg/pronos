@@ -3,7 +3,7 @@
  * Body: { username }
  *
  * Claims a username for the authenticated sub-org and atomically seeds
- * the user's MXNP balance with the signup bonus (500 MXNP) if this is
+ * the user's MXNP balance with the configured signup bonus if this is
  * their first time. Username claim, balance insert, and audit entry all
  * commit together.
  */
@@ -13,11 +13,12 @@ import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { readSession, createSessionToken, setSessionCookie } from '../../_lib/session.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 import { sendPointsWelcomeEmail } from '../../_lib/welcome-email.js';
+import { TOURNAMENT_REWARDS } from '../../_lib/points-tournament-config.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
 const USERNAME_RE = /^[a-z][a-z0-9_]{2,19}$/;
-const SIGNUP_BONUS = 500;
+const SIGNUP_BONUS = TOURNAMENT_REWARDS.signupBonus;
 
 export default async function handler(req, res) {
   // Top-level try/catch ensures we always return JSON, never a raw 500.

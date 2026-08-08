@@ -347,15 +347,15 @@ function CyclesPanel() {
 
   async function rollover() {
     // Double-confirm because this is destructive: it snapshots the
-    // leaderboard AND resets every user's balance to 500 MXNP. Running
+    // leaderboard AND resets every user's balance to 1,500 MXNP. Running
     // it too early means users lose late-cycle gains; running it late
     // leaves everyone staring at "cierre pendiente" for longer than
     // ideal.
     const ok = window.confirm(current
       ? '¿Cerrar el ciclo actual y abrir uno nuevo?\n\n' +
-        '⚠️  Esto es DESTRUCTIVO:\n' +
+        'Esto es DESTRUCTIVO:\n' +
         '1. Guarda un snapshot inmutable del top-100.\n' +
-        '2. REINICIA el balance de TODOS los usuarios a 500 MXNP.\n' +
+        '2. REINICIA el balance de TODOS los usuarios a 1,500 MXNP.\n' +
         '3. Abre un ciclo nuevo de 14 días.\n\n' +
         '¿Continuar?'
       : '¿Reanudar los ciclos y abrir un ciclo nuevo de 14 días?\n\n' +
@@ -371,8 +371,8 @@ function CyclesPanel() {
         setMsg(`✓ Ciclos reanudados — ciclo #${r.newCycleId || r.newCycle?.id} abierto.`);
       } else {
         setMsg(
-          `✓ Ciclo #${r.closedCycleId} cerrado — ${r.snapshotted} snapshots, ${r.resetCount || 0} balances reiniciados a 500 MXNP. ` +
-          (r.winners?.[0] ? `🥇 ${r.winners[0].username} (${Math.round(r.winners[0].finalBalance)} MXNP)` : '')
+          `Ciclo #${r.closedCycleId} cerrado — ${r.snapshotted} snapshots, ${r.resetCount || 0} balances reiniciados a 1,500 MXNP. ` +
+          (r.winners?.[0] ? `Ganador: ${r.winners[0].username} (${Math.round(r.winners[0].finalBalance)} MXNP)` : '')
         );
       }
       await load();
@@ -2078,7 +2078,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
               fontWeight: 600,
             }}
           >
-            {autoResolving ? 'Resolviendo…' : '⚡ Resolver ahora'}
+            {autoResolving ? 'Resolviendo…' : 'Resolver ahora'}
           </button>
         )}
       </div>

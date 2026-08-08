@@ -11,13 +11,14 @@
  *     alreadyClaimedToday: boolean,
  *     claimedAmount: number | null,   // today's credit if already claimed
  *     streakDay: number | null,       // current streak (0 if never claimed)
- *     nextClaimAtUtc: string          // ISO — tomorrow 00:00 UTC
+ *     nextClaimAtUtc: string          // ISO — tomorrow 00:00 Mexico City
  *   }
  */
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { requireSession } from '../_lib/session.js';
+import { mexicoDateKey, nextMexicoMidnightUtcIso } from '../_lib/points-tournament-config.js';
 
 let _sql = null;
 let _schemaSql = null;
@@ -36,17 +37,6 @@ function getSchemaSql() {
   return _schemaSql;
 }
 
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function nextUtcMidnight() {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() + 1);
-  d.setUTCHours(0, 0, 0, 0);
-  return d.toISOString();
-}
-
 export default async function handler(req, res) {
   try {
     const cors = applyCors(req, res, { methods: 'GET, OPTIONS', credentials: true });
@@ -61,7 +51,8 @@ export default async function handler(req, res) {
       const sql = getSql();
       await ensurePointsSchema(getSchemaSql());
 
-      const today = todayIso();
+      const now = new Date();
+      const today = mexicoDateKey(now);
       const username = session.username;
 
       // Two-field probe: today's claim row (if any) + latest streak row.
@@ -90,7 +81,7 @@ export default async function handler(req, res) {
         claimedAmount: claim ? Number(claim.amount) : null,
         streakDay: claim ? claim.streak_day : (s ? Number(s.current_streak) : 0),
         bestStreak: s ? Number(s.best_streak) : 0,
-        nextClaimAtUtc: nextUtcMidnight(),
+        nextClaimAtUtc: nextMexicoMidnightUtcIso(now),
       });
     } catch (e) {
       console.error('[points/daily-status] db error', { message: e?.message, code: e?.code });

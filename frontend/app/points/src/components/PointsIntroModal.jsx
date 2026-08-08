@@ -71,8 +71,8 @@ export default function PointsIntroModal({ open, onClose, onCreateAccount }) {
   if (!open) return null;
 
   const stats = [
-    { value: '500', unit: 'MXNP', label: t('points.hero.stats.welcomeBonus') },
-    { value: '100', unit: '+20/día', label: t('points.hero.stats.dailyClaim') },
+    { value: '1,500', unit: 'MXNP', label: t('points.hero.stats.welcomeBonus') },
+    { value: '150', unit: '+15/día', label: t('points.hero.stats.dailyClaim') },
     ...(activeCount != null
       ? [{ value: String(activeCount), unit: '', label: t('points.hero.stats.activeMarkets') }]
       : []),
