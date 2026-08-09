@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+
+# Video-recording demo. Everything behind this path is fabricated data used
+# for screen recordings — it must never be indexed as if it were real
+# Pronos market activity.
+Disallow: /points/video

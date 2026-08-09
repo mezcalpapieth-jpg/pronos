@@ -17,25 +17,48 @@ import './points.css';
 
 initSentry();
 
-// Pre-warm the BTC/ETH price feeds so the 5-min crypto markets show
-// live chart movement the moment the user opens one — without this,
-// the chart only starts populating on detail-page mount and re-empties
-// every navigation. The store persists across mounts.
-preloadCryptoTicker('BTC-USD');
-preloadCryptoTicker('ETH-USD');
+// Video-recording demo (/points/video). The flag is read inline rather than
+// through a helper so a normal visitor never pulls in the demo chunk — the
+// dynamic import below only runs for a session that already cleared the
+// server-side password gate.
+function videoDemoRequested() {
+  try {
+    return window.sessionStorage.getItem('pronos-video-demo-active') === '1';
+  } catch {
+    return false;
+  }
+}
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <Sentry.ErrorBoundary
-      fallback={
-        <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-          Algo salió mal. Recarga la página.
-        </div>
-      }
-    >
-      <PointsAuthProvider>
-        <App />
-      </PointsAuthProvider>
-    </Sentry.ErrorBoundary>
-  </React.StrictMode>,
-);
+async function bootstrap() {
+  // Must run before anything renders or pre-warms: once installed, every
+  // /api/points/* call in the app resolves from fabricated in-browser data.
+  if (videoDemoRequested()) {
+    const { installDemoBackend } = await import('./demo/installDemoBackend.js');
+    installDemoBackend();
+  }
+
+  // Pre-warm the BTC/ETH price feeds so the 5-min crypto markets show
+  // live chart movement the moment the user opens one — without this,
+  // the chart only starts populating on detail-page mount and re-empties
+  // every navigation. The store persists across mounts.
+  preloadCryptoTicker('BTC-USD');
+  preloadCryptoTicker('ETH-USD');
+
+  ReactDOM.createRoot(document.getElementById('root')).render(
+    <React.StrictMode>
+      <Sentry.ErrorBoundary
+        fallback={
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+            Algo salió mal. Recarga la página.
+          </div>
+        }
+      >
+        <PointsAuthProvider>
+          <App />
+        </PointsAuthProvider>
+      </Sentry.ErrorBoundary>
+    </React.StrictMode>,
+  );
+}
+
+bootstrap();

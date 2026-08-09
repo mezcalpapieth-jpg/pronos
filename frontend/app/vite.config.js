@@ -11,6 +11,12 @@ import {
   verifyMvpAccessCookie,
   verifyMvpAccessPassword,
 } from '../api/_lib/mvp-access-gate.js';
+import {
+  buildVideoAccessCookie,
+  readVideoAccessCookie,
+  verifyVideoAccessCookie,
+  verifyVideoAccessPassword,
+} from '../api/_lib/video-access-gate.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../..');
@@ -238,6 +244,39 @@ function mvpAccessDevGate() {
 
         return sendJson(res, 200, { ok: true }, {
           'Set-Cookie': buildMvpAccessCookie({ headers: req.headers }),
+        });
+      });
+    },
+  };
+}
+
+function videoAccessDevGate() {
+  return {
+    name: 'video-access-dev-gate',
+    configureServer(server) {
+      server.middlewares.use('/api/video-access', async (req, res, next) => {
+        if (req.method === 'OPTIONS') {
+          res.statusCode = 204;
+          return res.end();
+        }
+
+        if (req.method === 'GET') {
+          const cookie = readVideoAccessCookie(req.headers);
+          return sendJson(res, 200, { ok: verifyVideoAccessCookie(cookie) });
+        }
+
+        if (req.method !== 'POST') {
+          return sendJson(res, 405, { error: 'GET or POST only' });
+        }
+
+        const body = await readRequestJson(req);
+        const result = verifyVideoAccessPassword(body.password);
+        if (!result.ok) {
+          return sendJson(res, result.status, { error: result.error });
+        }
+
+        return sendJson(res, 200, { ok: true }, {
+          'Set-Cookie': buildVideoAccessCookie({ headers: req.headers }),
         });
       });
     },
@@ -611,7 +650,7 @@ export function turnkeyBrowserNodecryptoStub() {
 const isPoints = process.env.BUILD_TARGET === 'points';
 
 export default defineConfig({
-  plugins: [pointsRootDeckDevMiddleware(), sharedCssDevMiddleware(), mvpAccessDevGate(), deckDevApiMiddleware(), turnkeyBrowserNodecryptoStub(), react()],
+  plugins: [pointsRootDeckDevMiddleware(), sharedCssDevMiddleware(), mvpAccessDevGate(), videoAccessDevGate(), deckDevApiMiddleware(), turnkeyBrowserNodecryptoStub(), react()],
   base: isPoints ? '/points/' : '/mvp/',
   root: isPoints ? path.resolve(__dirname, 'points') : __dirname,
   build: {

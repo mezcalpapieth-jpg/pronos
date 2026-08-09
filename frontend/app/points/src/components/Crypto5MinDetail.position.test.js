@@ -23,5 +23,9 @@ test('crypto 5-minute markets show and refresh the current user position after b
   assert.match(detailSource, /async function handleTradeSuccess\(\)/);
   assert.match(detailSource, /onTradeSuccess=\{handleTradeSuccess\}/);
   assert.match(detailSource, /setPositionRefreshNonce\(v => v \+ 1\)/);
-  assert.match(detailSource, /const pollMs = isCryptoMarket \? 5_000 : 15_000/);
+  // Production cadence: 5s for crypto ticks, 15s for everything else. The
+  // video-recording demo overrides this ahead of the ternary, so assert the
+  // real cadence survives as the fallback rather than pinning the whole line.
+  assert.match(detailSource, /isCryptoMarket \? 5_000 : 15_000/);
+  assert.match(detailSource, /const pollMs = videoDemoPollMs\(\) \?\? \(isCryptoMarket/);
 });
