@@ -13,6 +13,9 @@ test('points and MVP soccer sidebars expose the new continental leagues', () => 
     assert.match(source, /key:\s*'copa-libertadores'/);
     assert.match(source, /key:\s*'uefa-europa-league'/);
     assert.match(source, /key:\s*'uefa-conference-league'/);
+    assert.match(source, /key:\s*'leagues-cup'/);
+    assert.match(source, /key:\s*'international'/);
+    assert.match(source, /key:\s*'club-friendlies'/);
   }
 });
 
@@ -32,6 +35,9 @@ test('admin soccer league filters and creation options expose the new continenta
     assert.match(source, /key:\s*'copa-libertadores'/);
     assert.match(source, /key:\s*'uefa-europa-league'/);
     assert.match(source, /key:\s*'uefa-conference-league'/);
+    assert.match(source, /key:\s*'leagues-cup'/);
+    assert.match(source, /key:\s*'international'/);
+    assert.match(source, /key:\s*'club-friendlies'/);
   }
 });
 
@@ -39,6 +45,9 @@ test('points translations include the new soccer league labels', () => {
   assert.match(i18n, /points\.league\.libertadores/);
   assert.match(i18n, /points\.league\.europa/);
   assert.match(i18n, /points\.league\.conference/);
+  assert.match(i18n, /points\.league\.leaguesCup/);
+  assert.match(i18n, /points\.league\.international/);
+  assert.match(i18n, /points\.league\.clubFriendlies/);
 });
 
 test('points and MVP baseball sidebars expose LMP alongside LMB', () => {

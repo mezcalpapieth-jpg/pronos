@@ -4,6 +4,7 @@ import { readCoinbaseBoundaryPrice } from './crypto-price-source.js';
 import { readFinnhubQuote } from './stockprice.js';
 import { readBanxicoLatest } from './banxico.js';
 import { readCreAverageFor } from './fuel.js';
+import { readMananeraPhraseResult } from './mananera.js';
 import { fetchMaxTempC, bucketIndexFor } from './weather.js';
 import { readAppleMxTopArtist } from './charts.js';
 import { readYouTubeTopMxChannel } from './youtube.js';
@@ -88,6 +89,15 @@ export function buildAutoResolverFinalScore({
         || resolverInfo?.topTrack
         || resolverInfo?.topTitle;
       if (top) return clip(`#1 ${top}`);
+      return clip(winLabel);
+    }
+
+    if (resolverType === 'api_transcript') {
+      const count = resolverInfo?.matchCount;
+      const phrase = cfg?.phrase;
+      if (Number.isFinite(Number(count)) && phrase) {
+        return clip(`${Number(count)} menciones de "${phrase}"`);
+      }
       return clip(winLabel);
     }
   } catch {
@@ -258,6 +268,34 @@ export async function resolveAutoResolverCandidate(candidate = {}) {
     }
     winningIdx = pickWinnerIdx;
     resolverInfo = { source: cfg.source, ...readerEcho };
+  } else if (resolverType === 'api_transcript') {
+    const transcript = await readMananeraPhraseResult(cfg);
+    if (!transcript.ready) {
+      const err = new Error(transcript.reason || 'official_transcript_not_ready');
+      err.benign = true;
+      err.info = {
+        source: cfg.source,
+        dateYmd: cfg.dateYmd || null,
+        searchUrl: transcript.searchUrl || null,
+      };
+      throw err;
+    }
+    winningIdx = transcript.outcomeIndex;
+    resolverInfo = {
+      source: cfg.source,
+      phrase: transcript.phrase,
+      matchCount: transcript.count,
+      op: transcript.op,
+      threshold: transcript.threshold,
+      transcriptUrl: transcript.transcriptUrl,
+      transcriptTitle: transcript.transcriptTitle,
+    };
+    resolverConfigPatch = {
+      transcriptUrl: transcript.transcriptUrl,
+      transcriptTitle: transcript.transcriptTitle,
+      transcriptMatchCount: transcript.count,
+      transcriptObservedAt: transcript.observedAt,
+    };
   } else if (resolverType === 'sports_api') {
     if (!cfg.source || !cfg.shape) {
       throw new Error('invalid sports_api config: missing source/shape');

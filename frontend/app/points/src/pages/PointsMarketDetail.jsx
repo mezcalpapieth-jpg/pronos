@@ -303,6 +303,7 @@ const RESOLVER_LABELS = {
   'api_price:cre-gasolina':        'CRE',
   'api_chart:apple-mx-songs':      'Apple Music',
   'api_chart:youtube-trending-mx': 'YouTube',
+  'api_transcript:gob-mx-presidencia-transcript': 'gob.mx Presidencia',
   'sports_api:espn':               'ESPN',
   'sports_api:football-data':      'football-data.org',
   'sports_api:jolpica-f1':         'Jolpica F1',

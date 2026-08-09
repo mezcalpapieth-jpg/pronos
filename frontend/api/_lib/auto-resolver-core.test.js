@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { MANANERA_TRANSCRIPT_SOURCE } from './mananera.js';
 import { resolveAutoResolverCandidate } from './auto-resolver-core.js';
 
 function jsonResponse(body) {
@@ -8,6 +9,14 @@ function jsonResponse(body) {
     ok: true,
     status: 200,
     json: async () => body,
+  };
+}
+
+function htmlResponse(body) {
+  return {
+    ok: true,
+    status: 200,
+    text: async () => body,
   };
 }
 
@@ -120,4 +129,49 @@ test('auto resolver core settles crypto binary-direction markets from Coinbase b
     closePriceSource: 'coinbase-candle',
     closePriceAt: '2026-08-08T09:10:00.000Z',
   });
+});
+
+test('auto resolver core settles mañanera transcript phrase markets', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async (url) => {
+    if (String(url).startsWith('https://www.gob.mx/busqueda')) {
+      return htmlResponse('<a href="/presidencia/articulos/version-estenografica-de-la-conferencia-matutina-del-pueblo-10-de-agosto-de-2026">Transcripción</a>');
+    }
+    return htmlResponse(`
+      <html>
+        <head><title>Versión estenográfica de la conferencia matutina del pueblo, 10 de agosto de 2026</title></head>
+        <body>
+          <article>
+            <p>10 de agosto de 2026</p>
+            <p>La seguridad pública y la seguridad nacional fueron mencionadas.</p>
+            <p>${'Texto oficial simulado para superar el mínimo de extracción. '.repeat(20)}</p>
+          </article>
+        </body>
+      </html>
+    `);
+  };
+
+  const decision = await resolveAutoResolverCandidate({
+    resolver_type: 'api_transcript',
+    resolver_config: {
+      source: MANANERA_TRANSCRIPT_SOURCE,
+      dateYmd: '2026-08-10',
+      phrase: 'seguridad',
+      op: 'gte',
+      threshold: 2,
+      yesOutcome: 0,
+    },
+    outcomes: ['Sí', 'No'],
+  });
+
+  assert.equal(decision.winningIdx, 0);
+  assert.equal(decision.resolverInfo.source, MANANERA_TRANSCRIPT_SOURCE);
+  assert.equal(decision.resolverInfo.matchCount, 2);
+  assert.equal(decision.finalScore, '2 menciones de "seguridad"');
+  assert.equal(decision.resolverConfigPatch.transcriptMatchCount, 2);
+  assert.match(decision.resolverConfigPatch.transcriptUrl, /version-estenografica/);
 });

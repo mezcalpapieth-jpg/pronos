@@ -32,6 +32,7 @@ import { generateNbaMarkets }           from './market-gen/nba.js';
 import { generateF1Markets }            from './market-gen/f1.js';
 import { generateFxMarkets }            from './market-gen/fx.js';
 import { generateFuelMarkets }          from './market-gen/fuel.js';
+import { generateMananeraMarkets }      from './market-gen/mananera.js';
 import { generateChartsMarkets }        from './market-gen/charts.js';
 import { generateYouTubeMarkets }       from './market-gen/youtube.js';
 import { generateEntertainmentMarkets } from './market-gen/entertainment.js';
@@ -59,6 +60,7 @@ export const GENERATORS = [
   { name: 'stocks',         run: generateStockMarkets         },
   { name: 'fx',             run: generateFxMarkets            },
   { name: 'fuel',           run: generateFuelMarkets          },
+  { name: 'mananera',       run: generateMananeraMarkets      },
   { name: 'weather',        run: generateWeatherMarkets       },
   { name: 'mlb',            run: generateMlbMarkets           },
   { name: 'nba',            run: generateNbaMarkets           },

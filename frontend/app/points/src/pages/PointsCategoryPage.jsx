@@ -79,6 +79,9 @@ const SOCCER_LEAGUES = [
   { key: 'serie-a',        tKey: 'points.league.serieA'        },
   { key: 'bundesliga',     tKey: 'points.league.bundesliga'    },
   { key: 'copa-libertadores', tKey: 'points.league.libertadores' },
+  { key: 'leagues-cup',    tKey: 'points.league.leaguesCup'    },
+  { key: 'international',  tKey: 'points.league.international' },
+  { key: 'club-friendlies', tKey: 'points.league.clubFriendlies' },
   { key: 'liga-mx',        tKey: 'points.league.ligaMx'        },
   { key: 'mls',            tKey: 'points.league.mls'           },
 ];

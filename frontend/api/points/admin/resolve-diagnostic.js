@@ -62,7 +62,7 @@ export default async function handler(req, res) {
     const manual = [];
 
     const AUTO_RESOLVER_TYPES = new Set([
-      'chainlink_price', 'api_price', 'weather_api', 'api_chart', 'sports_api',
+      'chainlink_price', 'api_price', 'weather_api', 'api_chart', 'api_transcript', 'sports_api',
     ]);
 
     for (const r of rows) {

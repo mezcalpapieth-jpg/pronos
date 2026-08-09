@@ -28,6 +28,7 @@ import {
 import { useT } from '@app/lib/i18n.js';
 import { findTeamByName, teamProfilePath } from '@app/lib/teamProfiles.js';
 import { marketInterestPayload, teamInterestPayload, trackInterest } from '@app/lib/interest.js';
+import { soccerMatchTypeLabel } from '@app/lib/soccerMarketType.js';
 import PointsBuyModal from './PointsBuyModal.jsx';
 
 const STAKE_PREVIEW = 100; // MXNP reference stake for the card payout preview
@@ -127,6 +128,7 @@ export default function PointsMarketCard({ market, userPosition }) {
     && market.endTime
     && new Date(market.endTime) < now;
   const isChampionsFinalCard = isChampionsLeagueFinalWinnerMarket(market);
+  const matchTypeLabel = soccerMatchTypeLabel(market);
   const marketDetailPath = `/market?id=${encodeURIComponent(market.id)}`;
   const cardTargetPath = isChampionsFinalCard ? CHAMPIONS_LEAGUE_HUB_PATH : marketDetailPath;
   const navigateToCardTarget = () => {
@@ -192,6 +194,21 @@ export default function PointsMarketCard({ market, userPosition }) {
         <span className="mock-card-cat">
           {market.category || 'General'}
         </span>
+        {matchTypeLabel && (
+          <span className="mock-card-badge" style={{
+            background: 'rgba(255,85,0,0.08)',
+            border: '1px solid rgba(255,85,0,0.22)',
+            color: 'var(--orange)',
+            padding: '2px 6px',
+            borderRadius: 4,
+            fontFamily: 'var(--font-mono)',
+            fontSize: 9,
+            fontWeight: 700,
+            letterSpacing: '0.08em',
+          }}>
+            {matchTypeLabel}
+          </span>
+        )}
         {isResolved && (
           <span className="mock-card-badge live" style={{ background: 'rgba(0,232,122,0.12)', color: 'var(--green)', padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 9 }}>
             {t('points.card.resolved')}

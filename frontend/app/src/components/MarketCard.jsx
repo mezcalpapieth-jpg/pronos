@@ -14,6 +14,7 @@ import {
   previewGain,
   priceForOutcome,
 } from '../lib/mvpMarketCard.js';
+import { soccerMatchTypeLabel } from '../lib/soccerMarketType.js';
 import { findTeamByName, teamProfilePath } from '../lib/teamProfiles.js';
 import { marketInterestPayload, teamInterestPayload, trackInterest } from '../lib/interest.js';
 
@@ -43,6 +44,7 @@ export default function MarketCard({ market, onOpenLogin }) {
     && market.endTime
     && new Date(market.endTime).getTime() < Date.now();
   const isChampionsFinalCard = isChampionsLeagueFinalWinnerMarket(market);
+  const matchTypeLabel = soccerMatchTypeLabel(market);
   const drawerOpen = drawerIndex !== null;
 
   function navigateToDetail() {
@@ -93,6 +95,18 @@ export default function MarketCard({ market, onOpenLogin }) {
           {market.categoryLabel || market.category || 'General'}
         </span>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {matchTypeLabel && (
+            <span
+              className="mock-card-badge"
+              style={{
+                background: 'rgba(255,85,0,0.08)',
+                border: '1px solid rgba(255,85,0,0.22)',
+                color: 'var(--orange)',
+              }}
+            >
+              {matchTypeLabel}
+            </span>
+          )}
           {isResolved && (
             <span className="mock-card-badge live" style={{ background: 'rgba(0,232,122,0.12)', color: 'var(--green)' }}>
               {t('card.resolved') || 'RESUELTO'}

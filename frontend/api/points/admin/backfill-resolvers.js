@@ -38,6 +38,7 @@ import { generateNbaMarkets }           from '../../_lib/market-gen/nba.js';
 import { generateF1Markets }            from '../../_lib/market-gen/f1.js';
 import { generateFxMarkets }            from '../../_lib/market-gen/fx.js';
 import { generateFuelMarkets }          from '../../_lib/market-gen/fuel.js';
+import { generateMananeraMarkets }      from '../../_lib/market-gen/mananera.js';
 import { generateChartsMarkets }        from '../../_lib/market-gen/charts.js';
 import { generateYouTubeMarkets }       from '../../_lib/market-gen/youtube.js';
 import { generateEntertainmentMarkets } from '../../_lib/market-gen/entertainment.js';
@@ -60,6 +61,7 @@ const sql = neon(process.env.DATABASE_URL);
 const GENERATORS = [
   generateSoccerMarkets, generateEspnSoccerMarkets,
   generateCryptoMarkets, generateStockMarkets, generateFxMarkets, generateFuelMarkets,
+  generateMananeraMarkets,
   generateWeatherMarkets,
   generateMlbMarkets, generateNbaMarkets, generateF1Markets,
   generateChartsMarkets, generateYouTubeMarkets, generateEntertainmentMarkets,

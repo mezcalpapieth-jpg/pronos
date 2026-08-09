@@ -81,6 +81,7 @@ const COMPETITION_TO_ESPN_PATH = {
 };
 
 const ONE_LEGGED_FINAL_COMPETITIONS = new Set(['CL', 'EL', 'UCL', 'CLI']);
+const TOURNAMENT_COMPETITIONS = new Set(['CL', 'EL', 'UCL', 'CLI']);
 
 const API_BASE = 'https://api.football-data.org/v4';
 
@@ -271,6 +272,7 @@ function matchToMarketSpec(match, competitionCode) {
   const kickoffMs = new Date(kickoffUtc).getTime();
   const winnerOnly = isOneLeggedCupFinal(match, competitionCode);
   const manualResolution = match?.manualResolution === true;
+  const matchTypeLabel = TOURNAMENT_COMPETITIONS.has(competitionCode) ? 'TORNEO' : null;
   const startTime = new Date(kickoffMs).toISOString();
   const endTime   = new Date(kickoffMs + (winnerOnly ? 4 : 2) * 3600_000).toISOString();
   const league    = COMPETITION_TO_LEAGUE[competitionCode] || null;
@@ -308,7 +310,7 @@ function matchToMarketSpec(match, competitionCode) {
     // — teams + vs is enough, user-tested preference.
     question: `${homeName} vs ${awayName}`,
     category: 'deportes',
-    icon: '⚽',
+    icon: null,
     outcomes: winnerOnly ? [homeName, awayName] : [homeName, 'Empate', awayName],
     outcome_images: winnerOnly ? [homeCrest, awayCrest] : [homeCrest, null, awayCrest],
     seed_liquidity: 1000,
@@ -322,6 +324,7 @@ function matchToMarketSpec(match, competitionCode) {
       competitionCode,
       competitionName: match?.competition?.name,
       matchday: match?.matchday,
+      matchTypeLabel,
       kickoffUtc,
       manualResolution,
       home: { name: homeName, tla: match?.homeTeam?.tla, id: match?.homeTeam?.id },
@@ -440,6 +443,7 @@ export const _internal = {
   TEAM_TLA_WHITELIST,
   COMPETITIONS_ALL_FIXTURES,
   COMPETITIONS_TEAM_FILTER,
+  TOURNAMENT_COMPETITIONS,
   isChampionsLeagueFinal,
   isOneLeggedCupFinal,
   fallbackFinalMatchesForCompetition,

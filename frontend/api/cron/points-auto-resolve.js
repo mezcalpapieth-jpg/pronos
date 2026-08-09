@@ -4,7 +4,7 @@
  * Scans points_markets for active rows whose trading window has closed
  * AND whose resolver_type is one we know how to settle automatically.
  * Active resolver types: chainlink_price, api_price, weather_api,
- * api_chart, sports_api (espn / espn-pga / espn-liv / etc.).
+ * api_chart, api_transcript, sports_api (espn / espn-pga / espn-liv / etc.).
  * manual_review/manual markets are not auto-settled; they are queued
  * into points_resolution_candidates when their close time passes.
  *
@@ -34,6 +34,7 @@ import { bestEffortPersistResolvedCryptoMarketSnapshot } from '../_lib/crypto-ch
 import { readFinnhubQuote } from '../_lib/stockprice.js';
 import { readBanxicoLatest } from '../_lib/banxico.js';
 import { readCreAverageFor } from '../_lib/fuel.js';
+import { readMananeraPhraseResult } from '../_lib/mananera.js';
 import { fetchMaxTempC, bucketIndexFor } from '../_lib/weather.js';
 import { readAppleMxTopArtist } from '../_lib/charts.js';
 import { readYouTubeTopMxChannel } from '../_lib/youtube.js';
@@ -114,6 +115,15 @@ function buildFinalScore({ resolverType, cfg, result, resolverInfo, outcomes, wi
     if (resolverType === 'api_chart') {
       const top = resolverInfo?.topArtist || resolverInfo?.topChannel || resolverInfo?.topTrack || resolverInfo?.topTitle;
       if (top) return clip(`#1 ${top}`);
+      return clip(winLabel);
+    }
+
+    if (resolverType === 'api_transcript') {
+      const count = resolverInfo?.matchCount;
+      const phrase = cfg?.phrase;
+      if (Number.isFinite(Number(count)) && phrase) {
+        return clip(`${Number(count)} menciones de "${phrase}"`);
+      }
       return clip(winLabel);
     }
   } catch { /* fall through */ }
@@ -359,7 +369,7 @@ export async function runAutoResolve({ dry = false } = {}) {
         AND m.parent_id IS NULL
         AND (
           (
-            m.resolver_type IN ('chainlink_price', 'api_price', 'weather_api', 'api_chart', 'sports_api')
+            m.resolver_type IN ('chainlink_price', 'api_price', 'weather_api', 'api_chart', 'api_transcript', 'sports_api')
             AND (
               m.end_time < NOW()
               OR (
@@ -654,6 +664,34 @@ export async function runAutoResolve({ dry = false } = {}) {
           }
           winningIdx = pickWinnerIdx;
           resolverInfo = { source: cfg.source, ...readerEcho };
+        } else if (resolverType === 'api_transcript') {
+          const transcript = await readMananeraPhraseResult(cfg);
+          if (!transcript.ready) {
+            const err = new Error(transcript.reason || 'official_transcript_not_ready');
+            err.benign = true;
+            err.info = {
+              source: cfg.source,
+              dateYmd: cfg.dateYmd || null,
+              searchUrl: transcript.searchUrl || null,
+            };
+            throw err;
+          }
+          winningIdx = transcript.outcomeIndex;
+          resolverInfo = {
+            source: cfg.source,
+            phrase: transcript.phrase,
+            matchCount: transcript.count,
+            op: transcript.op,
+            threshold: transcript.threshold,
+            transcriptUrl: transcript.transcriptUrl,
+            transcriptTitle: transcript.transcriptTitle,
+          };
+          resolverConfigPatch = {
+            transcriptUrl: transcript.transcriptUrl,
+            transcriptTitle: transcript.transcriptTitle,
+            transcriptMatchCount: transcript.count,
+            transcriptObservedAt: transcript.observedAt,
+          };
         } else if (resolverType === 'sports_api') {
           // Sports scoreboards (MLB/NBA/F1 via ESPN + Jolpica +
           // football-data). Shape in cfg:

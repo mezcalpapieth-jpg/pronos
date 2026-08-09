@@ -68,6 +68,9 @@ const SOCCER_LEAGUES = [
   { key: 'serie-a',        label: 'Serie A'        },
   { key: 'bundesliga',     label: 'Bundesliga'     },
   { key: 'copa-libertadores', label: 'Copa Libertadores' },
+  { key: 'leagues-cup',    label: 'Leagues Cup'    },
+  { key: 'international',  label: 'Internacional'  },
+  { key: 'club-friendlies', label: 'Amistosos de clubes' },
   { key: 'liga-mx',        label: 'Liga MX'        },
   { key: 'mls',            label: 'MLS'            },
 ];
