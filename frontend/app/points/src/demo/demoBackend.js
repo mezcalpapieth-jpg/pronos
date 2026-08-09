@@ -22,7 +22,6 @@ import {
   tournamentRulesPayload,
 } from '../../../../api/_lib/points-tournament-config.js';
 import { getDemoState, updateDemoState } from './demoStore.js';
-import { DEMO_USERNAME } from './demoSeed.js';
 
 const json = (body, status = 200) => ({ status, body });
 
@@ -102,13 +101,14 @@ function handleTradeActivity(state, params) {
     const market = findMarket(state, id);
     if (!market) { activity[id] = []; continue; }
 
-    // Spread the market's traded volume across the window with a shape that
-    // looks like real activity rather than a flat line.
+    // Backfill: spread the market's traded volume across the window with a
+    // shape that reads as real activity rather than a flat line. This covers
+    // the hours before the demo was opened, where no simulated trades exist.
     const total = Number(market.tradeVolume || 0);
     const weights = Array.from({ length: buckets }, (_, i) => 0.4 + Math.abs(Math.sin(i * 1.7)) + (i / buckets) * 0.8);
     const weightSum = weights.reduce((s, w) => s + w, 0) || 1;
 
-    activity[id] = weights.map((w, i) => {
+    const series = weights.map((w, i) => {
       const volume = Math.round((total * w) / weightSum);
       const buyVolume = Math.round(volume * (0.5 + Math.random() * 0.25));
       return {
@@ -119,6 +119,23 @@ function handleTradeActivity(state, params) {
         sellVolume: volume - buyVolume,
       };
     });
+
+    // Live layer: fold the simulated order flow into whichever bucket each
+    // trade falls in. In practice that is the newest one or two, so the
+    // right edge of the chart grows while the camera is on it.
+    const firstBucketStart = series[0]?.t ?? nowSec;
+    for (const trade of state.recentTrades) {
+      if (trade.marketId !== Number(id)) continue;
+      const slot = Math.floor((trade.t - firstBucketStart) / bucketSeconds);
+      const bucket = series[Math.min(series.length - 1, Math.max(0, slot))];
+      if (!bucket) continue;
+      bucket.count += 1;
+      bucket.volume += trade.size;
+      if (trade.side === 'buy') bucket.buyVolume += trade.size;
+      else bucket.sellVolume += trade.size;
+    }
+
+    activity[id] = series;
   }
   return json({ activity, bucketSeconds });
 }
@@ -152,7 +169,7 @@ function cyclePayload() {
 
 function handleLeaderboard(state) {
   const rules = tournamentRulesPayload();
-  const me = state.leaderboard.find(row => row.username === DEMO_USERNAME) || null;
+  const me = state.leaderboard.find(row => row.username === state.user.username) || null;
   return json({
     top: state.leaderboard,
     me,

@@ -11,8 +11,13 @@ para grabar: no toca la base de datos real y no lo ve ningún usuario.
 ## Las tres tomas
 
 **1. Mercado en vivo con el porcentaje moviéndose**
-Entra a cualquier mercado desde la portada. El porcentaje se mueve solo.
-Si lo quieres más rápido, en el panel sube **Velocidad** hasta 10.
+Entra a cualquier mercado desde la portada. El porcentaje se mueve solo y
+sobre la gráfica van apareciendo las órdenes que entran (`+$120`, `−$75`),
+igual que en Polymarket. El mercado que tengas abierto recibe la mayor parte
+del flujo, así que el que estés grabando siempre se ve activo.
+
+Si lo quieres más rápido, en el panel sube **Velocidad** hasta 10, y
+**Cuántas** para que entren más órdenes.
 
 **2. Tabla del torneo con usuarios subiendo**
 Ve a **Torneo Pronos** en el menú de arriba. Las filas se reacomodan solas
@@ -35,7 +40,10 @@ El botón naranja de abajo a la derecha lo abre.
 
 | Control | Qué hace |
 |---|---|
+| **Tu nombre de usuario** | Cámbialo si no quieres usar `fabian`. Se actualiza también en la tabla del torneo |
 | **Balance** | Cuántos MXNP tienes para gastar |
+| **Que entren órdenes solas** | Prende/apaga las compras y ventas que aparecen sobre la gráfica |
+| **Cuántas** | Qué tan seguido entran órdenes (1 pocas, 10 muchas) |
 | **Mover los porcentajes solos** | Prende/apaga el movimiento de las gráficas |
 | **Velocidad** | Qué tan rápido se mueven (1 lento, 10 rápido) |
 | **Mover posiciones solas** | Prende/apaga el movimiento de la tabla del torneo |

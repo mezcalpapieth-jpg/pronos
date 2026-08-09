@@ -334,11 +334,14 @@ export function buildSeedState(now = Date.now()) {
       balance: 2500,
       needsUsername: false,
     },
+    recentTrades: [],
     settings: {
       driftEnabled: true,
       driftSpeed: 3,
       leaderboardShuffleEnabled: true,
       leaderboardShuffleSeconds: 4,
+      tradeFlowEnabled: true,
+      tradeFlowIntensity: 3,
     },
   };
 }
