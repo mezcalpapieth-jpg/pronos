@@ -23,6 +23,10 @@ test('tournament page shows current leaderboard, past leaderboards, countdown an
   assert.match(pageSource, /Leaderboards anteriores/);
   assert.match(pageSource, /Cuenta regresiva/);
   assert.match(pageSource, /Reglas/);
+  assert.match(pageSource, /Preguntas frecuentes/);
+  assert.match(pageSource, /¿Qué significa PnL\?/);
+  assert.match(pageSource, /PnL significa ganancia o pérdida/);
+  assert.match(pageSource, /What does PnL mean\?/);
   assert.match(pageSource, /qualifyingMarkets:\s*10/);
 });
 

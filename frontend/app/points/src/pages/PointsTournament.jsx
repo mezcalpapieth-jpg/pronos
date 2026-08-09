@@ -274,6 +274,58 @@ function RuleList({ lang, rules }) {
   );
 }
 
+function TournamentFaq({ lang, rules }) {
+  const r = rules || DEFAULT_RULES;
+  const rows = lang === 'en' ? [
+    [
+      'What does PnL mean?',
+      'PnL means profit or loss. If you buy an outcome and its price rises, your PnL goes up; if it falls, your PnL goes down. The tournament uses that market result, not signup or referral bonuses.',
+    ],
+    [
+      'Do bonuses count toward winning?',
+      'Not directly. Bonuses give you MXNP to play with, but the leaderboard is scored by market performance. They simply give you more chances to participate.',
+    ],
+    [
+      'What do I need to qualify?',
+      `You need entries in ${fmtInteger(r.qualifyingMarkets)} distinct markets, with at least ${fmtInteger(r.minEntryMxnp)} MXNP per entry.`,
+    ],
+  ] : [
+    [
+      '¿Qué significa PnL?',
+      'PnL significa ganancia o pérdida. Si compras una opción y su precio sube, tu PnL sube; si baja, tu PnL baja. El torneo usa ese resultado de tus mercados, no los bonos que recibiste.',
+    ],
+    [
+      '¿Los bonos cuentan para ganar el torneo?',
+      'No directamente. Los bonos te dan MXNP para jugar, pero el ranking se calcula por desempeño en mercados. Sirven para que tengas más oportunidades de participar.',
+    ],
+    [
+      '¿Qué necesito para calificar?',
+      `Necesitas participar en ${fmtInteger(r.qualifyingMarkets)} mercados distintos, con entradas de al menos ${fmtInteger(r.minEntryMxnp)} MXNP.`,
+    ],
+  ];
+  return (
+    <div style={{
+      marginTop: 20,
+      paddingTop: 18,
+      borderTop: '1px solid var(--border)',
+      display: 'grid',
+      gap: 14,
+    }}>
+      <SectionLabel>{lang === 'en' ? 'FAQ' : 'Preguntas frecuentes'}</SectionLabel>
+      {rows.map(([question, answer]) => (
+        <div key={question} style={{ display: 'grid', gap: 5 }}>
+          <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-body)', fontSize: 14 }}>
+            {question}
+          </strong>
+          <p style={{ margin: 0, color: 'var(--text-secondary)', fontFamily: 'var(--font-body)', fontSize: 13, lineHeight: 1.55 }}>
+            {answer}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function RewardList({ lang, rules }) {
   const rewards = rules?.rewards || DEFAULT_RULES.rewards;
   const rows = lang === 'en' ? [
@@ -439,6 +491,7 @@ export default function PointsTournament() {
         <TournamentCard>
           <SectionLabel>{lang === 'en' ? 'Rules' : 'Reglas'}</SectionLabel>
           <RuleList lang={lang} rules={rules} />
+          <TournamentFaq lang={lang} rules={rules} />
         </TournamentCard>
 
         <TournamentCard>
