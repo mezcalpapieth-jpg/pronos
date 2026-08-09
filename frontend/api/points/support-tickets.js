@@ -4,13 +4,14 @@
  * GET  /api/points/support-tickets
  * POST /api/points/support-tickets
  *   body: { type: 'socials'|'markets'|'other', subject, message, attachments? }
+ *   body: { action: 'reply', id, message, attachments? }
  */
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { requireSession } from '../_lib/session.js';
 import { withTransaction } from '../_lib/db-tx.js';
-import { notifySupportTicketCreated } from '../_lib/support-email.js';
+import { notifySupportTicketCreated, notifySupportTicketUserReply } from '../_lib/support-email.js';
 import {
   normalizeSupportAttachments,
   serializeSupportAttachments,
@@ -59,9 +60,17 @@ export default async function handler(req, res) {
   try {
     await ensurePointsSchema(schemaSql);
     if (req.method === 'GET') return listTickets(req, res, session);
-    if (req.method === 'POST') return createTicket(req, res, session);
+    if (req.method === 'POST') {
+      if (String(req.body?.action || '').trim() === 'reply' || req.body?.id) {
+        return replyTicket(req, res, session);
+      }
+      return createTicket(req, res, session);
+    }
     return res.status(405).json({ error: 'method_not_allowed' });
   } catch (e) {
+    if (e?.status) {
+      return res.status(e.status).json({ error: e.message || 'support_failed', detail: e.detail || null });
+    }
     console.error('[points/support-tickets] failed', { message: e?.message, code: e?.code });
     return res.status(500).json({ error: 'support_failed', detail: e?.message?.slice(0, 240) || null });
   }
@@ -71,7 +80,7 @@ async function listTickets(req, res, session) {
   const ticketRows = await readSql`
     SELECT *
     FROM points_support_tickets
-    WHERE username = ${session.username}
+    WHERE LOWER(username) = LOWER(${session.username})
     ORDER BY updated_at DESC
     LIMIT 50
   `;
@@ -92,6 +101,71 @@ async function listTickets(req, res, session) {
 
   return res.status(200).json({
     tickets: ticketRows.map(t => serializeTicket(t, byTicket.get(t.id) || [])),
+  });
+}
+
+async function replyTicket(req, res, session) {
+  const id = parseInt(req.body?.id, 10);
+  const message = cleanText(req.body?.message, { min: 2, max: 4000 });
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'invalid_id' });
+  if (!message) return res.status(400).json({ error: 'invalid_message' });
+
+  let attachments = [];
+  try {
+    attachments = normalizeSupportAttachments(req.body?.attachments);
+  } catch (e) {
+    return res.status(400).json({ error: e.code || 'invalid_attachments', detail: e.detail || null });
+  }
+
+  const result = await withTransaction(async (client) => {
+    const ticketRes = await client.query(
+      `SELECT *
+       FROM points_support_tickets
+       WHERE id = $1 AND LOWER(username) = LOWER($2)
+       FOR UPDATE`,
+      [id, session.username],
+    );
+    if (ticketRes.rows.length === 0) {
+      return null;
+    }
+    const ticket = ticketRes.rows[0];
+    if (ticket.status !== 'open') {
+      const err = new Error('ticket_closed');
+      err.status = 409;
+      throw err;
+    }
+    const msg = await client.query(
+      `INSERT INTO points_support_messages
+         (ticket_id, sender_type, sender_username, body, attachments)
+       VALUES ($1, 'user', $2, $3, $4::jsonb)
+       RETURNING *`,
+      [ticket.id, session.username, message, JSON.stringify(attachments)],
+    );
+    const updated = await client.query(
+      `UPDATE points_support_tickets
+          SET last_user_message_at = NOW(),
+              updated_at = NOW()
+        WHERE id = $1
+        RETURNING *`,
+      [ticket.id],
+    );
+    return { ticket: updated.rows[0], message: msg.rows[0] };
+  });
+
+  if (!result) return res.status(404).json({ error: 'ticket_not_found' });
+
+  const emailed = await notifySupportTicketUserReply(result.ticket, message);
+  if (emailed) {
+    await schemaSql`
+      UPDATE points_support_messages
+      SET emailed = true
+      WHERE id = ${result.message.id}
+    `;
+    result.message.emailed = true;
+  }
+
+  return res.status(200).json({
+    ticket: serializeTicket(result.ticket, [result.message]),
   });
 }
 

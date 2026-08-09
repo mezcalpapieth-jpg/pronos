@@ -479,11 +479,19 @@ const POINTS_SCHEMA_MIGRATIONS = [
     handle            TEXT,
     profile_url       TEXT,
     reward_credited   BOOLEAN NOT NULL DEFAULT false,
+    is_public         BOOLEAN NOT NULL DEFAULT false,
+    source            TEXT NOT NULL DEFAULT 'oauth',
     linked_at         TIMESTAMPTZ DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE (username, provider),
     UNIQUE (provider, provider_user_id)
   )`,
+  `ALTER TABLE points_social_links ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE points_social_links ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'oauth'`,
+  `ALTER TABLE points_social_links ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`,
   `CREATE INDEX IF NOT EXISTS idx_points_social_links_user ON points_social_links(username)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_social_links_public_user
+    ON points_social_links(username, is_public)`,
 
   // ── Support tickets ─────────────────────────────────────────────────────
   // User-created support threads with admin replies. Outbound email is

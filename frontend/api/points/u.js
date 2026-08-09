@@ -44,6 +44,7 @@ import {
 import {
   buildAdminProfileSocialLinks,
   buildAdminProfileSocials,
+  buildPublicProfileSocialLinks,
 } from '../_lib/points-profile-socials.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -224,6 +225,25 @@ export default async function handler(req, res) {
     // ── Aggregate stats ───────────────────────────────────────────────
     const stats = buildPublicProfileStats(history);
 
+    let publicSocialLinks = [];
+    try {
+      const publicSocialRows = await sql`
+        SELECT provider, handle, profile_url, is_public, source, linked_at, updated_at
+        FROM points_social_links
+        WHERE LOWER(username) = LOWER(${username})
+          AND is_public = true
+        ORDER BY updated_at DESC, linked_at DESC
+        LIMIT 10
+      `;
+      publicSocialLinks = buildPublicProfileSocialLinks(publicSocialRows);
+    } catch (socialError) {
+      console.error('[points/u] public_socials_failed', {
+        message: socialError?.message,
+        code: socialError?.code,
+      });
+      publicSocialLinks = [];
+    }
+
     let adminSocials = null;
     let adminSocialLinks = null;
     if (viewerIsAdmin) {
@@ -242,10 +262,10 @@ export default async function handler(req, res) {
 
         const socialLinkRows = await sql`
           SELECT provider, provider_user_id, handle, profile_url,
-                 reward_credited, linked_at
+                 reward_credited, is_public, source, linked_at, updated_at
           FROM points_social_links
-          WHERE username = ${username}
-          ORDER BY linked_at DESC
+          WHERE LOWER(username) = LOWER(${username})
+          ORDER BY updated_at DESC, linked_at DESC
           LIMIT 20
         `;
         adminSocialLinks = buildAdminProfileSocialLinks(socialLinkRows);
@@ -264,6 +284,7 @@ export default async function handler(req, res) {
         username: userRow[0].username,
         joinedAt: userRow[0].created_at,
         totalVolume: stats.totalVolume,
+        socialLinks: publicSocialLinks,
         ...(viewerIsAdmin ? { adminSocials, adminSocialLinks } : {}),
       },
       stats: {

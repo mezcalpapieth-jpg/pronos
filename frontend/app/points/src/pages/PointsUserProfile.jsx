@@ -266,6 +266,7 @@ export default function PointsUserProfile() {
   }
 
   const { user, stats, active, history } = data;
+  const publicSocialLinks = Array.isArray(user.socialLinks) ? user.socialLinks : [];
   const showAdminSocials = Object.prototype.hasOwnProperty.call(user, 'adminSocials')
     || Object.prototype.hasOwnProperty.call(user, 'adminSocialLinks');
 
@@ -303,6 +304,10 @@ export default function PointsUserProfile() {
           ← Volver
         </button>
       </div>
+
+      {publicSocialLinks.length > 0 && (
+        <PublicSocialLinksPanel links={publicSocialLinks} />
+      )}
 
       {showAdminSocials && (
         <AdminSocialsPanel
@@ -364,6 +369,89 @@ export default function PointsUserProfile() {
         <HistoryList rows={history} onOpen={mid => navigate(`/market?id=${mid}`)} />
       )}
     </main>
+  );
+}
+
+function PublicSocialLinksPanel({ links }) {
+  return (
+    <section style={{
+      marginTop: 18,
+      marginBottom: 24,
+      padding: 14,
+      background: 'var(--surface1)',
+      border: '1px solid var(--border)',
+      borderRadius: 12,
+    }}>
+      <div style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        letterSpacing: '0.12em',
+        textTransform: 'uppercase',
+        color: 'var(--orange)',
+        marginBottom: 10,
+      }}>
+        Redes públicas
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+        {links.map((link) => {
+          const href = safeExternalHref(link.profileUrl);
+          const content = (
+            <>
+              <span style={{
+                fontFamily: 'var(--font-body)',
+                fontSize: 13,
+                color: 'var(--text-primary)',
+                fontWeight: 700,
+              }}>
+                {link.label || link.provider}
+              </span>
+              <span style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                color: 'var(--text-muted)',
+              }}>
+                @{link.handle || 'perfil'}
+              </span>
+              <span style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 9,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: link.verified ? 'var(--green)' : 'var(--text-muted)',
+              }}>
+                {link.verified ? 'Verificada' : 'Manual'}
+              </span>
+            </>
+          );
+          const style = {
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 9,
+            minHeight: 36,
+            padding: '8px 12px',
+            borderRadius: 999,
+            background: 'var(--surface2)',
+            border: '1px solid var(--border)',
+            textDecoration: 'none',
+          };
+          return href ? (
+            <a
+              key={`${link.provider}-${link.handle || href}`}
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={style}
+            >
+              {content}
+            </a>
+          ) : (
+            <div key={`${link.provider}-${link.handle || 'manual'}`} style={style}>
+              {content}
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -440,14 +528,45 @@ function AdminSocialsPanel({ rows, links = [] }) {
                   >
                     <div style={{ minWidth: 0 }}>
                       <div style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 10,
-                        color: 'var(--warning)',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.08em',
+                        display: 'flex',
+                        gap: 6,
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
                         marginBottom: 4,
                       }}>
-                        {link.label || link.provider}
+                        <span style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 10,
+                          color: 'var(--warning)',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.08em',
+                        }}>
+                          {link.label || link.provider}
+                        </span>
+                        <span style={{
+                          padding: '1px 6px',
+                          borderRadius: 999,
+                          background: link.verified ? 'rgba(0,232,122,0.12)' : 'rgba(255,255,255,0.06)',
+                          color: link.verified ? 'var(--green)' : 'var(--text-muted)',
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 8,
+                          letterSpacing: '0.08em',
+                          textTransform: 'uppercase',
+                        }}>
+                          {link.verified ? 'Verificada' : 'Manual'}
+                        </span>
+                        <span style={{
+                          padding: '1px 6px',
+                          borderRadius: 999,
+                          background: link.isPublic ? 'rgba(0,232,122,0.12)' : 'rgba(255,255,255,0.06)',
+                          color: link.isPublic ? 'var(--green)' : 'var(--text-muted)',
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 8,
+                          letterSpacing: '0.08em',
+                          textTransform: 'uppercase',
+                        }}>
+                          {link.isPublic ? 'Pública' : 'Privada'}
+                        </span>
                       </div>
                       <div style={{
                         fontFamily: 'var(--font-body)',

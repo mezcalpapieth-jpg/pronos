@@ -243,12 +243,16 @@ export async function revokeDelegation() {
   return postJson('/api/points/turnkey/revoke-delegation', {});
 }
 
-// ─── Social links (verified via OAuth) ───────────────────────────────
-// Separate surface from the admin-review social_tasks. These are
-// provider accounts (X, IG, TikTok) the user has linked via OAuth,
-// so their handle is cryptographically verified.
+// ─── Social links (OAuth + manual profile handles) ───────────────────
+// Separate surface from the admin-review social_tasks. X can be verified
+// through OAuth, while Instagram/TikTok can be stored manually until
+// their provider approvals are ready. Each handle is private by default.
 export async function fetchSocialLinks() {
   return getJson('/api/points/social-links');
+}
+
+export async function saveSocialLink({ provider, handle, isPublic = false }) {
+  return postJson('/api/points/social-links', { provider, handle, isPublic });
 }
 
 export async function unlinkSocial(provider) {
@@ -491,6 +495,10 @@ export async function fetchSupportTickets() {
 
 export async function createSupportTicket({ type, subject, message, attachments = [] }) {
   return postJson('/api/points/support-tickets', { type, subject, message, attachments });
+}
+
+export async function replySupportTicket({ id, message, attachments = [] }) {
+  return postJson('/api/points/support-tickets', { action: 'reply', id, message, attachments });
 }
 
 // ─── Admin — social task queue ──────────────────────────────────────────────

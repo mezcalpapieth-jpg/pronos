@@ -24,6 +24,7 @@ import {
   fetchSocialTaskCatalog,
   submitSocialTask,
   fetchSocialLinks,
+  saveSocialLink,
   unlinkSocial,
   socialLinkStartUrl,
   publicErrorMessage,
@@ -575,10 +576,11 @@ function SocialTaskRow({ task, onSubmit }) {
 const SOCIAL_PROVIDERS = [
   {
     key: 'x',
-    label: 'X (Twitter)',
-    icon: '𝕏',
+    label: 'X',
+    icon: 'X',
     reward: 300,
     available: true,
+    manualAllowed: false,
     comingSoonNote: null,
   },
   {
@@ -587,7 +589,9 @@ const SOCIAL_PROVIDERS = [
     icon: 'IG',
     reward: 300,
     available: false,
+    manualAllowed: true,
     comingSoonNote: 'Esperando aprobación de Meta',
+    comingSoonNoteEn: 'Waiting for Meta approval',
   },
   {
     key: 'tiktok',
@@ -595,15 +599,20 @@ const SOCIAL_PROVIDERS = [
     icon: 'TT',
     reward: 300,
     available: false,
+    manualAllowed: true,
     comingSoonNote: 'Esperando aprobación de TikTok',
+    comingSoonNoteEn: 'Waiting for TikTok approval',
   },
 ];
 
 function SocialLinksCard() {
   const lang = useLang();
   const [links, setLinks] = useState(null);
+  const [drafts, setDrafts] = useState({});
   const [err, setErr] = useState(null);
+  const [ok, setOk] = useState(null);
   const [busy, setBusy] = useState(null);
+  const [saveBusy, setSaveBusy] = useState(null);
 
   async function load() {
     try {
@@ -611,6 +620,15 @@ function SocialLinksCard() {
       const map = {};
       for (const l of r.links || []) map[l.provider] = l;
       setLinks(map);
+      const nextDrafts = {};
+      for (const provider of SOCIAL_PROVIDERS) {
+        const link = map[provider.key] || {};
+        nextDrafts[provider.key] = {
+          handle: link.handle || '',
+          isPublic: !!link.isPublic,
+        };
+      }
+      setDrafts(nextDrafts);
     } catch (e) {
       setErr(publicErrorMessage(e, lang, 'social_link_failed'));
     }
@@ -630,8 +648,21 @@ function SocialLinksCard() {
       url.searchParams.delete('link_error');
       window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
     }
+    if (linked) setOk(lang === 'en' ? 'Social account connected.' : 'Cuenta social conectada.');
     if (linkError) setErr(publicErrorMessage(linkError, lang, 'social_link_failed'));
   }, []);
+
+  function updateDraft(provider, patch) {
+    setDrafts(current => ({
+      ...current,
+      [provider]: {
+        ...(current[provider] || { handle: '', isPublic: false }),
+        ...patch,
+      },
+    }));
+    setErr(null);
+    setOk(null);
+  }
 
   async function handleConnect(provider) {
     if (!SOCIAL_PROVIDERS.find(p => p.key === provider)?.available) return;
@@ -639,8 +670,30 @@ function SocialLinksCard() {
     window.location.href = socialLinkStartUrl(provider, '/earn');
   }
 
+  async function handleSave(provider) {
+    const draft = drafts[provider] || {};
+    setSaveBusy(provider);
+    setErr(null);
+    setOk(null);
+    try {
+      await saveSocialLink({
+        provider,
+        handle: draft.handle,
+        isPublic: !!draft.isPublic,
+      });
+      await load();
+      setOk(lang === 'en' ? 'Social profile saved.' : 'Perfil social guardado.');
+    } catch (e) {
+      setErr(publicErrorMessage(e, lang, 'social_link_failed'));
+    } finally {
+      setSaveBusy(null);
+    }
+  }
+
   async function handleDisconnect(provider) {
     setBusy(provider);
+    setErr(null);
+    setOk(null);
     try {
       await unlinkSocial(provider);
       await load();
@@ -653,25 +706,40 @@ function SocialLinksCard() {
 
   return (
     <section style={panelStyle}>
-      <div style={eyebrowStyle}>Cuentas verificadas</div>
-      <h3 style={panelTitleStyle}>Conecta tus redes sociales</h3>
+      <div style={eyebrowStyle}>
+        {lang === 'en' ? 'Verified accounts' : 'Cuentas verificadas'}
+      </div>
+      <h3 style={panelTitleStyle}>
+        {lang === 'en' ? 'Connect your social accounts' : 'Conecta tus redes sociales'}
+      </h3>
       <p style={panelBodyStyle}>
-        Verificamos tu cuenta directamente con la red social — no hace falta capturas
-        ni revisión manual. Ganas MXNP en cuanto conectas.
+        {lang === 'en'
+          ? 'X is verified directly with the social network. You can also save your Instagram and TikTok usernames to show them on your profile whenever you want to promote them. Every network starts private.'
+          : 'X se verifica directamente con la red social. También puedes guardar tus usuarios de Instagram y TikTok para mostrarlos en tu perfil cuando quieras promoverlos. Cada red empieza privada.'}
       </p>
       {err && (
         <div style={{ ...noticeStyle, color: 'var(--danger)' }}>{err}</div>
+      )}
+      {ok && (
+        <div style={{ ...noticeStyle, color: 'var(--green)' }}>{ok}</div>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
         {SOCIAL_PROVIDERS.map(p => {
           const link = links?.[p.key] || null;
           const isLinked = !!link;
-          const locked = !p.available && !isLinked;
+          const locked = !p.available && !p.manualAllowed && !isLinked;
+          const draft = drafts[p.key] || { handle: link?.handle || '', isPublic: !!link?.isPublic };
+          const canEditHandle = !isLinked || link.source === 'manual';
+          const canSave = isLinked || p.manualAllowed;
+          const handleValue = canEditHandle ? draft.handle : (link?.handle || '');
+          const saving = saveBusy === p.key;
           return (
             <div
               key={p.key}
               style={{
-                display: 'flex', alignItems: 'center', gap: 12,
+                display: 'grid',
+                gridTemplateColumns: '28px minmax(0, 1fr)',
+                gap: 12,
                 padding: '14px 16px',
                 background: 'var(--surface2)',
                 border: '1px solid var(--border)',
@@ -688,72 +756,155 @@ function SocialLinksCard() {
                 {p.icon}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text-primary)', marginBottom: 4 }}>
-                  {p.label}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  marginBottom: 5,
+                }}>
+                  <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text-primary)' }}>
+                    {p.label}
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    {isLinked
+                      ? (link.verified ? (lang === 'en' ? 'Verified' : 'Verificado') : 'Manual')
+                      : (p.available ? 'OAuth' : 'Manual')}
+                  </div>
                 </div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 10 }}>
                   {isLinked
-                    ? `Conectado como @${link.handle || '—'}`
-                    : (locked ? p.comingSoonNote : 'Verificación automática vía OAuth')}
+                    ? (lang === 'en' ? `Saved as @${link.handle || '-'}` : `Guardado como @${link.handle || '-'}`)
+                    : (p.manualAllowed
+                      ? (lang === 'en' ? 'Add your username manually.' : 'Agrega tu usuario manualmente.')
+                      : (lang === 'en' ? 'Automatic verification via OAuth.' : 'Verificación automática vía OAuth.'))}
                 </div>
-              </div>
-              <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: 'var(--green)' }}>
-                  {isLinked && link.rewardCredited ? 'OK' : `+${p.reward}`}
-                </div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)' }}>MXNP</div>
-              </div>
-              {isLinked ? (
-                <button
-                  onClick={() => handleDisconnect(p.key)}
-                  disabled={busy === p.key}
-                  style={{
-                    padding: '8px 14px',
-                    background: 'transparent',
+                {canSave && (
+                  <input
+                    value={handleValue}
+                    onChange={(e) => updateDraft(p.key, { handle: e.target.value })}
+                    disabled={!canEditHandle || saving || busy === p.key}
+                    placeholder="@usuario"
+                    style={{
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      background: 'rgba(0,0,0,0.18)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 8,
+                      color: canEditHandle ? 'var(--text-primary)' : 'var(--text-muted)',
+                      padding: '9px 10px',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 11,
+                      outline: 'none',
+                    }}
+                  />
+                )}
+                <div style={{
+                  display: 'flex',
+                  gap: 8,
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  marginTop: 10,
+                }}>
+                  <label style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
                     color: 'var(--text-muted)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 8,
                     fontFamily: 'var(--font-mono)',
-                    fontSize: 11,
-                    fontWeight: 600,
-                    letterSpacing: '0.06em',
-                    cursor: busy === p.key ? 'wait' : 'pointer',
-                    minWidth: 120,
-                    opacity: busy === p.key ? 0.6 : 1,
+                    fontSize: 10,
                     textTransform: 'uppercase',
-                  }}
-                >
-                  {busy === p.key ? '…' : 'Desconectar'}
-                </button>
-              ) : (
-                <button
-                  onClick={() => handleConnect(p.key)}
-                  disabled={locked}
-                  style={{
-                    padding: '8px 14px',
-                    background: locked ? 'var(--surface3)' : 'var(--green)',
-                    color: locked ? 'var(--text-muted)' : '#000',
-                    border: locked ? '1px solid var(--border)' : 'none',
-                    borderRadius: 8,
+                    letterSpacing: '0.06em',
+                    cursor: canSave ? 'pointer' : 'not-allowed',
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={!!draft.isPublic}
+                      disabled={!canSave || saving || busy === p.key}
+                      onChange={(e) => updateDraft(p.key, { isPublic: e.target.checked })}
+                    />
+                    {draft.isPublic
+                      ? (lang === 'en' ? 'Public' : 'Pública')
+                      : (lang === 'en' ? 'Private' : 'Privada')}
+                  </label>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {!isLinked && p.available && (
+                      <button
+                        onClick={() => handleConnect(p.key)}
+                        style={socialActionButtonStyle({ primary: true })}
+                      >
+                        {lang === 'en' ? 'Connect' : 'Conectar'}
+                      </button>
+                    )}
+                    {canSave && (
+                      <button
+                        onClick={() => handleSave(p.key)}
+                        disabled={saving || busy === p.key || !String(draft.handle || '').trim()}
+                        style={socialActionButtonStyle({ primary: false, disabled: saving || busy === p.key || !String(draft.handle || '').trim() })}
+                      >
+                        {saving ? '...' : (lang === 'en' ? 'Save' : 'Guardar')}
+                      </button>
+                    )}
+                    {isLinked && (
+                      <button
+                        onClick={() => handleDisconnect(p.key)}
+                        disabled={busy === p.key}
+                        style={socialActionButtonStyle({ primary: false, disabled: busy === p.key })}
+                      >
+                        {busy === p.key ? '...' : (lang === 'en' ? 'Remove' : 'Quitar')}
+                      </button>
+                    )}
+                    {locked && (
+                      <button
+                        disabled
+                        style={socialActionButtonStyle({ primary: false, disabled: true })}
+                      >
+                        {lang === 'en' ? 'Soon' : 'Próximamente'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {p.comingSoonNote && (
+                  <div style={{
                     fontFamily: 'var(--font-mono)',
-                    fontSize: 11,
-                    fontWeight: 700,
-                    letterSpacing: '0.06em',
-                    cursor: locked ? 'not-allowed' : 'pointer',
-                    minWidth: 120,
-                    opacity: locked ? 0.6 : 1,
-                    textTransform: 'uppercase',
+                    fontSize: 9,
+                    color: 'var(--text-muted)',
+                    marginTop: 8,
+                    letterSpacing: '0.04em',
                   }}
-                >
-                  {locked ? 'Próximamente' : 'Conectar'}
-                </button>
-              )}
+                  >
+                    {lang === 'en'
+                      ? `${p.comingSoonNoteEn || p.comingSoonNote}. Manual usernames do not grant verification bonuses.`
+                      : `${p.comingSoonNote}. El usuario manual no da bono de verificación.`}
+                  </div>
+                )}
+              </div>
             </div>
           );
         })}
       </div>
     </section>
   );
+}
+
+function socialActionButtonStyle({ primary, disabled = false } = {}) {
+  return {
+    padding: '8px 12px',
+    background: primary ? 'var(--green)' : 'transparent',
+    color: primary ? '#000' : 'var(--text-muted)',
+    border: primary ? 'none' : '1px solid var(--border)',
+    borderRadius: 8,
+    fontFamily: 'var(--font-mono)',
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: '0.06em',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    minWidth: 88,
+    opacity: disabled ? 0.55 : 1,
+    textTransform: 'uppercase',
+  };
 }
 
 // (Turnkey delegated-signing card was removed from this page on

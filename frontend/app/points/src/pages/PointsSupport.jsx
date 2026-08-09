@@ -2,7 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { useLang } from '@app/lib/i18n.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
-import { createSupportTicket, fetchSupportTickets, publicErrorMessage } from '../lib/pointsApi.js';
+import {
+  createSupportTicket,
+  fetchSupportTickets,
+  publicErrorMessage,
+  replySupportTicket,
+} from '../lib/pointsApi.js';
 
 const TYPE_LABELS = {
   socials: { es: 'Redes sociales', en: 'Socials' },
@@ -145,6 +150,9 @@ export default function PointsSupport({ onOpenLogin }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [ok, setOk] = useState(null);
+  const [replyDrafts, setReplyDrafts] = useState({});
+  const [replyBusy, setReplyBusy] = useState(null);
+  const [replyErr, setReplyErr] = useState({});
 
   async function load() {
     if (!authenticated) return;
@@ -172,6 +180,27 @@ export default function PointsSupport({ onOpenLogin }) {
       setErr(publicErrorMessage(error, lang, 'default'));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function submitReply(ticketId) {
+    const message = String(replyDrafts[ticketId] || '').trim();
+    if (!message || replyBusy) return;
+    setReplyBusy(ticketId);
+    setReplyErr(errors => ({ ...errors, [ticketId]: null }));
+    setOk(null);
+    try {
+      await replySupportTicket({ id: ticketId, message });
+      setReplyDrafts(drafts => ({ ...drafts, [ticketId]: '' }));
+      setOk(lang === 'en' ? 'Reply sent.' : 'Respuesta enviada.');
+      await load();
+    } catch (error) {
+      setReplyErr(errors => ({
+        ...errors,
+        [ticketId]: publicErrorMessage(error, lang, 'default'),
+      }));
+    } finally {
+      setReplyBusy(null);
     }
   }
 
@@ -442,8 +471,16 @@ export default function PointsSupport({ onOpenLogin }) {
                       {ticket.status}
                     </span>
                   </div>
-                  <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {(ticket.messages || []).slice(-3).map(message => (
+                  <div style={{
+                    marginTop: 10,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 8,
+                    maxHeight: 260,
+                    overflowY: 'auto',
+                    paddingRight: 4,
+                  }}>
+                    {(ticket.messages || []).map(message => (
                       <div key={message.id} style={{
                         color: message.senderType === 'admin' ? 'var(--text-primary)' : 'var(--text-secondary)',
                         fontSize: 13,
@@ -458,6 +495,68 @@ export default function PointsSupport({ onOpenLogin }) {
                       </div>
                     ))}
                   </div>
+                  {ticket.status === 'open' ? (
+                    <div style={{ marginTop: 12 }}>
+                      <textarea
+                        value={replyDrafts[ticket.id] || ''}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setReplyDrafts(drafts => ({ ...drafts, [ticket.id]: value }));
+                          if (replyErr[ticket.id]) {
+                            setReplyErr(errors => ({ ...errors, [ticket.id]: null }));
+                          }
+                        }}
+                        rows={3}
+                        maxLength={4000}
+                        style={{
+                          ...inputStyle,
+                          resize: 'vertical',
+                          lineHeight: 1.5,
+                          fontSize: 13,
+                          padding: '10px 11px',
+                        }}
+                        placeholder={lang === 'en' ? 'Write another reply...' : 'Escribe otra respuesta...'}
+                      />
+                      {replyErr[ticket.id] && (
+                        <p style={{
+                          color: 'var(--danger)',
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 10,
+                          margin: '6px 0 0',
+                        }}>
+                          {replyErr[ticket.id]}
+                        </p>
+                      )}
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        onClick={() => submitReply(ticket.id)}
+                        disabled={replyBusy === ticket.id || !String(replyDrafts[ticket.id] || '').trim()}
+                        style={{
+                          width: '100%',
+                          marginTop: 8,
+                          padding: '10px 12px',
+                          fontSize: 12,
+                        }}
+                      >
+                        {replyBusy === ticket.id
+                          ? (lang === 'en' ? 'Sending...' : 'Enviando...')
+                          : (lang === 'en' ? 'Send reply' : 'Enviar respuesta')}
+                      </button>
+                    </div>
+                  ) : (
+                    <p style={{
+                      margin: '12px 0 0',
+                      color: 'var(--text-muted)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 10,
+                      lineHeight: 1.5,
+                    }}>
+                      {lang === 'en'
+                        ? 'This ticket is closed. Create a new ticket if you need more help.'
+                        : 'Este ticket está cerrado. Crea otro ticket si necesitas más ayuda.'}
+                    </p>
+                  )}
                 </article>
               ))}
             </div>

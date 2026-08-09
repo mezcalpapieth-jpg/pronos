@@ -69,6 +69,20 @@ export async function notifySupportTicketCreated(ticket, message) {
   });
 }
 
+export async function notifySupportTicketUserReply(ticket, message) {
+  const supportEmail = process.env.SUPPORT_TO_EMAIL || DEFAULT_SUPPORT_EMAIL;
+  return sendEmail({
+    to: supportEmail,
+    replyTo: ticket.email || null,
+    subject: `[Pronos soporte #${ticket.id}] Nueva respuesta de ${ticket.username}`,
+    html: ticketShell({
+      title: `Nueva respuesta en ticket #${ticket.id}`,
+      intro: `${ticket.username} · ${ticket.type} · ${ticket.email || 'sin email'}`,
+      body: message,
+    }),
+  });
+}
+
 export async function notifySupportTicketReply(ticket, message) {
   if (!ticket?.email) return false;
   return sendEmail({

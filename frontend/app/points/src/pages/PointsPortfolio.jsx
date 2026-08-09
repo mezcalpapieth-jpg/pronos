@@ -304,6 +304,95 @@ function MiniLeaderboard({ currentUsername }) {
     gotoProfile(search);
   }
 
+  const currentKey = String(currentUsername || '').toLowerCase();
+  function renderRows({ rows, me, mode }) {
+    const isPnl = mode === 'pnl';
+    const visibleRows = Array.isArray(rows) ? rows : [];
+    if (visibleRows.length === 0) {
+      return (
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
+          {isPnl ? 'Sin PnL de mercado todavía.' : 'Aún no hay participantes — sé el primero.'}
+        </div>
+      );
+    }
+
+    return (
+      <>
+        {visibleRows.map(u => {
+          const isMe = String(u.username || '').toLowerCase() === currentKey;
+          const value = isPnl ? Number(u.marketPnl ?? u.score ?? 0) : Number(u.balance ?? 0);
+          const delta = Number(u.cycleDelta ?? value - (data?.startingBalance || 0));
+          const deltaPos = delta >= 0;
+          return (
+            <button
+              key={`${mode}-${u.username}`}
+              type="button"
+              onClick={() => gotoProfile(u.username)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                padding: '6px 0',
+                borderBottom: '1px solid var(--border)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 12,
+                color: isMe ? 'var(--green)' : 'var(--text-secondary)',
+                background: 'transparent',
+                border: 'none',
+                borderBottomColor: 'var(--border)',
+                borderBottomWidth: 1,
+                borderBottomStyle: 'solid',
+                cursor: 'pointer',
+                width: '100%',
+                textAlign: 'left',
+                transition: 'background 0.12s',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface2)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+            >
+              <span style={{ width: 20, color: 'var(--text-muted)' }}>{u.rank}.</span>
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {isMe ? '(tú) ' : ''}{u.username}
+              </span>
+              <span
+                title={isPnl ? 'PnL de mercados' : `${deltaPos ? '+' : ''}${fmt(delta)} MXNP desde el inicio del ciclo`}
+                style={{
+                  color: isPnl
+                    ? (value >= 0 ? 'var(--success)' : 'var(--danger)')
+                    : 'var(--text-primary)',
+                  fontWeight: 700,
+                }}
+              >
+                {isPnl ? signedFmt(value) : fmt(value)}
+              </span>
+              {!isPnl && (
+                <span style={{
+                  width: 56,
+                  textAlign: 'right',
+                  fontSize: 10,
+                  color: deltaPos ? 'var(--success)' : 'var(--danger)',
+                }}>
+                  {deltaPos ? '+' : ''}{fmt(delta)}
+                </span>
+              )}
+            </button>
+          );
+        })}
+        {me && me.rank && me.rank > 10 && (
+          <div style={{
+            marginTop: 8,
+            paddingTop: 8,
+            borderTop: '1px dashed var(--border)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            color: 'var(--green)',
+          }}>
+            Tu posición: #{me.rank} · {isPnl ? `${signedFmt(me.marketPnl ?? me.score)} MXNP` : `${fmt(me.balance)} MXNP`}
+          </div>
+        )}
+      </>
+    );
+  }
+
   if (!data) {
     return (
       <div className="points-sidebar-card">
@@ -369,67 +458,27 @@ function MiniLeaderboard({ currentUsername }) {
         </button>
       </form>
 
-      {data.top.length === 0 && (
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
-          Aún no hay participantes — sé el primero.
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--orange)', textTransform: 'uppercase', marginBottom: 8 }}>
+          Wallet actual
         </div>
-      )}
-      {data.top.map(u => {
-        const isMe = u.username === currentUsername;
-        const delta = Number(u.cycleDelta ?? 0);
-        const deltaPos = delta >= 0;
-        return (
-          <button
-            key={u.username}
-            type="button"
-            onClick={() => gotoProfile(u.username)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              padding: '6px 0',
-              borderBottom: '1px solid var(--border)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 12,
-              color: isMe ? 'var(--green)' : 'var(--text-secondary)',
-              background: 'transparent',
-              border: 'none',
-              borderBottomColor: 'var(--border)',
-              borderBottomWidth: 1,
-              borderBottomStyle: 'solid',
-              cursor: 'pointer',
-              width: '100%',
-              textAlign: 'left',
-              transition: 'background 0.12s',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface2)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-          >
-            <span style={{ width: 20, color: 'var(--text-muted)' }}>{u.rank}.</span>
-            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {isMe ? '(tú) ' : ''}{u.username}
-            </span>
-            <span
-              title={`${deltaPos ? '+' : ''}${fmt(delta)} MXNP desde el inicio del ciclo`}
-              style={{ color: 'var(--text-primary)', fontWeight: 700 }}
-            >
-              {fmt(u.balance)}
-            </span>
-            <span style={{
-              width: 56,
-              textAlign: 'right',
-              fontSize: 10,
-              color: deltaPos ? 'var(--success)' : 'var(--danger)',
-            }}>
-              {deltaPos ? '+' : ''}{fmt(delta)}
-            </span>
-          </button>
-        );
-      })}
-      {data.me && data.me.rank && data.me.rank > 10 && (
-        <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--border)', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--green)' }}>
-          Tu posición: #{data.me.rank} · {fmt(data.me.balance)} MXNP
+        {renderRows({
+          rows: data.walletTop || data.top || [],
+          me: data.walletMe || data.me,
+          mode: 'wallet',
+        })}
+      </div>
+
+      <div style={{ paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 8 }}>
+          PnL de mercados
         </div>
-      )}
+        {renderRows({
+          rows: data.pnlTop || [],
+          me: data.pnlMe,
+          mode: 'pnl',
+        })}
+      </div>
     </div>
   );
 }

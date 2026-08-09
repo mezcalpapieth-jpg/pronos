@@ -38,6 +38,14 @@ function cleanHandle(value) {
   return trimmed || null;
 }
 
+function socialLinkSource(row) {
+  return String(row?.source || 'oauth').trim().toLowerCase() || 'oauth';
+}
+
+function isSocialLinkPublic(row) {
+  return Boolean(row?.is_public);
+}
+
 export function buildAdminProfileSocials(rows) {
   return (rows || []).map((row) => {
     const taskKey = String(row.task_key || '');
@@ -74,6 +82,7 @@ export function buildAdminProfileSocialLinks(rows) {
     const profileUrl = typeof row.profile_url === 'string' && row.profile_url.trim()
       ? row.profile_url.trim()
       : null;
+    const source = socialLinkSource(row);
 
     return {
       provider,
@@ -83,7 +92,35 @@ export function buildAdminProfileSocialLinks(rows) {
       handle: cleanHandle(row.handle),
       profileUrl,
       rewardCredited: Boolean(row.reward_credited),
+      isPublic: isSocialLinkPublic(row),
+      source,
+      verified: source === 'oauth',
       linkedAt: row.linked_at || null,
+      updatedAt: row.updated_at || row.linked_at || null,
     };
   });
+}
+
+export function buildPublicProfileSocialLinks(rows) {
+  return (rows || [])
+    .filter(isSocialLinkPublic)
+    .map((row) => {
+      const provider = String(row.provider || '').trim().toLowerCase();
+      const meta = SOCIAL_LINK_META[provider] || {};
+      const source = socialLinkSource(row);
+      const profileUrl = typeof row.profile_url === 'string' && row.profile_url.trim()
+        ? row.profile_url.trim()
+        : null;
+
+      return {
+        provider,
+        label: meta.label || provider || 'Social',
+        network: meta.network || provider || 'social',
+        handle: cleanHandle(row.handle),
+        profileUrl,
+        verified: source === 'oauth',
+        updatedAt: row.updated_at || row.linked_at || null,
+      };
+    })
+    .filter(link => link.handle || link.profileUrl);
 }

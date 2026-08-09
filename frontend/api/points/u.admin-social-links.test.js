@@ -8,6 +8,8 @@ test('admin public profile payload includes connected social links', () => {
   assert.match(SOURCE, /points_social_links/);
   assert.match(SOURCE, /buildAdminProfileSocialLinks/);
   assert.match(SOURCE, /adminSocialLinks/);
+  assert.match(SOURCE, /reward_credited, is_public, source, linked_at, updated_at/);
+  assert.match(SOURCE, /WHERE LOWER\(username\) = LOWER\(\$\{username\}\)/);
 });
 
 test('admin-only social profile data cannot break the public profile response', () => {
@@ -16,6 +18,15 @@ test('admin-only social profile data cannot break the public profile response', 
   assert.match(SOURCE, /\[points\/u\] admin_socials_failed/);
   assert.match(SOURCE, /adminSocials = \[\]/);
   assert.match(SOURCE, /adminSocialLinks = \[\]/);
+});
+
+test('public profile only exposes social handles users marked public', () => {
+  assert.match(SOURCE, /buildPublicProfileSocialLinks/);
+  assert.match(SOURCE, /socialLinks: publicSocialLinks/);
+  assert.match(SOURCE, /SELECT provider, handle, profile_url, is_public, source, linked_at, updated_at/);
+  assert.match(SOURCE, /AND is_public = true/);
+  assert.match(SOURCE, /\[points\/u\] public_socials_failed/);
+  assert.match(SOURCE, /publicSocialLinks = \[\]/);
 });
 
 test('public profile lookup falls back to public points activity rows', () => {

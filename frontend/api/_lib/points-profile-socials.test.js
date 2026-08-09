@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   buildAdminProfileSocialLinks,
   buildAdminProfileSocials,
+  buildPublicProfileSocialLinks,
 } from './points-profile-socials.js';
 
 test('buildAdminProfileSocials returns admin-only social proof rows with catalog labels', () => {
@@ -108,7 +109,10 @@ test('buildAdminProfileSocialLinks returns connected handles for admin profile v
       handle: '@frmm',
       profile_url: 'https://www.tiktok.com/@frmm',
       reward_credited: true,
+      is_public: true,
+      source: 'manual',
       linked_at: '2026-05-20T12:00:00.000Z',
+      updated_at: '2026-05-21T12:00:00.000Z',
     },
   ]);
 
@@ -121,7 +125,46 @@ test('buildAdminProfileSocialLinks returns connected handles for admin profile v
       handle: 'frmm',
       profileUrl: 'https://www.tiktok.com/@frmm',
       rewardCredited: true,
+      isPublic: true,
+      source: 'manual',
+      verified: false,
       linkedAt: '2026-05-20T12:00:00.000Z',
+      updatedAt: '2026-05-21T12:00:00.000Z',
+    },
+  ]);
+});
+
+test('buildPublicProfileSocialLinks only exposes handles the user made public', () => {
+  const links = buildPublicProfileSocialLinks([
+    {
+      provider: 'x',
+      handle: '@frmm',
+      profile_url: 'https://x.com/frmm',
+      is_public: true,
+      source: 'oauth',
+      linked_at: '2026-05-20T12:00:00.000Z',
+      updated_at: '2026-05-21T12:00:00.000Z',
+    },
+    {
+      provider: 'instagram',
+      handle: '@private_ig',
+      profile_url: 'https://www.instagram.com/private_ig/',
+      is_public: false,
+      source: 'manual',
+      linked_at: '2026-05-20T12:00:00.000Z',
+      updated_at: '2026-05-21T12:00:00.000Z',
+    },
+  ]);
+
+  assert.deepEqual(links, [
+    {
+      provider: 'x',
+      label: 'X',
+      network: 'twitter',
+      handle: 'frmm',
+      profileUrl: 'https://x.com/frmm',
+      verified: true,
+      updatedAt: '2026-05-21T12:00:00.000Z',
     },
   ]);
 });

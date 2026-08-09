@@ -23,3 +23,15 @@ test('points schema self-healing avoids hot-route migration lock pileups', () =>
   assert.match(source, /lock_not_available/);
   assert.match(source, /statement_timeout/);
 });
+
+test('points social links schema supports private-by-default public handles', () => {
+  assert.match(source, /CREATE TABLE IF NOT EXISTS points_social_links/);
+  assert.match(source, /is_public\s+BOOLEAN NOT NULL DEFAULT false/);
+  assert.match(source, /source\s+TEXT NOT NULL DEFAULT 'oauth'/);
+  assert.match(source, /updated_at\s+TIMESTAMPTZ DEFAULT NOW\(\)/);
+  assert.match(source, /ALTER TABLE points_social_links ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT false/);
+  assert.match(source, /ALTER TABLE points_social_links ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'oauth'/);
+  assert.match(source, /ALTER TABLE points_social_links ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW\(\)/);
+  assert.match(source, /idx_points_social_links_public_user/);
+  assert.match(source, /ON points_social_links\(username, is_public\)/);
+});
