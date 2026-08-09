@@ -160,7 +160,7 @@ export default function PointsHome() {
 
       {/* ── Most-traded carousel ──────────────────────────────
           Seven hidden editorial slots: last-hour, four-hour, seven-day
-          volume/activity, all-time volume, and the live Bitcoin 5-minute
+          volume/activity, all-time volume, and the live rapid Bitcoin
           market when available. Each slide pairs the price chart with a
           live buy/sell tape. Reads from the same `markets` list the grid
           below already fetched, so it costs no extra market call — only

@@ -41,6 +41,12 @@ function parseJsonb(value, fallback) {
   try { return JSON.parse(value); } catch { return fallback; }
 }
 
+function cryptoIntervalFromResolverConfig(resolverCfg) {
+  if (resolverCfg?.shape !== 'binary-direction') return null;
+  const minutes = Number(resolverCfg.intervalMinutes || resolverCfg.windowMinutes || 5);
+  return Number.isFinite(minutes) && minutes > 0 ? minutes : 5;
+}
+
 function pricesFromReserves(reserves, outcomeCount) {
   if (!Array.isArray(reserves) || reserves.length === 0) {
     return Array.from({ length: outcomeCount || 2 }, () => 1 / (outcomeCount || 2));
@@ -356,6 +362,7 @@ export default async function handler(req, res) {
       // dedicated "5 minutos" sub-filter — otherwise resueltos and the
       // crypto tab are dominated by 5-min rollover history.
       const crypto5min = cfg?.shape === 'binary-direction';
+      const cryptoIntervalMinutes = cryptoIntervalFromResolverConfig(cfg);
       return applySeriesGateToMarket({
         id: r.id,
         ammMode: 'unified',
@@ -378,6 +385,8 @@ export default async function handler(req, res) {
         featured: r.featured === true,
         trending: r.featured === true || live,
         crypto5min,
+        cryptoIntervalMinutes,
+        cryptoWindowMinutes: cryptoIntervalMinutes,
         status: r.status,
         outcome: r.outcome,
         resolvedAt: r.resolved_at,

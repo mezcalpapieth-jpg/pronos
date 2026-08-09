@@ -123,14 +123,14 @@ const RESUELTOS_CATEGORIES = [
   { key: 'finanzas', tKey: 'points.cat.finanzas'   },
 ];
 
-// Crypto type sub-row — splits the BTC/ETH 5-min "sube o baja" rollover
+// Crypto type sub-row — splits the BTC/ETH rapid "sube o baja" rollover
 // markets out of the broader crypto bucket so users can drill into one
-// or the other without the 5-min stream dominating the count. The
+// or the other without the rapid stream dominating the count. The
 // crypto5min flag is computed server-side from resolver_config.shape.
 const CRYPTO_TYPE_TABS = [
   { key: 'all',     fallback: 'Todos'     },
   { key: 'general', fallback: 'Eventos'   },
-  { key: '5min',    fallback: '5 minutos' },
+  { key: '5min',    fallback: 'Rápidos' },
 ];
 
 const MEXICO_TOPIC_TABS = [

@@ -65,7 +65,7 @@ export const ADMIN_COMBATE_LEAGUES = [
 export const ADMIN_CRYPTO_FILTERS = [
   { key: 'all', label: 'Todos' },
   { key: 'general', label: 'Eventos' },
-  { key: '5min', label: '5 minutos' },
+  { key: '5min', label: 'Rápidos' },
 ];
 
 export const ADMIN_GEO_FILTERS = [

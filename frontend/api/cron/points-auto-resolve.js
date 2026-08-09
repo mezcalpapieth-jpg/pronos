@@ -28,7 +28,13 @@ import { neon } from '@neondatabase/serverless';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { withTransaction } from '../_lib/db-tx.js';
 import { readChainlinkPrice, readChainlinkRoundAtOrBefore, comparePrice } from '../_lib/chainlink.js';
-import { formatDirectionFinalScore, resolveDirectionOutcome } from '../_lib/crypto-5min.js';
+import {
+  catchUpCurrentPendingCryptoMarkets,
+  catchUpExpiredActiveCryptoMarkets,
+  catchUpMissedPendingCryptoMarkets,
+  formatDirectionFinalScore,
+  resolveDirectionOutcome,
+} from '../_lib/crypto-5min.js';
 import { readCoinbaseBoundaryPrice } from '../_lib/crypto-price-source.js';
 import { bestEffortPersistResolvedCryptoMarketSnapshot } from '../_lib/crypto-chart-snapshot.js';
 import { readFinnhubQuote } from '../_lib/stockprice.js';
@@ -337,8 +343,8 @@ async function queueApiChartFallbackReview({ market, cfg, sourceData, outcomes, 
  *
  * Also acts as a catch-up pass for BTC/ETH 5-minute markets. Their
  * preferred path is the exact boundary tick in _lib/crypto-5min.js,
- * but if that tick is missed, this loop resolves them later using the
- * Chainlink round at the market's close timestamp.
+ * but if that tick is missed, this loop resolves active rows and
+ * recovers expired pending rows with Coinbase boundary candles.
  *
  * Vercel cron jobs ONLY run on production deployments. On preview
  * URLs the every-15-min schedule never fires, so admins use the
@@ -432,6 +438,80 @@ export async function runAutoResolve({ dry = false } = {}) {
       deferred: [],
       dryRun: dry,
     };
+
+    try {
+      const cryptoActiveCatchup = await catchUpExpiredActiveCryptoMarkets(schemaSql, {
+        dry,
+        limit: MAX_BINARY_DIRECTION_CATCHUP_PER_RUN,
+      });
+      report.cryptoActiveCatchup = cryptoActiveCatchup;
+      report.checked += cryptoActiveCatchup.checked;
+      for (const row of cryptoActiveCatchup.resolved || []) {
+        report.resolved.push({
+          id: row.id,
+          winningIdx: row.outcome,
+          finalScore: row.finalScore,
+          source: 'crypto-5min-missed-active',
+          asset: row.asset,
+        });
+      }
+      for (const err of cryptoActiveCatchup.errors || []) {
+        report.errors.push({
+          id: err.id,
+          error: `crypto_active_catchup_failed: ${err.error}`,
+        });
+      }
+    } catch (e) {
+      report.errors.push({
+        error: `crypto_active_catchup_failed: ${e?.message || 'unknown'}`,
+      });
+    }
+
+    try {
+      const cryptoPendingCatchup = await catchUpMissedPendingCryptoMarkets(schemaSql, {
+        dry,
+        limit: MAX_BINARY_DIRECTION_CATCHUP_PER_RUN,
+      });
+      report.cryptoPendingCatchup = cryptoPendingCatchup;
+      report.checked += cryptoPendingCatchup.checked;
+      for (const row of cryptoPendingCatchup.resolved || []) {
+        report.resolved.push({
+          id: row.id,
+          winningIdx: row.outcome,
+          finalScore: row.finalScore,
+          source: 'crypto-5min-missed-pending',
+          asset: row.asset,
+        });
+      }
+      for (const err of cryptoPendingCatchup.errors || []) {
+        report.errors.push({
+          id: err.id,
+          error: `crypto_pending_catchup_failed: ${err.error}`,
+        });
+      }
+    } catch (e) {
+      report.errors.push({
+        error: `crypto_pending_catchup_failed: ${e?.message || 'unknown'}`,
+      });
+    }
+
+    try {
+      const cryptoActivationCatchup = await catchUpCurrentPendingCryptoMarkets(schemaSql, {
+        dry,
+      });
+      report.cryptoActivationCatchup = cryptoActivationCatchup;
+      report.checked += cryptoActivationCatchup.checked;
+      for (const err of cryptoActivationCatchup.errors || []) {
+        report.errors.push({
+          error: `crypto_activation_catchup_failed: ${err.error}`,
+          sourceEventId: err.sourceEventId,
+        });
+      }
+    } catch (e) {
+      report.errors.push({
+        error: `crypto_activation_catchup_failed: ${e?.message || 'unknown'}`,
+      });
+    }
 
     let binaryDirectionCatchups = 0;
 

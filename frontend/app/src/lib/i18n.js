@@ -746,7 +746,7 @@ const STRINGS = {
   'points.activity.slot4h':   { es: 'volumen 4H',            en: '4H volume' },
   'points.activity.slotTotal': { es: 'volumen total',         en: 'total volume' },
   'points.activity.slot24h':  { es: 'volumen 24H',           en: '24H volume' },
-  'points.activity.slotBtc':  { es: 'Bitcoin 5 min',         en: 'Bitcoin 5 min' },
+  'points.activity.slotBtc':  { es: 'Bitcoin rápido',        en: 'Bitcoin rapid' },
   'points.activity.totalShort': { es: 'Total',                en: 'Total' },
   'points.activity.volumeShort': { es: 'Vol',                 en: 'Vol' },
   'points.intro.browse':      { es: 'Ver mercados',          en: 'Browse markets' },
@@ -791,7 +791,7 @@ const STRINGS = {
   'points.series.tied':       { es: 'Serie empatada {score}', en: 'Series tied {score}' },
   'points.series.leads':      { es: '{team} lidera {score}', en: '{team} leads {score}' },
 
-  'points.crypto.title':      { es: '{asset}: sube o baja en 5 minutos', en: '{asset}: up or down in 5 minutes' },
+  'points.crypto.title':      { es: '{asset}: sube o baja en {duration}', en: '{asset}: up or down in {duration}' },
   'points.crypto.currentPrice': { es: 'Precio actual',        en: 'Current price' },
   'points.crypto.threshold':  { es: 'Umbral',                 en: 'Threshold' },
   'points.crypto.atOpen':     { es: 'al abrir',               en: 'at open' },

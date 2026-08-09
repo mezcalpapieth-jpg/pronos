@@ -71,6 +71,14 @@ const inputStyle = {
   fontSize: 13,
 };
 
+const DEFAULT_CRYPTO_INTERVAL_OPTIONS = [
+  { minutes: 5, label: '5 minutos' },
+  { minutes: 10, label: '10 minutos' },
+  { minutes: 15, label: '15 minutos' },
+  { minutes: 30, label: '30 minutos' },
+  { minutes: 60, label: '1 hora' },
+];
+
 function Field({ label, hint, children }) {
   return (
     <label style={{ display: 'block', marginBottom: 14 }}>
@@ -378,6 +386,49 @@ function GeneratorsSection() {
   const [running, setRunning] = useState(null); // 'generate' | 'resolve' | null
   const [notice, setNotice]   = useState(null);
   const [lastResult, setLast] = useState(null);
+  const [cryptoInterval, setCryptoInterval] = useState(5);
+  const [cryptoIntervalOptions, setCryptoIntervalOptions] = useState(DEFAULT_CRYPTO_INTERVAL_OPTIONS);
+  const [cryptoIntervalLoading, setCryptoIntervalLoading] = useState(false);
+  const [cryptoIntervalSaving, setCryptoIntervalSaving] = useState(false);
+  const [cryptoIntervalError, setCryptoIntervalError] = useState(null);
+
+  const loadCryptoInterval = useCallback(async () => {
+    setCryptoIntervalLoading(true);
+    setCryptoIntervalError(null);
+    try {
+      const { ok, data } = await getJson('/api/points/admin/crypto-minute-settings');
+      if (!ok) throw new Error(data?.error || 'settings_failed');
+      const options = Array.isArray(data?.intervals) && data.intervals.length > 0
+        ? data.intervals
+        : DEFAULT_CRYPTO_INTERVAL_OPTIONS;
+      setCryptoIntervalOptions(options);
+      setCryptoInterval(Number(data?.intervalMinutes || 5));
+    } catch (e) {
+      setCryptoIntervalError(e?.message || 'settings_failed');
+    } finally {
+      setCryptoIntervalLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadCryptoInterval(); }, [loadCryptoInterval]);
+
+  async function saveCryptoInterval(value) {
+    const intervalMinutes = Number(value);
+    setCryptoInterval(intervalMinutes);
+    setCryptoIntervalSaving(true);
+    setCryptoIntervalError(null);
+    try {
+      const { ok, data } = await postJson('/api/points/admin/crypto-minute-settings', { intervalMinutes });
+      if (!ok) throw new Error(data?.error || 'settings_failed');
+      setCryptoInterval(Number(data?.intervalMinutes || intervalMinutes));
+      setNotice({ type: 'success', msg: `Mercados BTC/ETH: intervalo actualizado a ${intervalMinutes === 60 ? '1 hora' : `${intervalMinutes} minutos`}.` });
+    } catch (e) {
+      setCryptoIntervalError(e?.message || 'settings_failed');
+      await loadCryptoInterval();
+    } finally {
+      setCryptoIntervalSaving(false);
+    }
+  }
 
   async function runGenerators({ dry }) {
     setRunning('generate');
@@ -427,6 +478,56 @@ function GeneratorsSection() {
       />
 
       <Notice notice={notice} />
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+        gap: 12,
+        alignItems: 'end',
+        padding: 14,
+        borderRadius: 10,
+        background: 'var(--surface2)',
+        border: '1px solid var(--border)',
+        marginBottom: 12,
+      }}>
+        <div>
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            letterSpacing: '0.12em',
+            color: 'var(--text-muted)',
+            textTransform: 'uppercase',
+            marginBottom: 8,
+          }}>
+            Mercados BTC/ETH
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+            Este intervalo se usa para las próximas ventanas automáticas. Las ventanas activas o ya creadas se mantienen con su cierre original.
+          </p>
+          {cryptoIntervalError && (
+            <div style={{ marginTop: 8, color: 'var(--red)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+              Error: {cryptoIntervalError}
+            </div>
+          )}
+        </div>
+        <Field label="Intervalo">
+          <select
+            value={cryptoInterval}
+            onChange={(e) => saveCryptoInterval(e.target.value)}
+            disabled={cryptoIntervalLoading || cryptoIntervalSaving}
+            style={inputStyle}
+          >
+            {cryptoIntervalOptions.map((option) => (
+              <option key={option.minutes} value={option.minutes}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <div style={{ marginTop: 6, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 10 }}>
+            {cryptoIntervalSaving ? 'Guardando...' : cryptoIntervalLoading ? 'Cargando...' : 'Aplica hacia adelante.'}
+          </div>
+        </Field>
+      </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div style={{ padding: 14, borderRadius: 10, background: 'var(--surface2)', border: '1px solid var(--border)' }}>

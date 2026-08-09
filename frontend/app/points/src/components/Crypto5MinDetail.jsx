@@ -1,11 +1,11 @@
 /**
- * Crypto5MinDetail — specialized detail-page layout for the 5-min
+ * Crypto5MinDetail — specialized detail-page layout for the rolling
  * BTC/ETH direction markets.
  *
  * Replaces the standard PointsMarketDetail body for any market whose
  * cryptoMeta is non-null (i.e. resolver_config.shape === 'binary-direction').
  * The standard detail layout doesn't fit this product — these markets are
- * 5 min long, settle on a price comparison, and need a live chart with
+ * short-lived, settle on a price comparison, and need a live chart with
  * threshold rule + countdown more than the usual question + outcome list.
  *
  * Renders three states:
@@ -52,6 +52,17 @@ function formatCountdown(target) {
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function cryptoWindowMinutes(meta) {
+  const minutes = Number(meta?.intervalMinutes || meta?.windowMinutes || 5);
+  return Number.isFinite(minutes) && minutes > 0 ? minutes : 5;
+}
+
+function formatCryptoWindowDuration(meta, lang = 'es') {
+  const minutes = cryptoWindowMinutes(meta);
+  if (minutes === 60) return lang === 'en' ? '1 hour' : '1 hora';
+  return `${minutes} min`;
 }
 
 function normalizeChartPoints(points, { minT, maxT } = {}) {
@@ -202,6 +213,7 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
     [market, selectedMarketId],
   );
   const meta = selectedMarket?.cryptoMeta || {};
+  const windowDurationLabel = formatCryptoWindowDuration(meta, lang);
 
   // Re-render once per second so the countdown ticks. Cheap.
   const [tick, setTick] = useState(0);
@@ -502,14 +514,17 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
             color: 'var(--text-muted)', letterSpacing: '0.12em',
             textTransform: 'uppercase',
           }}>
-            {meta.symbol || '—'} · 5 min · Chainlink
+            {meta.symbol || '—'} · {windowDurationLabel} · Chainlink
           </div>
         </div>
         <h1 style={{
           fontFamily: 'var(--font-display)', fontSize: 'clamp(22px, 4vw, 32px)',
           color: 'var(--text-primary)', margin: 0, letterSpacing: '0.02em',
         }}>
-          {t('points.crypto.title', { asset: meta.asset === 'eth' ? 'Ethereum' : 'Bitcoin' })}
+          {t('points.crypto.title', {
+            asset: meta.asset === 'eth' ? 'Ethereum' : 'Bitcoin',
+            duration: windowDurationLabel,
+          })}
         </h1>
         <div style={{
           marginTop: 6,
@@ -948,7 +963,7 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
                 fontSize: 10,
                 color: 'var(--text-secondary)',
               }}>
-                {t('points.crypto.durationShort')}
+                {windowDurationLabel}
               </span>
             </button>
           )}

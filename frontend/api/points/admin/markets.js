@@ -22,6 +22,12 @@ function parseJsonb(v, fb) {
   try { return JSON.parse(v); } catch { return fb; }
 }
 
+function cryptoIntervalFromResolverConfig(resolverCfg) {
+  if (resolverCfg?.shape !== 'binary-direction') return null;
+  const minutes = Number(resolverCfg.intervalMinutes || resolverCfg.windowMinutes || 5);
+  return Number.isFinite(minutes) && minutes > 0 ? minutes : 5;
+}
+
 function publicSeriesMetaFromRow(row) {
   const resolverCfg = parseJsonb(row.resolver_config, null);
   const sourceData = parseJsonb(row.pending_source_data, null);
@@ -189,10 +195,12 @@ export default async function handler(req, res) {
     return res.status(200).json({
       markets: filteredRows.map(r => {
         const outcomes = parseJsonb(r.outcomes, ['Sí', 'No']);
+        const resolverConfig = parseJsonb(r.resolver_config, null);
+        const cryptoIntervalMinutes = cryptoIntervalFromResolverConfig(resolverConfig);
         const tags = deriveMarketTags({
           ...r,
           source_data: parseJsonb(r.pending_source_data, {}),
-          resolver_config: parseJsonb(r.resolver_config, {}),
+          resolver_config: resolverConfig || {},
           category_tags: parseJsonb(r.category_tags, []),
           geo_tags: parseJsonb(r.geo_tags, []),
           topic_tags: parseJsonb(r.topic_tags, []),
@@ -225,8 +233,10 @@ export default async function handler(req, res) {
         league: r.league || null,
         archivedAt: r.archived_at || null,
         finalScore: r.final_score || null,
-        resolverConfig: parseJsonb(r.resolver_config, null),
-        crypto5min: parseJsonb(r.resolver_config, null)?.shape === 'binary-direction',
+        resolverConfig,
+        crypto5min: resolverConfig?.shape === 'binary-direction',
+        cryptoIntervalMinutes,
+        cryptoWindowMinutes: cryptoIntervalMinutes,
         seriesMeta: publicSeriesMetaFromRow(r),
         categoryTags: tags.categoryTags,
         geoTags: tags.geoTags,

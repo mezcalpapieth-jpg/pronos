@@ -1777,6 +1777,14 @@ const inputStyle = {
   outline: 'none',
 };
 
+const DEFAULT_CRYPTO_INTERVAL_OPTIONS = [
+  { minutes: 5, label: '5 minutos' },
+  { minutes: 10, label: '10 minutos' },
+  { minutes: 15, label: '15 minutos' },
+  { minutes: 30, label: '30 minutos' },
+  { minutes: 60, label: '1 hora' },
+];
+
 // ─── Markets table ───────────────────────────────────────────────────────────
 function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
   const [markets, setMarkets] = useState(null);
@@ -2272,7 +2280,11 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
               #{m.id} · {m.category} · {m.tradeCount} trades · seed {m.seedLiquidity} MXNP
               {m.sport && <> · {m.sport}</>}
               {m.league && <>/{m.league}</>}
-              {m.crypto5min && <> · 5min</>}
+              {m.crypto5min && (
+                <> · {Number(m.cryptoIntervalMinutes || m.cryptoWindowMinutes || 5) === 60
+                  ? '1h'
+                  : `${Number(m.cryptoIntervalMinutes || m.cryptoWindowMinutes || 5)}min`}</>
+              )}
               {m.seriesMeta?.subtitle && <> · {m.seriesMeta.subtitle}</>}
               {m.source && <> · {m.source}</>}
               {(m.resolverConfig?.eventId || m.sourceEventId) && <> · event {m.resolverConfig?.eventId || m.sourceEventId}</>}
@@ -3583,6 +3595,11 @@ function PendingMarketsTable({ onQueueChange }) {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [editingPending, setEditingPending] = useState(null);
+  const [cryptoInterval, setCryptoInterval] = useState(5);
+  const [cryptoIntervalOptions, setCryptoIntervalOptions] = useState(DEFAULT_CRYPTO_INTERVAL_OPTIONS);
+  const [cryptoIntervalLoading, setCryptoIntervalLoading] = useState(false);
+  const [cryptoIntervalSaving, setCryptoIntervalSaving] = useState(false);
+  const [cryptoIntervalError, setCryptoIntervalError] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -3598,6 +3615,44 @@ function PendingMarketsTable({ onQueueChange }) {
     }
   }
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [filter]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadCryptoInterval() {
+      setCryptoIntervalLoading(true);
+      setCryptoIntervalError(null);
+      try {
+        const data = await getJson('/api/points/admin/crypto-minute-settings');
+        if (cancelled) return;
+        const options = Array.isArray(data?.intervals) && data.intervals.length
+          ? data.intervals
+          : DEFAULT_CRYPTO_INTERVAL_OPTIONS;
+        setCryptoIntervalOptions(options);
+        setCryptoInterval(Number(data?.intervalMinutes || 5));
+      } catch (e) {
+        if (!cancelled) setCryptoIntervalError(e.code || e.message || 'settings_failed');
+      } finally {
+        if (!cancelled) setCryptoIntervalLoading(false);
+      }
+    }
+    loadCryptoInterval();
+    return () => { cancelled = true; };
+  }, []);
+
+  async function saveCryptoInterval(value) {
+    const intervalMinutes = Number(value);
+    setCryptoInterval(intervalMinutes);
+    setCryptoIntervalSaving(true);
+    setCryptoIntervalError(null);
+    try {
+      const data = await postJson('/api/points/admin/crypto-minute-settings', { intervalMinutes });
+      setCryptoInterval(Number(data?.intervalMinutes || intervalMinutes));
+    } catch (e) {
+      setCryptoIntervalError(e.code || e.message || 'settings_failed');
+    } finally {
+      setCryptoIntervalSaving(false);
+    }
+  }
 
   async function review(id, action) {
     setBusyId(id);
@@ -3936,6 +3991,61 @@ function PendingMarketsTable({ onQueueChange }) {
         >
           🔄 Generar ahora
         </button>
+
+        <label
+          title="Define la duración de las próximas ventanas automáticas de Bitcoin y Ethereum"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '5px 10px',
+            borderRadius: 16,
+            border: '1px solid rgba(255,92,0,0.35)',
+            background: 'rgba(255,92,0,0.08)',
+            color: 'var(--orange)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            opacity: cryptoIntervalLoading ? 0.6 : 1,
+          }}
+        >
+          BTC/ETH
+          <select
+            value={cryptoInterval}
+            disabled={cryptoIntervalLoading || cryptoIntervalSaving}
+            onChange={(e) => saveCryptoInterval(e.target.value)}
+            style={{
+              minWidth: 96,
+              border: '1px solid var(--border)',
+              borderRadius: 12,
+              background: 'var(--surface2)',
+              color: 'var(--text-primary)',
+              padding: '4px 8px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              outline: 'none',
+              cursor: (cryptoIntervalLoading || cryptoIntervalSaving) ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {cryptoIntervalOptions.map(option => (
+              <option key={option.minutes} value={option.minutes}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {cryptoIntervalError && (
+          <span style={{
+            color: 'var(--red)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            letterSpacing: '0.04em',
+          }}>
+            No se pudo guardar intervalo
+          </span>
+        )}
 
         {/* Retrofit resolvers — one-shot migration for markets
             approved before the auto-resolver code landed. Dry-runs

@@ -41,10 +41,13 @@ function pricesFromReserves(reserves, outcomeCount) {
 
 function cryptoMetaFromResolverConfig(resolverCfg) {
   if (resolverCfg?.shape !== 'binary-direction') return null;
+  const intervalMinutes = Number(resolverCfg.intervalMinutes || resolverCfg.windowMinutes || 5);
   return {
     asset:            resolverCfg.asset            || null,
     symbol:           resolverCfg.symbol           || null,
     coinbaseProductId:resolverCfg.coinbaseProductId|| null,
+    intervalMinutes:  Number.isFinite(intervalMinutes) && intervalMinutes > 0 ? intervalMinutes : 5,
+    windowMinutes:    Number.isFinite(intervalMinutes) && intervalMinutes > 0 ? intervalMinutes : 5,
     threshold:        resolverCfg.threshold == null ? null : Number(resolverCfg.threshold),
     openPrice:        resolverCfg.openPrice  == null ? null : Number(resolverCfg.openPrice),
     closePrice:       resolverCfg.closePrice == null ? null : Number(resolverCfg.closePrice),
@@ -364,6 +367,7 @@ export default async function handler(req, res) {
       }
       if (cryptoMeta && r.start_time) {
         try {
+          const sequenceWindowMinutes = Math.max(15, Number(cryptoMeta.intervalMinutes || 5) * 3);
           const sequenceRows = await sql`
             SELECT id, question, outcomes, reserves, start_time, end_time,
                    status, outcome, resolved_at, final_score, resolver_config
@@ -371,8 +375,8 @@ export default async function handler(req, res) {
             WHERE resolver_config->>'source' = 'chainlink'
               AND resolver_config->>'shape'  = 'binary-direction'
               AND resolver_config->>'asset'  = ${cryptoMeta.asset || ''}
-              AND start_time >= ${r.start_time}::timestamptz - INTERVAL '15 minutes'
-              AND start_time <= ${r.start_time}::timestamptz + INTERVAL '15 minutes'
+              AND start_time >= ${r.start_time}::timestamptz - (${sequenceWindowMinutes} * INTERVAL '1 minute')
+              AND start_time <= ${r.start_time}::timestamptz + (${sequenceWindowMinutes} * INTERVAL '1 minute')
               AND archived_at IS NULL
             ORDER BY start_time ASC, id ASC
             LIMIT 9

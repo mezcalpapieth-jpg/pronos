@@ -1,12 +1,12 @@
 /**
- * Crypto 5-min markets — rolling auto-generated BTC/ETH direction markets.
+ * Crypto minute markets — rolling auto-generated BTC/ETH direction markets.
  *
- * Polymarket-style "will BTC be higher or lower than $T at the next 5-min
- * boundary?" markets. New market opens every 5 minutes per asset; lasts
- * exactly one window; resolves automatically at the next boundary using
- * the Coinbase candle close for that boundary. Chainlink stays recorded
- * on the row for audit/compatibility, but it is too sparse for 5-min
- * settlement.
+ * Polymarket-style "will BTC be higher or lower than $T at the next interval
+ * boundary?" markets. The active interval is an admin setting; each market
+ * lasts exactly one selected window and resolves automatically at the next
+ * boundary using the Coinbase candle close for that boundary. Chainlink stays
+ * recorded on the row for audit/compatibility, but it is too sparse for
+ * minute-level settlement.
  *
  * Lifecycle, run by cron every minute:
  *
@@ -14,7 +14,7 @@
  *     - Pre-create upcoming pending windows so the UI can already show
  *       the next market before it needs to activate.
  *
- *   At T = 12:00:00 (hh:mm where mm % 5 === 0):
+ *   At T = 12:00:00 (hh:mm where mm % interval === 0):
  *     1. Read Coinbase BTC/USD and ETH/USD minute candles at the boundary
  *     2. For each asset:
  *        a. RESOLVE  the [11:55, 12:00] market that just closed
@@ -72,9 +72,13 @@ const ASSETS = [
   },
 ];
 
-const WINDOW_MS = 5 * 60_000;
 const ARCHIVE_AFTER_MS = 24 * 60 * 60_000; // 24 h
 const DEFAULT_LOOKAHEAD_WINDOWS = 2;
+const DEFAULT_MISSED_PENDING_CATCHUP_LIMIT = 12;
+const DEFAULT_ACTIVE_CATCHUP_LIMIT = 12;
+export const CRYPTO_MINUTE_MARKET_INTERVALS = Object.freeze([5, 10, 15, 30, 60]);
+export const DEFAULT_CRYPTO_MINUTE_MARKET_INTERVAL = 5;
+export const CRYPTO_MINUTE_MARKET_INTERVAL_KEY = 'points_crypto_minute_market_interval';
 
 // Outcome labels and indices. Index 0 = SUBE (HIGHER), 1 = BAJA (LOWER).
 // Match the "parallel-shape" semantics already used elsewhere: outcome
@@ -88,6 +92,38 @@ const OUTCOMES = ['SUBE', 'BAJA'];
 // negligible — this eliminates the tie case in practice.
 function roundThreshold(price) {
   return Math.round(price);
+}
+
+export function normalizeCryptoMinuteMarketInterval(value) {
+  const raw = value && typeof value === 'object'
+    ? value.minutes ?? value.intervalMinutes ?? value.value
+    : value;
+  const minutes = Number(raw);
+  if (CRYPTO_MINUTE_MARKET_INTERVALS.includes(minutes)) return minutes;
+  return DEFAULT_CRYPTO_MINUTE_MARKET_INTERVAL;
+}
+
+export async function readCryptoMinuteMarketInterval(sql) {
+  try {
+    const rows = await sql`
+      SELECT value
+      FROM points_app_settings
+      WHERE key = ${CRYPTO_MINUTE_MARKET_INTERVAL_KEY}
+      LIMIT 1
+    `;
+    return normalizeCryptoMinuteMarketInterval(rowsFromQuery(rows)[0]?.value);
+  } catch (e) {
+    // Brand-new local DBs can call this before points_app_settings exists.
+    // Keep the generator operational on its long-standing 5-minute default.
+    if (e?.code === '42P01' || /points_app_settings/i.test(e?.message || '')) {
+      return DEFAULT_CRYPTO_MINUTE_MARKET_INTERVAL;
+    }
+    throw e;
+  }
+}
+
+function windowMsForInterval(intervalMinutes) {
+  return normalizeCryptoMinuteMarketInterval(intervalMinutes) * 60_000;
 }
 
 export function resolveDirectionOutcome(closePrice, threshold) {
@@ -105,22 +141,31 @@ export function formatDirectionFinalScore(threshold, closePrice) {
   return `$${Number(threshold)} -> $${Number(closePrice).toFixed(2)}`;
 }
 
-// Floor a Date to the most recent 5-min boundary (UTC). 12:03:42 -> 12:00:00.
-export function floorTo5MinBoundary(d) {
+// Floor a Date to the most recent interval boundary (UTC). 12:13:42 at 15m -> 12:00:00.
+export function floorToCryptoBoundary(d, intervalMinutes = DEFAULT_CRYPTO_MINUTE_MARKET_INTERVAL) {
+  const interval = normalizeCryptoMinuteMarketInterval(intervalMinutes);
   const out = new Date(d);
   out.setUTCSeconds(0, 0);
-  out.setUTCMinutes(out.getUTCMinutes() - (out.getUTCMinutes() % 5));
+  out.setUTCMinutes(out.getUTCMinutes() - (out.getUTCMinutes() % interval));
   return out;
 }
 
-export function crypto5MinWindowsForTick(nowInput = new Date()) {
+// Backward-compatible helper used by older tests/imports.
+export function floorTo5MinBoundary(d) {
+  return floorToCryptoBoundary(d, 5);
+}
+
+export function crypto5MinWindowsForTick(nowInput = new Date(), intervalMinutes = DEFAULT_CRYPTO_MINUTE_MARKET_INTERVAL) {
+  const interval = normalizeCryptoMinuteMarketInterval(intervalMinutes);
+  const windowMs = windowMsForInterval(interval);
   const now = nowInput instanceof Date ? nowInput : new Date(nowInput);
-  const boundary = floorTo5MinBoundary(now);
+  const boundary = floorToCryptoBoundary(now, interval);
   const sinceBoundaryMs = now.getTime() - boundary.getTime();
-  const nextBoundary = new Date(boundary.getTime() + WINDOW_MS);
+  const nextBoundary = new Date(boundary.getTime() + windowMs);
   return {
     now,
     boundary,
+    intervalMinutes: interval,
     sinceBoundaryMs,
     nextBoundary,
     msUntilNextBoundary: nextBoundary.getTime() - now.getTime(),
@@ -128,13 +173,42 @@ export function crypto5MinWindowsForTick(nowInput = new Date()) {
 }
 
 // Build the stable (source, source_event_id) pair for a window. The
-// window-start ISO suffix (without millis) makes the row unique per
-// asset per window, idempotent across re-runs.
-function eventKey(assetKey, windowStartIso) {
+// window-start ISO suffix makes the row unique per asset per window,
+// idempotent across re-runs. Preserve legacy 5-minute keys; append the
+// interval for longer cadences so they never collide with old 5-minute rows.
+function eventKey(assetKey, windowStartIso, intervalMinutes = DEFAULT_CRYPTO_MINUTE_MARKET_INTERVAL) {
+  const interval = normalizeCryptoMinuteMarketInterval(intervalMinutes);
+  const intervalSuffix = interval === DEFAULT_CRYPTO_MINUTE_MARKET_INTERVAL ? '' : `:${interval}m`;
   return {
     source: 'chainlink-5min',
-    source_event_id: `${assetKey}:${windowStartIso}`,
+    source_event_id: `${assetKey}:${windowStartIso}${intervalSuffix}`,
   };
+}
+
+function rowsFromQuery(result) {
+  if (Array.isArray(result)) return result;
+  if (Array.isArray(result?.rows)) return result.rows;
+  return [];
+}
+
+function parseJsonb(value, fallback) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string') return fallback;
+  try { return JSON.parse(value); } catch { return fallback; }
+}
+
+function toIso(value, label) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) {
+    throw new Error(`crypto-5min: invalid ${label}`);
+  }
+  return date.toISOString();
+}
+
+function assetForSourceEventId(sourceEventId) {
+  const assetKey = String(sourceEventId || '').split(':')[0]?.toLowerCase();
+  return ASSETS.find((asset) => asset.key === assetKey) || null;
 }
 
 // ─── Per-tick lifecycle ─────────────────────────────────────────────────────
@@ -164,24 +238,53 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
   }
 
   const now = new Date();
-  const { boundary, sinceBoundaryMs } = crypto5MinWindowsForTick(now);
+  const intervalMinutes = await readCryptoMinuteMarketInterval(sql);
+  const windowMs = windowMsForInterval(intervalMinutes);
+  const { boundary, sinceBoundaryMs } = crypto5MinWindowsForTick(now, intervalMinutes);
   const precreateReport = await ensureUpcomingCryptoMarkets(sql, {
     now,
     dry,
     lookaheadWindows: DEFAULT_LOOKAHEAD_WINDOWS,
+    intervalMinutes,
   });
+  let activeCatchup = { checked: 0, resolved: [], errors: [], dry };
+  try {
+    activeCatchup = await catchUpExpiredActiveCryptoMarkets(sql, { now, dry });
+  } catch (e) {
+    activeCatchup.errors.push({ error: e?.message || 'active_catchup_failed' });
+  }
+  let pendingCatchup = { checked: 0, resolved: [], errors: [], dry };
+  try {
+    pendingCatchup = await catchUpMissedPendingCryptoMarkets(sql, { now, dry });
+  } catch (e) {
+    pendingCatchup.errors.push({ error: e?.message || 'catchup_failed' });
+  }
+  let activationCatchup = { checked: 0, activated: [], errors: [], dry };
 
-  // We only do real work in the first ~60s after a 5-min boundary.
+  // We only do real work in the first ~60s after the selected interval boundary.
   // Outside that window the tick still pre-creates future pending
   // windows, but skips price reads and settlement writes.
   if (sinceBoundaryMs > 60_000) {
+    try {
+      activationCatchup = await catchUpCurrentPendingCryptoMarkets(sql, {
+        now,
+        dry,
+        intervalMinutes,
+      });
+    } catch (e) {
+      activationCatchup.errors.push({ error: e?.message || 'activation_catchup_failed' });
+    }
     return {
       processed: false,
       reason: 'between_boundaries',
       boundaryAt: boundary.toISOString(),
+      intervalMinutes,
       precreated: precreateReport.precreated,
       precreateExisting: precreateReport.existing,
       precreate: precreateReport.windows,
+      activeCatchup,
+      pendingCatchup,
+      activationCatchup,
       dry,
     };
   }
@@ -198,19 +301,23 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
       .catch(e => ({ ok: false, error: e?.message || 'boundary_price_failed' })),
   ));
 
-  const closingStart = new Date(boundary.getTime() - WINDOW_MS);
+  const closingStart = new Date(boundary.getTime() - windowMs);
   const closingEnd = boundary;
   const openingStart = boundary;
-  const openingEnd = new Date(boundary.getTime() + WINDOW_MS);
+  const openingEnd = new Date(boundary.getTime() + windowMs);
   const upcomingStart = openingEnd;
-  const upcomingEnd = new Date(upcomingStart.getTime() + WINDOW_MS);
+  const upcomingEnd = new Date(upcomingStart.getTime() + windowMs);
 
   const report = {
     processed: true,
     boundaryAt: boundary.toISOString(),
+    intervalMinutes,
     precreated: precreateReport.precreated,
     precreateExisting: precreateReport.existing,
     precreate: precreateReport.windows,
+    activeCatchup,
+    pendingCatchup,
+    activationCatchup,
     perAsset: [],
     archived: 0,
     dry,
@@ -240,7 +347,7 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
     // Outcome is decided in SQL — we compare the row's stored
     // resolver_config.threshold against the boundary price in a single
     // CASE expression, so we don't need to read-then-write here.
-    const closing = eventKey(asset.key, closingStart.toISOString());
+    const closing = eventKey(asset.key, closingStart.toISOString(), intervalMinutes);
 
     if (!dry) {
       try {
@@ -297,7 +404,7 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
     // The pending row was created last tick (or via this same loop's
     // step 3 below if this is the very first activation ever); we
     // promote it to 'active' and stamp its threshold.
-    const opening = eventKey(asset.key, openingStart.toISOString());
+    const opening = eventKey(asset.key, openingStart.toISOString(), intervalMinutes);
 
     if (!dry) {
       try {
@@ -326,6 +433,7 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
             asset,
             windowStart: openingStart,
             windowEnd: openingEnd,
+            intervalMinutes,
             status: 'active',
             threshold,
             openPrice: price,
@@ -346,6 +454,7 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
           asset,
           windowStart: upcomingStart,
           windowEnd: upcomingEnd,
+          intervalMinutes,
           status: 'pending',
           threshold: null,
           openPrice: null,
@@ -388,25 +497,29 @@ export async function ensureUpcomingCryptoMarkets(sql, {
   now = new Date(),
   dry = false,
   lookaheadWindows = DEFAULT_LOOKAHEAD_WINDOWS,
+  intervalMinutes = DEFAULT_CRYPTO_MINUTE_MARKET_INTERVAL,
 } = {}) {
   if (!sql) throw new Error('crypto-5min: sql client required');
 
   const count = Math.max(0, Math.floor(Number(lookaheadWindows) || 0));
-  const { nextBoundary } = crypto5MinWindowsForTick(now);
+  const interval = normalizeCryptoMinuteMarketInterval(intervalMinutes);
+  const windowMs = windowMsForInterval(interval);
+  const { nextBoundary } = crypto5MinWindowsForTick(now, interval);
   const windows = [];
   let precreated = 0;
   let existing = 0;
 
   for (let offset = 0; offset < count; offset++) {
-    const windowStart = new Date(nextBoundary.getTime() + offset * WINDOW_MS);
-    const windowEnd = new Date(windowStart.getTime() + WINDOW_MS);
+    const windowStart = new Date(nextBoundary.getTime() + offset * windowMs);
+    const windowEnd = new Date(windowStart.getTime() + windowMs);
 
     for (const asset of ASSETS) {
-      const key = eventKey(asset.key, windowStart.toISOString());
+      const key = eventKey(asset.key, windowStart.toISOString(), interval);
       const entry = {
         asset: asset.key,
         source: key.source,
         sourceEventId: key.source_event_id,
+        intervalMinutes: interval,
         windowStart: windowStart.toISOString(),
         windowEnd: windowEnd.toISOString(),
       };
@@ -420,6 +533,7 @@ export async function ensureUpcomingCryptoMarkets(sql, {
         asset,
         windowStart,
         windowEnd,
+        intervalMinutes: interval,
         status: 'pending',
         threshold: null,
         openPrice: null,
@@ -437,6 +551,368 @@ export async function ensureUpcomingCryptoMarkets(sql, {
   return { precreated, existing, windows, dry };
 }
 
+export async function catchUpCurrentPendingCryptoMarkets(sql, {
+  now = new Date(),
+  dry = false,
+  intervalMinutes = null,
+  readBoundaryPrice = readCoinbaseBoundaryPrice,
+} = {}) {
+  if (!sql) throw new Error('crypto-5min: sql client required');
+
+  const nowDate = now instanceof Date ? now : new Date(now);
+  const nowIso = toIso(nowDate, 'activation catchup now');
+  const interval = intervalMinutes == null
+    ? await readCryptoMinuteMarketInterval(sql)
+    : normalizeCryptoMinuteMarketInterval(intervalMinutes);
+  const windowMs = windowMsForInterval(interval);
+  const { boundary } = crypto5MinWindowsForTick(nowDate, interval);
+  const windowEnd = new Date(boundary.getTime() + windowMs);
+  const report = { checked: 0, activated: [], errors: [], dry };
+
+  if (nowDate.getTime() >= windowEnd.getTime()) return report;
+
+  for (const asset of ASSETS) {
+    const key = eventKey(asset.key, boundary.toISOString(), interval);
+    try {
+      const selected = await sql`
+        SELECT id, source_event_id, start_time, end_time, resolver_config
+          FROM points_markets
+         WHERE source = ${key.source}
+           AND source_event_id = ${key.source_event_id}
+           AND status = 'pending'
+           AND outcome IS NULL
+           AND parent_id IS NULL
+           AND start_time <= ${nowIso}::timestamptz
+           AND end_time > ${nowIso}::timestamptz
+           AND COALESCE(resolver_config->>'threshold', '') = ''
+         LIMIT 1
+      `;
+      const rows = rowsFromQuery(selected);
+      report.checked += rows.length;
+      if (rows.length === 0) continue;
+
+      const openBoundary = await readBoundaryPrice({
+        productId: asset.coinbaseProductId,
+        timestamp: boundary,
+      });
+      const openPrice = Number(openBoundary.price);
+      const threshold = roundThreshold(openPrice);
+      const windowStart = toIso(rows[0].start_time, 'current window start');
+      const entry = {
+        id: Number(rows[0].id),
+        asset: asset.key,
+        sourceEventId: rows[0].source_event_id,
+        windowStart,
+        windowEnd: toIso(rows[0].end_time, 'current window end'),
+        threshold,
+        openPrice,
+        openPriceAt: openBoundary.capturedAt,
+      };
+
+      if (dry) {
+        report.activated.push({ ...entry, dry: true });
+        continue;
+      }
+
+      const updated = await sql`
+        UPDATE points_markets
+           SET status = 'active',
+               resolver_config = COALESCE(resolver_config, '{}'::jsonb)
+                 || ${JSON.stringify({
+                   threshold,
+                   openPrice,
+                   openedAt: windowStart,
+                   openPriceSource: openBoundary.source,
+                   openPriceAt: openBoundary.capturedAt,
+                   activationCatchup: true,
+                   activationCaughtUpAt: nowIso,
+                 })}::jsonb
+         WHERE id = ${Number(rows[0].id)}
+           AND source = 'chainlink-5min'
+           AND status = 'pending'
+           AND outcome IS NULL
+           AND COALESCE(resolver_config->>'threshold', '') = ''
+         RETURNING id
+      `;
+
+      if (rowsFromQuery(updated).length > 0) {
+        report.activated.push(entry);
+      }
+    } catch (e) {
+      report.errors.push({
+        asset: asset.key,
+        sourceEventId: key.source_event_id,
+        error: e?.message || 'activation_catchup_failed',
+      });
+    }
+  }
+
+  return report;
+}
+
+export async function catchUpExpiredActiveCryptoMarkets(sql, {
+  now = new Date(),
+  dry = false,
+  limit = DEFAULT_ACTIVE_CATCHUP_LIMIT,
+  readBoundaryPrice = readCoinbaseBoundaryPrice,
+  transaction = withTransaction,
+  persistSnapshot = bestEffortPersistResolvedCryptoMarketSnapshot,
+} = {}) {
+  if (!sql) throw new Error('crypto-5min: sql client required');
+
+  const max = Math.max(0, Math.min(100, Math.floor(Number(limit) || 0)));
+  const nowIso = toIso(now, 'active catchup now');
+  const report = { checked: 0, resolved: [], errors: [], dry };
+  if (max === 0) return report;
+
+  const selected = await sql`
+    SELECT id, source_event_id, end_time, resolver_config
+      FROM points_markets
+     WHERE source = 'chainlink-5min'
+       AND source_event_id ~ '^(btc|eth):'
+       AND status = 'active'
+       AND outcome IS NULL
+       AND parent_id IS NULL
+       AND end_time <= ${nowIso}::timestamptz - INTERVAL '60 seconds'
+       AND COALESCE(resolver_config->>'threshold', '') <> ''
+     ORDER BY end_time DESC
+     LIMIT ${max}
+  `;
+  const rows = rowsFromQuery(selected);
+  report.checked = rows.length;
+
+  for (const row of rows) {
+    const asset = assetForSourceEventId(row.source_event_id);
+    if (!asset) {
+      report.errors.push({
+        id: row.id,
+        sourceEventId: row.source_event_id,
+        error: 'unknown_asset',
+      });
+      continue;
+    }
+
+    const cfg = parseJsonb(row.resolver_config, {});
+    const threshold = Number(cfg?.threshold);
+    if (!Number.isFinite(threshold)) {
+      report.errors.push({
+        id: row.id,
+        sourceEventId: row.source_event_id,
+        error: 'missing_threshold',
+      });
+      continue;
+    }
+
+    try {
+      const windowEnd = toIso(row.end_time, 'active window end');
+      const closeBoundary = await readBoundaryPrice({
+        productId: asset.coinbaseProductId,
+        timestamp: windowEnd,
+      });
+      const closePrice = Number(closeBoundary.price);
+      const outcome = resolveDirectionOutcome(closePrice, threshold);
+      const finalScore = formatDirectionFinalScore(threshold, closePrice);
+      const resolverConfigPatch = {
+        closePrice,
+        closePriceSource: closeBoundary.source,
+        closePriceAt: closeBoundary.capturedAt,
+        missedCloseCatchup: true,
+        missedCloseCaughtUpAt: nowIso,
+      };
+      const entry = {
+        id: Number(row.id),
+        asset: asset.key,
+        sourceEventId: row.source_event_id,
+        windowEnd,
+        threshold,
+        closePrice,
+        outcome,
+        finalScore,
+        closePriceAt: closeBoundary.capturedAt,
+      };
+
+      if (dry) {
+        report.resolved.push({ ...entry, dry: true });
+        continue;
+      }
+
+      const updated = await transaction(async (client) => {
+        const updateRows = await client.query(
+          `UPDATE points_markets
+              SET status = 'resolved',
+                  outcome = $2::int,
+                  final_score = $3::text,
+                  resolved_at = NOW(),
+                  resolved_by = 'system',
+                  resolver_config = COALESCE(resolver_config, '{}'::jsonb) || $4::jsonb
+            WHERE id = $1
+              AND source = 'chainlink-5min'
+              AND status = 'active'
+              AND outcome IS NULL
+            RETURNING id`,
+          [
+            Number(row.id),
+            outcome,
+            finalScore,
+            JSON.stringify(resolverConfigPatch),
+          ],
+        );
+        const updatedRows = rowsFromQuery(updateRows);
+        if (updatedRows.length === 0) return null;
+        await persistSnapshot(client, row.id, 'crypto-5min-missed-active');
+        return updatedRows[0];
+      });
+
+      if (updated?.id) {
+        report.resolved.push(entry);
+      }
+    } catch (e) {
+      report.errors.push({
+        id: row.id,
+        sourceEventId: row.source_event_id,
+        error: e?.message || 'active_catchup_failed',
+      });
+    }
+  }
+
+  return report;
+}
+
+export async function catchUpMissedPendingCryptoMarkets(sql, {
+  now = new Date(),
+  dry = false,
+  limit = DEFAULT_MISSED_PENDING_CATCHUP_LIMIT,
+  readBoundaryPrice = readCoinbaseBoundaryPrice,
+  transaction = withTransaction,
+  persistSnapshot = bestEffortPersistResolvedCryptoMarketSnapshot,
+} = {}) {
+  if (!sql) throw new Error('crypto-5min: sql client required');
+
+  const max = Math.max(0, Math.min(100, Math.floor(Number(limit) || 0)));
+  const nowIso = toIso(now, 'catchup now');
+  const report = { checked: 0, resolved: [], errors: [], dry };
+  if (max === 0) return report;
+
+  const selected = await sql`
+    SELECT id, source_event_id, start_time, end_time, resolver_config
+      FROM points_markets
+     WHERE source = 'chainlink-5min'
+       AND source_event_id ~ '^(btc|eth):'
+       AND status = 'pending'
+       AND outcome IS NULL
+       AND parent_id IS NULL
+       AND end_time <= ${nowIso}::timestamptz - INTERVAL '60 seconds'
+       AND COALESCE(resolver_config->>'threshold', '') = ''
+     ORDER BY end_time DESC
+     LIMIT ${max}
+  `;
+  const rows = rowsFromQuery(selected);
+  report.checked = rows.length;
+
+  for (const row of rows) {
+    const asset = assetForSourceEventId(row.source_event_id);
+    if (!asset) {
+      report.errors.push({
+        id: row.id,
+        sourceEventId: row.source_event_id,
+        error: 'unknown_asset',
+      });
+      continue;
+    }
+
+    try {
+      const windowStart = toIso(row.start_time, 'window start');
+      const windowEnd = toIso(row.end_time, 'window end');
+      const [openBoundary, closeBoundary] = await Promise.all([
+        readBoundaryPrice({
+          productId: asset.coinbaseProductId,
+          timestamp: windowStart,
+        }),
+        readBoundaryPrice({
+          productId: asset.coinbaseProductId,
+          timestamp: windowEnd,
+        }),
+      ]);
+      const openPrice = Number(openBoundary.price);
+      const closePrice = Number(closeBoundary.price);
+      const threshold = roundThreshold(openPrice);
+      const outcome = resolveDirectionOutcome(closePrice, threshold);
+      const finalScore = formatDirectionFinalScore(threshold, closePrice);
+      const resolverConfigPatch = {
+        threshold,
+        openPrice,
+        openedAt: windowStart,
+        openPriceSource: openBoundary.source,
+        openPriceAt: openBoundary.capturedAt,
+        closePrice,
+        closePriceSource: closeBoundary.source,
+        closePriceAt: closeBoundary.capturedAt,
+        missedActivationCatchup: true,
+        missedActivationCaughtUpAt: nowIso,
+      };
+      const entry = {
+        id: Number(row.id),
+        asset: asset.key,
+        sourceEventId: row.source_event_id,
+        windowStart,
+        windowEnd,
+        threshold,
+        openPrice,
+        closePrice,
+        outcome,
+        finalScore,
+        openPriceAt: openBoundary.capturedAt,
+        closePriceAt: closeBoundary.capturedAt,
+      };
+
+      if (dry) {
+        report.resolved.push({ ...entry, dry: true });
+        continue;
+      }
+
+      const updated = await transaction(async (client) => {
+        const updateRows = await client.query(
+          `UPDATE points_markets
+              SET status = 'resolved',
+                  outcome = $2::int,
+                  final_score = $3::text,
+                  resolved_at = NOW(),
+                  resolved_by = 'system',
+                  resolver_config = COALESCE(resolver_config, '{}'::jsonb) || $4::jsonb
+            WHERE id = $1
+              AND source = 'chainlink-5min'
+              AND status = 'pending'
+              AND outcome IS NULL
+              AND COALESCE(resolver_config->>'threshold', '') = ''
+            RETURNING id`,
+          [
+            Number(row.id),
+            outcome,
+            finalScore,
+            JSON.stringify(resolverConfigPatch),
+          ],
+        );
+        const updatedRows = rowsFromQuery(updateRows);
+        if (updatedRows.length === 0) return null;
+        await persistSnapshot(client, row.id, 'crypto-5min-missed-pending');
+        return updatedRows[0];
+      });
+
+      if (updated?.id) {
+        report.resolved.push(entry);
+      }
+    } catch (e) {
+      report.errors.push({
+        id: row.id,
+        sourceEventId: row.source_event_id,
+        error: e?.message || 'catchup_failed',
+      });
+    }
+  }
+
+  return report;
+}
+
 // Insert a 5-min crypto market. ON CONFLICT DO NOTHING on the
 // (source, source_event_id) pair — re-running the cron can't dupe rows.
 // We use the "raw" points_markets row shape so this bypasses the admin
@@ -445,13 +921,15 @@ async function insertCryptoMarket(sql, {
   asset,
   windowStart,
   windowEnd,
+  intervalMinutes = DEFAULT_CRYPTO_MINUTE_MARKET_INTERVAL,
   status,
   threshold,
   openPrice,
   openPriceSource = null,
   openPriceAt = null,
 }) {
-  const key = eventKey(asset.key, windowStart.toISOString());
+  const interval = normalizeCryptoMinuteMarketInterval(intervalMinutes);
+  const key = eventKey(asset.key, windowStart.toISOString(), interval);
   const question = thresholdQuestion(asset, threshold, windowEnd);
   const resolverConfig = {
     source: 'chainlink',
@@ -461,6 +939,8 @@ async function insertCryptoMarket(sql, {
     shape: 'binary-direction', // distinct from the existing 'binary' shape
     asset: asset.key,
     coinbaseProductId: asset.coinbaseProductId,
+    intervalMinutes: interval,
+    windowMinutes: interval,
     threshold: threshold == null ? null : Number(threshold),
     openPrice: openPrice == null ? null : Number(openPrice),
     openPriceSource: openPriceSource || null,

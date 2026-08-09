@@ -107,7 +107,7 @@ const RESUELTOS_CATEGORIES = [
 const CRYPTO_TYPE_TABS = [
   { key: 'all',     label: 'Todos' },
   { key: 'general', label: 'Eventos' },
-  { key: '5min',    label: '5 minutos' },
+  { key: '5min',    label: 'Rápidos' },
 ];
 
 const MEXICO_TOPIC_TABS = [
