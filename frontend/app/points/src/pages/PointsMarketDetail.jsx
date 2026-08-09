@@ -53,6 +53,7 @@ import {
 } from '../lib/cryptoMarketHub.js';
 import { marketInterestPayload, trackInterest } from '@app/lib/interest.js';
 import { emitPointsRefresh } from '../lib/pointsLiveRefresh.js';
+import { videoDemoPollMs } from '../demo/demoFlag.js';
 
 // Accent colors for the multi-line price chart. Match the buy-button
 // accents so users recognize the same color for the same outcome.
@@ -2007,7 +2008,11 @@ export default function PointsMarketDetail({ onOpenLogin }) {
     if (!id || !market) return undefined;
     const isCryptoMarket = Boolean(market.cryptoMeta);
     if (market.status === 'resolved' && !isCryptoMarket) return undefined;
-    const pollMs = isCryptoMarket ? 5_000 : 15_000;
+    // 15s is right for real users but reads as a frozen page on camera, so
+    // the video demo (/points/video) polls fast enough that the probability
+    // visibly ticks. Guarded by the demo session flag — normal traffic keeps
+    // the original cadence.
+    const pollMs = videoDemoPollMs() ?? (isCryptoMarket ? 5_000 : 15_000);
     const interval = window.setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       fetchMarket(id)

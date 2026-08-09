@@ -1,10 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchCurrentCycle, fetchCycleHistory, fetchLeaderboard } from '../lib/pointsApi.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useLang } from '@app/lib/i18n.js';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
 import { LeaderboardSkeleton } from '../components/PointsSkeleton.jsx';
+import { isVideoDemoActive, videoDemoPollMs } from '../demo/demoFlag.js';
+import { useFlipRows } from '../demo/useFlipRows.js';
 
 const DEFAULT_RULES = {
   startingBalance: 500,
@@ -145,6 +147,7 @@ function LeaderboardRow({ row, currentUsername, rules, compact = false, lang = '
   return (
     <Link
       to={`/u/${encodeURIComponent(row.username)}`}
+      data-flip-key={row.username}
       style={{
         display: 'grid',
         gridTemplateColumns: compact ? '30px minmax(0, 1fr) minmax(92px, auto)' : '36px minmax(0, 1fr) minmax(112px, auto) minmax(116px, auto)',
@@ -390,6 +393,18 @@ export default function PointsTournament() {
     };
   }, []);
 
+  // The leaderboard is otherwise fetched once and never again — fine for a
+  // cycle that moves over days, but the video demo needs ranks changing on
+  // camera. Only the demo session re-polls.
+  useEffect(() => {
+    const pollMs = videoDemoPollMs();
+    if (!pollMs) return undefined;
+    const id = window.setInterval(() => {
+      fetchLeaderboard().then(data => data && setLeaderboard(data)).catch(() => {});
+    }, pollMs);
+    return () => window.clearInterval(id);
+  }, []);
+
   const rules = leaderboard?.rules || cycle?.rules || DEFAULT_RULES;
   const countdownTarget = targetForCycle(cycle);
   const countdown = useMemo(() => {
@@ -407,6 +422,10 @@ export default function PointsTournament() {
     ? rules.prizes
     : DEFAULT_RULES.prizes;
   const prizePool = prizeRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+
+  // Slides rows to their new rank instead of snapping. Demo-only.
+  const leaderboardRef = useRef(null);
+  useFlipRows(leaderboardRef, top.map(row => row.username).join(','), isVideoDemoActive());
 
   return (
     <main style={{
@@ -501,7 +520,7 @@ export default function PointsTournament() {
           ) : top.length === 0 ? (
             <p style={emptyText}>{lang === 'en' ? 'No participants yet.' : 'Aún no hay participantes.'}</p>
           ) : (
-            <div>
+            <div ref={leaderboardRef}>
               {top.map(row => (
                 <LeaderboardRow key={row.username} row={row} currentUsername={user?.username} rules={rules} compact={isMobile} lang={lang} />
               ))}

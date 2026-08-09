@@ -22,6 +22,7 @@ import Footer from '@app/components/Footer.jsx';
 import PointsWelcomeModal, { hasBeenWelcomed } from './components/PointsWelcomeModal.jsx';
 import PointsIntroModal, { hasSeenIntro } from './components/PointsIntroModal.jsx';
 import { trackPublicityConversion, trackPublicityLanding } from './lib/pointsApi.js';
+import { isVideoDemoActive } from './demo/demoFlag.js';
 
 const PointsHome = lazy(() => import('./pages/PointsHome.jsx'));
 const PointsMarketDetail = lazy(() => import('./pages/PointsMarketDetail.jsx'));
@@ -43,6 +44,16 @@ const PointsAdmin = lazy(() => import('./pages/PointsAdmin.jsx'));
 const PointsReferralLanding = lazy(() => import('./pages/PointsReferralLanding.jsx'));
 const PointsUserProfile = lazy(() => import('./pages/PointsUserProfile.jsx'));
 const InvestorDeck = lazy(() => import('./pages/InvestorDeck.jsx'));
+
+// Video-recording demo. Both of these live in lazily-loaded chunks that a
+// normal visitor never downloads — the gate is only reachable at an
+// unadvertised path, and the panel only mounts for a session that already
+// cleared the server-side password.
+const VideoDemoGate = lazy(() => import('./demo/VideoDemoGate.jsx'));
+const DemoControlPanel = lazy(() => import('./demo/DemoControlPanel.jsx'));
+
+const IS_VIDEO_GATE = typeof window !== 'undefined'
+  && /\/points\/video\/?$/.test(window.location.pathname);
 
 // Admin usernames live in env var VITE_POINTS_ADMIN_USERNAMES so the client
 // can hide the admin nav link without needing a server round-trip. The real
@@ -254,6 +265,16 @@ export default function App() {
     window.history.replaceState(null, '', cleanUrl || '/points/');
   }, []);
 
+  // Standalone page — no nav, ticker, footer, modals or trackers, none of
+  // which should fire while someone is just typing a password.
+  if (IS_VIDEO_GATE) {
+    return (
+      <Suspense fallback={<RouteFallback />}>
+        <VideoDemoGate />
+      </Suspense>
+    );
+  }
+
   return (
     // The points app normally mounts under /points, but the private deck
     // intentionally lives at root /deck. Keep the basename dynamic so both
@@ -279,6 +300,11 @@ export default function App() {
         onClose={() => setIntroOpen(false)}
         onCreateAccount={() => setLoginOpen(true)}
       />
+      {isVideoDemoActive() && (
+        <Suspense fallback={null}>
+          <DemoControlPanel />
+        </Suspense>
+      )}
     </BrowserRouter>
   );
 }
