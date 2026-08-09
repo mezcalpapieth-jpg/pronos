@@ -5,21 +5,21 @@ export const TOURNAMENT_OPERATION_CLOSE_ISO = '2026-08-25T18:00:00.000Z';
 export const TOURNAMENT_RANKING_CUTOFF_ISO = '2026-08-26T05:59:00.000Z';
 export const TOURNAMENT_CYCLE_LABEL = 'Ciclo 12 ago - 25 ago';
 
-export const TOURNAMENT_STARTING_BALANCE = 1500;
+export const TOURNAMENT_STARTING_BALANCE = 500;
 export const TOURNAMENT_MIN_ENTRY_MXNP = 100;
 export const TOURNAMENT_MAX_SHARES_PER_MARKET = 6000;
 export const TOURNAMENT_QUALIFYING_MARKETS = 10;
 export const TOURNAMENT_INACTIVITY_PENALTY = 50;
 
 export const TOURNAMENT_REWARDS = Object.freeze({
-  signupBonus: 1500,
-  dailyBase: 150,
-  dailyStep: 15,
-  dailyMax: 225,
+  signupBonus: 500,
+  dailyBase: 100,
+  dailyStep: 20,
+  dailyMax: 200,
   rescueFloor: 300,
   rescueMaxClaims: 3,
-  referrerReward: 375,
-  referredReward: 300,
+  referrerReward: 100,
+  referredReward: 250,
   referralCycleCap: 10,
   socialFollow: 300,
   socialPost: 300,

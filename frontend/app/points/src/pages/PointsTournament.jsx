@@ -7,18 +7,18 @@ import { useIsMobile } from '@app/lib/useIsMobile.js';
 import { LeaderboardSkeleton } from '../components/PointsSkeleton.jsx';
 
 const DEFAULT_RULES = {
-  startingBalance: 1500,
+  startingBalance: 500,
   minEntryMxnp: 100,
   maxSharesPerMarket: 6000,
   qualifyingMarkets: 10,
   inactivityPenalty: 50,
   rewards: {
-    dailyBase: 150,
-    dailyStep: 15,
-    dailyMax: 225,
+    dailyBase: 100,
+    dailyStep: 20,
+    dailyMax: 200,
     referralCycleCap: 10,
-    referrerReward: 375,
-    referredReward: 300,
+    referrerReward: 100,
+    referredReward: 250,
     rescueFloor: 300,
     rescueMaxClaims: 3,
   },

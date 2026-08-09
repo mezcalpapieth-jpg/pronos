@@ -104,9 +104,9 @@ function DailyClaimCard({ onClaimed, alreadyClaimedToday: initialClaimed, onClai
   return (
     <section style={panelStyle}>
       <div style={eyebrowStyle}>Reclamo diario</div>
-      <h3 style={panelTitleStyle}>150 MXNP hoy, +15 MXNP por cada día consecutivo</h3>
+      <h3 style={panelTitleStyle}>100 MXNP hoy, +20 MXNP por cada día consecutivo</h3>
       <p style={panelBodyStyle}>
-        Día 1 = 150 MXNP. Día 2 = 165. Día 3 = 180. El reclamo llega hasta 225 MXNP.
+        Día 1 = 100 MXNP. Día 2 = 120. Día 3 = 140. El reclamo llega hasta 200 MXNP.
         Entra todos los días para mantener la racha; si te saltas un día, vuelves al día 1.
       </p>
       {state.msg && (
@@ -219,11 +219,11 @@ function ReferralCard() {
   return (
     <section style={panelStyle}>
       <div style={eyebrowStyle}>Programa de referidos</div>
-      <h3 style={panelTitleStyle}>+375 MXNP por cada amigo que se registre</h3>
+      <h3 style={panelTitleStyle}>+100 MXNP por cada amigo que se registre</h3>
       <p style={panelBodyStyle}>
         Comparte tu link único. Cuando alguien crea su cuenta usándolo, tú recibes
-        <strong style={{ color: 'var(--green)' }}> 375 MXNP</strong> y ellos reciben
-        <strong style={{ color: 'var(--green)' }}> 300 MXNP</strong>. El bono de invitador
+        <strong style={{ color: 'var(--green)' }}> 100 MXNP</strong> y ellos reciben
+        <strong style={{ color: 'var(--green)' }}> 250 MXNP</strong>. El bono de invitador
         cuenta hasta 10 referidos por ciclo.
       </p>
 

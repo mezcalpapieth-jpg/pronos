@@ -2,7 +2,7 @@
  * Welcome modal — shown once right after a user claims their username.
  *
  * The goal is to make the "what is Pronos?" moment feel considered:
- *   1. Hero with a concise headline + the 1,500 MXNP bonus call-out.
+ *   1. Hero with a concise headline + the 500 MXNP bonus call-out.
  *   2. "What Pronos is TODAY" — off-chain competition, 2-week cycles,
  *      cash prizes for the top of the leaderboard.
  *   3. "What's coming NEXT" - on-chain Pesos markets, priority access
@@ -128,9 +128,9 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
             margin: 0,
           }}>
             {isEn ? (
-              <>You already have <strong style={{ color: 'var(--green)' }}>1,500 MXNP</strong> as a welcome bonus to start predicting.</>
+              <>You already have <strong style={{ color: 'var(--green)' }}>500 MXNP</strong> as a welcome bonus to start predicting.</>
             ) : (
-              <>Ya tienes <strong style={{ color: 'var(--green)' }}>1,500 MXNP</strong> de bienvenida para empezar a predecir.</>
+              <>Ya tienes <strong style={{ color: 'var(--green)' }}>500 MXNP</strong> de bienvenida para empezar a predecir.</>
             )}
           </p>
         </div>
@@ -166,11 +166,11 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
             bullets={isEn ? [
               { icon: '01', text: 'Tournament', value: 'Aug 12' },
               { icon: '02', text: 'Markets', value: 'open' },
-              { icon: '03', text: 'Starting balance', value: '1,500 MXNP' },
+              { icon: '03', text: 'Starting balance', value: '500 MXNP' },
             ] : [
               { icon: '01', text: 'Torneo', value: '12 ago' },
               { icon: '02', text: 'Mercados', value: 'abiertos' },
-              { icon: '03', text: 'Balance inicial', value: '1,500 MXNP' },
+              { icon: '03', text: 'Balance inicial', value: '500 MXNP' },
             ]}
           />
 
@@ -208,12 +208,12 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
             accent="var(--text-muted)"
             eyebrow={isEn ? 'How to earn MXNP without spending it' : 'Cómo ganar MXNP sin gastarlo'}
             bullets={isEn ? [
-              { icon: '01', text: 'Daily claim', value: '150 + 15/day streak' },
-              { icon: '02', text: 'Each friend you invite', value: '+375 MXNP' },
+              { icon: '01', text: 'Daily claim', value: '100 + 20/day streak' },
+              { icon: '02', text: 'Each friend you invite', value: '+100 MXNP' },
               { icon: '03', text: 'Approved social tasks', value: '+300 to +750 MXNP' },
             ] : [
-              { icon: '01', text: 'Reclamo diario', value: '150 + 15/día racha' },
-              { icon: '02', text: 'Cada amigo que invites', value: '+375 MXNP' },
+              { icon: '01', text: 'Reclamo diario', value: '100 + 20/día racha' },
+              { icon: '02', text: 'Cada amigo que invites', value: '+100 MXNP' },
               { icon: '03', text: 'Tareas sociales aprobadas', value: '+300 a +750 MXNP' },
             ]}
           />

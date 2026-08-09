@@ -255,7 +255,7 @@ function DailyClaimCard({ onClaimed }) {
         Reclamo diario
       </div>
       <p className="points-daily-claim-copy">
-        Reclama tus MXNP diarios. Mantén la racha para ganar más cada día (+15 por cada día consecutivo, hasta 225 MXNP).
+        Reclama tus MXNP diarios. Mantén la racha para ganar más cada día (+20 por cada día consecutivo, hasta 200 MXNP).
       </p>
       {state.msg && (
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--green)', marginBottom: 10 }}>

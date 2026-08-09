@@ -10,7 +10,7 @@ import React from 'react';
 const ITEMS = [
   { label: 'BETA',             val: 'PRONOS',         green: true },
   { label: 'MONEDA',           val: 'MXNP · PUNTOS' },
-  { label: 'BONO INICIAL',     val: '1,500 MXNP',     green: true },
+  { label: 'BONO INICIAL',     val: '500 MXNP',       green: true },
   { label: 'CICLO',            val: '2 SEMANAS' },
   { label: 'PREMIO 1° LUGAR',  val: '$3,500 MXN',     green: true },
   { label: 'PREMIO 2° LUGAR',  val: '$2,500 MXN' },
@@ -22,7 +22,7 @@ const ITEMS = [
   // width of the viewport).
   { label: 'BETA',             val: 'PRONOS',         green: true },
   { label: 'MONEDA',           val: 'MXNP · PUNTOS' },
-  { label: 'BONO INICIAL',     val: '1,500 MXNP',     green: true },
+  { label: 'BONO INICIAL',     val: '500 MXNP',       green: true },
   { label: 'CICLO',            val: '2 SEMANAS' },
   { label: 'PREMIO 1° LUGAR',  val: '$3,500 MXN',     green: true },
 ];

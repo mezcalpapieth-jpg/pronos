@@ -46,7 +46,7 @@ export async function sendPointsWelcomeEmail({ email, username }) {
       ¡Bienvenido, ${handle}!
     </h1>
     <p style="font-size:15px;color:#999;line-height:1.6;margin:0 0 28px;">
-      Ya tienes <strong style="color:#00e87a;">1,500 MXNP</strong> en tu cuenta para empezar a predecir.
+      Ya tienes <strong style="color:#00e87a;">500 MXNP</strong> en tu cuenta para empezar a predecir.
     </p>
   </div>
 
@@ -94,9 +94,9 @@ export async function sendPointsWelcomeEmail({ email, username }) {
         Cómo ganar MXNP sin gastarlo
       </div>
       <div style="font-size:14px;color:#ccc;line-height:2;">
-        <strong>Reclamo diario:</strong> 150 MXNP + 15 extra por día de racha, hasta 225<br/>
-        <strong>Referidos:</strong> 375 MXNP por amigo, máximo 10 por ciclo<br/>
-        <strong>Nuevo referido:</strong> 300 MXNP para quien entra con tu link<br/>
+        <strong>Reclamo diario:</strong> 100 MXNP + 20 extra por día de racha, hasta 200<br/>
+        <strong>Referidos:</strong> 100 MXNP por amigo, máximo 10 por ciclo<br/>
+        <strong>Nuevo referido:</strong> 250 MXNP para quien entra con tu link<br/>
         <strong>Redes sociales:</strong> 300 MXNP por follow/post y 750 MXNP por story aprobada
       </div>
     </div>
