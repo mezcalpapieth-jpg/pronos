@@ -157,12 +157,16 @@ function driftPrices() {
   const speed = Number(state.settings.driftSpeed) || 3;
 
   // Calibrated against what the UI actually shows. Percentages render as
-  // integers, so a walk of a few tenths of a point is invisible on camera no
-  // matter how busy it looks in the data: at speed 3 this moves roughly a
-  // point per second and wanders a few points from the anchor before being
-  // pulled back, which reads as a live market rather than a frozen page.
-  const step = speed * 0.006;
-  const reversion = 0.012;
+  // integers, so a walk of a few tenths of a point is invisible on camera
+  // no matter how busy it looks in the data.
+  //
+  // Tuned for drama over realism: at speed 3 a market travels something like
+  // 58% → 65% inside a single take instead of inching around one number. A
+  // real prediction market does not swing like this, which is the point — a
+  // truthful walk looks like a frozen page on camera.
+  // applyProbabilities() clamps the extremes.
+  const step = speed * 0.026;
+  const reversion = 0.017;
 
   for (const market of state.markets) {
     if (market.status !== 'active') continue;
