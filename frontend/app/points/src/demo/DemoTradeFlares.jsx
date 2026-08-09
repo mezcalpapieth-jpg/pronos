@@ -95,7 +95,11 @@ export default function DemoTradeFlares({ marketId }) {
             fontWeight: 700,
             letterSpacing: '0.02em',
             whiteSpace: 'nowrap',
-            color: flare.side === 'buy' ? 'var(--green, #22c55e)' : 'var(--red, #ef4444)',
+            // NOT --green: in this palette that token is the brand orange
+            // (#FF5500), which rendered buys and sells in near-identical
+            // warm tones. --success is the real green, the one the SÍ
+            // button and the price line use.
+            color: flare.side === 'buy' ? 'var(--success, #00C96B)' : 'var(--red, #FF4545)',
             textShadow: '0 1px 6px rgba(0,0,0,0.85)',
             animation: `demo-flare ${LIFETIME_MS}ms ease-out forwards`,
           }}
