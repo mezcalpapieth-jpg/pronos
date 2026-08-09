@@ -49,8 +49,8 @@ const PUBLIC_ERROR_COPY = {
     en: 'Enter a valid amount.',
   },
   tournament_min_entry: {
-    es: 'Durante el torneo, cada entrada debe ser de al menos 300 MXNP.',
-    en: 'During the tournament, each entry must be at least 300 MXNP.',
+    es: 'Durante el torneo, cada entrada debe ser de al menos 100 MXNP.',
+    en: 'During the tournament, each entry must be at least 100 MXNP.',
   },
   tournament_share_cap: {
     es: 'Llegaste al máximo de acciones permitido por mercado en este torneo.',

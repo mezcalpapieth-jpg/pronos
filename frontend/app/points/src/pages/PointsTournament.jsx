@@ -8,7 +8,7 @@ import { LeaderboardSkeleton } from '../components/PointsSkeleton.jsx';
 
 const DEFAULT_RULES = {
   startingBalance: 1500,
-  minEntryMxnp: 300,
+  minEntryMxnp: 100,
   maxSharesPerMarket: 6000,
   qualifyingMarkets: 10,
   inactivityPenalty: 50,
