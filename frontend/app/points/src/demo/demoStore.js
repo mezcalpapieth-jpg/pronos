@@ -11,11 +11,12 @@
  *   - leaderboard shuffle: perturbs tournament scores so rows change rank,
  *     with a climb bias on the recording account (shot 2).
  */
-import { buildSeedState, pricesFromReserves, rankLeaderboard, DEMO_USERNAME } from './demoSeed.js';
+import { buildSeedState, pricesFromReserves, rankLeaderboard } from './demoSeed.js';
 
 const STORAGE_KEY = 'pronos-video-demo-v1';
 const HISTORY_POINT_SECONDS = 10;
 const MAX_HISTORY_POINTS = 360;
+const MAX_RECENT_TRADES = 600;
 const PERSIST_THROTTLE_MS = 3000;
 
 let state = null;
@@ -24,6 +25,12 @@ let driftTimer = null;
 let shuffleTimer = null;
 let lastPersist = 0;
 let lastHistoryAppend = 0;
+// Which market is open on screen, so the simulated flow can favour it.
+let focusedMarketId = null;
+
+export function setFocusedMarket(id) {
+  focusedMarketId = id == null ? null : Number(id);
+}
 
 // ─── Persistence ────────────────────────────────────────────────────────────
 
@@ -146,7 +153,7 @@ function applyProbabilities(market, probs) {
   market.prices = pricesFromReserves(market.reserves);
 }
 
-function driftTick() {
+function driftPrices() {
   const speed = Number(state.settings.driftSpeed) || 3;
 
   // Calibrated against what the UI actually shows. Percentages render as
@@ -170,6 +177,14 @@ function driftTick() {
     applyProbabilities(market, next);
   }
 
+}
+
+// Prices and order flow are independently switchable, so they share one
+// timer but each checks its own setting.
+function liveTick() {
+  if (state.settings.driftEnabled) driftPrices();
+  if (state.settings.tradeFlowEnabled) tradeFlowTick();
+
   const now = Date.now();
   if (now - lastHistoryAppend >= HISTORY_POINT_SECONDS * 1000) {
     lastHistoryAppend = now;
@@ -179,10 +194,75 @@ function driftTick() {
   notify();
 }
 
+// ─── Simulated order flow ───────────────────────────────────────────────────
+
+/**
+ * Drips buys and sells into the markets.
+ *
+ * Without this the volume figures are frozen: the cards, the 24h stats and
+ * the "flujo en vivo" panel all look busy but never move, which reads as a
+ * screenshot rather than a live market. Each simulated trade bumps the
+ * market's traded volume, stamps it as the latest trade, and lands in a
+ * rolling buffer that the activity endpoint buckets up.
+ *
+ * Prices are left to the drift walk. Tying them to this flow as well would
+ * compound two random walks on the same reserves and let a busy market run
+ * away to 99% during a long take.
+ */
+function tradeFlowTick() {
+  const intensity = Math.max(1, Number(state.settings.tradeFlowIntensity) || 3);
+  const active = state.markets.filter(m => m.status === 'active');
+  if (active.length === 0) return;
+
+  const now = Date.now();
+  const nowSec = Math.floor(now / 1000);
+  const tradesThisTick = 1 + Math.floor(Math.random() * intensity * 2);
+
+  const focused = focusedMarketId
+    ? active.find(m => m.id === Number(focusedMarketId))
+    : null;
+
+  for (let i = 0; i < tradesThisTick; i += 1) {
+    // Spread across 22 markets, the one actually on camera would see an
+    // order every few seconds. Send most of the flow to whichever market is
+    // open so its chart stays busy while it is being filmed.
+    const market = (focused && Math.random() < 0.65)
+      ? focused
+      : active[Math.floor(Math.random() * active.length)];
+
+    // Slight buy lean so the pressure bar sits believably above 50%.
+    const side = Math.random() < 0.57 ? 'buy' : 'sell';
+
+    // Two tiers, because a single curve gives either all pocket change or
+    // all whales. Most orders are small the way real ones are; roughly one
+    // in six is a big ticket that breaks up the rhythm on screen.
+    const size = Math.random() < 0.84
+      ? Math.round(2 + Math.pow(Math.random(), 2.2) * 450)
+      : Math.round(300 + Math.pow(Math.random(), 1.6) * 2600);
+
+    market.tradeVolume = Number(market.tradeVolume || 0) + size;
+    market.lastTradeAt = new Date(now).toISOString();
+
+    state.recentTrades.push({
+      marketId: market.id,
+      t: nowSec,
+      side,
+      size,
+      outcomeIndex: Math.floor(Math.random() * market.outcomes.length),
+    });
+  }
+
+  if (state.recentTrades.length > MAX_RECENT_TRADES) {
+    state.recentTrades.splice(0, state.recentTrades.length - MAX_RECENT_TRADES);
+  }
+}
+
 // ─── Leaderboard shuffle ────────────────────────────────────────────────────
 
 function shuffleTick() {
-  const me = state.leaderboard.find(row => row.username === DEMO_USERNAME);
+  // Matched against the live account name, not the seed constant, so the
+  // climb bias follows the username after Fabian renames himself.
+  const me = state.leaderboard.find(row => row.username === state.user.username);
 
   // Once the recording account tops the table there is nothing left to
   // film, so drop it back to mid-pack and let it climb again. That turns
@@ -194,7 +274,7 @@ function shuffleTick() {
   }
 
   for (const row of state.leaderboard) {
-    const bias = row.username === DEMO_USERNAME ? 55 : -4;
+    const bias = row.username === state.user.username ? 55 : -4;
     row.score = Math.max(0, Math.round(row.score + bias + (Math.random() - 0.5) * 120));
     row.cycleDelta = row.score;
     row.marketPnl = row.score;
@@ -208,8 +288,8 @@ function shuffleTick() {
 
 function startTimers() {
   stopTimers();
-  if (state.settings.driftEnabled) {
-    driftTimer = window.setInterval(driftTick, 1000);
+  if (state.settings.driftEnabled || state.settings.tradeFlowEnabled) {
+    driftTimer = window.setInterval(liveTick, 1000);
   }
   if (state.settings.leaderboardShuffleEnabled) {
     const seconds = Math.max(1, Number(state.settings.leaderboardShuffleSeconds) || 4);
@@ -234,7 +314,10 @@ export function initDemoStore() {
   if (state) return state;
   const now = Date.now();
   state = readStored() || buildSeedState(now);
-  if (!state.settings) state.settings = buildSeedState(now).settings;
+  // A scenario saved before a setting existed still has to boot.
+  const defaults = buildSeedState(now);
+  state.settings = { ...defaults.settings, ...(state.settings || {}) };
+  if (!Array.isArray(state.recentTrades)) state.recentTrades = [];
   ensureHistory(now);
   lastHistoryAppend = now;
   persist(true);
@@ -257,6 +340,33 @@ export function updateDemoState(mutator) {
 export function updateDemoSettings(patch) {
   updateDemoState(s => Object.assign(s.settings, patch));
   startTimers();
+}
+
+/**
+ * Renames the recording account.
+ *
+ * The name lives in two places that have to move together: the signed-in
+ * user and that user's row in the tournament table. Renaming only the first
+ * would leave the leaderboard highlighting nobody and the climb bias chasing
+ * a name that no longer exists.
+ */
+export function renameDemoUser(nextName) {
+  const name = String(nextName || '').trim().replace(/^@/, '');
+  if (!name) return { ok: false, error: 'Escribe un nombre de usuario.' };
+
+  const current = getDemoState().user.username;
+  if (name === current) return { ok: true };
+
+  const taken = getDemoState().leaderboard
+    .some(row => row.username !== current && row.username.toLowerCase() === name.toLowerCase());
+  if (taken) return { ok: false, error: 'Ese nombre ya lo usa otro competidor.' };
+
+  updateDemoState(s => {
+    const row = s.leaderboard.find(item => item.username === current);
+    if (row) row.username = name;
+    s.user.username = name;
+  });
+  return { ok: true };
 }
 
 export function resetDemoState() {
@@ -283,7 +393,9 @@ export function importDemoState(json) {
   const parsed = JSON.parse(json);
   if (!parsed || !Array.isArray(parsed.markets)) throw new Error('El archivo no tiene mercados.');
   state = parsed;
-  if (!state.settings) state.settings = buildSeedState(Date.now()).settings;
+  const defaults = buildSeedState(Date.now());
+  state.settings = { ...defaults.settings, ...(state.settings || {}) };
+  if (!Array.isArray(state.recentTrades)) state.recentTrades = [];
   ensureHistory(Date.now());
   persist(true);
   startTimers();

@@ -8,7 +8,7 @@
  * Data comes from /api/points/market?id=... — the response contains
  * the market row + its current reserves, outcomes, and prices.
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   cancelLimitOrder,
@@ -53,7 +53,9 @@ import {
 } from '../lib/cryptoMarketHub.js';
 import { marketInterestPayload, trackInterest } from '@app/lib/interest.js';
 import { emitPointsRefresh } from '../lib/pointsLiveRefresh.js';
-import { videoDemoPollMs } from '../demo/demoFlag.js';
+import { isVideoDemoActive, videoDemoPollMs } from '../demo/demoFlag.js';
+
+const DemoTradeFlares = lazy(() => import('../demo/DemoTradeFlares.jsx'));
 
 // Accent colors for the multi-line price chart. Match the buy-button
 // accents so users recognize the same color for the same outcome.
@@ -2600,7 +2602,13 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                   })}
                 </div>
               </div>
-              <div style={{ padding: '20px 20px 18px' }}>
+              <div style={{ padding: '20px 20px 18px', position: 'relative' }}>
+                {/* Video demo only: floating per-order labels over the chart. */}
+                {isVideoDemoActive() && (
+                  <Suspense fallback={null}>
+                    <DemoTradeFlares marketId={id} />
+                  </Suspense>
+                )}
                 {displayOutcomes.length <= 2 && (
                   <div style={{
                     display: 'flex',

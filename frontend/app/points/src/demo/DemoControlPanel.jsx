@@ -14,6 +14,7 @@ import {
   exportDemoState,
   getDemoState,
   importDemoState,
+  renameDemoUser,
   resetDemoState,
   subscribeDemoState,
   updateDemoSettings,
@@ -93,7 +94,17 @@ export default function DemoControlPanel() {
 
   const state = getDemoState();
 
+  // Held locally and committed on blur/Enter — renaming on every keystroke
+  // would walk the account through empty and half-typed names, and each one
+  // would drag the leaderboard row along with it.
+  const [nameDraft, setNameDraft] = useState(state.user.username);
+
   useEffect(() => subscribeDemoState(() => forceRender(n => n + 1)), []);
+
+  // Resync when the store changes the name out from under the input — Reset
+  // and Cargar archivo both do. Typing can't trigger this, since the store
+  // only learns the new name on blur.
+  useEffect(() => { setNameDraft(state.user.username); }, [state.user.username]);
 
   useEffect(() => {
     function onKey(e) {
@@ -115,6 +126,16 @@ export default function DemoControlPanel() {
   function flash(message) {
     setNotice(message);
     window.setTimeout(() => setNotice(''), 2200);
+  }
+
+  function commitName() {
+    const result = renameDemoUser(nameDraft);
+    if (result.ok) {
+      if (nameDraft.trim() !== state.user.username) flash('Nombre actualizado.');
+      return;
+    }
+    flash(result.error);
+    setNameDraft(state.user.username);
   }
 
   function setMarketVolume(market, total) {
@@ -304,6 +325,19 @@ export default function DemoControlPanel() {
       )}
 
       <Section title="Cuenta">
+        <Field label="Tu nombre de usuario">
+          <input
+            style={inputStyle}
+            value={nameDraft}
+            placeholder="fabian"
+            onChange={e => setNameDraft(e.target.value)}
+            onBlur={commitName}
+            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+          />
+        </Field>
+        <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', margin: '-4px 0 12px', lineHeight: 1.5 }}>
+          Es el que sale en la tabla del torneo como “(tú)”.
+        </p>
         <Field label="Balance en MXNP">
           <input
             type="number"
@@ -330,6 +364,28 @@ export default function DemoControlPanel() {
             onChange={e => updateDemoSettings({ driftSpeed: Number(e.target.value) })}
           />
         </Field>
+      </Section>
+
+      <Section title="Compras y ventas">
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 10 }}>
+          <input
+            type="checkbox"
+            checked={!!state.settings.tradeFlowEnabled}
+            onChange={e => updateDemoSettings({ tradeFlowEnabled: e.target.checked })}
+          />
+          Que entren órdenes solas
+        </label>
+        <Field label={`Cuántas: ${state.settings.tradeFlowIntensity}`}>
+          <input
+            type="range" min="1" max="10" style={{ width: '100%' }}
+            value={state.settings.tradeFlowIntensity}
+            onChange={e => updateDemoSettings({ tradeFlowIntensity: Number(e.target.value) })}
+          />
+        </Field>
+        <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', margin: '-4px 0 0', lineHeight: 1.5 }}>
+          Sube el volumen, mueve las barras de actividad y mantiene el
+          “último movimiento” en ahora.
+        </p>
       </Section>
 
       <Section title="Tabla del torneo">
