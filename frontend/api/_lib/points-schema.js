@@ -41,6 +41,7 @@ const POINTS_SCHEMA_READY_PROBE = `
     to_regclass('public.points_support_tickets') IS NOT NULL AS points_support_tickets,
     to_regclass('public.points_support_messages') IS NOT NULL AS points_support_messages,
     to_regclass('public.points_pwa_install_claims') IS NOT NULL AS points_pwa_install_claims,
+    to_regclass('public.points_social_links') IS NOT NULL AS points_social_links,
     EXISTS (
       SELECT 1 FROM information_schema.columns
       WHERE table_schema = 'public'
@@ -64,7 +65,25 @@ const POINTS_SCHEMA_READY_PROBE = `
       WHERE table_schema = 'public'
         AND table_name = 'points_cycle_snapshots'
         AND column_name = 'tournament_score'
-    ) AS points_cycle_snapshot_tournament_score
+    ) AS points_cycle_snapshot_tournament_score,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'points_social_links'
+        AND column_name = 'is_public'
+    ) AS points_social_links_is_public,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'points_social_links'
+        AND column_name = 'source'
+    ) AS points_social_links_source,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'points_social_links'
+        AND column_name = 'updated_at'
+    ) AS points_social_links_updated_at
 `;
 
 const POINTS_SCHEMA_LOCK_TABLE = `

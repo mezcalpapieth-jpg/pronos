@@ -34,6 +34,7 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
+import { ensurePointsSocialLinksSchema } from '../_lib/points-social-links-schema.js';
 import { binaryPrices, multiPrices } from '../_lib/amm-math.js';
 import { readSession } from '../_lib/session.js';
 import { isAdminUsername } from '../_lib/points-admin.js';
@@ -228,6 +229,7 @@ export default async function handler(req, res) {
 
     let publicSocialLinks = [];
     try {
+      await ensurePointsSocialLinksSchema(socialSql);
       const publicSocialRows = await socialSql`
         SELECT provider, handle, profile_url, is_public, source, linked_at, updated_at
         FROM points_social_links
@@ -261,6 +263,7 @@ export default async function handler(req, res) {
         `;
         adminSocials = buildAdminProfileSocials(socialRows);
 
+        await ensurePointsSocialLinksSchema(socialSql);
         const socialLinkRows = await socialSql`
           SELECT provider, provider_user_id, handle, profile_url,
                  reward_credited, is_public, source, linked_at, updated_at

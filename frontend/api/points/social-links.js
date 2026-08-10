@@ -11,6 +11,7 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
+import { ensurePointsSocialLinksSchema } from '../_lib/points-social-links-schema.js';
 import { requireSession } from '../_lib/session.js';
 
 const writeSql = neon(process.env.DATABASE_URL);
@@ -27,6 +28,7 @@ export default async function handler(req, res) {
 
   try {
     await ensurePointsSchema(schemaSql);
+    await ensurePointsSocialLinksSchema(writeSql);
     if (req.method === 'GET') return listLinks(req, res, session);
     if (req.method === 'POST') return saveLink(req, res, session);
     return res.status(405).json({ error: 'method_not_allowed' });

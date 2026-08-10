@@ -9,7 +9,11 @@ test('points schema self-healing avoids hot-route migration lock pileups', () =>
   assert.match(source, /to_regclass\('public\.points_publicity_daily'\)/);
   assert.match(source, /to_regclass\('public\.points_resolution_candidates'\)/);
   assert.match(source, /to_regclass\('public\.points_pwa_install_claims'\) IS NOT NULL AS points_pwa_install_claims/);
+  assert.match(source, /to_regclass\('public\.points_social_links'\) IS NOT NULL AS points_social_links/);
   assert.match(source, /points_support_message_attachments/);
+  assert.match(source, /points_social_links_is_public/);
+  assert.match(source, /points_social_links_source/);
+  assert.match(source, /points_social_links_updated_at/);
   assert.match(source, /points_support_messages[\s\S]+ADD COLUMN IF NOT EXISTS attachments JSONB/);
   assert.match(source, /POINTS_SCHEMA_LOCK_TABLE/);
   assert.match(source, /points_schema_locks/);

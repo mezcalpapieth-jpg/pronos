@@ -21,6 +21,7 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
+import { ensurePointsSocialLinksSchema } from '../../_lib/points-social-links-schema.js';
 import { readOAuthCookie, clearOAuthCookie, resolveCallbackUrl, redirectToReturn, safeReturnPath } from '../../_lib/oauth.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 import { USER_URL, exchangeXAuthorizationCode } from '../../_lib/x-oauth.js';
@@ -99,6 +100,7 @@ export default async function handler(req, res) {
   // ── Step 3: persist link + reward in one transaction ───────────
   try {
     await ensurePointsSchema(schemaSql);
+    await ensurePointsSocialLinksSchema(schemaSql);
     await withTransaction(async (client) => {
       // Insert the link; ON CONFLICT paths cover re-link attempts
       // (same user, same provider → refresh handle without re-crediting)

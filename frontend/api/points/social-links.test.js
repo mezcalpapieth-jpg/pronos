@@ -8,6 +8,7 @@ test('social links endpoint supports private-by-default manual handle saves', ()
   assert.match(SOURCE, /GET \/api\/points\/social-links/);
   assert.match(SOURCE, /POST \/api\/points\/social-links/);
   assert.match(SOURCE, /GET, POST, OPTIONS/);
+  assert.match(SOURCE, /ensurePointsSocialLinksSchema/);
   assert.match(SOURCE, /manual:\$\{username\}:\$\{provider\}/);
   assert.match(SOURCE, /is_public/);
   assert.match(SOURCE, /source/);

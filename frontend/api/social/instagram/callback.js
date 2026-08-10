@@ -31,6 +31,7 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
+import { ensurePointsSocialLinksSchema } from '../../_lib/points-social-links-schema.js';
 import { readOAuthCookie, clearOAuthCookie, resolveCallbackUrl, redirectToReturn, safeReturnPath } from '../../_lib/oauth.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 
@@ -141,6 +142,7 @@ export default async function handler(req, res) {
   // ── Step 3: persist link + reward in one transaction ───────────
   try {
     await ensurePointsSchema(schemaSql);
+    await ensurePointsSocialLinksSchema(schemaSql);
     await withTransaction(async (client) => {
       const ins = await client.query(
         `INSERT INTO points_social_links

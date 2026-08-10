@@ -6,6 +6,7 @@ const SOURCE = readFileSync(new URL('./u.js', import.meta.url), 'utf8');
 
 test('admin public profile payload includes connected social links', () => {
   assert.match(SOURCE, /points_social_links/);
+  assert.match(SOURCE, /ensurePointsSocialLinksSchema/);
   assert.match(SOURCE, /buildAdminProfileSocialLinks/);
   assert.match(SOURCE, /adminSocialLinks/);
   assert.match(SOURCE, /reward_credited, is_public, source, linked_at, updated_at/);
