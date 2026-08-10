@@ -25,14 +25,15 @@ test('TikTok follow task points at the current Pronos account', () => {
   assert.doesNotMatch(source, /tiktok\.com\/@pronos\.io/);
 });
 
-test('X follow task points at pronos_io and is automatically verified', () => {
+test('X follow task points at pronos_io and stays in manual review', () => {
   assert.match(source, /key:\s*'twitter_follow'/);
   assert.match(source, /label:\s*'Seguir @pronos_io en X'/);
   assert.match(source, /network:\s*'x'/);
   assert.match(source, /url:\s*'https:\/\/x\.com\/pronos_io'/);
-  assert.match(source, /verification:\s*'x_follow'/);
-  assert.match(source, /autoVerify:\s*true/);
-  assert.match(source, /targetHandle:\s*'pronos_io'/);
+  assert.match(source, /Sigue nuestra cuenta de X y sube captura/);
+  assert.doesNotMatch(source, /verification:\s*'x_follow'/);
+  assert.doesNotMatch(source, /autoVerify:\s*true/);
+  assert.doesNotMatch(source, /requiresProvider:\s*'x'/);
   assert.doesNotMatch(source, /twitter\.com\/pronos_io/);
 });
 
@@ -52,15 +53,18 @@ test('submit API can resolve static and campaign tasks through a shared lookup',
   assert.match(submitSource, /task\.url/);
 });
 
-test('submit API auto-approves verified X follow tasks without admin review', async () => {
+test('submit API keeps the X OAuth verification skeleton gated by task metadata', async () => {
   const submitSource = await readFile(new URL('./submit.js', import.meta.url), 'utf8');
   assert.match(submitSource, /xUserFollowsTarget/);
   assert.match(submitSource, /xUserFollowsTargetFromUserToken/);
   assert.match(submitSource, /xFollowTargetWithUserToken/);
   assert.match(submitSource, /xTokenHasScope/);
   assert.match(submitSource, /decryptOAuthToken/);
+  assert.match(submitSource, /task\?\.verification === 'x_follow'/);
+  assert.doesNotMatch(submitSource, /task\?\.key === 'twitter_follow'/);
   assert.match(submitSource, /x_account_required/);
   assert.match(submitSource, /x_reconnect_required/);
+  assert.match(submitSource, /x_api_credits_depleted/);
   assert.match(submitSource, /x_follow_not_verified/);
   assert.match(submitSource, /X_AUTO_REVIEWER = 'x:auto'/);
   assert.match(submitSource, /status = 'approved'/);

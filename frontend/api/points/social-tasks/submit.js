@@ -36,8 +36,7 @@ function tokenLooksFresh(expiresAt) {
 }
 
 function isAutoXFollowTask(task) {
-  return task?.verification === 'x_follow'
-    || task?.key === 'twitter_follow';
+  return task?.verification === 'x_follow';
 }
 
 function xFollowErrorResponse(res, error) {
@@ -72,6 +71,7 @@ async function handleAutoXFollowTask(res, { username, task }) {
     ? decryptOAuthToken(link.access_token_ciphertext)
     : null;
   const canWriteFollow = accessToken && xTokenHasScope(link.token_scope, 'follows.write');
+  let apiCreditsError = null;
   let followWriteError = null;
   if (accessToken) {
     try {
@@ -81,6 +81,7 @@ async function handleAutoXFollowTask(res, { username, task }) {
         accessToken,
       });
     } catch (error) {
+      if (error?.code === 'x_api_credits_depleted') apiCreditsError = error;
       console.warn('[social-tasks/submit] x user-token follow lookup failed', {
         code: error?.code,
         status: error?.status,
@@ -99,6 +100,7 @@ async function handleAutoXFollowTask(res, { username, task }) {
       });
     } catch (error) {
       followWriteError = error;
+      if (error?.code === 'x_api_credits_depleted') apiCreditsError = error;
       console.warn('[social-tasks/submit] x follow write failed', {
         code: error?.code,
         status: error?.status,
@@ -118,6 +120,12 @@ async function handleAutoXFollowTask(res, { username, task }) {
       });
     }
   } catch (error) {
+    if (error?.code === 'x_api_credits_depleted') {
+      return xFollowErrorResponse(res, error);
+    }
+    if (apiCreditsError) {
+      return xFollowErrorResponse(res, apiCreditsError);
+    }
     if (followWriteError) {
       return xFollowErrorResponse(res, followWriteError);
     }

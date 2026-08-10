@@ -128,6 +128,10 @@ const PUBLIC_ERROR_COPY = {
     es: 'X limitó la verificación. Intenta de nuevo en unos minutos.',
     en: 'X rate-limited the verification. Try again in a few minutes.',
   },
+  x_api_credits_depleted: {
+    es: 'La verificación automática de X está sin créditos de API. Intenta cuando recarguemos X.',
+    en: 'Automatic X verification is out of API credits. Try again after X credits are restored.',
+  },
   x_follow_lookup_failed: {
     es: 'No pudimos verificar X ahora. Intenta otra vez.',
     en: 'Could not verify X right now. Try again.',

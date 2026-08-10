@@ -18,11 +18,12 @@ test('TikTok and Instagram OAuth connection cards stay in proximamente until pro
   assert.match(source, /lang === 'en' \? 'Soon' : 'Próximamente'/);
 });
 
-test('X follow social task verifies automatically after OAuth connection', () => {
+test('X follow social task stays manual while OAuth verification is paused', () => {
   assert.match(source, /const isAutoVerify = !!task\.autoVerify/);
   assert.match(source, /isAutoVerify \? 'Verificar' : 'Enviar revisión'/);
   assert.match(source, /x_account_required/);
   assert.match(source, /x_reconnect_required/);
   assert.match(source, /socialLinkStartUrl\('x', '\/earn'\)/);
-  assert.match(source, /Follow de X verificado automáticamente/);
+  assert.match(source, /X, Instagram, TikTok y campañas temporales siguen en revisión manual/);
+  assert.doesNotMatch(source, /X se verifica automáticamente con tu cuenta conectada/);
 });

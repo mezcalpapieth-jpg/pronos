@@ -580,9 +580,10 @@ const SOCIAL_PROVIDERS = [
     label: 'X',
     icon: 'X',
     reward: 300,
-    available: true,
-    manualAllowed: false,
-    comingSoonNote: null,
+    available: false,
+    manualAllowed: true,
+    comingSoonNote: 'OAuth pausado hasta recargar créditos de X',
+    comingSoonNoteEn: 'OAuth paused until X API credits are restored',
   },
   {
     key: 'instagram',
@@ -720,8 +721,8 @@ function SocialLinksCard() {
       </h3>
       <p style={panelBodyStyle}>
         {lang === 'en'
-          ? 'X is verified directly with the social network. You can also save your Instagram and TikTok usernames to show them on your profile whenever you want to promote them. Every network starts private.'
-          : 'X se verifica directamente con la red social. También puedes guardar tus usuarios de Instagram y TikTok para mostrarlos en tu perfil cuando quieras promoverlos. Cada red empieza privada.'}
+          ? 'Save your social usernames so admins can review tasks and you can show them on your profile whenever you want to promote them. Every network starts private.'
+          : 'Guarda tus usuarios sociales para que admins puedan revisar tareas y para mostrarlos en tu perfil cuando quieras promoverlos. Cada red empieza privada.'}
       </p>
       {err && (
         <div style={{ ...noticeStyle, color: 'var(--danger)' }}>{err}</div>
@@ -971,7 +972,7 @@ function SocialTasksCard() {
       <div style={eyebrowStyle}>Tareas sociales</div>
       <h3 style={panelTitleStyle}>Tareas verificadas de Pronos</h3>
       <p style={panelBodyStyle}>
-        X se verifica automáticamente con tu cuenta conectada. Instagram, TikTok y campañas temporales siguen en revisión manual.
+        X, Instagram, TikTok y campañas temporales siguen en revisión manual.
         Algunas tareas solo aparecen desde enlaces temporales del equipo.
       </p>
       {err && (

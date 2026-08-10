@@ -34,14 +34,10 @@ export const STATIC_TASK_CATALOG = [
   {
     key: 'twitter_follow',
     label: 'Seguir @pronos_io en X',
-    description: 'Conecta tu cuenta de X y verifica automáticamente que sigues a @pronos_io. Sin captura.',
+    description: 'Sigue nuestra cuenta de X y sube captura del perfil con tu usuario visible.',
     reward: 300,
     network: 'x',
     url: 'https://x.com/pronos_io',
-    verification: 'x_follow',
-    autoVerify: true,
-    requiresProvider: 'x',
-    targetHandle: 'pronos_io',
   },
 ];
 

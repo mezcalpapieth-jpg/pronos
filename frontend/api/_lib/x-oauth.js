@@ -36,6 +36,10 @@ async function readXJson(response, fallbackCode) {
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = null; }
   if (response.ok) return data || {};
+  const problemText = `${data?.detail || ''} ${data?.title || ''} ${data?.type || ''} ${text}`.toLowerCase();
+  if (response.status === 402 || problemText.includes('credits depleted')) {
+    throw xApiError('x_api_credits_depleted', 503, text.slice(0, 240));
+  }
   if (response.status === 429) throw xApiError('x_rate_limited', 503, text.slice(0, 240));
   throw xApiError(fallbackCode, response.status >= 500 ? 503 : 502, text.slice(0, 240));
 }

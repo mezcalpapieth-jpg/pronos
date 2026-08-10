@@ -201,6 +201,31 @@ test('X follow verification can follow the target with connected user consent', 
   assert.match(calls[0].url, /\/2\/users\/123\/following/);
 });
 
+test('X follow verification surfaces depleted API credits clearly', async () => {
+  await assert.rejects(
+    () => xFollowTargetWithUserToken({
+      userId: '123',
+      targetUserId: '999',
+      accessToken: 'user-token',
+      fetchImpl: async () => ({
+        ok: false,
+        status: 402,
+        text: async () => JSON.stringify({
+          detail: 'credits depleted',
+          status: 402,
+          title: 'Payment Required',
+          type: 'https://api.x.com/2/problems/credits-depleted',
+        }),
+      }),
+    }),
+    (error) => {
+      assert.equal(error.code, 'x_api_credits_depleted');
+      assert.equal(error.status, 503);
+      return true;
+    },
+  );
+});
+
 test('X follow verification fails closed without a bearer token', async () => {
   await assert.rejects(
     () => xUserFollowsTarget({
