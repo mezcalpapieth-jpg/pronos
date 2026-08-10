@@ -13,7 +13,6 @@ import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { requireSession } from '../_lib/session.js';
 
-const readSql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const writeSql = neon(process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
 const PROVIDERS = new Set(['x', 'instagram', 'tiktok']);
@@ -80,7 +79,11 @@ function serializeLink(row) {
 }
 
 async function listLinks(req, res, session) {
-  const rows = await readSql`
+  // OAuth callbacks and schema migrations write through DATABASE_URL. Keep
+  // social-link reads on that same connection so new columns and fresh links
+  // are visible immediately even if DATABASE_READ_URL points at a lagging
+  // replica or older branch.
+  const rows = await writeSql`
       SELECT provider, provider_user_id, handle, profile_url, reward_credited, linked_at
            , is_public, source, updated_at
       FROM points_social_links

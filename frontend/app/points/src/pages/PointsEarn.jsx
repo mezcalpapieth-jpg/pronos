@@ -649,8 +649,13 @@ function SocialLinksCard() {
       url.searchParams.delete('link_error');
       window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
     }
-    if (linked) setOk(lang === 'en' ? 'Social account connected.' : 'Cuenta social conectada.');
-    if (linkError) setErr(publicErrorMessage(linkError, lang, 'social_link_failed'));
+    if (linkError) {
+      setOk(null);
+      setErr(publicErrorMessage(linkError, lang, 'social_link_failed'));
+    } else if (linked) {
+      setErr(null);
+      setOk(lang === 'en' ? 'Social account connected.' : 'Cuenta social conectada.');
+    }
   }, []);
 
   function updateDraft(provider, patch) {

@@ -176,6 +176,7 @@ export default async function handler(req, res) {
 }
 
 function bailOut(res, returnTo, provider, code) {
+  console.warn('[social/x/callback] handled failure', { provider, code });
   // Defense-in-depth: re-validate `returnTo` even though it came from the
   // HMAC-signed cookie. Guards against pre-fix in-flight cookies that
   // were minted before the start endpoint started filtering, and against

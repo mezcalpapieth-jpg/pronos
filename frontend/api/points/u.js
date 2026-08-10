@@ -48,6 +48,7 @@ import {
 } from '../_lib/points-profile-socials.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
+const socialSql = neon(process.env.DATABASE_URL || process.env.DATABASE_READ_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
 
 function parseJsonb(value, fallback) {
@@ -227,7 +228,7 @@ export default async function handler(req, res) {
 
     let publicSocialLinks = [];
     try {
-      const publicSocialRows = await sql`
+      const publicSocialRows = await socialSql`
         SELECT provider, handle, profile_url, is_public, source, linked_at, updated_at
         FROM points_social_links
         WHERE LOWER(username) = LOWER(${username})
@@ -260,7 +261,7 @@ export default async function handler(req, res) {
         `;
         adminSocials = buildAdminProfileSocials(socialRows);
 
-        const socialLinkRows = await sql`
+        const socialLinkRows = await socialSql`
           SELECT provider, provider_user_id, handle, profile_url,
                  reward_credited, is_public, source, linked_at, updated_at
           FROM points_social_links

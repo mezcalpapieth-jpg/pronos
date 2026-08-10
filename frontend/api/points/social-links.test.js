@@ -17,6 +17,8 @@ test('social links endpoint supports private-by-default manual handle saves', ()
 });
 
 test('social links endpoint keeps oauth rows verified while allowing public visibility edits', () => {
+  assert.match(SOURCE, /social-link reads on that same connection/);
+  assert.match(SOURCE, /const rows = await writeSql`/);
   assert.match(SOURCE, /const existingSource = String\(existing\?\.source \|\| 'oauth'\)/);
   assert.match(SOURCE, /const canEditHandle = !existing \|\| existingSource === 'manual'/);
   assert.match(SOURCE, /is_public = \$\{wantsPublic\}/);
