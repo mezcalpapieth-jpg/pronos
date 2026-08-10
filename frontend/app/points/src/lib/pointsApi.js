@@ -104,6 +104,30 @@ const PUBLIC_ERROR_COPY = {
     es: 'No pudimos conectar esa cuenta. Intenta otra vez.',
     en: 'Could not connect that account. Try again.',
   },
+  x_account_required: {
+    es: 'Conecta X primero y vuelve a verificar.',
+    en: 'Connect X first, then verify again.',
+  },
+  x_follow_not_verified: {
+    es: 'Todavía no vemos que sigas a @pronos_io en X. Sigue la cuenta y vuelve a verificar.',
+    en: 'We do not see you following @pronos_io on X yet. Follow the account and verify again.',
+  },
+  x_follow_verification_limited: {
+    es: 'X no nos dejó revisar toda la lista ahora. Intenta de nuevo en unos minutos.',
+    en: 'X would not let us check the full follower list right now. Try again in a few minutes.',
+  },
+  x_not_configured: {
+    es: 'La verificación automática de X todavía no está configurada.',
+    en: 'Automatic X verification is not configured yet.',
+  },
+  x_rate_limited: {
+    es: 'X limitó la verificación. Intenta de nuevo en unos minutos.',
+    en: 'X rate-limited the verification. Try again in a few minutes.',
+  },
+  x_follow_lookup_failed: {
+    es: 'No pudimos verificar X ahora. Intenta otra vez.',
+    en: 'Could not verify X right now. Try again.',
+  },
   default: {
     es: 'Algo salió mal. Intenta otra vez.',
     en: 'Something went wrong. Try again.',

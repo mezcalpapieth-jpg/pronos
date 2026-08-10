@@ -2,15 +2,25 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  DEFAULT_X_FOLLOW_TARGET_USERNAME,
   TOKEN_URL,
+  X_API_BASE,
   USER_URL,
   buildXTokenRequestAttempts,
   exchangeXAuthorizationCode,
+  normalizeXUsername,
+  xUserFollowsTarget,
 } from './x-oauth.js';
 
 test('X OAuth uses current X API hosts', () => {
   assert.equal(TOKEN_URL, 'https://api.x.com/2/oauth2/token');
   assert.equal(USER_URL, 'https://api.x.com/2/users/me');
+  assert.equal(X_API_BASE, 'https://api.x.com/2');
+});
+
+test('X follow verification targets the Pronos account', () => {
+  assert.equal(DEFAULT_X_FOLLOW_TARGET_USERNAME, 'pronos_io');
+  assert.equal(normalizeXUsername('@Pronos_IO'), 'pronos_io');
 });
 
 test('X OAuth confidential token request follows current docs', () => {
@@ -81,4 +91,55 @@ test('X OAuth retries public mode when confidential auth is rejected', async () 
   assert.equal(calls.length, 2);
   assert.equal(calls[0].init.headers.Authorization.startsWith('Basic '), true);
   assert.equal(calls[1].init.headers.Authorization, undefined);
+});
+
+test('X follow verification pages through target followers', async () => {
+  const calls = [];
+  const result = await xUserFollowsTarget({
+    userId: '123',
+    username: 'fran',
+    targetUserId: '999',
+    bearerToken: 'app-bearer',
+    fetchImpl: async (url, init) => {
+      calls.push({ url: String(url), init });
+      assert.equal(init.headers.Authorization, 'Bearer app-bearer');
+      if (calls.length === 1) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({
+            data: [{ id: '1', username: 'someone' }],
+            meta: { next_token: 'next-page' },
+          }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({
+          data: [{ id: '123', username: 'Fran' }],
+          meta: {},
+        }),
+      };
+    },
+  });
+
+  assert.equal(result.follows, true);
+  assert.equal(result.pages, 2);
+  assert.match(calls[0].url, /\/2\/users\/999\/followers/);
+  assert.match(calls[1].url, /pagination_token=next-page/);
+});
+
+test('X follow verification fails closed without a bearer token', async () => {
+  await assert.rejects(
+    () => xUserFollowsTarget({
+      userId: '123',
+      targetUserId: '999',
+      bearerToken: '',
+      fetchImpl: async () => {
+        throw new Error('unexpected fetch');
+      },
+    }),
+    /x_not_configured/,
+  );
 });

@@ -475,12 +475,13 @@ function InstallAppBonusCard({ onClaimed }) {
 // ─── Social tasks ────────────────────────────────────────────────────────────
 function SocialTaskRow({ task, onSubmit }) {
   const [submitting, setSubmitting] = useState(false);
+  const isAutoVerify = !!task.autoVerify;
 
   const STATUS_COPY = {
-    not_submitted: { label: 'Enviar revisión', primary: true,  disabled: false },
+    not_submitted: { label: isAutoVerify ? 'Verificar' : 'Enviar revisión', primary: true,  disabled: false },
     pending:       { label: 'En revisión',      primary: false, disabled: true  },
     approved:      { label: 'Aprobado',         primary: false, disabled: true  },
-    rejected:      { label: 'Rechazado · reintentar', primary: true, disabled: false },
+    rejected:      { label: isAutoVerify ? 'Verificar otra vez' : 'Rechazado · reintentar', primary: true, disabled: false },
   };
   const ui = STATUS_COPY[task.status] || STATUS_COPY.not_submitted;
 
@@ -488,7 +489,7 @@ function SocialTaskRow({ task, onSubmit }) {
     if (ui.disabled) return;
     setSubmitting(true);
     try {
-      await onSubmit(task.key);
+      await onSubmit(task);
     } finally {
       setSubmitting(false);
     }
@@ -927,6 +928,7 @@ function SocialTasksCard() {
   const taskKey = new URLSearchParams(location.search).get('task');
   const [tasks, setTasks] = useState(null);
   const [err, setErr] = useState(null);
+  const [ok, setOk] = useState(null);
 
   async function load() {
     try {
@@ -938,11 +940,22 @@ function SocialTasksCard() {
   }
   useEffect(() => { load(); }, [taskKey]);
 
-  async function handleSubmit(taskKey) {
+  async function handleSubmit(task) {
+    setErr(null);
+    setOk(null);
     try {
-      await submitSocialTask(taskKey);
+      const result = await submitSocialTask(task.key);
       await load();
+      if (result?.autoVerified) {
+        setOk(lang === 'en'
+          ? 'X follow verified automatically. MXNP credited.'
+          : 'Follow de X verificado automáticamente. MXNP acreditado.');
+      }
     } catch (e) {
+      if (e?.code === 'x_account_required' && task?.requiresProvider === 'x') {
+        window.location.href = socialLinkStartUrl('x', '/earn');
+        return;
+      }
       setErr(publicErrorMessage(e, lang, 'default'));
     }
   }
@@ -952,11 +965,14 @@ function SocialTasksCard() {
       <div style={eyebrowStyle}>Tareas sociales</div>
       <h3 style={panelTitleStyle}>Tareas verificadas de Pronos</h3>
       <p style={panelBodyStyle}>
-        Abre la cuenta o post exacto, completa la acción y envíala a revisión.
+        X se verifica automáticamente con tu cuenta conectada. Instagram, TikTok y campañas temporales siguen en revisión manual.
         Algunas tareas solo aparecen desde enlaces temporales del equipo.
       </p>
       {err && (
         <div style={{ ...noticeStyle, color: 'var(--danger)' }}>{err}</div>
+      )}
+      {ok && (
+        <div style={{ ...noticeStyle, color: 'var(--green)' }}>{ok}</div>
       )}
       {!tasks && !err && (
         <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', padding: 20 }}>

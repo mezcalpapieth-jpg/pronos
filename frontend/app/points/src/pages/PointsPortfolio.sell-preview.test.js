@@ -106,7 +106,7 @@ test('portfolio separates open PnL from total account PnL', () => {
   assert.match(source, /label: 'PnL total'/);
 });
 
-test('portfolio won markets can generate a native share card with real history', () => {
+test('portfolio won markets generate a Pronos ticket share card with cash-out details', () => {
   assert.match(source, /PointsWinShareButton/);
   assert.match(source, /m\.outcomeStatus === 'won'/);
   assert.match(source, /canRedeem \?/);
@@ -115,5 +115,8 @@ test('portfolio won markets can generate a native share card with real history',
   assert.match(winShareSource, /canvas\.toBlob/);
   assert.match(winShareSource, /navigator\.canShare\?\.\(\{ files: \[file\] \}\)/);
   assert.match(winShareSource, /new File\(\[blob\]/);
-  assert.match(winShareSource, /Sin historial suficiente/);
+  assert.match(winShareSource, /Cash Out/);
+  assert.match(winShareSource, /marketShareUrl/);
+  assert.match(winShareSource, /\/api\/share\/market/);
+  assert.match(winShareSource, /displayHandle\(username\)/);
 });

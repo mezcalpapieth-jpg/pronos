@@ -25,6 +25,17 @@ test('TikTok follow task points at the current Pronos account', () => {
   assert.doesNotMatch(source, /tiktok\.com\/@pronos\.io/);
 });
 
+test('X follow task points at pronos_io and is automatically verified', () => {
+  assert.match(source, /key:\s*'twitter_follow'/);
+  assert.match(source, /label:\s*'Seguir @pronos_io en X'/);
+  assert.match(source, /network:\s*'x'/);
+  assert.match(source, /url:\s*'https:\/\/x\.com\/pronos_io'/);
+  assert.match(source, /verification:\s*'x_follow'/);
+  assert.match(source, /autoVerify:\s*true/);
+  assert.match(source, /targetHandle:\s*'pronos_io'/);
+  assert.doesNotMatch(source, /twitter\.com\/pronos_io/);
+});
+
 test('hidden campaign tasks require an exact expiring task link', () => {
   assert.match(source, /requestedTaskKey/);
   assert.match(source, /req\.query\.task/);
@@ -39,6 +50,16 @@ test('submit API can resolve static and campaign tasks through a shared lookup',
   assert.match(source, /export async function findSocialTaskByKey/);
   assert.match(submitSource, /findSocialTaskByKey/);
   assert.match(submitSource, /task\.url/);
+});
+
+test('submit API auto-approves verified X follow tasks without admin review', async () => {
+  const submitSource = await readFile(new URL('./submit.js', import.meta.url), 'utf8');
+  assert.match(submitSource, /xUserFollowsTarget/);
+  assert.match(submitSource, /x_account_required/);
+  assert.match(submitSource, /x_follow_not_verified/);
+  assert.match(submitSource, /X_AUTO_REVIEWER = 'x:auto'/);
+  assert.match(submitSource, /status = 'approved'/);
+  assert.match(submitSource, /autoVerified: true/);
 });
 
 test('resubmitting a rejected task clears current review metadata', async () => {

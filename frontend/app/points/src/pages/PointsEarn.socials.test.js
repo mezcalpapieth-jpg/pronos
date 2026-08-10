@@ -14,5 +14,14 @@ const source = await readFile(new URL('./PointsEarn.jsx', import.meta.url), 'utf
 test('TikTok and Instagram OAuth connection cards stay in proximamente until provider approval', () => {
   assert.match(source, /key:\s*'instagram'[\s\S]*?available:\s*false[\s\S]*?Esperando aprobación de Meta/);
   assert.match(source, /key:\s*'tiktok'[\s\S]*?available:\s*false[\s\S]*?Esperando aprobación de TikTok/);
-  assert.match(source, /locked \? 'Próximamente' : 'Conectar'/);
+  assert.match(source, /locked &&/);
+  assert.match(source, /lang === 'en' \? 'Soon' : 'Próximamente'/);
+});
+
+test('X follow social task verifies automatically after OAuth connection', () => {
+  assert.match(source, /const isAutoVerify = !!task\.autoVerify/);
+  assert.match(source, /isAutoVerify \? 'Verificar' : 'Enviar revisión'/);
+  assert.match(source, /x_account_required/);
+  assert.match(source, /socialLinkStartUrl\('x', '\/earn'\)/);
+  assert.match(source, /Follow de X verificado automáticamente/);
 });

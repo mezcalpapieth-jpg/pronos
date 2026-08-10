@@ -22,17 +22,21 @@ import { neon } from '@neondatabase/serverless';
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 
 const PALETTE = {
-  bg:        '#000000',
-  surface:   '#0B0B0B',
-  surface2:  '#141414',
-  border:    'rgba(255,255,255,0.08)',
-  text:      '#F2F2F2',
-  textDim:   '#A0A0A0',
-  textMuted: '#666666',
-  accent:    '#FF5500',  // Pronos orange
-  green:     '#22c55e',
+  bg:        '#050505',
+  bg2:       '#210b03',
+  ticket:    '#fff7ec',
+  ticket2:   '#f4eadb',
+  ink:       '#0a0a0a',
+  inkDim:    '#6b6258',
+  line:      '#d9cab8',
+  text:      '#F8F1E8',
+  textDim:   '#D7C8BA',
+  textMuted: '#8f8479',
+  accent:    '#FF5500',
+  accent2:   '#ff8a3d',
+  green:     '#00E87A',
   red:       '#ef4444',
-  gold:      '#f59e0b',
+  gold:      '#f2c94c',
   blue:      '#3b82f6',
   purple:    '#8b5cf6',
 };
@@ -108,6 +112,43 @@ function formatDeadline(iso) {
   } catch { return ''; }
 }
 
+function firstQueryValue(value) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function cleanParam(value, max = 80) {
+  const raw = String(firstQueryValue(value) || '').trim();
+  if (!raw) return '';
+  return raw.replace(/[<>{}]/g, '').slice(0, max);
+}
+
+function cleanAccount(value) {
+  const raw = cleanParam(value, 32).replace(/^@+/, '');
+  return raw ? `@${raw}` : '@pronos_io';
+}
+
+function formatMoneyParam(value) {
+  const raw = cleanParam(value, 32);
+  if (!raw) return '';
+  const numeric = Number(raw.replace(/[^0-9.-]/g, ''));
+  if (!Number.isFinite(numeric)) return raw;
+  return `${formatVolume(numeric)} MXNP`;
+}
+
+function topOutcomeIndex(prices, winnerIdx) {
+  if (Number.isInteger(winnerIdx) && winnerIdx >= 0) return winnerIdx;
+  let bestIdx = 0;
+  let best = -Infinity;
+  prices.forEach((p, i) => {
+    const v = Number(p || 0);
+    if (v > best) {
+      best = v;
+      bestIdx = i;
+    }
+  });
+  return bestIdx;
+}
+
 export default async function handler(req, res) {
   try {
     const id = Number.parseInt(req.query.id, 10);
@@ -139,7 +180,12 @@ export default async function handler(req, res) {
     const deadline = formatDeadline(r.end_time);
     const isOnchain = r.mode === 'onchain';
 
-    const questionLines = wrapText(r.question || '', 38, 3);
+    const questionLines = wrapText(r.question || '', 32, 3);
+    const account = cleanAccount(req.query.account || req.query.username || req.query.user);
+    const cashout = formatMoneyParam(req.query.cashout || req.query.cashOut || req.query.amount);
+    const cost = formatMoneyParam(req.query.cost);
+    const odds = cleanParam(req.query.odds, 20);
+    const outcome = cleanParam(req.query.outcome || req.query.side, 48);
 
     const svg = renderSvg({
       category: (r.category || 'general').toUpperCase(),
@@ -152,6 +198,11 @@ export default async function handler(req, res) {
       isOnchain,
       tradeVolume,
       deadline,
+      account,
+      cashout,
+      cost,
+      odds,
+      outcome,
     });
 
     res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
@@ -168,10 +219,25 @@ function renderSvg({
   category, questionLines, outcomes, prices,
   finalScore, isResolved, winnerIdx, isOnchain,
   tradeVolume, deadline,
+  account, cashout, cost, odds, outcome,
 }) {
   const W = 1200, H = 630;
-  // Show top 4 outcomes max — beyond that the bars become unreadable.
-  const visible = outcomes.slice(0, 4).map((label, i) => ({
+  const pickedIdx = topOutcomeIndex(prices, winnerIdx);
+  const pickedLabel = outcome || outcomes[pickedIdx] || 'Sí';
+  const pickedPct = Math.round((prices[pickedIdx] || 0) * 100);
+  const statusText = isResolved ? 'RESUELTO' : isOnchain ? 'ON-CHAIN' : 'EN VIVO';
+  const resultTitle = isResolved
+    ? `Won on ${pickedLabel}`
+    : `${pickedLabel} en Pronos`;
+  const rightMetricLabel = cashout ? 'Cash Out' : 'Probabilidad';
+  const rightMetricValue = cashout || `${pickedPct}%`;
+  const costLabel = cost || `${formatVolume(tradeVolume)} MXNP`;
+  const oddsLabel = odds || `${pickedPct}%`;
+  const shortResult = resultTitle.length > 25 ? `${resultTitle.slice(0, 24)}…` : resultTitle;
+  const accountLabel = account.length > 20 ? `${account.slice(0, 19)}…` : account;
+  const accountPillW = Math.max(184, Math.min(340, 74 + accountLabel.length * 13));
+  const accountPillX = Math.round((W - accountPillW) / 2);
+  const visible = outcomes.slice(0, 3).map((label, i) => ({
     label,
     pct: Math.round((prices[i] || 0) * 100),
     color: OUTCOME_COLORS[i % OUTCOME_COLORS.length],
@@ -179,134 +245,94 @@ function renderSvg({
   }));
   const moreCount = Math.max(0, outcomes.length - visible.length);
 
-  // Outcome rows take the right half. Bar geometry: container 480 wide,
-  // each row 56 tall with 14px gap.
-  const barX = 660, barW = 480, rowH = 56, rowGap = 14;
-  const rowsTop = 220;
-
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
   <defs>
     <linearGradient id="bg-grad" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%"  stop-color="${PALETTE.bg}"/>
-      <stop offset="100%" stop-color="#0a0a0a"/>
+      <stop offset="0%" stop-color="${PALETTE.bg2}"/>
+      <stop offset="52%" stop-color="${PALETTE.bg}"/>
+      <stop offset="100%" stop-color="#120602"/>
     </linearGradient>
-    <linearGradient id="accent-fade" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%"  stop-color="${PALETTE.accent}" stop-opacity="0.3"/>
-      <stop offset="100%" stop-color="${PALETTE.accent}" stop-opacity="0"/>
+    <linearGradient id="ticket-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="${PALETTE.ticket}"/>
+      <stop offset="100%" stop-color="${PALETTE.ticket2}"/>
     </linearGradient>
+    <linearGradient id="avatar-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="${PALETTE.green}"/>
+      <stop offset="100%" stop-color="${PALETTE.accent}"/>
+    </linearGradient>
+    <pattern id="dot-grid" width="28" height="28" patternUnits="userSpaceOnUse">
+      <rect x="3" y="3" width="6" height="6" rx="1.5" fill="${PALETTE.accent}" opacity="0.18"/>
+    </pattern>
+    <filter id="ticket-shadow" x="-8%" y="-12%" width="116%" height="130%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000000" flood-opacity="0.36"/>
+    </filter>
   </defs>
 
-  <!-- Background -->
   <rect width="${W}" height="${H}" fill="url(#bg-grad)"/>
-  <!-- Subtle accent bar at top -->
-  <rect x="0" y="0" width="${W}" height="6" fill="${PALETTE.accent}"/>
-  <rect x="0" y="6" width="${W * 0.4}" height="2" fill="url(#accent-fade)"/>
+  <rect width="${W}" height="${H}" fill="url(#dot-grid)" opacity="0.55"/>
+  <path d="M0 0H1200V82C1030 106 870 78 718 68C484 52 280 96 0 76Z" fill="${PALETTE.accent}" opacity="0.24"/>
+  <path d="M1200 630H0V555C190 522 420 548 598 565C836 588 1014 555 1200 516Z" fill="${PALETTE.accent}" opacity="0.2"/>
 
-  <!-- Brand block (top-left) -->
-  <text x="64" y="78" fill="${PALETTE.accent}" font-family="Bebas Neue, Impact, sans-serif"
-    font-size="44" letter-spacing="3" font-weight="400">PRONOS</text>
-  <circle cx="220" cy="62" r="6" fill="${PALETTE.green}"/>
+  <g transform="translate(${accountPillX}, 38)">
+    <rect x="0" y="0" width="${accountPillW}" height="48" rx="24" fill="rgba(0,0,0,0.58)" stroke="rgba(255,255,255,0.16)"/>
+    <circle cx="30" cy="24" r="16" fill="url(#avatar-grad)"/>
+    <circle cx="30" cy="24" r="7" fill="rgba(255,255,255,0.18)"/>
+    <text x="58" y="31" fill="${PALETTE.text}" font-family="DM Sans, Inter, Arial, sans-serif" font-size="22" font-weight="800">${esc(accountLabel)}</text>
+  </g>
 
-  <!-- Category chip -->
-  <text x="64" y="138" fill="${PALETTE.textDim}" font-family="DM Mono, ui-monospace, monospace"
-    font-size="20" letter-spacing="3">${esc(category)}</text>
+  <g filter="url(#ticket-shadow)">
+    <rect x="148" y="118" width="904" height="330" rx="22" fill="url(#ticket-grad)"/>
+    <line x1="690" y1="118" x2="690" y2="448" stroke="${PALETTE.line}" stroke-width="2" stroke-dasharray="3 10"/>
+    <circle cx="690" cy="118" r="14" fill="${PALETTE.bg}"/>
+    <circle cx="690" cy="448" r="14" fill="${PALETTE.bg}"/>
 
-  <!-- Status badge (top-right) -->
-  ${renderStatusBadge({ isResolved, isOnchain, W })}
+    <rect x="184" y="152" width="76" height="76" rx="16" fill="#e8e1d8"/>
+    <path d="M203 190L241 170V211L203 190Z" fill="${PALETTE.accent}" opacity="0.22"/>
+    <text x="318" y="184" fill="${PALETTE.inkDim}" opacity="0.22" font-family="DM Sans, Inter, Arial, sans-serif" font-size="28" font-weight="900">PRONOS</text>
+    <text x="184" y="268" fill="${PALETTE.inkDim}" font-family="DM Mono, ui-monospace, monospace" font-size="18" font-weight="800" letter-spacing="3">${esc(category)} · ${statusText}</text>
+    ${questionLines.map((line, i) => `
+      <text x="184" y="${326 + i * 48}" fill="${PALETTE.ink}"
+        font-family="DM Sans, Inter, Arial, sans-serif" font-size="43" font-weight="900">${esc(line)}</text>
+    `).join('')}
+    ${finalScore && isResolved ? `
+      <text x="184" y="420" fill="${PALETTE.inkDim}" font-family="DM Mono, ui-monospace, monospace"
+        font-size="17" font-weight="800" letter-spacing="2">FINAL · ${esc(String(finalScore).slice(0, 34))}</text>
+    ` : ''}
 
-  <!-- Question (left half, multi-line) -->
-  ${questionLines.map((line, i) => `
-    <text x="64" y="${236 + i * 64}" fill="${PALETTE.text}"
-      font-family="DM Sans, system-ui, sans-serif" font-size="48" font-weight="600"
-      letter-spacing="-0.5">${esc(line)}</text>
-  `).join('')}
+    <text x="728" y="178" fill="${cashout || isResolved ? '#079c59' : PALETTE.accent}" font-family="DM Sans, Inter, Arial, sans-serif" font-size="34" font-weight="900">${esc(shortResult)}</text>
+    <text x="728" y="220" fill="${PALETTE.inkDim}" font-family="DM Sans, Inter, Arial, sans-serif" font-size="19" font-weight="700">${cashout ? 'Cost' : 'Vol'}</text>
+    <text x="1012" y="220" text-anchor="end" fill="${PALETTE.ink}" font-family="DM Mono, ui-monospace, monospace" font-size="19" font-weight="900">${esc(costLabel)}</text>
+    <text x="728" y="258" fill="${PALETTE.inkDim}" font-family="DM Sans, Inter, Arial, sans-serif" font-size="19" font-weight="700">Odds</text>
+    <text x="1012" y="258" text-anchor="end" fill="${PALETTE.ink}" font-family="DM Mono, ui-monospace, monospace" font-size="19" font-weight="900">${esc(oddsLabel)}</text>
+    <line x1="728" y1="288" x2="1012" y2="288" stroke="${PALETTE.line}" stroke-width="2" stroke-dasharray="4 8"/>
+    <text x="728" y="328" fill="${PALETTE.ink}" font-family="DM Sans, Inter, Arial, sans-serif" font-size="21" font-weight="800">${rightMetricLabel}</text>
+    <text x="728" y="392" fill="${PALETTE.green}" font-family="DM Sans, Inter, Arial, sans-serif" font-size="58" font-weight="900">${esc(rightMetricValue)}</text>
+  </g>
 
-  ${finalScore && isResolved ? `
-    <g transform="translate(64, ${236 + questionLines.length * 64 + 30})">
-      <rect x="0" y="0" width="540" height="48" rx="10" ry="10"
-        fill="${PALETTE.surface2}" stroke="${PALETTE.green}" stroke-width="1.5" stroke-opacity="0.4"/>
-      <text x="20" y="32" fill="${PALETTE.green}" font-family="DM Mono, monospace"
-        font-size="18" font-weight="700" letter-spacing="2">FINAL</text>
-      <text x="100" y="32" fill="${PALETTE.text}" font-family="DM Sans, sans-serif"
-        font-size="20" font-weight="600">${esc(finalScore.slice(0, 36))}</text>
-    </g>
-  ` : ''}
+  <g transform="translate(440, 514)">
+    <path d="M0 23L48 0V58L0 35V23ZM10 29L38 42V16L10 29Z" fill="${PALETTE.accent}"/>
+    <text x="66" y="40" fill="${PALETTE.text}" font-family="DM Sans, Inter, Arial, sans-serif" font-size="42" font-weight="900">Pronos</text>
+  </g>
 
-  <!-- Outcome bars (right half) -->
-  ${visible.map((o, i) => {
-    const y = rowsTop + i * (rowH + rowGap);
-    const fillW = Math.max(20, (o.pct / 100) * barW);
-    const labelTrunc = o.label.length > 18 ? o.label.slice(0, 17) + '…' : o.label;
-    return `
-      <g transform="translate(${barX}, ${y})">
-        <!-- Track -->
-        <rect x="0" y="0" width="${barW}" height="${rowH}" rx="14" ry="14"
-          fill="${PALETTE.surface}" stroke="${o.isWinner ? PALETTE.green : PALETTE.border}"
-          stroke-width="${o.isWinner ? 2 : 1}"/>
-        <!-- Fill -->
-        <rect x="0" y="0" width="${fillW}" height="${rowH}" rx="14" ry="14"
-          fill="${o.color}" opacity="${o.isWinner ? 0.32 : 0.18}"/>
-        <!-- Label -->
-        <text x="22" y="${rowH / 2 + 8}" fill="${o.isWinner ? PALETTE.green : PALETTE.text}"
-          font-family="DM Sans, sans-serif" font-size="22" font-weight="600">
-          ${esc(labelTrunc)}
-        </text>
-        <!-- Pct (right-aligned) -->
-        <text x="${barW - 22}" y="${rowH / 2 + 9}" text-anchor="end"
-          fill="${o.color}" font-family="DM Mono, monospace"
-          font-size="26" font-weight="700">${o.pct}¢</text>
-      </g>
-    `;
-  }).join('')}
-  ${moreCount > 0 ? `
-    <text x="${barX}" y="${rowsTop + visible.length * (rowH + rowGap) + 20}"
-      fill="${PALETTE.textMuted}" font-family="DM Mono, monospace" font-size="16">
-      +${moreCount} más
-    </text>
-  ` : ''}
+  <g transform="translate(156, 476)">
+    ${visible.map((o, i) => {
+      const x = i * 186;
+      const label = o.label.length > 14 ? `${o.label.slice(0, 13)}…` : o.label;
+      return `
+        <circle cx="${x}" cy="0" r="7" fill="${o.color}"/>
+        <text x="${x + 18}" y="7" fill="${PALETTE.textDim}" font-family="DM Mono, ui-monospace, monospace" font-size="15" font-weight="800">${esc(label)} ${o.pct}%</text>
+      `;
+    }).join('')}
+    ${moreCount > 0 ? `
+      <text x="${visible.length * 186}" y="7" fill="${PALETTE.textMuted}" font-family="DM Mono, ui-monospace, monospace" font-size="15" font-weight="800">+${moreCount} más</text>
+    ` : ''}
+  </g>
 
-  <!-- Footer: vol + deadline + url -->
-  <line x1="64" y1="540" x2="${W - 64}" y2="540" stroke="${PALETTE.border}" stroke-width="1"/>
-  <text x="64" y="582" fill="${PALETTE.textDim}" font-family="DM Mono, monospace"
-    font-size="20" letter-spacing="2">VOL ${formatVolume(tradeVolume)} MXNB</text>
   ${deadline ? `
-    <text x="${W / 2}" y="582" text-anchor="middle" fill="${PALETTE.textDim}"
-      font-family="DM Mono, monospace" font-size="20" letter-spacing="2">
+    <text x="${W - 150}" y="583" text-anchor="end" fill="${PALETTE.textMuted}"
+      font-family="DM Mono, ui-monospace, monospace" font-size="18" font-weight="800">
       cierra ${esc(deadline)}
     </text>
   ` : ''}
-  <text x="${W - 64}" y="582" text-anchor="end" fill="${PALETTE.accent}"
-    font-family="DM Sans, sans-serif" font-size="20" font-weight="600">pronos.io</text>
 </svg>`;
-}
-
-function renderStatusBadge({ isResolved, isOnchain, W }) {
-  if (isResolved) {
-    return `
-      <g transform="translate(${W - 220}, 56)">
-        <rect x="0" y="0" width="156" height="44" rx="22" ry="22"
-          fill="rgba(34,197,94,0.14)" stroke="${PALETTE.green}" stroke-width="1.5" stroke-opacity="0.5"/>
-        <text x="78" y="29" text-anchor="middle" fill="${PALETTE.green}"
-          font-family="DM Mono, monospace" font-size="16" letter-spacing="2.5" font-weight="700">RESUELTO</text>
-      </g>
-    `;
-  }
-  if (isOnchain) {
-    return `
-      <g transform="translate(${W - 220}, 56)">
-        <rect x="0" y="0" width="156" height="44" rx="22" ry="22"
-          fill="rgba(59,130,246,0.14)" stroke="${PALETTE.blue}" stroke-width="1.5" stroke-opacity="0.5"/>
-        <text x="78" y="29" text-anchor="middle" fill="${PALETTE.blue}"
-          font-family="DM Mono, monospace" font-size="16" letter-spacing="2.5" font-weight="700">ON-CHAIN</text>
-      </g>
-    `;
-  }
-  return `
-    <g transform="translate(${W - 220}, 56)">
-      <rect x="0" y="0" width="156" height="44" rx="22" ry="22"
-        fill="rgba(220,38,38,0.14)" stroke="${PALETTE.red}" stroke-width="1.5" stroke-opacity="0.5"/>
-      <text x="78" y="29" text-anchor="middle" fill="${PALETTE.red}"
-        font-family="DM Mono, monospace" font-size="16" letter-spacing="2.5" font-weight="700">EN VIVO</text>
-    </g>
-  `;
 }

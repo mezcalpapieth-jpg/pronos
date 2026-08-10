@@ -1,5 +1,104 @@
 export const TOKEN_URL = 'https://api.x.com/2/oauth2/token';
 export const USER_URL = 'https://api.x.com/2/users/me';
+export const X_API_BASE = 'https://api.x.com/2';
+export const DEFAULT_X_FOLLOW_TARGET_USERNAME = 'pronos_io';
+
+export function normalizeXUsername(value) {
+  return String(value || '')
+    .trim()
+    .replace(/^@+/, '')
+    .toLowerCase();
+}
+
+export function xBearerToken(env = process.env) {
+  return String(env.X_BEARER_TOKEN || env.TWITTER_BEARER_TOKEN || '').trim();
+}
+
+function xApiError(code, status = 503, detail = null) {
+  const err = new Error(code);
+  err.code = code;
+  err.status = status;
+  err.detail = detail;
+  return err;
+}
+
+async function readXJson(response, fallbackCode) {
+  const text = await response.text().catch(() => '');
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+  if (response.ok) return data || {};
+  if (response.status === 429) throw xApiError('x_rate_limited', 503, text.slice(0, 240));
+  throw xApiError(fallbackCode, response.status >= 500 ? 503 : 502, text.slice(0, 240));
+}
+
+export async function resolveXUserId({
+  username = DEFAULT_X_FOLLOW_TARGET_USERNAME,
+  bearerToken = xBearerToken(),
+  fetchImpl = fetch,
+} = {}) {
+  const handle = normalizeXUsername(username);
+  if (!handle) throw xApiError('x_target_required', 400);
+  if (!bearerToken) throw xApiError('x_not_configured', 503, 'X_BEARER_TOKEN missing');
+
+  const url = new URL(`${X_API_BASE}/users/by/username/${encodeURIComponent(handle)}`);
+  url.searchParams.set('user.fields', 'username');
+  const response = await fetchImpl(url, {
+    headers: { Authorization: `Bearer ${bearerToken}` },
+  });
+  const data = await readXJson(response, 'x_target_lookup_failed');
+  const id = data?.data?.id;
+  if (!id) throw xApiError('x_target_lookup_failed', 502, 'missing target user id');
+  return String(id);
+}
+
+export async function xUserFollowsTarget({
+  userId,
+  username,
+  targetUsername = DEFAULT_X_FOLLOW_TARGET_USERNAME,
+  targetUserId = process.env.X_FOLLOW_TARGET_USER_ID || process.env.TWITTER_FOLLOW_TARGET_USER_ID || '',
+  bearerToken = xBearerToken(),
+  fetchImpl = fetch,
+  maxPages = Number(process.env.X_FOLLOW_VERIFY_MAX_PAGES || 25),
+} = {}) {
+  const expectedId = String(userId || '').trim();
+  const expectedUsername = normalizeXUsername(username);
+  if (!expectedId && !expectedUsername) throw xApiError('x_account_required', 409);
+  if (!bearerToken) throw xApiError('x_not_configured', 503, 'X_BEARER_TOKEN missing');
+
+  const targetId = String(targetUserId || '').trim()
+    || await resolveXUserId({ username: targetUsername, bearerToken, fetchImpl });
+  const pageLimit = Number.isFinite(maxPages) && maxPages > 0 ? Math.floor(maxPages) : 25;
+  let paginationToken = '';
+
+  for (let page = 1; page <= pageLimit; page += 1) {
+    const url = new URL(`${X_API_BASE}/users/${encodeURIComponent(targetId)}/followers`);
+    url.searchParams.set('max_results', '1000');
+    url.searchParams.set('user.fields', 'username');
+    if (paginationToken) url.searchParams.set('pagination_token', paginationToken);
+
+    const response = await fetchImpl(url, {
+      headers: { Authorization: `Bearer ${bearerToken}` },
+    });
+    const data = await readXJson(response, 'x_follow_lookup_failed');
+    const followers = Array.isArray(data?.data) ? data.data : [];
+    const found = followers.some(follower => {
+      const idMatches = expectedId && String(follower?.id || '') === expectedId;
+      const usernameMatches = expectedUsername && normalizeXUsername(follower?.username) === expectedUsername;
+      return idMatches || usernameMatches;
+    });
+
+    if (found) {
+      return { follows: true, checkedAll: true, targetUserId: targetId, pages: page };
+    }
+
+    paginationToken = String(data?.meta?.next_token || '');
+    if (!paginationToken) {
+      return { follows: false, checkedAll: true, targetUserId: targetId, pages: page };
+    }
+  }
+
+  return { follows: false, checkedAll: false, targetUserId: targetId, pages: pageLimit };
+}
 
 function tokenBody({ code, clientId, redirectUri, verifier, mode }) {
   const body = new URLSearchParams();

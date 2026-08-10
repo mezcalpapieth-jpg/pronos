@@ -12,6 +12,7 @@
  *
  * Scopes requested:
  *   users.read      — read the linked user's @handle + id
+ *   follows.read    — user consent for follow-verification tasks
  *   tweet.read      — (reserved for future "verify you posted" tasks)
  *   offline.access  — refresh token in case we need longer-term access
  */
@@ -24,7 +25,7 @@ import {
 } from '../../_lib/oauth.js';
 
 const AUTHORIZE_URL = 'https://x.com/i/oauth2/authorize';
-const SCOPES = ['users.read', 'tweet.read', 'offline.access'];
+const SCOPES = ['users.read', 'follows.read', 'tweet.read', 'offline.access'];
 
 export default function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'GET, OPTIONS', credentials: true });

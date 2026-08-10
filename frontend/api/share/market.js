@@ -1,5 +1,6 @@
 /**
  * GET /api/share/market?id=<marketId>[&app=points|mvp]
+ *   Optional OG ticket params: account, cashout, cost, odds, outcome
  *
  * Bot-friendly wrapper around a market page. Returns a tiny HTML
  * document with proper OG / Twitter Card meta tags pointing at the
@@ -39,6 +40,29 @@ function esc(s) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
+}
+
+const OG_PARAM_ALLOWLIST = [
+  'account',
+  'username',
+  'user',
+  'cashout',
+  'cashOut',
+  'amount',
+  'cost',
+  'odds',
+  'outcome',
+  'side',
+];
+
+function appendOgParams(url, query) {
+  for (const key of OG_PARAM_ALLOWLIST) {
+    const raw = query?.[key];
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    if (value == null || String(value).trim() === '') continue;
+    url.searchParams.set(key, String(value).slice(0, 120));
+  }
+  return url;
 }
 
 // Compose a one-line summary from outcomes + their probabilities.
@@ -100,7 +124,8 @@ export default async function handler(req, res) {
     // VERCEL_URL is the deploy host on preview; pronos.io on prod via env.
     const baseUrl = process.env.PUBLIC_BASE_URL
       || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://pronos.io');
-    const ogImage = `${baseUrl}/api/og/market?id=${id}`;
+    const ogImageUrl = appendOgParams(new URL(`${baseUrl}/api/og/market?id=${id}`), req.query);
+    const ogImage = ogImageUrl.toString();
     const canonicalUrl = `${baseUrl}${targetPath}`;
 
     const html = renderHtml({
