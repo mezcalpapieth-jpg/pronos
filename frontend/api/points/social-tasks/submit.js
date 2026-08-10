@@ -14,15 +14,24 @@ import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requireSession } from '../../_lib/session.js';
 import { rateLimit, clientIp } from '../../_lib/rate-limit.js';
+import { decryptOAuthToken } from '../../_lib/oauth-token-crypto.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 import {
   DEFAULT_X_FOLLOW_TARGET_USERNAME,
   xUserFollowsTarget,
+  xUserFollowsTargetFromUserToken,
 } from '../../_lib/x-oauth.js';
 import { findSocialTaskByKey } from './catalog.js';
 
 const sql = neon(process.env.DATABASE_URL);
 const X_AUTO_REVIEWER = 'x:auto';
+
+function tokenLooksFresh(expiresAt) {
+  if (!expiresAt) return true;
+  const expires = new Date(expiresAt).getTime();
+  if (!Number.isFinite(expires)) return true;
+  return expires > Date.now() + 30_000;
+}
 
 function isAutoXFollowTask(task) {
   return task?.verification === 'x_follow'
@@ -41,7 +50,7 @@ function xFollowErrorResponse(res, error) {
 async function handleAutoXFollowTask(res, { username, task }) {
   const targetHandle = String(task.targetHandle || DEFAULT_X_FOLLOW_TARGET_USERNAME).replace(/^@+/, '');
   const linkRows = await sql`
-    SELECT provider_user_id, handle, profile_url
+    SELECT provider_user_id, handle, profile_url, access_token_ciphertext, token_expires_at
     FROM points_social_links
     WHERE username = ${username}
       AND provider = 'x'
@@ -56,13 +65,41 @@ async function handleAutoXFollowTask(res, { username, task }) {
   }
 
   let verification;
+  const accessToken = tokenLooksFresh(link.token_expires_at)
+    ? decryptOAuthToken(link.access_token_ciphertext)
+    : null;
+  if (accessToken) {
+    try {
+      verification = await xUserFollowsTargetFromUserToken({
+        userId: link.provider_user_id,
+        targetUsername: targetHandle,
+        accessToken,
+      });
+    } catch (error) {
+      console.warn('[social-tasks/submit] x user-token follow lookup failed', {
+        code: error?.code,
+        status: error?.status,
+      });
+      verification = null;
+    }
+  }
+
+  const needsReconnect = !accessToken;
   try {
-    verification = await xUserFollowsTarget({
-      userId: link.provider_user_id,
-      username: link.handle,
-      targetUsername: targetHandle,
-    });
+    if (!verification) {
+      verification = await xUserFollowsTarget({
+        userId: link.provider_user_id,
+        username: link.handle,
+        targetUsername: targetHandle,
+      });
+    }
   } catch (error) {
+    if (needsReconnect) {
+      return res.status(409).json({
+        error: 'x_reconnect_required',
+        hint: 'reconnect_x',
+      });
+    }
     return xFollowErrorResponse(res, error);
   }
 

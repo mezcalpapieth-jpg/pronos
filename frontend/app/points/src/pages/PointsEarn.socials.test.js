@@ -22,6 +22,7 @@ test('X follow social task verifies automatically after OAuth connection', () =>
   assert.match(source, /const isAutoVerify = !!task\.autoVerify/);
   assert.match(source, /isAutoVerify \? 'Verificar' : 'Enviar revisión'/);
   assert.match(source, /x_account_required/);
+  assert.match(source, /x_reconnect_required/);
   assert.match(source, /socialLinkStartUrl\('x', '\/earn'\)/);
   assert.match(source, /Follow de X verificado automáticamente/);
 });

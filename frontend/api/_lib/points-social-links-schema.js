@@ -20,7 +20,19 @@ const SOCIAL_LINKS_SCHEMA_READY_PROBE = `
       WHERE table_schema = 'public'
         AND table_name = 'points_social_links'
         AND column_name = 'updated_at'
-    ) AS points_social_links_updated_at
+    ) AS points_social_links_updated_at,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'points_social_links'
+        AND column_name = 'access_token_ciphertext'
+    ) AS points_social_links_access_token_ciphertext,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'points_social_links'
+        AND column_name = 'token_expires_at'
+    ) AS points_social_links_token_expires_at
 `;
 
 const SOCIAL_LINKS_SCHEMA_MIGRATIONS = [
@@ -34,6 +46,10 @@ const SOCIAL_LINKS_SCHEMA_MIGRATIONS = [
     reward_credited   BOOLEAN NOT NULL DEFAULT false,
     is_public         BOOLEAN NOT NULL DEFAULT false,
     source            TEXT NOT NULL DEFAULT 'oauth',
+    access_token_ciphertext  TEXT,
+    refresh_token_ciphertext TEXT,
+    token_expires_at         TIMESTAMPTZ,
+    token_scope              TEXT,
     linked_at         TIMESTAMPTZ DEFAULT NOW(),
     updated_at        TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE (username, provider),
@@ -42,6 +58,10 @@ const SOCIAL_LINKS_SCHEMA_MIGRATIONS = [
   `ALTER TABLE points_social_links ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT false`,
   `ALTER TABLE points_social_links ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'oauth'`,
   `ALTER TABLE points_social_links ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`,
+  `ALTER TABLE points_social_links ADD COLUMN IF NOT EXISTS access_token_ciphertext TEXT`,
+  `ALTER TABLE points_social_links ADD COLUMN IF NOT EXISTS refresh_token_ciphertext TEXT`,
+  `ALTER TABLE points_social_links ADD COLUMN IF NOT EXISTS token_expires_at TIMESTAMPTZ`,
+  `ALTER TABLE points_social_links ADD COLUMN IF NOT EXISTS token_scope TEXT`,
   `CREATE INDEX IF NOT EXISTS idx_points_social_links_user ON points_social_links(username)`,
   `CREATE INDEX IF NOT EXISTS idx_points_social_links_public_user
     ON points_social_links(username, is_public)`,

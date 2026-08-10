@@ -957,7 +957,8 @@ function SocialTasksCard() {
           : 'Follow de X verificado automáticamente. MXNP acreditado.');
       }
     } catch (e) {
-      if (e?.code === 'x_account_required' && task?.requiresProvider === 'x') {
+      if ((e?.code === 'x_account_required' || e?.code === 'x_reconnect_required')
+        && task?.requiresProvider === 'x') {
         window.location.href = socialLinkStartUrl('x', '/earn');
         return;
       }

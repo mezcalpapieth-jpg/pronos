@@ -16,3 +16,13 @@ for (const [provider, path] of callbacks) {
     assert.match(source, /INSERT INTO points_social_links/);
   });
 }
+
+test('x callback stores encrypted OAuth token material for follow verification', async () => {
+  const source = await readFile(new URL('./x/callback.js', import.meta.url), 'utf8');
+  assert.match(source, /encryptOAuthToken/);
+  assert.match(source, /access_token_ciphertext/);
+  assert.match(source, /refresh_token_ciphertext/);
+  assert.match(source, /token_expires_at/);
+  assert.match(source, /token_scope/);
+  assert.doesNotMatch(source, /console\.(log|warn|error)\([^)]*accessToken/);
+});

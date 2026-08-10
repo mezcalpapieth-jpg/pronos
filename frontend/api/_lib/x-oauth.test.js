@@ -10,6 +10,7 @@ import {
   exchangeXAuthorizationCode,
   normalizeXUsername,
   xUserFollowsTarget,
+  xUserFollowsTargetFromUserToken,
 } from './x-oauth.js';
 
 test('X OAuth uses current X API hosts', () => {
@@ -128,6 +129,45 @@ test('X follow verification pages through target followers', async () => {
   assert.equal(result.pages, 2);
   assert.match(calls[0].url, /\/2\/users\/999\/followers/);
   assert.match(calls[1].url, /pagination_token=next-page/);
+});
+
+test('X follow verification can use the connected user token following list', async () => {
+  const calls = [];
+  const result = await xUserFollowsTargetFromUserToken({
+    userId: '123',
+    targetUsername: 'pronos_io',
+    accessToken: 'user-token',
+    fetchImpl: async (url, init) => {
+      calls.push({ url: String(url), init });
+      assert.equal(init.headers.Authorization, 'Bearer user-token');
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({
+          data: [{ id: '999', username: 'Pronos_IO' }],
+          meta: {},
+        }),
+      };
+    },
+  });
+
+  assert.equal(result.follows, true);
+  assert.equal(result.method, 'user_following');
+  assert.match(calls[0].url, /\/2\/users\/123\/following/);
+});
+
+test('X user-token follow verification asks for reconnect without a token', async () => {
+  await assert.rejects(
+    () => xUserFollowsTargetFromUserToken({
+      userId: '123',
+      targetUsername: 'pronos_io',
+      accessToken: '',
+      fetchImpl: async () => {
+        throw new Error('unexpected fetch');
+      },
+    }),
+    /x_reconnect_required/,
+  );
 });
 
 test('X follow verification fails closed without a bearer token', async () => {

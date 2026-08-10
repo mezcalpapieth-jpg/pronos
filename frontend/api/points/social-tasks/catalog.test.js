@@ -55,7 +55,10 @@ test('submit API can resolve static and campaign tasks through a shared lookup',
 test('submit API auto-approves verified X follow tasks without admin review', async () => {
   const submitSource = await readFile(new URL('./submit.js', import.meta.url), 'utf8');
   assert.match(submitSource, /xUserFollowsTarget/);
+  assert.match(submitSource, /xUserFollowsTargetFromUserToken/);
+  assert.match(submitSource, /decryptOAuthToken/);
   assert.match(submitSource, /x_account_required/);
+  assert.match(submitSource, /x_reconnect_required/);
   assert.match(submitSource, /x_follow_not_verified/);
   assert.match(submitSource, /X_AUTO_REVIEWER = 'x:auto'/);
   assert.match(submitSource, /status = 'approved'/);

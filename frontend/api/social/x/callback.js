@@ -23,6 +23,7 @@ import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { ensurePointsSocialLinksSchema } from '../../_lib/points-social-links-schema.js';
 import { readOAuthCookie, clearOAuthCookie, resolveCallbackUrl, redirectToReturn, safeReturnPath } from '../../_lib/oauth.js';
+import { encryptOAuthToken } from '../../_lib/oauth-token-crypto.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 import { USER_URL, exchangeXAuthorizationCode } from '../../_lib/x-oauth.js';
 
@@ -57,6 +58,7 @@ export default async function handler(req, res) {
 
   // ── Step 1: exchange code for token ────────────────────────────
   let accessToken;
+  let tokenData = {};
   try {
     const token = await exchangeXAuthorizationCode({
       code: String(code),
@@ -66,6 +68,7 @@ export default async function handler(req, res) {
       verifier,
     });
     accessToken = token.accessToken;
+    tokenData = token.data || {};
     if (!accessToken) return bailOut(res, returnTo, 'x', 'no_access_token');
   } catch (e) {
     console.error('[social/x/callback] token exchange failed', {
@@ -101,18 +104,30 @@ export default async function handler(req, res) {
   try {
     await ensurePointsSchema(schemaSql);
     await ensurePointsSocialLinksSchema(schemaSql);
+    const accessTokenCiphertext = encryptOAuthToken(accessToken);
+    const refreshTokenCiphertext = encryptOAuthToken(tokenData?.refresh_token);
+    const expiresIn = Number(tokenData?.expires_in || 0);
+    const tokenExpiresAt = Number.isFinite(expiresIn) && expiresIn > 0
+      ? new Date(Date.now() + (expiresIn * 1000))
+      : null;
+    const tokenScope = typeof tokenData?.scope === 'string' ? tokenData.scope : null;
     await withTransaction(async (client) => {
       // Insert the link; ON CONFLICT paths cover re-link attempts
       // (same user, same provider → refresh handle without re-crediting)
       // and reject cross-user hijacks (different user, same X account).
       const ins = await client.query(
         `INSERT INTO points_social_links
-           (username, provider, provider_user_id, handle, profile_url)
-         VALUES ($1, 'x', $2, $3, $4)
+           (username, provider, provider_user_id, handle, profile_url,
+            access_token_ciphertext, refresh_token_ciphertext, token_expires_at, token_scope)
+         VALUES ($1, 'x', $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (username, provider) DO UPDATE
            SET provider_user_id = EXCLUDED.provider_user_id,
                handle           = EXCLUDED.handle,
                profile_url      = EXCLUDED.profile_url,
+               access_token_ciphertext = COALESCE(EXCLUDED.access_token_ciphertext, points_social_links.access_token_ciphertext),
+               refresh_token_ciphertext = COALESCE(EXCLUDED.refresh_token_ciphertext, points_social_links.refresh_token_ciphertext),
+               token_expires_at = EXCLUDED.token_expires_at,
+               token_scope      = EXCLUDED.token_scope,
                linked_at        = NOW()
          RETURNING id, reward_credited, (xmax = 0) AS inserted`,
         [
@@ -120,6 +135,10 @@ export default async function handler(req, res) {
           profile.id,
           profile.username,
           `https://x.com/${profile.username}`,
+          accessTokenCiphertext,
+          refreshTokenCiphertext,
+          tokenExpiresAt,
+          tokenScope,
         ],
       );
       const row = ins.rows[0];

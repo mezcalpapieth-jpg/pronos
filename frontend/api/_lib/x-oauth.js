@@ -100,6 +100,54 @@ export async function xUserFollowsTarget({
   return { follows: false, checkedAll: false, targetUserId: targetId, pages: pageLimit };
 }
 
+export async function xUserFollowsTargetFromUserToken({
+  userId,
+  targetUsername = DEFAULT_X_FOLLOW_TARGET_USERNAME,
+  targetUserId = process.env.X_FOLLOW_TARGET_USER_ID || process.env.TWITTER_FOLLOW_TARGET_USER_ID || '',
+  accessToken,
+  fetchImpl = fetch,
+  maxPages = Number(process.env.X_FOLLOW_VERIFY_MAX_PAGES || 25),
+} = {}) {
+  const sourceId = String(userId || '').trim();
+  const expectedTargetId = String(targetUserId || '').trim();
+  const expectedTargetUsername = normalizeXUsername(targetUsername);
+  if (!sourceId) throw xApiError('x_account_required', 409);
+  if (!expectedTargetId && !expectedTargetUsername) throw xApiError('x_target_required', 400);
+  if (!accessToken) throw xApiError('x_reconnect_required', 409, 'X OAuth token missing');
+
+  const pageLimit = Number.isFinite(maxPages) && maxPages > 0 ? Math.floor(maxPages) : 25;
+  let paginationToken = '';
+
+  for (let page = 1; page <= pageLimit; page += 1) {
+    const url = new URL(`${X_API_BASE}/users/${encodeURIComponent(sourceId)}/following`);
+    url.searchParams.set('max_results', '1000');
+    url.searchParams.set('user.fields', 'username');
+    if (paginationToken) url.searchParams.set('pagination_token', paginationToken);
+
+    const response = await fetchImpl(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const data = await readXJson(response, 'x_follow_lookup_failed');
+    const following = Array.isArray(data?.data) ? data.data : [];
+    const found = following.some(account => {
+      const idMatches = expectedTargetId && String(account?.id || '') === expectedTargetId;
+      const usernameMatches = expectedTargetUsername && normalizeXUsername(account?.username) === expectedTargetUsername;
+      return idMatches || usernameMatches;
+    });
+
+    if (found) {
+      return { follows: true, checkedAll: true, pages: page, method: 'user_following' };
+    }
+
+    paginationToken = String(data?.meta?.next_token || '');
+    if (!paginationToken) {
+      return { follows: false, checkedAll: true, pages: page, method: 'user_following' };
+    }
+  }
+
+  return { follows: false, checkedAll: false, pages: pageLimit, method: 'user_following' };
+}
+
 function tokenBody({ code, clientId, redirectUri, verifier, mode }) {
   const body = new URLSearchParams();
   body.set('code', String(code));

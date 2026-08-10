@@ -108,6 +108,10 @@ const PUBLIC_ERROR_COPY = {
     es: 'Conecta X primero y vuelve a verificar.',
     en: 'Connect X first, then verify again.',
   },
+  x_reconnect_required: {
+    es: 'Conecta X otra vez para activar la verificación automática.',
+    en: 'Connect X again to activate automatic verification.',
+  },
   x_follow_not_verified: {
     es: 'Todavía no vemos que sigas a @pronos_io en X. Sigue la cuenta y vuelve a verificar.',
     en: 'We do not see you following @pronos_io on X yet. Follow the account and verify again.',
