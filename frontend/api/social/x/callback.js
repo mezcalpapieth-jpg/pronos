@@ -29,6 +29,7 @@ import { USER_URL, exchangeXAuthorizationCode } from '../../_lib/x-oauth.js';
 
 const REWARD_MXNP = 50;
 const DISTRIBUTION_KIND = 'social_link_x';
+const REQUESTED_SCOPE = 'users.read follows.read follows.write tweet.read offline.access';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 
@@ -110,7 +111,9 @@ export default async function handler(req, res) {
     const tokenExpiresAt = Number.isFinite(expiresIn) && expiresIn > 0
       ? new Date(Date.now() + (expiresIn * 1000))
       : null;
-    const tokenScope = typeof tokenData?.scope === 'string' ? tokenData.scope : null;
+    const tokenScope = typeof tokenData?.scope === 'string' && tokenData.scope.trim()
+      ? tokenData.scope
+      : REQUESTED_SCOPE;
     await withTransaction(async (client) => {
       // Insert the link; ON CONFLICT paths cover re-link attempts
       // (same user, same provider → refresh handle without re-crediting)

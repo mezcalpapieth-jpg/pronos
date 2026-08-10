@@ -18,6 +18,8 @@ import { decryptOAuthToken } from '../../_lib/oauth-token-crypto.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 import {
   DEFAULT_X_FOLLOW_TARGET_USERNAME,
+  xFollowTargetWithUserToken,
+  xTokenHasScope,
   xUserFollowsTarget,
   xUserFollowsTargetFromUserToken,
 } from '../../_lib/x-oauth.js';
@@ -50,7 +52,8 @@ function xFollowErrorResponse(res, error) {
 async function handleAutoXFollowTask(res, { username, task }) {
   const targetHandle = String(task.targetHandle || DEFAULT_X_FOLLOW_TARGET_USERNAME).replace(/^@+/, '');
   const linkRows = await sql`
-    SELECT provider_user_id, handle, profile_url, access_token_ciphertext, token_expires_at
+    SELECT provider_user_id, handle, profile_url,
+           access_token_ciphertext, token_expires_at, token_scope
     FROM points_social_links
     WHERE username = ${username}
       AND provider = 'x'
@@ -68,6 +71,8 @@ async function handleAutoXFollowTask(res, { username, task }) {
   const accessToken = tokenLooksFresh(link.token_expires_at)
     ? decryptOAuthToken(link.access_token_ciphertext)
     : null;
+  const canWriteFollow = accessToken && xTokenHasScope(link.token_scope, 'follows.write');
+  let followWriteError = null;
   if (accessToken) {
     try {
       verification = await xUserFollowsTargetFromUserToken({
@@ -79,12 +84,31 @@ async function handleAutoXFollowTask(res, { username, task }) {
       console.warn('[social-tasks/submit] x user-token follow lookup failed', {
         code: error?.code,
         status: error?.status,
+        detail: String(error?.detail || '').slice(0, 180),
       });
       verification = null;
     }
   }
 
-  const needsReconnect = !accessToken;
+  if ((!verification || !verification.follows) && canWriteFollow) {
+    try {
+      verification = await xFollowTargetWithUserToken({
+        userId: link.provider_user_id,
+        targetUsername: targetHandle,
+        accessToken,
+      });
+    } catch (error) {
+      followWriteError = error;
+      console.warn('[social-tasks/submit] x follow write failed', {
+        code: error?.code,
+        status: error?.status,
+        detail: String(error?.detail || '').slice(0, 180),
+      });
+      verification = null;
+    }
+  }
+
+  const needsReconnect = !accessToken || !canWriteFollow;
   try {
     if (!verification) {
       verification = await xUserFollowsTarget({
@@ -94,6 +118,9 @@ async function handleAutoXFollowTask(res, { username, task }) {
       });
     }
   } catch (error) {
+    if (followWriteError) {
+      return xFollowErrorResponse(res, followWriteError);
+    }
     if (needsReconnect) {
       return res.status(409).json({
         error: 'x_reconnect_required',

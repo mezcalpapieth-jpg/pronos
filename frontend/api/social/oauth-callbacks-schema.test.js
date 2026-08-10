@@ -24,5 +24,6 @@ test('x callback stores encrypted OAuth token material for follow verification',
   assert.match(source, /refresh_token_ciphertext/);
   assert.match(source, /token_expires_at/);
   assert.match(source, /token_scope/);
+  assert.match(source, /REQUESTED_SCOPE = 'users\.read follows\.read follows\.write tweet\.read offline\.access'/);
   assert.doesNotMatch(source, /console\.(log|warn|error)\([^)]*accessToken/);
 });

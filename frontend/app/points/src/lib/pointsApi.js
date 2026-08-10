@@ -132,6 +132,10 @@ const PUBLIC_ERROR_COPY = {
     es: 'No pudimos verificar X ahora. Intenta otra vez.',
     en: 'Could not verify X right now. Try again.',
   },
+  x_follow_write_failed: {
+    es: 'X no nos dejó completar el follow automático. Revisa permisos y vuelve a intentar.',
+    en: 'X did not let us complete the automatic follow. Check permissions and try again.',
+  },
   default: {
     es: 'Algo salió mal. Intenta otra vez.',
     en: 'Something went wrong. Try again.',

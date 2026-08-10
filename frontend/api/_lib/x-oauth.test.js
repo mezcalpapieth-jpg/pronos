@@ -9,6 +9,8 @@ import {
   buildXTokenRequestAttempts,
   exchangeXAuthorizationCode,
   normalizeXUsername,
+  xFollowTargetWithUserToken,
+  xTokenHasScope,
   xUserFollowsTarget,
   xUserFollowsTargetFromUserToken,
 } from './x-oauth.js';
@@ -22,6 +24,11 @@ test('X OAuth uses current X API hosts', () => {
 test('X follow verification targets the Pronos account', () => {
   assert.equal(DEFAULT_X_FOLLOW_TARGET_USERNAME, 'pronos_io');
   assert.equal(normalizeXUsername('@Pronos_IO'), 'pronos_io');
+});
+
+test('X scope helper detects granted follow-write consent', () => {
+  assert.equal(xTokenHasScope('tweet.read users.read follows.read follows.write', 'follows.write'), true);
+  assert.equal(xTokenHasScope('tweet.read users.read follows.read', 'follows.write'), false);
 });
 
 test('X OAuth confidential token request follows current docs', () => {
@@ -168,6 +175,30 @@ test('X user-token follow verification asks for reconnect without a token', asyn
     }),
     /x_reconnect_required/,
   );
+});
+
+test('X follow verification can follow the target with connected user consent', async () => {
+  const calls = [];
+  const result = await xFollowTargetWithUserToken({
+    userId: '123',
+    targetUserId: '999',
+    accessToken: 'user-token',
+    fetchImpl: async (url, init) => {
+      calls.push({ url: String(url), init });
+      assert.equal(init.method, 'POST');
+      assert.equal(init.headers.Authorization, 'Bearer user-token');
+      assert.equal(JSON.parse(init.body).target_user_id, '999');
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ data: { following: true, pending_follow: false } }),
+      };
+    },
+  });
+
+  assert.equal(result.follows, true);
+  assert.equal(result.method, 'follow_write');
+  assert.match(calls[0].url, /\/2\/users\/123\/following/);
 });
 
 test('X follow verification fails closed without a bearer token', async () => {

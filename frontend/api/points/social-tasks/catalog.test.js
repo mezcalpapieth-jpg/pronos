@@ -56,6 +56,8 @@ test('submit API auto-approves verified X follow tasks without admin review', as
   const submitSource = await readFile(new URL('./submit.js', import.meta.url), 'utf8');
   assert.match(submitSource, /xUserFollowsTarget/);
   assert.match(submitSource, /xUserFollowsTargetFromUserToken/);
+  assert.match(submitSource, /xFollowTargetWithUserToken/);
+  assert.match(submitSource, /xTokenHasScope/);
   assert.match(submitSource, /decryptOAuthToken/);
   assert.match(submitSource, /x_account_required/);
   assert.match(submitSource, /x_reconnect_required/);

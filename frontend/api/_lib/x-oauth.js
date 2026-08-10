@@ -14,6 +14,15 @@ export function xBearerToken(env = process.env) {
   return String(env.X_BEARER_TOKEN || env.TWITTER_BEARER_TOKEN || '').trim();
 }
 
+export function xTokenHasScope(scope, requiredScope) {
+  const required = String(requiredScope || '').trim().toLowerCase();
+  if (!required) return false;
+  return String(scope || '')
+    .split(/\s+/)
+    .map(s => s.trim().toLowerCase())
+    .includes(required);
+}
+
 function xApiError(code, status = 503, detail = null) {
   const err = new Error(code);
   err.code = code;
@@ -146,6 +155,43 @@ export async function xUserFollowsTargetFromUserToken({
   }
 
   return { follows: false, checkedAll: false, pages: pageLimit, method: 'user_following' };
+}
+
+export async function xFollowTargetWithUserToken({
+  userId,
+  targetUsername = DEFAULT_X_FOLLOW_TARGET_USERNAME,
+  targetUserId = process.env.X_FOLLOW_TARGET_USER_ID || process.env.TWITTER_FOLLOW_TARGET_USER_ID || '',
+  accessToken,
+  fetchImpl = fetch,
+} = {}) {
+  const sourceId = String(userId || '').trim();
+  if (!sourceId) throw xApiError('x_account_required', 409);
+  if (!accessToken) throw xApiError('x_reconnect_required', 409, 'X OAuth token missing');
+
+  const targetId = String(targetUserId || '').trim()
+    || await resolveXUserId({ username: targetUsername, bearerToken: accessToken, fetchImpl });
+  if (!targetId) throw xApiError('x_target_lookup_failed', 502, 'missing target user id');
+
+  const response = await fetchImpl(`${X_API_BASE}/users/${encodeURIComponent(sourceId)}/following`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ target_user_id: targetId }),
+  });
+  const data = await readXJson(response, 'x_follow_write_failed');
+  const followState = data?.data || {};
+  if (followState.following === true || followState.pending_follow === true) {
+    return {
+      follows: true,
+      checkedAll: true,
+      targetUserId: targetId,
+      method: 'follow_write',
+      pendingFollow: followState.pending_follow === true,
+    };
+  }
+  throw xApiError('x_follow_write_failed', 502, JSON.stringify(data || {}).slice(0, 240));
 }
 
 function tokenBody({ code, clientId, redirectUri, verifier, mode }) {
