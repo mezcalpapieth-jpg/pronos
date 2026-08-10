@@ -35,15 +35,23 @@ function mensSinglesGrouping(playersOrCompetitions) {
   };
 }
 
-function atpEvent({ id = 'national-bank-open', name = 'National Bank Open', players = [], groupings = null } = {}) {
+function atpEvent({
+  id = 'national-bank-open',
+  name = 'National Bank Open',
+  players = [],
+  groupings = null,
+  state = 'pre',
+  date = futureIso(10),
+  endDate = futureIso(18),
+} = {}) {
   return {
     id,
     name,
-    date: futureIso(10),
-    endDate: futureIso(18),
+    date,
+    endDate,
     status: {
       type: {
-        state: 'pre',
+        state,
       },
     },
     groupings: groupings ?? [mensSinglesGrouping(players)],
@@ -151,6 +159,59 @@ test('ATP generator emits bounded head-to-head markets for top-tier draws only',
     assert.equal(h2h[0].amm_mode, 'unified');
     assert.equal(h2h[0].resolver_config.source, 'espn-atp-match');
     assert.equal(h2h[0].resolver_config.matchId, 'match-1');
+    assert.deepEqual(h2h[0].outcomes, ['Alexander Zverev', 'Taylor Fritz']);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('ATP generator still emits H2H markets once a top-tier tournament is in progress', async () => {
+  const originalFetch = globalThis.fetch;
+  const matchDate = futureIso(1);
+  const competitions = [
+    {
+      id: 'qf-1',
+      date: matchDate,
+      round: { displayName: 'Quarterfinals' },
+      status: { type: { state: 'pre' } },
+      competitors: [
+        tennisPlayer('2375', 'Alexander Zverev', 1),
+        tennisPlayer('2946', 'Taylor Fritz', 2),
+      ],
+    },
+    {
+      id: 'qf-2',
+      date: matchDate,
+      round: { displayName: 'Quarterfinals' },
+      status: { type: { state: 'pre' } },
+      competitors: [
+        tennisPlayer('9250', 'Ben Shelton', 3),
+        tennisPlayer('3764', 'Lorenzo Musetti', 4),
+      ],
+    },
+  ];
+
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      events: [
+        atpEvent({
+          state: 'in',
+          date: futureIso(-7),
+          endDate: futureIso(3),
+          groupings: [mensSinglesGrouping(competitions)],
+        }),
+      ],
+    }),
+  });
+
+  try {
+    const specs = await generateTennisMarkets();
+    const h2h = specs.filter(spec => spec.source === 'espn-atp-match');
+    assert.equal(specs.some(spec => spec.source === 'espn-atp-tournament'), false);
+    assert.equal(h2h.length, 2);
+    assert.equal(h2h[0].source_data.roundLabel, 'Quarterfinals');
+    assert.equal(h2h[0].resolver_config.matchId, 'qf-1');
     assert.deepEqual(h2h[0].outcomes, ['Alexander Zverev', 'Taylor Fritz']);
   } finally {
     globalThis.fetch = originalFetch;
