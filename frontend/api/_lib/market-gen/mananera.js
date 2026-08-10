@@ -118,7 +118,7 @@ function criteriaFor(topic, dateLabel) {
   const mentions = topic.threshold === 1
     ? `contiene ${topic.label} al menos una vez`
     : `contiene la frase "${topic.phrase}" ${topic.threshold} o más veces`;
-  return `la versión estenográfica oficial de gob.mx de la mañanera del ${dateLabel} ${mentions}`;
+  return `la versión estenográfica oficial de gob.mx de la mañanera del ${dateLabel} ${mentions}; si gob.mx no está disponible, se usará la transcripción/captions del video oficial de YouTube de la conferencia de prensa matutina de ese día`;
 }
 
 function buildSpec(topic, end) {
@@ -147,7 +147,8 @@ function buildSpec(topic, end) {
       threshold: topic.threshold,
       yesOutcome: 0,
       evidenceUrl: MANANERA_OFFICIAL_BASE_URL,
-      sourceUrls: [MANANERA_OFFICIAL_BASE_URL],
+      youtubeFallback: true,
+      sourceUrls: [MANANERA_OFFICIAL_BASE_URL, 'https://www.youtube.com/'],
       criteria: criteriaFor(topic, dateLabel),
     },
     source_data: {
@@ -158,7 +159,7 @@ function buildSpec(topic, end) {
       phrase: topic.phrase,
       threshold: topic.threshold,
       closeLocalTime: '07:59',
-      transcriptSource: 'gob.mx Presidencia',
+      transcriptSource: 'gob.mx Presidencia; fallback YouTube oficial',
       categorization: {
         categoryTags: ['mexico'],
         geoTags: ['mexico'],

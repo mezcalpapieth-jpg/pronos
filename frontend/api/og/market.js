@@ -104,6 +104,17 @@ function formatVolume(n) {
   return Math.round(v).toLocaleString('en-US');
 }
 
+function formatMoney(n) {
+  const v = Number(n || 0);
+  if (!Number.isFinite(v)) return '0';
+  if (Math.abs(v) >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(v) >= 1_000) return `${(v / 1_000).toFixed(1)}k`;
+  return v.toLocaleString('es-MX', {
+    minimumFractionDigits: v % 1 === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 function formatDeadline(iso) {
   if (!iso) return '';
   try {
@@ -127,12 +138,12 @@ function cleanAccount(value) {
   return raw ? `@${raw}` : '@pronos_io';
 }
 
-function formatMoneyParam(value) {
+function formatMoneyParam(value, { plus = false } = {}) {
   const raw = cleanParam(value, 32);
   if (!raw) return '';
   const numeric = Number(raw.replace(/[^0-9.-]/g, ''));
   if (!Number.isFinite(numeric)) return raw;
-  return `${formatVolume(numeric)} MXNP`;
+  return `${plus && numeric > 0 ? '+' : ''}${formatMoney(numeric)} MXNP`;
 }
 
 function topOutcomeIndex(prices, winnerIdx) {
@@ -147,6 +158,16 @@ function topOutcomeIndex(prices, winnerIdx) {
     }
   });
   return bestIdx;
+}
+
+function svgTextFit(text, maxWidth, maxFont, minFont, ratio = 0.6) {
+  const len = Array.from(String(text || '')).length || 1;
+  const fitted = Math.floor(maxWidth / (len * ratio));
+  const fontSize = Math.max(minFont, Math.min(maxFont, fitted));
+  const textLengthAttr = fitted < minFont
+    ? ` textLength="${maxWidth}" lengthAdjust="spacingAndGlyphs"`
+    : '';
+  return { fontSize, textLengthAttr };
 }
 
 export default async function handler(req, res) {
@@ -182,7 +203,7 @@ export default async function handler(req, res) {
 
     const questionLines = wrapText(r.question || '', 32, 3);
     const account = cleanAccount(req.query.account || req.query.username || req.query.user);
-    const cashout = formatMoneyParam(req.query.cashout || req.query.cashOut || req.query.amount);
+    const cashout = formatMoneyParam(req.query.cashout || req.query.cashOut || req.query.amount, { plus: true });
     const cost = formatMoneyParam(req.query.cost);
     const odds = cleanParam(req.query.odds, 20);
     const outcome = cleanParam(req.query.outcome || req.query.side, 48);
@@ -227,13 +248,15 @@ function renderSvg({
   const pickedPct = Math.round((prices[pickedIdx] || 0) * 100);
   const statusText = isResolved ? 'RESUELTO' : isOnchain ? 'ON-CHAIN' : 'EN VIVO';
   const resultTitle = isResolved
-    ? `Won on ${pickedLabel}`
+    ? `Ganó en ${pickedLabel}`
     : `${pickedLabel} en Pronos`;
-  const rightMetricLabel = cashout ? 'Cash Out' : 'Probabilidad';
+  const rightMetricLabel = cashout ? 'Cobro' : 'Probabilidad';
   const rightMetricValue = cashout || `${pickedPct}%`;
   const costLabel = cost || `${formatVolume(tradeVolume)} MXNP`;
   const oddsLabel = odds || `${pickedPct}%`;
   const shortResult = resultTitle.length > 25 ? `${resultTitle.slice(0, 24)}…` : resultTitle;
+  const resultFit = svgTextFit(shortResult, 284, 34, 26, 0.58);
+  const metricFit = svgTextFit(rightMetricValue, 284, 58, 34, 0.62);
   const accountLabel = account.length > 20 ? `${account.slice(0, 19)}…` : account;
   const accountPillW = Math.max(184, Math.min(340, 74 + accountLabel.length * 13));
   const accountPillX = Math.round((W - accountPillW) / 2);
@@ -287,7 +310,8 @@ function renderSvg({
     <circle cx="690" cy="448" r="14" fill="${PALETTE.bg}"/>
 
     <rect x="184" y="152" width="76" height="76" rx="16" fill="#e8e1d8"/>
-    <path d="M203 190L241 170V211L203 190Z" fill="${PALETTE.accent}" opacity="0.22"/>
+    <text x="222" y="206" text-anchor="middle" fill="${PALETTE.ink}" font-family="DM Sans, Inter, Arial, sans-serif" font-size="54" font-weight="900">P</text>
+    <circle cx="244" cy="174" r="7" fill="${PALETTE.accent}"/>
     <text x="318" y="184" fill="${PALETTE.inkDim}" opacity="0.22" font-family="DM Sans, Inter, Arial, sans-serif" font-size="28" font-weight="900">PRONOS</text>
     <text x="184" y="268" fill="${PALETTE.inkDim}" font-family="DM Mono, ui-monospace, monospace" font-size="18" font-weight="800" letter-spacing="3">${esc(category)} · ${statusText}</text>
     ${questionLines.map((line, i) => `
@@ -299,20 +323,18 @@ function renderSvg({
         font-size="17" font-weight="800" letter-spacing="2">FINAL · ${esc(String(finalScore).slice(0, 34))}</text>
     ` : ''}
 
-    <text x="728" y="178" fill="${cashout || isResolved ? '#079c59' : PALETTE.accent}" font-family="DM Sans, Inter, Arial, sans-serif" font-size="34" font-weight="900">${esc(shortResult)}</text>
-    <text x="728" y="220" fill="${PALETTE.inkDim}" font-family="DM Sans, Inter, Arial, sans-serif" font-size="19" font-weight="700">${cashout ? 'Cost' : 'Vol'}</text>
+    <text x="728" y="178" fill="${cashout || isResolved ? '#079c59' : PALETTE.accent}" font-family="DM Sans, Inter, Arial, sans-serif" font-size="${resultFit.fontSize}" font-weight="900"${resultFit.textLengthAttr}>${esc(shortResult)}</text>
+    <text x="728" y="220" fill="${PALETTE.inkDim}" font-family="DM Sans, Inter, Arial, sans-serif" font-size="19" font-weight="700">${cashout ? 'Costo' : 'Vol.'}</text>
     <text x="1012" y="220" text-anchor="end" fill="${PALETTE.ink}" font-family="DM Mono, ui-monospace, monospace" font-size="19" font-weight="900">${esc(costLabel)}</text>
-    <text x="728" y="258" fill="${PALETTE.inkDim}" font-family="DM Sans, Inter, Arial, sans-serif" font-size="19" font-weight="700">Odds</text>
+    <text x="728" y="258" fill="${PALETTE.inkDim}" font-family="DM Sans, Inter, Arial, sans-serif" font-size="19" font-weight="700">Prob.</text>
     <text x="1012" y="258" text-anchor="end" fill="${PALETTE.ink}" font-family="DM Mono, ui-monospace, monospace" font-size="19" font-weight="900">${esc(oddsLabel)}</text>
     <line x1="728" y1="288" x2="1012" y2="288" stroke="${PALETTE.line}" stroke-width="2" stroke-dasharray="4 8"/>
     <text x="728" y="328" fill="${PALETTE.ink}" font-family="DM Sans, Inter, Arial, sans-serif" font-size="21" font-weight="800">${rightMetricLabel}</text>
-    <text x="728" y="392" fill="${PALETTE.green}" font-family="DM Sans, Inter, Arial, sans-serif" font-size="58" font-weight="900">${esc(rightMetricValue)}</text>
+    <text x="728" y="392" fill="${PALETTE.green}" font-family="DM Sans, Inter, Arial, sans-serif" font-size="${metricFit.fontSize}" font-weight="900"${metricFit.textLengthAttr}>${esc(rightMetricValue)}</text>
   </g>
 
-  <g transform="translate(440, 514)">
-    <path d="M0 23L48 0V58L0 35V23ZM10 29L38 42V16L10 29Z" fill="${PALETTE.accent}"/>
-    <text x="66" y="40" fill="${PALETTE.text}" font-family="DM Sans, Inter, Arial, sans-serif" font-size="42" font-weight="900">Pronos</text>
-  </g>
+  <text x="${W / 2}" y="576" text-anchor="middle" fill="${PALETTE.text}" font-family="DM Sans, Inter, Arial, sans-serif" font-size="42" font-weight="900">Pronos</text>
+  <circle cx="688" cy="560" r="7" fill="${PALETTE.accent}"/>
 
   <g transform="translate(156, 476)">
     ${visible.map((o, i) => {

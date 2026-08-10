@@ -30,6 +30,10 @@ test('generateMananeraMarkets creates pending specs with transcript resolver met
   assert.equal(inegi.resolver_config.dateYmd, '2026-08-10');
   assert.equal(inegi.resolver_config.phrase, 'INEGI');
   assert.equal(inegi.resolver_config.yesOutcome, 0);
+  assert.equal(inegi.resolver_config.youtubeFallback, true);
+  assert.ok(inegi.resolver_config.criteria.includes('YouTube'));
+  assert.ok(inegi.resolver_config.sourceUrls.includes('https://www.youtube.com/'));
+  assert.match(inegi.source_data.transcriptSource, /YouTube/);
   assert.equal(inegi.source_data.categorization.categoryTags[0], 'mexico');
   assert.equal(inegi.source_data.categorization.geoTags[0], 'mexico');
   assert.deepEqual(inegi.source_data.categorization.topicTags, ['politica']);

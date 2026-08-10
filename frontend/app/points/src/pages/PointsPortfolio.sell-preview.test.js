@@ -115,7 +115,13 @@ test('portfolio won markets generate a Pronos ticket share card with cash-out de
   assert.match(winShareSource, /canvas\.toBlob/);
   assert.match(winShareSource, /navigator\.canShare\?\.\(\{ files: \[file\] \}\)/);
   assert.match(winShareSource, /new File\(\[blob\]/);
-  assert.match(winShareSource, /Cash Out/);
+  assert.match(winShareSource, /Ganó en/);
+  assert.match(winShareSource, /Cobro/);
+  assert.match(winShareSource, /Costo/);
+  assert.match(winShareSource, /Prob\./);
+  assert.match(winShareSource, /fillTextFit/);
+  assert.doesNotMatch(winShareSource, /Cash Out/);
+  assert.doesNotMatch(winShareSource, /Won on/);
   assert.match(winShareSource, /marketShareUrl/);
   assert.match(winShareSource, /\/api\/share\/market/);
   assert.match(winShareSource, /displayHandle\(username\)/);

@@ -97,6 +97,27 @@ function roundedRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
+function fillTextFit(ctx, text, x, y, maxWidth, fontForSize, maxSize, minSize = 18) {
+  let size = maxSize;
+  while (size > minSize) {
+    ctx.font = fontForSize(size);
+    if (ctx.measureText(text).width <= maxWidth) break;
+    size -= 1;
+  }
+
+  ctx.save();
+  ctx.font = fontForSize(size);
+  const width = ctx.measureText(text).width;
+  if (ctx.textAlign === 'left' && width > maxWidth) {
+    ctx.translate(x, y);
+    ctx.scale(maxWidth / width, 1);
+    ctx.fillText(text, 0, 0);
+  } else {
+    ctx.fillText(text, x, y);
+  }
+  ctx.restore();
+}
+
 async function makeWinCard({ item, username, amount, outcomeLabel }) {
   const canvas = document.createElement('canvas');
   canvas.width = CARD_W;
@@ -195,16 +216,18 @@ async function makeWinCard({ item, username, amount, outcomeLabel }) {
   roundedRect(ctx, 134, 152, 76, 76, 16);
   ctx.fillStyle = '#e8e1d8';
   ctx.fill();
-  ctx.fillStyle = 'rgba(255,85,0,0.24)';
+  ctx.fillStyle = '#080808';
+  ctx.font = '900 54px Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('P', 172, 207);
+  ctx.fillStyle = '#ff5500';
   ctx.beginPath();
-  ctx.moveTo(154, 190);
-  ctx.lineTo(192, 170);
-  ctx.lineTo(192, 211);
-  ctx.closePath();
+  ctx.arc(194, 174, 7, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.fillStyle = 'rgba(10,10,10,0.14)';
   ctx.font = '900 28px Arial, sans-serif';
+  ctx.textAlign = 'left';
   ctx.fillText('PRONOS', 270, 185);
   ctx.fillStyle = '#6b6258';
   ctx.font = '800 18px Arial, sans-serif';
@@ -219,19 +242,19 @@ async function makeWinCard({ item, username, amount, outcomeLabel }) {
   const oddsText = pct == null ? '—' : `${Math.round(pct)}%`;
   const cost = Number(item?.costBasis ?? item?.totalInvested ?? 0);
   const resultLabel = String(outcomeLabel || item?.outcomeLabel || 'Resultado ganador').slice(0, 28);
+  const rightX = cutX + 42;
+  const rightMaxWidth = ticket.x + ticket.w - 42 - rightX;
   ctx.textAlign = 'left';
   ctx.fillStyle = '#079c59';
-  ctx.font = '900 36px Arial, sans-serif';
-  ctx.fillText(`Won on ${resultLabel}`, cutX + 42, 184);
+  fillTextFit(ctx, `Ganó en ${resultLabel}`, rightX, 184, rightMaxWidth, size => `900 ${size}px Arial, sans-serif`, 36, 27);
   ctx.fillStyle = '#6b6258';
   ctx.font = '700 20px Arial, sans-serif';
-  ctx.fillText('Cost', cutX + 42, 224);
-  ctx.fillText('Odds', cutX + 42, 262);
+  ctx.fillText('Costo', rightX, 224);
+  ctx.fillText('Prob.', rightX, 262);
   ctx.textAlign = 'right';
   ctx.fillStyle = '#080808';
-  ctx.font = '900 20px Arial, sans-serif';
-  ctx.fillText(`${formatMxnp(cost)} MXNP`, ticket.x + ticket.w - 42, 224);
-  ctx.fillText(oddsText, ticket.x + ticket.w - 42, 262);
+  fillTextFit(ctx, `${formatMxnp(cost)} MXNP`, ticket.x + ticket.w - 42, 224, 176, size => `900 ${size}px Arial, sans-serif`, 20, 15);
+  fillTextFit(ctx, oddsText, ticket.x + ticket.w - 42, 262, 176, size => `900 ${size}px Arial, sans-serif`, 20, 15);
   ctx.save();
   ctx.setLineDash([4, 9]);
   ctx.strokeStyle = '#d7c7b5';
@@ -244,31 +267,20 @@ async function makeWinCard({ item, username, amount, outcomeLabel }) {
   ctx.textAlign = 'left';
   ctx.fillStyle = '#080808';
   ctx.font = '800 22px Arial, sans-serif';
-  ctx.fillText('Cash Out', cutX + 42, 332);
+  ctx.fillText('Cobro', rightX, 332);
   ctx.fillStyle = '#00b862';
   const cashText = `+${formatMxnp(amount)} MXNP`;
-  ctx.font = cashText.length > 14 ? '900 46px Arial, sans-serif' : '900 58px Arial, sans-serif';
-  ctx.fillText(cashText, cutX + 42, 396);
+  fillTextFit(ctx, cashText, rightX, 396, rightMaxWidth, size => `900 ${size}px Arial, sans-serif`, 58, 32);
 
-  ctx.fillStyle = '#ff5500';
-  ctx.beginPath();
-  ctx.moveTo(486, 555);
-  ctx.lineTo(536, 531);
-  ctx.lineTo(536, 592);
-  ctx.lineTo(486, 568);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = '#050505';
-  ctx.beginPath();
-  ctx.moveTo(498, 562);
-  ctx.lineTo(524, 550);
-  ctx.lineTo(524, 573);
-  ctx.closePath();
-  ctx.fill();
   ctx.fillStyle = '#fff7ec';
   ctx.font = '900 44px Arial, sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText('Pronos', 558, 576);
+  ctx.textAlign = 'center';
+  ctx.fillText('Pronos', CARD_W / 2, 576);
+  const pronosWidth = ctx.measureText('Pronos').width;
+  ctx.fillStyle = '#ff5500';
+  ctx.beginPath();
+  ctx.arc((CARD_W / 2) + (pronosWidth / 2) + 16, 559, 7, 0, Math.PI * 2);
+  ctx.fill();
 
   return new Promise((resolve, reject) => {
     canvas.toBlob(blob => {

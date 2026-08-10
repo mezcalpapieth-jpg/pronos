@@ -12,11 +12,18 @@ const source = await readFile(new URL('./market.js', import.meta.url), 'utf8');
 test('market OG image renders the Pronos ticket share style', () => {
   assert.match(source, /cleanAccount/);
   assert.match(source, /cashout/);
-  assert.match(source, /Cash Out/);
+  assert.match(source, /Ganó en/);
+  assert.match(source, /Cobro/);
+  assert.match(source, /Costo/);
+  assert.match(source, /Prob\./);
+  assert.doesNotMatch(source, /Cash Out/);
+  assert.doesNotMatch(source, /Won on/);
   assert.match(source, /dot-grid/);
   assert.match(source, /ticket-shadow/);
   assert.match(source, /stroke-dasharray="3 10"/);
+  assert.match(source, /svgTextFit/);
   assert.match(source, /Pronos/);
+  assert.match(source, />P<\/text>/);
 });
 
 test('market OG image accepts account and cash-out query params', () => {

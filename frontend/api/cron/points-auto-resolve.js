@@ -79,6 +79,9 @@ function parseJsonb(v, fb) {
 function buildFinalScore({ resolverType, cfg, result, resolverInfo, outcomes, winningIdx }) {
   const winLabel = Array.isArray(outcomes) ? outcomes[winningIdx] : null;
   const clip = (s) => (s == null ? null : String(s).slice(0, 240));
+  const timestampLabels = (items) => (Array.isArray(items) ? items : [])
+    .map(item => (typeof item === 'string' ? item : item?.label))
+    .filter(Boolean);
 
   try {
     if (resolverType === 'sports_api') {
@@ -129,7 +132,13 @@ function buildFinalScore({ resolverType, cfg, result, resolverInfo, outcomes, wi
       const count = resolverInfo?.matchCount;
       const phrase = cfg?.phrase;
       if (Number.isFinite(Number(count)) && phrase) {
-        return clip(`${Number(count)} menciones de "${phrase}"`);
+        const labels = timestampLabels(
+          resolverInfo?.requiredMatchTimestamps?.length
+            ? resolverInfo.requiredMatchTimestamps
+            : resolverInfo?.matchTimestamps,
+        );
+        const suffix = labels.length ? ` · ${labels.join(', ')}` : '';
+        return clip(`${Number(count)} menciones de "${phrase}"${suffix}`);
       }
       return clip(winLabel);
     }
@@ -947,24 +956,47 @@ export async function runAutoResolve({ dry = false } = {}) {
               source: cfg.source,
               dateYmd: cfg.dateYmd || null,
               searchUrl: transcript.searchUrl || null,
+              fallbackReason: transcript.fallbackReason || null,
+              youtubeSearchUrl: transcript.youtubeSearchUrl || null,
+              youtubeVideoUrl: transcript.youtubeVideoUrl || null,
+              youtubeTranscriptTitle: transcript.youtubeTranscriptTitle || null,
             };
             throw err;
           }
           winningIdx = transcript.outcomeIndex;
           resolverInfo = {
             source: cfg.source,
+            transcriptSource: transcript.transcriptSource,
             phrase: transcript.phrase,
             matchCount: transcript.count,
             op: transcript.op,
             threshold: transcript.threshold,
             transcriptUrl: transcript.transcriptUrl,
             transcriptTitle: transcript.transcriptTitle,
+            videoId: transcript.videoId || null,
+            channelTitle: transcript.channelTitle || null,
+            captionLanguage: transcript.captionLanguage || null,
+            captionKind: transcript.captionKind || null,
+            firstMatchTimestamp: transcript.firstMatchTimestamp || null,
+            firstMatchUrl: transcript.firstMatchUrl || null,
+            requiredMatchTimestamps: transcript.requiredMatchTimestamps || [],
+            matchTimestamps: transcript.matchTimestamps || [],
           };
           resolverConfigPatch = {
             transcriptUrl: transcript.transcriptUrl,
             transcriptTitle: transcript.transcriptTitle,
+            transcriptSource: transcript.transcriptSource,
             transcriptMatchCount: transcript.count,
             transcriptObservedAt: transcript.observedAt,
+            transcriptVideoId: transcript.videoId || null,
+            transcriptChannelTitle: transcript.channelTitle || null,
+            transcriptCaptionLanguage: transcript.captionLanguage || null,
+            transcriptCaptionKind: transcript.captionKind || null,
+            transcriptFirstMatchSeconds: transcript.firstMatchSeconds ?? null,
+            transcriptFirstMatchTimestamp: transcript.firstMatchTimestamp || null,
+            transcriptFirstMatchUrl: transcript.firstMatchUrl || null,
+            transcriptRequiredMatchTimestamps: transcript.requiredMatchTimestamps || [],
+            transcriptMatchTimestamps: transcript.matchTimestamps || [],
           };
         } else if (resolverType === 'sports_api') {
           // Sports scoreboards (MLB/NBA/F1 via ESPN + Jolpica +

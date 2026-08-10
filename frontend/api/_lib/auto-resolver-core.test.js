@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { MANANERA_TRANSCRIPT_SOURCE } from './mananera.js';
-import { resolveAutoResolverCandidate } from './auto-resolver-core.js';
+import { buildAutoResolverFinalScore, resolveAutoResolverCandidate } from './auto-resolver-core.js';
 
 function jsonResponse(body) {
   return {
@@ -174,4 +174,25 @@ test('auto resolver core settles mañanera transcript phrase markets', async (t)
   assert.equal(decision.finalScore, '2 menciones de "seguridad"');
   assert.equal(decision.resolverConfigPatch.transcriptMatchCount, 2);
   assert.match(decision.resolverConfigPatch.transcriptUrl, /version-estenografica/);
+});
+
+test('auto resolver final score includes required transcript timestamps when available', () => {
+  const score = buildAutoResolverFinalScore({
+    resolverType: 'api_transcript',
+    cfg: { phrase: 'seguridad', threshold: 5 },
+    resolverInfo: {
+      matchCount: 7,
+      requiredMatchTimestamps: [
+        { label: '2:01' },
+        { label: '3:05' },
+        { label: '4:06' },
+        { label: '5:07' },
+        { label: '6:08' },
+      ],
+    },
+    outcomes: ['Sí', 'No'],
+    winningIdx: 0,
+  });
+
+  assert.equal(score, '7 menciones de "seguridad" · 2:01, 3:05, 4:06, 5:07, 6:08');
 });
