@@ -338,6 +338,7 @@ function Shell({ onOpenLogin, isAdmin }) {
           <Route path="/x" element={<PublicityRedirect source="x" />} />
           <Route path="/instagram" element={<PublicityRedirect source="instagram" />} />
           <Route path="/tiktok" element={<PublicityRedirect source="tiktok" />} />
+          <Route path="/twitter" element={<PublicityRedirect source="x" />} />
           <Route path="/" element={<PointsHomeEntry />} />
           {/* World Cup gets its own page with a hero, groups, and
               bracket. Registered BEFORE the generic /c/:slug so it

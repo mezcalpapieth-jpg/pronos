@@ -62,28 +62,36 @@ test('admin stats exposes publicity source metrics', () => {
 });
 
 test('root social bio paths rewrite to the publicity redirect API', () => {
-  assert.ok(
-    hasRewrite('/i', '/api/points/publicity/redirect?source=instagram'),
-    'expected /i to rewrite to Instagram publicity tracking',
-  );
-  assert.ok(
-    hasRewrite('/t', '/api/points/publicity/redirect?source=tiktok'),
-    'expected /t to rewrite to TikTok publicity tracking',
-  );
-  assert.ok(
-    hasRewrite('/x', '/api/points/publicity/redirect?source=x'),
-    'expected /x to rewrite to X publicity tracking',
-  );
-  assert.ok(
-    hasRewrite('/instagram', '/api/points/publicity/redirect?source=instagram'),
-    'expected /instagram to rewrite to Instagram publicity tracking',
-  );
-  assert.ok(
-    hasRewrite('/tiktok', '/api/points/publicity/redirect?source=tiktok'),
-    'expected /tiktok to rewrite to TikTok publicity tracking',
-  );
-  assert.ok(
-    hasRewrite('/x', '/api/points/publicity/redirect?source=x'),
-    'expected /x to rewrite to X publicity tracking',
-  );
+  const expected = [
+    ['/i', 'instagram'],
+    ['/i/', 'instagram'],
+    ['/t', 'tiktok'],
+    ['/t/', 'tiktok'],
+    ['/x', 'x'],
+    ['/x/', 'x'],
+    ['/instagram', 'instagram'],
+    ['/instagram/', 'instagram'],
+    ['/tiktok', 'tiktok'],
+    ['/tiktok/', 'tiktok'],
+    ['/twitter', 'x'],
+    ['/twitter/', 'x'],
+    ['/points/i', 'instagram'],
+    ['/points/i/', 'instagram'],
+    ['/points/t', 'tiktok'],
+    ['/points/t/', 'tiktok'],
+    ['/points/x', 'x'],
+    ['/points/x/', 'x'],
+    ['/points/instagram', 'instagram'],
+    ['/points/instagram/', 'instagram'],
+    ['/points/tiktok', 'tiktok'],
+    ['/points/tiktok/', 'tiktok'],
+    ['/points/twitter', 'x'],
+    ['/points/twitter/', 'x'],
+  ];
+  for (const [source, publicitySource] of expected) {
+    assert.ok(
+      hasRewrite(source, `/api/points/publicity/redirect?source=${publicitySource}`),
+      `expected ${source} to rewrite to ${publicitySource} publicity tracking`,
+    );
+  }
 });

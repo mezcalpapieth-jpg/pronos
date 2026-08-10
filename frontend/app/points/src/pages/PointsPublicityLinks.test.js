@@ -39,30 +39,40 @@ test('points app exposes local routes for clean public social links', () => {
   assert.match(appSource, /path="\/x"/);
   assert.match(appSource, /path="\/instagram"/);
   assert.match(appSource, /path="\/tiktok"/);
-  assert.ok(
-    hasRewrite('/i', '/api/points/publicity/redirect?source=instagram'),
-    'expected /i to rewrite to publicity tracking in production',
-  );
-  assert.ok(
-    hasRewrite('/t', '/api/points/publicity/redirect?source=tiktok'),
-    'expected /t to rewrite to publicity tracking in production',
-  );
-  assert.ok(
-    hasRewrite('/x', '/api/points/publicity/redirect?source=x'),
-    'expected /x to rewrite to publicity tracking in production',
-  );
-  assert.ok(
-    hasRewrite('/instagram', '/api/points/publicity/redirect?source=instagram'),
-    'expected /instagram to rewrite to publicity tracking in production',
-  );
-  assert.ok(
-    hasRewrite('/tiktok', '/api/points/publicity/redirect?source=tiktok'),
-    'expected /tiktok to rewrite to publicity tracking in production',
-  );
-  assert.ok(
-    hasRewrite('/x', '/api/points/publicity/redirect?source=x'),
-    'expected /x to rewrite to publicity tracking in production',
-  );
+  assert.match(appSource, /path="\/twitter"/);
+
+  const expected = [
+    ['/i', 'instagram'],
+    ['/i/', 'instagram'],
+    ['/t', 'tiktok'],
+    ['/t/', 'tiktok'],
+    ['/x', 'x'],
+    ['/x/', 'x'],
+    ['/instagram', 'instagram'],
+    ['/instagram/', 'instagram'],
+    ['/tiktok', 'tiktok'],
+    ['/tiktok/', 'tiktok'],
+    ['/twitter', 'x'],
+    ['/twitter/', 'x'],
+    ['/points/i', 'instagram'],
+    ['/points/i/', 'instagram'],
+    ['/points/t', 'tiktok'],
+    ['/points/t/', 'tiktok'],
+    ['/points/x', 'x'],
+    ['/points/x/', 'x'],
+    ['/points/instagram', 'instagram'],
+    ['/points/instagram/', 'instagram'],
+    ['/points/tiktok', 'tiktok'],
+    ['/points/tiktok/', 'tiktok'],
+    ['/points/twitter', 'x'],
+    ['/points/twitter/', 'x'],
+  ];
+  for (const [source, publicitySource] of expected) {
+    assert.ok(
+      hasRewrite(source, `/api/points/publicity/redirect?source=${publicitySource}`),
+      `expected ${source} to rewrite to publicity tracking in production`,
+    );
+  }
 });
 
 test('admin stats renders copyable production bio links with channel metrics', () => {

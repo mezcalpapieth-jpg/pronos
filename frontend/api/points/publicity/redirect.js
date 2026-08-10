@@ -1,8 +1,8 @@
 /**
  * GET /api/points/publicity/redirect?source=instagram|tiktok|x
  *
- * Clean social-bio links (/instagram, /tiktok, /x) rewrite here in
- * production. The endpoint records a daily aggregate, stores a short-lived
+ * Clean social-bio links (/i, /t, /x and /points/... aliases) rewrite here
+ * in production. The endpoint records a daily aggregate, stores a short-lived
  * source cookie, then redirects into the public points home.
  */
 import { neon } from '@neondatabase/serverless';
