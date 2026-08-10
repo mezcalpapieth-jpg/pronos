@@ -61,6 +61,17 @@ function pricesFromReserves(reserves, outcomeCount) {
   return invs.map(v => v / total);
 }
 
+function binaryLegPricesFromRow({ reserves, status, outcome }, fallbackYes = 0.5) {
+  if (String(status || '') === 'resolved') {
+    const resolvedOutcome = Number(outcome);
+    if (resolvedOutcome === 0) return [1, 0];
+    if (resolvedOutcome === 1) return [0, 1];
+  }
+  if (Array.isArray(reserves) && reserves.length === 2) return binaryPrices(reserves);
+  const yes = Number.isFinite(Number(fallbackYes)) ? Number(fallbackYes) : 0.5;
+  return [yes, 1 - yes];
+}
+
 function publicSeriesMetaFromRow(row) {
   const resolverCfg = parseJsonb(row.resolver_config, null);
   const sourceData = parseJsonb(row.pending_source_data, null);
@@ -290,7 +301,11 @@ export default async function handler(req, res) {
         const legs = legsByParent.get(r.id) || [];
         const legPrices = legs.map(l => {
           const lr = parseJsonb(l.reserves, []).map(Number);
-          return lr.length === 2 ? binaryPrices(lr)[0] : 1 / outcomes.length;
+          return binaryLegPricesFromRow({
+            reserves: lr,
+            status: l.status,
+            outcome: l.outcome,
+          }, 1 / outcomes.length)[0];
         });
         const seedTotal = legs.reduce((s, l) => s + Number(l.seed_liquidity || 0), 0);
         const tradeTotal = legs.reduce((s, l) => s + Number(l.trade_volume || 0), 0);

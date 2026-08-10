@@ -40,3 +40,22 @@ test('handleBuyClick falls back to the parent status instead of blocking', () =>
     'a target without a status must not be treated as inactive',
   );
 });
+
+test('parallel detail sinks resolved loser legs and renders them read-only at zero', () => {
+  assert.match(detailSource, /function parallelLegYesPrice/);
+  assert.match(detailSource, /if \(resolvedOutcome === 1\) return 0/);
+  assert.match(detailSource, /function sortParallelDisplayLegs/);
+  assert.match(detailSource, /parallelLegYesPrice\(b\) - parallelLegYesPrice\(a\)/);
+  assert.match(detailSource, /const parallelDisplayLegs = market\.ammMode === 'parallel'/);
+  assert.match(detailSource, /legs=\{parallelDisplayLegs \|\| market\.legs\}/);
+  assert.match(detailSource, /const isLegTradable = parallelLegIsTradable\(leg, market\)/);
+  assert.match(detailSource, /Eliminado · 0%/);
+});
+
+test('parallel order book only exposes tradable child legs', () => {
+  const optionsBuilder = detailSource.match(/function buildOrderBookOptions\([\s\S]*?\n\}/);
+  assert.ok(optionsBuilder, 'expected buildOrderBookOptions');
+  assert.match(optionsBuilder[0], /parallelDisplayLegs/);
+  assert.match(optionsBuilder[0], /\.filter\(leg => parallelLegIsTradable\(leg, market\)\)/);
+  assert.match(detailSource, /parallelDisplayLegs=\{parallelDisplayLegs\}/);
+});

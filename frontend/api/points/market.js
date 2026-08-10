@@ -39,6 +39,17 @@ function pricesFromReserves(reserves, outcomeCount) {
   return invs.map(v => v / total);
 }
 
+function binaryLegPricesFromRow({ reserves, status, outcome }, fallbackYes = 0.5) {
+  if (String(status || '') === 'resolved') {
+    const resolvedOutcome = Number(outcome);
+    if (resolvedOutcome === 0) return [1, 0];
+    if (resolvedOutcome === 1) return [0, 1];
+  }
+  if (Array.isArray(reserves) && reserves.length === 2) return binaryPrices(reserves);
+  const yes = Number.isFinite(Number(fallbackYes)) ? Number(fallbackYes) : 0.5;
+  return [yes, 1 - yes];
+}
+
 function cryptoMetaFromResolverConfig(resolverCfg) {
   if (resolverCfg?.shape !== 'binary-direction') return null;
   const intervalMinutes = Number(resolverCfg.intervalMinutes || resolverCfg.windowMinutes || 5);
@@ -435,7 +446,11 @@ export default async function handler(req, res) {
         `;
         const legs = legRows.map((l, i) => {
           const lr = parseJsonb(l.reserves, []).map(Number);
-          const lp = lr.length === 2 ? binaryPrices(lr) : [1 / outcomes.length, 1 - 1 / outcomes.length];
+          const lp = binaryLegPricesFromRow({
+            reserves: lr,
+            status: l.status,
+            outcome: l.outcome,
+          }, 1 / outcomes.length);
           return {
             id: l.id,
             outcomeIndex: i,

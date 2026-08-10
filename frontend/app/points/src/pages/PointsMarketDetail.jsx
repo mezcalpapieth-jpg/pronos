@@ -295,6 +295,58 @@ function accentFor(i, totalOutcomes) {
   return MULTI_ACCENTS[i % MULTI_ACCENTS.length];
 }
 
+function clampProbability(value, fallback = 0.5) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.min(1, n));
+}
+
+function parallelLegYesPrice(leg, fallback = 0.5) {
+  if (String(leg?.status || '') === 'resolved') {
+    const resolvedOutcome = Number(leg?.outcome);
+    if (resolvedOutcome === 0) return 1;
+    if (resolvedOutcome === 1) return 0;
+    return 0;
+  }
+  if (leg?.status && leg.status !== 'active') return 0;
+  return clampProbability(leg?.prices?.[0], fallback);
+}
+
+function parallelLegNoPrice(leg, fallback = 0.5) {
+  if (String(leg?.status || '') === 'resolved') {
+    const resolvedOutcome = Number(leg?.outcome);
+    if (resolvedOutcome === 0) return 0;
+    if (resolvedOutcome === 1) return 1;
+    return 1;
+  }
+  const explicitNo = Array.isArray(leg?.prices) ? leg.prices[1] : null;
+  if (explicitNo != null) return clampProbability(explicitNo, 1 - fallback);
+  return clampProbability(1 - parallelLegYesPrice(leg, fallback), 1 - fallback);
+}
+
+function parallelLegIsTradable(leg, market) {
+  return market?.status === 'active'
+    && (leg?.status ?? market?.status) === 'active'
+    && !market?.seriesLocked
+    && !leg?.seriesLocked;
+}
+
+function sortParallelDisplayLegs(legs) {
+  return (Array.isArray(legs) ? legs : [])
+    .map((leg, index) => ({
+      ...leg,
+      outcomeIndex: Number.isInteger(Number(leg?.outcomeIndex)) ? Number(leg.outcomeIndex) : index,
+      originalOrder: index,
+    }))
+    .sort((a, b) => {
+      const aOpen = a.status === 'active' ? 0 : 1;
+      const bOpen = b.status === 'active' ? 0 : 1;
+      return aOpen - bOpen
+        || parallelLegYesPrice(b) - parallelLegYesPrice(a)
+        || a.originalOrder - b.originalOrder;
+    });
+}
+
 // Map (resolver_type, resolver_config.source) → human-readable source
 // name. Brand names stay untranslated — "Chainlink" is "Chainlink" in
 // every language.
@@ -460,20 +512,23 @@ function UnifiedOutcomeList({ outcomes, prices, outcomeImages, outcomeCountryLab
 // label + aggregated %, then compact Sí / No buttons with each side's
 // current price. Clicking either opens the buy modal against the leg.
 //
-// Leg images come from the parent market's `outcomeImages[i]` — the
-// parallel parent stores one image per outcome (e.g. driver portraits
-// when/if we wire that up), index-aligned with the leg order.
+// Leg images are passed in display order. The parent stores one image
+// per original outcome; the caller sorts those alongside the legs.
 function ParallelLegList({ market, legs, outcomeImages, outcomeCountryLabels, onBuyClick }) {
   return (
     <ScrollableList count={legs.length}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {legs.map((leg, i) => {
           const accent = accentFor(i, legs.length);
-          const yesPrice = leg.prices?.[0] ?? 0.5;
-          const noPrice  = leg.prices?.[1] ?? 1 - yesPrice;
+          const yesPrice = parallelLegYesPrice(leg);
+          const noPrice  = parallelLegNoPrice(leg);
           const pct = Math.round(yesPrice * 100);
           const logo = outcomeImages?.[i] || null;
           const countryLabel = outcomeCountryLabels?.[i] || null;
+          const isLegTradable = parallelLegIsTradable(leg, market);
+          const closedLabel = leg.status === 'resolved' && Number(leg.outcome) === 1
+            ? 'Eliminado · 0%'
+            : 'Cerrado';
           // Carry the leg's own gating fields through — handleBuyClick
           // checks status/seriesLocked on whatever target it gets, so a
           // synthetic leg market missing them reads as "not active" and
@@ -498,8 +553,9 @@ function ParallelLegList({ market, legs, outcomeImages, outcomeCountryLabels, on
                 gap: 10,
                 padding: '10px 12px',
                 borderRadius: 10,
-                border: '1px solid var(--border)',
+                border: `1px solid ${isLegTradable ? 'var(--border)' : 'rgba(255,255,255,0.06)'}`,
                 background: 'var(--surface2)',
+                opacity: isLegTradable ? 1 : 0.58,
               }}
             >
               {logo && <OutcomeLogo src={logo} />}
@@ -509,7 +565,7 @@ function ParallelLegList({ market, legs, outcomeImages, outcomeCountryLabels, on
                 fontFamily: 'var(--font-body)',
                 fontSize: 13,
                 fontWeight: 600,
-                color: 'var(--text-primary)',
+                color: isLegTradable ? 'var(--text-primary)' : 'var(--text-muted)',
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -520,39 +576,57 @@ function ParallelLegList({ market, legs, outcomeImages, outcomeCountryLabels, on
               <div style={{
                 fontFamily: 'var(--font-display)',
                 fontSize: 16,
-                color: accent.fg,
+                color: isLegTradable ? accent.fg : 'var(--text-muted)',
                 minWidth: 48,
                 textAlign: 'right',
                 flexShrink: 0,
               }}>
                 {pct}%
               </div>
-              <div style={{
-                display: 'flex',
-                gap: 6,
-                flexShrink: 0,
-                // Push the buttons to the right edge when the row
-                // has enough width; wrap to a new line below the
-                // label when there's not.
-                marginLeft: 'auto',
-              }}>
-                <button
-                  onClick={() => onBuyClick(legMarket, 0, `${leg.label} — Sí`)}
-                  style={legButtonStyle('var(--yes)', 'rgba(22,163,74,0.15)', 'rgba(22,163,74,0.4)')}
-                  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
-                  onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-                >
-                  Sí <span style={legPriceStyle}>{Math.round(yesPrice * 100)}¢</span>
-                </button>
-                <button
-                  onClick={() => onBuyClick(legMarket, 1, `${leg.label} — No`)}
-                  style={legButtonStyle('var(--danger)', 'rgba(255,59,59,0.12)', 'rgba(255,59,59,0.4)')}
-                  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
-                  onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-                >
-                  No <span style={legPriceStyle}>{Math.round(noPrice * 100)}¢</span>
-                </button>
-              </div>
+              {isLegTradable ? (
+                <div style={{
+                  display: 'flex',
+                  gap: 6,
+                  flexShrink: 0,
+                  // Push the buttons to the right edge when the row
+                  // has enough width; wrap to a new line below the
+                  // label when there's not.
+                  marginLeft: 'auto',
+                }}>
+                  <button
+                    onClick={() => onBuyClick(legMarket, 0, `${leg.label} — Sí`)}
+                    style={legButtonStyle('var(--yes)', 'rgba(22,163,74,0.15)', 'rgba(22,163,74,0.4)')}
+                    onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                    onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                  >
+                    Sí <span style={legPriceStyle}>{Math.round(yesPrice * 100)}¢</span>
+                  </button>
+                  <button
+                    onClick={() => onBuyClick(legMarket, 1, `${leg.label} — No`)}
+                    style={legButtonStyle('var(--danger)', 'rgba(255,59,59,0.12)', 'rgba(255,59,59,0.4)')}
+                    onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                    onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                  >
+                    No <span style={legPriceStyle}>{Math.round(noPrice * 100)}¢</span>
+                  </button>
+                </div>
+              ) : (
+                <div style={{
+                  marginLeft: 'auto',
+                  padding: '6px 10px',
+                  borderRadius: 999,
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  background: 'rgba(255,255,255,0.03)',
+                  color: 'var(--text-muted)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {closedLabel}
+                </div>
+              )}
             </div>
           );
         })}
@@ -963,17 +1037,22 @@ function parseLimitInputPrice(value) {
   return price;
 }
 
-function buildOrderBookOptions({ market, displayOutcomes, displayOutcomeIndices, displayOutcomeImages }) {
+function buildOrderBookOptions({ market, displayOutcomes, displayOutcomeIndices, displayOutcomeImages, parallelDisplayLegs }) {
   if (!market) return [];
   if (market.ammMode === 'parallel' && Array.isArray(market.legs)) {
-    return market.legs.map((leg, i) => ({
-      key: `${leg.id}:0`,
-      marketId: leg.id,
-      outcomeIndex: 0,
-      label: leg.label || displayOutcomes[i] || `Opción ${i + 1}`,
-      logo: displayOutcomeImages?.[i] || null,
-      price: Array.isArray(leg.prices) ? leg.prices[0] : null,
-    }));
+    const legs = Array.isArray(parallelDisplayLegs)
+      ? parallelDisplayLegs
+      : sortParallelDisplayLegs(market.legs);
+    return legs
+      .filter(leg => parallelLegIsTradable(leg, market))
+      .map((leg, i) => ({
+        key: `${leg.id}:0`,
+        marketId: leg.id,
+        outcomeIndex: 0,
+        label: leg.label || displayOutcomes[i] || `Opción ${i + 1}`,
+        logo: displayOutcomeImages?.[i] || null,
+        price: parallelLegYesPrice(leg),
+      }));
   }
   return displayOutcomes.map((label, i) => ({
     key: `${market.id}:${displayOutcomeIndices[i] ?? i}`,
@@ -1130,6 +1209,7 @@ function OrderBookPanel({
   displayOutcomes,
   displayOutcomeIndices,
   displayOutcomeImages,
+  parallelDisplayLegs,
   disabled,
   authenticated,
   onOpenLogin,
@@ -1159,6 +1239,7 @@ function OrderBookPanel({
     displayOutcomes,
     displayOutcomeIndices,
     displayOutcomeImages,
+    parallelDisplayLegs,
   });
   const optionsSig = options.map((option) => option.key).join('|');
   const safeSelected = Math.min(selected, Math.max(0, options.length - 1));
@@ -2295,16 +2376,25 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   const prices = Array.isArray(market.prices) && market.prices.length === outcomes.length
     ? market.prices
     : outcomes.map((_, i) => (i === 0 ? 0.5 : 1 / outcomes.length));
+  const parallelDisplayLegs = market.ammMode === 'parallel' && Array.isArray(market.legs)
+    ? sortParallelDisplayLegs(market.legs)
+    : null;
   const championsFinalOptions = market.ammMode !== 'parallel' && findChampionsLeagueFinalMarket([market])
     ? finalMarketOptions(market)
     : null;
-  const displayOutcomeIndices = Array.isArray(championsFinalOptions) && championsFinalOptions.length >= 2
+  const displayOutcomeIndices = Array.isArray(parallelDisplayLegs)
+    ? parallelDisplayLegs.map(leg => leg.outcomeIndex)
+    : Array.isArray(championsFinalOptions) && championsFinalOptions.length >= 2
     ? championsFinalOptions.map(option => option.outcomeIndex)
     : outcomes.map((_, i) => i);
-  const displayOutcomes = Array.isArray(championsFinalOptions) && championsFinalOptions.length >= 2
+  const displayOutcomes = Array.isArray(parallelDisplayLegs)
+    ? parallelDisplayLegs.map((leg, i) => leg.label || outcomes[leg.outcomeIndex] || `Opción ${i + 1}`)
+    : Array.isArray(championsFinalOptions) && championsFinalOptions.length >= 2
     ? championsFinalOptions.map(option => option.label)
     : outcomes;
-  const displayPrices = Array.isArray(championsFinalOptions) && championsFinalOptions.length >= 2
+  const displayPrices = Array.isArray(parallelDisplayLegs)
+    ? parallelDisplayLegs.map(leg => parallelLegYesPrice(leg, 1 / Math.max(2, outcomes.length)))
+    : Array.isArray(championsFinalOptions) && championsFinalOptions.length >= 2
     ? championsFinalOptions.map(option => option.price)
     : prices;
   const displayOutcomeImages = displayOutcomeIndices.map(i => market.outcomeImages?.[i] || null);
@@ -2743,6 +2833,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               displayOutcomes={displayOutcomes}
               displayOutcomeIndices={displayOutcomeIndices}
               displayOutcomeImages={displayOutcomeImages}
+              parallelDisplayLegs={parallelDisplayLegs}
               disabled={isResolved || isPendingResolution || isTradingLocked || isCanceled}
               authenticated={authenticated}
               onOpenLogin={onOpenLogin}
@@ -2960,9 +3051,9 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               market.ammMode === 'parallel' && Array.isArray(market.legs)
                 ? <ParallelLegList
                     market={market}
-                    legs={market.legs}
-                    outcomeImages={market.outcomeImages}
-                    outcomeCountryLabels={market.outcomeCountryLabels}
+                    legs={parallelDisplayLegs || market.legs}
+                    outcomeImages={displayOutcomeImages}
+                    outcomeCountryLabels={displayOutcomeCountryLabels}
                     onBuyClick={handleBuyClick}
                   />
                 : <UnifiedOutcomeList

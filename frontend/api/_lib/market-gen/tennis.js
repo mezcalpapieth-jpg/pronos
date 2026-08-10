@@ -176,7 +176,7 @@ function statusState(item) {
 }
 
 function eventCanEmitHeadToHeads(event) {
-  return statusState(event) !== 'post';
+  return eventCompetitions(event).some(competitionCanEmitHeadToHead);
 }
 
 function competitionCanEmitHeadToHead(competition) {
@@ -335,7 +335,6 @@ export async function generateTennisMarkets({ horizonDays = 60 } = {}) {
   const specs = [];
   for (const ev of events) {
     const state = statusState(ev);
-    if (state === 'post') continue;
     if (!isTopTier(ev)) continue;          // Drop ATP 250 / regional events
     const startIso = ev.date;
     const endIso = ev.endDate || ev.date;  // ESPN ships endDate on tournaments

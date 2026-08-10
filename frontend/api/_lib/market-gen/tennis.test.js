@@ -218,6 +218,47 @@ test('ATP generator still emits H2H markets once a top-tier tournament is in pro
   }
 });
 
+test('ATP generator emits H2H when ESPN marks the tournament post but nested matches pre', async () => {
+  const originalFetch = globalThis.fetch;
+  const competitions = [
+    {
+      id: 'espn-qf-1',
+      date: futureIso(1),
+      startDate: futureIso(1),
+      round: { id: '5', displayName: 'Quarterfinal' },
+      status: { type: { state: 'pre', completed: false } },
+      competitors: [
+        tennisPlayer('10052', 'Arthur Fils', null),
+        tennisPlayer('12657', 'Rafael Jodar', null),
+      ],
+    },
+  ];
+
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      events: [
+        atpEvent({
+          state: 'post',
+          date: futureIso(-9),
+          endDate: futureIso(4),
+          groupings: [mensSinglesGrouping(competitions)],
+        }),
+      ],
+    }),
+  });
+
+  try {
+    const specs = await generateTennisMarkets();
+    assert.equal(specs.length, 1);
+    assert.equal(specs[0].source, 'espn-atp-match');
+    assert.equal(specs[0].resolver_config.matchId, 'espn-qf-1');
+    assert.deepEqual(specs[0].outcomes, ['Arthur Fils', 'Rafael Jodar']);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('ATP generator skips top-tier tournaments until ESPN exposes a confirmed draw', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => ({
