@@ -407,18 +407,24 @@ function UnifiedOutcomeList({ outcomes, prices, outcomeImages, outcomeCountryLab
               padding: '10px 14px 10px 10px',
               marginBottom: 8,
               borderRadius: 10,
-              border: `1px solid ${accent.border}`,
-              background: accent.bg,
-              color: accent.fg,
+              border: '1px solid var(--border)',
+              background: 'var(--surface2)',
+              color: 'var(--text-primary)',
               fontFamily: 'var(--font-mono)',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: 10,
-              transition: 'transform 0.15s',
+              transition: 'border-color 0.15s, background 0.15s',
             }}
-            onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
-            onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = accent.border;
+              e.currentTarget.style.background = 'var(--surface1)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = 'var(--border)';
+              e.currentTarget.style.background = 'var(--surface2)';
+            }}
           >
             <OutcomeLogo src={logo} />
             <span style={{
@@ -435,7 +441,12 @@ function UnifiedOutcomeList({ outcomes, prices, outcomeImages, outcomeCountryLab
               {label}
             </span>
             <CountryChip label={countryLabel} />
-            <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, flexShrink: 0 }}>
+            <span style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 20,
+              flexShrink: 0,
+              color: accent.fg,
+            }}>
               {pct}%
             </span>
           </button>
@@ -487,8 +498,8 @@ function ParallelLegList({ market, legs, outcomeImages, outcomeCountryLabels, on
                 gap: 10,
                 padding: '10px 12px',
                 borderRadius: 10,
-                border: `1px solid ${accent.border}`,
-                background: accent.bg,
+                border: '1px solid var(--border)',
+                background: 'var(--surface2)',
               }}
             >
               {logo && <OutcomeLogo src={logo} />}
@@ -498,7 +509,7 @@ function ParallelLegList({ market, legs, outcomeImages, outcomeCountryLabels, on
                 fontFamily: 'var(--font-body)',
                 fontSize: 13,
                 fontWeight: 600,
-                color: accent.fg,
+                color: 'var(--text-primary)',
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -550,10 +561,9 @@ function ParallelLegList({ market, legs, outcomeImages, outcomeCountryLabels, on
   );
 }
 
-// Read-only price summary shown on the right side of parallel markets.
+// Read-only price summary used for the lower "Odds actuales" block.
 // Each row: label on the left (swatch in the outcome's accent), % on the
-// right. No buttons — the actual buying happens in the leg list below
-// the chart. Keeps the sidebar quick to scan.
+// right. No buttons — the actual buying happens in the right sidebar.
 function OddsSummary({ outcomes, prices, outcomeImages, outcomeCountryLabels }) {
   return (
     <ScrollableList count={outcomes.length}>
@@ -632,7 +642,7 @@ function legButtonStyle(fg, bg, border) {
     display: 'inline-flex',
     gap: 6,
     alignItems: 'center',
-    transition: 'transform 0.15s',
+    transition: 'transform 0.15s, border-color 0.15s, background 0.15s',
     whiteSpace: 'nowrap',
   };
 }
@@ -2763,10 +2773,9 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               />
             )}
 
-            {/* Parallel markets: voting lives here (below the chart),
-                one row per leg with Sí/No buttons — matches the
-                Polymarket-style layout. The right sidebar carries a
-                read-only odds summary to complement this. */}
+            {/* Parallel markets keep a read-only odds snapshot below
+                the chart. The actual Sí/No buy controls live at the
+                top of the right column, close to the graph. */}
             {market.ammMode === 'parallel' && Array.isArray(market.legs) && !isResolved && !isPendingResolution && (
               <div style={{ marginBottom: 32 }}>
                 <div style={{
@@ -2777,23 +2786,28 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                   textTransform: 'uppercase',
                   marginBottom: 12,
                 }}>
-                  {t('points.detail.optionsVote')}
+                  {t('points.detail.oddsNow')}
                 </div>
-                <ParallelLegList
-                  market={market}
-                  legs={market.legs}
-                  outcomeImages={market.outcomeImages}
-                  outcomeCountryLabels={market.outcomeCountryLabels}
-                  onBuyClick={handleBuyClick}
-                />
+                <div style={{
+                  background: 'var(--surface1)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 14,
+                  padding: 18,
+                }}>
+                  <OddsSummary
+                    outcomes={displayOutcomes}
+                    prices={displayPrices}
+                    outcomeImages={displayOutcomeImages}
+                    outcomeCountryLabels={displayOutcomeCountryLabels}
+                  />
+                </div>
               </div>
             )}
 
             {/* Unified multi (N>2): read-only option grid under the
                 chart so the user sees every outcome's percentage. The
                 actual voting happens in the right sidebar. Parallel
-                doesn't use this grid — the leg list above already
-                shows every outcome with inline buy buttons. */}
+                uses the calmer "Odds actuales" snapshot above instead. */}
             {displayOutcomes.length > 2 && market.ammMode !== 'parallel' && (
               <div style={{
                 display: 'grid',
@@ -2914,7 +2928,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
             </div>
           </div>
 
-          {/* Right column: user-position panel + buy panel */}
+          {/* Right column: buy panel + user-position panel + holders */}
           <aside style={{
             position: 'sticky',
             top: 80,
@@ -2922,6 +2936,80 @@ export default function PointsMarketDetail({ onOpenLogin }) {
             flexDirection: 'column',
             gap: 16,
           }}>
+
+          <div style={{
+            background: 'var(--surface1)',
+            border: '1px solid var(--border)',
+            borderRadius: 14,
+            padding: 24,
+          }}>
+            <div style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              letterSpacing: '0.12em',
+              color: 'var(--text-muted)',
+              textTransform: 'uppercase',
+              marginBottom: 16,
+            }}>
+              {isResolved ? t('points.detail.marketClosed')
+               : isPendingResolution ? t('points.detail.awaitingResult')
+               : t('points.detail.chooseOutcome')}
+            </div>
+
+            {!isResolved && !isPendingResolution && !isTradingLocked && (
+              market.ammMode === 'parallel' && Array.isArray(market.legs)
+                ? <ParallelLegList
+                    market={market}
+                    legs={market.legs}
+                    outcomeImages={market.outcomeImages}
+                    outcomeCountryLabels={market.outcomeCountryLabels}
+                    onBuyClick={handleBuyClick}
+                  />
+                : <UnifiedOutcomeList
+                    outcomes={displayOutcomes}
+                    prices={displayPrices}
+                    outcomeImages={displayOutcomeImages}
+                    outcomeCountryLabels={displayOutcomeCountryLabels}
+                    outcomeIndices={displayOutcomeIndices}
+                    market={market}
+                    onBuyClick={handleBuyClick}
+                  />
+            )}
+
+            {(isResolved || isPendingResolution || isTradingLocked) && (
+              <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                {isCanceled
+                  ? 'Este mercado fue anulado porque el evento no ocurrió. No cuenta como ganado o perdido.'
+                  : isResolved
+                  ? t('points.detail.closedHint')
+                  : t('points.detail.pendingHint')}
+              </p>
+            )}
+
+            <div style={{
+              marginTop: 16,
+              paddingTop: 16,
+              borderTop: '1px solid var(--border)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              color: 'var(--text-muted)',
+              letterSpacing: '0.04em',
+              lineHeight: 1.6,
+            }}>
+              <p style={{ margin: 0 }}>
+                {t('points.detail.mxnpNote')}
+              </p>
+              {displayOutcomes.length === 2 && !isResolved && !isCanceled && (
+                <p style={{
+                  margin: '10px 0 0',
+                  paddingTop: 10,
+                  borderTop: '1px solid var(--border)',
+                }}>
+                  {t('points.detail.probExplain')}
+                </p>
+              )}
+            </div>
+          </div>
 
             {/* ── Tu posición ───────────────────────────────────────
                 Shows shares held per outcome when the user is signed in.
@@ -3074,84 +3162,6 @@ export default function PointsMarketDetail({ onOpenLogin }) {
           {/* Top holders — read-only social-proof panel. Refreshes after
               local trades and remote polling so it reflects live movement. */}
           <TopHolders marketId={market.id} refreshKey={orderBookRefresh} />
-
-          <div style={{
-            background: 'var(--surface1)',
-            border: '1px solid var(--border)',
-            borderRadius: 14,
-            padding: 24,
-          }}>
-            <div style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              letterSpacing: '0.12em',
-              color: 'var(--text-muted)',
-              textTransform: 'uppercase',
-              marginBottom: 16,
-            }}>
-              {isResolved ? t('points.detail.marketClosed')
-               : isPendingResolution ? t('points.detail.awaitingResult')
-               : market.ammMode === 'parallel' ? t('points.detail.oddsNow')
-               : t('points.detail.chooseOutcome')}
-            </div>
-
-            {/* Unified: one big button per outcome lives in the sidebar.
-                Parallel: voting moved below the chart in the main column
-                (one row per leg with Sí/No buttons); the sidebar only
-                carries a read-only odds summary to keep scanability. */}
-            {!isResolved && !isPendingResolution && !isTradingLocked && (
-              market.ammMode === 'parallel'
-                ? <OddsSummary
-                    outcomes={displayOutcomes}
-                    prices={displayPrices}
-                    outcomeImages={displayOutcomeImages}
-                    outcomeCountryLabels={displayOutcomeCountryLabels}
-                  />
-                : <UnifiedOutcomeList
-                    outcomes={displayOutcomes}
-                    prices={displayPrices}
-                    outcomeImages={displayOutcomeImages}
-                    outcomeCountryLabels={displayOutcomeCountryLabels}
-                    outcomeIndices={displayOutcomeIndices}
-                    market={market}
-                    onBuyClick={handleBuyClick}
-                  />
-            )}
-
-            {(isResolved || isPendingResolution || isTradingLocked) && (
-              <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-                {isCanceled
-                  ? 'Este mercado fue anulado porque el evento no ocurrió. No cuenta como ganado o perdido.'
-                  : isResolved
-                  ? t('points.detail.closedHint')
-                  : t('points.detail.pendingHint')}
-              </p>
-            )}
-
-            <div style={{
-              marginTop: 16,
-              paddingTop: 16,
-              borderTop: '1px solid var(--border)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              color: 'var(--text-muted)',
-              letterSpacing: '0.04em',
-              lineHeight: 1.6,
-            }}>
-              <p style={{ margin: 0 }}>
-                {t('points.detail.mxnpNote')}
-              </p>
-              {displayOutcomes.length === 2 && !isResolved && !isCanceled && (
-                <p style={{
-                  margin: '10px 0 0',
-                  paddingTop: 10,
-                  borderTop: '1px solid var(--border)',
-                }}>
-                  {t('points.detail.probExplain')}
-                </p>
-              )}
-            </div>
-          </div>
 
           </aside>
         </div>

@@ -1,12 +1,12 @@
 /**
- * ATP tennis generator — TOURNAMENT-WINNER markets.
+ * ATP tennis generator — top-tier tournament-winner + selected H2H markets.
  *
- * Earlier versions of this generator emitted one binary head-to-head
- * market per match, but matches resolve in 2-3 hours after first
- * serve and the market never had time to attract liquidity. We now
- * emit ONE parallel market per upcoming top-tier tournament:
+ * We emit ONE parallel market per upcoming top-tier tournament:
  *   "¿Quién gana el <Tournament>?"
  * with confirmed draw entrants plus "Otro" for dark-horse winners.
+ * We also emit a bounded number of binary head-to-head markets for
+ * matches in those same top-tier tournaments, but only when there is
+ * enough lead time before first serve.
  *
  * Mirrors the golf.js (PGA) generator shape — the cron's parallel-
  * shape leg matcher handles tennis tournament resolution unchanged
@@ -20,8 +20,11 @@
 
 const ESPN = 'https://site.api.espn.com/apis/site/v2/sports/tennis/atp/scoreboard';
 
-const MAX_FIELD_OUTCOMES = 12;
+const MAX_FIELD_OUTCOMES = 32;
 const MIN_CONFIRMED_DRAW_PLAYERS = 8;
+const MAX_HEAD_TO_HEAD_MARKETS = 8;
+const HEAD_TO_HEAD_WINDOW_DAYS = 7;
+const MIN_HEAD_TO_HEAD_LEAD_HOURS = 3;
 
 // Ranking/favorite priority only. These names are no longer used as
 // market entrants by themselves; they only sort players that ESPN
@@ -66,6 +69,12 @@ function numberOrNull(value) {
   if (value == null || value === '') return null;
   const num = Number(String(value).replace(/[^0-9.-]+/g, ''));
   return Number.isFinite(num) ? num : null;
+}
+
+function ymdFromIso(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
 }
 
 function isPlaceholderPlayerName(name) {
@@ -134,6 +143,95 @@ function sortEntrants(a, b) {
     || fieldPriority(a) - fieldPriority(b)
     || (a.order ?? 9999) - (b.order ?? 9999)
     || String(a.name || '').localeCompare(String(b.name || ''));
+}
+
+function heuristicTournamentProbabilities(field, fullFieldSize) {
+  const listedCount = field.length;
+  if (listedCount <= 0) return [];
+  const totalField = Math.max(Number(fullFieldSize) || listedCount, listedCount);
+  const remainingCount = Math.max(0, totalField - listedCount);
+  const otherProbability = remainingCount > 0
+    ? Math.min(0.5, Math.max(0.16, (remainingCount / totalField) * 0.55))
+    : 0.04;
+  const listedMass = 1 - otherProbability;
+  const weights = field.map((player, index) => {
+    const strength = player.seed ?? player.rank ?? fieldPriority(player) ?? index + 1;
+    return 1 / Math.pow(Math.max(1, Number(strength) || index + 1), 0.82);
+  });
+  const totalWeight = weights.reduce((sum, value) => sum + value, 0) || listedCount;
+  return [
+    ...weights.map(weight => (weight / totalWeight) * listedMass),
+    otherProbability,
+  ];
+}
+
+function eventCompetitions(event) {
+  const groupings = Array.isArray(event?.groupings) ? event.groupings : [];
+  const mens = groupings.find(tennisGroupingIsMensSingles);
+  return Array.isArray(mens?.competitions) ? mens.competitions : [];
+}
+
+function headToHeadCompetitors(competition) {
+  const competitors = Array.isArray(competition?.competitors) ? competition.competitors : [];
+  if (competitors.length !== 2) return null;
+  const players = competitors.map((competitor, index) => tennisCompetitorToEntrant(competitor, index));
+  if (players.some(player => !player)) return null;
+  if (normalizeName(players[0].name) === normalizeName(players[1].name)) return null;
+  return players;
+}
+
+function buildHeadToHeadMarket(event, competition, players) {
+  const startIso = competition?.date || event?.date;
+  const startMs = new Date(startIso).getTime();
+  if (!Number.isFinite(startMs)) return null;
+  const nowMs = Date.now();
+  if (startMs < nowMs + MIN_HEAD_TO_HEAD_LEAD_HOURS * 3600_000) return null;
+  if (startMs > nowMs + HEAD_TO_HEAD_WINDOW_DAYS * 86_400_000) return null;
+
+  const matchId = String(competition?.id || '').trim();
+  if (!matchId) return null;
+  const eventId = String(event?.id || '').trim();
+  if (!eventId) return null;
+  const roundLabel = competition?.round?.displayName || competition?.round?.name || null;
+  const p0 = players[0];
+  const p1 = players[1];
+  const startTime = new Date(startMs).toISOString();
+
+  return {
+    source: 'espn-atp-match',
+    source_event_id: `atp-match:${matchId}`,
+    sport: 'tennis',
+    league: 'atp',
+    question: `¿Quién gana: ${p0.name} vs ${p1.name} en el ${event.name}?`,
+    category: 'deportes',
+    icon: '🎾',
+    outcomes: [p0.name, p1.name],
+    outcome_images: [headshot(p0.id), headshot(p1.id)],
+    seed_liquidity: 1000,
+    start_time: new Date().toISOString(),
+    end_time: startTime,
+    amm_mode: 'unified',
+    resolver_type: 'sports_api',
+    resolver_config: {
+      source: 'espn-atp-match',
+      shape: 'binary',
+      eventId,
+      matchId,
+      dateYmd: ymdFromIso(startTime),
+      homeName: p0.name,
+      awayName: p1.name,
+    },
+    source_data: {
+      eventId,
+      matchId,
+      tournamentName: event.name,
+      roundLabel,
+      startDateIso: startTime,
+      tier: event?.major === true ? 'grand-slam' : 'atp-500-plus',
+      fieldSource: 'espn-mens-singles-draw',
+      players: players.map(p => ({ id: p.id, name: p.name, seed: p.seed, rank: p.rank })),
+    },
+  };
 }
 
 export function extractAtpMensSinglesField(event) {
@@ -251,6 +349,7 @@ export async function generateTennisMarkets({ horizonDays = 60 } = {}) {
       seed: player.seed,
       rank: player.rank,
     }));
+    const suggestedProbabilities = heuristicTournamentProbabilities(eventField, fullDrawField.length);
 
     const legs = [
       ...eventField.map(p => ({ label: p.name, driverId: p.id })),
@@ -297,8 +396,25 @@ export async function generateTennisMarkets({ horizonDays = 60 } = {}) {
         fieldSource: 'espn-mens-singles-draw',
         fieldUpdatedAt: new Date().toISOString(),
         rankingFallbackDisabled: true,
+        listedFieldSize: eventField.length,
+        fieldCap: MAX_FIELD_OUTCOMES,
+        suggestedPricing: {
+          source: 'source-signals:tennis-seed-field',
+          probabilities: suggestedProbabilities,
+          rationale: 'Probabilidad inicial heurística por seed/ranking y masa de Otro para jugadores no listados.',
+        },
       },
     });
+
+    const h2hSpecs = eventCompetitions(ev)
+      .map(competition => {
+        const players = headToHeadCompetitors(competition);
+        return players ? buildHeadToHeadMarket(ev, competition, players) : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => new Date(a.end_time).getTime() - new Date(b.end_time).getTime())
+      .slice(0, MAX_HEAD_TO_HEAD_MARKETS);
+    specs.push(...h2hSpecs);
   }
   return specs;
 }

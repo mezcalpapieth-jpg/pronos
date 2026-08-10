@@ -32,3 +32,20 @@ test('points auto-resolver queues chart API failures for manual review', () => {
   assert.match(SOURCE, /El lector automático de charts no pudo confirmar el resultado/);
   assert.match(SOURCE, /api_chart_manual_review_queue_failed/);
 });
+
+test('points auto-resolver settles eliminated tennis and golf child legs early', () => {
+  assert.match(SOURCE, /readEspnAtpMatchWinner/);
+  assert.match(SOURCE, /function isEarlyTournamentLegSource/);
+  assert.match(SOURCE, /'espn-atp-tournament', 'espn-pga'/);
+  assert.match(SOURCE, /m\.resolver_config->>'shape' = 'parallel'/);
+  assert.match(SOURCE, /m\.resolver_config->>'source' IN \('espn-atp-tournament', 'espn-pga'\)/);
+  assert.match(SOURCE, /m\.end_time > NOW\(\)/);
+  assert.match(SOURCE, /function resolveEliminatedParallelLegs/);
+  assert.match(SOURCE, /result\?\.eliminatedCompetitors/);
+  assert.match(SOURCE, /releaseOpenLimitOrdersForMarkets\(client, targetIds/);
+  assert.match(SOURCE, /SET status = 'resolved',\s*outcome = 1/);
+  assert.match(SOURCE, /resolved_by = \$1/);
+  assert.match(SOURCE, /resolver:\$\{cfg\.source\}:early-elimination/);
+  assert.match(SOURCE, /WHERE parent_id = \$1\s+ORDER BY id ASC/);
+  assert.match(SOURCE, /row && row\.status === 'active'/);
+});

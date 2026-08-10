@@ -163,6 +163,13 @@ function formatSuggestedPricing(row) {
     .join(' · ');
 }
 
+function formatOutcomeList(outcomes, limit = 14) {
+  if (!Array.isArray(outcomes) || outcomes.length === 0) return '—';
+  const visible = outcomes.slice(0, limit).join(' · ');
+  const remaining = outcomes.length - limit;
+  return remaining > 0 ? `${visible} · +${remaining} más` : visible;
+}
+
 function formatSuggestedPricingSource(pricing) {
   if (!pricing?.source) return 'fuente no especificada';
   if (pricing.source === 'uniform-default') return 'balanceado';
@@ -1784,6 +1791,7 @@ const DEFAULT_CRYPTO_INTERVAL_OPTIONS = [
   { minutes: 30, label: '30 minutos' },
   { minutes: 60, label: '1 hora' },
 ];
+const MAX_PENDING_EDIT_OUTCOMES = 64;
 
 // ─── Markets table ───────────────────────────────────────────────────────────
 function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
@@ -3590,6 +3598,12 @@ function StatCard({ label, value }) {
 function PendingMarketsTable({ onQueueChange }) {
   const [rows, setRows] = useState(null);
   const [filter, setFilter] = useState('pending');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [sportFilter, setSportFilter] = useState('all');
+  const [leagueFilter, setLeagueFilter] = useState('all');
+  const [cryptoTypeFilter, setCryptoTypeFilter] = useState('all');
+  const [geoFilter, setGeoFilter] = useState('all');
+  const [topicFilter, setTopicFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -3601,11 +3615,62 @@ function PendingMarketsTable({ onQueueChange }) {
   const [cryptoIntervalSaving, setCryptoIntervalSaving] = useState(false);
   const [cryptoIntervalError, setCryptoIntervalError] = useState(null);
 
+  const showSportFilters = categoryFilter === 'deportes';
+  const showCryptoFilters = categoryFilter === 'crypto';
+  const showGeoFilters = categoryFilter === 'mexico';
+  const showTopicFilters = categoryFilter === 'mexico' || categoryFilter === 'musica';
+  const showLeagueFilters = showSportFilters
+    && (sportFilter === 'soccer' || sportFilter === 'baseball' || sportFilter === 'combate');
+  const activeTopicFilters = categoryFilter === 'musica'
+    ? ADMIN_ENTERTAINMENT_TOPIC_FILTERS
+    : ADMIN_MEXICO_TOPIC_FILTERS;
+  const activeLeagueFilters = sportFilter === 'baseball'
+    ? ADMIN_BASEBALL_LEAGUES
+    : sportFilter === 'combate'
+      ? ADMIN_COMBATE_LEAGUES
+      : ADMIN_SOCCER_LEAGUES;
+
+  function pendingFiltersPayload() {
+    const filters = {};
+    if (categoryFilter !== 'all') filters.category = categoryFilter;
+    if (categoryFilter === 'deportes' && sportFilter !== 'all') filters.sport = sportFilter;
+    if (showLeagueFilters && leagueFilter !== 'all') filters.league = leagueFilter;
+    if (categoryFilter === 'crypto' && cryptoTypeFilter !== 'all') filters.crypto_type = cryptoTypeFilter;
+    if (categoryFilter === 'mexico' && geoFilter !== 'all') filters.geo = geoFilter;
+    if ((categoryFilter === 'mexico' || categoryFilter === 'musica') && topicFilter !== 'all') filters.topic = topicFilter;
+    return filters;
+  }
+
+  function selectCategoryFilter(next) {
+    setCategoryFilter(next);
+    setSportFilter('all');
+    setLeagueFilter('all');
+    setCryptoTypeFilter('all');
+    setGeoFilter('all');
+    setTopicFilter('all');
+  }
+
+  function selectSportFilter(next) {
+    setSportFilter(next);
+    if (next !== 'soccer' && next !== 'baseball' && next !== 'combate') {
+      setLeagueFilter('all');
+    }
+  }
+
   async function load() {
     setLoading(true);
     setErr(null);
     try {
-      const r = await adminListPendingMarkets(filter);
+      const q = buildAdminMarketsQuery({
+        status: filter,
+        categoryFilter,
+        sportFilter,
+        leagueFilter,
+        cryptoTypeFilter,
+        geoFilter,
+        topicFilter,
+      });
+      const r = await adminListPendingMarkets(q);
       setRows(r.pending || []);
     } catch (e) {
       setRows([]);
@@ -3614,7 +3679,15 @@ function PendingMarketsTable({ onQueueChange }) {
       setLoading(false);
     }
   }
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [filter]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [
+    filter,
+    categoryFilter,
+    sportFilter,
+    leagueFilter,
+    cryptoTypeFilter,
+    geoFilter,
+    topicFilter,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -3728,7 +3801,7 @@ function PendingMarketsTable({ onQueueChange }) {
     }
     setBulkBusy(true);
     try {
-      const r = await adminRefreshAllPendingPricing();
+      const r = await adminRefreshAllPendingPricing(pendingFiltersPayload());
       await load();
       alert(
         `✓ Odds revisados: ${r.refreshedCount || 0}/${r.checked || 0}.\n`
@@ -3751,7 +3824,7 @@ function PendingMarketsTable({ onQueueChange }) {
     }
     setBulkBusy(true);
     try {
-      const r = await adminApproveAllPendingMarkets();
+      const r = await adminApproveAllPendingMarkets(null, pendingFiltersPayload());
       await load();
       const msg = r.failedCount > 0
         ? `Aprobados ${r.approvedCount} de ${r.checked}. ${r.failedCount} fallaron — revisa el historial.`
@@ -3886,6 +3959,32 @@ function PendingMarketsTable({ onQueueChange }) {
     } catch (e) {
       alert(`Diagnóstico falló: ${e.code || e.message}`);
     }
+  }
+
+  function renderFilterGroup(options, value, onSelect, { compact = false } = {}) {
+    return (
+      <div style={{ display: 'flex', gap: 8, marginBottom: compact ? 12 : 16, flexWrap: 'wrap', alignItems: 'center' }}>
+        {options.map(option => (
+          <button
+            key={option.key}
+            onClick={() => onSelect(option.key)}
+            style={{
+              padding: compact ? '5px 10px' : '6px 12px',
+              borderRadius: compact ? 14 : 16,
+              border: `1px solid ${value === option.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
+              background: value === option.key ? 'rgba(0,232,122,0.1)' : 'transparent',
+              color: value === option.key ? 'var(--green)' : 'var(--text-secondary)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: compact ? 10 : 11,
+              cursor: 'pointer',
+              letterSpacing: '0.04em',
+            }}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    );
   }
 
   const pendingCount = rows?.filter(r => r.status === 'pending').length || 0;
@@ -4116,6 +4215,13 @@ function PendingMarketsTable({ onQueueChange }) {
 
       </div>
 
+      {renderFilterGroup(MARKET_CATEGORY_FILTERS, categoryFilter, selectCategoryFilter)}
+      {showGeoFilters && renderFilterGroup(ADMIN_GEO_FILTERS, geoFilter, setGeoFilter, { compact: true })}
+      {showTopicFilters && renderFilterGroup(activeTopicFilters, topicFilter, setTopicFilter, { compact: true })}
+      {showSportFilters && renderFilterGroup(ADMIN_SPORT_FILTERS, sportFilter, selectSportFilter, { compact: true })}
+      {showLeagueFilters && renderFilterGroup(activeLeagueFilters, leagueFilter, setLeagueFilter, { compact: true })}
+      {showCryptoFilters && renderFilterGroup(ADMIN_CRYPTO_FILTERS, cryptoTypeFilter, setCryptoTypeFilter, { compact: true })}
+
       <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.6 }}>
         El agente (cron diario <code>/api/cron/generate-markets-pending</code>) descubre eventos
         y los deja aquí para revisión. Aprobar crea el mercado con odds/liquidez sugeridos
@@ -4191,6 +4297,8 @@ function PendingMarketsTable({ onQueueChange }) {
                   letterSpacing: '0.04em', marginBottom: 4, textTransform: 'uppercase',
                 }}>
                   #{r.id} · {r.source} · {r.category} · {r.ammMode}
+                  {r.sport && <> · {r.sport}</>}
+                  {r.league && <>/{r.league}</>}
                   {r.sourceData?.competitionName && <> · {r.sourceData.competitionName}</>}
                   {r.resolverType && <> · resolver: {r.resolverType}</>}
                 </div>
@@ -4201,7 +4309,7 @@ function PendingMarketsTable({ onQueueChange }) {
                   fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)',
                   marginTop: 4, letterSpacing: '0.04em',
                 }}>
-                  Opciones: {Array.isArray(r.outcomes) ? r.outcomes.join(' · ') : '—'}
+                  Opciones ({Array.isArray(r.outcomes) ? r.outcomes.length : 0}): {formatOutcomeList(r.outcomes)}
                   {' · Cierra: '}{formatAdminMarketDate(r.endTime)}
                   {' · Seed: '}
                   {Array.isArray(r.seedLiquidities) && r.seedLiquidities.length === r.outcomes?.length
@@ -4349,11 +4457,15 @@ function PendingMarketEditModal({ row, onClose, onSaved }) {
   const initialSeeds = Array.isArray(row.seedLiquidities) && row.seedLiquidities.length === initialOutcomes.length
     ? row.seedLiquidities
     : initialOutcomes.map(() => Number(row.seedLiquidity || 500));
+  const initialImages = Array.isArray(row.outcomeImages) && row.outcomeImages.length === initialOutcomes.length
+    ? row.outcomeImages.map(url => url || '')
+    : initialOutcomes.map(() => '');
 
   const [question, setQuestion] = useState(row.question || '');
   const [category, setCategory] = useState(row.category || 'general');
   const [ammMode, setAmmMode] = useState(row.ammMode === 'parallel' ? 'parallel' : 'unified');
   const [outcomes, setOutcomes] = useState(initialOutcomes);
+  const [outcomeImages, setOutcomeImages] = useState(initialImages);
   const [seedLiquidities, setSeedLiquidities] = useState(initialSeeds);
   const [startDate, setStartDate] = useState(isoToDdMmYyyy(row.startTime));
   const [startHour, setStartHour] = useState(isoToHourPart(row.startTime));
@@ -4370,28 +4482,39 @@ function PendingMarketEditModal({ row, onClose, onSaved }) {
     setOutcomes(prev => prev.map((v, i) => i === idx ? value : v));
   }
 
+  function updateOutcomeImage(idx, value) {
+    setOutcomeImages(prev => prev.map((v, i) => i === idx ? value : v));
+  }
+
   function updateLiquidity(idx, value) {
     setSeedLiquidities(prev => prev.map((v, i) => i === idx ? value : v));
   }
 
   function addOutcome() {
-    if (outcomes.length >= 10) return;
+    if (outcomes.length >= MAX_PENDING_EDIT_OUTCOMES) return;
     setOutcomes(prev => [...prev, '']);
+    setOutcomeImages(prev => [...prev, '']);
     setSeedLiquidities(prev => [...prev, 500]);
   }
 
   function removeOutcome(idx) {
     if (outcomes.length <= 2) return;
     setOutcomes(prev => prev.filter((_, i) => i !== idx));
+    setOutcomeImages(prev => prev.filter((_, i) => i !== idx));
     setSeedLiquidities(prev => prev.filter((_, i) => i !== idx));
   }
 
   async function save() {
     const pairs = outcomes
-      .map((outcome, i) => ({ outcome: String(outcome || '').trim(), liquidity: seedLiquidities[i] }))
+      .map((outcome, i) => ({
+        outcome: String(outcome || '').trim(),
+        liquidity: seedLiquidities[i],
+        image: String(outcomeImages[i] || '').trim(),
+      }))
       .filter(p => p.outcome);
     const cleanedOutcomes = pairs.map(p => p.outcome);
     const cleanedLiquidities = pairs.map(p => Number(p.liquidity));
+    const cleanedImages = pairs.map(p => p.image);
     if (question.trim().length < 8) {
       setErr('La pregunta debe tener al menos 8 caracteres.');
       return;
@@ -4436,6 +4559,7 @@ function PendingMarketEditModal({ row, onClose, onSaved }) {
         icon: null,
         ammMode,
         outcomes: cleanedOutcomes,
+        outcomeImages: cleanedImages,
         seedLiquidity: cleanedLiquidities[0] || 500,
         seedLiquidities: cleanedLiquidities,
         startTime: startIso,
@@ -4559,7 +4683,15 @@ function PendingMarketEditModal({ row, onClose, onSaved }) {
               </div>
             )}
             {outcomes.map((outcome, i) => (
-              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div
+                key={i}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '24px minmax(160px, 1fr) minmax(160px, 1fr) 132px auto',
+                  gap: 8,
+                  alignItems: 'center',
+                }}
+              >
                 <span style={{
                   flexShrink: 0,
                   width: 24,
@@ -4568,13 +4700,19 @@ function PendingMarketEditModal({ row, onClose, onSaved }) {
                   color: 'var(--text-muted)',
                   letterSpacing: '0.06em',
                 }}>
-                  {String.fromCharCode(65 + i)}
+                  {i + 1}
                 </span>
                 <input
                   value={outcome}
                   onChange={(e) => updateOutcome(i, e.target.value)}
                   placeholder={`Opción ${i + 1}`}
                   style={{ ...inputStyle, flex: 1 }}
+                />
+                <input
+                  value={outcomeImages[i] || ''}
+                  onChange={(e) => updateOutcomeImage(i, e.target.value)}
+                  placeholder="Logo URL opcional"
+                  style={{ ...inputStyle, minWidth: 0 }}
                 />
                 <input
                   type="number"
@@ -4604,14 +4742,14 @@ function PendingMarketEditModal({ row, onClose, onSaved }) {
                       cursor: 'pointer',
                       fontFamily: 'var(--font-mono)',
                       fontSize: 12,
-                    }}
-                  >
-                    ×
-                  </button>
+                  }}
+                >
+                  ×
+                </button>
                 )}
               </div>
             ))}
-            {outcomes.length < 10 && (
+            {outcomes.length < MAX_PENDING_EDIT_OUTCOMES && (
               <button
                 type="button"
                 onClick={addOutcome}

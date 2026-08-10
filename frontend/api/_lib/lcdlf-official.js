@@ -13,18 +13,18 @@ const DEFAULT_CLOSE_MINUTE = 0;
 
 const DEFAULT_RESIDENTS = [
   'Aldo Rendón',
-  'Aranza Ruiz',
+  'Arantza Ruiz',
   'Brianda Deyanara',
   'Cynthia Klitbo',
   'Ernesto Laguardia',
   'Ese Pérez',
   'Fede Vigevani',
   'Flor Vigna',
-  'Gena Garoa',
+  'Gema Garoa',
   'Karina Torres',
   'Luis Chaparro',
   'Mariana Ochoa',
-  'Masael Atlántida',
+  'Masad Altamimi',
   'Memo Schutz',
   'Moisés Peñaloza',
   'Ximena Herrera',
@@ -81,12 +81,31 @@ function titleFromSlug(slug) {
     .join(' ');
 }
 
+function escapeRegExp(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function getBaseUrl(baseUrl = process.env.LCDLF_BASE_URL || LCDLF_DEFAULT_BASE_URL) {
   try {
     return new URL(baseUrl).origin;
   } catch {
     return LCDLF_DEFAULT_BASE_URL;
   }
+}
+
+function lcdlfStatusFromKey(key, rawFallback = '') {
+  const normalized = String(key || '').trim().toLowerCase();
+  if (normalized === 'eliminado') return { key: 'eliminado', label: 'Eliminado/a', raw: rawFallback || 'ELIMINADO' };
+  if (normalized === 'nominado') return { key: 'nominado', label: 'Nominado/a', raw: rawFallback || 'NOMINADO' };
+  if (normalized === 'en_casa') return { key: 'en_casa', label: 'En casa', raw: rawFallback || 'EN CASA' };
+  return null;
+}
+
+function statusFromResidentEntry(entry) {
+  if (!entry || typeof entry !== 'object') return null;
+  const keyed = lcdlfStatusFromKey(entry.statusKey, entry.rawStatus || entry.statusLabel);
+  if (keyed) return keyed;
+  return normalizeLcdlfStatus(entry.rawStatus || entry.statusLabel || entry.status || '');
 }
 
 function normalizeResidentEntry(entry) {
@@ -100,7 +119,15 @@ function normalizeResidentEntry(entry) {
     const name = String(entry.name || entry.label || '').trim();
     const slug = String(entry.slug || '').trim() || (name ? slugifyLcdlfResidentName(name) : '');
     if (!name && !slug) return null;
-    return { name: name || titleFromSlug(slug), slug };
+    const status = statusFromResidentEntry(entry);
+    return {
+      name: name || titleFromSlug(slug),
+      slug,
+      url: entry.url || null,
+      statusKey: status?.key || null,
+      statusLabel: status?.label || null,
+      rawStatus: status?.raw || null,
+    };
   }
   return null;
 }
@@ -156,9 +183,81 @@ export function normalizeLcdlfStatus(value) {
   return null;
 }
 
-export function parseLcdlfResidentStatus(html) {
-  const visible = stripHtml(html);
-  return normalizeLcdlfStatus(visible);
+function findResidentHeroHtml(html, resident) {
+  const source = String(html || '');
+  const normalized = normalizeResidentEntry(resident);
+  if (!normalized) return '';
+  const slug = escapeRegExp(normalized.slug);
+  const h1SlugRe = slug
+    ? new RegExp(`<h1\\b[\\s\\S]{0,2200}?/habitantes/${slug}\\b`, 'i')
+    : null;
+  const h1Match = h1SlugRe ? h1SlugRe.exec(source) : null;
+  let anchorIndex = h1Match?.index ?? -1;
+
+  if (anchorIndex < 0 && slug) {
+    const slugRe = new RegExp(`/habitantes/${slug}\\b`, 'gi');
+    let match;
+    while ((match = slugRe.exec(source))) {
+      const before = source.slice(Math.max(0, match.index - 1800), match.index);
+      if (/<h1\b/i.test(before)) {
+        anchorIndex = match.index;
+        break;
+      }
+    }
+  }
+
+  if (anchorIndex < 0) return '';
+  const start = Math.max(0, anchorIndex - 4500);
+  let end = Math.min(source.length, anchorIndex + 1600);
+  const after = source.slice(anchorIndex + 1, end);
+  const nextSection = after.search(/<section\b/i);
+  if (nextSection >= 0) end = anchorIndex + 1 + nextSection;
+  return source.slice(start, end);
+}
+
+export function parseLcdlfResidentStatus(html, resident = null) {
+  if (!resident) return normalizeLcdlfStatus(html);
+  const source = String(html || '');
+  const hero = findResidentHeroHtml(html, resident);
+  if (!hero) return source.length <= 12000 ? normalizeLcdlfStatus(source) : null;
+  return normalizeLcdlfStatus(hero);
+}
+
+function cleanResidentCardName(label, slug) {
+  const cleaned = stripHtml(label)
+    .replace(/\b(?:ELIMINAD[OA]|NOMINAD[OA]|EN\s+CASA)\b/gi, ' ')
+    .replace(/\bVer\s+m[aá]s\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return titleFromSlug(slug);
+  if (cleaned.length > 42 || /\b(?:actor|actriz|cantante|influencer|conductor|conductora|creador|creadora)\b/i.test(cleaned)) {
+    return titleFromSlug(slug);
+  }
+  return cleaned;
+}
+
+function nearbyCardTitle(source, anchorIndex) {
+  const start = Math.max(0, anchorIndex - 1800);
+  const chunk = source.slice(start, anchorIndex);
+  const matches = [...chunk.matchAll(/data-card-title=["']([^"']+)["']/gi)];
+  if (!matches.length) return null;
+  const last = matches[matches.length - 1];
+  return {
+    title: stripHtml(last[1]),
+    index: start + last.index,
+  };
+}
+
+function cardHtmlForAnchor(source, anchorIndex, titleInfo) {
+  const start = titleInfo?.index != null
+    ? Math.max(0, source.lastIndexOf('<', titleInfo.index))
+    : Math.max(0, anchorIndex - 900);
+  const after = source.slice(anchorIndex + 1);
+  const nextCard = after.search(/\bdata-card-title=["']/i);
+  const end = nextCard >= 0
+    ? anchorIndex + 1 + nextCard
+    : Math.min(source.length, anchorIndex + 5000);
+  return source.slice(start, end);
 }
 
 export function extractResidentsFromIndexHtml(html, {
@@ -166,15 +265,22 @@ export function extractResidentsFromIndexHtml(html, {
 } = {}) {
   const residents = [];
   const base = getBaseUrl(baseUrl);
+  const source = String(html || '');
   const anchorRe = /<a\b[^>]*href=["']([^"']*\/habitantes\/([^"'/#?]+)[^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi;
   let match;
-  while ((match = anchorRe.exec(String(html || '')))) {
+  while ((match = anchorRe.exec(source))) {
     const slug = cleanUrl(match[2]).replace(/^\/+|\/+$/g, '');
-    const label = stripHtml(match[3]);
+    const cardTitle = nearbyCardTitle(source, match.index);
+    const cardHtml = cardHtmlForAnchor(source, match.index, cardTitle);
+    const status = normalizeLcdlfStatus(cardHtml);
+    const label = cardTitle?.title || cleanResidentCardName(match[3], slug);
     residents.push({
       name: label || titleFromSlug(slug),
       slug,
       url: match[1].startsWith('http') ? cleanUrl(match[1]) : `${base}${cleanUrl(match[1]).startsWith('/') ? '' : '/'}${cleanUrl(match[1])}`,
+      statusKey: status?.key || null,
+      statusLabel: status?.label || null,
+      rawStatus: status?.raw || null,
     });
   }
   return uniqueResidents(residents);
@@ -241,16 +347,17 @@ export async function fetchLcdlfResidentStatus(resident, {
   const url = resident?.url || residentUrl(normalized, { baseUrl });
   try {
     const response = await fetchFreshText(url, { fetchImpl, cacheBust: true });
-    const parsed = response.ok ? parseLcdlfResidentStatus(response.text) : null;
+    const parsed = response.ok ? parseLcdlfResidentStatus(response.text, normalized) : null;
+    const status = parsed || (response.ok ? statusFromResidentEntry(normalized) : null);
     return {
       name: normalized.name,
       slug: normalized.slug,
       url,
       ok: response.ok,
       httpStatus: response.status,
-      statusKey: parsed?.key || null,
-      statusLabel: parsed?.label || null,
-      rawStatus: parsed?.raw || null,
+      statusKey: status?.key || null,
+      statusLabel: status?.label || null,
+      rawStatus: status?.raw || null,
       checkedAt: now.toISOString(),
     };
   } catch (e) {
@@ -277,7 +384,9 @@ export async function readLcdlfOfficialSnapshot({
 } = {}) {
   const configured = residents ? uniqueResidents(residents) : loadLcdlfResidents();
   const discovered = residents ? [] : await discoverResidents({ fetchImpl, baseUrl, now });
-  const roster = discovered.length >= 6 ? discovered : configured;
+  const roster = residents
+    ? configured
+    : uniqueResidents(discovered.length >= 6 ? [...discovered, ...configured] : configured);
   const checks = await Promise.allSettled(
     roster.map(row => fetchLcdlfResidentStatus(row, { fetchImpl, baseUrl, now })),
   );
@@ -304,7 +413,7 @@ export async function readLcdlfOfficialSnapshot({
   const nominated = rows.filter(row => row.statusKey === 'nominado');
   const eliminated = rows.filter(row => row.statusKey === 'eliminado');
   const active = rows.filter(row => row.statusKey === 'en_casa' || row.statusKey === 'nominado');
-  const usable = parsedCount >= Math.min(2, rows.length || 2);
+  const usable = parsedCount >= 1;
 
   return {
     source: LCDLF_SOURCE,

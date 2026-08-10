@@ -583,7 +583,10 @@ export async function fetchTopHolders(marketId, { limit = 10 } = {}) {
 
 // ─── Admin — pending markets (agent-generated queue) ───────────────────────
 export async function adminListPendingMarkets(status = 'pending') {
-  return getJson(`/api/points/admin/pending-markets?status=${encodeURIComponent(status)}`);
+  const query = status instanceof URLSearchParams
+    ? status
+    : new URLSearchParams({ status: String(status || 'pending') });
+  return getJson(`/api/points/admin/pending-markets?${query.toString()}`);
 }
 
 export async function adminListTaskCounts() {
@@ -626,8 +629,8 @@ export async function adminRefreshPendingPricing(id) {
   return postJson('/api/points/admin/pending-markets', { id, action: 'refresh_pricing' });
 }
 
-export async function adminRefreshAllPendingPricing() {
-  return postJson('/api/points/admin/pending-markets', { action: 'refresh_pricing_all' });
+export async function adminRefreshAllPendingPricing(filters) {
+  return postJson('/api/points/admin/pending-markets', { action: 'refresh_pricing_all', filters });
 }
 
 export async function adminEditPendingMarket(id, patch, note) {
@@ -636,8 +639,8 @@ export async function adminEditPendingMarket(id, patch, note) {
 
 // Bulk-approve every pending row. Backend does per-row transactions so
 // partial failure is tolerated; returns `{ checked, approvedCount, failedCount, failures }`.
-export async function adminApproveAllPendingMarkets(note) {
-  return postJson('/api/points/admin/pending-markets', { action: 'approve_all', note });
+export async function adminApproveAllPendingMarkets(note, filters) {
+  return postJson('/api/points/admin/pending-markets', { action: 'approve_all', note, filters });
 }
 
 // One-shot: retrofit resolver_type + resolver_config on already-approved

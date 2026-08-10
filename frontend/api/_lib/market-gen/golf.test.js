@@ -64,6 +64,9 @@ test('PGA generator uses confirmed ESPN competitors, not the static ranking list
     assert.equal(specs[0].source_data.fieldSource, 'espn-scoreboard-competitors');
     assert.equal(specs[0].source_data.confirmedFieldSize, competitors.length);
     assert.equal(specs[0].source_data.rankingFallbackDisabled, true);
+    assert.equal(specs[0].source_data.listedFieldSize, competitors.length);
+    assert.equal(specs[0].source_data.fieldCap, 40);
+    assert.equal(specs[0].source_data.suggestedPricing.probabilities.length, specs[0].outcomes.length);
     assert.equal(specs[0].outcomes.includes('Scottie Scheffler'), false);
     assert.equal(specs[0].outcomes.includes('Rory McIlroy'), true);
     assert.equal(specs[0].outcomes.at(-1), 'Otro');
@@ -71,6 +74,29 @@ test('PGA generator uses confirmed ESPN competitors, not the static ranking list
       specs[0].resolver_config.legs.map(leg => leg.label),
       specs[0].outcomes,
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('PGA generator caps large confirmed fields at 40 listed golfers plus Otro', async () => {
+  const originalFetch = globalThis.fetch;
+  const competitors = Array.from({ length: 45 }, (_, index) =>
+    golfer(String(9000 + index), `Golfer ${index + 1}`, index + 1),
+  );
+
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({ events: [golfEvent({ competitors })] }),
+  });
+
+  try {
+    const specs = await generateGolfMarkets();
+    assert.equal(specs.length, 1);
+    assert.equal(specs[0].source_data.confirmedFieldSize, 45);
+    assert.equal(specs[0].source_data.listedFieldSize, 40);
+    assert.equal(specs[0].outcomes.length, 41);
+    assert.equal(specs[0].outcomes.at(-1), 'Otro');
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -24,6 +24,7 @@ import { withTransaction } from '../_lib/db-tx.js';
 import { bestEffortInsertPointsPriceSnapshot } from '../_lib/points-price-snapshots.js';
 import { executeTriggeredLimitOrders, lockedReservedShares } from '../_lib/points-limit-orders.js';
 import { assertCryptoTradeAllowed } from '../_lib/points-crypto-trade-guard.js';
+import { normalizeExecutableSellShares } from '../_lib/points-sell-shares.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 
@@ -111,15 +112,17 @@ export default async function handler(req, res) {
       const costBasis = Number(p.cost_basis);
       const realized = Number(p.realized_pnl || 0);
       const reservedShares = await lockedReservedShares(client, { marketId: mid, username, outcomeIndex: oi });
-      if (held - reservedShares < n) {
-        const err = new Error('insufficient_available_shares'); err.status = 400; throw err;
-      }
+      const { sharesToSell } = normalizeExecutableSellShares({
+        requestedShares: n,
+        heldShares: held,
+        reservedShares,
+      });
 
       let quote;
       try {
         quote = reserves.length === 2
-          ? binarySellQuote(reserves, oi, n)
-          : multiSellQuote(reserves, oi, n);
+          ? binarySellQuote(reserves, oi, sharesToSell)
+          : multiSellQuote(reserves, oi, sharesToSell);
       } catch (e) {
         const err = new Error('invalid_quote'); err.status = 400; err.detail = e.message; throw err;
       }
@@ -159,9 +162,9 @@ export default async function handler(req, res) {
 
       // Average-cost realized PnL
       const avgCost = held > 0 ? costBasis / held : 0;
-      const soldCostBasis = avgCost * n;
+      const soldCostBasis = avgCost * sharesToSell;
       const addedRealized = quote.collateralOut - soldCostBasis;
-      const newShares = held - n;
+      const newShares = Math.max(0, held - sharesToSell);
       const newCostBasis = newShares > 0 ? costBasis - soldCostBasis : 0;
       const newRealized = realized + addedRealized;
 
@@ -183,7 +186,7 @@ export default async function handler(req, res) {
          ) VALUES ($1, $2, 'sell', $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb)`,
         [
           mid, username, oi,
-          n, quote.collateralOut, quote.fee, quote.priceBefore || 0,
+          sharesToSell, quote.collateralOut, quote.fee, quote.priceBefore || 0,
           JSON.stringify(reserves),
           JSON.stringify(quote.reservesAfter),
         ],
@@ -192,7 +195,7 @@ export default async function handler(req, res) {
       await client.query(
         `INSERT INTO points_distributions (username, amount, kind, reference_id, reason)
          VALUES ($1, $2, 'trade_sell', $3, $4)`,
-        [username, quote.collateralOut, mid, `Venta anticipada de ${n.toFixed(2)} acciones`],
+        [username, quote.collateralOut, mid, `Venta anticipada de ${sharesToSell.toFixed(2)} acciones`],
       );
 
       await bestEffortInsertPointsPriceSnapshot(client, {
@@ -208,7 +211,7 @@ export default async function handler(req, res) {
       return {
         balance: newBalance,
         collateralOut: quote.collateralOut,
-        sharesSold: n,
+        sharesSold: sharesToSell,
         realizedPnl: addedRealized,
         priceBefore: quote.priceBefore,
         priceAfter: quote.priceAfter,

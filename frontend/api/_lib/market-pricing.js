@@ -48,8 +48,9 @@ export function seedLiquiditiesFromProbabilities(probabilities, {
   seedLiquidity = DEFAULT_SEED_LIQUIDITY,
   minSeed = 100,
   maxSeed = 10_000_000,
+  minProbability = MIN_PROBABILITY,
 } = {}) {
-  const normalized = normalizeProbabilities(probabilities);
+  const normalized = normalizeProbabilities(probabilities, null, { minProbability });
   if (normalized.error) return normalized;
 
   const seed = Number(seedLiquidity ?? DEFAULT_SEED_LIQUIDITY);

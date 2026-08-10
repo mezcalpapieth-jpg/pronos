@@ -34,11 +34,31 @@ test('pending generated markets can be edited before approval', () => {
   assert.match(source, /async function editPending/);
   assert.match(source, /normalizeSeedLiquidities/);
   assert.match(source, /seed_liquidities/);
+  assert.match(source, /MAX_PENDING_OUTCOMES\s*=\s*64/);
+  assert.match(source, /normalizeOutcomeImagesForEdit/);
+  assert.match(source, /outcomeImages:\s*parseJsonb\(r\.outcome_images,\s*null\)/);
+  assert.match(source, /alignParallelResolverConfig/);
+  assert.match(source, /resolver_config = \$11::jsonb/);
   assert.match(source, /const sourceData = parseJsonb\(r\.source_data,\s*\{\}\)/);
   assert.match(source, /suggestedPricing:\s*sourceData\?\.suggestedPricing\s*\|\|\s*null/);
   assert.match(source, /pricingSearch:\s*sourceData\?\.pricingSearch\s*\|\|\s*null/);
   assert.match(source, /seedLiquidities:\s*parseJsonb\(r\.seed_liquidities,\s*null\)/);
   assert.match(source, /status !== 'pending'/);
+});
+
+test('pending generated markets support taxonomy filters and filtered bulk actions', () => {
+  assert.match(source, /matchesMarketTaxonomy/);
+  assert.match(source, /function filteredPendingRows/);
+  assert.match(source, /filteredPendingRows\(rows,\s*req\.query/);
+  assert.match(source, /async function listPendingRowsForBulk/);
+  assert.match(source, /listPendingRowsForBulk\(filters\s*\|\|\s*\{\}\)/);
+});
+
+test('parallel pending approvals derive child Yes\\/No reserves from suggested probabilities', () => {
+  assert.match(source, /seedLiquiditiesFromProbabilities/);
+  assert.match(source, /function parallelLegBinaryReserves/);
+  assert.match(source, /minProbability:\s*0\.01/);
+  assert.match(source, /JSON\.stringify\(legReserves\)/);
 });
 
 test('human re-added sports rows are not immediately auto-rejected again', () => {

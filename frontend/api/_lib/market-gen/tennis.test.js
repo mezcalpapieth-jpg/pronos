@@ -10,7 +10,7 @@ function futureIso(days = 14) {
   return new Date(Date.now() + days * 86_400_000).toISOString();
 }
 
-function tennisPlayer(id, name, seed) {
+function tennisPlayer(id, name, seed, extra = {}) {
   return {
     id: String(id),
     seed,
@@ -18,18 +18,20 @@ function tennisPlayer(id, name, seed) {
       id: String(id),
       displayName: name,
     },
+    ...extra,
   };
 }
 
-function mensSinglesGrouping(players) {
+function mensSinglesGrouping(playersOrCompetitions) {
+  const competitions = Array.isArray(playersOrCompetitions?.[0]?.competitors)
+    ? playersOrCompetitions
+    : [{ competitors: playersOrCompetitions }];
   return {
     grouping: {
       slug: 'mens-singles',
       name: "Men's Singles",
     },
-    competitions: [
-      { competitors: players },
-    ],
+    competitions,
   };
 }
 
@@ -78,10 +80,78 @@ test('ATP generator uses confirmed draw entrants, not the static ranking list', 
     assert.equal(specs[0].outcomes.includes('Jannik Sinner'), false);
     assert.equal(specs[0].outcomes.includes('Alexander Zverev'), true);
     assert.equal(specs[0].outcomes.at(-1), 'Otro');
+    assert.equal(specs[0].source_data.listedFieldSize, players.length);
+    assert.equal(specs[0].source_data.fieldCap, 32);
+    assert.equal(specs[0].source_data.suggestedPricing.probabilities.length, specs[0].outcomes.length);
     assert.deepEqual(
       specs[0].resolver_config.legs.map(leg => leg.label),
       specs[0].outcomes,
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('ATP generator emits bounded head-to-head markets for top-tier draws only', async () => {
+  const originalFetch = globalThis.fetch;
+  const matchDate = futureIso(3);
+  const competitions = [
+    {
+      id: 'match-1',
+      date: matchDate,
+      round: { displayName: 'Round of 32' },
+      status: { type: { state: 'pre' } },
+      competitors: [
+        tennisPlayer('2375', 'Alexander Zverev', 1),
+        tennisPlayer('2946', 'Taylor Fritz', 2),
+      ],
+    },
+    {
+      id: 'match-2',
+      date: matchDate,
+      round: { displayName: 'Round of 32' },
+      status: { type: { state: 'pre' } },
+      competitors: [
+        tennisPlayer('9250', 'Ben Shelton', 3),
+        tennisPlayer('3764', 'Lorenzo Musetti', 4),
+      ],
+    },
+    {
+      id: 'match-3',
+      date: matchDate,
+      round: { displayName: 'Round of 32' },
+      status: { type: { state: 'pre' } },
+      competitors: [
+        tennisPlayer('2651', 'Alex de Minaur', 5),
+        tennisPlayer('3992', 'Tommy Paul', 6),
+      ],
+    },
+    {
+      id: 'match-4',
+      date: matchDate,
+      round: { displayName: 'Round of 32' },
+      status: { type: { state: 'pre' } },
+      competitors: [
+        tennisPlayer('9678', 'Holger Rune', 7),
+        tennisPlayer('3897', 'Frances Tiafoe', 8),
+      ],
+    },
+  ];
+
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({ events: [atpEvent({ groupings: [mensSinglesGrouping(competitions)] })] }),
+  });
+
+  try {
+    const specs = await generateTennisMarkets();
+    const h2h = specs.filter(spec => spec.source === 'espn-atp-match');
+    assert.equal(specs[0].source, 'espn-atp-tournament');
+    assert.equal(h2h.length, 4);
+    assert.equal(h2h[0].amm_mode, 'unified');
+    assert.equal(h2h[0].resolver_config.source, 'espn-atp-match');
+    assert.equal(h2h[0].resolver_config.matchId, 'match-1');
+    assert.deepEqual(h2h[0].outcomes, ['Alexander Zverev', 'Taylor Fritz']);
   } finally {
     globalThis.fetch = originalFetch;
   }

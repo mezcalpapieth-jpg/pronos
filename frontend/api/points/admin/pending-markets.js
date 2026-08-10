@@ -19,9 +19,9 @@ import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 import { initialReserves } from '../../_lib/amm-math.js';
-import { deriveMarketTags } from '../../_lib/category-tags.js';
+import { deriveMarketTags, matchesMarketTaxonomy } from '../../_lib/category-tags.js';
 import { normalizeSeedLiquidities } from '../../_lib/market-liquidity.js';
-import { attachDefaultSuggestedPricing } from '../../_lib/market-pricing.js';
+import { attachDefaultSuggestedPricing, seedLiquiditiesFromProbabilities } from '../../_lib/market-pricing.js';
 import { tryAttachPolymarketPricing } from '../../_lib/polymarket-pricing.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -29,12 +29,138 @@ const readSql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const ALLOWED_CATEGORIES = new Set([
   'general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup',
 ]);
+const MAX_PENDING_OUTCOMES = 64;
 
 function parseJsonb(v, fb) {
   if (Array.isArray(v)) return v;
   if (v && typeof v === 'object') return v;
   if (typeof v !== 'string') return fb;
   try { return JSON.parse(v); } catch { return fb; }
+}
+
+function normalizeLabelKey(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function cleanOptionalUrl(value) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  return /^https?:\/\//i.test(text) ? text.slice(0, 1000) : null;
+}
+
+function normalizeOutcomeImagesForEdit({ row, patch, previousOutcomes, nextOutcomes }) {
+  const hasImagesPatch = Object.prototype.hasOwnProperty.call(patch, 'outcomeImages')
+    || Object.prototype.hasOwnProperty.call(patch, 'outcome_images');
+  const patchedImages = hasImagesPatch
+    ? (patch.outcomeImages ?? patch.outcome_images)
+    : null;
+  if (hasImagesPatch) {
+    const source = Array.isArray(patchedImages) ? patchedImages : [];
+    return nextOutcomes.map((_, index) => cleanOptionalUrl(source[index]));
+  }
+
+  const existing = parseJsonb(row.outcome_images, null);
+  if (!Array.isArray(existing)) return nextOutcomes.map(() => null);
+
+  const byLabel = new Map();
+  previousOutcomes.forEach((label, index) => {
+    const key = normalizeLabelKey(label);
+    if (key) byLabel.set(key, existing[index] || null);
+  });
+  return nextOutcomes.map((label, index) => {
+    const key = normalizeLabelKey(label);
+    const match = key ? byLabel.get(key) : undefined;
+    return cleanOptionalUrl(match ?? existing[index] ?? null);
+  });
+}
+
+function alignParallelResolverConfig({ row, nextOutcomes }) {
+  const cfg = parseJsonb(row.resolver_config, null);
+  if (!cfg || cfg.shape !== 'parallel') return cfg;
+  const previousOutcomes = parseJsonb(row.outcomes, []);
+  const previousLegs = Array.isArray(cfg.legs) ? cfg.legs : [];
+  const byLabel = new Map();
+  previousOutcomes.forEach((label, index) => {
+    const key = normalizeLabelKey(label);
+    const leg = previousLegs[index] || null;
+    if (key && leg) byLabel.set(key, leg);
+  });
+  for (const leg of previousLegs) {
+    const key = normalizeLabelKey(leg?.label);
+    if (key && !byLabel.has(key)) byLabel.set(key, leg);
+  }
+
+  return {
+    ...cfg,
+    legs: nextOutcomes.map((label) => {
+      const previous = byLabel.get(normalizeLabelKey(label));
+      if (previous) return { ...previous, label };
+      return { label, driverId: null, manuallyAdded: true };
+    }),
+  };
+}
+
+function filteredPendingRows(rows, query = {}) {
+  const filters = {
+    category: query.category,
+    sport: query.sport,
+    league: query.league,
+    geo: query.geo,
+    topic: query.topic,
+    cryptoType: query.crypto_type ?? query.cryptoType,
+  };
+  if (!Object.values(filters).some(Boolean)) return rows;
+  return rows.filter(row => matchesMarketTaxonomy({
+    ...row,
+    source_data: parseJsonb(row.source_data, {}),
+    resolver_config: parseJsonb(row.resolver_config, {}),
+    category_tags: parseJsonb(row.category_tags, []),
+    geo_tags: parseJsonb(row.geo_tags, []),
+    topic_tags: parseJsonb(row.topic_tags, []),
+  }, filters));
+}
+
+function probabilitiesFromParentSeedValues(seedValues) {
+  if (!Array.isArray(seedValues) || seedValues.length < 2) return null;
+  const inverse = seedValues.map(value => {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? 1 / n : null;
+  });
+  if (inverse.some(value => value == null)) return null;
+  const total = inverse.reduce((sum, value) => sum + value, 0);
+  if (!Number.isFinite(total) || total <= 0) return null;
+  return inverse.map(value => value / total);
+}
+
+function parallelLegBinaryReserves({ sourceData, outcomeIndex, legSeed, parentSeedValues }) {
+  let probabilities = sourceData?.suggestedPricing?.probabilities
+    || sourceData?.suggestedPricing?.probabilityPct
+    || probabilitiesFromParentSeedValues(parentSeedValues);
+  if (
+    Array.isArray(parentSeedValues)
+    && Array.isArray(probabilities)
+    && probabilities.length !== parentSeedValues.length
+  ) {
+    probabilities = probabilitiesFromParentSeedValues(parentSeedValues);
+  }
+  const pRaw = Array.isArray(probabilities) ? Number(probabilities[outcomeIndex]) : NaN;
+  const probability = Number.isFinite(pRaw) && pRaw > 1 ? pRaw / 100 : pRaw;
+  if (!Number.isFinite(probability) || probability <= 0 || probability >= 1) {
+    return initialReserves(legSeed, 2);
+  }
+  const priced = seedLiquiditiesFromProbabilities([probability, 1 - probability], {
+    seedLiquidity: legSeed,
+    minProbability: 0.01,
+  });
+  return Array.isArray(priced.seedLiquidities) && priced.seedLiquidities.length === 2
+    ? priced.seedLiquidities
+    : initialReserves(legSeed, 2);
 }
 
 export default async function handler(req, res) {
@@ -150,8 +276,10 @@ async function list(req, res) {
         LIMIT 2000
       `;
 
+  const filteredRows = filteredPendingRows(rows, req.query || {});
+
   return res.status(200).json({
-    pending: rows.map(r => {
+    pending: filteredRows.map(r => {
       const sourceData = parseJsonb(r.source_data, {});
       return {
         id: r.id,
@@ -164,6 +292,7 @@ async function list(req, res) {
         category: r.category,
         icon: null,
         outcomes: parseJsonb(r.outcomes, []),
+        outcomeImages: parseJsonb(r.outcome_images, null),
         seedLiquidity: Number(r.seed_liquidity),
         seedLiquidities: parseJsonb(r.seed_liquidities, null),
         startTime: r.start_time,
@@ -171,6 +300,8 @@ async function list(req, res) {
         ammMode: r.amm_mode,
         resolverType: r.resolver_type,
         resolverConfig: parseJsonb(r.resolver_config, null),
+        sport: r.sport || null,
+        league: r.league || null,
         categoryTags: parseJsonb(r.category_tags, []),
         geoTags: parseJsonb(r.geo_tags, []),
         topicTags: parseJsonb(r.topic_tags, []),
@@ -315,10 +446,12 @@ async function approveOne(pid, reviewer, note, opts = {}) {
       : null;
 
     const pendingFeatured = r.featured === true;
+    const sourceData = parseJsonb(r.source_data, {});
+    const resolverConfig = parseJsonb(r.resolver_config, null);
     const tagBundle = deriveMarketTags({
       ...r,
-      source_data: parseJsonb(r.source_data, {}),
-      resolver_config: parseJsonb(r.resolver_config, {}),
+      source_data: sourceData,
+      resolver_config: resolverConfig || {},
       category_tags: parseJsonb(r.category_tags, []),
       geo_tags: parseJsonb(r.geo_tags, []),
       topic_tags: parseJsonb(r.topic_tags, []),
@@ -414,7 +547,7 @@ async function approveOne(pid, reviewer, note, opts = {}) {
           endDate.toISOString(),
           reviewer,
           r.resolver_type || null,
-          r.resolver_config ? JSON.stringify(r.resolver_config) : null,
+          resolverConfig ? JSON.stringify(resolverConfig) : null,
           r.sport || null,
           r.league || null,
           outcomeImagesJson,
@@ -458,7 +591,7 @@ async function approveOne(pid, reviewer, note, opts = {}) {
           endDate.toISOString(),
           reviewer,
           r.resolver_type || null,
-          r.resolver_config ? JSON.stringify(r.resolver_config) : null,
+          resolverConfig ? JSON.stringify(resolverConfig) : null,
           r.sport || null,
           r.league || null,
           outcomeImagesJson,
@@ -475,7 +608,12 @@ async function approveOne(pid, reviewer, note, opts = {}) {
       createdMarketId = parent.rows[0].id;
       for (let i = 0; i < outcomes.length; i++) {
         const legSeed = seedValues[i];
-        const legReserves = initialReserves(legSeed, 2);
+        const legReserves = parallelLegBinaryReserves({
+          sourceData,
+          outcomeIndex: i,
+          legSeed,
+          parentSeedValues: seedValues,
+        });
         // Auto-deployed parallel: each leg has its own binary contract.
         // Manual / off-chain falls back to the parent's chainAddressStr
         // (which is null for off-chain points-mode markets).
@@ -504,7 +642,7 @@ async function approveOne(pid, reviewer, note, opts = {}) {
             JSON.stringify(['Sí', 'No']),
             JSON.stringify(legReserves),
             legSeed,
-            JSON.stringify([legSeed, legSeed]),
+            JSON.stringify(legReserves),
             startIso,
             endDate.toISOString(),
             reviewer,
@@ -581,10 +719,11 @@ async function editPending(pid, reviewer, patch = {}, note = null) {
 
     const icon = null;
 
+    const previousOutcomes = parseJsonb(r.outcomes, []);
     const outcomes = has('outcomes')
       ? patch.outcomes
-      : parseJsonb(r.outcomes, []);
-    if (!Array.isArray(outcomes) || outcomes.length < 2 || outcomes.length > 10) {
+      : previousOutcomes;
+    if (!Array.isArray(outcomes) || outcomes.length < 2 || outcomes.length > MAX_PENDING_OUTCOMES) {
       const err = new Error('outcome_count_out_of_range'); err.status = 400; throw err;
     }
     const normalizedOutcomes = outcomes.map(o => String(o || '').trim());
@@ -630,10 +769,16 @@ async function editPending(pid, reviewer, patch = {}, note = null) {
       throw err;
     }
 
-    const existingImages = parseJsonb(r.outcome_images, null);
-    const outcomeImages = Array.isArray(existingImages) && existingImages.length === normalizedOutcomes.length
-      ? existingImages
-      : null;
+    const outcomeImages = normalizeOutcomeImagesForEdit({
+      row: r,
+      patch,
+      previousOutcomes,
+      nextOutcomes: normalizedOutcomes,
+    });
+    const resolverConfig = alignParallelResolverConfig({
+      row: r,
+      nextOutcomes: normalizedOutcomes,
+    });
 
     const tagBundle = deriveMarketTags({
       ...r,
@@ -641,7 +786,7 @@ async function editPending(pid, reviewer, patch = {}, note = null) {
       category,
       outcomes: normalizedOutcomes,
       source_data: parseJsonb(r.source_data, {}),
-      resolver_config: parseJsonb(r.resolver_config, {}),
+      resolver_config: resolverConfig || {},
       category_tags: parseJsonb(r.category_tags, []),
       geo_tags: parseJsonb(r.geo_tags, []),
       topic_tags: parseJsonb(r.topic_tags, []),
@@ -659,13 +804,14 @@ async function editPending(pid, reviewer, patch = {}, note = null) {
              end_time = $8,
              amm_mode = $9,
              outcome_images = $10::jsonb,
-             category_tags = $11::jsonb,
-             geo_tags = $12::jsonb,
-             topic_tags = $13::jsonb,
-             admin_note = COALESCE(NULLIF($14, ''), admin_note),
-             reviewer = $15,
+             resolver_config = $11::jsonb,
+             category_tags = $12::jsonb,
+             geo_tags = $13::jsonb,
+             topic_tags = $14::jsonb,
+             admin_note = COALESCE(NULLIF($15, ''), admin_note),
+             reviewer = $16,
              reviewed_at = NOW()
-       WHERE id = $16
+       WHERE id = $17
        RETURNING id`,
       [
         question,
@@ -677,7 +823,8 @@ async function editPending(pid, reviewer, patch = {}, note = null) {
         nextStartIso,
         nextEndIso,
         ammMode,
-        outcomeImages ? JSON.stringify(outcomeImages) : null,
+        JSON.stringify(outcomeImages),
+        resolverConfig ? JSON.stringify(resolverConfig) : null,
         JSON.stringify(tagBundle.categoryTags),
         JSON.stringify(tagBundle.geoTags),
         JSON.stringify(tagBundle.topicTags),
@@ -784,8 +931,18 @@ async function refreshPendingPricing(pid, reviewer) {
   });
 }
 
+async function listPendingRowsForBulk(filters = {}) {
+  const rows = await readSql`
+    SELECT * FROM points_pending_markets
+    WHERE status = 'pending'
+    ORDER BY id ASC
+    LIMIT 2000
+  `;
+  return filteredPendingRows(rows, filters);
+}
+
 async function review(req, res, admin) {
-  const { id, action, note, patch, mode, chainId, chainAddress, chainMarketId, autoDeploy } = req.body || {};
+  const { id, action, note, patch, mode, chainId, chainAddress, chainMarketId, autoDeploy, filters } = req.body || {};
   // Shared opts passed to approveOne for both single-row and
   // approve_all paths. Default behaviour (no opts) keeps Points admin
   // approvals off-chain; the MVP admin sends mode='onchain' + chain
@@ -810,11 +967,7 @@ async function review(req, res, admin) {
         detail: 'On-chain approvals must be done one at a time so each market gets its own chain_address.',
       });
     }
-    const pending = await readSql`
-      SELECT id FROM points_pending_markets
-      WHERE status = 'pending'
-      ORDER BY id ASC
-    `;
+    const pending = await listPendingRowsForBulk(filters || {});
     const approved = [];
     const failures = [];
     for (const row of pending) {
@@ -841,12 +994,7 @@ async function review(req, res, admin) {
   }
 
   if (action === 'refresh_pricing_all') {
-    const pending = await readSql`
-      SELECT id FROM points_pending_markets
-      WHERE status = 'pending'
-      ORDER BY id ASC
-      LIMIT 100
-    `;
+    const pending = (await listPendingRowsForBulk(filters || {})).slice(0, 100);
     const refreshed = [];
     const failures = [];
     for (const row of pending) {

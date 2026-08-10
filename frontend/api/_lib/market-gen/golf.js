@@ -16,7 +16,7 @@
 
 const PGA = 'https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard';
 
-const MAX_FIELD_OUTCOMES = 12;
+const MAX_FIELD_OUTCOMES = 40;
 const MIN_CONFIRMED_GOLF_FIELD = 8;
 
 // ESPN headshot CDN pattern — confirmed working via HEAD probes
@@ -151,6 +151,27 @@ function sortEntrants(a, b) {
     || String(a.name || '').localeCompare(String(b.name || ''));
 }
 
+function heuristicTournamentProbabilities(field, fullFieldSize) {
+  const listedCount = field.length;
+  if (listedCount <= 0) return [];
+  const totalField = Math.max(Number(fullFieldSize) || listedCount, listedCount);
+  const remainingCount = Math.max(0, totalField - listedCount);
+  const otherProbability = remainingCount > 0
+    ? Math.min(0.55, Math.max(0.24, (remainingCount / totalField) * 0.65))
+    : 0.05;
+  const listedMass = 1 - otherProbability;
+  const weights = field.map((player, index) => {
+    const priority = fieldPriority(player);
+    const rank = player.rank ?? (priority < 9999 ? priority + 1 : index + 1);
+    return 1 / Math.pow(Math.max(1, Number(rank) || index + 1), 0.72);
+  });
+  const totalWeight = weights.reduce((sum, value) => sum + value, 0) || listedCount;
+  return [
+    ...weights.map(weight => (weight / totalWeight) * listedMass),
+    otherProbability,
+  ];
+}
+
 export function extractGolfEventField(event) {
   const entrants = new Map();
   let order = 0;
@@ -238,6 +259,7 @@ export async function generateGolfMarkets() {
     order: player.order,
     logo: player.logo || null,
   }));
+  const suggestedProbabilities = heuristicTournamentProbabilities(eventField, fullField.length);
 
   // Include an "Otro" catchall so the market is always resolvable
   // even when a dark-horse wins. Field name `driverId` is the
@@ -284,9 +306,16 @@ export async function generateGolfMarkets() {
       startDateIso: ev.date,
       isMajor: isMajorEvent(ev.name),
       confirmedFieldSize: fullField.length,
+      listedFieldSize: eventField.length,
+      fieldCap: MAX_FIELD_OUTCOMES,
       fieldSource: 'espn-scoreboard-competitors',
       fieldUpdatedAt: new Date().toISOString(),
       rankingFallbackDisabled: true,
+      suggestedPricing: {
+        source: 'source-signals:golf-priority-field',
+        probabilities: suggestedProbabilities,
+        rationale: 'Probabilidad inicial heurística por prioridad/ranking y masa de Otro para golfistas no listados.',
+      },
       // Persist the per-event field so backfill-resolvers can rebuild
       // outcome_images and resolver legs from this row alone.
       field: eventField,

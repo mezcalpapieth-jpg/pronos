@@ -44,10 +44,10 @@ import { readMananeraPhraseResult } from '../_lib/mananera.js';
 import { fetchMaxTempC, bucketIndexFor } from '../_lib/weather.js';
 import { readAppleMxTopArtist } from '../_lib/charts.js';
 import { readYouTubeTopMxChannel } from '../_lib/youtube.js';
-import { readEspnEvent, readFootballDataMatch, readJolpicaF1Result, readJolpicaF1Standings, readEspnPgaWinner, readEspnLivWinner, readLivTeamWinner, readEspnAtpTournamentWinner, readEspnMmaWinner, readOddsApiBoxingWinner, readNextOpponent } from '../_lib/sports-results.js';
+import { readEspnEvent, readFootballDataMatch, readJolpicaF1Result, readJolpicaF1Standings, readEspnPgaWinner, readEspnLivWinner, readLivTeamWinner, readEspnAtpTournamentWinner, readEspnAtpMatchWinner, readEspnMmaWinner, readOddsApiBoxingWinner, readNextOpponent } from '../_lib/sports-results.js';
 import { buildEspnLiveScoreConfig } from '../_lib/espn-live-score.js';
 import { buildFootballDataEspnFallbackConfig } from '../_lib/sports-resolver-fallback.js';
-import { NEXT_OPPONENT_RECHECK_INTERVAL_HOURS, findParallelWinnerIndex } from '../_lib/sports-resolver-policy.js';
+import { NEXT_OPPONENT_RECHECK_INTERVAL_HOURS, findParallelWinnerIndex, resolverLabelsOverlap } from '../_lib/sports-resolver-policy.js';
 import { buildPointsResolutionCandidateInsert } from '../_lib/points-resolution-candidates.js';
 import { releaseOpenLimitOrdersForMarkets } from '../_lib/points-limit-orders.js';
 import { buildLcdlfResolutionReview, isLcdlfMarket } from '../_lib/lcdlf-official.js';
@@ -207,6 +207,146 @@ function isManualReviewMarket({ resolverType, cfg, row, sourceData }) {
 
   const kind = String(sourceData?.kind || '').trim().toLowerCase();
   return ['award', 'reality_week', 'reality_winner', 'lcdlf_week', 'concert'].includes(kind);
+}
+
+function isEarlyTournamentLegSource(cfg = {}) {
+  return cfg?.shape === 'parallel'
+    && ['espn-atp-tournament', 'espn-pga'].includes(String(cfg?.source || ''));
+}
+
+function labelIsOther(label) {
+  return ['otro', 'otra', 'other', 'field'].includes(
+    String(label || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim(),
+  );
+}
+
+function findEliminatedParallelLegIndexes(legs = [], result = {}) {
+  if (!Array.isArray(legs) || !Array.isArray(result?.eliminatedCompetitors)) return [];
+  const indexes = new Set();
+
+  for (const eliminated of result.eliminatedCompetitors) {
+    const idNeedle = String(eliminated?.driverId || '').trim();
+    const labelNeedle = String(eliminated?.label || '').trim();
+    if (!idNeedle && !labelNeedle) continue;
+
+    let idx = idNeedle
+      ? legs.findIndex(leg =>
+          !labelIsOther(leg?.label)
+          && leg?.driverId
+          && String(leg.driverId).trim() === idNeedle,
+        )
+      : -1;
+
+    if (idx < 0 && labelNeedle) {
+      idx = legs.findIndex(leg =>
+        !labelIsOther(leg?.label)
+        && resolverLabelsOverlap(leg?.label, labelNeedle),
+      );
+    }
+
+    if (idx >= 0) indexes.add(idx);
+  }
+
+  return Array.from(indexes).sort((a, b) => a - b);
+}
+
+async function resolveEliminatedParallelLegs({ market, cfg, result, dry, report }) {
+  if (!isEarlyTournamentLegSource(cfg)) return 0;
+  const indexes = findEliminatedParallelLegIndexes(cfg.legs, result);
+  if (indexes.length === 0) return 0;
+
+  const detailsByIndex = new Map();
+  for (const eliminated of result.eliminatedCompetitors || []) {
+    const matchIndex = findEliminatedParallelLegIndexes(cfg.legs, {
+      eliminatedCompetitors: [eliminated],
+    })[0];
+    if (Number.isInteger(matchIndex) && !detailsByIndex.has(matchIndex)) {
+      detailsByIndex.set(matchIndex, eliminated);
+    }
+  }
+
+  if (dry) {
+    for (const index of indexes) {
+      const leg = cfg.legs[index] || {};
+      const detail = detailsByIndex.get(index) || {};
+      report.resolved.push({
+        id: market.id,
+        parentId: market.id,
+        legIndex: index,
+        legLabel: leg.label || detail.label || null,
+        winningIdx: 1,
+        source: cfg.source,
+        reason: `early_${detail.reason || 'eliminated'}`,
+        dry: true,
+      });
+    }
+    return indexes.length;
+  }
+
+  let resolvedCount = 0;
+  await withTransaction(async (client) => {
+    const legs = await client.query(
+      `SELECT id, leg_label, status
+         FROM points_markets
+        WHERE parent_id = $1
+        ORDER BY id ASC
+        FOR UPDATE`,
+      [market.id],
+    );
+    const targetIds = indexes
+      .map(index => legs.rows[index])
+      .filter(row => row && row.status === 'active')
+      .map(row => Number(row.id));
+    if (!targetIds.length) return;
+
+    await releaseOpenLimitOrdersForMarkets(client, targetIds, {
+      reason: 'market_resolved',
+    });
+
+    for (const index of indexes) {
+      const row = legs.rows[index];
+      if (!row?.id) continue;
+      const leg = cfg.legs[index] || {};
+      const detail = detailsByIndex.get(index) || {};
+      const finalScore = `${detail.reason || 'Eliminado'}: ${detail.label || leg.label || row.leg_label || 'opcion'}`;
+      const updated = await client.query(
+        `UPDATE points_markets
+            SET status = 'resolved',
+                outcome = 1,
+                resolved_at = NOW(),
+                resolved_by = $1
+          WHERE id = $2
+            AND status = 'active'
+          RETURNING id`,
+        [`resolver:${cfg.source}:early-elimination`, row.id],
+      );
+      if (updated.rows.length === 0) continue;
+      resolvedCount += 1;
+      try {
+        await client.query(
+          `UPDATE points_markets SET final_score = $1 WHERE id = $2`,
+          [finalScore.slice(0, 240), row.id],
+        );
+      } catch (e) {
+        if (e?.code !== '42703') throw e;
+      }
+      report.resolved.push({
+        id: row.id,
+        parentId: market.id,
+        legIndex: index,
+        legLabel: leg.label || row.leg_label || detail.label || null,
+        winningIdx: 1,
+        source: cfg.source,
+        reason: `early_${detail.reason || 'eliminated'}`,
+      });
+    }
+  });
+
+  return resolvedCount;
 }
 
 async function enrichManualReviewCandidate({ market, cfg, sourceData, outcomes }) {
@@ -434,6 +574,14 @@ export async function runAutoResolve({ dry = false } = {}) {
                   OR NULLIF(m.resolver_config->>'nextOpponentLastCheckedAt', '')::timestamptz
                        < NOW() - (${NEXT_OPPONENT_RECHECK_INTERVAL_HOURS}::int * INTERVAL '1 hour')
                 )
+              )
+              OR (
+                m.resolver_type = 'sports_api'
+                AND m.resolver_config->>'shape' = 'parallel'
+                AND m.resolver_config->>'source' IN ('espn-atp-tournament', 'espn-pga')
+                AND m.start_time IS NOT NULL
+                AND m.start_time < NOW()
+                AND m.end_time > NOW()
               )
             )
           )
@@ -953,9 +1101,22 @@ export async function runAutoResolve({ dry = false } = {}) {
             // winner=true. Same envelope as the other parallel-
             // shape readers.
             result = await readEspnAtpTournamentWinner({ eventId: cfg.eventId });
+          } else if (cfg.source === 'espn-atp-match') {
+            result = await readEspnAtpMatchWinner({
+              eventId: cfg.eventId,
+              matchId: cfg.matchId,
+            });
           } else {
             throw new Error(`unsupported sports_api source: ${cfg.source}`);
           }
+
+          await resolveEliminatedParallelLegs({
+            market: m,
+            cfg,
+            result,
+            dry,
+            report,
+          });
 
           // Not completed yet = benign skip. Cron will retry on the
           // next tick; a postponed game just keeps retrying until

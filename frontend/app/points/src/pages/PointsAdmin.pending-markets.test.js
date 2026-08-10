@@ -27,6 +27,7 @@ test('Points admin can edit generated markets and per-option liquidity before ap
   assert.match(source, /adminEditPendingMarket/);
   assert.match(source, /seedLiquidities/);
   assert.match(source, /Liquidez opción/);
+  assert.match(source, /MAX_PENDING_EDIT_OUTCOMES\s*=\s*64/);
   assert.match(source, /pendingSuggestedPricing/);
   assert.match(source, /formatSuggestedPricing/);
   assert.match(source, /Odds sugeridos/);
@@ -35,8 +36,39 @@ test('Points admin can edit generated markets and per-option liquidity before ap
   assert.match(source, /Polymarket/);
   assert.doesNotMatch(source, /Field label="Icono"/);
   assert.match(source, /icon:\s*null/);
+  assert.match(source, /outcomeImages/);
+  assert.match(source, /Logo URL opcional/);
+  assert.match(source, /outcomeImages:\s*cleanedImages/);
   assert.match(apiSource, /export async function adminEditPendingMarket/);
   assert.match(apiSource, /action:\s*'edit'/);
+});
+
+test('Points pending queue has taxonomy filters and filtered bulk actions', () => {
+  assert.match(source, /function PendingMarketsTable\(\{ onQueueChange \}\)/);
+  assert.match(source, /const \[categoryFilter,\s*setCategoryFilter\]/);
+  assert.match(source, /const \[sportFilter,\s*setSportFilter\]/);
+  assert.match(source, /const \[leagueFilter,\s*setLeagueFilter\]/);
+  assert.match(source, /const \[cryptoTypeFilter,\s*setCryptoTypeFilter\]/);
+  assert.match(source, /const \[geoFilter,\s*setGeoFilter\]/);
+  assert.match(source, /const \[topicFilter,\s*setTopicFilter\]/);
+  assert.match(source, /buildAdminMarketsQuery\(\{\s*status:\s*filter,/);
+  assert.match(source, /adminListPendingMarkets\(q\)/);
+  assert.match(source, /pendingFiltersPayload\(\)/);
+  assert.match(source, /adminRefreshAllPendingPricing\(pendingFiltersPayload\(\)\)/);
+  assert.match(source, /adminApproveAllPendingMarkets\(null,\s*pendingFiltersPayload\(\)\)/);
+  assert.match(source, /renderFilterGroup\(MARKET_CATEGORY_FILTERS,\s*categoryFilter,\s*selectCategoryFilter\)/);
+  assert.match(source, /renderFilterGroup\(ADMIN_SPORT_FILTERS,\s*sportFilter,\s*selectSportFilter/);
+  assert.match(source, /renderFilterGroup\(ADMIN_CRYPTO_FILTERS,\s*cryptoTypeFilter,\s*setCryptoTypeFilter/);
+  assert.match(apiSource, /status instanceof URLSearchParams/);
+  assert.match(apiSource, /action:\s*'refresh_pricing_all',\s*filters/);
+  assert.match(apiSource, /action:\s*'approve_all',\s*note,\s*filters/);
+});
+
+test('Points pending queue keeps large generated fields readable', () => {
+  assert.match(source, /function formatOutcomeList\(outcomes,\s*limit = 14\)/);
+  assert.match(source, /Opciones \(\{Array\.isArray\(r\.outcomes\) \? r\.outcomes\.length : 0\}\): \{formatOutcomeList\(r\.outcomes\)\}/);
+  assert.match(source, /r\.sport && <> · \{r\.sport\}<\/>/);
+  assert.match(source, /r\.league && <>\/\{r\.league\}<\/>/);
 });
 
 test('Points admin tabs show pending-work badges outside the active tab', () => {

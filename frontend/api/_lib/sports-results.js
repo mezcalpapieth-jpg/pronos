@@ -77,6 +77,35 @@ function cleanString(value) {
   return text.length > 0 ? text : null;
 }
 
+function athleteId(c) {
+  const value = c?.athlete?.id || c?.id;
+  return value == null || value === '' ? null : String(value);
+}
+
+function athleteDisplayName(c) {
+  const athlete = c?.athlete || {};
+  return cleanString(athlete.displayName)
+    || cleanString(athlete.fullName)
+    || cleanString(athlete.shortName)
+    || cleanString(`${athlete.firstName || ''} ${athlete.lastName || ''}`)
+    || cleanString(c?.displayName)
+    || cleanString(c?.name)
+    || null;
+}
+
+function dedupeCompetitorEntries(entries) {
+  const seen = new Set();
+  const out = [];
+  for (const entry of entries || []) {
+    if (!entry?.label && !entry?.driverId) continue;
+    const key = entry.driverId ? `id:${entry.driverId}` : `label:${normName(entry.label)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(entry);
+  }
+  return out;
+}
+
 function normalizeTeamName(value) {
   return String(value || '')
     .normalize('NFD')
@@ -109,6 +138,7 @@ function competitorName(c) {
     || cleanString(c?.team?.displayName)
     || cleanString(c?.team?.name)
     || cleanString(c?.team?.abbreviation)
+    || athleteDisplayName(c)
     || cleanString(c?.displayName)
     || null;
 }
@@ -119,6 +149,7 @@ function competitorNames(c) {
     c?.team?.displayName,
     c?.team?.name,
     c?.team?.abbreviation,
+    athleteDisplayName(c),
     c?.displayName,
   ].map(cleanString).filter(Boolean);
 }
@@ -261,11 +292,25 @@ export async function readEspnTennisMatch({ eventId, dateYmd }) {
 
 const ESPN_ATP_BASE = 'https://site.api.espn.com/apis/site/v2/sports/tennis/atp';
 
-export async function readEspnAtpTournamentWinner({ eventId }) {
+function tennisGroupingIsMensSingles(grouping) {
+  const slug = String(grouping?.grouping?.slug || grouping?.slug || '').toLowerCase();
+  const name = String(grouping?.grouping?.name || grouping?.name || grouping?.displayName || '').toLowerCase();
+  return slug === 'mens-singles'
+    || slug === 'mens singles'
+    || name === "men's singles"
+    || name === 'mens singles'
+    || name === 'men s singles'
+    || name.includes('men singles')
+    || name.includes('men s singles');
+}
+
+function eventStatusCompleted(event) {
+  return Boolean(event?.status?.type?.completed)
+    || event?.status?.type?.state === 'post';
+}
+
+async function fetchEspnAtpTournamentEvent(eventId) {
   if (!eventId) throw new Error('espn-atp-tournament: missing eventId');
-  // Wide date window — tournaments span 1-2 weeks and we may poll
-  // a few days post-final. -7 / +60 covers in-progress and just-
-  // completed events at the same query.
   const now = new Date();
   const back = new Date(now.getTime() - 7 * 86_400_000);
   const fwd  = new Date(now.getTime() + 60 * 86_400_000);
@@ -277,28 +322,95 @@ export async function readEspnAtpTournamentWinner({ eventId }) {
   if (!res.ok) throw new Error(`espn-atp-tournament: HTTP ${res.status}`);
   const data = await res.json();
   const events = Array.isArray(data?.events) ? data.events : [];
-  const ev = events.find(e => String(e.id) === String(eventId));
+  return events.find(e => String(e.id) === String(eventId)) || null;
+}
+
+function atpMensSinglesCompetitions(event) {
+  const groupings = Array.isArray(event?.groupings) ? event.groupings : [];
+  const mens = groupings.find(tennisGroupingIsMensSingles);
+  return Array.isArray(mens?.competitions) ? mens.competitions : [];
+}
+
+function extractAtpEliminatedCompetitors(event) {
+  const eliminated = [];
+  for (const competition of atpMensSinglesCompetitions(event)) {
+    const status = competition?.status || {};
+    const completed = Boolean(status?.type?.completed) || status?.type?.state === 'post';
+    if (!completed) continue;
+    const competitors = Array.isArray(competition?.competitors) ? competition.competitors : [];
+    const winner = competitors.find(c => c?.winner === true);
+    if (!winner) continue;
+    for (const competitor of competitors) {
+      if (!competitor || competitor === winner || competitor?.winner === true) continue;
+      eliminated.push({
+        driverId: athleteId(competitor),
+        label: athleteDisplayName(competitor),
+        reason: 'lost',
+        sourceStatus: status?.type?.description || status?.type?.name || status?.type?.state || null,
+      });
+    }
+  }
+  return dedupeCompetitorEntries(eliminated);
+}
+
+function normalizeAtpMatchCompetition(competition) {
+  const status = competition?.status || {};
+  const state = status?.type?.state || null;
+  const completed = Boolean(status?.type?.completed) || state === 'post';
+  const competitors = Array.isArray(competition?.competitors) ? competition.competitors : [];
+  const c0 = competitors[0] || null;
+  const c1 = competitors[1] || null;
+  if (!c0 || !c1) return { completed: false, winner: null, state: 'missing_competitors' };
+  if (!completed) return { completed: false, winner: null, state };
+  const winnerC = competitors.find(c => c?.winner === true);
+  const winner = winnerC === c0 ? 'home' : winnerC === c1 ? 'away' : null;
+  return {
+    completed: Boolean(winner),
+    winner,
+    homeTeam: athleteDisplayName(c0),
+    awayTeam: athleteDisplayName(c1),
+    state: winner ? state : 'no_winner_flag',
+  };
+}
+
+export async function readEspnAtpMatchWinner({ eventId, matchId }) {
+  if (!matchId) throw new Error('espn-atp-match: missing matchId');
+  const ev = await fetchEspnAtpTournamentEvent(eventId);
+  if (!ev) return { completed: false, winner: null, notFound: true };
+  const match = atpMensSinglesCompetitions(ev)
+    .find(competition => String(competition?.id) === String(matchId));
+  if (!match) return { completed: false, winner: null, notFound: true };
+  return normalizeAtpMatchCompetition(match);
+}
+
+export async function readEspnAtpTournamentWinner({ eventId }) {
+  // Wide date window — tournaments span 1-2 weeks and we may poll
+  // a few days post-final. -7 / +60 covers in-progress and just-
+  // completed events at the same query.
+  const ev = await fetchEspnAtpTournamentEvent(eventId);
   if (!ev) {
     return { completed: false, winner: null, notFound: true };
   }
-  const completed = Boolean(ev?.status?.type?.completed)
-    || ev?.status?.type?.state === 'post';
+  const eliminatedCompetitors = extractAtpEliminatedCompetitors(ev);
+  const completed = eventStatusCompleted(ev);
   if (!completed) {
-    return { completed: false, winner: null, state: ev?.status?.type?.state || null };
-  }
-  // Pull Men's Singles draw.
-  const groupings = Array.isArray(ev.groupings) ? ev.groupings : [];
-  const mens = groupings.find(g => g?.grouping?.slug === 'mens-singles');
-  if (!mens) {
-    return { completed: false, winner: null, state: 'no_mens_singles' };
+    return {
+      completed: false,
+      winner: null,
+      state: ev?.status?.type?.state || null,
+      eliminatedCompetitors,
+    };
   }
   // Round id '7' is the Final on ESPN. There can be multiple comps
   // with that round id across years/groupings, so within Men's
   // Singles the latest-by-date Final is the right one.
-  const comps = Array.isArray(mens.competitions) ? mens.competitions : [];
+  const comps = atpMensSinglesCompetitions(ev);
+  if (comps.length === 0) {
+    return { completed: false, winner: null, state: 'no_mens_singles', eliminatedCompetitors };
+  }
   const finals = comps.filter(c => c?.round?.id === '7');
   if (finals.length === 0) {
-    return { completed: false, winner: null, state: 'no_final_match' };
+    return { completed: false, winner: null, state: 'no_final_match', eliminatedCompetitors };
   }
   finals.sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime());
   const final = finals[finals.length - 1];
@@ -307,19 +419,14 @@ export async function readEspnAtpTournamentWinner({ eventId }) {
   if (!winnerC) {
     // Final scheduled but result not in yet (TBD competitors, etc.)
     // — let cron retry next tick.
-    return { completed: false, winner: null, state: 'final_pending' };
+    return { completed: false, winner: null, state: 'final_pending', eliminatedCompetitors };
   }
-  const ath = winnerC?.athlete || {};
-  const athleteId = winnerC?.id ? String(winnerC.id) : null;
-  const fullName = ath.displayName
-    || ath.fullName
-    || `${ath.firstName || ''} ${ath.lastName || ''}`.trim()
-    || null;
   return {
     completed: true,
     winner: 'p1',
-    winnerDriverId: athleteId,
-    winnerDriverLabel: fullName,
+    winnerDriverId: athleteId(winnerC),
+    winnerDriverLabel: athleteDisplayName(winnerC),
+    eliminatedCompetitors,
   };
 }
 
@@ -356,6 +463,56 @@ export async function readEspnAtpTournamentWinner({ eventId }) {
 
 const ESPN_GOLF_BASE = 'https://site.api.espn.com/apis/site/v2/sports/golf';
 
+function golfCompetitorStatusText(competitor) {
+  const status = competitor?.status || {};
+  return [
+    status?.type?.name,
+    status?.type?.description,
+    status?.type?.detail,
+    status?.displayName,
+    status?.name,
+    status?.description,
+    status?.detail,
+    status?.abbreviation,
+    competitor?.lineScores?.at?.(-1)?.displayValue,
+  ].map(cleanString).filter(Boolean).join(' ');
+}
+
+function golfEliminationReason(competitor) {
+  const raw = golfCompetitorStatusText(competitor);
+  const text = raw.toLowerCase();
+  if (!text) return null;
+  if (/\b(disqualified|disqualification|dq|dqd)\b/i.test(raw)) return 'disqualified';
+  if (/\b(withdrawn|withdrawal|wd|w\/d)\b/i.test(raw)) return 'withdrawn';
+  if (/\b(mdf)\b/i.test(raw)) return 'mdf';
+  if (/\b(cut|missed cut|mc)\b/i.test(raw)) return 'cut';
+  if (text.includes('missed the cut')) return 'cut';
+  return null;
+}
+
+function extractGolfEliminatedCompetitors(event) {
+  const comp = Array.isArray(event?.competitions) ? event.competitions[0] : null;
+  const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
+  return dedupeCompetitorEntries(competitors
+    .map((competitor) => {
+      const reason = golfEliminationReason(competitor);
+      if (!reason) return null;
+      const isTeam = competitor?.type === 'team';
+      const label = isTeam
+        ? cleanString(competitor?.team?.displayName)
+          || cleanString(competitor?.team?.shortDisplayName)
+          || cleanString(competitor?.team?.name)
+        : athleteDisplayName(competitor);
+      return {
+        driverId: isTeam ? null : athleteId(competitor),
+        label,
+        reason,
+        sourceStatus: golfCompetitorStatusText(competitor) || reason,
+      };
+    })
+    .filter(Boolean));
+}
+
 async function readEspnGolfWinnerImpl({ leaguePath, eventId }) {
   if (!leaguePath) throw new Error('espn-golf: missing leaguePath');
   if (!eventId) throw new Error('espn-golf: missing eventId');
@@ -377,9 +534,15 @@ async function readEspnGolfWinnerImpl({ leaguePath, eventId }) {
   if (!ev) {
     return { completed: false, winner: null, notFound: true };
   }
+  const eliminatedCompetitors = extractGolfEliminatedCompetitors(ev);
   const completed = Boolean(ev?.status?.type?.completed);
   if (!completed) {
-    return { completed: false, winner: null, state: ev?.status?.type?.state || null };
+    return {
+      completed: false,
+      winner: null,
+      state: ev?.status?.type?.state || null,
+      eliminatedCompetitors,
+    };
   }
   // Find the order=1 competitor. Both individual and team events
   // expose `order: 1` on the leader; status.position is not reliable
@@ -390,7 +553,7 @@ async function readEspnGolfWinnerImpl({ leaguePath, eventId }) {
   if (!winnerC) {
     // No order=1 — could be an unresolved playoff or unusual data.
     // Treat as "not done" so the cron retries.
-    return { completed: false, winner: null, state: 'no_order_1' };
+    return { completed: false, winner: null, state: 'no_order_1', eliminatedCompetitors };
   }
   const isTeam = winnerC?.type === 'team';
   if (isTeam) {
@@ -408,6 +571,7 @@ async function readEspnGolfWinnerImpl({ leaguePath, eventId }) {
       winner: 'p1',
       winnerDriverId: null,
       winnerDriverLabel: teamName,
+      eliminatedCompetitors,
     };
   }
   // Individual event — pull athlete.id from `competitor.id` (which
@@ -428,6 +592,7 @@ async function readEspnGolfWinnerImpl({ leaguePath, eventId }) {
     // golf-specific code path.
     winnerDriverId: athleteId,
     winnerDriverLabel: fullName,
+    eliminatedCompetitors,
   };
 }
 

@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { readEspnEvent } from './sports-results.js';
+import {
+  readEspnAtpMatchWinner,
+  readEspnAtpTournamentWinner,
+  readEspnEvent,
+  readEspnPgaWinner,
+} from './sports-results.js';
 
 function jsonResponse(body, ok = true, status = 200) {
   return {
@@ -164,6 +169,131 @@ test('readEspnEvent matches display names when ESPN short names are abbreviated'
     assert.equal(result.winner, 'away');
     assert.equal(result.homeScore, 2);
     assert.equal(result.awayScore, 3);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('readEspnAtpTournamentWinner exposes eliminated losers before the tournament is complete', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes('/tennis/atp/scoreboard')) {
+      return jsonResponse({
+        events: [{
+          id: 'atp-1',
+          status: { type: { state: 'in', completed: false } },
+          groupings: [{
+            grouping: { slug: 'mens-singles', name: "Men's Singles" },
+            competitions: [{
+              id: 'match-1',
+              status: { type: { state: 'post', completed: true, description: 'Final' } },
+              competitors: [
+                { id: '1', winner: true, athlete: { id: '1', displayName: 'Carlos Alcaraz' } },
+                { id: '2', winner: false, athlete: { id: '2', displayName: 'Taylor Fritz' } },
+              ],
+            }],
+          }],
+        }],
+      });
+    }
+    throw new Error(`unexpected url ${url}`);
+  };
+
+  try {
+    const result = await readEspnAtpTournamentWinner({ eventId: 'atp-1' });
+    assert.equal(result.completed, false);
+    assert.deepEqual(result.eliminatedCompetitors.map(row => ({
+      driverId: row.driverId,
+      label: row.label,
+      reason: row.reason,
+    })), [{
+      driverId: '2',
+      label: 'Taylor Fritz',
+      reason: 'lost',
+    }]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('readEspnAtpMatchWinner resolves a completed match inside the tournament grouping', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes('/tennis/atp/scoreboard')) {
+      return jsonResponse({
+        events: [{
+          id: 'atp-1',
+          status: { type: { state: 'in', completed: false } },
+          groupings: [{
+            grouping: { slug: 'mens-singles', name: "Men's Singles" },
+            competitions: [{
+              id: 'match-2',
+              status: { type: { state: 'post', completed: true } },
+              competitors: [
+                { id: '1', winner: false, athlete: { id: '1', displayName: 'Carlos Alcaraz' } },
+                { id: '2', winner: true, athlete: { id: '2', displayName: 'Taylor Fritz' } },
+              ],
+            }],
+          }],
+        }],
+      });
+    }
+    throw new Error(`unexpected url ${url}`);
+  };
+
+  try {
+    const result = await readEspnAtpMatchWinner({ eventId: 'atp-1', matchId: 'match-2' });
+    assert.equal(result.completed, true);
+    assert.equal(result.winner, 'away');
+    assert.equal(result.homeTeam, 'Carlos Alcaraz');
+    assert.equal(result.awayTeam, 'Taylor Fritz');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('readEspnPgaWinner exposes only clearly eliminated golfers before completion', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes('/golf/pga/scoreboard')) {
+      return jsonResponse({
+        events: [{
+          id: 'pga-1',
+          status: { type: { state: 'in', completed: false } },
+          competitions: [{
+            competitors: [
+              {
+                id: '9478',
+                type: 'athlete',
+                athlete: { id: '9478', displayName: 'Scottie Scheffler' },
+                status: { type: { description: 'Active' } },
+              },
+              {
+                id: '3470',
+                type: 'athlete',
+                athlete: { id: '3470', displayName: 'Rory McIlroy' },
+                status: { type: { description: 'CUT' } },
+              },
+            ],
+          }],
+        }],
+      });
+    }
+    throw new Error(`unexpected url ${url}`);
+  };
+
+  try {
+    const result = await readEspnPgaWinner({ eventId: 'pga-1' });
+    assert.equal(result.completed, false);
+    assert.deepEqual(result.eliminatedCompetitors.map(row => ({
+      driverId: row.driverId,
+      label: row.label,
+      reason: row.reason,
+    })), [{
+      driverId: '3470',
+      label: 'Rory McIlroy',
+      reason: 'cut',
+    }]);
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -17,6 +17,7 @@ import {
   readEspnLivWinner,
   readLivTeamWinner,
   readEspnAtpTournamentWinner,
+  readEspnAtpMatchWinner,
   readEspnMmaWinner,
   readOddsApiBoxingWinner,
   readNextOpponent,
@@ -378,6 +379,11 @@ export async function resolveAutoResolverCandidate(candidate = {}) {
       });
     } else if (cfg.source === 'espn-atp-tournament') {
       result = await readEspnAtpTournamentWinner({ eventId: cfg.eventId });
+    } else if (cfg.source === 'espn-atp-match') {
+      result = await readEspnAtpMatchWinner({
+        eventId: cfg.eventId,
+        matchId: cfg.matchId,
+      });
     } else {
       throw new Error(`unsupported sports_api source: ${cfg.source}`);
     }

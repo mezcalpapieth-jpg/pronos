@@ -5,12 +5,40 @@ import {
   buildLcdlfWeeklyMarketSpec,
   extractResidentsFromIndexHtml,
   parseLcdlfResidentStatus,
+  readLcdlfOfficialSnapshot,
 } from './lcdlf-official.js';
 
 test('parseLcdlfResidentStatus recognizes official status labels', () => {
   assert.equal(parseLcdlfResidentStatus('<span>EN CASA</span>').key, 'en_casa');
   assert.equal(parseLcdlfResidentStatus('<span>NOMINADA</span>').key, 'nominado');
   assert.equal(parseLcdlfResidentStatus('<span>ELIMINADO</span>').key, 'eliminado');
+});
+
+test('parseLcdlfResidentStatus only reads scoped resident profile badges', () => {
+  const aldoPage = `
+    <main>
+      <section>
+        <h1><a href="/habitantes/aldo-rendon">Aldo Rendón</a></h1>
+        <p>Aldo sigue en competencia.</p>
+      </section>
+      <section>
+        <article>Aldo, Karina y Gema se preocupan por saber si saldrán nominadas.</article>
+        <article>La Casa espera saber si Masad será o no eliminado.</article>
+      </section>
+    </main>
+  `;
+  const ximenaPage = `
+    <main>
+      <section>
+        <figure><span>ELIMINADA</span></figure>
+        <h1><a href="/habitantes/ximena-herrera">Ximena Herrera</a></h1>
+      </section>
+      <section><article>Otros habitantes nominados.</article></section>
+    </main>
+  `;
+
+  assert.equal(parseLcdlfResidentStatus(aldoPage, { name: 'Aldo Rendón', slug: 'aldo-rendon' }), null);
+  assert.equal(parseLcdlfResidentStatus(ximenaPage, { name: 'Ximena Herrera', slug: 'ximena-herrera' }).key, 'eliminado');
 });
 
 test('extractResidentsFromIndexHtml finds official resident profile links', () => {
@@ -21,6 +49,82 @@ test('extractResidentsFromIndexHtml finds official resident profile links', () =
 
   assert.deepEqual(rows.map(row => row.slug), ['ernesto-laguardia', 'memo-schutz']);
   assert.deepEqual(rows.map(row => row.name), ['Ernesto Laguardia', 'Memo Schutz']);
+});
+
+test('extractResidentsFromIndexHtml uses card titles and scoped card badges', () => {
+  const rows = extractResidentsFromIndexHtml(`
+    <article data-card-title="Ximena Herrera">
+      <a href="/habitantes/ximena-herrera"><span>ELIMINADA</span> Ximena Herrera Actriz Ver más</a>
+    </article>
+    <article data-card-title="Masad Altamimi">
+      <a href="/habitantes/masad-altamimi">Masad Altamimi Ver más</a>
+      <p>En vivo desde La Casa.</p>
+    </article>
+    <article data-card-title="Memo Schutz">
+      <a href="/habitantes/memo-schutz">Memo Schutz Ver más</a>
+    </article>
+  `);
+
+  assert.deepEqual(rows.map(row => row.name), ['Ximena Herrera', 'Masad Altamimi', 'Memo Schutz']);
+  assert.deepEqual(rows.map(row => row.statusKey), ['eliminado', null, null]);
+});
+
+test('readLcdlfOfficialSnapshot merges discovered cards with configured full roster', async () => {
+  const previousResidents = process.env.LCDLF_RESIDENTS_JSON;
+  const previousDiscover = process.env.LCDLF_DISCOVER_RESIDENTS;
+  try {
+    delete process.env.LCDLF_DISCOVER_RESIDENTS;
+    process.env.LCDLF_RESIDENTS_JSON = JSON.stringify([
+      { name: 'Mariana Ochoa', slug: 'mariana-ochoa' },
+      { name: 'Ximena Herrera', slug: 'ximena-herrera' },
+      { name: 'Masad Altamimi', slug: 'masad-altamimi' },
+    ]);
+
+    const fetchImpl = async (url) => {
+      if (!String(url).includes('/habitantes/')) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => `
+            <article data-card-title="Ximena Herrera">
+              <a href="/habitantes/ximena-herrera"><span>ELIMINADA</span> Ximena Herrera Ver más</a>
+            </article>
+            <article data-card-title="Masad Altamimi"><a href="/habitantes/masad-altamimi">Masad Altamimi</a></article>
+            <article data-card-title="Aldo Rendón"><a href="/habitantes/aldo-rendon">Aldo Rendón</a></article>
+            <article data-card-title="Yahir"><a href="/habitantes/yahir">Yahir</a></article>
+            <article data-card-title="Memo Schutz"><a href="/habitantes/memo-schutz">Memo Schutz</a></article>
+            <article data-card-title="Fede Vigevani"><a href="/habitantes/fede-vigevani">Fede Vigevani</a></article>
+          `,
+        };
+      }
+      const slug = String(url).split('/habitantes/')[1]?.split('?')[0];
+      const badge = slug === 'mariana-ochoa' ? '<span>ELIMINADA</span>' : '';
+      const title = slug === 'mariana-ochoa' ? 'Mariana Ochoa'
+        : slug === 'ximena-herrera' ? 'Ximena Herrera'
+          : slug === 'masad-altamimi' ? 'Masad Altamimi'
+            : 'Habitante';
+      return {
+        ok: true,
+        status: 200,
+        text: async () => `<main><section>${badge}<h1><a href="/habitantes/${slug}">${title}</a></h1></section></main>`,
+      };
+    };
+
+    const snapshot = await readLcdlfOfficialSnapshot({
+      fetchImpl,
+      baseUrl: 'https://example.com',
+      now: new Date('2026-08-10T12:00:00Z'),
+    });
+
+    assert.equal(snapshot.total, 7);
+    assert.equal(snapshot.ok, true);
+    assert.deepEqual(snapshot.eliminated.map(row => row.name), ['Ximena Herrera', 'Mariana Ochoa']);
+  } finally {
+    if (previousResidents === undefined) delete process.env.LCDLF_RESIDENTS_JSON;
+    else process.env.LCDLF_RESIDENTS_JSON = previousResidents;
+    if (previousDiscover === undefined) delete process.env.LCDLF_DISCOVER_RESIDENTS;
+    else process.env.LCDLF_DISCOVER_RESIDENTS = previousDiscover;
+  }
 });
 
 test('buildLcdlfWeeklyMarketSpec creates a manual-review market from nominees', () => {
