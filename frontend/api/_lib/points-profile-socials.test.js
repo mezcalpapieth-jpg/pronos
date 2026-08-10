@@ -22,7 +22,7 @@ test('buildAdminProfileSocials returns admin-only social proof rows with catalog
     },
     {
       id: 13,
-      task_key: 'custom_social',
+      task_key: 'tiktok_follow',
       status: 'pending',
       reward: '10',
       proof_url: '',
@@ -30,6 +30,17 @@ test('buildAdminProfileSocials returns admin-only social proof rows with catalog
       reviewed_at: null,
       rejection_note: null,
       created_at: '2026-05-02T00:00:00.000Z',
+    },
+    {
+      id: 14,
+      task_key: 'custom_social',
+      status: 'pending',
+      reward: '10',
+      proof_url: '',
+      reviewer: null,
+      reviewed_at: null,
+      rejection_note: null,
+      created_at: '2026-05-03T00:00:00.000Z',
     },
   ]);
 
@@ -50,6 +61,20 @@ test('buildAdminProfileSocials returns admin-only social proof rows with catalog
     },
     {
       id: 13,
+      taskKey: 'tiktok_follow',
+      label: 'Seguir @pronosmarkets en TikTok',
+      network: 'tiktok',
+      status: 'pending',
+      reward: 10,
+      proofUrl: null,
+      targetUrl: null,
+      reviewer: null,
+      reviewedAt: null,
+      rejectionNote: null,
+      createdAt: '2026-05-02T00:00:00.000Z',
+    },
+    {
+      id: 14,
       taskKey: 'custom_social',
       label: 'custom_social',
       network: 'social',
@@ -60,7 +85,7 @@ test('buildAdminProfileSocials returns admin-only social proof rows with catalog
       reviewer: null,
       reviewedAt: null,
       rejectionNote: null,
-      createdAt: '2026-05-02T00:00:00.000Z',
+      createdAt: '2026-05-03T00:00:00.000Z',
     },
   ]);
 });

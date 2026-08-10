@@ -4,7 +4,7 @@ const SOCIAL_TASK_META = {
     network: 'instagram',
   },
   tiktok_follow: {
-    label: 'Seguir @pronos.io en TikTok',
+    label: 'Seguir @pronosmarkets en TikTok',
     network: 'tiktok',
   },
   twitter_follow: {

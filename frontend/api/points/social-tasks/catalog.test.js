@@ -19,6 +19,12 @@ test('public social task catalog no longer exposes vague like/repost tasks', () 
   assert.doesNotMatch(source, /Repostear una story/);
 });
 
+test('TikTok follow task points at the current Pronos account', () => {
+  assert.match(source, /label:\s*'Seguir @pronosmarkets en TikTok'/);
+  assert.match(source, /url:\s*'https:\/\/tiktok\.com\/@pronosmarkets'/);
+  assert.doesNotMatch(source, /tiktok\.com\/@pronos\.io/);
+});
+
 test('hidden campaign tasks require an exact expiring task link', () => {
   assert.match(source, /requestedTaskKey/);
   assert.match(source, /req\.query\.task/);

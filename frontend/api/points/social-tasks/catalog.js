@@ -25,11 +25,11 @@ export const STATIC_TASK_CATALOG = [
   },
   {
     key: 'tiktok_follow',
-    label: 'Seguir @pronos.io en TikTok',
+    label: 'Seguir @pronosmarkets en TikTok',
     description: 'Sigue nuestra cuenta de TikTok y sube captura del perfil con tu usuario visible.',
     reward: 300,
     network: 'tiktok',
-    url: 'https://tiktok.com/@pronos.io',
+    url: 'https://tiktok.com/@pronosmarkets',
   },
   {
     key: 'twitter_follow',

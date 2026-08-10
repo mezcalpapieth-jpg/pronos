@@ -25,7 +25,7 @@ import {
 } from '../lib/socialLinks.js';
 
 const IG_PROFILE = 'https://www.instagram.com/pronos.latam/';
-const TT_PROFILE = 'https://www.tiktok.com/@pronos.io';
+const TT_PROFILE = 'https://www.tiktok.com/@pronosmarkets';
 const X_PROFILE  = 'https://twitter.com/pronos_io';
 
 function buildShareUrl(platform, link) {
