@@ -50,6 +50,7 @@ import { buildFootballDataEspnFallbackConfig } from '../_lib/sports-resolver-fal
 import { NEXT_OPPONENT_RECHECK_INTERVAL_HOURS, findParallelWinnerIndex } from '../_lib/sports-resolver-policy.js';
 import { buildPointsResolutionCandidateInsert } from '../_lib/points-resolution-candidates.js';
 import { releaseOpenLimitOrdersForMarkets } from '../_lib/points-limit-orders.js';
+import { buildLcdlfResolutionReview, isLcdlfMarket } from '../_lib/lcdlf-official.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql   = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -205,7 +206,46 @@ function isManualReviewMarket({ resolverType, cfg, row, sourceData }) {
   if (String(row?.category || '').trim().toLowerCase() === 'musica') return true;
 
   const kind = String(sourceData?.kind || '').trim().toLowerCase();
-  return ['award', 'reality_week', 'reality_winner', 'concert'].includes(kind);
+  return ['award', 'reality_week', 'reality_winner', 'lcdlf_week', 'concert'].includes(kind);
+}
+
+async function enrichManualReviewCandidate({ market, cfg, sourceData, outcomes }) {
+  if (!isLcdlfMarket({ cfg, row: market, sourceData })) {
+    return { cfg, sourceData };
+  }
+
+  try {
+    const review = await buildLcdlfResolutionReview({
+      market,
+      cfg,
+      sourceData,
+      outcomes,
+    });
+    return {
+      cfg: {
+        ...(cfg || {}),
+        ...(review?.resolverConfigPatch || {}),
+      },
+      sourceData: {
+        ...(sourceData || {}),
+        ...(review?.sourceDataPatch || {}),
+      },
+    };
+  } catch (e) {
+    return {
+      cfg: {
+        ...(cfg || {}),
+        source: 'lcdlf-official',
+        suggestedOutcomeIndex: null,
+        confidenceBps: 0,
+        rationale: `No se pudo leer el sitio oficial de La Casa de los Famosos México: ${e?.message || 'error desconocido'}. Requiere revisión manual antes de pagar MXNP.`,
+      },
+      sourceData: {
+        ...(sourceData || {}),
+        lcdlfResolutionError: e?.message || 'unknown',
+      },
+    };
+  }
 }
 
 function buildManualReviewCandidate({ market, cfg, sourceData, outcomes }) {
@@ -539,10 +579,16 @@ export async function runAutoResolve({ dry = false } = {}) {
       }
       if (isManualReviewMarket({ resolverType, cfg, row: m, sourceData })) {
         try {
-          await queueManualReviewCandidate({
+          const enriched = await enrichManualReviewCandidate({
             market: m,
             cfg,
             sourceData,
+            outcomes: marketOutcomes,
+          });
+          await queueManualReviewCandidate({
+            market: m,
+            cfg: enriched.cfg,
+            sourceData: enriched.sourceData,
             outcomes: marketOutcomes,
             dry,
             report,

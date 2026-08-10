@@ -20,3 +20,9 @@ test('support ticket replies preserve message authorship and attachments', () =>
   assert.match(SOURCE, /normalizeSupportAttachments\(req\.body\?\.attachments\)/);
   assert.match(SOURCE, /serializeTicket\(result\.ticket, \[result\.message\]\)/);
 });
+
+test('support email bookkeeping is best-effort after tickets are saved', () => {
+  assert.match(SOURCE, /async function markSupportMessageEmailed/);
+  assert.match(SOURCE, /console\.warn\('\[points\/support-tickets\] email mark failed'/);
+  assert.match(SOURCE, /emailed && await markSupportMessageEmailed\(result\.message\.id\)/);
+});

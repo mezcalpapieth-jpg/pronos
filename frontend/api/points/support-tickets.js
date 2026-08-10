@@ -49,6 +49,24 @@ function cleanText(value, { min = 1, max = 2000 } = {}) {
   return text;
 }
 
+async function markSupportMessageEmailed(messageId) {
+  try {
+    await schemaSql`
+      UPDATE points_support_messages
+      SET emailed = true
+      WHERE id = ${messageId}
+    `;
+    return true;
+  } catch (e) {
+    console.warn('[points/support-tickets] email mark failed', {
+      messageId,
+      message: e?.message,
+      code: e?.code,
+    });
+    return false;
+  }
+}
+
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'GET, POST, OPTIONS', credentials: true });
   if (cors) return cors;
@@ -155,12 +173,7 @@ async function replyTicket(req, res, session) {
   if (!result) return res.status(404).json({ error: 'ticket_not_found' });
 
   const emailed = await notifySupportTicketUserReply(result.ticket, message);
-  if (emailed) {
-    await schemaSql`
-      UPDATE points_support_messages
-      SET emailed = true
-      WHERE id = ${result.message.id}
-    `;
+  if (emailed && await markSupportMessageEmailed(result.message.id)) {
     result.message.emailed = true;
   }
 
@@ -201,12 +214,7 @@ async function createTicket(req, res, session) {
   });
 
   const emailed = await notifySupportTicketCreated(result.ticket, message);
-  if (emailed) {
-    await schemaSql`
-      UPDATE points_support_messages
-      SET emailed = true
-      WHERE id = ${result.message.id}
-    `;
+  if (emailed && await markSupportMessageEmailed(result.message.id)) {
     result.message.emailed = true;
   }
 

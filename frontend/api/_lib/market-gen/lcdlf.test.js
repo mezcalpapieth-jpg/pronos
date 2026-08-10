@@ -1,0 +1,44 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { generateLcdlfMarkets } from './lcdlf.js';
+
+test('generateLcdlfMarkets uses official nominees and suggested balanced pricing', async () => {
+  const previousResidents = process.env.LCDLF_RESIDENTS_JSON;
+  const previousDiscover = process.env.LCDLF_DISCOVER_RESIDENTS;
+  try {
+    process.env.LCDLF_DISCOVER_RESIDENTS = 'false';
+    process.env.LCDLF_RESIDENTS_JSON = JSON.stringify([
+      { name: 'Ernesto Laguardia', slug: 'ernesto-laguardia' },
+      { name: 'Memo Schutz', slug: 'memo-schutz' },
+      { name: 'Yahir', slug: 'yahir' },
+    ]);
+
+    const fetchImpl = async (url) => {
+      let label = 'EN CASA';
+      if (String(url).includes('/habitantes/ernesto-laguardia')) label = 'NOMINADO';
+      if (String(url).includes('/habitantes/memo-schutz')) label = 'NOMINADO';
+      return {
+        ok: true,
+        status: 200,
+        text: async () => `<html><body><span>${label}</span></body></html>`,
+      };
+    };
+
+    const specs = await generateLcdlfMarkets({
+      now: new Date('2026-08-10T12:00:00Z'),
+      fetchImpl,
+    });
+
+    assert.equal(specs.length, 1);
+    assert.equal(specs[0].source, 'lcdlf-official');
+    assert.deepEqual(specs[0].outcomes, ['Ernesto Laguardia', 'Memo Schutz']);
+    assert.deepEqual(specs[0].seed_liquidities, [1000, 1000]);
+    assert.equal(specs[0].source_data.suggestedPricing.source, 'lcdlf-official:nominated');
+    assert.equal(specs[0].resolver_config.requireHumanConfirmation, true);
+  } finally {
+    if (previousResidents === undefined) delete process.env.LCDLF_RESIDENTS_JSON;
+    else process.env.LCDLF_RESIDENTS_JSON = previousResidents;
+    if (previousDiscover === undefined) delete process.env.LCDLF_DISCOVER_RESIDENTS;
+    else process.env.LCDLF_DISCOVER_RESIDENTS = previousDiscover;
+  }
+});

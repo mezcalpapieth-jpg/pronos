@@ -7,6 +7,7 @@ const sellModalSource = await readFile(new URL('../components/PointsSellPreviewM
 const detailSource = await readFile(new URL('./PointsMarketDetail.jsx', import.meta.url), 'utf8');
 const earnSource = await readFile(new URL('./PointsEarn.jsx', import.meta.url), 'utf8');
 const i18nSource = await readFile(new URL('../../../src/lib/i18n.js', import.meta.url), 'utf8');
+const winShareSource = await readFile(new URL('../components/PointsWinShareButton.jsx', import.meta.url), 'utf8');
 
 test('portfolio sell flow previews the real AMM quote before executing', () => {
   assert.match(source, /setSellPreview\(/);
@@ -103,4 +104,16 @@ test('portfolio separates open PnL from total account PnL', () => {
   assert.match(source, /const totalPnl = Number\(historySummary\?\.totalPnl \?\? openPnl\)/);
   assert.match(source, /label: 'PnL abierto'/);
   assert.match(source, /label: 'PnL total'/);
+});
+
+test('portfolio won markets can generate a native share card with real history', () => {
+  assert.match(source, /PointsWinShareButton/);
+  assert.match(source, /m\.outcomeStatus === 'won'/);
+  assert.match(source, /canRedeem \?/);
+  assert.match(winShareSource, /fetchPriceHistory/);
+  assert.match(winShareSource, /document\.createElement\('canvas'\)/);
+  assert.match(winShareSource, /canvas\.toBlob/);
+  assert.match(winShareSource, /navigator\.canShare\?\.\(\{ files: \[file\] \}\)/);
+  assert.match(winShareSource, /new File\(\[blob\]/);
+  assert.match(winShareSource, /Sin historial suficiente/);
 });

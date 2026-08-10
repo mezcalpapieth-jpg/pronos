@@ -36,6 +36,7 @@ import { generateMananeraMarkets }      from './market-gen/mananera.js';
 import { generateChartsMarkets }        from './market-gen/charts.js';
 import { generateYouTubeMarkets }       from './market-gen/youtube.js';
 import { generateEntertainmentMarkets } from './market-gen/entertainment.js';
+import { generateLcdlfMarkets }         from './market-gen/lcdlf.js';
 import { generateWorldCupMarkets }      from './market-gen/world-cup.js';
 import { generateLmbMarkets }           from './market-gen/lmb.js';
 import { generateTennisMarkets }        from './market-gen/tennis.js';
@@ -67,6 +68,7 @@ export const GENERATORS = [
   { name: 'f1',             run: generateF1Markets            },
   { name: 'charts',         run: generateChartsMarkets        },
   { name: 'youtube',        run: generateYouTubeMarkets       },
+  { name: 'lcdlf',          run: generateLcdlfMarkets         },
   { name: 'entertainment',  run: generateEntertainmentMarkets },
   { name: 'world-cup',      run: generateWorldCupMarkets      },
   { name: 'lmb',            run: generateLmbMarkets            },

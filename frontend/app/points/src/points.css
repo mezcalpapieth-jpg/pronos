@@ -641,6 +641,38 @@
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }
+.points-win-share-button {
+  border: 1px solid rgba(255, 90, 20, 0.38);
+  background: rgba(255, 90, 20, 0.09);
+  color: var(--orange);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+.points-win-share-button:hover,
+.points-win-share-button:focus-visible {
+  background: rgba(255, 90, 20, 0.16);
+  border-color: rgba(255, 90, 20, 0.62);
+  color: var(--text-primary);
+}
+.points-win-share-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+.points-history-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
 .points-portfolio-market-link {
   color: var(--text-primary);
   text-decoration: none;
@@ -718,6 +750,10 @@
   .points-position-actions .btn-ghost,
   .points-position-actions button {
     width: 100%;
+  }
+  .points-history-row-actions {
+    align-items: flex-end;
+    flex-direction: column;
   }
   .points-history-total-card {
     align-items: flex-start;

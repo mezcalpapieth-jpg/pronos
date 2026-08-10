@@ -45,6 +45,24 @@ function cleanMessage(value) {
   return text.length >= 2 && text.length <= 4000 ? text : null;
 }
 
+async function markSupportMessageEmailed(messageId) {
+  try {
+    await schemaSql`
+      UPDATE points_support_messages
+      SET emailed = true
+      WHERE id = ${messageId}
+    `;
+    return true;
+  } catch (e) {
+    console.warn('[admin/support-tickets] email mark failed', {
+      messageId,
+      message: e?.message,
+      code: e?.code,
+    });
+    return false;
+  }
+}
+
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'GET, POST, OPTIONS', credentials: true });
   if (cors) return cors;
@@ -139,12 +157,7 @@ async function mutate(req, res, admin) {
     });
 
     const emailed = await notifySupportTicketReply(result.ticket, message);
-    if (emailed) {
-      await schemaSql`
-        UPDATE points_support_messages
-        SET emailed = true
-        WHERE id = ${result.message.id}
-      `;
+    if (emailed && await markSupportMessageEmailed(result.message.id)) {
       result.message.emailed = true;
     }
     return res.status(200).json({ ticket: serializeTicket(result.ticket, [result.message]) });

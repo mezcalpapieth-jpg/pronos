@@ -18,6 +18,7 @@ import { historyPnlValue } from '../lib/historyPnl.js';
 import { buildSellPreview, normalizeSellShares } from '../lib/sellPreview.js';
 import { HistorySkeleton, LeaderboardSkeleton, PositionSkeleton } from '../components/PointsSkeleton.jsx';
 import PointsSellPreviewModal from '../components/PointsSellPreviewModal.jsx';
+import PointsWinShareButton from '../components/PointsWinShareButton.jsx';
 import {
   fetchPositions,
   fetchHistory,
@@ -73,7 +74,7 @@ function pickedOutcomeLabelFromTransactions(transactions = []) {
 }
 
 // ─── Position card ───────────────────────────────────────────────────────────
-function PositionCard({ position, onSell, onRedeem, onDismiss, selling, redeeming, dismissing }) {
+function PositionCard({ position, username, onSell, onRedeem, onDismiss, selling, redeeming, dismissing }) {
   const {
     marketId, outcomeLabel, question, shares, costBasis, currentPrice,
     currentValue, pnl, canRedeem, status,
@@ -156,14 +157,23 @@ function PositionCard({ position, onSell, onRedeem, onDismiss, selling, redeemin
           )}
         </div>
         {canRedeem ? (
-          <button
-            className="btn-primary"
-            onClick={() => onRedeem(position)}
-            disabled={redeeming}
-            style={{ padding: '8px 16px', fontSize: 11 }}
-          >
-            {redeeming ? 'Cobrando…' : 'Cobrar ganancias'}
-          </button>
+          <>
+            <PointsWinShareButton
+              item={position}
+              username={username}
+              amount={Math.max(Number(pnl || 0), Number(position.claimablePayout || 0))}
+              outcomeLabel={outcomeLabel}
+              compact
+            />
+            <button
+              className="btn-primary"
+              onClick={() => onRedeem(position)}
+              disabled={redeeming}
+              style={{ padding: '8px 16px', fontSize: 11 }}
+            >
+              {redeeming ? 'Cobrando…' : 'Cobrar ganancias'}
+            </button>
+          </>
         ) : status === 'active' ? (
           <button
             className="btn-ghost"
@@ -1052,6 +1062,7 @@ export default function PointsPortfolio() {
                       <PositionCard
                         key={key}
                         position={p}
+                        username={user?.username}
                         onSell={handleSell}
                         onRedeem={handleRedeem}
                         onDismiss={handleDismiss}
@@ -1067,7 +1078,7 @@ export default function PointsPortfolio() {
           )}
 
           {tab === 'historial' && (
-            <HistoryView history={history} summary={historySummary} loading={loading} />
+            <HistoryView history={history} summary={historySummary} loading={loading} username={user?.username} />
           )}
 
           {tab === 'recompensas' && (
@@ -1100,7 +1111,7 @@ export default function PointsPortfolio() {
 }
 
 // ─── History view (inlined — mirrors MVP HistoryTab structure) ───────────────
-function HistoryView({ history, summary, loading }) {
+function HistoryView({ history, summary, loading, username }) {
   if (loading) {
     return <HistorySkeleton count={4} />;
   }
@@ -1176,15 +1187,26 @@ function HistoryView({ history, summary, loading }) {
                     {m.question || `Mercado #${m.marketId}`}
                   </p>
                 )}
-                <span style={{
-                  fontFamily: 'var(--font-mono)', fontSize: 10,
-                  letterSpacing: '0.08em', textTransform: 'uppercase',
-                  background: s.bg, color: s.color,
-                  border: `1px solid ${s.color}40`,
-                  padding: '3px 8px', borderRadius: 4, flexShrink: 0,
-                }}>
-                  {s.label}
-                </span>
+                <div className="points-history-row-actions">
+                  {m.outcomeStatus === 'won' && (
+                    <PointsWinShareButton
+                      item={m}
+                      username={username}
+                      amount={Math.max(Number(pnl || 0), Number(m.claimablePayout || 0))}
+                      outcomeLabel={pickedLabel || m.winningOutcomeLabel}
+                      compact
+                    />
+                  )}
+                  <span style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 10,
+                    letterSpacing: '0.08em', textTransform: 'uppercase',
+                    background: s.bg, color: s.color,
+                    border: `1px solid ${s.color}40`,
+                    padding: '3px 8px', borderRadius: 4, flexShrink: 0,
+                  }}>
+                    {s.label}
+                  </span>
+                </div>
               </div>
               <div style={{
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
