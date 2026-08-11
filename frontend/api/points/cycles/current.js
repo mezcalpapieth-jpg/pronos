@@ -116,6 +116,39 @@ function tournamentPayload(window = getTournamentWindow()) {
   };
 }
 
+function dbCyclePayload(row, window = getTournamentWindow()) {
+  const now = Date.now();
+  const startsAtMs = new Date(row.started_at).getTime();
+  const endsAtMs = new Date(row.ends_at).getTime();
+  const secondsUntilStart = Math.max(0, Math.floor((startsAtMs - now) / 1000));
+  const secondsRemaining = Math.max(0, Math.floor((endsAtMs - now) / 1000));
+  const active = now >= startsAtMs && secondsRemaining > 0;
+  return {
+    paused: false,
+    label: row.label || window.label,
+    window,
+    rules: tournamentRulesPayload(),
+    cycle: {
+      id: row.id,
+      label: row.label || window.label,
+      startedAt: row.started_at,
+      startsAt: row.started_at,
+      operationCloseAt: row.ends_at,
+      rankingCutoffAt: row.ends_at,
+      endsAt: row.ends_at,
+      status: secondsRemaining === 0 ? 'closed' : active ? 'active' : 'scheduled',
+      paused: false,
+      scheduled: now < startsAtMs,
+      createdAt: row.created_at,
+      closedAt: row.closed_at,
+      secondsUntilStart,
+      secondsUntilOperationClose: secondsRemaining,
+      secondsRemaining,
+      pastDeadline: secondsRemaining === 0,
+    },
+  };
+}
+
 export default async function handler(req, res) {
   const timer = createApiTimer(res, 'points/cycles/current');
   try {
@@ -124,10 +157,14 @@ export default async function handler(req, res) {
     if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
 
     setCacheHeaders(res, { scope: 'public', maxAge: 10, sMaxage: 30, staleWhileRevalidate: 120 });
-    const { value: payload, hit } = await cachedJson('points:cycles:current:v2', 20_000, async () => {
+    const { value: payload, hit } = await cachedJson('points:cycles:current:v3', 20_000, async () => {
       await timer.time('schema', () => ensurePointsSchema(sql));
       const window = getTournamentWindow();
       const paused = await timer.time('db_pause', () => cyclesArePaused());
+      const row = paused ? null : await timer.time('db_current', () => getCurrent());
+      if (row) {
+        return dbCyclePayload(row, window);
+      }
       if (paused && window.status === 'closed') {
         return pausedPayload();
       }
@@ -136,38 +173,7 @@ export default async function handler(req, res) {
         return tournamentPayload(window);
       }
 
-      const row = await timer.time('db_current', () => getCurrent());
-      if (!row) {
-        return tournamentPayload(window);
-      }
-
-      const endsAtMs = new Date(row.ends_at).getTime();
-      const secondsRemaining = Math.max(0, Math.floor((endsAtMs - Date.now()) / 1000));
-
-      return {
-        paused: false,
-        label: row.label || window.label,
-        window,
-        rules: tournamentRulesPayload(),
-        cycle: {
-          id: row.id,
-          label: row.label || window.label,
-          startedAt: row.started_at,
-          startsAt: row.started_at,
-          operationCloseAt: window.operationCloseAt,
-          rankingCutoffAt: window.rankingCutoffAt,
-          endsAt: row.ends_at,
-          status: row.status,
-          createdAt: row.created_at,
-          closedAt: row.closed_at,
-          secondsUntilStart: window.secondsUntilStart,
-          secondsUntilOperationClose: window.secondsUntilOperationClose,
-          secondsRemaining,
-          // Flag the UI can use to show "pendiente de cierre" once the
-          // deadline passes but before an admin rolls over.
-          pastDeadline: secondsRemaining === 0,
-        },
-      };
+      return tournamentPayload(window);
     });
     res.setHeader('X-Pronos-Cache', hit ? 'hit' : 'miss');
     timer.end({ cache: hit ? 'hit' : 'miss' });

@@ -508,6 +508,57 @@ const MIGRATIONS = [
     ON social_task_reviews(social_task_id, reviewed_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_social_task_reviews_user_time
     ON social_task_reviews(username, reviewed_at DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS points_cycles (
+    id            SERIAL PRIMARY KEY,
+    label         TEXT,
+    started_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    ends_at       TIMESTAMPTZ NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'active',
+    created_at    TIMESTAMPTZ DEFAULT NOW(),
+    closed_at     TIMESTAMPTZ
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_cycles_status ON points_cycles(status, ends_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_cycles_closed_at
+    ON points_cycles(closed_at DESC)
+    WHERE status = 'closed'`,
+
+  `CREATE TABLE IF NOT EXISTS points_cycle_snapshots (
+    id             SERIAL PRIMARY KEY,
+    cycle_id       INTEGER NOT NULL REFERENCES points_cycles(id) ON DELETE CASCADE,
+    username       TEXT NOT NULL,
+    final_balance  NUMERIC(20,6) NOT NULL,
+    final_pnl      NUMERIC(20,6) NOT NULL DEFAULT 0,
+    rank           INTEGER NOT NULL,
+    created_at     TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(cycle_id, username)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_cycle_snapshots_cycle_rank
+    ON points_cycle_snapshots(cycle_id, rank ASC)`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS tournament_score NUMERIC(20,6)`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS market_pnl NUMERIC(20,6)`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS current_position_value NUMERIC(20,6)`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS inactivity_penalty NUMERIC(20,6)`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS inactive_days INTEGER`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS active_days INTEGER`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS qualifying_markets INTEGER`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS qualified BOOLEAN`,
+
+  `CREATE TABLE IF NOT EXISTS points_cycle_position_snapshots (
+    id              SERIAL PRIMARY KEY,
+    cycle_id        INTEGER REFERENCES points_cycles(id) ON DELETE SET NULL,
+    username        TEXT NOT NULL,
+    market_id       INTEGER NOT NULL REFERENCES points_markets(id) ON DELETE CASCADE,
+    outcome_index   SMALLINT NOT NULL,
+    shares          NUMERIC(30,18) NOT NULL DEFAULT 0,
+    cost_basis      NUMERIC(20,6) NOT NULL DEFAULT 0,
+    realized_pnl    NUMERIC(20,6) NOT NULL DEFAULT 0,
+    snapshotted_at  TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_cycle_position_snapshots_cycle_user
+    ON points_cycle_position_snapshots(cycle_id, username)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_cycle_position_snapshots_market
+    ON points_cycle_position_snapshots(market_id, outcome_index)`,
 ];
 
 export default async function handler(req, res) {

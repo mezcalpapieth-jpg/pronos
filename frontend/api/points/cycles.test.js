@@ -22,3 +22,21 @@ test('points admin can pause and later reopen public cycles', () => {
   assert.match(adminSource, /restarted:\s*true/);
   assert.match(adminSource, /openNewCycle/);
 });
+
+test('points rollover archives exposure and carries only approved pre-cycle bonuses on bootstrap', () => {
+  assert.match(schemaSource, /points_cycle_position_snapshots/);
+  assert.match(adminSource, /archiveAndClearPositionsForCycleReset/);
+  assert.match(adminSource, /cancelOpenLimitOrdersForCycleReset/);
+  assert.match(adminSource, /includePreCycleCarryover:\s*true/);
+  assert.match(adminSource, /PRE_CYCLE_SIGNUP_BONUS/);
+  assert.match(adminSource, /PRE_CYCLE_REFERRAL_REWARD/);
+  assert.match(adminSource, /PRE_CYCLE_FOLLOW_TASK_KEYS/);
+  assert.match(adminSource, /SOCIAL_LINK_CARRYOVER_KINDS/);
+  assert.match(adminSource, /cycle_carryover/);
+});
+
+test('public cycles prefer the active database cycle once admin opens one', () => {
+  assert.match(currentSource, /dbCyclePayload/);
+  assert.match(currentSource, /points:cycles:current:v3/);
+  assert.match(currentSource, /const row = paused \? null : await timer\.time\('db_current'/);
+});

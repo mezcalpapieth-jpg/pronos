@@ -244,6 +244,7 @@ export default async function handler(req, res) {
          ON CONFLICT (market_id, username, outcome_index) DO UPDATE
          SET shares     = points_positions.shares + EXCLUDED.shares,
              cost_basis = points_positions.cost_basis + EXCLUDED.cost_basis,
+             dismissed_at = NULL,
              updated_at = NOW()`,
         [mid, username, oi, quote.sharesOut, amt],
       );

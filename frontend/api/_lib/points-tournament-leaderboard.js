@@ -48,12 +48,52 @@ function dateKeysInclusive(startDate, endKey) {
   return keys;
 }
 
-function completedPenaltyEndKey(now) {
+export function cycleWindowFromRow(row) {
+  if (!row?.started_at || !row?.ends_at) return null;
+  return {
+    id: row.id ?? null,
+    label: row.label || null,
+    startsAt: row.started_at,
+    operationCloseAt: row.ends_at,
+    rankingCutoffAt: row.ends_at,
+    endsAt: row.ends_at,
+  };
+}
+
+export async function resolveTournamentScoringWindow(db, { now = new Date() } = {}) {
+  try {
+    const rows = await queryRows(db, `
+      SELECT id, label, started_at, ends_at
+      FROM points_cycles
+      WHERE status = 'active'
+      ORDER BY ends_at DESC
+      LIMIT 1
+    `);
+    const active = cycleWindowFromRow(rows[0]);
+    if (active) return active;
+  } catch {
+    // Schema creation happens at the API boundary. If a read replica is
+    // briefly behind, keep the launch tournament window as the fallback.
+  }
+
+  return {
+    id: null,
+    label: null,
+    startsAt: TOURNAMENT_START_ISO,
+    operationCloseAt: TOURNAMENT_OPERATION_CLOSE_ISO,
+    rankingCutoffAt: TOURNAMENT_RANKING_CUTOFF_ISO,
+    endsAt: TOURNAMENT_RANKING_CUTOFF_ISO,
+  };
+}
+
+function completedPenaltyEndKey(now, window) {
   const current = now instanceof Date ? now : new Date(now);
-  const startsAt = new Date(TOURNAMENT_START_ISO);
-  const rankingCutoffAt = new Date(TOURNAMENT_RANKING_CUTOFF_ISO);
+  const startsAt = new Date(window?.startsAt || TOURNAMENT_START_ISO);
+  const rankingCutoffAt = new Date(window?.rankingCutoffAt || TOURNAMENT_RANKING_CUTOFF_ISO);
   if (current < startsAt) return null;
-  if (current >= rankingCutoffAt) return mexicoDateKey(new Date(TOURNAMENT_OPERATION_CLOSE_ISO));
+  if (current >= rankingCutoffAt) {
+    return mexicoDateKey(new Date(window?.operationCloseAt || TOURNAMENT_OPERATION_CLOSE_ISO));
+  }
   return previousMexicoDateKey(current);
 }
 
@@ -86,11 +126,11 @@ function positionValue(position) {
   };
 }
 
-function buildPenalty({ user, activity, now }) {
-  const penaltyEndKey = completedPenaltyEndKey(now);
+function buildPenalty({ user, activity, now, window }) {
+  const penaltyEndKey = completedPenaltyEndKey(now, window);
   if (!penaltyEndKey) return { activeDays: 0, inactiveDays: 0, inactivityPenalty: 0 };
 
-  const startsAt = new Date(TOURNAMENT_START_ISO);
+  const startsAt = new Date(window?.startsAt || TOURNAMENT_START_ISO);
   const userCreatedAt = user.created_at ? new Date(user.created_at) : startsAt;
   const effectiveStart = userCreatedAt > startsAt ? userCreatedAt : startsAt;
   const eligibleKeys = dateKeysInclusive(effectiveStart, penaltyEndKey);
@@ -104,7 +144,7 @@ function buildPenalty({ user, activity, now }) {
   };
 }
 
-export async function buildTournamentLeaderboardRows(db, { limit = 500, now = new Date() } = {}) {
+export async function buildTournamentLeaderboardRows(db, { limit = 500, now = new Date(), window = null } = {}) {
   const users = await queryRows(db, `
     SELECT u.username, u.created_at, COALESCE(b.balance, 0) AS balance
     FROM points_users u
@@ -113,8 +153,9 @@ export async function buildTournamentLeaderboardRows(db, { limit = 500, now = ne
     LIMIT 5000
   `);
 
-  const startIso = TOURNAMENT_START_ISO;
-  const cutoffIso = TOURNAMENT_RANKING_CUTOFF_ISO;
+  const scoringWindow = window || await resolveTournamentScoringWindow(db, { now });
+  const startIso = scoringWindow.startsAt || TOURNAMENT_START_ISO;
+  const cutoffIso = scoringWindow.rankingCutoffAt || TOURNAMENT_RANKING_CUTOFF_ISO;
   const qualifyingMinimum = TOURNAMENT_MIN_ENTRY_MXNP;
 
   const activityRows = await queryRows(db, `
@@ -162,7 +203,7 @@ export async function buildTournamentLeaderboardRows(db, { limit = 500, now = ne
     const activity = activityByUser.get(user.username) || {};
     const marketPnl = pnlByUser.get(user.username) || 0;
     const currentPositionValue = valueByUser.get(user.username) || 0;
-    const penalty = buildPenalty({ user, activity, now });
+    const penalty = buildPenalty({ user, activity, now, window: scoringWindow });
     const qualifyingMarkets = Number(activity.qualifying_markets || 0);
     const score = marketPnl - penalty.inactivityPenalty;
     return {

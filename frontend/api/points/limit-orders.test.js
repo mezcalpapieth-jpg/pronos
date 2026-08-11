@@ -36,6 +36,10 @@ test('points schema and manual migration create reserved limit-order book storag
     assert.match(source, /idx_points_limit_orders_market_outcome/);
     assert.match(source, /idx_points_limit_orders_user/);
   }
+  for (const source of [schemaSource, migrateSource]) {
+    assert.match(source, /CREATE TABLE IF NOT EXISTS points_cycle_position_snapshots/);
+    assert.match(source, /idx_points_cycle_position_snapshots_cycle_user/);
+  }
 });
 
 test('limit-order helper reserves funds, rewards makers, and fills against AMM quotes', () => {
@@ -139,6 +143,8 @@ test('portfolio and cron expose daily maker-reward payouts', () => {
 test('market writes trigger orders and close paths release open reserves', () => {
   assert.match(buySource, /executeTriggeredLimitOrders\(client, \{\s*marketId: mid,\s*\}\)/s);
   assert.match(sellSource, /executeTriggeredLimitOrders\(client, \{\s*marketId: mid,\s*\}\)/s);
+  assert.match(buySource, /dismissed_at = NULL/);
+  assert.match(helperSource, /dismissed_at = NULL/);
   assert.match(buySource, /assertCryptoTradeAllowed/);
   assert.match(sellSource, /assertCryptoTradeAllowed/);
   assert.match(helperSource, /const outcomeIndices = await resolveTriggeredOutcomeIndices/);

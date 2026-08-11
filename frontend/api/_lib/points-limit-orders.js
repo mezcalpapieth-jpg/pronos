@@ -409,6 +409,7 @@ async function fillBuyOrder(client, { order, market, reserves }) {
      ON CONFLICT (market_id, username, outcome_index) DO UPDATE
        SET shares = points_positions.shares + EXCLUDED.shares,
            cost_basis = points_positions.cost_basis + EXCLUDED.cost_basis,
+           dismissed_at = NULL,
            updated_at = NOW()`,
     [order.market_id, order.username, Number(order.outcome_index), quote.sharesOut, amount],
   );

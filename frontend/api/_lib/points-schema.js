@@ -805,6 +805,26 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS qualifying_markets INTEGER`,
   `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS qualified BOOLEAN`,
 
+  // ── Cycle position snapshots ───────────────────────────────────────────
+  // Rollover zeroes live materialized positions so the next competition
+  // cannot inherit old exposure. This table keeps the pre-reset position
+  // state for audit/debugging without leaving those shares active.
+  `CREATE TABLE IF NOT EXISTS points_cycle_position_snapshots (
+    id              SERIAL PRIMARY KEY,
+    cycle_id        INTEGER REFERENCES points_cycles(id) ON DELETE SET NULL,
+    username        TEXT NOT NULL,
+    market_id       INTEGER NOT NULL REFERENCES points_markets(id) ON DELETE CASCADE,
+    outcome_index   SMALLINT NOT NULL,
+    shares          NUMERIC(30,18) NOT NULL DEFAULT 0,
+    cost_basis      NUMERIC(20,6) NOT NULL DEFAULT 0,
+    realized_pnl    NUMERIC(20,6) NOT NULL DEFAULT 0,
+    snapshotted_at  TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_cycle_position_snapshots_cycle_user
+    ON points_cycle_position_snapshots(cycle_id, username)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_cycle_position_snapshots_market
+    ON points_cycle_position_snapshots(market_id, outcome_index)`,
+
   // ── Crypto price ticks (server-side history for the 5-min chart) ─────────
   // Recorded by /api/points/crypto-tick every ~5s for each asset (BTC, ETH)
   // while visitors have the points app open. /api/points/crypto-history
