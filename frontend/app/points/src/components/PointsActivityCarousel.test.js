@@ -77,11 +77,15 @@ test('parallel parent activity rolls up from leg ids', () => {
   assert.match(carousel, /rollupActivityByParent\(a \|\| \{\}, activityRequest\)/);
 });
 
-test('parallel carousel charts fetch the first leg history and remap it to the parent', () => {
-  // Parent rows do not receive leg price snapshots, so the slide chart needs
-  // the first leg's history to avoid an empty sparkline on multi-option cards.
+test('parallel carousel charts use parent flow instead of a child leg identity', () => {
+  // Multi-option parents should not inherit Zverev/Felix/etc. as the carousel
+  // headline just because one child leg happens to be first in the id list.
   assert.match(carousel, /function priceHistoryRequestForMarkets\(markets\)/);
-  assert.match(carousel, /m\.ammMode === 'parallel' && Array\.isArray\(m\.legIds\) && m\.legIds\[0\]/);
+  assert.match(carousel, /if \(m\.ammMode === 'parallel'\) continue/);
+  assert.match(carousel, /function aggregateParallelFlowSeries/);
+  assert.match(carousel, /m\.ammMode === 'parallel'\) return aggregateParallelFlowSeries\(m\)/);
+  assert.match(carousel, /points\.activity\.flowTotal/);
+  assert.doesNotMatch(carousel, /m\.legIds\[0\]/);
   assert.match(carousel, /fetchPriceHistory\(priceHistoryIds/);
   assert.match(carousel, /remapHistoryByParent\(h \|\| \{\}, priceHistoryRequest\)/);
 });

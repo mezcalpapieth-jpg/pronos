@@ -191,6 +191,13 @@ test('readEspnAtpTournamentWinner exposes eliminated losers before the tournamen
                 { id: '1', winner: true, athlete: { id: '1', displayName: 'Carlos Alcaraz' } },
                 { id: '2', winner: false, athlete: { id: '2', displayName: 'Taylor Fritz' } },
               ],
+            }, {
+              id: 'match-3',
+              status: { type: { state: 'pre', completed: false } },
+              competitors: [
+                { id: '1', athlete: { id: '1', displayName: 'Carlos Alcaraz' } },
+                { id: '3', athlete: { id: '3', displayName: 'Ben Shelton' } },
+              ],
             }],
           }],
         }],
@@ -211,6 +218,10 @@ test('readEspnAtpTournamentWinner exposes eliminated losers before the tournamen
       label: 'Taylor Fritz',
       reason: 'lost',
     }]);
+    assert.deepEqual(result.remainingCompetitors.map(row => row.label), [
+      'Carlos Alcaraz',
+      'Ben Shelton',
+    ]);
   } finally {
     globalThis.fetch = originalFetch;
   }

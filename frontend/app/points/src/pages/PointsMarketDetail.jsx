@@ -347,6 +347,34 @@ function sortParallelDisplayLegs(legs) {
     });
 }
 
+function chartOutcomeIndicesForDisplay({ displayOutcomes = [], displayPrices = [], parallelDisplayLegs = null }) {
+  const all = displayOutcomes.map((_, i) => i);
+  if (all.length <= 4) return all;
+
+  const ranked = [...all].sort((a, b) =>
+    (displayPrices[b] ?? 0) - (displayPrices[a] ?? 0) || a - b,
+  );
+  if (!Array.isArray(parallelDisplayLegs)) return ranked.slice(0, 4);
+
+  const selected = ranked
+    .filter(i => parallelDisplayLegs[i]?.status === 'active')
+    .slice(0, 4);
+  for (const i of ranked) {
+    if (selected.length >= 4) break;
+    if (!selected.includes(i)) selected.push(i);
+  }
+
+  const zeroed = all
+    .filter(i => String(parallelDisplayLegs[i]?.status || '') === 'resolved'
+      && Number(parallelDisplayLegs[i]?.outcome) === 1)
+    .slice(0, 2);
+  for (const i of zeroed) {
+    if (!selected.includes(i)) selected.push(i);
+  }
+
+  return selected.slice(0, 6);
+}
+
 // Map (resolver_type, resolver_config.source) → human-readable source
 // name. Brand names stay untranslated — "Chainlink" is "Chainlink" in
 // every language.
@@ -2772,19 +2800,17 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                     emptySubLabel="El precio se moverá con el primer trade."
                   />
                 ) : (
-                  // Chart shows up to FOUR lines. When a market has
-                  // more than four outcomes (F1, election-style
-                  // markets) we pick the four with the highest
-                  // current odds — every other line would just be a
-                  // flat zero-ish trace crowding the chart. Color
-                  // stays tied to the outcome's ORIGINAL index so
-                  // it matches the color in the buy-list below.
+                  // Chart shows the current leaders. Parallel tournament
+                  // markets can append a couple of resolved-to-zero lines
+                  // so users see who dropped out without burying live legs.
+                  // Color stays tied to the outcome's ORIGINAL index so it
+                  // matches the color in the buy-list below.
                   (() => {
-                    const chartIndices = displayOutcomes.length <= 4
-                      ? displayOutcomes.map((_, i) => i)
-                      : [...displayOutcomes.keys()]
-                          .sort((a, b) => (displayPrices[b] ?? 0) - (displayPrices[a] ?? 0))
-                          .slice(0, 4);
+                    const chartIndices = chartOutcomeIndicesForDisplay({
+                      displayOutcomes,
+                      displayPrices,
+                      parallelDisplayLegs,
+                    });
                     return (
                       <MultiSparkline
                         height={240}

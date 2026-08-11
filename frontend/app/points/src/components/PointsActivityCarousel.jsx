@@ -13,7 +13,7 @@
  * That endpoint deliberately never exposes individual users, so the tape
  * shows hourly buy/sell flow rather than a per-user fill ticker.
  *   - slotting     → hidden editorial mix of 1h interaction, volume, 7d activity, BTC 5m
- *   - chart        → /api/points/price-history (outcome 0, last 30d)
+ *   - chart        → binary price history; parallel markets use parent flow
  *   - tape rows    → one row per hour that actually traded
  *   - pressure bar → buy vs sell volume across the window
  *
@@ -171,9 +171,8 @@ function priceHistoryRequestForMarkets(markets) {
 
   for (const m of markets || []) {
     if (!m?.id) continue;
-    const sourceId = m.ammMode === 'parallel' && Array.isArray(m.legIds) && m.legIds[0]
-      ? m.legIds[0]
-      : m.id;
+    if (m.ammMode === 'parallel') continue;
+    const sourceId = m.id;
     const key = marketIdKey(sourceId);
     if (ownerById.has(key)) continue;
     ids.push(sourceId);
@@ -194,6 +193,43 @@ function remapHistoryByParent(history, request) {
   }
 
   return mapped;
+}
+
+function aggregateParallelFlowSeries(m) {
+  const buckets = Array.isArray(m?._buckets)
+    ? [...m._buckets].sort((a, b) => Number(a.t) - Number(b.t))
+    : [];
+  const total = buckets.reduce((sum, b) => sum + Number(b.volume || 0), 0);
+  if (total <= 0) return [];
+
+  let cumulative = 0;
+  return buckets.map((b) => {
+    cumulative += Number(b.volume || 0);
+    return {
+      t: b.t,
+      p: Math.max(0, Math.min(100, (cumulative / total) * 100)),
+    };
+  });
+}
+
+function seriesForSlide(m, history) {
+  if (!m) return [];
+  if (m.ammMode === 'parallel') return aggregateParallelFlowSeries(m);
+  return history?.[m.id] || [];
+}
+
+function outcomeEntriesForMarket(m, limit = 4) {
+  const outcomes = Array.isArray(m?.outcomes) ? m.outcomes : ['Sí', 'No'];
+  const prices = Array.isArray(m?.prices) ? m.prices : [];
+  const entries = outcomes.map((label, index) => ({
+    label,
+    index,
+    price: Number(prices[index] ?? 0),
+  }));
+  if (m?.ammMode !== 'parallel') return entries.slice(0, limit);
+  return entries
+    .sort((a, b) => b.price - a.price || a.index - b.index)
+    .slice(0, limit);
 }
 
 function bucketsForWindow(buckets, hours, nowSeconds) {
@@ -518,14 +554,6 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
   const pressureTotal = buyPressure + sellPressure;
   const buyPct = pressureTotal > 0 ? (buyPressure / pressureTotal) * 100 : 50;
 
-  const series = (active && history[active.id]) || [];
-  const outcomes = Array.isArray(active?.outcomes) ? active.outcomes : ['Sí', 'No'];
-  const prices = Array.isArray(active?.prices) ? active.prices : [];
-  const leadPct = Math.round((prices[0] ?? 0.5) * 100);
-  // Movement over the loaded window — the number under the chart.
-  const delta = series.length >= 2 ? series[series.length - 1].p - series[0].p : 0;
-  const deltaColor = delta > 0.05 ? BUY_COLOR : delta < -0.05 ? SELL_COLOR : 'var(--text-muted)';
-
   const chipStyle = {
     fontFamily: 'var(--font-mono)',
     fontSize: 'var(--fs-2xs)',
@@ -650,7 +678,12 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
             const isActive = i === index;
             const mOutcomes = Array.isArray(m.outcomes) ? m.outcomes : ['Sí', 'No'];
             const mPrices = Array.isArray(m.prices) ? m.prices : [];
-            const mSeries = history[m.id] || [];
+            const isParallel = m.ammMode === 'parallel';
+            const mSeries = seriesForSlide(m, history);
+            const mLeadPct = Math.round((mPrices[0] ?? 0.5) * 100);
+            const mDelta = mSeries.length >= 2 ? mSeries[mSeries.length - 1].p - mSeries[0].p : 0;
+            const mDeltaColor = mDelta > 0.05 ? BUY_COLOR : mDelta < -0.05 ? SELL_COLOR : 'var(--text-muted)';
+            const mOutcomeEntries = outcomeEntriesForMarket(m);
             return (
               <div
                 key={m.id}
@@ -732,9 +765,8 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                       {m.question}
                     </h3>
 
-                    {/* Chart. Outcome 0 only — that's what the history
-                        endpoint returns per call, and on a binary market
-                        the NO curve is just this one mirrored. */}
+                    {/* Chart. Binary markets show outcome 0 price history;
+                        parallel markets show total parent flow. */}
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 4 }}>
                       <span style={{
                         fontFamily: 'var(--font-display)',
@@ -742,7 +774,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                         lineHeight: 1,
                         color: 'var(--text-primary)',
                       }}>
-                        {isActive ? leadPct : Math.round((mPrices[0] ?? 0.5) * 100)}%
+                        {isParallel ? `${formatCompact(m._displayVolume)} MXNP` : `${mLeadPct}%`}
                       </span>
                       <span style={{
                         fontFamily: 'var(--font-mono)',
@@ -754,16 +786,16 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
                       }}>
-                        {mOutcomes[0]}
+                        {isParallel ? t('points.activity.flowTotal') : mOutcomes[0]}
                       </span>
-                      {isActive && mSeries.length >= 2 && (
+                      {isActive && !isParallel && mSeries.length >= 2 && (
                         <span style={{
                           fontFamily: 'var(--font-mono)',
                           fontSize: 'var(--fs-xs)',
-                          color: deltaColor,
+                          color: mDeltaColor,
                           fontVariantNumeric: 'tabular-nums',
                         }}>
-                          {delta >= 0 ? '▲' : '▼'} {Math.abs(delta).toFixed(1)} pp · 30d
+                          {mDelta >= 0 ? '▲' : '▼'} {Math.abs(mDelta).toFixed(1)} pp · 30d
                         </span>
                       )}
                     </div>
@@ -778,14 +810,14 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                       // would only collide with the end dot here.
                       showYAxis={false}
                       data={mSeries}
-                      targetPct={Math.round((mPrices[0] ?? 0.5) * 100)}
+                      targetPct={isParallel ? 100 : mLeadPct}
                       emptyLabel={t('points.activity.noHistory')}
                       emptySubLabel={t('points.activity.noHistorySub')}
                     />
 
-                    {/* Outcome legend — every option, current odds. */}
+                    {/* Outcome legend — leaders first on parallel markets. */}
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 14 }}>
-                      {mOutcomes.slice(0, 4).map((label, oi) => (
+                      {mOutcomeEntries.map(({ label, index: oi, price }) => (
                         <span key={oi} style={{
                           ...chipStyle,
                           textTransform: 'none',
@@ -796,12 +828,12 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                           textOverflow: 'ellipsis',
                         }}>
                           {label} <strong style={{ color: 'var(--text-primary)' }}>
-                            {Math.round((mPrices[oi] ?? 0) * 100)}%
+                            {Math.round(price * 100)}%
                           </strong>
                         </span>
                       ))}
-                      {mOutcomes.length > 4 && (
-                        <span style={chipStyle}>+{mOutcomes.length - 4}</span>
+                      {mOutcomes.length > mOutcomeEntries.length && (
+                        <span style={chipStyle}>+{mOutcomes.length - mOutcomeEntries.length}</span>
                       )}
                     </div>
                   </div>

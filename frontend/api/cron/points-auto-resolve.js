@@ -233,11 +233,44 @@ function labelIsOther(label) {
   );
 }
 
+function competitorMatchesLeg(leg, competitor) {
+  if (!leg || labelIsOther(leg?.label)) return false;
+  const idNeedle = String(competitor?.driverId || '').trim();
+  const labelNeedle = String(competitor?.label || '').trim();
+  if (idNeedle && leg?.driverId && String(leg.driverId).trim() === idNeedle) return true;
+  return Boolean(labelNeedle && resolverLabelsOverlap(leg?.label, labelNeedle));
+}
+
+function eliminatedCompetitorsForLegs(legs = [], result = {}) {
+  const explicit = Array.isArray(result?.eliminatedCompetitors)
+    ? result.eliminatedCompetitors
+    : [];
+  const remaining = Array.isArray(result?.remainingCompetitors)
+    ? result.remainingCompetitors
+    : [];
+  if (!Array.isArray(legs) || remaining.length < 2) return explicit;
+
+  const out = [...explicit];
+  for (const leg of legs) {
+    if (!leg || labelIsOther(leg?.label)) continue;
+    if (out.some(eliminated => competitorMatchesLeg(leg, eliminated))) continue;
+    if (remaining.some(alive => competitorMatchesLeg(leg, alive))) continue;
+    out.push({
+      driverId: leg.driverId || null,
+      label: leg.label || null,
+      reason: 'not_in_remaining_draw',
+    });
+  }
+  return out;
+}
+
 function findEliminatedParallelLegIndexes(legs = [], result = {}) {
-  if (!Array.isArray(legs) || !Array.isArray(result?.eliminatedCompetitors)) return [];
+  if (!Array.isArray(legs)) return [];
+  const eliminatedCompetitors = eliminatedCompetitorsForLegs(legs, result);
+  if (eliminatedCompetitors.length === 0) return [];
   const indexes = new Set();
 
-  for (const eliminated of result.eliminatedCompetitors) {
+  for (const eliminated of eliminatedCompetitors) {
     const idNeedle = String(eliminated?.driverId || '').trim();
     const labelNeedle = String(eliminated?.label || '').trim();
     if (!idNeedle && !labelNeedle) continue;
@@ -265,11 +298,12 @@ function findEliminatedParallelLegIndexes(legs = [], result = {}) {
 
 async function resolveEliminatedParallelLegs({ market, cfg, result, dry, report }) {
   if (!isEarlyTournamentLegSource(cfg)) return 0;
+  const eliminatedCompetitors = eliminatedCompetitorsForLegs(cfg.legs, result);
   const indexes = findEliminatedParallelLegIndexes(cfg.legs, result);
   if (indexes.length === 0) return 0;
 
   const detailsByIndex = new Map();
-  for (const eliminated of result.eliminatedCompetitors || []) {
+  for (const eliminated of eliminatedCompetitors) {
     const matchIndex = findEliminatedParallelLegIndexes(cfg.legs, {
       eliminatedCompetitors: [eliminated],
     })[0];
@@ -321,7 +355,12 @@ async function resolveEliminatedParallelLegs({ market, cfg, result, dry, report 
       if (!row?.id) continue;
       const leg = cfg.legs[index] || {};
       const detail = detailsByIndex.get(index) || {};
-      const finalScore = `${detail.reason || 'Eliminado'}: ${detail.label || leg.label || row.leg_label || 'opcion'}`;
+      const reasonLabel = detail.reason === 'not_in_remaining_draw'
+        ? 'Fuera del cuadro restante'
+        : detail.reason === 'lost'
+        ? 'Eliminado'
+        : detail.reason || 'Eliminado';
+      const finalScore = `${reasonLabel}: ${detail.label || leg.label || row.leg_label || 'opcion'}`;
       const updated = await client.query(
         `UPDATE points_markets
             SET status = 'resolved',

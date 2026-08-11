@@ -42,6 +42,9 @@ test('points auto-resolver settles eliminated tennis and golf child legs early',
   assert.match(SOURCE, /m\.end_time > NOW\(\)/);
   assert.match(SOURCE, /function resolveEliminatedParallelLegs/);
   assert.match(SOURCE, /result\?\.eliminatedCompetitors/);
+  assert.match(SOURCE, /result\?\.remainingCompetitors/);
+  assert.match(SOURCE, /function eliminatedCompetitorsForLegs/);
+  assert.match(SOURCE, /not_in_remaining_draw/);
   assert.match(SOURCE, /releaseOpenLimitOrdersForMarkets\(client, targetIds/);
   assert.match(SOURCE, /SET status = 'resolved',\s*outcome = 1/);
   assert.match(SOURCE, /resolved_by = \$1/);
