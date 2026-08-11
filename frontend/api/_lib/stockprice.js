@@ -62,4 +62,5 @@ export const STOCKS = {
   MSFT: { label: 'Microsoft', step: 5, icon: '🪟' },
   NVDA: { label: 'NVIDIA', step: 10, icon: '🟢' },
   AAPL: { label: 'Apple', step: 5, icon: '🍎' },
+  META: { label: 'Meta', step: 10, icon: '♾️' },
 };
