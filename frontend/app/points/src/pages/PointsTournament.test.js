@@ -24,6 +24,9 @@ test('tournament page shows current leaderboard, past leaderboards, countdown an
   assert.match(pageSource, /Cuenta regresiva/);
   assert.match(pageSource, /Nuevos mercados para el torneo/);
   assert.match(pageSource, /Todos los días a las 9:00 AM, hora de Ciudad de México/);
+  assert.match(pageSource, /200 MXNP agregados al inicio/);
+  assert.match(pageSource, /50 MXNP por persona referida, máximo 10 referidos/);
+  assert.match(pageSource, /premios aprobados de Instagram, TikTok, X y campañas/);
   assert.match(pageSource, /nextTournamentMarketDropIso/);
   assert.match(pageSource, /America\/Mexico_City/);
   assert.match(pageSource, /Reglas/);

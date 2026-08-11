@@ -392,11 +392,17 @@ function TournamentFaq({ lang, rules }) {
 function RewardList({ lang, rules }) {
   const rewards = rules?.rewards || DEFAULT_RULES.rewards;
   const rows = lang === 'en' ? [
+    ['Early signup', '200 MXNP added at the start for users who registered before the reset'],
+    ['Referral rollover', '50 MXNP per referred user, max 10 referrals (500 MXNP)'],
+    ['Social tasks', 'Approved Instagram, TikTok, X, and campaign task rewards are added to the starting tournament balance'],
     ['Daily claim', `${fmtInteger(rewards.dailyBase)} MXNP + ${fmtInteger(rewards.dailyStep)} per streak day, max ${fmtInteger(rewards.dailyMax)}`],
     ['Referrals', `${fmtInteger(rewards.referrerReward)} MXNP to inviter, max ${fmtInteger(rewards.referralCycleCap)} per cycle`],
     ['New referred user', `${fmtInteger(rewards.referredReward)} MXNP`],
     ['Rescue top-up', `Up to ${fmtInteger(rewards.rescueFloor)} MXNP, max ${fmtInteger(rewards.rescueMaxClaims)} times per cycle`],
   ] : [
+    ['Registro temprano', '200 MXNP agregados al inicio para usuarios registrados antes del reset'],
+    ['Referidos acumulados', '50 MXNP por persona referida, máximo 10 referidos (500 MXNP)'],
+    ['Tareas sociales', 'Los premios aprobados de Instagram, TikTok, X y campañas se agregan al balance inicial del torneo'],
     ['Reclamo diario', `${fmtInteger(rewards.dailyBase)} MXNP + ${fmtInteger(rewards.dailyStep)} por día de racha, máximo ${fmtInteger(rewards.dailyMax)}`],
     ['Referidos', `${fmtInteger(rewards.referrerReward)} MXNP para quien invita, máximo ${fmtInteger(rewards.referralCycleCap)} por ciclo`],
     ['Usuario referido', `${fmtInteger(rewards.referredReward)} MXNP`],
