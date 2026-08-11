@@ -15,6 +15,7 @@ import React, { useMemo, useState, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { usePointsAuth } from './lib/pointsAuth.js';
 import PointsLoginModal from './components/PointsLoginModal.jsx';
+import PageViewTracker from './components/PageViewTracker.jsx';
 import Nav from './components/Nav.jsx';
 import CategoryBar from './components/CategoryBar.jsx';
 import Footer from './components/Footer.jsx';
@@ -67,6 +68,7 @@ export default function App() {
   if (IS_PUBLIC_MARKETS || IS_ROOT_LEGAL) {
     return (
       <BrowserRouter basename="/">
+        <PageViewTracker />
         <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/markets" element={<MarketDetail />} />
@@ -84,6 +86,7 @@ export default function App() {
 
   return (
     <BrowserRouter basename="/mvp">
+      <PageViewTracker />
       {showLogin && (
         <PointsLoginModal
           open={showLogin}

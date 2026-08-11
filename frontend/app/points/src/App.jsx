@@ -21,6 +21,7 @@ import PointsCategoryBar from './components/PointsCategoryBar.jsx';
 import Footer from '@app/components/Footer.jsx';
 import PointsWelcomeModal, { hasBeenWelcomed } from './components/PointsWelcomeModal.jsx';
 import PointsIntroModal, { hasSeenIntro } from './components/PointsIntroModal.jsx';
+import PageViewTracker from '@app/components/PageViewTracker.jsx';
 import { trackPublicityConversion, trackPublicityLanding } from './lib/pointsApi.js';
 import { isVideoDemoActive } from './demo/demoFlag.js';
 
@@ -282,6 +283,7 @@ export default function App() {
     // /points.
     <BrowserRouter basename={basename}>
       <PointsSiteTimeTracker enabled={authenticated && !!user?.username} />
+      <PageViewTracker />
       <Shell
         onOpenLogin={() => setLoginOpen(true)}
         isAdmin={isAdmin}
