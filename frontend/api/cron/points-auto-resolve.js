@@ -960,6 +960,7 @@ export async function runAutoResolve({ dry = false } = {}) {
               youtubeSearchUrl: transcript.youtubeSearchUrl || null,
               youtubeVideoUrl: transcript.youtubeVideoUrl || null,
               youtubeTranscriptTitle: transcript.youtubeTranscriptTitle || null,
+              youtubeCaptionAttempts: transcript.youtubeCaptionAttempts || [],
             };
             throw err;
           }

@@ -165,6 +165,79 @@ test('ATP generator emits bounded head-to-head markets for top-tier draws only',
   }
 });
 
+test('ATP generator skips H2H markets without a match-level date', async () => {
+  const originalFetch = globalThis.fetch;
+  const competitions = [
+    {
+      id: 'undated-qf',
+      round: { displayName: 'Quarterfinal' },
+      status: { type: { state: 'pre' } },
+      competitors: [
+        tennisPlayer('2375', 'Alexander Zverev', 1),
+        tennisPlayer('2946', 'Taylor Fritz', 2),
+      ],
+    },
+  ];
+
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      events: [
+        atpEvent({
+          date: futureIso(2),
+          groupings: [mensSinglesGrouping(competitions)],
+        }),
+      ],
+    }),
+  });
+
+  try {
+    const specs = await generateTennisMarkets();
+    assert.deepEqual(specs, []);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('ATP generator can use competition startDate for H2H markets', async () => {
+  const originalFetch = globalThis.fetch;
+  const matchDate = futureIso(2);
+  const competitions = [
+    {
+      id: 'start-date-qf',
+      startDate: matchDate,
+      round: { displayName: 'Quarterfinal' },
+      status: { type: { state: 'pre' } },
+      competitors: [
+        tennisPlayer('9250', 'Ben Shelton', 3),
+        tennisPlayer('10319', 'Jakub Mensik', 13),
+      ],
+    },
+  ];
+
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      events: [
+        atpEvent({
+          date: futureIso(-7),
+          groupings: [mensSinglesGrouping(competitions)],
+        }),
+      ],
+    }),
+  });
+
+  try {
+    const specs = await generateTennisMarkets();
+    assert.equal(specs.length, 1);
+    assert.equal(specs[0].source, 'espn-atp-match');
+    assert.equal(specs[0].end_time, matchDate);
+    assert.equal(specs[0].resolver_config.dateYmd, matchDate.slice(0, 10));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('ATP generator still emits H2H markets once a top-tier tournament is in progress', async () => {
   const originalFetch = globalThis.fetch;
   const matchDate = futureIso(1);

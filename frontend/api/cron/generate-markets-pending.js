@@ -18,7 +18,11 @@
 
 import { neon } from '@neondatabase/serverless';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
-import { runAllGenerators, upsertPending } from '../_lib/run-generators.js';
+import {
+  runAllGenerators,
+  syncApprovedMarketSchedules,
+  upsertPending,
+} from '../_lib/run-generators.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -44,16 +48,19 @@ export default async function handler(req, res) {
     const { allSpecs, sourceStats } = await runAllGenerators();
 
     if (dryRun) {
+      const scheduleSync = await syncApprovedMarketSchedules(sql, allSpecs, { dryRun: true });
       return res.status(200).json({
         dryRun: true,
         sources: sourceStats,
         specs: allSpecs.slice(0, 20),
         totalSpecs: allSpecs.length,
+        scheduleSync,
         elapsedMs: Date.now() - started,
       });
     }
 
     const { inserted, updated, skipped } = await upsertPending(sql, allSpecs);
+    const scheduleSync = await syncApprovedMarketSchedules(sql, allSpecs);
 
     return res.status(200).json({
       ok: true,
@@ -62,6 +69,7 @@ export default async function handler(req, res) {
       inserted,
       updated,
       skipped,
+      scheduleSync,
       elapsedMs: Date.now() - started,
     });
   } catch (e) {

@@ -53,6 +53,9 @@ import { attachMarketContextBlocks }      from './market-context-blocks.js';
 
 const MARKET_ICON = null;
 const PRICING_CONCURRENCY = 4;
+const APPROVED_SCHEDULE_SYNC_SOURCES = new Set([
+  'espn-atp-match',
+]);
 
 export const GENERATORS = [
   { name: 'soccer',         run: generateSoccerMarkets        },
@@ -233,6 +236,142 @@ export async function upsertPending(sql, allSpecs) {
     }
   }
   return { inserted, updated, skipped };
+}
+
+function approvedScheduleSyncCandidate(spec, nowMs = Date.now()) {
+  if (!spec || !APPROVED_SCHEDULE_SYNC_SOURCES.has(spec.source)) return null;
+  const sourceEventId = String(spec.source_event_id || '').trim();
+  if (!sourceEventId) return null;
+  const endMs = new Date(spec.end_time).getTime();
+  if (!Number.isFinite(endMs) || endMs <= nowMs) return null;
+  return { source: spec.source, sourceEventId, endMs };
+}
+
+function resolverTimingPatch(spec) {
+  const patch = {};
+  const dateYmd = spec?.resolver_config?.dateYmd;
+  if (dateYmd) patch.dateYmd = dateYmd;
+  return patch;
+}
+
+export async function syncApprovedMarketSchedules(sql, allSpecs, { dryRun = false, nowMs = Date.now() } = {}) {
+  const stats = {
+    checked: 0,
+    candidates: 0,
+    updated: 0,
+    skipped: 0,
+    updates: [],
+  };
+  const seen = new Set();
+
+  for (const s of allSpecs) {
+    const candidate = approvedScheduleSyncCandidate(s, nowMs);
+    if (!candidate) continue;
+    const dedupeKey = `${candidate.source}:${candidate.sourceEventId}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    stats.checked += 1;
+
+    const resolverPatch = JSON.stringify(resolverTimingPatch(s));
+    const freshResolverConfig = s.resolver_config ? JSON.stringify(s.resolver_config) : null;
+    const sourceDataPatch = JSON.stringify({
+      startDateIso: s.source_data?.startDateIso || s.end_time,
+      scheduleSyncedAt: new Date(nowMs).toISOString(),
+    });
+
+    try {
+      if (dryRun) {
+        const rows = await sql`
+          SELECT m.id AS market_id,
+                 m.question,
+                 m.end_time AS old_end_time,
+                 ${s.end_time}::timestamptz AS new_end_time
+          FROM points_markets m
+          JOIN points_pending_markets pm ON pm.approved_market_id = m.id
+          WHERE pm.source = ${s.source}
+            AND pm.source_event_id = ${s.source_event_id}
+            AND m.status = 'active'
+            AND m.parent_id IS NULL
+            AND COALESCE(m.source, pm.source) = ${s.source}
+            AND COALESCE(m.source_event_id, pm.source_event_id) = ${s.source_event_id}
+            AND ${s.end_time}::timestamptz > NOW()
+            AND m.end_time IS DISTINCT FROM ${s.end_time}::timestamptz
+        `;
+        stats.candidates += rows.length;
+        for (const row of rows) {
+          stats.updates.push({
+            marketId: row.market_id,
+            question: row.question,
+            oldEndTime: row.old_end_time,
+            newEndTime: row.new_end_time,
+          });
+        }
+        continue;
+      }
+
+      const rows = await sql`
+        WITH candidate AS (
+          SELECT m.id AS market_id,
+                 m.question,
+                 m.end_time AS old_end_time,
+                 pm.id AS pending_id
+          FROM points_markets m
+          JOIN points_pending_markets pm ON pm.approved_market_id = m.id
+          WHERE pm.source = ${s.source}
+            AND pm.source_event_id = ${s.source_event_id}
+            AND m.status = 'active'
+            AND m.parent_id IS NULL
+            AND COALESCE(m.source, pm.source) = ${s.source}
+            AND COALESCE(m.source_event_id, pm.source_event_id) = ${s.source_event_id}
+            AND ${s.end_time}::timestamptz > NOW()
+            AND m.end_time IS DISTINCT FROM ${s.end_time}::timestamptz
+        )
+        UPDATE points_markets m
+        SET end_time = ${s.end_time}::timestamptz,
+            resolver_config = CASE
+              WHEN ${resolverPatch}::jsonb = '{}'::jsonb THEN m.resolver_config
+              ELSE COALESCE(m.resolver_config, '{}'::jsonb) || ${resolverPatch}::jsonb
+            END
+        FROM candidate c
+        WHERE m.id = c.market_id
+        RETURNING m.id AS market_id,
+                  m.question,
+                  c.pending_id,
+                  c.old_end_time,
+                  m.end_time AS new_end_time
+      `;
+
+      if (rows.length === 0) continue;
+      stats.candidates += rows.length;
+      stats.updated += rows.length;
+      for (const row of rows) {
+        if (row.pending_id) {
+          await sql`
+            UPDATE points_pending_markets
+            SET end_time = ${s.end_time}::timestamptz,
+                resolver_config = ${freshResolverConfig}::jsonb,
+                source_data = COALESCE(source_data, '{}'::jsonb) || ${sourceDataPatch}::jsonb
+            WHERE id = ${row.pending_id}
+          `;
+        }
+        stats.updates.push({
+          marketId: row.market_id,
+          question: row.question,
+          oldEndTime: row.old_end_time,
+          newEndTime: row.new_end_time,
+        });
+      }
+    } catch (e) {
+      console.error('[run-generators] approved schedule sync failed', {
+        source: s.source,
+        source_event_id: s.source_event_id,
+        message: e?.message,
+      });
+      stats.skipped += 1;
+    }
+  }
+
+  return stats;
 }
 
 export async function upsertProtocolPending(sql, allSpecs) {

@@ -2003,6 +2003,20 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
       const errorSample = (r.errors || []).slice(0, 3)
         .map(e => `#${e.id}: ${e.error}`)
         .join('\n');
+      const deferredSample = (r.deferred || []).slice(0, 3)
+        .map(d => {
+          const attempts = Array.isArray(d.youtubeCaptionAttempts) ? d.youtubeCaptionAttempts : [];
+          const youtube = attempts.slice(0, 2)
+            .map(a => {
+              const parts = [a.videoId || 'video', a.reason || 'sin texto'];
+              if (a.captionTrackCount != null) parts.push(`${a.captionTrackCount} pistas`);
+              if (a.captionBodyLength != null) parts.push(`${a.captionBodyLength} chars`);
+              return parts.join(' · ');
+            })
+            .join(' / ');
+          return `#${d.id}: ${d.reason || 'diferido'}${d.fallbackReason ? ` · YouTube: ${d.fallbackReason}` : ''}${youtube ? ` · ${youtube}` : ''}`;
+        })
+        .join('\n');
       alert(
         `✓ Auto-resolver corrido.\n`
         + `Candidatos: ${r.checked || 0}\n`
@@ -2010,6 +2024,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
         + `En revisión: ${reviewCount}\n`
         + `Diferidos: ${deferredCount}\n`
         + `Errores: ${errorCount}\n`
+        + (deferredSample ? `\nEjemplos diferidos:\n${deferredSample}\n` : '')
         + (errorSample ? `\nEjemplos de errores:\n${errorSample}` : ''),
       );
       await load();

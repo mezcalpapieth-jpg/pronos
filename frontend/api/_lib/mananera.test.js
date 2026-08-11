@@ -7,6 +7,7 @@ import {
   buildMananeraSearchUrl,
   buildMananeraYouTubeSearchUrl,
   countPhraseOccurrences,
+  findMananeraYouTubeTranscript,
   readMananeraPhraseResult,
 } from './mananera.js';
 
@@ -135,6 +136,9 @@ test('falls back to official YouTube captions when gob.mx transcript is delayed'
         </feed>
       `);
     }
+    if (href.startsWith('https://www.youtube.com/channel/') && href.endsWith('/streams')) {
+      return htmlResponse('<html><body>Sin streams extra</body></html>');
+    }
     if (href.startsWith('https://www.googleapis.com/youtube/v3/search')) {
       return jsonResponse({
         items: [{
@@ -198,6 +202,260 @@ test('falls back to official YouTube captions when gob.mx transcript is delayed'
   assert.deepEqual(result.matchTimestamps.map(t => t.label), ['2:01', '3:05', '4:06', '5:07', '6:08']);
   assert.ok(seen.some(url => url.startsWith('https://www.youtube.com/feeds/videos.xml')));
   assert.ok(!seen.some(url => url.startsWith('https://www.googleapis.com/youtube/v3/search')));
+});
+
+test('tries the next same-day YouTube video when the first captions are empty', async () => {
+  const firstVideoId = 'aaa111BBB22';
+  const secondVideoId = 'ccc333DDD44';
+  const firstCaptionBaseUrl = `https://www.youtube.com/api/timedtext?v=${firstVideoId}&lang=es`;
+  const secondCaptionBaseUrl = `https://www.youtube.com/api/timedtext?v=${secondVideoId}&lang=es`;
+  const captionFiller = 'Transcripción oficial simulada. '.repeat(40);
+  const seen = [];
+  const fetchImpl = async (url) => {
+    const href = String(url);
+    seen.push(href);
+    if (href.startsWith('https://www.youtube.com/feeds/videos.xml')) {
+      return htmlResponse(`
+        <feed>
+          <entry>
+            <yt:videoId>${firstVideoId}</yt:videoId>
+            <title>Conferencia de prensa matutina en vivo. Lunes 10 de agosto 2026 | Presidenta Claudia Sheinbaum</title>
+            <author><name>Claudia Sheinbaum Pardo</name></author>
+          </entry>
+          <entry>
+            <yt:videoId>${secondVideoId}</yt:videoId>
+            <title>Conferencia de prensa matutina en vivo. Lunes 10 de agosto 2026 | Presidenta Claudia Sheinbaum</title>
+            <author><name>Claudia Sheinbaum Pardo</name></author>
+          </entry>
+        </feed>
+      `);
+    }
+    if (href.startsWith('https://www.youtube.com/channel/') && href.endsWith('/streams')) {
+      return htmlResponse('<html><body>Sin streams extra</body></html>');
+    }
+    if (href === `https://www.youtube.com/watch?v=${firstVideoId}`) {
+      return htmlResponse(`
+        <script>var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[
+          {"baseUrl":${JSON.stringify(firstCaptionBaseUrl)},"languageCode":"es","name":{"simpleText":"Español (generado automáticamente)"},"kind":"asr"}
+        ]}}};</script>
+      `);
+    }
+    if (href === `https://www.youtube.com/watch?v=${secondVideoId}`) {
+      return htmlResponse(`
+        <script>var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[
+          {"baseUrl":${JSON.stringify(secondCaptionBaseUrl)},"languageCode":"es","name":{"simpleText":"Español (generado automáticamente)"},"kind":"asr"}
+        ]}}};</script>
+      `);
+    }
+    if (href.startsWith(firstCaptionBaseUrl)) {
+      return { ok: true, status: 200, text: async () => '' };
+    }
+    if (href.startsWith(secondCaptionBaseUrl)) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({
+          events: [
+            { tStartMs: 42000, segs: [{ utf8: 'Hoy revisamos inflación y economía. ' }] },
+            { tStartMs: 84000, segs: [{ utf8: captionFiller }] },
+          ],
+        }),
+      };
+    }
+    throw new Error(`unexpected fetch ${href}`);
+  };
+
+  const result = await findMananeraYouTubeTranscript({
+    dateYmd: '2026-08-10',
+    fetchImpl,
+    youtubeApiKey: null,
+  });
+
+  assert.equal(result.ready, true);
+  assert.equal(result.videoId, secondVideoId);
+  assert.equal(result.captionAttempts.length, 1);
+  assert.equal(result.captionAttempts[0].videoId, firstVideoId);
+  assert.equal(result.captionAttempts[0].reason, 'youtube_captions_empty');
+  assert.ok(seen.includes(`https://www.youtube.com/watch?v=${firstVideoId}`));
+  assert.ok(seen.includes(`https://www.youtube.com/watch?v=${secondVideoId}`));
+});
+
+test('reports empty YouTube captions when all same-day videos are unusable', async () => {
+  const firstVideoId = 'emp111AAA22';
+  const secondVideoId = 'not111BBB22';
+  const firstCaptionBaseUrl = `https://www.youtube.com/api/timedtext?v=${firstVideoId}&lang=es`;
+  const fetchImpl = async (url) => {
+    const href = String(url);
+    if (href.startsWith('https://www.youtube.com/feeds/videos.xml')) {
+      return htmlResponse(`
+        <feed>
+          <entry>
+            <yt:videoId>${firstVideoId}</yt:videoId>
+            <title>Conferencia de prensa matutina en vivo. Lunes 10 de agosto 2026 | Presidenta Claudia Sheinbaum</title>
+            <author><name>Claudia Sheinbaum Pardo</name></author>
+          </entry>
+          <entry>
+            <yt:videoId>${secondVideoId}</yt:videoId>
+            <title>Conferencia de prensa matutina en vivo. Lunes 10 de agosto 2026 | Presidenta Claudia Sheinbaum</title>
+            <author><name>Claudia Sheinbaum Pardo</name></author>
+          </entry>
+        </feed>
+      `);
+    }
+    if (href.startsWith('https://www.youtube.com/channel/') && href.endsWith('/streams')) {
+      return htmlResponse('<html><body>Sin streams extra</body></html>');
+    }
+    if (href === `https://www.youtube.com/watch?v=${firstVideoId}`) {
+      return htmlResponse(`
+        <script>var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[
+          {"baseUrl":${JSON.stringify(firstCaptionBaseUrl)},"languageCode":"es","name":{"simpleText":"Español (generado automáticamente)"},"kind":"asr"}
+        ]}}};</script>
+      `);
+    }
+    if (href === `https://www.youtube.com/watch?v=${secondVideoId}`) {
+      return htmlResponse('<html><body>Sin captions</body></html>');
+    }
+    if (href.startsWith(firstCaptionBaseUrl)) {
+      return { ok: true, status: 200, text: async () => '' };
+    }
+    throw new Error(`unexpected fetch ${href}`);
+  };
+
+  const result = await findMananeraYouTubeTranscript({
+    dateYmd: '2026-08-10',
+    fetchImpl,
+    youtubeApiKey: null,
+  });
+
+  assert.equal(result.ready, false);
+  assert.equal(result.reason, 'youtube_captions_empty');
+  assert.equal(result.captionAttempts.length, 2);
+  assert.equal(result.captionAttempts[0].captionTrackCount, 1);
+  assert.equal(result.captionAttempts[0].captionBodyLength, 0);
+  assert.equal(result.captionAttempts[1].reason, 'youtube_captions_not_found');
+});
+
+test('discovers official mañanera livestream archives from the channel streams tab', async () => {
+  const videoId = 'liv111AAA22';
+  const captionBaseUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=es`;
+  const captionFiller = 'Texto de caption oficial simulado para un livestream largo. '.repeat(40);
+  const streamMenuFiller = '{"buttonViewModel":{"title":"noop"}},'.repeat(180);
+  const seen = [];
+  const fetchImpl = async (url) => {
+    const href = String(url);
+    seen.push(href);
+    if (href.startsWith('https://www.youtube.com/feeds/videos.xml')) {
+      return htmlResponse('<feed></feed>');
+    }
+    if (href.startsWith('https://www.youtube.com/channel/') && href.endsWith('/streams')) {
+      return htmlResponse(`
+        <html><body><script>
+          var ytInitialData = {"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"content":{"richGridRenderer":{"contents":[
+            {"richItemRenderer":{"content":{"lockupViewModel":{
+              "contentImage":{"thumbnailViewModel":{"image":{"sources":[{"url":"https://i.ytimg.com/vi/${videoId}/hqdefault.jpg"}]}}},
+              "rendererContext":{"commandContext":{"onTap":{"innertubeCommand":{"watchEndpoint":{"videoId":"${videoId}"}}}}},
+              "menuButton":{"items":[${streamMenuFiller}]},
+              "metadata":{"lockupMetadataViewModel":{"title":{"content":"Conferencia de prensa matutina en vivo. Lunes 10 de agosto 2026 | Presidenta Claudia Sheinbaum"}}}
+            }}}
+          ]}}}}]}}};
+        </script></body></html>
+      `);
+    }
+    if (href.startsWith('https://www.googleapis.com/youtube/v3/search')) {
+      throw new Error('Data API should not be needed for streams-tab discovery');
+    }
+    if (href === `https://www.youtube.com/watch?v=${videoId}`) {
+      return htmlResponse(`
+        <script>var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[
+          {"baseUrl":${JSON.stringify(captionBaseUrl)},"languageCode":"es","name":{"simpleText":"Español (generado automáticamente)"},"kind":"asr"}
+        ]}}};</script>
+      `);
+    }
+    if (href.startsWith(captionBaseUrl)) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({
+          events: [
+            { tStartMs: 60000, segs: [{ utf8: `La presidenta habló del INEGI. ${captionFiller}` }] },
+          ],
+        }),
+      };
+    }
+    throw new Error(`unexpected fetch ${href}`);
+  };
+
+  const result = await findMananeraYouTubeTranscript({
+    dateYmd: '2026-08-10',
+    fetchImpl,
+    youtubeApiKey: null,
+  });
+
+  assert.equal(result.ready, true);
+  assert.equal(result.videoId, videoId);
+  assert.equal(result.source, MANANERA_YOUTUBE_CAPTIONS_SOURCE);
+  assert.ok(seen.some(url => url.endsWith('/streams')));
+  assert.ok(!seen.some(url => url.startsWith('https://www.googleapis.com/youtube/v3/search')));
+});
+
+test('uses YouTube Data API key as query parameter when feed discovery misses', async () => {
+  const videoId = 'api123DEF45';
+  const captionBaseUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=es`;
+  const captionFiller = 'Texto de caption oficial simulado. '.repeat(40);
+  let apiSearchUrl = null;
+  let apiSearchHeaders = null;
+  const fetchImpl = async (url, options = {}) => {
+    const href = String(url);
+    if (href.startsWith('https://www.youtube.com/feeds/videos.xml')) {
+      return htmlResponse('<feed></feed>');
+    }
+    if (href.startsWith('https://www.youtube.com/channel/') && href.endsWith('/streams')) {
+      return htmlResponse('<html><body>Sin streams</body></html>');
+    }
+    if (href.startsWith('https://www.googleapis.com/youtube/v3/search')) {
+      apiSearchUrl = new URL(href);
+      apiSearchHeaders = options.headers || {};
+      return jsonResponse({
+        items: [{
+          id: { videoId },
+          snippet: {
+            title: 'Conferencia de prensa matutina en vivo. Lunes 10 de agosto 2026 | Presidenta Claudia Sheinbaum',
+            channelTitle: 'Claudia Sheinbaum Pardo',
+          },
+        }],
+      });
+    }
+    if (href === `https://www.youtube.com/watch?v=${videoId}`) {
+      return htmlResponse(`
+        <script>var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[
+          {"baseUrl":${JSON.stringify(captionBaseUrl)},"languageCode":"es","name":{"simpleText":"Español (generado automáticamente)"},"kind":"asr"}
+        ]}}};</script>
+      `);
+    }
+    if (href.startsWith(captionBaseUrl)) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({
+          events: [
+            { tStartMs: 12000, segs: [{ utf8: `La presidenta mencionó INEGI. ${captionFiller}` }] },
+          ],
+        }),
+      };
+    }
+    throw new Error(`unexpected fetch ${href}`);
+  };
+
+  const result = await findMananeraYouTubeTranscript({
+    dateYmd: '2026-08-10',
+    fetchImpl,
+    youtubeApiKey: 'test-youtube-key',
+  });
+
+  assert.equal(result.ready, true);
+  assert.equal(result.videoId, videoId);
+  assert.equal(apiSearchUrl.searchParams.get('key'), 'test-youtube-key');
+  assert.equal(apiSearchHeaders['X-goog-api-key'], undefined);
 });
 
 test('defers when the official transcript for that date is not found', async () => {

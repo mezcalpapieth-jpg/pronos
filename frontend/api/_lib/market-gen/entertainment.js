@@ -1,11 +1,12 @@
 /**
  * Entertainment calendar generator (Mexico pop culture).
  *
- * Reads three admin-curated config arrays and emits one pending-market
+ * Reads admin-curated config arrays and emits one pending-market
  * spec per resolvable event within a near-term horizon. Covers:
  *   - Awards   (Latin Grammy, Premios Juventud, Premios Lo Nuestro …)
  *   - Reality  (La Casa de los Famosos weekly + season winner)
  *   - Concerts (Ticketmaster / promoter-announced, binary Sí/No)
+ *   - Popular  (news/pop-culture binary events, manual review)
  *
  * All markets produced here carry resolver_type=manual_review — the
  * scheduler wakes them at close and queues an admin resolution candidate
@@ -20,6 +21,7 @@ import {
   AWARD_CEREMONIES,
   REALITY_EVENTS,
   CONCERT_EVENTS,
+  POPULAR_EVENTS,
 } from '../entertainment-config.js';
 import { attachSuggestedPricing } from '../market-pricing.js';
 
@@ -27,6 +29,7 @@ import { attachSuggestedPricing } from '../market-pricing.js';
 // Prevents the queue from filling with events months ahead — admin can
 // always approve earlier by populating closer to the date.
 const HORIZON_DAYS = 60;
+const POPULAR_HORIZON_DAYS = 180;
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5';
 
 function aiPricingEnabled() {
@@ -43,13 +46,14 @@ function manualReviewConfig({ sourceEventId, criteria, evidence = [] }) {
   };
 }
 
-function withinHorizon(iso) {
+function withinHorizon(iso, { horizonDays = HORIZON_DAYS, now = Date.now() } = {}) {
   if (!iso) return false;
   const t = new Date(iso).getTime();
   if (!Number.isFinite(t)) return false;
-  const now = Date.now();
-  if (t <= now) return false;                         // past = skip
-  return t - now <= HORIZON_DAYS * 86_400_000;
+  const nowMs = now instanceof Date ? now.getTime() : Number(now);
+  if (!Number.isFinite(nowMs)) return false;
+  if (t <= nowMs) return false;                         // past = skip
+  return t - nowMs <= horizonDays * 86_400_000;
 }
 
 function configuredProbabilities(config = {}, outcomeCount, fallback) {
@@ -108,6 +112,27 @@ function withEntertainmentTopic(spec, topicTags) {
       categorization: {
         ...(spec.source_data?.categorization || {}),
         topicTags: tags,
+      },
+    },
+  };
+}
+
+function explicitTags(spec, tags = {}) {
+  const categoryTags = Array.isArray(tags.categoryTags) ? tags.categoryTags.filter(Boolean) : [];
+  const geoTags = Array.isArray(tags.geoTags) ? tags.geoTags.filter(Boolean) : [];
+  const topicTags = Array.isArray(tags.topicTags) ? tags.topicTags.filter(Boolean) : [];
+  if (!categoryTags.length && !geoTags.length && !topicTags.length) return spec;
+  return {
+    ...spec,
+    ...(categoryTags.length ? { category_tags: categoryTags } : {}),
+    ...(geoTags.length ? { geo_tags: geoTags } : {}),
+    ...(topicTags.length ? { topic_tags: topicTags } : {}),
+    source_data: {
+      ...(spec.source_data || {}),
+      categorization: {
+        ...(spec.source_data?.categorization || {}),
+        ...(geoTags.length ? { geoTags } : {}),
+        ...(topicTags.length ? { topicTags } : {}),
       },
     },
   };
@@ -340,6 +365,59 @@ function concertSpec(ev) {
   });
 }
 
+// ─── Popular binary events ─────────────────────────────────────────────
+function popularEventSpec(ev) {
+  const horizonDays = Number.isFinite(Number(ev.horizonDays))
+    ? Number(ev.horizonDays)
+    : POPULAR_HORIZON_DAYS;
+  if (!withinHorizon(ev.resolveAt, { horizonDays })) return null;
+  if (typeof ev.question !== 'string' || ev.question.trim().length < 8) return null;
+  if (typeof ev.criteria !== 'string' || ev.criteria.trim().length < 12) return null;
+
+  const evidence = ev.sources || ev.evidence || [];
+  const spec = {
+    source: ev.source || 'popular',
+    source_event_id: `popular:${ev.key}`,
+    question: ev.question,
+    category: ev.category || 'general',
+    icon: ev.icon || null,
+    outcomes: ['Sí', 'No'],
+    seed_liquidity: 1000,
+    end_time: ev.resolveAt,
+    amm_mode: 'unified',
+    resolver_type: 'manual_review',
+    resolver_config: manualReviewConfig({
+      sourceEventId: `popular:${ev.key}`,
+      criteria: ev.criteria,
+      evidence,
+    }),
+    source_data: {
+      kind: 'popular_event',
+      topic: ev.topic || null,
+      movie: ev.movie || null,
+      franchise: ev.franchise || null,
+      region: ev.region || ev.marketRegion || 'world',
+      sourceUrls: evidence
+        .map(item => (typeof item === 'string' ? item : item?.url))
+        .filter(Boolean),
+      evidence,
+      resolutionCriteria: ev.criteria,
+    },
+  };
+  return attachSuggestedPricing(explicitTags(spec, ev.tags), {
+    probabilities: configuredProbabilities(
+      ev,
+      2,
+      binaryProbabilitiesFromYes(ev.probabilityYes ?? ev.suggestedProbabilityYes, 0.45),
+    ),
+    source: Array.isArray(ev.probabilities) || Array.isArray(ev.probabilityPct) || ev.probabilityYes != null
+      ? 'admin-config'
+      : 'source-signals:popular-event',
+    rationale: 'Mercado popular con resolución manual y fuentes explícitas; admin puede editar odds antes de aprobar.',
+    evidence,
+  });
+}
+
 export async function generateEntertainmentMarkets() {
   const specs = [];
 
@@ -359,6 +437,10 @@ export async function generateEntertainmentMarkets() {
     const s = concertSpec(ev);
     if (s) specs.push(s);
   }
+  for (const ev of POPULAR_EVENTS) {
+    const s = popularEventSpec(ev);
+    if (s) specs.push(s);
+  }
 
   const out = [];
   for (const spec of specs) out.push(await maybeAttachAiPricing(spec));
@@ -370,6 +452,9 @@ export const _internal = {
   awardProbabilities,
   binaryProbabilitiesFromYes,
   configuredProbabilities,
+  explicitTags,
+  popularEventSpec,
   suggestPricingWithAnthropic,
   uniformProbabilities,
+  withinHorizon,
 };

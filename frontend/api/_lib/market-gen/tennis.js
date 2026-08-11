@@ -195,7 +195,7 @@ function headToHeadCompetitors(competition) {
 
 function buildHeadToHeadMarket(event, competition, players) {
   if (!competitionCanEmitHeadToHead(competition)) return null;
-  const startIso = competition?.date || event?.date;
+  const startIso = competition?.date || competition?.startDate;
   const startMs = new Date(startIso).getTime();
   if (!Number.isFinite(startMs)) return null;
   const nowMs = Date.now();

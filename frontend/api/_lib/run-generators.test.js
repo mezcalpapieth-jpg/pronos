@@ -20,3 +20,10 @@ test('points pending upsert persists per-option seed liquidities', () => {
   assert.match(source, /\$\{s\.seed_liquidities \? JSON\.stringify\(s\.seed_liquidities\) : null\}::jsonb/);
   assert.match(source, /seed_liquidities\s*=\s*EXCLUDED\.seed_liquidities/);
 });
+
+test('generator runner can sync approved ATP H2H schedule changes', () => {
+  assert.match(source, /APPROVED_SCHEDULE_SYNC_SOURCES[\s\S]*espn-atp-match/);
+  assert.match(source, /export async function syncApprovedMarketSchedules/);
+  assert.match(source, /UPDATE points_markets m[\s\S]*SET end_time = \$\{s\.end_time\}::timestamptz/);
+  assert.match(source, /UPDATE points_pending_markets[\s\S]*resolver_config = \$\{freshResolverConfig\}::jsonb/);
+});

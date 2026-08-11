@@ -250,6 +250,7 @@ export function deriveMarketTags(row = {}) {
     ...readNestedTags(sourceData, 'topicTags', TOPIC_KEYS),
     ...readNestedTags(sourceData, 'topic_tags', TOPIC_KEYS),
   ];
+  const hasExplicitTopicSignal = explicitTopicTags.length > 0;
 
   for (const tag of explicitCategoryTags) {
     if (!isolatedCategory || tag === category) addUnique(categoryTags, tag, CATEGORY_KEYS);
@@ -353,7 +354,7 @@ export function deriveMarketTags(row = {}) {
     || explicitEntertainmentSource
     || ((category === 'mexico' || category === 'general') && !sport && !league && hasEntertainmentKeyword)
   );
-  if (isEntertainment) {
+  if (isEntertainment && !hasExplicitTopicSignal) {
     if (entertainmentKind === 'concert') addUnique(topicTags, 'musica', TOPIC_KEYS);
     if (entertainmentKind.startsWith('reality')) {
       addUnique(topicTags, 'tv', TOPIC_KEYS);

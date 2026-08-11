@@ -33,3 +33,49 @@ test('entertainment AI pricing stays gated behind env flag and key', () => {
     else process.env.ANTHROPIC_API_KEY = oldKey;
   }
 });
+
+test('popular event markets use the longer capped horizon', () => {
+  const now = Date.UTC(2026, 7, 11, 12, 0, 0);
+  const ninetyDays = new Date(now + 90 * 86_400_000).toISOString();
+
+  assert.equal(_internal.withinHorizon(ninetyDays, { now }), false);
+  assert.equal(_internal.withinHorizon(ninetyDays, { now, horizonDays: 180 }), true);
+});
+
+test('popular event spec carries manual criteria, evidence, and tags', () => {
+  const resolveAt = new Date(Date.now() + 90 * 86_400_000).toISOString();
+  const spec = _internal.popularEventSpec({
+    kind: 'popular_event',
+    key: 'test-popular',
+    question: '¿GTA VI se retrasa otra vez antes de su lanzamiento?',
+    category: 'general',
+    topic: 'gaming',
+    resolveAt,
+    probabilityYes: 30,
+    criteria: 'Resolver Sí si una fuente oficial anuncia una fecha posterior antes del cierre.',
+    evidence: [
+      { title: 'Fuente oficial', url: 'https://example.com/source', publishedAt: '2026-08-11' },
+    ],
+    tags: {
+      categoryTags: ['general'],
+      geoTags: ['world'],
+      topicTags: ['general'],
+    },
+  });
+
+  assert.equal(spec.source, 'popular');
+  assert.equal(spec.source_event_id, 'popular:test-popular');
+  assert.equal(spec.resolver_type, 'manual_review');
+  assert.equal(spec.resolver_config.criteria, 'Resolver Sí si una fuente oficial anuncia una fecha posterior antes del cierre.');
+  assert.deepEqual(spec.outcomes, ['Sí', 'No']);
+  assert.deepEqual(spec.category_tags, ['general']);
+  assert.deepEqual(spec.geo_tags, ['world']);
+  assert.deepEqual(spec.topic_tags, ['general']);
+  assert.deepEqual(spec.source_data.categorization, {
+    geoTags: ['world'],
+    topicTags: ['general'],
+  });
+  assert.deepEqual(spec.source_data.sourceUrls, ['https://example.com/source']);
+  assert.equal(spec.source_data.suggestedPricing.source, 'admin-config');
+  assert.deepEqual(spec.source_data.suggestedPricing.probabilityPct, [30, 70]);
+});

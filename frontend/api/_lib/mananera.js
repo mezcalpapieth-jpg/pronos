@@ -5,6 +5,7 @@ export const MANANERA_SEARCH_BASE_URL = 'https://www.gob.mx/busqueda';
 export const MANANERA_YOUTUBE_SEARCH_BASE_URL = 'https://www.youtube.com/results';
 
 const YOUTUBE_SEARCH_API_URL = 'https://www.googleapis.com/youtube/v3/search';
+const YOUTUBE_CHANNEL_BASE_URL = 'https://www.youtube.com/channel';
 const YOUTUBE_WATCH_BASE_URL = 'https://www.youtube.com/watch';
 const YOUTUBE_FEED_BASE_URL = 'https://www.youtube.com/feeds/videos.xml';
 const DEFAULT_MANANERA_YOUTUBE_CHANNEL_IDS = [
@@ -240,7 +241,7 @@ function addDays(dateYmd, days) {
   return d.toISOString().slice(0, 10);
 }
 
-function youtubeSearchApiUrl({ dateYmd, channelId = null }) {
+function youtubeSearchApiUrl({ dateYmd, channelId = null, youtubeApiKey = null, eventType = null }) {
   const q = `Conferencia de prensa matutina ${formatSpanishLongDate(dateYmd)} Presidenta Claudia Sheinbaum`;
   const params = new URLSearchParams({
     part: 'snippet',
@@ -253,6 +254,8 @@ function youtubeSearchApiUrl({ dateYmd, channelId = null }) {
     publishedBefore: new Date(`${addDays(dateYmd, 1)}T00:00:00-06:00`).toISOString(),
   });
   if (channelId) params.set('channelId', channelId);
+  if (youtubeApiKey) params.set('key', youtubeApiKey);
+  if (eventType) params.set('eventType', eventType);
   return `${YOUTUBE_SEARCH_API_URL}?${params.toString()}`;
 }
 
@@ -263,6 +266,10 @@ function videoUrl(videoId) {
 function youtubeChannelFeedUrl(channelId) {
   const params = new URLSearchParams({ channel_id: channelId });
   return `${YOUTUBE_FEED_BASE_URL}?${params.toString()}`;
+}
+
+function youtubeChannelStreamsUrl(channelId) {
+  return `${YOUTUBE_CHANNEL_BASE_URL}/${encodeURIComponent(channelId)}/streams`;
 }
 
 function xmlTagText(xml, tagName) {
@@ -286,7 +293,69 @@ function videosFromYouTubeFeedXml(xml) {
   return out;
 }
 
-async function findMananeraYouTubeVideo({
+function decodeYouTubeJsonText(value) {
+  const raw = String(value || '');
+  try {
+    return decodeHtmlEntities(JSON.parse(`"${raw.replace(/\n/g, '\\n')}"`))
+      .replace(/\s+/g, ' ')
+      .trim();
+  } catch {
+    return decodeHtmlEntities(raw
+      .replace(/\\u0026/g, '&')
+      .replace(/\\n/g, ' ')
+      .replace(/\\\//g, '/'))
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+}
+
+function rendererTitleFromYouTubeBlock(block) {
+  const source = String(block || '');
+  const patterns = [
+    /"title":\{"runs":\[\{"text":"((?:\\.|[^"\\])*)"/,
+    /"title":\{"simpleText":"((?:\\.|[^"\\])*)"/,
+    /"title":\{"content":"((?:\\.|[^"\\])*)"/,
+    /"accessibilityData":\{"label":"((?:\\.|[^"\\])*)"/,
+  ];
+  for (const re of patterns) {
+    const match = source.match(re);
+    const title = match ? decodeYouTubeJsonText(match[1]) : '';
+    if (title) return title;
+  }
+  return '';
+}
+
+function videosFromYouTubeStreamsHtml(html) {
+  const source = decodeHtmlEntities(String(html || ''))
+    .replace(/\\u0026/g, '&')
+    .replace(/\\\//g, '/')
+    .replace(/\\"/g, '"');
+  const out = [];
+  const re = /"videoId":"([a-zA-Z0-9_-]{11})"/g;
+  let match;
+  while ((match = re.exec(source))) {
+    const id = match[1];
+    if (out.some(item => item.id === id)) continue;
+    const block = source.slice(match.index, Math.min(source.length, match.index + 9000));
+    const title = rendererTitleFromYouTubeBlock(block);
+    if (!title) continue;
+    out.push({ id, title, channelTitle: '' });
+  }
+  return out;
+}
+
+function addYouTubeCandidate(out, video = {}) {
+  const id = extractYouTubeVideoId(video.id || video.videoId || video.url);
+  if (!id) return;
+  if (out.some(item => item.id === id)) return;
+  out.push({
+    ...video,
+    id,
+    url: video.url || videoUrl(id),
+  });
+}
+
+async function findMananeraYouTubeVideos({
   dateYmd,
   cfg = {},
   fetchImpl,
@@ -303,9 +372,18 @@ async function findMananeraYouTubeVideo({
       channelTitle: cfg.youtubeChannelTitle || null,
       searchUrl,
       explicit: true,
+      videos: [{
+        id: explicitVideoId,
+        url: videoUrl(explicitVideoId),
+        title: cfg.youtubeTitle || null,
+        channelTitle: cfg.youtubeChannelTitle || null,
+        searchUrl,
+        explicit: true,
+      }],
     };
   }
 
+  const videos = [];
   const channelIds = configuredYouTubeChannelIds({ cfg });
   for (const channelId of channelIds) {
     try {
@@ -314,8 +392,7 @@ async function findMananeraYouTubeVideo({
       });
       for (const item of videosFromYouTubeFeedXml(feedXml)) {
         if (!titleLooksLikeMananeraForDate(item.title, dateYmd)) continue;
-        return {
-          ready: true,
+        addYouTubeCandidate(videos, {
           id: item.id,
           url: videoUrl(item.id),
           title: item.title,
@@ -323,12 +400,44 @@ async function findMananeraYouTubeVideo({
           searchUrl,
           channelId,
           discovery: 'youtube-feed',
-        };
+        });
       }
     } catch {
       // Feed is the free path. If it is unavailable, fall through to the
       // Data API search path when a key exists.
     }
+  }
+
+  for (const channelId of channelIds) {
+    try {
+      const streamsHtml = await fetchText(fetchImpl, youtubeChannelStreamsUrl(channelId), {
+        accept: 'text/html,application/xhtml+xml',
+      });
+      for (const item of videosFromYouTubeStreamsHtml(streamsHtml)) {
+        if (!titleLooksLikeMananeraForDate(item.title, dateYmd)) continue;
+        addYouTubeCandidate(videos, {
+          id: item.id,
+          url: videoUrl(item.id),
+          title: item.title,
+          channelTitle: item.channelTitle,
+          searchUrl,
+          channelId,
+          discovery: 'youtube-streams-tab',
+        });
+      }
+    } catch {
+      // The streams tab is a public HTML fallback for livestream archives.
+      // If YouTube blocks it, the Data API search path below can still help.
+    }
+  }
+
+  if (videos.length) {
+    return {
+      ready: true,
+      ...videos[0],
+      videos,
+      searchUrl,
+    };
   }
 
   if (!youtubeApiKey) {
@@ -341,38 +450,59 @@ async function findMananeraYouTubeVideo({
 
   let apiErrorReason = null;
   for (const channelId of channelIds) {
-    const apiUrl = youtubeSearchApiUrl({ dateYmd, channelId });
-    let data;
-    try {
-      data = await fetchJson(fetchImpl, apiUrl, { 'X-goog-api-key': youtubeApiKey });
-    } catch (err) {
-      apiErrorReason = err?.status ? `youtube_search_failed_${err.status}` : 'youtube_search_failed';
-      continue;
+    for (const eventType of [null, 'completed']) {
+      const apiUrl = youtubeSearchApiUrl({ dateYmd, channelId, youtubeApiKey, eventType });
+      let data;
+      try {
+        data = await fetchJson(fetchImpl, apiUrl);
+      } catch (err) {
+        apiErrorReason = err?.status ? `youtube_search_failed_${err.status}` : 'youtube_search_failed';
+        continue;
+      }
+      const items = Array.isArray(data?.items) ? data.items : [];
+      for (const item of items) {
+        const id = item?.id?.videoId;
+        const title = item?.snippet?.title || '';
+        const channelTitle = item?.snippet?.channelTitle || '';
+        if (!id) continue;
+        if (!titleLooksLikeMananeraForDate(title, dateYmd)) continue;
+        if (channelTitle && !OFFICIAL_YOUTUBE_CHANNEL_TITLE_RE.test(channelTitle) && !channelIds.includes(channelId)) continue;
+        addYouTubeCandidate(videos, {
+          id,
+          url: videoUrl(id),
+          title,
+          channelTitle,
+          searchUrl,
+          channelId,
+          discovery: eventType ? `youtube-data-api-${eventType}` : 'youtube-data-api',
+        });
+      }
     }
-    const items = Array.isArray(data?.items) ? data.items : [];
-    for (const item of items) {
-      const id = item?.id?.videoId;
-      const title = item?.snippet?.title || '';
-      const channelTitle = item?.snippet?.channelTitle || '';
-      if (!id) continue;
-      if (!titleLooksLikeMananeraForDate(title, dateYmd)) continue;
-      if (channelTitle && !OFFICIAL_YOUTUBE_CHANNEL_TITLE_RE.test(channelTitle) && !channelIds.includes(channelId)) continue;
-      return {
-        ready: true,
-        id,
-        url: videoUrl(id),
-        title,
-        channelTitle,
-        searchUrl,
-        channelId,
-      };
-    }
+  }
+
+  if (videos.length) {
+    return {
+      ready: true,
+      ...videos[0],
+      videos,
+      searchUrl,
+    };
   }
 
   return {
     ready: false,
     reason: apiErrorReason || 'official_youtube_video_not_found',
     searchUrl,
+  };
+}
+
+async function findMananeraYouTubeVideo(options = {}) {
+  const result = await findMananeraYouTubeVideos(options);
+  if (!result.ready) return result;
+  const first = Array.isArray(result.videos) ? result.videos[0] : null;
+  return {
+    ...result,
+    ...(first || {}),
   };
 }
 
@@ -594,7 +724,11 @@ async function fetchYouTubeCaptionText({ fetchImpl, videoId }) {
   const tracks = extractCaptionTracks(watchHtml);
   const track = selectSpanishCaptionTrack(tracks);
   if (!track) {
-    return { ready: false, reason: 'youtube_captions_not_found' };
+    return {
+      ready: false,
+      reason: 'youtube_captions_not_found',
+      captionTrackCount: Array.isArray(tracks) ? tracks.length : 0,
+    };
   }
 
   let captionUrl;
@@ -613,6 +747,7 @@ async function fetchYouTubeCaptionText({ fetchImpl, videoId }) {
     return { ready: false, reason: `youtube_captions_fetch_failed_${response?.status || 'unknown'}` };
   }
   const body = await response.text();
+  const bodyLength = body.length;
   let text = '';
   let timedSegments = [];
   try {
@@ -625,7 +760,16 @@ async function fetchYouTubeCaptionText({ fetchImpl, videoId }) {
   }
 
   if (text.length < 500) {
-    return { ready: false, reason: 'youtube_captions_too_short' };
+    return {
+      ready: false,
+      reason: text.length === 0 ? 'youtube_captions_empty' : 'youtube_captions_too_short',
+      captionTrackCount: Array.isArray(tracks) ? tracks.length : 0,
+      captionBodyLength: bodyLength,
+      captionTextLength: text.length,
+      captionLanguage: track.languageCode || null,
+      captionName: trackName(track) || null,
+      captionKind: track.kind || null,
+    };
   }
   return {
     ready: true,
@@ -638,6 +782,17 @@ async function fetchYouTubeCaptionText({ fetchImpl, videoId }) {
   };
 }
 
+function finalYouTubeCaptionFailureReason(captionAttempts = []) {
+  const attempts = Array.isArray(captionAttempts) ? captionAttempts : [];
+  const fetchFailed = attempts.find(a => String(a?.reason || '').startsWith('youtube_captions_fetch_failed'));
+  if (fetchFailed?.reason) return fetchFailed.reason;
+  const empty = attempts.find(a => a?.reason === 'youtube_captions_empty');
+  if (empty?.reason) return empty.reason;
+  const tooShort = attempts.find(a => a?.reason === 'youtube_captions_too_short');
+  if (tooShort?.reason) return tooShort.reason;
+  return attempts[attempts.length - 1]?.reason || 'youtube_captions_not_found';
+}
+
 export async function findMananeraYouTubeTranscript({
   dateYmd,
   cfg = {},
@@ -647,38 +802,64 @@ export async function findMananeraYouTubeTranscript({
   if (!dateYmd) throw new Error('mananera youtube: missing dateYmd');
   if (typeof fetchImpl !== 'function') throw new Error('mananera youtube: fetch unavailable');
 
-  const video = await findMananeraYouTubeVideo({
+  const videoResult = await findMananeraYouTubeVideos({
     dateYmd,
     cfg,
     fetchImpl,
     youtubeApiKey,
   });
-  if (!video.ready) return video;
+  if (!videoResult.ready) return videoResult;
 
-  const captions = await fetchYouTubeCaptionText({ fetchImpl, videoId: video.id });
-  if (!captions.ready) {
+  const videos = Array.isArray(videoResult.videos) && videoResult.videos.length
+    ? videoResult.videos
+    : [videoResult];
+  const captionAttempts = [];
+  for (const video of videos) {
+    const captions = await fetchYouTubeCaptionText({ fetchImpl, videoId: video.id });
+    if (!captions.ready) {
+      captionAttempts.push({
+        videoId: video.id,
+        videoUrl: video.url,
+        title: video.title || null,
+        channelTitle: video.channelTitle || null,
+        discovery: video.discovery || null,
+        reason: captions.reason || null,
+        captionTrackCount: captions.captionTrackCount ?? null,
+        captionBodyLength: captions.captionBodyLength ?? null,
+        captionTextLength: captions.captionTextLength ?? null,
+        captionLanguage: captions.captionLanguage || null,
+        captionName: captions.captionName || null,
+        captionKind: captions.captionKind || null,
+      });
+      continue;
+    }
+
     return {
-      ...captions,
-      searchUrl: video.searchUrl,
-      videoUrl: video.url,
-      transcriptTitle: video.title,
+      ready: true,
+      source: MANANERA_YOUTUBE_CAPTIONS_SOURCE,
+      url: video.url,
+      title: video.title || 'Conferencia de prensa matutina',
+      text: captions.text,
+      searchUrl: video.searchUrl || videoResult.searchUrl,
+      videoId: video.id,
+      channelTitle: video.channelTitle,
+      captionUrl: captions.captionUrl,
+      captionLanguage: captions.captionLanguage,
+      captionName: captions.captionName,
+      captionKind: captions.captionKind,
+      timedSegments: captions.timedSegments,
+      captionAttempts,
     };
   }
 
+  const firstAttempt = captionAttempts[0] || null;
   return {
-    ready: true,
-    source: MANANERA_YOUTUBE_CAPTIONS_SOURCE,
-    url: video.url,
-    title: video.title || 'Conferencia de prensa matutina',
-    text: captions.text,
-    searchUrl: video.searchUrl,
-    videoId: video.id,
-    channelTitle: video.channelTitle,
-    captionUrl: captions.captionUrl,
-    captionLanguage: captions.captionLanguage,
-    captionName: captions.captionName,
-    captionKind: captions.captionKind,
-    timedSegments: captions.timedSegments,
+    ready: false,
+    reason: finalYouTubeCaptionFailureReason(captionAttempts),
+    searchUrl: videoResult.searchUrl,
+    videoUrl: firstAttempt?.videoUrl || null,
+    transcriptTitle: firstAttempt?.title || null,
+    captionAttempts,
   };
 }
 
@@ -753,6 +934,7 @@ export async function readMananeraPhraseResult(cfg = {}, options = {}) {
         youtubeSearchUrl: youtubeTranscript.searchUrl || buildMananeraYouTubeSearchUrl(cfg.dateYmd),
         youtubeVideoUrl: youtubeTranscript.videoUrl || null,
         youtubeTranscriptTitle: youtubeTranscript.transcriptTitle || null,
+        youtubeCaptionAttempts: youtubeTranscript.captionAttempts || [],
       };
     }
   }

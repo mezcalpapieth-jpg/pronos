@@ -175,3 +175,27 @@ test('keeps global sports markets out of Mexico entertainment topics', () => {
   assert.equal(matchesMarketTaxonomy(row, { category: 'mexico', topic: 'cine' }), false);
   assert.equal(matchesMarketTaxonomy(row, { category: 'deportes', sport: 'f1' }), true);
 });
+
+test('honors explicit popular-event categorization tags', () => {
+  const tags = deriveMarketTags({
+    category: 'musica',
+    source: 'popular',
+    category_tags: ['musica'],
+    question: '¿Avengers: Doomsday se retrasa de su estreno?',
+    source_data: {
+      kind: 'popular_event',
+      topic: 'cine',
+      region: 'world',
+      categorization: {
+        geoTags: ['world'],
+        topicTags: ['cine'],
+      },
+    },
+  });
+
+  assert.deepEqual(tags.categoryTags, ['musica']);
+  assert.deepEqual(tags.geoTags, ['world']);
+  assert.deepEqual(tags.topicTags, ['cine']);
+
+  assert.equal(matchesMarketTaxonomy({ ...tags, category: 'musica' }, { category: 'musica', topic: 'cine' }), true);
+});

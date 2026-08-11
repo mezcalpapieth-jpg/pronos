@@ -291,6 +291,7 @@ export async function resolveAutoResolverCandidate(candidate = {}) {
         youtubeSearchUrl: transcript.youtubeSearchUrl || null,
         youtubeVideoUrl: transcript.youtubeVideoUrl || null,
         youtubeTranscriptTitle: transcript.youtubeTranscriptTitle || null,
+        youtubeCaptionAttempts: transcript.youtubeCaptionAttempts || [],
       };
       throw err;
     }
