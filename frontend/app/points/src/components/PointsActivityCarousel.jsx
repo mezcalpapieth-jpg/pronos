@@ -195,26 +195,113 @@ function remapHistoryByParent(history, request) {
   return mapped;
 }
 
-function aggregateParallelFlowSeries(m) {
+function parallelFlowPoints(m) {
   const buckets = Array.isArray(m?._buckets)
     ? [...m._buckets].sort((a, b) => Number(a.t) - Number(b.t))
     : [];
-  const total = buckets.reduce((sum, b) => sum + Number(b.volume || 0), 0);
-  if (total <= 0) return [];
 
   let cumulative = 0;
-  return buckets.map((b) => {
-    cumulative += Number(b.volume || 0);
-    return {
-      t: b.t,
-      p: Math.max(0, Math.min(100, (cumulative / total) * 100)),
-    };
-  });
+  return buckets
+    .map((b) => {
+      const volume = Number(b.volume || 0);
+      if (!Number.isFinite(volume) || volume <= 0) return null;
+      cumulative += volume;
+      return {
+        t: Number(b.t || 0),
+        v: cumulative,
+      };
+    })
+    .filter(pt => Number.isFinite(pt?.t) && pt.t > 0 && Number.isFinite(pt.v));
+}
+
+function FlowSparkline({
+  buckets,
+  height = 148,
+  color = BUY_COLOR,
+  emptyLabel,
+  emptySubLabel,
+}) {
+  const points = useMemo(() => parallelFlowPoints({ _buckets: buckets }), [buckets]);
+  if (points.length === 0) {
+    return (
+      <div style={{
+        height,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+        color: 'var(--text-muted)',
+        textAlign: 'center',
+      }}>
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          color: 'var(--text-secondary)',
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+        }}>
+          {emptyLabel}
+        </span>
+        <span style={{
+          fontFamily: 'var(--font-body)',
+          fontSize: 12,
+          color: 'var(--text-muted)',
+        }}>
+          {emptySubLabel}
+        </span>
+      </div>
+    );
+  }
+
+  const width = 100;
+  const padX = 2;
+  const padY = 5;
+  const minT = Math.min(...points.map(pt => pt.t));
+  const maxT = Math.max(...points.map(pt => pt.t));
+  const maxV = Math.max(1, ...points.map(pt => pt.v));
+  const xFor = (t) => padX + ((t - minT) / Math.max(1, maxT - minT)) * (width - padX * 2);
+  const yFor = (v) => padY + (height - padY * 2) - (v / maxV) * (height - padY * 2);
+  const coords = points.map(pt => ({ x: xFor(pt.t), y: yFor(pt.v), v: pt.v }));
+  let path = `M${coords[0].x.toFixed(2)},${coords[0].y.toFixed(2)}`;
+  for (let i = 1; i < coords.length; i++) {
+    path += ` L${coords[i].x.toFixed(2)},${coords[i - 1].y.toFixed(2)}`;
+    path += ` L${coords[i].x.toFixed(2)},${coords[i].y.toFixed(2)}`;
+  }
+  const fill = `${path} L${coords[coords.length - 1].x.toFixed(2)},${(height - padY).toFixed(2)} L${coords[0].x.toFixed(2)},${(height - padY).toFixed(2)} Z`;
+
+  return (
+    <svg
+      width="100%"
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="none"
+      style={{ display: 'block', overflow: 'visible' }}
+      aria-label={`Flujo acumulado ${formatCompact(maxV)} MXNP`}
+    >
+      <path d={fill} fill={color} opacity="0.08" />
+      <path
+        d={path}
+        fill="none"
+        stroke={color}
+        strokeWidth={0.7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <circle
+        cx={coords[coords.length - 1].x}
+        cy={coords[coords.length - 1].y}
+        r={2.4}
+        fill={color}
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  );
 }
 
 function seriesForSlide(m, history) {
-  if (!m) return [];
-  if (m.ammMode === 'parallel') return aggregateParallelFlowSeries(m);
+  if (!m || m.ammMode === 'parallel') return [];
   return history?.[m.id] || [];
 }
 
@@ -230,6 +317,23 @@ function outcomeEntriesForMarket(m, limit = 4) {
   return entries
     .sort((a, b) => b.price - a.price || a.index - b.index)
     .slice(0, limit);
+}
+
+function leadingOutcomeForMarket(m, tiedLabel = 'Empatado') {
+  const entries = outcomeEntriesForMarket(m, Number.POSITIVE_INFINITY)
+    .filter(entry => Number.isFinite(entry.price));
+  if (entries.length === 0) return {
+    label: tiedLabel,
+    pct: 50,
+    tied: true,
+  };
+  const topPct = Math.round((entries[0].price || 0) * 100);
+  const tiedCount = entries.filter(entry => Math.round((entry.price || 0) * 100) === topPct).length;
+  return {
+    label: tiedCount > 1 ? tiedLabel : entries[0].label,
+    pct: topPct,
+    tied: tiedCount > 1,
+  };
 }
 
 function bucketsForWindow(buckets, hours, nowSeconds) {
@@ -680,7 +784,8 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
             const mPrices = Array.isArray(m.prices) ? m.prices : [];
             const isParallel = m.ammMode === 'parallel';
             const mSeries = seriesForSlide(m, history);
-            const mLeadPct = Math.round((mPrices[0] ?? 0.5) * 100);
+            const mLeader = isParallel ? leadingOutcomeForMarket(m, t('points.activity.tied')) : null;
+            const mLeadPct = isParallel ? mLeader.pct : Math.round((mPrices[0] ?? 0.5) * 100);
             const mDelta = mSeries.length >= 2 ? mSeries[mSeries.length - 1].p - mSeries[0].p : 0;
             const mDeltaColor = mDelta > 0.05 ? BUY_COLOR : mDelta < -0.05 ? SELL_COLOR : 'var(--text-muted)';
             const mOutcomeEntries = outcomeEntriesForMarket(m);
@@ -774,7 +879,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                         lineHeight: 1,
                         color: 'var(--text-primary)',
                       }}>
-                        {isParallel ? `${formatCompact(m._displayVolume)} MXNP` : `${mLeadPct}%`}
+                        {mLeadPct}%
                       </span>
                       <span style={{
                         fontFamily: 'var(--font-mono)',
@@ -786,7 +891,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
                       }}>
-                        {isParallel ? t('points.activity.flowTotal') : mOutcomes[0]}
+                        {isParallel ? mLeader.label : mOutcomes[0]}
                       </span>
                       {isActive && !isParallel && mSeries.length >= 2 && (
                         <span style={{
@@ -800,20 +905,30 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                       )}
                     </div>
 
-                    <Sparkline
-                      height={isMobile ? 110 : 148}
-                      color={BUY_COLOR}
-                      strokeWidth={2.2}
-                      fill
-                      // The big % above the chart already states the
-                      // level; Sparkline's auto y-axis (on at h>=100)
-                      // would only collide with the end dot here.
-                      showYAxis={false}
-                      data={mSeries}
-                      targetPct={isParallel ? 100 : mLeadPct}
-                      emptyLabel={t('points.activity.noHistory')}
-                      emptySubLabel={t('points.activity.noHistorySub')}
-                    />
+                    {isParallel ? (
+                      <FlowSparkline
+                        buckets={m._buckets}
+                        height={isMobile ? 110 : 148}
+                        color={BUY_COLOR}
+                        emptyLabel={t('points.activity.noHistory')}
+                        emptySubLabel={t('points.activity.noHistorySub')}
+                      />
+                    ) : (
+                      <Sparkline
+                        height={isMobile ? 110 : 148}
+                        color={BUY_COLOR}
+                        strokeWidth={2.2}
+                        fill
+                        // The big % above the chart already states the
+                        // level; Sparkline's auto y-axis (on at h>=100)
+                        // would only collide with the end dot here.
+                        showYAxis={false}
+                        data={mSeries}
+                        targetPct={mLeadPct}
+                        emptyLabel={t('points.activity.noHistory')}
+                        emptySubLabel={t('points.activity.noHistorySub')}
+                      />
+                    )}
 
                     {/* Outcome legend — leaders first on parallel markets. */}
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 14 }}>

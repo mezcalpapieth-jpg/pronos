@@ -82,10 +82,16 @@ test('parallel carousel charts use parent flow instead of a child leg identity',
   // headline just because one child leg happens to be first in the id list.
   assert.match(carousel, /function priceHistoryRequestForMarkets\(markets\)/);
   assert.match(carousel, /if \(m\.ammMode === 'parallel'\) continue/);
-  assert.match(carousel, /function aggregateParallelFlowSeries/);
-  assert.match(carousel, /m\.ammMode === 'parallel'\) return aggregateParallelFlowSeries\(m\)/);
-  assert.match(carousel, /points\.activity\.flowTotal/);
+  assert.match(carousel, /function parallelFlowPoints/);
+  assert.match(carousel, /function FlowSparkline/);
+  assert.match(carousel, /function leadingOutcomeForMarket/);
+  assert.match(carousel, /<FlowSparkline/);
+  assert.match(carousel, /points\.activity\.tied/);
+  assert.match(carousel, /isParallel \? mLeader\.label : mOutcomes\[0\]/);
+  assert.match(carousel, /const mLeadPct = isParallel \? mLeader\.pct/);
   assert.doesNotMatch(carousel, /m\.legIds\[0\]/);
+  assert.doesNotMatch(carousel, /targetPct=\{isParallel \? 100 : mLeadPct\}/);
+  assert.doesNotMatch(carousel, /aggregateParallelFlowSeries/);
   assert.match(carousel, /fetchPriceHistory\(priceHistoryIds/);
   assert.match(carousel, /remapHistoryByParent\(h \|\| \{\}, priceHistoryRequest\)/);
 });

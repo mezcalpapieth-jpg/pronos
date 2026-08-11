@@ -757,6 +757,7 @@ const STRINGS = {
   'points.activity.noRecentSub': { es: 'Mercado con volumen histórico, sin operaciones en esta ventana.', en: 'High-volume market, no trades in this window.' },
   'points.activity.flow':     { es: 'Flujo en vivo',         en: 'Live flow' },
   'points.activity.flowTotal': { es: 'Flujo total',           en: 'Total flow' },
+  'points.activity.tied':     { es: 'Empatado',              en: 'Tied' },
   'points.activity.txs':      { es: 'transacciones',         en: 'transactions' },
   'points.activity.buys':     { es: 'Compras',               en: 'Buys' },
   'points.activity.sells':    { es: 'Ventas',                en: 'Sells' },
