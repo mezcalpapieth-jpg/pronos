@@ -17,6 +17,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { usePointsAuth } from '../lib/pointsAuth.js';
+import { useLang } from '../lib/i18n.js';
 import DelegationPrompt from './DelegationPrompt.jsx';
 
 const ERRORS = {
@@ -53,6 +54,7 @@ export default function PointsLoginModal({
   enableDelegationStep = false,
 }) {
   const { initOtp, verifyOtp, setUsername, refresh, user } = usePointsAuth();
+  const lang = useLang();
 
   // `initialStep` lets a caller (e.g. MVP App.jsx) jump straight to the
   // username step when the user is already authed but missing a username.
@@ -194,7 +196,7 @@ export default function PointsLoginModal({
           color: 'var(--text-primary)', marginBottom: 18,
           textTransform: 'uppercase', letterSpacing: '0.02em',
         }}>
-          {step === 'email' && 'Crear cuenta o entrar'}
+          {step === 'email' && (lang === 'en' ? 'Log In' : 'Únete')}
           {step === 'code' && 'Código enviado'}
           {step === 'username' && 'Elige tu usuario'}
           {step === 'delegate' && 'Bienvenido a Pronos'}
@@ -293,7 +295,7 @@ export default function PointsLoginModal({
             </p>
             {err && <div style={errorStyle}>{err}</div>}
             <button type="submit" disabled={pending || uname.length < 3} style={btnPrimaryStyle}>
-              {pending ? 'Guardando…' : 'Crear cuenta'}
+              {pending ? 'Guardando…' : (lang === 'en' ? 'Log In' : 'Únete')}
             </button>
             <p style={{ ...helperStyle, marginTop: 10, fontSize: 10 }}>
               Recibes 500 MXNP de bienvenida al crear tu usuario.

@@ -1029,7 +1029,7 @@ export default function PointsEarn({ onOpenLogin }) {
           Crea tu cuenta (gratis) para ver tu racha, referir amigos, y completar tareas sociales.
         </p>
         <button className="btn-primary" onClick={onOpenLogin} style={{ padding: '12px 24px' }}>
-          Crear cuenta
+          {lang === 'en' ? 'Log In' : 'Únete'}
         </button>
       </main>
     );

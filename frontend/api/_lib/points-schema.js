@@ -42,6 +42,7 @@ const POINTS_SCHEMA_READY_PROBE = `
     to_regclass('public.points_support_messages') IS NOT NULL AS points_support_messages,
     to_regclass('public.points_pwa_install_claims') IS NOT NULL AS points_pwa_install_claims,
     to_regclass('public.points_social_links') IS NOT NULL AS points_social_links,
+    to_regclass('public.points_mananera_transcripts') IS NOT NULL AS points_mananera_transcripts,
     EXISTS (
       SELECT 1 FROM information_schema.columns
       WHERE table_schema = 'public'
@@ -275,8 +276,20 @@ const POINTS_SCHEMA_MIGRATIONS = [
   // keep showing up on home; admin can toggle specific markets off
   // via the 🔥 button in the approved-markets list.
   `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT true`,
+  // hidden_from_home: bulk curation switch for the home/trending
+  // surface. Category pages and direct links still show the market;
+  // only the home feed suppresses it. The trophy override below can
+  // still force a market through even when this is true.
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS hidden_from_home BOOLEAN NOT NULL DEFAULT false`,
+  // tournament_featured: explicit 🏆 override for tournament markets.
+  // These stay visible on the home feed even after admins bulk-hide the
+  // regular market set.
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS tournament_featured BOOLEAN NOT NULL DEFAULT false`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_featured_status
     ON points_markets(featured, status) WHERE featured = true`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_tournament_featured_active_end
+    ON points_markets(status, end_time ASC, id ASC)
+    WHERE archived_at IS NULL AND parent_id IS NULL AND tournament_featured = true`,
   // auto_featured: tracks whether the cron flipped `featured = true`
   // because the market entered its game window (start_time <= now <
   // end_time). Lets us safely auto-unfeature when the game ends
@@ -917,6 +930,34 @@ const POINTS_SCHEMA_MIGRATIONS = [
     ON points_resolution_candidates(points_market_id)
     WHERE status = 'pending'`,
 
+  // ── Mañanera official transcript cache ────────────────────────────────────
+  // The resolver can settle phrase markets from the same durable record
+  // instead of repeatedly scraping gob.mx. date_ymd is the primary key
+  // because each official morning conference has one canonical transcript.
+  `CREATE TABLE IF NOT EXISTS points_mananera_transcripts (
+    date_ymd          DATE PRIMARY KEY,
+    source            TEXT NOT NULL,
+    url               TEXT NOT NULL,
+    fetched_at        TIMESTAMPTZ NOT NULL,
+    raw_html_gzip     BYTEA NOT NULL,
+    raw_html_sha256   TEXT NOT NULL,
+    raw_html_bytes    INTEGER NOT NULL DEFAULT 0,
+    transcript_text   TEXT NOT NULL,
+    characters        INTEGER NOT NULL DEFAULT 0,
+    words             INTEGER NOT NULL DEFAULT 0,
+    n_turnos          INTEGER NOT NULL DEFAULT 0,
+    speakers          JSONB NOT NULL DEFAULT '[]'::jsonb,
+    turns             JSONB NOT NULL DEFAULT '[]'::jsonb,
+    parse_version     INTEGER NOT NULL DEFAULT 1,
+    complete          BOOLEAN NOT NULL DEFAULT true,
+    created_at        TIMESTAMPTZ DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_mananera_transcripts_fetched
+    ON points_mananera_transcripts(fetched_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_mananera_transcripts_source
+    ON points_mananera_transcripts(source, fetched_at DESC)`,
+
   // ── Pending markets (agent-generated, awaiting admin approval) ────────────
   // The daily generator cron writes one row here per discovered event. The
   // admin queue UI reads live rows; approving copies the spec into
@@ -977,6 +1018,8 @@ const POINTS_SCHEMA_MIGRATIONS = [
   // pre-set "show in Trending?" from the pending queue before approval.
   // Default false on pending — admin explicitly ticks the 🔥 to feature.
   `ALTER TABLE points_pending_markets ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT false`,
+  // tournament_featured mirrors the 🏆 override before approval.
+  `ALTER TABLE points_pending_markets ADD COLUMN IF NOT EXISTS tournament_featured BOOLEAN NOT NULL DEFAULT false`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_points_pending_source_event
     ON points_pending_markets(source, source_event_id)`,
   `CREATE INDEX IF NOT EXISTS idx_points_pending_status

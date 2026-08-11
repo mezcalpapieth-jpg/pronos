@@ -19,6 +19,11 @@ function hasRule(rules, source, destination) {
     && rules.some((rule) => rule.source === source && rule.destination === destination);
 }
 
+function hasCron(path, schedule) {
+  return Array.isArray(vercelConfig.crons)
+    && vercelConfig.crons.some((cron) => cron.path === path && cron.schedule === schedule);
+}
+
 test('public user profile route has a root shortcut redirect', () => {
   assert.ok(
     hasRule(vercelConfig.redirects, '/u/:username', '/points/u/:username'),
@@ -36,6 +41,13 @@ test('root redirects to the public points app', () => {
     'expected frontend/index.html to be a meta-refresh fallback shell',
   );
   assert.match(rootIndexHtml, /\/points\//);
+});
+
+test('Mañanera transcript ingestion cron runs at the Mexico City attempt cadence', () => {
+  assert.ok(
+    hasCron('/api/cron/mananera-transcript', '0 0,3,18,21 * * *'),
+    'expected Mañanera ingestion cron at the UTC equivalents of 12/15/18/21 CDMX',
+  );
 });
 
 test('public user profile route hard-refreshes through the points SPA', () => {

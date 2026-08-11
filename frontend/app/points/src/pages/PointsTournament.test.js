@@ -22,6 +22,10 @@ test('tournament page shows current leaderboard, past leaderboards, countdown an
   assert.match(pageSource, /Leaderboard actual/);
   assert.match(pageSource, /Leaderboards anteriores/);
   assert.match(pageSource, /Cuenta regresiva/);
+  assert.match(pageSource, /Nuevos mercados para el torneo/);
+  assert.match(pageSource, /Todos los días a las 9:00 AM, hora de Ciudad de México/);
+  assert.match(pageSource, /nextTournamentMarketDropIso/);
+  assert.match(pageSource, /America\/Mexico_City/);
   assert.match(pageSource, /Reglas/);
   assert.match(pageSource, /Preguntas frecuentes/);
   assert.match(pageSource, /¿Qué significa PnL\?/);

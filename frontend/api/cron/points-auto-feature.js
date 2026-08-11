@@ -61,6 +61,7 @@ export default async function handler(req, res) {
          AND start_time IS NOT NULL
          AND start_time <= NOW()
          AND end_time > NOW()
+         AND hidden_from_home = false
          AND featured = false
        RETURNING id
     `;

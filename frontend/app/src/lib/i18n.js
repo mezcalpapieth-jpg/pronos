@@ -497,7 +497,7 @@ const STRINGS = {
   'points.nav.theme':         { es: 'Cambiar tema',          en: 'Toggle theme' },
   'points.nav.lang':          { es: 'Idioma',                en: 'Language' },
   'points.nav.howItWorks':    { es: 'Cómo funciona',         en: 'How it works' },
-  'points.nav.signUp':        { es: 'Crear cuenta',          en: 'Sign up' },
+  'points.nav.signUp':        { es: 'Únete',                 en: 'Log In' },
 
   // Hero + home copy
   'points.hero.badge':        { es: 'Beta · Competencia MXNP', en: 'Beta · MXNP competition' },

@@ -10,6 +10,7 @@ test('points schema self-healing avoids hot-route migration lock pileups', () =>
   assert.match(source, /to_regclass\('public\.points_resolution_candidates'\)/);
   assert.match(source, /to_regclass\('public\.points_pwa_install_claims'\) IS NOT NULL AS points_pwa_install_claims/);
   assert.match(source, /to_regclass\('public\.points_social_links'\) IS NOT NULL AS points_social_links/);
+  assert.match(source, /to_regclass\('public\.points_mananera_transcripts'\) IS NOT NULL AS points_mananera_transcripts/);
   assert.match(source, /points_support_message_attachments/);
   assert.match(source, /points_social_links_is_public/);
   assert.match(source, /points_social_links_source/);
@@ -28,6 +29,16 @@ test('points schema self-healing avoids hot-route migration lock pileups', () =>
   assert.match(source, /deadlock_detected/);
   assert.match(source, /lock_not_available/);
   assert.match(source, /statement_timeout/);
+});
+
+test('points schema stores official Mañanera transcripts by local date', () => {
+  assert.match(source, /CREATE TABLE IF NOT EXISTS points_mananera_transcripts/);
+  assert.match(source, /date_ymd\s+DATE PRIMARY KEY/);
+  assert.match(source, /raw_html_gzip\s+BYTEA NOT NULL/);
+  assert.match(source, /transcript_text\s+TEXT NOT NULL/);
+  assert.match(source, /speakers\s+JSONB NOT NULL DEFAULT '\[\]'::jsonb/);
+  assert.match(source, /turns\s+JSONB NOT NULL DEFAULT '\[\]'::jsonb/);
+  assert.match(source, /idx_points_mananera_transcripts_fetched/);
 });
 
 test('points social links schema supports private-by-default public handles', () => {

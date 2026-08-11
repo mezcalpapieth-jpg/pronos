@@ -119,6 +119,15 @@ test('Points markets filter surfaces por resolver count while inside Mercados', 
   assert.match(source, /taskCount > 0/);
 });
 
+test('Points pending admin can set 24h crypto windows and toggle BTC/ETH generation', () => {
+  assert.match(source, /DEFAULT_CRYPTO_INTERVAL_OPTIONS[\s\S]*1440[\s\S]*24 horas/);
+  assert.match(source, /DEFAULT_CRYPTO_ASSET_OPTIONS[\s\S]*btc[\s\S]*eth/);
+  assert.match(source, /enabledCryptoAssetKeys/);
+  assert.match(source, /saveCryptoAssetToggle/);
+  assert.match(source, /enabledAssets:\s*enabledCryptoAssetKeys/);
+  assert.match(source, /type="checkbox"/);
+});
+
 test('Points admin can review scheduler resolution candidates', () => {
   assert.match(source, /ResolutionCandidatePanel/);
   assert.match(source, /resolutionCandidate/);
@@ -127,6 +136,20 @@ test('Points admin can review scheduler resolution candidates', () => {
   assert.match(source, /Negar/);
   assert.match(source, /En revisión/);
   assert.match(apiSource, /export async function adminReviewResolutionCandidate/);
+});
+
+test('Points admin can bulk-hide home markets and mark tournament overrides', () => {
+  assert.match(source, /hideAllMarketsFromHome/);
+  assert.match(source, /Ocultar todos/);
+  assert.match(source, /adminBulkHideMarkets/);
+  assert.match(source, /toggleTournamentFeaturedMarket/);
+  assert.match(source, /togglePendingTournamentFeatured/);
+  assert.match(source, /tournamentFeatured/);
+  assert.match(source, /pendingTournamentFeatured/);
+  assert.match(source, /🏆/);
+  assert.match(apiSource, /export async function adminBulkHideMarkets/);
+  assert.match(apiSource, /\/api\/points\/admin\/bulk-hide-markets/);
+  assert.match(apiSource, /tournamentFeatured/);
 });
 
 test('Points admin can cancel active and por resolver markets', () => {

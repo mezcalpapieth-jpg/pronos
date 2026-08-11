@@ -224,6 +224,8 @@ export default async function handler(req, res) {
         resolvedAt: r.resolved_at,
         tradeCount: r.trade_count || 0,
         featured: r.featured === true || r.featured === false ? r.featured : true,
+        hiddenFromHome: r.hidden_from_home === true,
+        tournamentFeatured: r.tournament_featured === true,
         resolverType: r.resolver_type || null,
         mode: r.mode || 'points',
         chainId: r.chain_id || null,

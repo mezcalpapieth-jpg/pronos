@@ -49,6 +49,12 @@ function formatCountdown(target) {
   const ms = target.getTime() - Date.now();
   if (ms <= 0) return '0:00';
   const totalSec = Math.floor(ms / 1000);
+  if (totalSec >= 3600) {
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
@@ -61,6 +67,7 @@ function cryptoWindowMinutes(meta) {
 
 function formatCryptoWindowDuration(meta, lang = 'es') {
   const minutes = cryptoWindowMinutes(meta);
+  if (minutes === 24 * 60) return lang === 'en' ? '24 hours' : '24 horas';
   if (minutes === 60) return lang === 'en' ? '1 hour' : '1 hora';
   return `${minutes} min`;
 }

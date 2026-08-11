@@ -248,13 +248,14 @@ async function list(req, res) {
   }
 
   // LEFT JOIN points_markets so approved rows carry the current
-  // `featured` flag (and market status) back to the admin UI. Pending
-  // / rejected rows have no approved_market_id and the join returns
-  // nulls — which we surface as `featured: null` below so the UI
-  // knows "no toggle applicable".
+  // `featured` / `tournament_featured` flags (and market status) back
+  // to the admin UI. Pending / rejected rows have no approved_market_id
+  // and the join returns nulls.
   const rows = status === 'all'
     ? await readSql`
-        SELECT p.*, mk.featured AS market_featured, mk.status AS market_status
+        SELECT p.*, mk.featured AS market_featured,
+               mk.tournament_featured AS market_tournament_featured,
+               mk.status AS market_status
         FROM points_pending_markets p
         LEFT JOIN points_markets mk ON mk.id = p.approved_market_id
         ORDER BY
@@ -265,7 +266,9 @@ async function list(req, res) {
         LIMIT 2000
       `
     : await readSql`
-        SELECT p.*, mk.featured AS market_featured, mk.status AS market_status
+        SELECT p.*, mk.featured AS market_featured,
+               mk.tournament_featured AS market_tournament_featured,
+               mk.status AS market_status
         FROM points_pending_markets p
         LEFT JOIN points_markets mk ON mk.id = p.approved_market_id
         WHERE p.status = ${status}
@@ -315,9 +318,13 @@ async function list(req, res) {
         // Pendientes row toggles pre-approval. Carries into points_markets
         // when the row is approved.
         pendingFeatured: r.featured === true,
+        pendingTournamentFeatured: r.tournament_featured === true,
         // The already-created market's featured flag, if this row was
         // approved. null for pending/rejected — nothing to toggle there.
         marketFeatured: typeof r.market_featured === 'boolean' ? r.market_featured : null,
+        marketTournamentFeatured: typeof r.market_tournament_featured === 'boolean'
+          ? r.market_tournament_featured
+          : null,
         marketStatus: r.market_status || null,
       };
     }),
@@ -446,6 +453,7 @@ async function approveOne(pid, reviewer, note, opts = {}) {
       : null;
 
     const pendingFeatured = r.featured === true;
+    const pendingTournamentFeatured = r.tournament_featured === true;
     const sourceData = parseJsonb(r.source_data, {});
     const resolverConfig = parseJsonb(r.resolver_config, null);
     const tagBundle = deriveMarketTags({
@@ -526,12 +534,13 @@ async function approveOne(pid, reviewer, note, opts = {}) {
            question, category, icon, outcomes, reserves, seed_liquidity, seed_liquidities,
             start_time, end_time, status, created_by, amm_mode,
             resolver_type, resolver_config, sport, league, outcome_images, featured,
+            tournament_featured,
             category_tags, geo_tags, topic_tags,
             mode, chain_id, chain_market_id, chain_address)
          VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9::jsonb, $10, $11, 'active', $12,
                  'unified', $13, $14::jsonb, $15, $16, $17::jsonb, $18,
-                 $19::jsonb, $20::jsonb, $21::jsonb,
-                 $22, $23, $24, $25)
+                 $19, $20::jsonb, $21::jsonb, $22::jsonb,
+                 $23, $24, $25, $26)
          RETURNING id`,
         [
           r.source,
@@ -552,6 +561,7 @@ async function approveOne(pid, reviewer, note, opts = {}) {
           r.league || null,
           outcomeImagesJson,
           pendingFeatured,
+          pendingTournamentFeatured,
           categoryTagsJson,
           geoTagsJson,
           topicTagsJson,
@@ -571,12 +581,13 @@ async function approveOne(pid, reviewer, note, opts = {}) {
             question, category, icon, outcomes, reserves, seed_liquidity, seed_liquidities,
             start_time, end_time, status, created_by, amm_mode,
             resolver_type, resolver_config, sport, league, outcome_images, featured,
+            tournament_featured,
             category_tags, geo_tags, topic_tags,
             mode, chain_id, chain_market_id, chain_address)
          VALUES ($1, $2, $3, $4, $5, $6::jsonb, '[]'::jsonb, $7, $8::jsonb, $9, $10, 'active', $11,
                  'parallel', $12, $13::jsonb, $14, $15, $16::jsonb, $17,
-                 $18::jsonb, $19::jsonb, $20::jsonb,
-                 $21, $22, $23, $24)
+                 $18, $19::jsonb, $20::jsonb, $21::jsonb,
+                 $22, $23, $24, $25)
          RETURNING id`,
         [
           r.source,
@@ -596,6 +607,7 @@ async function approveOne(pid, reviewer, note, opts = {}) {
           r.league || null,
           outcomeImagesJson,
           pendingFeatured,
+          pendingTournamentFeatured,
           categoryTagsJson,
           geoTagsJson,
           topicTagsJson,

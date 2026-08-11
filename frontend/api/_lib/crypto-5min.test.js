@@ -8,7 +8,9 @@ import {
   crypto5MinWindowsForTick,
   ensureUpcomingCryptoMarkets,
   formatDirectionFinalScore,
+  normalizeCryptoMinuteMarketAssets,
   normalizeCryptoMinuteMarketInterval,
+  readCryptoMinuteMarketAssets,
   readCryptoMinuteMarketInterval,
   resolveDirectionOutcome,
 } from './crypto-5min.js';
@@ -45,18 +47,40 @@ test('crypto5MinWindowsForTick supports admin-selected minute intervals', () => 
   assert.equal(windows.msUntilNextBoundary, 78_000);
 });
 
+test('crypto5MinWindowsForTick supports 24-hour windows anchored to CDMX midnight', () => {
+  const windows = crypto5MinWindowsForTick('2026-08-07T12:13:42.000Z', 1440);
+
+  assert.equal(windows.intervalMinutes, 1440);
+  assert.equal(windows.boundary.toISOString(), '2026-08-07T06:00:00.000Z');
+  assert.equal(windows.nextBoundary.toISOString(), '2026-08-08T06:00:00.000Z');
+});
+
 test('normalizeCryptoMinuteMarketInterval accepts only supported admin intervals', () => {
   assert.equal(normalizeCryptoMinuteMarketInterval(10), 10);
   assert.equal(normalizeCryptoMinuteMarketInterval({ intervalMinutes: 30 }), 30);
   assert.equal(normalizeCryptoMinuteMarketInterval({ minutes: 60 }), 60);
+  assert.equal(normalizeCryptoMinuteMarketInterval({ minutes: 1440 }), 1440);
   assert.equal(normalizeCryptoMinuteMarketInterval(7), 5);
   assert.equal(normalizeCryptoMinuteMarketInterval('bad'), 5);
+});
+
+test('normalizeCryptoMinuteMarketAssets supports BTC/ETH admin toggles', () => {
+  assert.deepEqual(normalizeCryptoMinuteMarketAssets(['btc']), ['btc']);
+  assert.deepEqual(normalizeCryptoMinuteMarketAssets({ btc: true, eth: false }), ['btc']);
+  assert.deepEqual(normalizeCryptoMinuteMarketAssets({ enabledAssets: [] }), []);
+  assert.deepEqual(normalizeCryptoMinuteMarketAssets('bad'), ['btc', 'eth']);
 });
 
 test('readCryptoMinuteMarketInterval reads the stored admin setting', async () => {
   const sql = () => Promise.resolve([{ value: { minutes: 30 } }]);
 
   assert.equal(await readCryptoMinuteMarketInterval(sql), 30);
+});
+
+test('readCryptoMinuteMarketAssets reads the stored admin asset toggles', async () => {
+  const sql = () => Promise.resolve([{ value: { btc: false, eth: true } }]);
+
+  assert.deepEqual(await readCryptoMinuteMarketAssets(sql), ['eth']);
 });
 
 test('ensureUpcomingCryptoMarkets pre-creates the next pending BTC and ETH windows', async () => {
@@ -102,6 +126,28 @@ test('ensureUpcomingCryptoMarkets suffixes non-five-minute source ids', async ()
     ['2026-08-07T12:20:00.000Z', '2026-08-07T12:20:00.000Z'],
   );
   assert.equal(report.windows.every((window) => window.intervalMinutes === 10), true);
+});
+
+test('ensureUpcomingCryptoMarkets can pre-create 24-hour ETH-only windows', async () => {
+  const sql = () => Promise.resolve([{ id: 1 }]);
+
+  const report = await ensureUpcomingCryptoMarkets(sql, {
+    now: '2026-08-07T12:03:42.000Z',
+    intervalMinutes: 1440,
+    enabledAssets: ['eth'],
+    lookaheadWindows: 1,
+  });
+
+  assert.equal(report.precreated, 1);
+  assert.deepEqual(
+    report.windows.map((window) => window.sourceEventId),
+    ['eth:2026-08-08T06:00:00.000Z:1440m'],
+  );
+  assert.deepEqual(
+    report.windows.map((window) => window.windowEnd),
+    ['2026-08-09T06:00:00.000Z'],
+  );
+  assert.equal(report.windows[0].intervalMinutes, 1440);
 });
 
 test('ensureUpcomingCryptoMarkets dry run reports windows without writes', async () => {

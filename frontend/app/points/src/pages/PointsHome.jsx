@@ -40,6 +40,12 @@ function isPendingMarket(market, now = Date.now()) {
     && new Date(market.endTime).getTime() < now;
 }
 
+function shouldShowOnHome(market, featuredTeamKeys) {
+  if (market?.tournamentFeatured) return true;
+  if (market?.hiddenFromHome) return false;
+  return Boolean(market?.featured || market?.trending || marketMatchesFeaturedTeam(market, featuredTeamKeys));
+}
+
 export default function PointsHome() {
   const { authenticated } = usePointsAuth();
   const t = useT();
@@ -147,13 +153,19 @@ export default function PointsHome() {
   // Home = Trending. Always active, never pending (those live on
   // /c/porresolver). Search narrows the visible list through mapMarkets.
   const filtered = useMemo(() => {
-    const out = mapMarkets.filter(m => m.trending || marketMatchesFeaturedTeam(m, featuredTeamKeys));
+    const out = mapMarkets.filter(m => shouldShowOnHome(m, featuredTeamKeys));
     return prioritizeFeaturedMarkets(out, featuredTeamKeys);
   }, [mapMarkets, featuredTeamKeys]);
 
+  const carouselMarkets = useMemo(() => (
+    mapMarkets.filter(m => shouldShowOnHome(m, featuredTeamKeys))
+  ), [mapMarkets, featuredTeamKeys]);
+
   const homeMapMarkets = useMemo(() => (
-    sharedMapLoaded && sharedMapMarkets.length > 0 ? sharedMapMarkets : mapMarkets
-  ), [sharedMapLoaded, sharedMapMarkets, mapMarkets]);
+    sharedMapLoaded && sharedMapMarkets.length > 0
+      ? sharedMapMarkets.filter(m => shouldShowOnHome(m, featuredTeamKeys))
+      : carouselMarkets
+  ), [sharedMapLoaded, sharedMapMarkets, carouselMarkets, featuredTeamKeys]);
 
   return (
     <>
@@ -170,7 +182,7 @@ export default function PointsHome() {
       {!error && !searchQuery && trendingView === 'markets' && (
         loading
           ? <ActivityCarouselSkeleton isMobile={isMobile} />
-          : <PointsActivityCarousel markets={markets} count={7} />
+          : <PointsActivityCarousel markets={carouselMarkets} count={7} />
       )}
 
       {/* ── Markets grid ──────────────────────────────────── */}

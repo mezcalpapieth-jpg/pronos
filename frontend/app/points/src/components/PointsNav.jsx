@@ -5,7 +5,7 @@
  *   - `.nav-logo` wordmark with pulsing `.green-dot` next to it
  *   - `.nav-links` row with Markets, Portfolio (if signed-in), Cómo funciona
  *   - circular light/dark switcher
- *   - Green Crear cuenta CTA or balance pill + dropdown when signed-in
+ *   - Green entry CTA or balance pill + dropdown when signed-in
  *
  * No wallet-chain UI, no RPC, no Privy — this is an off-chain points app.
  */
@@ -540,7 +540,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
 
         {!authenticated ? (
           <button className="nav-signup-cta" onClick={onOpenLogin}>
-            {lang === 'en' ? 'Sign up' : 'Crear cuenta'}
+            {t('points.nav.signUp')}
           </button>
         ) : (
           <div style={{ position: 'relative' }} ref={dropdownRef}>

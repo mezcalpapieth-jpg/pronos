@@ -76,9 +76,12 @@ const ARCHIVE_AFTER_MS = 24 * 60 * 60_000; // 24 h
 const DEFAULT_LOOKAHEAD_WINDOWS = 2;
 const DEFAULT_MISSED_PENDING_CATCHUP_LIMIT = 12;
 const DEFAULT_ACTIVE_CATCHUP_LIMIT = 12;
-export const CRYPTO_MINUTE_MARKET_INTERVALS = Object.freeze([5, 10, 15, 30, 60]);
+export const CRYPTO_MINUTE_MARKET_INTERVALS = Object.freeze([5, 10, 15, 30, 60, 24 * 60]);
 export const DEFAULT_CRYPTO_MINUTE_MARKET_INTERVAL = 5;
 export const CRYPTO_MINUTE_MARKET_INTERVAL_KEY = 'points_crypto_minute_market_interval';
+export const CRYPTO_MINUTE_MARKET_ENABLED_ASSETS_KEY = 'points_crypto_minute_market_enabled_assets';
+export const DEFAULT_CRYPTO_MINUTE_MARKET_ENABLED_ASSETS = Object.freeze(['btc', 'eth']);
+const CRYPTO_BOUNDARY_ANCHOR_MS = 6 * 60 * 60_000; // 00:00 CDMX == 06:00 UTC.
 
 // Outcome labels and indices. Index 0 = SUBE (HIGHER), 1 = BAJA (LOWER).
 // Match the "parallel-shape" semantics already used elsewhere: outcome
@@ -103,6 +106,45 @@ export function normalizeCryptoMinuteMarketInterval(value) {
   return DEFAULT_CRYPTO_MINUTE_MARKET_INTERVAL;
 }
 
+function normalizeAssetKey(value) {
+  const key = String(value || '').trim().toLowerCase();
+  return ASSETS.some((asset) => asset.key === key) ? key : null;
+}
+
+export function normalizeCryptoMinuteMarketAssets(value) {
+  if (Array.isArray(value)) {
+    const out = [];
+    for (const item of value) {
+      const key = normalizeAssetKey(item);
+      if (key && !out.includes(key)) out.push(key);
+    }
+    return out;
+  }
+
+  if (value && typeof value === 'object') {
+    if (Array.isArray(value.enabledAssets)) {
+      return normalizeCryptoMinuteMarketAssets(value.enabledAssets);
+    }
+    if (Array.isArray(value.assets)) {
+      return normalizeCryptoMinuteMarketAssets(value.assets);
+    }
+    if (value.assets && typeof value.assets === 'object') {
+      return normalizeCryptoMinuteMarketAssets(value.assets);
+    }
+
+    let sawToggle = false;
+    const out = [];
+    for (const asset of ASSETS) {
+      if (!Object.prototype.hasOwnProperty.call(value, asset.key)) continue;
+      sawToggle = true;
+      if (value[asset.key] === true) out.push(asset.key);
+    }
+    if (sawToggle) return out;
+  }
+
+  return [...DEFAULT_CRYPTO_MINUTE_MARKET_ENABLED_ASSETS];
+}
+
 export async function readCryptoMinuteMarketInterval(sql) {
   try {
     const rows = await sql`
@@ -120,6 +162,31 @@ export async function readCryptoMinuteMarketInterval(sql) {
     }
     throw e;
   }
+}
+
+export async function readCryptoMinuteMarketAssets(sql) {
+  try {
+    const rows = await sql`
+      SELECT value
+      FROM points_app_settings
+      WHERE key = ${CRYPTO_MINUTE_MARKET_ENABLED_ASSETS_KEY}
+      LIMIT 1
+    `;
+    if (rowsFromQuery(rows).length === 0) {
+      return [...DEFAULT_CRYPTO_MINUTE_MARKET_ENABLED_ASSETS];
+    }
+    return normalizeCryptoMinuteMarketAssets(rowsFromQuery(rows)[0]?.value);
+  } catch (e) {
+    if (e?.code === '42P01' || /points_app_settings/i.test(e?.message || '')) {
+      return [...DEFAULT_CRYPTO_MINUTE_MARKET_ENABLED_ASSETS];
+    }
+    throw e;
+  }
+}
+
+function cryptoAssetsFromSetting(value) {
+  const enabled = normalizeCryptoMinuteMarketAssets(value);
+  return ASSETS.filter((asset) => enabled.includes(asset.key));
 }
 
 function windowMsForInterval(intervalMinutes) {
@@ -141,13 +208,16 @@ export function formatDirectionFinalScore(threshold, closePrice) {
   return `$${Number(threshold)} -> $${Number(closePrice).toFixed(2)}`;
 }
 
-// Floor a Date to the most recent interval boundary (UTC). 12:13:42 at 15m -> 12:00:00.
+// Floor a Date to the most recent interval boundary. Minute/hour
+// windows align the same as UTC; 24h windows anchor to 00:00 CDMX so
+// the daily market opens/closes at a user-facing local midnight.
 export function floorToCryptoBoundary(d, intervalMinutes = DEFAULT_CRYPTO_MINUTE_MARKET_INTERVAL) {
   const interval = normalizeCryptoMinuteMarketInterval(intervalMinutes);
-  const out = new Date(d);
-  out.setUTCSeconds(0, 0);
-  out.setUTCMinutes(out.getUTCMinutes() - (out.getUTCMinutes() % interval));
-  return out;
+  const date = d instanceof Date ? d : new Date(d);
+  const ms = date.getTime();
+  if (!Number.isFinite(ms)) return new Date(NaN);
+  const windowMs = interval * 60_000;
+  return new Date(Math.floor((ms - CRYPTO_BOUNDARY_ANCHOR_MS) / windowMs) * windowMs + CRYPTO_BOUNDARY_ANCHOR_MS);
 }
 
 // Backward-compatible helper used by older tests/imports.
@@ -239,6 +309,8 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
 
   const now = new Date();
   const intervalMinutes = await readCryptoMinuteMarketInterval(sql);
+  const enabledAssets = await readCryptoMinuteMarketAssets(sql);
+  const enabledAssetConfigs = cryptoAssetsFromSetting(enabledAssets);
   const windowMs = windowMsForInterval(intervalMinutes);
   const { boundary, sinceBoundaryMs } = crypto5MinWindowsForTick(now, intervalMinutes);
   const precreateReport = await ensureUpcomingCryptoMarkets(sql, {
@@ -246,6 +318,7 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
     dry,
     lookaheadWindows: DEFAULT_LOOKAHEAD_WINDOWS,
     intervalMinutes,
+    enabledAssets,
   });
   let activeCatchup = { checked: 0, resolved: [], errors: [], dry };
   try {
@@ -270,6 +343,7 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
         now,
         dry,
         intervalMinutes,
+        enabledAssets,
       });
     } catch (e) {
       activationCatchup.errors.push({ error: e?.message || 'activation_catchup_failed' });
@@ -279,6 +353,7 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
       reason: 'between_boundaries',
       boundaryAt: boundary.toISOString(),
       intervalMinutes,
+      enabledAssets,
       precreated: precreateReport.precreated,
       precreateExisting: precreateReport.existing,
       precreate: precreateReport.windows,
@@ -312,6 +387,7 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
     processed: true,
     boundaryAt: boundary.toISOString(),
     intervalMinutes,
+    enabledAssets,
     precreated: precreateReport.precreated,
     precreateExisting: precreateReport.existing,
     precreate: precreateReport.windows,
@@ -342,6 +418,8 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
     const price = pr.price;
     const threshold = roundThreshold(price);
     entry.threshold = threshold;
+    const assetEnabled = enabledAssetConfigs.some((enabled) => enabled.key === asset.key);
+    entry.enabled = assetEnabled;
 
     // ── 1. RESOLVE the market that just closed (if any). ─────────────
     // Outcome is decided in SQL — we compare the row's stored
@@ -406,7 +484,7 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
     // promote it to 'active' and stamp its threshold.
     const opening = eventKey(asset.key, openingStart.toISOString(), intervalMinutes);
 
-    if (!dry) {
+    if (!dry && assetEnabled) {
       try {
         const activateRows = await sql`
           UPDATE points_markets
@@ -448,7 +526,7 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
     }
 
     // ── 3. CREATE the upcoming pending market. ──────────────────────
-    if (!dry) {
+    if (!dry && assetEnabled) {
       try {
         const created = await insertCryptoMarket(sql, {
           asset,
@@ -498,11 +576,13 @@ export async function ensureUpcomingCryptoMarkets(sql, {
   dry = false,
   lookaheadWindows = DEFAULT_LOOKAHEAD_WINDOWS,
   intervalMinutes = DEFAULT_CRYPTO_MINUTE_MARKET_INTERVAL,
+  enabledAssets = DEFAULT_CRYPTO_MINUTE_MARKET_ENABLED_ASSETS,
 } = {}) {
   if (!sql) throw new Error('crypto-5min: sql client required');
 
   const count = Math.max(0, Math.floor(Number(lookaheadWindows) || 0));
   const interval = normalizeCryptoMinuteMarketInterval(intervalMinutes);
+  const assets = cryptoAssetsFromSetting(enabledAssets);
   const windowMs = windowMsForInterval(interval);
   const { nextBoundary } = crypto5MinWindowsForTick(now, interval);
   const windows = [];
@@ -513,7 +593,7 @@ export async function ensureUpcomingCryptoMarkets(sql, {
     const windowStart = new Date(nextBoundary.getTime() + offset * windowMs);
     const windowEnd = new Date(windowStart.getTime() + windowMs);
 
-    for (const asset of ASSETS) {
+    for (const asset of assets) {
       const key = eventKey(asset.key, windowStart.toISOString(), interval);
       const entry = {
         asset: asset.key,
@@ -555,6 +635,7 @@ export async function catchUpCurrentPendingCryptoMarkets(sql, {
   now = new Date(),
   dry = false,
   intervalMinutes = null,
+  enabledAssets = null,
   readBoundaryPrice = readCoinbaseBoundaryPrice,
 } = {}) {
   if (!sql) throw new Error('crypto-5min: sql client required');
@@ -564,6 +645,9 @@ export async function catchUpCurrentPendingCryptoMarkets(sql, {
   const interval = intervalMinutes == null
     ? await readCryptoMinuteMarketInterval(sql)
     : normalizeCryptoMinuteMarketInterval(intervalMinutes);
+  const assets = cryptoAssetsFromSetting(
+    enabledAssets == null ? await readCryptoMinuteMarketAssets(sql) : enabledAssets,
+  );
   const windowMs = windowMsForInterval(interval);
   const { boundary } = crypto5MinWindowsForTick(nowDate, interval);
   const windowEnd = new Date(boundary.getTime() + windowMs);
@@ -571,7 +655,7 @@ export async function catchUpCurrentPendingCryptoMarkets(sql, {
 
   if (nowDate.getTime() >= windowEnd.getTime()) return report;
 
-  for (const asset of ASSETS) {
+  for (const asset of assets) {
     const key = eventKey(asset.key, boundary.toISOString(), interval);
     try {
       const selected = await sql`

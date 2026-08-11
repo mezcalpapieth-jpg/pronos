@@ -41,6 +41,7 @@ import { readFinnhubQuote } from '../_lib/stockprice.js';
 import { readBanxicoLatest } from '../_lib/banxico.js';
 import { readCreAverageFor } from '../_lib/fuel.js';
 import { readMananeraPhraseResult } from '../_lib/mananera.js';
+import { readStoredMananeraTranscript } from '../_lib/mananera-ingest.js';
 import { fetchMaxTempC, bucketIndexFor } from '../_lib/weather.js';
 import { readAppleMxTopArtist } from '../_lib/charts.js';
 import { readYouTubeTopMxChannel } from '../_lib/youtube.js';
@@ -987,7 +988,19 @@ export async function runAutoResolve({ dry = false } = {}) {
           winningIdx = pickWinnerIdx;
           resolverInfo = { source: cfg.source, ...readerEcho };
         } else if (resolverType === 'api_transcript') {
-          const transcript = await readMananeraPhraseResult(cfg);
+          let storedTranscript = null;
+          if (cfg.dateYmd) {
+            try {
+              storedTranscript = await readStoredMananeraTranscript(readSql, cfg.dateYmd);
+            } catch (cacheErr) {
+              console.warn('[points-auto-resolve] mañanera transcript cache read failed', {
+                dateYmd: cfg.dateYmd,
+                message: cacheErr?.message,
+                code: cacheErr?.code,
+              });
+            }
+          }
+          const transcript = await readMananeraPhraseResult(cfg, { storedTranscript });
           if (!transcript.ready) {
             const err = new Error(transcript.reason || 'official_transcript_not_ready');
             err.benign = true;

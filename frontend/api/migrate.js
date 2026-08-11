@@ -262,6 +262,8 @@ const MIGRATIONS = [
   )`,
   `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES points_markets(id)`,
   `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT true`,
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS hidden_from_home BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS tournament_featured BOOLEAN NOT NULL DEFAULT false`,
   `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_status ON points_markets(status)`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_end_time ON points_markets(end_time)`,
@@ -272,6 +274,9 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_markets_featured_active_end
     ON points_markets(status, end_time ASC, id ASC)
     WHERE archived_at IS NULL AND parent_id IS NULL AND featured = true`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_tournament_featured_active_end
+    ON points_markets(status, end_time ASC, id ASC)
+    WHERE archived_at IS NULL AND parent_id IS NULL AND tournament_featured = true`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_category_status_end
     ON points_markets(category, status, end_time ASC, id ASC)
     WHERE archived_at IS NULL AND parent_id IS NULL`,
@@ -439,6 +444,30 @@ const MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_points_publicity_attributions_source
     ON points_publicity_attributions(source, converted_at DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS points_mananera_transcripts (
+    date_ymd          DATE PRIMARY KEY,
+    source            TEXT NOT NULL,
+    url               TEXT NOT NULL,
+    fetched_at        TIMESTAMPTZ NOT NULL,
+    raw_html_gzip     BYTEA NOT NULL,
+    raw_html_sha256   TEXT NOT NULL,
+    raw_html_bytes    INTEGER NOT NULL DEFAULT 0,
+    transcript_text   TEXT NOT NULL,
+    characters        INTEGER NOT NULL DEFAULT 0,
+    words             INTEGER NOT NULL DEFAULT 0,
+    n_turnos          INTEGER NOT NULL DEFAULT 0,
+    speakers          JSONB NOT NULL DEFAULT '[]'::jsonb,
+    turns             JSONB NOT NULL DEFAULT '[]'::jsonb,
+    parse_version     INTEGER NOT NULL DEFAULT 1,
+    complete          BOOLEAN NOT NULL DEFAULT true,
+    created_at        TIMESTAMPTZ DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_mananera_transcripts_fetched
+    ON points_mananera_transcripts(fetched_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_mananera_transcripts_source
+    ON points_mananera_transcripts(source, fetched_at DESC)`,
 
   `CREATE TABLE IF NOT EXISTS points_referrals (
     id             SERIAL PRIMARY KEY,

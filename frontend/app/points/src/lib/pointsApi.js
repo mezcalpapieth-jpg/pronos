@@ -710,10 +710,24 @@ export async function adminRunAutoResolve({ dry = false } = {}) {
   return postJson(`/api/points/admin/run-auto-resolve${q}`, {});
 }
 
-// Toggle a market's `featured` flag. Featured markets appear in the
-// home Trending grid; non-featured ones only show under /c/<category>.
-export async function adminToggleFeatured({ marketId, pendingId, featured }) {
-  return postJson('/api/points/admin/toggle-featured', { marketId, pendingId, featured });
+// Toggle curation flags. Featured (🔥) markets appear on home unless
+// bulk-hidden; tournamentFeatured (🏆) markets appear even after the
+// regular market set is hidden.
+export async function adminToggleFeatured({ marketId, pendingId, featured, tournamentFeatured }) {
+  return postJson('/api/points/admin/toggle-featured', {
+    marketId,
+    pendingId,
+    featured,
+    tournamentFeatured,
+  });
+}
+
+export async function adminBulkHideMarkets({ dry = false, expectedCount = null, mode = 'points' } = {}) {
+  return postJson('/api/points/admin/bulk-hide-markets', {
+    dryRun: dry,
+    expectedCount,
+    mode,
+  });
 }
 
 // Repair/progress World Cup markets from ESPN. Dry-run first so the

@@ -42,6 +42,7 @@ import {
   adminRunAutoResolve,
   adminRunGenerators,
   adminToggleFeatured,
+  adminBulkHideMarkets,
   adminProgressWorldCup,
 } from '../lib/pointsApi.js';
 import {
@@ -1790,6 +1791,11 @@ const DEFAULT_CRYPTO_INTERVAL_OPTIONS = [
   { minutes: 15, label: '15 minutos' },
   { minutes: 30, label: '30 minutos' },
   { minutes: 60, label: '1 hora' },
+  { minutes: 1440, label: '24 horas' },
+];
+const DEFAULT_CRYPTO_ASSET_OPTIONS = [
+  { key: 'btc', label: 'BTC', name: 'Bitcoin', enabled: true },
+  { key: 'eth', label: 'ETH', name: 'Ethereum', enabled: true },
 ];
 const MAX_PENDING_EDIT_OUTCOMES = 64;
 
@@ -1808,6 +1814,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
   const [reviewingCandidate, setReviewingCandidate] = useState(null);
   const [canceling, setCanceling] = useState(null);
   const [autoResolving, setAutoResolving] = useState(false);
+  const [hidingMarkets, setHidingMarkets] = useState(false);
   // When non-null, render the edit modal for this market.
   const [editing, setEditing] = useState(null);
 
@@ -1976,12 +1983,63 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
   // back on server rejection.
   async function toggleFeaturedMarket(m) {
     const next = !m.featured;
-    setMarkets(prev => (prev || []).map(x => x.id === m.id ? { ...x, featured: next } : x));
+    setMarkets(prev => (prev || []).map(x => x.id === m.id ? {
+      ...x,
+      featured: next,
+      hiddenFromHome: next ? false : x.hiddenFromHome,
+    } : x));
     try {
       await adminToggleFeatured({ marketId: m.id, featured: next });
     } catch (e) {
-      setMarkets(prev => (prev || []).map(x => x.id === m.id ? { ...x, featured: !next } : x));
+      setMarkets(prev => (prev || []).map(x => x.id === m.id ? {
+        ...x,
+        featured: !next,
+        hiddenFromHome: m.hiddenFromHome,
+      } : x));
       alert(`No se pudo actualizar: ${e.code || e.message}`);
+    }
+  }
+
+  async function toggleTournamentFeaturedMarket(m) {
+    const next = !m.tournamentFeatured;
+    setMarkets(prev => (prev || []).map(x => x.id === m.id ? { ...x, tournamentFeatured: next } : x));
+    try {
+      await adminToggleFeatured({ marketId: m.id, tournamentFeatured: next });
+    } catch (e) {
+      setMarkets(prev => (prev || []).map(x => x.id === m.id ? { ...x, tournamentFeatured: !next } : x));
+      alert(`No se pudo actualizar torneo: ${e.code || e.message}`);
+    }
+  }
+
+  async function hideAllMarketsFromHome() {
+    setHidingMarkets(true);
+    try {
+      const preview = await adminBulkHideMarkets({ dry: true, mode: 'points' });
+      const count = Number(preview?.wouldHideCount || 0);
+      if (count <= 0) {
+        alert('No hay mercados activos para ocultar.');
+        return;
+      }
+      if (!confirm(
+        `¿Ocultar ${count} mercados activos del home?\n\n`
+        + 'Los mercados con 🏆 seguirán apareciendo. Las categorías, links y resolución no cambian.',
+      )) {
+        return;
+      }
+      const result = await adminBulkHideMarkets({ dry: false, mode: 'points', expectedCount: count });
+      setMarkets(prev => (prev || []).map(m => ({
+        ...m,
+        featured: false,
+        hiddenFromHome: true,
+      })));
+      alert(`✓ Ocultos del home: ${result.hiddenCount || count}. Los 🏆 siguen visibles.`);
+    } catch (e) {
+      const detail = e.detail?.liveCount != null
+        ? `\nConteo cambió: ahora hay ${e.detail.liveCount}. Intenta otra vez.`
+        : '';
+      alert(`No se pudieron ocultar: ${e.code || e.message}${detail}`);
+    } finally {
+      setHidingMarkets(false);
     }
   }
 
@@ -2112,6 +2170,27 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
             {autoResolving ? 'Resolviendo…' : 'Resolver ahora'}
           </button>
         )}
+
+        <button
+          onClick={hideAllMarketsFromHome}
+          disabled={hidingMarkets}
+          title="Oculta todos los mercados activos del home. Los mercados con 🏆 siguen visibles."
+          style={{
+            marginLeft: filter === 'pending' ? 0 : 'auto',
+            padding: '6px 14px',
+            borderRadius: 16,
+            border: '1px solid rgba(239,68,68,0.4)',
+            background: 'rgba(239,68,68,0.10)',
+            color: 'var(--red, #ef4444)',
+            fontFamily: 'var(--font-mono)', fontSize: 11,
+            letterSpacing: '0.06em', textTransform: 'uppercase',
+            cursor: hidingMarkets ? 'not-allowed' : 'pointer',
+            opacity: hidingMarkets ? 0.5 : 1,
+            fontWeight: 600,
+          }}
+        >
+          {hidingMarkets ? 'Ocultando…' : 'Ocultar todos'}
+        </button>
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -2298,15 +2377,42 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
           >
             🔥
           </button>
+          <button
+            onClick={() => toggleTournamentFeaturedMarket(m)}
+            title={m.tournamentFeatured
+              ? 'Quitar del bloque de torneo (si todo está oculto, dejará de aparecer)'
+              : 'Mostrar con prioridad de torneo aunque los demás estén ocultos'}
+            style={{
+              flexShrink: 0,
+              width: 32, height: 32,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '50%',
+              border: `1px solid ${m.tournamentFeatured ? 'rgba(250,204,21,0.58)' : 'var(--border)'}`,
+              background: m.tournamentFeatured ? 'rgba(250,204,21,0.16)' : 'transparent',
+              cursor: 'pointer',
+              fontSize: 16,
+              lineHeight: 1,
+              padding: 0,
+              filter: m.tournamentFeatured ? 'none' : 'grayscale(1)',
+              opacity: m.tournamentFeatured ? 1 : 0.45,
+              transition: 'opacity 0.15s, background 0.15s, border-color 0.15s',
+            }}
+          >
+            🏆
+          </button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>
               #{m.id} · {m.category} · {m.tradeCount} trades · seed {m.seedLiquidity} MXNP
               {m.sport && <> · {m.sport}</>}
               {m.league && <>/{m.league}</>}
               {m.crypto5min && (
-                <> · {Number(m.cryptoIntervalMinutes || m.cryptoWindowMinutes || 5) === 60
-                  ? '1h'
-                  : `${Number(m.cryptoIntervalMinutes || m.cryptoWindowMinutes || 5)}min`}</>
+                <> · {Number(m.cryptoIntervalMinutes || m.cryptoWindowMinutes || 5) === 1440
+                  ? '24h'
+                  : Number(m.cryptoIntervalMinutes || m.cryptoWindowMinutes || 5) === 60
+                    ? '1h'
+                    : `${Number(m.cryptoIntervalMinutes || m.cryptoWindowMinutes || 5)}min`}</>
               )}
               {m.seriesMeta?.subtitle && <> · {m.seriesMeta.subtitle}</>}
               {m.source && <> · {m.source}</>}
@@ -3626,6 +3732,7 @@ function PendingMarketsTable({ onQueueChange }) {
   const [editingPending, setEditingPending] = useState(null);
   const [cryptoInterval, setCryptoInterval] = useState(5);
   const [cryptoIntervalOptions, setCryptoIntervalOptions] = useState(DEFAULT_CRYPTO_INTERVAL_OPTIONS);
+  const [cryptoAssets, setCryptoAssets] = useState(DEFAULT_CRYPTO_ASSET_OPTIONS);
   const [cryptoIntervalLoading, setCryptoIntervalLoading] = useState(false);
   const [cryptoIntervalSaving, setCryptoIntervalSaving] = useState(false);
   const [cryptoIntervalError, setCryptoIntervalError] = useState(null);
@@ -3715,8 +3822,17 @@ function PendingMarketsTable({ onQueueChange }) {
         const options = Array.isArray(data?.intervals) && data.intervals.length
           ? data.intervals
           : DEFAULT_CRYPTO_INTERVAL_OPTIONS;
+        const assets = Array.isArray(data?.assets) && data.assets.length
+          ? data.assets
+          : DEFAULT_CRYPTO_ASSET_OPTIONS;
         setCryptoIntervalOptions(options);
         setCryptoInterval(Number(data?.intervalMinutes || 5));
+        setCryptoAssets(assets.map(asset => ({
+          key: String(asset.key || '').toLowerCase(),
+          label: asset.label || String(asset.key || '').toUpperCase(),
+          name: asset.name || asset.label || String(asset.key || '').toUpperCase(),
+          enabled: asset.enabled !== false,
+        })).filter(asset => asset.key === 'btc' || asset.key === 'eth'));
       } catch (e) {
         if (!cancelled) setCryptoIntervalError(e.code || e.message || 'settings_failed');
       } finally {
@@ -3727,14 +3843,43 @@ function PendingMarketsTable({ onQueueChange }) {
     return () => { cancelled = true; };
   }, []);
 
+  function enabledCryptoAssetKeys(assets = cryptoAssets) {
+    return assets.filter(asset => asset.enabled !== false).map(asset => asset.key);
+  }
+
   async function saveCryptoInterval(value) {
     const intervalMinutes = Number(value);
     setCryptoInterval(intervalMinutes);
     setCryptoIntervalSaving(true);
     setCryptoIntervalError(null);
     try {
-      const data = await postJson('/api/points/admin/crypto-minute-settings', { intervalMinutes });
+      const data = await postJson('/api/points/admin/crypto-minute-settings', {
+        intervalMinutes,
+        enabledAssets: enabledCryptoAssetKeys(),
+      });
       setCryptoInterval(Number(data?.intervalMinutes || intervalMinutes));
+      if (Array.isArray(data?.assets) && data.assets.length) setCryptoAssets(data.assets);
+    } catch (e) {
+      setCryptoIntervalError(e.code || e.message || 'settings_failed');
+    } finally {
+      setCryptoIntervalSaving(false);
+    }
+  }
+
+  async function saveCryptoAssetToggle(assetKey, enabled) {
+    const nextAssets = cryptoAssets.map(asset => (
+      asset.key === assetKey ? { ...asset, enabled } : asset
+    ));
+    setCryptoAssets(nextAssets);
+    setCryptoIntervalSaving(true);
+    setCryptoIntervalError(null);
+    try {
+      const data = await postJson('/api/points/admin/crypto-minute-settings', {
+        intervalMinutes: cryptoInterval,
+        enabledAssets: enabledCryptoAssetKeys(nextAssets),
+      });
+      setCryptoInterval(Number(data?.intervalMinutes || cryptoInterval));
+      if (Array.isArray(data?.assets) && data.assets.length) setCryptoAssets(data.assets);
     } catch (e) {
       setCryptoIntervalError(e.code || e.message || 'settings_failed');
     } finally {
@@ -3913,6 +4058,21 @@ function PendingMarketsTable({ onQueueChange }) {
         r.id === row.id ? { ...r, pendingFeatured: !next } : r,
       ));
       alert(`No se pudo actualizar: ${e.code || e.message}`);
+    }
+  }
+
+  async function togglePendingTournamentFeatured(row) {
+    const next = !row.pendingTournamentFeatured;
+    setRows(prev => (prev || []).map(r =>
+      r.id === row.id ? { ...r, pendingTournamentFeatured: next } : r,
+    ));
+    try {
+      await adminToggleFeatured({ pendingId: row.id, tournamentFeatured: next });
+    } catch (e) {
+      setRows(prev => (prev || []).map(r =>
+        r.id === row.id ? { ...r, pendingTournamentFeatured: !next } : r,
+      ));
+      alert(`No se pudo actualizar torneo: ${e.code || e.message}`);
     }
   }
 
@@ -4148,6 +4308,37 @@ function PendingMarketsTable({ onQueueChange }) {
               </option>
             ))}
           </select>
+          <span style={{
+            width: 1,
+            alignSelf: 'stretch',
+            background: 'rgba(255,255,255,0.12)',
+          }} />
+          {cryptoAssets.map(asset => (
+            <span
+              key={asset.key}
+              title={`${asset.enabled !== false ? 'Activo' : 'Desactivado'}: ${asset.name || asset.label}`}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                color: asset.enabled !== false ? 'var(--text-primary)' : 'var(--text-muted)',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={asset.enabled !== false}
+                disabled={cryptoIntervalLoading || cryptoIntervalSaving}
+                onChange={(e) => saveCryptoAssetToggle(asset.key, e.target.checked)}
+                style={{
+                  width: 13,
+                  height: 13,
+                  accentColor: 'var(--orange)',
+                  cursor: (cryptoIntervalLoading || cryptoIntervalSaving) ? 'not-allowed' : 'pointer',
+                }}
+              />
+              {asset.label}
+            </span>
+          ))}
         </label>
 
         {cryptoIntervalError && (
@@ -4280,31 +4471,58 @@ function PendingMarketsTable({ onQueueChange }) {
                   Mercados tab so admins can flip featured after the
                   market already exists. */}
               {isPending && (
-                <button
-                  onClick={() => togglePendingFeatured(r)}
-                  title={r.pendingFeatured
-                    ? 'Este mercado irá a Trending al aprobarse (click para quitar)'
-                    : 'Click para que este mercado salga en Trending al aprobarse'}
-                  style={{
-                    flexShrink: 0,
-                    width: 32, height: 32,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    borderRadius: '50%',
-                    border: `1px solid ${r.pendingFeatured ? 'rgba(245,158,11,0.5)' : 'var(--border)'}`,
-                    background: r.pendingFeatured ? 'rgba(245,158,11,0.15)' : 'transparent',
-                    cursor: 'pointer',
-                    fontSize: 16,
-                    lineHeight: 1,
-                    padding: 0,
-                    filter: r.pendingFeatured ? 'none' : 'grayscale(1)',
-                    opacity: r.pendingFeatured ? 1 : 0.45,
-                    transition: 'opacity 0.15s, background 0.15s, border-color 0.15s',
-                  }}
-                >
-                  🔥
-                </button>
+                <div style={{ display: 'inline-flex', gap: 8, flexShrink: 0 }}>
+                  <button
+                    onClick={() => togglePendingFeatured(r)}
+                    title={r.pendingFeatured
+                      ? 'Este mercado irá a Trending al aprobarse (click para quitar)'
+                      : 'Click para que este mercado salga en Trending al aprobarse'}
+                    style={{
+                      flexShrink: 0,
+                      width: 32, height: 32,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: '50%',
+                      border: `1px solid ${r.pendingFeatured ? 'rgba(245,158,11,0.5)' : 'var(--border)'}`,
+                      background: r.pendingFeatured ? 'rgba(245,158,11,0.15)' : 'transparent',
+                      cursor: 'pointer',
+                      fontSize: 16,
+                      lineHeight: 1,
+                      padding: 0,
+                      filter: r.pendingFeatured ? 'none' : 'grayscale(1)',
+                      opacity: r.pendingFeatured ? 1 : 0.45,
+                      transition: 'opacity 0.15s, background 0.15s, border-color 0.15s',
+                    }}
+                  >
+                    🔥
+                  </button>
+                  <button
+                    onClick={() => togglePendingTournamentFeatured(r)}
+                    title={r.pendingTournamentFeatured
+                      ? 'Este mercado irá al bloque de torneo al aprobarse (click para quitar)'
+                      : 'Click para que aparezca como mercado de torneo aunque todo lo demás esté oculto'}
+                    style={{
+                      flexShrink: 0,
+                      width: 32, height: 32,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: '50%',
+                      border: `1px solid ${r.pendingTournamentFeatured ? 'rgba(250,204,21,0.58)' : 'var(--border)'}`,
+                      background: r.pendingTournamentFeatured ? 'rgba(250,204,21,0.16)' : 'transparent',
+                      cursor: 'pointer',
+                      fontSize: 16,
+                      lineHeight: 1,
+                      padding: 0,
+                      filter: r.pendingTournamentFeatured ? 'none' : 'grayscale(1)',
+                      opacity: r.pendingTournamentFeatured ? 1 : 0.45,
+                      transition: 'opacity 0.15s, background 0.15s, border-color 0.15s',
+                    }}
+                  >
+                    🏆
+                  </button>
+                </div>
               )}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{

@@ -141,7 +141,7 @@ export default async function handler(req, res) {
   const featuredParam = req.query.featured;
   const featuredOnly = !category && featuredParam !== 'all';
   const cacheKey = [
-    'points:markets:v2',
+    'points:markets:v3',
     status,
     category || 'all',
     modeFilter || 'all-modes',
@@ -193,7 +193,10 @@ export default async function handler(req, res) {
             FROM points_markets m
             LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
             WHERE m.status = ${status}
-              AND m.featured = true
+              AND (
+                (m.featured = true AND m.hidden_from_home = false)
+                OR m.tournament_featured = true
+              )
               AND m.parent_id IS NULL
               AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
             AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
@@ -332,7 +335,9 @@ export default async function handler(req, res) {
           endTime: r.end_time,
           live,
           featured: r.featured === true,
-          trending: r.featured === true || live,
+          hiddenFromHome: r.hidden_from_home === true,
+          tournamentFeatured: r.tournament_featured === true,
+          trending: r.hidden_from_home !== true && (r.featured === true || live),
           status: r.status,
           outcome: r.outcome,
           resolvedAt: r.resolved_at,
@@ -398,7 +403,9 @@ export default async function handler(req, res) {
         // boolean without re-doing the date math.
         live,
         featured: r.featured === true,
-        trending: r.featured === true || live,
+        hiddenFromHome: r.hidden_from_home === true,
+        tournamentFeatured: r.tournament_featured === true,
+        trending: r.hidden_from_home !== true && (r.featured === true || live),
         crypto5min,
         cryptoIntervalMinutes,
         cryptoWindowMinutes: cryptoIntervalMinutes,

@@ -32,6 +32,7 @@ const DEFAULT_RULES = {
     { rank: '5', amount: 1000, prize: '$1,000 MXN' },
   ],
 };
+const MEXICO_CITY_TIME_ZONE = 'America/Mexico_City';
 
 function fmt(n, digits = 2) {
   return Number(n || 0).toLocaleString('es-MX', {
@@ -58,6 +59,63 @@ function formatCountdown(totalSeconds, lang) {
   parts.push(`${minutes}m`);
   if (days === 0 && hours === 0) parts.push(`${seconds}s`);
   return parts.join(' ');
+}
+
+function mexicoCityParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: MEXICO_CITY_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+  const map = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return {
+    year: Number(map.year),
+    month: Number(map.month),
+    day: Number(map.day),
+    hour: Number(map.hour === '24' ? '0' : map.hour),
+    minute: Number(map.minute),
+    second: Number(map.second),
+  };
+}
+
+function utcMsForMexicoWallTime({ year, month, day, hour, minute = 0, second = 0 }) {
+  let guess = Date.UTC(year, month - 1, day, hour + 6, minute, second);
+  const targetWallMs = Date.UTC(year, month - 1, day, hour, minute, second);
+  for (let i = 0; i < 3; i++) {
+    const parts = mexicoCityParts(new Date(guess));
+    const actualWallMs = Date.UTC(
+      parts.year,
+      parts.month - 1,
+      parts.day,
+      parts.hour,
+      parts.minute,
+      parts.second,
+    );
+    guess += targetWallMs - actualWallMs;
+  }
+  return guess;
+}
+
+function nextTournamentMarketDropIso(now = new Date()) {
+  const parts = mexicoCityParts(now);
+  let targetMs = utcMsForMexicoWallTime({ ...parts, hour: 9, minute: 0, second: 0 });
+  if (now.getTime() >= targetMs) {
+    const nextDate = new Date(Date.UTC(parts.year, parts.month - 1, parts.day) + 86_400_000);
+    targetMs = utcMsForMexicoWallTime({
+      year: nextDate.getUTCFullYear(),
+      month: nextDate.getUTCMonth() + 1,
+      day: nextDate.getUTCDate(),
+      hour: 9,
+      minute: 0,
+      second: 0,
+    });
+  }
+  return new Date(targetMs).toISOString();
 }
 
 function statusCopy(status, lang) {
@@ -241,12 +299,14 @@ function RuleList({ lang, rules }) {
     `Bonuses fund your account, but signup, streak, social, and referral rewards do not directly add to the score.`,
     `You qualify with ${fmtInteger(r.qualifyingMarkets)} entries in distinct markets. Each entry has a ${fmtInteger(r.minEntryMxnp)} MXNP minimum.`,
     `Each user can hold up to ${fmtInteger(r.maxSharesPerMarket)} shares per market.`,
+    'New tournament markets go live every day at 9:00 AM Mexico City time.',
     'Ties break by fewer inactive days, more distinct liquidated markets, then older registration.',
   ] : [
     `El puntaje es el PnL de mercados marcado a precio actual, menos ${fmtInteger(r.inactivityPenalty)} MXNP por cada día inactivo.`,
     'Los bonos fondean tu cuenta, pero registro, racha, redes y referidos no suman directo al puntaje.',
     `Calificas con ${fmtInteger(r.qualifyingMarkets)} entradas en mercados distintos. Cada entrada tiene mínimo de ${fmtInteger(r.minEntryMxnp)} MXNP.`,
     `Cada usuario puede tener hasta ${fmtInteger(r.maxSharesPerMarket)} acciones por mercado.`,
+    'Todos los días a las 9:00 AM, hora de Ciudad de México, salen nuevos mercados para el torneo.',
     'Empates: menos días inactivos, más mercados distintos liquidados y registro más antiguo.',
   ];
   return (
@@ -407,11 +467,25 @@ export default function PointsTournament() {
 
   const rules = leaderboard?.rules || cycle?.rules || DEFAULT_RULES;
   const countdownTarget = targetForCycle(cycle);
+  const nowMs = Date.now();
+  const cycleTargetMs = countdownTarget?.iso ? new Date(countdownTarget.iso).getTime() : NaN;
+  const showMarketDropCountdown = !Number.isFinite(cycleTargetMs)
+    || cycle?.status === 'closed'
+    || cycleTargetMs <= nowMs;
+  const activeCountdownTarget = showMarketDropCountdown
+    ? {
+        label: {
+          es: 'Nuevos mercados para el torneo',
+          en: 'New tournament markets',
+        },
+        iso: nextTournamentMarketDropIso(new Date(nowMs)),
+      }
+    : countdownTarget;
   const countdown = useMemo(() => {
-    if (!countdownTarget?.iso || cycle?.status === 'closed') return statusCopy(cycle?.status || 'scheduled', lang);
-    const seconds = Math.max(0, Math.floor((new Date(countdownTarget.iso).getTime() - Date.now()) / 1000));
+    if (!activeCountdownTarget?.iso) return statusCopy(cycle?.status || 'scheduled', lang);
+    const seconds = Math.max(0, Math.floor((new Date(activeCountdownTarget.iso).getTime() - Date.now()) / 1000));
     return formatCountdown(seconds, lang);
-  }, [countdownTarget?.iso, cycle?.status, lang, tick]);
+  }, [activeCountdownTarget?.iso, cycle?.status, lang, tick]);
 
   const top = Array.isArray(leaderboard?.top) ? leaderboard.top : [];
   const cycles = Array.isArray(history) ? history : [];
@@ -481,7 +555,7 @@ export default function PointsTournament() {
               }) : null}
             />
             <Metric
-              label={countdownTarget?.label?.[lang] || (lang === 'en' ? 'Countdown' : 'Cuenta regresiva')}
+              label={activeCountdownTarget?.label?.[lang] || (lang === 'en' ? 'Countdown' : 'Cuenta regresiva')}
               value={countdown}
               tone="orange"
               sub={lang === 'en' ? 'Mexico City time' : 'Hora Ciudad de México'}

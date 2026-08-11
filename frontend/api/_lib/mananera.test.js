@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   MANANERA_TRANSCRIPT_SOURCE,
   MANANERA_YOUTUBE_CAPTIONS_SOURCE,
+  buildMananeraDirectTranscriptUrl,
   buildMananeraSearchUrl,
   buildMananeraYouTubeSearchUrl,
   countPhraseOccurrences,
@@ -16,6 +17,14 @@ function htmlResponse(body) {
     ok: true,
     status: 200,
     text: async () => body,
+  };
+}
+
+function notFoundResponse() {
+  return {
+    ok: false,
+    status: 404,
+    text: async () => '',
   };
 }
 
@@ -59,8 +68,8 @@ test('counts transcript phrases accent-insensitively', () => {
   );
 });
 
-test('reads official transcript search result and resolves yes when count reaches threshold', async () => {
-  const articleUrl = 'https://www.gob.mx/presidencia/articulos/version-estenografica-de-la-conferencia-matutina-del-pueblo-10-de-agosto-de-2026';
+test('reads official transcript direct slug and resolves yes when count reaches threshold', async () => {
+  const articleUrl = buildMananeraDirectTranscriptUrl('2026-08-10');
   const seen = [];
   const fetchImpl = async (url) => {
     seen.push(String(url));
@@ -85,7 +94,7 @@ test('reads official transcript search result and resolves yes when count reache
   assert.equal(result.outcomeIndex, 0);
   assert.equal(result.count, 2);
   assert.equal(result.transcriptUrl, articleUrl);
-  assert.deepEqual(seen, [buildMananeraSearchUrl('2026-08-10'), articleUrl]);
+  assert.deepEqual(seen, [articleUrl]);
 });
 
 test('resolves no when transcript exists but phrase count misses threshold', async () => {
@@ -111,6 +120,31 @@ test('resolves no when transcript exists but phrase count misses threshold', asy
   assert.equal(result.count, 1);
 });
 
+test('resolves from an ingested stored transcript without fetching gob.mx again', async () => {
+  const result = await readMananeraPhraseResult({
+    source: MANANERA_TRANSCRIPT_SOURCE,
+    dateYmd: '2026-08-10',
+    phrase: 'seguridad',
+    op: 'gte',
+    threshold: 2,
+    yesOutcome: 0,
+  }, {
+    storedTranscript: {
+      dateYmd: '2026-08-10',
+      source: MANANERA_TRANSCRIPT_SOURCE,
+      url: buildMananeraDirectTranscriptUrl('2026-08-10'),
+      transcriptText: 'PRESIDENTA DE MÉXICO: seguridad pública y seguridad nacional.',
+    },
+    fetchImpl: async () => {
+      throw new Error('stored transcript should avoid network fetch');
+    },
+  });
+
+  assert.equal(result.ready, true);
+  assert.equal(result.count, 2);
+  assert.equal(result.yes, true);
+});
+
 test('falls back to official YouTube captions when gob.mx transcript is delayed', async () => {
   const videoId = 'abc123DEF45';
   const captionBaseUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=es`;
@@ -119,6 +153,12 @@ test('falls back to official YouTube captions when gob.mx transcript is delayed'
   const fetchImpl = async (url) => {
     const href = String(url);
     seen.push(href);
+    if (href === buildMananeraDirectTranscriptUrl('2026-08-10')) {
+      return notFoundResponse();
+    }
+    if (href === 'https://www.gob.mx/presidencia/archivo/articulos') {
+      return htmlResponse('<html><body>Sin estenográfica del día</body></html>');
+    }
     if (href.startsWith('https://www.gob.mx/busqueda')) {
       return htmlResponse('<a href="/presidencia/articulos/version-estenografica-de-la-conferencia-matutina-del-pueblo-09-de-agosto-de-2026">Otro día</a>');
     }
