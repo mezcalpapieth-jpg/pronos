@@ -143,7 +143,7 @@ const STRINGS = {
   'nav.deposit':              { es: 'Depositar',            en: 'Deposit' },
   'nav.switchTo':             { es: 'Cambiar a {chain}',    en: 'Switch to {chain}' },
   'nav.signOut':              { es: 'Cerrar sesión',        en: 'Sign out' },
-  'nav.predict':              { es: 'Predecir',             en: 'Predict' },
+  'nav.predict':              { es: 'Únete',                en: 'Log In' },
   'nav.admin':                { es: 'Admin',                en: 'Admin' },
 
   // ── Hero ───────────────────────────────────────────────────────────────────

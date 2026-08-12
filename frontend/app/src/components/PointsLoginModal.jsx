@@ -196,7 +196,7 @@ export default function PointsLoginModal({
           color: 'var(--text-primary)', marginBottom: 18,
           textTransform: 'uppercase', letterSpacing: '0.02em',
         }}>
-          {step === 'email' && (lang === 'en' ? 'Log In' : 'Únete')}
+          {step === 'email' && (lang === 'en' ? 'Log in / Create account' : 'Iniciar sesión / Crear cuenta')}
           {step === 'code' && 'Código enviado'}
           {step === 'username' && 'Elige tu usuario'}
           {step === 'delegate' && 'Bienvenido a Pronos'}
@@ -295,7 +295,7 @@ export default function PointsLoginModal({
             </p>
             {err && <div style={errorStyle}>{err}</div>}
             <button type="submit" disabled={pending || uname.length < 3} style={btnPrimaryStyle}>
-              {pending ? 'Guardando…' : (lang === 'en' ? 'Log In' : 'Únete')}
+              {pending ? 'Guardando…' : (lang === 'en' ? 'Create account' : 'Crear cuenta')}
             </button>
             <p style={{ ...helperStyle, marginTop: 10, fontSize: 10 }}>
               Recibes 500 MXNP de bienvenida al crear tu usuario.
