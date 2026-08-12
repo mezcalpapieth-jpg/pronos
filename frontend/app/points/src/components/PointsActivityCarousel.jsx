@@ -918,6 +918,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                         height={isMobile ? 138 : 164}
                         strokeWidth={2}
                         showActivity={false}
+                        xMode="movement"
                         domainMin={0}
                         domainMax={100}
                         series={mChartEntries.map(entry => ({
@@ -954,6 +955,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                         // level; Sparkline's auto y-axis (on at h>=100)
                         // would only collide with the end dot here.
                         showYAxis={false}
+                        xMode="movement"
                         data={mSeries}
                         targetPct={mLeadPct}
                         emptyLabel={t('points.activity.noHistory')}

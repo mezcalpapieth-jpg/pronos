@@ -81,6 +81,7 @@ export default function MultiSparkline({
   legendNote = null,
   domainMin,
   domainMax,
+  xMode = 'time',
   style = {},
 }) {
   const uid = useId().replace(/:/g, '');
@@ -135,8 +136,10 @@ export default function MultiSparkline({
   }), [series]);
 
   const hasRealHistory = lines.some(l => l.hasHistory);
+  const useMovementAxis = xMode === 'movement';
 
   const timeBounds = useMemo(() => {
+    if (useMovementAxis) return null;
     const times = lines.flatMap(l => l.points.map(p => p.t));
     if (times.length === 0) {
       const now = Math.floor(Date.now() / 1000);
@@ -145,13 +148,13 @@ export default function MultiSparkline({
     const min = Math.min(...times);
     const max = Math.max(...times);
     return max > min ? { min, max } : { min: min - 60, max };
-  }, [lines]);
+  }, [lines, useMovementAxis]);
 
   const padX = 3;
   const padY = 4;
   const chartWidth = measuredWidth > 0 ? measuredWidth : Math.max(20, width);
   const yAxisGutter = Math.min(38, Math.max(30, chartWidth * 0.06));
-  const xAxisHeight = 18;
+  const xAxisHeight = useMovementAxis ? 0 : 18;
   const plotRight = Math.max(20, chartWidth - yAxisGutter);
   const plotBottom = Math.max(16, height - xAxisHeight);
   const w = Math.max(20, plotRight - padX * 2);
@@ -179,21 +182,29 @@ export default function MultiSparkline({
   };
 
   const xForTime = (t) => {
+    if (!timeBounds) return padX + w;
     const span = Math.max(1, timeBounds.max - timeBounds.min);
     const clamped = Math.max(timeBounds.min, Math.min(timeBounds.max, Number(t)));
     return padX + ((clamped - timeBounds.min) / span) * w;
   };
 
   const timeForX = (x) => {
+    if (!timeBounds) return 0;
     const span = timeBounds.max - timeBounds.min;
     const ratio = Math.max(0, Math.min(1, (x - padX) / Math.max(1, w)));
     return timeBounds.min + ratio * span;
+  };
+
+  const xForMovementIndex = (index, count) => {
+    const denom = Math.max(1, count - 1);
+    return padX + (Math.max(0, index) / denom) * w;
   };
 
   const yTicks = useMemo(() => axisTicks(domain.min, domain.max), [domain]);
   const visibleYTicks = yTicks.filter(tick => yForValue(tick) < plotBottom - padY - 6);
 
   const xTicks = useMemo(() => {
+    if (useMovementAxis || !timeBounds) return [];
     const span = timeBounds.max - timeBounds.min;
     const count = chartWidth < 420 ? 3 : 5;
     const times = [];
@@ -205,11 +216,25 @@ export default function MultiSparkline({
       if (!built.some((tick, i) => i > 0 && tick.labelText === built[i - 1].labelText)) return built;
     }
     return build(modes[modes.length - 1]);
-  }, [timeBounds, chartWidth]);
+  }, [timeBounds, chartWidth, useMovementAxis]);
 
   // Step-after, then held flat to the right edge: the last trade's price
   // is still the price now, so every line ends in the same column.
   const pathFor = (line) => {
+    if (useMovementAxis) {
+      const source = line.hasHistory ? line.points : [{ p: line.target }, { p: line.target }];
+      const pts = source.length >= 2 ? source : [source[0], source[0]];
+      const coords = pts.map((pt, i) => ({
+        x: xForMovementIndex(i, pts.length),
+        y: yForValue(pt.p),
+      }));
+      let d = `M${coords[0].x.toFixed(2)},${coords[0].y.toFixed(2)}`;
+      for (let i = 1; i < coords.length; i++) {
+        d += ` L${coords[i].x.toFixed(2)},${coords[i].y.toFixed(2)}`;
+      }
+      return { d, end: coords[coords.length - 1] };
+    }
+
     const pts = line.hasHistory
       ? line.points
       : [{ t: timeBounds.min, p: line.target }, { t: timeBounds.max, p: line.target }];
@@ -268,6 +293,7 @@ export default function MultiSparkline({
   }, [lines]);
 
   function handleMouseMove(e) {
+    if (useMovementAxis) return;
     if (snapTimes.length === 0) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const relX = ((e.clientX - rect.left) / rect.width) * chartWidth;
@@ -375,7 +401,9 @@ export default function MultiSparkline({
               {activityPoints.map((pt, i) => {
                 const metric = pt.volume > 0 ? pt.volume : pt.count;
                 const barHeight = Math.max(2, (metric / maxActivity) * activityBandHeight);
-                const x = xForTime(pt.t) - activityBarWidth / 2;
+                const x = (useMovementAxis
+                  ? xForMovementIndex(i, activityPoints.length)
+                  : xForTime(pt.t)) - activityBarWidth / 2;
                 const sellHeavy = pt.sellVolume > pt.buyVolume;
                 return (
                   <rect

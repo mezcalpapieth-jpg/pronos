@@ -108,6 +108,7 @@ export default function Sparkline({
   showXAxis,
   domainMin,
   domainMax,
+  xMode = 'time',
   activity = [],
   showActivity = true,
   style = {},
@@ -191,8 +192,11 @@ export default function Sparkline({
 
   const padX = 3;
   const padY = 4;
+  const useMovementAxis = xMode === 'movement';
   const shouldShowYAxis = typeof showYAxis === 'boolean' ? showYAxis : height >= 100;
-  const shouldShowXAxis = typeof showXAxis === 'boolean' ? showXAxis : height >= 100;
+  const shouldShowXAxis = useMovementAxis
+    ? false
+    : (typeof showXAxis === 'boolean' ? showXAxis : height >= 100);
   const chartWidth = measuredWidth > 0
     ? measuredWidth
     : Math.max(20, width - labelWidth - (showValue ? valueWidth : 0));
@@ -232,6 +236,7 @@ export default function Sparkline({
   const visibleYTicks = yTicks.filter(tick => yForValue(tick) < plotBottom - padY - 6);
 
   const timeBounds = useMemo(() => {
+    if (useMovementAxis) return null;
     if (!hasTimestamps) return null;
     const priceTimes = points
       .map(pt => Number(pt?.t))
@@ -240,16 +245,20 @@ export default function Sparkline({
     const min = Math.min(...priceTimes);
     const max = Math.max(...priceTimes);
     return max > min ? { min, max } : null;
-  }, [hasTimestamps, points]);
+  }, [hasTimestamps, points, useMovementAxis]);
 
-  const xForTime = (t, fallbackIdx = 0) => {
+  const xForMovementIndex = (index, count) => {
+    const denom = Math.max(1, count - 1);
+    return padX + (Math.max(0, index) / denom) * w;
+  };
+
+  const xForTime = (t, fallbackIdx = 0, fallbackCount = values.length) => {
     const time = Number(t);
     if (timeBounds && Number.isFinite(time)) {
       const clamped = Math.max(timeBounds.min, Math.min(timeBounds.max, time));
       return padX + ((clamped - timeBounds.min) / (timeBounds.max - timeBounds.min)) * w;
     }
-    const denom = Math.max(1, values.length - 1);
-    return padX + (fallbackIdx / denom) * w;
+    return xForMovementIndex(fallbackIdx, fallbackCount);
   };
 
   // Evenly spaced time labels across the visible window. Under ~2 days
@@ -279,7 +288,7 @@ export default function Sparkline({
   const coords = values.map((v, i) => {
     const pt = points[i];
     return {
-      x: xForTime(typeof pt === 'object' && pt !== null ? pt.t : null, i),
+      x: xForTime(typeof pt === 'object' && pt !== null ? pt.t : null, i, values.length),
       y: yForValue(v),
       v,
       t: typeof pt === 'object' && pt !== null ? pt.t : null,
@@ -327,7 +336,7 @@ export default function Sparkline({
     if (pts.length < 2) return '';
     let d = `M${pts[0].x.toFixed(2)},${pts[0].y.toFixed(2)}`;
     for (let i = 1; i < pts.length; i++) {
-      d += ` L${pts[i].x.toFixed(2)},${pts[i - 1].y.toFixed(2)}`;
+      if (!useMovementAxis) d += ` L${pts[i].x.toFixed(2)},${pts[i - 1].y.toFixed(2)}`;
       d += ` L${pts[i].x.toFixed(2)},${pts[i].y.toFixed(2)}`;
     }
     return d;
@@ -434,7 +443,7 @@ export default function Sparkline({
             {activityPoints.map((pt, i) => {
               const metric = pt.volume > 0 ? pt.volume : pt.count;
               const barHeight = Math.max(2, (metric / maxActivity) * activityBandHeight);
-              const x = xForTime(pt.t, i) - activityBarWidth / 2;
+              const x = xForTime(pt.t, i, activityPoints.length) - activityBarWidth / 2;
               const sellHeavy = pt.sellVolume > pt.buyVolume;
               return (
                 <rect

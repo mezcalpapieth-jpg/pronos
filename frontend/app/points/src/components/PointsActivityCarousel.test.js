@@ -10,6 +10,14 @@ const home = await readFile(
   new URL('../pages/PointsHome.jsx', import.meta.url),
   'utf8',
 );
+const sparkline = await readFile(
+  new URL('../../../src/components/Sparkline.jsx', import.meta.url),
+  'utf8',
+);
+const multiSparkline = await readFile(
+  new URL('../../../src/components/MultiSparkline.jsx', import.meta.url),
+  'utf8',
+);
 
 test('carousel reads the existing trade-activity feed, not a parallel endpoint', () => {
   // /api/points/trade-activity already backs the market detail chart and is
@@ -89,6 +97,7 @@ test('parallel carousel charts draw leg histories without adopting a child ident
   assert.match(carousel, /function chartEntriesForMarket/);
   assert.match(carousel, /function leadingOutcomeForMarket/);
   assert.match(carousel, /<MultiSparkline/);
+  assert.match(carousel, /xMode="movement"/);
   assert.match(carousel, /series=\{mChartEntries\.map\(entry =>/);
   assert.match(carousel, /activity=\{\[m\._buckets \|\| \[\]\]\}/);
   assert.match(carousel, /points\.activity\.tied/);
@@ -100,6 +109,19 @@ test('parallel carousel charts draw leg histories without adopting a child ident
   assert.doesNotMatch(carousel, /function FlowSparkline/);
   assert.match(carousel, /fetchPriceHistory\(group\.ids/);
   assert.match(carousel, /remapHistoryByParent\(results, priceHistoryRequest\)/);
+});
+
+test('carousel charts use movement spacing instead of wall-clock spacing', () => {
+  assert.match(carousel, /<MultiSparkline[\s\S]*xMode="movement"/);
+  assert.match(carousel, /<Sparkline[\s\S]*xMode="movement"/);
+  assert.match(sparkline, /xMode = 'time'/);
+  assert.match(sparkline, /const useMovementAxis = xMode === 'movement'/);
+  assert.match(sparkline, /const xForMovementIndex/);
+  assert.match(sparkline, /if \(!useMovementAxis\) d \+=/);
+  assert.match(multiSparkline, /xMode = 'time'/);
+  assert.match(multiSparkline, /const useMovementAxis = xMode === 'movement'/);
+  assert.match(multiSparkline, /xForMovementIndex\(i, pts\.length\)/);
+  assert.match(multiSparkline, /if \(useMovementAxis\) return/);
 });
 
 test('visible parallel slide polling keeps querying leg activity', () => {
