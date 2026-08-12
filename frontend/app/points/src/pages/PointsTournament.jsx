@@ -140,6 +140,9 @@ function targetForCycle(cycle) {
   if (cycle.status === 'closing') {
     return { label: { es: 'Ranking cierra en', en: 'Ranking closes in' }, iso: cycle.rankingCutoffAt || cycle.endsAt };
   }
+  if (cycle.status === 'paused' && (cycle.endsAt || cycle.operationCloseAt)) {
+    return { label: { es: 'Torneo cierra en', en: 'Tournament closes in' }, iso: cycle.endsAt || cycle.operationCloseAt };
+  }
   return { label: { es: 'Estado', en: 'Status' }, iso: cycle.endsAt };
 }
 
