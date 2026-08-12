@@ -82,6 +82,7 @@ export default function MultiSparkline({
   domainMin,
   domainMax,
   xMode = 'time',
+  jumpShape = 'step',
   style = {},
 }) {
   const uid = useId().replace(/:/g, '');
@@ -220,6 +221,21 @@ export default function MultiSparkline({
 
   // Step-after, then held flat to the right edge: the last trade's price
   // is still the price now, so every line ends in the same column.
+  const linePath = (coords) => {
+    if (coords.length < 2) return '';
+    let d = `M${coords[0].x.toFixed(2)},${coords[0].y.toFixed(2)}`;
+    for (let i = 1; i < coords.length; i++) {
+      if (jumpShape === 'soft-step') {
+        const rampX = coords[i - 1].x + (coords[i].x - coords[i - 1].x) * 0.72;
+        d += ` L${rampX.toFixed(2)},${coords[i - 1].y.toFixed(2)}`;
+      } else if (!useMovementAxis) {
+        d += ` L${coords[i].x.toFixed(2)},${coords[i - 1].y.toFixed(2)}`;
+      }
+      d += ` L${coords[i].x.toFixed(2)},${coords[i].y.toFixed(2)}`;
+    }
+    return d;
+  };
+
   const pathFor = (line) => {
     if (useMovementAxis) {
       const source = line.hasHistory ? line.points : [{ p: line.target }, { p: line.target }];
@@ -228,11 +244,7 @@ export default function MultiSparkline({
         x: xForMovementIndex(i, pts.length),
         y: yForValue(pt.p),
       }));
-      let d = `M${coords[0].x.toFixed(2)},${coords[0].y.toFixed(2)}`;
-      for (let i = 1; i < coords.length; i++) {
-        d += ` L${coords[i].x.toFixed(2)},${coords[i].y.toFixed(2)}`;
-      }
-      return { d, end: coords[coords.length - 1] };
+      return { d: linePath(coords), end: coords[coords.length - 1] };
     }
 
     const pts = line.hasHistory
@@ -243,12 +255,7 @@ export default function MultiSparkline({
     const edgeX = padX + w;
     if (last.x < edgeX - 0.5) coords.push({ x: edgeX, y: last.y });
     if (coords.length < 2) return { d: '', end: last };
-    let d = `M${coords[0].x.toFixed(2)},${coords[0].y.toFixed(2)}`;
-    for (let i = 1; i < coords.length; i++) {
-      d += ` L${coords[i].x.toFixed(2)},${coords[i - 1].y.toFixed(2)}`;
-      d += ` L${coords[i].x.toFixed(2)},${coords[i].y.toFixed(2)}`;
-    }
-    return { d, end: coords[coords.length - 1] };
+    return { d: linePath(coords), end: coords[coords.length - 1] };
   };
 
   const drawn = lines.map(line => ({ line, ...pathFor(line) }));

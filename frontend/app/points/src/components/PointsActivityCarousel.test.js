@@ -97,8 +97,9 @@ test('parallel carousel charts draw leg histories without adopting a child ident
   assert.match(carousel, /function chartEntriesForMarket/);
   assert.match(carousel, /function leadingOutcomeForMarket/);
   assert.match(carousel, /<MultiSparkline/);
-  assert.match(carousel, /xMode="movement"/);
+  assert.match(carousel, /jumpShape="soft-step"/);
   assert.match(carousel, /series=\{mChartEntries\.map\(entry =>/);
+  assert.match(carousel, /data: chartSeriesForOutcome\(m, entry, mOutcomeSeries\?\.\[entry\.index\]\)/);
   assert.match(carousel, /activity=\{\[m\._buckets \|\| \[\]\]\}/);
   assert.match(carousel, /points\.activity\.tied/);
   assert.match(carousel, /isMultiChart \? mLeader\.label : mOutcomes\[0\]/);
@@ -108,24 +109,41 @@ test('parallel carousel charts draw leg histories without adopting a child ident
   assert.doesNotMatch(carousel, /aggregateParallelFlowSeries/);
   assert.doesNotMatch(carousel, /function FlowSparkline/);
   assert.match(carousel, /fetchPriceHistory\(group\.ids/);
-  assert.match(carousel, /remapHistoryByParent\(results, priceHistoryRequest\)/);
+  assert.match(carousel, /remapHistoryByParent\(priceResults, priceHistoryRequest\)/);
 });
 
-test('carousel charts use movement spacing instead of wall-clock spacing', () => {
-  assert.match(carousel, /<MultiSparkline[\s\S]*xMode="movement"/);
-  assert.match(carousel, /<Sparkline[\s\S]*xMode="movement"/);
-  assert.match(carousel, /showActivity[\s\S]*xMode="movement"/);
-  assert.match(carousel, /showYAxis=\{false\}[\s\S]*fitDomain[\s\S]*xMode="movement"/);
+test('carousel charts use a 24h time window with softened jumps', () => {
+  assert.match(carousel, /const CHART_HISTORY_HOURS = 24/);
+  assert.match(carousel, /fetchPriceHistory\(group\.ids, \{ hours: CHART_HISTORY_HOURS/);
+  assert.match(carousel, /function chartSeriesForOutcome/);
+  assert.match(carousel, /points\.unshift\(\{ t: openedAt, p: openingPct \}\)/);
+  assert.match(carousel, /points\.push\(\{ t: now, p: targetPct \}\)/);
+  assert.match(carousel, /pp · 24h/);
+  assert.match(carousel, /<MultiSparkline[\s\S]*jumpShape="soft-step"/);
+  assert.match(carousel, /<Sparkline[\s\S]*jumpShape="soft-step"/);
+  assert.match(carousel, /showActivity[\s\S]*jumpShape="soft-step"/);
+  assert.match(carousel, /showYAxis=\{false\}[\s\S]*fitDomain[\s\S]*jumpShape="soft-step"/);
   assert.doesNotMatch(carousel, /<MultiSparkline[\s\S]{0,260}domainMin=\{0\}[\s\S]{0,80}domainMax=\{100\}/);
   assert.match(sparkline, /xMode = 'time'/);
   assert.match(sparkline, /fitDomain = false/);
+  assert.match(sparkline, /jumpShape = 'step'/);
+  assert.match(sparkline, /jumpShape === 'soft-step'/);
   assert.match(sparkline, /const useMovementAxis = xMode === 'movement'/);
-  assert.match(sparkline, /const xForMovementIndex/);
-  assert.match(sparkline, /if \(!useMovementAxis\) d \+=/);
   assert.match(multiSparkline, /xMode = 'time'/);
+  assert.match(multiSparkline, /jumpShape = 'step'/);
+  assert.match(multiSparkline, /jumpShape === 'soft-step'/);
   assert.match(multiSparkline, /const useMovementAxis = xMode === 'movement'/);
-  assert.match(multiSparkline, /xForMovementIndex\(i, pts\.length\)/);
-  assert.match(multiSparkline, /if \(useMovementAxis\) return/);
+});
+
+test('bitcoin crypto carousel slide backfills from crypto tick history', () => {
+  assert.match(carousel, /import \{ fetchCryptoHistory, fetchPriceHistory, fetchTradeActivity \}/);
+  assert.match(carousel, /const CRYPTO_PRICE_PERCENT_TO_PP = 25/);
+  assert.match(carousel, /function cryptoSeriesForMarket/);
+  assert.match(carousel, /function mergeCryptoHistoryByParent/);
+  assert.match(carousel, /const shifted = Number\.isFinite\(targetPct\) && Number\.isFinite\(lastPct\)/);
+  assert.match(carousel, /const cryptoHistoryMarkets = useMemo/);
+  assert.match(carousel, /fetchCryptoHistory\(m\.id\)/);
+  assert.match(carousel, /setHistory\(mergeCryptoHistoryByParent\(priceHistory, cryptoResults\)\)/);
 });
 
 test('visible parallel slide polling keeps querying leg activity', () => {

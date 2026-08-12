@@ -110,6 +110,7 @@ export default function Sparkline({
   domainMax,
   fitDomain = false,
   xMode = 'time',
+  jumpShape = 'step',
   activity = [],
   showActivity = true,
   style = {},
@@ -337,7 +338,12 @@ export default function Sparkline({
     if (pts.length < 2) return '';
     let d = `M${pts[0].x.toFixed(2)},${pts[0].y.toFixed(2)}`;
     for (let i = 1; i < pts.length; i++) {
-      if (!useMovementAxis) d += ` L${pts[i].x.toFixed(2)},${pts[i - 1].y.toFixed(2)}`;
+      if (jumpShape === 'soft-step') {
+        const rampX = pts[i - 1].x + (pts[i].x - pts[i - 1].x) * 0.72;
+        d += ` L${rampX.toFixed(2)},${pts[i - 1].y.toFixed(2)}`;
+      } else if (!useMovementAxis) {
+        d += ` L${pts[i].x.toFixed(2)},${pts[i - 1].y.toFixed(2)}`;
+      }
       d += ` L${pts[i].x.toFixed(2)},${pts[i].y.toFixed(2)}`;
     }
     return d;

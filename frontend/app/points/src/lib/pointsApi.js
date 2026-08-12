@@ -362,6 +362,15 @@ export async function fetchPriceHistory(ids, { days = 30, hours, outcome = 0, li
   }
 }
 
+export async function fetchCryptoHistory(marketId) {
+  if (marketId == null || marketId === '') return null;
+  try {
+    return await getJson(`/api/points/crypto-history?marketId=${encodeURIComponent(marketId)}`);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Cumulative PnL series for the chart on the portfolio and public profiles.
  * Pass `username` for a public profile; omit it for the signed-in user.

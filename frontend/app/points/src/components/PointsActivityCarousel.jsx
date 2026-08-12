@@ -35,7 +35,7 @@ import MultiSparkline from '@app/components/MultiSparkline.jsx';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
 import { useT } from '@app/lib/i18n.js';
 import { ActivityCarouselSkeleton } from './PointsSkeleton.jsx';
-import { fetchPriceHistory, fetchTradeActivity } from '../lib/pointsApi.js';
+import { fetchCryptoHistory, fetchPriceHistory, fetchTradeActivity } from '../lib/pointsApi.js';
 
 const SLIDE_MS = 8000;      // autoplay dwell per slide
 const TAPE_POLL_MS = 25_000; // how often the visible slide refetches its flow
@@ -44,6 +44,8 @@ const TAPE_ROWS = 7;
 // this whole window, then the UI derives 1h / 4h / 7d scores.
 const WINDOW_HOURS = 24 * 7;
 const WINDOW_BUCKETS = 120;
+const CHART_HISTORY_HOURS = 24;
+const CHART_HISTORY_LIMIT = 240;
 // Ask about a wide set so a newer, fast-moving market can beat older
 // high-volume markets in the 1h / 4h slots.
 const CANDIDATE_POOL = 120;
@@ -51,6 +53,7 @@ const CANDIDATE_POOL = 120;
 // requests in ranked order and let lower-volume candidates fall off first.
 const MAX_ACTIVITY_IDS = 200;
 const CHART_OUTCOME_LIMIT = 4;
+const CRYPTO_PRICE_PERCENT_TO_PP = 25;
 
 const SLOT_DEFS = [
   { key: '1h-interactions', hours: 1, metric: 'count' },
@@ -260,9 +263,144 @@ function remapHistoryByParent(results, request) {
   return mapped;
 }
 
+function secondsFromMaybeMs(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n > 10_000_000_000 ? Math.floor(n / 1000) : Math.floor(n);
+}
+
+function cryptoConfigForMarket(m) {
+  const cfg = m?.cryptoMeta || m?.resolverConfig || null;
+  if (!cfg || (cfg.shape && cfg.shape !== 'binary-direction')) return null;
+  if (!m?.crypto5min && cfg.shape !== 'binary-direction') return null;
+  return cfg;
+}
+
+function normalizeCryptoPricePoints(m, rawPoints) {
+  const cfg = cryptoConfigForMarket(m);
+  if (!cfg) return [];
+  const out = [];
+  const openedAt = secondsFromMaybeMs(
+    (cfg.openedAt || m?.startTime) ? new Date(cfg.openedAt || m?.startTime).getTime() : null,
+  );
+  const openPrice = Number(cfg.openPrice ?? cfg.threshold);
+  if (openedAt && Number.isFinite(openPrice) && openPrice > 0) {
+    out.push({ t: openedAt, price: openPrice });
+  }
+  for (const pt of rawPoints || []) {
+    const t = secondsFromMaybeMs(pt?.t);
+    const price = Number(pt?.price);
+    if (!t || !Number.isFinite(price) || price <= 0) continue;
+    out.push({ t, price });
+  }
+  out.sort((a, b) => a.t - b.t);
+  const deduped = [];
+  for (const pt of out) {
+    if (deduped.length > 0 && deduped[deduped.length - 1].t === pt.t) {
+      deduped[deduped.length - 1] = pt;
+    } else {
+      deduped.push(pt);
+    }
+  }
+  return deduped;
+}
+
+function clampChartPct(value) {
+  return Math.max(1, Math.min(99, value));
+}
+
+function cryptoSeriesForMarket(m, rawPoints) {
+  if (!m?.crypto5min) return [];
+  const points = normalizeCryptoPricePoints(m, rawPoints);
+  if (points.length < 2) return [];
+  const cfg = cryptoConfigForMarket(m);
+  const basePrice = Number(cfg?.openPrice ?? cfg?.threshold ?? points[0]?.price);
+  if (!Number.isFinite(basePrice) || basePrice <= 0) return [];
+  const prices = Array.isArray(m.prices) ? m.prices : [0.5, 0.5];
+  return [0, 1].map((outcomeIndex) => {
+    const targetPct = Math.round(Number(prices[outcomeIndex] ?? (outcomeIndex === 0 ? 0.5 : 0.5)) * 100);
+    const baseSeries = points.map((pt) => {
+      const movePct = ((pt.price - basePrice) / basePrice) * 100;
+      const upPct = clampChartPct(50 + movePct * CRYPTO_PRICE_PERCENT_TO_PP);
+      return {
+        t: pt.t,
+        p: outcomeIndex === 0 ? upPct : 100 - upPct,
+      };
+    });
+    const lastPct = Number(baseSeries[baseSeries.length - 1]?.p);
+    const shifted = Number.isFinite(targetPct) && Number.isFinite(lastPct)
+      ? targetPct - lastPct
+      : 0;
+    return baseSeries.map(pt => ({ t: pt.t, p: clampChartPct(pt.p + shifted) }));
+  });
+}
+
+function hasMeaningfulSeries(series) {
+  if (!Array.isArray(series) || series.length < 2) return false;
+  const values = series
+    .map(pt => Number(pt?.p))
+    .filter(Number.isFinite);
+  if (values.length < 2) return false;
+  return Math.max(...values) - Math.min(...values) >= 0.25;
+}
+
+function mergeCryptoHistoryByParent(baseHistory, cryptoResults) {
+  const merged = { ...(baseHistory || {}) };
+  for (const result of cryptoResults || []) {
+    const market = result?.market;
+    if (!market?.id) continue;
+    const series = cryptoSeriesForMarket(market, result?.points);
+    if (series.length === 0) continue;
+    const key = marketIdKey(market.id);
+    const existing = Array.isArray(merged[key]) ? [...merged[key]] : [];
+    for (let i = 0; i < series.length; i++) {
+      if (!hasMeaningfulSeries(existing[i])) existing[i] = series[i];
+    }
+    merged[key] = existing;
+  }
+  return merged;
+}
+
 function seriesForSlide(m, history) {
   if (!m) return [];
   return history?.[marketIdKey(m.id)] || history?.[m.id] || [];
+}
+
+function openingPctForMarket(m) {
+  if (m?.ammMode === 'parallel') return 50;
+  const outcomeCount = Array.isArray(m?.outcomes) ? Math.max(2, m.outcomes.length) : 2;
+  return 100 / outcomeCount;
+}
+
+function chartSeriesForOutcome(m, entry, rawSeries) {
+  const targetPct = Math.round((entry?.price || 0) * 100);
+  const series = Array.isArray(rawSeries)
+    ? rawSeries
+        .map(pt => ({
+          t: Number(pt?.t),
+          p: Number(pt?.p),
+        }))
+        .filter(pt => Number.isFinite(pt.t) && pt.t > 0 && Number.isFinite(pt.p))
+    : [];
+  const now = Math.floor(Date.now() / 1000);
+  const windowStart = now - CHART_HISTORY_HOURS * 3600;
+  const openedAt = m?.createdAt ? Math.floor(new Date(m.createdAt).getTime() / 1000) : null;
+  const openingPct = openingPctForMarket(m);
+  const points = [...series];
+
+  if (Number.isFinite(openedAt) && openedAt >= windowStart) {
+    const firstT = Number(points[0]?.t);
+    if (!Number.isFinite(firstT) || firstT > openedAt) {
+      points.unshift({ t: openedAt, p: openingPct });
+    }
+  }
+
+  const last = points[points.length - 1];
+  if (!last || (now > last.t && Math.abs(Number(last.p) - targetPct) >= 0.25)) {
+    points.push({ t: now, p: targetPct });
+  }
+
+  return points;
 }
 
 function outcomeEntriesForMarket(m, limit = 4) {
@@ -565,9 +703,14 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
 
   const priceHistoryRequest = useMemo(() => priceHistoryRequestForMarkets(slides), [slides]);
   const priceHistoryGroups = priceHistoryRequest.groups;
+  const cryptoHistoryMarkets = useMemo(
+    () => slides.filter(m => m?.crypto5min && cryptoConfigForMarket(m)),
+    [slides],
+  );
   const idsKey = priceHistoryGroups
     .map(group => `${group.outcome}:${group.ids.map(marketIdKey).join('|')}`)
     .join(';');
+  const cryptoIdsKey = cryptoHistoryMarkets.map(m => marketIdKey(m.id)).join('|');
 
   // Clamp the cursor when the ranking shrinks under it (markets resolve,
   // search narrows the list) so we never park on a removed slide.
@@ -579,22 +722,34 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
   // its own errors and resolves to {}, so a cold snapshot table degrades
   // to the Sparkline's flat state instead of taking down home.
   useEffect(() => {
-    if (priceHistoryGroups.length === 0) {
+    if (priceHistoryGroups.length === 0 && cryptoHistoryMarkets.length === 0) {
       setHistory({});
       return undefined;
     }
     let cancelled = false;
-    Promise.all(
-      priceHistoryGroups.map(group =>
-        fetchPriceHistory(group.ids, { days: 30, outcome: group.outcome, limit: 120 })
-          .then(history => ({ group, history: history || {} })),
+    Promise.all([
+      Promise.all(
+        priceHistoryGroups.map(group =>
+          fetchPriceHistory(group.ids, { hours: CHART_HISTORY_HOURS, outcome: group.outcome, limit: CHART_HISTORY_LIMIT })
+            .then(history => ({ group, history: history || {} })),
+        ),
       ),
-    ).then(results => {
-      if (!cancelled) setHistory(remapHistoryByParent(results, priceHistoryRequest));
+      Promise.all(
+        cryptoHistoryMarkets.map(m =>
+          fetchCryptoHistory(m.id).then(payload => ({
+            market: m,
+            points: Array.isArray(payload?.points) ? payload.points : [],
+          })),
+        ),
+      ),
+    ]).then(([priceResults, cryptoResults]) => {
+      if (cancelled) return;
+      const priceHistory = remapHistoryByParent(priceResults, priceHistoryRequest);
+      setHistory(mergeCryptoHistoryByParent(priceHistory, cryptoResults));
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idsKey, priceHistoryRequest]);
+  }, [idsKey, cryptoIdsKey, priceHistoryRequest, cryptoHistoryMarkets]);
 
   const active = slides[index] || null;
 
@@ -908,7 +1063,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                           color: mDeltaColor,
                           fontVariantNumeric: 'tabular-nums',
                         }}>
-                          {mDelta >= 0 ? '▲' : '▼'} {Math.abs(mDelta).toFixed(1)} pp · 30d
+                          {mDelta >= 0 ? '▲' : '▼'} {Math.abs(mDelta).toFixed(1)} pp · 24h
                         </span>
                       )}
                     </div>
@@ -918,14 +1073,12 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                         height={isMobile ? 138 : 164}
                         strokeWidth={2}
                         showActivity
-                        xMode="movement"
+                        jumpShape="soft-step"
                         series={mChartEntries.map(entry => ({
                           key: `opt-${entry.index}`,
                           label: entry.label,
                           color: OUTCOME_COLORS[entry.index % OUTCOME_COLORS.length],
-                          data: Array.isArray(mOutcomeSeries?.[entry.index])
-                            ? mOutcomeSeries[entry.index]
-                            : [],
+                          data: chartSeriesForOutcome(m, entry, mOutcomeSeries?.[entry.index]),
                           targetPct: Math.round((entry.price || 0) * 100),
                         }))}
                         activity={[m._buckets || []]}
@@ -954,8 +1107,8 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                         // would only collide with the end dot here.
                         showYAxis={false}
                         fitDomain
-                        xMode="movement"
-                        data={mSeries}
+                        jumpShape="soft-step"
+                        data={chartSeriesForOutcome(m, mChartEntries[0] || mOutcomeEntries[0], mSeries)}
                         targetPct={mLeadPct}
                         emptyLabel={t('points.activity.noHistory')}
                         emptySubLabel={t('points.activity.noHistorySub')}
