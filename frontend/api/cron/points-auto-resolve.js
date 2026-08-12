@@ -33,6 +33,7 @@ import {
   catchUpExpiredActiveCryptoMarkets,
   catchUpMissedPendingCryptoMarkets,
   formatDirectionFinalScore,
+  readGeneratedCryptoHiddenFromHome,
   resolveDirectionOutcome,
 } from '../_lib/crypto-5min.js';
 import { readCoinbaseBoundaryPrice } from '../_lib/crypto-price-source.js';
@@ -980,8 +981,10 @@ export async function runAutoResolve({ dry = false } = {}) {
     }
 
     try {
+      const generatedHiddenFromHome = dry ? false : await readGeneratedCryptoHiddenFromHome(schemaSql);
       const cryptoActivationCatchup = await catchUpCurrentPendingCryptoMarkets(schemaSql, {
         dry,
+        hiddenFromHome: generatedHiddenFromHome,
       });
       report.cryptoActivationCatchup = cryptoActivationCatchup;
       report.checked += cryptoActivationCatchup.checked;

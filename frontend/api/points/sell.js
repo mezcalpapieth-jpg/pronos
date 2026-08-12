@@ -23,8 +23,10 @@ import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { withTransaction } from '../_lib/db-tx.js';
 import { bestEffortInsertPointsPriceSnapshot } from '../_lib/points-price-snapshots.js';
 import {
+  combineSellOrderbookMatches,
   executeTriggeredLimitOrders,
   lockedReservedShares,
+  matchPronosMakerBidsForSell,
   matchRestingBidsForSell,
 } from '../_lib/points-limit-orders.js';
 import { assertCryptoTradeAllowed } from '../_lib/points-crypto-trade-guard.js';
@@ -75,7 +77,7 @@ export default async function handler(req, res) {
 
     const result = await withTransaction(async (client) => {
       const marketResult = await client.query(
-        `SELECT id, status, reserves, end_time, resolver_config
+        `SELECT id, status, reserves, end_time, resolver_config, seed_liquidity, seed_liquidities
          FROM points_markets
          WHERE id = $1
          FOR UPDATE`,
@@ -120,13 +122,23 @@ export default async function handler(req, res) {
         reservedShares,
       });
 
-      const orderbookMatch = await matchRestingBidsForSell(client, {
+      const realOrderbookMatch = await matchRestingBidsForSell(client, {
         market: m,
         marketId: mid,
         username,
         outcomeIndex: oi,
         sharesToSell,
       });
+      const makerOrderbookMatch = realOrderbookMatch.remainingShares > 0.000001
+        ? await matchPronosMakerBidsForSell(client, {
+          market: m,
+          marketId: mid,
+          username,
+          outcomeIndex: oi,
+          sharesToSell: realOrderbookMatch.remainingShares,
+        })
+        : null;
+      const orderbookMatch = combineSellOrderbookMatches(realOrderbookMatch, makerOrderbookMatch);
       const ammShares = orderbookMatch.remainingShares > 0.000001
         ? orderbookMatch.remainingShares
         : 0;

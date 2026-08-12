@@ -160,16 +160,10 @@ const CATEGORY_SLUG_ALIASES = {
   'world-cup': 'nuevos-mercados',
 };
 
-const CATEGORY_TAXONOMY_ALIASES = {
-  'nuevos-mercados': 'world-cup',
-};
+const TOURNAMENT_SHELF_SLUGS = new Set(['nuevos-mercados']);
 
 function canonicalCategorySlug(value) {
   return CATEGORY_SLUG_ALIASES[value] || value;
-}
-
-function taxonomyCategoryForSlug(value) {
-  return CATEGORY_TAXONOMY_ALIASES[value] || value;
 }
 
 const GEO_FILTER_EXCLUDED_CATEGORIES = new Set(['all', 'crypto', 'world-cup', 'nuevos-mercados', 'porresolver', 'resueltos', 'noticias']);
@@ -182,7 +176,8 @@ export default function PointsCategoryPage() {
   const t = useT();
   const { authenticated } = usePointsAuth();
   const slug = canonicalCategorySlug(routeSlug);
-  const categoryFilter = taxonomyCategoryForSlug(slug);
+  const categoryFilter = slug;
+  const isTournamentShelf = TOURNAMENT_SHELF_SLUGS.has(slug);
   // Drives layout collapses for the league sidebar + page padding on
   // phones. The sport sub-filter row is already overflow-scrollable
   // via existing inline styles, so it doesn't need this hook.
@@ -232,7 +227,7 @@ export default function PointsCategoryPage() {
         const m = await fetchMarkets({
           status: fetchStatus,
           limit: 2000,
-          featured: 'all',
+          featured: isTournamentShelf ? 'tournament' : 'all',
         });
         if (cancelled) return;
         setMarkets(m);
@@ -262,7 +257,7 @@ export default function PointsCategoryPage() {
     }
     load();
     return () => { cancelled = true; };
-  }, [fetchStatus, authenticated]);
+  }, [fetchStatus, isTournamentShelf, authenticated]);
 
   const filtered = useMemo(() => {
     const q = searchQuery.toLowerCase();
@@ -283,6 +278,11 @@ export default function PointsCategoryPage() {
       if (resueltosCat !== 'all') {
         out = out.filter(m => marketInCategory(m, resueltosCat));
       }
+    } else if (isTournamentShelf) {
+      // Nuevos mercados is a curated shelf keyed by the admin trophy
+      // flag. Markets keep their real taxonomy category.
+      out = out.filter(m => !isPending(m));
+      out = out.filter(m => m.tournamentFeatured === true);
     } else {
       // Regular category: hide pending from the main grid.
       out = out.filter(m => !isPending(m));
@@ -323,7 +323,7 @@ export default function PointsCategoryPage() {
     }
 
     return prioritizeFeaturedMarkets(out, featuredTeamKeys);
-  }, [markets, slug, categoryFilter, sport, league, resueltosCat, cryptoType, geo, topic, supportsGeoFilters, supportsTopicFilters, searchQuery, featuredTeamKeys]);
+  }, [markets, slug, categoryFilter, isTournamentShelf, sport, league, resueltosCat, cryptoType, geo, topic, supportsGeoFilters, supportsTopicFilters, searchQuery, featuredTeamKeys]);
 
   function setSport(next) {
     const params = new URLSearchParams(searchParams);

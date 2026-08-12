@@ -6,6 +6,7 @@ import {
   multiPrices,
   multiSellQuote,
 } from './amm-math.js';
+import { buildMockMakerDepth, AMM_DEPTH_LEVELS } from './amm-depth.js';
 import { bestEffortInsertPointsPriceSnapshot } from './points-price-snapshots.js';
 import { assertCryptoTradeAllowed, cryptoTradeLock } from './points-crypto-trade-guard.js';
 import {
@@ -17,6 +18,8 @@ import {
 const EPSILON = 0.000001;
 const MAX_TRIGGERED_PER_PASS = 24;
 const SECONDS_PER_YEAR = 365 * 24 * 60 * 60;
+
+export const PRONOS_TREASURY_USERNAME = process.env.POINTS_TREASURY_USERNAME || 'pronos_treasury';
 
 function configNumber(name, fallback) {
   const value = Number(process.env[name]);
@@ -556,6 +559,168 @@ function orderbookAverage(collateral, shares) {
   return s > EPSILON ? round(c / s, 6) : 0;
 }
 
+function serializeOrderId(id, fallback = null) {
+  const n = Number(id);
+  if (Number.isFinite(n)) return n;
+  if (id !== undefined && id !== null && String(id)) return String(id);
+  return fallback;
+}
+
+function sortedMakerAsks(depth) {
+  return [...(depth?.asks || [])].sort((a, b) => Number(a.price || 0) - Number(b.price || 0));
+}
+
+function sortedMakerBids(depth) {
+  return [...(depth?.bids || [])].sort((a, b) => Number(b.price || 0) - Number(a.price || 0));
+}
+
+function subtractCollateralFromDepth(rows, usedCollateral) {
+  let remainingUsed = Math.max(0, Number(usedCollateral || 0));
+  const available = [];
+
+  for (const row of rows) {
+    const price = normalizeTakerPrice(row.price, null);
+    const total = Math.max(0, Number(row.total || 0));
+    if (!price || total <= EPSILON) continue;
+
+    const consumed = Math.min(total, remainingUsed);
+    remainingUsed = round(Math.max(0, remainingUsed - consumed), 6);
+    const remainingTotal = round(Math.max(0, total - consumed), 6);
+    if (remainingTotal <= EPSILON) continue;
+
+    available.push({
+      ...row,
+      price,
+      total: remainingTotal,
+      shares: round(remainingTotal / price, 6),
+      source: 'maker',
+    });
+  }
+
+  return available;
+}
+
+export function makerUsageFromRows(rows = []) {
+  const usage = { askCollateralUsed: 0, bidCollateralUsed: 0 };
+  for (const row of rows || []) {
+    const collateral = Math.max(0, Number(row.collateral || row.total || 0));
+    if (!Number.isFinite(collateral) || collateral <= EPSILON) continue;
+    if (row.side === 'sell') usage.askCollateralUsed = round(usage.askCollateralUsed + collateral, 6);
+    if (row.side === 'buy') usage.bidCollateralUsed = round(usage.bidCollateralUsed + collateral, 6);
+  }
+  return usage;
+}
+
+export async function readPronosMakerUsage(client, { marketId, outcomeIndex } = {}) {
+  const result = await client.query(
+    `SELECT side, COALESCE(SUM(collateral), 0)::text AS collateral
+       FROM points_trades
+      WHERE market_id = $1
+        AND outcome_index = $2
+        AND username = $3
+        AND side IN ('buy', 'sell')
+      GROUP BY side`,
+    [marketId, outcomeIndex, PRONOS_TREASURY_USERNAME],
+  );
+  return makerUsageFromRows(result.rows);
+}
+
+export function pronosMakerDepthForMarket(market, {
+  outcomeIndex = 0,
+  levels = AMM_DEPTH_LEVELS,
+  usage = {},
+} = {}) {
+  const reserves = reservesForMarket(market, Number(outcomeIndex));
+  const seedLiquidities = parseJsonb(market?.seed_liquidities, null);
+  const depth = buildMockMakerDepth({
+    reserves,
+    outcomeIndex: Number(outcomeIndex),
+    levels,
+    seedLiquidity: Number(market?.seed_liquidity || 0),
+    seedLiquidities,
+  });
+
+  const asks = subtractCollateralFromDepth(
+    sortedMakerAsks(depth),
+    usage.askCollateralUsed,
+  ).sort((a, b) => Number(b.price || 0) - Number(a.price || 0));
+  const bids = subtractCollateralFromDepth(
+    sortedMakerBids(depth),
+    usage.bidCollateralUsed,
+  ).sort((a, b) => Number(b.price || 0) - Number(a.price || 0));
+  const bestAsk = asks.reduce((best, row) => (
+    best == null || row.price < best ? row.price : best
+  ), null);
+  const bestBid = bids.reduce((best, row) => (
+    best == null || row.price > best ? row.price : best
+  ), null);
+
+  return {
+    ...depth,
+    asks,
+    bids,
+    spread: bestAsk == null || bestBid == null ? null : round(Math.max(0, bestAsk - bestBid), 6),
+  };
+}
+
+function makerAskRows(depth, limit = MAX_TRIGGERED_PER_PASS) {
+  return sortedMakerAsks(depth).slice(0, limit).map((row, index) => ({
+    id: `maker-ask-${index + 1}`,
+    username: PRONOS_TREASURY_USERNAME,
+    limit_price: row.price,
+    remaining_amount: row.shares,
+    maker_total: row.total,
+    source: 'maker',
+  }));
+}
+
+function makerBidRows(depth, limit = MAX_TRIGGERED_PER_PASS) {
+  return sortedMakerBids(depth).slice(0, limit).map((row, index) => ({
+    id: `maker-bid-${index + 1}`,
+    username: PRONOS_TREASURY_USERNAME,
+    limit_price: row.price,
+    remaining_amount: row.total,
+    maker_shares: row.shares,
+    source: 'maker',
+  }));
+}
+
+export function combineBuyOrderbookMatches(...matches) {
+  const clean = matches.filter(Boolean);
+  const fills = clean.flatMap(match => match.fills || []);
+  const sharesOut = round(clean.reduce((sum, match) => sum + Number(match.sharesOut || 0), 0), 6);
+  const collateralSpent = round(clean.reduce((sum, match) => sum + Number(match.collateralSpent || 0), 0), 6);
+  const remainingCollateral = clean.length > 0
+    ? Number(clean[clean.length - 1].remainingCollateral || 0)
+    : 0;
+  return {
+    fills,
+    sharesOut,
+    collateralSpent,
+    remainingCollateral: round(remainingCollateral, 6),
+    avgPrice: orderbookAverage(collateralSpent, sharesOut),
+  };
+}
+
+export function combineSellOrderbookMatches(...matches) {
+  const clean = matches.filter(Boolean);
+  const fills = clean.flatMap(match => match.fills || []);
+  const sharesSold = round(clean.reduce((sum, match) => sum + Number(match.sharesSold || 0), 0), 6);
+  const collateralOut = round(clean.reduce((sum, match) => sum + Number(match.collateralOut || 0), 0), 6);
+  const realizedPnl = round(clean.reduce((sum, match) => sum + Number(match.realizedPnl || 0), 0), 6);
+  const remainingShares = clean.length > 0
+    ? Number(clean[clean.length - 1].remainingShares || 0)
+    : 0;
+  return {
+    fills,
+    sharesSold,
+    collateralOut,
+    realizedPnl,
+    remainingShares: round(remainingShares, 6),
+    avgPrice: orderbookAverage(collateralOut, sharesSold),
+  };
+}
+
 export function previewRestingAsksForBuy(rows = [], {
   collateral,
   maxPrice = null,
@@ -578,9 +743,10 @@ export function previewRestingAsksForBuy(rows = [], {
     if (fillShares <= EPSILON || fillCollateral <= EPSILON) continue;
 
     fills.push({
-      orderId: Number(row.id),
+      orderId: serializeOrderId(row.id),
       maker: row.username,
       side: 'sell',
+      source: row.source || 'limit',
       price,
       shares: fillShares,
       collateral: fillCollateral,
@@ -621,9 +787,10 @@ export function previewRestingBidsForSell(rows = [], {
     if (fillShares <= EPSILON || fillCollateral <= EPSILON) continue;
 
     fills.push({
-      orderId: Number(row.id),
+      orderId: serializeOrderId(row.id),
       maker: row.username,
       side: 'buy',
+      source: row.source || 'limit',
       price,
       shares: fillShares,
       collateral: fillCollateral,
@@ -640,6 +807,28 @@ export function previewRestingBidsForSell(rows = [], {
     remainingShares,
     avgPrice: orderbookAverage(collateralOut, sharesSold),
   };
+}
+
+export function previewPronosMakerAsksForBuy(market, {
+  outcomeIndex,
+  collateral,
+  usage = {},
+  levels = AMM_DEPTH_LEVELS,
+  maxPrice = null,
+} = {}) {
+  const depth = pronosMakerDepthForMarket(market, { outcomeIndex, levels, usage });
+  return previewRestingAsksForBuy(makerAskRows(depth), { collateral, maxPrice });
+}
+
+export function previewPronosMakerBidsForSell(market, {
+  outcomeIndex,
+  shares,
+  usage = {},
+  levels = AMM_DEPTH_LEVELS,
+  minPrice = null,
+} = {}) {
+  const depth = pronosMakerDepthForMarket(market, { outcomeIndex, levels, usage });
+  return previewRestingBidsForSell(makerBidRows(depth), { shares, minPrice });
 }
 
 async function updateLimitOrderFill(client, order, {
@@ -909,6 +1098,99 @@ export async function matchRestingAsksForBuy(client, {
   };
 }
 
+export async function matchPronosMakerAsksForBuy(client, {
+  market,
+  marketId,
+  username,
+  outcomeIndex,
+  collateralBudget,
+  maxPrice = null,
+  maxOrders = MAX_TRIGGERED_PER_PASS,
+} = {}) {
+  const budget = Math.max(0, Number(collateralBudget || 0));
+  if (budget <= EPSILON) {
+    return { fills: [], sharesOut: 0, collateralSpent: 0, remainingCollateral: budget, avgPrice: 0 };
+  }
+
+  const reserves = reservesForMarket(market, outcomeIndex);
+  const usage = await readPronosMakerUsage(client, { marketId, outcomeIndex });
+  const depth = pronosMakerDepthForMarket(market, { outcomeIndex, usage });
+  const rows = makerAskRows(depth, Math.max(1, Number.parseInt(maxOrders, 10) || MAX_TRIGGERED_PER_PASS));
+  const preview = previewRestingAsksForBuy(rows, { collateral: budget, maxPrice });
+  if (preview.sharesOut <= EPSILON || preview.collateralSpent <= EPSILON) {
+    return preview;
+  }
+
+  const fills = [];
+  let sharesOut = 0;
+  let collateralSpent = 0;
+  let remainingCollateral = budget;
+
+  for (const fill of preview.fills) {
+    if (remainingCollateral <= EPSILON) break;
+    const fillShares = round(Math.min(fill.shares, remainingCollateral / fill.price), 6);
+    const fillCollateral = round(fillShares * fill.price, 6);
+    if (fillShares <= EPSILON || fillCollateral <= EPSILON) continue;
+
+    await assertTournamentShareCap(client, {
+      marketId,
+      username,
+      additionalShares: fillShares,
+    });
+    await upsertBoughtPosition(client, {
+      marketId,
+      username,
+      outcomeIndex,
+      shares: fillShares,
+      costBasis: fillCollateral,
+    });
+
+    await insertTradeAndSnapshot(client, {
+      marketId,
+      username,
+      side: 'buy',
+      outcomeIndex,
+      shares: fillShares,
+      collateral: fillCollateral,
+      fee: 0,
+      priceAtTrade: fill.price,
+      reservesBefore: reserves,
+      reservesAfter: reserves,
+      snapshotLabel: null,
+    });
+    await insertTradeAndSnapshot(client, {
+      marketId,
+      username: PRONOS_TREASURY_USERNAME,
+      side: 'sell',
+      outcomeIndex,
+      shares: fillShares,
+      collateral: fillCollateral,
+      fee: 0,
+      priceAtTrade: fill.price,
+      reservesBefore: reserves,
+      reservesAfter: reserves,
+      snapshotLabel: null,
+    });
+
+    fills.push({
+      ...fill,
+      status: 'filled',
+      source: 'maker',
+    });
+    sharesOut = round(sharesOut + fillShares, 6);
+    collateralSpent = round(collateralSpent + fillCollateral, 6);
+    remainingCollateral = round(Math.max(0, remainingCollateral - fillCollateral), 6);
+  }
+
+  return {
+    fills,
+    sharesOut,
+    collateralSpent,
+    remainingCollateral,
+    avgPrice: orderbookAverage(collateralSpent, sharesOut),
+  };
+}
+
 export async function matchRestingBidsForSell(client, {
   market,
   marketId,
@@ -1045,6 +1327,102 @@ export async function matchRestingBidsForSell(client, {
     collateralOut,
     remainingShares,
     realizedPnl,
+    avgPrice: orderbookAverage(collateralOut, sharesSold),
+  };
+}
+
+export async function matchPronosMakerBidsForSell(client, {
+  market,
+  marketId,
+  username,
+  outcomeIndex,
+  sharesToSell,
+  minPrice = null,
+  maxOrders = MAX_TRIGGERED_PER_PASS,
+} = {}) {
+  const targetShares = Math.max(0, Number(sharesToSell || 0));
+  if (targetShares <= EPSILON) {
+    return { fills: [], sharesSold: 0, collateralOut: 0, remainingShares: targetShares, realizedPnl: 0, avgPrice: 0 };
+  }
+
+  const reserves = reservesForMarket(market, outcomeIndex);
+  const usage = await readPronosMakerUsage(client, { marketId, outcomeIndex });
+  const depth = pronosMakerDepthForMarket(market, { outcomeIndex, usage });
+  const rows = makerBidRows(depth, Math.max(1, Number.parseInt(maxOrders, 10) || MAX_TRIGGERED_PER_PASS));
+  const preview = previewRestingBidsForSell(rows, { shares: targetShares, minPrice });
+  if (preview.sharesSold <= EPSILON || preview.collateralOut <= EPSILON) {
+    return { ...preview, realizedPnl: 0 };
+  }
+
+  const fills = [];
+  let sharesSold = 0;
+  let collateralOut = 0;
+  let realizedPnl = 0;
+  let remainingShares = targetShares;
+
+  for (const fill of preview.fills) {
+    if (remainingShares <= EPSILON) break;
+    const fillShares = round(Math.min(fill.shares, remainingShares), 6);
+    const fillCollateral = round(fillShares * fill.price, 6);
+    if (fillShares <= EPSILON || fillCollateral <= EPSILON) continue;
+
+    const sellerPosition = await reduceSoldPosition(client, {
+      marketId,
+      username,
+      outcomeIndex,
+      shares: fillShares,
+      collateralOut: fillCollateral,
+    });
+    if (!sellerPosition) {
+      const err = new Error('insufficient_available_shares');
+      err.status = 400;
+      throw err;
+    }
+
+    await insertTradeAndSnapshot(client, {
+      marketId,
+      username,
+      side: 'sell',
+      outcomeIndex,
+      shares: fillShares,
+      collateral: fillCollateral,
+      fee: 0,
+      priceAtTrade: fill.price,
+      reservesBefore: reserves,
+      reservesAfter: reserves,
+      snapshotLabel: null,
+    });
+    await insertTradeAndSnapshot(client, {
+      marketId,
+      username: PRONOS_TREASURY_USERNAME,
+      side: 'buy',
+      outcomeIndex,
+      shares: fillShares,
+      collateral: fillCollateral,
+      fee: 0,
+      priceAtTrade: fill.price,
+      reservesBefore: reserves,
+      reservesAfter: reserves,
+      snapshotLabel: null,
+    });
+
+    fills.push({
+      ...fill,
+      status: 'filled',
+      source: 'maker',
+    });
+    sharesSold = round(sharesSold + fillShares, 6);
+    collateralOut = round(collateralOut + fillCollateral, 6);
+    realizedPnl = round(realizedPnl + sellerPosition.addedRealized, 6);
+    remainingShares = round(Math.max(0, remainingShares - fillShares), 6);
+  }
+
+  return {
+    fills,
+    sharesSold,
+    collateralOut,
+    realizedPnl,
+    remainingShares,
     avgPrice: orderbookAverage(collateralOut, sharesSold),
   };
 }

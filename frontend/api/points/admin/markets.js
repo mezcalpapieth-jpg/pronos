@@ -11,6 +11,7 @@ import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { normalizeSeriesMeta, seriesSubtitle } from '../../_lib/series-markets.js';
 import { deriveMarketTags, matchesMarketTaxonomy } from '../../_lib/category-tags.js';
 import { formatPointsResolutionCandidate } from '../../_lib/points-resolution-candidates.js';
+import { PRONOS_TREASURY_USERNAME } from '../../_lib/points-limit-orders.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -106,7 +107,7 @@ export default async function handler(req, res) {
     if (filter === 'archived') {
       rows = await sql`
         SELECT m.*, pm.source_data AS pending_source_data,
-          (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id) AS trade_count
+          (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_count
         FROM points_markets m
         LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
         WHERE m.parent_id IS NULL
@@ -127,7 +128,7 @@ export default async function handler(req, res) {
     } else if (filter === 'all') {
       rows = await sql`
         SELECT m.*, pm.source_data AS pending_source_data,
-          (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id) AS trade_count
+          (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_count
         FROM points_markets m
         LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
         WHERE m.parent_id IS NULL
@@ -148,7 +149,7 @@ export default async function handler(req, res) {
     } else if (filter === 'pending') {
       rows = await sql`
         SELECT m.*, pm.source_data AS pending_source_data,
-          (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id) AS trade_count
+          (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_count
         FROM points_markets m
         LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
         WHERE m.status = 'active'
@@ -172,7 +173,7 @@ export default async function handler(req, res) {
     } else {
       rows = await sql`
         SELECT m.*, pm.source_data AS pending_source_data,
-          (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id) AS trade_count
+          (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_count
         FROM points_markets m
         LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
         WHERE m.status = ${filter} AND m.parent_id IS NULL

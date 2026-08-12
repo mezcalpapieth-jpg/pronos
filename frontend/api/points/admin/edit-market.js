@@ -25,6 +25,7 @@ import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { deriveMarketTags } from '../../_lib/category-tags.js';
+import { syncMananeraPhraseFromQuestion } from '../../_lib/mananera-market-sync.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -89,10 +90,6 @@ export default async function handler(req, res) {
       nextCategory = category;
     }
 
-    if (nextQuestion === null && nextStartTime === null && nextEndTime === null && nextCategory === null) {
-      return res.status(400).json({ error: 'nothing_to_update' });
-    }
-
     await ensurePointsSchema(sql);
 
     const existingRows = await sql`
@@ -106,6 +103,21 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'market_not_found' });
     }
     const existing = existingRows[0];
+    const syncedMananera = syncMananeraPhraseFromQuestion({
+      question: nextQuestion ?? existing.question,
+      resolverConfig: parseJsonb(existing.resolver_config, null),
+    });
+    const nextResolverConfig = syncedMananera.resolverConfig || null;
+    const resolverConfigChanged = syncedMananera.changed === true;
+    if (
+      nextQuestion === null
+      && nextStartTime === null
+      && nextEndTime === null
+      && nextCategory === null
+      && !resolverConfigChanged
+    ) {
+      return res.status(400).json({ error: 'nothing_to_update' });
+    }
     const effectiveStart = nextStartTime !== null
       ? new Date(nextStartTime)
       : (existing.start_time ? new Date(existing.start_time) : null);
@@ -122,10 +134,11 @@ export default async function handler(req, res) {
     // Apply to the target row. For parallel parents we also cascade
     // start/end time + category to every leg so admin changes ripple
     // through the whole group atomically.
-    if (nextQuestion !== null) {
+    if (nextQuestion !== null || resolverConfigChanged) {
       await sql`
         UPDATE points_markets
-        SET question = ${nextQuestion}
+        SET question = ${nextQuestion ?? existing.question},
+            resolver_config = ${nextResolverConfig ? JSON.stringify(nextResolverConfig) : null}::jsonb
         WHERE id = ${mid}
       `;
     }
@@ -155,7 +168,7 @@ export default async function handler(req, res) {
         ...existing,
         question: nextQuestion ?? existing.question,
         category: nextCategory ?? existing.category,
-        resolver_config: parseJsonb(existing.resolver_config, {}),
+        resolver_config: nextResolverConfig || {},
         category_tags: [],
         geo_tags: [],
         topic_tags: [],

@@ -7,7 +7,8 @@
  *     expectedCount?: number,
  *   }
  *
- * Removes active markets from public list surfaces without archiving them.
+ * Removes active and direct-generated pending markets from public list
+ * surfaces without archiving them.
  * Home, search, and category pages hide regular rows; direct links, trading,
  * history, and resolution keep working. The 🏆 tournament override still
  * shows after this pass. `show` restores public list visibility by clearing
@@ -48,7 +49,7 @@ export default async function handler(req, res) {
     await ensurePointsSchema(schemaSql);
 
     const whereClause = `
-      status = 'active'
+      status IN ('active', 'pending')
       AND parent_id IS NULL
       AND archived_at IS NULL
       AND COALESCE(mode, 'points') = $1

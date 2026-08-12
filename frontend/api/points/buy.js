@@ -21,7 +21,12 @@ import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { withTransaction } from '../_lib/db-tx.js';
 import { seriesTradeLockFromRows } from '../_lib/series-markets.js';
 import { bestEffortInsertPointsPriceSnapshot } from '../_lib/points-price-snapshots.js';
-import { executeTriggeredLimitOrders, matchRestingAsksForBuy } from '../_lib/points-limit-orders.js';
+import {
+  combineBuyOrderbookMatches,
+  executeTriggeredLimitOrders,
+  matchPronosMakerAsksForBuy,
+  matchRestingAsksForBuy,
+} from '../_lib/points-limit-orders.js';
 import { assertCryptoTradeAllowed } from '../_lib/points-crypto-trade-guard.js';
 import {
   TOURNAMENT_MAX_SHARES_PER_MARKET,
@@ -134,7 +139,8 @@ export default async function handler(req, res) {
       // order across buy/sell prevents deadlocks.
       const marketResult = await client.query(
         `SELECT id, question, status, reserves, outcomes, start_time, end_time,
-                created_at, resolver_type, resolver_config, sport, league
+                created_at, resolver_type, resolver_config, sport, league,
+                seed_liquidity, seed_liquidities
          FROM points_markets
          WHERE id = $1
          FOR UPDATE`,
@@ -182,13 +188,23 @@ export default async function handler(req, res) {
         const err = new Error('insufficient_balance'); err.status = 400; throw err;
       }
 
-      const orderbookMatch = await matchRestingAsksForBuy(client, {
+      const realOrderbookMatch = await matchRestingAsksForBuy(client, {
         market: m,
         marketId: mid,
         username,
         outcomeIndex: oi,
         collateralBudget: amt,
       });
+      const makerOrderbookMatch = realOrderbookMatch.remainingCollateral > 0.000001
+        ? await matchPronosMakerAsksForBuy(client, {
+          market: m,
+          marketId: mid,
+          username,
+          outcomeIndex: oi,
+          collateralBudget: realOrderbookMatch.remainingCollateral,
+        })
+        : null;
+      const orderbookMatch = combineBuyOrderbookMatches(realOrderbookMatch, makerOrderbookMatch);
       const ammCollateral = orderbookMatch.remainingCollateral > 0.000001
         ? orderbookMatch.remainingCollateral
         : 0;

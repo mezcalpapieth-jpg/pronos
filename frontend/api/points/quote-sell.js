@@ -11,7 +11,13 @@ import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { binaryPrices, binarySellQuote, multiPrices, multiSellQuote } from '../_lib/amm-math.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { cryptoTradeLock } from '../_lib/points-crypto-trade-guard.js';
-import { previewRestingBidsForSell } from '../_lib/points-limit-orders.js';
+import {
+  combineSellOrderbookMatches,
+  makerUsageFromRows,
+  previewPronosMakerBidsForSell,
+  previewRestingBidsForSell,
+  PRONOS_TREASURY_USERNAME,
+} from '../_lib/points-limit-orders.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -45,7 +51,12 @@ export default async function handler(req, res) {
 
   try {
     await ensurePointsSchema(schemaSql);
-    const rows = await sql`SELECT status, reserves, end_time, resolver_config FROM points_markets WHERE id = ${mid} LIMIT 1`;
+    const rows = await sql`
+      SELECT status, reserves, end_time, resolver_config, seed_liquidity, seed_liquidities
+      FROM points_markets
+      WHERE id = ${mid}
+      LIMIT 1
+    `;
     if (rows.length === 0) return res.status(404).json({ error: 'market_not_found' });
     const r = rows[0];
     if (r.status !== 'active') return res.status(400).json({ error: 'market_closed' });
@@ -75,7 +86,24 @@ export default async function handler(req, res) {
        ORDER BY limit_price DESC, created_at ASC, id ASC
        LIMIT 24
     `;
-    const orderbook = previewRestingBidsForSell(bidRows, { shares: n });
+    const realOrderbook = previewRestingBidsForSell(bidRows, { shares: n });
+    const usageRows = await sql`
+      SELECT side, COALESCE(SUM(collateral), 0)::text AS collateral
+        FROM points_trades
+       WHERE market_id = ${mid}
+         AND outcome_index = ${oi}
+         AND username = ${PRONOS_TREASURY_USERNAME}
+         AND side IN ('buy', 'sell')
+       GROUP BY side
+    `;
+    const makerOrderbook = realOrderbook.remainingShares > 0.000001
+      ? previewPronosMakerBidsForSell(r, {
+        outcomeIndex: oi,
+        shares: realOrderbook.remainingShares,
+        usage: makerUsageFromRows(usageRows),
+      })
+      : null;
+    const orderbook = combineSellOrderbookMatches(realOrderbook, makerOrderbook);
     const ammShares = orderbook.remainingShares > 0.000001
       ? orderbook.remainingShares
       : 0;

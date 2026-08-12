@@ -232,6 +232,7 @@ test('catchUpCurrentPendingCryptoMarkets activates a current pending crypto wind
   const report = await catchUpCurrentPendingCryptoMarkets(sql, {
     now: '2026-08-07T12:07:20.000Z',
     intervalMinutes: 5,
+    enabledAssets: ['btc'],
     readBoundaryPrice: async ({ productId, timestamp }) => {
       assert.equal(productId, 'BTC-USD');
       assert.equal(new Date(timestamp).toISOString(), '2026-08-07T12:05:00.000Z');
@@ -249,6 +250,87 @@ test('catchUpCurrentPendingCryptoMarkets activates a current pending crypto wind
   assert.equal(report.activated[0].threshold, 101);
   assert.equal(report.activated[0].windowStart, '2026-08-07T12:05:00.000Z');
   assert.equal(queries.filter(q => /UPDATE points_markets/.test(q.text)).length, 1);
+});
+
+test('catchUpCurrentPendingCryptoMarkets creates the current 12-hour BTC window if it was not pre-created', async () => {
+  const queries = [];
+  const sql = (strings, ...values) => {
+    const text = strings.join('?');
+    queries.push({ text, values });
+    if (/SELECT id, source_event_id/.test(text)) {
+      return Promise.resolve([]);
+    }
+    if (/SELECT id, status/.test(text)) {
+      return Promise.resolve([]);
+    }
+    if (/INSERT INTO points_markets/.test(text)) {
+      return Promise.resolve([{ id: 99 }]);
+    }
+    throw new Error(`unexpected query ${text}`);
+  };
+
+  const report = await catchUpCurrentPendingCryptoMarkets(sql, {
+    now: '2026-08-07T18:13:42.000Z',
+    intervalMinutes: 720,
+    enabledAssets: ['btc'],
+    hiddenFromHome: true,
+    readBoundaryPrice: async ({ productId, timestamp }) => {
+      assert.equal(productId, 'BTC-USD');
+      assert.equal(new Date(timestamp).toISOString(), '2026-08-07T15:00:00.000Z');
+      return {
+        price: 116_234.49,
+        source: 'coinbase-candle',
+        capturedAt: '2026-08-07T15:00:06.000Z',
+      };
+    },
+  });
+
+  assert.equal(report.errors.length, 0);
+  assert.equal(report.activated.length, 1);
+  assert.deepEqual(report.activated[0], {
+    id: 99,
+    asset: 'btc',
+    sourceEventId: 'btc:2026-08-07T15:00:00.000Z:720m',
+    windowStart: '2026-08-07T15:00:00.000Z',
+    windowEnd: '2026-08-08T03:00:00.000Z',
+    threshold: 116234,
+    openPrice: 116_234.49,
+    openPriceAt: '2026-08-07T15:00:06.000Z',
+    created: true,
+  });
+  const insert = queries.find(q => /INSERT INTO points_markets/.test(q.text));
+  assert.match(insert.text, /featured, auto_featured, hidden_from_home/);
+  assert.match(insert.text, /\?, false, \?/);
+  assert.equal(insert.values.at(-2), false);
+  assert.equal(insert.values.at(-1), true);
+});
+
+test('catchUpCurrentPendingCryptoMarkets skips creation when the current crypto row already exists', async () => {
+  const queries = [];
+  const sql = (strings, ...values) => {
+    const text = strings.join('?');
+    queries.push({ text, values });
+    if (/SELECT id, source_event_id/.test(text)) {
+      return Promise.resolve([]);
+    }
+    if (/SELECT id, status/.test(text)) {
+      return Promise.resolve([{ id: 12, status: 'active' }]);
+    }
+    throw new Error(`unexpected query ${text}`);
+  };
+
+  const report = await catchUpCurrentPendingCryptoMarkets(sql, {
+    now: '2026-08-07T18:13:42.000Z',
+    intervalMinutes: 720,
+    enabledAssets: ['btc'],
+    readBoundaryPrice: async () => {
+      throw new Error('price should not be read for an existing current row');
+    },
+  });
+
+  assert.equal(report.errors.length, 0);
+  assert.equal(report.activated.length, 0);
+  assert.equal(queries.some(q => /INSERT INTO points_markets/.test(q.text)), false);
 });
 
 test('catchUpExpiredActiveCryptoMarkets resolves active crypto windows after a missed boundary tick', async () => {

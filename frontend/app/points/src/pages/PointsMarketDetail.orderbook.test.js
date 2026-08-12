@@ -31,15 +31,20 @@ test('points market detail renders hybrid limit-order book depth', () => {
   assert.match(detailSource, /requestIdleCallback/);
 });
 
-test('points market detail places orderbook in the left flow before outcome controls', () => {
+test('points market detail places mobile trade controls before orderbook', () => {
+  const tradePanelIndex = detailSource.indexOf('const tradePanel = (');
+  const mobileTradeIndex = detailSource.indexOf('{isMobile && tradePanel}');
   const orderBookIndex = detailSource.indexOf('<OrderBookPanel');
   const seriesStripIndex = detailSource.indexOf('<SeriesGameStrip');
   const asideIndex = detailSource.indexOf('<aside style');
-  const gaugeIndex = detailSource.indexOf('<ProbabilityGaugeRow');
+  const desktopTradeIndex = detailSource.indexOf('{!isMobile && tradePanel}');
+  assert.ok(tradePanelIndex > 0, 'expected shared trade panel render block');
+  assert.ok(mobileTradeIndex > tradePanelIndex, 'expected mobile trade panel placement');
   assert.ok(orderBookIndex > 0, 'expected OrderBookPanel render call');
-  assert.ok(orderBookIndex < seriesStripIndex, 'orderbook should sit right after the chart, before series navigation');
-  assert.ok(orderBookIndex < gaugeIndex, 'orderbook should sit before the outcome question controls');
-  assert.ok(orderBookIndex < asideIndex, 'orderbook should no longer live in the right rail');
+  assert.ok(mobileTradeIndex < orderBookIndex, 'mobile trade controls should sit between the chart and orderbook');
+  assert.ok(orderBookIndex < seriesStripIndex, 'orderbook should stay after mobile trade controls and before series navigation');
+  assert.ok(orderBookIndex < asideIndex, 'orderbook should remain in the left/mobile flow');
+  assert.ok(desktopTradeIndex > asideIndex, 'desktop trade controls should stay in the right rail');
 });
 
 test('points API client exposes orderbook and limit-order endpoints', () => {

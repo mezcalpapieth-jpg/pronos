@@ -15,13 +15,15 @@ test('points trade activity is anonymous, bucketed, and bounded', () => {
   assert.match(source, /side IN \('buy', 'sell'\)/);
   assert.match(source, /GROUP BY market_id, bucket_at/);
   assert.match(source, /COUNT\(\*\)::int AS count/);
-  assert.match(source, /SUM\(collateral\)/);
+  assert.match(source, /SUM\(ABS\(collateral\)\)/);
+  assert.match(source, /PRONOS_TREASURY_USERNAME/);
+  assert.match(source, /username <> \$\{PRONOS_TREASURY_USERNAME\}/);
   assert.match(source, /slice\(0, 200\)/);
   assert.match(source, /windowHours/);
   assert.match(source, /\|\| ' hours'/);
   assert.match(source, /max: 60/);
   assert.match(source, /max: 120/);
-  assert.doesNotMatch(source, /username/);
+  assert.doesNotMatch(source, /SELECT\s+username/);
 });
 
 test('trade activity query has a market/outcome/time index', () => {

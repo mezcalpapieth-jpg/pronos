@@ -13,8 +13,8 @@ test('matches public category membership through primary category or category ta
   assert.equal(marketInCategory({ category: 'crypto', categoryTags: ['crypto'] }, 'mexico'), false);
 });
 
-test('new markets public slug matches legacy world-cup category rows', () => {
-  assert.equal(marketInCategory({ category: 'world-cup', categoryTags: ['world-cup'] }, 'nuevos-mercados'), true);
+test('new markets public slug does not alias legacy world-cup category rows', () => {
+  assert.equal(marketInCategory({ category: 'world-cup', categoryTags: ['world-cup'] }, 'nuevos-mercados'), false);
   assert.equal(marketInCategory({ category: 'nuevos-mercados', categoryTags: [] }, 'nuevos-mercados'), true);
   assert.equal(marketInCategory({ category: 'world-cup', categoryTags: ['world-cup'] }, 'mexico'), false);
 });

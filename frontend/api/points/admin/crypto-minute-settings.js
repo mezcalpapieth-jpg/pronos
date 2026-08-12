@@ -14,7 +14,10 @@ import {
   CRYPTO_MINUTE_MARKET_INTERVAL_KEY,
   CRYPTO_MINUTE_MARKET_INTERVALS,
   DEFAULT_CRYPTO_MINUTE_MARKET_ENABLED_ASSETS,
+  catchUpCurrentPendingCryptoMarkets,
+  ensureUpcomingCryptoMarkets,
   normalizeCryptoMinuteMarketAssets,
+  readGeneratedCryptoHiddenFromHome,
   readCryptoMinuteMarketAssets,
   readCryptoMinuteMarketInterval,
 } from '../../_lib/crypto-5min.js';
@@ -138,12 +141,39 @@ export default async function handler(req, res) {
     await saveInterval(intervalMinutes);
     await saveEnabledAssets(enabledAssets);
     const archivedPending = await archiveDisabledPendingAssets(enabledAssets);
+    let generatedHiddenFromHome = false;
+    let activationCatchup = null;
+    let precreate = null;
+    let generationError = null;
+    try {
+      generatedHiddenFromHome = await readGeneratedCryptoHiddenFromHome(sql);
+      activationCatchup = await catchUpCurrentPendingCryptoMarkets(sql, {
+        intervalMinutes,
+        enabledAssets,
+        hiddenFromHome: generatedHiddenFromHome,
+      });
+      precreate = await ensureUpcomingCryptoMarkets(sql, {
+        intervalMinutes,
+        enabledAssets,
+        hiddenFromHome: generatedHiddenFromHome,
+      });
+    } catch (e) {
+      generationError = e?.message?.slice(0, 240) || 'generation_failed';
+      console.warn('[admin/crypto-minute-settings] generation skipped', {
+        message: e?.message,
+        code: e?.code,
+      });
+    }
     return res.status(200).json({
       ok: true,
       intervalMinutes,
       enabledAssets,
       assets: assetOptions(enabledAssets),
       archivedPending,
+      generatedHiddenFromHome,
+      activationCatchup,
+      precreate,
+      generationError,
       updatedBy: admin.username,
     });
   } catch (e) {

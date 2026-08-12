@@ -8,13 +8,8 @@ function normalizedSlug(value) {
   return String(value || '').toLowerCase();
 }
 
-const CATEGORY_ALIASES = {
-  'nuevos-mercados': 'world-cup',
-};
-
 function normalizedCategorySlug(value) {
-  const slug = normalizedSlug(value);
-  return CATEGORY_ALIASES[slug] || slug;
+  return normalizedSlug(value);
 }
 
 function isLatamSportsFallback(market) {

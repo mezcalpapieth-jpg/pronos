@@ -2529,6 +2529,82 @@ export default function PointsMarketDetail({ onOpenLogin }) {
     && market.endTime
     && new Date(market.endTime) < _now;
 
+  const tradePanel = (
+    <div style={{
+      background: 'var(--surface1)',
+      border: '1px solid var(--border)',
+      borderRadius: 14,
+      padding: 24,
+    }}>
+      <div style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        letterSpacing: '0.12em',
+        color: 'var(--text-muted)',
+        textTransform: 'uppercase',
+        marginBottom: 16,
+      }}>
+        {isResolved ? t('points.detail.marketClosed')
+         : isPendingResolution ? t('points.detail.awaitingResult')
+         : t('points.detail.chooseOutcome')}
+      </div>
+
+      {!isResolved && !isPendingResolution && !isTradingLocked && (
+        market.ammMode === 'parallel' && Array.isArray(market.legs)
+          ? <ParallelLegList
+              market={market}
+              legs={parallelDisplayLegs || market.legs}
+              outcomeImages={displayOutcomeImages}
+              outcomeCountryLabels={displayOutcomeCountryLabels}
+              onBuyClick={handleBuyClick}
+            />
+          : <UnifiedOutcomeList
+              outcomes={displayOutcomes}
+              prices={displayPrices}
+              outcomeImages={displayOutcomeImages}
+              outcomeCountryLabels={displayOutcomeCountryLabels}
+              outcomeIndices={displayOutcomeIndices}
+              market={market}
+              onBuyClick={handleBuyClick}
+            />
+      )}
+
+      {(isResolved || isPendingResolution || isTradingLocked) && (
+        <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+          {isCanceled
+            ? 'Este mercado fue anulado porque el evento no ocurrió. No cuenta como ganado o perdido.'
+            : isResolved
+            ? t('points.detail.closedHint')
+            : t('points.detail.pendingHint')}
+        </p>
+      )}
+
+      <div style={{
+        marginTop: 16,
+        paddingTop: 16,
+        borderTop: '1px solid var(--border)',
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        color: 'var(--text-muted)',
+        letterSpacing: '0.04em',
+        lineHeight: 1.6,
+      }}>
+        <p style={{ margin: 0 }}>
+          {t('points.detail.mxnpNote')}
+        </p>
+        {displayOutcomes.length === 2 && !isResolved && !isCanceled && (
+          <p style={{
+            margin: '10px 0 0',
+            paddingTop: 10,
+            borderTop: '1px solid var(--border)',
+          }}>
+            {t('points.detail.probExplain')}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <>
       <main style={{
@@ -2879,6 +2955,8 @@ export default function PointsMarketDetail({ onOpenLogin }) {
               </div>
             </div>
 
+            {isMobile && tradePanel}
+
             <OrderBookPanel
               market={market}
               displayOutcomes={displayOutcomes}
@@ -2916,8 +2994,9 @@ export default function PointsMarketDetail({ onOpenLogin }) {
             )}
 
             {/* Parallel markets keep a read-only odds snapshot below
-                the chart. The actual Sí/No buy controls live at the
-                top of the right column, close to the graph. */}
+                the trade/orderbook area. The actual Sí/No buy controls
+                stay immediately after the graph on phones and in the
+                right column on desktop. */}
             {market.ammMode === 'parallel' && Array.isArray(market.legs) && !isResolved && !isPendingResolution && (
               <div style={{ marginBottom: 32 }}>
                 <div style={{
@@ -2948,8 +3027,8 @@ export default function PointsMarketDetail({ onOpenLogin }) {
 
             {/* Unified multi (N>2): read-only option grid under the
                 chart so the user sees every outcome's percentage. The
-                actual voting happens in the right sidebar. Parallel
-                uses the calmer "Odds actuales" snapshot above instead. */}
+                actual voting stays in the trade panel near the graph.
+                Parallel uses the calmer "Odds actuales" snapshot above. */}
             {displayOutcomes.length > 2 && market.ammMode !== 'parallel' && (
               <div style={{
                 display: 'grid',
@@ -3072,86 +3151,14 @@ export default function PointsMarketDetail({ onOpenLogin }) {
 
           {/* Right column: buy panel + user-position panel + holders */}
           <aside style={{
-            position: 'sticky',
-            top: 80,
+            position: isMobile ? 'static' : 'sticky',
+            top: isMobile ? undefined : 80,
             display: 'flex',
             flexDirection: 'column',
             gap: 16,
           }}>
 
-          <div style={{
-            background: 'var(--surface1)',
-            border: '1px solid var(--border)',
-            borderRadius: 14,
-            padding: 24,
-          }}>
-            <div style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              letterSpacing: '0.12em',
-              color: 'var(--text-muted)',
-              textTransform: 'uppercase',
-              marginBottom: 16,
-            }}>
-              {isResolved ? t('points.detail.marketClosed')
-               : isPendingResolution ? t('points.detail.awaitingResult')
-               : t('points.detail.chooseOutcome')}
-            </div>
-
-            {!isResolved && !isPendingResolution && !isTradingLocked && (
-              market.ammMode === 'parallel' && Array.isArray(market.legs)
-                ? <ParallelLegList
-                    market={market}
-                    legs={parallelDisplayLegs || market.legs}
-                    outcomeImages={displayOutcomeImages}
-                    outcomeCountryLabels={displayOutcomeCountryLabels}
-                    onBuyClick={handleBuyClick}
-                  />
-                : <UnifiedOutcomeList
-                    outcomes={displayOutcomes}
-                    prices={displayPrices}
-                    outcomeImages={displayOutcomeImages}
-                    outcomeCountryLabels={displayOutcomeCountryLabels}
-                    outcomeIndices={displayOutcomeIndices}
-                    market={market}
-                    onBuyClick={handleBuyClick}
-                  />
-            )}
-
-            {(isResolved || isPendingResolution || isTradingLocked) && (
-              <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-                {isCanceled
-                  ? 'Este mercado fue anulado porque el evento no ocurrió. No cuenta como ganado o perdido.'
-                  : isResolved
-                  ? t('points.detail.closedHint')
-                  : t('points.detail.pendingHint')}
-              </p>
-            )}
-
-            <div style={{
-              marginTop: 16,
-              paddingTop: 16,
-              borderTop: '1px solid var(--border)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              color: 'var(--text-muted)',
-              letterSpacing: '0.04em',
-              lineHeight: 1.6,
-            }}>
-              <p style={{ margin: 0 }}>
-                {t('points.detail.mxnpNote')}
-              </p>
-              {displayOutcomes.length === 2 && !isResolved && !isCanceled && (
-                <p style={{
-                  margin: '10px 0 0',
-                  paddingTop: 10,
-                  borderTop: '1px solid var(--border)',
-                }}>
-                  {t('points.detail.probExplain')}
-                </p>
-              )}
-            </div>
-          </div>
+          {!isMobile && tradePanel}
 
             {/* ── Tu posición ───────────────────────────────────────
                 Shows shares held per outcome when the user is signed in.

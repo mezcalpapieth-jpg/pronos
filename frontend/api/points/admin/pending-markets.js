@@ -24,6 +24,7 @@ import { normalizeSeedLiquidities } from '../../_lib/market-liquidity.js';
 import { attachDefaultSuggestedPricing, seedLiquiditiesFromProbabilities } from '../../_lib/market-pricing.js';
 import { tryAttachPolymarketPricing } from '../../_lib/polymarket-pricing.js';
 import { LCDLF_SOURCE } from '../../_lib/lcdlf-official.js';
+import { syncMananeraPhraseFromQuestion } from '../../_lib/mananera-market-sync.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -478,8 +479,13 @@ async function approveOne(pid, reviewer, note, opts = {}) {
 
     const pendingFeatured = r.featured === true;
     const pendingTournamentFeatured = r.tournament_featured === true;
-    const sourceData = parseJsonb(r.source_data, {});
-    const resolverConfig = parseJsonb(r.resolver_config, null);
+    const syncedMananera = syncMananeraPhraseFromQuestion({
+      question: r.question,
+      resolverConfig: parseJsonb(r.resolver_config, null),
+      sourceData: parseJsonb(r.source_data, {}),
+    });
+    const sourceData = syncedMananera.sourceData || {};
+    const resolverConfig = syncedMananera.resolverConfig || null;
     const tagBundle = deriveMarketTags({
       ...r,
       source_data: sourceData,
@@ -701,9 +707,18 @@ async function approveOne(pid, reviewer, note, opts = {}) {
     await client.query(
       `UPDATE points_pending_markets
          SET status = 'approved', admin_note = $1, reviewer = $2,
-             reviewed_at = NOW(), approved_market_id = $3
-       WHERE id = $4`,
-      [note || null, reviewer, createdMarketId, pid],
+             reviewed_at = NOW(), approved_market_id = $3,
+             source_data = $4::jsonb,
+             resolver_config = $5::jsonb
+       WHERE id = $6`,
+      [
+        note || null,
+        reviewer,
+        createdMarketId,
+        JSON.stringify(sourceData),
+        resolverConfig ? JSON.stringify(resolverConfig) : null,
+        pid,
+      ],
     );
     return { id: pid, marketId: createdMarketId };
   });
@@ -811,17 +826,25 @@ async function editPending(pid, reviewer, patch = {}, note = null) {
       previousOutcomes,
       nextOutcomes: normalizedOutcomes,
     });
-    const resolverConfig = alignParallelResolverConfig({
+    const previousSourceData = parseJsonb(r.source_data, {});
+    const alignedResolverConfig = alignParallelResolverConfig({
       row: r,
       nextOutcomes: normalizedOutcomes,
     });
+    const syncedMananera = syncMananeraPhraseFromQuestion({
+      question,
+      resolverConfig: alignedResolverConfig,
+      sourceData: previousSourceData,
+    });
+    const resolverConfig = syncedMananera.resolverConfig || null;
+    const sourceData = syncedMananera.sourceData || previousSourceData;
 
     const tagBundle = deriveMarketTags({
       ...r,
       question,
       category,
       outcomes: normalizedOutcomes,
-      source_data: parseJsonb(r.source_data, {}),
+      source_data: sourceData,
       resolver_config: resolverConfig || {},
       category_tags: parseJsonb(r.category_tags, []),
       geo_tags: parseJsonb(r.geo_tags, []),
@@ -841,13 +864,14 @@ async function editPending(pid, reviewer, patch = {}, note = null) {
              amm_mode = $9,
              outcome_images = $10::jsonb,
              resolver_config = $11::jsonb,
-             category_tags = $12::jsonb,
-             geo_tags = $13::jsonb,
-             topic_tags = $14::jsonb,
-             admin_note = COALESCE(NULLIF($15, ''), admin_note),
-             reviewer = $16,
+             source_data = $12::jsonb,
+             category_tags = $13::jsonb,
+             geo_tags = $14::jsonb,
+             topic_tags = $15::jsonb,
+             admin_note = COALESCE(NULLIF($16, ''), admin_note),
+             reviewer = $17,
              reviewed_at = NOW()
-       WHERE id = $17
+       WHERE id = $18
        RETURNING id`,
       [
         question,
@@ -861,6 +885,7 @@ async function editPending(pid, reviewer, patch = {}, note = null) {
         ammMode,
         JSON.stringify(outcomeImages),
         resolverConfig ? JSON.stringify(resolverConfig) : null,
+        JSON.stringify(sourceData),
         JSON.stringify(tagBundle.categoryTags),
         JSON.stringify(tagBundle.geoTags),
         JSON.stringify(tagBundle.topicTags),

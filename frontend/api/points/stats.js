@@ -17,6 +17,7 @@ import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { cachedJson, createApiTimer, setCacheHeaders } from '../_lib/api-performance.js';
+import { PRONOS_TREASURY_USERNAME } from '../_lib/points-limit-orders.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -28,7 +29,7 @@ export default async function handler(req, res) {
     if (cors) return cors;
     if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
 
-    const { value: payload, hit } = await cachedJson('points:stats:v1', 30_000, async () => {
+    const { value: payload, hit } = await cachedJson('points:stats:v2', 30_000, async () => {
       await timer.time('schema', () => ensurePointsSchema(schemaSql));
 
       const rows = await timer.time('db_stats', () => sql`
@@ -40,7 +41,9 @@ export default async function handler(req, res) {
                            AND end_time IS NOT NULL AND end_time < NOW())                        AS pending_count,
           COALESCE(SUM(CASE WHEN status = 'active' AND parent_id IS NULL
                             THEN (SELECT COALESCE(SUM(ABS(collateral)), 0)
-                                  FROM points_trades t WHERE t.market_id = m.id)
+                                  FROM points_trades t
+                                  WHERE t.market_id = m.id
+                                    AND t.username <> ${PRONOS_TREASURY_USERNAME})
                             ELSE 0 END), 0)                                                       AS active_volume
         FROM points_markets m
       `);

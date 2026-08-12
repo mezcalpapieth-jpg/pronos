@@ -13,6 +13,7 @@ import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { cachedJson, createApiTimer, setCacheHeaders } from '../_lib/api-performance.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
+import { PRONOS_TREASURY_USERNAME } from '../_lib/points-limit-orders.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -70,7 +71,7 @@ export default async function handler(req, res) {
 
   try {
     const cacheOutcome = allOutcomes ? 'all' : outcomeIdx;
-    const cacheKey = `points:trade-activity:v3:${ids.join(',')}:${windowHours}:${cacheOutcome}:${buckets}`;
+    const cacheKey = `points:trade-activity:v4:${ids.join(',')}:${windowHours}:${cacheOutcome}:${buckets}`;
     const { value: payload, hit } = await cachedJson(cacheKey, 2_000, async () => {
       await timer.time('schema', () => ensurePointsSchema(schemaSql));
       const rows = await timer.time('db_trade_activity', () => {
@@ -87,6 +88,7 @@ export default async function handler(req, res) {
               FROM points_trades
               WHERE market_id = ANY(${ids}::int[])
                 AND side IN ('buy', 'sell')
+                AND username <> ${PRONOS_TREASURY_USERNAME}
                 AND created_at >= NOW() - (${windowHours} || ' hours')::interval
             )
             SELECT
@@ -114,6 +116,7 @@ export default async function handler(req, res) {
             WHERE market_id = ANY(${ids}::int[])
               AND outcome_index = ${outcomeIdx}
               AND side IN ('buy', 'sell')
+              AND username <> ${PRONOS_TREASURY_USERNAME}
               AND created_at >= NOW() - (${windowHours} || ' hours')::interval
           )
           SELECT

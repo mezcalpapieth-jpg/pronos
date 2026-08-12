@@ -18,6 +18,7 @@ import {
 import { deriveMarketTags } from '../_lib/category-tags.js';
 import { buildEspnLiveScoreConfig } from '../_lib/espn-live-score.js';
 import { deriveOutcomeCountryLabels } from '../_lib/outcome-country-labels.js';
+import { PRONOS_TREASURY_USERNAME } from '../_lib/points-limit-orders.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -48,6 +49,20 @@ function binaryLegPricesFromRow({ reserves, status, outcome }, fallbackYes = 0.5
   if (Array.isArray(reserves) && reserves.length === 2) return binaryPrices(reserves);
   const yes = Number.isFinite(Number(fallbackYes)) ? Number(fallbackYes) : 0.5;
   return [yes, 1 - yes];
+}
+
+function binaryPricesWithLatestTrade(basePrices, {
+  status,
+  outcomeIndex,
+  price,
+} = {}) {
+  if (String(status || '').toLowerCase() !== 'active') return basePrices;
+  if (!Array.isArray(basePrices) || basePrices.length !== 2) return basePrices;
+  const oi = Number(outcomeIndex);
+  const p = Number(price);
+  if (!Number.isInteger(oi) || oi < 0 || oi > 1) return basePrices;
+  if (!Number.isFinite(p) || p <= 0 || p >= 1) return basePrices;
+  return oi === 0 ? [p, 1 - p] : [1 - p, p];
 }
 
 function cryptoMetaFromResolverConfig(resolverCfg) {
@@ -255,8 +270,10 @@ export default async function handler(req, res) {
 
       const rows = await sql`
         SELECT m.*, pm.source_data AS pending_source_data,
-          (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = m.id) AS trade_volume,
-          (SELECT MAX(created_at) FROM points_trades t WHERE t.market_id = m.id) AS last_trade_at
+          (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_volume,
+          (SELECT MAX(created_at) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS last_trade_at,
+          (SELECT t.outcome_index FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.side IN ('buy', 'sell') ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS last_trade_outcome_index,
+          (SELECT t.price_at_trade FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.side IN ('buy', 'sell') ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS last_trade_price
         FROM points_markets m
         LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
         WHERE m.id = ${id}
@@ -437,8 +454,10 @@ export default async function handler(req, res) {
       if (ammMode === 'parallel') {
         const legRows = await sql`
           SELECT l.id, l.leg_label, l.reserves, l.seed_liquidity, l.status, l.outcome,
-            (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = l.id) AS trade_volume,
-            (SELECT MAX(created_at) FROM points_trades t WHERE t.market_id = l.id) AS last_trade_at
+            (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = l.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_volume,
+            (SELECT MAX(created_at) FROM points_trades t WHERE t.market_id = l.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS last_trade_at,
+            (SELECT t.outcome_index FROM points_trades t WHERE t.market_id = l.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.side IN ('buy', 'sell') ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS last_trade_outcome_index,
+            (SELECT t.price_at_trade FROM points_trades t WHERE t.market_id = l.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.side IN ('buy', 'sell') ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS last_trade_price
           FROM points_markets l
           WHERE l.parent_id = ${r.id}
             AND l.status <> 'canceled'
@@ -446,11 +465,16 @@ export default async function handler(req, res) {
         `;
         const legs = legRows.map((l, i) => {
           const lr = parseJsonb(l.reserves, []).map(Number);
-          const lp = binaryLegPricesFromRow({
+          const basePrices = binaryLegPricesFromRow({
             reserves: lr,
             status: l.status,
             outcome: l.outcome,
           }, 1 / outcomes.length);
+          const lp = binaryPricesWithLatestTrade(basePrices, {
+            status: l.status,
+            outcomeIndex: l.last_trade_outcome_index,
+            price: l.last_trade_price,
+          });
           return {
             id: l.id,
             outcomeIndex: i,
@@ -517,7 +541,11 @@ export default async function handler(req, res) {
       }
 
       const reserves = parseJsonb(r.reserves, []).map(Number);
-      const prices = pricesFromReserves(reserves, outcomes.length);
+      const prices = binaryPricesWithLatestTrade(pricesFromReserves(reserves, outcomes.length), {
+        status: r.status,
+        outcomeIndex: r.last_trade_outcome_index,
+        price: r.last_trade_price,
+      });
 
       const marketPayload = applySeriesDetailGateToMarket({
           id: r.id,

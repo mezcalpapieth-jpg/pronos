@@ -269,6 +269,26 @@ function rowsFromQuery(result) {
   return [];
 }
 
+export async function readGeneratedCryptoHiddenFromHome(sql) {
+  try {
+    const rows = await sql`
+      SELECT
+        COUNT(*) FILTER (WHERE hidden_from_home IS TRUE)::int AS hidden_count,
+        COUNT(*) FILTER (WHERE hidden_from_home IS NOT TRUE)::int AS visible_count
+      FROM points_markets
+      WHERE status IN ('active', 'pending')
+        AND parent_id IS NULL
+        AND archived_at IS NULL
+        AND COALESCE(mode, 'points') = 'points'
+    `;
+    const row = rowsFromQuery(rows)[0] || {};
+    return Number(row.hidden_count || 0) > 0 && Number(row.visible_count || 0) === 0;
+  } catch (e) {
+    if (e?.code === '42P01' || /points_markets/i.test(e?.message || '')) return false;
+    throw e;
+  }
+}
+
 function parseJsonb(value, fallback) {
   if (value && typeof value === 'object' && !Array.isArray(value)) return value;
   if (Array.isArray(value)) return value;
@@ -319,6 +339,7 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
   const intervalMinutes = await readCryptoMinuteMarketInterval(sql);
   const enabledAssets = await readCryptoMinuteMarketAssets(sql);
   const enabledAssetConfigs = cryptoAssetsFromSetting(enabledAssets);
+  const generatedHiddenFromHome = dry ? false : await readGeneratedCryptoHiddenFromHome(sql);
   const windowMs = windowMsForInterval(intervalMinutes);
   const { boundary, sinceBoundaryMs } = crypto5MinWindowsForTick(now, intervalMinutes);
   const precreateReport = await ensureUpcomingCryptoMarkets(sql, {
@@ -327,6 +348,7 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
     lookaheadWindows: DEFAULT_LOOKAHEAD_WINDOWS,
     intervalMinutes,
     enabledAssets,
+    hiddenFromHome: generatedHiddenFromHome,
   });
   let activeCatchup = { checked: 0, resolved: [], errors: [], dry };
   try {
@@ -352,6 +374,7 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
         dry,
         intervalMinutes,
         enabledAssets,
+        hiddenFromHome: generatedHiddenFromHome,
       });
     } catch (e) {
       activationCatchup.errors.push({ error: e?.message || 'activation_catchup_failed' });
@@ -525,6 +548,7 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
             openPrice: price,
             openPriceSource: pr.source,
             openPriceAt: pr.capturedAt,
+            hiddenFromHome: generatedHiddenFromHome,
           });
           if (created?.id) entry.activatedId = created.id;
         }
@@ -544,6 +568,7 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
           status: 'pending',
           threshold: null,
           openPrice: null,
+          hiddenFromHome: generatedHiddenFromHome,
         });
         if (created?.id) entry.createdId = created.id;
         else if (created?.alreadyExists) entry.upcomingExisted = true;
@@ -585,6 +610,7 @@ export async function ensureUpcomingCryptoMarkets(sql, {
   lookaheadWindows = DEFAULT_LOOKAHEAD_WINDOWS,
   intervalMinutes = DEFAULT_CRYPTO_MINUTE_MARKET_INTERVAL,
   enabledAssets = DEFAULT_CRYPTO_MINUTE_MARKET_ENABLED_ASSETS,
+  hiddenFromHome = false,
 } = {}) {
   if (!sql) throw new Error('crypto-5min: sql client required');
 
@@ -625,6 +651,7 @@ export async function ensureUpcomingCryptoMarkets(sql, {
         status: 'pending',
         threshold: null,
         openPrice: null,
+        hiddenFromHome,
       });
       if (created?.id) {
         precreated += 1;
@@ -644,6 +671,7 @@ export async function catchUpCurrentPendingCryptoMarkets(sql, {
   dry = false,
   intervalMinutes = null,
   enabledAssets = null,
+  hiddenFromHome = false,
   readBoundaryPrice = readCoinbaseBoundaryPrice,
 } = {}) {
   if (!sql) throw new Error('crypto-5min: sql client required');
@@ -681,7 +709,19 @@ export async function catchUpCurrentPendingCryptoMarkets(sql, {
       `;
       const rows = rowsFromQuery(selected);
       report.checked += rows.length;
-      if (rows.length === 0) continue;
+      if (rows.length === 0) {
+        const existing = await sql`
+          SELECT id, status
+            FROM points_markets
+           WHERE source = ${key.source}
+             AND source_event_id = ${key.source_event_id}
+             AND outcome IS NULL
+             AND parent_id IS NULL
+             AND archived_at IS NULL
+           LIMIT 1
+        `;
+        if (rowsFromQuery(existing).length > 0) continue;
+      }
 
       const openBoundary = await readBoundaryPrice({
         productId: asset.coinbaseProductId,
@@ -689,13 +729,18 @@ export async function catchUpCurrentPendingCryptoMarkets(sql, {
       });
       const openPrice = Number(openBoundary.price);
       const threshold = roundThreshold(openPrice);
-      const windowStart = toIso(rows[0].start_time, 'current window start');
+      const windowStart = rows.length > 0
+        ? toIso(rows[0].start_time, 'current window start')
+        : boundary.toISOString();
+      const windowEndIso = rows.length > 0
+        ? toIso(rows[0].end_time, 'current window end')
+        : windowEnd.toISOString();
       const entry = {
-        id: Number(rows[0].id),
+        id: rows.length > 0 ? Number(rows[0].id) : null,
         asset: asset.key,
-        sourceEventId: rows[0].source_event_id,
+        sourceEventId: rows[0]?.source_event_id || key.source_event_id,
         windowStart,
-        windowEnd: toIso(rows[0].end_time, 'current window end'),
+        windowEnd: windowEndIso,
         threshold,
         openPrice,
         openPriceAt: openBoundary.capturedAt,
@@ -703,6 +748,27 @@ export async function catchUpCurrentPendingCryptoMarkets(sql, {
 
       if (dry) {
         report.activated.push({ ...entry, dry: true });
+        continue;
+      }
+
+      if (rows.length === 0) {
+        const created = await insertCryptoMarket(sql, {
+          asset,
+          windowStart: boundary,
+          windowEnd,
+          intervalMinutes: interval,
+          status: 'active',
+          threshold,
+          openPrice,
+          openPriceSource: openBoundary.source,
+          openPriceAt: openBoundary.capturedAt,
+          hiddenFromHome,
+        });
+        if (created?.id) {
+          report.activated.push({ ...entry, id: Number(created.id), created: true });
+        } else if (created?.alreadyExists) {
+          report.activated.push({ ...entry, alreadyExists: true });
+        }
         continue;
       }
 
@@ -1019,6 +1085,7 @@ async function insertCryptoMarket(sql, {
   openPrice,
   openPriceSource = null,
   openPriceAt = null,
+  hiddenFromHome = false,
 }) {
   const interval = normalizeCryptoMinuteMarketInterval(intervalMinutes);
   const key = eventKey(asset.key, windowStart.toISOString(), interval);
@@ -1055,6 +1122,7 @@ async function insertCryptoMarket(sql, {
       reserves, seed_liquidity, start_time, end_time,
       amm_mode, status,
       resolver_type, resolver_config,
+      featured, auto_featured, hidden_from_home,
       mode
     )
     VALUES (
@@ -1064,6 +1132,7 @@ async function insertCryptoMarket(sql, {
       ${JSON.stringify(reserves)}::jsonb, 1000, ${windowStart.toISOString()}, ${windowEnd.toISOString()},
       'unified', ${status},
       'chainlink_price', ${JSON.stringify(resolverConfig)}::jsonb,
+      ${hiddenFromHome ? false : true}, false, ${hiddenFromHome ? true : false},
       'points'
     )
     ON CONFLICT (source, source_event_id) WHERE source IS NOT NULL AND source_event_id IS NOT NULL DO NOTHING

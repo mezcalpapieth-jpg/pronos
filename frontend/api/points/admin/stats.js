@@ -14,6 +14,7 @@ import { ensureInterestSchema } from '../../_lib/interest-schema.js';
 import { INTEREST_WINDOWS, formatInterestRow } from '../../_lib/interest.js';
 import { cachedJson, createApiTimer, setCacheHeaders } from '../../_lib/api-performance.js';
 import { PUBLICITY_SOURCES } from '../../_lib/publicity.js';
+import { PRONOS_TREASURY_USERNAME } from '../../_lib/points-limit-orders.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -29,7 +30,7 @@ export default async function handler(req, res) {
 
   try {
     setCacheHeaders(res, { scope: 'private', maxAge: 20, staleWhileRevalidate: 60 });
-    const { value: payload, hit } = await cachedJson('points:admin:stats:v4', 20_000, async () => {
+    const { value: payload, hit } = await cachedJson('points:admin:stats:v5', 20_000, async () => {
     await timer.time('schema_points', () => ensurePointsSchema(schemaSql));
     await timer.time('schema_interest', () => ensureInterestSchema(schemaSql));
 
@@ -205,6 +206,7 @@ export default async function handler(req, res) {
         FROM points_markets m
         JOIN points_trades t ON t.market_id = m.id
         WHERE COALESCE(m.mode, 'points') = 'points'
+          AND t.username <> ${PRONOS_TREASURY_USERNAME}
         GROUP BY m.id, m.question, m.category, m.status, m.end_time
         ORDER BY invested_volume DESC, buy_count DESC, m.end_time DESC
         LIMIT 12
@@ -273,6 +275,7 @@ export default async function handler(req, res) {
           FROM points_trades t
           JOIN points_markets m ON m.id = t.market_id
           WHERE COALESCE(m.mode, 'points') = 'points'
+            AND t.username <> ${PRONOS_TREASURY_USERNAME}
           UNION ALL
           SELECT
             d.created_at,

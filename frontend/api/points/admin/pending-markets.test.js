@@ -39,6 +39,8 @@ test('pending generated markets can be edited before approval', () => {
   assert.match(source, /outcomeImages:\s*parseJsonb\(r\.outcome_images,\s*null\)/);
   assert.match(source, /alignParallelResolverConfig/);
   assert.match(source, /resolver_config = \$11::jsonb/);
+  assert.match(source, /source_data = \$12::jsonb/);
+  assert.match(source, /syncMananeraPhraseFromQuestion/);
   assert.match(source, /const sourceData = parseJsonb\(r\.source_data,\s*\{\}\)/);
   assert.match(source, /suggestedPricing:\s*sourceData\?\.suggestedPricing\s*\|\|\s*null/);
   assert.match(source, /pricingSearch:\s*sourceData\?\.pricingSearch\s*\|\|\s*null/);
@@ -72,6 +74,13 @@ test('legacy LCDLF binary nomination rows are auto-rejected after grouped market
   assert.match(source, /source_event_id ~ '\^lcdlf-mx-nomination:\[0-9\]\{4\}-\[0-9\]\{2\}-\[0-9\]\{2\}:\.\+'/);
   assert.match(source, /COALESCE\(amm_mode, 'unified'\) <> 'parallel'/);
   assert.match(source, /AND \(reviewer IS NULL OR reviewer = 'system'\)/);
+});
+
+test('pending mañanera approval syncs transcript phrase from quoted question', () => {
+  assert.match(source, /syncMananeraPhraseFromQuestion\(\{\s*question: r\.question,/);
+  assert.match(source, /const resolverConfig = syncedMananera\.resolverConfig \|\| null/);
+  assert.match(source, /resolver_config = \$5::jsonb/);
+  assert.match(source, /source_data = \$4::jsonb/);
 });
 
 test('human re-added sports rows are not immediately auto-rejected again', () => {

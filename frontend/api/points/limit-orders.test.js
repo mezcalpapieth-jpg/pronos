@@ -7,7 +7,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import {
+  combineBuyOrderbookMatches,
   estimateMakerReward,
+  makerUsageFromRows,
+  previewPronosMakerAsksForBuy,
   previewRestingAsksForBuy,
   previewRestingBidsForSell,
 } from '../_lib/points-limit-orders.js';
@@ -129,12 +132,63 @@ test('orderbook taker previews consume real resting orders before AMM fallback',
   assert.equal(sellPreview.remainingShares, 15.454545);
 });
 
-test('orderbook exposes real user rows with mocked maker depth', () => {
+test('Pronos maker previews use seeded depth after real resting orders', () => {
+  const realPreview = previewRestingAsksForBuy([
+    { id: 1, username: 'maker-a', limit_price: 0.45, remaining_amount: 100 },
+  ], { collateral: 100 });
+  assert.equal(realPreview.collateralSpent, 45);
+  assert.equal(realPreview.remainingCollateral, 55);
+
+  const makerPreview = previewPronosMakerAsksForBuy({
+    reserves: JSON.stringify([500, 500]),
+    seed_liquidity: 7500,
+    seed_liquidities: null,
+  }, {
+    outcomeIndex: 0,
+    collateral: realPreview.remainingCollateral,
+    levels: [10, 25, 50, 100],
+  });
+  const combined = combineBuyOrderbookMatches(realPreview, makerPreview);
+
+  assert.equal(combined.remainingCollateral, 0);
+  assert.ok(combined.sharesOut > realPreview.sharesOut);
+  assert.equal(combined.fills[0].source, 'limit');
+  assert.equal(combined.fills[1].source, 'maker');
+});
+
+test('Pronos maker depth depletes from treasury trade usage', () => {
+  const market = {
+    reserves: JSON.stringify([500, 500]),
+    seed_liquidity: 7500,
+    seed_liquidities: null,
+  };
+  const before = previewPronosMakerAsksForBuy(market, {
+    outcomeIndex: 0,
+    collateral: 200,
+    levels: [10, 25, 50, 100],
+  });
+  const usage = makerUsageFromRows([{ side: 'sell', collateral: 2000 }]);
+  const after = previewPronosMakerAsksForBuy(market, {
+    outcomeIndex: 0,
+    collateral: 200,
+    levels: [10, 25, 50, 100],
+    usage,
+  });
+
+  assert.ok(after.avgPrice > before.avgPrice);
+  assert.ok(after.fills[0].price > before.fills[0].price);
+});
+
+test('orderbook exposes executable user rows with depleted Pronos maker depth', () => {
   assert.match(orderbookSource, /Hybrid points order book/);
   assert.match(orderbookSource, /aggregateLimitOrderRows/);
   assert.match(orderbookSource, /FROM points_limit_orders/);
   assert.match(helperSource, /source: 'limit'/);
-  assert.match(orderbookSource, /buildMockMakerDepth/);
+  assert.match(helperSource, /matchPronosMakerAsksForBuy/);
+  assert.match(helperSource, /matchPronosMakerBidsForSell/);
+  assert.match(orderbookSource, /pronosMakerDepthForMarket/);
+  assert.match(orderbookSource, /makerUsageFromRows/);
+  assert.match(orderbookSource, /PRONOS_TREASURY_USERNAME/);
   assert.match(orderbookSource, /seed_liquidity,\s*seed_liquidities/);
   assert.match(orderbookSource, /bookType: 'mock_orderbook'/);
   assert.doesNotMatch(orderbookSource, /source: 'amm'/);

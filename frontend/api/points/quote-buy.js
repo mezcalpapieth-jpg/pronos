@@ -13,7 +13,13 @@ import { binaryBuyQuote, binaryPrices, multiBuyQuote, multiPrices } from '../_li
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { seriesTradeLockFromRows } from '../_lib/series-markets.js';
 import { cryptoTradeLock } from '../_lib/points-crypto-trade-guard.js';
-import { previewRestingAsksForBuy } from '../_lib/points-limit-orders.js';
+import {
+  combineBuyOrderbookMatches,
+  makerUsageFromRows,
+  previewPronosMakerAsksForBuy,
+  previewRestingAsksForBuy,
+  PRONOS_TREASURY_USERNAME,
+} from '../_lib/points-limit-orders.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -73,7 +79,8 @@ export default async function handler(req, res) {
     await ensurePointsSchema(schemaSql);
     const rows = await sql`
       SELECT id, question, status, reserves, outcomes, start_time, end_time,
-             created_at, resolver_type, resolver_config, sport, league
+             created_at, resolver_type, resolver_config, sport, league,
+             seed_liquidity, seed_liquidities
       FROM points_markets
       WHERE id = ${mid}
       LIMIT 1
@@ -118,7 +125,24 @@ export default async function handler(req, res) {
        ORDER BY limit_price ASC, created_at ASC, id ASC
        LIMIT 24
     `;
-    const orderbook = previewRestingAsksForBuy(askRows, { collateral: amt });
+    const realOrderbook = previewRestingAsksForBuy(askRows, { collateral: amt });
+    const usageRows = await sql`
+      SELECT side, COALESCE(SUM(collateral), 0)::text AS collateral
+        FROM points_trades
+       WHERE market_id = ${mid}
+         AND outcome_index = ${oi}
+         AND username = ${PRONOS_TREASURY_USERNAME}
+         AND side IN ('buy', 'sell')
+       GROUP BY side
+    `;
+    const makerOrderbook = realOrderbook.remainingCollateral > 0.000001
+      ? previewPronosMakerAsksForBuy(r, {
+        outcomeIndex: oi,
+        collateral: realOrderbook.remainingCollateral,
+        usage: makerUsageFromRows(usageRows),
+      })
+      : null;
+    const orderbook = combineBuyOrderbookMatches(realOrderbook, makerOrderbook);
     const ammCollateral = orderbook.remainingCollateral > 0.000001
       ? orderbook.remainingCollateral
       : 0;

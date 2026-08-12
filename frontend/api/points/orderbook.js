@@ -2,14 +2,19 @@
  * GET /api/points/orderbook?marketId=<id>&outcomeIndex=<idx>&levels=<n>
  *
  * Hybrid points order book. User bids/asks come from reserved limit
- * orders; Pronos maker rows are mocked from configured seed depth so we can
- * preview order-book liquidity before wiring the full matching engine.
+ * orders; Pronos maker rows come from configured seed depth and are
+ * depleted by treasury fills before the AMM sees any leftover flow.
  */
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
-import { buildMockMakerDepth, AMM_DEPTH_LEVELS } from '../_lib/amm-depth.js';
-import { aggregateLimitOrderRows } from '../_lib/points-limit-orders.js';
+import { AMM_DEPTH_LEVELS } from '../_lib/amm-depth.js';
+import {
+  aggregateLimitOrderRows,
+  makerUsageFromRows,
+  pronosMakerDepthForMarket,
+  PRONOS_TREASURY_USERNAME,
+} from '../_lib/points-limit-orders.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { cachedJson, createApiTimer, setCacheHeaders } from '../_lib/api-performance.js';
 
@@ -60,7 +65,7 @@ export default async function handler(req, res) {
   });
 
   try {
-    const cacheKey = `points:orderbook:v3:${marketId}:${outcomeIndex}:${requestedLevels.join(',')}`;
+    const cacheKey = `points:orderbook:v5:${marketId}:${outcomeIndex}:${requestedLevels.join(',')}`;
     const { value: payload, hit } = await cachedJson(cacheKey, 1_000, async () => {
       await timer.time('schema', () => ensurePointsSchema(schemaSql));
       const rows = await timer.time('db_market', () => sql`
@@ -79,7 +84,6 @@ export default async function handler(req, res) {
       const market = rows[0];
       const outcomes = parseJsonb(market.outcomes, ['Sí', 'No']);
       const reserves = parseJsonb(market.reserves, []).map(Number);
-      const seedLiquidities = parseJsonb(market.seed_liquidities, null);
       const outcomeLabel = market.leg_label || outcomes[outcomeIndex] || `Opción ${outcomeIndex + 1}`;
 
       if (market.status !== 'active') {
@@ -96,12 +100,19 @@ export default async function handler(req, res) {
         };
       }
 
-      const depth = buildMockMakerDepth({
-        reserves,
+      const usageRows = await timer.time('db_maker_usage', () => sql`
+        SELECT side, COALESCE(SUM(collateral), 0)::text AS collateral
+          FROM points_trades
+         WHERE market_id = ${marketId}
+           AND outcome_index = ${outcomeIndex}
+           AND username = ${PRONOS_TREASURY_USERNAME}
+           AND side IN ('buy', 'sell')
+         GROUP BY side
+      `);
+      const depth = pronosMakerDepthForMarket(market, {
         outcomeIndex,
         levels: requestedLevels,
-        seedLiquidity: Number(market.seed_liquidity || 0),
-        seedLiquidities,
+        usage: makerUsageFromRows(usageRows),
       });
       const limitRows = await timer.time('db_limit_orders', () => sql`
         SELECT side,
@@ -139,20 +150,23 @@ export default async function handler(req, res) {
         FROM points_trades
         WHERE market_id = ${marketId}
           AND outcome_index = ${outcomeIndex}
+          AND username <> ${PRONOS_TREASURY_USERNAME}
         ORDER BY created_at DESC, id DESC
         LIMIT 1
       `);
       const lastPrice = lastRows.length > 0
         ? Number(lastRows[0].price_at_trade)
         : depth.currentPrice;
+      const currentPrice = Number.isFinite(lastPrice) ? lastPrice : depth.currentPrice;
 
       return {
         marketId,
         outcomeIndex,
         outcomeLabel,
         status: market.status,
-        currentPrice: depth.currentPrice,
-        lastPrice: Number.isFinite(lastPrice) ? lastPrice : depth.currentPrice,
+        currentPrice,
+        lastPrice: currentPrice,
+        ammPrice: depth.currentPrice,
         spread,
         asks,
         bids,
