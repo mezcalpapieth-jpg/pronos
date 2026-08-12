@@ -114,7 +114,11 @@ test('parallel carousel charts draw leg histories without adopting a child ident
 test('carousel charts use movement spacing instead of wall-clock spacing', () => {
   assert.match(carousel, /<MultiSparkline[\s\S]*xMode="movement"/);
   assert.match(carousel, /<Sparkline[\s\S]*xMode="movement"/);
+  assert.match(carousel, /showActivity[\s\S]*xMode="movement"/);
+  assert.match(carousel, /showYAxis=\{false\}[\s\S]*fitDomain[\s\S]*xMode="movement"/);
+  assert.doesNotMatch(carousel, /<MultiSparkline[\s\S]{0,260}domainMin=\{0\}[\s\S]{0,80}domainMax=\{100\}/);
   assert.match(sparkline, /xMode = 'time'/);
+  assert.match(sparkline, /fitDomain = false/);
   assert.match(sparkline, /const useMovementAxis = xMode === 'movement'/);
   assert.match(sparkline, /const xForMovementIndex/);
   assert.match(sparkline, /if \(!useMovementAxis\) d \+=/);

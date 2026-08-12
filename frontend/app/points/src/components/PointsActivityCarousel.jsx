@@ -917,10 +917,8 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                       <MultiSparkline
                         height={isMobile ? 138 : 164}
                         strokeWidth={2}
-                        showActivity={false}
+                        showActivity
                         xMode="movement"
-                        domainMin={0}
-                        domainMax={100}
                         series={mChartEntries.map(entry => ({
                           key: `opt-${entry.index}`,
                           label: entry.label,
@@ -955,6 +953,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                         // level; Sparkline's auto y-axis (on at h>=100)
                         // would only collide with the end dot here.
                         showYAxis={false}
+                        fitDomain
                         xMode="movement"
                         data={mSeries}
                         targetPct={mLeadPct}

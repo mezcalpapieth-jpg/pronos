@@ -108,6 +108,7 @@ export default function Sparkline({
   showXAxis,
   domainMin,
   domainMax,
+  fitDomain = false,
   xMode = 'time',
   activity = [],
   showActivity = true,
@@ -219,8 +220,8 @@ export default function Sparkline({
     if (Number.isFinite(domainMin) && Number.isFinite(domainMax) && domainMax > domainMin) {
       return { min: domainMin, max: domainMax };
     }
-    return shouldShowYAxis ? priceDomain(values) : { min: 0, max: 100 };
-  }, [values, domainMin, domainMax, shouldShowYAxis]);
+    return shouldShowYAxis || fitDomain ? priceDomain(values) : { min: 0, max: 100 };
+  }, [values, domainMin, domainMax, shouldShowYAxis, fitDomain]);
   const yTicks = useMemo(
     () => (shouldShowYAxis ? axisTicks(domain.min, domain.max) : []),
     [shouldShowYAxis, domain],
