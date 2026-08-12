@@ -37,6 +37,9 @@ test('points rollover archives exposure and carries only approved pre-cycle bonu
 
 test('public cycles prefer the active database cycle once admin opens one', () => {
   assert.match(currentSource, /dbCyclePayload/);
-  assert.match(currentSource, /points:cycles:current:v3/);
-  assert.match(currentSource, /const row = paused \? null : await timer\.time\('db_current'/);
+  assert.match(currentSource, /points:cycles:current:v4/);
+  assert.match(currentSource, /if \(paused\) \{\s*return pausedPayload\(\);/);
+  assert.match(currentSource, /const row = await timer\.time\('db_current'/);
+  assert.match(currentSource, /return pausedPayload\(\);/);
+  assert.doesNotMatch(currentSource, /tournamentPayload/);
 });

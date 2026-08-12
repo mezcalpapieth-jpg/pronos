@@ -84,7 +84,7 @@ export default async function handler(req, res) {
   try {
     setCacheHeaders(res, { scope: 'private', maxAge: 15, staleWhileRevalidate: 60 });
 
-    const { value: ranked, hit } = await cachedJson('points:leaderboard:ranked:v2', 15_000, async () => {
+    const { value: ranked, hit } = await cachedJson('points:leaderboard:ranked:v3', 15_000, async () => {
       await timer.time('schema', () => ensurePointsSchema(schemaSql));
       return await timer.time('db_leaderboard', () => buildTournamentLeaderboardRows(sql, { limit: 5000 }));
     });

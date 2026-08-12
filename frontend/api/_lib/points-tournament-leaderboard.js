@@ -73,17 +73,42 @@ export async function resolveTournamentScoringWindow(db, { now = new Date() } = 
     if (active) return active;
   } catch {
     // Schema creation happens at the API boundary. If a read replica is
-    // briefly behind, keep the launch tournament window as the fallback.
+    // briefly behind, fail closed: scores should not start before reset.
   }
 
-  return {
-    id: null,
-    label: null,
-    startsAt: TOURNAMENT_START_ISO,
-    operationCloseAt: TOURNAMENT_OPERATION_CLOSE_ISO,
-    rankingCutoffAt: TOURNAMENT_RANKING_CUTOFF_ISO,
-    endsAt: TOURNAMENT_RANKING_CUTOFF_ISO,
-  };
+  return null;
+}
+
+function buildNeutralLeaderboardRows(users, limit) {
+  const ranked = users.map(user => ({
+    username: user.username,
+    createdAt: user.created_at,
+    balance: roundTournamentAmount(user.balance),
+    score: 0,
+    cycleDelta: 0,
+    marketPnl: 0,
+    currentPositionValue: 0,
+    inactivityPenalty: 0,
+    inactiveDays: 0,
+    activeDays: 0,
+    qualifyingMarkets: 0,
+    qualified: false,
+    totalActions: 0,
+    buyCount: 0,
+  }));
+
+  ranked.sort((a, b) => {
+    const aCreated = new Date(a.createdAt || 0).getTime();
+    const bCreated = new Date(b.createdAt || 0).getTime();
+    if (aCreated !== bCreated) return aCreated - bCreated;
+    return String(a.username).localeCompare(String(b.username));
+  });
+
+  ranked.forEach((row, index) => {
+    row.rank = index + 1;
+  });
+
+  return ranked.slice(0, Math.max(1, Number(limit) || 500));
 }
 
 function completedPenaltyEndKey(now, window) {
@@ -154,6 +179,10 @@ export async function buildTournamentLeaderboardRows(db, { limit = 500, now = ne
   `);
 
   const scoringWindow = window || await resolveTournamentScoringWindow(db, { now });
+  if (!scoringWindow) {
+    return buildNeutralLeaderboardRows(users, limit);
+  }
+
   const startIso = scoringWindow.startsAt || TOURNAMENT_START_ISO;
   const cutoffIso = scoringWindow.rankingCutoffAt || TOURNAMENT_RANKING_CUTOFF_ISO;
   const qualifyingMinimum = TOURNAMENT_MIN_ENTRY_MXNP;

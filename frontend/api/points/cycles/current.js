@@ -1,10 +1,9 @@
 /**
  * GET /api/points/cycles/current
  *
- * Returns the currently-active competition cycle when public cycles are open.
- * The launch tournament window is configured in code so the public page can
- * count down even while the old admin pause flag remains set. Admin can still
- * close and reopen future cycles from /api/points/admin/cycles.
+ * Returns the currently-active competition cycle when admin has opened one
+ * with the reset/rollover control. The code-defined launch window is only a
+ * paused preview; PnL scoring starts when a real points_cycles row exists.
  *
  * Response:
  *   {
@@ -89,33 +88,6 @@ function pausedPayload() {
   };
 }
 
-function tournamentPayload(window = getTournamentWindow()) {
-  return {
-    paused: false,
-    label: window.label,
-    window,
-    rules: tournamentRulesPayload(),
-    cycle: {
-      id: null,
-      label: window.label,
-      status: window.status,
-      paused: false,
-      scheduled: window.scheduled,
-      startedAt: window.startsAt,
-      startsAt: window.startsAt,
-      operationCloseAt: window.operationCloseAt,
-      rankingCutoffAt: window.rankingCutoffAt,
-      endsAt: window.endsAt,
-      createdAt: null,
-      closedAt: null,
-      secondsUntilStart: window.secondsUntilStart,
-      secondsUntilOperationClose: window.secondsUntilOperationClose,
-      secondsRemaining: window.secondsRemaining,
-      pastDeadline: window.pastDeadline,
-    },
-  };
-}
-
 function dbCyclePayload(row, window = getTournamentWindow()) {
   const now = Date.now();
   const startsAtMs = new Date(row.started_at).getTime();
@@ -157,23 +129,20 @@ export default async function handler(req, res) {
     if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
 
     setCacheHeaders(res, { scope: 'public', maxAge: 10, sMaxage: 30, staleWhileRevalidate: 120 });
-    const { value: payload, hit } = await cachedJson('points:cycles:current:v3', 20_000, async () => {
+    const { value: payload, hit } = await cachedJson('points:cycles:current:v4', 20_000, async () => {
       await timer.time('schema', () => ensurePointsSchema(sql));
       const window = getTournamentWindow();
       const paused = await timer.time('db_pause', () => cyclesArePaused());
-      const row = paused ? null : await timer.time('db_current', () => getCurrent());
-      if (row) {
-        return dbCyclePayload(row, window);
-      }
-      if (paused && window.status === 'closed') {
+      if (paused) {
         return pausedPayload();
       }
 
-      if (window.status !== 'closed') {
-        return tournamentPayload(window);
+      const row = await timer.time('db_current', () => getCurrent());
+      if (row) {
+        return dbCyclePayload(row, window);
       }
 
-      return tournamentPayload(window);
+      return pausedPayload();
     });
     res.setHeader('X-Pronos-Cache', hit ? 'hit' : 'miss');
     timer.end({ cache: hit ? 'hit' : 'miss' });

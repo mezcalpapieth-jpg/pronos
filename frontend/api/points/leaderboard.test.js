@@ -24,6 +24,9 @@ test('points tournament leaderboard scores against the active cycle window', () 
   assert.match(tournamentSource, /resolveTournamentScoringWindow/);
   assert.match(tournamentSource, /FROM points_cycles/);
   assert.match(tournamentSource, /WHERE status = 'active'/);
+  assert.match(tournamentSource, /return null/);
+  assert.match(tournamentSource, /buildNeutralLeaderboardRows/);
   assert.match(tournamentSource, /const startIso = scoringWindow\.startsAt/);
   assert.match(tournamentSource, /const cutoffIso = scoringWindow\.rankingCutoffAt/);
+  assert.match(source, /points:leaderboard:ranked:v3/);
 });
