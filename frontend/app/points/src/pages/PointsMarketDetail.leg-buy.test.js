@@ -49,7 +49,7 @@ test('parallel detail sinks resolved loser legs and renders them read-only at ze
   assert.match(detailSource, /const parallelDisplayLegs = market\.ammMode === 'parallel'/);
   assert.match(detailSource, /legs=\{parallelDisplayLegs \|\| market\.legs\}/);
   assert.match(detailSource, /const isLegTradable = parallelLegIsTradable\(leg, market\)/);
-  assert.match(detailSource, /Eliminado · 0%/);
+  assert.match(detailSource, /No · 0%/);
   assert.match(detailSource, /function chartOutcomeIndicesForDisplay/);
   assert.match(detailSource, /Number\(parallelDisplayLegs\[i\]\?\.outcome\) === 1/);
   assert.match(detailSource, /return selected\.slice\(0, 6\)/);

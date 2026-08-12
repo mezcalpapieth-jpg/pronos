@@ -118,6 +118,7 @@ export function attachSuggestedPricing(spec = {}, pricingOverride = {}) {
   if (outcomes.length < 2) return spec;
 
   const seed = Number(spec.seed_liquidity ?? spec.seedLiquidity ?? DEFAULT_SEED_LIQUIDITY);
+  const existingPricing = spec?.source_data?.suggestedPricing || spec?.suggestedPricing || {};
   const suggested = {
     ...pricingFromSpec(spec),
     ...pricingOverride,
@@ -131,6 +132,7 @@ export function attachSuggestedPricing(spec = {}, pricingOverride = {}) {
     ? { ...spec.source_data }
     : {};
   sourceData.suggestedPricing = {
+    ...(existingPricing && typeof existingPricing === 'object' ? existingPricing : {}),
     source: suggested.source || 'uniform-default',
     probabilities: priced.probabilities,
     probabilityPct: priced.probabilityPct,

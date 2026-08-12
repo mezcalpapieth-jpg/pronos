@@ -21,7 +21,9 @@ export async function generateLcdlfMarkets({
   const weeklySpec = buildLcdlfWeeklyMarketSpec({ snapshot, now });
   const specs = [
     ...nominationSpecs.map(spec => attachSuggestedPricing(spec, {
-      probabilities: [0.32, 0.68],
+      probabilities: spec.amm_mode === 'parallel'
+        ? uniformProbabilities(spec.outcomes.length)
+        : [0.32, 0.68],
       source: 'lcdlf-official:active-resident',
       rationale: 'Habitante activo en el sitio oficial; el mercado se cierra cuando la fuente marca nominación o “podría estar eliminado/a”.',
       evidence: spec.resolver_config?.evidence || [],

@@ -60,8 +60,18 @@ test('pending generated markets support taxonomy filters and filtered bulk actio
 test('parallel pending approvals derive child Yes\\/No reserves from suggested probabilities', () => {
   assert.match(source, /seedLiquiditiesFromProbabilities/);
   assert.match(source, /function parallelLegBinaryReserves/);
+  assert.match(source, /suggestedPricing\.legProbabilities/);
+  assert.match(source, /suggestedPricing\.legProbabilityPct/);
   assert.match(source, /minProbability:\s*0\.01/);
   assert.match(source, /JSON\.stringify\(legReserves\)/);
+});
+
+test('legacy LCDLF binary nomination rows are auto-rejected after grouped market rollout', () => {
+  assert.match(source, /LCDLF_SOURCE/);
+  assert.match(source, /legacy LCDLF binary nominations replaced by grouped parallel market/);
+  assert.match(source, /source_event_id ~ '\^lcdlf-mx-nomination:\[0-9\]\{4\}-\[0-9\]\{2\}-\[0-9\]\{2\}:\.\+'/);
+  assert.match(source, /COALESCE\(amm_mode, 'unified'\) <> 'parallel'/);
+  assert.match(source, /AND \(reviewer IS NULL OR reviewer = 'system'\)/);
 });
 
 test('human re-added sports rows are not immediately auto-rejected again', () => {

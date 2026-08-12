@@ -23,6 +23,7 @@ import { deriveMarketTags, matchesMarketTaxonomy } from '../../_lib/category-tag
 import { normalizeSeedLiquidities } from '../../_lib/market-liquidity.js';
 import { attachDefaultSuggestedPricing, seedLiquiditiesFromProbabilities } from '../../_lib/market-pricing.js';
 import { tryAttachPolymarketPricing } from '../../_lib/polymarket-pricing.js';
+import { LCDLF_SOURCE } from '../../_lib/lcdlf-official.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -146,8 +147,13 @@ function probabilitiesFromParentSeedValues(seedValues) {
 }
 
 function parallelLegBinaryReserves({ sourceData, outcomeIndex, legSeed, parentSeedValues }) {
-  let probabilities = sourceData?.suggestedPricing?.probabilities
-    || sourceData?.suggestedPricing?.probabilityPct
+  const suggestedPricing = sourceData?.suggestedPricing || {};
+  let probabilities = suggestedPricing.legProbabilities
+    || suggestedPricing.legProbabilityPct
+    || suggestedPricing.yesProbabilities
+    || suggestedPricing.yesProbabilityPct
+    || suggestedPricing.probabilities
+    || suggestedPricing.probabilityPct
     || probabilitiesFromParentSeedValues(parentSeedValues);
   if (
     Array.isArray(parentSeedValues)
@@ -247,6 +253,17 @@ async function list(req, res) {
         AND resolver_config->'series' IS NOT NULL
         AND EXTRACT(MINUTE FROM start_time AT TIME ZONE 'UTC') = 0
         AND EXTRACT(HOUR FROM start_time AT TIME ZONE 'UTC') IN (4, 5)
+    `;
+    await schemaSql`
+      UPDATE points_pending_markets
+      SET status = 'rejected',
+          admin_note = COALESCE(NULLIF(admin_note, ''), 'auto-rejected: legacy LCDLF binary nominations replaced by grouped parallel market'),
+          reviewer = COALESCE(reviewer, 'system'),
+          reviewed_at = COALESCE(reviewed_at, NOW())
+      WHERE status = 'pending'
+        AND source = ${LCDLF_SOURCE}
+        AND source_event_id ~ '^lcdlf-mx-nomination:[0-9]{4}-[0-9]{2}-[0-9]{2}:.+'
+        AND COALESCE(amm_mode, 'unified') <> 'parallel'
     `;
   } catch (e) {
     // Don't block the list on the cleanup query — log and continue.

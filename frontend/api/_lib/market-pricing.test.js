@@ -59,3 +59,25 @@ test('attachSuggestedPricing preserves provider source and evidence', () => {
   assert.equal(spec.source_data.suggestedPricing.source, 'provider');
   assert.equal(spec.source_data.suggestedPricing.evidence[0].bookmaker, 'Book');
 });
+
+test('attachSuggestedPricing preserves per-leg probabilities for parallel markets', () => {
+  const spec = attachSuggestedPricing({
+    source: 'test',
+    source_event_id: 'parallel',
+    outcomes: ['A', 'B', 'C'],
+    seed_liquidity: 1000,
+    amm_mode: 'parallel',
+    source_data: {
+      suggestedPricing: {
+        legProbabilities: [0.32, 0.32, 0.32],
+        legProbabilityPct: [32, 32, 32],
+      },
+    },
+  }, {
+    probabilities: [1 / 3, 1 / 3, 1 / 3],
+    source: 'parallel-default',
+  });
+  assert.deepEqual(spec.seed_liquidities, [1000, 1000, 1000]);
+  assert.deepEqual(spec.source_data.suggestedPricing.legProbabilityPct, [32, 32, 32]);
+  assert.equal(spec.source_data.suggestedPricing.source, 'parallel-default');
+});

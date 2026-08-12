@@ -607,6 +607,10 @@ export function buildLcdlfNominationMarketSpecs({
   if (!snapshot?.ok || !Array.isArray(snapshot.active) || snapshot.active.length < 2) return [];
   if (Array.isArray(snapshot.nominated) && snapshot.nominated.length >= 2) return [];
 
+  const activeRows = snapshot.active
+    .filter(row => row?.name && row?.slug && row.statusKey !== 'eliminado');
+  if (activeRows.length < 2) return [];
+
   const closeHour = Number(process.env.LCDLF_NOMINATION_CLOSE_HOUR ?? DEFAULT_NOMINATION_CLOSE_HOUR);
   const closeMinute = Number(process.env.LCDLF_NOMINATION_CLOSE_MINUTE ?? DEFAULT_NOMINATION_CLOSE_MINUTE);
   const closeWeekday = Number(process.env.LCDLF_NOMINATION_CLOSE_WEEKDAY ?? DEFAULT_NOMINATION_CLOSE_WEEKDAY);
@@ -619,67 +623,77 @@ export function buildLcdlfNominationMarketSpecs({
   const baseEvidence = [
     { title: 'La Casa de los Famosos México', url: snapshot.sourceUrl },
   ];
+  const sourceEventId = `lcdlf-mx-nomination:${weekKey}`;
+  const evidence = [
+    ...baseEvidence,
+    ...activeRows.map(row => ({
+      title: `${row.name} · ${row.statusLabel || 'En casa'}`,
+      url: row.url,
+    })),
+  ].filter(item => item.url);
+  const outcomes = activeRows.map(row => row.name);
+  const legProbabilities = activeRows.map(() => 0.32);
 
-  return snapshot.active
-    .filter(row => row?.name && row?.slug && row.statusKey !== 'eliminado')
-    .map(row => {
-      const sourceEventId = `lcdlf-mx-nomination:${weekKey}:${row.slug}`;
-      const evidence = [
-        ...baseEvidence,
-        { title: `${row.name} · ${row.statusLabel || 'En casa'}`, url: row.url },
-      ].filter(item => item.url);
-      return {
-        source: LCDLF_SOURCE,
-        source_event_id: sourceEventId,
-        question: `¿${row.name} quedará nominado/a en La Casa de los Famosos México esta semana?`,
-        category: 'musica',
-        icon: null,
-        outcomes: ['Sí', 'No'],
-        seed_liquidity: seedLiquidity,
-        start_time: now.toISOString(),
-        end_time: close.toISOString(),
-        amm_mode: 'unified',
-        resolver_type: 'api_lcdlf',
-        resolver_config: {
-          source: LCDLF_SOURCE,
-          sourceEventId,
-          shape: 'binary-status',
-          residentName: row.name,
-          residentSlug: row.slug,
-          statusKey: 'nominado',
-          yesOutcome: 0,
-          noOutcome: 1,
-          closeOnStatus: true,
-          nominationMinStatusCount: 2,
-          criteria: `Se resuelve Sí si el sitio oficial de La Casa de los Famosos México marca a ${row.name} como Nominado/a o con la frase "podría estar eliminado/a" esta semana. Si llega la hora límite sin esa etiqueta oficial, se resuelve No con revisión de la misma fuente.`,
-          evidence,
-          sourceUrls: evidence.map(item => item.url).filter(Boolean),
-          evidenceUrl: row.url || snapshot.sourceUrl,
-          timezone: MEXICO_CITY_TZ,
-          staleReadPolicy: 'Usar lectura fresca del sitio oficial; si el estado no se puede leer, diferir o enviar a revisión manual.',
-        },
-        source_data: {
-          kind: 'lcdlf_nomination',
-          showLabel: 'La Casa de los Famosos México',
-          seasonLabel,
-          weekKey,
-          residentName: row.name,
-          residentSlug: row.slug,
-          closeLocalTime: `miércoles ${String(closeHour).padStart(2, '0')}:${String(closeMinute).padStart(2, '0')} ${MEXICO_CITY_TZ}`,
-          snapshot: {
-            sourceUrl: snapshot.sourceUrl,
-            observedAt: snapshot.observedAt,
-            parsedCount: snapshot.parsedCount,
-            total: snapshot.total,
-            rows: compactRows(snapshot.rows),
-          },
-          categorization: {
-            topicTags: ['tv', 'farandula'],
-          },
-        },
-        topic_tags: ['tv', 'farandula'],
-      };
-    });
+  return [{
+    source: LCDLF_SOURCE,
+    source_event_id: sourceEventId,
+    question: `¿Quién quedará nominado/a en La Casa de los Famosos México esta semana?`,
+    category: 'musica',
+    icon: null,
+    outcomes,
+    seed_liquidity: seedLiquidity,
+    start_time: now.toISOString(),
+    end_time: close.toISOString(),
+    amm_mode: 'parallel',
+    resolver_type: 'api_lcdlf',
+    resolver_config: {
+      source: LCDLF_SOURCE,
+      sourceEventId,
+      shape: 'parallel-status',
+      statusKey: 'nominado',
+      yesOutcome: 0,
+      noOutcome: 1,
+      closeOnStatus: true,
+      nominationMinStatusCount: 2,
+      legs: activeRows.map(row => ({
+        label: row.name,
+        residentName: row.name,
+        residentSlug: row.slug,
+        statusKey: 'nominado',
+        evidenceUrl: row.url || snapshot.sourceUrl,
+      })),
+      criteria: 'Cada participante se resuelve de forma independiente: Sí si el sitio oficial marca a esa persona como Nominado/a o con la frase "podría estar eliminado/a" esta semana. Cuando la ronda oficial de nominación esté publicada, las personas sin esa etiqueta se resuelven No.',
+      evidence,
+      sourceUrls: evidence.map(item => item.url).filter(Boolean),
+      evidenceUrl: snapshot.sourceUrl,
+      timezone: MEXICO_CITY_TZ,
+      staleReadPolicy: 'Usar lectura fresca del sitio oficial; si el estado no se puede leer, diferir o enviar a revisión manual.',
+    },
+    source_data: {
+      kind: 'lcdlf_nomination',
+      nominationMarketShape: 'parallel-status',
+      showLabel: 'La Casa de los Famosos México',
+      seasonLabel,
+      weekKey,
+      residents: compactRows(activeRows),
+      closeLocalTime: `miércoles ${String(closeHour).padStart(2, '0')}:${String(closeMinute).padStart(2, '0')} ${MEXICO_CITY_TZ}`,
+      snapshot: {
+        sourceUrl: snapshot.sourceUrl,
+        observedAt: snapshot.observedAt,
+        parsedCount: snapshot.parsedCount,
+        total: snapshot.total,
+        rows: compactRows(snapshot.rows),
+      },
+      suggestedPricing: {
+        legProbabilities,
+        legProbabilityPct: legProbabilities.map(p => Math.round(p * 1000) / 10),
+      },
+      categorization: {
+        topicTags: ['tv', 'farandula'],
+      },
+    },
+    topic_tags: ['tv', 'farandula'],
+  }];
 }
 
 function outcomeIndexForName(outcomes = [], name) {

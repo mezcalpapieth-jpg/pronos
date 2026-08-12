@@ -42,3 +42,11 @@ test('public profile lookup falls back to public points activity rows', () => {
   assert.match(SOURCE, /FROM points_cycle_snapshots/);
   assert.match(SOURCE, /ORDER BY priority ASC/);
 });
+
+test('public profile payload includes the searched user current balance', () => {
+  assert.match(SOURCE, /const balanceRows = await sql/);
+  assert.match(SOURCE, /SELECT balance/);
+  assert.match(SOURCE, /const currentBalance = round2/);
+  assert.match(SOURCE, /balance: currentBalance/);
+  assert.match(SOURCE, /currentBalance/);
+});

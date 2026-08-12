@@ -564,8 +564,8 @@ function ParallelLegList({ market, legs, outcomeImages, outcomeCountryLabels, on
           const logo = outcomeImages?.[i] || null;
           const countryLabel = outcomeCountryLabels?.[i] || null;
           const isLegTradable = parallelLegIsTradable(leg, market);
-          const closedLabel = leg.status === 'resolved' && Number(leg.outcome) === 1
-            ? 'Eliminado · 0%'
+          const closedLabel = leg.status === 'resolved'
+            ? (Number(leg.outcome) === 0 ? 'Sí · 100%' : 'No · 0%')
             : 'Cerrado';
           // Carry the leg's own gating fields through — handleBuyClick
           // checks status/seriesLocked on whatever target it gets, so a
@@ -2027,16 +2027,18 @@ export default function PointsMarketDetail({ onOpenLogin }) {
     let cancelled = false;
     const range = detailChartRangeFor(chartRange);
 
-    const tailPointFor = (outcomeIdx) => {
-      if (market.status !== 'resolved' || market.outcome == null) return null;
+    const tailPointFor = (outcomeIdx, leg = null) => {
+      if (market.status !== 'resolved') return null;
       const t = market.resolvedAt
         ? Math.floor(new Date(market.resolvedAt).getTime() / 1000)
         : Math.floor(Date.now() / 1000);
-      const p = Number(market.outcome) === outcomeIdx ? 100 : 0;
+      const p = market.ammMode === 'parallel' && leg
+        ? (Number(leg.outcome) === 0 ? 100 : 0)
+        : (market.outcome != null && Number(market.outcome) === outcomeIdx ? 100 : 0);
       return { t, p };
     };
-    const withTail = (series, outcomeIdx) => {
-      const tail = tailPointFor(outcomeIdx);
+    const withTail = (series, outcomeIdx, leg = null) => {
+      const tail = tailPointFor(outcomeIdx, leg);
       if (!tail) return series;
       const filtered = series.filter(pt => pt.t <= tail.t);
       const last = filtered[filtered.length - 1];
@@ -2051,8 +2053,8 @@ export default function PointsMarketDetail({ onOpenLogin }) {
         const series = await Promise.all(
           market.legs.map((leg, i) =>
             fetchPriceHistory([leg.id], { days: range.days, hours: range.hours, outcome: 0, limit: range.limit })
-              .then(h => withTail(h[leg.id] || [], i))
-              .catch(() => withTail([], i)),
+              .then(h => withTail(h[leg.id] || [], i, leg))
+              .catch(() => withTail([], i, leg)),
           ),
         );
         const activity = await Promise.all(
@@ -2492,13 +2494,23 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   );
   const latestTradeAt = unixSecondsFromDateLike(market.lastTradeAt) || activitySummary.lastAt;
   const isCanceled = market.status === 'canceled';
+  const parallelResolved = !isCanceled
+    && market.status === 'resolved'
+    && market.ammMode === 'parallel'
+    && Array.isArray(parallelDisplayLegs)
+    && parallelDisplayLegs.length > 0;
   const winnerIndex = !isCanceled && market.status === 'resolved' && market.outcome != null ? Number(market.outcome) : null;
-  const isResolved = winnerIndex != null && Number.isFinite(winnerIndex);
+  const isResolved = parallelResolved || (winnerIndex != null && Number.isFinite(winnerIndex));
   const displayWinnerIndex = isResolved ? displayOutcomeIndices.indexOf(winnerIndex) : null;
   const isTradingLocked = !isResolved && (isCanceled || market.seriesLocked || market.status !== 'active');
   const seriesSubtitle = formatSeriesSubtitle(market.seriesMeta, { t });
   function pctFor(i) {
-    if (isResolved) return displayWinnerIndex === i ? 100 : 0;
+    if (isResolved) {
+      if (market.ammMode === 'parallel' && Array.isArray(parallelDisplayLegs)) {
+        return Number(parallelDisplayLegs[i]?.outcome) === 0 ? 100 : 0;
+      }
+      return displayWinnerIndex === i ? 100 : 0;
+    }
     return Math.round((displayPrices[i] ?? 0) * 100);
   }
   // isLive wins over isPendingResolution when start_time has passed

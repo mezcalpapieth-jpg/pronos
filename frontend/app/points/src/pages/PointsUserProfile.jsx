@@ -8,7 +8,7 @@
  * recognize what they're looking at.
  *
  * Public surface — keep it bounded:
- *   - No private fields (email, wallet address, balance ledger).
+ *   - No private fields (email, wallet address, balance ledger rows).
  *   - 404 on unknown usernames so we don't leak existence.
  *   - Active + history lists capped server-side at whatever the
  *     /u endpoint returns (no client-side override).
@@ -115,6 +115,8 @@ export default function PointsUserProfile() {
   const [pnlSeries, setPnlSeries] = useState([]);
   const [pnlLoading, setPnlLoading] = useState(true);
   const [pnlRange, setPnlRange] = useState(0); // 0 = since first trade
+  const [pnlCycleScope, setPnlCycleScope] = useState('current');
+  const [currentCyclePnl, setCurrentCyclePnl] = useState(null);
   const backTarget = typeof location.state?.from === 'string' && location.state.from.startsWith('/')
     ? location.state.from
     : null;
@@ -138,6 +140,7 @@ export default function PointsUserProfile() {
   useEffect(() => {
     let cancelled = false;
     const username = String(profileUsername || '').trim();
+    setCurrentCyclePnl(null);
     setLoading(true);
     setError(null);
     setData(null);
@@ -183,17 +186,37 @@ export default function PointsUserProfile() {
     const username = String(profileUsername || '').trim();
     if (!username) { setPnlSeries([]); setPnlLoading(false); return undefined; }
     setPnlLoading(true);
-    fetchPnlHistory({ username, days: pnlRange })
+    fetchPnlHistory({ username, days: pnlRange, cycle: pnlCycleScope })
       .then(({ series }) => { if (!cancelled) setPnlSeries(series || []); })
       .finally(() => { if (!cancelled) setPnlLoading(false); });
     return () => { cancelled = true; };
-  }, [profileUsername, pnlRange]);
+  }, [profileUsername, pnlRange, pnlCycleScope]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const username = String(profileUsername || '').trim();
+    if (!username) { setCurrentCyclePnl(null); return undefined; }
+    fetchPnlHistory({ username, days: 0, cycle: 'current' })
+      .then(({ current }) => {
+        if (!cancelled) setCurrentCyclePnl(Number(current || 0));
+      })
+      .catch(() => {
+        if (!cancelled) setCurrentCyclePnl(null);
+      });
+    return () => { cancelled = true; };
+  }, [profileUsername]);
 
   const pnlColor = useMemo(() => {
     if (!data) return 'var(--text-primary)';
     return data.stats.totalPnl > 0 ? 'var(--success)'
       : data.stats.totalPnl < 0 ? 'var(--danger)' : 'var(--text-primary)';
   }, [data]);
+
+  const currentPnlColor = useMemo(() => {
+    const value = Number(currentCyclePnl);
+    if (!Number.isFinite(value)) return 'var(--text-primary)';
+    return value > 0 ? 'var(--success)' : value < 0 ? 'var(--danger)' : 'var(--text-primary)';
+  }, [currentCyclePnl]);
 
   if (loading) {
     return (
@@ -266,6 +289,8 @@ export default function PointsUserProfile() {
   }
 
   const { user, stats, active, history } = data;
+  const balance = Number(user.balance ?? user.currentBalance ?? stats.currentBalance ?? 0);
+  const currentPnlValue = currentCyclePnl == null ? null : Number(currentCyclePnl);
   const publicSocialLinks = Array.isArray(user.socialLinks) ? user.socialLinks : [];
   const showAdminSocials = Object.prototype.hasOwnProperty.call(user, 'adminSocials')
     || Object.prototype.hasOwnProperty.call(user, 'adminSocialLinks');
@@ -322,7 +347,13 @@ export default function PointsUserProfile() {
         gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
         gap: 12, marginTop: 18, marginBottom: 24,
       }}>
-        <Stat label="PnL total"     value={`${stats.totalPnl > 0 ? '+' : ''}${fmt(stats.totalPnl)} MXNP`} color={pnlColor} />
+        <Stat label="Balance actual" value={`${fmt(balance)} MXNP`} color="var(--orange)" />
+        <Stat
+          label="PnL ciclo actual"
+          value={Number.isFinite(currentPnlValue) ? `${currentPnlValue > 0 ? '+' : ''}${fmt(currentPnlValue)} MXNP` : '—'}
+          color={currentPnlColor}
+        />
+        <Stat label="PnL histórico" value={`${stats.totalPnl > 0 ? '+' : ''}${fmt(stats.totalPnl)} MXNP`} color={pnlColor} />
         <Stat label="Mercados"      value={String(stats.marketsTraded)} />
         <Stat label="Ganados"       value={String(stats.marketsWon)}  color="var(--green)" />
         <Stat label="Perdidos"      value={String(stats.marketsLost)} color="var(--danger)" />
@@ -337,6 +368,8 @@ export default function PointsUserProfile() {
         series={pnlSeries}
         range={pnlRange}
         onRangeChange={setPnlRange}
+        cycleScope={pnlCycleScope}
+        onCycleScopeChange={setPnlCycleScope}
         loading={pnlLoading}
         emptySubLabel="Este usuario aún no tiene predicciones cerradas."
       />

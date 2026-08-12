@@ -273,6 +273,40 @@ function buildLcdlfStatusPatch({ cfg, row, snapshot, winningIdx }) {
   };
 }
 
+function finalScoreForLcdlfParallelStatus(legResolutions = []) {
+  const yesRows = legResolutions.filter(row => Number(row.outcomeIndex) === 0);
+  if (yesRows.length === 0) return 'Sin nominados oficiales';
+  const names = yesRows.map(row => row.residentName || row.label).filter(Boolean);
+  return `Nominados: ${names.join(', ')}`;
+}
+
+function buildLcdlfParallelStatusPatch({ cfg, snapshot, legResolutions }) {
+  const finalScore = finalScoreForLcdlfParallelStatus(legResolutions);
+  return {
+    lcdlfParallelStatusAtResolve: {
+      source: LCDLF_SOURCE,
+      sourceEventId: cfg?.sourceEventId || null,
+      statusKey: cfg?.statusKey || null,
+      observedAt: snapshot?.observedAt || new Date().toISOString(),
+      nominatedCount: Array.isArray(snapshot?.nominated) ? snapshot.nominated.length : null,
+      finalScore,
+      legs: legResolutions.map(row => ({
+        index: row.index,
+        label: row.label || null,
+        residentName: row.residentName || null,
+        residentSlug: row.residentSlug || null,
+        statusKey: row.statusKey || null,
+        statusLabel: row.statusLabel || null,
+        rawStatus: row.rawStatus || null,
+        url: row.url || null,
+        outcomeIndex: row.outcomeIndex,
+      })),
+    },
+    evidenceUrl: snapshot?.sourceUrl || cfg?.evidenceUrl || null,
+    finalScore,
+  };
+}
+
 async function queueNextMananeraPendingMarkets({ candidates, dry, report, now = new Date() }) {
   if (!Array.isArray(candidates) || !candidates.some(row => (
     isMananeraMarket({
@@ -831,7 +865,7 @@ export async function runAutoResolve({ dry = false } = {}) {
               )
               OR (
                 m.resolver_type = 'api_lcdlf'
-                AND m.resolver_config->>'shape' = 'binary-status'
+                AND m.resolver_config->>'shape' IN ('binary-status', 'parallel-status')
                 AND m.start_time IS NOT NULL
                 AND m.start_time < NOW()
                 AND m.end_time > NOW()
@@ -1031,6 +1065,7 @@ export async function runAutoResolve({ dry = false } = {}) {
       let winningIdx = null;
       let resolverInfo = {};
       let resolverConfigPatch = null;
+      let independentLegResolutions = null;
       let result = null;
       try {
         if (resolverType === 'chainlink_price') {
@@ -1265,7 +1300,7 @@ export async function runAutoResolve({ dry = false } = {}) {
             transcriptMatchTimestamps: transcript.matchTimestamps || [],
           };
         } else if (resolverType === 'api_lcdlf') {
-          if (cfg.source !== LCDLF_SOURCE || cfg.shape !== 'binary-status' || !cfg.statusKey) {
+          if (cfg.source !== LCDLF_SOURCE || !cfg.statusKey) {
             throw new Error('invalid api_lcdlf config');
           }
           const snapshot = await readLcdlfOfficialSnapshot();
@@ -1280,23 +1315,9 @@ export async function runAutoResolve({ dry = false } = {}) {
             throw err;
           }
 
-          const row = findLcdlfStatusRow(snapshot, cfg);
-          if (!row) {
-            const err = new Error('lcdlf_resident_not_found');
-            err.benign = true;
-            err.info = {
-              source: LCDLF_SOURCE,
-              residentName: cfg.residentName || null,
-              residentSlug: cfg.residentSlug || null,
-              parsedCount: snapshot.parsedCount,
-            };
-            throw err;
-          }
-
           const targetStatus = String(cfg.statusKey || '').trim().toLowerCase();
           const yesOutcome = Number.isInteger(Number(cfg.yesOutcome)) ? Number(cfg.yesOutcome) : 0;
           const noOutcome = Number.isInteger(Number(cfg.noOutcome)) ? Number(cfg.noOutcome) : 1;
-          const isTargetStatus = String(row.statusKey || '').trim().toLowerCase() === targetStatus;
           const nominationMinStatusCount = Math.max(
             1,
             Number.isFinite(Number(cfg.nominationMinStatusCount))
@@ -1307,40 +1328,151 @@ export async function runAutoResolve({ dry = false } = {}) {
             && Array.isArray(snapshot.nominated)
             && snapshot.nominated.length >= nominationMinStatusCount;
 
-          if (isTargetStatus) {
-            winningIdx = yesOutcome;
-          } else if (nominationRoundPosted || new Date(m.end_time).getTime() <= Date.now()) {
-            winningIdx = noOutcome;
-          } else {
-            const err = new Error('lcdlf_status_not_marked_yet');
-            err.benign = true;
-            err.info = {
+          if (cfg.shape === 'binary-status') {
+            const row = findLcdlfStatusRow(snapshot, cfg);
+            if (!row) {
+              const err = new Error('lcdlf_resident_not_found');
+              err.benign = true;
+              err.info = {
+                source: LCDLF_SOURCE,
+                residentName: cfg.residentName || null,
+                residentSlug: cfg.residentSlug || null,
+                parsedCount: snapshot.parsedCount,
+              };
+              throw err;
+            }
+
+            const isTargetStatus = String(row.statusKey || '').trim().toLowerCase() === targetStatus;
+            if (isTargetStatus) {
+              winningIdx = yesOutcome;
+            } else if (nominationRoundPosted || new Date(m.end_time).getTime() <= Date.now()) {
+              winningIdx = noOutcome;
+            } else {
+              const err = new Error('lcdlf_status_not_marked_yet');
+              err.benign = true;
+              err.info = {
+                source: LCDLF_SOURCE,
+                residentName: row.name,
+                residentSlug: row.slug,
+                statusKey: row.statusKey || null,
+                statusLabel: row.statusLabel || null,
+                nominatedCount: Array.isArray(snapshot.nominated) ? snapshot.nominated.length : null,
+                observedAt: snapshot.observedAt,
+              };
+              throw err;
+            }
+
+            resolverInfo = {
               source: LCDLF_SOURCE,
-              residentName: row.name,
-              residentSlug: row.slug,
+              shape: cfg.shape,
+              residentName: row.name || cfg.residentName || null,
+              residentSlug: row.slug || cfg.residentSlug || null,
               statusKey: row.statusKey || null,
               statusLabel: row.statusLabel || null,
-              nominatedCount: Array.isArray(snapshot.nominated) ? snapshot.nominated.length : null,
               observedAt: snapshot.observedAt,
+              sourceUrl: row.url || snapshot.sourceUrl,
             };
-            throw err;
-          }
+            resolverConfigPatch = buildLcdlfStatusPatch({
+              cfg,
+              row,
+              snapshot,
+              winningIdx,
+            });
+          } else if (cfg.shape === 'parallel-status') {
+            const resolverLegs = Array.isArray(cfg.legs) && cfg.legs.length > 0
+              ? cfg.legs
+              : marketOutcomes.map((label) => ({
+                  label,
+                  residentName: label,
+                  residentSlug: null,
+                  statusKey: targetStatus,
+                }));
+            if (resolverLegs.length !== marketOutcomes.length) {
+              throw new Error('lcdlf_parallel_status_leg_mismatch');
+            }
 
-          resolverInfo = {
-            source: LCDLF_SOURCE,
-            residentName: row.name || cfg.residentName || null,
-            residentSlug: row.slug || cfg.residentSlug || null,
-            statusKey: row.statusKey || null,
-            statusLabel: row.statusLabel || null,
-            observedAt: snapshot.observedAt,
-            sourceUrl: row.url || snapshot.sourceUrl,
-          };
-          resolverConfigPatch = buildLcdlfStatusPatch({
-            cfg,
-            row,
-            snapshot,
-            winningIdx,
-          });
+            const legResolutions = [];
+            for (let i = 0; i < resolverLegs.length; i++) {
+              const leg = resolverLegs[i] || {};
+              const label = leg.label || marketOutcomes[i] || `Opción ${i + 1}`;
+              const row = findLcdlfStatusRow(snapshot, {
+                residentName: leg.residentName || label,
+                residentSlug: leg.residentSlug || null,
+              });
+              if (!row) {
+                const err = new Error('lcdlf_resident_not_found');
+                err.benign = true;
+                err.info = {
+                  source: LCDLF_SOURCE,
+                  shape: cfg.shape,
+                  legIndex: i,
+                  residentName: leg.residentName || label,
+                  residentSlug: leg.residentSlug || null,
+                  parsedCount: snapshot.parsedCount,
+                };
+                throw err;
+              }
+              const legTargetStatus = String(leg.statusKey || targetStatus).trim().toLowerCase();
+              const isTargetStatus = String(row.statusKey || '').trim().toLowerCase() === legTargetStatus;
+              if (isTargetStatus) {
+                legResolutions.push({
+                  index: i,
+                  label,
+                  residentName: row.name || leg.residentName || label,
+                  residentSlug: row.slug || leg.residentSlug || null,
+                  statusKey: row.statusKey || null,
+                  statusLabel: row.statusLabel || null,
+                  rawStatus: row.rawStatus || null,
+                  url: row.url || null,
+                  outcomeIndex: yesOutcome,
+                });
+              } else if (nominationRoundPosted || new Date(m.end_time).getTime() <= Date.now()) {
+                legResolutions.push({
+                  index: i,
+                  label,
+                  residentName: row.name || leg.residentName || label,
+                  residentSlug: row.slug || leg.residentSlug || null,
+                  statusKey: row.statusKey || null,
+                  statusLabel: row.statusLabel || null,
+                  rawStatus: row.rawStatus || null,
+                  url: row.url || null,
+                  outcomeIndex: noOutcome,
+                });
+              } else {
+                const err = new Error('lcdlf_status_not_marked_yet');
+                err.benign = true;
+                err.info = {
+                  source: LCDLF_SOURCE,
+                  shape: cfg.shape,
+                  legIndex: i,
+                  residentName: row.name,
+                  residentSlug: row.slug,
+                  statusKey: row.statusKey || null,
+                  statusLabel: row.statusLabel || null,
+                  nominatedCount: Array.isArray(snapshot.nominated) ? snapshot.nominated.length : null,
+                  observedAt: snapshot.observedAt,
+                };
+                throw err;
+              }
+            }
+
+            independentLegResolutions = legResolutions;
+            resolverInfo = {
+              source: LCDLF_SOURCE,
+              shape: cfg.shape,
+              observedAt: snapshot.observedAt,
+              sourceUrl: snapshot.sourceUrl,
+              nominatedCount: Array.isArray(snapshot.nominated) ? snapshot.nominated.length : null,
+              yesCount: legResolutions.filter(row => Number(row.outcomeIndex) === yesOutcome).length,
+            };
+            resolverConfigPatch = buildLcdlfParallelStatusPatch({
+              cfg,
+              snapshot,
+              legResolutions,
+            });
+          } else {
+            throw new Error('invalid api_lcdlf config');
+          }
         } else if (resolverType === 'sports_api') {
           // Sports scoreboards (MLB/NBA/F1 via ESPN + Jolpica +
           // football-data). Shape in cfg:
@@ -1605,6 +1737,116 @@ export async function runAutoResolve({ dry = false } = {}) {
           continue;
         }
         report.errors.push({ id: m.id, error: `resolve_failed: ${e.message}` });
+        continue;
+      }
+
+      if (Array.isArray(independentLegResolutions)) {
+        const finalScore = resolverConfigPatch?.finalScore
+          || finalScoreForLcdlfParallelStatus(independentLegResolutions);
+        const legAudit = independentLegResolutions.map(row => ({
+          index: row.index,
+          label: row.label,
+          residentName: row.residentName,
+          residentSlug: row.residentSlug,
+          outcomeIndex: row.outcomeIndex,
+          statusKey: row.statusKey,
+          statusLabel: row.statusLabel,
+        }));
+        if (dry) {
+          report.resolved.push({
+            id: m.id,
+            finalScore,
+            legResolutions: legAudit,
+            ...resolverInfo,
+            dry: true,
+          });
+          continue;
+        }
+
+        try {
+          await withTransaction(async (client) => {
+            const legs = await client.query(
+              `SELECT id FROM points_markets
+                 WHERE parent_id = $1
+                   AND status <> 'canceled'
+                 ORDER BY id ASC
+                 FOR UPDATE`,
+              [m.id],
+            );
+            if (legs.rows.length !== independentLegResolutions.length) {
+              throw new Error(`lcdlf_parallel_leg_count_mismatch: db=${legs.rows.length} cfg=${independentLegResolutions.length}`);
+            }
+            const legIds = legs.rows.map(row => Number(row.id)).filter(Number.isFinite);
+            await releaseOpenLimitOrdersForMarkets(client, [m.id, ...legIds], {
+              reason: 'market_resolved',
+            });
+            const r = await client.query(
+              `UPDATE points_markets
+                 SET status = 'resolved',
+                     outcome = NULL,
+                     resolved_at = NOW(),
+                     resolved_by = $1,
+                     resolver_type = COALESCE(resolver_type, $3),
+                     resolver_config = COALESCE(resolver_config, $4::jsonb)
+               WHERE id = $2
+                 AND status = 'active'
+               RETURNING id`,
+              [`resolver:${resolverType}`, m.id, resolverType, JSON.stringify(cfg)],
+            );
+            if (r.rows.length === 0) {
+              const err = new Error('not_active_at_write'); err.benign = true; throw err;
+            }
+            if (finalScore != null && finalScore !== '') {
+              try {
+                await client.query(
+                  `UPDATE points_markets SET final_score = $1 WHERE id = $2`,
+                  [finalScore, m.id],
+                );
+              } catch (e) {
+                if (e?.code !== '42703') throw e;
+              }
+            }
+            if (resolverConfigPatch && Object.keys(resolverConfigPatch).length > 0) {
+              await client.query(
+                `UPDATE points_markets
+                    SET resolver_config = COALESCE(resolver_config, '{}'::jsonb) || $1::jsonb
+                  WHERE id = $2`,
+                [JSON.stringify(resolverConfigPatch), m.id],
+              );
+            }
+            for (let i = 0; i < legs.rows.length; i++) {
+              const outcomeIndex = Number(independentLegResolutions[i]?.outcomeIndex);
+              if (!Number.isInteger(outcomeIndex) || outcomeIndex < 0) {
+                throw new Error(`invalid independent leg outcome ${outcomeIndex}`);
+              }
+              await client.query(
+                `UPDATE points_markets
+                   SET status = 'resolved',
+                       outcome = $1,
+                       resolved_at = NOW(),
+                       resolved_by = $2
+                 WHERE id = $3
+                   AND status = 'active'`,
+                [outcomeIndex, `resolver:${resolverType}`, legs.rows[i].id],
+              );
+            }
+
+            await bestEffortPersistResolvedCryptoMarketSnapshot(
+              client,
+              m.id,
+              'cron/points-auto-resolve',
+            );
+          });
+          report.resolved.push({
+            id: m.id,
+            finalScore,
+            legResolutions: legAudit,
+            ...resolverInfo,
+          });
+        } catch (e) {
+          if (e.benign) continue;
+          report.errors.push({ id: m.id, error: `write_failed: ${e.message}` });
+        }
         continue;
       }
 

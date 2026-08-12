@@ -97,6 +97,11 @@ export default async function handler(req, res) {
     // their parent — hiding them here keeps the admin table uncluttered
     // for markets with many outcomes. Admin resolves the parent; the
     // resolve endpoint cascades to every leg.
+    //
+    // Push the cheap filters into SQL before LIMIT. This matters for
+    // curation: after "Ocultar mercados", hidden active rows still need
+    // to be reachable in admin so a BTC 12h market can be marked as a
+    // tournament override and shown publicly again.
     let rows;
     if (filter === 'archived') {
       rows = await sql`
@@ -108,6 +113,14 @@ export default async function handler(req, res) {
           AND m.archived_at IS NOT NULL
           AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
           AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
+          AND (${categoryFilter}::text IS NULL OR m.category = ${categoryFilter}::text OR COALESCE(m.category_tags, '[]'::jsonb) ? ${categoryFilter}::text)
+          AND (${sportFilter}::text IS NULL OR m.sport = ${sportFilter}::text)
+          AND (${leagueFilter}::text IS NULL OR m.league = ${leagueFilter}::text)
+          AND (
+            ${cryptoTypeFilter}::text IS NULL
+            OR (${cryptoTypeFilter}::text = '5min' AND m.resolver_config->>'shape' = 'binary-direction')
+            OR (${cryptoTypeFilter}::text = 'general' AND COALESCE(m.resolver_config->>'shape', '') <> 'binary-direction')
+          )
         ORDER BY m.archived_at DESC
         LIMIT 2000
       `;
@@ -121,6 +134,14 @@ export default async function handler(req, res) {
           AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
           AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
           AND (${showArchived} OR m.archived_at IS NULL)
+          AND (${categoryFilter}::text IS NULL OR m.category = ${categoryFilter}::text OR COALESCE(m.category_tags, '[]'::jsonb) ? ${categoryFilter}::text)
+          AND (${sportFilter}::text IS NULL OR m.sport = ${sportFilter}::text)
+          AND (${leagueFilter}::text IS NULL OR m.league = ${leagueFilter}::text)
+          AND (
+            ${cryptoTypeFilter}::text IS NULL
+            OR (${cryptoTypeFilter}::text = '5min' AND m.resolver_config->>'shape' = 'binary-direction')
+            OR (${cryptoTypeFilter}::text = 'general' AND COALESCE(m.resolver_config->>'shape', '') <> 'binary-direction')
+          )
         ORDER BY m.created_at DESC
         LIMIT 2000
       `;
@@ -137,6 +158,14 @@ export default async function handler(req, res) {
           AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
           AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
           AND (${showArchived} OR m.archived_at IS NULL)
+          AND (${categoryFilter}::text IS NULL OR m.category = ${categoryFilter}::text OR COALESCE(m.category_tags, '[]'::jsonb) ? ${categoryFilter}::text)
+          AND (${sportFilter}::text IS NULL OR m.sport = ${sportFilter}::text)
+          AND (${leagueFilter}::text IS NULL OR m.league = ${leagueFilter}::text)
+          AND (
+            ${cryptoTypeFilter}::text IS NULL
+            OR (${cryptoTypeFilter}::text = '5min' AND m.resolver_config->>'shape' = 'binary-direction')
+            OR (${cryptoTypeFilter}::text = 'general' AND COALESCE(m.resolver_config->>'shape', '') <> 'binary-direction')
+          )
         ORDER BY m.end_time ASC
         LIMIT 2000
       `;
@@ -150,7 +179,22 @@ export default async function handler(req, res) {
           AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
           AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
           AND (${showArchived} OR m.archived_at IS NULL)
-        ORDER BY m.created_at DESC
+          AND (${categoryFilter}::text IS NULL OR m.category = ${categoryFilter}::text OR COALESCE(m.category_tags, '[]'::jsonb) ? ${categoryFilter}::text)
+          AND (${sportFilter}::text IS NULL OR m.sport = ${sportFilter}::text)
+          AND (${leagueFilter}::text IS NULL OR m.league = ${leagueFilter}::text)
+          AND (
+            ${cryptoTypeFilter}::text IS NULL
+            OR (${cryptoTypeFilter}::text = '5min' AND m.resolver_config->>'shape' = 'binary-direction')
+            OR (${cryptoTypeFilter}::text = 'general' AND COALESCE(m.resolver_config->>'shape', '') <> 'binary-direction')
+          )
+        ORDER BY
+          CASE WHEN ${filter}::text = 'resolved' THEN m.resolved_at END DESC NULLS LAST,
+          CASE WHEN ${filter}::text = 'active'
+                AND m.start_time IS NOT NULL
+                AND m.start_time <= NOW()
+                AND m.end_time > NOW() THEN 0 ELSE 1 END,
+          CASE WHEN ${filter}::text = 'active' THEN m.end_time END ASC NULLS LAST,
+          m.created_at DESC
         LIMIT 2000
       `;
     }

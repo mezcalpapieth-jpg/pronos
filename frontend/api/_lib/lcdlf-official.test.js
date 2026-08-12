@@ -161,7 +161,7 @@ test('buildLcdlfWeeklyMarketSpec creates a manual-review market from nominees', 
   assert.equal(spec.resolver_config.requireHumanConfirmation, true);
 });
 
-test('buildLcdlfNominationMarketSpecs creates binary markets from active residents before nominees are official', () => {
+test('buildLcdlfNominationMarketSpecs creates one parallel market from active residents before nominees are official', () => {
   const now = new Date('2026-08-12T18:00:00Z');
   const snapshot = {
     ok: true,
@@ -188,15 +188,21 @@ test('buildLcdlfNominationMarketSpecs creates binary markets from active residen
 
   const specs = buildLcdlfNominationMarketSpecs({ snapshot, now });
 
-  assert.equal(specs.length, 3);
-  assert.deepEqual(specs[0].outcomes, ['Sí', 'No']);
+  assert.equal(specs.length, 1);
+  assert.deepEqual(specs[0].outcomes, ['Brianda Deyanara', 'Flor Vigna', 'Yahir']);
+  assert.equal(specs[0].amm_mode, 'parallel');
   assert.equal(specs[0].resolver_type, 'api_lcdlf');
-  assert.equal(specs[0].resolver_config.shape, 'binary-status');
+  assert.equal(specs[0].resolver_config.shape, 'parallel-status');
   assert.equal(specs[0].resolver_config.statusKey, 'nominado');
+  assert.deepEqual(
+    specs[0].resolver_config.legs.map(leg => leg.residentSlug),
+    ['brianda-deyanara', 'flor-vigna', 'yahir'],
+  );
   assert.equal(specs[0].resolver_config.nominationMinStatusCount, 2);
   assert.equal(specs[0].source_data.kind, 'lcdlf_nomination');
   assert.match(specs[0].source_event_id, /^lcdlf-mx-nomination:/);
-  assert.ok(specs.every(spec => !spec.question.includes('Fede Vigevani')));
+  assert.ok(!specs[0].question.includes('Fede Vigevani'));
+  assert.deepEqual(specs[0].source_data.suggestedPricing.legProbabilityPct, [32, 32, 32]);
 });
 
 test('buildLcdlfResolutionReview suggests the eliminated nominee only after official evidence', async () => {

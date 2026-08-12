@@ -360,7 +360,11 @@ export default function PointsMarketCard({ market, userPosition }) {
             // Resolved markets collapse to a binary 100 / 0 display so
             // the card matches what the detail page already does — no
             // more stale "Bad Bunny 67%" showing after Bad Bunny won.
-            const resolvedPrice = isResolved ? (Number(market.outcome) === i ? 1 : 0) : null;
+            const resolvedPrice = isResolved
+              ? (market.ammMode === 'parallel' && row.legOutcome != null
+                  ? (Number(row.legOutcome) === 0 ? 1 : 0)
+                  : (Number(market.outcome) === i ? 1 : 0))
+              : null;
             const pct = Math.round((resolvedPrice ?? livePrice) * 100);
             const gain = previewGain(livePrice);
             const teamProfile = findTeamByName(market.sport, label);

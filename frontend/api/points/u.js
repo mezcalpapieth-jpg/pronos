@@ -12,14 +12,14 @@
  *   - takes ?username= from the query string,
  *   - returns NOTHING that a logged-in user's session response
  *     wouldn't already expose to the leaderboard (no email, wallet
- *     address, balance ledger, or anything sensitive),
+ *     address, ledger rows, or anything sensitive),
  *   - 404s on unknown usernames so we don't leak existence by
  *     timing differences between unknown / empty users.
  *
  * Response:
  *   {
- *     user: { username, joinedAt, totalVolume, adminSocials? },
- *     stats: { totalPnl, marketsTraded, marketsWon, marketsOpen, winRate },
+ *     user: { username, joinedAt, balance, totalVolume, adminSocials? },
+ *     stats: { totalPnl, currentBalance, marketsTraded, marketsWon, marketsOpen, winRate },
  *     active: [{ marketId, question, category, outcomeIndex, outcomeLabel,
  *                shares, costBasis, currentValue, unrealizedPnl, ... }],
  *     history: [{ marketId, question, category, outcomeStatus, netPnl,
@@ -152,6 +152,14 @@ export default async function handler(req, res) {
     if (userRow.length === 0) {
       return res.status(404).json({ error: 'user_not_found' });
     }
+
+    const balanceRows = await sql`
+      SELECT balance
+      FROM points_balances
+      WHERE LOWER(username) = ${username}
+      LIMIT 1
+    `;
+    const currentBalance = round2(Number(balanceRows[0]?.balance || 0));
 
     // ── Active positions ──────────────────────────────────────────────
     // Mirrors /api/points/positions but auth-less. Only 'points' mode
@@ -287,12 +295,15 @@ export default async function handler(req, res) {
       user: {
         username: userRow[0].username,
         joinedAt: userRow[0].created_at,
+        balance: currentBalance,
+        currentBalance,
         totalVolume: stats.totalVolume,
         socialLinks: publicSocialLinks,
         ...(viewerIsAdmin ? { adminSocials, adminSocialLinks } : {}),
       },
       stats: {
         totalPnl: stats.totalPnl,
+        currentBalance,
         marketsTraded: stats.marketsTraded,
         marketsWon: stats.marketsWon,
         marketsLost: stats.marketsLost,

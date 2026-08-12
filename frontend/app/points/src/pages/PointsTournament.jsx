@@ -526,7 +526,7 @@ export default function PointsTournament() {
           letterSpacing: '0.01em',
           margin: 0,
         }}>
-          {lang === 'en' ? 'The next cycle starts soon' : 'El próximo ciclo empieza pronto'}
+          {lang === 'en' ? 'The tournament is here' : 'El torneo ya está aquí'}
         </h1>
         <p style={{
           maxWidth: 760,

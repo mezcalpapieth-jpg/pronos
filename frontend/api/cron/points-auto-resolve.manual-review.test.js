@@ -74,9 +74,13 @@ test('points auto-resolver polls LCDLF nomination markets before close and resol
   assert.match(SOURCE, /readLcdlfOfficialSnapshot/);
   assert.match(SOURCE, /findLcdlfStatusRow/);
   assert.match(SOURCE, /m\.resolver_type = 'api_lcdlf'/);
-  assert.match(SOURCE, /m\.resolver_config->>'shape' = 'binary-status'/);
+  assert.match(SOURCE, /m\.resolver_config->>'shape' IN \('binary-status', 'parallel-status'\)/);
   assert.match(SOURCE, /nominationRoundPosted/);
   assert.match(SOURCE, /snapshot\.nominated\.length >= nominationMinStatusCount/);
   assert.match(SOURCE, /lcdlf_status_not_marked_yet/);
   assert.match(SOURCE, /buildLcdlfStatusPatch/);
+  assert.match(SOURCE, /cfg\.shape === 'parallel-status'/);
+  assert.match(SOURCE, /independentLegResolutions/);
+  assert.match(SOURCE, /buildLcdlfParallelStatusPatch/);
+  assert.match(SOURCE, /outcome = NULL/);
 });

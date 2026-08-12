@@ -43,7 +43,7 @@ test('generateLcdlfMarkets uses official nominees and suggested balanced pricing
   }
 });
 
-test('generateLcdlfMarkets creates nomination markets from active residents before official nominees appear', async () => {
+test('generateLcdlfMarkets creates one nested nomination market from active residents before official nominees appear', async () => {
   const previousResidents = process.env.LCDLF_RESIDENTS_JSON;
   const previousDiscover = process.env.LCDLF_DISCOVER_RESIDENTS;
   try {
@@ -70,11 +70,14 @@ test('generateLcdlfMarkets creates nomination markets from active residents befo
       fetchImpl,
     });
 
-    assert.equal(specs.length, 2);
-    assert.deepEqual(specs.map(spec => spec.resolver_type), ['api_lcdlf', 'api_lcdlf']);
-    assert.deepEqual(specs.map(spec => spec.outcomes), [['Sí', 'No'], ['Sí', 'No']]);
-    assert.deepEqual(specs.map(spec => spec.source_data.residentSlug), ['brianda-deyanara', 'flor-vigna']);
+    assert.equal(specs.length, 1);
+    assert.equal(specs[0].resolver_type, 'api_lcdlf');
+    assert.equal(specs[0].amm_mode, 'parallel');
+    assert.equal(specs[0].resolver_config.shape, 'parallel-status');
+    assert.deepEqual(specs[0].outcomes, ['Brianda Deyanara', 'Flor Vigna']);
+    assert.deepEqual(specs[0].resolver_config.legs.map(leg => leg.residentSlug), ['brianda-deyanara', 'flor-vigna']);
     assert.equal(specs[0].source_data.suggestedPricing.source, 'lcdlf-official:active-resident');
+    assert.deepEqual(specs[0].source_data.suggestedPricing.legProbabilityPct, [32, 32]);
   } finally {
     if (previousResidents === undefined) delete process.env.LCDLF_RESIDENTS_JSON;
     else process.env.LCDLF_RESIDENTS_JSON = previousResidents;
