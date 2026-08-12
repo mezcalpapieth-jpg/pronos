@@ -196,7 +196,7 @@ function outcomeInitials(label) {
 function ChartWatermark() {
   return (
     <div style={{position:'absolute',top:2,right:14,opacity:0.55,pointerEvents:'none',userSelect:'none',zIndex:1}}>
-      <span style={{fontFamily:'var(--font-display)',fontSize:13,letterSpacing:'0.05em',color:'var(--text-primary)'}}>PRONOS.IO</span>
+      <span style={{fontFamily:'var(--font-display)',fontSize:13,letterSpacing:'0.05em',color:'var(--text-primary)'}}>pronos.io</span>
     </div>
   );
 }
