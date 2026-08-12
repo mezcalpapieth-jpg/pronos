@@ -173,6 +173,20 @@ function marketLiveSignature(market) {
   });
 }
 
+// ── Chart watermark (Pronos brand mark, corner-anchored like Polymarket's) ──
+function ChartWatermark() {
+  return (
+    <div style={{position:'absolute',top:0,right:0,display:'flex',alignItems:'center',gap:6,opacity:0.55,pointerEvents:'none',userSelect:'none',zIndex:1}}>
+      <svg width="18" height="18" viewBox="0 0 32 32">
+        <rect width="32" height="32" rx="7" fill="var(--text-primary)"/>
+        <text x="5" y="25" fontFamily="'Bebas Neue',sans-serif" fontSize="26" fontWeight="900" fill="var(--surface1)" letterSpacing="-1">P</text>
+        <circle cx="25" cy="9" r="4" fill="var(--orange)"/>
+      </svg>
+      <span style={{fontFamily:'var(--font-display)',fontSize:14,letterSpacing:'0.06em',color:'var(--text-primary)'}}>PRONOS</span>
+    </div>
+  );
+}
+
 function MarketActivityStrip({ summary, rangeLabel, lastTradeAt, locale = 'es-MX', t }) {
   const safeSummary = summary || {
     count: 0,
@@ -2731,6 +2745,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                 </div>
               </div>
               <div style={{ padding: '20px 20px 18px', position: 'relative' }}>
+                <ChartWatermark />
                 {/* Video demo only: floating per-order labels over the chart. */}
                 {isVideoDemoActive() && (
                   <Suspense fallback={null}>
