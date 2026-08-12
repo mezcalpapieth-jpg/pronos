@@ -176,8 +176,8 @@ function marketLiveSignature(market) {
 // ── Chart watermark (Pronos brand mark, corner-anchored like Polymarket's) ──
 function ChartWatermark() {
   return (
-    <div style={{position:'absolute',top:1,right:14,opacity:0.5,pointerEvents:'none',userSelect:'none',zIndex:1}}>
-      <span style={{fontFamily:'var(--font-mono)',fontSize:12,letterSpacing:'0.02em',color:'var(--text-primary)'}}>pronos.io</span>
+    <div style={{position:'absolute',top:2,right:14,opacity:0.55,pointerEvents:'none',userSelect:'none',zIndex:1}}>
+      <span style={{fontFamily:'var(--font-display)',fontSize:13,letterSpacing:'0.05em',color:'var(--text-primary)'}}>PRONOS.IO</span>
     </div>
   );
 }
