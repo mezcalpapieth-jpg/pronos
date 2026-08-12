@@ -1,11 +1,3 @@
-const TOURNAMENT_LEAGUES = new Set([
-  'uefa-cl',
-  'uefa-europa-league',
-  'uefa-conference-league',
-  'copa-libertadores',
-  'leagues-cup',
-]);
-
 const LEAGUE_LABELS = {
   'club-friendlies': 'AMISTOSO',
   international: 'INTERNACIONAL',
@@ -28,16 +20,15 @@ export function soccerMatchTypeLabel(market = {}) {
       || market.resolverConfig?.matchTypeLabel
       || market.resolver_config?.matchTypeLabel
   );
-  if (explicit) return explicit;
+  if (market.tournamentFeatured === true) return 'TORNEO';
+  if (explicit && explicit !== 'TORNEO') return explicit;
 
   const league = String(market.league || '').trim().toLowerCase();
-  if (TOURNAMENT_LEAGUES.has(league)) return 'TORNEO';
   if (LEAGUE_LABELS[league]) return LEAGUE_LABELS[league];
   return null;
 }
 
 export const _internal = {
   LEAGUE_LABELS,
-  TOURNAMENT_LEAGUES,
   normalizeType,
 };
