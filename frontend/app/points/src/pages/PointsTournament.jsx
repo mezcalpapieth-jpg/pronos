@@ -135,7 +135,7 @@ function targetForCycle(cycle) {
     return { label: { es: 'Inicia en', en: 'Starts in' }, iso: cycle.startsAt || cycle.startedAt };
   }
   if (cycle.status === 'active') {
-    return { label: { es: 'Operación cierra en', en: 'Trading closes in' }, iso: cycle.operationCloseAt || cycle.endsAt };
+    return { label: { es: 'Torneo cierra en', en: 'Tournament closes in' }, iso: cycle.endsAt || cycle.operationCloseAt };
   }
   if (cycle.status === 'closing') {
     return { label: { es: 'Ranking cierra en', en: 'Ranking closes in' }, iso: cycle.rankingCutoffAt || cycle.endsAt };
@@ -172,7 +172,7 @@ function SectionLabel({ children }) {
   );
 }
 
-function Metric({ label, value, tone = 'primary', sub }) {
+function Metric({ label, value, tone = 'primary', sub, children }) {
   const color = tone === 'green'
     ? 'var(--green)'
     : tone === 'orange'
@@ -189,6 +189,7 @@ function Metric({ label, value, tone = 'primary', sub }) {
       <div style={metricLabel}>{label}</div>
       <div style={{ ...metricValue, color }}>{value}</div>
       {sub && <div style={metricSub}>{sub}</div>}
+      {children}
     </div>
   );
 }
@@ -475,23 +476,21 @@ export default function PointsTournament() {
   const countdownTarget = targetForCycle(cycle);
   const nowMs = Date.now();
   const cycleTargetMs = countdownTarget?.iso ? new Date(countdownTarget.iso).getTime() : NaN;
-  const showMarketDropCountdown = !Number.isFinite(cycleTargetMs)
-    || cycle?.status === 'closed'
-    || cycleTargetMs <= nowMs;
-  const activeCountdownTarget = showMarketDropCountdown
-    ? {
-        label: {
-          es: 'Nuevos mercados para el torneo',
-          en: 'New tournament markets',
-        },
-        iso: nextTournamentMarketDropIso(new Date(nowMs)),
-      }
-    : countdownTarget;
+  const cycleEndMs = cycle?.endsAt ? new Date(cycle.endsAt).getTime() : cycleTargetMs;
+  const nextMarketDropIso = nextTournamentMarketDropIso(new Date(nowMs));
+  const nextMarketDropMs = new Date(nextMarketDropIso).getTime();
+  const showMarketDropTimer = cycle?.status !== 'closed'
+    && (!Number.isFinite(cycleEndMs) || (nowMs < cycleEndMs && nextMarketDropMs <= cycleEndMs));
   const countdown = useMemo(() => {
-    if (!activeCountdownTarget?.iso) return statusCopy(cycle?.status || 'scheduled', lang);
-    const seconds = Math.max(0, Math.floor((new Date(activeCountdownTarget.iso).getTime() - Date.now()) / 1000));
+    if (!countdownTarget?.iso) return statusCopy(cycle?.status || 'scheduled', lang);
+    const seconds = Math.max(0, Math.floor((new Date(countdownTarget.iso).getTime() - Date.now()) / 1000));
     return formatCountdown(seconds, lang);
-  }, [activeCountdownTarget?.iso, cycle?.status, lang, tick]);
+  }, [countdownTarget?.iso, cycle?.status, lang, tick]);
+  const marketDropCountdown = useMemo(() => {
+    if (!showMarketDropTimer) return lang === 'en' ? 'Closed' : 'Cerrado';
+    const seconds = Math.max(0, Math.floor((new Date(nextMarketDropIso).getTime() - Date.now()) / 1000));
+    return formatCountdown(seconds, lang);
+  }, [showMarketDropTimer, nextMarketDropIso, lang, tick]);
 
   const top = Array.isArray(leaderboard?.top) ? leaderboard.top : [];
   const cycles = Array.isArray(history) ? history : [];
@@ -561,11 +560,20 @@ export default function PointsTournament() {
               }) : null}
             />
             <Metric
-              label={activeCountdownTarget?.label?.[lang] || (lang === 'en' ? 'Countdown' : 'Cuenta regresiva')}
+              label={countdownTarget?.label?.[lang] || (lang === 'en' ? 'Countdown' : 'Cuenta regresiva')}
               value={countdown}
               tone="orange"
               sub={lang === 'en' ? 'Mexico City time' : 'Hora Ciudad de México'}
-            />
+            >
+              <div style={marketDropTimerBlock}>
+                <div style={marketDropTimerLabel}>
+                  {lang === 'en' ? 'Next tournament markets' : 'Próximos mercados del torneo'}
+                </div>
+                <div style={marketDropTimerValue}>
+                  {marketDropCountdown}
+                </div>
+              </div>
+            </Metric>
             <Metric
               label={lang === 'en' ? 'Prize pool' : 'Bolsa'}
               value={`$${fmtInteger(prizePool)} MXN`}
@@ -724,6 +732,32 @@ const metricSub = {
   fontFamily: 'var(--font-mono)',
   fontSize: 10,
   lineHeight: 1.45,
+};
+
+const marketDropTimerBlock = {
+  marginTop: 13,
+  paddingTop: 12,
+  borderTop: '1px dashed rgba(255,255,255,0.14)',
+  display: 'grid',
+  gap: 4,
+};
+
+const marketDropTimerLabel = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: 9,
+  letterSpacing: '0.11em',
+  textTransform: 'uppercase',
+  color: 'var(--text-muted)',
+  lineHeight: 1.35,
+};
+
+const marketDropTimerValue = {
+  fontFamily: 'var(--font-display)',
+  fontSize: 'clamp(15px, 1.5vw, 19px)',
+  color: 'var(--orange)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.01em',
+  whiteSpace: 'nowrap',
 };
 
 const emptyText = {

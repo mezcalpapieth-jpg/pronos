@@ -722,8 +722,14 @@ export async function adminToggleFeatured({ marketId, pendingId, featured, tourn
   });
 }
 
-export async function adminBulkHideMarkets({ dry = false, expectedCount = null, mode = 'points' } = {}) {
+export async function adminBulkHideMarkets({
+  action = 'hide',
+  dry = false,
+  expectedCount = null,
+  mode = 'points',
+} = {}) {
   return postJson('/api/points/admin/bulk-hide-markets', {
+    action,
     dryRun: dry,
     expectedCount,
     mode,

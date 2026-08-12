@@ -1,11 +1,17 @@
 /**
  * POST /api/points/admin/bulk-hide-markets
- *   body: { mode?: 'points' | 'onchain', dryRun?: boolean, expectedCount?: number }
+ *   body: {
+ *     mode?: 'points' | 'onchain',
+ *     action?: 'hide' | 'show',
+ *     dryRun?: boolean,
+ *     expectedCount?: number,
+ *   }
  *
  * Removes active markets from the public home/trending surface without
  * archiving them. Category pages, direct links, trading, history, and
  * resolution keep working. The 🏆 tournament override still shows even
- * after this pass.
+ * after this pass. `show` restores the public home surface by clearing
+ * hidden_from_home and re-enabling featured on the same active parent rows.
  */
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
@@ -26,6 +32,7 @@ export default async function handler(req, res) {
 
     const {
       mode = 'points',
+      action: rawAction = 'hide',
       dryRun,
       expectedCount,
     } = req.body || {};
@@ -33,6 +40,7 @@ export default async function handler(req, res) {
     if (mode !== 'points' && mode !== 'onchain') {
       return res.status(400).json({ error: 'invalid_mode', detail: 'mode must be "points" or "onchain"' });
     }
+    const action = rawAction === 'show' ? 'show' : 'hide';
 
     const isDryRun = dryRun === true;
     const requireMatch = !isDryRun && Number.isInteger(expectedCount) && expectedCount >= 0;
@@ -45,20 +53,38 @@ export default async function handler(req, res) {
       AND archived_at IS NULL
       AND COALESCE(mode, 'points') = $1
     `;
+    const hideWhereClause = `
+      ${whereClause}
+      AND hidden_from_home IS NOT TRUE
+    `;
+    const showWhereClause = `
+      ${whereClause}
+      AND hidden_from_home IS TRUE
+    `;
+    const targetWhereClause = action === 'show' ? showWhereClause : hideWhereClause;
 
     if (isDryRun) {
       const result = await schemaSql.query(
-        `SELECT COUNT(*)::int AS n
+        `SELECT
+            COUNT(*) FILTER (WHERE hidden_from_home IS TRUE)::int AS hidden_count,
+            COUNT(*) FILTER (WHERE hidden_from_home IS NOT TRUE)::int AS visible_count
            FROM points_markets
           WHERE ${whereClause}`,
         [mode],
       );
-      const n = Number(result?.[0]?.n ?? result?.rows?.[0]?.n ?? 0);
+      const row = result?.[0] || result?.rows?.[0] || {};
+      const hiddenCount = Number(row.hidden_count || 0);
+      const visibleCount = Number(row.visible_count || 0);
       return res.status(200).json({
         ok: true,
         dryRun: true,
         mode,
-        wouldHideCount: n,
+        action,
+        visibleCount,
+        hiddenCount,
+        wouldHideCount: visibleCount,
+        wouldShowCount: hiddenCount,
+        suggestedAction: visibleCount > 0 ? 'hide' : (hiddenCount > 0 ? 'show' : 'hide'),
         actor: admin.username,
       });
     }
@@ -68,7 +94,7 @@ export default async function handler(req, res) {
         const c = await client.query(
           `SELECT COUNT(*)::int AS n
              FROM points_markets
-            WHERE ${whereClause}`,
+            WHERE ${targetWhereClause}`,
           [mode],
         );
         const live = Number(c.rows[0]?.n || 0);
@@ -80,14 +106,23 @@ export default async function handler(req, res) {
         }
       }
 
-      const result = await client.query(
-        `UPDATE points_markets
-            SET featured = false,
-                auto_featured = false,
-                hidden_from_home = true
-          WHERE ${whereClause}`,
-        [mode],
-      );
+      const result = action === 'show'
+        ? await client.query(
+            `UPDATE points_markets
+                SET featured = true,
+                    auto_featured = false,
+                    hidden_from_home = false
+              WHERE ${targetWhereClause}`,
+            [mode],
+          )
+        : await client.query(
+            `UPDATE points_markets
+                SET featured = false,
+                    auto_featured = false,
+                    hidden_from_home = true
+              WHERE ${targetWhereClause}`,
+            [mode],
+          );
       return { count: result.rowCount || 0 };
     });
 
@@ -95,7 +130,10 @@ export default async function handler(req, res) {
       ok: true,
       dryRun: false,
       mode,
-      hiddenCount: count,
+      action,
+      changedCount: count,
+      hiddenCount: action === 'hide' ? count : 0,
+      shownCount: action === 'show' ? count : 0,
       actor: admin.username,
     });
   } catch (e) {

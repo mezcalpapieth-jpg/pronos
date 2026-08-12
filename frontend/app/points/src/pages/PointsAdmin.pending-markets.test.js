@@ -138,9 +138,11 @@ test('Points admin can review scheduler resolution candidates', () => {
   assert.match(apiSource, /export async function adminReviewResolutionCandidate/);
 });
 
-test('Points admin can bulk-hide home markets and mark tournament overrides', () => {
-  assert.match(source, /hideAllMarketsFromHome/);
-  assert.match(source, /Ocultar todos/);
+test('Points admin can bulk-hide or show home markets and mark tournament overrides', () => {
+  assert.match(source, /toggleHomeMarketsVisibility/);
+  assert.match(source, /Ocultar mercados/);
+  assert.match(source, /Mostrar mercados/);
+  assert.match(source, /suggestedAction/);
   assert.match(source, /adminBulkHideMarkets/);
   assert.match(source, /toggleTournamentFeaturedMarket/);
   assert.match(source, /togglePendingTournamentFeatured/);
@@ -149,6 +151,7 @@ test('Points admin can bulk-hide home markets and mark tournament overrides', ()
   assert.match(source, /🏆/);
   assert.match(apiSource, /export async function adminBulkHideMarkets/);
   assert.match(apiSource, /\/api\/points\/admin\/bulk-hide-markets/);
+  assert.match(apiSource, /action/);
   assert.match(apiSource, /tournamentFeatured/);
 });
 

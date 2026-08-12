@@ -6,7 +6,7 @@ export const CATEGORIES = [
   { key: 'finanzas', label: 'Finanzas' },
   { key: 'crypto',   label: 'Crypto' },
   { key: 'musica',   label: 'Entretenimiento' },
-  { key: 'world-cup', label: 'Copa del Mundo' },
+  { key: 'world-cup', label: 'Nuevos mercados' },
 ];
 
 export const MARKET_CATEGORY_FILTERS = [

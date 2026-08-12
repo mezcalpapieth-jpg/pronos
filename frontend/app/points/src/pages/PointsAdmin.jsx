@@ -1799,6 +1799,18 @@ const DEFAULT_CRYPTO_ASSET_OPTIONS = [
 ];
 const MAX_PENDING_EDIT_OUTCOMES = 64;
 
+function normalizeHomeMarketVisibility(payload = {}) {
+  const visibleCount = Number(payload.visibleCount || 0);
+  const hiddenCount = Number(payload.hiddenCount || 0);
+  return {
+    visibleCount,
+    hiddenCount,
+    suggestedAction: payload.suggestedAction === 'show'
+      ? 'show'
+      : (visibleCount > 0 ? 'hide' : (hiddenCount > 0 ? 'show' : 'hide')),
+  };
+}
+
 // ─── Markets table ───────────────────────────────────────────────────────────
 function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
   const [markets, setMarkets] = useState(null);
@@ -1815,6 +1827,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
   const [canceling, setCanceling] = useState(null);
   const [autoResolving, setAutoResolving] = useState(false);
   const [hidingMarkets, setHidingMarkets] = useState(false);
+  const [homeMarketVisibility, setHomeMarketVisibility] = useState(normalizeHomeMarketVisibility());
   // When non-null, render the edit modal for this market.
   const [editing, setEditing] = useState(null);
 
@@ -1845,8 +1858,12 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
         geoFilter,
         topicFilter,
       });
-      const r = await getJson(`/api/points/admin/markets?${q.toString()}`);
+      const [r, visibility] = await Promise.all([
+        getJson(`/api/points/admin/markets?${q.toString()}`),
+        adminBulkHideMarkets({ dry: true, mode: 'points' }),
+      ]);
       setMarkets(r.markets || []);
+      setHomeMarketVisibility(normalizeHomeMarketVisibility(visibility));
     } catch (e) {
       setMarkets([]);
     } finally {
@@ -2011,33 +2028,43 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
     }
   }
 
-  async function hideAllMarketsFromHome() {
+  async function toggleHomeMarketsVisibility() {
     setHidingMarkets(true);
     try {
       const preview = await adminBulkHideMarkets({ dry: true, mode: 'points' });
-      const count = Number(preview?.wouldHideCount || 0);
+      const visibility = normalizeHomeMarketVisibility(preview);
+      setHomeMarketVisibility(visibility);
+      const action = visibility.suggestedAction;
+      const isShowing = action === 'show';
+      const count = Number((isShowing ? preview?.wouldShowCount : preview?.wouldHideCount) || 0);
       if (count <= 0) {
-        alert('No hay mercados activos para ocultar.');
+        alert(isShowing ? 'No hay mercados ocultos para mostrar.' : 'No hay mercados activos para ocultar.');
         return;
       }
       if (!confirm(
-        `¿Ocultar ${count} mercados activos del home?\n\n`
-        + 'Los mercados con 🏆 seguirán apareciendo. Las categorías, links y resolución no cambian.',
+        isShowing
+          ? `¿Mostrar ${count} mercados activos en el home?\n\n`
+            + 'Esto vuelve a activar su visibilidad en Trending y Nuevos mercados.'
+          : `¿Ocultar ${count} mercados activos del home?\n\n`
+            + 'Los mercados con 🏆 seguirán apareciendo. Las categorías, links y resolución no cambian.',
       )) {
         return;
       }
-      const result = await adminBulkHideMarkets({ dry: false, mode: 'points', expectedCount: count });
-      setMarkets(prev => (prev || []).map(m => ({
-        ...m,
-        featured: false,
-        hiddenFromHome: true,
-      })));
-      alert(`✓ Ocultos del home: ${result.hiddenCount || count}. Los 🏆 siguen visibles.`);
+      const result = await adminBulkHideMarkets({
+        action,
+        dry: false,
+        mode: 'points',
+        expectedCount: count,
+      });
+      await load();
+      alert(isShowing
+        ? `✓ Mercados visibles otra vez: ${result.shownCount || count}.`
+        : `✓ Ocultos del home: ${result.hiddenCount || count}. Los 🏆 siguen visibles.`);
     } catch (e) {
       const detail = e.detail?.liveCount != null
         ? `\nConteo cambió: ahora hay ${e.detail.liveCount}. Intenta otra vez.`
         : '';
-      alert(`No se pudieron ocultar: ${e.code || e.message}${detail}`);
+      alert(`No se pudo actualizar visibilidad: ${e.code || e.message}${detail}`);
     } finally {
       setHidingMarkets(false);
     }
@@ -2093,6 +2120,12 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
       setAutoResolving(false);
     }
   }
+
+  const homeVisibilityAction = homeMarketVisibility.suggestedAction === 'show' ? 'show' : 'hide';
+  const isShowingHomeMarkets = homeVisibilityAction === 'show';
+  const homeVisibilityButtonLabel = hidingMarkets
+    ? (isShowingHomeMarkets ? 'Mostrando…' : 'Ocultando…')
+    : (isShowingHomeMarkets ? 'Mostrar mercados' : 'Ocultar mercados');
 
   return (
     <div>
@@ -2172,16 +2205,18 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
         )}
 
         <button
-          onClick={hideAllMarketsFromHome}
+          onClick={toggleHomeMarketsVisibility}
           disabled={hidingMarkets}
-          title="Oculta todos los mercados activos del home. Los mercados con 🏆 siguen visibles."
+          title={isShowingHomeMarkets
+            ? 'Vuelve a mostrar los mercados activos en el home.'
+            : 'Oculta todos los mercados activos del home. Los mercados con 🏆 siguen visibles.'}
           style={{
             marginLeft: filter === 'pending' ? 0 : 'auto',
             padding: '6px 14px',
             borderRadius: 16,
-            border: '1px solid rgba(239,68,68,0.4)',
-            background: 'rgba(239,68,68,0.10)',
-            color: 'var(--red, #ef4444)',
+            border: isShowingHomeMarkets ? '1px solid rgba(0,232,122,0.38)' : '1px solid rgba(239,68,68,0.4)',
+            background: isShowingHomeMarkets ? 'rgba(0,232,122,0.10)' : 'rgba(239,68,68,0.10)',
+            color: isShowingHomeMarkets ? 'var(--green)' : 'var(--red, #ef4444)',
             fontFamily: 'var(--font-mono)', fontSize: 11,
             letterSpacing: '0.06em', textTransform: 'uppercase',
             cursor: hidingMarkets ? 'not-allowed' : 'pointer',
@@ -2189,7 +2224,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
             fontWeight: 600,
           }}
         >
-          {hidingMarkets ? 'Ocultando…' : 'Ocultar todos'}
+          {homeVisibilityButtonLabel}
         </button>
       </div>
 

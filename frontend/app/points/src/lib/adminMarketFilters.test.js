@@ -66,8 +66,8 @@ test('formats admin market dates without relying on component-local helpers', ()
   assert.match(formatAdminMarketDate('2026-05-15T18:30:00.000Z'), /\d{2}/);
 });
 
-test('exposes Spanish admin labels for World Cup, creation world region, and weather topic', () => {
-  assert.ok(CATEGORIES.some(c => c.key === 'world-cup' && c.label === 'Copa del Mundo'));
+test('exposes Spanish admin labels for new markets, creation world region, and weather topic', () => {
+  assert.ok(CATEGORIES.some(c => c.key === 'world-cup' && c.label === 'Nuevos mercados'));
   assert.ok(CATEGORIES.some(c => c.key === 'musica' && c.label === 'Entretenimiento'));
   assert.ok(MARKET_CREATION_GEO_OPTIONS.some(c => c.key === 'world' && c.label === 'Mundo'));
   assert.ok(ADMIN_MEXICO_TOPIC_FILTERS.some(c => c.key === 'weather' && c.label === 'Clima'));

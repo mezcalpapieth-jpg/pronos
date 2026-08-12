@@ -669,7 +669,7 @@ const STRINGS = {
   // matches the MVP's clean text-only treatment.
   'points.cat.noticias':      { es: 'Noticias',               en: 'News' },
   'points.cat.trending':      { es: 'Trending',               en: 'Trending' },
-  'points.cat.worldCup':      { es: 'Copa del Mundo',         en: 'World Cup' },
+  'points.cat.worldCup':      { es: 'Nuevos mercados',        en: 'New markets' },
   'points.cat.deportes':      { es: 'Deportes',               en: 'Sports' },
   'points.cat.musica':        { es: 'Entretenimiento',        en: 'Entertainment' },
   'points.cat.mexico':        { es: 'Mexico & Latam',         en: 'Mexico & Latam' },

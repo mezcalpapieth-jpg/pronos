@@ -27,7 +27,6 @@ import { isVideoDemoActive } from './demo/demoFlag.js';
 const PointsHome = lazy(() => import('./pages/PointsHome.jsx'));
 const PointsMarketDetail = lazy(() => import('./pages/PointsMarketDetail.jsx'));
 const PointsCategoryPage = lazy(() => import('./pages/PointsCategoryPage.jsx'));
-const PointsWorldCupPage = lazy(() => import('./pages/PointsWorldCupPage.jsx'));
 const PointsChampionsLeaguePage = lazy(() => import('./pages/PointsChampionsLeaguePage.jsx'));
 // Shared news page — same component used by the MVP build, with the
 // admin-handoff destination passed in via the `adminPath` prop.
@@ -340,10 +339,6 @@ function Shell({ onOpenLogin, isAdmin }) {
           <Route path="/tiktok" element={<PublicityRedirect source="tiktok" />} />
           <Route path="/twitter" element={<PublicityRedirect source="x" />} />
           <Route path="/" element={<PointsHomeEntry />} />
-          {/* World Cup gets its own page with a hero, groups, and
-              bracket. Registered BEFORE the generic /c/:slug so it
-              wins the match. */}
-          <Route path="/c/world-cup" element={<PointsWorldCupPage />} />
           <Route path="/c/deportes/uefa-champions-league" element={<PointsChampionsLeaguePage />} />
           {/* News page — registered BEFORE the generic /c/:slug so the
               specialized layout wins over the standard category grid.

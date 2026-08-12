@@ -40,6 +40,7 @@ const SLUG_TO_TITLE_KEY = {
   deportes:    'points.cat.deportes',
   musica:      'points.cat.musica',
   mexico:      'points.cat.mexico',
+  'world-cup': 'points.cat.worldCup',
   politica:    'points.cat.politica',
   crypto:      'points.cat.crypto',
   finanzas:    'points.cat.finanzas',

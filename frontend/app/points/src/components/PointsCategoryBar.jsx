@@ -19,11 +19,11 @@ import { useT } from '@app/lib/i18n.js';
 
 // Order here = visual order in the bar. Each entry maps a URL slug
 // (used in /c/<slug>) to the i18n key that produces the label.
-// `highlight: true` applies the attention-grabbing tri-color
-// gradient treatment — used for the World Cup tab so it pops.
+// `highlight: true` applies the attention-grabbing Pronos treatment
+// for the daily tournament-market bucket.
 // `regional: true` applies a softer green/gold treatment for Mexico & Latam.
 // `news: true` applies a red-gradient + live-dot treatment for the
-// Noticias tab, less loud than world-cup but still distinctive.
+// Noticias tab, distinctive but calmer than the highlighted bucket.
 export const CATEGORY_TABS = [
   { slug: 'noticias',    tKey: 'points.cat.noticias',   news: true },
   { slug: 'all',         tKey: 'points.cat.trending'    },
@@ -68,13 +68,9 @@ export default function PointsCategoryBar() {
           {CATEGORY_TABS.map(cat => {
             const isActive = active === cat.slug;
             if (cat.highlight) {
-              // Special treatment for the World Cup tab — tri-color
-              // gradient (green/red/blue host flags) with a subtle
-              // shine so it catches the eye in the row.
-              // The tri-color gradient already provides the hue
-              // contrast; the border just needs a subtle outline that
-              // reads in both themes. `--border-active` (orange) when
-              // selected, `--border` when idle — both swap with theme.
+              // Special treatment for the tournament drop bucket: a
+              // Pronos orange/green treatment so it catches the eye
+              // without reading as the archived tournament tab.
               return (
                 <button
                   key={cat.slug}
@@ -82,8 +78,8 @@ export default function PointsCategoryBar() {
                   className="filter-btn"
                   style={{
                     background: isActive
-                      ? 'linear-gradient(130deg, rgba(22,163,74,0.35), rgba(220,38,38,0.32) 50%, rgba(59,130,246,0.38))'
-                      : 'linear-gradient(130deg, rgba(22,163,74,0.18), rgba(220,38,38,0.15) 50%, rgba(59,130,246,0.2))',
+                      ? 'linear-gradient(130deg, rgba(255,85,0,0.28), rgba(0,232,122,0.20))'
+                      : 'linear-gradient(130deg, rgba(255,85,0,0.15), rgba(0,232,122,0.09))',
                     borderColor: isActive ? 'var(--border-active)' : 'var(--border)',
                     color: 'var(--text-primary)',
                     fontWeight: 700,
@@ -96,7 +92,7 @@ export default function PointsCategoryBar() {
             }
             if (cat.regional) {
               // Mexico & Latam should invite exploration without
-              // competing with the louder World Cup tab.
+              // competing with the highlighted tournament bucket.
               return (
                 <button
                   key={cat.slug}
@@ -121,8 +117,8 @@ export default function PointsCategoryBar() {
             }
             if (cat.news) {
               // Noticias tab — single-hue red gradient + a pulsing
-              // live-dot. Distinctive but less loud than the World
-              // Cup's tri-color treatment.
+              // live-dot. Distinctive but less loud than the
+              // highlighted tournament bucket.
               return (
                 <button
                   key={cat.slug}
