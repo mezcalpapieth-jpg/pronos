@@ -35,6 +35,67 @@ function parseJsonb(value, fallback) {
   try { return JSON.parse(value); } catch { return fallback; }
 }
 
+function parseCycleScope(value) {
+  const raw = String(value || 'current').toLowerCase();
+  if (raw === 'previous' || raw === 'all') return raw;
+  return 'current';
+}
+
+function toMs(value) {
+  if (value == null) return null;
+  const ms = value instanceof Date ? value.getTime() : new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+async function resolveCycleWindow(scope) {
+  if (scope === 'all') {
+    return { scope: 'all', fromIso: null, toIso: null, fromMs: 0, toMs: null, empty: false };
+  }
+
+  if (scope === 'previous') {
+    const rows = await sql`
+      SELECT id, label, started_at, ends_at, closed_at
+      FROM points_cycles
+      WHERE status = 'closed'
+      ORDER BY closed_at DESC NULLS LAST, ends_at DESC
+      LIMIT 1
+    `;
+    const row = rows[0];
+    if (!row) return { scope, empty: true };
+    const toIso = row.closed_at || row.ends_at;
+    return {
+      scope,
+      id: row.id,
+      label: row.label || null,
+      fromIso: row.started_at,
+      toIso,
+      fromMs: toMs(row.started_at) || 0,
+      toMs: toMs(toIso),
+      empty: false,
+    };
+  }
+
+  const rows = await sql`
+    SELECT id, label, started_at, ends_at, closed_at
+    FROM points_cycles
+    WHERE status = 'active'
+    ORDER BY ends_at DESC
+    LIMIT 1
+  `;
+  const row = rows[0];
+  if (!row) return { scope: 'current', empty: true };
+  return {
+    scope: 'current',
+    id: row.id,
+    label: row.label || null,
+    fromIso: row.started_at,
+    toIso: null,
+    fromMs: toMs(row.started_at) || 0,
+    toMs: null,
+    empty: false,
+  };
+}
+
 export default async function handler(req, res) {
   const timer = createApiTimer(res, 'points/pnl-history');
   const cors = applyCors(req, res, { methods: 'GET, OPTIONS', credentials: true });
@@ -54,10 +115,9 @@ export default async function handler(req, res) {
 
   const daysRaw = parseInt(req.query.days, 10);
   // 0 (or `all`) means "since the first trade" — the default view, since a
-  // cumulative curve is most useful over the account's whole life.
+  // cumulative curve is most useful over the selected cycle.
   const days = Number.isInteger(daysRaw) && daysRaw > 0 ? Math.min(365, daysRaw) : 0;
-  const nowMs = Date.now();
-  const fromMs = days > 0 ? nowMs - days * 86_400_000 : 0;
+  const cycleScope = parseCycleScope(req.query.cycle);
 
   // Points-mode only, matching /api/points/history's default — the Points
   // app must never fold on-chain MVP trades into its numbers.
@@ -65,6 +125,21 @@ export default async function handler(req, res) {
 
   try {
     await timer.time('schema', () => ensurePointsSchema(schemaSql));
+    const cycleWindow = await timer.time('db_cycle', () => resolveCycleWindow(cycleScope));
+    const nowMs = cycleWindow.toMs || Date.now();
+    const cycleStartMs = cycleWindow.fromMs || 0;
+    const fromMs = Math.max(cycleStartMs, days > 0 ? nowMs - days * 86_400_000 : 0);
+
+    if (cycleWindow.empty) {
+      const emptyNowMs = Date.now();
+      timer.end({ series: 0, cycle: cycleWindow.scope });
+      return res.status(200).json({
+        series: [],
+        current: 0,
+        range: { days, from: Math.round(emptyNowMs / 1000), to: Math.round(emptyNowMs / 1000) },
+        cycle: cycleWindow,
+      });
+    }
 
     const tradeRows = await timer.time('db_trades', () => sql`
       SELECT t.market_id, t.side, t.outcome_index, t.shares, t.collateral, t.created_at,
@@ -73,6 +148,8 @@ export default async function handler(req, res) {
       JOIN points_markets m ON m.id = t.market_id
       WHERE LOWER(t.username) = ${username}
         AND COALESCE(m.mode, 'points') = ${modeFilter}
+        AND (${cycleWindow.fromIso}::timestamptz IS NULL OR t.created_at >= ${cycleWindow.fromIso}::timestamptz)
+        AND (${cycleWindow.toIso}::timestamptz IS NULL OR t.created_at < ${cycleWindow.toIso}::timestamptz)
       ORDER BY t.created_at ASC
     `);
 
@@ -82,6 +159,7 @@ export default async function handler(req, res) {
         series: [],
         current: 0,
         range: { days, from: Math.round(fromMs / 1000), to: Math.round(nowMs / 1000) },
+        cycle: cycleWindow,
       });
     }
 
@@ -92,6 +170,8 @@ export default async function handler(req, res) {
       WHERE LOWER(d.username) = ${username}
         AND d.kind IN ('market_cancel_refund', 'void_refund', 'invalid_field_refund')
         AND COALESCE(m.mode, 'points') = ${modeFilter}
+        AND (${cycleWindow.fromIso}::timestamptz IS NULL OR d.created_at >= ${cycleWindow.fromIso}::timestamptz)
+        AND (${cycleWindow.toIso}::timestamptz IS NULL OR d.created_at < ${cycleWindow.toIso}::timestamptz)
       ORDER BY d.created_at ASC
     `);
 
@@ -151,6 +231,7 @@ export default async function handler(req, res) {
       series,
       current,
       range: { days, from: Math.round(fromMs / 1000), to: Math.round(nowMs / 1000) },
+      cycle: cycleWindow,
     });
   } catch (e) {
     timer.end({ error: 'pnl_history_failed' });

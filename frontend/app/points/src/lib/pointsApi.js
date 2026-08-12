@@ -365,15 +365,17 @@ export async function fetchPriceHistory(ids, { days = 30, hours, outcome = 0, li
 /**
  * Cumulative PnL series for the chart on the portfolio and public profiles.
  * Pass `username` for a public profile; omit it for the signed-in user.
- * `days: 0` (the default) means "since the first trade".
+ * `days: 0` (the default) means "since the first trade in the selected
+ * cycle". `cycle` defaults to the active tournament cycle.
  */
-export async function fetchPnlHistory({ username, days = 0 } = {}) {
+export async function fetchPnlHistory({ username, days = 0, cycle = 'current' } = {}) {
   const q = new URLSearchParams();
   if (username) q.set('username', username);
   if (days > 0) q.set('days', String(days));
+  q.set('cycle', cycle || 'current');
   try {
-    const { series = [], current = 0 } = await getJson(`/api/points/pnl-history?${q}`);
-    return { series, current };
+    const { series = [], current = 0, cycle: cycleMeta = null } = await getJson(`/api/points/pnl-history?${q}`);
+    return { series, current, cycle: cycleMeta };
   } catch {
     // Same posture as price history: the chart is additive, so a failure
     // renders the truthful empty state rather than breaking the page.
@@ -470,8 +472,10 @@ export async function fetchClaimableSummary() {
   return getJson('/api/points/claimable');
 }
 
-export async function fetchHistory() {
-  return getJson('/api/points/history');
+export async function fetchHistory({ cycle = 'current' } = {}) {
+  const q = new URLSearchParams();
+  q.set('cycle', cycle || 'current');
+  return getJson(`/api/points/history?${q}`);
 }
 
 export async function fetchMakerRewards() {

@@ -14,6 +14,13 @@ const navSource = await readFile(new URL('../components/PointsNav.jsx', import.m
 const apiSource = await readFile(new URL('../lib/pointsApi.js', import.meta.url), 'utf8');
 const statsApiSource = await readFile(new URL('../../../../api/points/admin/stats.js', import.meta.url), 'utf8');
 
+function sourceForFunction(name) {
+  const start = source.indexOf(`function ${name}`);
+  assert.notEqual(start, -1, `${name} should exist`);
+  const nextFunction = source.indexOf('\nfunction ', start + 1);
+  return source.slice(start, nextFunction === -1 ? source.length : nextFunction);
+}
+
 test('Points admin exposes a re-add action for rejected generated markets', () => {
   assert.match(source, /filter === 'rejected'/);
   assert.match(source, /review\(r\.id,\s*'readd'\)/);
@@ -44,27 +51,28 @@ test('Points admin can edit generated markets and per-option liquidity before ap
 });
 
 test('Points pending queue has taxonomy filters and filtered bulk actions', () => {
-  assert.match(source, /function PendingMarketsTable\(\{ onQueueChange \}\)/);
-  assert.match(source, /const \[categoryFilter,\s*setCategoryFilter\]/);
-  assert.match(source, /const \[sportFilter,\s*setSportFilter\]/);
-  assert.match(source, /const \[leagueFilter,\s*setLeagueFilter\]/);
-  assert.match(source, /const \[cryptoTypeFilter,\s*setCryptoTypeFilter\]/);
-  assert.match(source, /const \[geoFilter,\s*setGeoFilter\]/);
-  assert.match(source, /const \[topicFilter,\s*setTopicFilter\]/);
-  assert.match(source, /const \[curationFilter,\s*setCurationFilter\]/);
-  assert.match(source, /pendingCurationFilters/);
-  assert.match(source, /key:\s*'featured',\s*label:\s*'🔥'/);
-  assert.match(source, /key:\s*'tournament',\s*label:\s*'🏆'/);
-  assert.match(source, /buildAdminMarketsQuery\(\{\s*status:\s*filter,/);
-  assert.match(source, /featureFilter:\s*curationFilter/);
-  assert.match(source, /adminListPendingMarkets\(q\)/);
-  assert.match(source, /pendingFiltersPayload\(\)/);
-  assert.match(source, /filters\.feature = curationFilter/);
-  assert.match(source, /adminRefreshAllPendingPricing\(pendingFiltersPayload\(\)\)/);
-  assert.match(source, /adminApproveAllPendingMarkets\(null,\s*pendingFiltersPayload\(\)\)/);
-  assert.match(source, /renderFilterGroup\(MARKET_CATEGORY_FILTERS,\s*categoryFilter,\s*selectCategoryFilter\)/);
-  assert.match(source, /renderFilterGroup\(ADMIN_SPORT_FILTERS,\s*sportFilter,\s*selectSportFilter/);
-  assert.match(source, /renderFilterGroup\(ADMIN_CRYPTO_FILTERS,\s*cryptoTypeFilter,\s*setCryptoTypeFilter/);
+  const pendingTableSource = sourceForFunction('PendingMarketsTable');
+  assert.match(pendingTableSource, /function PendingMarketsTable\(\{ onQueueChange \}\)/);
+  assert.match(pendingTableSource, /const \[categoryFilter,\s*setCategoryFilter\]/);
+  assert.match(pendingTableSource, /const \[sportFilter,\s*setSportFilter\]/);
+  assert.match(pendingTableSource, /const \[leagueFilter,\s*setLeagueFilter\]/);
+  assert.match(pendingTableSource, /const \[cryptoTypeFilter,\s*setCryptoTypeFilter\]/);
+  assert.match(pendingTableSource, /const \[geoFilter,\s*setGeoFilter\]/);
+  assert.match(pendingTableSource, /const \[topicFilter,\s*setTopicFilter\]/);
+  assert.match(pendingTableSource, /const \[curationFilter,\s*setCurationFilter\]/);
+  assert.match(pendingTableSource, /pendingCurationFilters/);
+  assert.match(pendingTableSource, /key:\s*'featured',\s*label:\s*'🔥'/);
+  assert.match(pendingTableSource, /key:\s*'tournament',\s*label:\s*'🏆'/);
+  assert.match(pendingTableSource, /buildAdminMarketsQuery\(\{\s*status:\s*filter,/);
+  assert.match(pendingTableSource, /featureFilter:\s*curationFilter/);
+  assert.match(pendingTableSource, /adminListPendingMarkets\(q\)/);
+  assert.match(pendingTableSource, /pendingFiltersPayload\(\)/);
+  assert.match(pendingTableSource, /filters\.feature = curationFilter/);
+  assert.match(pendingTableSource, /adminRefreshAllPendingPricing\(pendingFiltersPayload\(\)\)/);
+  assert.match(pendingTableSource, /adminApproveAllPendingMarkets\(null,\s*pendingFiltersPayload\(\)\)/);
+  assert.match(pendingTableSource, /renderFilterGroup\(MARKET_CATEGORY_FILTERS,\s*categoryFilter,\s*selectCategoryFilter\)/);
+  assert.match(pendingTableSource, /renderFilterGroup\(ADMIN_SPORT_FILTERS,\s*sportFilter,\s*selectSportFilter/);
+  assert.match(pendingTableSource, /renderFilterGroup\(ADMIN_CRYPTO_FILTERS,\s*cryptoTypeFilter,\s*setCryptoTypeFilter/);
   assert.match(apiSource, /status instanceof URLSearchParams/);
   assert.match(apiSource, /action:\s*'refresh_pricing_all',\s*filters/);
   assert.match(apiSource, /action:\s*'approve_all',\s*note,\s*filters/);

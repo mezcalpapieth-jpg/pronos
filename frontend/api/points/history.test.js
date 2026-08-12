@@ -23,3 +23,19 @@ test('portfolio history exposes the bought outcome at market level', () => {
   assert.match(source, /pickedOutcomeLabel: labels\.join\(', '\)/);
   assert.match(source, /\.\.\.pickedOutcome/);
 });
+
+test('portfolio history defaults to the current cycle window', () => {
+  assert.match(source, /function parseCycleScope\(value\)/);
+  assert.match(source, /String\(value \|\| 'current'\)\.toLowerCase\(\)/);
+  assert.match(source, /resolveCycleWindow\(cycleScope\)/);
+  assert.match(source, /WHERE status = 'active'/);
+  assert.match(source, /WHERE status = 'closed'/);
+  assert.match(source, /t\.created_at >= \$\{cycleWindow\.fromIso\}::timestamptz/);
+  assert.match(source, /t\.created_at < \$\{cycleWindow\.toIso\}::timestamptz/);
+  assert.match(source, /d\.created_at >= \$\{cycleWindow\.fromIso\}::timestamptz/);
+});
+
+test('previous-cycle unresolved markets are not labeled open', () => {
+  assert.match(source, /outcomeStatus = 'cycle_closed'/);
+  assert.match(source, /marketsCycleClosed: history\.filter\(m => m\.outcomeStatus === 'cycle_closed'\)\.length/);
+});

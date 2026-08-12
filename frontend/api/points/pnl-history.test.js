@@ -40,3 +40,15 @@ test('the maths is delegated to the unit-tested lib rather than inlined', () => 
 test('an empty history short-circuits before the snapshot query', () => {
   assert.match(source, /if \(tradeRows\.length === 0\)[\s\S]{0,200}series: \[\]/);
 });
+
+test('pnl-history defaults to the active cycle and can read the previous cycle', () => {
+  assert.match(source, /function parseCycleScope\(value\)/);
+  assert.match(source, /String\(value \|\| 'current'\)\.toLowerCase\(\)/);
+  assert.match(source, /resolveCycleWindow\(cycleScope\)/);
+  assert.match(source, /WHERE status = 'active'/);
+  assert.match(source, /WHERE status = 'closed'/);
+  assert.match(source, /t\.created_at >= \$\{cycleWindow\.fromIso\}::timestamptz/);
+  assert.match(source, /t\.created_at < \$\{cycleWindow\.toIso\}::timestamptz/);
+  assert.match(source, /d\.created_at >= \$\{cycleWindow\.fromIso\}::timestamptz/);
+  assert.match(source, /cycle: cycleWindow/);
+});

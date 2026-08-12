@@ -3956,6 +3956,7 @@ function PendingMarketsTable({ onQueueChange }) {
   const [cryptoTypeFilter, setCryptoTypeFilter] = useState('all');
   const [geoFilter, setGeoFilter] = useState('all');
   const [topicFilter, setTopicFilter] = useState('all');
+  const [curationFilter, setCurationFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [bulkBusy, setBulkBusy] = useState(false);

@@ -33,6 +33,74 @@ function labelFor(outcomes, i) {
   return outcomes[i] || `Opción ${i + 1}`;
 }
 
+function parseCycleScope(value) {
+  const raw = String(value || 'current').toLowerCase();
+  if (raw === 'previous' || raw === 'all') return raw;
+  return 'current';
+}
+
+function emptyHistoryPayload(cycle = null) {
+  return {
+    history: [],
+    summary: {
+      totalPnl: 0,
+      marketsTotal: 0,
+      marketsWon: 0,
+      marketsLost: 0,
+      marketsCanceled: 0,
+      marketsExited: 0,
+      marketsOpen: 0,
+      marketsPending: 0,
+      marketsCycleClosed: 0,
+    },
+    cycle,
+  };
+}
+
+async function resolveCycleWindow(scope) {
+  if (scope === 'all') {
+    return { scope: 'all', fromIso: null, toIso: null, empty: false };
+  }
+
+  if (scope === 'previous') {
+    const rows = await sql`
+      SELECT id, label, started_at, ends_at, closed_at
+      FROM points_cycles
+      WHERE status = 'closed'
+      ORDER BY closed_at DESC NULLS LAST, ends_at DESC
+      LIMIT 1
+    `;
+    const row = rows[0];
+    if (!row) return { scope, empty: true };
+    return {
+      scope,
+      id: row.id,
+      label: row.label || null,
+      fromIso: row.started_at,
+      toIso: row.closed_at || row.ends_at,
+      empty: false,
+    };
+  }
+
+  const rows = await sql`
+    SELECT id, label, started_at, ends_at, closed_at
+    FROM points_cycles
+    WHERE status = 'active'
+    ORDER BY ends_at DESC
+    LIMIT 1
+  `;
+  const row = rows[0];
+  if (!row) return { scope: 'current', empty: true };
+  return {
+    scope: 'current',
+    id: row.id,
+    label: row.label || null,
+    fromIso: row.started_at,
+    toIso: null,
+    empty: false,
+  };
+}
+
 function pickedOutcomeSummary(transactions = []) {
   const picked = new Map();
   for (const tx of transactions) {
@@ -74,9 +142,16 @@ export default async function handler(req, res) {
   const modeFilter = modeParam === 'onchain' ? 'onchain'
                     : modeParam === 'all'    ? null
                     : 'points';
+  const cycleScope = parseCycleScope(req.query.cycle);
 
   try {
     await timer.time('schema', () => ensurePointsSchema(schemaSql));
+    const cycleWindow = await timer.time('db_cycle', () => resolveCycleWindow(cycleScope));
+    if (cycleWindow.empty) {
+      timer.end({ history: 0, trades: 0, refunds: 0, cycle: cycleWindow.scope });
+      return res.status(200).json(emptyHistoryPayload(cycleWindow));
+    }
+
     const rows = await timer.time('db_trades', () => sql`
       SELECT t.id, t.market_id, t.side, t.outcome_index, t.shares,
              t.collateral, t.fee, t.price_at_trade, t.tx_hash, t.created_at,
@@ -90,6 +165,8 @@ export default async function handler(req, res) {
       LEFT JOIN points_markets pm ON pm.id = m.parent_id
       WHERE t.username = ${username}
         AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
+        AND (${cycleWindow.fromIso}::timestamptz IS NULL OR t.created_at >= ${cycleWindow.fromIso}::timestamptz)
+        AND (${cycleWindow.toIso}::timestamptz IS NULL OR t.created_at < ${cycleWindow.toIso}::timestamptz)
       ORDER BY t.created_at ASC
     `);
     const refundRows = await timer.time('db_refunds', () => sql`
@@ -105,6 +182,8 @@ export default async function handler(req, res) {
       WHERE d.username = ${username}
         AND d.kind IN ('market_cancel_refund', 'void_refund', 'invalid_field_refund')
         AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
+        AND (${cycleWindow.fromIso}::timestamptz IS NULL OR d.created_at >= ${cycleWindow.fromIso}::timestamptz)
+        AND (${cycleWindow.toIso}::timestamptz IS NULL OR d.created_at < ${cycleWindow.toIso}::timestamptz)
       ORDER BY d.created_at ASC
     `);
 
@@ -224,6 +303,9 @@ export default async function handler(req, res) {
         if (end && end <= Date.now()) outcomeStatus = 'pending';
         else outcomeStatus = 'open';
       }
+      if (cycleWindow.scope === 'previous' && (outcomeStatus === 'open' || outcomeStatus === 'pending')) {
+        outcomeStatus = 'cycle_closed';
+      }
 
       let claimablePayout = 0;
       if (outcomeStatus === 'won') {
@@ -304,7 +386,9 @@ export default async function handler(req, res) {
         marketsExited: history.filter(m => m.outcomeStatus === 'exited').length,
         marketsOpen: history.filter(m => m.outcomeStatus === 'open').length,
         marketsPending: history.filter(m => m.outcomeStatus === 'pending').length,
+        marketsCycleClosed: history.filter(m => m.outcomeStatus === 'cycle_closed').length,
       },
+      cycle: cycleWindow,
     });
   } catch (e) {
     timer.end({ error: 'history_failed' });

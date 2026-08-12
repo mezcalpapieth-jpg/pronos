@@ -17,6 +17,11 @@ const RANGES = [
   { days: 0, label: 'TOTAL' },
 ];
 
+const CYCLE_SCOPES = [
+  { key: 'current', label: 'CICLO ACTUAL' },
+  { key: 'previous', label: 'CICLO ANTERIOR' },
+];
+
 function signedFmt(n) {
   const v = Number(n) || 0;
   return `${v >= 0 ? '+' : '-'}${Math.abs(v).toFixed(2)}`;
@@ -26,6 +31,8 @@ export default function PnlChartCard({
   series = [],
   range = 0,
   onRangeChange,
+  cycleScope,
+  onCycleScopeChange,
   loading = false,
   title = 'Evolución del PnL',
   emptyLabel,
@@ -64,27 +71,54 @@ export default function PnlChartCard({
           </div>
         </div>
 
-        {onRangeChange && (
-          <div style={{ display: 'flex', gap: 4 }}>
-            {RANGES.map(r => {
-              const active = r.days === range;
-              return (
-                <button
-                  key={r.label}
-                  type="button"
-                  onClick={() => onRangeChange(r.days)}
-                  style={{
-                    fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.06em',
-                    padding: '5px 9px', borderRadius: 6, cursor: 'pointer',
-                    border: `1px solid ${active ? 'var(--border-active)' : 'var(--border)'}`,
-                    background: active ? 'var(--surface3)' : 'transparent',
-                    color: active ? 'var(--text-primary)' : 'var(--text-muted)',
-                  }}
-                >
-                  {r.label}
-                </button>
-              );
-            })}
+        {(onRangeChange || onCycleScopeChange) && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {onCycleScopeChange && (
+              <div style={{ display: 'flex', gap: 4 }}>
+                {CYCLE_SCOPES.map(scope => {
+                  const active = scope.key === (cycleScope || 'current');
+                  return (
+                    <button
+                      key={scope.key}
+                      type="button"
+                      onClick={() => onCycleScopeChange(scope.key)}
+                      style={{
+                        fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.06em',
+                        padding: '5px 9px', borderRadius: 6, cursor: 'pointer',
+                        border: `1px solid ${active ? 'var(--orange)' : 'var(--border)'}`,
+                        background: active ? 'rgba(255,85,0,0.12)' : 'transparent',
+                        color: active ? 'var(--text-primary)' : 'var(--text-muted)',
+                      }}
+                    >
+                      {scope.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {onRangeChange && (
+              <div style={{ display: 'flex', gap: 4 }}>
+                {RANGES.map(r => {
+                  const active = r.days === range;
+                  return (
+                    <button
+                      key={r.label}
+                      type="button"
+                      onClick={() => onRangeChange(r.days)}
+                      style={{
+                        fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.06em',
+                        padding: '5px 9px', borderRadius: 6, cursor: 'pointer',
+                        border: `1px solid ${active ? 'var(--border-active)' : 'var(--border)'}`,
+                        background: active ? 'var(--surface3)' : 'transparent',
+                        color: active ? 'var(--text-primary)' : 'var(--text-muted)',
+                      }}
+                    >
+                      {r.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>

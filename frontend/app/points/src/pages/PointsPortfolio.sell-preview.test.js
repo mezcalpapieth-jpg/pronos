@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./PointsPortfolio.jsx', import.meta.url), 'utf8');
 const sellModalSource = await readFile(new URL('../components/PointsSellPreviewModal.jsx', import.meta.url), 'utf8');
+const pnlChartCardSource = await readFile(new URL('../components/PnlChartCard.jsx', import.meta.url), 'utf8');
 const detailSource = await readFile(new URL('./PointsMarketDetail.jsx', import.meta.url), 'utf8');
 const earnSource = await readFile(new URL('./PointsEarn.jsx', import.meta.url), 'utf8');
 const i18nSource = await readFile(new URL('../../../src/lib/i18n.js', import.meta.url), 'utf8');
@@ -99,11 +100,24 @@ test('portfolio shows maker reward payouts in their own market-linked tab', () =
 });
 
 test('portfolio separates open PnL from total account PnL', () => {
-  assert.match(source, /Promise\.all\(\[\s*fetchPositions\(\),\s*fetchHistory\(\)\.catch\(\(\) => null\),\s*\]\)/s);
+  assert.match(source, /Promise\.all\(\[\s*fetchPositions\(\),\s*fetchHistory\(\{ cycle: 'current' \}\)\.catch\(\(\) => null\),\s*\]\)/s);
   assert.match(source, /const openPnl = Number\(summary\?\.pnl \|\| 0\)/);
   assert.match(source, /const totalPnl = Number\(historySummary\?\.totalPnl \?\? openPnl\)/);
   assert.match(source, /label: 'PnL abierto'/);
   assert.match(source, /label: 'PnL total'/);
+});
+
+test('portfolio PnL and history can switch between current and previous cycles', () => {
+  assert.match(source, /const \[pnlCycleScope, setPnlCycleScope\] = useState\('current'\)/);
+  assert.match(source, /const \[historyCycleScope, setHistoryCycleScope\] = useState\('current'\)/);
+  assert.match(source, /fetchPnlHistory\(\{ days: pnlRange, cycle: pnlCycleScope \}\)/);
+  assert.match(source, /fetchHistory\(\{ cycle: historyCycleScope \}\)/);
+  assert.match(source, /cycleScope=\{pnlCycleScope\}/);
+  assert.match(source, /onCycleScopeChange=\{setPnlCycleScope\}/);
+  assert.match(source, /onCycleScopeChange=\{setHistoryCycleScope\}/);
+  assert.match(source, /cycle_closed:\s*\{ label: 'CICLO ANTERIOR'/);
+  assert.match(pnlChartCardSource, /CYCLE_SCOPES/);
+  assert.match(pnlChartCardSource, /CICLO ANTERIOR/);
 });
 
 test('portfolio won markets generate a Pronos ticket share card with cash-out details', () => {

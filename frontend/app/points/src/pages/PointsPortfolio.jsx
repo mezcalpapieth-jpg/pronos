@@ -733,7 +733,9 @@ export default function PointsPortfolio() {
   const [msg, setMsg] = useState(null);
   const [pnlSeries, setPnlSeries] = useState([]);
   const [pnlLoading, setPnlLoading] = useState(true);
-  const [pnlRange, setPnlRange] = useState(0); // 0 = since first trade
+  const [pnlRange, setPnlRange] = useState(0); // 0 = since first trade in selected cycle
+  const [pnlCycleScope, setPnlCycleScope] = useState('current');
+  const [historyCycleScope, setHistoryCycleScope] = useState('current');
   const sellQuoteSeqRef = useRef(0);
   const sellQuoteTimerRef = useRef(null);
 
@@ -749,7 +751,7 @@ export default function PointsPortfolio() {
     }
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, authenticated, tab]);
+  }, [authLoading, authenticated, tab, historyCycleScope]);
 
   // Separate from load(): switching the chart range must not refetch
   // positions and history and flash the whole page.
@@ -757,11 +759,11 @@ export default function PointsPortfolio() {
     if (!authenticated || tab !== 'activo') return undefined;
     let cancelled = false;
     setPnlLoading(true);
-    fetchPnlHistory({ days: pnlRange })
+    fetchPnlHistory({ days: pnlRange, cycle: pnlCycleScope })
       .then(({ series }) => { if (!cancelled) setPnlSeries(series || []); })
       .finally(() => { if (!cancelled) setPnlLoading(false); });
     return () => { cancelled = true; };
-  }, [authenticated, tab, pnlRange]);
+  }, [authenticated, tab, pnlRange, pnlCycleScope]);
 
   async function load({ silent = false } = {}) {
     if (!silent) setLoading(true);
@@ -769,7 +771,7 @@ export default function PointsPortfolio() {
       if (tab === 'activo') {
         const [positionsResult, historyResult] = await Promise.all([
           fetchPositions(),
-          fetchHistory().catch(() => null),
+          fetchHistory({ cycle: 'current' }).catch(() => null),
         ]);
         setPositions(positionsResult.positions || []);
         setSummary(positionsResult.summary || null);
@@ -781,7 +783,7 @@ export default function PointsPortfolio() {
         setRewards(r.rewards || []);
         setRewardSummary(r.summary || null);
       } else {
-        const r = await fetchHistory();
+        const r = await fetchHistory({ cycle: historyCycleScope });
         setHistory(r.history || []);
         setHistorySummary(r.summary || null);
       }
@@ -804,7 +806,7 @@ export default function PointsPortfolio() {
       window.clearInterval(intervalId);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authenticated, tab]);
+  }, [authenticated, tab, historyCycleScope]);
 
   async function loadSellPreviewQuote(pos, shares) {
     const selectedShares = normalizeSellShares(pos, shares);
@@ -1025,6 +1027,8 @@ export default function PointsPortfolio() {
                 series={pnlSeries}
                 range={pnlRange}
                 onRangeChange={setPnlRange}
+                cycleScope={pnlCycleScope}
+                onCycleScopeChange={setPnlCycleScope}
                 loading={pnlLoading}
               />
 
@@ -1078,7 +1082,14 @@ export default function PointsPortfolio() {
           )}
 
           {tab === 'historial' && (
-            <HistoryView history={history} summary={historySummary} loading={loading} username={user?.username} />
+            <HistoryView
+              history={history}
+              summary={historySummary}
+              loading={loading}
+              username={user?.username}
+              cycleScope={historyCycleScope}
+              onCycleScopeChange={setHistoryCycleScope}
+            />
           )}
 
           {tab === 'recompensas' && (
@@ -1110,21 +1121,66 @@ export default function PointsPortfolio() {
   );
 }
 
+function CycleScopeToggle({ value = 'current', onChange }) {
+  if (!onChange) return null;
+  const options = [
+    { key: 'current', label: 'Ciclo actual' },
+    { key: 'previous', label: 'Ciclo anterior' },
+  ];
+  return (
+    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap', marginBottom: 14 }}>
+      {options.map(option => {
+        const active = value === option.key;
+        return (
+          <button
+            key={option.key}
+            type="button"
+            onClick={() => onChange(option.key)}
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              padding: '8px 12px',
+              borderRadius: 8,
+              border: `1px solid ${active ? 'var(--orange)' : 'var(--border)'}`,
+              background: active ? 'rgba(255,85,0,0.12)' : 'transparent',
+              color: active ? 'var(--text-primary)' : 'var(--text-muted)',
+              cursor: 'pointer',
+            }}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── History view (inlined — mirrors MVP HistoryTab structure) ───────────────
-function HistoryView({ history, summary, loading, username }) {
+function HistoryView({ history, summary, loading, username, cycleScope = 'current', onCycleScopeChange }) {
+  const cycleToggle = <CycleScopeToggle value={cycleScope} onChange={onCycleScopeChange} />;
   if (loading) {
-    return <HistorySkeleton count={4} />;
+    return (
+      <>
+        {cycleToggle}
+        <HistorySkeleton count={4} />
+      </>
+    );
   }
   if (!history || history.length === 0) {
     return (
-      <div style={{
-        textAlign: 'center', padding: '60px 24px',
-        border: '1px dashed var(--border)', borderRadius: 16,
-      }}>
-        <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
-          Sin actividad aún.
-        </p>
-      </div>
+      <>
+        {cycleToggle}
+        <div style={{
+          textAlign: 'center', padding: '60px 24px',
+          border: '1px dashed var(--border)', borderRadius: 16,
+        }}>
+          <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
+            Sin actividad en este ciclo.
+          </p>
+        </div>
+      </>
     );
   }
   const totalPositive = (summary?.totalPnl ?? 0) >= 0;
@@ -1136,16 +1192,19 @@ function HistoryView({ history, summary, loading, username }) {
     canceled:{ label: 'ANULADO',        bg: 'rgba(148,163,184,0.08)', color: 'var(--text-secondary)' },
     pending: { label: 'PENDIENTE',    bg: 'rgba(245,158,11,0.1)',  color: 'var(--warning)' },
     open:    { label: 'EN CURSO',      bg: 'rgba(245,200,66,0.08)', color: 'var(--gold)' },
+    cycle_closed: { label: 'CICLO ANTERIOR', bg: 'rgba(255,85,0,0.08)', color: 'var(--orange)' },
   };
 
   return (
     <>
+      {cycleToggle}
       <div className="points-history-summary-grid">
         {[
           ['Mercados',   summary?.marketsTotal ?? 0, 'var(--text-primary)'],
           ['Ganados',    summary?.marketsWon ?? 0,   'var(--green)'],
           ['Perdidos',   summary?.marketsLost ?? 0,  'var(--danger)'],
           ['Pendientes', summary?.marketsPending ?? 0, 'var(--warning)'],
+          ['Ciclo ant.', summary?.marketsCycleClosed ?? 0, 'var(--orange)'],
           ['Anulados',   summary?.marketsCanceled ?? 0, 'var(--text-secondary)'],
         ].map(([label, value, color]) => (
           <div key={label} className="points-history-summary-card">
