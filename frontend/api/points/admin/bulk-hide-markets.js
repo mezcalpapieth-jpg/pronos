@@ -7,10 +7,10 @@
  *     expectedCount?: number,
  *   }
  *
- * Removes active markets from the public home/trending surface without
- * archiving them. Category pages, direct links, trading, history, and
- * resolution keep working. The 🏆 tournament override still shows even
- * after this pass. `show` restores the public home surface by clearing
+ * Removes active markets from public list surfaces without archiving them.
+ * Home, search, and category pages hide regular rows; direct links, trading,
+ * history, and resolution keep working. The 🏆 tournament override still
+ * shows after this pass. `show` restores public list visibility by clearing
  * hidden_from_home and re-enabling featured on the same active parent rows.
  */
 import { neon } from '@neondatabase/serverless';

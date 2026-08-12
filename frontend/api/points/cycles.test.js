@@ -29,12 +29,19 @@ test('points rollover archives exposure and carries only approved pre-cycle bonu
   assert.match(schemaSource, /points_cycle_position_snapshots/);
   assert.match(adminSource, /archiveAndClearPositionsForCycleReset/);
   assert.match(adminSource, /cancelOpenLimitOrdersForCycleReset/);
+  assert.match(adminSource, /getCyclesPausedForClient/);
+  assert.match(adminSource, /includePreCycleCarryover:\s*wasPaused/);
   assert.match(adminSource, /includePreCycleCarryover:\s*true/);
   assert.match(adminSource, /PRE_CYCLE_SIGNUP_BONUS/);
   assert.match(adminSource, /PRE_CYCLE_REFERRAL_REWARD/);
-  assert.match(adminSource, /PRE_CYCLE_FOLLOW_TASK_KEYS/);
+  assert.match(adminSource, /PRE_CYCLE_REFERRAL_CAP/);
+  assert.match(adminSource, /LEAST\(COUNT\(\*\)::numeric,\s*\$3::numeric\)/);
+  assert.match(adminSource, /FROM social_tasks\s+WHERE status = 'approved'/);
   assert.match(adminSource, /SOCIAL_LINK_CARRYOVER_KINDS/);
   assert.match(adminSource, /cycle_carryover/);
+  assert.match(adminSource, /action === 'apply_pre_cycle_carryover'/);
+  assert.match(adminSource, /applyPreCycleCarryoverForCycle/);
+  assert.match(adminSource, /WHERE kind = 'cycle_carryover'[\s\S]*AND reference_id = \$1/);
 });
 
 test('public cycles prefer the active database cycle once admin opens one', () => {

@@ -27,7 +27,7 @@ import { useT } from '@app/lib/i18n.js';
 export const CATEGORY_TABS = [
   { slug: 'noticias',    tKey: 'points.cat.noticias',   news: true },
   { slug: 'all',         tKey: 'points.cat.trending'    },
-  { slug: 'world-cup',   tKey: 'points.cat.worldCup',   highlight: true },
+  { slug: 'nuevos-mercados', tKey: 'points.cat.worldCup', highlight: true },
   { slug: 'mexico',      tKey: 'points.cat.mexico',      regional: true },
   { slug: 'deportes',    tKey: 'points.cat.deportes'    },
   { slug: 'musica',      tKey: 'points.cat.musica'      },

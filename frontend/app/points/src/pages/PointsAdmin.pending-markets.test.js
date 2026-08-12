@@ -122,6 +122,10 @@ test('Points admin can pause public cycles and restart them later', () => {
   assert.match(source, /adminPauseCycles/);
   assert.match(source, /Pausar ciclos/);
   assert.match(source, /Reanudar ciclos/);
+  assert.match(source, /adminApplyPreCycleCarryover/);
+  assert.match(source, /Aplicar bonos preciclo/);
+  assert.match(apiSource, /export async function adminApplyPreCycleCarryover/);
+  assert.match(apiSource, /apply_pre_cycle_carryover/);
   assert.match(apiSource, /export async function adminPauseCycles/);
   assert.match(apiSource, /action:\s*'pause'/);
 });
@@ -163,10 +167,11 @@ test('Points admin can review scheduler resolution candidates', () => {
   assert.match(apiSource, /export async function adminReviewResolutionCandidate/);
 });
 
-test('Points admin can bulk-hide or show home markets and mark tournament overrides', () => {
+test('Points admin can bulk-hide or show public markets and mark tournament overrides', () => {
   assert.match(source, /toggleHomeMarketsVisibility/);
   assert.match(source, /Ocultar mercados/);
   assert.match(source, /Mostrar mercados/);
+  assert.match(source, /listas públicas/);
   assert.match(source, /suggestedAction/);
   assert.match(source, /adminBulkHideMarkets/);
   assert.match(source, /toggleTournamentFeaturedMarket/);

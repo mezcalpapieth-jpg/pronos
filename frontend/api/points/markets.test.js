@@ -15,6 +15,18 @@ test('points market payload keeps admin featured and tournament markets on home'
   assert.match(source, /m\.tournament_featured = true/);
 });
 
+test('points public lists hide bulk-hidden active markets outside trophy overrides', () => {
+  assert.match(source, /points:markets:v4/);
+  const visibilityMatches = source.match(/m\.hidden_from_home IS NOT TRUE\s+OR m\.tournament_featured = true/g) || [];
+  assert.ok(visibilityMatches.length >= 2);
+});
+
+test('points market list accepts nuevos-mercados as the public alias for world-cup', () => {
+  assert.match(source, /function publicCategoryAlias/);
+  assert.match(source, /raw === 'nuevos-mercados'\) return 'world-cup'/);
+  assert.match(source, /publicCategoryAlias\(req\.query\.category\)/);
+});
+
 test('points market payload exposes featured and trending for parallel and unified markets', () => {
   const featuredMatches = source.match(/featured:\s*r\.featured === true/g) || [];
   const trendingMatches = source.match(/trending:\s*r\.hidden_from_home !== true && \(r\.featured === true \|\| live\)/g) || [];

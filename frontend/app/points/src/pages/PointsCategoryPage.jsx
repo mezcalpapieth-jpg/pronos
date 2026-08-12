@@ -19,7 +19,7 @@
  * that plumbing will have null values and fall into the "Todos" bucket.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useT } from '@app/lib/i18n.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
@@ -40,7 +40,8 @@ const SLUG_TO_TITLE_KEY = {
   deportes:    'points.cat.deportes',
   musica:      'points.cat.musica',
   mexico:      'points.cat.mexico',
-  'world-cup': 'points.cat.worldCup',
+  'nuevos-mercados': 'points.cat.worldCup',
+  'world-cup':       'points.cat.worldCup',
   politica:    'points.cat.politica',
   crypto:      'points.cat.crypto',
   finanzas:    'points.cat.finanzas',
@@ -155,14 +156,33 @@ const ENTERTAINMENT_TOPIC_TABS = [
   { key: 'farandula', tKey: 'points.topic.farandula' },
 ];
 
-const GEO_FILTER_EXCLUDED_CATEGORIES = new Set(['all', 'crypto', 'world-cup', 'porresolver', 'resueltos', 'noticias']);
+const CATEGORY_SLUG_ALIASES = {
+  'world-cup': 'nuevos-mercados',
+};
+
+const CATEGORY_TAXONOMY_ALIASES = {
+  'nuevos-mercados': 'world-cup',
+};
+
+function canonicalCategorySlug(value) {
+  return CATEGORY_SLUG_ALIASES[value] || value;
+}
+
+function taxonomyCategoryForSlug(value) {
+  return CATEGORY_TAXONOMY_ALIASES[value] || value;
+}
+
+const GEO_FILTER_EXCLUDED_CATEGORIES = new Set(['all', 'crypto', 'world-cup', 'nuevos-mercados', 'porresolver', 'resueltos', 'noticias']);
 
 export default function PointsCategoryPage() {
-  const { slug } = useParams();
+  const { slug: routeSlug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const t = useT();
   const { authenticated } = usePointsAuth();
+  const slug = canonicalCategorySlug(routeSlug);
+  const categoryFilter = taxonomyCategoryForSlug(slug);
   // Drives layout collapses for the league sidebar + page padding on
   // phones. The sport sub-filter row is already overflow-scrollable
   // via existing inline styles, so it doesn't need this hook.
@@ -187,10 +207,16 @@ export default function PointsCategoryPage() {
   const geo = searchParams.get('geo') || 'all';
   const topic = searchParams.get('topic') || 'all';
 
+  useEffect(() => {
+    if (routeSlug !== slug) {
+      navigate(`/c/${slug}${location.search || ''}`, { replace: true });
+    }
+  }, [routeSlug, slug, location.search, navigate]);
+
   // Status to fetch — resueltos loads resolved; everything else fetches
   // active and filters client-side for "pending" if needed.
   const fetchStatus = RESOLVED_SLUGS.has(slug) ? 'resolved' : 'active';
-  const activeFilterCategory = RESOLVED_SLUGS.has(slug) ? resueltosCat : slug;
+  const activeFilterCategory = RESOLVED_SLUGS.has(slug) ? resueltosCat : categoryFilter;
   const supportsGeoFilters = !GEO_FILTER_EXCLUDED_CATEGORIES.has(activeFilterCategory);
   const supportsTopicFilters = activeFilterCategory === 'mexico' || activeFilterCategory === 'musica';
 
@@ -200,9 +226,9 @@ export default function PointsCategoryPage() {
       setLoading(true);
       setError(null);
       try {
-        // Category pages show EVERY market in the category, not just
-        // the featured ones. Pass `featured: 'all'` so the API
-        // doesn't apply its Trending default filter.
+        // Category pages show every public-visible market in the category,
+        // not just the featured ones. Pass `featured: 'all'` so the API
+        // doesn't apply its Trending curation filter.
         const m = await fetchMarkets({
           status: fetchStatus,
           limit: 2000,
@@ -260,7 +286,7 @@ export default function PointsCategoryPage() {
     } else {
       // Regular category: hide pending from the main grid.
       out = out.filter(m => !isPending(m));
-      out = out.filter(m => marketInCategory(m, slug));
+      out = out.filter(m => marketInCategory(m, categoryFilter));
     }
 
     // Sports sub-filter: only when on /c/deportes OR when scoping
@@ -297,7 +323,7 @@ export default function PointsCategoryPage() {
     }
 
     return prioritizeFeaturedMarkets(out, featuredTeamKeys);
-  }, [markets, slug, sport, league, resueltosCat, cryptoType, geo, topic, supportsGeoFilters, supportsTopicFilters, searchQuery, featuredTeamKeys]);
+  }, [markets, slug, categoryFilter, sport, league, resueltosCat, cryptoType, geo, topic, supportsGeoFilters, supportsTopicFilters, searchQuery, featuredTeamKeys]);
 
   function setSport(next) {
     const params = new URLSearchParams(searchParams);

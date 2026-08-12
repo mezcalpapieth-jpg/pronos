@@ -714,9 +714,9 @@ export async function adminRunAutoResolve({ dry = false } = {}) {
   return postJson(`/api/points/admin/run-auto-resolve${q}`, {});
 }
 
-// Toggle curation flags. Featured (🔥) markets appear on home unless
+// Toggle curation flags. Featured (🔥) markets appear publicly unless
 // bulk-hidden; tournamentFeatured (🏆) markets appear even after the
-// regular market set is hidden.
+// regular active market set is hidden.
 export async function adminToggleFeatured({ marketId, pendingId, featured, tournamentFeatured }) {
   return postJson('/api/points/admin/toggle-featured', {
     marketId,
@@ -801,6 +801,12 @@ export async function adminRolloverCycle(nextCycleLabel) {
 export async function adminPauseCycles() {
   return postJson('/api/points/admin/cycles', {
     action: 'pause',
+  });
+}
+
+export async function adminApplyPreCycleCarryover() {
+  return postJson('/api/points/admin/cycles', {
+    action: 'apply_pre_cycle_carryover',
   });
 }
 

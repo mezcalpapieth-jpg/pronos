@@ -8,6 +8,15 @@ function normalizedSlug(value) {
   return String(value || '').toLowerCase();
 }
 
+const CATEGORY_ALIASES = {
+  'nuevos-mercados': 'world-cup',
+};
+
+function normalizedCategorySlug(value) {
+  const slug = normalizedSlug(value);
+  return CATEGORY_ALIASES[slug] || slug;
+}
+
 function isLatamSportsFallback(market) {
   return normalizedSlug(market?.category) === 'deportes'
     && normalizedSlug(market?.sport) === 'soccer'
@@ -23,10 +32,10 @@ export const PUBLIC_GEO_FILTERS = [
 const PUBLIC_GEO_KEYS = new Set(PUBLIC_GEO_FILTERS.map(g => g.key));
 
 export function marketInCategory(m, category) {
-  const target = normalizedSlug(category);
+  const target = normalizedCategorySlug(category);
   if (!target || target === 'all') return true;
-  const primary = normalizedSlug(m?.category);
-  const tags = normalizedTags(m?.categoryTags);
+  const primary = normalizedCategorySlug(m?.category);
+  const tags = normalizedTags(m?.categoryTags).map(normalizedCategorySlug);
   if (target === 'mexico' && isLatamSportsFallback(m)) return true;
   return primary === target || tags.includes(target);
 }

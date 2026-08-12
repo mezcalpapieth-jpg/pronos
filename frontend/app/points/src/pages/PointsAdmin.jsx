@@ -26,6 +26,7 @@ import {
   adminListCycles,
   adminRolloverCycle,
   adminPauseCycles,
+  adminApplyPreCycleCarryover,
   adminEditMarket,
   adminCancelMarket,
   adminListPendingMarkets,
@@ -411,6 +412,29 @@ function CyclesPanel() {
     }
   }
 
+  async function applyPreCycleCarryover() {
+    const ok = window.confirm(
+      '¿Aplicar los bonos preciclo faltantes al ciclo activo?\n\n' +
+      'Esto NO cierra mercados, NO borra posiciones y NO reinicia balances. Solo agrega el diferencial faltante de registro temprano, referidos y tareas sociales al balance actual.'
+    );
+    if (!ok) return;
+    setWorking(true);
+    setMsg(null);
+    setErr(null);
+    try {
+      const r = await adminApplyPreCycleCarryover();
+      setMsg(
+        `✓ Bonos preciclo aplicados — ${r.creditedUsers || 0} usuarios, ` +
+        `${Number(r.creditedTotal || 0).toLocaleString('es-MX')} MXNP acreditados.`
+      );
+      await load();
+    } catch (e) {
+      setErr(`${e.code || e.message}${e.detail ? ' · ' + e.detail : ''}`);
+    } finally {
+      setWorking(false);
+    }
+  }
+
   if (!data && !err) {
     return <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', padding: 20 }}>Cargando ciclos…</div>;
   }
@@ -498,6 +522,25 @@ function CyclesPanel() {
                   Pausar ciclos
                 </button>
               )}
+              <button
+                onClick={applyPreCycleCarryover}
+                disabled={working}
+                style={{
+                  padding: '10px 18px',
+                  background: 'transparent',
+                  color: 'var(--orange)',
+                  border: '1px solid rgba(255,85,0,0.5)',
+                  borderRadius: 8,
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  cursor: working ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Aplicar bonos preciclo
+              </button>
             </div>
             {msg && <div style={{ marginTop: 12, color: 'var(--green)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{msg}</div>}
             {err && <div style={{ marginTop: 12, color: 'var(--red, #ef4444)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>Error: {err}</div>}
@@ -2046,10 +2089,10 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
       }
       if (!confirm(
         isShowing
-          ? `¿Mostrar ${count} mercados activos en el home?\n\n`
-            + 'Esto vuelve a activar su visibilidad en Trending y Nuevos mercados.'
-          : `¿Ocultar ${count} mercados activos del home?\n\n`
-            + 'Los mercados con 🏆 seguirán apareciendo. Las categorías, links y resolución no cambian.',
+          ? `¿Mostrar ${count} mercados activos en las listas públicas?\n\n`
+            + 'Esto vuelve a activar su visibilidad en Trending, búsqueda y categorías.'
+          : `¿Ocultar ${count} mercados activos de las listas públicas?\n\n`
+            + 'Los mercados con 🏆 seguirán apareciendo. Los links directos, trading y resolución no cambian.',
       )) {
         return;
       }
@@ -2062,7 +2105,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
       await load();
       alert(isShowing
         ? `✓ Mercados visibles otra vez: ${result.shownCount || count}.`
-        : `✓ Ocultos del home: ${result.hiddenCount || count}. Los 🏆 siguen visibles.`);
+        : `✓ Ocultos de listas públicas: ${result.hiddenCount || count}. Los 🏆 siguen visibles.`);
     } catch (e) {
       const detail = e.detail?.liveCount != null
         ? `\nConteo cambió: ahora hay ${e.detail.liveCount}. Intenta otra vez.`
@@ -2211,8 +2254,8 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
           onClick={toggleHomeMarketsVisibility}
           disabled={hidingMarkets}
           title={isShowingHomeMarkets
-            ? 'Vuelve a mostrar los mercados activos en el home.'
-            : 'Oculta todos los mercados activos del home. Los mercados con 🏆 siguen visibles.'}
+            ? 'Vuelve a mostrar los mercados activos en las listas públicas.'
+            : 'Oculta todos los mercados activos de las listas públicas. Los mercados con 🏆 siguen visibles.'}
           style={{
             marginLeft: filter === 'pending' ? 0 : 'auto',
             padding: '6px 14px',

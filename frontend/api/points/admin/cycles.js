@@ -86,6 +86,17 @@ async function getCyclesPaused() {
   return parseSettingBool(rows[0]?.value, true);
 }
 
+async function getCyclesPausedForClient(client) {
+  const result = await client.query(
+    `SELECT value
+     FROM points_app_settings
+     WHERE key = $1
+     LIMIT 1`,
+    [CYCLES_PAUSED_KEY],
+  );
+  return parseSettingBool(result.rows[0]?.value, true);
+}
+
 async function setCyclesPaused(client, paused) {
   await client.query(
     `INSERT INTO points_app_settings (key, value, updated_at)
@@ -158,7 +169,7 @@ async function handleGet(req, res) {
 const CYCLE_STARTING_BALANCE = TOURNAMENT_STARTING_BALANCE;
 const PRE_CYCLE_SIGNUP_BONUS = TOURNAMENT_REWARDS.preCycleSignupBonus;
 const PRE_CYCLE_REFERRAL_REWARD = TOURNAMENT_REWARDS.preCycleReferralReward;
-const PRE_CYCLE_FOLLOW_TASK_KEYS = ['instagram_follow', 'tiktok_follow', 'twitter_follow'];
+const PRE_CYCLE_REFERRAL_CAP = TOURNAMENT_REWARDS.referralCycleCap;
 const SOCIAL_LINK_CARRYOVER_KINDS = ['social_link_instagram', 'social_link_tiktok', 'social_link_x'];
 
 function numeric(value) {
@@ -297,8 +308,8 @@ async function selectCycleResetBalances(client, {
   await client.query(`SELECT username FROM points_balances FOR UPDATE`);
 
   const referralReward = includePreCycleCarryover ? PRE_CYCLE_REFERRAL_REWARD : 0;
+  const referralCap = includePreCycleCarryover ? PRE_CYCLE_REFERRAL_CAP : 0;
   const signupBonus = includePreCycleCarryover ? PRE_CYCLE_SIGNUP_BONUS : 0;
-  const followTaskKeys = includePreCycleCarryover ? PRE_CYCLE_FOLLOW_TASK_KEYS : [];
   const socialLinkKinds = includePreCycleCarryover ? SOCIAL_LINK_CARRYOVER_KINDS : [];
 
   const result = await client.query(
@@ -319,7 +330,7 @@ async function selectCycleResetBalances(client, {
      ),
      referrals AS (
        SELECT LOWER(referrer) AS username,
-              COUNT(*)::numeric * $2::numeric AS amount
+              LEAST(COUNT(*)::numeric, $3::numeric) * $2::numeric AS amount
        FROM points_referrals
        WHERE created_at <= $1::timestamptz
        GROUP BY LOWER(referrer)
@@ -329,7 +340,6 @@ async function selectCycleResetBalances(client, {
               SUM(COALESCE(reward, 0))::numeric AS amount
        FROM social_tasks
        WHERE status = 'approved'
-         AND task_key = ANY($3::text[])
          AND COALESCE(reviewed_at, created_at) <= $1::timestamptz
        GROUP BY LOWER(username)
      ),
@@ -364,7 +374,7 @@ async function selectCycleResetBalances(client, {
     [
       resetAtIso,
       referralReward,
-      followTaskKeys,
+      referralCap,
       socialLinkKinds,
       signupBonus,
       CYCLE_STARTING_BALANCE,
@@ -465,10 +475,97 @@ async function resetBalancesForCycle(client, {
   };
 }
 
+async function applyPreCycleCarryoverForCycle(client, {
+  cycleId,
+  cutoffIso,
+} = {}) {
+  const rows = await selectCycleResetBalances(client, {
+    resetAtIso: cutoffIso,
+    includePreCycleCarryover: true,
+  });
+  if (rows.length === 0) {
+    return {
+      checkedUsers: 0,
+      creditedUsers: 0,
+      creditedTotal: 0,
+      signupBonusTotal: 0,
+      referralBonusTotal: 0,
+      socialBonusTotal: 0,
+    };
+  }
+
+  await client.query(`SELECT username FROM points_balances FOR UPDATE`);
+
+  const alreadyRows = await client.query(
+    `SELECT LOWER(username) AS username, COALESCE(SUM(amount), 0) AS amount
+     FROM points_distributions
+     WHERE kind = 'cycle_carryover'
+       AND reference_id = $1
+     GROUP BY LOWER(username)`,
+    [cycleId],
+  );
+  const alreadyByUser = new Map(alreadyRows.rows.map(row => [row.username, numeric(row.amount)]));
+
+  const usernames = [];
+  const missingAmounts = [];
+  const reasons = [];
+  let signupBonusTotal = 0;
+  let referralBonusTotal = 0;
+  let socialBonusTotal = 0;
+
+  for (const row of rows) {
+    const signupBonus = numeric(row.signup_bonus);
+    const referralBonus = numeric(row.referral_bonus);
+    const socialBonus = numeric(row.social_bonus);
+    const carryover = signupBonus + referralBonus + socialBonus;
+    signupBonusTotal += signupBonus;
+    referralBonusTotal += referralBonus;
+    socialBonusTotal += socialBonus;
+
+    const alreadyApplied = alreadyByUser.get(row.username) || 0;
+    const missing = Math.max(0, carryover - alreadyApplied);
+    if (missing > 0.000001) {
+      usernames.push(row.username);
+      missingAmounts.push(numericSql(missing));
+      reasons.push(
+        `Bonos preciclo aplicados al ciclo actual: registro ${numericSql(signupBonus)} MXNP, referidos ${numericSql(referralBonus)} MXNP, sociales ${numericSql(socialBonus)} MXNP`,
+      );
+    }
+  }
+
+  if (usernames.length > 0) {
+    await client.query(
+      `INSERT INTO points_balances (username, balance, updated_at)
+       SELECT u, a, NOW()
+       FROM UNNEST($1::text[], $2::numeric[]) AS t(u, a)
+       ON CONFLICT (username) DO UPDATE
+       SET balance = points_balances.balance + EXCLUDED.balance,
+           updated_at = NOW()`,
+      [usernames, missingAmounts],
+    );
+    await client.query(
+      `INSERT INTO points_distributions (username, amount, kind, reference_id, reason)
+       SELECT u, a, 'cycle_carryover', $3, r
+       FROM UNNEST($1::text[], $2::numeric[], $4::text[]) AS t(u, a, r)`,
+      [usernames, missingAmounts, cycleId, reasons],
+    );
+  }
+
+  return {
+    checkedUsers: rows.length,
+    creditedUsers: usernames.length,
+    creditedTotal: Number(missingAmounts.reduce((sum, amount) => sum + numeric(amount), 0).toFixed(6)),
+    signupBonusTotal: Number(signupBonusTotal.toFixed(6)),
+    referralBonusTotal: Number(referralBonusTotal.toFixed(6)),
+    socialBonusTotal: Number(socialBonusTotal.toFixed(6)),
+  };
+}
+
 async function handleRollover(req, res, nextCycleLabel) {
   const result = await withTransaction(async (client) => {
     const now = new Date();
     const resetAtIso = now.toISOString();
+    const wasPaused = await getCyclesPausedForClient(client);
     // Lock the current active cycle. `FOR UPDATE` prevents two admins
     // from rolling over simultaneously.
     const cur = await client.query(
@@ -530,7 +627,7 @@ async function handleRollover(req, res, nextCycleLabel) {
     const balances = await resetBalancesForCycle(client, {
       cycleId: newCycle.id,
       resetAtIso,
-      includePreCycleCarryover: false,
+      includePreCycleCarryover: wasPaused,
     });
     await setCyclesPaused(client, false);
 
@@ -561,6 +658,40 @@ async function handleRollover(req, res, nextCycleLabel) {
   return res.status(200).json({ ok: true, ...result });
 }
 
+async function handleApplyPreCycleCarryover(req, res) {
+  const result = await withTransaction(async (client) => {
+    const current = await client.query(
+      `SELECT id, label, started_at, ends_at
+       FROM points_cycles
+       WHERE status = 'active'
+       ORDER BY ends_at DESC
+       LIMIT 1
+       FOR UPDATE`,
+    );
+    if (current.rows.length === 0) {
+      const err = new Error('no_active_cycle');
+      err.status = 409;
+      throw err;
+    }
+
+    const cycle = current.rows[0];
+    const cutoffIso = new Date(cycle.started_at).toISOString();
+    const bonuses = await applyPreCycleCarryoverForCycle(client, {
+      cycleId: cycle.id,
+      cutoffIso,
+    });
+
+    return {
+      cycleId: cycle.id,
+      cycleLabel: cycle.label,
+      cutoffIso,
+      ...bonuses,
+    };
+  });
+
+  return res.status(200).json({ ok: true, ...result });
+}
+
 async function handlePause(req, res) {
   await withTransaction(async (client) => {
     await setCyclesPaused(client, true);
@@ -583,6 +714,9 @@ export default async function handler(req, res) {
       const { action, nextCycleLabel } = req.body || {};
       if (action === 'pause') {
         return await handlePause(req, res);
+      }
+      if (action === 'apply_pre_cycle_carryover') {
+        return await handleApplyPreCycleCarryover(req, res);
       }
       if (action !== 'rollover') {
         return res.status(400).json({ error: 'invalid_action' });

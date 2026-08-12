@@ -70,10 +70,9 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
   async function ensureSearchCache() {
     if (searchCacheLoaded) return;
     try {
-      // "Active" covers Trending + category tabs + Por resolver; we
-      // intentionally don't pull resolved markets since users are
-      // almost never trying to jump into one via search. Add another
-      // fetch if that changes.
+      // "Active" covers public-visible Trending + category tabs + Por
+      // resolver; we intentionally don't pull resolved markets since users
+      // are almost never trying to jump into one via search.
       const rows = await fetchMarkets({ status: 'active', featured: 'all', limit: 250 });
       setSearchCache(Array.isArray(rows) ? rows : []);
       setSearchCacheLoaded(true);

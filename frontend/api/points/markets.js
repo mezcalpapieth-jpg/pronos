@@ -96,6 +96,12 @@ function publicSeriesMetaFromRow(row) {
   };
 }
 
+function publicCategoryAlias(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === 'nuevos-mercados') return 'world-cup';
+  return raw || null;
+}
+
 export default async function handler(req, res) {
   // Top-level try/catch: the home page renders "HTTP 500" raw when this
   // endpoint ever returns non-JSON, so guarantee JSON output no matter
@@ -107,7 +113,7 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
 
   const status = req.query.status === 'resolved' ? 'resolved' : 'active';
-  const category = typeof req.query.category === 'string' ? req.query.category : null;
+  const category = typeof req.query.category === 'string' ? publicCategoryAlias(req.query.category) : null;
   // `mode` segregates off-chain Points markets from on-chain MVP markets
   // so the two apps render isolated universes even though they share the
   // same table. Omitted → Points default ('points'). MVP passes
@@ -136,12 +142,13 @@ export default async function handler(req, res) {
     : 100;
   // featured filter: the home "Trending" grid only shows curated
   // (featured=true) markets. Category pages pass featured=all to see
-  // everything. Default without a category = trending, so featured=true.
-  // Explicit ?featured=all bypasses the filter entirely.
+  // every public-visible market. Default without a category = trending,
+  // so featured=true. Explicit ?featured=all bypasses the curation filter,
+  // but still respects hidden_from_home for active non-trophy markets.
   const featuredParam = req.query.featured;
   const featuredOnly = !category && featuredParam !== 'all';
   const cacheKey = [
-    'points:markets:v3',
+    'points:markets:v4',
     status,
     category || 'all',
     modeFilter || 'all-modes',
@@ -176,6 +183,11 @@ export default async function handler(req, res) {
             AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
             AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
             AND m.archived_at IS NULL
+            AND (
+              ${status}::text <> 'active'
+              OR m.hidden_from_home IS NOT TRUE
+              OR m.tournament_featured = true
+            )
           ORDER BY
             CASE WHEN ${status}::text = 'resolved' THEN m.resolved_at END DESC NULLS LAST,
             -- Live markets first (kickoff has passed, deadline hasn't).
@@ -225,6 +237,11 @@ export default async function handler(req, res) {
               AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
             AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
             AND m.archived_at IS NULL
+            AND (
+              ${status}::text <> 'active'
+              OR m.hidden_from_home IS NOT TRUE
+              OR m.tournament_featured = true
+            )
             ORDER BY
               CASE WHEN ${status}::text = 'resolved' THEN m.resolved_at END DESC NULLS LAST,
               -- Live markets first (kickoff has passed, deadline hasn't).
