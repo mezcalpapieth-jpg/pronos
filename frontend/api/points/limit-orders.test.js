@@ -18,6 +18,7 @@ import {
 const schemaSource = await readFile(new URL('../_lib/points-schema.js', import.meta.url), 'utf8');
 const migrateSource = await readFile(new URL('../migrate.js', import.meta.url), 'utf8');
 const helperSource = await readFile(new URL('../_lib/points-limit-orders.js', import.meta.url), 'utf8');
+const entrySource = await readFile(new URL('../_lib/points-tournament-entry.js', import.meta.url), 'utf8');
 const orderbookSource = await readFile(new URL('./orderbook.js', import.meta.url), 'utf8');
 const limitOrdersSource = await readFile(new URL('./limit-orders.js', import.meta.url), 'utf8');
 const cancelOrderSource = await readFile(new URL('./cancel-limit-order.js', import.meta.url), 'utf8');
@@ -70,6 +71,30 @@ test('limit-order helper reserves funds, rewards makers, and fills against AMM q
   assert.match(helperSource, /binaryBuyQuote|multiBuyQuote/);
   assert.match(helperSource, /binarySellQuote|multiSellQuote/);
   assert.match(helperSource, /Pago diario por liquidez/);
+});
+
+test('tournament minimum applies only before a market is covered', () => {
+  assert.match(entrySource, /export async function hasCoveredTournamentMarket/);
+  assert.match(entrySource, /export async function assertTournamentMinimumEntry/);
+  assert.match(entrySource, /resolveTournamentScoringWindow/);
+  assert.match(entrySource, /TOURNAMENT_START_ISO/);
+  assert.match(entrySource, /TOURNAMENT_RANKING_CUTOFF_ISO/);
+  assert.match(entrySource, /WHERE id = \$1 OR parent_id = \$1/);
+  assert.match(entrySource, /side = 'buy'/);
+  assert.match(entrySource, /market_id = ANY\(\$2::int\[\]\)/);
+  assert.match(entrySource, /ABS\(COALESCE\(collateral, 0\)\) >= \$3/);
+  assert.match(entrySource, /created_at >= \$4::timestamptz/);
+  assert.match(entrySource, /created_at <= \$5::timestamptz/);
+  assert.match(entrySource, /if \(await hasCoveredTournamentMarket\(client, \{ market, username \}\)\) return/);
+  assert.match(entrySource, /primera entrada/);
+  assert.match(helperSource, /import \{ assertTournamentMinimumEntry \} from '\.\/points-tournament-entry\.js'/);
+  assert.match(helperSource, /SELECT id, question, status, reserves, outcomes, end_time, resolver_config,\s*amm_mode, parent_id/s);
+  assert.match(helperSource, /await assertTournamentMinimumEntry\(client, \{\s*market,\s*username,\s*amount: qty,\s*\}\)/s);
+  assert.doesNotMatch(helperSource, /qty < TOURNAMENT_MIN_ENTRY_MXNP/);
+  assert.match(buySource, /import \{ assertTournamentMinimumEntry \} from '\.\.\/_lib\/points-tournament-entry\.js'/);
+  assert.match(buySource, /seed_liquidity, seed_liquidities, amm_mode, parent_id/);
+  assert.match(buySource, /await assertTournamentMinimumEntry\(client, \{\s*market: m,\s*username,\s*amount: amt,\s*\}\)/s);
+  assert.doesNotMatch(buySource, /amt < TOURNAMENT_MIN_ENTRY_MXNP/);
 });
 
 test('maker rewards accrue after resting near the current price with no per-order cap', () => {

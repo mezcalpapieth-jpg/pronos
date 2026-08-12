@@ -52,6 +52,22 @@ test('public points errors use safe user copy instead of backend details', () =>
   assert.match(buyModalSource, /publicErrorMessage/);
 });
 
+test('buy modal mirrors tournament minimum before submitting', () => {
+  assert.match(buyModalSource, /TOURNAMENT_MIN_BUY_MXNP = 100/);
+  assert.match(buyModalSource, /const FIRST_ENTRY_QUICK_AMOUNTS = \[100, 200, 500, 1000\]/);
+  assert.match(buyModalSource, /const TOP_UP_QUICK_AMOUNTS = \[5, 10, 25, 50, 100\]/);
+  assert.match(buyModalSource, /minimumEntrySatisfied = false/);
+  assert.match(buyModalSource, /const requiresMinimumEntry = !minimumEntrySatisfied/);
+  assert.match(buyModalSource, /requiresMinimumEntry && numAmount > 0 && numAmount < TOURNAMENT_MIN_BUY_MXNP/);
+  assert.match(buyModalSource, /belowMinimum \|\| quoteState !== 'ready'/);
+  assert.match(buyModalSource, /points\.buy\.minimumEntryHint/);
+  assert.match(buyModalSource, /points\.buy\.topUpHint/);
+  assert.match(buyModalSource, /points\.buy\.errorTournamentMin/);
+  assert.match(translationLine('points.buy.minimumEntryHint'), /Mínimo \{amount\} MXNP/);
+  assert.match(translationLine('points.buy.topUpHint'), /Ya cubriste este mercado/);
+  assert.match(translationLine('points.buy.errorTournamentMin'), /mínimo para cubrir un mercado/);
+});
+
 test('public sharing, news links, and generated market fallbacks are text-only', () => {
   assert.doesNotMatch(shareSource, /[\u2600-\u27BF]|[\u{1F000}-\u{1FAFF}]/u);
   assert.doesNotMatch(newsSource, /📊|📈|🔗/);

@@ -11,9 +11,9 @@ import { bestEffortInsertPointsPriceSnapshot } from './points-price-snapshots.js
 import { assertCryptoTradeAllowed, cryptoTradeLock } from './points-crypto-trade-guard.js';
 import {
   TOURNAMENT_MAX_SHARES_PER_MARKET,
-  TOURNAMENT_MIN_ENTRY_MXNP,
   tournamentRulesActive,
 } from './points-tournament-config.js';
+import { assertTournamentMinimumEntry } from './points-tournament-entry.js';
 
 const EPSILON = 0.000001;
 const MAX_TRIGGERED_PER_PASS = 24;
@@ -256,7 +256,8 @@ export function normalizeLimitPrice(value) {
 
 async function lockMarket(client, marketId) {
   const result = await client.query(
-    `SELECT id, question, status, reserves, outcomes, end_time, resolver_config
+    `SELECT id, question, status, reserves, outcomes, end_time, resolver_config,
+            amm_mode, parent_id
        FROM points_markets
       WHERE id = $1
       FOR UPDATE`,
@@ -1498,15 +1499,15 @@ export async function createLimitOrder(client, {
   if (!Number.isFinite(qty) || qty <= 0) {
     const err = new Error('invalid_amount'); err.status = 400; throw err;
   }
-  if (normalizedSide === 'buy' && tournamentRulesActive() && qty < TOURNAMENT_MIN_ENTRY_MXNP) {
-    const err = new Error('tournament_min_entry');
-    err.status = 400;
-    err.detail = `El mínimo por entrada durante el torneo es ${TOURNAMENT_MIN_ENTRY_MXNP} MXNP.`;
-    throw err;
-  }
-
   const market = await lockMarket(client, marketId);
   assertMarketCanTrade(market);
+  if (normalizedSide === 'buy') {
+    await assertTournamentMinimumEntry(client, {
+      market,
+      username,
+      amount: qty,
+    });
+  }
   reservesForMarket(market, outcomeIndex);
 
   if (normalizedSide === 'buy') {

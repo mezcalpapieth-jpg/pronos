@@ -77,23 +77,29 @@ test('parallel parent activity rolls up from leg ids', () => {
   assert.match(carousel, /rollupActivityByParent\(a \|\| \{\}, activityRequest\)/);
 });
 
-test('parallel carousel charts use parent flow instead of a child leg identity', () => {
+test('parallel carousel charts draw leg histories without adopting a child identity', () => {
   // Multi-option parents should not inherit Zverev/Felix/etc. as the carousel
   // headline just because one child leg happens to be first in the id list.
+  // The chart should still be a probability graph, not the right-side flow tape.
+  assert.match(carousel, /import MultiSparkline from '@app\/components\/MultiSparkline\.jsx'/);
   assert.match(carousel, /function priceHistoryRequestForMarkets\(markets\)/);
-  assert.match(carousel, /if \(m\.ammMode === 'parallel'\) continue/);
-  assert.match(carousel, /function parallelFlowPoints/);
-  assert.match(carousel, /function FlowSparkline/);
+  assert.match(carousel, /if \(m\.ammMode === 'parallel'\) \{/);
+  assert.match(carousel, /sourceId: m\.legIds\[entry\.index\]/);
+  assert.match(carousel, /sourceOutcome: 0/);
+  assert.match(carousel, /function chartEntriesForMarket/);
   assert.match(carousel, /function leadingOutcomeForMarket/);
-  assert.match(carousel, /<FlowSparkline/);
+  assert.match(carousel, /<MultiSparkline/);
+  assert.match(carousel, /series=\{mChartEntries\.map\(entry =>/);
+  assert.match(carousel, /activity=\{\[m\._buckets \|\| \[\]\]\}/);
   assert.match(carousel, /points\.activity\.tied/);
-  assert.match(carousel, /isParallel \? mLeader\.label : mOutcomes\[0\]/);
-  assert.match(carousel, /const mLeadPct = isParallel \? mLeader\.pct/);
+  assert.match(carousel, /isMultiChart \? mLeader\.label : mOutcomes\[0\]/);
+  assert.match(carousel, /const mLeadPct = isMultiChart \? mLeader\.pct/);
   assert.doesNotMatch(carousel, /m\.legIds\[0\]/);
   assert.doesNotMatch(carousel, /targetPct=\{isParallel \? 100 : mLeadPct\}/);
   assert.doesNotMatch(carousel, /aggregateParallelFlowSeries/);
-  assert.match(carousel, /fetchPriceHistory\(priceHistoryIds/);
-  assert.match(carousel, /remapHistoryByParent\(h \|\| \{\}, priceHistoryRequest\)/);
+  assert.doesNotMatch(carousel, /function FlowSparkline/);
+  assert.match(carousel, /fetchPriceHistory\(group\.ids/);
+  assert.match(carousel, /remapHistoryByParent\(results, priceHistoryRequest\)/);
 });
 
 test('visible parallel slide polling keeps querying leg activity', () => {
@@ -121,6 +127,6 @@ test('the pinned market states it has no buys instead of implying activity', () 
 });
 
 test('home caps the carousel at seven hidden editorial slots', () => {
-  assert.match(home, /<PointsActivityCarousel markets=\{markets\} count=\{7\} \/>/);
+  assert.match(home, /<PointsActivityCarousel markets=\{carouselMarkets\} count=\{7\} \/>/);
   assert.match(home, /Seven hidden editorial slots/);
 });

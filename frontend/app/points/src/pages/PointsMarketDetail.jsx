@@ -2220,7 +2220,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
     emitPointsRefresh({ source: 'trade_success', marketId: id });
   }
 
-  function handleBuyClick(target, outcomeIndex, outcomeLabel) {
+  function handleBuyClick(target, outcomeIndex, outcomeLabel, options = {}) {
     if (!authenticated) {
       onOpenLogin?.();
       return;
@@ -2233,7 +2233,12 @@ export default function PointsMarketDetail({ onOpenLogin }) {
     if (lockTarget?.seriesLocked || targetStatus !== 'active' || market?.seriesLocked || market?.status !== 'active') {
       return;
     }
-    setBuyState({ market: target, outcomeIndex, outcomeLabel });
+    setBuyState({
+      market: target,
+      outcomeIndex,
+      outcomeLabel,
+      minimumEntrySatisfied: Boolean(options.minimumEntrySatisfied),
+    });
   }
 
   async function loadSellPreviewQuote(position, shares) {
@@ -3266,7 +3271,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                       {!isResolved && !isPendingResolution && (
                         <div style={{ display: 'flex', gap: 6 }}>
                           <button
-                            onClick={() => handleBuyClick(buyTarget, oi, label)}
+                            onClick={() => handleBuyClick(buyTarget, oi, label, { minimumEntrySatisfied: true })}
                             className="btn-primary"
                             style={{ flex: 1, padding: '8px 10px', fontSize: 11 }}
                           >
@@ -3325,6 +3330,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
           market={buyState.market || market}
           outcomeIndex={buyState.outcomeIndex}
           outcomeLabel={buyState.outcomeLabel}
+          minimumEntrySatisfied={buyState.minimumEntrySatisfied}
           onClose={() => setBuyState(null)}
           onSuccess={async () => {
             setBuyState(null);

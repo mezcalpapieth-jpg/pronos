@@ -30,9 +30,9 @@ import {
 import { assertCryptoTradeAllowed } from '../_lib/points-crypto-trade-guard.js';
 import {
   TOURNAMENT_MAX_SHARES_PER_MARKET,
-  TOURNAMENT_MIN_ENTRY_MXNP,
   tournamentRulesActive,
 } from '../_lib/points-tournament-config.js';
+import { assertTournamentMinimumEntry } from '../_lib/points-tournament-entry.js';
 
 // Lightweight HTTP client used only to run the idempotent schema bootstrap.
 // Transactional work goes through withTransaction() which uses a WS Pool.
@@ -112,12 +112,6 @@ export default async function handler(req, res) {
   // reserves count (binary=2 or trinary=3). Just guard the lower bound here.
   if (!Number.isInteger(oi) || oi < 0)    return res.status(400).json({ error: 'invalid_outcome_index' });
   if (!Number.isFinite(amt) || amt <= 0)   return res.status(400).json({ error: 'invalid_amount' });
-  if (tournamentRulesActive() && amt < TOURNAMENT_MIN_ENTRY_MXNP) {
-    return res.status(400).json({
-      error: 'tournament_min_entry',
-      detail: `El mínimo por entrada durante el torneo es ${TOURNAMENT_MIN_ENTRY_MXNP} MXNP.`,
-    });
-  }
 
   // Slippage guards (optional). Client sends what it quoted; server
   // rejects with `price_moved` if the locked quote exceeds the
@@ -140,7 +134,7 @@ export default async function handler(req, res) {
       const marketResult = await client.query(
         `SELECT id, question, status, reserves, outcomes, start_time, end_time,
                 created_at, resolver_type, resolver_config, sport, league,
-                seed_liquidity, seed_liquidities
+                seed_liquidity, seed_liquidities, amm_mode, parent_id
          FROM points_markets
          WHERE id = $1
          FOR UPDATE`,
@@ -156,6 +150,11 @@ export default async function handler(req, res) {
       if (m.end_time && new Date(m.end_time) <= new Date()) {
         const err = new Error('market_expired'); err.status = 400; throw err;
       }
+      await assertTournamentMinimumEntry(client, {
+        market: m,
+        username,
+        amount: amt,
+      });
       assertCryptoTradeAllowed(m);
       const seriesLock = await readSeriesTradeLock(client, m);
       if (seriesLock?.locked) {

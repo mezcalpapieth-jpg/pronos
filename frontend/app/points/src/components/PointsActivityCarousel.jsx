@@ -31,6 +31,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sparkline from '@app/components/Sparkline.jsx';
+import MultiSparkline from '@app/components/MultiSparkline.jsx';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
 import { useT } from '@app/lib/i18n.js';
 import { ActivityCarouselSkeleton } from './PointsSkeleton.jsx';
@@ -49,6 +50,7 @@ const CANDIDATE_POOL = 120;
 // The API bounds ids to 200. Parallel markets add one id per leg, so build
 // requests in ranked order and let lower-volume candidates fall off first.
 const MAX_ACTIVITY_IDS = 200;
+const CHART_OUTCOME_LIMIT = 4;
 
 const SLOT_DEFS = [
   { key: '1h-interactions', hours: 1, metric: 'count' },
@@ -62,6 +64,16 @@ const SLOT_DEFS = [
 
 const BUY_COLOR = 'var(--yes)';
 const SELL_COLOR = 'var(--danger)';
+const OUTCOME_COLORS = [
+  'var(--yes)',
+  'var(--gold)',
+  '#ff3b3b',
+  '#3b82f6',
+  '#a855f7',
+  '#06b6d4',
+  '#ec4899',
+  '#84cc16',
+];
 
 function displayCategory(category) {
   const key = String(category || 'general').trim().toLowerCase();
@@ -166,157 +178,138 @@ function rollupActivityByParent(activity, request) {
 }
 
 function priceHistoryRequestForMarkets(markets) {
-  const ids = [];
-  const ownerById = new Map();
+  const groups = new Map();
+  const parentIds = new Set();
+
+  const add = ({ sourceId, parentId, outcomeIndex, sourceOutcome }) => {
+    if (sourceId == null || parentId == null) return;
+    const groupKey = String(sourceOutcome || 0);
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, {
+        outcome: Number(sourceOutcome || 0),
+        ids: [],
+        targets: [],
+        seen: new Set(),
+      });
+    }
+    const group = groups.get(groupKey);
+    const sourceKey = marketIdKey(sourceId);
+    const targetKey = `${sourceKey}:${marketIdKey(parentId)}:${outcomeIndex}`;
+    if (group.seen.has(targetKey)) return;
+    group.seen.add(targetKey);
+    if (!group.ids.some(id => marketIdKey(id) === sourceKey)) group.ids.push(sourceId);
+    parentIds.add(marketIdKey(parentId));
+    group.targets.push({
+      sourceKey,
+      parentKey: marketIdKey(parentId),
+      outcomeIndex,
+    });
+  };
 
   for (const m of markets || []) {
     if (!m?.id) continue;
-    if (m.ammMode === 'parallel') continue;
-    const sourceId = m.id;
-    const key = marketIdKey(sourceId);
-    if (ownerById.has(key)) continue;
-    ids.push(sourceId);
-    ownerById.set(key, marketIdKey(m.id));
+    const entries = chartEntriesForMarket(m);
+    if (m.ammMode === 'parallel') {
+      if (!Array.isArray(m.legIds) || m.legIds.length === 0) continue;
+      for (const entry of entries) {
+        add({
+          sourceId: m.legIds[entry.index],
+          parentId: m.id,
+          outcomeIndex: entry.index,
+          sourceOutcome: 0,
+        });
+      }
+      continue;
+    }
+
+    for (const entry of entries) {
+      add({
+        sourceId: m.id,
+        parentId: m.id,
+        outcomeIndex: entry.index,
+        sourceOutcome: entry.index,
+      });
+    }
   }
 
-  return { ids, ownerById };
+  return {
+    groups: [...groups.values()].map(group => ({
+      outcome: group.outcome,
+      ids: group.ids,
+      targets: group.targets,
+    })),
+    parentIds,
+  };
 }
 
-function remapHistoryByParent(history, request) {
+function remapHistoryByParent(results, request) {
   const mapped = {};
-  for (const parentId of request?.ownerById?.values?.() || []) mapped[parentId] = [];
+  for (const parentId of request?.parentIds || []) mapped[parentId] = [];
 
-  for (const [sourceId, points] of Object.entries(history || {})) {
-    const parentId = request?.ownerById?.get?.(marketIdKey(sourceId));
-    if (!parentId) continue;
-    mapped[parentId] = Array.isArray(points) ? points : [];
+  for (const result of results || []) {
+    const group = result?.group;
+    const history = result?.history || {};
+    for (const target of group?.targets || []) {
+      if (!mapped[target.parentKey]) mapped[target.parentKey] = [];
+      mapped[target.parentKey][target.outcomeIndex] = Array.isArray(history[target.sourceKey])
+        ? history[target.sourceKey]
+        : [];
+    }
   }
 
   return mapped;
 }
 
-function parallelFlowPoints(m) {
-  const buckets = Array.isArray(m?._buckets)
-    ? [...m._buckets].sort((a, b) => Number(a.t) - Number(b.t))
-    : [];
-
-  let cumulative = 0;
-  return buckets
-    .map((b) => {
-      const volume = Number(b.volume || 0);
-      if (!Number.isFinite(volume) || volume <= 0) return null;
-      cumulative += volume;
-      return {
-        t: Number(b.t || 0),
-        v: cumulative,
-      };
-    })
-    .filter(pt => Number.isFinite(pt?.t) && pt.t > 0 && Number.isFinite(pt.v));
-}
-
-function FlowSparkline({
-  buckets,
-  height = 148,
-  color = BUY_COLOR,
-  emptyLabel,
-  emptySubLabel,
-}) {
-  const points = useMemo(() => parallelFlowPoints({ _buckets: buckets }), [buckets]);
-  if (points.length === 0) {
-    return (
-      <div style={{
-        height,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 4,
-        color: 'var(--text-muted)',
-        textAlign: 'center',
-      }}>
-        <span style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11,
-          color: 'var(--text-secondary)',
-          letterSpacing: '0.06em',
-          textTransform: 'uppercase',
-        }}>
-          {emptyLabel}
-        </span>
-        <span style={{
-          fontFamily: 'var(--font-body)',
-          fontSize: 12,
-          color: 'var(--text-muted)',
-        }}>
-          {emptySubLabel}
-        </span>
-      </div>
-    );
-  }
-
-  const width = 100;
-  const padX = 2;
-  const padY = 5;
-  const minT = Math.min(...points.map(pt => pt.t));
-  const maxT = Math.max(...points.map(pt => pt.t));
-  const maxV = Math.max(1, ...points.map(pt => pt.v));
-  const xFor = (t) => padX + ((t - minT) / Math.max(1, maxT - minT)) * (width - padX * 2);
-  const yFor = (v) => padY + (height - padY * 2) - (v / maxV) * (height - padY * 2);
-  const coords = points.map(pt => ({ x: xFor(pt.t), y: yFor(pt.v), v: pt.v }));
-  let path = `M${coords[0].x.toFixed(2)},${coords[0].y.toFixed(2)}`;
-  for (let i = 1; i < coords.length; i++) {
-    path += ` L${coords[i].x.toFixed(2)},${coords[i - 1].y.toFixed(2)}`;
-    path += ` L${coords[i].x.toFixed(2)},${coords[i].y.toFixed(2)}`;
-  }
-  const fill = `${path} L${coords[coords.length - 1].x.toFixed(2)},${(height - padY).toFixed(2)} L${coords[0].x.toFixed(2)},${(height - padY).toFixed(2)} Z`;
-
-  return (
-    <svg
-      width="100%"
-      height={height}
-      viewBox={`0 0 ${width} ${height}`}
-      preserveAspectRatio="none"
-      style={{ display: 'block', overflow: 'visible' }}
-      aria-label={`Flujo acumulado ${formatCompact(maxV)} MXNP`}
-    >
-      <path d={fill} fill={color} opacity="0.08" />
-      <path
-        d={path}
-        fill="none"
-        stroke={color}
-        strokeWidth={0.7}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        vectorEffect="non-scaling-stroke"
-      />
-      <circle
-        cx={coords[coords.length - 1].x}
-        cy={coords[coords.length - 1].y}
-        r={2.4}
-        fill={color}
-        vectorEffect="non-scaling-stroke"
-      />
-    </svg>
-  );
-}
-
 function seriesForSlide(m, history) {
-  if (!m || m.ammMode === 'parallel') return [];
-  return history?.[m.id] || [];
+  if (!m) return [];
+  return history?.[marketIdKey(m.id)] || history?.[m.id] || [];
 }
 
 function outcomeEntriesForMarket(m, limit = 4) {
   const outcomes = Array.isArray(m?.outcomes) ? m.outcomes : ['Sí', 'No'];
   const prices = Array.isArray(m?.prices) ? m.prices : [];
+  const legIds = Array.isArray(m?.legIds) && m.legIds.length === outcomes.length
+    ? m.legIds
+    : null;
+  const legStatuses = Array.isArray(m?.legStatuses) && m.legStatuses.length === outcomes.length
+    ? m.legStatuses
+    : null;
+  const legOutcomes = Array.isArray(m?.legOutcomes) && m.legOutcomes.length === outcomes.length
+    ? m.legOutcomes
+    : null;
   const entries = outcomes.map((label, index) => ({
     label,
     index,
     price: Number(prices[index] ?? 0),
+    legId: legIds?.[index] ?? null,
+    legStatus: legStatuses?.[index] || null,
+    legOutcome: legOutcomes?.[index] ?? null,
   }));
-  if (m?.ammMode !== 'parallel') return entries.slice(0, limit);
-  return entries
+
+  if (m?.ammMode === 'parallel') {
+    const activeEntries = entries.filter(entry => (
+      legStatuses
+        ? String(entry.legStatus || '').toLowerCase() === 'active'
+        : Number(entry.price) > 0
+    ));
+    const visible = activeEntries.length > 0 ? activeEntries : entries;
+    return visible
+      .sort((a, b) => b.price - a.price || a.index - b.index)
+      .slice(0, limit);
+  }
+
+  if (entries.length <= 2) return entries.slice(0, limit);
+  return [...entries]
     .sort((a, b) => b.price - a.price || a.index - b.index)
     .slice(0, limit);
+}
+
+function chartEntriesForMarket(m) {
+  const outcomes = Array.isArray(m?.outcomes) ? m.outcomes : ['Sí', 'No'];
+  if (m?.ammMode !== 'parallel' && outcomes.length <= 2) {
+    return outcomeEntriesForMarket(m, 1);
+  }
+  return outcomeEntriesForMarket(m, CHART_OUTCOME_LIMIT);
 }
 
 function leadingOutcomeForMarket(m, tiedLabel = 'Empatado') {
@@ -571,8 +564,10 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
   }, [candidates, recent, count, pinned]);
 
   const priceHistoryRequest = useMemo(() => priceHistoryRequestForMarkets(slides), [slides]);
-  const priceHistoryIds = priceHistoryRequest.ids;
-  const idsKey = priceHistoryIds.join(',');
+  const priceHistoryGroups = priceHistoryRequest.groups;
+  const idsKey = priceHistoryGroups
+    .map(group => `${group.outcome}:${group.ids.map(marketIdKey).join('|')}`)
+    .join(';');
 
   // Clamp the cursor when the ranking shrinks under it (markets resolve,
   // search narrows the list) so we never park on a removed slide.
@@ -584,10 +579,18 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
   // its own errors and resolves to {}, so a cold snapshot table degrades
   // to the Sparkline's flat state instead of taking down home.
   useEffect(() => {
-    if (priceHistoryIds.length === 0) return undefined;
+    if (priceHistoryGroups.length === 0) {
+      setHistory({});
+      return undefined;
+    }
     let cancelled = false;
-    fetchPriceHistory(priceHistoryIds, { days: 30, outcome: 0, limit: 120 }).then(h => {
-      if (!cancelled) setHistory(remapHistoryByParent(h || {}, priceHistoryRequest));
+    Promise.all(
+      priceHistoryGroups.map(group =>
+        fetchPriceHistory(group.ids, { days: 30, outcome: group.outcome, limit: 120 })
+          .then(history => ({ group, history: history || {} })),
+      ),
+    ).then(results => {
+      if (!cancelled) setHistory(remapHistoryByParent(results, priceHistoryRequest));
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -783,12 +786,15 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
             const mOutcomes = Array.isArray(m.outcomes) ? m.outcomes : ['Sí', 'No'];
             const mPrices = Array.isArray(m.prices) ? m.prices : [];
             const isParallel = m.ammMode === 'parallel';
-            const mSeries = seriesForSlide(m, history);
-            const mLeader = isParallel ? leadingOutcomeForMarket(m, t('points.activity.tied')) : null;
-            const mLeadPct = isParallel ? mLeader.pct : Math.round((mPrices[0] ?? 0.5) * 100);
+            const isMultiChart = isParallel || mOutcomes.length > 2;
+            const mOutcomeSeries = seriesForSlide(m, history);
+            const mSeries = Array.isArray(mOutcomeSeries?.[0]) ? mOutcomeSeries[0] : [];
+            const mLeader = isMultiChart ? leadingOutcomeForMarket(m, t('points.activity.tied')) : null;
+            const mLeadPct = isMultiChart ? mLeader.pct : Math.round((mPrices[0] ?? 0.5) * 100);
             const mDelta = mSeries.length >= 2 ? mSeries[mSeries.length - 1].p - mSeries[0].p : 0;
             const mDeltaColor = mDelta > 0.05 ? BUY_COLOR : mDelta < -0.05 ? SELL_COLOR : 'var(--text-muted)';
             const mOutcomeEntries = outcomeEntriesForMarket(m);
+            const mChartEntries = chartEntriesForMarket(m);
             return (
               <div
                 key={m.id}
@@ -870,8 +876,10 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                       {m.question}
                     </h3>
 
-                    {/* Chart. Binary markets show outcome 0 price history;
-                        parallel markets show total parent flow. */}
+                    {/* Chart. Binary markets show outcome 0 price history.
+                        Multi and parallel parents draw the leading outcome
+                        lines on one shared axis; the right panel keeps the
+                        parent-level money flow. */}
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 4 }}>
                       <span style={{
                         fontFamily: 'var(--font-display)',
@@ -891,9 +899,9 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
                       }}>
-                        {isParallel ? mLeader.label : mOutcomes[0]}
+                        {isMultiChart ? mLeader.label : mOutcomes[0]}
                       </span>
-                      {isActive && !isParallel && mSeries.length >= 2 && (
+                      {isActive && !isMultiChart && mSeries.length >= 2 && (
                         <span style={{
                           fontFamily: 'var(--font-mono)',
                           fontSize: 'var(--fs-xs)',
@@ -905,13 +913,36 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                       )}
                     </div>
 
-                    {isParallel ? (
-                      <FlowSparkline
-                        buckets={m._buckets}
-                        height={isMobile ? 110 : 148}
-                        color={BUY_COLOR}
+                    {isMultiChart ? (
+                      <MultiSparkline
+                        height={isMobile ? 138 : 164}
+                        strokeWidth={2}
+                        showActivity={false}
+                        domainMin={0}
+                        domainMax={100}
+                        series={mChartEntries.map(entry => ({
+                          key: `opt-${entry.index}`,
+                          label: entry.label,
+                          color: OUTCOME_COLORS[entry.index % OUTCOME_COLORS.length],
+                          data: Array.isArray(mOutcomeSeries?.[entry.index])
+                            ? mOutcomeSeries[entry.index]
+                            : [],
+                          targetPct: Math.round((entry.price || 0) * 100),
+                        }))}
+                        activity={[m._buckets || []]}
                         emptyLabel={t('points.activity.noHistory')}
                         emptySubLabel={t('points.activity.noHistorySub')}
+                        legendNote={mOutcomes.length > mChartEntries.length ? (
+                          <span style={{
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: 11,
+                            color: 'var(--text-muted)',
+                            letterSpacing: '0.04em',
+                            alignSelf: 'center',
+                          }}>
+                            +{mOutcomes.length - mChartEntries.length}
+                          </span>
+                        ) : null}
                       />
                     ) : (
                       <Sparkline

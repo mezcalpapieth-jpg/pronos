@@ -16,17 +16,28 @@ import { useLang, useT } from '@app/lib/i18n.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { emitPointsRefresh } from '../lib/pointsLiveRefresh.js';
 
-const QUICK_AMOUNTS = [5, 10, 25, 50, 100];
+const TOURNAMENT_MIN_BUY_MXNP = 100;
+const FIRST_ENTRY_QUICK_AMOUNTS = [100, 200, 500, 1000];
+const TOP_UP_QUICK_AMOUNTS = [5, 10, 25, 50, 100];
 
 // `variant='modal'` (default) centers on screen with a darkened backdrop.
 // `variant='drawer'` slides in from the right edge and takes the full
 // viewport height — invoked from market cards so the user can buy
 // without leaving the grid.
-export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabel, onClose, onSuccess, variant = 'modal' }) {
+export default function PointsBuyModal({
+  open,
+  market,
+  outcomeIndex,
+  outcomeLabel,
+  onClose,
+  onSuccess,
+  variant = 'modal',
+  minimumEntrySatisfied = false,
+}) {
   const { user, refresh } = usePointsAuth();
   const t = useT();
   const lang = useLang();
-  const [amount, setAmount] = useState('10');
+  const [amount, setAmount] = useState(String(TOURNAMENT_MIN_BUY_MXNP));
   const [quote, setQuote] = useState(null);
   const [quoteState, setQuoteState] = useState('idle'); // idle | loading | ready | error
   const [quoteError, setQuoteError] = useState('');
@@ -36,12 +47,27 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
 
   const balance = Number(user?.balance || 0);
   const numAmount = parseFloat(amount) || 0;
+  const requiresMinimumEntry = !minimumEntrySatisfied;
+  const quickAmounts = requiresMinimumEntry ? FIRST_ENTRY_QUICK_AMOUNTS : TOP_UP_QUICK_AMOUNTS;
+  const defaultAmount = requiresMinimumEntry ? TOURNAMENT_MIN_BUY_MXNP : 50;
+  const inputMin = requiresMinimumEntry ? TOURNAMENT_MIN_BUY_MXNP : 1;
+  const belowMinimum = requiresMinimumEntry && numAmount > 0 && numAmount < TOURNAMENT_MIN_BUY_MXNP;
   const insufficientBalance = numAmount > balance;
   const numberLocale = lang === 'en' ? 'en-US' : 'es-MX';
 
+  useEffect(() => {
+    if (!open) return;
+    setAmount(String(defaultAmount));
+    setQuote(null);
+    setQuoteState('idle');
+    setQuoteError('');
+    setSubmitError('');
+    setSuccess(false);
+  }, [open, defaultAmount, market?.id, outcomeIndex]);
+
   // Debounced quote — re-request when the amount changes
   useEffect(() => {
-    if (!open || numAmount <= 0 || !market?.id) {
+    if (!open || numAmount <= 0 || belowMinimum || !market?.id) {
       setQuote(null);
       setQuoteState('idle');
       return;
@@ -67,7 +93,7 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [open, numAmount, market?.id, outcomeIndex]);
+  }, [open, numAmount, belowMinimum, market?.id, outcomeIndex]);
 
   if (!open || !market) return null;
 
@@ -218,7 +244,7 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
         </label>
         <input
           type="number"
-          min="1"
+          min={String(inputMin)}
           step="1"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
@@ -226,7 +252,7 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
           style={{
             width: '100%',
             background: 'var(--surface2)',
-            border: `1px solid ${insufficientBalance ? 'rgba(255,59,59,0.5)' : 'var(--border)'}`,
+            border: `1px solid ${insufficientBalance || belowMinimum ? 'rgba(255,59,59,0.5)' : 'var(--border)'}`,
             borderRadius: 10,
             padding: '12px 14px',
             fontFamily: 'var(--font-mono)',
@@ -236,9 +262,21 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
             marginBottom: 10,
           }}
         />
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          color: belowMinimum ? 'var(--danger)' : 'var(--text-muted)',
+          letterSpacing: '0.04em',
+          lineHeight: 1.45,
+          margin: '-2px 0 10px',
+        }}>
+          {requiresMinimumEntry
+            ? t('points.buy.minimumEntryHint', { amount: TOURNAMENT_MIN_BUY_MXNP })
+            : t('points.buy.topUpHint')}
+        </div>
 
         <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-          {QUICK_AMOUNTS.map(v => (
+          {quickAmounts.map(v => (
             <button
               key={v}
               onClick={() => setAmount(String(v))}
@@ -328,7 +366,7 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
 
         <button
           onClick={handleConfirm}
-          disabled={submitting || insufficientBalance || quoteState !== 'ready' || numAmount <= 0}
+          disabled={submitting || insufficientBalance || belowMinimum || quoteState !== 'ready' || numAmount <= 0}
           style={{
             width: '100%',
             padding: '14px 16px',
@@ -341,14 +379,15 @@ export default function PointsBuyModal({ open, market, outcomeIndex, outcomeLabe
             fontWeight: 700,
             letterSpacing: '0.08em',
             textTransform: 'uppercase',
-            cursor: submitting || insufficientBalance || quoteState !== 'ready' ? 'not-allowed' : 'pointer',
-            opacity: submitting || insufficientBalance || quoteState !== 'ready' ? 0.6 : 1,
+            cursor: submitting || insufficientBalance || belowMinimum || quoteState !== 'ready' ? 'not-allowed' : 'pointer',
+            opacity: submitting || insufficientBalance || belowMinimum || quoteState !== 'ready' ? 0.6 : 1,
             transition: 'opacity 0.15s',
           }}
         >
           {success ? t('points.buy.success') :
            submitting ? t('points.buy.submitting') :
            insufficientBalance ? t('points.buy.insufficientBalance') :
+           belowMinimum ? t('points.buy.minimumEntryButton', { amount: TOURNAMENT_MIN_BUY_MXNP }) :
            `${t('points.buy.title')} ${numAmount || '—'} MXNP`}
         </button>
       </div>
@@ -387,5 +426,6 @@ function mapError(code, t) {
   if (code.includes('not_authenticated')) return t('points.buy.errorNotAuth');
   if (code.includes('market_closed')) return t('points.buy.errorMarketClosed');
   if (code.includes('market_not_found')) return t('points.buy.errorMarketNotFound');
+  if (code.includes('tournament_min_entry')) return t('points.buy.errorTournamentMin', { amount: TOURNAMENT_MIN_BUY_MXNP });
   return t('points.buy.errorPrefix', { code });
 }
