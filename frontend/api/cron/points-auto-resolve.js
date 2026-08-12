@@ -4,7 +4,7 @@
  * Scans points_markets for active rows whose trading window has closed
  * AND whose resolver_type is one we know how to settle automatically.
  * Active resolver types: chainlink_price, api_price, weather_api,
- * api_chart, api_transcript, sports_api (espn / espn-pga / espn-liv / etc.).
+ * api_chart, api_transcript, api_lcdlf, sports_api (espn / espn-pga / espn-liv / etc.).
  * manual_review/manual markets are not auto-settled; they are queued
  * into points_resolution_candidates when their close time passes.
  *
@@ -40,8 +40,9 @@ import { bestEffortPersistResolvedCryptoMarketSnapshot } from '../_lib/crypto-ch
 import { readFinnhubQuote } from '../_lib/stockprice.js';
 import { readBanxicoLatest } from '../_lib/banxico.js';
 import { readCreAverageFor } from '../_lib/fuel.js';
-import { readMananeraPhraseResult } from '../_lib/mananera.js';
+import { MANANERA_TRANSCRIPT_SOURCE, readMananeraPhraseResult } from '../_lib/mananera.js';
 import { readStoredMananeraTranscript } from '../_lib/mananera-ingest.js';
+import { generateMananeraMarkets } from '../_lib/market-gen/mananera.js';
 import { fetchMaxTempC, bucketIndexFor } from '../_lib/weather.js';
 import { readAppleMxTopArtist } from '../_lib/charts.js';
 import { readYouTubeTopMxChannel } from '../_lib/youtube.js';
@@ -51,7 +52,14 @@ import { buildFootballDataEspnFallbackConfig } from '../_lib/sports-resolver-fal
 import { NEXT_OPPONENT_RECHECK_INTERVAL_HOURS, findParallelWinnerIndex, resolverLabelsOverlap } from '../_lib/sports-resolver-policy.js';
 import { buildPointsResolutionCandidateInsert } from '../_lib/points-resolution-candidates.js';
 import { releaseOpenLimitOrdersForMarkets } from '../_lib/points-limit-orders.js';
-import { buildLcdlfResolutionReview, isLcdlfMarket } from '../_lib/lcdlf-official.js';
+import {
+  buildLcdlfResolutionReview,
+  isLcdlfMarket,
+  LCDLF_SOURCE,
+  normalizeLcdlfName,
+  readLcdlfOfficialSnapshot,
+} from '../_lib/lcdlf-official.js';
+import { prepareGeneratedSpecs, upsertPending } from '../_lib/run-generators.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql   = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -101,6 +109,14 @@ function buildFinalScore({ resolverType, cfg, result, resolverInfo, outcomes, wi
         if (driver) return clip(`🏁 ${driver}`);
         return clip(winLabel);
       }
+    }
+
+    if (resolverType === 'api_lcdlf') {
+      const resident = resolverInfo?.residentName || cfg?.residentName;
+      const status = resolverInfo?.statusLabel || resolverInfo?.statusKey;
+      if (resident && status) return clip(`${resident} · ${status}`);
+      if (resident) return clip(resident);
+      return clip(winLabel);
     }
 
     if (resolverType === 'chainlink_price' || resolverType === 'api_price') {
@@ -206,6 +222,7 @@ function isAutoResolvableApiChart({ resolverType, source }) {
 function isManualReviewMarket({ resolverType, cfg, row, sourceData }) {
   const rt = String(resolverType || '').trim().toLowerCase();
   if (rt === 'manual' || rt === 'manual_review') return true;
+  if (rt === 'api_lcdlf') return false;
 
   const source = String(row?.source || cfg?.source || '').trim().toLowerCase();
   if (isAutoResolvableApiChart({ resolverType: rt, source })) return false;
@@ -217,6 +234,75 @@ function isManualReviewMarket({ resolverType, cfg, row, sourceData }) {
 
   const kind = String(sourceData?.kind || '').trim().toLowerCase();
   return ['award', 'reality_week', 'reality_winner', 'lcdlf_week', 'concert'].includes(kind);
+}
+
+function isMananeraMarket({ cfg, row, sourceData } = {}) {
+  const source = String(row?.source || cfg?.source || sourceData?.source || '').trim().toLowerCase();
+  const kind = String(sourceData?.kind || '').trim().toLowerCase();
+  return source === 'mananera'
+    || source === MANANERA_TRANSCRIPT_SOURCE
+    || source === 'gob-mx-mananera'
+    || source === 'mananera-transcript'
+    || kind === 'mananera_phrase';
+}
+
+function findLcdlfStatusRow(snapshot, cfg = {}) {
+  const rows = Array.isArray(snapshot?.rows) ? snapshot.rows : [];
+  const slugNeedle = String(cfg?.residentSlug || '').trim().toLowerCase();
+  const nameNeedle = normalizeLcdlfName(cfg?.residentName || '');
+  if (!slugNeedle && !nameNeedle) return null;
+  return rows.find(row => (
+    (slugNeedle && String(row?.slug || '').trim().toLowerCase() === slugNeedle)
+    || (nameNeedle && normalizeLcdlfName(row?.name || '') === nameNeedle)
+  )) || null;
+}
+
+function buildLcdlfStatusPatch({ cfg, row, snapshot, winningIdx }) {
+  return {
+    lcdlfStatusAtResolve: {
+      residentName: row?.name || cfg?.residentName || null,
+      residentSlug: row?.slug || cfg?.residentSlug || null,
+      statusKey: row?.statusKey || null,
+      statusLabel: row?.statusLabel || null,
+      rawStatus: row?.rawStatus || null,
+      url: row?.url || null,
+      observedAt: snapshot?.observedAt || new Date().toISOString(),
+      outcomeIndex: winningIdx,
+    },
+    evidenceUrl: row?.url || snapshot?.sourceUrl || cfg?.evidenceUrl || null,
+  };
+}
+
+async function queueNextMananeraPendingMarkets({ candidates, dry, report, now = new Date() }) {
+  if (!Array.isArray(candidates) || !candidates.some(row => (
+    isMananeraMarket({
+      cfg: parseJsonb(row?.resolver_config, {}),
+      row,
+      sourceData: parseJsonb(row?.pending_source_data, {}),
+    })
+  ))) {
+    return null;
+  }
+
+  const rawSpecs = await generateMananeraMarkets({ now });
+  const specs = await prepareGeneratedSpecs(rawSpecs);
+  const summary = {
+    dryRun: dry,
+    totalSpecs: specs.length,
+    sourceEventIds: specs.map(spec => spec.source_event_id),
+  };
+
+  if (dry) {
+    report.mananeraNextPending = summary;
+    return summary;
+  }
+
+  const result = await upsertPending(schemaSql, specs);
+  report.mananeraNextPending = {
+    ...summary,
+    ...result,
+  };
+  return report.mananeraNextPending;
 }
 
 function isEarlyTournamentLegSource(cfg = {}) {
@@ -242,6 +328,22 @@ function competitorMatchesLeg(leg, competitor) {
   return Boolean(labelNeedle && resolverLabelsOverlap(leg?.label, labelNeedle));
 }
 
+function otherLegCoveredByNamedRemaining(legs = [], remaining = []) {
+  const otherLeg = legs.find(leg => labelIsOther(leg?.label));
+  if (!otherLeg || remaining.length < 2) return null;
+  const namedLegs = legs.filter(leg => leg && !labelIsOther(leg.label));
+  if (namedLegs.length === 0) return null;
+  const hasUnmatchedRemaining = remaining.some(competitor => (
+    !namedLegs.some(leg => competitorMatchesLeg(leg, competitor))
+  ));
+  if (hasUnmatchedRemaining) return null;
+  return {
+    driverId: null,
+    label: otherLeg.label || 'Otro',
+    reason: 'field_fully_covered',
+  };
+}
+
 function eliminatedCompetitorsForLegs(legs = [], result = {}) {
   const explicit = Array.isArray(result?.eliminatedCompetitors)
     ? result.eliminatedCompetitors
@@ -262,6 +364,10 @@ function eliminatedCompetitorsForLegs(legs = [], result = {}) {
       reason: 'not_in_remaining_draw',
     });
   }
+  const coveredOther = otherLegCoveredByNamedRemaining(legs, remaining);
+  if (coveredOther && !out.some(eliminated => labelIsOther(eliminated?.label))) {
+    out.push(coveredOther);
+  }
   return out;
 }
 
@@ -274,6 +380,45 @@ function findEliminatedParallelLegIndexes(legs = [], result = {}) {
   for (const eliminated of eliminatedCompetitors) {
     const idNeedle = String(eliminated?.driverId || '').trim();
     const labelNeedle = String(eliminated?.label || '').trim();
+    if (!idNeedle && !labelNeedle) continue;
+
+    let idx = eliminated?.reason === 'field_fully_covered'
+      ? legs.findIndex(leg => labelIsOther(leg?.label))
+      : -1;
+
+    if (idx < 0 && idNeedle) {
+      idx = legs.findIndex(leg =>
+        !labelIsOther(leg?.label)
+        && leg?.driverId
+        && String(leg.driverId).trim() === idNeedle,
+      );
+    }
+
+    if (idx < 0 && labelNeedle) {
+      idx = legs.findIndex(leg =>
+        (eliminated?.reason === 'field_fully_covered' || !labelIsOther(leg?.label))
+        && resolverLabelsOverlap(leg?.label, labelNeedle),
+      );
+    }
+
+    if (idx >= 0) indexes.add(idx);
+  }
+
+  return Array.from(indexes).sort((a, b) => a - b);
+}
+
+function findRemainingParallelLegIndexes(legs = [], result = {}) {
+  if (!Array.isArray(legs)) return [];
+  const remaining = Array.isArray(result?.remainingCompetitors)
+    ? result.remainingCompetitors
+    : [];
+  if (remaining.length === 0) return [];
+  const otherIndex = legs.findIndex(leg => labelIsOther(leg?.label));
+  const indexes = new Set();
+
+  for (const competitor of remaining) {
+    const idNeedle = String(competitor?.driverId || '').trim();
+    const labelNeedle = String(competitor?.label || '').trim();
     if (!idNeedle && !labelNeedle) continue;
 
     let idx = idNeedle
@@ -292,6 +437,7 @@ function findEliminatedParallelLegIndexes(legs = [], result = {}) {
     }
 
     if (idx >= 0) indexes.add(idx);
+    else if (otherIndex >= 0) indexes.add(otherIndex);
   }
 
   return Array.from(indexes).sort((a, b) => a - b);
@@ -301,7 +447,8 @@ async function resolveEliminatedParallelLegs({ market, cfg, result, dry, report 
   if (!isEarlyTournamentLegSource(cfg)) return 0;
   const eliminatedCompetitors = eliminatedCompetitorsForLegs(cfg.legs, result);
   const indexes = findEliminatedParallelLegIndexes(cfg.legs, result);
-  if (indexes.length === 0) return 0;
+  const remainingIndexes = findRemainingParallelLegIndexes(cfg.legs, result);
+  if (indexes.length === 0 && remainingIndexes.length === 0) return 0;
 
   const detailsByIndex = new Map();
   for (const eliminated of eliminatedCompetitors) {
@@ -334,13 +481,61 @@ async function resolveEliminatedParallelLegs({ market, cfg, result, dry, report 
   let resolvedCount = 0;
   await withTransaction(async (client) => {
     const legs = await client.query(
-      `SELECT id, leg_label, status
+      `SELECT id, leg_label, status, outcome
          FROM points_markets
         WHERE parent_id = $1
+          AND status <> 'canceled'
         ORDER BY id ASC
         FOR UPDATE`,
       [market.id],
     );
+    for (const index of remainingIndexes) {
+      const row = legs.rows[index];
+      if (!row?.id || row.status !== 'resolved' || Number(row.outcome) !== 1) continue;
+      const redeemed = await client.query(
+        `SELECT id
+           FROM points_trades
+          WHERE market_id = $1
+            AND side = 'redeem'
+          LIMIT 1`,
+        [row.id],
+      );
+      if (redeemed.rows.length > 0) {
+        report.deferred.push({
+          id: row.id,
+          parentId: market.id,
+          legIndex: index,
+          legLabel: row.leg_label || null,
+          reason: 'resolved_alive_leg_has_redemptions',
+          source: cfg.source,
+        });
+        continue;
+      }
+      const reopened = await client.query(
+        `UPDATE points_markets
+            SET status = 'active',
+                outcome = NULL,
+                resolved_at = NULL,
+                resolved_by = NULL,
+                final_score = NULL
+          WHERE id = $1
+            AND status = 'resolved'
+            AND outcome = 1
+          RETURNING id`,
+        [row.id],
+      );
+      if (reopened.rows.length > 0) {
+        report.reopened.push({
+          id: row.id,
+          parentId: market.id,
+          legIndex: index,
+          legLabel: row.leg_label || null,
+          source: cfg.source,
+          reason: 'alive_in_remaining_draw',
+        });
+      }
+    }
+
     const targetIds = indexes
       .map(index => legs.rows[index])
       .filter(row => row && row.status === 'active')
@@ -360,6 +555,8 @@ async function resolveEliminatedParallelLegs({ market, cfg, result, dry, report 
         ? 'Fuera del cuadro restante'
         : detail.reason === 'lost'
         ? 'Eliminado'
+        : detail.reason === 'field_fully_covered'
+        ? 'Campo restante cubierto por opciones nombradas'
         : detail.reason || 'Eliminado';
       const finalScore = `${reasonLabel}: ${detail.label || leg.label || row.leg_label || 'opcion'}`;
       const updated = await client.query(
@@ -604,7 +801,7 @@ export async function runAutoResolve({ dry = false } = {}) {
         AND m.parent_id IS NULL
         AND (
           (
-            m.resolver_type IN ('chainlink_price', 'api_price', 'weather_api', 'api_chart', 'api_transcript', 'sports_api')
+            m.resolver_type IN ('chainlink_price', 'api_price', 'weather_api', 'api_chart', 'api_transcript', 'api_lcdlf', 'sports_api')
             AND (
               m.end_time < NOW()
               OR (
@@ -628,6 +825,13 @@ export async function runAutoResolve({ dry = false } = {}) {
                 m.resolver_type = 'sports_api'
                 AND m.resolver_config->>'shape' = 'parallel'
                 AND m.resolver_config->>'source' IN ('espn-atp-tournament', 'espn-pga')
+                AND m.start_time IS NOT NULL
+                AND m.start_time < NOW()
+                AND m.end_time > NOW()
+              )
+              OR (
+                m.resolver_type = 'api_lcdlf'
+                AND m.resolver_config->>'shape' = 'binary-status'
                 AND m.start_time IS NOT NULL
                 AND m.start_time < NOW()
                 AND m.end_time > NOW()
@@ -671,10 +875,19 @@ export async function runAutoResolve({ dry = false } = {}) {
     const report = {
       checked: candidates.length,
       resolved: [],
+      reopened: [],
       errors: [],
       deferred: [],
       dryRun: dry,
     };
+
+    try {
+      await queueNextMananeraPendingMarkets({ candidates, dry, report });
+    } catch (e) {
+      report.errors.push({
+        error: `mananera_next_pending_failed: ${e?.message || 'unknown'}`,
+      });
+    }
 
     try {
       const cryptoActiveCatchup = await catchUpExpiredActiveCryptoMarkets(schemaSql, {
@@ -1051,6 +1264,83 @@ export async function runAutoResolve({ dry = false } = {}) {
             transcriptRequiredMatchTimestamps: transcript.requiredMatchTimestamps || [],
             transcriptMatchTimestamps: transcript.matchTimestamps || [],
           };
+        } else if (resolverType === 'api_lcdlf') {
+          if (cfg.source !== LCDLF_SOURCE || cfg.shape !== 'binary-status' || !cfg.statusKey) {
+            throw new Error('invalid api_lcdlf config');
+          }
+          const snapshot = await readLcdlfOfficialSnapshot();
+          if (!snapshot?.ok) {
+            const err = new Error(snapshot?.error || 'lcdlf_status_not_ready');
+            err.benign = true;
+            err.info = {
+              source: LCDLF_SOURCE,
+              parsedCount: snapshot?.parsedCount ?? null,
+              total: snapshot?.total ?? null,
+            };
+            throw err;
+          }
+
+          const row = findLcdlfStatusRow(snapshot, cfg);
+          if (!row) {
+            const err = new Error('lcdlf_resident_not_found');
+            err.benign = true;
+            err.info = {
+              source: LCDLF_SOURCE,
+              residentName: cfg.residentName || null,
+              residentSlug: cfg.residentSlug || null,
+              parsedCount: snapshot.parsedCount,
+            };
+            throw err;
+          }
+
+          const targetStatus = String(cfg.statusKey || '').trim().toLowerCase();
+          const yesOutcome = Number.isInteger(Number(cfg.yesOutcome)) ? Number(cfg.yesOutcome) : 0;
+          const noOutcome = Number.isInteger(Number(cfg.noOutcome)) ? Number(cfg.noOutcome) : 1;
+          const isTargetStatus = String(row.statusKey || '').trim().toLowerCase() === targetStatus;
+          const nominationMinStatusCount = Math.max(
+            1,
+            Number.isFinite(Number(cfg.nominationMinStatusCount))
+              ? Number(cfg.nominationMinStatusCount)
+              : 2,
+          );
+          const nominationRoundPosted = targetStatus === 'nominado'
+            && Array.isArray(snapshot.nominated)
+            && snapshot.nominated.length >= nominationMinStatusCount;
+
+          if (isTargetStatus) {
+            winningIdx = yesOutcome;
+          } else if (nominationRoundPosted || new Date(m.end_time).getTime() <= Date.now()) {
+            winningIdx = noOutcome;
+          } else {
+            const err = new Error('lcdlf_status_not_marked_yet');
+            err.benign = true;
+            err.info = {
+              source: LCDLF_SOURCE,
+              residentName: row.name,
+              residentSlug: row.slug,
+              statusKey: row.statusKey || null,
+              statusLabel: row.statusLabel || null,
+              nominatedCount: Array.isArray(snapshot.nominated) ? snapshot.nominated.length : null,
+              observedAt: snapshot.observedAt,
+            };
+            throw err;
+          }
+
+          resolverInfo = {
+            source: LCDLF_SOURCE,
+            residentName: row.name || cfg.residentName || null,
+            residentSlug: row.slug || cfg.residentSlug || null,
+            statusKey: row.statusKey || null,
+            statusLabel: row.statusLabel || null,
+            observedAt: snapshot.observedAt,
+            sourceUrl: row.url || snapshot.sourceUrl,
+          };
+          resolverConfigPatch = buildLcdlfStatusPatch({
+            cfg,
+            row,
+            snapshot,
+            winningIdx,
+          });
         } else if (resolverType === 'sports_api') {
           // Sports scoreboards (MLB/NBA/F1 via ESPN + Jolpica +
           // football-data). Shape in cfg:

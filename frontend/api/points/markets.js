@@ -316,6 +316,11 @@ export default async function handler(req, res) {
         // right leg without an extra round-trip to /api/points/market.
         // Each leg is binary Sí/No, ordered to match `outcomes`.
         const legIds = legs.map(l => l.id);
+        const legStatuses = legs.map(l => l.status || null);
+        const legOutcomes = legs.map(l => l.outcome == null ? null : Number(l.outcome));
+        const activeOutcomeIndexes = legs
+          .map((l, i) => String(l.status || '').toLowerCase() === 'active' ? i : null)
+          .filter(i => i !== null);
         return applySeriesGateToMarket({
           id: r.id,
           ammMode: 'parallel',
@@ -328,6 +333,9 @@ export default async function handler(req, res) {
             ? legPrices
             : outcomes.map(() => 1 / outcomes.length),
           legIds: legIds.length === outcomes.length ? legIds : null,
+          legStatuses: legStatuses.length === outcomes.length ? legStatuses : null,
+          legOutcomes: legOutcomes.length === outcomes.length ? legOutcomes : null,
+          activeOutcomeIndexes,
           seedLiquidity: seedTotal,
           volume: seedTotal,
           tradeVolume: tradeTotal,

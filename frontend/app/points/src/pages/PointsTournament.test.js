@@ -22,6 +22,7 @@ test('tournament page shows current leaderboard, past leaderboards, countdown an
   assert.match(pageSource, /Leaderboard actual/);
   assert.match(pageSource, /Leaderboards anteriores/);
   assert.match(pageSource, /Torneo cierra en/);
+  assert.match(pageSource, /cycle\.operationCloseAt \|\| cycle\.endsAt/);
   assert.doesNotMatch(pageSource, /Operación cierra en/);
   assert.match(pageSource, /Próximos mercados del torneo/);
   assert.match(pageSource, /Todos los días a las 9:00 AM, hora de Ciudad de México/);

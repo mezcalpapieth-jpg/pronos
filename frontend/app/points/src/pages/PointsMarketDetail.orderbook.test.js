@@ -19,6 +19,7 @@ test('points market detail renders hybrid limit-order book depth', () => {
   assert.match(detailSource, /points\.detail\.orderBook/);
   assert.match(detailSource, /points\.detail\.orderBookSellSide/);
   assert.match(detailSource, /points\.detail\.orderBookBuySide/);
+  assert.match(detailSource, /points\.detail\.orderBookSourceMaker/);
   assert.match(detailSource, /points\.detail\.limitOrderTitle/);
   assert.match(detailSource, /points\.detail\.limitOrderMakerReward/);
   assert.match(detailSource, /points\.detail\.limitOrderRewardEarned/);
@@ -51,4 +52,9 @@ test('points API client exposes orderbook and limit-order endpoints', () => {
   assert.match(apiSource, /\/api\/points\/cancel-limit-order/);
   assert.match(apiSource, /outcomeIndex/);
   assert.match(apiSource, /levels/);
+});
+
+test('points market detail hides sold-out dust positions', () => {
+  assert.match(detailSource, /DISPLAYABLE_SHARE_EPSILON\s*=\s*0\.005/);
+  assert.match(detailSource, /Number\(p\.shares\) < DISPLAYABLE_SHARE_EPSILON/);
 });

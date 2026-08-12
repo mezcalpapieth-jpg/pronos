@@ -112,3 +112,13 @@ test('points market cards display seed liquidity plus traded volume', () => {
   assert.match(marketCardSource, /const traded = Number\(market\?\.tradeVolume \|\| 0\)/);
   assert.match(marketCardSource, /return seed \+ traded/);
 });
+
+test('parallel market cards hide eliminated outcomes from the preview list', () => {
+  assert.match(marketCardSource, /const legStatuses = market\.ammMode === 'parallel'/);
+  assert.match(marketCardSource, /const legOutcomes = market\.ammMode === 'parallel'/);
+  assert.match(marketCardSource, /const visibleOutcomeRows = \(\(\) => \{/);
+  assert.match(marketCardSource, /String\(row\.legStatus \|\| ''\)\.toLowerCase\(\) === 'active'/);
+  assert.match(marketCardSource, /Number\(row\.price\) > 0/);
+  assert.match(marketCardSource, /visibleOutcomeRows\.map\(\(row\) => \{/);
+  assert.match(marketCardSource, /setDrawerIndex\(i\)/);
+});

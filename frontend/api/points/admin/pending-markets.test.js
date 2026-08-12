@@ -49,6 +49,9 @@ test('pending generated markets can be edited before approval', () => {
 test('pending generated markets support taxonomy filters and filtered bulk actions', () => {
   assert.match(source, /matchesMarketTaxonomy/);
   assert.match(source, /function filteredPendingRows/);
+  assert.match(source, /query\.feature/);
+  assert.match(source, /feature === 'featured' && row\.featured !== true/);
+  assert.match(source, /feature === 'tournament' && row\.tournament_featured !== true/);
   assert.match(source, /filteredPendingRows\(rows,\s*req\.query/);
   assert.match(source, /async function listPendingRowsForBulk/);
   assert.match(source, /listPendingRowsForBulk\(filters\s*\|\|\s*\{\}\)/);

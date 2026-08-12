@@ -33,3 +33,13 @@ test('parallel payload prices resolved loser legs as zero instead of stale AMM o
     assert.match(text, /binaryLegPricesFromRow\(\{/);
   }
 });
+
+test('parallel list payload exposes leg lifecycle for card previews', () => {
+  assert.match(source, /const legStatuses = legs\.map\(l => l\.status \|\| null\)/);
+  assert.match(source, /const legOutcomes = legs\.map\(l => l\.outcome == null \? null : Number\(l\.outcome\)\)/);
+  assert.match(source, /const activeOutcomeIndexes = legs/);
+  assert.match(source, /String\(l\.status \|\| ''\)\.toLowerCase\(\) === 'active'/);
+  assert.match(source, /legStatuses: legStatuses\.length === outcomes\.length \? legStatuses : null/);
+  assert.match(source, /legOutcomes: legOutcomes\.length === outcomes\.length \? legOutcomes : null/);
+  assert.match(source, /activeOutcomeIndexes,/);
+});

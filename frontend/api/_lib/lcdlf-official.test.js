@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildLcdlfNominationMarketSpecs,
   buildLcdlfResolutionReview,
   buildLcdlfWeeklyMarketSpec,
   extractResidentsFromIndexHtml,
@@ -11,6 +12,8 @@ import {
 test('parseLcdlfResidentStatus recognizes official status labels', () => {
   assert.equal(parseLcdlfResidentStatus('<span>EN CASA</span>').key, 'en_casa');
   assert.equal(parseLcdlfResidentStatus('<span>NOMINADA</span>').key, 'nominado');
+  assert.equal(parseLcdlfResidentStatus('<span>Podría estar eliminado</span>').key, 'nominado');
+  assert.equal(parseLcdlfResidentStatus('<span>LÍDER DE LA SEMANA</span>').key, 'lider_semana');
   assert.equal(parseLcdlfResidentStatus('<span>ELIMINADO</span>').key, 'eliminado');
 });
 
@@ -156,6 +159,44 @@ test('buildLcdlfWeeklyMarketSpec creates a manual-review market from nominees', 
   assert.deepEqual(spec.topic_tags, ['tv', 'farandula']);
   assert.match(spec.source_event_id, /^lcdlf-mx-elimination:/);
   assert.equal(spec.resolver_config.requireHumanConfirmation, true);
+});
+
+test('buildLcdlfNominationMarketSpecs creates binary markets from active residents before nominees are official', () => {
+  const now = new Date('2026-08-12T18:00:00Z');
+  const snapshot = {
+    ok: true,
+    sourceUrl: 'https://www.lacasadelosfamososmexico.tv',
+    observedAt: now.toISOString(),
+    parsedCount: 2,
+    total: 4,
+    rows: [
+      { name: 'Fede Vigevani', slug: 'fede-vigevani', ok: true, statusKey: 'eliminado', statusLabel: 'Eliminado/a', url: 'https://example.com/fede' },
+      { name: 'Brianda Deyanara', slug: 'brianda-deyanara', ok: true, statusKey: 'lider_semana', statusLabel: 'Líder de la semana', url: 'https://example.com/brianda' },
+      { name: 'Flor Vigna', slug: 'flor-vigna', ok: true, statusKey: null, statusLabel: null, url: 'https://example.com/flor' },
+      { name: 'Yahir', slug: 'yahir', ok: true, statusKey: 'en_casa', statusLabel: 'En casa', url: 'https://example.com/yahir' },
+    ],
+    active: [
+      { name: 'Brianda Deyanara', slug: 'brianda-deyanara', ok: true, statusKey: 'lider_semana', statusLabel: 'Líder de la semana', url: 'https://example.com/brianda' },
+      { name: 'Flor Vigna', slug: 'flor-vigna', ok: true, statusKey: null, statusLabel: null, url: 'https://example.com/flor' },
+      { name: 'Yahir', slug: 'yahir', ok: true, statusKey: 'en_casa', statusLabel: 'En casa', url: 'https://example.com/yahir' },
+    ],
+    nominated: [],
+    eliminated: [
+      { name: 'Fede Vigevani', slug: 'fede-vigevani', ok: true, statusKey: 'eliminado', statusLabel: 'Eliminado/a', url: 'https://example.com/fede' },
+    ],
+  };
+
+  const specs = buildLcdlfNominationMarketSpecs({ snapshot, now });
+
+  assert.equal(specs.length, 3);
+  assert.deepEqual(specs[0].outcomes, ['Sí', 'No']);
+  assert.equal(specs[0].resolver_type, 'api_lcdlf');
+  assert.equal(specs[0].resolver_config.shape, 'binary-status');
+  assert.equal(specs[0].resolver_config.statusKey, 'nominado');
+  assert.equal(specs[0].resolver_config.nominationMinStatusCount, 2);
+  assert.equal(specs[0].source_data.kind, 'lcdlf_nomination');
+  assert.match(specs[0].source_event_id, /^lcdlf-mx-nomination:/);
+  assert.ok(specs.every(spec => !spec.question.includes('Fede Vigevani')));
 });
 
 test('buildLcdlfResolutionReview suggests the eliminated nominee only after official evidence', async () => {

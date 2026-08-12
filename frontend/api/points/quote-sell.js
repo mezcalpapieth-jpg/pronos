@@ -8,9 +8,10 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
-import { binarySellQuote, multiSellQuote } from '../_lib/amm-math.js';
+import { binaryPrices, binarySellQuote, multiPrices, multiSellQuote } from '../_lib/amm-math.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { cryptoTradeLock } from '../_lib/points-crypto-trade-guard.js';
+import { previewRestingBidsForSell } from '../_lib/points-limit-orders.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -63,18 +64,42 @@ export default async function handler(req, res) {
     if (reserves.length < 2) return res.status(400).json({ error: 'degenerate_reserves' });
     if (oi >= reserves.length) return res.status(400).json({ error: 'invalid_outcome_index' });
 
-    const q = reserves.length === 2
-      ? binarySellQuote(reserves, oi, n)
-      : multiSellQuote(reserves, oi, n);
+    const bidRows = await sql`
+      SELECT id, username, limit_price, remaining_amount
+        FROM points_limit_orders
+       WHERE market_id = ${mid}
+         AND outcome_index = ${oi}
+         AND side = 'buy'
+         AND status = 'open'
+         AND (expires_at IS NULL OR expires_at > NOW())
+       ORDER BY limit_price DESC, created_at ASC, id ASC
+       LIMIT 24
+    `;
+    const orderbook = previewRestingBidsForSell(bidRows, { shares: n });
+    const ammShares = orderbook.remainingShares > 0.000001
+      ? orderbook.remainingShares
+      : 0;
+    const q = ammShares > 0
+      ? (reserves.length === 2
+        ? binarySellQuote(reserves, oi, ammShares)
+        : multiSellQuote(reserves, oi, ammShares))
+      : null;
+    const pricesBefore = reserves.length === 2 ? binaryPrices(reserves) : multiPrices(reserves);
+    const collateralOut = orderbook.collateralOut + Number(q?.collateralOut || 0);
+    const priceBefore = pricesBefore[oi] || 0;
+    const priceAfter = q?.priceAfter ?? priceBefore;
     return res.status(200).json({
-      shares: q.shares,
-      gross: q.gross,
-      fee: q.fee,
-      feePct: q.feePct,
-      collateralOut: q.collateralOut,
-      priceBefore: q.priceBefore,
-      priceAfter: q.priceAfter,
-      priceImpactPts: q.priceImpactPts,
+      shares: n,
+      gross: collateralOut,
+      fee: Number(q?.fee || 0),
+      feePct: q?.feePct || 0,
+      collateralOut,
+      avgPrice: n > 0 ? collateralOut / n : 0,
+      priceBefore,
+      priceAfter,
+      priceImpactPts: (priceAfter - priceBefore) * 100,
+      orderbookFills: orderbook.fills,
+      ammShares,
     });
   } catch (e) {
     const msg = (e?.message || '').toLowerCase();

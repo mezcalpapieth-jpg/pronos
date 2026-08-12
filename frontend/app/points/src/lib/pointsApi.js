@@ -736,14 +736,6 @@ export async function adminBulkHideMarkets({
   });
 }
 
-// Repair/progress World Cup markets from ESPN. Dry-run first so the
-// admin can see how many rows will be patched/resolved/created before
-// applying the DB write.
-export async function adminProgressWorldCup({ dry = false } = {}) {
-  const q = dry ? '?dry=1' : '';
-  return postJson(`/api/points/admin/progress-world-cup${q}`, {});
-}
-
 // ─── Admin — edit market (question + start/end time + category) ────────────
 export async function adminEditMarket({ marketId, question, startTime, endTime, category }) {
   return postJson('/api/points/admin/edit-market', {
@@ -752,6 +744,24 @@ export async function adminEditMarket({ marketId, question, startTime, endTime, 
     startTime,
     endTime,
     category,
+  });
+}
+
+export async function adminAppendParallelOutcomes({
+  marketId,
+  outcomes,
+  seedLiquidity,
+  seedLiquidities,
+  outcomeImages,
+  resolverLegs,
+} = {}) {
+  return postJson('/api/points/admin/append-parallel-outcomes', {
+    marketId,
+    outcomes,
+    seedLiquidity,
+    seedLiquidities,
+    outcomeImages,
+    resolverLegs,
   });
 }
 

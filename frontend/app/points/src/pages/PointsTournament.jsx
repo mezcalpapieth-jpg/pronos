@@ -135,13 +135,13 @@ function targetForCycle(cycle) {
     return { label: { es: 'Inicia en', en: 'Starts in' }, iso: cycle.startsAt || cycle.startedAt };
   }
   if (cycle.status === 'active') {
-    return { label: { es: 'Torneo cierra en', en: 'Tournament closes in' }, iso: cycle.endsAt || cycle.operationCloseAt };
+    return { label: { es: 'Torneo cierra en', en: 'Tournament closes in' }, iso: cycle.operationCloseAt || cycle.endsAt };
   }
   if (cycle.status === 'closing') {
     return { label: { es: 'Ranking cierra en', en: 'Ranking closes in' }, iso: cycle.rankingCutoffAt || cycle.endsAt };
   }
   if (cycle.status === 'paused' && (cycle.endsAt || cycle.operationCloseAt)) {
-    return { label: { es: 'Torneo cierra en', en: 'Tournament closes in' }, iso: cycle.endsAt || cycle.operationCloseAt };
+    return { label: { es: 'Torneo cierra en', en: 'Tournament closes in' }, iso: cycle.operationCloseAt || cycle.endsAt };
   }
   return { label: { es: 'Estado', en: 'Status' }, iso: cycle.endsAt };
 }

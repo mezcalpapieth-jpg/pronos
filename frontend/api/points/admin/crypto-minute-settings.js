@@ -23,6 +23,7 @@ const sql = neon(process.env.DATABASE_URL);
 
 function intervalLabel(minutes) {
   if (Number(minutes) === 24 * 60) return '24 horas';
+  if (Number(minutes) === 12 * 60) return '12 horas';
   return Number(minutes) === 60 ? '1 hora' : `${minutes} minutos`;
 }
 

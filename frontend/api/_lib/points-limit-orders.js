@@ -366,11 +366,13 @@ async function insertTradeAndSnapshot(client, {
     ],
   );
 
-  await bestEffortInsertPointsPriceSnapshot(client, {
-    marketId,
-    reserves: reservesAfter,
-    logLabel: snapshotLabel,
-  });
+  if (snapshotLabel) {
+    await bestEffortInsertPointsPriceSnapshot(client, {
+      marketId,
+      reserves: reservesAfter,
+      logLabel: snapshotLabel,
+    });
+  }
 }
 
 async function fillBuyOrder(client, { order, market, reserves }) {
@@ -539,6 +541,511 @@ async function fillSellOrder(client, { order, market, reserves }) {
     avgPrice,
     reservesAfter: quote.reservesAfter,
     makerReward,
+  };
+}
+
+function normalizeTakerPrice(value, fallback = null) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return round(n > 1 ? n / 100 : n, 6);
+}
+
+function orderbookAverage(collateral, shares) {
+  const c = Number(collateral || 0);
+  const s = Number(shares || 0);
+  return s > EPSILON ? round(c / s, 6) : 0;
+}
+
+export function previewRestingAsksForBuy(rows = [], {
+  collateral,
+  maxPrice = null,
+} = {}) {
+  let remainingCollateral = Math.max(0, Number(collateral || 0));
+  const priceCap = normalizeTakerPrice(maxPrice, null);
+  const fills = [];
+  let collateralSpent = 0;
+  let sharesOut = 0;
+
+  for (const row of rows) {
+    if (remainingCollateral <= EPSILON) break;
+    const price = normalizeTakerPrice(row.limit_price, null);
+    const availableShares = Math.max(0, Number(row.remaining_amount || 0));
+    if (!price || availableShares <= EPSILON) continue;
+    if (priceCap !== null && price > priceCap + EPSILON) continue;
+
+    const fillShares = round(Math.min(availableShares, remainingCollateral / price), 6);
+    const fillCollateral = round(fillShares * price, 6);
+    if (fillShares <= EPSILON || fillCollateral <= EPSILON) continue;
+
+    fills.push({
+      orderId: Number(row.id),
+      maker: row.username,
+      side: 'sell',
+      price,
+      shares: fillShares,
+      collateral: fillCollateral,
+    });
+    sharesOut = round(sharesOut + fillShares, 6);
+    collateralSpent = round(collateralSpent + fillCollateral, 6);
+    remainingCollateral = round(Math.max(0, remainingCollateral - fillCollateral), 6);
+  }
+
+  return {
+    fills,
+    sharesOut,
+    collateralSpent,
+    remainingCollateral,
+    avgPrice: orderbookAverage(collateralSpent, sharesOut),
+  };
+}
+
+export function previewRestingBidsForSell(rows = [], {
+  shares,
+  minPrice = null,
+} = {}) {
+  let remainingShares = Math.max(0, Number(shares || 0));
+  const priceFloor = normalizeTakerPrice(minPrice, null);
+  const fills = [];
+  let collateralOut = 0;
+  let sharesSold = 0;
+
+  for (const row of rows) {
+    if (remainingShares <= EPSILON) break;
+    const price = normalizeTakerPrice(row.limit_price, null);
+    const remainingCollateral = Math.max(0, Number(row.remaining_amount || 0));
+    if (!price || remainingCollateral <= EPSILON) continue;
+    if (priceFloor !== null && price + EPSILON < priceFloor) continue;
+
+    const fillShares = round(Math.min(remainingShares, remainingCollateral / price), 6);
+    const fillCollateral = round(fillShares * price, 6);
+    if (fillShares <= EPSILON || fillCollateral <= EPSILON) continue;
+
+    fills.push({
+      orderId: Number(row.id),
+      maker: row.username,
+      side: 'buy',
+      price,
+      shares: fillShares,
+      collateral: fillCollateral,
+    });
+    sharesSold = round(sharesSold + fillShares, 6);
+    collateralOut = round(collateralOut + fillCollateral, 6);
+    remainingShares = round(Math.max(0, remainingShares - fillShares), 6);
+  }
+
+  return {
+    fills,
+    sharesSold,
+    collateralOut,
+    remainingShares,
+    avgPrice: orderbookAverage(collateralOut, sharesSold),
+  };
+}
+
+async function updateLimitOrderFill(client, order, {
+  fillShares,
+  fillCollateral,
+  remainingAmount,
+  reservedCollateral,
+  reservedShares,
+}) {
+  const nextRemaining = Number(remainingAmount || 0) <= EPSILON ? 0 : round(remainingAmount, 6);
+  const filledShares = round(Number(order.filled_shares || 0) + Number(fillShares || 0), 6);
+  const filledCollateral = round(Number(order.filled_collateral || 0) + Number(fillCollateral || 0), 6);
+  const avgFillPrice = orderbookAverage(filledCollateral, filledShares);
+  const status = nextRemaining <= EPSILON ? 'filled' : 'open';
+  await client.query(
+    `UPDATE points_limit_orders
+        SET status = $2,
+            remaining_amount = $3,
+            reserved_collateral = $4,
+            reserved_shares = $5,
+            filled_shares = $6,
+            filled_collateral = $7,
+            avg_fill_price = $8,
+            filled_at = CASE WHEN $2 = 'filled' THEN NOW() ELSE filled_at END,
+            updated_at = NOW()
+      WHERE id = $1`,
+    [
+      order.id,
+      status,
+      nextRemaining,
+      Math.max(0, Number(reservedCollateral || 0)),
+      Math.max(0, Number(reservedShares || 0)),
+      filledShares,
+      filledCollateral,
+      avgFillPrice || null,
+    ],
+  );
+  return status;
+}
+
+async function upsertBoughtPosition(client, {
+  marketId,
+  username,
+  outcomeIndex,
+  shares,
+  costBasis,
+}) {
+  await client.query(
+    `INSERT INTO points_positions (market_id, username, outcome_index, shares, cost_basis)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (market_id, username, outcome_index) DO UPDATE
+       SET shares = points_positions.shares + EXCLUDED.shares,
+           cost_basis = points_positions.cost_basis + EXCLUDED.cost_basis,
+           dismissed_at = NULL,
+           updated_at = NOW()`,
+    [marketId, username, outcomeIndex, shares, costBasis],
+  );
+}
+
+async function reduceSoldPosition(client, {
+  marketId,
+  username,
+  outcomeIndex,
+  shares,
+  collateralOut,
+  expireOrderId = null,
+}) {
+  const positionResult = await client.query(
+    `SELECT shares, cost_basis, realized_pnl
+       FROM points_positions
+      WHERE market_id = $1
+        AND username = $2
+        AND outcome_index = $3
+      FOR UPDATE`,
+    [marketId, username, outcomeIndex],
+  );
+  if (positionResult.rows.length === 0 || Number(positionResult.rows[0].shares || 0) + EPSILON < shares) {
+    if (expireOrderId) {
+      await client.query(
+        `UPDATE points_limit_orders
+            SET status = 'expired',
+                reason = 'shares_unavailable_at_taker_fill',
+                remaining_amount = 0,
+                reserved_shares = 0,
+                updated_at = NOW()
+          WHERE id = $1`,
+        [expireOrderId],
+      );
+    }
+    return null;
+  }
+
+  const p = positionResult.rows[0];
+  const held = Number(p.shares);
+  const costBasis = Number(p.cost_basis);
+  const realized = Number(p.realized_pnl || 0);
+  const avgCost = held > EPSILON ? costBasis / held : 0;
+  const soldCostBasis = avgCost * shares;
+  const addedRealized = Number(collateralOut || 0) - soldCostBasis;
+  const newShares = Math.max(0, held - shares);
+  const newCostBasis = newShares > EPSILON ? Math.max(0, costBasis - soldCostBasis) : 0;
+  const newRealized = realized + addedRealized;
+
+  await client.query(
+    `UPDATE points_positions
+        SET shares = $1,
+            cost_basis = $2,
+            realized_pnl = $3,
+            updated_at = NOW()
+      WHERE market_id = $4
+        AND username = $5
+        AND outcome_index = $6`,
+    [newShares, newCostBasis, newRealized, marketId, username, outcomeIndex],
+  );
+
+  return {
+    held,
+    costBasis,
+    realized,
+    soldCostBasis,
+    addedRealized,
+    newShares,
+    newCostBasis,
+    newRealized,
+  };
+}
+
+export async function matchRestingAsksForBuy(client, {
+  market,
+  marketId,
+  username,
+  outcomeIndex,
+  collateralBudget,
+  maxPrice = null,
+  maxOrders = MAX_TRIGGERED_PER_PASS,
+} = {}) {
+  const budget = Math.max(0, Number(collateralBudget || 0));
+  if (budget <= EPSILON) {
+    return { fills: [], sharesOut: 0, collateralSpent: 0, remainingCollateral: budget, avgPrice: 0 };
+  }
+
+  const reserves = reservesForMarket(market, outcomeIndex);
+  const priceCap = normalizeTakerPrice(maxPrice, null);
+  const limit = Math.max(1, Number.parseInt(maxOrders, 10) || MAX_TRIGGERED_PER_PASS);
+  const orders = await client.query(
+    `SELECT *
+       FROM points_limit_orders
+      WHERE market_id = $1
+        AND outcome_index = $2
+        AND side = 'sell'
+        AND status = 'open'
+        AND username <> $3
+        AND (expires_at IS NULL OR expires_at > NOW())
+        AND ($4::numeric IS NULL OR limit_price <= $4::numeric)
+      ORDER BY limit_price ASC, created_at ASC, id ASC
+      LIMIT $5
+      FOR UPDATE`,
+    [marketId, outcomeIndex, username, priceCap, limit],
+  );
+
+  let remainingCollateral = budget;
+  const fills = [];
+  let sharesOut = 0;
+  let collateralSpent = 0;
+
+  for (const rawOrder of orders.rows) {
+    if (remainingCollateral <= EPSILON) break;
+    const order = await accrueMakerRewardForOrder(client, rawOrder, market, reserves);
+    const price = normalizeTakerPrice(order.limit_price, null);
+    const availableShares = Math.max(0, Number(order.remaining_amount || 0));
+    if (!price || availableShares <= EPSILON) continue;
+
+    const fillShares = round(Math.min(availableShares, remainingCollateral / price), 6);
+    const fillCollateral = round(fillShares * price, 6);
+    if (fillShares <= EPSILON || fillCollateral <= EPSILON) continue;
+
+    await assertTournamentShareCap(client, {
+      marketId,
+      username,
+      additionalShares: fillShares,
+    });
+
+    const sellerPosition = await reduceSoldPosition(client, {
+      marketId,
+      username: order.username,
+      outcomeIndex,
+      shares: fillShares,
+      collateralOut: fillCollateral,
+      expireOrderId: order.id,
+    });
+    if (!sellerPosition) continue;
+
+    await upsertBoughtPosition(client, {
+      marketId,
+      username,
+      outcomeIndex,
+      shares: fillShares,
+      costBasis: fillCollateral,
+    });
+
+    const sellerBalance = await lockBalance(client, order.username);
+    await setBalance(client, order.username, sellerBalance + fillCollateral);
+    await client.query(
+      `INSERT INTO points_distributions (username, amount, kind, reference_id, reason)
+       VALUES ($1, $2, 'limit_sell_fill', $3, $4)`,
+      [order.username, fillCollateral, marketId, `Ask ejecutado a ${round(price * 100, 2)}c`],
+    );
+
+    await insertTradeAndSnapshot(client, {
+      marketId,
+      username,
+      side: 'buy',
+      outcomeIndex,
+      shares: fillShares,
+      collateral: fillCollateral,
+      fee: 0,
+      priceAtTrade: price,
+      reservesBefore: reserves,
+      reservesAfter: reserves,
+      snapshotLabel: null,
+    });
+    await insertTradeAndSnapshot(client, {
+      marketId,
+      username: order.username,
+      side: 'sell',
+      outcomeIndex,
+      shares: fillShares,
+      collateral: fillCollateral,
+      fee: 0,
+      priceAtTrade: price,
+      reservesBefore: reserves,
+      reservesAfter: reserves,
+      snapshotLabel: null,
+    });
+
+    const nextRemaining = round(Math.max(0, Number(order.remaining_amount || 0) - fillShares), 6);
+    const status = await updateLimitOrderFill(client, order, {
+      fillShares,
+      fillCollateral,
+      remainingAmount: nextRemaining,
+      reservedCollateral: 0,
+      reservedShares: nextRemaining,
+    });
+    const makerReward = await payMakerRewardForOrder(client, order.id, 'Orden límite ejecutada');
+
+    fills.push({
+      orderId: Number(order.id),
+      maker: order.username,
+      side: 'sell',
+      status,
+      price,
+      shares: fillShares,
+      collateral: fillCollateral,
+      makerReward,
+    });
+    sharesOut = round(sharesOut + fillShares, 6);
+    collateralSpent = round(collateralSpent + fillCollateral, 6);
+    remainingCollateral = round(Math.max(0, remainingCollateral - fillCollateral), 6);
+  }
+
+  return {
+    fills,
+    sharesOut,
+    collateralSpent,
+    remainingCollateral,
+    avgPrice: orderbookAverage(collateralSpent, sharesOut),
+  };
+}
+
+export async function matchRestingBidsForSell(client, {
+  market,
+  marketId,
+  username,
+  outcomeIndex,
+  sharesToSell,
+  minPrice = null,
+  maxOrders = MAX_TRIGGERED_PER_PASS,
+} = {}) {
+  const targetShares = Math.max(0, Number(sharesToSell || 0));
+  if (targetShares <= EPSILON) {
+    return { fills: [], sharesSold: 0, collateralOut: 0, remainingShares: targetShares, realizedPnl: 0, avgPrice: 0 };
+  }
+
+  const reserves = reservesForMarket(market, outcomeIndex);
+  const priceFloor = normalizeTakerPrice(minPrice, null);
+  const limit = Math.max(1, Number.parseInt(maxOrders, 10) || MAX_TRIGGERED_PER_PASS);
+  const orders = await client.query(
+    `SELECT *
+       FROM points_limit_orders
+      WHERE market_id = $1
+        AND outcome_index = $2
+        AND side = 'buy'
+        AND status = 'open'
+        AND username <> $3
+        AND (expires_at IS NULL OR expires_at > NOW())
+        AND ($4::numeric IS NULL OR limit_price >= $4::numeric)
+      ORDER BY limit_price DESC, created_at ASC, id ASC
+      LIMIT $5
+      FOR UPDATE`,
+    [marketId, outcomeIndex, username, priceFloor, limit],
+  );
+
+  let remainingShares = targetShares;
+  const fills = [];
+  let sharesSold = 0;
+  let collateralOut = 0;
+  let realizedPnl = 0;
+
+  for (const rawOrder of orders.rows) {
+    if (remainingShares <= EPSILON) break;
+    const order = await accrueMakerRewardForOrder(client, rawOrder, market, reserves);
+    const price = normalizeTakerPrice(order.limit_price, null);
+    const availableCollateral = Math.max(0, Number(order.remaining_amount || 0));
+    if (!price || availableCollateral <= EPSILON) continue;
+
+    const fillShares = round(Math.min(remainingShares, availableCollateral / price), 6);
+    const fillCollateral = round(fillShares * price, 6);
+    if (fillShares <= EPSILON || fillCollateral <= EPSILON) continue;
+
+    await assertTournamentShareCap(client, {
+      marketId,
+      username: order.username,
+      additionalShares: fillShares,
+    });
+
+    const sellerPosition = await reduceSoldPosition(client, {
+      marketId,
+      username,
+      outcomeIndex,
+      shares: fillShares,
+      collateralOut: fillCollateral,
+    });
+    if (!sellerPosition) {
+      const err = new Error('insufficient_available_shares');
+      err.status = 400;
+      throw err;
+    }
+
+    await upsertBoughtPosition(client, {
+      marketId,
+      username: order.username,
+      outcomeIndex,
+      shares: fillShares,
+      costBasis: fillCollateral,
+    });
+
+    await insertTradeAndSnapshot(client, {
+      marketId,
+      username,
+      side: 'sell',
+      outcomeIndex,
+      shares: fillShares,
+      collateral: fillCollateral,
+      fee: 0,
+      priceAtTrade: price,
+      reservesBefore: reserves,
+      reservesAfter: reserves,
+      snapshotLabel: null,
+    });
+    await insertTradeAndSnapshot(client, {
+      marketId,
+      username: order.username,
+      side: 'buy',
+      outcomeIndex,
+      shares: fillShares,
+      collateral: fillCollateral,
+      fee: 0,
+      priceAtTrade: price,
+      reservesBefore: reserves,
+      reservesAfter: reserves,
+      snapshotLabel: null,
+    });
+
+    const nextRemaining = round(Math.max(0, availableCollateral - fillCollateral), 6);
+    const status = await updateLimitOrderFill(client, order, {
+      fillShares,
+      fillCollateral,
+      remainingAmount: nextRemaining,
+      reservedCollateral: nextRemaining,
+      reservedShares: 0,
+    });
+    const makerReward = await payMakerRewardForOrder(client, order.id, 'Orden límite ejecutada');
+
+    fills.push({
+      orderId: Number(order.id),
+      maker: order.username,
+      side: 'buy',
+      status,
+      price,
+      shares: fillShares,
+      collateral: fillCollateral,
+      makerReward,
+    });
+    sharesSold = round(sharesSold + fillShares, 6);
+    collateralOut = round(collateralOut + fillCollateral, 6);
+    realizedPnl = round(realizedPnl + sellerPosition.addedRealized, 6);
+    remainingShares = round(Math.max(0, remainingShares - fillShares), 6);
+  }
+
+  return {
+    fills,
+    sharesSold,
+    collateralOut,
+    remainingShares,
+    realizedPnl,
+    avgPrice: orderbookAverage(collateralOut, sharesSold),
   };
 }
 

@@ -51,9 +51,15 @@ test('Points pending queue has taxonomy filters and filtered bulk actions', () =
   assert.match(source, /const \[cryptoTypeFilter,\s*setCryptoTypeFilter\]/);
   assert.match(source, /const \[geoFilter,\s*setGeoFilter\]/);
   assert.match(source, /const \[topicFilter,\s*setTopicFilter\]/);
+  assert.match(source, /const \[curationFilter,\s*setCurationFilter\]/);
+  assert.match(source, /pendingCurationFilters/);
+  assert.match(source, /key:\s*'featured',\s*label:\s*'🔥'/);
+  assert.match(source, /key:\s*'tournament',\s*label:\s*'🏆'/);
   assert.match(source, /buildAdminMarketsQuery\(\{\s*status:\s*filter,/);
+  assert.match(source, /featureFilter:\s*curationFilter/);
   assert.match(source, /adminListPendingMarkets\(q\)/);
   assert.match(source, /pendingFiltersPayload\(\)/);
+  assert.match(source, /filters\.feature = curationFilter/);
   assert.match(source, /adminRefreshAllPendingPricing\(pendingFiltersPayload\(\)\)/);
   assert.match(source, /adminApproveAllPendingMarkets\(null,\s*pendingFiltersPayload\(\)\)/);
   assert.match(source, /renderFilterGroup\(MARKET_CATEGORY_FILTERS,\s*categoryFilter,\s*selectCategoryFilter\)/);
@@ -119,8 +125,19 @@ test('Points markets filter surfaces por resolver count while inside Mercados', 
   assert.match(source, /taskCount > 0/);
 });
 
+test('Points admin can append players to active parallel markets', () => {
+  assert.match(source, /adminAppendParallelOutcomes/);
+  assert.match(source, /AppendParallelOutcomesModal/);
+  assert.match(source, /Agregar jugador/);
+  assert.match(source, /m\.ammMode === 'parallel'/);
+  assert.match(source, /Jugadores nuevos/);
+  assert.match(source, /outcomes:\s*unique/);
+  assert.match(apiSource, /export async function adminAppendParallelOutcomes/);
+  assert.match(apiSource, /\/api\/points\/admin\/append-parallel-outcomes/);
+});
+
 test('Points pending admin can set 24h crypto windows and toggle BTC/ETH generation', () => {
-  assert.match(source, /DEFAULT_CRYPTO_INTERVAL_OPTIONS[\s\S]*1440[\s\S]*24 horas/);
+  assert.match(source, /DEFAULT_CRYPTO_INTERVAL_OPTIONS[\s\S]*720[\s\S]*12 horas[\s\S]*1440[\s\S]*24 horas/);
   assert.match(source, /DEFAULT_CRYPTO_ASSET_OPTIONS[\s\S]*btc[\s\S]*eth/);
   assert.match(source, /enabledCryptoAssetKeys/);
   assert.match(source, /saveCryptoAssetToggle/);
@@ -153,6 +170,14 @@ test('Points admin can bulk-hide or show home markets and mark tournament overri
   assert.match(apiSource, /\/api\/points\/admin\/bulk-hide-markets/);
   assert.match(apiSource, /action/);
   assert.match(apiSource, /tournamentFeatured/);
+});
+
+test('Points admin does not expose one-off World Cup repair/progress buttons', () => {
+  assert.doesNotMatch(source, /adminProgressWorldCup/);
+  assert.doesNotMatch(source, /progressWorldCup/);
+  assert.doesNotMatch(source, /Reparar Mundial/);
+  assert.doesNotMatch(source, /Progresar Mundial/);
+  assert.doesNotMatch(apiSource, /export async function adminProgressWorldCup/);
 });
 
 test('Points admin can cancel active and por resolver markets', () => {

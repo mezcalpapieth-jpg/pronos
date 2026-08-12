@@ -45,10 +45,38 @@ test('points auto-resolver settles eliminated tennis and golf child legs early',
   assert.match(SOURCE, /result\?\.remainingCompetitors/);
   assert.match(SOURCE, /function eliminatedCompetitorsForLegs/);
   assert.match(SOURCE, /not_in_remaining_draw/);
+  assert.match(SOURCE, /function otherLegCoveredByNamedRemaining/);
+  assert.match(SOURCE, /field_fully_covered/);
+  assert.match(SOURCE, /function findRemainingParallelLegIndexes/);
+  assert.match(SOURCE, /resolved_alive_leg_has_redemptions/);
+  assert.match(SOURCE, /alive_in_remaining_draw/);
   assert.match(SOURCE, /releaseOpenLimitOrdersForMarkets\(client, targetIds/);
   assert.match(SOURCE, /SET status = 'resolved',\s*outcome = 1/);
   assert.match(SOURCE, /resolved_by = \$1/);
   assert.match(SOURCE, /resolver:\$\{cfg\.source\}:early-elimination/);
-  assert.match(SOURCE, /WHERE parent_id = \$1\s+ORDER BY id ASC/);
+  assert.match(SOURCE, /WHERE parent_id = \$1\s+AND status <> 'canceled'\s+ORDER BY id ASC/);
   assert.match(SOURCE, /row && row\.status === 'active'/);
+});
+
+test('points auto-resolver queues next-day mañanera markets when current transcript markets close', () => {
+  assert.match(SOURCE, /generateMananeraMarkets/);
+  assert.match(SOURCE, /prepareGeneratedSpecs/);
+  assert.match(SOURCE, /upsertPending/);
+  assert.match(SOURCE, /function isMananeraMarket/);
+  assert.match(SOURCE, /queueNextMananeraPendingMarkets/);
+  assert.match(SOURCE, /report\.mananeraNextPending/);
+  assert.match(SOURCE, /mananera_next_pending_failed/);
+});
+
+test('points auto-resolver polls LCDLF nomination markets before close and resolves by official status', () => {
+  assert.match(SOURCE, /api_lcdlf/);
+  assert.match(SOURCE, /if \(rt === 'api_lcdlf'\) return false/);
+  assert.match(SOURCE, /readLcdlfOfficialSnapshot/);
+  assert.match(SOURCE, /findLcdlfStatusRow/);
+  assert.match(SOURCE, /m\.resolver_type = 'api_lcdlf'/);
+  assert.match(SOURCE, /m\.resolver_config->>'shape' = 'binary-status'/);
+  assert.match(SOURCE, /nominationRoundPosted/);
+  assert.match(SOURCE, /snapshot\.nominated\.length >= nominationMinStatusCount/);
+  assert.match(SOURCE, /lcdlf_status_not_marked_yet/);
+  assert.match(SOURCE, /buildLcdlfStatusPatch/);
 });

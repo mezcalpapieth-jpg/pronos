@@ -6,7 +6,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { estimateMakerReward } from '../_lib/points-limit-orders.js';
+import {
+  estimateMakerReward,
+  previewRestingAsksForBuy,
+  previewRestingBidsForSell,
+} from '../_lib/points-limit-orders.js';
 
 const schemaSource = await readFile(new URL('../_lib/points-schema.js', import.meta.url), 'utf8');
 const migrateSource = await readFile(new URL('../migrate.js', import.meta.url), 'utf8');
@@ -103,13 +107,37 @@ test('maker rewards accrue after resting near the current price with no per-orde
   assert.ok(alreadyPaidOrder > 10, 'paid order should keep accruing because there is no per-order cap');
 });
 
-test('orderbook exposes real user rows with AMM fallback liquidity', () => {
+test('orderbook taker previews consume real resting orders before AMM fallback', () => {
+  const buyPreview = previewRestingAsksForBuy([
+    { id: 1, username: 'maker-a', limit_price: 0.45, remaining_amount: 100 },
+    { id: 2, username: 'maker-b', limit_price: 0.50, remaining_amount: 100 },
+  ], { collateral: 70 });
+  assert.equal(buyPreview.fills.length, 2);
+  assert.equal(buyPreview.fills[0].orderId, 1);
+  assert.equal(buyPreview.sharesOut, 150);
+  assert.equal(buyPreview.collateralSpent, 70);
+  assert.equal(buyPreview.remainingCollateral, 0);
+
+  const sellPreview = previewRestingBidsForSell([
+    { id: 3, username: 'maker-c', limit_price: 0.60, remaining_amount: 30 },
+    { id: 4, username: 'maker-d', limit_price: 0.55, remaining_amount: 30 },
+  ], { shares: 120 });
+  assert.equal(sellPreview.fills.length, 2);
+  assert.equal(sellPreview.fills[0].orderId, 3);
+  assert.equal(sellPreview.sharesSold, 104.545455);
+  assert.equal(sellPreview.collateralOut, 60);
+  assert.equal(sellPreview.remainingShares, 15.454545);
+});
+
+test('orderbook exposes real user rows with mocked maker depth', () => {
   assert.match(orderbookSource, /Hybrid points order book/);
   assert.match(orderbookSource, /aggregateLimitOrderRows/);
   assert.match(orderbookSource, /FROM points_limit_orders/);
   assert.match(helperSource, /source: 'limit'/);
-  assert.match(orderbookSource, /source: 'amm'/);
-  assert.match(orderbookSource, /bookType: 'hybrid'/);
+  assert.match(orderbookSource, /buildMockMakerDepth/);
+  assert.match(orderbookSource, /seed_liquidity,\s*seed_liquidities/);
+  assert.match(orderbookSource, /bookType: 'mock_orderbook'/);
+  assert.doesNotMatch(orderbookSource, /source: 'amm'/);
 });
 
 test('public endpoints create, list, and cancel authenticated limit orders', () => {

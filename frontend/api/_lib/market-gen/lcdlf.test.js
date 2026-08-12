@@ -42,3 +42,43 @@ test('generateLcdlfMarkets uses official nominees and suggested balanced pricing
     else process.env.LCDLF_DISCOVER_RESIDENTS = previousDiscover;
   }
 });
+
+test('generateLcdlfMarkets creates nomination markets from active residents before official nominees appear', async () => {
+  const previousResidents = process.env.LCDLF_RESIDENTS_JSON;
+  const previousDiscover = process.env.LCDLF_DISCOVER_RESIDENTS;
+  try {
+    process.env.LCDLF_DISCOVER_RESIDENTS = 'false';
+    process.env.LCDLF_RESIDENTS_JSON = JSON.stringify([
+      { name: 'Fede Vigevani', slug: 'fede-vigevani' },
+      { name: 'Brianda Deyanara', slug: 'brianda-deyanara' },
+      { name: 'Flor Vigna', slug: 'flor-vigna' },
+    ]);
+
+    const fetchImpl = async (url) => {
+      let label = '';
+      if (String(url).includes('/habitantes/fede-vigevani')) label = 'ELIMINADO';
+      if (String(url).includes('/habitantes/brianda-deyanara')) label = 'LÍDER DE LA SEMANA';
+      return {
+        ok: true,
+        status: 200,
+        text: async () => `<html><body><span>${label}</span></body></html>`,
+      };
+    };
+
+    const specs = await generateLcdlfMarkets({
+      now: new Date('2026-08-12T18:00:00Z'),
+      fetchImpl,
+    });
+
+    assert.equal(specs.length, 2);
+    assert.deepEqual(specs.map(spec => spec.resolver_type), ['api_lcdlf', 'api_lcdlf']);
+    assert.deepEqual(specs.map(spec => spec.outcomes), [['Sí', 'No'], ['Sí', 'No']]);
+    assert.deepEqual(specs.map(spec => spec.source_data.residentSlug), ['brianda-deyanara', 'flor-vigna']);
+    assert.equal(specs[0].source_data.suggestedPricing.source, 'lcdlf-official:active-resident');
+  } finally {
+    if (previousResidents === undefined) delete process.env.LCDLF_RESIDENTS_JSON;
+    else process.env.LCDLF_RESIDENTS_JSON = previousResidents;
+    if (previousDiscover === undefined) delete process.env.LCDLF_DISCOVER_RESIDENTS;
+    else process.env.LCDLF_DISCOVER_RESIDENTS = previousDiscover;
+  }
+});

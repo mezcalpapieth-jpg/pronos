@@ -21,7 +21,7 @@ import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { withTransaction } from '../_lib/db-tx.js';
 import { seriesTradeLockFromRows } from '../_lib/series-markets.js';
 import { bestEffortInsertPointsPriceSnapshot } from '../_lib/points-price-snapshots.js';
-import { executeTriggeredLimitOrders } from '../_lib/points-limit-orders.js';
+import { executeTriggeredLimitOrders, matchRestingAsksForBuy } from '../_lib/points-limit-orders.js';
 import { assertCryptoTradeAllowed } from '../_lib/points-crypto-trade-guard.js';
 import {
   TOURNAMENT_MAX_SHARES_PER_MARKET,
@@ -182,89 +182,120 @@ export default async function handler(req, res) {
         const err = new Error('insufficient_balance'); err.status = 400; throw err;
       }
 
-      let quote;
-      try {
-        quote = reserves.length === 2
-          ? binaryBuyQuote(reserves, oi, amt)
-          : multiBuyQuote(reserves, oi, amt);
-      } catch (e) {
-        const err = new Error('invalid_quote'); err.status = 400; err.detail = e.message; throw err;
+      const orderbookMatch = await matchRestingAsksForBuy(client, {
+        market: m,
+        marketId: mid,
+        username,
+        outcomeIndex: oi,
+        collateralBudget: amt,
+      });
+      const ammCollateral = orderbookMatch.remainingCollateral > 0.000001
+        ? orderbookMatch.remainingCollateral
+        : 0;
+
+      let quote = null;
+      if (ammCollateral > 0) {
+        try {
+          quote = reserves.length === 2
+            ? binaryBuyQuote(reserves, oi, ammCollateral)
+            : multiBuyQuote(reserves, oi, ammCollateral);
+        } catch (e) {
+          const err = new Error('invalid_quote'); err.status = 400; err.detail = e.message; throw err;
+        }
       }
+
+      const totalSharesOut = orderbookMatch.sharesOut + Number(quote?.sharesOut || 0);
+      const totalSpent = orderbookMatch.collateralSpent + ammCollateral;
+      const totalFee = Number(quote?.fee || 0);
+      const combinedAvgPrice = totalSharesOut > 0.000001
+        ? (totalSpent - totalFee) / totalSharesOut
+        : 0;
 
       // Slippage enforcement — we already hold FOR UPDATE on the
       // market row, so the quote above is authoritative. If it drifted
       // past the client's tolerance between their preview and now,
       // bail with a specific error so the UI can re-quote cleanly.
-      if (minShares !== null && quote.sharesOut < minShares) {
+      if (minShares !== null && totalSharesOut < minShares) {
         const err = new Error('price_moved'); err.status = 409;
-        err.detail = `shares_out=${quote.sharesOut.toFixed(6)} below min=${minShares}`;
+        err.detail = `shares_out=${totalSharesOut.toFixed(6)} below min=${minShares}`;
         throw err;
       }
-      if (maxPrice !== null && quote.avgPrice > maxPrice) {
+      if (maxPrice !== null && combinedAvgPrice > maxPrice) {
         const err = new Error('price_moved'); err.status = 409;
-        err.detail = `avg_price=${quote.avgPrice.toFixed(6)} above max=${maxPrice}`;
+        err.detail = `avg_price=${combinedAvgPrice.toFixed(6)} above max=${maxPrice}`;
         throw err;
+      }
+      if (totalSharesOut <= 0.000001 || totalSpent <= 0.000001) {
+        const err = new Error('invalid_quote'); err.status = 400; throw err;
       }
 
-      await assertTournamentShareCap(client, {
-        marketId: mid,
-        username,
-        additionalShares: quote.sharesOut,
-      });
+      if (quote) {
+        await assertTournamentShareCap(client, {
+          marketId: mid,
+          username,
+          additionalShares: quote.sharesOut,
+        });
+      }
 
       // Persist reserves + balance + trade + position + audit log.
-      await client.query(
-        `UPDATE points_markets SET reserves = $1::jsonb WHERE id = $2`,
-        [JSON.stringify(quote.reservesAfter), mid],
-      );
+      if (quote) {
+        await client.query(
+          `UPDATE points_markets SET reserves = $1::jsonb WHERE id = $2`,
+          [JSON.stringify(quote.reservesAfter), mid],
+        );
+      }
 
-      const newBalance = currentBalance - amt;
+      const newBalance = currentBalance - totalSpent;
       await client.query(
         `UPDATE points_balances SET balance = $1, updated_at = NOW() WHERE username = $2`,
         [newBalance, username],
       );
 
-      await client.query(
-        `INSERT INTO points_trades (
-           market_id, username, side, outcome_index,
-           shares, collateral, fee, price_at_trade,
-           reserves_before, reserves_after
-         ) VALUES ($1, $2, 'buy', $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb)`,
-        [
-          mid, username, oi,
-          quote.sharesOut, amt, quote.fee, quote.avgPrice,
-          JSON.stringify(reserves),
-          JSON.stringify(quote.reservesAfter),
-        ],
-      );
+      if (quote) {
+        await client.query(
+          `INSERT INTO points_trades (
+             market_id, username, side, outcome_index,
+             shares, collateral, fee, price_at_trade,
+             reserves_before, reserves_after
+           ) VALUES ($1, $2, 'buy', $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb)`,
+          [
+            mid, username, oi,
+            quote.sharesOut, ammCollateral, quote.fee, quote.avgPrice,
+            JSON.stringify(reserves),
+            JSON.stringify(quote.reservesAfter),
+          ],
+        );
 
-      await client.query(
-        `INSERT INTO points_positions (market_id, username, outcome_index, shares, cost_basis)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (market_id, username, outcome_index) DO UPDATE
-         SET shares     = points_positions.shares + EXCLUDED.shares,
-             cost_basis = points_positions.cost_basis + EXCLUDED.cost_basis,
-             dismissed_at = NULL,
-             updated_at = NOW()`,
-        [mid, username, oi, quote.sharesOut, amt],
-      );
+        await client.query(
+          `INSERT INTO points_positions (market_id, username, outcome_index, shares, cost_basis)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (market_id, username, outcome_index) DO UPDATE
+           SET shares     = points_positions.shares + EXCLUDED.shares,
+               cost_basis = points_positions.cost_basis + EXCLUDED.cost_basis,
+               dismissed_at = NULL,
+               updated_at = NOW()`,
+          [mid, username, oi, quote.sharesOut, ammCollateral],
+        );
+      }
 
       await client.query(
         `INSERT INTO points_distributions (username, amount, kind, reference_id, reason)
          VALUES ($1, $2, 'trade_buy', $3, $4)`,
         [
           username,
-          -amt,
+          -totalSpent,
           mid,
-          `Compra de ${quote.sharesOut.toFixed(2)} acciones`,
+          `Compra de ${totalSharesOut.toFixed(2)} acciones`,
         ],
       );
 
-      await bestEffortInsertPointsPriceSnapshot(client, {
-        marketId: mid,
-        reserves: quote.reservesAfter,
-        logLabel: 'points-buy-price-snapshot',
-      });
+      if (quote) {
+        await bestEffortInsertPointsPriceSnapshot(client, {
+          marketId: mid,
+          reserves: quote.reservesAfter,
+          logLabel: 'points-buy-price-snapshot',
+        });
+      }
 
       const triggeredLimitOrders = await executeTriggeredLimitOrders(client, {
         marketId: mid,
@@ -272,10 +303,11 @@ export default async function handler(req, res) {
 
       return {
         balance: newBalance,
-        sharesOut: quote.sharesOut,
-        fee: quote.fee,
-        priceBefore: quote.priceBefore,
-        priceAfter: quote.priceAfter,
+        sharesOut: totalSharesOut,
+        fee: totalFee,
+        priceBefore: quote?.priceBefore ?? orderbookMatch.avgPrice,
+        priceAfter: quote?.priceAfter ?? orderbookMatch.avgPrice,
+        orderbookFills: orderbookMatch.fills,
         triggeredLimitOrders,
       };
     });

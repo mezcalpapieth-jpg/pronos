@@ -1,11 +1,15 @@
 import {
   binaryBuyQuote,
+  binaryPrices,
   binarySellQuote,
   multiBuyQuote,
+  multiPrices,
   multiSellQuote,
 } from './amm-math.js';
 
 const DEFAULT_LEVELS = [10, 25, 50, 100, 250, 500, 1000, 2500];
+const DEFAULT_MOCK_MAKER_DEPTH = 7500;
+const MOCK_MAKER_SPREADS = [0.01, 0.02, 0.035, 0.05, 0.075, 0.10, 0.14, 0.18, 0.23, 0.29, 0.36, 0.44];
 
 function round(value, digits = 6) {
   if (!Number.isFinite(Number(value))) return 0;
@@ -27,6 +31,10 @@ function quoteSell(reserves, outcomeIndex, shares) {
   return reserves.length === 2
     ? binarySellQuote(reserves, outcomeIndex, shares)
     : multiSellQuote(reserves, outcomeIndex, shares);
+}
+
+function pricesForReserves(reserves) {
+  return reserves.length === 2 ? binaryPrices(reserves) : multiPrices(reserves);
 }
 
 function bestAsk(asks) {
@@ -112,6 +120,89 @@ export function buildAmmDepth({ reserves, outcomeIndex = 0, levels = DEFAULT_LEV
     spread: spread == null ? null : round(spread, 6),
     asks,
     bids,
+  };
+}
+
+export function buildMockMakerDepth({
+  reserves,
+  outcomeIndex = 0,
+  levels = DEFAULT_LEVELS,
+  seedLiquidity = DEFAULT_MOCK_MAKER_DEPTH,
+  seedLiquidities = null,
+  minimumDepth = DEFAULT_MOCK_MAKER_DEPTH,
+} = {}) {
+  if (!Array.isArray(reserves) || reserves.length < 2) {
+    throw new Error('amm-depth: reserves must contain at least two values');
+  }
+  const normalizedReserves = reserves.map(Number);
+  if (normalizedReserves.some((value) => !Number.isFinite(value) || value <= 0)) {
+    throw new Error('amm-depth: reserves must be positive');
+  }
+  const oi = Number(outcomeIndex);
+  if (!Number.isInteger(oi) || oi < 0 || oi >= normalizedReserves.length) {
+    throw new Error('amm-depth: outcome_index out of range');
+  }
+
+  const cleanLevels = (Array.isArray(levels) && levels.length > 0 ? levels : DEFAULT_LEVELS)
+    .map(Number)
+    .filter((value) => Number.isFinite(value) && value > 0)
+    .slice(0, 12);
+  const count = Math.max(1, cleanLevels.length);
+  const seedValues = Array.isArray(seedLiquidities) ? seedLiquidities.map(Number) : [];
+  const configuredDepth = Number(seedValues[oi] ?? seedLiquidity);
+  const perSideDepth = Math.max(
+    Number.isFinite(configuredDepth) ? configuredDepth : 0,
+    Number.isFinite(Number(minimumDepth)) ? Number(minimumDepth) : DEFAULT_MOCK_MAKER_DEPTH,
+  );
+  const currentPrice = clampPrice(Number(pricesForReserves(normalizedReserves)[oi]));
+  const asks = [];
+  const bids = [];
+
+  const weights = Array.from({ length: count }, (_, i) => 1 + i * 0.12);
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0) || 1;
+  for (let i = 0; i < count; i += 1) {
+    const spread = MOCK_MAKER_SPREADS[Math.min(i, MOCK_MAKER_SPREADS.length - 1)];
+    const total = round(perSideDepth * (weights[i] / totalWeight), 6);
+    const askPrice = clampPrice(Math.max(0.01, Math.min(0.99, currentPrice + spread)));
+    const bidPrice = clampPrice(Math.max(0.01, Math.min(0.99, currentPrice - spread)));
+
+    if (askPrice > 0) {
+      asks.push({
+        side: 'ask',
+        price: round(askPrice, 6),
+        shares: round(total / askPrice, 6),
+        total,
+        fee: 0,
+        priceImpactPts: 0,
+        source: 'maker',
+      });
+    }
+    if (bidPrice > 0) {
+      bids.push({
+        side: 'bid',
+        price: round(bidPrice, 6),
+        shares: round(total / bidPrice, 6),
+        total,
+        fee: 0,
+        priceImpactPts: 0,
+        source: 'maker',
+      });
+    }
+  }
+
+  asks.sort((a, b) => b.price - a.price);
+  bids.sort((a, b) => b.price - a.price);
+
+  const ask = bestAsk(asks);
+  const bid = bestBid(bids);
+  const spread = ask == null || bid == null ? null : Math.max(0, ask - bid);
+
+  return {
+    currentPrice: round(currentPrice, 6),
+    spread: spread == null ? null : round(spread, 6),
+    asks,
+    bids,
+    perSideDepth: round(perSideDepth, 6),
   };
 }
 

@@ -343,11 +343,27 @@ function atpMensSinglesCompetitions(event) {
   return Array.isArray(mens?.competitions) ? mens.competitions : [];
 }
 
+function atpCompetitionStatus(competition) {
+  return competition?.status || {};
+}
+
+function atpCompetitionCompleted(competition) {
+  const status = atpCompetitionStatus(competition);
+  return Boolean(status?.type?.completed) || status?.type?.state === 'post';
+}
+
+function atpCompetitionRealEntries(competition, extra = {}) {
+  const competitors = Array.isArray(competition?.competitors) ? competition.competitors : [];
+  return competitors
+    .map(competitor => competitorEntry(competitor, extra))
+    .filter(Boolean);
+}
+
 function extractAtpEliminatedCompetitors(event) {
   const eliminated = [];
   for (const competition of atpMensSinglesCompetitions(event)) {
-    const status = competition?.status || {};
-    const completed = Boolean(status?.type?.completed) || status?.type?.state === 'post';
+    const status = atpCompetitionStatus(competition);
+    const completed = atpCompetitionCompleted(competition);
     if (!completed) continue;
     const competitors = Array.isArray(competition?.competitors) ? competition.competitors : [];
     const winner = competitors.find(c => c?.winner === true);
@@ -366,24 +382,35 @@ function extractAtpEliminatedCompetitors(event) {
 }
 
 function extractAtpRemainingCompetitors(event) {
-  const remaining = [];
+  const pending = [];
   for (const competition of atpMensSinglesCompetitions(event)) {
-    const status = competition?.status || {};
-    const completed = Boolean(status?.type?.completed) || status?.type?.state === 'post';
-    const competitors = Array.isArray(competition?.competitors) ? competition.competitors : [];
-    if (completed) {
-      const winner = competitors.find(c => c?.winner === true);
-      const entry = winner ? competitorEntry(winner, { reason: 'won_completed_match' }) : null;
-      if (entry) remaining.push(entry);
-      continue;
-    }
-
-    for (const competitor of competitors) {
-      const entry = competitorEntry(competitor, { reason: 'scheduled_or_live' });
-      if (entry) remaining.push(entry);
-    }
+    if (atpCompetitionCompleted(competition)) continue;
+    const status = atpCompetitionStatus(competition);
+    pending.push(...atpCompetitionRealEntries(competition, {
+      reason: status?.type?.state === 'in' ? 'live_match' : 'scheduled_match',
+      roundId: competition?.round?.id || null,
+      roundName: competition?.round?.displayName || null,
+    }));
   }
-  return dedupeCompetitorEntries(remaining);
+  if (pending.length > 0) return dedupeCompetitorEntries(pending);
+
+  // ESPN sometimes posts a bracket before the next round competitors
+  // are materialized. In that gap, derive survivors as every real player
+  // seen in the tournament minus anyone who has a completed-match loss.
+  const eliminated = extractAtpEliminatedCompetitors(event);
+  const eliminatedKeys = new Set(eliminated.map(entry => (
+    entry.driverId ? `id:${entry.driverId}` : `label:${normName(entry.label)}`
+  )));
+  const seen = [];
+  for (const competition of atpMensSinglesCompetitions(event)) {
+    seen.push(...atpCompetitionRealEntries(competition, {
+      reason: 'not_eliminated',
+    }));
+  }
+  return dedupeCompetitorEntries(seen).filter(entry => {
+    const key = entry.driverId ? `id:${entry.driverId}` : `label:${normName(entry.label)}`;
+    return !eliminatedKeys.has(key);
+  });
 }
 
 function normalizeAtpMatchCompetition(competition) {

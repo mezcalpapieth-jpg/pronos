@@ -15,7 +15,8 @@
  *       2. Archives and clears materialized positions, then cancels open
  *          limit orders so old exposure cannot leak into the next cycle.
  *       3. Marks the cycle as 'closed' with closed_at = now.
- *       4. Opens a new active cycle starting now, ends_at in 14 days.
+ *       4. Opens a new active cycle starting now, ending at the configured
+ *          tournament close while that launch window is still open.
  *       5. Resets balances to the tournament starting balance. The first
  *          bootstrap reset also carries forward only pre-cycle promotional
  *          bonuses: 200 MXNP for existing signups, 50 MXNP per referral,
@@ -31,6 +32,7 @@ import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 import {
+  TOURNAMENT_OPERATION_CLOSE_ISO,
   TOURNAMENT_STARTING_BALANCE,
   TOURNAMENT_REWARDS,
 } from '../../_lib/points-tournament-config.js';
@@ -44,15 +46,24 @@ const sql = neon(process.env.DATABASE_URL);
 const CYCLE_DAYS = 14;
 const CYCLES_PAUSED_KEY = 'points_cycles_paused';
 
-function cycleLabel(startIso) {
+function cycleLabel(startIso, endIso) {
   try {
     const start = new Date(startIso);
-    const end = new Date(start.getTime() + CYCLE_DAYS * 24 * 60 * 60 * 1000);
+    const end = endIso ? new Date(endIso) : new Date(start.getTime() + CYCLE_DAYS * 24 * 60 * 60 * 1000);
     const fmt = new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short' });
     return `Ciclo ${fmt.format(start)} — ${fmt.format(end)}`;
   } catch {
     return null;
   }
+}
+
+function cycleEndIso(startIso) {
+  const startMs = new Date(startIso).getTime();
+  const tournamentCloseMs = new Date(TOURNAMENT_OPERATION_CLOSE_ISO).getTime();
+  if (Number.isFinite(startMs) && Number.isFinite(tournamentCloseMs) && tournamentCloseMs > startMs) {
+    return TOURNAMENT_OPERATION_CLOSE_ISO;
+  }
+  return new Date(startMs + CYCLE_DAYS * 24 * 60 * 60 * 1000).toISOString();
 }
 
 function parseSettingBool(value, fallback = true) {
@@ -89,10 +100,10 @@ async function setCyclesPaused(client, paused) {
 async function openNewCycle(client, nextCycleLabel) {
   const now = new Date();
   const startIso = now.toISOString();
-  const endIso = new Date(now.getTime() + CYCLE_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const endIso = cycleEndIso(startIso);
   const label = nextCycleLabel && typeof nextCycleLabel === 'string'
     ? nextCycleLabel.slice(0, 80)
-    : cycleLabel(startIso);
+    : cycleLabel(startIso, endIso);
   const inserted = await client.query(
     `INSERT INTO points_cycles (label, started_at, ends_at, status)
      VALUES ($1, $2, $3, 'active')

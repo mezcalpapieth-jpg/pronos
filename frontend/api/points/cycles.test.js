@@ -21,6 +21,8 @@ test('points admin can pause and later reopen public cycles', () => {
   assert.match(adminSource, /setCyclesPaused\(client,\s*false\)/);
   assert.match(adminSource, /restarted:\s*true/);
   assert.match(adminSource, /openNewCycle/);
+  assert.match(adminSource, /TOURNAMENT_OPERATION_CLOSE_ISO/);
+  assert.match(adminSource, /cycleEndIso/);
 });
 
 test('points rollover archives exposure and carries only approved pre-cycle bonuses on bootstrap', () => {

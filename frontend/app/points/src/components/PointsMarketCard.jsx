@@ -100,6 +100,14 @@ export default function PointsMarketCard({ market, userPosition }) {
     && market.legIds.length === outcomes.length
     ? market.legIds
     : null;
+  const legStatuses = market.ammMode === 'parallel' && Array.isArray(market.legStatuses)
+    && market.legStatuses.length === outcomes.length
+    ? market.legStatuses
+    : null;
+  const legOutcomes = market.ammMode === 'parallel' && Array.isArray(market.legOutcomes)
+    && market.legOutcomes.length === outcomes.length
+    ? market.legOutcomes
+    : null;
   const canOpenDrawer = !isResolved
     && !isSeriesPending
     && market.status === 'active'
@@ -179,6 +187,28 @@ export default function PointsMarketCard({ market, userPosition }) {
     // cycling keeps adjacent outcomes on different hues.
     return ACCENTS[i % ACCENTS.length];
   };
+  const outcomeRows = outcomes.map((label, i) => ({
+    index: i,
+    label,
+    price: prices[i],
+    logo: outcomeImages?.[i] || null,
+    countryLabel: outcomeCountryLabels?.[i] || null,
+    legStatus: legStatuses?.[i] || null,
+    legOutcome: legOutcomes?.[i] ?? null,
+  }));
+  const visibleOutcomeRows = (() => {
+    if (market.ammMode !== 'parallel' || isResolved) return outcomeRows;
+
+    const activeRows = outcomeRows.filter(row => (
+      legStatuses
+        ? String(row.legStatus || '').toLowerCase() === 'active'
+        : Number(row.price) > 0
+    ));
+    const rows = activeRows.length > 0 ? activeRows : outcomeRows;
+    return [...rows].sort((a, b) =>
+      (Number(b.price) || 0) - (Number(a.price) || 0) || a.index - b.index
+    );
+  })();
 
   return (
     <div
@@ -309,7 +339,7 @@ export default function PointsMarketCard({ market, userPosition }) {
             flexDirection: 'column',
             gap: 6,
             margin: '10px 0 4px',
-            ...(outcomes.length > 4 ? {
+            ...(visibleOutcomeRows.length > 4 ? {
               maxHeight: 200,
               overflowY: 'auto',
               paddingRight: 4,
@@ -321,20 +351,18 @@ export default function PointsMarketCard({ market, userPosition }) {
           // the outer card's navigate handler so the user can scroll
           // without accidentally opening the detail page.
           onClick={(e) => {
-            if (outcomes.length > 4) e.stopPropagation();
+            if (visibleOutcomeRows.length > 4) e.stopPropagation();
           }}
         >
-          {outcomes.map((label, i) => {
+          {visibleOutcomeRows.map((row) => {
+            const { index: i, label, price: livePrice, logo, countryLabel } = row;
             const accent = accentFor(i);
             // Resolved markets collapse to a binary 100 / 0 display so
             // the card matches what the detail page already does — no
             // more stale "Bad Bunny 67%" showing after Bad Bunny won.
-            const livePrice = prices[i];
             const resolvedPrice = isResolved ? (Number(market.outcome) === i ? 1 : 0) : null;
             const pct = Math.round((resolvedPrice ?? livePrice) * 100);
             const gain = previewGain(livePrice);
-            const logo = outcomeImages?.[i] || null;
-            const countryLabel = outcomeCountryLabels?.[i] || null;
             const teamProfile = findTeamByName(market.sport, label);
             const rowOnClick = (e) => {
               // Stop the click from reaching the card's outer

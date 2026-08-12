@@ -68,6 +68,7 @@ function cryptoWindowMinutes(meta) {
 function formatCryptoWindowDuration(meta, lang = 'es') {
   const minutes = cryptoWindowMinutes(meta);
   if (minutes === 24 * 60) return lang === 'en' ? '24 hours' : '24 horas';
+  if (minutes === 12 * 60) return lang === 'en' ? '12 hours' : '12 horas';
   if (minutes === 60) return lang === 'en' ? '1 hour' : '1 hora';
   return `${minutes} min`;
 }

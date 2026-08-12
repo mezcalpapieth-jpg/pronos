@@ -420,6 +420,7 @@ function resolverLabel(type, source) {
 // is wrapped in a fixed-height scroll container by the caller, so the
 // detail page doesn't turn into an endless vertical stack.
 const SCROLL_AT_N = 6;
+const DISPLAYABLE_SHARE_EPSILON = 0.005;
 
 function OutcomeLogo({ src }) {
   if (!src) return null;
@@ -1170,13 +1171,15 @@ function DepthRows({ rows, side, maxTotal, t, onPickRow }) {
               <span>{formatDepthAmount(row.shares)}</span>
               <span style={{
                 fontSize: 8,
-                color: row.source === 'limit' ? 'var(--orange)' : 'var(--text-muted)',
+                color: row.source === 'limit' || row.source === 'maker' ? 'var(--orange)' : 'var(--text-muted)',
                 letterSpacing: '0.08em',
                 textTransform: 'uppercase',
               }}>
                 {row.source === 'limit'
                   ? t('points.detail.orderBookSourceUsers')
-                  : t('points.detail.orderBookSourceAmm')}
+                  : row.source === 'maker'
+                    ? t('points.detail.orderBookSourceMaker')
+                    : t('points.detail.orderBookSourceAmm')}
               </span>
             </span>
             <span style={{
@@ -2192,7 +2195,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
           ? new Set(buildCryptoMarketSequence(market).map((m) => Number(m.id)))
           : null;
         const mine = (r.positions || []).filter(p => {
-          if (Number(p.shares) <= 0) return false;
+          if (Number(p.shares) < DISPLAYABLE_SHARE_EPSILON) return false;
           if (cryptoIds) {
             return cryptoIds.has(Number(p.marketId)) || cryptoIds.has(Number(p.parentMarketId));
           }

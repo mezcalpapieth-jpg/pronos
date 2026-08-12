@@ -43,7 +43,7 @@ import {
   adminRunGenerators,
   adminToggleFeatured,
   adminBulkHideMarkets,
-  adminProgressWorldCup,
+  adminAppendParallelOutcomes,
 } from '../lib/pointsApi.js';
 import {
   ADMIN_BASEBALL_LEAGUES,
@@ -1791,6 +1791,7 @@ const DEFAULT_CRYPTO_INTERVAL_OPTIONS = [
   { minutes: 15, label: '15 minutos' },
   { minutes: 30, label: '30 minutos' },
   { minutes: 60, label: '1 hora' },
+  { minutes: 720, label: '12 horas' },
   { minutes: 1440, label: '24 horas' },
 ];
 const DEFAULT_CRYPTO_ASSET_OPTIONS = [
@@ -1821,6 +1822,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
   const [cryptoTypeFilter, setCryptoTypeFilter] = useState('all');
   const [geoFilter, setGeoFilter] = useState('all');
   const [topicFilter, setTopicFilter] = useState('all');
+  const [curationFilter, setCurationFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState(null);
   const [reviewingCandidate, setReviewingCandidate] = useState(null);
@@ -1830,6 +1832,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
   const [homeMarketVisibility, setHomeMarketVisibility] = useState(normalizeHomeMarketVisibility());
   // When non-null, render the edit modal for this market.
   const [editing, setEditing] = useState(null);
+  const [appending, setAppending] = useState(null);
 
   const showSportFilters = categoryFilter === 'deportes';
   const showCryptoFilters = categoryFilter === 'crypto';
@@ -2445,9 +2448,11 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
               {m.crypto5min && (
                 <> · {Number(m.cryptoIntervalMinutes || m.cryptoWindowMinutes || 5) === 1440
                   ? '24h'
-                  : Number(m.cryptoIntervalMinutes || m.cryptoWindowMinutes || 5) === 60
-                    ? '1h'
-                    : `${Number(m.cryptoIntervalMinutes || m.cryptoWindowMinutes || 5)}min`}</>
+                  : Number(m.cryptoIntervalMinutes || m.cryptoWindowMinutes || 5) === 720
+                    ? '12h'
+                    : Number(m.cryptoIntervalMinutes || m.cryptoWindowMinutes || 5) === 60
+                      ? '1h'
+                      : `${Number(m.cryptoIntervalMinutes || m.cryptoWindowMinutes || 5)}min`}</>
               )}
               {m.seriesMeta?.subtitle && <> · {m.seriesMeta.subtitle}</>}
               {m.source && <> · {m.source}</>}
@@ -2492,6 +2497,26 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
               >
                 Editar
               </button>
+              {m.ammMode === 'parallel' && (
+                <button
+                  onClick={() => setAppending(m)}
+                  title="Agregar opciones nuevas sin cambiar las existentes"
+                  style={{
+                    padding: '6px 10px',
+                    background: 'transparent',
+                    border: '1px solid rgba(0,232,122,0.35)',
+                    borderRadius: 8,
+                    color: 'var(--green)',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11,
+                    cursor: 'pointer',
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  Agregar jugador
+                </button>
+              )}
               {filter === 'pending' && (
                 <button
                   onClick={() => cancelMarket(m)}
@@ -2547,6 +2572,16 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
           }}
         />
       )}
+      {appending && (
+        <AppendParallelOutcomesModal
+          market={appending}
+          onClose={() => setAppending(null)}
+          onSaved={async () => {
+            setAppending(null);
+            await load();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -2556,6 +2591,167 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
 // and category. Reserves, outcomes, and status stay locked — mutating
 // those post-creation would desync the AMM or confuse existing holders.
 // Wired to POST /api/points/admin/edit-market.
+function AppendParallelOutcomesModal({ market, onClose, onSaved }) {
+  const [labels, setLabels] = useState('');
+  const [seedLiquidity, setSeedLiquidity] = useState(500);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const parsedLabels = labels
+    .split(/\r?\n/)
+    .map(label => label.trim())
+    .filter(Boolean);
+
+  async function save() {
+    const unique = [];
+    const seen = new Set();
+    for (const label of parsedLabels) {
+      const key = label
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      unique.push(label);
+    }
+    if (unique.length === 0) {
+      setErr('Agrega al menos un jugador, uno por línea.');
+      return;
+    }
+    const seed = Number(seedLiquidity);
+    if (!Number.isFinite(seed) || seed < 100) {
+      setErr('La liquidez por jugador debe ser de al menos 100 MXNP.');
+      return;
+    }
+
+    setSaving(true);
+    setErr(null);
+    try {
+      await adminAppendParallelOutcomes({
+        marketId: market.id,
+        outcomes: unique,
+        seedLiquidity: seed,
+      });
+      await onSaved?.();
+    } catch (e) {
+      setErr(`${e.code || e.message}${e.detail ? ' · ' + e.detail : ''}`);
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={(e) => { if (e.target === e.currentTarget && !saving) onClose?.(); }}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 9999,
+        background: 'rgba(0, 0, 0, 0.68)',
+        backdropFilter: 'blur(4px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '24px 16px',
+      }}
+    >
+      <div style={{
+        width: 'min(640px, 100%)',
+        background: 'var(--surface1)',
+        border: '1px solid var(--border)',
+        borderRadius: 14,
+        padding: '24px 28px',
+      }}>
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          letterSpacing: '0.12em',
+          color: 'var(--green)',
+          textTransform: 'uppercase',
+          marginBottom: 8,
+        }}>
+          Mercado paralelo #{market.id}
+        </div>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, marginTop: 0, marginBottom: 8 }}>
+          Agregar jugadores
+        </h3>
+        <p style={{
+          color: 'var(--text-muted)',
+          fontFamily: 'var(--font-body)',
+          fontSize: 13,
+          lineHeight: 1.45,
+          marginTop: 0,
+          marginBottom: 18,
+        }}>
+          Se crearán nuevas opciones binarias Sí/No sin cambiar las opciones existentes.
+        </p>
+
+        <Field label="Jugadores nuevos">
+          <textarea
+            value={labels}
+            onChange={(e) => setLabels(e.target.value)}
+            rows={7}
+            placeholder={'Brandon Nakashima\nRafael Jodar'}
+            style={{ ...inputStyle, resize: 'vertical', fontFamily: 'var(--font-mono)' }}
+          />
+        </Field>
+
+        <Field label="Liquidez por jugador">
+          <input
+            type="number"
+            min="100"
+            step="100"
+            value={seedLiquidity}
+            onChange={(e) => setSeedLiquidity(e.target.value)}
+            style={{ ...inputStyle, maxWidth: 180, fontFamily: 'var(--font-mono)', textAlign: 'right' }}
+          />
+        </Field>
+
+        {err && (
+          <div style={{ color: 'var(--red, #ef4444)', fontFamily: 'var(--font-mono)', fontSize: 12, marginBottom: 12 }}>
+            Error: {err}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            style={{
+              padding: '10px 14px',
+              background: 'transparent',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+              color: 'var(--text-secondary)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 12,
+              cursor: saving ? 'not-allowed' : 'pointer',
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+            }}
+          >
+            Cerrar
+          </button>
+          <button
+            type="button"
+            onClick={save}
+            disabled={saving}
+            className="btn-primary"
+            style={{ padding: '10px 16px' }}
+          >
+            {saving ? 'Agregando…' : 'Agregar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EditMarketModal({ market, onClose, onSaved, onCancel }) {
   const [question, setQuestion] = useState(market.question || '');
   const [category, setCategory] = useState(market.category || 'general');
@@ -3795,6 +3991,7 @@ function PendingMarketsTable({ onQueueChange }) {
     if (categoryFilter === 'crypto' && cryptoTypeFilter !== 'all') filters.crypto_type = cryptoTypeFilter;
     if (categoryFilter === 'mexico' && geoFilter !== 'all') filters.geo = geoFilter;
     if ((categoryFilter === 'mexico' || categoryFilter === 'musica') && topicFilter !== 'all') filters.topic = topicFilter;
+    if (curationFilter !== 'all') filters.feature = curationFilter;
     return filters;
   }
 
@@ -3826,6 +4023,7 @@ function PendingMarketsTable({ onQueueChange }) {
         cryptoTypeFilter,
         geoFilter,
         topicFilter,
+        featureFilter: curationFilter,
       });
       const r = await adminListPendingMarkets(q);
       setRows(r.pending || []);
@@ -3844,6 +4042,7 @@ function PendingMarketsTable({ onQueueChange }) {
     cryptoTypeFilter,
     geoFilter,
     topicFilter,
+    curationFilter,
   ]);
 
   useEffect(() => {
@@ -4111,46 +4310,6 @@ function PendingMarketsTable({ onQueueChange }) {
     }
   }
 
-  async function progressWorldCup() {
-    setBulkBusy(true);
-    try {
-      const preview = await adminProgressWorldCup({ dry: true });
-      const n = preview.totalPlanned || 0;
-      const lines = [
-        `Eventos ESPN: ${preview.espnEvents || 0}`,
-        `Partidos de grupo enlazados: ${preview.groupFixturesMatched || 0}/72`,
-        `Parches de resolver: ${preview.groupResolverPatches || 0}`,
-        `Grupos por resolver: ${preview.groupMatchesToResolve || 0}`,
-        `Ganadores de grupo por cerrar: ${preview.groupWinnerMarketsToResolve || 0}`,
-        `Knockouts por crear: ${preview.knockoutMarketsToCreate || 0}`,
-        `Knockouts por resolver: ${preview.knockoutMarketsToResolve || 0}`,
-      ];
-      if (n === 0) {
-        alert(`Sin cambios pendientes para Mundial.\n\n${lines.join('\n')}`);
-        return;
-      }
-      if (!confirm(`Aplicar reparación ESPN del Mundial?\n\n${lines.join('\n')}`)) {
-        return;
-      }
-      const r = await adminProgressWorldCup({ dry: false });
-      const applied = r.applied || {};
-      alert(
-        `✓ Mundial actualizado.\n`
-        + `Resolvers parchados: ${applied.groupResolverPatches || 0}\n`
-        + `Grupos resueltos: ${applied.groupMatchesResolved || 0}\n`
-        + `Ganadores de grupo: ${applied.groupWinnerMarketsResolved || 0}\n`
-        + `Knockouts creados/parchados: ${applied.knockoutMarketsCreatedOrPatched || 0}\n`
-        + `Knockouts resueltos: ${applied.knockoutMarketsResolved || 0}`,
-      );
-      await load();
-      onQueueChange?.();
-    } catch (e) {
-      alert(`Progresar Mundial falló: ${e.code || e.message}${e.detail ? '\n' + e.detail : ''}`);
-    } finally {
-      setBulkBusy(false);
-    }
-  }
-
   async function showResolveDiagnostic() {
     try {
       const r = await adminResolveDiagnostic();
@@ -4197,6 +4356,11 @@ function PendingMarketsTable({ onQueueChange }) {
     );
   }
 
+  const pendingCurationFilters = [
+    { key: 'all', label: 'Todos', title: 'Mostrar todos los mercados pendientes de esta vista' },
+    { key: 'featured', label: '🔥', title: 'Mostrar solo mercados marcados para Trending' },
+    { key: 'tournament', label: '🏆', title: 'Mostrar solo mercados marcados para torneo' },
+  ];
   const pendingCount = rows?.filter(r => r.status === 'pending').length || 0;
 
   return (
@@ -4409,29 +4573,6 @@ function PendingMarketsTable({ onQueueChange }) {
           🔧 Retrofit resolvers
         </button>
 
-        {/* Repair/progress World Cup from ESPN. Safe to re-run:
-            dry-runs first, then patches existing group rows, resolves
-            completed fixtures, and creates/open knockouts through
-            the current semifinal window. */}
-        <button
-          onClick={progressWorldCup}
-          disabled={bulkBusy}
-          title="Parcha y progresa mercados del Mundial con ESPN"
-          style={{
-            padding: '6px 14px',
-            borderRadius: 16,
-            border: '1px solid rgba(59,130,246,0.4)',
-            background: 'rgba(59,130,246,0.1)',
-            color: '#3b82f6',
-            fontFamily: 'var(--font-mono)', fontSize: 11,
-            letterSpacing: '0.06em', textTransform: 'uppercase',
-            cursor: bulkBusy ? 'not-allowed' : 'pointer',
-            opacity: bulkBusy ? 0.5 : 1,
-          }}
-        >
-          Reparar Mundial
-        </button>
-
         {/* Resolver diagnostic — read-only "why aren't my markets
             resolving?" report. Buckets active markets into
             resolvable / waiting / missing-resolver / manual. */}
@@ -4454,6 +4595,63 @@ function PendingMarketsTable({ onQueueChange }) {
           🩺 Diagnóstico resolver
         </button>
 
+      </div>
+
+      <div style={{
+        display: 'flex',
+        gap: 8,
+        marginBottom: 16,
+        flexWrap: 'wrap',
+        alignItems: 'center',
+      }}>
+        {pendingCurationFilters.map(option => {
+          const selected = curationFilter === option.key;
+          const activeColor = option.key === 'tournament'
+            ? 'rgba(250,204,21,0.58)'
+            : option.key === 'featured'
+              ? 'rgba(245,158,11,0.5)'
+              : 'rgba(0,232,122,0.4)';
+          const activeBg = option.key === 'tournament'
+            ? 'rgba(250,204,21,0.16)'
+            : option.key === 'featured'
+              ? 'rgba(245,158,11,0.15)'
+              : 'rgba(0,232,122,0.1)';
+          const activeText = option.key === 'tournament'
+            ? '#facc15'
+            : option.key === 'featured'
+              ? '#f59e0b'
+              : 'var(--green)';
+          return (
+            <button
+              key={option.key}
+              onClick={() => setCurationFilter(option.key)}
+              title={option.title}
+              aria-label={option.title}
+              style={{
+                minWidth: option.key === 'all' ? 78 : 42,
+                height: 32,
+                padding: option.key === 'all' ? '6px 14px' : '0 12px',
+                borderRadius: 16,
+                border: `1px solid ${selected ? activeColor : 'var(--border)'}`,
+                background: selected ? activeBg : 'transparent',
+                color: selected ? activeText : 'var(--text-secondary)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: option.key === 'all' ? 11 : 16,
+                cursor: 'pointer',
+                letterSpacing: option.key === 'all' ? '0.06em' : 0,
+                textTransform: option.key === 'all' ? 'uppercase' : 'none',
+                lineHeight: 1,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                filter: selected || option.key === 'all' ? 'none' : 'grayscale(1)',
+                opacity: selected || option.key === 'all' ? 1 : 0.5,
+              }}
+            >
+              {option.label}
+            </button>
+          );
+        })}
       </div>
 
       {renderFilterGroup(MARKET_CATEGORY_FILTERS, categoryFilter, selectCategoryFilter)}

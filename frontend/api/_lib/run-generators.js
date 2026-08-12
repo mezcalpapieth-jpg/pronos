@@ -103,14 +103,18 @@ async function attachGeneratorPricing(specs, { concurrency = PRICING_CONCURRENCY
   return priced;
 }
 
+export async function prepareGeneratedSpecs(specs) {
+  const pricedSpecs = await attachGeneratorPricing(specs);
+  return pricedSpecs.map(spec => attachMarketContextBlocks(spec));
+}
+
 export async function runAllGenerators() {
   const allSpecs = [];
   const sourceStats = {};
   for (const gen of GENERATORS) {
     try {
       const specs = await gen.run();
-      const pricedSpecs = await attachGeneratorPricing(specs);
-      const contextualSpecs = pricedSpecs.map(spec => attachMarketContextBlocks(spec));
+      const contextualSpecs = await prepareGeneratedSpecs(specs);
       sourceStats[gen.name] = { count: contextualSpecs.length };
       if (contextualSpecs.length) allSpecs.push(...contextualSpecs);
     } catch (e) {

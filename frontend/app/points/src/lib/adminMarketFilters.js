@@ -117,9 +117,11 @@ export function buildAdminMarketsQuery({
   cryptoTypeFilter = 'all',
   geoFilter = 'all',
   topicFilter = 'all',
+  featureFilter = 'all',
 } = {}) {
   const q = new URLSearchParams({ status });
   if (categoryFilter !== 'all') q.set('category', categoryFilter);
+  if (featureFilter !== 'all') q.set('feature', featureFilter);
 
   if (categoryFilter === 'mexico') {
     if (geoFilter !== 'all' && ADMIN_GEO_FILTER_KEYS.has(geoFilter)) q.set('geo', geoFilter);

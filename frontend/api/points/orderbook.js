@@ -2,13 +2,13 @@
  * GET /api/points/orderbook?marketId=<id>&outcomeIndex=<idx>&levels=<n>
  *
  * Hybrid points order book. User bids/asks come from reserved limit
- * orders; AMM depth stays as fallback liquidity so the book remains
- * executable while real resting orders are sparse.
+ * orders; Pronos maker rows are mocked from configured seed depth so we can
+ * preview order-book liquidity before wiring the full matching engine.
  */
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
-import { buildAmmDepth, AMM_DEPTH_LEVELS } from '../_lib/amm-depth.js';
+import { buildMockMakerDepth, AMM_DEPTH_LEVELS } from '../_lib/amm-depth.js';
 import { aggregateLimitOrderRows } from '../_lib/points-limit-orders.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { cachedJson, createApiTimer, setCacheHeaders } from '../_lib/api-performance.js';
@@ -60,11 +60,12 @@ export default async function handler(req, res) {
   });
 
   try {
-    const cacheKey = `points:orderbook:v2:${marketId}:${outcomeIndex}:${requestedLevels.join(',')}`;
+    const cacheKey = `points:orderbook:v3:${marketId}:${outcomeIndex}:${requestedLevels.join(',')}`;
     const { value: payload, hit } = await cachedJson(cacheKey, 1_000, async () => {
       await timer.time('schema', () => ensurePointsSchema(schemaSql));
       const rows = await timer.time('db_market', () => sql`
-        SELECT id, parent_id, leg_label, question, status, outcomes, reserves
+        SELECT id, parent_id, leg_label, question, status, outcomes, reserves,
+               seed_liquidity, seed_liquidities
         FROM points_markets
         WHERE id = ${marketId}
         LIMIT 1
@@ -78,6 +79,7 @@ export default async function handler(req, res) {
       const market = rows[0];
       const outcomes = parseJsonb(market.outcomes, ['Sí', 'No']);
       const reserves = parseJsonb(market.reserves, []).map(Number);
+      const seedLiquidities = parseJsonb(market.seed_liquidities, null);
       const outcomeLabel = market.leg_label || outcomes[outcomeIndex] || `Opción ${outcomeIndex + 1}`;
 
       if (market.status !== 'active') {
@@ -94,10 +96,12 @@ export default async function handler(req, res) {
         };
       }
 
-      const depth = buildAmmDepth({
+      const depth = buildMockMakerDepth({
         reserves,
         outcomeIndex,
         levels: requestedLevels,
+        seedLiquidity: Number(market.seed_liquidity || 0),
+        seedLiquidities,
       });
       const limitRows = await timer.time('db_limit_orders', () => sql`
         SELECT side,
@@ -111,19 +115,19 @@ export default async function handler(req, res) {
          GROUP BY side, limit_price
       `);
       const limitBook = aggregateLimitOrderRows(limitRows);
-      const ammAsks = depth.asks.map(row => ({ ...row, source: 'amm' }));
-      const ammBids = depth.bids.map(row => ({ ...row, source: 'amm' }));
-      const asks = [...limitBook.asks, ...ammAsks]
+      const makerAsks = depth.asks;
+      const makerBids = depth.bids;
+      const asks = [...limitBook.asks, ...makerAsks]
         .sort((a, b) => b.price - a.price)
         .slice(0, requestedLevels.length + limitBook.asks.length);
-      const bids = [...limitBook.bids, ...ammBids]
+      const bids = [...limitBook.bids, ...makerBids]
         .sort((a, b) => b.price - a.price)
         .slice(0, requestedLevels.length + limitBook.bids.length);
-      const bestAsk = [...limitBook.asks, ...ammAsks].reduce(
+      const bestAsk = [...limitBook.asks, ...makerAsks].reduce(
         (best, row) => (best == null || row.price < best ? row.price : best),
         null,
       );
-      const bestBid = [...limitBook.bids, ...ammBids].reduce(
+      const bestBid = [...limitBook.bids, ...makerBids].reduce(
         (best, row) => (best == null || row.price > best ? row.price : best),
         null,
       );
@@ -152,9 +156,12 @@ export default async function handler(req, res) {
         spread,
         asks,
         bids,
-        bookType: 'hybrid',
+        bookType: 'mock_orderbook',
+        mockMakerDepth: depth.perSideDepth,
         limitAskCount: limitBook.asks.reduce((sum, row) => sum + (Number(row.orderCount) || 0), 0),
         limitBidCount: limitBook.bids.reduce((sum, row) => sum + (Number(row.orderCount) || 0), 0),
+        makerAskCount: makerAsks.length,
+        makerBidCount: makerBids.length,
       };
     });
     res.setHeader('X-Pronos-Cache', hit ? 'hit' : 'miss');

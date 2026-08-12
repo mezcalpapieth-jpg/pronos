@@ -20,9 +20,10 @@ test('builds admin markets query with Mexico & Latam subfilters', () => {
     sportFilter: 'soccer',
     leagueFilter: 'liga-mx',
     cryptoTypeFilter: '5min',
+    featureFilter: 'tournament',
   });
 
-  assert.equal(q.toString(), 'status=all&category=mexico&geo=mexico&topic=weather');
+  assert.equal(q.toString(), 'status=all&category=mexico&feature=tournament&geo=mexico&topic=weather');
 });
 
 test('keeps world as a creation label but not a Mexico & Latam browse filter', () => {
@@ -46,8 +47,9 @@ test('builds sports and crypto admin subfilter queries only in their parent cate
       sportFilter: 'baseball',
       leagueFilter: 'mlb',
       cryptoTypeFilter: '5min',
+      featureFilter: 'featured',
     }).toString(),
-    'status=pending&category=deportes&sport=baseball&league=mlb',
+    'status=pending&category=deportes&feature=featured&sport=baseball&league=mlb',
   );
 
   assert.equal(
@@ -84,7 +86,8 @@ test('builds entertainment admin subfilter queries under the legacy musica key',
       topicFilter: 'cine',
       geoFilter: 'mexico',
       sportFilter: 'soccer',
+      featureFilter: 'tournament',
     }).toString(),
-    'status=all&category=musica&topic=cine',
+    'status=all&category=musica&feature=tournament&topic=cine',
   );
 });

@@ -76,12 +76,13 @@ const ARCHIVE_AFTER_MS = 24 * 60 * 60_000; // 24 h
 const DEFAULT_LOOKAHEAD_WINDOWS = 2;
 const DEFAULT_MISSED_PENDING_CATCHUP_LIMIT = 12;
 const DEFAULT_ACTIVE_CATCHUP_LIMIT = 12;
-export const CRYPTO_MINUTE_MARKET_INTERVALS = Object.freeze([5, 10, 15, 30, 60, 24 * 60]);
+export const CRYPTO_MINUTE_MARKET_INTERVALS = Object.freeze([5, 10, 15, 30, 60, 12 * 60, 24 * 60]);
 export const DEFAULT_CRYPTO_MINUTE_MARKET_INTERVAL = 5;
 export const CRYPTO_MINUTE_MARKET_INTERVAL_KEY = 'points_crypto_minute_market_interval';
 export const CRYPTO_MINUTE_MARKET_ENABLED_ASSETS_KEY = 'points_crypto_minute_market_enabled_assets';
 export const DEFAULT_CRYPTO_MINUTE_MARKET_ENABLED_ASSETS = Object.freeze(['btc', 'eth']);
-const CRYPTO_BOUNDARY_ANCHOR_MS = 6 * 60 * 60_000; // 00:00 CDMX == 06:00 UTC.
+const CRYPTO_MIDNIGHT_CDMX_ANCHOR_MS = 6 * 60 * 60_000; // 00:00 CDMX == 06:00 UTC.
+const CRYPTO_9AM_CDMX_ANCHOR_MS = 15 * 60 * 60_000; // 09:00 CDMX == 15:00 UTC.
 
 // Outcome labels and indices. Index 0 = SUBE (HIGHER), 1 = BAJA (LOWER).
 // Match the "parallel-shape" semantics already used elsewhere: outcome
@@ -208,16 +209,23 @@ export function formatDirectionFinalScore(threshold, closePrice) {
   return `$${Number(threshold)} -> $${Number(closePrice).toFixed(2)}`;
 }
 
+function cryptoBoundaryAnchorMs(intervalMinutes) {
+  return intervalMinutes === 12 * 60
+    ? CRYPTO_9AM_CDMX_ANCHOR_MS
+    : CRYPTO_MIDNIGHT_CDMX_ANCHOR_MS;
+}
+
 // Floor a Date to the most recent interval boundary. Minute/hour
-// windows align the same as UTC; 24h windows anchor to 00:00 CDMX so
-// the daily market opens/closes at a user-facing local midnight.
+// windows align the same as UTC; 12h windows anchor to 09:00/21:00
+// CDMX, while 24h windows keep the existing 00:00 CDMX open/close.
 export function floorToCryptoBoundary(d, intervalMinutes = DEFAULT_CRYPTO_MINUTE_MARKET_INTERVAL) {
   const interval = normalizeCryptoMinuteMarketInterval(intervalMinutes);
   const date = d instanceof Date ? d : new Date(d);
   const ms = date.getTime();
   if (!Number.isFinite(ms)) return new Date(NaN);
   const windowMs = interval * 60_000;
-  return new Date(Math.floor((ms - CRYPTO_BOUNDARY_ANCHOR_MS) / windowMs) * windowMs + CRYPTO_BOUNDARY_ANCHOR_MS);
+  const anchorMs = cryptoBoundaryAnchorMs(interval);
+  return new Date(Math.floor((ms - anchorMs) / windowMs) * windowMs + anchorMs);
 }
 
 // Backward-compatible helper used by older tests/imports.

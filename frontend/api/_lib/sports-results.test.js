@@ -227,6 +227,74 @@ test('readEspnAtpTournamentWinner exposes eliminated losers before the tournamen
   }
 });
 
+test('readEspnAtpTournamentWinner keeps remaining competitors to unfinished ATP matches', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes('/tennis/atp/scoreboard')) {
+      return jsonResponse({
+        events: [{
+          id: 'atp-2',
+          status: { type: { state: 'in', completed: false } },
+          groupings: [{
+            grouping: { slug: 'mens-singles', name: "Men's Singles" },
+            competitions: [{
+              id: 'round-2',
+              round: { id: '2', displayName: 'Round 2' },
+              status: { type: { state: 'post', completed: true, description: 'Final' } },
+              competitors: [
+                { id: '1', winner: true, athlete: { id: '1', displayName: 'Taylor Fritz' } },
+                { id: '2', winner: false, athlete: { id: '2', displayName: 'Flavio Cobolli' } },
+              ],
+            }, {
+              id: 'quarterfinal',
+              round: { id: '5', displayName: 'Quarterfinal' },
+              status: { type: { state: 'post', completed: true, description: 'Final' } },
+              competitors: [
+                { id: '3', winner: true, athlete: { id: '3', displayName: 'Ben Shelton' } },
+                { id: '1', winner: false, athlete: { id: '1', displayName: 'Taylor Fritz' } },
+              ],
+            }, {
+              id: 'semifinal-a',
+              round: { id: '6', displayName: 'Semifinal' },
+              status: { type: { state: 'pre', completed: false, description: 'Scheduled' } },
+              competitors: [
+                { id: '3', athlete: { id: '3', displayName: 'Ben Shelton' } },
+                { id: '4', athlete: { id: '4', displayName: 'Learner Tien' } },
+              ],
+            }, {
+              id: 'semifinal-b',
+              round: { id: '6', displayName: 'Semifinal' },
+              status: { type: { state: 'pre', completed: false, description: 'Scheduled' } },
+              competitors: [
+                { id: '5', athlete: { id: '5', displayName: 'Brandon Nakashima' } },
+                { id: '6', athlete: { id: '6', displayName: 'Rafael Jodar' } },
+              ],
+            }],
+          }],
+        }],
+      });
+    }
+    throw new Error(`unexpected url ${url}`);
+  };
+
+  try {
+    const result = await readEspnAtpTournamentWinner({ eventId: 'atp-2' });
+    assert.equal(result.completed, false);
+    assert.deepEqual(result.remainingCompetitors.map(row => row.label), [
+      'Ben Shelton',
+      'Learner Tien',
+      'Brandon Nakashima',
+      'Rafael Jodar',
+    ]);
+    assert.deepEqual(result.eliminatedCompetitors.map(row => row.label), [
+      'Flavio Cobolli',
+      'Taylor Fritz',
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('readEspnAtpMatchWinner resolves a completed match inside the tournament grouping', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {

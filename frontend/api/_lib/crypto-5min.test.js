@@ -55,10 +55,22 @@ test('crypto5MinWindowsForTick supports 24-hour windows anchored to CDMX midnigh
   assert.equal(windows.nextBoundary.toISOString(), '2026-08-08T06:00:00.000Z');
 });
 
+test('crypto5MinWindowsForTick supports 12-hour windows anchored to 9am CDMX', () => {
+  const morning = crypto5MinWindowsForTick('2026-08-07T18:13:42.000Z', 720);
+  assert.equal(morning.intervalMinutes, 720);
+  assert.equal(morning.boundary.toISOString(), '2026-08-07T15:00:00.000Z');
+  assert.equal(morning.nextBoundary.toISOString(), '2026-08-08T03:00:00.000Z');
+
+  const beforeNine = crypto5MinWindowsForTick('2026-08-07T14:59:00.000Z', 720);
+  assert.equal(beforeNine.boundary.toISOString(), '2026-08-07T03:00:00.000Z');
+  assert.equal(beforeNine.nextBoundary.toISOString(), '2026-08-07T15:00:00.000Z');
+});
+
 test('normalizeCryptoMinuteMarketInterval accepts only supported admin intervals', () => {
   assert.equal(normalizeCryptoMinuteMarketInterval(10), 10);
   assert.equal(normalizeCryptoMinuteMarketInterval({ intervalMinutes: 30 }), 30);
   assert.equal(normalizeCryptoMinuteMarketInterval({ minutes: 60 }), 60);
+  assert.equal(normalizeCryptoMinuteMarketInterval({ minutes: 720 }), 720);
   assert.equal(normalizeCryptoMinuteMarketInterval({ minutes: 1440 }), 1440);
   assert.equal(normalizeCryptoMinuteMarketInterval(7), 5);
   assert.equal(normalizeCryptoMinuteMarketInterval('bad'), 5);
@@ -148,6 +160,27 @@ test('ensureUpcomingCryptoMarkets can pre-create 24-hour ETH-only windows', asyn
     ['2026-08-09T06:00:00.000Z'],
   );
   assert.equal(report.windows[0].intervalMinutes, 1440);
+});
+
+test('ensureUpcomingCryptoMarkets can pre-create 12-hour windows from the next 9am CDMX boundary', async () => {
+  const sql = () => Promise.resolve([{ id: 1 }]);
+
+  const report = await ensureUpcomingCryptoMarkets(sql, {
+    now: '2026-08-07T12:03:42.000Z',
+    intervalMinutes: 720,
+    lookaheadWindows: 1,
+  });
+
+  assert.equal(report.precreated, 2);
+  assert.deepEqual(
+    report.windows.map((window) => window.sourceEventId),
+    ['btc:2026-08-07T15:00:00.000Z:720m', 'eth:2026-08-07T15:00:00.000Z:720m'],
+  );
+  assert.deepEqual(
+    report.windows.map((window) => window.windowEnd),
+    ['2026-08-08T03:00:00.000Z', '2026-08-08T03:00:00.000Z'],
+  );
+  assert.equal(report.windows.every((window) => window.intervalMinutes === 720), true);
 });
 
 test('ensureUpcomingCryptoMarkets dry run reports windows without writes', async () => {

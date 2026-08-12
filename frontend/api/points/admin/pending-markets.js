@@ -115,15 +115,22 @@ function filteredPendingRows(rows, query = {}) {
     topic: query.topic,
     cryptoType: query.crypto_type ?? query.cryptoType,
   };
-  if (!Object.values(filters).some(Boolean)) return rows;
-  return rows.filter(row => matchesMarketTaxonomy({
-    ...row,
-    source_data: parseJsonb(row.source_data, {}),
-    resolver_config: parseJsonb(row.resolver_config, {}),
-    category_tags: parseJsonb(row.category_tags, []),
-    geo_tags: parseJsonb(row.geo_tags, []),
-    topic_tags: parseJsonb(row.topic_tags, []),
-  }, filters));
+  const feature = ['featured', 'tournament'].includes(String(query.feature || '').trim())
+    ? String(query.feature).trim()
+    : 'all';
+  if (!Object.values(filters).some(Boolean) && feature === 'all') return rows;
+  return rows.filter(row => {
+    if (feature === 'featured' && row.featured !== true) return false;
+    if (feature === 'tournament' && row.tournament_featured !== true) return false;
+    return matchesMarketTaxonomy({
+      ...row,
+      source_data: parseJsonb(row.source_data, {}),
+      resolver_config: parseJsonb(row.resolver_config, {}),
+      category_tags: parseJsonb(row.category_tags, []),
+      geo_tags: parseJsonb(row.geo_tags, []),
+      topic_tags: parseJsonb(row.topic_tags, []),
+    }, filters);
+  });
 }
 
 function probabilitiesFromParentSeedValues(seedValues) {

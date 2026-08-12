@@ -15,6 +15,7 @@ import { requireSession } from '../_lib/session.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
+const DISPLAYABLE_SHARE_EPSILON = 0.005;
 
 function parseJsonb(value, fallback) {
   if (Array.isArray(value)) return value;
@@ -68,7 +69,7 @@ export default async function handler(req, res) {
       JOIN points_markets m ON m.id = p.market_id
       LEFT JOIN points_markets pm ON pm.id = m.parent_id
       WHERE p.username = ${username}
-        AND p.shares > 0
+        AND p.shares >= ${DISPLAYABLE_SHARE_EPSILON}
         AND p.dismissed_at IS NULL
         AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
       ORDER BY

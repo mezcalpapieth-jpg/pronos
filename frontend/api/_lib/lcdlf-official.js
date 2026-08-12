@@ -10,6 +10,9 @@ export const LCDLF_DEFAULT_SEASON_LABEL = 'Temporada 4';
 
 const DEFAULT_CLOSE_HOUR = 20;
 const DEFAULT_CLOSE_MINUTE = 0;
+const DEFAULT_NOMINATION_CLOSE_WEEKDAY = 3; // Wednesday in Mexico City.
+const DEFAULT_NOMINATION_CLOSE_HOUR = 23;
+const DEFAULT_NOMINATION_CLOSE_MINUTE = 59;
 
 const DEFAULT_RESIDENTS = [
   'Aldo Rendón',
@@ -97,6 +100,7 @@ function lcdlfStatusFromKey(key, rawFallback = '') {
   const normalized = String(key || '').trim().toLowerCase();
   if (normalized === 'eliminado') return { key: 'eliminado', label: 'Eliminado/a', raw: rawFallback || 'ELIMINADO' };
   if (normalized === 'nominado') return { key: 'nominado', label: 'Nominado/a', raw: rawFallback || 'NOMINADO' };
+  if (normalized === 'lider_semana') return { key: 'lider_semana', label: 'Líder de la semana', raw: rawFallback || 'LIDER DE LA SEMANA' };
   if (normalized === 'en_casa') return { key: 'en_casa', label: 'En casa', raw: rawFallback || 'EN CASA' };
   return null;
 }
@@ -177,8 +181,12 @@ export function residentUrl(resident, { baseUrl = process.env.LCDLF_BASE_URL || 
 
 export function normalizeLcdlfStatus(value) {
   const text = stripAccents(stripHtml(value)).toUpperCase();
+  if (/\bPODRIA\s+ESTAR\s+ELIMINAD[OA]\b/.test(text)) {
+    return { key: 'nominado', label: 'Podría estar eliminado/a', raw: 'PODRIA ESTAR ELIMINADO' };
+  }
   if (/\bELIMINAD[OA]\b/.test(text)) return { key: 'eliminado', label: 'Eliminado/a', raw: 'ELIMINADO' };
   if (/\bNOMINAD[OA]\b/.test(text)) return { key: 'nominado', label: 'Nominado/a', raw: 'NOMINADO' };
+  if (/\bLIDER\s+DE\s+LA\s+SEMANA\b/.test(text)) return { key: 'lider_semana', label: 'Líder de la semana', raw: 'LIDER DE LA SEMANA' };
   if (/\bEN\s+CASA\b/.test(text)) return { key: 'en_casa', label: 'En casa', raw: 'EN CASA' };
   return null;
 }
@@ -225,7 +233,7 @@ export function parseLcdlfResidentStatus(html, resident = null) {
 
 function cleanResidentCardName(label, slug) {
   const cleaned = stripHtml(label)
-    .replace(/\b(?:ELIMINAD[OA]|NOMINAD[OA]|EN\s+CASA)\b/gi, ' ')
+    .replace(/\b(?:PODR[IÍ]A\s+ESTAR\s+ELIMINAD[OA]|ELIMINAD[OA]|NOMINAD[OA]|L[IÍ]DER\s+DE\s+LA\s+SEMANA|EN\s+CASA)\b/gi, ' ')
     .replace(/\bVer\s+m[aá]s\b/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -412,7 +420,11 @@ export async function readLcdlfOfficialSnapshot({
   const parsedCount = rows.filter(row => row.statusKey).length;
   const nominated = rows.filter(row => row.statusKey === 'nominado');
   const eliminated = rows.filter(row => row.statusKey === 'eliminado');
-  const active = rows.filter(row => row.statusKey === 'en_casa' || row.statusKey === 'nominado');
+  const active = rows.filter(row => (
+    row.statusKey !== 'eliminado'
+    && (row.ok || row.statusKey)
+    && (!row.statusKey || ['en_casa', 'nominado', 'lider_semana'].includes(row.statusKey))
+  ));
   const usable = parsedCount >= 1;
 
   return {
@@ -477,6 +489,30 @@ export function nextLcdlfSundayClose(now = new Date(), {
   const closeMinute = Number.isFinite(minute) ? minute : DEFAULT_CLOSE_MINUTE;
   const local = mexicoDateTimeParts(now);
   let daysAhead = (7 - local.weekday) % 7;
+  const alreadyPastToday = daysAhead === 0
+    && (local.hour > closeHour || (local.hour === closeHour && local.minute >= closeMinute));
+  if (alreadyPastToday) daysAhead = 7;
+  const target = addDaysLocal(local, daysAhead);
+  return dateAtMexicoCityTime({
+    ...target,
+    hour: closeHour,
+    minute: closeMinute,
+    second: 0,
+  });
+}
+
+export function nextLcdlfNominationClose(now = new Date(), {
+  weekday = Number(process.env.LCDLF_NOMINATION_CLOSE_WEEKDAY ?? DEFAULT_NOMINATION_CLOSE_WEEKDAY),
+  hour = Number(process.env.LCDLF_NOMINATION_CLOSE_HOUR ?? DEFAULT_NOMINATION_CLOSE_HOUR),
+  minute = Number(process.env.LCDLF_NOMINATION_CLOSE_MINUTE ?? DEFAULT_NOMINATION_CLOSE_MINUTE),
+} = {}) {
+  const closeWeekday = Number.isFinite(weekday) && weekday >= 0 && weekday <= 6
+    ? weekday
+    : DEFAULT_NOMINATION_CLOSE_WEEKDAY;
+  const closeHour = Number.isFinite(hour) ? hour : DEFAULT_NOMINATION_CLOSE_HOUR;
+  const closeMinute = Number.isFinite(minute) ? minute : DEFAULT_NOMINATION_CLOSE_MINUTE;
+  const local = mexicoDateTimeParts(now);
+  let daysAhead = (closeWeekday - local.weekday + 7) % 7;
   const alreadyPastToday = daysAhead === 0
     && (local.hour > closeHour || (local.hour === closeHour && local.minute >= closeMinute));
   if (alreadyPastToday) daysAhead = 7;
@@ -562,6 +598,90 @@ export function buildLcdlfWeeklyMarketSpec({
   };
 }
 
+export function buildLcdlfNominationMarketSpecs({
+  snapshot,
+  now = new Date(),
+  seedLiquidity = 1000,
+  seasonLabel = process.env.LCDLF_SEASON_LABEL || LCDLF_DEFAULT_SEASON_LABEL,
+} = {}) {
+  if (!snapshot?.ok || !Array.isArray(snapshot.active) || snapshot.active.length < 2) return [];
+  if (Array.isArray(snapshot.nominated) && snapshot.nominated.length >= 2) return [];
+
+  const closeHour = Number(process.env.LCDLF_NOMINATION_CLOSE_HOUR ?? DEFAULT_NOMINATION_CLOSE_HOUR);
+  const closeMinute = Number(process.env.LCDLF_NOMINATION_CLOSE_MINUTE ?? DEFAULT_NOMINATION_CLOSE_MINUTE);
+  const closeWeekday = Number(process.env.LCDLF_NOMINATION_CLOSE_WEEKDAY ?? DEFAULT_NOMINATION_CLOSE_WEEKDAY);
+  const close = nextLcdlfNominationClose(now, {
+    weekday: closeWeekday,
+    hour: closeHour,
+    minute: closeMinute,
+  });
+  const weekKey = formatMexicoDateYmd(close);
+  const baseEvidence = [
+    { title: 'La Casa de los Famosos México', url: snapshot.sourceUrl },
+  ];
+
+  return snapshot.active
+    .filter(row => row?.name && row?.slug && row.statusKey !== 'eliminado')
+    .map(row => {
+      const sourceEventId = `lcdlf-mx-nomination:${weekKey}:${row.slug}`;
+      const evidence = [
+        ...baseEvidence,
+        { title: `${row.name} · ${row.statusLabel || 'En casa'}`, url: row.url },
+      ].filter(item => item.url);
+      return {
+        source: LCDLF_SOURCE,
+        source_event_id: sourceEventId,
+        question: `¿${row.name} quedará nominado/a en La Casa de los Famosos México esta semana?`,
+        category: 'musica',
+        icon: null,
+        outcomes: ['Sí', 'No'],
+        seed_liquidity: seedLiquidity,
+        start_time: now.toISOString(),
+        end_time: close.toISOString(),
+        amm_mode: 'unified',
+        resolver_type: 'api_lcdlf',
+        resolver_config: {
+          source: LCDLF_SOURCE,
+          sourceEventId,
+          shape: 'binary-status',
+          residentName: row.name,
+          residentSlug: row.slug,
+          statusKey: 'nominado',
+          yesOutcome: 0,
+          noOutcome: 1,
+          closeOnStatus: true,
+          nominationMinStatusCount: 2,
+          criteria: `Se resuelve Sí si el sitio oficial de La Casa de los Famosos México marca a ${row.name} como Nominado/a o con la frase "podría estar eliminado/a" esta semana. Si llega la hora límite sin esa etiqueta oficial, se resuelve No con revisión de la misma fuente.`,
+          evidence,
+          sourceUrls: evidence.map(item => item.url).filter(Boolean),
+          evidenceUrl: row.url || snapshot.sourceUrl,
+          timezone: MEXICO_CITY_TZ,
+          staleReadPolicy: 'Usar lectura fresca del sitio oficial; si el estado no se puede leer, diferir o enviar a revisión manual.',
+        },
+        source_data: {
+          kind: 'lcdlf_nomination',
+          showLabel: 'La Casa de los Famosos México',
+          seasonLabel,
+          weekKey,
+          residentName: row.name,
+          residentSlug: row.slug,
+          closeLocalTime: `miércoles ${String(closeHour).padStart(2, '0')}:${String(closeMinute).padStart(2, '0')} ${MEXICO_CITY_TZ}`,
+          snapshot: {
+            sourceUrl: snapshot.sourceUrl,
+            observedAt: snapshot.observedAt,
+            parsedCount: snapshot.parsedCount,
+            total: snapshot.total,
+            rows: compactRows(snapshot.rows),
+          },
+          categorization: {
+            topicTags: ['tv', 'farandula'],
+          },
+        },
+        topic_tags: ['tv', 'farandula'],
+      };
+    });
+}
+
 function outcomeIndexForName(outcomes = [], name) {
   const target = normalizeLcdlfName(name);
   if (!target) return -1;
@@ -571,7 +691,7 @@ function outcomeIndexForName(outcomes = [], name) {
 export function isLcdlfMarket({ cfg, row, sourceData } = {}) {
   const source = String(row?.source || cfg?.source || sourceData?.source || '').trim().toLowerCase();
   const kind = String(sourceData?.kind || '').trim().toLowerCase();
-  return source === LCDLF_SOURCE || kind === 'lcdlf_week';
+  return source === LCDLF_SOURCE || kind === 'lcdlf_week' || kind === 'lcdlf_nomination';
 }
 
 export async function buildLcdlfResolutionReview({

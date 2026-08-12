@@ -27,3 +27,15 @@ test('X follow social task stays manual while OAuth verification is paused', () 
   assert.match(source, /X, Instagram, TikTok y campañas temporales siguen en revisión manual/);
   assert.doesNotMatch(source, /X se verifica automáticamente con tu cuenta conectada/);
 });
+
+test('social tasks card has TikTok, Instagram, and X filter tabs', () => {
+  assert.match(source, /const SOCIAL_TASK_FILTERS = \[/);
+  assert.match(source, /key:\s*'tiktok'[\s\S]*label:\s*'TikTok'/);
+  assert.match(source, /key:\s*'instagram'[\s\S]*label:\s*'Instagram'/);
+  assert.match(source, /key:\s*'x'[\s\S]*label:\s*'X'/);
+  assert.match(source, /normalizeSocialTaskNetwork/);
+  assert.match(source, /const \[networkFilter,\s*setNetworkFilter\] = useState\('tiktok'\)/);
+  assert.match(source, /role="tablist"/);
+  assert.match(source, /aria-label="Filtrar tareas sociales"/);
+  assert.match(source, /\.filter\(t => normalizeSocialTaskNetwork\(t\) === networkFilter\)/);
+});
