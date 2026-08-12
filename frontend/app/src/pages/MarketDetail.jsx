@@ -192,6 +192,20 @@ function outcomeInitials(label) {
   return (words.map(word => word[0]).join('') || '?').toUpperCase();
 }
 
+// ── Chart watermark (Pronos brand mark, corner-anchored like Polymarket's) ──
+function ChartWatermark() {
+  return (
+    <div style={{position:'absolute',top:0,right:0,display:'flex',alignItems:'center',gap:6,opacity:0.55,pointerEvents:'none',userSelect:'none',zIndex:1}}>
+      <svg width="18" height="18" viewBox="0 0 32 32">
+        <rect width="32" height="32" rx="7" fill="var(--text-primary)"/>
+        <text x="5" y="25" fontFamily="'Bebas Neue',sans-serif" fontSize="26" fontWeight="900" fill="var(--surface1)" letterSpacing="-1">P</text>
+        <circle cx="25" cy="9" r="4" fill="var(--green)"/>
+      </svg>
+      <span style={{fontFamily:'var(--font-display)',fontSize:14,letterSpacing:'0.06em',color:'var(--text-primary)'}}>PRONOS</span>
+    </div>
+  );
+}
+
 // ── Ring chart for binary markets ───────────────────────────────────────────
 function ProbabilityRing({ pct, label, logo, color = 'var(--yes)', resolved, winner }) {
   const radius = 54;
@@ -680,7 +694,9 @@ export default function MarketDetail({ onOpenLogin }) {
               padding: '10px 4px 4px',
               borderTop: displayOutcomes.length === 2 ? '1px solid var(--border)' : 'none',
               marginTop: displayOutcomes.length === 2 ? 8 : 0,
+              position: 'relative',
             }}>
+              <ChartWatermark />
               <div style={{
                 fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em',
                 color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 10,
