@@ -11,6 +11,7 @@ import {
   estimateMakerReward,
   makerUsageFromRows,
   previewPronosMakerAsksForBuy,
+  pronosMakerDepthForMarket,
   previewRestingAsksForBuy,
   previewRestingBidsForSell,
 } from '../_lib/points-limit-orders.js';
@@ -94,7 +95,8 @@ test('tournament minimum applies only before a market is covered', () => {
   assert.match(helperSource, /await assertTournamentMinimumEntry\(client, \{\s*market,\s*username,\s*amount: qty,\s*\}\)/s);
   assert.doesNotMatch(helperSource, /qty < TOURNAMENT_MIN_ENTRY_MXNP/);
   assert.match(buySource, /import \{ assertTournamentMinimumEntry \} from '\.\.\/_lib\/points-tournament-entry\.js'/);
-  assert.match(buySource, /seed_liquidity, seed_liquidities, amm_mode, parent_id/);
+  assert.match(buySource, /m\.seed_liquidity, m\.seed_liquidities, m\.amm_mode, m\.parent_id/);
+  assert.match(buySource, /COALESCE\(m\.tournament_featured, p\.tournament_featured, false\) AS tournament_featured/);
   assert.match(buySource, /await assertTournamentMinimumEntry\(client, \{\s*market: m,\s*username,\s*amount: amt,\s*\}\)/s);
   assert.doesNotMatch(buySource, /amt < TOURNAMENT_MIN_ENTRY_MXNP/);
 });
@@ -207,6 +209,28 @@ test('Pronos maker previews use seeded depth after real resting orders', () => {
   assert.equal(combined.fills[1].source, 'maker');
 });
 
+test('Pronos maker depth uses lightweight targets instead of legacy seed walls', () => {
+  const market = {
+    reserves: JSON.stringify([500, 500]),
+    seed_liquidity: 7500,
+    seed_liquidities: JSON.stringify([7500, 7500]),
+  };
+  const normalDepth = pronosMakerDepthForMarket(market, {
+    outcomeIndex: 0,
+    levels: [10, 25, 50, 100],
+  });
+  const trophyDepth = pronosMakerDepthForMarket({
+    ...market,
+    tournament_featured: true,
+  }, {
+    outcomeIndex: 0,
+    levels: [10, 25, 50, 100],
+  });
+
+  assert.equal(normalDepth.perSideDepth, 500);
+  assert.equal(trophyDepth.perSideDepth, 750);
+});
+
 test('Pronos maker depth depletes from treasury trade usage', () => {
   const market = {
     reserves: JSON.stringify([500, 500]),
@@ -218,7 +242,7 @@ test('Pronos maker depth depletes from treasury trade usage', () => {
     collateral: 200,
     levels: [10, 25, 50, 100],
   });
-  const usage = makerUsageFromRows([{ side: 'sell', collateral: 2000 }]);
+  const usage = makerUsageFromRows([{ side: 'sell', collateral: 200 }]);
   const after = previewPronosMakerAsksForBuy(market, {
     outcomeIndex: 0,
     collateral: 200,
@@ -240,7 +264,8 @@ test('orderbook exposes executable user rows with depleted Pronos maker depth', 
   assert.match(orderbookSource, /pronosMakerDepthForMarket/);
   assert.match(orderbookSource, /makerUsageFromRows/);
   assert.match(orderbookSource, /PRONOS_TREASURY_USERNAME/);
-  assert.match(orderbookSource, /seed_liquidity,\s*seed_liquidities/);
+  assert.match(orderbookSource, /m\.seed_liquidity,\s*m\.seed_liquidities/);
+  assert.match(orderbookSource, /LEFT JOIN points_markets p ON p\.id = m\.parent_id/);
   assert.match(orderbookSource, /bookType: 'mock_orderbook'/);
   assert.doesNotMatch(orderbookSource, /source: 'amm'/);
 });

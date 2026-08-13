@@ -79,11 +79,13 @@ export default async function handler(req, res) {
   try {
     await ensurePointsSchema(schemaSql);
     const rows = await sql`
-      SELECT id, question, status, reserves, outcomes, start_time, end_time,
-             created_at, resolver_type, resolver_config, sport, league,
-             seed_liquidity, seed_liquidities
-      FROM points_markets
-      WHERE id = ${mid}
+      SELECT m.id, m.question, m.status, m.reserves, m.outcomes, m.start_time, m.end_time,
+             m.created_at, m.resolver_type, m.resolver_config, m.sport, m.league,
+             m.seed_liquidity, m.seed_liquidities,
+             COALESCE(m.tournament_featured, p.tournament_featured, false) AS tournament_featured
+      FROM points_markets m
+      LEFT JOIN points_markets p ON p.id = m.parent_id
+      WHERE m.id = ${mid}
       LIMIT 1
     `;
     if (rows.length === 0) return res.status(404).json({ error: 'market_not_found' });

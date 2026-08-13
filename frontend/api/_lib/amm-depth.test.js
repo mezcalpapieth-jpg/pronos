@@ -54,16 +54,16 @@ test('buildMockMakerDepth creates seeded order-book rows without AMM depth', () 
   assert.ok(Math.abs(depth.bids.reduce((sum, row) => sum + row.total, 0) - 7500) < 0.01);
 });
 
-test('buildMockMakerDepth defaults to thinner tournament maker depth', () => {
+test('buildMockMakerDepth defaults to lightweight maker depth', () => {
   const depth = buildMockMakerDepth({
     reserves: [500, 500],
     outcomeIndex: 0,
     levels: [10, 25, 50, 100],
-    seedLiquidity: 1000,
+    seedLiquidity: 250,
   });
 
   assert.equal(depth.currentPrice, 0.5);
-  assert.equal(depth.perSideDepth, 2500);
-  assert.ok(Math.abs(depth.asks.reduce((sum, row) => sum + row.total, 0) - 2500) < 0.01);
-  assert.ok(Math.abs(depth.bids.reduce((sum, row) => sum + row.total, 0) - 2500) < 0.01);
+  assert.equal(depth.perSideDepth, 500);
+  assert.ok(Math.abs(depth.asks.reduce((sum, row) => sum + row.total, 0) - 500) < 0.01);
+  assert.ok(Math.abs(depth.bids.reduce((sum, row) => sum + row.total, 0) - 500) < 0.01);
 });

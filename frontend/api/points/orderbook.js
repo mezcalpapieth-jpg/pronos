@@ -2,8 +2,8 @@
  * GET /api/points/orderbook?marketId=<id>&outcomeIndex=<idx>&levels=<n>
  *
  * Hybrid points order book. User bids/asks come from reserved limit
- * orders; Pronos maker rows come from configured seed depth and are
- * depleted by treasury fills before the AMM sees any leftover flow.
+ * orders; Pronos maker rows add light treasury depth and are depleted
+ * by treasury fills before the AMM sees any leftover flow.
  */
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
@@ -69,10 +69,12 @@ export default async function handler(req, res) {
     const { value: payload, hit } = await cachedJson(cacheKey, 1_000, async () => {
       await timer.time('schema', () => ensurePointsSchema(schemaSql));
       const rows = await timer.time('db_market', () => sql`
-        SELECT id, parent_id, leg_label, question, status, outcomes, reserves,
-               seed_liquidity, seed_liquidities
-        FROM points_markets
-        WHERE id = ${marketId}
+        SELECT m.id, m.parent_id, m.leg_label, m.question, m.status, m.outcomes, m.reserves,
+               m.seed_liquidity, m.seed_liquidities,
+               COALESCE(m.tournament_featured, p.tournament_featured, false) AS tournament_featured
+        FROM points_markets m
+        LEFT JOIN points_markets p ON p.id = m.parent_id
+        WHERE m.id = ${marketId}
         LIMIT 1
       `);
       if (rows.length === 0) {

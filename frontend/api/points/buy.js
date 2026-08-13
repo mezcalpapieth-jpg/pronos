@@ -132,12 +132,14 @@ export default async function handler(req, res) {
       // Lock the market row first, then the position row — consistent lock
       // order across buy/sell prevents deadlocks.
       const marketResult = await client.query(
-        `SELECT id, question, status, reserves, outcomes, start_time, end_time,
-                created_at, resolver_type, resolver_config, sport, league,
-                seed_liquidity, seed_liquidities, amm_mode, parent_id
-         FROM points_markets
-         WHERE id = $1
-         FOR UPDATE`,
+        `SELECT m.id, m.question, m.status, m.reserves, m.outcomes, m.start_time, m.end_time,
+                m.created_at, m.resolver_type, m.resolver_config, m.sport, m.league,
+                m.seed_liquidity, m.seed_liquidities, m.amm_mode, m.parent_id,
+                COALESCE(m.tournament_featured, p.tournament_featured, false) AS tournament_featured
+         FROM points_markets m
+         LEFT JOIN points_markets p ON p.id = m.parent_id
+         WHERE m.id = $1
+         FOR UPDATE OF m`,
         [mid],
       );
       if (marketResult.rows.length === 0) {

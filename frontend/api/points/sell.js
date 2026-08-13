@@ -77,10 +77,13 @@ export default async function handler(req, res) {
 
     const result = await withTransaction(async (client) => {
       const marketResult = await client.query(
-        `SELECT id, status, reserves, end_time, resolver_config, seed_liquidity, seed_liquidities
-         FROM points_markets
-         WHERE id = $1
-         FOR UPDATE`,
+        `SELECT m.id, m.status, m.reserves, m.end_time, m.resolver_config,
+                m.seed_liquidity, m.seed_liquidities,
+                COALESCE(m.tournament_featured, p.tournament_featured, false) AS tournament_featured
+         FROM points_markets m
+         LEFT JOIN points_markets p ON p.id = m.parent_id
+         WHERE m.id = $1
+         FOR UPDATE OF m`,
         [mid],
       );
       if (marketResult.rows.length === 0) {

@@ -31,6 +31,8 @@ export const MAKER_REWARD_MAX_DAILY_PER_USER = configNumber('POINTS_MAKER_REWARD
 export const MAKER_REWARD_MAX_DISTANCE = configNumber('POINTS_MAKER_REWARD_MAX_DISTANCE', 0.10);
 export const MAKER_REWARD_FULL_DISTANCE = configNumber('POINTS_MAKER_REWARD_FULL_DISTANCE', 0.03);
 export const MAKER_REWARD_MIN_SECONDS = configNumber('POINTS_MAKER_REWARD_MIN_SECONDS', 300);
+export const PRONOS_MAKER_DEPTH_PER_SIDE = configNumber('POINTS_MAKER_DEPTH_PER_SIDE', 500);
+export const PRONOS_TROPHY_MAKER_DEPTH_PER_SIDE = configNumber('POINTS_TROPHY_MAKER_DEPTH_PER_SIDE', 750);
 
 export function parseJsonb(value, fallback) {
   if (Array.isArray(value)) return value;
@@ -626,19 +628,25 @@ export async function readPronosMakerUsage(client, { marketId, outcomeIndex } = 
   return makerUsageFromRows(result.rows);
 }
 
+export function pronosMakerDepthTarget(market = {}) {
+  const isTrophy = market.tournament_featured === true || market.tournamentFeatured === true;
+  return isTrophy ? PRONOS_TROPHY_MAKER_DEPTH_PER_SIDE : PRONOS_MAKER_DEPTH_PER_SIDE;
+}
+
 export function pronosMakerDepthForMarket(market, {
   outcomeIndex = 0,
   levels = AMM_DEPTH_LEVELS,
   usage = {},
 } = {}) {
   const reserves = reservesForMarket(market, Number(outcomeIndex));
-  const seedLiquidities = parseJsonb(market?.seed_liquidities, null);
+  const makerDepth = pronosMakerDepthTarget(market);
   const depth = buildMockMakerDepth({
     reserves,
     outcomeIndex: Number(outcomeIndex),
     levels,
-    seedLiquidity: Number(market?.seed_liquidity || 0),
-    seedLiquidities,
+    seedLiquidity: makerDepth,
+    seedLiquidities: Array.from({ length: reserves.length }, () => makerDepth),
+    minimumDepth: makerDepth,
   });
 
   const asks = subtractCollateralFromDepth(
