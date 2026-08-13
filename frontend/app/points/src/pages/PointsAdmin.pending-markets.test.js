@@ -241,10 +241,17 @@ test('Points admin social task queue filters review items by network', () => {
   assert.match(source, /id:\s*'instagram'[\s\S]*label:\s*'Instagram'/);
   assert.match(source, /id:\s*'x'[\s\S]*label:\s*'X'/);
   assert.match(source, /function normalizeSocialTaskPlatform\(task\)/);
+  assert.match(source, /task\?\.task_key \|\| task\?\.taskKey \|\| task\?\.key/);
+  assert.match(source, /key\.startsWith\('tiktok_'\)/);
+  assert.match(source, /key\.startsWith\('instagram_'\)/);
+  assert.match(source, /key\.startsWith\('twitter_'\)/);
+  assert.match(source, /key\.startsWith\('x_'\)/);
+  assert.match(source, /function socialTaskPlatformLabel\(task\)/);
   assert.match(socialQueueSource, /const \[networkFilter,\s*setNetworkFilter\] = useState\('all'\)/);
   assert.match(socialQueueSource, /aria-label="Filtrar tareas sociales por red"/);
   assert.match(socialQueueSource, /normalizeSocialTaskPlatform\(task\) === filter\.id/);
   assert.match(socialQueueSource, /visibleTasks\.map\(t =>/);
+  assert.match(socialQueueSource, /socialTaskPlatformLabel\(t\)/);
 });
 
 test('Points admin social task tabs show review history details', () => {

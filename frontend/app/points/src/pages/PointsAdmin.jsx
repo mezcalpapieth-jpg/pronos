@@ -625,7 +625,22 @@ const SOCIAL_TASK_NETWORK_FILTERS = [
 
 function normalizeSocialTaskPlatform(task) {
   const platform = String(task?.platform || task?.network || '').trim().toLowerCase();
-  return platform === 'twitter' ? 'x' : platform;
+  if (platform === 'twitter') return 'x';
+  if (platform) return platform;
+
+  const key = String(task?.task_key || task?.taskKey || task?.key || '').trim().toLowerCase();
+  if (key.startsWith('tiktok_') || key.includes('tiktok_follow')) return 'tiktok';
+  if (key.startsWith('instagram_') || key.includes('instagram_follow')) return 'instagram';
+  if (key.startsWith('twitter_') || key.startsWith('x_') || key.includes('twitter_follow')) return 'x';
+  return '';
+}
+
+function socialTaskPlatformLabel(task) {
+  const platform = normalizeSocialTaskPlatform(task);
+  if (platform === 'tiktok') return 'TIKTOK';
+  if (platform === 'instagram') return 'INSTAGRAM';
+  if (platform === 'x') return 'X';
+  return 'SOCIAL';
 }
 
 function SocialTasksQueue({ onQueueChange }) {
@@ -988,7 +1003,7 @@ function SocialTasksQueue({ onQueueChange }) {
           }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>
-                #{t.review_id ? `rev-${t.review_id}` : t.id} · @{t.username} · {t.task_label || t.task_key} · {t.platform ? String(t.platform).toUpperCase() : 'SOCIAL'} · {statusLabel} · +{t.reward} MXNP
+                #{t.review_id ? `rev-${t.review_id}` : t.id} · @{t.username} · {t.task_label || t.task_key} · {socialTaskPlatformLabel(t)} · {statusLabel} · +{t.reward} MXNP
               </div>
               <div style={{
                 display: 'flex',
