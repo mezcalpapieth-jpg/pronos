@@ -26,6 +26,7 @@ const makerRewardsSource = await readFile(new URL('./maker-rewards.js', import.m
 const makerRewardsCronSource = await readFile(new URL('../cron/points-maker-rewards.js', import.meta.url), 'utf8');
 const buySource = await readFile(new URL('./buy.js', import.meta.url), 'utf8');
 const quoteBuySource = await readFile(new URL('./quote-buy.js', import.meta.url), 'utf8');
+const quoteSellSource = await readFile(new URL('./quote-sell.js', import.meta.url), 'utf8');
 const sellSource = await readFile(new URL('./sell.js', import.meta.url), 'utf8');
 const resolveSource = await readFile(new URL('./admin/resolve-market.js', import.meta.url), 'utf8');
 const cancelMarketSource = await readFile(new URL('./admin/cancel-market.js', import.meta.url), 'utf8');
@@ -159,9 +160,27 @@ test('orderbook taker previews consume real resting orders before AMM fallback',
 });
 
 test('buy quotes display orderbook-only execution price instead of stale AMM price', () => {
+  assert.match(quoteBuySource, /binaryPricesWithBookTrade/);
+  assert.match(quoteBuySource, /displayTradeRows/);
+  assert.match(quoteBuySource, /reserves_before = reserves_after/);
+  assert.match(quoteBuySource, /const priceBefore = displayPricesBefore\[oi\] \|\| pricesBefore\[oi\] \|\| 0/);
   assert.match(quoteBuySource, /const executionPrice = avgPrice > 0 \? avgPrice : null/);
-  assert.match(quoteBuySource, /const priceAfter = q\?\.pricesAfter\?\.\[oi\] \?\? executionPrice \?\? priceBefore/);
+  assert.match(quoteBuySource, /const lastBookFillPrice = \[\.\.\.\(orderbook\.fills \|\| \[\]\)\]/);
+  assert.match(quoteBuySource, /const priceAfter = q\?\.pricesAfter\?\.\[oi\] \?\? lastBookFillPrice \?\? executionPrice \?\? priceBefore/);
   assert.match(quoteBuySource, /priceImpactPts: \(priceAfter - priceBefore\) \* 100/);
+});
+
+test('sell quotes and orderbook current price only trust latest book-only fills', () => {
+  for (const source of [quoteSellSource, orderbookSource]) {
+    assert.match(source, /reserves_before IS NOT NULL AND reserves_after IS NOT NULL AND reserves_before = reserves_after/);
+    assert.match(source, /is_book_trade/);
+  }
+  assert.match(quoteSellSource, /binaryPricesWithBookTrade/);
+  assert.match(quoteSellSource, /const priceBefore = displayPricesBefore\[oi\] \|\| pricesBefore\[oi\] \|\| 0/);
+  assert.match(quoteSellSource, /const lastBookFillPrice = \[\.\.\.\(orderbook\.fills \|\| \[\]\)\]/);
+  assert.match(quoteSellSource, /const priceAfter = q\?\.priceAfter \?\? lastBookFillPrice \?\? executionPrice \?\? priceBefore/);
+  assert.match(orderbookSource, /const lastBookPrice = lastRows\[0\]\?\.is_book_trade/);
+  assert.match(orderbookSource, /const currentPrice = Number\.isFinite\(lastBookPrice\) \? lastBookPrice : depth\.currentPrice/);
 });
 
 test('Pronos maker previews use seeded depth after real resting orders', () => {

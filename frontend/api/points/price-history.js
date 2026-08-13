@@ -29,6 +29,7 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
+import { PRONOS_TREASURY_USERNAME } from '../_lib/points-limit-orders.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -122,6 +123,25 @@ export default async function handler(req, res) {
         snapshotted_at ASC
     `;
 
+    // Order-book fills do not alter reserves, so they do not create AMM
+    // snapshots. Add them back as real price points for binary markets.
+    const bookRows = outcomeIdx <= 1 ? await sql`
+      SELECT t.id, t.market_id, t.outcome_index, t.price_at_trade, t.created_at
+      FROM points_trades t
+      JOIN points_markets m ON m.id = t.market_id
+      WHERE t.market_id = ANY(${ids}::int[])
+        AND t.username <> ${PRONOS_TREASURY_USERNAME}
+        AND t.price_at_trade IS NOT NULL
+        AND t.outcome_index IN (0, 1)
+        AND t.reserves_before IS NOT NULL
+        AND t.reserves_after IS NOT NULL
+        AND t.reserves_before = t.reserves_after
+        AND jsonb_typeof(m.outcomes) = 'array'
+        AND jsonb_array_length(m.outcomes) = 2
+        AND t.created_at >= NOW() - (${windowHours} || ' hours')::interval
+      ORDER BY t.market_id ASC, t.created_at ASC, t.id ASC
+    ` : [];
+
     // Group by market_id and project only the requested outcome.
     const history = {};
     for (const id of ids) history[id] = [];
@@ -130,11 +150,29 @@ export default async function handler(req, res) {
       const price = Number(prices[outcomeIdx]);
       if (!Number.isFinite(price)) continue;
       history[r.market_id].push({
-        t: Math.floor(new Date(r.snapshotted_at).getTime() / 1000),
+        t: new Date(r.snapshotted_at).getTime() / 1000,
         // Snapshots store probability 0-1; the Sparkline component expects
         // 0-100 to match MVP CLOB series.
         p: Math.round(price * 10000) / 100,
+        _id: 0,
       });
+    }
+    for (const r of bookRows) {
+      const tradePrice = Number(r.price_at_trade);
+      const tradeOutcome = Number(r.outcome_index);
+      if (!Number.isFinite(tradePrice) || tradePrice <= 0 || tradePrice >= 1) continue;
+      const projected = tradeOutcome === outcomeIdx ? tradePrice : 1 - tradePrice;
+      history[r.market_id].push({
+        t: new Date(r.created_at).getTime() / 1000,
+        p: Math.round(projected * 10000) / 100,
+        _id: Number(r.id) || 0,
+      });
+    }
+    for (const id of ids) {
+      history[id] = history[id]
+        .filter(pt => Number.isFinite(pt.t) && Number.isFinite(pt.p))
+        .sort((a, b) => a.t - b.t || a._id - b._id)
+        .map(({ t, p }) => ({ t, p }));
     }
 
     return res.status(200).json({ history });

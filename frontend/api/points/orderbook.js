@@ -146,18 +146,20 @@ export default async function handler(req, res) {
         ? depth.spread
         : Math.max(0, bestAsk - bestBid);
       const lastRows = await timer.time('db_last_trade', () => sql`
-        SELECT price_at_trade
+        SELECT price_at_trade,
+               (reserves_before IS NOT NULL AND reserves_after IS NOT NULL AND reserves_before = reserves_after) AS is_book_trade
         FROM points_trades
         WHERE market_id = ${marketId}
           AND outcome_index = ${outcomeIndex}
           AND username <> ${PRONOS_TREASURY_USERNAME}
+          AND price_at_trade IS NOT NULL
         ORDER BY created_at DESC, id DESC
         LIMIT 1
       `);
-      const lastPrice = lastRows.length > 0
+      const lastBookPrice = lastRows[0]?.is_book_trade
         ? Number(lastRows[0].price_at_trade)
-        : depth.currentPrice;
-      const currentPrice = Number.isFinite(lastPrice) ? lastPrice : depth.currentPrice;
+        : null;
+      const currentPrice = Number.isFinite(lastBookPrice) ? lastBookPrice : depth.currentPrice;
 
       return {
         marketId,

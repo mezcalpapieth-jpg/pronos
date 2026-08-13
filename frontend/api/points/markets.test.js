@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./markets.js', import.meta.url), 'utf8');
 const detailSource = await readFile(new URL('./market.js', import.meta.url), 'utf8');
+const displayPriceSource = await readFile(new URL('../_lib/points-display-prices.js', import.meta.url), 'utf8');
 const pointsHome = await readFile(new URL('../../app/points/src/pages/PointsHome.jsx', import.meta.url), 'utf8');
 
 test('points market payload keeps admin featured and tournament markets on home', () => {
@@ -16,7 +17,7 @@ test('points market payload keeps admin featured and tournament markets on home'
 });
 
 test('points public lists hide bulk-hidden active markets outside trophy overrides', () => {
-  assert.match(source, /points:markets:v6/);
+  assert.match(source, /points:markets:v7/);
   const visibilityMatches = source.match(/m\.hidden_from_home IS NOT TRUE\s+OR m\.tournament_featured = true/g) || [];
   assert.ok(visibilityMatches.length >= 2);
 });
@@ -59,11 +60,16 @@ test('parallel list payload exposes leg lifecycle for card previews', () => {
   assert.match(source, /activeOutcomeIndexes,/);
 });
 
-test('public market odds use executable reserves instead of last trade price', () => {
+test('public market odds use reserves plus latest book-only fills', () => {
+  assert.match(displayPriceSource, /export function binaryPricesWithBookTrade/);
+  assert.match(displayPriceSource, /String\(status \|\| ''\)\.toLowerCase\(\) !== 'active'/);
+  assert.match(displayPriceSource, /isBookTrade === true \|\| String\(isBookTrade\)\.toLowerCase\(\) === 'true'/);
+  assert.match(displayPriceSource, /return oi === 0 \? \[p, 1 - p\] : \[1 - p, p\]/);
   for (const text of [source, detailSource]) {
     assert.match(text, /pricesFromReserves\(reserves, outcomes\.length\)/);
+    assert.match(text, /display_trade_is_book/);
+    assert.match(text, /t\.reserves_before = t\.reserves_after/);
+    assert.match(text, /binaryPricesWithBookTrade\(/);
     assert.doesNotMatch(text, /function binaryPricesWithLatestTrade/);
-    assert.doesNotMatch(text, /last_trade_price[\s\S]*prices:/);
-    assert.doesNotMatch(text, /price_at_trade[\s\S]*prices:/);
   }
 });
