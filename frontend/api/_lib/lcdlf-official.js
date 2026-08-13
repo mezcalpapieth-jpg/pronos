@@ -11,8 +11,10 @@ export const LCDLF_DEFAULT_SEASON_LABEL = 'Temporada 4';
 const DEFAULT_CLOSE_HOUR = 20;
 const DEFAULT_CLOSE_MINUTE = 0;
 const DEFAULT_NOMINATION_CLOSE_WEEKDAY = 3; // Wednesday in Mexico City.
-const DEFAULT_NOMINATION_CLOSE_HOUR = 23;
-const DEFAULT_NOMINATION_CLOSE_MINUTE = 59;
+// The nomination gala starts at 22:00 CDMX, so default markets close before
+// partial nomination information starts becoming public during the broadcast.
+const DEFAULT_NOMINATION_CLOSE_HOUR = 21;
+const DEFAULT_NOMINATION_CLOSE_MINUTE = 55;
 
 const DEFAULT_RESIDENTS = [
   'Aldo Rendón',

@@ -5,6 +5,7 @@ import {
   buildLcdlfResolutionReview,
   buildLcdlfWeeklyMarketSpec,
   extractResidentsFromIndexHtml,
+  nextLcdlfNominationClose,
   parseLcdlfResidentStatus,
   readLcdlfOfficialSnapshot,
 } from './lcdlf-official.js';
@@ -70,6 +71,11 @@ test('extractResidentsFromIndexHtml uses card titles and scoped card badges', ()
 
   assert.deepEqual(rows.map(row => row.name), ['Ximena Herrera', 'Masad Altamimi', 'Memo Schutz']);
   assert.deepEqual(rows.map(row => row.statusKey), ['eliminado', null, null]);
+});
+
+test('nextLcdlfNominationClose defaults to before the Wednesday nomination gala', () => {
+  const close = nextLcdlfNominationClose(new Date('2026-08-12T18:00:00Z'));
+  assert.equal(close.toISOString(), '2026-08-13T03:55:00.000Z');
 });
 
 test('readLcdlfOfficialSnapshot merges discovered cards with configured full roster', async () => {
@@ -200,6 +206,8 @@ test('buildLcdlfNominationMarketSpecs creates one parallel market from active re
   );
   assert.equal(specs[0].resolver_config.nominationMinStatusCount, 2);
   assert.equal(specs[0].source_data.kind, 'lcdlf_nomination');
+  assert.equal(specs[0].end_time, '2026-08-13T03:55:00.000Z');
+  assert.equal(specs[0].source_data.closeLocalTime, 'miércoles 21:55 America/Mexico_City');
   assert.match(specs[0].source_event_id, /^lcdlf-mx-nomination:/);
   assert.ok(!specs[0].question.includes('Fede Vigevani'));
   assert.deepEqual(specs[0].source_data.suggestedPricing.legProbabilityPct, [32, 32, 32]);

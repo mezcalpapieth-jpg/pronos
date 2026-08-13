@@ -609,6 +609,8 @@ const STRINGS = {
   'points.detail.claiming':         { es: 'Reclamando...',      en: 'Claiming...' },
   'points.detail.claimSuccess':     { es: 'Reclamaste {n} MXNP', en: 'Claimed {n} MXNP' },
   'points.detail.mxnpNote':        { es: 'MXNP son puntos de la competencia.', en: 'MXNP are competition points.' },
+  'points.detail.temperatureResolutionTitle': { es: 'Cómo se resuelve', en: 'How it resolves' },
+  'points.detail.temperatureResolutionBody': { es: 'Usamos la temperatura máxima oficial con un decimal y la redondeamos al grado Celsius entero más cercano. Ejemplo: 25.6°C gana 26°C; 24.4°C gana ≤24°C; 26.5°C o más gana ≥27°C.', en: 'We use the official maximum temperature with one decimal and round it to the nearest whole Celsius degree. Example: 25.6°C wins 26°C; 24.4°C wins ≤24°C; 26.5°C or higher wins ≥27°C.' },
   'points.detail.orderBook':       { es: 'Libro de órdenes',    en: 'Order book' },
   'points.detail.orderBookHint':   { es: 'Órdenes de usuarios con profundidad maker simulada de Pronos.', en: 'User orders with simulated Pronos maker depth.' },
   'points.detail.orderBookSpread': { es: 'Spread',             en: 'Spread' },

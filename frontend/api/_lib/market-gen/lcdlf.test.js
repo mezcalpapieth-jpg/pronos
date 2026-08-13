@@ -75,6 +75,7 @@ test('generateLcdlfMarkets creates one nested nomination market from active resi
     assert.equal(specs[0].amm_mode, 'parallel');
     assert.equal(specs[0].resolver_config.shape, 'parallel-status');
     assert.deepEqual(specs[0].outcomes, ['Brianda Deyanara', 'Flor Vigna']);
+    assert.equal(specs[0].end_time, '2026-08-13T03:55:00.000Z');
     assert.deepEqual(specs[0].resolver_config.legs.map(leg => leg.residentSlug), ['brianda-deyanara', 'flor-vigna']);
     assert.equal(specs[0].source_data.suggestedPricing.source, 'lcdlf-official:active-resident');
     assert.deepEqual(specs[0].source_data.suggestedPricing.legProbabilityPct, [32, 32]);

@@ -407,6 +407,32 @@ function resolverLabel(type, source) {
   return RESOLVER_LABELS[composite] || RESOLVER_LABELS[type] || type;
 }
 
+function optionText(option) {
+  if (option == null) return '';
+  if (typeof option === 'string' || typeof option === 'number') return String(option);
+  return String(option.label || option.name || option.title || option.value || '');
+}
+
+function isTemperatureMarket(market) {
+  if (!market) return false;
+  const optionLabels = Array.isArray(market.outcomes)
+    ? market.outcomes.map(optionText)
+    : Array.isArray(market.options)
+      ? market.options.map(optionText)
+      : [];
+  const topicTags = Array.isArray(market.topicTags) ? market.topicTags : [];
+  const haystack = [
+    market.title,
+    market.question,
+    market.category,
+    market.resolverType,
+    market.resolverSource,
+    ...topicTags,
+    ...optionLabels,
+  ].filter(Boolean).join(' ').toLowerCase();
+  return /temperatura|temperature|celsius|°c/.test(haystack);
+}
+
 // ─── Outcome pickers ────────────────────────────────────────────────────────
 // Unified: one tap-target per outcome ("Sí" / "No" / "Barcelona" …) showing
 // the current percentage. Tapping opens the buy modal for that outcome at
@@ -2533,6 +2559,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
     && market.status === 'active'
     && market.endTime
     && new Date(market.endTime) < _now;
+  const showTemperatureResolutionNote = isTemperatureMarket(market);
 
   const tradePanel = (
     <div style={{
@@ -2597,6 +2624,25 @@ export default function PointsMarketDetail({ onOpenLogin }) {
         <p style={{ margin: 0 }}>
           {t('points.detail.mxnpNote')}
         </p>
+        {showTemperatureResolutionNote && (
+          <div style={{
+            marginTop: 10,
+            paddingTop: 10,
+            borderTop: '1px solid var(--border)',
+          }}>
+            <p style={{
+              margin: '0 0 6px',
+              color: 'var(--text-primary)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+            }}>
+              {t('points.detail.temperatureResolutionTitle')}
+            </p>
+            <p style={{ margin: 0 }}>
+              {t('points.detail.temperatureResolutionBody')}
+            </p>
+          </div>
+        )}
         {displayOutcomes.length === 2 && !isResolved && !isCanceled && (
           <p style={{
             margin: '10px 0 0',
