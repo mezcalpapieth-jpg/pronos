@@ -50,3 +50,9 @@ test('repair implementation writes invalid-field refund audit rows', () => {
   assert.match(source, /invalid_field_refund/);
   assert.match(source, /Participante fuera del draw\/campo confirmado/);
 });
+
+test('repair avoids known-missing ESPN tennis headshots', () => {
+  const source = fs.readFileSync(new URL('./points-field-repair.js', import.meta.url), 'utf8');
+  assert.match(source, /String\(id \|\| ''\)\.trim\(\) === '9250'/);
+  assert.doesNotMatch(source, /tennisHeadshot[\s\S]*9250\.png/);
+});

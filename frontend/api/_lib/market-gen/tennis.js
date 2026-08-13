@@ -46,8 +46,10 @@ const FIELD = [
 
 const FIELD_PRIORITY_BY_ID = new Map(FIELD.map((p, index) => [String(p.id), index]));
 const FIELD_PRIORITY_BY_NAME = new Map(FIELD.map((p, index) => [normalizeName(p.name), index]));
+const MISSING_HEADSHOT_IDS = new Set(['9250']);
 
 function headshot(id) {
+  if (MISSING_HEADSHOT_IDS.has(String(id || '').trim())) return null;
   return id ? `https://a.espncdn.com/i/headshots/tennis/players/full/${id}.png` : null;
 }
 

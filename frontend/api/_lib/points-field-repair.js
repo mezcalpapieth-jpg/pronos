@@ -96,6 +96,7 @@ function eventIdFromMarket(row) {
 }
 
 function tennisHeadshot(id) {
+  if (String(id || '').trim() === '9250') return null;
   return id ? `https://a.espncdn.com/i/headshots/tennis/players/full/${id}.png` : null;
 }
 

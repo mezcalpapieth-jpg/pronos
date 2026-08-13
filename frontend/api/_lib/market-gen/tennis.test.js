@@ -160,6 +160,9 @@ test('ATP generator emits bounded head-to-head markets for top-tier draws only',
     assert.equal(h2h[0].resolver_config.source, 'espn-atp-match');
     assert.equal(h2h[0].resolver_config.matchId, 'match-1');
     assert.deepEqual(h2h[0].outcomes, ['Alexander Zverev', 'Taylor Fritz']);
+    assert.deepEqual(h2h[1].outcomes, ['Ben Shelton', 'Lorenzo Musetti']);
+    assert.equal(h2h[1].outcome_images[0], null);
+    assert.equal(h2h[1].outcome_images[1]?.includes('/3764.png'), true);
   } finally {
     globalThis.fetch = originalFetch;
   }

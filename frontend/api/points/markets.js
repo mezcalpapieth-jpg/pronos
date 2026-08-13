@@ -73,20 +73,6 @@ function binaryLegPricesFromRow({ reserves, status, outcome }, fallbackYes = 0.5
   return [yes, 1 - yes];
 }
 
-function binaryPricesWithLatestTrade(basePrices, {
-  status,
-  outcomeIndex,
-  price,
-} = {}) {
-  if (String(status || '').toLowerCase() !== 'active') return basePrices;
-  if (!Array.isArray(basePrices) || basePrices.length !== 2) return basePrices;
-  const oi = Number(outcomeIndex);
-  const p = Number(price);
-  if (!Number.isInteger(oi) || oi < 0 || oi > 1) return basePrices;
-  if (!Number.isFinite(p) || p <= 0 || p >= 1) return basePrices;
-  return oi === 0 ? [p, 1 - p] : [1 - p, p];
-}
-
 function publicSeriesMetaFromRow(row) {
   const resolverCfg = parseJsonb(row.resolver_config, null);
   const sourceData = parseJsonb(row.pending_source_data, null);
@@ -191,9 +177,7 @@ export default async function handler(req, res) {
       const rows = await timer.time('db_markets', () => category
         ? sql`
           SELECT m.*, pm.source_data AS pending_source_data,
-            (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_volume,
-            (SELECT t.outcome_index FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.side IN ('buy', 'sell') ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS last_trade_outcome_index,
-            (SELECT t.price_at_trade FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.side IN ('buy', 'sell') ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS last_trade_price
+            (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_volume
           FROM points_markets m
           LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
           WHERE m.status = ${status}
@@ -220,9 +204,7 @@ export default async function handler(req, res) {
         : tournamentOnly
           ? sql`
             SELECT m.*, pm.source_data AS pending_source_data,
-              (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_volume,
-              (SELECT t.outcome_index FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.side IN ('buy', 'sell') ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS last_trade_outcome_index,
-              (SELECT t.price_at_trade FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.side IN ('buy', 'sell') ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS last_trade_price
+              (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_volume
             FROM points_markets m
             LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
             WHERE m.status = ${status}
@@ -243,9 +225,7 @@ export default async function handler(req, res) {
           : featuredOnly
           ? sql`
             SELECT m.*, pm.source_data AS pending_source_data,
-              (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_volume,
-              (SELECT t.outcome_index FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.side IN ('buy', 'sell') ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS last_trade_outcome_index,
-              (SELECT t.price_at_trade FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.side IN ('buy', 'sell') ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS last_trade_price
+              (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_volume
             FROM points_markets m
             LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
             WHERE m.status = ${status}
@@ -273,9 +253,7 @@ export default async function handler(req, res) {
           `
           : sql`
             SELECT m.*, pm.source_data AS pending_source_data,
-              (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_volume,
-              (SELECT t.outcome_index FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.side IN ('buy', 'sell') ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS last_trade_outcome_index,
-              (SELECT t.price_at_trade FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.side IN ('buy', 'sell') ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS last_trade_price
+              (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_volume
             FROM points_markets m
             LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
             WHERE m.status = ${status}
@@ -312,9 +290,7 @@ export default async function handler(req, res) {
       if (parallelIds.length > 0) {
         const legs = await timer.time('db_legs', () => sql`
         SELECT l.id, l.parent_id, l.leg_label, l.reserves, l.seed_liquidity, l.status, l.outcome,
-          (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = l.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_volume,
-          (SELECT t.outcome_index FROM points_trades t WHERE t.market_id = l.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.side IN ('buy', 'sell') ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS last_trade_outcome_index,
-          (SELECT t.price_at_trade FROM points_trades t WHERE t.market_id = l.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.side IN ('buy', 'sell') ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS last_trade_price
+          (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = l.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_volume
         FROM points_markets l
         WHERE l.parent_id = ANY(${parallelIds})
           AND l.status <> 'canceled'
@@ -369,16 +345,11 @@ export default async function handler(req, res) {
         const legs = legsByParent.get(r.id) || [];
         const legPrices = legs.map(l => {
           const lr = parseJsonb(l.reserves, []).map(Number);
-          const baseLegPrices = binaryLegPricesFromRow({
+          return binaryLegPricesFromRow({
             reserves: lr,
             status: l.status,
             outcome: l.outcome,
-          }, 1 / outcomes.length);
-          return binaryPricesWithLatestTrade(baseLegPrices, {
-            status: l.status,
-            outcomeIndex: l.last_trade_outcome_index,
-            price: l.last_trade_price,
-          })[0];
+          }, 1 / outcomes.length)[0];
         });
         const seedTotal = legs.reduce((s, l) => s + Number(l.seed_liquidity || 0), 0);
         const tradeTotal = legs.reduce((s, l) => s + Number(l.trade_volume || 0), 0);
@@ -443,11 +414,7 @@ export default async function handler(req, res) {
       }
 
       const reserves = parseJsonb(r.reserves, []).map(Number);
-      const prices = binaryPricesWithLatestTrade(pricesFromReserves(reserves, outcomes.length), {
-        status: r.status,
-        outcomeIndex: r.last_trade_outcome_index,
-        price: r.last_trade_price,
-      });
+      const prices = pricesFromReserves(reserves, outcomes.length);
       // "Live" is the red EN VIVO pill — only for fixed-window sports
       // events. Two defenses against open-ended prediction markets
       // accidentally showing live:

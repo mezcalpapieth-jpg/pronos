@@ -62,6 +62,54 @@ function previewGain(price) {
   return Math.round(payout - STAKE_PREVIEW);
 }
 
+function outcomeInitials(label) {
+  const words = String(label || '').trim().split(/\s+/).filter(Boolean);
+  const first = words[0]?.[0] || '?';
+  const second = words.length > 1 ? words[words.length - 1]?.[0] : '';
+  return `${first}${second}`.toUpperCase();
+}
+
+function OutcomeLogo({ src, label }) {
+  const [failed, setFailed] = useState(false);
+  if (!src) return null;
+  if (failed) {
+    return (
+      <span
+        aria-hidden="true"
+        style={{
+          width: 26,
+          height: 26,
+          borderRadius: '50%',
+          display: 'inline-grid',
+          placeItems: 'center',
+          background: 'var(--surface1)',
+          border: '1px solid var(--border)',
+          color: 'var(--text-secondary)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 9,
+          fontWeight: 700,
+          flexShrink: 0,
+        }}
+      >
+        {outcomeInitials(label)}
+      </span>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt=""
+      style={{
+        width: 26,
+        height: 26,
+        objectFit: 'contain',
+        flexShrink: 0,
+      }}
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 export default function PointsMarketCard({ market, userPosition }) {
   const navigate = useNavigate();
   const t = useT();
@@ -401,17 +449,7 @@ export default function PointsMarketCard({ market, userPosition }) {
                     soccer row) so every label lines up at the same
                     x-offset as rows that do have a crest. */}
                 {logo ? (
-                  <img
-                    src={logo}
-                    alt=""
-                    style={{
-                      width: 26,
-                      height: 26,
-                      objectFit: 'contain',
-                      flexShrink: 0,
-                    }}
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  />
+                  <OutcomeLogo src={logo} label={label} />
                 ) : hasAnyLogo ? (
                   <span style={{ width: 26, height: 26, flexShrink: 0 }} aria-hidden="true" />
                 ) : null}

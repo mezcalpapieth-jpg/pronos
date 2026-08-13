@@ -63,6 +63,25 @@ test('multi-outcome markets draw every line on one shared axis', () => {
   assert.doesNotMatch(multiSource, /Math\.random/);
 });
 
+test('active charts append the live executable price as their tail', () => {
+  assert.match(detailSource, /const livePctFor = \(outcomeIdx, leg = null\) => \{/);
+  assert.match(detailSource, /if \(market\.status !== 'active'\) return null/);
+  assert.match(detailSource, /market\.ammMode === 'parallel' && leg\s+\? leg\?\.prices\?\.\[0\]/);
+  assert.match(detailSource, /: market\.prices\?\.\[outcomeIdx\]/);
+  assert.match(detailSource, /const p = livePctFor\(outcomeIdx, leg\)/);
+  assert.match(detailSource, /Math\.floor\(Date\.now\(\) \/ 1000\)/);
+});
+
+test('outcome logos fall back to initials when a supplied image fails', () => {
+  for (const text of [detailSource, marketCardSource]) {
+    assert.match(text, /function outcomeInitials\(label\)/);
+    assert.match(text, /const \[failed, setFailed\] = useState\(false\)/);
+    assert.match(text, /onError=\{\(\) => setFailed\(true\)\}/);
+    assert.match(text, /outcomeInitials\(label\)/);
+    assert.doesNotMatch(text, /style\.display = 'none'/);
+  }
+});
+
 test('points API client exposes anonymous trade activity endpoint', () => {
   assert.match(apiSource, /export async function fetchTradeActivity/);
   assert.match(apiSource, /\/api\/points\/trade-activity\?/);

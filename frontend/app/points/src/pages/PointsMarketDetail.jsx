@@ -448,19 +448,50 @@ function isTemperatureMarket(market) {
 const SCROLL_AT_N = 6;
 const DISPLAYABLE_SHARE_EPSILON = 0.005;
 
-function OutcomeLogo({ src }) {
+function outcomeInitials(label) {
+  const words = String(label || '').trim().split(/\s+/).filter(Boolean);
+  const first = words[0]?.[0] || '?';
+  const second = words.length > 1 ? words[words.length - 1]?.[0] : '';
+  return `${first}${second}`.toUpperCase();
+}
+
+function OutcomeLogo({ src, label, size = 28 }) {
+  const [failed, setFailed] = useState(false);
   if (!src) return null;
+  if (failed) {
+    return (
+      <span
+        aria-hidden="true"
+        style={{
+          width: size,
+          height: size,
+          borderRadius: '50%',
+          display: 'inline-grid',
+          placeItems: 'center',
+          background: 'var(--surface1)',
+          border: '1px solid var(--border)',
+          color: 'var(--text-secondary)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: Math.max(9, Math.round(size * 0.36)),
+          fontWeight: 700,
+          flexShrink: 0,
+        }}
+      >
+        {outcomeInitials(label)}
+      </span>
+    );
+  }
   return (
     <img
       src={src}
       alt=""
       style={{
-        width: 28,
-        height: 28,
+        width: size,
+        height: size,
         objectFit: 'contain',
         flexShrink: 0,
       }}
-      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+      onError={() => setFailed(true)}
     />
   );
 }
@@ -542,7 +573,7 @@ function UnifiedOutcomeList({ outcomes, prices, outcomeImages, outcomeCountryLab
               e.currentTarget.style.background = 'var(--surface2)';
             }}
           >
-            <OutcomeLogo src={logo} />
+            <OutcomeLogo src={logo} label={label} />
             <span style={{
               flex: 1,
               minWidth: 0,
@@ -622,7 +653,7 @@ function ParallelLegList({ market, legs, outcomeImages, outcomeCountryLabels, on
                 opacity: isLegTradable ? 1 : 0.58,
               }}
             >
-              {logo && <OutcomeLogo src={logo} />}
+              <OutcomeLogo src={logo} label={leg.label} />
               <div style={{
                 flex: '1 1 200px',
                 minWidth: 0,
@@ -725,7 +756,7 @@ function OddsSummary({ outcomes, prices, outcomeImages, outcomeCountryLabels }) 
               }}
             >
               {logo ? (
-                <OutcomeLogo src={logo} />
+                <OutcomeLogo src={logo} label={label} />
               ) : (
                 <span style={{
                   width: 8,
@@ -924,14 +955,6 @@ function SeriesGameStrip({ seriesMeta, currentMarketId, navigate, t }) {
   );
 }
 
-function outcomeInitials(label) {
-  const words = String(label || '')
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2);
-  return (words.map(word => word[0]).join('') || '?').toUpperCase();
-}
-
 /* Ring chart — same shape as MVP's ProbabilityChart, minus on-chain state */
 function ProbabilityRing({ pct, resolved, winner, label, logo, color = 'var(--yes)' }) {
   const radius = 54;
@@ -972,12 +995,7 @@ function ProbabilityRing({ pct, resolved, winner, label, logo, color = 'var(--ye
         gap: 5,
       }}>
         {logo ? (
-          <img
-            src={logo}
-            alt=""
-            style={{ width: 44, height: 44, objectFit: 'contain', filter: 'drop-shadow(0 8px 14px rgba(0,0,0,0.35))' }}
-            onError={(e) => { e.currentTarget.style.display = 'none'; }}
-          />
+          <OutcomeLogo src={logo} label={label} size={44} />
         ) : (
           <span style={{
             width: 44,
@@ -1581,7 +1599,7 @@ function OrderBookPanel({
                 whiteSpace: 'nowrap',
               }}
             >
-              <OutcomeLogo src={option.logo} />
+              <OutcomeLogo src={option.logo} label={option.label} />
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{option.label}</span>
             </button>
           );
@@ -2053,14 +2071,25 @@ export default function PointsMarketDetail({ onOpenLogin }) {
     let cancelled = false;
     const range = detailChartRangeFor(chartRange);
 
+    const livePctFor = (outcomeIdx, leg = null) => {
+      if (market.status === 'resolved') {
+        return market.ammMode === 'parallel' && leg
+          ? (Number(leg.outcome) === 0 ? 100 : 0)
+          : (market.outcome != null && Number(market.outcome) === outcomeIdx ? 100 : 0);
+      }
+      if (market.status !== 'active') return null;
+      const price = market.ammMode === 'parallel' && leg
+        ? leg?.prices?.[0]
+        : market.prices?.[outcomeIdx];
+      const pct = Number(price) * 100;
+      return Number.isFinite(pct) ? Math.max(0, Math.min(100, pct)) : null;
+    };
     const tailPointFor = (outcomeIdx, leg = null) => {
-      if (market.status !== 'resolved') return null;
-      const t = market.resolvedAt
+      const p = livePctFor(outcomeIdx, leg);
+      if (p == null) return null;
+      const t = market.status === 'resolved' && market.resolvedAt
         ? Math.floor(new Date(market.resolvedAt).getTime() / 1000)
         : Math.floor(Date.now() / 1000);
-      const p = market.ammMode === 'parallel' && leg
-        ? (Number(leg.outcome) === 0 ? 100 : 0)
-        : (market.outcome != null && Number(market.outcome) === outcomeIdx ? 100 : 0);
       return { t, p };
     };
     const withTail = (series, outcomeIdx, leg = null) => {
@@ -3110,7 +3139,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                       alignItems: 'center',
                       gap: 10,
                     }}>
-                      <OutcomeLogo src={logo} />
+                      <OutcomeLogo src={logo} label={label} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{
                           fontFamily: 'var(--font-mono)',

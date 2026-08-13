@@ -58,3 +58,12 @@ test('parallel list payload exposes leg lifecycle for card previews', () => {
   assert.match(source, /legOutcomes: legOutcomes\.length === outcomes\.length \? legOutcomes : null/);
   assert.match(source, /activeOutcomeIndexes,/);
 });
+
+test('public market odds use executable reserves instead of last trade price', () => {
+  for (const text of [source, detailSource]) {
+    assert.match(text, /pricesFromReserves\(reserves, outcomes\.length\)/);
+    assert.doesNotMatch(text, /function binaryPricesWithLatestTrade/);
+    assert.doesNotMatch(text, /last_trade_price[\s\S]*prices:/);
+    assert.doesNotMatch(text, /price_at_trade[\s\S]*prices:/);
+  }
+});
