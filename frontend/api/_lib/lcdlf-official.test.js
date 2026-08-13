@@ -6,6 +6,7 @@ import {
   buildLcdlfWeeklyMarketSpec,
   extractResidentsFromIndexHtml,
   nextLcdlfNominationClose,
+  nextLcdlfSundayClose,
   parseLcdlfResidentStatus,
   readLcdlfOfficialSnapshot,
 } from './lcdlf-official.js';
@@ -76,6 +77,11 @@ test('extractResidentsFromIndexHtml uses card titles and scoped card badges', ()
 test('nextLcdlfNominationClose defaults to before the Wednesday nomination gala', () => {
   const close = nextLcdlfNominationClose(new Date('2026-08-12T18:00:00Z'));
   assert.equal(close.toISOString(), '2026-08-13T03:55:00.000Z');
+});
+
+test('nextLcdlfSundayClose defaults to before the Sunday elimination pregala', () => {
+  const close = nextLcdlfSundayClose(new Date('2026-08-09T18:00:00Z'));
+  assert.equal(close.toISOString(), '2026-08-10T01:55:00.000Z');
 });
 
 test('readLcdlfOfficialSnapshot merges discovered cards with configured full roster', async () => {
@@ -160,6 +166,8 @@ test('buildLcdlfWeeklyMarketSpec creates a manual-review market from nominees', 
   const spec = buildLcdlfWeeklyMarketSpec({ snapshot, now });
   assert.equal(spec.source, 'lcdlf-official');
   assert.equal(spec.resolver_type, 'manual_review');
+  assert.equal(spec.end_time, '2026-08-17T01:55:00.000Z');
+  assert.equal(spec.source_data.closeLocalTime, 'domingo 19:55 America/Mexico_City');
   assert.deepEqual(spec.outcomes, ['Ernesto Laguardia', 'Memo Schutz']);
   assert.equal(spec.category, 'musica');
   assert.deepEqual(spec.topic_tags, ['tv', 'farandula']);

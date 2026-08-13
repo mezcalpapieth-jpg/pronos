@@ -8,8 +8,10 @@ export const LCDLF_SOURCE = 'lcdlf-official';
 export const LCDLF_DEFAULT_BASE_URL = 'https://www.lacasadelosfamososmexico.tv';
 export const LCDLF_DEFAULT_SEASON_LABEL = 'Temporada 4';
 
-const DEFAULT_CLOSE_HOUR = 20;
-const DEFAULT_CLOSE_MINUTE = 0;
+// Sunday elimination voting reopens at 20:00 CDMX during the pregala, before
+// the 20:30 main gala, so close markets before that broadcast window starts.
+const DEFAULT_CLOSE_HOUR = 19;
+const DEFAULT_CLOSE_MINUTE = 55;
 const DEFAULT_NOMINATION_CLOSE_WEEKDAY = 3; // Wednesday in Mexico City.
 // The nomination gala starts at 22:00 CDMX, so default markets close before
 // partial nomination information starts becoming public during the broadcast.
