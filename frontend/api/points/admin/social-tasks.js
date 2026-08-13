@@ -23,6 +23,11 @@ let schemaSql;
 
 const VALID_STATUSES = new Set(['pending', 'approved', 'rejected', 'history', 'campaigns']);
 const VALID_PLATFORMS = new Set(['x', 'instagram', 'tiktok']);
+const STATIC_FOLLOW_TASK_REWARDS = new Map([
+  ['instagram_follow', 100],
+  ['tiktok_follow', 100],
+  ['twitter_follow', 100],
+]);
 
 function normalizePlatform(platform) {
   const value = String(platform || '').trim().toLowerCase();
@@ -35,6 +40,20 @@ function platformLabel(platform) {
 
 function makeTaskKey(platform) {
   return `${platform}_post_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
+}
+
+function socialTaskReviewReward(task) {
+  const taskKey = String(task?.task_key || task?.taskKey || '').trim();
+  if (STATIC_FOLLOW_TASK_REWARDS.has(taskKey)) return STATIC_FOLLOW_TASK_REWARDS.get(taskKey);
+  return Number(task?.reward || 0);
+}
+
+function normalizePendingSocialTaskRows(rows) {
+  return rows.map(row => {
+    if (row.status !== 'pending') return row;
+    const reward = socialTaskReviewReward(row);
+    return Number(row.reward || 0) === reward ? row : { ...row, reward };
+  });
 }
 
 function normalizeTargetUrl(value) {
@@ -203,7 +222,7 @@ async function handleList(req, res) {
           ORDER BY s.created_at DESC
           LIMIT 100
         `;
-    return res.status(200).json({ tasks: rows });
+    return res.status(200).json({ tasks: normalizePendingSocialTaskRows(rows) });
   } catch (e) {
     if (isDatabaseQuotaError(e)) {
       console.warn('[admin/social-tasks] list unavailable from DB quota', {
@@ -257,19 +276,21 @@ async function handleReview(req, res, adminUsername) {
         const err = new Error('already_reviewed'); err.status = 409; throw err;
       }
 
+      const reviewReward = socialTaskReviewReward(task);
+
       if (action === 'approve') {
         await client.query(
           `UPDATE social_tasks
-           SET status = 'approved', reviewer = $1, reviewed_at = NOW()
-           WHERE id = $2`,
-          [adminUsername, taskId],
+           SET status = 'approved', reward = $1, reviewer = $2, reviewed_at = NOW()
+           WHERE id = $3`,
+          [reviewReward, adminUsername, taskId],
         );
         await client.query(
           `INSERT INTO social_task_reviews (
              social_task_id, username, task_key, action, reward, proof_url, reviewer
            )
            VALUES ($1, $2, $3, 'approved', $4, $5, $6)`,
-          [taskId, task.username, task.task_key, Number(task.reward), task.proof_url || null, adminUsername],
+          [taskId, task.username, task.task_key, reviewReward, task.proof_url || null, adminUsername],
         );
 
         // Credit the user their reward + audit entry.
@@ -279,14 +300,14 @@ async function handleReview(req, res, adminUsername) {
            ON CONFLICT (username) DO UPDATE
            SET balance = points_balances.balance + EXCLUDED.balance,
                updated_at = NOW()`,
-          [task.username, Number(task.reward)],
+          [task.username, reviewReward],
         );
         await client.query(
           `INSERT INTO points_distributions (username, amount, kind, reference_id, reason)
            VALUES ($1, $2, 'social_task', $3, $4)`,
           [
             task.username,
-            Number(task.reward),
+            reviewReward,
             taskId,
             `Tarea social aprobada: ${task.task_key}`,
           ],
@@ -295,11 +316,12 @@ async function handleReview(req, res, adminUsername) {
         await client.query(
           `UPDATE social_tasks
            SET status = 'rejected',
-               reviewer = $1,
+               reward = $1,
+               reviewer = $2,
                reviewed_at = NOW(),
-               rejection_note = $2
-           WHERE id = $3`,
-          [adminUsername, note.trim().slice(0, 500), taskId],
+               rejection_note = $3
+           WHERE id = $4`,
+          [reviewReward, adminUsername, note.trim().slice(0, 500), taskId],
         );
         await client.query(
           `INSERT INTO social_task_reviews (
@@ -310,7 +332,7 @@ async function handleReview(req, res, adminUsername) {
             taskId,
             task.username,
             task.task_key,
-            Number(task.reward),
+            reviewReward,
             task.proof_url || null,
             adminUsername,
             note.trim().slice(0, 500),
@@ -334,7 +356,7 @@ async function handleReview(req, res, adminUsername) {
 async function handleCreateCampaign(req, res, adminUsername) {
   const platform = normalizePlatform(req.body?.platform);
   const targetUrl = normalizeTargetUrl(req.body?.targetUrl);
-  const reward = Number(req.body?.reward ?? 300);
+  const reward = Number(req.body?.reward ?? 100);
   const expiresInDays = Number(req.body?.expiresInDays ?? 7);
   const customLabel = String(req.body?.label || '').trim();
 

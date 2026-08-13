@@ -651,7 +651,7 @@ function SocialTasksQueue({ onQueueChange }) {
   const [campaignForm, setCampaignForm] = useState({
     platform: 'x',
     targetUrl: '',
-    reward: '10',
+    reward: '100',
     expiresInDays: '7',
     label: '',
   });

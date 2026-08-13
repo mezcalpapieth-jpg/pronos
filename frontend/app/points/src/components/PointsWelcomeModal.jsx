@@ -210,11 +210,11 @@ export default function PointsWelcomeModal({ open, username, onClose }) {
             bullets={isEn ? [
               { icon: '01', text: 'Daily claim', value: '100 + 20/day streak' },
               { icon: '02', text: 'Each friend you invite', value: '+100 MXNP' },
-              { icon: '03', text: 'Approved social tasks', value: '+300 to +750 MXNP' },
+              { icon: '03', text: 'Approved social tasks', value: '+100 to +750 MXNP' },
             ] : [
               { icon: '01', text: 'Reclamo diario', value: '100 + 20/día racha' },
               { icon: '02', text: 'Cada amigo que invites', value: '+100 MXNP' },
-              { icon: '03', text: 'Tareas sociales aprobadas', value: '+300 a +750 MXNP' },
+              { icon: '03', text: 'Tareas sociales aprobadas', value: '+100 a +750 MXNP' },
             ]}
           />
         </div>

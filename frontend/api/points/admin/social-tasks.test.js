@@ -74,8 +74,21 @@ test('social task admin supports hidden expiring post campaigns', () => {
   assert.match(source, /deactivate_campaign/);
   assert.match(source, /VALID_PLATFORMS/);
   assert.match(source, /normalizeTargetUrl/);
+  assert.match(source, /req\.body\?\.reward \?\? 100/);
   assert.match(source, /status === 'campaigns'/);
   assert.match(source, /sharePath:\s*`\/earn\?task=/);
+});
+
+test('social task admin normalizes pending static follow rewards to 100 MXNP', () => {
+  assert.match(source, /STATIC_FOLLOW_TASK_REWARDS/);
+  assert.match(source, /\['instagram_follow', 100\]/);
+  assert.match(source, /\['tiktok_follow', 100\]/);
+  assert.match(source, /\['twitter_follow', 100\]/);
+  assert.match(source, /function socialTaskReviewReward\(task\)/);
+  assert.match(source, /function normalizePendingSocialTaskRows\(rows\)/);
+  assert.match(source, /tasks: normalizePendingSocialTaskRows\(rows\)/);
+  assert.match(source, /const reviewReward = socialTaskReviewReward\(task\)/);
+  assert.match(source, /SET status = 'approved', reward = \$1/);
 });
 
 test('social task admin review queue includes exact campaign post metadata', () => {

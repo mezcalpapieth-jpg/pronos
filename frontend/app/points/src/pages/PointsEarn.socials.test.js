@@ -18,6 +18,15 @@ test('TikTok and Instagram OAuth connection cards stay in proximamente until pro
   assert.match(source, /lang === 'en' \? 'Soon' : 'Próximamente'/);
 });
 
+test('social connection reward cards show 100 MXNP', () => {
+  assert.match(source, /key:\s*'x'[\s\S]*?reward:\s*100/);
+  assert.match(source, /key:\s*'instagram'[\s\S]*?reward:\s*100/);
+  assert.match(source, /key:\s*'tiktok'[\s\S]*?reward:\s*100/);
+  assert.doesNotMatch(source, /key:\s*'x'[\s\S]*?reward:\s*300/);
+  assert.doesNotMatch(source, /key:\s*'instagram'[\s\S]*?reward:\s*300/);
+  assert.doesNotMatch(source, /key:\s*'tiktok'[\s\S]*?reward:\s*300/);
+});
+
 test('X follow social task stays manual while OAuth verification is paused', () => {
   assert.match(source, /const isAutoVerify = !!task\.autoVerify/);
   assert.match(source, /isAutoVerify \? 'Verificar' : 'Enviar revisión'/);

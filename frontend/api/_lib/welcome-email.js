@@ -97,7 +97,7 @@ export async function sendPointsWelcomeEmail({ email, username }) {
         <strong>Reclamo diario:</strong> 100 MXNP + 20 extra por día de racha, hasta 200<br/>
         <strong>Referidos:</strong> 100 MXNP por amigo, máximo 10 por ciclo<br/>
         <strong>Nuevo referido:</strong> 250 MXNP para quien entra con tu link<br/>
-        <strong>Redes sociales:</strong> 300 MXNP por follow/post y 750 MXNP por story aprobada
+        <strong>Redes sociales:</strong> 100 MXNP por follow/post y 750 MXNP por story aprobada
       </div>
     </div>
 

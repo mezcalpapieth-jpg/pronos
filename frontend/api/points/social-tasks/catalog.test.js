@@ -25,6 +25,15 @@ test('TikTok follow task points at the current Pronos account', () => {
   assert.doesNotMatch(source, /tiktok\.com\/@pronos\.io/);
 });
 
+test('static follow tasks reward 100 MXNP each', () => {
+  assert.match(source, /key:\s*'instagram_follow'[\s\S]*?reward:\s*100/);
+  assert.match(source, /key:\s*'tiktok_follow'[\s\S]*?reward:\s*100/);
+  assert.match(source, /key:\s*'twitter_follow'[\s\S]*?reward:\s*100/);
+  assert.doesNotMatch(source, /key:\s*'instagram_follow'[\s\S]*?reward:\s*300/);
+  assert.doesNotMatch(source, /key:\s*'tiktok_follow'[\s\S]*?reward:\s*300/);
+  assert.doesNotMatch(source, /key:\s*'twitter_follow'[\s\S]*?reward:\s*300/);
+});
+
 test('X follow task points at pronos_io and stays in manual review', () => {
   assert.match(source, /key:\s*'twitter_follow'/);
   assert.match(source, /label:\s*'Seguir @pronos_io en X'/);

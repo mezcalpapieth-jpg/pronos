@@ -23,8 +23,8 @@ export const TOURNAMENT_REWARDS = Object.freeze({
   preCycleReferralReward: 50,
   referredReward: 250,
   referralCycleCap: 10,
-  socialFollow: 300,
-  socialPost: 300,
+  socialFollow: 100,
+  socialPost: 100,
   socialStory: 750,
 });
 

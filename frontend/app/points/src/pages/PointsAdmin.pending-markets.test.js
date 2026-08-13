@@ -222,6 +222,7 @@ test('Points admin has a command center for hidden expiring social post tasks', 
   assert.match(source, /adminDeactivateSocialTaskCampaign/);
   assert.match(source, /Centro de tareas/);
   assert.match(source, /Posts ocultos/);
+  assert.match(source, /reward:\s*'100'/);
   assert.match(source, /URL del post/);
   assert.match(source, /Crear link/);
   assert.match(source, /Links temporales/);
