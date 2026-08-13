@@ -569,17 +569,6 @@ function SocialTaskRow({ task, onSubmit }) {
   );
 }
 
-const SOCIAL_TASK_FILTERS = [
-  { key: 'tiktok', label: 'TikTok' },
-  { key: 'instagram', label: 'Instagram' },
-  { key: 'x', label: 'X' },
-];
-
-function normalizeSocialTaskNetwork(task) {
-  const network = String(task?.network || task?.platform || '').trim().toLowerCase();
-  return network === 'twitter' ? 'x' : network;
-}
-
 // ─── Verified social connections (OAuth) ─────────────────────────────
 // Separate from SocialTasksCard because the verification story is
 // different: here we get a cryptographic handshake with the provider
@@ -944,7 +933,6 @@ function SocialTasksCard() {
   const location = useLocation();
   const taskKey = new URLSearchParams(location.search).get('task');
   const [tasks, setTasks] = useState(null);
-  const [networkFilter, setNetworkFilter] = useState('tiktok');
   const [err, setErr] = useState(null);
   const [ok, setOk] = useState(null);
 
@@ -957,16 +945,6 @@ function SocialTasksCard() {
     }
   }
   useEffect(() => { load(); }, [taskKey]);
-
-  useEffect(() => {
-    if (!Array.isArray(tasks) || tasks.length === 0) return;
-    const hasCurrent = tasks.some(task => normalizeSocialTaskNetwork(task) === networkFilter);
-    if (hasCurrent) return;
-    const next = SOCIAL_TASK_FILTERS.find(filter =>
-      tasks.some(task => normalizeSocialTaskNetwork(task) === filter.key),
-    );
-    if (next) setNetworkFilter(next.key);
-  }, [tasks, networkFilter]);
 
   async function handleSubmit(task) {
     setErr(null);
@@ -989,16 +967,6 @@ function SocialTasksCard() {
     }
   }
 
-  const socialTaskCounts = Object.fromEntries(SOCIAL_TASK_FILTERS.map(filter => [
-    filter.key,
-    Array.isArray(tasks)
-      ? tasks.filter(task => normalizeSocialTaskNetwork(task) === filter.key).length
-      : 0,
-  ]));
-  const visibleSocialTasks = Array.isArray(tasks)
-    ? tasks.filter(t => normalizeSocialTaskNetwork(t) === networkFilter)
-    : [];
-
   return (
     <section style={panelStyle}>
       <div style={eyebrowStyle}>Tareas sociales</div>
@@ -1019,76 +987,24 @@ function SocialTasksCard() {
         </div>
       )}
       {tasks && (
-        <>
-          <div
-            role="tablist"
-            aria-label="Filtrar tareas sociales"
-            style={{
-              display: 'flex',
-              gap: 8,
-              flexWrap: 'wrap',
-              marginTop: 14,
-              marginBottom: 12,
-            }}
-          >
-            {SOCIAL_TASK_FILTERS.map(filter => {
-              const selected = networkFilter === filter.key;
-              const count = socialTaskCounts[filter.key] || 0;
-              return (
-                <button
-                  key={filter.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={selected}
-                  onClick={() => setNetworkFilter(filter.key)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    padding: '7px 12px',
-                    borderRadius: 999,
-                    border: `1px solid ${selected ? 'rgba(255,92,0,0.58)' : 'var(--border)'}`,
-                    background: selected ? 'rgba(255,92,0,0.12)' : 'transparent',
-                    color: selected ? 'var(--orange)' : 'var(--text-muted)',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 10,
-                    fontWeight: 700,
-                    letterSpacing: '0.06em',
-                    textTransform: 'uppercase',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <span>{filter.label}</span>
-                  <span style={{
-                    color: selected ? 'var(--text-primary)' : 'var(--text-muted)',
-                    opacity: count > 0 ? 1 : 0.55,
-                  }}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {visibleSocialTasks
-              .map(t => (
-                <SocialTaskRow key={t.key} task={t} onSubmit={handleSubmit} />
-              ))}
-            {visibleSocialTasks.length === 0 && (
-              <div style={{
-                padding: '16px',
-                border: '1px solid var(--border)',
-                borderRadius: 10,
-                background: 'var(--surface2)',
-                color: 'var(--text-muted)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 11,
-              }}>
-                No hay tareas disponibles para esta red.
-              </div>
-            )}
-          </div>
-        </>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
+          {tasks.map(t => (
+            <SocialTaskRow key={t.key} task={t} onSubmit={handleSubmit} />
+          ))}
+          {tasks.length === 0 && (
+            <div style={{
+              padding: '16px',
+              border: '1px solid var(--border)',
+              borderRadius: 10,
+              background: 'var(--surface2)',
+              color: 'var(--text-muted)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+            }}>
+              No hay tareas sociales disponibles.
+            </div>
+          )}
+        </div>
       )}
     </section>
   );

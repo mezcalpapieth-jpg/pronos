@@ -28,14 +28,12 @@ test('X follow social task stays manual while OAuth verification is paused', () 
   assert.doesNotMatch(source, /X se verifica automáticamente con tu cuenta conectada/);
 });
 
-test('social tasks card has TikTok, Instagram, and X filter tabs', () => {
-  assert.match(source, /const SOCIAL_TASK_FILTERS = \[/);
-  assert.match(source, /key:\s*'tiktok'[\s\S]*label:\s*'TikTok'/);
-  assert.match(source, /key:\s*'instagram'[\s\S]*label:\s*'Instagram'/);
-  assert.match(source, /key:\s*'x'[\s\S]*label:\s*'X'/);
-  assert.match(source, /normalizeSocialTaskNetwork/);
-  assert.match(source, /const \[networkFilter,\s*setNetworkFilter\] = useState\('tiktok'\)/);
-  assert.match(source, /role="tablist"/);
-  assert.match(source, /aria-label="Filtrar tareas sociales"/);
-  assert.match(source, /\.filter\(t => normalizeSocialTaskNetwork\(t\) === networkFilter\)/);
+test('public social tasks card shows all catalog tasks without network filter tabs', () => {
+  const socialTasksSource = source.slice(source.indexOf('function SocialTasksCard'));
+  assert.doesNotMatch(socialTasksSource, /const SOCIAL_TASK_FILTERS = \[/);
+  assert.doesNotMatch(socialTasksSource, /normalizeSocialTaskNetwork/);
+  assert.doesNotMatch(socialTasksSource, /const \[networkFilter,\s*setNetworkFilter\]/);
+  assert.doesNotMatch(socialTasksSource, /aria-label="Filtrar tareas sociales"/);
+  assert.match(socialTasksSource, /tasks\.map\(t =>/);
+  assert.match(socialTasksSource, /No hay tareas sociales disponibles/);
 });

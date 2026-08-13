@@ -41,6 +41,7 @@ test('pending generated markets can be edited before approval', () => {
   assert.match(source, /resolver_config = \$11::jsonb/);
   assert.match(source, /source_data = \$12::jsonb/);
   assert.match(source, /syncMananeraPhraseFromQuestion/);
+  assert.match(source, /syncApiPriceFromQuestion/);
   assert.match(source, /const sourceData = parseJsonb\(r\.source_data,\s*\{\}\)/);
   assert.match(source, /suggestedPricing:\s*sourceData\?\.suggestedPricing\s*\|\|\s*null/);
   assert.match(source, /pricingSearch:\s*sourceData\?\.pricingSearch\s*\|\|\s*null/);
@@ -78,9 +79,16 @@ test('legacy LCDLF binary nomination rows are auto-rejected after grouped market
 
 test('pending mañanera approval syncs transcript phrase from quoted question', () => {
   assert.match(source, /syncMananeraPhraseFromQuestion\(\{\s*question: r\.question,/);
-  assert.match(source, /const resolverConfig = syncedMananera\.resolverConfig \|\| null/);
   assert.match(source, /resolver_config = \$5::jsonb/);
   assert.match(source, /source_data = \$4::jsonb/);
+});
+
+test('pending api-price approval syncs edited threshold and operator from question', () => {
+  assert.match(source, /syncApiPriceFromQuestion\(\{\s*question: r\.question,/);
+  assert.match(source, /resolverConfig: syncedMananera\.resolverConfig/);
+  assert.match(source, /sourceData: syncedMananera\.sourceData \|\| \{\}/);
+  assert.match(source, /const sourceData = syncedApiPrice\.sourceData \|\| syncedMananera\.sourceData \|\| \{\}/);
+  assert.match(source, /const resolverConfig = syncedApiPrice\.resolverConfig \|\| null/);
 });
 
 test('human re-added sports rows are not immediately auto-rejected again', () => {

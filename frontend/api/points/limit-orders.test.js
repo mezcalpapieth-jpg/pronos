@@ -25,6 +25,7 @@ const cancelOrderSource = await readFile(new URL('./cancel-limit-order.js', impo
 const makerRewardsSource = await readFile(new URL('./maker-rewards.js', import.meta.url), 'utf8');
 const makerRewardsCronSource = await readFile(new URL('../cron/points-maker-rewards.js', import.meta.url), 'utf8');
 const buySource = await readFile(new URL('./buy.js', import.meta.url), 'utf8');
+const quoteBuySource = await readFile(new URL('./quote-buy.js', import.meta.url), 'utf8');
 const sellSource = await readFile(new URL('./sell.js', import.meta.url), 'utf8');
 const resolveSource = await readFile(new URL('./admin/resolve-market.js', import.meta.url), 'utf8');
 const cancelMarketSource = await readFile(new URL('./admin/cancel-market.js', import.meta.url), 'utf8');
@@ -155,6 +156,12 @@ test('orderbook taker previews consume real resting orders before AMM fallback',
   assert.equal(sellPreview.sharesSold, 104.545455);
   assert.equal(sellPreview.collateralOut, 60);
   assert.equal(sellPreview.remainingShares, 15.454545);
+});
+
+test('buy quotes display orderbook-only execution price instead of stale AMM price', () => {
+  assert.match(quoteBuySource, /const executionPrice = avgPrice > 0 \? avgPrice : null/);
+  assert.match(quoteBuySource, /const priceAfter = q\?\.pricesAfter\?\.\[oi\] \?\? executionPrice \?\? priceBefore/);
+  assert.match(quoteBuySource, /priceImpactPts: \(priceAfter - priceBefore\) \* 100/);
 });
 
 test('Pronos maker previews use seeded depth after real resting orders', () => {

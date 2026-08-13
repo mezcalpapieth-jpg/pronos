@@ -79,3 +79,34 @@ test('popular event spec carries manual criteria, evidence, and tags', () => {
   assert.equal(spec.source_data.suggestedPricing.source, 'admin-config');
   assert.deepEqual(spec.source_data.suggestedPricing.probabilityPct, [30, 70]);
 });
+
+test('popular event spec supports one multi-outcome manual market', () => {
+  const resolveAt = new Date(Date.now() + 10 * 86_400_000).toISOString();
+  const spec = _internal.popularEventSpec({
+    kind: 'popular_event',
+    key: 'test-multi-popular',
+    question: '¿Quién será anunciado como Magneto en D23?',
+    category: 'musica',
+    topic: 'cine',
+    eventLabel: 'D23',
+    resolveAt,
+    outcomes: ['Robert Pattinson', 'Adam Driver', 'Otro actor', 'No anuncian a Magneto'],
+    probabilities: [22, 13, 20, 45],
+    criteria: 'Resolver con anuncio oficial o trades principales después del evento.',
+    evidence: [
+      { title: 'D23', url: 'https://d23.com/ultimatefanevent2026-copy/' },
+    ],
+    tags: {
+      categoryTags: ['musica'],
+      geoTags: ['world'],
+      topicTags: ['cine'],
+    },
+  });
+
+  assert.equal(spec.source_event_id, 'popular:test-multi-popular');
+  assert.equal(spec.amm_mode, 'unified');
+  assert.deepEqual(spec.outcomes, ['Robert Pattinson', 'Adam Driver', 'Otro actor', 'No anuncian a Magneto']);
+  assert.equal(spec.source_data.eventLabel, 'D23');
+  assert.deepEqual(spec.topic_tags, ['cine']);
+  assert.deepEqual(spec.source_data.suggestedPricing.probabilityPct, [22, 13, 20, 45]);
+});

@@ -23,7 +23,7 @@
  * CONCERT: { kind:'concert', key, question, resolveAt,
  *           artist, venue, category?, probabilityYes? }
  * POPULAR EVENT: { kind:'popular_event', key, question, resolveAt,
- *           category?, topic?, probabilityYes?, criteria, evidence?,
+ *           category?, topic?, outcomes?, probabilities?, probabilityYes?, criteria, evidence?,
  *           tags?: { categoryTags?, geoTags?, topicTags? } }
  *
  * `resolveAt` is an ISO UTC string; close time. `probabilities` accepts
@@ -103,6 +103,51 @@ export const CONCERT_EVENTS = [
 // resolver. These use a longer horizon than concerts so marquee dates
 // such as GTA VI can appear in the admin queue while still staying capped.
 export const POPULAR_EVENTS = [
+  {
+    kind: 'popular_event',
+    key: 'd23-2026-mcu-magneto',
+    topic: 'cine',
+    eventLabel: 'D23 2026 · Disney Entertainment Showcase',
+    question: '¿Quién será anunciado como Magneto en el reboot de X-Men del MCU durante D23 2026?',
+    category: 'musica',
+    icon: '🎬',
+    outcomes: ['Robert Pattinson', 'Adam Driver', 'Otro actor', 'No anuncian a Magneto'],
+    probabilities: [22, 13, 20, 45],
+    resolveAt: '2026-08-15T01:55:00Z',
+    criteria: 'Resolver después del Disney Entertainment Showcase de D23 2026. Robert Pattinson o Adam Driver ganan si Disney, Marvel Studios, D23 o un trade principal (Variety, Deadline o The Hollywood Reporter) confirma a ese actor como Magneto/Erik Lensherr para el reboot de X-Men del MCU. Otro actor gana si se confirma oficialmente a otro actor. No anuncian a Magneto gana si no hay confirmación oficial o de trade principal durante D23 2026. Rumores, fan-casts, "in talks" o "eyed" no cuentan.',
+    evidence: [
+      {
+        title: 'D23 · The Ultimate Disney Fan Event 2026',
+        url: 'https://d23.com/ultimatefanevent2026-copy/',
+      },
+      {
+        title: 'D23 · All-Day Programming Lineup Announced for D23 2026',
+        url: 'https://d23.com/all-day-programming-lineup-announced-for-d23-the-ultimate-disney-fan-event-2026/',
+        publishedAt: '2026-07-13',
+      },
+      {
+        title: 'Marvel · Movies',
+        url: 'https://www.marvel.com/movies',
+      },
+      {
+        title: 'Variety · Marvel',
+        url: 'https://variety.com/t/marvel/',
+      },
+      {
+        title: 'Deadline · Marvel',
+        url: 'https://deadline.com/tag/marvel/',
+      },
+      {
+        title: 'The Hollywood Reporter · Marvel',
+        url: 'https://www.hollywoodreporter.com/t/marvel/',
+      },
+    ],
+    tags: {
+      categoryTags: ['musica'],
+      geoTags: ['world'],
+      topicTags: ['cine'],
+    },
+  },
   {
     kind: 'popular_event',
     key: 'gta6-delayed-again-2026',

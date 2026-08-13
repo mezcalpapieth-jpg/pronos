@@ -234,6 +234,19 @@ test('Points admin has a command center for hidden expiring social post tasks', 
   assert.match(apiSource, /action:\s*'deactivate_campaign'/);
 });
 
+test('Points admin social task queue filters review items by network', () => {
+  const socialQueueSource = sourceForFunction('SocialTasksQueue');
+  assert.match(source, /const SOCIAL_TASK_NETWORK_FILTERS = \[/);
+  assert.match(source, /id:\s*'tiktok'[\s\S]*label:\s*'TikTok'/);
+  assert.match(source, /id:\s*'instagram'[\s\S]*label:\s*'Instagram'/);
+  assert.match(source, /id:\s*'x'[\s\S]*label:\s*'X'/);
+  assert.match(source, /function normalizeSocialTaskPlatform\(task\)/);
+  assert.match(socialQueueSource, /const \[networkFilter,\s*setNetworkFilter\] = useState\('all'\)/);
+  assert.match(socialQueueSource, /aria-label="Filtrar tareas sociales por red"/);
+  assert.match(socialQueueSource, /normalizeSocialTaskPlatform\(task\) === filter\.id/);
+  assert.match(socialQueueSource, /visibleTasks\.map\(t =>/);
+});
+
 test('Points admin social task tabs show review history details', () => {
   assert.match(source, /Sin tareas aprobadas todavía/);
   assert.match(source, /Sin tareas rechazadas todavía/);

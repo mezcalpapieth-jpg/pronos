@@ -7,7 +7,13 @@ const source = await readFile(new URL('./edit-market.js', import.meta.url), 'utf
 test('active market edit syncs mañanera resolver phrase from quoted question', () => {
   assert.match(source, /syncMananeraPhraseFromQuestion/);
   assert.match(source, /question:\s*nextQuestion \?\? existing\.question/);
-  assert.match(source, /resolverConfigChanged = syncedMananera\.changed === true/);
+  assert.match(source, /resolverConfigChanged = syncedMananera\.changed === true \|\| syncedApiPrice\.changed === true/);
   assert.match(source, /&& !resolverConfigChanged/);
   assert.match(source, /resolver_config = \$\{nextResolverConfig \? JSON\.stringify\(nextResolverConfig\) : null\}::jsonb/);
+});
+
+test('active api-price market edits sync threshold and operator from question', () => {
+  assert.match(source, /syncApiPriceFromQuestion/);
+  assert.match(source, /resolverConfig: syncedMananera\.resolverConfig/);
+  assert.match(source, /const nextResolverConfig = syncedApiPrice\.resolverConfig \|\| null/);
 });

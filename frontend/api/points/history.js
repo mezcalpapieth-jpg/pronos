@@ -9,7 +9,7 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
-import { binaryPrices } from '../_lib/amm-math.js';
+import { binaryPrices, multiPrices } from '../_lib/amm-math.js';
 import { requireSession } from '../_lib/session.js';
 import { createApiTimer } from '../_lib/api-performance.js';
 
@@ -315,18 +315,25 @@ export default async function handler(req, res) {
         claimablePayout = Math.max(0, winningGross - redeemedWinning);
       }
       const effectiveReceived = m.totalReceived + claimablePayout;
-      const netPnl = round2(effectiveReceived - m.totalInvested);
       const pickedOutcome = pickedOutcomeSummary(m.transactions);
-      // Snapshot of unsold shares' mark-to-market for "open" rows
+      const settledNetPnl = round2(effectiveReceived - m.totalInvested);
+
+      // Snapshot of unsold shares' mark-to-market for "open" rows. This
+      // keeps history.summary.totalPnl aligned with /pnl-history's final
+      // point: received cash + current holdings value - invested cash.
       if (outcomeStatus === 'open' || outcomeStatus === 'pending') {
         const reserves = m.reserves;
         const prices = Array.isArray(reserves) && reserves.length === 2
           ? binaryPrices(reserves)
-          : m.outcomes.map((_, i) => 1 / m.outcomes.length);
+          : Array.isArray(reserves) && reserves.length >= 2
+            ? multiPrices(reserves)
+            : m.outcomes.map(() => 1 / m.outcomes.length);
         let mtm = 0;
         for (const [oi, held] of m.heldByOutcome.entries()) {
-          mtm += held * (prices[oi] ?? 0);
+          const unredeemed = Math.max(0, held - (m.redeemedByOutcome.get(oi) || 0));
+          mtm += unredeemed * (prices[oi] ?? 0);
         }
+        const netPnl = round2(effectiveReceived + mtm - m.totalInvested);
         return {
           marketId: m.marketId,
           parentMarketId: m.parentMarketId,
@@ -355,7 +362,7 @@ export default async function handler(req, res) {
         totalReceived: round2(effectiveReceived),
         realizedReceived: round2(m.totalReceived),
         claimablePayout: round2(claimablePayout),
-        netPnl,
+        netPnl: settledNetPnl,
         ...pickedOutcome,
         transactions: m.transactions,
       };

@@ -365,7 +365,7 @@ function concertSpec(ev) {
   });
 }
 
-// ─── Popular binary events ─────────────────────────────────────────────
+// ─── Popular manual-review events ─────────────────────────────────────
 function popularEventSpec(ev) {
   const horizonDays = Number.isFinite(Number(ev.horizonDays))
     ? Number(ev.horizonDays)
@@ -374,6 +374,11 @@ function popularEventSpec(ev) {
   if (typeof ev.question !== 'string' || ev.question.trim().length < 8) return null;
   if (typeof ev.criteria !== 'string' || ev.criteria.trim().length < 12) return null;
 
+  const outcomes = Array.isArray(ev.outcomes)
+    ? ev.outcomes.map(value => String(value || '').trim()).filter(Boolean)
+    : ['Sí', 'No'];
+  if (outcomes.length < 2) return null;
+
   const evidence = ev.sources || ev.evidence || [];
   const spec = {
     source: ev.source || 'popular',
@@ -381,10 +386,10 @@ function popularEventSpec(ev) {
     question: ev.question,
     category: ev.category || 'general',
     icon: ev.icon || null,
-    outcomes: ['Sí', 'No'],
+    outcomes,
     seed_liquidity: 1000,
     end_time: ev.resolveAt,
-    amm_mode: 'unified',
+    amm_mode: ev.ammMode || ev.amm_mode || 'unified',
     resolver_type: 'manual_review',
     resolver_config: manualReviewConfig({
       sourceEventId: `popular:${ev.key}`,
@@ -394,6 +399,7 @@ function popularEventSpec(ev) {
     source_data: {
       kind: 'popular_event',
       topic: ev.topic || null,
+      eventLabel: ev.eventLabel || null,
       movie: ev.movie || null,
       franchise: ev.franchise || null,
       region: ev.region || ev.marketRegion || 'world',
@@ -404,13 +410,16 @@ function popularEventSpec(ev) {
       resolutionCriteria: ev.criteria,
     },
   };
+  const hasExplicitProbabilities = Array.isArray(ev.probabilities) || Array.isArray(ev.probabilityPct);
   return attachSuggestedPricing(explicitTags(spec, ev.tags), {
     probabilities: configuredProbabilities(
       ev,
-      2,
-      binaryProbabilitiesFromYes(ev.probabilityYes ?? ev.suggestedProbabilityYes, 0.45),
+      outcomes.length,
+      outcomes.length === 2
+        ? binaryProbabilitiesFromYes(ev.probabilityYes ?? ev.suggestedProbabilityYes, 0.45)
+        : uniformProbabilities(outcomes.length),
     ),
-    source: Array.isArray(ev.probabilities) || Array.isArray(ev.probabilityPct) || ev.probabilityYes != null
+    source: hasExplicitProbabilities || ev.probabilityYes != null
       ? 'admin-config'
       : 'source-signals:popular-event',
     rationale: 'Mercado popular con resolución manual y fuentes explícitas; admin puede editar odds antes de aprobar.',

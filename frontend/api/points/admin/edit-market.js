@@ -26,6 +26,7 @@ import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { deriveMarketTags } from '../../_lib/category-tags.js';
 import { syncMananeraPhraseFromQuestion } from '../../_lib/mananera-market-sync.js';
+import { syncApiPriceFromQuestion } from '../../_lib/api-price-market-sync.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -107,8 +108,12 @@ export default async function handler(req, res) {
       question: nextQuestion ?? existing.question,
       resolverConfig: parseJsonb(existing.resolver_config, null),
     });
-    const nextResolverConfig = syncedMananera.resolverConfig || null;
-    const resolverConfigChanged = syncedMananera.changed === true;
+    const syncedApiPrice = syncApiPriceFromQuestion({
+      question: nextQuestion ?? existing.question,
+      resolverConfig: syncedMananera.resolverConfig,
+    });
+    const nextResolverConfig = syncedApiPrice.resolverConfig || null;
+    const resolverConfigChanged = syncedMananera.changed === true || syncedApiPrice.changed === true;
     if (
       nextQuestion === null
       && nextStartTime === null

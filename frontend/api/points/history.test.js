@@ -8,12 +8,19 @@ test('winning unresolved history includes claimable payout in displayed PnL', ()
   assert.match(source, /claimablePayout/);
   assert.match(source, /redeemedByOutcome\.get\(winningIdx\)/);
   assert.match(source, /effectiveReceived = m\.totalReceived \+ claimablePayout/);
-  assert.match(source, /netPnl = round2\(effectiveReceived - m\.totalInvested\)/);
+  assert.match(source, /settledNetPnl = round2\(effectiveReceived - m\.totalInvested\)/);
 });
 
 test('history still exposes realized received separately from claimable payout', () => {
   assert.match(source, /realizedReceived: round2\(m\.totalReceived\)/);
   assert.match(source, /totalReceived: round2\(effectiveReceived\)/);
+});
+
+test('open-market history PnL includes mark-to-market like the chart', () => {
+  assert.match(source, /import \{ binaryPrices, multiPrices \} from '\.\.\/_lib\/amm-math\.js'/);
+  assert.match(source, /markToMarket: round2\(mtm\)/);
+  assert.match(source, /netPnl = round2\(effectiveReceived \+ mtm - m\.totalInvested\)/);
+  assert.match(source, /multiPrices\(reserves\)/);
 });
 
 test('portfolio history exposes the bought outcome at market level', () => {

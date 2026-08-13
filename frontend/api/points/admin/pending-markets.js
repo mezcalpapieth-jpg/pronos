@@ -25,6 +25,7 @@ import { attachDefaultSuggestedPricing, seedLiquiditiesFromProbabilities } from 
 import { tryAttachPolymarketPricing } from '../../_lib/polymarket-pricing.js';
 import { LCDLF_SOURCE } from '../../_lib/lcdlf-official.js';
 import { syncMananeraPhraseFromQuestion } from '../../_lib/mananera-market-sync.js';
+import { syncApiPriceFromQuestion } from '../../_lib/api-price-market-sync.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -484,8 +485,13 @@ async function approveOne(pid, reviewer, note, opts = {}) {
       resolverConfig: parseJsonb(r.resolver_config, null),
       sourceData: parseJsonb(r.source_data, {}),
     });
-    const sourceData = syncedMananera.sourceData || {};
-    const resolverConfig = syncedMananera.resolverConfig || null;
+    const syncedApiPrice = syncApiPriceFromQuestion({
+      question: r.question,
+      resolverConfig: syncedMananera.resolverConfig,
+      sourceData: syncedMananera.sourceData || {},
+    });
+    const sourceData = syncedApiPrice.sourceData || syncedMananera.sourceData || {};
+    const resolverConfig = syncedApiPrice.resolverConfig || null;
     const tagBundle = deriveMarketTags({
       ...r,
       source_data: sourceData,
@@ -836,8 +842,13 @@ async function editPending(pid, reviewer, patch = {}, note = null) {
       resolverConfig: alignedResolverConfig,
       sourceData: previousSourceData,
     });
-    const resolverConfig = syncedMananera.resolverConfig || null;
-    const sourceData = syncedMananera.sourceData || previousSourceData;
+    const syncedApiPrice = syncApiPriceFromQuestion({
+      question,
+      resolverConfig: syncedMananera.resolverConfig,
+      sourceData: syncedMananera.sourceData || previousSourceData,
+    });
+    const resolverConfig = syncedApiPrice.resolverConfig || null;
+    const sourceData = syncedApiPrice.sourceData || syncedMananera.sourceData || previousSourceData;
 
     const tagBundle = deriveMarketTags({
       ...r,

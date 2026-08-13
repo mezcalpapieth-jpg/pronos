@@ -8,7 +8,7 @@ import {
 } from './amm-math.js';
 
 const DEFAULT_LEVELS = [10, 25, 50, 100, 250, 500, 1000, 2500];
-const DEFAULT_MOCK_MAKER_DEPTH = 7500;
+const DEFAULT_MOCK_MAKER_DEPTH = 2500;
 const MOCK_MAKER_SPREADS = [0.01, 0.02, 0.035, 0.05, 0.075, 0.10, 0.14, 0.18, 0.23, 0.29, 0.36, 0.44];
 
 function round(value, digits = 6) {

@@ -158,7 +158,8 @@ export default async function handler(req, res) {
     const fee = Number(q?.fee || 0);
     const avgPrice = sharesOut > 0.000001 ? (collateralSpent - fee) / sharesOut : 0;
     const priceBefore = pricesBefore[oi] || 0;
-    const priceAfter = pricesAfter[oi] || priceBefore;
+    const executionPrice = avgPrice > 0 ? avgPrice : null;
+    const priceAfter = q?.pricesAfter?.[oi] ?? executionPrice ?? priceBefore;
     return res.status(200).json({
       collateral: collateralSpent,
       fee,

@@ -616,8 +616,21 @@ function CyclesPanel() {
 }
 
 // ─── Social tasks queue ────────────────────────────────────────────────────
+const SOCIAL_TASK_NETWORK_FILTERS = [
+  { id: 'all', label: 'Todas' },
+  { id: 'tiktok', label: 'TikTok' },
+  { id: 'instagram', label: 'Instagram' },
+  { id: 'x', label: 'X' },
+];
+
+function normalizeSocialTaskPlatform(task) {
+  const platform = String(task?.platform || task?.network || '').trim().toLowerCase();
+  return platform === 'twitter' ? 'x' : platform;
+}
+
 function SocialTasksQueue({ onQueueChange }) {
   const [status, setStatus] = useState('pending');
+  const [networkFilter, setNetworkFilter] = useState('all');
   const [tasks, setTasks] = useState(null);
   const [campaigns, setCampaigns] = useState([]);
   const [campaignForm, setCampaignForm] = useState({
@@ -658,11 +671,22 @@ function SocialTasksQueue({ onQueueChange }) {
   }
 
   function emptySocialCopy() {
+    if (networkFilter !== 'all') return `Sin tareas de ${networkFilter.toUpperCase()} en esta vista.`;
     if (status === 'approved') return 'Sin tareas aprobadas todavía.';
     if (status === 'rejected') return 'Sin tareas rechazadas todavía.';
     if (status === 'history') return 'Sin historial de revisiones todavía.';
     return 'Sin tareas pendientes.';
   }
+
+  const socialTaskCounts = Object.fromEntries(SOCIAL_TASK_NETWORK_FILTERS.map(filter => [
+    filter.id,
+    Array.isArray(tasks)
+      ? tasks.filter(task => filter.id === 'all' || normalizeSocialTaskPlatform(task) === filter.id).length
+      : 0,
+  ]));
+  const visibleTasks = Array.isArray(tasks)
+    ? tasks.filter(task => networkFilter === 'all' || normalizeSocialTaskPlatform(task) === networkFilter)
+    : [];
 
   async function copyCampaignLink(campaign) {
     const url = campaignShareUrl(campaign);
@@ -891,15 +915,58 @@ function SocialTasksQueue({ onQueueChange }) {
         ))}
       </div>
 
+      <div
+        role="tablist"
+        aria-label="Filtrar tareas sociales por red"
+        style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}
+      >
+        {SOCIAL_TASK_NETWORK_FILTERS.map(filter => {
+          const selected = networkFilter === filter.id;
+          const count = socialTaskCounts[filter.id] || 0;
+          return (
+            <button
+              key={filter.id}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              onClick={() => setNetworkFilter(filter.id)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '6px 14px',
+                borderRadius: 16,
+                border: `1px solid ${selected ? 'rgba(255,92,0,0.58)' : 'var(--border)'}`,
+                background: selected ? 'rgba(255,92,0,0.12)' : 'transparent',
+                color: selected ? 'var(--orange)' : 'var(--text-secondary)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                cursor: 'pointer',
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+              }}
+            >
+              <span>{filter.label}</span>
+              <span style={{
+                color: selected ? 'var(--text-primary)' : 'var(--text-muted)',
+                opacity: count > 0 ? 1 : 0.55,
+              }}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {tasks === null && (
         <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Cargando…</p>
       )}
-      {tasks && tasks.length === 0 && (
+      {tasks && visibleTasks.length === 0 && (
         <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
           {emptySocialCopy()}
         </p>
       )}
-      {tasks && tasks.map(t => {
+      {tasks && visibleTasks.map(t => {
         const statusLabel = t.status === 'approved'
           ? 'Aprobada'
           : t.status === 'rejected'
