@@ -24,10 +24,13 @@ test('convert-parallel-binary ignores historical trades but refuses current expo
   assert.match(source, /points_trades/);
   assert.match(source, /points_limit_orders/);
   assert.match(source, /points_positions/);
+  assert.match(source, /ACTIVE_POSITION_SHARE_EPSILON = 0\.5/);
   assert.match(source, /PRONOS_TREASURY_USERNAME/);
   assert.match(source, /hasCurrentPublicExposure/);
   assert.match(source, /parallel_market_has_exposure/);
+  assert.match(source, /ABS\(COALESCE\(shares, 0\)\) >= \$3/);
   assert.doesNotMatch(source, /counts\.trades > 0/);
+  assert.doesNotMatch(source, /cost_basis > 0/);
   assert.match(source, /Cancel\/refund this market and create a fresh binary version instead/);
 });
 

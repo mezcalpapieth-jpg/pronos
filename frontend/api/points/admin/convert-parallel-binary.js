@@ -21,6 +21,7 @@ import {
 } from '../../_lib/points-limit-orders.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
+const ACTIVE_POSITION_SHARE_EPSILON = 0.5;
 
 function httpError(message, status = 400, detail = null) {
   const err = new Error(message);
@@ -189,8 +190,8 @@ export default async function handler(req, res) {
               FROM points_positions
              WHERE market_id = ANY($1::int[])
                AND username <> $2
-               AND (shares > 0 OR cost_basis > 0)) AS positions`,
-        [relatedIds, PRONOS_TREASURY_USERNAME],
+               AND ABS(COALESCE(shares, 0)) >= $3) AS positions`,
+        [relatedIds, PRONOS_TREASURY_USERNAME, ACTIVE_POSITION_SHARE_EPSILON],
       );
       const counts = publicActivityCounts(activity.rows[0]);
       if (hasCurrentPublicExposure(counts)) {
