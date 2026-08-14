@@ -7,6 +7,9 @@
  *   seedLiquidities?: number[] // index-aligned per-outcome liquidity
  *   ammMode?: 'unified' | 'parallel'  // default 'unified'
  *   featured?: boolean
+ *   chartStyle?: 'auto' | 'single' | 'rivals'  // default 'auto'; only
+ *     meaningful at N=2 — 'single' forces one line, 'rivals' forces two
+ *     on a shared axis, 'auto' detects from the outcome labels
  *   sport?, league?, outcomeImages?, geo?,
  *   resolverType?, resolverConfig?, resolutionSource?, resolutionCriteria?,
  *   source?, sourceEventId?
@@ -42,6 +45,7 @@ const ALLOWED_CATEGORIES = new Set([
 ]);
 const ALLOWED_GEO_TAGS = new Set(['mexico', 'latam', 'world']);
 const ALLOWED_MANUAL_RESOLVERS = new Set(['manual', 'manual_review']);
+const ALLOWED_CHART_STYLES = new Set(['single', 'rivals']);
 const ALLOWED_TOPIC_TAGS = new Set([
   'general',
   'politica',
@@ -188,7 +192,7 @@ export default async function handler(req, res) {
 
   const {
     question, category, endTime, outcomes, seedLiquidity, seedLiquidities, ammMode,
-    featured,
+    featured, chartStyle,
     sport, league, outcomeImages, geo, topicTags,
     resolverType, resolverConfig, resolutionSource, resolutionCriteria, source, sourceEventId,
   } = req.body || {};
@@ -250,6 +254,17 @@ export default async function handler(req, res) {
   const lowerSet = new Set(normalizedOutcomes.map(o => o.toLowerCase()));
   if (lowerSet.size !== normalizedOutcomes.length) {
     return res.status(400).json({ error: 'duplicate_outcomes' });
+  }
+  // chart_style: admin override for the detail-page chart. 'auto' / empty
+  // stores NULL (the default auto-detect); anything else must be one of
+  // the two explicit styles.
+  let chartStyleVal = null;
+  if (chartStyle != null && chartStyle !== '' && chartStyle !== 'auto') {
+    const normalizedChartStyle = String(chartStyle).trim().toLowerCase();
+    if (!ALLOWED_CHART_STYLES.has(normalizedChartStyle)) {
+      return res.status(400).json({ error: 'invalid_chart_style' });
+    }
+    chartStyleVal = normalizedChartStyle;
   }
   const normalizedLiquidity = normalizeSeedLiquidities({
     outcomes: normalizedOutcomes,
@@ -328,12 +343,14 @@ export default async function handler(req, res) {
               question, category, icon, outcomes, reserves, seed_liquidity, seed_liquidities,
               end_time, status, created_by, amm_mode, featured,
               mode, chain_id, chain_market_id, chain_address,
-              sport, league, outcome_images, category_tags, geo_tags, topic_tags)
+              sport, league, outcome_images, category_tags, geo_tags, topic_tags,
+              chart_style)
            VALUES ($1, $2, $3, $4::jsonb,
                    $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11::jsonb,
                    $12, 'active', $13, 'unified', $14,
                    $15, $16, $17, $18,
-                   $19, $20, $21::jsonb, $22::jsonb, $23::jsonb, $24::jsonb)
+                   $19, $20, $21::jsonb, $22::jsonb, $23::jsonb, $24::jsonb,
+                   $25)
            RETURNING id`,
           [
             sourceVal,
@@ -360,6 +377,7 @@ export default async function handler(req, res) {
             categoryTagsJson,
             geoTagsJson,
             topicTagsJson,
+            chartStyleVal,
           ],
         );
         return r.rows[0].id;
@@ -390,12 +408,14 @@ export default async function handler(req, res) {
             question, category, icon, outcomes, reserves, seed_liquidity, seed_liquidities,
             end_time, status, created_by, amm_mode, featured,
             mode, chain_id, chain_market_id, chain_address,
-            sport, league, outcome_images, category_tags, geo_tags, topic_tags)
+            sport, league, outcome_images, category_tags, geo_tags, topic_tags,
+            chart_style)
          VALUES ($1, $2, $3, $4::jsonb,
                  $5, $6, $7, $8::jsonb, '[]'::jsonb, $9, $10::jsonb,
                  $11, 'active', $12, 'parallel', $13,
                  $14, $15, $16, $17,
-                 $18, $19, $20::jsonb, $21::jsonb, $22::jsonb, $23::jsonb)
+                 $18, $19, $20::jsonb, $21::jsonb, $22::jsonb, $23::jsonb,
+                 $24)
          RETURNING id`,
         [
           sourceVal,
@@ -421,6 +441,7 @@ export default async function handler(req, res) {
           categoryTagsJson,
           geoTagsJson,
           topicTagsJson,
+          chartStyleVal,
         ],
       );
       const parentId = parent.rows[0].id;

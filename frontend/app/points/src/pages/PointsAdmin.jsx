@@ -1485,6 +1485,10 @@ function SupportTicketsQueue({ onQueueChange }) {
 function CreateMarketForm({ prefill }) {
   const [mode, setMode] = useState('binary'); // 'binary' | 'multi'
   const [ammMode, setAmmMode] = useState('unified'); // 'unified' | 'parallel'
+  // Detail-page chart style — only meaningful at N=2 outcomes. 'auto'
+  // detects from the outcome labels (literal Sí/No → one line, named
+  // rivals → two); 'single' / 'rivals' force one or the other.
+  const [chartStyle, setChartStyle] = useState('auto'); // 'auto' | 'single' | 'rivals'
   // `prefill` arrives via deep-link (currently from the /c/noticias
   // "Crear mercado de esta noticia" button). Seeds question +
   // category so admin only fills outcomes / end time.
@@ -1513,6 +1517,8 @@ function CreateMarketForm({ prefill }) {
       outcomes: next === 'binary' ? ['Sí', 'No'] : ['', '', ''],
       seedLiquidities: next === 'binary' ? [500, 500] : [500, 500, 500],
     }));
+    // chartStyle only applies at N=2 — drop a stale pick on the way out.
+    if (next !== 'binary') setChartStyle('auto');
   }
 
   function updateOutcome(idx, value) {
@@ -1584,6 +1590,9 @@ function CreateMarketForm({ prefill }) {
     setState({ submitting: true, msg: null, err: null });
     // Binary markets are always unified (parallel = unified at N=2).
     const effectiveAmmMode = mode === 'binary' ? 'unified' : ammMode;
+    // chartStyle only applies at N=2; multi markets always auto (they
+    // always draw every outcome on one shared axis regardless).
+    const effectiveChartStyle = mode === 'binary' ? chartStyle : 'auto';
     const resolutionSource = form.resolutionSource.trim();
     const resolutionCriteria = form.resolutionCriteria.trim();
     const resolutionPayload = (resolutionSource || resolutionCriteria)
@@ -1605,6 +1614,7 @@ function CreateMarketForm({ prefill }) {
         seedLiquidity: cleanedLiquidities[0] || 500,
         seedLiquidities: cleanedLiquidities,
         ammMode: effectiveAmmMode,
+        chartStyle: effectiveChartStyle,
         ...resolutionPayload,
       });
       const modeLabel = effectiveAmmMode === 'parallel' ? 'paralelo' : 'unificado';
@@ -1624,6 +1634,7 @@ function CreateMarketForm({ prefill }) {
         outcomes: mode === 'binary' ? ['Sí', 'No'] : ['', '', ''],
         seedLiquidities: mode === 'binary' ? [500, 500] : [500, 500, 500],
       }));
+      setChartStyle('auto');
     } catch (e) {
       setState({ submitting: false, msg: null, err: e.code || e.message });
     }
@@ -1958,6 +1969,50 @@ function CreateMarketForm({ prefill }) {
           )}
         </div>
       </Field>
+
+      {/* ── Chart style ──────────────────────────────────────
+          Only meaningful at N=2: auto-detect picks one line for a
+          literal Sí/No and two (Polymarket-style, shared axis) for
+          named rivals — this overrides that when the labels don't
+          give it away, e.g. a Verdadero/Falso market that should
+          still read as binary. */}
+      {mode === 'binary' && (
+        <Field label="Estilo de gráfica">
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[
+              { key: 'auto', label: 'Automático', hint: 'Detecta por las etiquetas' },
+              { key: 'single', label: 'Línea única', hint: 'Sí/No clásico' },
+              { key: 'rivals', label: 'Rivales', hint: 'Dos líneas, un eje' },
+            ].map(s => {
+              const active = chartStyle === s.key;
+              return (
+                <button
+                  key={s.key}
+                  type="button"
+                  onClick={() => setChartStyle(s.key)}
+                  title={s.hint}
+                  style={{
+                    flex: 1,
+                    padding: '10px 12px',
+                    background: active ? 'var(--surface3, rgba(0,232,122,0.12))' : 'var(--surface2)',
+                    border: `1px solid ${active ? 'var(--green)' : 'var(--border)'}`,
+                    borderRadius: 8,
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 10,
+                    fontWeight: active ? 700 : 500,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    color: active ? 'var(--green)' : 'var(--text-muted)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {s.label}
+                </button>
+              );
+            })}
+          </div>
+        </Field>
+      )}
 
       {state.msg && (
         <div style={{ color: 'var(--green)', fontFamily: 'var(--font-mono)', fontSize: 12, marginBottom: 12 }}>

@@ -1040,6 +1040,14 @@ const POINTS_SCHEMA_MIGRATIONS = [
     ON points_pending_markets(source, source_event_id)`,
   `CREATE INDEX IF NOT EXISTS idx_points_pending_status
     ON points_pending_markets(status, end_time ASC)`,
+
+  // chart_style: admin override for the detail-page price chart on
+  // 2-outcome markets. NULL (default) auto-detects — literal Sí/No
+  // outcomes get one line, named rivals get two on a shared axis.
+  // 'single' / 'rivals' force one or the other regardless of labels.
+  // 3+ outcome markets always draw one shared-axis line per outcome
+  // and ignore this column.
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS chart_style TEXT`,
 ];
 
 // PostgreSQL error codes we treat as idempotent no-ops during migration.
