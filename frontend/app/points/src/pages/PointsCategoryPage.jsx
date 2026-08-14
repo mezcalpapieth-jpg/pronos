@@ -50,8 +50,7 @@ const SLUG_TO_TITLE_KEY = {
 };
 
 // Sports sub-filter tabs. `key` maps to market.sport. 'all' shows
-// everything deportes-tagged. NFL is listed but will be empty until
-// a generator ships. Baseball is a family — MLB + LMB share the
+// everything deportes-tagged. Baseball is a family — MLB + LMB share the
 // 'baseball' sport and are split by league in the sidebar below.
 const SPORT_TABS = [
   { key: 'all',      tKey: 'points.sport.all'      },
