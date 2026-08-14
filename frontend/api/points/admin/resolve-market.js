@@ -23,6 +23,7 @@ import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 import { bestEffortPersistResolvedCryptoMarketSnapshot } from '../../_lib/crypto-chart-snapshot.js';
 import { releaseOpenLimitOrdersForMarkets } from '../../_lib/points-limit-orders.js';
+import { bestEffortPersistTopHolderSnapshot } from '../../_lib/points-top-holders.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 
@@ -84,6 +85,12 @@ export default async function handler(req, res) {
         [mid],
       );
       const relatedIds = relatedIdsResult.rows.map(row => Number(row.id)).filter(Number.isFinite);
+      await bestEffortPersistTopHolderSnapshot(
+        client,
+        mid,
+        'admin/resolve-market',
+        { resolution: { winningOutcomeIndex: oi } },
+      );
       await releaseOpenLimitOrdersForMarkets(client, relatedIds.length > 0 ? relatedIds : [mid], {
         reason: 'market_resolved',
       });

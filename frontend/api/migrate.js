@@ -588,6 +588,17 @@ const MIGRATIONS = [
     ON points_cycle_position_snapshots(cycle_id, username)`,
   `CREATE INDEX IF NOT EXISTS idx_points_cycle_position_snapshots_market
     ON points_cycle_position_snapshots(market_id, outcome_index)`,
+
+  `CREATE TABLE IF NOT EXISTS points_top_holder_snapshots (
+    market_id      INTEGER PRIMARY KEY REFERENCES points_markets(id) ON DELETE CASCADE,
+    amm_mode       TEXT NOT NULL DEFAULT 'unified',
+    outcomes       JSONB NOT NULL DEFAULT '[]'::jsonb,
+    holders        JSONB NOT NULL DEFAULT '[]'::jsonb,
+    snapshotted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_top_holder_snapshots_time
+    ON points_top_holder_snapshots(snapshotted_at DESC)`,
 ];
 
 export default async function handler(req, res) {

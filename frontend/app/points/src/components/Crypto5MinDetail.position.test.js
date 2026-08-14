@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const cryptoSource = await readFile(new URL('./Crypto5MinDetail.jsx', import.meta.url), 'utf8');
+const topHoldersSource = await readFile(new URL('./TopHolders.jsx', import.meta.url), 'utf8');
 const detailSource = await readFile(new URL('../pages/PointsMarketDetail.jsx', import.meta.url), 'utf8');
 
 test('crypto 5-minute markets show and refresh the current user position after buying', () => {
@@ -30,4 +31,11 @@ test('crypto 5-minute markets show and refresh the current user position after b
   // real cadence survives as the fallback rather than pinning the whole line.
   assert.match(detailSource, /isCryptoMarket \? 5_000 : 15_000/);
   assert.match(detailSource, /const pollMs = videoDemoPollMs\(\) \?\? \(isCryptoMarket/);
+});
+
+test('top holders display frozen invested MXNP and final payout when present', () => {
+  assert.match(topHoldersSource, /payoutValue/);
+  assert.match(topHoldersSource, /hasPayout/);
+  assert.match(topHoldersSource, /const beforeValue = hasPayout && Number\.isFinite\(costBasis\) \? costBasis : value/);
+  assert.match(topHoldersSource, /`\$\{beforeLabel\} MXNP -> \$\{payoutLabel\} MXNP`/);
 });

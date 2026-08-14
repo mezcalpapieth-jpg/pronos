@@ -64,6 +64,12 @@ export default function TopHolders({ marketId, refreshKey }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {holders.map((h, i) => {
             const value = Number(h.value || 0);
+            const costBasis = Number(h.costBasis);
+            const payoutValue = Number(h.payoutValue);
+            const hasPayout = Number.isFinite(payoutValue);
+            const beforeValue = hasPayout && Number.isFinite(costBasis) ? costBasis : value;
+            const beforeLabel = Math.round(beforeValue).toLocaleString('es-MX');
+            const payoutLabel = hasPayout ? Math.round(payoutValue).toLocaleString('es-MX') : '';
             const width = Math.max(4, Math.min(100, (value / maxValue) * 100));
             return (
               <div
@@ -134,9 +140,10 @@ export default function TopHolders({ marketId, refreshKey }) {
                 color: 'var(--text-primary)',
                 whiteSpace: 'nowrap',
                 fontWeight: 600,
+                textAlign: 'right',
               }}>
-                {Math.round(h.value).toLocaleString('es-MX')}
-              </span>
+              {hasPayout ? `${beforeLabel} MXNP -> ${payoutLabel} MXNP` : beforeLabel}
+            </span>
             </div>
           );
         })}

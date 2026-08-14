@@ -53,6 +53,7 @@ import { buildFootballDataEspnFallbackConfig } from '../_lib/sports-resolver-fal
 import { NEXT_OPPONENT_RECHECK_INTERVAL_HOURS, findParallelWinnerIndex, resolverLabelsOverlap } from '../_lib/sports-resolver-policy.js';
 import { buildPointsResolutionCandidateInsert } from '../_lib/points-resolution-candidates.js';
 import { releaseOpenLimitOrdersForMarkets } from '../_lib/points-limit-orders.js';
+import { bestEffortPersistTopHolderSnapshot } from '../_lib/points-top-holders.js';
 import {
   buildLcdlfResolutionReview,
   isLcdlfMarket,
@@ -1780,6 +1781,16 @@ export async function runAutoResolve({ dry = false } = {}) {
               throw new Error(`lcdlf_parallel_leg_count_mismatch: db=${legs.rows.length} cfg=${independentLegResolutions.length}`);
             }
             const legIds = legs.rows.map(row => Number(row.id)).filter(Number.isFinite);
+            await bestEffortPersistTopHolderSnapshot(
+              client,
+              m.id,
+              'cron/points-auto-resolve',
+              {
+                resolution: {
+                  independentLegOutcomes: independentLegResolutions.map(row => Number(row.outcomeIndex)),
+                },
+              },
+            );
             await releaseOpenLimitOrdersForMarkets(client, [m.id, ...legIds], {
               reason: 'market_resolved',
             });
@@ -1878,6 +1889,12 @@ export async function runAutoResolve({ dry = false } = {}) {
 
       try {
         await withTransaction(async (client) => {
+          await bestEffortPersistTopHolderSnapshot(
+            client,
+            m.id,
+            'cron/points-auto-resolve',
+            { resolution: { winningOutcomeIndex: winningIdx } },
+          );
           await releaseOpenLimitOrdersForMarkets(client, [m.id], {
             reason: 'market_resolved',
           });

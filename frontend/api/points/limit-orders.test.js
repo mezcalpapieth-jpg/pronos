@@ -29,11 +29,13 @@ const buySource = await readFile(new URL('./buy.js', import.meta.url), 'utf8');
 const quoteBuySource = await readFile(new URL('./quote-buy.js', import.meta.url), 'utf8');
 const quoteSellSource = await readFile(new URL('./quote-sell.js', import.meta.url), 'utf8');
 const topHoldersSource = await readFile(new URL('./top-holders.js', import.meta.url), 'utf8');
+const topHoldersHelperSource = await readFile(new URL('../_lib/points-top-holders.js', import.meta.url), 'utf8');
 const sellSource = await readFile(new URL('./sell.js', import.meta.url), 'utf8');
 const resolveSource = await readFile(new URL('./admin/resolve-market.js', import.meta.url), 'utf8');
 const cancelMarketSource = await readFile(new URL('./admin/cancel-market.js', import.meta.url), 'utf8');
 const voidMarketSource = await readFile(new URL('./admin/void-market.js', import.meta.url), 'utf8');
 const cronResolveSource = await readFile(new URL('../cron/points-auto-resolve.js', import.meta.url), 'utf8');
+const crypto5MinSource = await readFile(new URL('../_lib/crypto-5min.js', import.meta.url), 'utf8');
 const vercelSource = await readFile(new URL('../../../vercel.json', import.meta.url), 'utf8');
 
 test('points schema and manual migration create reserved limit-order book storage', () => {
@@ -51,6 +53,11 @@ test('points schema and manual migration create reserved limit-order book storag
   for (const source of [schemaSource, migrateSource]) {
     assert.match(source, /CREATE TABLE IF NOT EXISTS points_cycle_position_snapshots/);
     assert.match(source, /idx_points_cycle_position_snapshots_cycle_user/);
+  }
+  for (const source of [schemaSource, migrateSource]) {
+    assert.match(source, /CREATE TABLE IF NOT EXISTS points_top_holder_snapshots/);
+    assert.match(source, /holders\s+JSONB NOT NULL DEFAULT '\[\]'::jsonb/);
+    assert.match(source, /idx_points_top_holder_snapshots_time/);
   }
 });
 
@@ -187,13 +194,26 @@ test('sell quotes and orderbook current price only trust latest book-only fills'
 });
 
 test('top holders price positions with displayed book-trade odds', () => {
-  assert.match(topHoldersSource, /SELECT id, parent_id, outcomes, reserves, amm_mode, status, outcome/);
-  assert.match(topHoldersSource, /binaryPricesWithBookTrade/);
-  assert.match(topHoldersSource, /display_trade_outcome_index/);
-  assert.match(topHoldersSource, /display_trade_is_book/);
-  assert.match(topHoldersSource, /PRONOS_TREASURY_USERNAME/);
-  assert.match(topHoldersSource, /const prices = basePrices\.length === 2/);
-  assert.match(topHoldersSource, /const legPrices = legBasePrices\.length === 2/);
+  assert.match(topHoldersSource, /readTopHolderSnapshot/);
+  assert.match(topHoldersSource, /buildTopHoldersForMarket/);
+  assert.match(topHoldersHelperSource, /binaryPricesWithBookTrade/);
+  assert.match(topHoldersHelperSource, /display_trade_outcome_index/);
+  assert.match(topHoldersHelperSource, /display_trade_is_book/);
+  assert.match(topHoldersHelperSource, /PRONOS_TREASURY_USERNAME/);
+  assert.match(topHoldersHelperSource, /points_top_holder_snapshots/);
+  assert.match(topHoldersHelperSource, /payoutValue/);
+  assert.match(topHoldersHelperSource, /winningOutcomeIndex/);
+  assert.match(topHoldersHelperSource, /independentLegOutcomes/);
+});
+
+test('market resolution freezes top-holder snapshots before final odds collapse', () => {
+  for (const source of [resolveSource, cronResolveSource, crypto5MinSource]) {
+    assert.match(source, /bestEffortPersistTopHolderSnapshot/);
+  }
+  assert.match(resolveSource, /resolution: \{ winningOutcomeIndex: oi \}/);
+  assert.match(cronResolveSource, /resolution: \{ winningOutcomeIndex: winningIdx \}/);
+  assert.match(cronResolveSource, /independentLegOutcomes: independentLegResolutions\.map/);
+  assert.match(crypto5MinSource, /resolution: \{ winningOutcomeIndex: closingOutcome \}/);
 });
 
 test('Pronos maker previews use seeded depth after real resting orders', () => {

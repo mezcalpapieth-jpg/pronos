@@ -1,9 +1,10 @@
 /**
  * GET /api/points/top-holders?marketId=X&limit=10
  *
- * Returns the biggest shareholders of a market, ordered by current
- * mark-to-market value (shares × current price). Works for both unified
- * and parallel markets:
+ * Returns the biggest shareholders of a market, ordered by mark-to-market
+ * value. Active markets calculate live values; resolved markets use the
+ * pre-resolution snapshot when one exists. Works for both unified and
+ * parallel markets:
  *
  *   Unified: aggregates rows from points_positions where market_id = X.
  *   Parallel: marketId refers to the parent; we expand to all its legs
@@ -16,39 +17,20 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
-import { binaryPrices, multiPrices } from '../_lib/amm-math.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
-import { binaryPricesWithBookTrade } from '../_lib/points-display-prices.js';
-import { PRONOS_TREASURY_USERNAME } from '../_lib/points-limit-orders.js';
+import { poolQuery } from '../_lib/db-tx.js';
+import {
+  buildTopHoldersForMarket,
+  readTopHolderSnapshot,
+} from '../_lib/points-top-holders.js';
 
-let _sql = null;
 let _schemaSql = null;
-function getSql() {
-  if (_sql) return _sql;
-  const cs = process.env.DATABASE_READ_URL || process.env.DATABASE_URL;
-  if (!cs) throw new Error('DATABASE_URL not configured');
-  _sql = neon(cs);
-  return _sql;
-}
 function getSchemaSql() {
   if (_schemaSql) return _schemaSql;
   const cs = process.env.DATABASE_URL;
   if (!cs) throw new Error('DATABASE_URL not configured');
   _schemaSql = neon(cs);
   return _schemaSql;
-}
-
-function parseJsonb(v, fb) {
-  if (Array.isArray(v)) return v;
-  if (v && typeof v === 'object') return v;
-  if (typeof v !== 'string') return fb;
-  try { return JSON.parse(v); } catch { return fb; }
-}
-
-function pricesForReserves(reserves) {
-  if (!Array.isArray(reserves) || reserves.length === 0) return [];
-  if (reserves.length === 2) return binaryPrices(reserves);
-  return multiPrices(reserves);
 }
 
 export default async function handler(req, res) {
@@ -70,183 +52,18 @@ export default async function handler(req, res) {
     }
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 10));
 
-    const sql = getSql();
     await ensurePointsSchema(getSchemaSql());
+    const db = { query: (text, params = []) => poolQuery(text, params) };
 
-    const marketRows = await sql`
-      SELECT id, parent_id, outcomes, reserves, amm_mode, status, outcome,
-             (SELECT t.outcome_index
-                FROM points_trades t
-               WHERE t.market_id = points_markets.id
-                 AND t.username <> ${PRONOS_TREASURY_USERNAME}
-                 AND t.price_at_trade IS NOT NULL
-               ORDER BY t.created_at DESC, t.id DESC
-               LIMIT 1) AS display_trade_outcome_index,
-             (SELECT t.price_at_trade
-                FROM points_trades t
-               WHERE t.market_id = points_markets.id
-                 AND t.username <> ${PRONOS_TREASURY_USERNAME}
-                 AND t.price_at_trade IS NOT NULL
-               ORDER BY t.created_at DESC, t.id DESC
-               LIMIT 1) AS display_trade_price,
-             (SELECT (t.reserves_before IS NOT NULL AND t.reserves_after IS NOT NULL AND t.reserves_before = t.reserves_after)
-                FROM points_trades t
-               WHERE t.market_id = points_markets.id
-                 AND t.username <> ${PRONOS_TREASURY_USERNAME}
-                 AND t.price_at_trade IS NOT NULL
-               ORDER BY t.created_at DESC, t.id DESC
-               LIMIT 1) AS display_trade_is_book
-      FROM points_markets
-      WHERE id = ${mid}
-      LIMIT 1
-    `;
-    if (marketRows.length === 0) {
-      return res.status(404).json({ error: 'market_not_found' });
-    }
-    const m = marketRows[0];
-    if (m.parent_id) {
-      // Legs aren't addressable directly — same contract as /api/points/market.
-      return res.status(400).json({ error: 'leg_not_addressable', detail: 'use parent id' });
-    }
+    const snapshot = await readTopHolderSnapshot(db, mid, { limit });
+    if (snapshot) return res.status(200).json(snapshot);
 
-    const parentOutcomes = parseJsonb(m.outcomes, ['Sí', 'No']);
-    const ammMode = m.amm_mode || 'unified';
-    const isResolved = m.status === 'resolved';
-    const winningIdx = isResolved ? Number(m.outcome) : null;
-
-    if (ammMode === 'parallel') {
-      // Aggregate per-leg positions. Each leg has its own reserves & winning
-      // outcome (0 for the winning leg, 1 for losers after cascade resolve).
-      const legs = await sql`
-        SELECT l.id, l.reserves, l.status, l.outcome, l.leg_label,
-               (SELECT t.outcome_index
-                  FROM points_trades t
-                 WHERE t.market_id = l.id
-                   AND t.username <> ${PRONOS_TREASURY_USERNAME}
-                   AND t.price_at_trade IS NOT NULL
-                 ORDER BY t.created_at DESC, t.id DESC
-                 LIMIT 1) AS display_trade_outcome_index,
-               (SELECT t.price_at_trade
-                  FROM points_trades t
-                 WHERE t.market_id = l.id
-                   AND t.username <> ${PRONOS_TREASURY_USERNAME}
-                   AND t.price_at_trade IS NOT NULL
-                 ORDER BY t.created_at DESC, t.id DESC
-                 LIMIT 1) AS display_trade_price,
-               (SELECT (t.reserves_before IS NOT NULL AND t.reserves_after IS NOT NULL AND t.reserves_before = t.reserves_after)
-                  FROM points_trades t
-                 WHERE t.market_id = l.id
-                   AND t.username <> ${PRONOS_TREASURY_USERNAME}
-                   AND t.price_at_trade IS NOT NULL
-                 ORDER BY t.created_at DESC, t.id DESC
-                 LIMIT 1) AS display_trade_is_book
-        FROM points_markets l
-        WHERE l.parent_id = ${mid}
-        ORDER BY l.id ASC
-      `;
-      if (legs.length === 0) {
-        return res.status(200).json({ ammMode: 'parallel', outcomes: parentOutcomes, holders: [] });
-      }
-
-      const legIds = legs.map(l => Number(l.id));
-      const positions = await sql`
-        SELECT p.username, p.market_id, p.outcome_index, p.shares, p.cost_basis
-        FROM points_positions p
-        WHERE p.market_id = ANY(${legIds}) AND p.shares > 0
-      `;
-
-      const priced = positions.map(p => {
-        const leg = legs.find(l => Number(l.id) === Number(p.market_id));
-        const legReserves = parseJsonb(leg?.reserves, []).map(Number);
-        const legBasePrices = pricesForReserves(legReserves);
-        const legPrices = legBasePrices.length === 2
-          ? binaryPricesWithBookTrade(legBasePrices, {
-              status: leg?.status,
-              outcomeIndex: leg?.display_trade_outcome_index,
-              price: leg?.display_trade_price,
-              isBookTrade: leg?.display_trade_is_book,
-            })
-          : legBasePrices;
-        const oi = Number(p.outcome_index);
-        let currentPrice;
-        if (leg?.status === 'resolved') {
-          currentPrice = Number(leg.outcome) === oi ? 1 : 0;
-        } else {
-          currentPrice = legPrices[oi] ?? 0.5;
-        }
-        const shares = Number(p.shares);
-        return {
-          username: p.username,
-          legLabel: leg?.leg_label || '—',
-          side: oi === 0 ? 'Sí' : 'No',
-          shares,
-          costBasis: Number(p.cost_basis || 0),
-          value: shares * currentPrice,
-        };
-      });
-
-      priced.sort((a, b) => b.value - a.value);
-      return res.status(200).json({
-        ammMode: 'parallel',
-        outcomes: parentOutcomes,
-        holders: priced.slice(0, limit).map(h => ({
-          username: h.username,
-          outcomeLabel: `${h.legLabel} — ${h.side}`,
-          shares: Math.round(h.shares * 100) / 100,
-          costBasis: Math.round(h.costBasis * 100) / 100,
-          value: Math.round(h.value * 100) / 100,
-        })),
-      });
-    }
-
-    // Unified path.
-    const reserves = parseJsonb(m.reserves, []).map(Number);
-    const basePrices = pricesForReserves(reserves);
-    const prices = basePrices.length === 2
-      ? binaryPricesWithBookTrade(basePrices, {
-          status: m.status,
-          outcomeIndex: m.display_trade_outcome_index,
-          price: m.display_trade_price,
-          isBookTrade: m.display_trade_is_book,
-        })
-      : basePrices;
-
-    const positions = await sql`
-      SELECT username, outcome_index, shares, cost_basis
-      FROM points_positions
-      WHERE market_id = ${mid} AND shares > 0
-    `;
-
-    const priced = positions.map(p => {
-      const oi = Number(p.outcome_index);
-      let currentPrice;
-      if (isResolved) currentPrice = oi === winningIdx ? 1 : 0;
-      else currentPrice = prices[oi] ?? 1 / (parentOutcomes.length || 2);
-      const shares = Number(p.shares);
-      return {
-        username: p.username,
-        outcomeIndex: oi,
-        outcomeLabel: parentOutcomes[oi] || `Opción ${oi + 1}`,
-        shares,
-        costBasis: Number(p.cost_basis || 0),
-        value: shares * currentPrice,
-      };
-    });
-
-    priced.sort((a, b) => b.value - a.value);
-    return res.status(200).json({
-      ammMode: 'unified',
-      outcomes: parentOutcomes,
-      holders: priced.slice(0, limit).map(h => ({
-        username: h.username,
-        outcomeIndex: h.outcomeIndex,
-        outcomeLabel: h.outcomeLabel,
-        shares: Math.round(h.shares * 100) / 100,
-        costBasis: Math.round(h.costBasis * 100) / 100,
-        value: Math.round(h.value * 100) / 100,
-      })),
-    });
+    const live = await buildTopHoldersForMarket(db, mid, { limit });
+    return res.status(200).json(live);
   } catch (e) {
+    if (e?.status && typeof e?.message === 'string') {
+      return res.status(e.status).json({ error: e.message, detail: e.detail });
+    }
     console.error('[points/top-holders] error', { message: e?.message, code: e?.code });
     return res.status(500).json({
       error: 'server_error',

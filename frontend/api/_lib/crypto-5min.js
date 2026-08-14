@@ -49,6 +49,7 @@ import { FEEDS_ARBITRUM_ONE } from './chainlink.js';
 import { initialReserves } from './amm-math.js';
 import { withTransaction } from './db-tx.js';
 import { bestEffortPersistResolvedCryptoMarketSnapshot } from './crypto-chart-snapshot.js';
+import { bestEffortPersistTopHolderSnapshot } from './points-top-holders.js';
 import { readCoinbaseBoundaryPrice } from './crypto-price-source.js';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
@@ -464,6 +465,29 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
         // Snapshot persistence is best-effort inside the tx via a
         // savepoint, so a snapshot failure never blocks settlement.
         const resolved = await withTransaction(async (client) => {
+          const targetRows = await client.query(
+            `SELECT id, resolver_config
+               FROM points_markets
+              WHERE source = $1
+                AND source_event_id = $2
+                AND status = 'active'
+                AND outcome IS NULL
+              LIMIT 1
+              FOR UPDATE`,
+            [closing.source, closing.source_event_id],
+          );
+          if (targetRows.rows.length === 0) return null;
+
+          const target = targetRows.rows[0];
+          const targetCfg = parseJsonb(target.resolver_config, {});
+          const closingOutcome = resolveDirectionOutcome(price, Number(targetCfg.threshold));
+          await bestEffortPersistTopHolderSnapshot(
+            client,
+            target.id,
+            'crypto-5min',
+            { resolution: { winningOutcomeIndex: closingOutcome } },
+          );
+
           const resolveRows = await client.query(
             `UPDATE points_markets
                 SET status = 'resolved',
@@ -484,10 +508,11 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
                       )
               WHERE source = $2
                 AND source_event_id = $3
+                AND id = $6
                 AND status = 'active'
                 AND outcome IS NULL
             RETURNING id, outcome`,
-            [price, closing.source, closing.source_event_id, pr.source, pr.capturedAt],
+            [price, closing.source, closing.source_event_id, pr.source, pr.capturedAt, target.id],
           );
           if (resolveRows.rows.length === 0) return null;
 
@@ -815,6 +840,7 @@ export async function catchUpExpiredActiveCryptoMarkets(sql, {
   readBoundaryPrice = readCoinbaseBoundaryPrice,
   transaction = withTransaction,
   persistSnapshot = bestEffortPersistResolvedCryptoMarketSnapshot,
+  persistHolderSnapshot = bestEffortPersistTopHolderSnapshot,
 } = {}) {
   if (!sql) throw new Error('crypto-5min: sql client required');
 
@@ -895,6 +921,12 @@ export async function catchUpExpiredActiveCryptoMarkets(sql, {
       }
 
       const updated = await transaction(async (client) => {
+        await persistHolderSnapshot(
+          client,
+          row.id,
+          'crypto-5min-missed-active',
+          { resolution: { winningOutcomeIndex: outcome } },
+        );
         const updateRows = await client.query(
           `UPDATE points_markets
               SET status = 'resolved',
@@ -943,6 +975,7 @@ export async function catchUpMissedPendingCryptoMarkets(sql, {
   readBoundaryPrice = readCoinbaseBoundaryPrice,
   transaction = withTransaction,
   persistSnapshot = bestEffortPersistResolvedCryptoMarketSnapshot,
+  persistHolderSnapshot = bestEffortPersistTopHolderSnapshot,
 } = {}) {
   if (!sql) throw new Error('crypto-5min: sql client required');
 
@@ -1029,6 +1062,12 @@ export async function catchUpMissedPendingCryptoMarkets(sql, {
       }
 
       const updated = await transaction(async (client) => {
+        await persistHolderSnapshot(
+          client,
+          row.id,
+          'crypto-5min-missed-pending',
+          { resolution: { winningOutcomeIndex: outcome } },
+        );
         const updateRows = await client.query(
           `UPDATE points_markets
               SET status = 'resolved',

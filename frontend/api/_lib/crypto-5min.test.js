@@ -356,6 +356,7 @@ test('catchUpExpiredActiveCryptoMarkets resolves active crypto windows after a m
   };
   const updates = [];
   const snapshots = [];
+  const holderSnapshots = [];
 
   const report = await catchUpExpiredActiveCryptoMarkets(sql, {
     now: '2026-08-07T12:11:30.000Z',
@@ -379,6 +380,10 @@ test('catchUpExpiredActiveCryptoMarkets resolves active crypto windows after a m
       snapshots.push({ marketId, label });
       return { stored: true };
     },
+    persistHolderSnapshot: async (_client, marketId, label, options) => {
+      holderSnapshots.push({ marketId, label, outcome: options?.resolution?.winningOutcomeIndex });
+      return { stored: true };
+    },
   });
 
   assert.equal(report.checked, 1);
@@ -391,6 +396,7 @@ test('catchUpExpiredActiveCryptoMarkets resolves active crypto windows after a m
   assert.equal(updates[0].params[1], 1);
   assert.equal(updates[0].params[2], '$2000 -> $1999.40');
   assert.deepEqual(snapshots, [{ marketId: 88, label: 'crypto-5min-missed-active' }]);
+  assert.deepEqual(holderSnapshots, [{ marketId: 88, label: 'crypto-5min-missed-active', outcome: 1 }]);
 });
 
 test('catchUpMissedPendingCryptoMarkets resolves expired pending crypto windows', async () => {
@@ -414,6 +420,7 @@ test('catchUpMissedPendingCryptoMarkets resolves expired pending crypto windows'
   };
   const updates = [];
   const snapshots = [];
+  const holderSnapshots = [];
 
   const report = await catchUpMissedPendingCryptoMarkets(sql, {
     now: '2026-08-07T12:40:00.000Z',
@@ -447,6 +454,10 @@ test('catchUpMissedPendingCryptoMarkets resolves expired pending crypto windows'
       snapshots.push({ marketId, label });
       return { stored: true };
     },
+    persistHolderSnapshot: async (_client, marketId, label, options) => {
+      holderSnapshots.push({ marketId, label, outcome: options?.resolution?.winningOutcomeIndex });
+      return { stored: true };
+    },
   });
 
   assert.equal(report.checked, 1);
@@ -461,4 +472,5 @@ test('catchUpMissedPendingCryptoMarkets resolves expired pending crypto windows'
   assert.equal(updates[0].params[1], 0);
   assert.equal(updates[0].params[2], '$100 -> $101.40');
   assert.deepEqual(snapshots, [{ marketId: 42, label: 'crypto-5min-missed-pending' }]);
+  assert.deepEqual(holderSnapshots, [{ marketId: 42, label: 'crypto-5min-missed-pending', outcome: 0 }]);
 });

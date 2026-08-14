@@ -43,6 +43,7 @@ const POINTS_SCHEMA_READY_PROBE = `
     to_regclass('public.points_pwa_install_claims') IS NOT NULL AS points_pwa_install_claims,
     to_regclass('public.points_social_links') IS NOT NULL AS points_social_links,
     to_regclass('public.points_mananera_transcripts') IS NOT NULL AS points_mananera_transcripts,
+    to_regclass('public.points_top_holder_snapshots') IS NOT NULL AS points_top_holder_snapshots,
     EXISTS (
       SELECT 1 FROM information_schema.columns
       WHERE table_schema = 'public'
@@ -870,6 +871,21 @@ const POINTS_SCHEMA_MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_points_crypto_market_snapshots_asset_close
     ON points_crypto_market_snapshots(asset, closes_at DESC)`,
+
+  // ── Frozen top-holder lists for resolved markets ─────────────────────────
+  // Live positions keep changing after resolution/redeem, so the detail page
+  // needs a pre-resolution holder snapshot instead of recalculating everyone
+  // at final 1/0 prices.
+  `CREATE TABLE IF NOT EXISTS points_top_holder_snapshots (
+    market_id      INTEGER PRIMARY KEY REFERENCES points_markets(id) ON DELETE CASCADE,
+    amm_mode       TEXT NOT NULL DEFAULT 'unified',
+    outcomes       JSONB NOT NULL DEFAULT '[]'::jsonb,
+    holders        JSONB NOT NULL DEFAULT '[]'::jsonb,
+    snapshotted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_top_holder_snapshots_time
+    ON points_top_holder_snapshots(snapshotted_at DESC)`,
 
   // ── Comments (per-market discussion, soft-deleted) ────────────────────────
   // Keyed on market_id. `deleted_at` = NULL means live; non-null means hidden
