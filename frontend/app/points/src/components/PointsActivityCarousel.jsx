@@ -1108,6 +1108,9 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                         // would only collide with the end dot here.
                         showYAxis={false}
                         fitDomain
+                        showEndLabel
+                        endLabelText={mOutcomes[0]}
+                        endLabelWidth={140}
                         data={chartSeriesForOutcome(m, mChartEntries[0] || mOutcomeEntries[0], mSeries)}
                         targetPct={mLeadPct}
                         emptyLabel={t('points.activity.noHistory')}
