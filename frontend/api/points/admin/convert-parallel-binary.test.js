@@ -41,3 +41,11 @@ test('convert-parallel-binary switches parent to unified binary and retires legs
   assert.match(source, /status = 'canceled'/);
   assert.match(source, /convertedFromParallel/);
 });
+
+test('convert-parallel-binary keeps metadata on pending rows, not points_markets', () => {
+  assert.match(source, /FROM points_pending_markets/);
+  assert.match(source, /approved_market_id = \$1/);
+  assert.match(source, /SET source_data = \$2::jsonb/);
+  assert.doesNotMatch(source, /source_data, sport/);
+  assert.doesNotMatch(source, /source_data = \$6::jsonb/);
+});

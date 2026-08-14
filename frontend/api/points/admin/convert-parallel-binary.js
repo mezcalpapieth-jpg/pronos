@@ -118,7 +118,7 @@ export default async function handler(req, res) {
       const marketResult = await client.query(
         `SELECT id, question, status, amm_mode, parent_id, outcomes, reserves,
                 seed_liquidity, seed_liquidities, resolver_type, resolver_config,
-                source, source_data, sport, league
+                source, sport, league
            FROM points_markets
           WHERE id = $1
           FOR UPDATE`,
@@ -141,6 +141,17 @@ export default async function handler(req, res) {
       if (market.resolver_type !== 'sports_api' || cfg?.source !== 'espn-mma') {
         throw httpError('unsupported_conversion', 400, 'Only ESPN MMA UFC fight markets can be converted.');
       }
+
+      const pendingResult = await client.query(
+        `SELECT id, source_data
+           FROM points_pending_markets
+          WHERE approved_market_id = $1
+          ORDER BY id DESC
+          LIMIT 1
+          FOR UPDATE`,
+        [mid],
+      );
+      const pendingMarket = pendingResult.rows[0] || null;
 
       const legResult = await client.query(
         `SELECT id, parent_id, leg_label, status, reserves, seed_liquidity
@@ -217,7 +228,7 @@ export default async function handler(req, res) {
       };
       delete nextResolverConfig.legs;
 
-      const sourceData = parseJsonb(market.source_data, {});
+      const sourceData = parseJsonb(pendingMarket?.source_data, {});
       const nextSourceData = {
         ...(sourceData && typeof sourceData === 'object' ? sourceData : {}),
         convertedFromParallel: {
@@ -235,8 +246,7 @@ export default async function handler(req, res) {
                 reserves = $3::jsonb,
                 seed_liquidity = $4,
                 seed_liquidities = $3::jsonb,
-                resolver_config = $5::jsonb,
-                source_data = $6::jsonb
+                resolver_config = $5::jsonb
           WHERE id = $1`,
         [
           mid,
@@ -244,9 +254,17 @@ export default async function handler(req, res) {
           JSON.stringify(priced.seedLiquidities),
           seedLiquidity,
           JSON.stringify(nextResolverConfig),
-          JSON.stringify(nextSourceData),
         ],
       );
+
+      if (pendingMarket?.id) {
+        await client.query(
+          `UPDATE points_pending_markets
+              SET source_data = $2::jsonb
+            WHERE id = $1`,
+          [Number(pendingMarket.id), JSON.stringify(nextSourceData)],
+        );
+      }
 
       await client.query(
         `UPDATE points_markets

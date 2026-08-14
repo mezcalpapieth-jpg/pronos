@@ -46,11 +46,23 @@ function normalizeHolder(h) {
   };
 }
 
+function holderHasDisplayValue(holder) {
+  const value = Number(holder?.value);
+  const costBasis = Number(holder?.costBasis);
+  const payoutValue = Number(holder?.payoutValue);
+  if (Number.isFinite(payoutValue)) {
+    const beforeValue = Number.isFinite(costBasis) ? costBasis : value;
+    return Math.round(Math.max(0, beforeValue, payoutValue)) > 0;
+  }
+  return Math.round(Math.max(0, value)) > 0;
+}
+
 function normalizeHolderList(holders, limit) {
   const max = clampLimit(limit);
   return (Array.isArray(holders) ? holders : [])
     .map(normalizeHolder)
     .filter(h => h.username && h.outcomeLabel)
+    .filter(holderHasDisplayValue)
     .slice(0, max);
 }
 

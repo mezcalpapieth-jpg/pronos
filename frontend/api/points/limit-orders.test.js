@@ -218,6 +218,9 @@ test('top holders price positions with displayed book-trade odds', () => {
   assert.match(topHoldersHelperSource, /payoutValue/);
   assert.match(topHoldersHelperSource, /winningOutcomeIndex/);
   assert.match(topHoldersHelperSource, /independentLegOutcomes/);
+  assert.match(topHoldersHelperSource, /holderHasDisplayValue/);
+  assert.match(topHoldersHelperSource, /Math\.round\(Math\.max\(0, beforeValue, payoutValue\)\) > 0/);
+  assert.match(topHoldersHelperSource, /\.filter\(holderHasDisplayValue\)/);
 });
 
 test('market resolution freezes top-holder snapshots before final odds collapse', () => {
