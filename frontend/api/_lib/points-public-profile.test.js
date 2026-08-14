@@ -98,6 +98,39 @@ test('resolved profile history values a losing market as the invested loss', () 
   assert.equal(history[0].netPnl, -100);
 });
 
+test('canceled profile history nets refund against invested amount', () => {
+  const history = buildPublicProfileHistory([
+    {
+      ...BASE_ROW,
+      status: 'canceled',
+      m_outcome: null,
+      side: 'buy',
+      outcome_index: 0,
+      shares: 193.6,
+      collateral: 100,
+      fee: 0,
+      created_at: '2026-08-14T15:10:00.000Z',
+    },
+    {
+      ...BASE_ROW,
+      status: 'canceled',
+      m_outcome: null,
+      side: 'refund',
+      outcome_index: null,
+      shares: 0,
+      collateral: 100,
+      fee: 0,
+      created_at: '2026-08-14T16:28:00.000Z',
+    },
+  ], { nowMs: Date.parse('2026-08-14T18:00:00.000Z') });
+
+  assert.equal(history.length, 1);
+  assert.equal(history[0].outcomeStatus, 'canceled');
+  assert.equal(history[0].buyCollateral, 100);
+  assert.equal(history[0].refundProceeds, 100);
+  assert.equal(history[0].netPnl, 0);
+});
+
 test('profile history exposes the options the user bought', () => {
   const history = buildPublicProfileHistory([
     {

@@ -45,6 +45,10 @@ test('public profile history displays the selected outcome for support review', 
   assert.match(SOURCE, /Eligió \$\{pickedLabel\}/);
 });
 
+test('public profile history labels canceled markets as annulled', () => {
+  assert.match(SOURCE, /canceled:\s*\{\s*label: 'Anulado'/);
+});
+
 test('public profile shows current-cycle account numbers and cycle graph toggles', () => {
   assert.match(SOURCE, /const \[pnlCycleScope, setPnlCycleScope\] = useState\('current'\)/);
   assert.match(SOURCE, /const \[currentCyclePnl, setCurrentCyclePnl\] = useState\(null\)/);

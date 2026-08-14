@@ -75,6 +75,10 @@ function statusAndRedeemValue(market, nowMs) {
   const currentHeld = currentHeldByOutcome(market);
   const stillHeld = hasPositiveValue(currentHeld);
 
+  if (market.status === 'canceled' || market.status === 'cancelled') {
+    return { outcomeStatus: 'canceled', redeemValue: 0 };
+  }
+
   if (market.status === 'resolved') {
     const winningIdx = Number(market.marketOutcome);
     const winningGross = market.heldByOutcome.get(winningIdx) || 0;
@@ -120,6 +124,7 @@ export function buildPublicProfileHistory(tradeRows, { nowMs = Date.now() } = {}
         sellFees: 0,
         redeemProceeds: 0,
         redeemFees: 0,
+        refundProceeds: 0,
         heldByOutcome: new Map(),
         redeemedByOutcome: new Map(),
         pickedByOutcome: new Map(),
@@ -157,13 +162,15 @@ export function buildPublicProfileHistory(tradeRows, { nowMs = Date.now() } = {}
         outcomeIndex,
         (market.redeemedByOutcome.get(outcomeIndex) || 0) + shares,
       );
+    } else if (row.side === 'refund') {
+      market.refundProceeds += collateral;
     }
   }
 
   const history = Array.from(byMarket.values()).map((market) => {
     const { outcomeStatus, redeemValue } = statusAndRedeemValue(market, nowMs);
     const fees = market.buyFees + market.sellFees + market.redeemFees;
-    const totalReceived = market.sellProceeds + market.redeemProceeds + redeemValue;
+    const totalReceived = market.sellProceeds + market.redeemProceeds + market.refundProceeds + redeemValue;
     const netPnl = totalReceived - market.buyCollateral - fees;
 
     return {
@@ -174,6 +181,7 @@ export function buildPublicProfileHistory(tradeRows, { nowMs = Date.now() } = {}
       netPnl: round2(netPnl),
       buyCollateral: round2(market.buyCollateral),
       sellProceeds: round2(market.sellProceeds),
+      refundProceeds: round2(market.refundProceeds),
       resolvedAt: market.resolvedAt,
       lastTradeAt: market.lastTradeAt,
       finalScore: market.finalScore,

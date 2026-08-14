@@ -230,7 +230,23 @@ export default async function handler(req, res) {
       ORDER BY t.created_at ASC
     `;
 
-    const history = buildPublicProfileHistory(tradeRows);
+    const refundRows = await sql`
+      SELECT d.reference_id AS market_id, 'refund' AS side, NULL::int AS outcome_index,
+             0::numeric AS shares, d.amount AS collateral, 0::numeric AS fee,
+             0::numeric AS price_at_trade, d.created_at,
+             m.question, m.category, m.outcomes, m.status,
+             m.outcome AS m_outcome, m.end_time, m.resolved_at, m.final_score,
+             m.parent_id, m.leg_label, pm.question AS parent_question
+      FROM points_distributions d
+      JOIN points_markets m ON m.id = d.reference_id
+      LEFT JOIN points_markets pm ON pm.id = m.parent_id
+      WHERE LOWER(d.username) = ${username}
+        AND d.kind IN ('market_cancel_refund', 'void_refund', 'invalid_field_refund')
+        AND COALESCE(m.mode, 'points') = 'points'
+      ORDER BY d.created_at ASC
+    `;
+
+    const history = buildPublicProfileHistory([...tradeRows, ...refundRows]);
 
     // ── Aggregate stats ───────────────────────────────────────────────
     const stats = buildPublicProfileStats(history);

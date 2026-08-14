@@ -38,6 +38,7 @@ const STATUS_LABEL = {
   lost:    { label: 'Perdió',  bg: 'rgba(255,69,69,0.10)',  fg: 'var(--danger)' },
   pending: { label: 'Pendiente', bg: 'rgba(245,158,11,0.12)', fg: 'var(--warning)' },
   exited:  { label: 'Salió',   bg: 'var(--surface2)',       fg: 'var(--text-muted)' },
+  canceled:{ label: 'Anulado', bg: 'rgba(148,163,184,0.08)', fg: 'var(--text-muted)' },
   open:    { label: 'Abierta', bg: 'rgba(59,130,246,0.12)', fg: 'var(--info)' },
 };
 
