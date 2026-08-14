@@ -97,7 +97,6 @@ test('parallel carousel charts draw leg histories without adopting a child ident
   assert.match(carousel, /function chartEntriesForMarket/);
   assert.match(carousel, /function leadingOutcomeForMarket/);
   assert.match(carousel, /<MultiSparkline/);
-  assert.match(carousel, /jumpShape="soft-step"/);
   assert.match(carousel, /series=\{mChartEntries\.map\(entry =>/);
   assert.match(carousel, /data: chartSeriesForOutcome\(m, entry, mOutcomeSeries\?\.\[entry\.index\]\)/);
   assert.match(carousel, /activity=\{\[m\._buckets \|\| \[\]\]\}/);
@@ -112,17 +111,16 @@ test('parallel carousel charts draw leg histories without adopting a child ident
   assert.match(carousel, /remapHistoryByParent\(priceResults, priceHistoryRequest\)/);
 });
 
-test('carousel charts use a 24h time window with softened jumps', () => {
+test('carousel charts use a 24h time window with the shared hard-step line', () => {
   assert.match(carousel, /const CHART_HISTORY_HOURS = 24/);
   assert.match(carousel, /fetchPriceHistory\(group\.ids, \{ hours: CHART_HISTORY_HOURS/);
   assert.match(carousel, /function chartSeriesForOutcome/);
   assert.match(carousel, /points\.unshift\(\{ t: openedAt, p: openingPct \}\)/);
   assert.match(carousel, /points\.push\(\{ t: now, p: targetPct \}\)/);
   assert.match(carousel, /pp · 24h/);
-  assert.match(carousel, /<MultiSparkline[\s\S]*jumpShape="soft-step"/);
-  assert.match(carousel, /<Sparkline[\s\S]*jumpShape="soft-step"/);
-  assert.match(carousel, /showActivity[\s\S]*jumpShape="soft-step"/);
-  assert.match(carousel, /showYAxis=\{false\}[\s\S]*fitDomain[\s\S]*jumpShape="soft-step"/);
+  // Carousel charts no longer override jumpShape — they fall back to the
+  // shared components' default hard step, matching the market detail page.
+  assert.doesNotMatch(carousel, /jumpShape="soft-step"/);
   assert.doesNotMatch(carousel, /<MultiSparkline[\s\S]{0,260}domainMin=\{0\}[\s\S]{0,80}domainMax=\{100\}/);
   assert.match(sparkline, /xMode = 'time'/);
   assert.match(sparkline, /fitDomain = false/);
