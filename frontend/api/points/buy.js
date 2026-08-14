@@ -15,7 +15,7 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
-import { binaryBuyQuote, multiBuyQuote } from '../_lib/amm-math.js';
+import { binaryBuyQuote, binaryPrices, multiBuyQuote } from '../_lib/amm-math.js';
 import { requireSession } from '../_lib/session.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { withTransaction } from '../_lib/db-tx.js';
@@ -26,7 +26,12 @@ import {
   executeTriggeredLimitOrders,
   matchPronosMakerAsksForBuy,
   matchRestingAsksForBuy,
+  PRONOS_TREASURY_USERNAME,
 } from '../_lib/points-limit-orders.js';
+import {
+  binaryPricesWithBookTrade,
+  monotonicBuyDisplayPrice,
+} from '../_lib/points-display-prices.js';
 import { assertCryptoTradeAllowed } from '../_lib/points-crypto-trade-guard.js';
 import {
   TOURNAMENT_MAX_SHARES_PER_MARKET,
@@ -177,6 +182,28 @@ export default async function handler(req, res) {
       if (oi >= reserves.length) {
         const err = new Error('invalid_outcome_index'); err.status = 400; throw err;
       }
+      let displayPriceBefore = 0;
+      if (reserves.length === 2) {
+        const pricesBefore = binaryPrices(reserves);
+        const displayTradeResult = await client.query(
+          `SELECT outcome_index, price_at_trade,
+                  (reserves_before IS NOT NULL AND reserves_after IS NOT NULL AND reserves_before = reserves_after) AS is_book_trade
+             FROM points_trades
+            WHERE market_id = $1
+              AND username <> $2
+              AND price_at_trade IS NOT NULL
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1`,
+          [mid, PRONOS_TREASURY_USERNAME],
+        );
+        const displayPricesBefore = binaryPricesWithBookTrade(pricesBefore, {
+          status: m.status,
+          outcomeIndex: displayTradeResult.rows[0]?.outcome_index,
+          price: displayTradeResult.rows[0]?.price_at_trade,
+          isBookTrade: displayTradeResult.rows[0]?.is_book_trade,
+        });
+        displayPriceBefore = Number(displayPricesBefore[oi] ?? pricesBefore[oi] ?? 0);
+      }
 
       const balanceResult = await client.query(
         `SELECT balance FROM points_balances WHERE username = $1 FOR UPDATE`,
@@ -317,13 +344,26 @@ export default async function handler(req, res) {
       const triggeredLimitOrders = await executeTriggeredLimitOrders(client, {
         marketId: mid,
       });
+      const lastOrderbookFillPrice = [...(orderbookMatch.fills || [])]
+        .reverse()
+        .map(fill => Number(fill.price))
+        .find(price => Number.isFinite(price) && price > 0);
+      const rawPriceBefore = quote?.priceBefore ?? orderbookMatch.avgPrice;
+      const responsePriceBefore = displayPriceBefore || rawPriceBefore;
+      const responsePriceAfter = reserves.length === 2
+        ? monotonicBuyDisplayPrice(responsePriceBefore, [
+          quote?.priceAfter,
+          lastOrderbookFillPrice,
+          combinedAvgPrice,
+        ])
+        : (quote?.priceAfter ?? orderbookMatch.avgPrice);
 
       return {
         balance: newBalance,
         sharesOut: totalSharesOut,
         fee: totalFee,
-        priceBefore: quote?.priceBefore ?? orderbookMatch.avgPrice,
-        priceAfter: quote?.priceAfter ?? orderbookMatch.avgPrice,
+        priceBefore: responsePriceBefore,
+        priceAfter: responsePriceAfter,
         orderbookFills: orderbookMatch.fills,
         triggeredLimitOrders,
       };

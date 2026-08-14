@@ -15,10 +15,12 @@ import {
   previewRestingAsksForBuy,
   previewRestingBidsForSell,
 } from '../_lib/points-limit-orders.js';
+import { monotonicBuyDisplayPrice } from '../_lib/points-display-prices.js';
 
 const schemaSource = await readFile(new URL('../_lib/points-schema.js', import.meta.url), 'utf8');
 const migrateSource = await readFile(new URL('../migrate.js', import.meta.url), 'utf8');
 const helperSource = await readFile(new URL('../_lib/points-limit-orders.js', import.meta.url), 'utf8');
+const displayPriceSource = await readFile(new URL('../_lib/points-display-prices.js', import.meta.url), 'utf8');
 const entrySource = await readFile(new URL('../_lib/points-tournament-entry.js', import.meta.url), 'utf8');
 const orderbookSource = await readFile(new URL('./orderbook.js', import.meta.url), 'utf8');
 const limitOrdersSource = await readFile(new URL('./limit-orders.js', import.meta.url), 'utf8');
@@ -171,13 +173,25 @@ test('orderbook taker previews consume real resting orders before AMM fallback',
 
 test('buy quotes display orderbook-only execution price instead of stale AMM price', () => {
   assert.match(quoteBuySource, /binaryPricesWithBookTrade/);
+  assert.match(quoteBuySource, /monotonicBuyDisplayPrice/);
   assert.match(quoteBuySource, /displayTradeRows/);
   assert.match(quoteBuySource, /reserves_before = reserves_after/);
   assert.match(quoteBuySource, /const priceBefore = displayPricesBefore\[oi\] \|\| pricesBefore\[oi\] \|\| 0/);
   assert.match(quoteBuySource, /const executionPrice = avgPrice > 0 \? avgPrice : null/);
   assert.match(quoteBuySource, /const lastBookFillPrice = \[\.\.\.\(orderbook\.fills \|\| \[\]\)\]/);
-  assert.match(quoteBuySource, /const priceAfter = q\?\.pricesAfter\?\.\[oi\] \?\? lastBookFillPrice \?\? executionPrice \?\? priceBefore/);
+  assert.match(quoteBuySource, /const rawPriceAfter = q\?\.pricesAfter\?\.\[oi\] \?\? null/);
+  assert.match(quoteBuySource, /const priceAfter = monotonicBuyDisplayPrice\(priceBefore, \[/);
   assert.match(quoteBuySource, /priceImpactPts: \(priceAfter - priceBefore\) \* 100/);
+  assert.match(buySource, /binaryPricesWithBookTrade/);
+  assert.match(buySource, /PRONOS_TREASURY_USERNAME/);
+  assert.match(buySource, /const responsePriceAfter = reserves\.length === 2\s*\?\s*monotonicBuyDisplayPrice\(responsePriceBefore, \[/s);
+});
+
+test('buy display prices never report the selected side moving backward', () => {
+  assert.match(displayPriceSource, /export function monotonicBuyDisplayPrice/);
+  assert.equal(monotonicBuyDisplayPrice(0.76, [0.71]), 0.76);
+  assert.equal(monotonicBuyDisplayPrice(0.76, [0.82]), 0.82);
+  assert.equal(monotonicBuyDisplayPrice(0.5, [null, 0.49, 0.53]), 0.53);
 });
 
 test('sell quotes and orderbook current price only trust latest book-only fills', () => {

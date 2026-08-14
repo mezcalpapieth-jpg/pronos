@@ -20,7 +20,10 @@ import {
   previewRestingAsksForBuy,
   PRONOS_TREASURY_USERNAME,
 } from '../_lib/points-limit-orders.js';
-import { binaryPricesWithBookTrade } from '../_lib/points-display-prices.js';
+import {
+  binaryPricesWithBookTrade,
+  monotonicBuyDisplayPrice,
+} from '../_lib/points-display-prices.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -182,7 +185,12 @@ export default async function handler(req, res) {
       .reverse()
       .map(fill => Number(fill.price))
       .find(price => Number.isFinite(price) && price > 0);
-    const priceAfter = q?.pricesAfter?.[oi] ?? lastBookFillPrice ?? executionPrice ?? priceBefore;
+    const rawPriceAfter = q?.pricesAfter?.[oi] ?? null;
+    const priceAfter = monotonicBuyDisplayPrice(priceBefore, [
+      rawPriceAfter,
+      lastBookFillPrice,
+      executionPrice,
+    ]);
     return res.status(200).json({
       collateral: collateralSpent,
       fee,
