@@ -1075,7 +1075,6 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                         height={isMobile ? 138 : 164}
                         strokeWidth={1.5}
                         showActivity
-                        jumpShape="soft-step"
                         series={mChartEntries.map(entry => ({
                           key: `opt-${entry.index}`,
                           label: entry.label,
@@ -1109,7 +1108,6 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                         // would only collide with the end dot here.
                         showYAxis={false}
                         fitDomain
-                        jumpShape="soft-step"
                         data={chartSeriesForOutcome(m, mChartEntries[0] || mOutcomeEntries[0], mSeries)}
                         targetPct={mLeadPct}
                         emptyLabel={t('points.activity.noHistory')}
