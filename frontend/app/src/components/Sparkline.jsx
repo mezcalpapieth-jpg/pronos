@@ -438,10 +438,10 @@ export default function Sparkline({
             y1={yForValue(tick)}
             x2={plotRight}
             y2={yForValue(tick)}
-            stroke="var(--border)"
+            stroke="var(--text-muted)"
             strokeWidth={1}
             strokeDasharray="2,4"
-            opacity={0.5}
+            opacity={0.35}
           />
         ))}
 

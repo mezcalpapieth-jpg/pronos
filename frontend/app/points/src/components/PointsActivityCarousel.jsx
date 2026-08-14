@@ -1072,7 +1072,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
 
                     {isMultiChart ? (
                       <MultiSparkline
-                        height={isMobile ? 138 : 164}
+                        height={isMobile ? 168 : 200}
                         strokeWidth={1.5}
                         showActivity
                         series={mChartEntries.map(entry => ({
@@ -1099,10 +1099,10 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                       />
                     ) : (
                       <Sparkline
-                        height={isMobile ? 110 : 148}
+                        height={isMobile ? 140 : 180}
                         color={BUY_COLOR}
                         strokeWidth={1.6}
-                        fill
+                        fill={false}
                         // The big % above the chart already states the
                         // level; Sparkline's auto y-axis (on at h>=100)
                         // would only collide with the end dot here.
