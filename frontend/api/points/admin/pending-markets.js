@@ -138,14 +138,18 @@ function filteredPendingRows(rows, query = {}) {
 
 function probabilitiesFromParentSeedValues(seedValues) {
   if (!Array.isArray(seedValues) || seedValues.length < 2) return null;
-  const inverse = seedValues.map(value => {
+  // In the pending admin UI these values are shown as per-leg display
+  // liquidity/weight, not as the binary leg's Sí reserve. If pricing
+  // metadata is missing or no longer matches edited outcomes, higher admin
+  // weight should mean a higher opening Sí probability.
+  const weights = seedValues.map(value => {
     const n = Number(value);
-    return Number.isFinite(n) && n > 0 ? 1 / n : null;
+    return Number.isFinite(n) && n > 0 ? n : null;
   });
-  if (inverse.some(value => value == null)) return null;
-  const total = inverse.reduce((sum, value) => sum + value, 0);
+  if (weights.some(value => value == null)) return null;
+  const total = weights.reduce((sum, value) => sum + value, 0);
   if (!Number.isFinite(total) || total <= 0) return null;
-  return inverse.map(value => value / total);
+  return weights.map(value => value / total);
 }
 
 function parallelLegBinaryReserves({ sourceData, outcomeIndex, legSeed, parentSeedValues }) {

@@ -5,6 +5,7 @@ import {
   readEspnAtpMatchWinner,
   readEspnAtpTournamentWinner,
   readEspnEvent,
+  readEspnMmaWinner,
   readEspnPgaWinner,
 } from './sports-results.js';
 
@@ -169,6 +170,50 @@ test('readEspnEvent matches display names when ESPN short names are abbreviated'
     assert.equal(result.winner, 'away');
     assert.equal(result.homeScore, 2);
     assert.equal(result.awayScore, 3);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('readEspnMmaWinner returns binary home/away winner plus legacy fighter identity', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes('/sports/mma/ufc/scoreboard')) {
+      return jsonResponse({
+        events: [{
+          id: 'ufc-card-1',
+          competitions: [{
+            id: 'fight-9',
+            status: { type: { state: 'post', completed: true } },
+            competitors: [
+              {
+                id: '101',
+                winner: false,
+                athlete: { displayName: 'Sample Fighter' },
+              },
+              {
+                id: '202',
+                winner: true,
+                athlete: { displayName: 'Rival Fighter' },
+              },
+            ],
+          }],
+        }],
+      });
+    }
+    throw new Error(`unexpected url ${url}`);
+  };
+
+  try {
+    const result = await readEspnMmaWinner({
+      eventId: 'ufc-card-1',
+      fightId: 'fight-9',
+    });
+
+    assert.equal(result.completed, true);
+    assert.equal(result.winner, 'away');
+    assert.equal(result.winnerDriverId, '202');
+    assert.equal(result.winnerDriverLabel, 'Rival Fighter');
   } finally {
     globalThis.fetch = originalFetch;
   }

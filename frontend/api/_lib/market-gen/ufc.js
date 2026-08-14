@@ -1,5 +1,5 @@
 /**
- * UFC market generator — emits ONE parallel-binary market per
+ * UFC market generator — emits ONE unified binary market per
  * filter-passing fight on every upcoming UFC card.
  *
  * Source: ESPN MMA scoreboard
@@ -14,8 +14,8 @@
  *   3. EITHER fighter has a Mexican flag
  *   4. EITHER fighter has a LATAM flag (broader)
  *
- * Markets are 2-leg parallel: each leg is a binary Yes/No for one
- * fighter. UFC has no draws as a practical matter (technically split
+ * Markets are unified binary: outcome 0 is fighter A, outcome 1 is
+ * fighter B. UFC has no draws as a practical matter (technically split
  * draws happen ~0.1% of fights — when one does the reader returns
  * completed=false and admin handles via the void-market endpoint).
  *
@@ -152,14 +152,16 @@ function buildFightMarket(ev, fight, isLastOnCard) {
     seed_liquidity: isMain ? 1500 : 800,
     start_time: startTime,
     end_time: endTime,
-    amm_mode: 'parallel',
+    amm_mode: 'unified',
     resolver_type: 'sports_api',
     resolver_config: {
       source: 'espn-mma',
-      shape: 'parallel',
+      shape: 'binary',
       eventId: ev.id,
       fightId: fight.id,
-      legs,
+      homeName: aName,
+      awayName: bName,
+      fighterIds: [aId, bId],
     },
     source_data: {
       eventId: ev.id,
@@ -212,4 +214,5 @@ export async function generateUfcMarkets() {
 
 export const _internal = {
   shouldKeepFightDate,
+  buildFightMarket,
 };

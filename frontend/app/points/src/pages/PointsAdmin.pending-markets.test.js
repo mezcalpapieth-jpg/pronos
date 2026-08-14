@@ -116,7 +116,9 @@ test('Points nav exposes a compact mobile menu with identity and hidden routes',
   assert.match(navSource, /points-mobile-menu/);
   assert.match(navSource, /points-mobile-menu-user/);
   assert.match(navSource, /user\?\.username/);
-  assert.match(navSource, /balance\.toLocaleString\('es-MX'\)/);
+  assert.match(navSource, /formatBalance/);
+  assert.match(navSource, /minimumFractionDigits: 2/);
+  assert.match(navSource, /balanceLabel/);
   assert.match(navSource, /points\.nav\.howItWorks/);
   assert.match(navSource, /points-lang-toggle/);
   assert.match(navSource, /points-theme-toggle/);
@@ -152,6 +154,31 @@ test('Points admin can append players to active parallel markets', () => {
   assert.match(source, /outcomes:\s*unique/);
   assert.match(apiSource, /export async function adminAppendParallelOutcomes/);
   assert.match(apiSource, /\/api\/points\/admin\/append-parallel-outcomes/);
+});
+
+test('Points admin can convert UFC parallel markets without current exposure to binary', () => {
+  assert.match(source, /canConvertParallelToBinary/);
+  assert.match(source, /resolverSource === 'espn-mma'/);
+  assert.match(source, /league === 'ufc'/);
+  assert.match(source, /convertParallelMarketToBinary/);
+  assert.match(source, /adminConvertParallelToBinary/);
+  assert.match(source, /A binario/);
+  assert.match(source, /Los trades históricos cerrados no bloquean/);
+  assert.doesNotMatch(source, /detail\.trades/);
+  assert.match(apiSource, /export async function adminConvertParallelToBinary/);
+  assert.match(apiSource, /\/api\/points\/admin\/convert-parallel-binary/);
+});
+
+test('Points admin can repair active parallel market reserves', () => {
+  assert.match(source, /normalizeParallelReserveRows/);
+  assert.match(source, /parallelYesProbabilityFromReserves/);
+  assert.match(source, /Reservas Sí\/No/);
+  assert.match(source, /Reserva Sí/);
+  assert.match(source, /Reserva No/);
+  assert.match(source, /Más reserva No = Sí más alto/);
+  assert.match(source, /parallelLegs:\s*parallelLegPatches/);
+  assert.match(apiSource, /adminEditMarket\(\{ marketId, question, startTime, endTime, category, parallelLegs \}\)/);
+  assert.match(apiSource, /parallelLegs/);
 });
 
 test('Points pending admin can set 24h crypto windows and toggle BTC/ETH generation', () => {

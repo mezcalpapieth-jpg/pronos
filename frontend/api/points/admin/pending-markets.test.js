@@ -69,6 +69,13 @@ test('parallel pending approvals derive child Yes\\/No reserves from suggested p
   assert.match(source, /JSON\.stringify\(legReserves\)/);
 });
 
+test('parallel pending fallback treats per-leg liquidity as direct weight', () => {
+  assert.match(source, /function probabilitiesFromParentSeedValues/);
+  assert.match(source, /higher admin\s+\/\/\s+weight should mean a higher opening Sí probability/);
+  assert.match(source, /return Number\.isFinite\(n\) && n > 0 \? n : null/);
+  assert.doesNotMatch(source, /return Number\.isFinite\(n\) && n > 0 \? 1 \/ n : null/);
+});
+
 test('legacy LCDLF binary nomination rows are auto-rejected after grouped market rollout', () => {
   assert.match(source, /LCDLF_SOURCE/);
   assert.match(source, /legacy LCDLF binary nominations replaced by grouped parallel market/);

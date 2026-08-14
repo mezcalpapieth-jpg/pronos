@@ -17,3 +17,13 @@ test('active api-price market edits sync threshold and operator from question', 
   assert.match(source, /resolverConfig: syncedMananera\.resolverConfig/);
   assert.match(source, /const nextResolverConfig = syncedApiPrice\.resolverConfig \|\| null/);
 });
+
+test('active parallel market edits can repair child reserves', () => {
+  assert.match(source, /normalizeParallelLegPatches/);
+  assert.match(source, /parallelLegs/);
+  assert.match(source, /not_parallel_parent/);
+  assert.match(source, /parallel_leg_not_active/);
+  assert.match(source, /reserves = \$1::jsonb/);
+  assert.match(source, /seed_liquidities = \$1::jsonb/);
+  assert.match(source, /seed_liquidity = \$2/);
+});

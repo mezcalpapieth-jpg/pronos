@@ -1,6 +1,6 @@
 /**
  * POST /api/points/admin/edit-market
- * Body: { marketId, question?, startTime?, endTime?, category? }
+ * Body: { marketId, question?, startTime?, endTime?, category?, parallelLegs? }
  *
  * Admin-only. Updates the editable fields of a points market:
  *   - question: the user-facing title
@@ -9,10 +9,9 @@
  *               epoch ms)
  *   - category: display bucket (deportes, politica, etc.)
  *
- * Only non-null/undefined fields are applied. Reserves, outcomes, and
- * status are intentionally NOT editable through this endpoint — mutating
- * them post-creation would either desync the AMM state or confuse
- * existing holders.
+ * Only non-null/undefined fields are applied. For active parallel parent
+ * markets, admins may also repair child-leg binary reserves. This moves the
+ * live curve from that point forward, but does not rewrite positions/trades.
  *
  * For parallel markets we also cascade shared timing/category edits to
  * every leg so the parent and legs stay in sync.
@@ -27,6 +26,7 @@ import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { deriveMarketTags } from '../../_lib/category-tags.js';
 import { syncMananeraPhraseFromQuestion } from '../../_lib/mananera-market-sync.js';
 import { syncApiPriceFromQuestion } from '../../_lib/api-price-market-sync.js';
+import { withTransaction } from '../../_lib/db-tx.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -41,6 +41,36 @@ function parseJsonb(value, fallback) {
   try { return JSON.parse(value); } catch { return fallback; }
 }
 
+function cleanReserve(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.round(n * 1_000_000) / 1_000_000;
+}
+
+function normalizeParallelLegPatches(value) {
+  if (value === undefined || value === null) return { value: null };
+  if (!Array.isArray(value)) return { error: 'invalid_parallel_legs' };
+  if (value.length === 0) return { value: [] };
+  if (value.length > 80) return { error: 'too_many_parallel_legs' };
+
+  const seen = new Set();
+  const patches = [];
+  for (const raw of value) {
+    const id = Number(raw?.id ?? raw?.marketId);
+    if (!Number.isInteger(id) || id <= 0) return { error: 'invalid_parallel_leg_id' };
+    if (seen.has(id)) return { error: 'duplicate_parallel_leg_id' };
+    seen.add(id);
+
+    const yesReserve = cleanReserve(raw?.yesReserve ?? raw?.reserves?.[0]);
+    const noReserve = cleanReserve(raw?.noReserve ?? raw?.reserves?.[1]);
+    if (yesReserve == null || noReserve == null) return { error: 'invalid_parallel_leg_reserve' };
+    if (yesReserve < 100 || noReserve < 100) return { error: 'parallel_leg_reserve_too_small' };
+    if (yesReserve > 10_000_000 || noReserve > 10_000_000) return { error: 'parallel_leg_reserve_too_large' };
+    patches.push({ id, yesReserve, noReserve });
+  }
+  return { value: patches };
+}
+
 export default async function handler(req, res) {
   try {
     const cors = applyCors(req, res, { methods: 'POST, OPTIONS', credentials: true });
@@ -50,11 +80,16 @@ export default async function handler(req, res) {
     const session = requirePointsAdmin(req, res);
     if (!session) return; // 401/403 already sent
 
-    const { marketId, question, startTime, endTime, category } = req.body || {};
+    const { marketId, question, startTime, endTime, category, parallelLegs } = req.body || {};
     const mid = parseInt(marketId, 10);
     if (!Number.isInteger(mid) || mid <= 0) {
       return res.status(400).json({ error: 'invalid_market_id' });
     }
+    const normalizedParallelLegs = normalizeParallelLegPatches(parallelLegs);
+    if (normalizedParallelLegs.error) {
+      return res.status(400).json({ error: normalizedParallelLegs.error });
+    }
+    const nextParallelLegs = normalizedParallelLegs.value;
 
     // Normalise the optional fields.
     let nextQuestion = null;
@@ -95,7 +130,8 @@ export default async function handler(req, res) {
 
     const existingRows = await sql`
       SELECT id, question, category, start_time, end_time, sport, league,
-             resolver_type, resolver_config, category_tags, geo_tags, topic_tags
+             resolver_type, resolver_config, category_tags, geo_tags, topic_tags,
+             status, amm_mode, parent_id, seed_liquidity
       FROM points_markets
       WHERE id = ${mid}
       LIMIT 1
@@ -119,6 +155,7 @@ export default async function handler(req, res) {
       && nextStartTime === null
       && nextEndTime === null
       && nextCategory === null
+      && nextParallelLegs === null
       && !resolverConfigChanged
     ) {
       return res.status(400).json({ error: 'nothing_to_update' });
@@ -187,6 +224,93 @@ export default async function handler(req, res) {
       `;
     }
 
+    if (nextParallelLegs !== null && nextParallelLegs.length > 0) {
+      await withTransaction(async (client) => {
+        const parentRes = await client.query(
+          `SELECT id, status, amm_mode, parent_id
+             FROM points_markets
+            WHERE id = $1
+            FOR UPDATE`,
+          [mid],
+        );
+        if (parentRes.rows.length === 0) {
+          const err = new Error('market_not_found'); err.status = 404; throw err;
+        }
+        const parent = parentRes.rows[0];
+        if (parent.parent_id || parent.amm_mode !== 'parallel') {
+          const err = new Error('not_parallel_parent'); err.status = 400; throw err;
+        }
+        if (parent.status !== 'active') {
+          const err = new Error('parallel_parent_not_active'); err.status = 400; throw err;
+        }
+
+        const legRes = await client.query(
+          `SELECT id, parent_id, status, leg_label, reserves
+             FROM points_markets
+            WHERE parent_id = $1
+            FOR UPDATE`,
+          [mid],
+        );
+        const legById = new Map(legRes.rows.map(row => [Number(row.id), row]));
+        for (const patch of nextParallelLegs) {
+          const leg = legById.get(patch.id);
+          if (!leg) {
+            const err = new Error('parallel_leg_not_found'); err.status = 404; throw err;
+          }
+          if (leg.status !== 'active') {
+            const err = new Error('parallel_leg_not_active'); err.status = 400;
+            err.detail = leg.leg_label || String(leg.id);
+            throw err;
+          }
+        }
+
+        const nextLegSeeds = new Map();
+        for (const leg of legRes.rows) {
+          const current = parseJsonb(leg.reserves, []).map(Number);
+          nextLegSeeds.set(Number(leg.id), {
+            yesReserve: Number(current[0] || 0),
+            noReserve: Number(current[1] || 0),
+          });
+        }
+
+        for (const patch of nextParallelLegs) {
+          const reserves = [patch.yesReserve, patch.noReserve];
+          const avgSeed = Math.round(((patch.yesReserve + patch.noReserve) / 2) * 1_000_000) / 1_000_000;
+          await client.query(
+            `UPDATE points_markets
+                SET reserves = $1::jsonb,
+                    seed_liquidities = $1::jsonb,
+                    seed_liquidity = $2
+              WHERE id = $3`,
+            [JSON.stringify(reserves), avgSeed, patch.id],
+          );
+          nextLegSeeds.set(patch.id, {
+            yesReserve: patch.yesReserve,
+            noReserve: patch.noReserve,
+          });
+        }
+
+        const parentSeedLiquidities = legRes.rows.map((leg) => {
+          const next = nextLegSeeds.get(Number(leg.id));
+          if (!next) return Number(leg.seed_liquidity || 0);
+          return Math.round(((next.yesReserve + next.noReserve) / 2) * 1_000_000) / 1_000_000;
+        });
+        if (parentSeedLiquidities.length > 0) {
+          await client.query(
+            `UPDATE points_markets
+                SET seed_liquidities = $1::jsonb,
+                    seed_liquidity = $2
+              WHERE id = $3`,
+            [
+              JSON.stringify(parentSeedLiquidities),
+              Number(parentSeedLiquidities[0] || existing.seed_liquidity || 0),
+              mid,
+            ],
+          );
+        }
+      });
+    }
+
     const rows = await sql`
       SELECT id, question, category, start_time, end_time, status, outcome, outcomes, amm_mode
       FROM points_markets
@@ -210,6 +334,12 @@ export default async function handler(req, res) {
     });
   } catch (e) {
     console.error('[admin/edit-market] error', { message: e?.message, code: e?.code });
+    if (Number.isInteger(e?.status) && e.status >= 400 && e.status < 500) {
+      return res.status(e.status).json({
+        error: e.message || 'bad_request',
+        detail: e.detail || null,
+      });
+    }
     return res.status(500).json({
       error: 'server_error',
       detail: e?.message?.slice(0, 240) || null,

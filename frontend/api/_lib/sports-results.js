@@ -670,9 +670,10 @@ export const readEspnLivWinner = ({ eventId }) =>
 // One UFC event carries N fights as ESPN "competitions". The cron
 // passes both eventId (the card) and fightId (the specific bout).
 // We find that competition, inspect `winner: true` on each side, and
-// return the winning fighter in the same envelope as the golf
-// readers so the parallel-shape matcher in points-auto-resolve
-// handles it without any new code path.
+// return both:
+//   - winner: 'home' | 'away' for normal binary fight markets
+//   - winnerDriverId/Label for legacy parallel UFC rows created before
+//     UFC fights moved back to unified binary.
 //
 // Draws: UFC has technically-possible draws (split / majority). ESPN
 // represents them as both competitors having winner=false on a
@@ -707,7 +708,8 @@ export async function readEspnMmaWinner({ eventId, fightId }) {
   }
 
   const ctors = Array.isArray(fight.competitors) ? fight.competitors : [];
-  const winnerC = ctors.find(c => c?.winner === true);
+  const winnerIndex = ctors.findIndex(c => c?.winner === true);
+  const winnerC = winnerIndex >= 0 ? ctors[winnerIndex] : null;
   if (!winnerC) {
     // Both winner=false on a completed event = draw, no-contest, or
     // unusual data. Treat as not-done so admin handles via void
@@ -717,7 +719,7 @@ export async function readEspnMmaWinner({ eventId, fightId }) {
   }
   return {
     completed: true,
-    winner: 'p1',
+    winner: winnerIndex === 0 ? 'home' : 'away',
     winnerDriverId: String(winnerC.id || ''),
     winnerDriverLabel: winnerC.athlete?.displayName
       || winnerC.athlete?.fullName

@@ -20,6 +20,14 @@ const TOURNAMENT_MIN_BUY_MXNP = 100;
 const FIRST_ENTRY_QUICK_AMOUNTS = [100, 200, 500, 1000];
 const TOP_UP_QUICK_AMOUNTS = [5, 10, 25, 50, 100];
 
+function formatMxnp(value, locale) {
+  const numeric = Number(value || 0);
+  return numeric.toLocaleString(locale, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 // `variant='modal'` (default) centers on screen with a darkened backdrop.
 // `variant='drawer'` slides in from the right edge and takes the full
 // viewport height — invoked from market cards so the user can buy
@@ -54,6 +62,7 @@ export default function PointsBuyModal({
   const belowMinimum = requiresMinimumEntry && numAmount > 0 && numAmount < TOURNAMENT_MIN_BUY_MXNP;
   const insufficientBalance = numAmount > balance;
   const numberLocale = lang === 'en' ? 'en-US' : 'es-MX';
+  const balanceLabel = formatMxnp(balance, numberLocale);
 
   useEffect(() => {
     if (!open) return;
@@ -227,7 +236,7 @@ export default function PointsBuyModal({
         }}>
           <span style={{ color: 'var(--text-muted)' }}>{t('points.buy.balance')}</span>
           <span style={{ color: 'var(--green)', fontWeight: 700 }}>
-            {balance.toLocaleString(numberLocale)} MXNP
+            {balanceLabel} MXNP
           </span>
         </div>
 
@@ -345,7 +354,7 @@ export default function PointsBuyModal({
             borderRadius: 8,
             marginBottom: 12,
           }}>
-            {t('points.buy.insufficientBalanceDetail', { amount: balance.toLocaleString(numberLocale) })}
+            {t('points.buy.insufficientBalanceDetail', { amount: balanceLabel })}
           </div>
         )}
 

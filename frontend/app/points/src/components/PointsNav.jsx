@@ -30,6 +30,14 @@ function themeToggleLabel(lang, theme) {
   return targetIsLight ? 'Modo claro' : 'Modo oscuro';
 }
 
+function formatBalance(value) {
+  const numeric = Number(value || 0);
+  return numeric.toLocaleString('es-MX', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 function getInitialTheme() {
   try {
     const saved = localStorage.getItem('pronos-theme');
@@ -241,6 +249,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
   }
 
   const balance = Number(user?.balance || 0);
+  const balanceLabel = formatBalance(balance);
 
   return (
     <nav id="nav" className={scrolled ? 'scrolled' : ''}>
@@ -406,7 +415,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
             {authenticated && (
               <div className="points-mobile-menu-user">
                 <span>{user?.username ? `@${user.username}` : (lang === 'en' ? 'Signed in' : 'Sesión iniciada')}</span>
-                <strong>{balance.toLocaleString('es-MX')} MXNP</strong>
+                <strong>{balanceLabel} MXNP</strong>
               </div>
             )}
             <Link to="/" onClick={closeMobileMenu}>{t('points.nav.markets')}</Link>
@@ -549,7 +558,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
               aria-expanded={dropdownOpen}
             >
               <span className="dot" />
-              <span className="balance">{balance.toLocaleString('es-MX')}</span>
+              <span className="balance">{balanceLabel}</span>
               <span style={{ opacity: 0.7 }}>MXNP</span>
               <span style={{ opacity: 0.5, fontSize: 10 }}>▾</span>
             </button>

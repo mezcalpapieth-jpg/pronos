@@ -749,14 +749,15 @@ export async function adminBulkHideMarkets({
   });
 }
 
-// ─── Admin — edit market (question + start/end time + category) ────────────
-export async function adminEditMarket({ marketId, question, startTime, endTime, category }) {
+// ─── Admin — edit market (question + timing + category + parallel reserves) ─
+export async function adminEditMarket({ marketId, question, startTime, endTime, category, parallelLegs }) {
   return postJson('/api/points/admin/edit-market', {
     marketId,
     question,
     startTime,
     endTime,
     category,
+    parallelLegs,
   });
 }
 
@@ -776,6 +777,10 @@ export async function adminAppendParallelOutcomes({
     outcomeImages,
     resolverLegs,
   });
+}
+
+export async function adminConvertParallelToBinary({ marketId } = {}) {
+  return postJson('/api/points/admin/convert-parallel-binary', { marketId });
 }
 
 export async function adminCancelMarket({ marketId, reason } = {}) {

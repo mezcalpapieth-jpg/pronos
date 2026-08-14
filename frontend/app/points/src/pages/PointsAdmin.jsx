@@ -45,6 +45,7 @@ import {
   adminToggleFeatured,
   adminBulkHideMarkets,
   adminAppendParallelOutcomes,
+  adminConvertParallelToBinary,
 } from '../lib/pointsApi.js';
 import {
   ADMIN_BASEBALL_LEAGUES,
@@ -192,6 +193,32 @@ function clampPendingLiquidity(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return 500;
   return Math.min(10_000_000, Math.max(100, Math.round(n * 100) / 100));
+}
+
+function parallelYesProbabilityFromReserves(yesReserve, noReserve) {
+  const yes = Number(yesReserve);
+  const no = Number(noReserve);
+  const total = yes + no;
+  if (!Number.isFinite(yes) || !Number.isFinite(no) || total <= 0) return 0.5;
+  return no / total;
+}
+
+function normalizeParallelReserveRows(market) {
+  if (market?.ammMode !== 'parallel' || !Array.isArray(market.parallelLegs)) return [];
+  return market.parallelLegs.map((leg, index) => {
+    const reserves = Array.isArray(leg?.reserves) ? leg.reserves.map(Number) : [];
+    const fallback = clampPendingLiquidity(leg?.seedLiquidity || 500);
+    const yesReserve = Number.isFinite(reserves[0]) && reserves[0] > 0 ? reserves[0] : fallback;
+    const noReserve = Number.isFinite(reserves[1]) && reserves[1] > 0 ? reserves[1] : fallback;
+    return {
+      id: Number(leg.id),
+      label: leg.label || `Opción ${index + 1}`,
+      yesReserve: String(Math.round(yesReserve * 100) / 100),
+      noReserve: String(Math.round(noReserve * 100) / 100),
+      status: leg.status || 'active',
+      tradeCount: Number(leg.tradeCount || 0),
+    };
+  }).filter(row => Number.isInteger(row.id) && row.id > 0);
 }
 
 function pendingSeedValues(row, outcomesOverride = null, seedOverride = null) {
@@ -2009,6 +2036,28 @@ function normalizeHomeMarketVisibility(payload = {}) {
   };
 }
 
+function canConvertParallelToBinary(market) {
+  if (!market || market.status !== 'active') return false;
+  if (market.ammMode !== 'parallel') return false;
+  if (!Array.isArray(market.outcomes) || market.outcomes.length !== 2) return false;
+  const resolverSource = String(market.resolverConfig?.source || market.source || '').toLowerCase();
+  const league = String(market.league || '').toLowerCase();
+  return resolverSource === 'espn-mma' || league === 'ufc';
+}
+
+function convertParallelToBinaryErrorDetail(error) {
+  const detail = error?.detail;
+  if (detail && typeof detail === 'object') {
+    const parts = [];
+    if (Number(detail.openOrders || 0) > 0) parts.push(`${detail.openOrders} órdenes abiertas`);
+    if (Number(detail.positions || 0) > 0) parts.push(`${detail.positions} posiciones`);
+    if (parts.length > 0) {
+      return `${parts.join(', ')}. Anula/reembolsa y crea una versión binaria nueva.`;
+    }
+  }
+  return error?.detail || error?.code || error?.message || 'Error desconocido';
+}
+
 // ─── Markets table ───────────────────────────────────────────────────────────
 function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
   const [markets, setMarkets] = useState(null);
@@ -2030,6 +2079,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
   // When non-null, render the edit modal for this market.
   const [editing, setEditing] = useState(null);
   const [appending, setAppending] = useState(null);
+  const [converting, setConverting] = useState(null);
 
   const showSportFilters = categoryFilter === 'deportes';
   const showCryptoFilters = categoryFilter === 'crypto';
@@ -2193,6 +2243,37 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
       return false;
     } finally {
       setCanceling(null);
+    }
+  }
+
+  async function convertParallelMarketToBinary(market) {
+    if (!market?.id) return;
+    const ok = window.confirm(
+      `¿Convertir "${market.question}" a mercado binario?\n\n`
+      + 'Funciona si no hay posiciones actuales ni órdenes públicas abiertas. '
+      + 'Los trades históricos cerrados no bloquean la conversión.',
+    );
+    if (!ok) return;
+    setConverting(market.id);
+    try {
+      const result = await adminConvertParallelToBinary({ marketId: market.id });
+      setMarkets(prev => (prev || []).map(m => m.id === market.id ? {
+        ...m,
+        ammMode: 'unified',
+        reserves: Array.isArray(result?.reserves) ? result.reserves : m.reserves,
+        outcomes: Array.isArray(result?.outcomes) ? result.outcomes : m.outcomes,
+        parallelLegs: null,
+        resolverConfig: {
+          ...(m.resolverConfig || {}),
+          shape: 'binary',
+        },
+      } : m));
+      alert('Mercado convertido a binario.');
+      await load();
+    } catch (e) {
+      alert(`No se pudo convertir: ${convertParallelToBinaryErrorDetail(e)}`);
+    } finally {
+      setConverting(null);
     }
   }
 
@@ -2678,7 +2759,9 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
             <>
               <button
                 onClick={() => setEditing(m)}
-                title="Editar nombre, inicio o cierre"
+                title={m.ammMode === 'parallel'
+                  ? 'Editar nombre, fechas, categoría y reservas Sí/No'
+                  : 'Editar nombre, inicio o cierre'}
                 style={{
                   padding: '6px 10px',
                   background: 'transparent',
@@ -2712,6 +2795,28 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
                   }}
                 >
                   Agregar jugador
+                </button>
+              )}
+              {canConvertParallelToBinary(m) && (
+                <button
+                  onClick={() => convertParallelMarketToBinary(m)}
+                  disabled={converting === m.id}
+                  title="Convierte un UFC paralelo sin actividad pública en mercado binario"
+                  style={{
+                    padding: '6px 10px',
+                    background: 'rgba(59,130,246,0.10)',
+                    border: '1px solid rgba(59,130,246,0.35)',
+                    borderRadius: 8,
+                    color: '#60a5fa',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11,
+                    cursor: converting === m.id ? 'not-allowed' : 'pointer',
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
+                    opacity: converting === m.id ? 0.55 : 1,
+                  }}
+                >
+                  {converting === m.id ? 'Convirtiendo…' : 'A binario'}
                 </button>
               )}
               {filter === 'pending' && (
@@ -2952,6 +3057,8 @@ function AppendParallelOutcomesModal({ market, onClose, onSaved }) {
 function EditMarketModal({ market, onClose, onSaved, onCancel }) {
   const [question, setQuestion] = useState(market.question || '');
   const [category, setCategory] = useState(market.category || 'general');
+  const initialParallelReserveRows = normalizeParallelReserveRows(market);
+  const [parallelReserveRows, setParallelReserveRows] = useState(initialParallelReserveRows);
   // Split date + time into three plain inputs so format is stable
   // across browser locales. Hour/minute are number inputs clamped to
   // 0-23 / 0-59 via their native min/max attributes.
@@ -2972,6 +3079,7 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
   const initialEndHour = isoToHourPart(market.endTime);
   const initialEndMinute = isoToMinutePart(market.endTime);
   const initialCategory = market.category || 'general';
+  const canEditParallelReserves = market.ammMode === 'parallel' && initialParallelReserveRows.length > 0;
 
   function normalizeEditedIso(dateValue, hourValue, minuteValue, initialDateValue, initialHourValue, initialMinuteValue, label) {
     const touched =
@@ -2989,6 +3097,12 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
       return { error: `Fecha de ${label} inválida. Formato: dd/mm/yyyy.` };
     }
     return { value: iso };
+  }
+
+  function updateParallelReserve(rowId, field, value) {
+    setParallelReserveRows(prev => prev.map(row => (
+      row.id === rowId ? { ...row, [field]: value } : row
+    )));
   }
 
   async function save() {
@@ -3033,6 +3147,34 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
       return;
     }
 
+    let parallelLegPatches;
+    if (canEditParallelReserves) {
+      const initialById = new Map(initialParallelReserveRows.map(row => [row.id, row]));
+      const patches = [];
+      for (const row of parallelReserveRows) {
+        const yesReserve = Number(row.yesReserve);
+        const noReserve = Number(row.noReserve);
+        if (
+          !Number.isFinite(yesReserve) ||
+          !Number.isFinite(noReserve) ||
+          yesReserve < 100 ||
+          noReserve < 100
+        ) {
+          setErr('Cada reserva Sí/No debe ser de al menos 100 MXNP.');
+          setSaving(false);
+          return;
+        }
+        const initial = initialById.get(row.id);
+        const changed = !initial
+          || Math.abs(yesReserve - Number(initial.yesReserve)) > 0.000001
+          || Math.abs(noReserve - Number(initial.noReserve)) > 0.000001;
+        if (changed) {
+          patches.push({ id: row.id, yesReserve, noReserve });
+        }
+      }
+      if (patches.length > 0) parallelLegPatches = patches;
+    }
+
     try {
       await adminEditMarket({
         marketId: market.id,
@@ -3040,6 +3182,7 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
         startTime: nextStart.value,
         endTime: nextEnd.value,
         category: category !== initialCategory ? category : undefined,
+        parallelLegs: parallelLegPatches,
       });
       await onSaved?.();
     } catch (e) {
@@ -3081,7 +3224,9 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
       }}
     >
       <div style={{
-        width: 'min(480px, 100%)',
+        width: canEditParallelReserves ? 'min(760px, 100%)' : 'min(480px, 100%)',
+        maxHeight: 'calc(100vh - 48px)',
+        overflowY: 'auto',
         background: 'var(--surface1)',
         border: '1px solid var(--border)',
         borderRadius: 14,
@@ -3278,9 +3423,117 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
           );
         })()}
 
+        {canEditParallelReserves && (
+          <div style={{
+            border: '1px solid rgba(255, 90, 0, 0.28)',
+            background: 'rgba(255, 90, 0, 0.06)',
+            borderRadius: 10,
+            padding: 12,
+            marginBottom: 14,
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 10,
+              marginBottom: 8,
+            }}>
+              <div style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                color: 'var(--orange)',
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+              }}>
+                Reservas Sí/No
+              </div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
+                Más reserva No = Sí más alto
+              </div>
+            </div>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(150px, 1fr) 112px 112px 78px',
+              gap: 8,
+              alignItems: 'center',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              color: 'var(--text-muted)',
+              marginBottom: 6,
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+            }}>
+              <span>Opción</span>
+              <span>Sí</span>
+              <span>No</span>
+              <span>% Sí</span>
+            </div>
+            <div style={{ display: 'grid', gap: 6, maxHeight: 260, overflowY: 'auto', paddingRight: 2 }}>
+              {parallelReserveRows.map((row) => {
+                const yesPct = parallelYesProbabilityFromReserves(row.yesReserve, row.noReserve) * 100;
+                return (
+                  <div
+                    key={row.id}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'minmax(150px, 1fr) 112px 112px 78px',
+                      gap: 8,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{
+                        color: 'var(--text-primary)',
+                        fontFamily: 'var(--font-body)',
+                        fontSize: 13,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}>
+                        {row.label}
+                      </div>
+                      <div style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 10 }}>
+                        {row.tradeCount} trades
+                      </div>
+                    </div>
+                    <input
+                      type="number"
+                      min="100"
+                      step="10"
+                      value={row.yesReserve}
+                      onChange={(e) => updateParallelReserve(row.id, 'yesReserve', e.target.value)}
+                      style={{ ...inputStyle, padding: '8px 9px', fontFamily: 'var(--font-mono)', textAlign: 'right' }}
+                      aria-label={`Reserva Sí ${row.label}`}
+                    />
+                    <input
+                      type="number"
+                      min="100"
+                      step="10"
+                      value={row.noReserve}
+                      onChange={(e) => updateParallelReserve(row.id, 'noReserve', e.target.value)}
+                      style={{ ...inputStyle, padding: '8px 9px', fontFamily: 'var(--font-mono)', textAlign: 'right' }}
+                      aria-label={`Reserva No ${row.label}`}
+                    />
+                    <div style={{
+                      fontFamily: 'var(--font-mono)',
+                      color: 'var(--green)',
+                      fontSize: 13,
+                      textAlign: 'right',
+                    }}>
+                      {Number(yesPct).toLocaleString('es-MX', { maximumFractionDigits: 1 })}%
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 16 }}>
           Pregunta, fecha de inicio, fecha de cierre y categoría son editables.
-          Opciones y reservas del AMM no se pueden cambiar después de crear el mercado.
+          {canEditParallelReserves
+            ? ' En mercados paralelos también puedes reparar reservas Sí/No.'
+            : ' Opciones y reservas del AMM no se pueden cambiar después de crear el mercado.'}
         </p>
 
         {actionMode === 'cancel' && (
@@ -3576,7 +3829,7 @@ function StatsPanel() {
           Sesión admin: <strong style={{ color: 'var(--text-primary)' }}>@{user.username}</strong>
           {user.balance != null && (
             <span style={{ marginLeft: 'auto', color: 'var(--green)' }}>
-              {Number(user.balance).toLocaleString('es-MX')} MXNP
+              {adminMxnp(user.balance)}
             </span>
           )}
         </div>
@@ -3584,7 +3837,7 @@ function StatsPanel() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 24 }}>
         <StatCard label="Usuarios" value={stats.users.toLocaleString('es-MX')} />
-        <StatCard label="MXNP en circulación" value={`${Number(stats.totalSupply).toLocaleString('es-MX')} MXNP`} />
+        <StatCard label="MXNP en circulación" value={adminMxnp(stats.totalSupply)} />
         <StatCard label="Mercados (activos / total)" value={`${stats.markets.active} / ${stats.markets.total}`} />
       </div>
 

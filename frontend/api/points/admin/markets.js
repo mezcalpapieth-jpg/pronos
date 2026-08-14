@@ -217,6 +217,31 @@ export default async function handler(req, res) {
       topic: topicFilter,
     })).slice(0, 200);
 
+    const parallelIds = filteredRows
+      .filter(r => r.amm_mode === 'parallel')
+      .map(r => Number(r.id))
+      .filter(Number.isInteger);
+    const legsByParent = new Map();
+    if (parallelIds.length > 0) {
+      const legRows = await sql`
+        SELECT l.id, l.parent_id, l.leg_label, l.reserves, l.seed_liquidity,
+               l.seed_liquidities, l.status, l.outcome,
+               (SELECT COUNT(*)::int
+                  FROM points_trades t
+                 WHERE t.market_id = l.id
+                   AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_count
+          FROM points_markets l
+         WHERE l.parent_id = ANY(${parallelIds})
+           AND l.archived_at IS NULL
+         ORDER BY l.parent_id ASC, l.id ASC
+      `;
+      for (const leg of legRows) {
+        const parentId = Number(leg.parent_id);
+        if (!legsByParent.has(parentId)) legsByParent.set(parentId, []);
+        legsByParent.get(parentId).push(leg);
+      }
+    }
+
     const candidateByMarket = new Map();
     if (filteredRows.length > 0) {
       const ids = filteredRows.map(r => Number(r.id)).filter(Number.isInteger);
@@ -260,6 +285,18 @@ export default async function handler(req, res) {
         outcomes,
         reserves: parseJsonb(r.reserves, []).map(Number),
         seedLiquidity: Number(r.seed_liquidity || 0),
+        parallelLegs: r.amm_mode === 'parallel'
+          ? (legsByParent.get(Number(r.id)) || []).map((leg) => ({
+            id: leg.id,
+            label: leg.leg_label || null,
+            reserves: parseJsonb(leg.reserves, []).map(Number),
+            seedLiquidity: Number(leg.seed_liquidity || 0),
+            seedLiquidities: parseJsonb(leg.seed_liquidities, null),
+            status: leg.status,
+            outcome: leg.outcome,
+            tradeCount: Number(leg.trade_count || 0),
+          }))
+          : null,
         startTime: r.start_time,
         endTime: r.end_time,
         status: r.status,
