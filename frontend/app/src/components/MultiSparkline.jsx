@@ -327,6 +327,27 @@ export default function MultiSparkline({
     ? Math.max(14, Math.min(86, (hoverX / chartWidth) * 100))
     : 0;
 
+  // Hover pills sit at each line's exact y, so two lines within a few
+  // points of each other (or tied outright) fully overlap and silently
+  // hide one label. Spread them apart top-to-bottom, keeping value order,
+  // while the dot on the line itself stays put at the true reading.
+  const HOVER_LABEL_MIN_GAP = 20;
+  const hoverLabelY = useMemo(() => {
+    if (!hoverReadouts) return null;
+    const entries = hoverReadouts
+      .map((v, i) => (v == null ? null : { i, y: yForValue(v) }))
+      .filter(Boolean)
+      .sort((a, b) => a.y - b.y);
+    for (let k = 1; k < entries.length; k++) {
+      const minY = entries[k - 1].y + HOVER_LABEL_MIN_GAP;
+      if (entries[k].y < minY) entries[k].y = minY;
+    }
+    const out = {};
+    for (const e of entries) out[e.i] = e.y;
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hoveredTime]);
+
   return (
     <div style={{ width: '100%', ...style }}>
       {/* Legend — the only place each line is named, since on a shared
@@ -493,6 +514,43 @@ export default function MultiSparkline({
             }}
           />
         ))}
+
+        {/* Per-line hover pills — name + value pinned to each line at the
+            hovered instant, the way Polymarket tags every series instead
+            of only naming them in the legend above the chart. */}
+        {hoverX != null && drawn.map(({ line }, i) => {
+          const v = hoverReadouts?.[i];
+          if (v == null) return null;
+          const labelY = hoverLabelY?.[i] ?? yForValue(v);
+          return (
+            <div
+              key={`hover-label-${line.key}`}
+              style={{
+                position: 'absolute',
+                left: `${(hoverX / chartWidth) * 100}%`,
+                top: `${(labelY / height) * 100}%`,
+                transform: 'translate(9px, -50%)',
+                display: 'flex',
+                alignItems: 'stretch',
+                background: 'var(--surface2)',
+                border: '1px solid var(--border)',
+                borderLeft: `3px solid ${line.color}`,
+                borderRadius: 4,
+                padding: '2px 8px 2px 6px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                fontWeight: 700,
+                color: 'var(--text-primary)',
+                whiteSpace: 'nowrap',
+                pointerEvents: 'none',
+                fontVariantNumeric: 'tabular-nums',
+                zIndex: 11,
+              }}
+            >
+              {line.label} {Math.round(v)}%
+            </div>
+          );
+        })}
 
         {visibleYTicks.map((tick) => (
           <span
