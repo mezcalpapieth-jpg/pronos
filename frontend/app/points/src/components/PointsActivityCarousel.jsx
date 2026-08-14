@@ -67,15 +67,17 @@ const SLOT_DEFS = [
 
 const BUY_COLOR = 'var(--yes)';
 const SELL_COLOR = 'var(--danger)';
+// Muted to match PointsMarketDetail.jsx's OUTCOME_COLORS — full-saturation
+// hex read as neon against the near-black chart background.
 const OUTCOME_COLORS = [
-  'var(--yes)',
-  'var(--gold)',
-  '#ff3b3b',
-  '#3b82f6',
-  '#a855f7',
-  '#06b6d4',
-  '#ec4899',
-  '#84cc16',
+  '#3FAE72',
+  '#D9A63C',
+  '#E2574F',
+  '#5D8EE0',
+  '#A47FD1',
+  '#4CB3C2',
+  '#D687A8',
+  '#9CB84E',
 ];
 
 function displayCategory(category) {
@@ -1071,7 +1073,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                     {isMultiChart ? (
                       <MultiSparkline
                         height={isMobile ? 138 : 164}
-                        strokeWidth={2}
+                        strokeWidth={1.5}
                         showActivity
                         jumpShape="soft-step"
                         series={mChartEntries.map(entry => ({
@@ -1100,7 +1102,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                       <Sparkline
                         height={isMobile ? 110 : 148}
                         color={BUY_COLOR}
-                        strokeWidth={2.2}
+                        strokeWidth={1.6}
                         fill
                         // The big % above the chart already states the
                         // level; Sparkline's auto y-axis (on at h>=100)

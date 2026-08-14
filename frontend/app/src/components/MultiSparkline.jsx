@@ -73,7 +73,7 @@ export default function MultiSparkline({
   activity = [],
   height = 240,
   width = 320,
-  strokeWidth = 2,
+  strokeWidth = 1.5,
   showActivity = true,
   emptyLabel = 'Sin actividad todavía',
   emptySubLabel = 'El precio se moverá con el primer trade.',
