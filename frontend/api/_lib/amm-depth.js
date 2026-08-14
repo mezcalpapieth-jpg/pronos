@@ -10,6 +10,7 @@ import {
 const DEFAULT_LEVELS = [10, 25, 50, 100, 250, 500, 1000, 2500];
 const DEFAULT_MOCK_MAKER_DEPTH = 500;
 const MOCK_MAKER_SPREADS = [0.01, 0.02, 0.035, 0.05, 0.075, 0.10, 0.14, 0.18, 0.23, 0.29, 0.36, 0.44];
+const DEFAULT_EDGE_DEPTH_START = 0.65;
 
 function round(value, digits = 6) {
   if (!Number.isFinite(Number(value))) return 0;
@@ -19,6 +20,25 @@ function round(value, digits = 6) {
 
 function clampPrice(value) {
   return Math.max(0, Math.min(1, Number(value) || 0));
+}
+
+function clamp01(value) {
+  return Math.max(0, Math.min(1, Number(value) || 0));
+}
+
+function smoothstep(value) {
+  const x = clamp01(value);
+  return x * x * (3 - (2 * x));
+}
+
+function edgeDepthWeight({ side, price, edgeDepthMultiplier = 0, edgeDepthStart = DEFAULT_EDGE_DEPTH_START } = {}) {
+  const extra = Math.max(0, Number(edgeDepthMultiplier || 0));
+  if (extra <= 0) return 1;
+  const start = Math.max(0.5, Math.min(0.95, Number(edgeDepthStart || DEFAULT_EDGE_DEPTH_START)));
+  const p = clampPrice(price);
+  const towardEdge = side === 'bid' ? 1 - p : p;
+  const pressure = smoothstep((towardEdge - start) / Math.max(0.01, 1 - start));
+  return 1 + (extra * pressure);
 }
 
 function quoteBuy(reserves, outcomeIndex, amount) {
@@ -130,6 +150,8 @@ export function buildMockMakerDepth({
   seedLiquidity = DEFAULT_MOCK_MAKER_DEPTH,
   seedLiquidities = null,
   minimumDepth = DEFAULT_MOCK_MAKER_DEPTH,
+  edgeDepthMultiplier = 0,
+  edgeDepthStart = DEFAULT_EDGE_DEPTH_START,
 } = {}) {
   if (!Array.isArray(reserves) || reserves.length < 2) {
     throw new Error('amm-depth: reserves must contain at least two values');
@@ -162,16 +184,28 @@ export function buildMockMakerDepth({
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0) || 1;
   for (let i = 0; i < count; i += 1) {
     const spread = MOCK_MAKER_SPREADS[Math.min(i, MOCK_MAKER_SPREADS.length - 1)];
-    const total = round(perSideDepth * (weights[i] / totalWeight), 6);
+    const baseTotal = perSideDepth * (weights[i] / totalWeight);
     const askPrice = clampPrice(Math.max(0.01, Math.min(0.99, currentPrice + spread)));
     const bidPrice = clampPrice(Math.max(0.01, Math.min(0.99, currentPrice - spread)));
+    const askTotal = round(baseTotal * edgeDepthWeight({
+      side: 'ask',
+      price: askPrice,
+      edgeDepthMultiplier,
+      edgeDepthStart,
+    }), 6);
+    const bidTotal = round(baseTotal * edgeDepthWeight({
+      side: 'bid',
+      price: bidPrice,
+      edgeDepthMultiplier,
+      edgeDepthStart,
+    }), 6);
 
     if (askPrice > 0) {
       asks.push({
         side: 'ask',
         price: round(askPrice, 6),
-        shares: round(total / askPrice, 6),
-        total,
+        shares: round(askTotal / askPrice, 6),
+        total: askTotal,
         fee: 0,
         priceImpactPts: 0,
         source: 'maker',
@@ -181,8 +215,8 @@ export function buildMockMakerDepth({
       bids.push({
         side: 'bid',
         price: round(bidPrice, 6),
-        shares: round(total / bidPrice, 6),
-        total,
+        shares: round(bidTotal / bidPrice, 6),
+        total: bidTotal,
         fee: 0,
         priceImpactPts: 0,
         source: 'maker',

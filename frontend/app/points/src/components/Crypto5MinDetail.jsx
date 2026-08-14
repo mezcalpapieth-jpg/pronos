@@ -33,6 +33,7 @@ import {
 import LivePriceChart from '@app/components/LivePriceChart.jsx';
 import { useLang, useT } from '@app/lib/i18n.js';
 import PointsBuyModal from './PointsBuyModal.jsx';
+import TopHolders from './TopHolders.jsx';
 import { publicErrorMessage, redeemWinnings } from '../lib/pointsApi.js';
 
 function fmt(n, d = 2) {
@@ -977,6 +978,10 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
           )}
         </div>
       )}
+
+      <div style={{ marginTop: 16 }}>
+        <TopHolders marketId={selectedMarket.id} refreshKey={sequenceSig} />
+      </div>
 
       {buyState && (
         <PointsBuyModal

@@ -9,6 +9,8 @@ test('crypto 5-minute markets show and refresh the current user position after b
   assert.match(cryptoSource, /onTradeSuccess/);
   assert.match(cryptoSource, /gridTemplateColumns:\s*isMobile \|\| selectedPositions\.length === 0/);
   assert.match(cryptoSource, /selectedPositions\.map/);
+  assert.match(cryptoSource, /import TopHolders from '\.\/TopHolders\.jsx'/);
+  assert.match(cryptoSource, /<TopHolders marketId=\{selectedMarket\.id\} refreshKey=\{sequenceSig\}/);
   assert.match(cryptoSource, /await onTradeSuccess\?\.\(\)/);
   assert.match(cryptoSource, /redeemWinnings/);
   assert.match(cryptoSource, /isResolved && p\.canRedeem/);

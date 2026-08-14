@@ -33,6 +33,9 @@ export const MAKER_REWARD_FULL_DISTANCE = configNumber('POINTS_MAKER_REWARD_FULL
 export const MAKER_REWARD_MIN_SECONDS = configNumber('POINTS_MAKER_REWARD_MIN_SECONDS', 300);
 export const PRONOS_MAKER_DEPTH_PER_SIDE = configNumber('POINTS_MAKER_DEPTH_PER_SIDE', 500);
 export const PRONOS_TROPHY_MAKER_DEPTH_PER_SIDE = configNumber('POINTS_TROPHY_MAKER_DEPTH_PER_SIDE', 750);
+export const PRONOS_MAKER_EDGE_DEPTH_MULTIPLIER = configNumber('POINTS_MAKER_EDGE_DEPTH_MULTIPLIER', 5);
+export const PRONOS_TROPHY_MAKER_EDGE_DEPTH_MULTIPLIER = configNumber('POINTS_TROPHY_MAKER_EDGE_DEPTH_MULTIPLIER', PRONOS_MAKER_EDGE_DEPTH_MULTIPLIER);
+export const PRONOS_CRYPTO_MAKER_EDGE_DEPTH_MULTIPLIER = configNumber('POINTS_CRYPTO_MAKER_EDGE_DEPTH_MULTIPLIER', PRONOS_MAKER_EDGE_DEPTH_MULTIPLIER);
 
 export function parseJsonb(value, fallback) {
   if (Array.isArray(value)) return value;
@@ -633,6 +636,17 @@ export function pronosMakerDepthTarget(market = {}) {
   return isTrophy ? PRONOS_TROPHY_MAKER_DEPTH_PER_SIDE : PRONOS_MAKER_DEPTH_PER_SIDE;
 }
 
+function isCryptoDirectionMarket(market = {}) {
+  const cfg = parseJsonb(market.resolver_config ?? market.resolverConfig, null);
+  return cfg?.shape === 'binary-direction';
+}
+
+export function pronosMakerEdgeDepthMultiplier(market = {}) {
+  if (isCryptoDirectionMarket(market)) return PRONOS_CRYPTO_MAKER_EDGE_DEPTH_MULTIPLIER;
+  const isTrophy = market.tournament_featured === true || market.tournamentFeatured === true;
+  return isTrophy ? PRONOS_TROPHY_MAKER_EDGE_DEPTH_MULTIPLIER : PRONOS_MAKER_EDGE_DEPTH_MULTIPLIER;
+}
+
 export function pronosMakerDepthForMarket(market, {
   outcomeIndex = 0,
   levels = AMM_DEPTH_LEVELS,
@@ -640,6 +654,7 @@ export function pronosMakerDepthForMarket(market, {
 } = {}) {
   const reserves = reservesForMarket(market, Number(outcomeIndex));
   const makerDepth = pronosMakerDepthTarget(market);
+  const edgeDepthMultiplier = pronosMakerEdgeDepthMultiplier(market);
   const depth = buildMockMakerDepth({
     reserves,
     outcomeIndex: Number(outcomeIndex),
@@ -647,6 +662,7 @@ export function pronosMakerDepthForMarket(market, {
     seedLiquidity: makerDepth,
     seedLiquidities: Array.from({ length: reserves.length }, () => makerDepth),
     minimumDepth: makerDepth,
+    edgeDepthMultiplier,
   });
 
   const asks = subtractCollateralFromDepth(

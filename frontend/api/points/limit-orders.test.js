@@ -28,6 +28,7 @@ const makerRewardsCronSource = await readFile(new URL('../cron/points-maker-rewa
 const buySource = await readFile(new URL('./buy.js', import.meta.url), 'utf8');
 const quoteBuySource = await readFile(new URL('./quote-buy.js', import.meta.url), 'utf8');
 const quoteSellSource = await readFile(new URL('./quote-sell.js', import.meta.url), 'utf8');
+const topHoldersSource = await readFile(new URL('./top-holders.js', import.meta.url), 'utf8');
 const sellSource = await readFile(new URL('./sell.js', import.meta.url), 'utf8');
 const resolveSource = await readFile(new URL('./admin/resolve-market.js', import.meta.url), 'utf8');
 const cancelMarketSource = await readFile(new URL('./admin/cancel-market.js', import.meta.url), 'utf8');
@@ -185,6 +186,16 @@ test('sell quotes and orderbook current price only trust latest book-only fills'
   assert.match(orderbookSource, /const currentPrice = Number\.isFinite\(lastBookPrice\) \? lastBookPrice : depth\.currentPrice/);
 });
 
+test('top holders price positions with displayed book-trade odds', () => {
+  assert.match(topHoldersSource, /SELECT id, parent_id, outcomes, reserves, amm_mode, status, outcome/);
+  assert.match(topHoldersSource, /binaryPricesWithBookTrade/);
+  assert.match(topHoldersSource, /display_trade_outcome_index/);
+  assert.match(topHoldersSource, /display_trade_is_book/);
+  assert.match(topHoldersSource, /PRONOS_TREASURY_USERNAME/);
+  assert.match(topHoldersSource, /const prices = basePrices\.length === 2/);
+  assert.match(topHoldersSource, /const legPrices = legBasePrices\.length === 2/);
+});
+
 test('Pronos maker previews use seeded depth after real resting orders', () => {
   const realPreview = previewRestingAsksForBuy([
     { id: 1, username: 'maker-a', limit_price: 0.45, remaining_amount: 100 },
@@ -229,6 +240,39 @@ test('Pronos maker depth uses lightweight targets instead of legacy seed walls',
 
   assert.equal(normalDepth.perSideDepth, 500);
   assert.equal(trophyDepth.perSideDepth, 750);
+});
+
+test('Pronos maker depth keeps the middle light and adds shared edge walls', () => {
+  const midMarket = {
+    reserves: JSON.stringify([500, 500]),
+  };
+  const edgeMarket = {
+    // binaryPrices([65, 435])[0] ~= 87%, matching a high-probability side.
+    reserves: JSON.stringify([65, 435]),
+  };
+  const edgeCryptoMarket = {
+    reserves: JSON.stringify([65, 435]),
+    resolver_config: JSON.stringify({ source: 'chainlink', shape: 'binary-direction', asset: 'btc' }),
+  };
+  const midDepth = pronosMakerDepthForMarket(midMarket, {
+    outcomeIndex: 0,
+    levels: [10, 25, 50, 100],
+  });
+  const edgeDepth = pronosMakerDepthForMarket(edgeMarket, {
+    outcomeIndex: 0,
+    levels: [10, 25, 50, 100],
+  });
+  const edgeCryptoDepth = pronosMakerDepthForMarket(edgeCryptoMarket, {
+    outcomeIndex: 0,
+    levels: [10, 25, 50, 100],
+  });
+  const bestAsk = (depth) => depth.asks.reduce((best, row) => (
+    best == null || row.price < best.price ? row : best
+  ), null);
+
+  assert.ok(bestAsk(edgeDepth).total > bestAsk(midDepth).total * 3);
+  assert.ok(edgeDepth.asks.reduce((sum, row) => sum + row.total, 0) > midDepth.asks.reduce((sum, row) => sum + row.total, 0) * 3);
+  assert.equal(bestAsk(edgeCryptoDepth).total, bestAsk(edgeDepth).total);
 });
 
 test('Pronos maker depth depletes from treasury trade usage', () => {

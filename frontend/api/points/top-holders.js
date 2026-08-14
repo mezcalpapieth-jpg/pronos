@@ -18,6 +18,8 @@ import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { binaryPrices, multiPrices } from '../_lib/amm-math.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
+import { binaryPricesWithBookTrade } from '../_lib/points-display-prices.js';
+import { PRONOS_TREASURY_USERNAME } from '../_lib/points-limit-orders.js';
 
 let _sql = null;
 let _schemaSql = null;
@@ -72,7 +74,28 @@ export default async function handler(req, res) {
     await ensurePointsSchema(getSchemaSql());
 
     const marketRows = await sql`
-      SELECT id, outcomes, reserves, amm_mode, status, outcome
+      SELECT id, parent_id, outcomes, reserves, amm_mode, status, outcome,
+             (SELECT t.outcome_index
+                FROM points_trades t
+               WHERE t.market_id = points_markets.id
+                 AND t.username <> ${PRONOS_TREASURY_USERNAME}
+                 AND t.price_at_trade IS NOT NULL
+               ORDER BY t.created_at DESC, t.id DESC
+               LIMIT 1) AS display_trade_outcome_index,
+             (SELECT t.price_at_trade
+                FROM points_trades t
+               WHERE t.market_id = points_markets.id
+                 AND t.username <> ${PRONOS_TREASURY_USERNAME}
+                 AND t.price_at_trade IS NOT NULL
+               ORDER BY t.created_at DESC, t.id DESC
+               LIMIT 1) AS display_trade_price,
+             (SELECT (t.reserves_before IS NOT NULL AND t.reserves_after IS NOT NULL AND t.reserves_before = t.reserves_after)
+                FROM points_trades t
+               WHERE t.market_id = points_markets.id
+                 AND t.username <> ${PRONOS_TREASURY_USERNAME}
+                 AND t.price_at_trade IS NOT NULL
+               ORDER BY t.created_at DESC, t.id DESC
+               LIMIT 1) AS display_trade_is_book
       FROM points_markets
       WHERE id = ${mid}
       LIMIT 1
@@ -95,7 +118,28 @@ export default async function handler(req, res) {
       // Aggregate per-leg positions. Each leg has its own reserves & winning
       // outcome (0 for the winning leg, 1 for losers after cascade resolve).
       const legs = await sql`
-        SELECT l.id, l.reserves, l.status, l.outcome, l.leg_label
+        SELECT l.id, l.reserves, l.status, l.outcome, l.leg_label,
+               (SELECT t.outcome_index
+                  FROM points_trades t
+                 WHERE t.market_id = l.id
+                   AND t.username <> ${PRONOS_TREASURY_USERNAME}
+                   AND t.price_at_trade IS NOT NULL
+                 ORDER BY t.created_at DESC, t.id DESC
+                 LIMIT 1) AS display_trade_outcome_index,
+               (SELECT t.price_at_trade
+                  FROM points_trades t
+                 WHERE t.market_id = l.id
+                   AND t.username <> ${PRONOS_TREASURY_USERNAME}
+                   AND t.price_at_trade IS NOT NULL
+                 ORDER BY t.created_at DESC, t.id DESC
+                 LIMIT 1) AS display_trade_price,
+               (SELECT (t.reserves_before IS NOT NULL AND t.reserves_after IS NOT NULL AND t.reserves_before = t.reserves_after)
+                  FROM points_trades t
+                 WHERE t.market_id = l.id
+                   AND t.username <> ${PRONOS_TREASURY_USERNAME}
+                   AND t.price_at_trade IS NOT NULL
+                 ORDER BY t.created_at DESC, t.id DESC
+                 LIMIT 1) AS display_trade_is_book
         FROM points_markets l
         WHERE l.parent_id = ${mid}
         ORDER BY l.id ASC
@@ -114,7 +158,15 @@ export default async function handler(req, res) {
       const priced = positions.map(p => {
         const leg = legs.find(l => Number(l.id) === Number(p.market_id));
         const legReserves = parseJsonb(leg?.reserves, []).map(Number);
-        const legPrices = pricesForReserves(legReserves);
+        const legBasePrices = pricesForReserves(legReserves);
+        const legPrices = legBasePrices.length === 2
+          ? binaryPricesWithBookTrade(legBasePrices, {
+              status: leg?.status,
+              outcomeIndex: leg?.display_trade_outcome_index,
+              price: leg?.display_trade_price,
+              isBookTrade: leg?.display_trade_is_book,
+            })
+          : legBasePrices;
         const oi = Number(p.outcome_index);
         let currentPrice;
         if (leg?.status === 'resolved') {
@@ -149,7 +201,15 @@ export default async function handler(req, res) {
 
     // Unified path.
     const reserves = parseJsonb(m.reserves, []).map(Number);
-    const prices = pricesForReserves(reserves);
+    const basePrices = pricesForReserves(reserves);
+    const prices = basePrices.length === 2
+      ? binaryPricesWithBookTrade(basePrices, {
+          status: m.status,
+          outcomeIndex: m.display_trade_outcome_index,
+          price: m.display_trade_price,
+          isBookTrade: m.display_trade_is_book,
+        })
+      : basePrices;
 
     const positions = await sql`
       SELECT username, outcome_index, shares, cost_basis
