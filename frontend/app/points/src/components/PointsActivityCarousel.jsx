@@ -1103,10 +1103,11 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                         color={BUY_COLOR}
                         strokeWidth={1.6}
                         fill={false}
-                        // The big % above the chart already states the
-                        // level; Sparkline's auto y-axis (on at h>=100)
-                        // would only collide with the end dot here.
-                        showYAxis={false}
+                        // The end label now reserves its own gutter, so
+                        // the y-axis no longer collides with it — enable
+                        // it for the same scale reference the multi-
+                        // outcome carousel charts already show.
+                        showYAxis
                         fitDomain
                         showEndLabel
                         endLabelText={mOutcomes[0]}
