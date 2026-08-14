@@ -146,7 +146,7 @@ export default function Sparkline({
 
   const rawPoints = useMemo(() => {
     const source = Array.isArray(data) ? data : [];
-    return source
+    const mapped = source
       .map((pt) => {
         if (typeof pt === 'object' && pt !== null && 'p' in pt) {
           const p = Number(pt.p);
@@ -160,6 +160,16 @@ export default function Sparkline({
         return Number.isFinite(p) ? Math.max(0, Math.min(100, p)) : null;
       })
       .filter(Boolean);
+    // Adjacent snapshots sharing a timestamp collapse to the last one —
+    // on a step-after chart, an earlier same-instant value shares an x
+    // coordinate with the value that immediately supersedes it, so it
+    // renders as a zero-width spike instead of a hold.
+    return mapped.filter((pt, i) => {
+      if (i === mapped.length - 1) return true;
+      const next = mapped[i + 1];
+      if (typeof pt !== 'object' || pt === null || typeof next !== 'object' || next === null) return true;
+      return next.t !== pt.t;
+    });
   }, [data]);
 
   const hasRealHistory = rawPoints.length > 0;
