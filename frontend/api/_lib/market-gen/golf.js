@@ -48,6 +48,7 @@ const PGA_FIELD = [
   { id: '4364873', name: 'Viktor Hovland' },
   { id: '10592',   name: 'Collin Morikawa' },
   { id: '5860',    name: 'Hideki Matsuyama' },
+  { id: '11382',   name: 'Sungjae Im' },
   { id: '5539',    name: 'Tommy Fleetwood' },
   { id: '6007',    name: 'Patrick Cantlay' },
   { id: '9938',    name: 'Sam Burns' },

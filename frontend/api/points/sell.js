@@ -17,7 +17,7 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
-import { binarySellQuote, multiSellQuote } from '../_lib/amm-math.js';
+import { binaryPrices, binarySellQuote, multiSellQuote } from '../_lib/amm-math.js';
 import { requireSession } from '../_lib/session.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { withTransaction } from '../_lib/db-tx.js';
@@ -28,9 +28,11 @@ import {
   lockedReservedShares,
   matchPronosMakerBidsForSell,
   matchRestingBidsForSell,
+  PRONOS_TREASURY_USERNAME,
 } from '../_lib/points-limit-orders.js';
 import { assertCryptoTradeAllowed } from '../_lib/points-crypto-trade-guard.js';
 import { normalizeExecutableSellShares } from '../_lib/points-sell-shares.js';
+import { binaryPricesWithBookTrade } from '../_lib/points-display-prices.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 
@@ -105,6 +107,28 @@ export default async function handler(req, res) {
       if (oi >= reserves.length) {
         const err = new Error('invalid_outcome_index'); err.status = 400; throw err;
       }
+      let displayPriceBefore = 0;
+      if (reserves.length === 2) {
+        const pricesBefore = binaryPrices(reserves);
+        const displayTradeResult = await client.query(
+          `SELECT outcome_index, price_at_trade,
+                  (reserves_before IS NOT NULL AND reserves_after IS NOT NULL AND reserves_before = reserves_after) AS is_book_trade
+             FROM points_trades
+            WHERE market_id = $1
+              AND username <> $2
+              AND price_at_trade IS NOT NULL
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1`,
+          [mid, PRONOS_TREASURY_USERNAME],
+        );
+        const displayPricesBefore = binaryPricesWithBookTrade(pricesBefore, {
+          status: m.status,
+          outcomeIndex: displayTradeResult.rows[0]?.outcome_index,
+          price: displayTradeResult.rows[0]?.price_at_trade,
+          isBookTrade: displayTradeResult.rows[0]?.is_book_trade,
+        });
+        displayPriceBefore = Number(displayPricesBefore[oi] ?? pricesBefore[oi] ?? 0);
+      }
 
       const positionResult = await client.query(
         `SELECT shares, cost_basis, realized_pnl
@@ -139,6 +163,7 @@ export default async function handler(req, res) {
           username,
           outcomeIndex: oi,
           sharesToSell: realOrderbookMatch.remainingShares,
+          currentPrice: displayPriceBefore || null,
         })
         : null;
       const orderbookMatch = combineSellOrderbookMatches(realOrderbookMatch, makerOrderbookMatch);

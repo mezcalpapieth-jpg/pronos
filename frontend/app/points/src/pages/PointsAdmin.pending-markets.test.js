@@ -150,8 +150,11 @@ test('Points admin can append players to active parallel markets', () => {
   assert.match(source, /AppendParallelOutcomesModal/);
   assert.match(source, /Agregar jugador/);
   assert.match(source, /m\.ammMode === 'parallel'/);
-  assert.match(source, /Jugadores nuevos/);
+  assert.match(source, /Jugadores nuevos o existentes/);
   assert.match(source, /outcomes:\s*unique/);
+  assert.match(source, /outcomeImages/);
+  assert.match(source, /resolverLegs/);
+  assert.match(source, /Sungjae Im \| 11382/);
   assert.match(apiSource, /export async function adminAppendParallelOutcomes/);
   assert.match(apiSource, /\/api\/points\/admin\/append-parallel-outcomes/);
 });

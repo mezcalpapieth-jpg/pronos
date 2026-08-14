@@ -230,6 +230,7 @@ export default async function handler(req, res) {
           username,
           outcomeIndex: oi,
           collateralBudget: realOrderbookMatch.remainingCollateral,
+          currentPrice: displayPriceBefore || null,
         })
         : null;
       const orderbookMatch = combineBuyOrderbookMatches(realOrderbookMatch, makerOrderbookMatch);

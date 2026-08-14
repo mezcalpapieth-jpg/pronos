@@ -2899,16 +2899,32 @@ function AppendParallelOutcomesModal({ market, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(null);
 
-  const parsedLabels = labels
+  function parsePlayerRow(row) {
+    const parts = String(row || '')
+      .split('|')
+      .map(part => part.trim());
+    const label = parts[0] || '';
+    let driverId = '';
+    let image = '';
+    for (const part of parts.slice(1)) {
+      if (/^https?:\/\//i.test(part)) image = part;
+      else if (part) driverId = part;
+    }
+    return { label, driverId, image };
+  }
+
+  const parsedEntries = labels
     .split(/\r?\n/)
-    .map(label => label.trim())
-    .filter(Boolean);
+    .map(parsePlayerRow)
+    .filter(entry => entry.label);
 
   async function save() {
     const unique = [];
+    const outcomeImages = [];
+    const resolverLegs = [];
     const seen = new Set();
-    for (const label of parsedLabels) {
-      const key = label
+    for (const entry of parsedEntries) {
+      const key = entry.label
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .toLowerCase()
@@ -2917,7 +2933,9 @@ function AppendParallelOutcomesModal({ market, onClose, onSaved }) {
         .trim();
       if (!key || seen.has(key)) continue;
       seen.add(key);
-      unique.push(label);
+      unique.push(entry.label);
+      outcomeImages.push(entry.image || null);
+      resolverLegs.push({ driverId: entry.driverId || null });
     }
     if (unique.length === 0) {
       setErr('Agrega al menos un jugador, uno por línea.');
@@ -2936,6 +2954,8 @@ function AppendParallelOutcomesModal({ market, onClose, onSaved }) {
         marketId: market.id,
         outcomes: unique,
         seedLiquidity: seed,
+        outcomeImages,
+        resolverLegs,
       });
       await onSaved?.();
     } catch (e) {
@@ -2989,15 +3009,15 @@ function AppendParallelOutcomesModal({ market, onClose, onSaved }) {
           marginTop: 0,
           marginBottom: 18,
         }}>
-          Se crearán nuevas opciones binarias Sí/No sin cambiar las opciones existentes.
+          Usa Nombre | ESPN ID | Imagen. Si coincide con una opción activa, se actualiza sin duplicar.
         </p>
 
-        <Field label="Jugadores nuevos">
+        <Field label="Jugadores nuevos o existentes">
           <textarea
             value={labels}
             onChange={(e) => setLabels(e.target.value)}
             rows={7}
-            placeholder={'Brandon Nakashima\nRafael Jodar'}
+            placeholder={'Sungjae Im | 11382\nBrandon Nakashima | 3130357 | https://...'}
             style={{ ...inputStyle, resize: 'vertical', fontFamily: 'var(--font-mono)' }}
           />
         </Field>

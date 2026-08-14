@@ -79,6 +79,25 @@ export default async function handler(req, res) {
     if (reserves.length < 2) return res.status(400).json({ error: 'degenerate_reserves' });
     if (oi >= reserves.length) return res.status(400).json({ error: 'invalid_outcome_index' });
 
+    const pricesBefore = reserves.length === 2 ? binaryPrices(reserves) : multiPrices(reserves);
+    const displayTradeRows = reserves.length === 2 ? await sql`
+      SELECT outcome_index, price_at_trade,
+             (reserves_before IS NOT NULL AND reserves_after IS NOT NULL AND reserves_before = reserves_after) AS is_book_trade
+      FROM points_trades
+      WHERE market_id = ${mid}
+        AND username <> ${PRONOS_TREASURY_USERNAME}
+        AND price_at_trade IS NOT NULL
+      ORDER BY created_at DESC, id DESC
+      LIMIT 1
+    ` : [];
+    const displayPricesBefore = binaryPricesWithBookTrade(pricesBefore, {
+      status: r.status,
+      outcomeIndex: displayTradeRows[0]?.outcome_index,
+      price: displayTradeRows[0]?.price_at_trade,
+      isBookTrade: displayTradeRows[0]?.is_book_trade,
+    });
+    const priceBefore = displayPricesBefore[oi] || pricesBefore[oi] || 0;
+
     const bidRows = await sql`
       SELECT id, username, limit_price, remaining_amount
         FROM points_limit_orders
@@ -105,6 +124,7 @@ export default async function handler(req, res) {
         outcomeIndex: oi,
         shares: realOrderbook.remainingShares,
         usage: makerUsageFromRows(usageRows),
+        currentPrice: priceBefore,
       })
       : null;
     const orderbook = combineSellOrderbookMatches(realOrderbook, makerOrderbook);
@@ -116,26 +136,8 @@ export default async function handler(req, res) {
         ? binarySellQuote(reserves, oi, ammShares)
         : multiSellQuote(reserves, oi, ammShares))
       : null;
-    const pricesBefore = reserves.length === 2 ? binaryPrices(reserves) : multiPrices(reserves);
-    const displayTradeRows = reserves.length === 2 ? await sql`
-      SELECT outcome_index, price_at_trade,
-             (reserves_before IS NOT NULL AND reserves_after IS NOT NULL AND reserves_before = reserves_after) AS is_book_trade
-      FROM points_trades
-      WHERE market_id = ${mid}
-        AND username <> ${PRONOS_TREASURY_USERNAME}
-        AND price_at_trade IS NOT NULL
-      ORDER BY created_at DESC, id DESC
-      LIMIT 1
-    ` : [];
-    const displayPricesBefore = binaryPricesWithBookTrade(pricesBefore, {
-      status: r.status,
-      outcomeIndex: displayTradeRows[0]?.outcome_index,
-      price: displayTradeRows[0]?.price_at_trade,
-      isBookTrade: displayTradeRows[0]?.is_book_trade,
-    });
     const collateralOut = orderbook.collateralOut + Number(q?.collateralOut || 0);
     const avgPrice = n > 0 ? collateralOut / n : 0;
-    const priceBefore = displayPricesBefore[oi] || pricesBefore[oi] || 0;
     const executionPrice = avgPrice > 0 ? avgPrice : null;
     const lastBookFillPrice = [...(orderbook.fills || [])]
       .reverse()

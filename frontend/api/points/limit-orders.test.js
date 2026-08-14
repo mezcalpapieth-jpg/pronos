@@ -177,6 +177,7 @@ test('buy quotes display orderbook-only execution price instead of stale AMM pri
   assert.match(quoteBuySource, /displayTradeRows/);
   assert.match(quoteBuySource, /reserves_before = reserves_after/);
   assert.match(quoteBuySource, /const priceBefore = displayPricesBefore\[oi\] \|\| pricesBefore\[oi\] \|\| 0/);
+  assert.match(quoteBuySource, /currentPrice: priceBefore/);
   assert.match(quoteBuySource, /const executionPrice = avgPrice > 0 \? avgPrice : null/);
   assert.match(quoteBuySource, /const lastBookFillPrice = \[\.\.\.\(orderbook\.fills \|\| \[\]\)\]/);
   assert.match(quoteBuySource, /const rawPriceAfter = q\?\.pricesAfter\?\.\[oi\] \?\? null/);
@@ -184,6 +185,7 @@ test('buy quotes display orderbook-only execution price instead of stale AMM pri
   assert.match(quoteBuySource, /priceImpactPts: \(priceAfter - priceBefore\) \* 100/);
   assert.match(buySource, /binaryPricesWithBookTrade/);
   assert.match(buySource, /PRONOS_TREASURY_USERNAME/);
+  assert.match(buySource, /currentPrice: displayPriceBefore \|\| null/);
   assert.match(buySource, /const responsePriceAfter = reserves\.length === 2\s*\?\s*monotonicBuyDisplayPrice\(responsePriceBefore, \[/s);
 });
 
@@ -200,11 +202,14 @@ test('sell quotes and orderbook current price only trust latest book-only fills'
     assert.match(source, /is_book_trade/);
   }
   assert.match(quoteSellSource, /binaryPricesWithBookTrade/);
+  assert.match(quoteSellSource, /currentPrice: priceBefore/);
   assert.match(quoteSellSource, /const priceBefore = displayPricesBefore\[oi\] \|\| pricesBefore\[oi\] \|\| 0/);
   assert.match(quoteSellSource, /const lastBookFillPrice = \[\.\.\.\(orderbook\.fills \|\| \[\]\)\]/);
   assert.match(quoteSellSource, /const priceAfter = q\?\.priceAfter \?\? lastBookFillPrice \?\? executionPrice \?\? priceBefore/);
-  assert.match(orderbookSource, /const lastBookPrice = lastRows\[0\]\?\.is_book_trade/);
-  assert.match(orderbookSource, /const currentPrice = Number\.isFinite\(lastBookPrice\) \? lastBookPrice : depth\.currentPrice/);
+  assert.match(orderbookSource, /binaryPricesWithBookTrade/);
+  assert.match(orderbookSource, /outcomeIndex: lastRows\[0\]\?\.outcome_index/);
+  assert.match(orderbookSource, /currentPrice: Number\.isFinite\(displayCurrentPrice\) \? displayCurrentPrice : null/);
+  assert.match(orderbookSource, /const currentPrice = Number\.isFinite\(displayCurrentPrice\) \? displayCurrentPrice : depth\.currentPrice/);
 });
 
 test('top holders price positions with displayed book-trade odds', () => {
@@ -255,6 +260,30 @@ test('Pronos maker previews use seeded depth after real resting orders', () => {
   assert.ok(combined.sharesOut > realPreview.sharesOut);
   assert.equal(combined.fills[0].source, 'limit');
   assert.equal(combined.fills[1].source, 'maker');
+});
+
+test('Pronos maker previews can anchor to displayed binary odds', () => {
+  const market = {
+    reserves: JSON.stringify([500, 500]),
+    seed_liquidity: 500,
+    seed_liquidities: null,
+  };
+  const stalePreview = previewPronosMakerAsksForBuy(market, {
+    outcomeIndex: 1,
+    collateral: 100,
+    levels: [10, 25, 50, 100],
+  });
+  const anchoredPreview = previewPronosMakerAsksForBuy(market, {
+    outcomeIndex: 1,
+    collateral: 100,
+    levels: [10, 25, 50, 100],
+    currentPrice: 0.4,
+  });
+  const highestFillPrice = Math.max(...anchoredPreview.fills.map(fill => fill.price));
+
+  assert.ok(stalePreview.avgPrice > 0.5);
+  assert.ok(anchoredPreview.avgPrice < 0.5);
+  assert.ok(highestFillPrice < 0.5);
 });
 
 test('Pronos maker depth uses lightweight targets instead of legacy seed walls', () => {

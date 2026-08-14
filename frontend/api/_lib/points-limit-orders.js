@@ -651,6 +651,7 @@ export function pronosMakerDepthForMarket(market, {
   outcomeIndex = 0,
   levels = AMM_DEPTH_LEVELS,
   usage = {},
+  currentPrice = null,
 } = {}) {
   const reserves = reservesForMarket(market, Number(outcomeIndex));
   const makerDepth = pronosMakerDepthTarget(market);
@@ -663,6 +664,7 @@ export function pronosMakerDepthForMarket(market, {
     seedLiquidities: Array.from({ length: reserves.length }, () => makerDepth),
     minimumDepth: makerDepth,
     edgeDepthMultiplier,
+    currentPrice,
   });
 
   const asks = subtractCollateralFromDepth(
@@ -840,8 +842,14 @@ export function previewPronosMakerAsksForBuy(market, {
   usage = {},
   levels = AMM_DEPTH_LEVELS,
   maxPrice = null,
+  currentPrice = null,
 } = {}) {
-  const depth = pronosMakerDepthForMarket(market, { outcomeIndex, levels, usage });
+  const depth = pronosMakerDepthForMarket(market, {
+    outcomeIndex,
+    levels,
+    usage,
+    currentPrice,
+  });
   return previewRestingAsksForBuy(makerAskRows(depth), { collateral, maxPrice });
 }
 
@@ -851,8 +859,14 @@ export function previewPronosMakerBidsForSell(market, {
   usage = {},
   levels = AMM_DEPTH_LEVELS,
   minPrice = null,
+  currentPrice = null,
 } = {}) {
-  const depth = pronosMakerDepthForMarket(market, { outcomeIndex, levels, usage });
+  const depth = pronosMakerDepthForMarket(market, {
+    outcomeIndex,
+    levels,
+    usage,
+    currentPrice,
+  });
   return previewRestingBidsForSell(makerBidRows(depth), { shares, minPrice });
 }
 
@@ -1131,6 +1145,7 @@ export async function matchPronosMakerAsksForBuy(client, {
   collateralBudget,
   maxPrice = null,
   maxOrders = MAX_TRIGGERED_PER_PASS,
+  currentPrice = null,
 } = {}) {
   const budget = Math.max(0, Number(collateralBudget || 0));
   if (budget <= EPSILON) {
@@ -1139,7 +1154,7 @@ export async function matchPronosMakerAsksForBuy(client, {
 
   const reserves = reservesForMarket(market, outcomeIndex);
   const usage = await readPronosMakerUsage(client, { marketId, outcomeIndex });
-  const depth = pronosMakerDepthForMarket(market, { outcomeIndex, usage });
+  const depth = pronosMakerDepthForMarket(market, { outcomeIndex, usage, currentPrice });
   const rows = makerAskRows(depth, Math.max(1, Number.parseInt(maxOrders, 10) || MAX_TRIGGERED_PER_PASS));
   const preview = previewRestingAsksForBuy(rows, { collateral: budget, maxPrice });
   if (preview.sharesOut <= EPSILON || preview.collateralSpent <= EPSILON) {
@@ -1364,6 +1379,7 @@ export async function matchPronosMakerBidsForSell(client, {
   sharesToSell,
   minPrice = null,
   maxOrders = MAX_TRIGGERED_PER_PASS,
+  currentPrice = null,
 } = {}) {
   const targetShares = Math.max(0, Number(sharesToSell || 0));
   if (targetShares <= EPSILON) {
@@ -1372,7 +1388,7 @@ export async function matchPronosMakerBidsForSell(client, {
 
   const reserves = reservesForMarket(market, outcomeIndex);
   const usage = await readPronosMakerUsage(client, { marketId, outcomeIndex });
-  const depth = pronosMakerDepthForMarket(market, { outcomeIndex, usage });
+  const depth = pronosMakerDepthForMarket(market, { outcomeIndex, usage, currentPrice });
   const rows = makerBidRows(depth, Math.max(1, Number.parseInt(maxOrders, 10) || MAX_TRIGGERED_PER_PASS));
   const preview = previewRestingBidsForSell(rows, { shares: targetShares, minPrice });
   if (preview.sharesSold <= EPSILON || preview.collateralOut <= EPSILON) {

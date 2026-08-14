@@ -26,6 +26,11 @@ function clamp01(value) {
   return Math.max(0, Math.min(1, Number(value) || 0));
 }
 
+function cleanPriceOverride(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 && n < 1 ? clampPrice(n) : null;
+}
+
 function smoothstep(value) {
   const x = clamp01(value);
   return x * x * (3 - (2 * x));
@@ -152,6 +157,7 @@ export function buildMockMakerDepth({
   minimumDepth = DEFAULT_MOCK_MAKER_DEPTH,
   edgeDepthMultiplier = 0,
   edgeDepthStart = DEFAULT_EDGE_DEPTH_START,
+  currentPrice = null,
 } = {}) {
   if (!Array.isArray(reserves) || reserves.length < 2) {
     throw new Error('amm-depth: reserves must contain at least two values');
@@ -176,7 +182,8 @@ export function buildMockMakerDepth({
     Number.isFinite(configuredDepth) ? configuredDepth : 0,
     Number.isFinite(Number(minimumDepth)) ? Number(minimumDepth) : DEFAULT_MOCK_MAKER_DEPTH,
   );
-  const currentPrice = clampPrice(Number(pricesForReserves(normalizedReserves)[oi]));
+  const anchoredPrice = cleanPriceOverride(currentPrice);
+  const currentPriceForOutcome = anchoredPrice ?? clampPrice(Number(pricesForReserves(normalizedReserves)[oi]));
   const asks = [];
   const bids = [];
 
@@ -185,8 +192,8 @@ export function buildMockMakerDepth({
   for (let i = 0; i < count; i += 1) {
     const spread = MOCK_MAKER_SPREADS[Math.min(i, MOCK_MAKER_SPREADS.length - 1)];
     const baseTotal = perSideDepth * (weights[i] / totalWeight);
-    const askPrice = clampPrice(Math.max(0.01, Math.min(0.99, currentPrice + spread)));
-    const bidPrice = clampPrice(Math.max(0.01, Math.min(0.99, currentPrice - spread)));
+    const askPrice = clampPrice(Math.max(0.01, Math.min(0.99, currentPriceForOutcome + spread)));
+    const bidPrice = clampPrice(Math.max(0.01, Math.min(0.99, currentPriceForOutcome - spread)));
     const askTotal = round(baseTotal * edgeDepthWeight({
       side: 'ask',
       price: askPrice,
@@ -232,7 +239,7 @@ export function buildMockMakerDepth({
   const spread = ask == null || bid == null ? null : Math.max(0, ask - bid);
 
   return {
-    currentPrice: round(currentPrice, 6),
+    currentPrice: round(currentPriceForOutcome, 6),
     spread: spread == null ? null : round(spread, 6),
     asks,
     bids,

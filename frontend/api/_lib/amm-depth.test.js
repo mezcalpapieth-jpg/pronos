@@ -67,3 +67,17 @@ test('buildMockMakerDepth defaults to lightweight maker depth', () => {
   assert.ok(Math.abs(depth.asks.reduce((sum, row) => sum + row.total, 0) - 500) < 0.01);
   assert.ok(Math.abs(depth.bids.reduce((sum, row) => sum + row.total, 0) - 500) < 0.01);
 });
+
+test('buildMockMakerDepth can anchor synthetic rows to displayed book-trade price', () => {
+  const depth = buildMockMakerDepth({
+    reserves: [500, 500],
+    outcomeIndex: 1,
+    levels: [10, 25, 50, 100],
+    seedLiquidity: 500,
+    currentPrice: 0.4,
+  });
+
+  assert.equal(depth.currentPrice, 0.4);
+  assert.ok(Math.min(...depth.asks.map(row => row.price)) < 0.5);
+  assert.ok(Math.max(...depth.bids.map(row => row.price)) < 0.4);
+});
