@@ -130,6 +130,89 @@
 }
 .nav-links a:hover { color: var(--text-primary); }
 
+.points-mobile-menu {
+  display: none;
+  position: relative;
+  flex-shrink: 0;
+}
+.points-mobile-menu-button {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.points-mobile-menu-button:hover {
+  background: var(--surface3);
+  border-color: var(--border-active);
+}
+.points-mobile-menu-button span {
+  width: 15px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--text-primary);
+}
+.points-mobile-menu-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(290px, calc(100vw - 24px));
+  padding: 8px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface1);
+  box-shadow: 0 18px 48px rgba(0,0,0,0.42);
+  z-index: 1100;
+}
+.points-mobile-menu-panel a,
+.points-mobile-menu-panel button {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-decoration: none;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+}
+.points-mobile-menu-panel a:hover,
+.points-mobile-menu-panel button:hover {
+  background: var(--surface2);
+  color: var(--text-primary);
+}
+.points-mobile-menu-badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(245,158,11,0.16);
+  border: 1px solid rgba(245,158,11,0.5);
+  color: #f59e0b;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
 /* ── Nav search bar ──────────────────────────────────────── */
 .nav-search {
   position: relative;
@@ -226,12 +309,19 @@
   border-color: var(--border-active);
   transform: rotate(20deg);
 }
-/* Icon via CSS content */
 .btn-theme-toggle::before {
-  content: '🌙';
+  content: '';
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  opacity: 0.45;
+  transition: opacity 0.2s, color 0.2s, box-shadow 0.2s;
 }
 html[data-theme="light"] .btn-theme-toggle::before {
-  content: '☀️';
+  opacity: 1;
+  color: var(--orange);
+  box-shadow: 0 0 12px rgba(255, 90, 31, 0.3);
 }
 
 .btn-nav-cta {
@@ -1138,7 +1228,10 @@ html[data-theme="light"] .btn-theme-toggle::before {
   top: 64px;
   z-index: 90;
   width: 100%;
-  background: rgba(10, 10, 10, 0.92);
+  /* Theme-aware translucent bg. --bg-rgb is "8,8,8" in dark and
+     "245,245,243" in light, so 0.92 alpha gives a near-opaque match
+     to the page bg in either theme. */
+  background: rgba(var(--bg-rgb), 0.92);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--border);
@@ -1186,7 +1279,9 @@ html[data-theme="light"] .btn-theme-toggle::before {
 }
 .filter-btn:hover {
   color: var(--text-primary);
-  border-color: rgba(255,255,255,0.2);
+  /* --text-secondary works in both themes (#888 dark, #555 light) so
+     the hover border is visible without going hardcoded white. */
+  border-color: var(--text-secondary);
 }
 .filter-btn.active {
   color: var(--green);
@@ -1496,6 +1591,185 @@ html[data-theme="light"] .btn-theme-toggle::before {
   100% { opacity: 0;   transform: translateY(-58px) scale(0.85); }
 }
 
+/* News tab live-dot pulse — used by the Noticias category bar entry. */
+@keyframes pronos-news-pulse {
+  0%, 100% { opacity: 1;   transform: scale(1); }
+  50%      { opacity: 0.5; transform: scale(0.85); }
+}
+
+/* ============================================================
+   NEWS PAGE — carousel + mosaic grid
+============================================================ */
+
+/* Hero carousel card sizing.
+   - Mobile (default): 92% width, one card visible at a time, peek
+     ~6% so the swipe-affordance is obvious.
+   - Tablet+ (≥720px): 50% width minus half-gap, two cards visible
+     side-by-side.
+   .has-image variant gets a min-height so the picture has room.
+   Text-only cards (no .has-image) shrink to their content height —
+   no big empty box where the image would have been. */
+/* News layout — sub-tab sidebar on the left at desktop widths, falling
+   back to a horizontal flex-wrap row at the top on tablet/phone. The
+   sticky positioning keeps the category list visible as the user
+   scrolls through the grid below the carousel. */
+/* Mirrors the deportes/soccer league sidebar in PointsCategoryPage.jsx
+   so users moving between tabs see the same proportions. The news tab
+   colors stay red-themed to keep the live-news vs sports distinction. */
+.news-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  margin-bottom: 22px;
+}
+.news-sidebar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.news-main {
+  flex: 1 1 auto;
+  min-width: 0;       /* allow flex child to shrink past content width */
+}
+.news-tab {
+  font-family: var(--font-body);
+  font-size: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.news-tab:hover {
+  background: var(--surface2);
+}
+.news-tab.active {
+  border-color: var(--red, #FF4545);
+  color: var(--red, #FF4545);
+  background: rgba(255,69,69,0.08);
+}
+.news-tab-count {
+  margin-left: 6px;
+  opacity: 0.7;
+}
+
+@media (min-width: 900px) {
+  .news-layout {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 24px;          /* matches deportes/soccer grid gap */
+  }
+  .news-sidebar {
+    flex: 0 0 200px;    /* matches deportes/soccer 200px league column */
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 6px;
+    position: sticky;
+    top: 120px;         /* matches deportes/soccer sticky offset */
+  }
+  .news-tab {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+/* Hero card sizing — three-tier responsive layout:
+     mobile (<720)    → 1 card visible at 92% width
+     tablet (720-1100) → 2 cards visible at calc(50% - 8px)
+     desktop (>1100)  → 3 cards visible at calc(33.33% - 11px)
+   The 11px in the desktop clamp = 2/3 of the 16px gap, so 3 cards +
+   2 gaps fit cleanly without horizontal overflow.
+
+   Heights are explicit (not just min-) so image cards can't stretch
+   to absurd portrait-photo heights. The scroller is aligned to
+   flex-start (see NewsPage.jsx) so text-only cards stay at their
+   natural height instead of stretching to match image cards in the
+   same row. */
+.news-hero-card {
+  flex: 0 0 92%;
+  /* Min-height applies to text-only cards so they don't shrink under
+     image cards in the same row. has-image still sets `height` below
+     so portrait photos don't blow up the row. */
+  min-height: 280px;
+}
+.news-hero-card.has-image {
+  height: 280px;
+}
+/* Fixed image strip — paired with `flex: 0 0 auto` on the inline JSX
+   wrapper so the text below always has the remaining card height for
+   headline + summary. Without this the image was free to grow past
+   50% and squeeze the title section, causing 1-2 lines of the
+   headline to clip below the card border. */
+.news-hero-card .news-hero-image {
+  height: 150px;
+}
+@media (min-width: 720px) {
+  .news-hero-card {
+    flex: 0 0 calc(50% - 8px);
+    min-height: 320px;
+  }
+  .news-hero-card.has-image {
+    height: 320px;
+  }
+  .news-hero-card .news-hero-image {
+    height: 170px;
+  }
+}
+@media (min-width: 1100px) {
+  .news-hero-card {
+    flex: 0 0 calc(33.333% - 11px);
+    min-height: 380px;
+  }
+  .news-hero-card.has-image {
+    height: 380px;
+  }
+  .news-hero-card .news-hero-image {
+    height: 200px;
+  }
+}
+
+/* Hide the webkit scrollbar on the hero scroller so the carousel
+   reads as a clean strip. scroll-snap still works. */
+.news-hero-scroller::-webkit-scrollbar { display: none; }
+
+/* True masonry packing via CSS columns. We tried `grid-auto-flow: dense`
+   first but pure CSS Grid can't reflow a short card up into the gap
+   left by a taller card — every grid row is the height of its tallest
+   item, which left big empty patches under text-only cards next to
+   image cards. CSS columns ARE the only browser-native way to get
+   gap-free Pinterest-style packing without JS or the not-yet-shipped
+   `grid-template-rows: masonry`. Trade-off: cards flow top-to-bottom
+   per column rather than left-to-right per row, and `grid-column:
+   span` no longer applies — the .news-card-feature class still picks
+   up its row-layout content via the JSX, just doesn't span columns. */
+.news-grid {
+  column-count: 1;
+  column-gap: 16px;
+}
+@media (min-width: 720px) {
+  .news-grid { column-count: 2; }
+}
+@media (min-width: 1100px) {
+  .news-grid { column-count: 3; }
+}
+@media (min-width: 1400px) {
+  .news-grid { column-count: 4; }
+}
+.news-grid > * {
+  break-inside: avoid;
+  -webkit-column-break-inside: avoid;   /* Safari */
+  page-break-inside: avoid;             /* legacy */
+  margin-bottom: 16px;
+  display: block;
+  width: 100%;
+}
+
 .hmc {
   background: var(--surface1);
   border: 1px solid var(--border);
@@ -1769,6 +2043,13 @@ html[data-theme="light"] .btn-theme-toggle::before {
    TABLET RESPONSIVE — components
 ============================================================ */
 @media (max-width: 1024px) {
+  .points-mobile-menu {
+    display: block;
+  }
+  .points-nav-search {
+    max-width: 280px !important;
+    margin: 0 10px !important;
+  }
   .nav-links a {
     display: none; /* hide text links on tablet and below */
   }
@@ -1791,12 +2072,35 @@ html[data-theme="light"] .btn-theme-toggle::before {
     height: 56px;
     gap: 8px;
   }
+  .nav-logo {
+    font-size: 22px;
+  }
+  .points-nav-search {
+    flex: 1 1 130px !important;
+    max-width: 190px !important;
+    margin: 0 4px !important;
+  }
+  .points-nav-search input {
+    height: 34px;
+    padding-top: 7px !important;
+    padding-bottom: 7px !important;
+    font-size: 11px !important;
+  }
+  .points-nav-search > span {
+    top: 10px !important;
+  }
   /* Hide search bar on mobile landing page */
   .nav-search {
     display: none;
   }
   .nav-links {
     gap: 8px;
+  }
+  .nav-links .btn-theme-toggle,
+  .nav-links > button,
+  .nav-links .nav-user-pill-points,
+  .nav-links .nav-signup-cta {
+    display: none !important;
   }
   .nav-links a {
     display: none;

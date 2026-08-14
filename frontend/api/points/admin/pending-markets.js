@@ -1,0 +1,1181 @@
+/**
+ * Admin queue for agent-generated markets awaiting approval.
+ *
+ * GET  /api/points/admin/pending-markets?status=pending|approved|rejected
+ *   → list rows (most-recent first)
+ * POST /api/points/admin/pending-markets
+ *   body: { id, action: 'approve' | 'reject' | 'readd' | 'edit', note?, patch? }
+ *   approve → copy spec into points_markets + mark approved
+ *   reject  → mark rejected (row stays so re-runs stay idempotent)
+ *   readd   → move a rejected row back to pending review
+ *
+ * Both operations run inside one transaction so we never half-create a
+ * market and forget to mark the queue row.
+ */
+
+import { neon } from '@neondatabase/serverless';
+import { applyCors } from '../../_lib/cors.js';
+import { ensurePointsSchema } from '../../_lib/points-schema.js';
+import { requirePointsAdmin } from '../../_lib/points-admin.js';
+import { withTransaction } from '../../_lib/db-tx.js';
+import { initialReserves } from '../../_lib/amm-math.js';
+import { deriveMarketTags, matchesMarketTaxonomy } from '../../_lib/category-tags.js';
+import { normalizeSeedLiquidities } from '../../_lib/market-liquidity.js';
+import { attachDefaultSuggestedPricing, seedLiquiditiesFromProbabilities } from '../../_lib/market-pricing.js';
+import { tryAttachPolymarketPricing } from '../../_lib/polymarket-pricing.js';
+import { LCDLF_SOURCE } from '../../_lib/lcdlf-official.js';
+import { syncMananeraPhraseFromQuestion } from '../../_lib/mananera-market-sync.js';
+import { syncApiPriceFromQuestion } from '../../_lib/api-price-market-sync.js';
+
+const schemaSql = neon(process.env.DATABASE_URL);
+const readSql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
+const ALLOWED_CATEGORIES = new Set([
+  'general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup',
+]);
+const MAX_PENDING_OUTCOMES = 64;
+
+function parseJsonb(v, fb) {
+  if (Array.isArray(v)) return v;
+  if (v && typeof v === 'object') return v;
+  if (typeof v !== 'string') return fb;
+  try { return JSON.parse(v); } catch { return fb; }
+}
+
+function normalizeLabelKey(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function cleanOptionalUrl(value) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  return /^https?:\/\//i.test(text) ? text.slice(0, 1000) : null;
+}
+
+function normalizeOutcomeImagesForEdit({ row, patch, previousOutcomes, nextOutcomes }) {
+  const hasImagesPatch = Object.prototype.hasOwnProperty.call(patch, 'outcomeImages')
+    || Object.prototype.hasOwnProperty.call(patch, 'outcome_images');
+  const patchedImages = hasImagesPatch
+    ? (patch.outcomeImages ?? patch.outcome_images)
+    : null;
+  if (hasImagesPatch) {
+    const source = Array.isArray(patchedImages) ? patchedImages : [];
+    return nextOutcomes.map((_, index) => cleanOptionalUrl(source[index]));
+  }
+
+  const existing = parseJsonb(row.outcome_images, null);
+  if (!Array.isArray(existing)) return nextOutcomes.map(() => null);
+
+  const byLabel = new Map();
+  previousOutcomes.forEach((label, index) => {
+    const key = normalizeLabelKey(label);
+    if (key) byLabel.set(key, existing[index] || null);
+  });
+  return nextOutcomes.map((label, index) => {
+    const key = normalizeLabelKey(label);
+    const match = key ? byLabel.get(key) : undefined;
+    return cleanOptionalUrl(match ?? existing[index] ?? null);
+  });
+}
+
+function alignParallelResolverConfig({ row, nextOutcomes }) {
+  const cfg = parseJsonb(row.resolver_config, null);
+  if (!cfg || cfg.shape !== 'parallel') return cfg;
+  const previousOutcomes = parseJsonb(row.outcomes, []);
+  const previousLegs = Array.isArray(cfg.legs) ? cfg.legs : [];
+  const byLabel = new Map();
+  previousOutcomes.forEach((label, index) => {
+    const key = normalizeLabelKey(label);
+    const leg = previousLegs[index] || null;
+    if (key && leg) byLabel.set(key, leg);
+  });
+  for (const leg of previousLegs) {
+    const key = normalizeLabelKey(leg?.label);
+    if (key && !byLabel.has(key)) byLabel.set(key, leg);
+  }
+
+  return {
+    ...cfg,
+    legs: nextOutcomes.map((label) => {
+      const previous = byLabel.get(normalizeLabelKey(label));
+      if (previous) return { ...previous, label };
+      return { label, driverId: null, manuallyAdded: true };
+    }),
+  };
+}
+
+function filteredPendingRows(rows, query = {}) {
+  const filters = {
+    category: query.category,
+    sport: query.sport,
+    league: query.league,
+    geo: query.geo,
+    topic: query.topic,
+    cryptoType: query.crypto_type ?? query.cryptoType,
+  };
+  const feature = ['featured', 'tournament'].includes(String(query.feature || '').trim())
+    ? String(query.feature).trim()
+    : 'all';
+  if (!Object.values(filters).some(Boolean) && feature === 'all') return rows;
+  return rows.filter(row => {
+    if (feature === 'featured' && row.featured !== true) return false;
+    if (feature === 'tournament' && row.tournament_featured !== true) return false;
+    return matchesMarketTaxonomy({
+      ...row,
+      source_data: parseJsonb(row.source_data, {}),
+      resolver_config: parseJsonb(row.resolver_config, {}),
+      category_tags: parseJsonb(row.category_tags, []),
+      geo_tags: parseJsonb(row.geo_tags, []),
+      topic_tags: parseJsonb(row.topic_tags, []),
+    }, filters);
+  });
+}
+
+function probabilitiesFromParentSeedValues(seedValues) {
+  if (!Array.isArray(seedValues) || seedValues.length < 2) return null;
+  // In the pending admin UI these values are shown as per-leg display
+  // liquidity/weight, not as the binary leg's Sí reserve. If pricing
+  // metadata is missing or no longer matches edited outcomes, higher admin
+  // weight should mean a higher opening Sí probability.
+  const weights = seedValues.map(value => {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  });
+  if (weights.some(value => value == null)) return null;
+  const total = weights.reduce((sum, value) => sum + value, 0);
+  if (!Number.isFinite(total) || total <= 0) return null;
+  return weights.map(value => value / total);
+}
+
+function parallelLegBinaryReserves({ sourceData, outcomeIndex, legSeed, parentSeedValues }) {
+  const suggestedPricing = sourceData?.suggestedPricing || {};
+  let probabilities = suggestedPricing.legProbabilities
+    || suggestedPricing.legProbabilityPct
+    || suggestedPricing.yesProbabilities
+    || suggestedPricing.yesProbabilityPct
+    || suggestedPricing.probabilities
+    || suggestedPricing.probabilityPct
+    || probabilitiesFromParentSeedValues(parentSeedValues);
+  if (
+    Array.isArray(parentSeedValues)
+    && Array.isArray(probabilities)
+    && probabilities.length !== parentSeedValues.length
+  ) {
+    probabilities = probabilitiesFromParentSeedValues(parentSeedValues);
+  }
+  const pRaw = Array.isArray(probabilities) ? Number(probabilities[outcomeIndex]) : NaN;
+  const probability = Number.isFinite(pRaw) && pRaw > 1 ? pRaw / 100 : pRaw;
+  if (!Number.isFinite(probability) || probability <= 0 || probability >= 1) {
+    return initialReserves(legSeed, 2);
+  }
+  const priced = seedLiquiditiesFromProbabilities([probability, 1 - probability], {
+    seedLiquidity: legSeed,
+    minProbability: 0.01,
+  });
+  return Array.isArray(priced.seedLiquidities) && priced.seedLiquidities.length === 2
+    ? priced.seedLiquidities
+    : initialReserves(legSeed, 2);
+}
+
+export default async function handler(req, res) {
+  try {
+    const cors = applyCors(req, res, { methods: 'GET, POST, OPTIONS', credentials: true });
+    if (cors) return cors;
+
+    const admin = requirePointsAdmin(req, res);
+    if (!admin) return;
+
+    if (req.method === 'GET')  return list(req, res);
+    if (req.method === 'POST') return review(req, res, admin);
+    return res.status(405).json({ error: 'method_not_allowed' });
+  } catch (e) {
+    console.error('[admin/pending-markets] unhandled', { message: e?.message, code: e?.code });
+    return res.status(500).json({ error: 'server_error', detail: e?.message?.slice(0, 240) || null });
+  }
+}
+
+async function list(req, res) {
+  const status = ['pending', 'approved', 'rejected', 'all'].includes(req.query.status)
+    ? req.query.status
+    : 'pending';
+  await ensurePointsSchema(schemaSql);
+
+  // Auto-expire stale pendings BEFORE the list query runs. Any row
+  // whose end_time has already passed is no longer approvable — the
+  // event it was generated for already started/ended — so we flip
+  // it to 'rejected' with a marker note. This keeps the pending
+  // queue trimmed to actionable candidates and prevents the same
+  // dead rows from cluttering the admin UI on every load.
+  //
+  // The COALESCE on admin_note preserves any human note that was
+  // already there, only filling in the auto-expire reason when the
+  // slot is empty. `reviewer = 'system'` distinguishes it from a
+  // manual rejection. Idempotent — already-rejected rows are skipped
+  // by the WHERE.
+  try {
+    await schemaSql`
+      UPDATE points_pending_markets
+      SET status = 'rejected',
+          admin_note = COALESCE(NULLIF(admin_note, ''), 'auto-expired: end_time passed before approval'),
+          reviewer = COALESCE(reviewer, 'system'),
+          reviewed_at = COALESCE(reviewed_at, NOW())
+      WHERE status = 'pending'
+        AND end_time IS NOT NULL
+        AND end_time < NOW()
+    `;
+    await schemaSql`
+      UPDATE points_pending_markets
+      SET status = 'rejected',
+          admin_note = COALESCE(NULLIF(admin_note, ''), 'auto-rejected: fight outside 14-day import window'),
+          reviewer = COALESCE(reviewer, 'system'),
+          reviewed_at = COALESCE(reviewed_at, NOW())
+      WHERE status = 'pending'
+        AND (reviewer IS NULL OR reviewer = 'system')
+        AND source IN ('odds-api-boxing', 'espn-mma')
+        AND start_time IS NOT NULL
+        AND (
+          start_time > NOW() + INTERVAL '14 days'
+          OR (
+            EXTRACT(MONTH FROM start_time AT TIME ZONE 'UTC') = 1
+            AND EXTRACT(DAY FROM start_time AT TIME ZONE 'UTC') = 1
+          )
+        )
+    `;
+    await schemaSql`
+      UPDATE points_pending_markets
+      SET status = 'rejected',
+          admin_note = COALESCE(NULLIF(admin_note, ''), 'auto-rejected: NBA tipoff still TBD'),
+          reviewer = COALESCE(reviewer, 'system'),
+          reviewed_at = COALESCE(reviewed_at, NOW())
+      WHERE status = 'pending'
+        AND (reviewer IS NULL OR reviewer = 'system')
+        AND source = 'espn-nba'
+        AND start_time IS NOT NULL
+        AND resolver_config->'series' IS NOT NULL
+        AND EXTRACT(MINUTE FROM start_time AT TIME ZONE 'UTC') = 0
+        AND EXTRACT(HOUR FROM start_time AT TIME ZONE 'UTC') IN (4, 5)
+    `;
+    await schemaSql`
+      UPDATE points_pending_markets
+      SET status = 'rejected',
+          admin_note = COALESCE(NULLIF(admin_note, ''), 'auto-rejected: legacy LCDLF binary nominations replaced by grouped parallel market'),
+          reviewer = COALESCE(reviewer, 'system'),
+          reviewed_at = COALESCE(reviewed_at, NOW())
+      WHERE status = 'pending'
+        AND source = ${LCDLF_SOURCE}
+        AND source_event_id ~ '^lcdlf-mx-nomination:[0-9]{4}-[0-9]{2}-[0-9]{2}:.+'
+        AND COALESCE(amm_mode, 'unified') <> 'parallel'
+    `;
+  } catch (e) {
+    // Don't block the list on the cleanup query — log and continue.
+    // The list itself still returns even if cleanup fails.
+    console.warn('[admin/pending-markets] auto-expire skipped', { code: e?.code, message: e?.message?.slice(0, 120) });
+  }
+
+  // LEFT JOIN points_markets so approved rows carry the current
+  // `featured` / `tournament_featured` flags (and market status) back
+  // to the admin UI. Pending / rejected rows have no approved_market_id
+  // and the join returns nulls.
+  const rows = status === 'all'
+    ? await readSql`
+        SELECT p.*, mk.featured AS market_featured,
+               mk.tournament_featured AS market_tournament_featured,
+               mk.status AS market_status
+        FROM points_pending_markets p
+        LEFT JOIN points_markets mk ON mk.id = p.approved_market_id
+        ORDER BY
+          CASE p.status WHEN 'pending' THEN 0 WHEN 'rejected' THEN 1 ELSE 2 END,
+          CASE WHEN p.status = 'rejected' THEN p.reviewed_at END DESC NULLS LAST,
+          CASE WHEN p.status = 'pending' THEN p.end_time END ASC NULLS LAST,
+          p.created_at DESC
+        LIMIT 2000
+      `
+    : await readSql`
+        SELECT p.*, mk.featured AS market_featured,
+               mk.tournament_featured AS market_tournament_featured,
+               mk.status AS market_status
+        FROM points_pending_markets p
+        LEFT JOIN points_markets mk ON mk.id = p.approved_market_id
+        WHERE p.status = ${status}
+        ORDER BY
+          CASE WHEN p.status = 'rejected' THEN p.reviewed_at END DESC NULLS LAST,
+          CASE WHEN p.status = 'pending' THEN p.end_time END ASC NULLS LAST,
+          p.created_at DESC
+        LIMIT 2000
+      `;
+
+  const filteredRows = filteredPendingRows(rows, req.query || {});
+
+  return res.status(200).json({
+    pending: filteredRows.map(r => {
+      const sourceData = parseJsonb(r.source_data, {});
+      return {
+        id: r.id,
+        source: r.source,
+        sourceEventId: r.source_event_id,
+        sourceData,
+        suggestedPricing: sourceData?.suggestedPricing || null,
+        pricingSearch: sourceData?.pricingSearch || null,
+        question: r.question,
+        category: r.category,
+        icon: null,
+        outcomes: parseJsonb(r.outcomes, []),
+        outcomeImages: parseJsonb(r.outcome_images, null),
+        seedLiquidity: Number(r.seed_liquidity),
+        seedLiquidities: parseJsonb(r.seed_liquidities, null),
+        startTime: r.start_time,
+        endTime: r.end_time,
+        ammMode: r.amm_mode,
+        resolverType: r.resolver_type,
+        resolverConfig: parseJsonb(r.resolver_config, null),
+        sport: r.sport || null,
+        league: r.league || null,
+        categoryTags: parseJsonb(r.category_tags, []),
+        geoTags: parseJsonb(r.geo_tags, []),
+        topicTags: parseJsonb(r.topic_tags, []),
+        status: r.status,
+        adminNote: r.admin_note,
+        reviewer: r.reviewer,
+        reviewedAt: r.reviewed_at,
+        approvedMarketId: r.approved_market_id,
+        createdAt: r.created_at,
+        // Pending row's own featured flag — the one the featured button on a
+        // Pendientes row toggles pre-approval. Carries into points_markets
+        // when the row is approved.
+        pendingFeatured: r.featured === true,
+        pendingTournamentFeatured: r.tournament_featured === true,
+        // The already-created market's featured flag, if this row was
+        // approved. null for pending/rejected — nothing to toggle there.
+        marketFeatured: typeof r.market_featured === 'boolean' ? r.market_featured : null,
+        marketTournamentFeatured: typeof r.market_tournament_featured === 'boolean'
+          ? r.market_tournament_featured
+          : null,
+        marketStatus: r.market_status || null,
+      };
+    }),
+  });
+}
+
+/**
+ * Approve ONE pending row — copy its spec into points_markets and flip
+ * the pending row to 'approved'. Runs inside its own withTransaction so
+ * bulk approval can call this per-row and tolerate per-row failure
+ * without rolling back earlier successes.
+ *
+ * `opts` lets the MVP admin tag the resulting market as on-chain and
+ * attach the deployed contract coordinates. Off-chain callers leave
+ * opts empty (or pass mode: 'points') and behaviour is unchanged.
+ *
+ *   opts.mode          — 'points' (default) | 'onchain'
+ *   opts.chainId       — numeric chain id (required when mode='onchain')
+ *   opts.chainAddress  — 0x-prefixed 40-hex contract address (required
+ *                        when mode='onchain'); persisted on parent + legs
+ *   opts.chainMarketId — numeric market id within the contract (optional)
+ *
+ * Throws on validation / DB error. Returns { id, marketId }.
+ */
+async function approveOne(pid, reviewer, note, opts = {}) {
+  const marketMode = opts.mode === 'onchain' ? 'onchain' : 'points';
+  const isOnchain = marketMode === 'onchain';
+  let chainIdNum = null;
+  let chainAddressStr = null;
+  let chainMarketIdStr = null;
+  // Two paths to fill chainAddressStr when isOnchain:
+  //   A) Manual paste — opts.chainAddress is a 0x40-hex address
+  //   B) Auto-deploy — opts.autoDeploy=true, no chainAddress; we call
+  //      MarketFactory ourselves once we've read the pending row's
+  //      question / outcomes / endTime / seed.
+  const wantsAutoDeploy = isOnchain
+    && opts.autoDeploy === true
+    && (!opts.chainAddress || String(opts.chainAddress).trim() === '');
+  if (isOnchain) {
+    chainIdNum = Number.parseInt(opts.chainId, 10);
+    if (!Number.isInteger(chainIdNum) || chainIdNum <= 0) {
+      const err = new Error('invalid_chain_id'); err.status = 400; throw err;
+    }
+    if (!wantsAutoDeploy) {
+      if (typeof opts.chainAddress !== 'string' || !/^0x[a-fA-F0-9]{40}$/.test(opts.chainAddress.trim())) {
+        const err = new Error('invalid_chain_address'); err.status = 400; throw err;
+      }
+      chainAddressStr = opts.chainAddress.trim().toLowerCase();
+      if (opts.chainMarketId !== undefined && opts.chainMarketId !== null && opts.chainMarketId !== '') {
+        const raw = String(opts.chainMarketId).trim();
+        if (!/^\d{1,78}$/.test(raw)) {
+          const err = new Error('invalid_chain_market_id'); err.status = 400; throw err;
+        }
+        chainMarketIdStr = raw;
+      }
+    }
+  }
+  // Lazy-load the deploy helper so off-chain approvals don't import
+  // ethers / Turnkey deps unnecessarily. Validates env vars upfront so
+  // the deploy doesn't fail mid-transaction.
+  let deployer = null;
+  if (wantsAutoDeploy) {
+    const { isOnchainReady, deployMarketOnChain } = await import('../../_lib/onchain-trader.js');
+    if (!isOnchainReady()) {
+      const err = new Error('onchain_not_enabled');
+      err.status = 503;
+      err.detail = 'set TURNKEY_POLICIES_ENABLED + ONCHAIN_RPC_URL + ONCHAIN_COLLATERAL_ADDRESS';
+      throw err;
+    }
+    const deployerSuborgId = process.env.ONCHAIN_DEPLOYER_SUBORG_ID;
+    const deployerAddr = process.env.ONCHAIN_DEPLOYER_ADDRESS;
+    if (!deployerSuborgId || !deployerAddr) {
+      const err = new Error('deployer_not_configured');
+      err.status = 503;
+      err.detail = 'set ONCHAIN_DEPLOYER_SUBORG_ID + ONCHAIN_DEPLOYER_ADDRESS';
+      throw err;
+    }
+    deployer = { deployerSuborgId, deployerAddr, deployMarketOnChain };
+  }
+
+  return withTransaction(async (client) => {
+    const rowRes = await client.query(
+      `SELECT * FROM points_pending_markets WHERE id = $1 FOR UPDATE`,
+      [pid],
+    );
+    if (rowRes.rows.length === 0) {
+      const err = new Error('pending_not_found'); err.status = 404; throw err;
+    }
+    const r = rowRes.rows[0];
+    if (r.status !== 'pending') {
+      const err = new Error('already_reviewed'); err.status = 400;
+      err.detail = `status=${r.status}`;
+      throw err;
+    }
+
+    const outcomes = parseJsonb(r.outcomes, []);
+    if (!Array.isArray(outcomes) || outcomes.length < 2) {
+      const err = new Error('invalid_outcomes'); err.status = 400; throw err;
+    }
+    const normalizedLiquidity = normalizeSeedLiquidities({
+      outcomes,
+      seedLiquidity: r.seed_liquidity,
+      seedLiquidities: parseJsonb(r.seed_liquidities, null),
+    });
+    if (normalizedLiquidity.error) {
+      const err = new Error(normalizedLiquidity.error); err.status = 400; throw err;
+    }
+    const seedValues = normalizedLiquidity.values;
+    const seed = normalizedLiquidity.fallback;
+    const seedLiquiditiesJson = JSON.stringify(seedValues);
+    const endDate = r.end_time ? new Date(r.end_time) : null;
+    if (!endDate || isNaN(endDate.getTime()) || endDate <= new Date()) {
+      const err = new Error('invalid_end_time'); err.status = 400;
+      err.detail = 'end_time must be in the future at approval time';
+      throw err;
+    }
+
+    const ammMode = r.amm_mode === 'parallel' ? 'parallel' : 'unified';
+    let createdMarketId;
+
+    const startIso = r.start_time ? new Date(r.start_time).toISOString() : null;
+
+    const outcomeImages = parseJsonb(r.outcome_images, null);
+    const outcomeImagesJson = Array.isArray(outcomeImages) && outcomeImages.length === outcomes.length
+      ? JSON.stringify(outcomeImages)
+      : null;
+
+    const pendingFeatured = r.featured === true;
+    const pendingTournamentFeatured = r.tournament_featured === true;
+    const syncedMananera = syncMananeraPhraseFromQuestion({
+      question: r.question,
+      resolverConfig: parseJsonb(r.resolver_config, null),
+      sourceData: parseJsonb(r.source_data, {}),
+    });
+    const syncedApiPrice = syncApiPriceFromQuestion({
+      question: r.question,
+      resolverConfig: syncedMananera.resolverConfig,
+      sourceData: syncedMananera.sourceData || {},
+    });
+    const sourceData = syncedApiPrice.sourceData || syncedMananera.sourceData || {};
+    const resolverConfig = syncedApiPrice.resolverConfig || null;
+    const tagBundle = deriveMarketTags({
+      ...r,
+      source_data: sourceData,
+      resolver_config: resolverConfig || {},
+      category_tags: parseJsonb(r.category_tags, []),
+      geo_tags: parseJsonb(r.geo_tags, []),
+      topic_tags: parseJsonb(r.topic_tags, []),
+    });
+    const categoryTagsJson = JSON.stringify(tagBundle.categoryTags);
+    const geoTagsJson = JSON.stringify(tagBundle.geoTags);
+    const topicTagsJson = JSON.stringify(tagBundle.topicTags);
+
+    // Auto-deploy step — runs BEFORE the INSERT so a failed deploy doesn't
+    // leave a half-approved row pointing at no contract. Dispatches V1
+    // (binary) or V2 (multi 2..8) inside deployMarketOnChain. Parallel
+    // pending markets fall through to the manual-paste path because we
+    // don't have a parallel factory yet (would need to loop V1 per leg).
+    let parallelLegDeploys = null;
+    if (wantsAutoDeploy && deployer && ammMode === 'unified') {
+      try {
+        const deployResult = await deployer.deployMarketOnChain({
+          deployerSuborgId: deployer.deployerSuborgId,
+          deployerAddr: deployer.deployerAddr,
+          question: String(r.question || '').trim(),
+          category: String(r.category || 'general').trim(),
+          outcomeCount: outcomes.length,
+          outcomeLabels: outcomes,
+          endTime: endDate.toISOString(),
+          resolutionSource: r.resolution_source || 'Pronos auto-resolver',
+          seedAmount: seed,
+        });
+        chainAddressStr = String(deployResult.marketAddress || '').toLowerCase();
+        chainMarketIdStr = deployResult.marketId || null;
+      } catch (deployErr) {
+        // Surface as much as we can — the trader helper sets .status /
+        // .detail on its own errors. Anything else gets wrapped.
+        const err = new Error(deployErr?.message || 'auto_deploy_failed');
+        err.status = deployErr?.status || 500;
+        err.detail = deployErr?.detail || null;
+        if (deployErr?.txHash) err.detail = `${err.detail || ''} (tx=${deployErr.txHash})`.trim();
+        throw err;
+      }
+    } else if (wantsAutoDeploy && deployer && ammMode === 'parallel') {
+      // Loop V1 createMarket once per outcome — each leg is its own
+      // binary Yes/No contract. The parent row gets no chain_address;
+      // each leg's chain_address is filled below in the per-leg INSERT.
+      try {
+        const { deployParallelBinaryOnChain } = await import('../../_lib/onchain-trader.js');
+        const parallelResult = await deployParallelBinaryOnChain({
+          deployerSuborgId: deployer.deployerSuborgId,
+          deployerAddr: deployer.deployerAddr,
+          parentQuestion: String(r.question || '').trim(),
+          category: String(r.category || 'general').trim(),
+          outcomeLabels: outcomes,
+          endTime: endDate.toISOString(),
+          resolutionSource: r.resolution_source || 'Pronos auto-resolver',
+          seedAmountPerLeg: seed,
+        });
+        parallelLegDeploys = parallelResult.legs;
+      } catch (deployErr) {
+        const err = new Error(deployErr?.message || 'parallel_auto_deploy_failed');
+        err.status = deployErr?.status || 500;
+        err.detail = deployErr?.detail || null;
+        if (Array.isArray(deployErr?.partialLegs) && deployErr.partialLegs.length > 0) {
+          err.detail = `${err.detail || ''} (${deployErr.partialLegs.length} legs already on-chain — orphaned)`.trim();
+        }
+        throw err;
+      }
+    }
+
+    if (ammMode === 'unified') {
+      const reserves = seedValues;
+      const mk = await client.query(
+        `INSERT INTO points_markets
+           (source, source_event_id,
+           question, category, icon, outcomes, reserves, seed_liquidity, seed_liquidities,
+            start_time, end_time, status, created_by, amm_mode,
+            resolver_type, resolver_config, sport, league, outcome_images, featured,
+            tournament_featured,
+            category_tags, geo_tags, topic_tags,
+            mode, chain_id, chain_market_id, chain_address)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9::jsonb, $10, $11, 'active', $12,
+                 'unified', $13, $14::jsonb, $15, $16, $17::jsonb, $18,
+                 $19, $20::jsonb, $21::jsonb, $22::jsonb,
+                 $23, $24, $25, $26)
+         RETURNING id`,
+        [
+          r.source,
+          r.source_event_id,
+          r.question,
+          r.category,
+          null,
+          JSON.stringify(outcomes),
+          JSON.stringify(reserves),
+          seed,
+          seedLiquiditiesJson,
+          startIso,
+          endDate.toISOString(),
+          reviewer,
+          r.resolver_type || null,
+          resolverConfig ? JSON.stringify(resolverConfig) : null,
+          r.sport || null,
+          r.league || null,
+          outcomeImagesJson,
+          pendingFeatured,
+          pendingTournamentFeatured,
+          categoryTagsJson,
+          geoTagsJson,
+          topicTagsJson,
+          marketMode,
+          chainIdNum,
+          chainMarketIdStr,
+          chainAddressStr,
+        ],
+      );
+      createdMarketId = mk.rows[0].id;
+    } else {
+      // Parallel — parent + N legs. Supports F1 / weather / future
+      // generators that ship amm_mode='parallel'.
+      const parent = await client.query(
+        `INSERT INTO points_markets
+           (source, source_event_id,
+            question, category, icon, outcomes, reserves, seed_liquidity, seed_liquidities,
+            start_time, end_time, status, created_by, amm_mode,
+            resolver_type, resolver_config, sport, league, outcome_images, featured,
+            tournament_featured,
+            category_tags, geo_tags, topic_tags,
+            mode, chain_id, chain_market_id, chain_address)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb, '[]'::jsonb, $7, $8::jsonb, $9, $10, 'active', $11,
+                 'parallel', $12, $13::jsonb, $14, $15, $16::jsonb, $17,
+                 $18, $19::jsonb, $20::jsonb, $21::jsonb,
+                 $22, $23, $24, $25)
+         RETURNING id`,
+        [
+          r.source,
+          r.source_event_id,
+          r.question,
+          r.category,
+          null,
+          JSON.stringify(outcomes),
+          seed,
+          seedLiquiditiesJson,
+          startIso,
+          endDate.toISOString(),
+          reviewer,
+          r.resolver_type || null,
+          resolverConfig ? JSON.stringify(resolverConfig) : null,
+          r.sport || null,
+          r.league || null,
+          outcomeImagesJson,
+          pendingFeatured,
+          pendingTournamentFeatured,
+          categoryTagsJson,
+          geoTagsJson,
+          topicTagsJson,
+          marketMode,
+          chainIdNum,
+          chainMarketIdStr,
+          chainAddressStr,
+        ],
+      );
+      createdMarketId = parent.rows[0].id;
+      for (let i = 0; i < outcomes.length; i++) {
+        const legSeed = seedValues[i];
+        const legReserves = parallelLegBinaryReserves({
+          sourceData,
+          outcomeIndex: i,
+          legSeed,
+          parentSeedValues: seedValues,
+        });
+        // Auto-deployed parallel: each leg has its own binary contract.
+        // Manual / off-chain falls back to the parent's chainAddressStr
+        // (which is null for off-chain points-mode markets).
+        const legChainAddress = parallelLegDeploys
+          ? String(parallelLegDeploys[i]?.marketAddress || '').toLowerCase()
+          : chainAddressStr;
+        const legChainMarketId = parallelLegDeploys
+          ? (parallelLegDeploys[i]?.marketId || null)
+          : null;
+
+        await client.query(
+          `INSERT INTO points_markets
+             (question, category, icon, outcomes, reserves, seed_liquidity, seed_liquidities,
+              start_time, end_time, status, created_by, amm_mode,
+              parent_id, leg_label, sport, league, mode,
+              category_tags, geo_tags, topic_tags,
+              chain_id, chain_market_id, chain_address)
+           VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7::jsonb, $8, $9, 'active', $10,
+                   'parallel', $11, $12, $13, $14, $15,
+                   $16::jsonb, $17::jsonb, $18::jsonb,
+                   $19, $20, $21)`,
+          [
+            `${r.question} — ${outcomes[i]}`,
+            r.category,
+            null,
+            JSON.stringify(['Sí', 'No']),
+            JSON.stringify(legReserves),
+            legSeed,
+            JSON.stringify(legReserves),
+            startIso,
+            endDate.toISOString(),
+            reviewer,
+            createdMarketId,
+            outcomes[i],
+            r.sport || null,
+            r.league || null,
+            marketMode,
+            categoryTagsJson,
+            geoTagsJson,
+            topicTagsJson,
+            chainIdNum,
+            legChainMarketId,
+            legChainAddress,
+          ],
+        );
+      }
+    }
+
+    await client.query(
+      `UPDATE points_pending_markets
+         SET status = 'approved', admin_note = $1, reviewer = $2,
+             reviewed_at = NOW(), approved_market_id = $3,
+             source_data = $4::jsonb,
+             resolver_config = $5::jsonb
+       WHERE id = $6`,
+      [
+        note || null,
+        reviewer,
+        createdMarketId,
+        JSON.stringify(sourceData),
+        resolverConfig ? JSON.stringify(resolverConfig) : null,
+        pid,
+      ],
+    );
+    return { id: pid, marketId: createdMarketId };
+  });
+}
+
+async function editPending(pid, reviewer, patch = {}, note = null) {
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+    const err = new Error('invalid_patch'); err.status = 400; throw err;
+  }
+
+  const has = (key) => Object.prototype.hasOwnProperty.call(patch, key);
+  const cleanIso = (value, field, { nullable = true } = {}) => {
+    if (nullable && (value === null || value === '')) return null;
+    const d = value ? new Date(value) : null;
+    if (!d || Number.isNaN(d.getTime())) {
+      const err = new Error(`invalid_${field}`); err.status = 400; throw err;
+    }
+    return d.toISOString();
+  };
+
+  return withTransaction(async (client) => {
+    const rowRes = await client.query(
+      `SELECT * FROM points_pending_markets WHERE id = $1 FOR UPDATE`,
+      [pid],
+    );
+    if (rowRes.rows.length === 0) {
+      const err = new Error('pending_not_found'); err.status = 404; throw err;
+    }
+    const r = rowRes.rows[0];
+    if (r.status !== 'pending') {
+      const err = new Error('already_reviewed'); err.status = 400;
+      err.detail = `status=${r.status}`;
+      throw err;
+    }
+
+    const question = has('question')
+      ? String(patch.question || '').trim()
+      : String(r.question || '').trim();
+    if (question.length < 8) {
+      const err = new Error('invalid_question'); err.status = 400; throw err;
+    }
+
+    const category = has('category')
+      ? String(patch.category || '').trim()
+      : String(r.category || 'general').trim();
+    if (!ALLOWED_CATEGORIES.has(category)) {
+      const err = new Error('invalid_category'); err.status = 400; throw err;
+    }
+
+    const icon = null;
+
+    const previousOutcomes = parseJsonb(r.outcomes, []);
+    const outcomes = has('outcomes')
+      ? patch.outcomes
+      : previousOutcomes;
+    if (!Array.isArray(outcomes) || outcomes.length < 2 || outcomes.length > MAX_PENDING_OUTCOMES) {
+      const err = new Error('outcome_count_out_of_range'); err.status = 400; throw err;
+    }
+    const normalizedOutcomes = outcomes.map(o => String(o || '').trim());
+    if (!normalizedOutcomes.every(Boolean)) {
+      const err = new Error('invalid_outcomes'); err.status = 400; throw err;
+    }
+    const lowerSet = new Set(normalizedOutcomes.map(o => o.toLowerCase()));
+    if (lowerSet.size !== normalizedOutcomes.length) {
+      const err = new Error('duplicate_outcomes'); err.status = 400; throw err;
+    }
+
+    const normalizedLiquidity = normalizeSeedLiquidities({
+      outcomes: normalizedOutcomes,
+      seedLiquidity: has('seedLiquidity') ? patch.seedLiquidity : r.seed_liquidity,
+      seedLiquidities: has('seedLiquidities') ? patch.seedLiquidities : parseJsonb(r.seed_liquidities, null),
+    });
+    if (normalizedLiquidity.error) {
+      const err = new Error(normalizedLiquidity.error); err.status = 400; throw err;
+    }
+    const seedValues = normalizedLiquidity.values;
+
+    const ammMode = has('ammMode')
+      ? String(patch.ammMode || '').trim()
+      : (r.amm_mode || 'unified');
+    if (ammMode !== 'unified' && ammMode !== 'parallel') {
+      const err = new Error('invalid_amm_mode'); err.status = 400; throw err;
+    }
+
+    const nextStartIso = has('startTime')
+      ? cleanIso(patch.startTime, 'start_time', { nullable: true })
+      : (r.start_time ? new Date(r.start_time).toISOString() : null);
+    const nextEndIso = has('endTime')
+      ? cleanIso(patch.endTime, 'end_time', { nullable: false })
+      : (r.end_time ? new Date(r.end_time).toISOString() : null);
+    if (!nextEndIso || new Date(nextEndIso) <= new Date()) {
+      const err = new Error('invalid_end_time'); err.status = 400;
+      err.detail = 'end_time must be in the future';
+      throw err;
+    }
+    if (nextStartIso && new Date(nextStartIso) >= new Date(nextEndIso)) {
+      const err = new Error('invalid_start_time'); err.status = 400;
+      err.detail = 'start_time must be before end_time';
+      throw err;
+    }
+
+    const outcomeImages = normalizeOutcomeImagesForEdit({
+      row: r,
+      patch,
+      previousOutcomes,
+      nextOutcomes: normalizedOutcomes,
+    });
+    const previousSourceData = parseJsonb(r.source_data, {});
+    const alignedResolverConfig = alignParallelResolverConfig({
+      row: r,
+      nextOutcomes: normalizedOutcomes,
+    });
+    const syncedMananera = syncMananeraPhraseFromQuestion({
+      question,
+      resolverConfig: alignedResolverConfig,
+      sourceData: previousSourceData,
+    });
+    const syncedApiPrice = syncApiPriceFromQuestion({
+      question,
+      resolverConfig: syncedMananera.resolverConfig,
+      sourceData: syncedMananera.sourceData || previousSourceData,
+    });
+    const resolverConfig = syncedApiPrice.resolverConfig || null;
+    const sourceData = syncedApiPrice.sourceData || syncedMananera.sourceData || previousSourceData;
+
+    const tagBundle = deriveMarketTags({
+      ...r,
+      question,
+      category,
+      outcomes: normalizedOutcomes,
+      source_data: sourceData,
+      resolver_config: resolverConfig || {},
+      category_tags: parseJsonb(r.category_tags, []),
+      geo_tags: parseJsonb(r.geo_tags, []),
+      topic_tags: parseJsonb(r.topic_tags, []),
+    });
+
+    const updated = await client.query(
+      `UPDATE points_pending_markets
+         SET question = $1,
+             category = $2,
+             icon = $3,
+             outcomes = $4::jsonb,
+             seed_liquidity = $5,
+             seed_liquidities = $6::jsonb,
+             start_time = $7,
+             end_time = $8,
+             amm_mode = $9,
+             outcome_images = $10::jsonb,
+             resolver_config = $11::jsonb,
+             source_data = $12::jsonb,
+             category_tags = $13::jsonb,
+             geo_tags = $14::jsonb,
+             topic_tags = $15::jsonb,
+             admin_note = COALESCE(NULLIF($16, ''), admin_note),
+             reviewer = $17,
+             reviewed_at = NOW()
+       WHERE id = $18
+       RETURNING id`,
+      [
+        question,
+        category,
+        icon,
+        JSON.stringify(normalizedOutcomes),
+        normalizedLiquidity.fallback,
+        JSON.stringify(seedValues),
+        nextStartIso,
+        nextEndIso,
+        ammMode,
+        JSON.stringify(outcomeImages),
+        resolverConfig ? JSON.stringify(resolverConfig) : null,
+        JSON.stringify(sourceData),
+        JSON.stringify(tagBundle.categoryTags),
+        JSON.stringify(tagBundle.geoTags),
+        JSON.stringify(tagBundle.topicTags),
+        note || null,
+        reviewer,
+        pid,
+      ],
+    );
+
+    return {
+      ok: true,
+      action: 'edit',
+      id: updated.rows[0].id,
+      seedLiquidities: seedValues,
+    };
+  });
+}
+
+function pendingRowToPricingSpec(r) {
+  return {
+    question: r.question,
+    category: r.category,
+    outcomes: parseJsonb(r.outcomes, []),
+    seed_liquidity: Number(r.seed_liquidity || 1000),
+    seed_liquidities: parseJsonb(r.seed_liquidities, null),
+    source_data: parseJsonb(r.source_data, {}),
+    source: r.source,
+    source_event_id: r.source_event_id,
+    resolver_type: r.resolver_type,
+    resolver_config: parseJsonb(r.resolver_config, null),
+    sport: r.sport,
+    league: r.league,
+  };
+}
+
+async function refreshPendingPricing(pid, reviewer) {
+  const rowRes = await readSql`
+    SELECT * FROM points_pending_markets
+    WHERE id = ${pid}
+    LIMIT 1
+  `;
+  if (rowRes.length === 0) {
+    const err = new Error('pending_not_found'); err.status = 404; throw err;
+  }
+  const row = rowRes[0];
+  if (row.status !== 'pending') {
+    const err = new Error('already_reviewed'); err.status = 400;
+    err.detail = `status=${row.status}`;
+    throw err;
+  }
+
+  const originalSpec = pendingRowToPricingSpec(row);
+  const pricedSpec = attachDefaultSuggestedPricing(
+    await tryAttachPolymarketPricing(originalSpec),
+  );
+  const pricing = pricedSpec?.source_data?.suggestedPricing || null;
+  const seedLiquidities = Array.isArray(pricedSpec?.seed_liquidities)
+    ? pricedSpec.seed_liquidities
+    : parseJsonb(row.seed_liquidities, null);
+  const sourceData = {
+    ...originalSpec.source_data,
+    ...(pricedSpec.source_data || {}),
+  };
+
+  return withTransaction(async (client) => {
+    const lock = await client.query(
+      `SELECT status FROM points_pending_markets WHERE id = $1 FOR UPDATE`,
+      [pid],
+    );
+    if (lock.rows.length === 0) {
+      const err = new Error('pending_not_found'); err.status = 404; throw err;
+    }
+    if (lock.rows[0].status !== 'pending') {
+      const err = new Error('already_reviewed'); err.status = 400;
+      err.detail = `status=${lock.rows[0].status}`;
+      throw err;
+    }
+    await client.query(
+      `UPDATE points_pending_markets
+          SET source_data = $1::jsonb,
+              seed_liquidities = $2::jsonb,
+              seed_liquidity = $3,
+              reviewer = $4,
+              reviewed_at = NOW()
+        WHERE id = $5`,
+      [
+        JSON.stringify(sourceData),
+        seedLiquidities ? JSON.stringify(seedLiquidities) : null,
+        Array.isArray(seedLiquidities) ? Number(seedLiquidities[0]) : Number(row.seed_liquidity || 1000),
+        reviewer,
+        pid,
+      ],
+    );
+    return {
+      ok: true,
+      action: 'refresh_pricing',
+      id: pid,
+      suggestedPricing: pricing,
+      seedLiquidities,
+      source: pricing?.source || null,
+      pricingSearch: sourceData?.pricingSearch || null,
+      foundExternalOdds: Boolean(pricing?.source && String(pricing.source).startsWith('polymarket:')),
+    };
+  });
+}
+
+async function listPendingRowsForBulk(filters = {}) {
+  const rows = await readSql`
+    SELECT * FROM points_pending_markets
+    WHERE status = 'pending'
+    ORDER BY id ASC
+    LIMIT 2000
+  `;
+  return filteredPendingRows(rows, filters);
+}
+
+async function review(req, res, admin) {
+  const { id, action, note, patch, mode, chainId, chainAddress, chainMarketId, autoDeploy, filters } = req.body || {};
+  // Shared opts passed to approveOne for both single-row and
+  // approve_all paths. Default behaviour (no opts) keeps Points admin
+  // approvals off-chain; the MVP admin sends mode='onchain' + chain
+  // fields on every approve call.
+  const approveOpts = { mode, chainId, chainAddress, chainMarketId, autoDeploy };
+
+  await ensurePointsSchema(schemaSql);
+
+  // Bulk approve — iterate every pending row with per-row transactions
+  // so one bad spec (e.g. end_time already in the past) doesn't undo
+  // the rows that processed cleanly before it. Returns a summary of
+  // what landed + what failed so the admin UI can show the result.
+  //
+  // Bulk approve with mode='onchain' would assign the same chain_address
+  // to every market, which doesn't match reality (each market = its own
+  // contract). Reject it explicitly — MVP admin must approve on-chain
+  // markets one at a time with per-market chain details.
+  if (action === 'approve_all') {
+    if (approveOpts?.mode === 'onchain') {
+      return res.status(400).json({
+        error: 'bulk_approve_onchain_unsupported',
+        detail: 'On-chain approvals must be done one at a time so each market gets its own chain_address.',
+      });
+    }
+    const pending = await listPendingRowsForBulk(filters || {});
+    const approved = [];
+    const failures = [];
+    for (const row of pending) {
+      try {
+        const result = await approveOne(row.id, admin.username, note, approveOpts);
+        approved.push({ pendingId: result.id, marketId: result.marketId });
+      } catch (e) {
+        failures.push({
+          pendingId: row.id,
+          error: e?.message || 'unknown',
+          detail: e?.detail || null,
+        });
+      }
+    }
+    return res.status(200).json({
+      ok: true,
+      action: 'approve_all',
+      checked: pending.length,
+      approvedCount: approved.length,
+      failedCount: failures.length,
+      approved,
+      failures,
+    });
+  }
+
+  if (action === 'refresh_pricing_all') {
+    const pending = (await listPendingRowsForBulk(filters || {})).slice(0, 100);
+    const refreshed = [];
+    const failures = [];
+    for (const row of pending) {
+      try {
+        refreshed.push(await refreshPendingPricing(row.id, admin.username));
+      } catch (e) {
+        failures.push({
+          pendingId: row.id,
+          error: e?.message || 'unknown',
+          detail: e?.detail || null,
+        });
+      }
+    }
+    return res.status(200).json({
+      ok: true,
+      action: 'refresh_pricing_all',
+      checked: pending.length,
+      refreshedCount: refreshed.length,
+      foundExternalCount: refreshed.filter(item => item.foundExternalOdds).length,
+      failedCount: failures.length,
+      refreshed,
+      failures,
+    });
+  }
+
+  // Single-row approve / reject — requires a valid id.
+  const pid = parseInt(id, 10);
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return res.status(400).json({ error: 'invalid_id' });
+  }
+  if (
+    action !== 'approve'
+    && action !== 'reject'
+    && action !== 'readd'
+    && action !== 'edit'
+    && action !== 'refresh_pricing'
+  ) {
+    return res.status(400).json({ error: 'invalid_action' });
+  }
+
+  if (action === 'refresh_pricing') {
+    const result = await refreshPendingPricing(pid, admin.username);
+    return res.status(200).json(result);
+  }
+
+  if (action === 'edit') {
+    const result = await editPending(pid, admin.username, patch, note);
+    return res.status(200).json(result);
+  }
+
+  if (action === 'readd') {
+    const result = await withTransaction(async (client) => {
+      const rowRes = await client.query(
+        `SELECT status FROM points_pending_markets WHERE id = $1 FOR UPDATE`,
+        [pid],
+      );
+      if (rowRes.rows.length === 0) {
+        const err = new Error('pending_not_found'); err.status = 404; throw err;
+      }
+      if (rowRes.rows[0].status !== 'rejected') {
+        const err = new Error('not_rejected'); err.status = 400;
+        err.detail = `status=${rowRes.rows[0].status}`;
+        throw err;
+      }
+      await client.query(
+        `UPDATE points_pending_markets
+           SET status = 'pending',
+               admin_note = COALESCE(NULLIF($2, ''), 'manual-readded from rejected'),
+               reviewer = $3,
+               reviewed_at = NOW(),
+               approved_market_id = NULL
+         WHERE id = $1`,
+        [pid, note || null, admin.username || 'admin'],
+      );
+      return { ok: true, action: 'readd', id: pid, status: 'pending' };
+    });
+    return res.status(200).json(result);
+  }
+
+  if (action === 'reject') {
+    const result = await withTransaction(async (client) => {
+      const rowRes = await client.query(
+        `SELECT status FROM points_pending_markets WHERE id = $1 FOR UPDATE`,
+        [pid],
+      );
+      if (rowRes.rows.length === 0) {
+        const err = new Error('pending_not_found'); err.status = 404; throw err;
+      }
+      if (rowRes.rows[0].status !== 'pending') {
+        const err = new Error('already_reviewed'); err.status = 400;
+        err.detail = `status=${rowRes.rows[0].status}`;
+        throw err;
+      }
+      await client.query(
+        `UPDATE points_pending_markets
+           SET status = 'rejected', admin_note = $1, reviewer = $2, reviewed_at = NOW()
+         WHERE id = $3`,
+        [note || null, admin.username, pid],
+      );
+      return { ok: true, action: 'reject', id: pid };
+    });
+    return res.status(200).json(result);
+  }
+
+  // action === 'approve'
+  const approved = await approveOne(pid, admin.username, note, approveOpts);
+  return res.status(200).json({ ok: true, action: 'approve', ...approved });
+}

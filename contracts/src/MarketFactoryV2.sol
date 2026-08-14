@@ -7,13 +7,15 @@ import "./PronosAMMMulti.sol";
 
 /**
  * @title MarketFactoryV2
- * @notice Creates and manages Pronos multi-outcome markets.
+ * @notice Creates and manages Pronos multi-outcome markets. Owner can sit on
+ *         a Safe while marketCreator keeps routine creation automatic.
  */
 contract MarketFactoryV2 {
     PronosTokenV2 public immutable token;
     IERC20 public immutable collateral;
 
     address public owner;
+    address public marketCreator;
     address public resolver;
 
     address public treasury;
@@ -45,12 +47,24 @@ contract MarketFactoryV2 {
     );
     event MarketResolved(uint256 indexed marketId, uint8 outcome);
     event MarketPaused(uint256 indexed marketId, bool paused);
+    event MarketCanceled(uint256 indexed marketId);
+    event ResolutionDisputeOpened(uint256 indexed marketId);
+    event ResolutionDisputeCleared(uint256 indexed marketId);
+    event MarketResolutionCorrected(uint256 indexed marketId, uint8 oldOutcome, uint8 newOutcome);
+    event CancelRefundPushed(uint256 indexed marketId, address indexed holder, uint256 payout);
+    event MarketRefundFunded(uint256 indexed marketId, uint256 amount);
     event FeesDistributed(uint256 treasury, uint256 liquidity, uint256 emergency);
     event OwnershipTransferred(address indexed oldOwner, address indexed newOwner);
+    event MarketCreatorUpdated(address indexed oldCreator, address indexed newCreator);
     event ResolverUpdated(address indexed oldResolver, address indexed newResolver);
 
     modifier onlyOwner() {
         require(msg.sender == owner, "MarketFactoryV2: not owner");
+        _;
+    }
+
+    modifier onlyMarketCreator() {
+        require(msg.sender == marketCreator || msg.sender == owner, "MarketFactoryV2: not creator");
         _;
     }
 
@@ -69,6 +83,7 @@ contract MarketFactoryV2 {
         token = PronosTokenV2(_token);
         collateral = IERC20(_collateral);
         owner = msg.sender;
+        marketCreator = msg.sender;
         resolver = msg.sender;
         treasury = _treasury;
         liquidityReserve = _liquidityReserve;
@@ -83,7 +98,7 @@ contract MarketFactoryV2 {
         string calldata resolutionSource,
         string[] calldata outcomes,
         uint256 seedAmount
-    ) external onlyOwner returns (uint256 marketId) {
+    ) external onlyMarketCreator returns (uint256 marketId) {
         require(endTime > block.timestamp, "MarketFactoryV2: end time in past");
         require(outcomes.length >= 2, "MarketFactoryV2: too few outcomes");
         require(outcomes.length <= token.MAX_OUTCOMES(), "MarketFactoryV2: too many outcomes");
@@ -144,6 +159,97 @@ contract MarketFactoryV2 {
         emit MarketPaused(marketId, paused);
     }
 
+    function cancelMarket(uint256 marketId) external onlyOwner {
+        require(marketId < markets.length, "MarketFactoryV2: invalid market");
+        Market storage m = markets[marketId];
+        PronosAMMMulti(m.pool).cancel();
+        m.active = false;
+        emit MarketCanceled(marketId);
+    }
+
+    function openResolutionDispute(uint256 marketId) external onlyOwner {
+        require(marketId < markets.length, "MarketFactoryV2: invalid market");
+        PronosAMMMulti(markets[marketId].pool).openResolutionDispute();
+        emit ResolutionDisputeOpened(marketId);
+    }
+
+    function clearResolutionDispute(uint256 marketId) external onlyOwner {
+        require(marketId < markets.length, "MarketFactoryV2: invalid market");
+        PronosAMMMulti(markets[marketId].pool).clearResolutionDispute();
+        emit ResolutionDisputeCleared(marketId);
+    }
+
+    function correctResolution(uint256 marketId, uint8 newOutcome) external onlyOwner {
+        require(marketId < markets.length, "MarketFactoryV2: invalid market");
+        PronosAMMMulti pool = PronosAMMMulti(markets[marketId].pool);
+        uint8 oldOutcome = pool.outcome();
+        pool.correctResolution(newOutcome);
+        emit MarketResolutionCorrected(marketId, oldOutcome, newOutcome);
+        emit MarketResolved(marketId, newOutcome);
+    }
+
+    function fundMarketRefunds(uint256 marketId, uint256 amount) external onlyOwner {
+        require(marketId < markets.length, "MarketFactoryV2: invalid market");
+        require(amount > 0, "MarketFactoryV2: zero amount");
+        require(collateral.transferFrom(msg.sender, markets[marketId].pool, amount), "MarketFactoryV2: transfer failed");
+        emit MarketRefundFunded(marketId, amount);
+    }
+
+    /**
+     * @notice Sweep a resolved market's leftover collateral to the
+     *         given recipient. Mirrors MarketFactory (V1): must wait
+     *         the AMM's RECOVER_GRACE_PERIOD (30 days) past resolve();
+     *         idempotent after the AMM's winning reserve is drained.
+     */
+    function sweepDust(uint256 marketId, address recipient) external onlyOwner {
+        require(marketId < markets.length, "MarketFactoryV2: invalid market");
+        require(recipient != address(0), "MarketFactoryV2: zero recipient");
+        PronosAMMMulti(markets[marketId].pool).recoverDust(recipient);
+        emit DustSwept(marketId, recipient);
+    }
+
+    /// @notice Emitted on each successful sweep.
+    event DustSwept(uint256 indexed marketId, address indexed recipient);
+
+    /**
+     * @notice Batch push-redeem on a resolved market — same as
+     *         MarketFactory (V1). Sized for ~100 holders/tx.
+     */
+    function pushRedeem(
+        uint256 marketId,
+        address[] calldata holders,
+        uint256[] calldata amounts
+    ) external onlyOwner {
+        require(marketId < markets.length, "MarketFactoryV2: invalid market");
+        require(holders.length == amounts.length, "MarketFactoryV2: length mismatch");
+        require(holders.length > 0, "MarketFactoryV2: empty batch");
+
+        PronosAMMMulti pool = PronosAMMMulti(markets[marketId].pool);
+        for (uint256 i = 0; i < holders.length; i++) {
+            pool.redeemOnBehalf(holders[i], amounts[i]);
+        }
+    }
+
+    function pushCancelRefund(
+        uint256 marketId,
+        address[] calldata holders,
+        uint8[][] calldata outcomeIndexes,
+        uint256[][] calldata burnAmounts,
+        uint256[] calldata payouts
+    ) external onlyOwner {
+        require(marketId < markets.length, "MarketFactoryV2: invalid market");
+        require(holders.length == outcomeIndexes.length, "MarketFactoryV2: length mismatch");
+        require(holders.length == burnAmounts.length, "MarketFactoryV2: length mismatch");
+        require(holders.length == payouts.length, "MarketFactoryV2: length mismatch");
+        require(holders.length > 0, "MarketFactoryV2: empty batch");
+
+        PronosAMMMulti pool = PronosAMMMulti(markets[marketId].pool);
+        for (uint256 i = 0; i < holders.length; i++) {
+            pool.refundOnBehalf(holders[i], outcomeIndexes[i], burnAmounts[i], payouts[i]);
+            emit CancelRefundPushed(marketId, holders[i], payouts[i]);
+        }
+    }
+
     function distributeFees() external onlyOwner {
         uint256 total = collateral.balanceOf(feeCollector);
         require(total > 0, "MarketFactoryV2: no fees");
@@ -198,6 +304,12 @@ contract MarketFactoryV2 {
         require(newOwner != address(0), "MarketFactoryV2: zero address");
         emit OwnershipTransferred(owner, newOwner);
         owner = newOwner;
+    }
+
+    function setMarketCreator(address newCreator) external onlyOwner {
+        require(newCreator != address(0), "MarketFactoryV2: zero address");
+        emit MarketCreatorUpdated(marketCreator, newCreator);
+        marketCreator = newCreator;
     }
 
     function setResolver(address newResolver) external onlyOwner {

@@ -10,9 +10,88 @@
       "schedule": "0 13 * * *"
     },
     {
-      "path": "/api/cron/auto-resolve",
-      "schedule": "*/30 * * * *"
+      "path": "/api/cron/points-snapshot-prices",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/generate-markets-pending",
+      "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/cron/points-auto-resolve",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/points-auto-feature",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/points-maker-rewards",
+      "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/cron/mananera-transcript",
+      "schedule": "0 0,3,18,21 * * *"
     }
+  ],
+  "redirects": [
+    { "source": "/",          "destination": "/points/",          "permanent": false },
+    { "source": "/privacy",   "destination": "/points/privacy",   "permanent": false },
+    { "source": "/terms",     "destination": "/points/terms",     "permanent": false },
+    { "source": "/portfolio",  "destination": "/points/portfolio",  "permanent": true },
+    { "source": "/admin",      "destination": "/points/admin",      "permanent": true },
+    { "source": "/points/deck","destination": "/deck",              "permanent": true },
+    { "source": "/investors",  "destination": "/deck",              "permanent": true },
+    { "source": "/earn",       "destination": "/points/earn",       "permanent": true },
+    { "source": "/market",     "destination": "/points/market",     "permanent": true },
+    { "source": "/u/:username","destination": "/points/u/:username","permanent": true },
+    { "source": "/c/deportes/uefa-champions-league", "destination": "/points/c/deportes/uefa-champions-league", "permanent": true },
+    { "source": "/c/:slug",    "destination": "/points/c/:slug",    "permanent": true }
+  ],
+  "rewrites": [
+    { "source": "/i",                  "destination": "/api/points/publicity/redirect?source=instagram" },
+    { "source": "/i/",                 "destination": "/api/points/publicity/redirect?source=instagram" },
+    { "source": "/t",                  "destination": "/api/points/publicity/redirect?source=tiktok" },
+    { "source": "/t/",                 "destination": "/api/points/publicity/redirect?source=tiktok" },
+    { "source": "/x",                  "destination": "/api/points/publicity/redirect?source=x" },
+    { "source": "/x/",                 "destination": "/api/points/publicity/redirect?source=x" },
+    { "source": "/instagram",          "destination": "/api/points/publicity/redirect?source=instagram" },
+    { "source": "/instagram/",         "destination": "/api/points/publicity/redirect?source=instagram" },
+    { "source": "/tiktok",             "destination": "/api/points/publicity/redirect?source=tiktok" },
+    { "source": "/tiktok/",            "destination": "/api/points/publicity/redirect?source=tiktok" },
+    { "source": "/twitter",            "destination": "/api/points/publicity/redirect?source=x" },
+    { "source": "/twitter/",           "destination": "/api/points/publicity/redirect?source=x" },
+    { "source": "/points/i",           "destination": "/api/points/publicity/redirect?source=instagram" },
+    { "source": "/points/i/",          "destination": "/api/points/publicity/redirect?source=instagram" },
+    { "source": "/points/t",           "destination": "/api/points/publicity/redirect?source=tiktok" },
+    { "source": "/points/t/",          "destination": "/api/points/publicity/redirect?source=tiktok" },
+    { "source": "/points/x",           "destination": "/api/points/publicity/redirect?source=x" },
+    { "source": "/points/x/",          "destination": "/api/points/publicity/redirect?source=x" },
+    { "source": "/points/instagram",   "destination": "/api/points/publicity/redirect?source=instagram" },
+    { "source": "/points/instagram/",  "destination": "/api/points/publicity/redirect?source=instagram" },
+    { "source": "/points/tiktok",      "destination": "/api/points/publicity/redirect?source=tiktok" },
+    { "source": "/points/tiktok/",     "destination": "/api/points/publicity/redirect?source=tiktok" },
+    { "source": "/points/twitter",     "destination": "/api/points/publicity/redirect?source=x" },
+    { "source": "/points/twitter/",    "destination": "/api/points/publicity/redirect?source=x" },
+    { "source": "/r/:username",        "destination": "/api/share/referral?username=:username" },
+    { "source": "/mvp/market",    "destination": "/mvp/" },
+    { "source": "/mvp/portfolio", "destination": "/mvp/" },
+    { "source": "/mvp/admin",     "destination": "/mvp/" },
+    { "source": "/mvp/c/deportes/uefa-champions-league", "destination": "/mvp/" },
+    { "source": "/mvp/privacy",   "destination": "/mvp/" },
+    { "source": "/mvp/terms",     "destination": "/mvp/" },
+    { "source": "/points/market",       "destination": "/points/" },
+    { "source": "/points/portfolio",    "destination": "/points/" },
+    { "source": "/points/admin",        "destination": "/points/" },
+    { "source": "/deck",                "destination": "/points/" },
+    { "source": "/points/earn",         "destination": "/points/" },
+    { "source": "/points/privacy",      "destination": "/points/" },
+    { "source": "/points/terms",        "destination": "/points/" },
+    { "source": "/points/r/:username",  "destination": "/points/" },
+    { "source": "/points/u/:username",  "destination": "/points/" },
+    { "source": "/points/c/deportes/uefa-champions-league", "destination": "/points/" },
+    { "source": "/points/c/:slug",      "destination": "/points/" },
+    { "source": "/points/:path*",       "destination": "/points/" }
   ],
   "headers": [
     {
@@ -20,8 +99,14 @@
       "headers": [
         {
           "key": "Content-Security-Policy-Report-Only",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://tally.so https://*.tally.so https://*.privy.io https://auth.privy.io; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.privy.io https://auth.privy.io https://pronos.io https://gamma-api.polymarket.com https://clob.polymarket.com https://polymarket.com https://polygon-rpc.com https://arb1.arbitrum.io https://sepolia-rollup.arbitrum.io https://*.infura.io https://*.alchemy.com https://*.ankr.com https://safe-transaction-arbitrum.safe.global https://safe-transaction-arbitrum-sepolia.safe.global https://*.sentry.io wss://*.privy.io wss://*.walletconnect.com wss://*.walletconnect.org https://*.walletconnect.com https://*.walletconnect.org; frame-src 'self' https://tally.so https://*.tally.so https://*.privy.io https://auth.privy.io; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self';"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://tally.so https://*.tally.so https://*.turnkey.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://api.turnkey.com https://*.turnkey.com https://pronos.io https://arb1.arbitrum.io https://sepolia-rollup.arbitrum.io https://*.infura.io https://*.alchemy.com https://*.ankr.com https://safe-transaction-arbitrum.safe.global https://safe-transaction-arbitrum-sepolia.safe.global https://*.sentry.io; frame-src 'self' https://tally.so https://*.tally.so https://*.turnkey.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self';"
         }
+      ]
+    },
+    {
+      "source": "/deck",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache" }
       ]
     }
   ]

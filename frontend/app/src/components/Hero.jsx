@@ -1,150 +1,377 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { usePrivy } from '@privy-io/react-auth';
+/**
+ * MVP Hero — Turnkey-era on-chain mainnet path.
+ *
+ * Chart + carousel ported from the main-branch pronos.io landing
+ * (frontend/js/app.js). Each featured market gets:
+ *   - a deterministic multi-outcome history, one series per outcome,
+ *     smoothed with cubic-bezier paths and normalized so all series
+ *     sum to 100 at every time-step
+ *   - a gradient fill under the main series
+ *   - end-point circle dots
+ *   - animated floating "+$amount" trade ticks overlaid on the card
+ *
+ * Markets come from `/api/protocol/markets` so the /mvp hero only
+ * shows indexed on-chain protocol markets. Demo entries are allowed
+ * only in local/dev or when explicitly enabled by VITE_MVP_DEMO_MARKETS.
+ */
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import MARKETS from '../lib/markets.js';
-import { fetchResolutions } from '../lib/resolutions.js';
-import { fetchApprovedPolymarket } from '../lib/polymarketApproved.js';
-import { fetchPriceHistory, extractSeries } from '../lib/priceHistory.js';
-import { isExpired } from '../lib/deadline.js';
-import { useT, useLang, localizedTitle, localizedOptions } from '../lib/i18n.js';
-import Sparkline from './Sparkline.jsx';
+import { usePointsAuth } from '../lib/pointsAuth.js';
+import { useT, useLang } from '../lib/i18n.js';
 
-const OPTION_COLORS = ['var(--yes)', 'var(--red)', 'var(--gold)', '#8b5cf6'];
-const AUTO_INTERVAL = 6000; // ms
+const TIME_PERIODS = ['1D', '1W', '1M', 'ALL'];
+const AUTO_INTERVAL_MS = 7000;
+const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 42161);
+const TRADE_MIN_MS = 1500;
+const TRADE_MAX_MS = 3800;
+const ENABLE_DEMO_MARKETS = import.meta.env.DEV || import.meta.env.VITE_MVP_DEMO_MARKETS === 'true';
 
-/* ── Hero ─────────────────────────────────────────────── */
-export default function Hero() {
+// Color tokens used by the chart lines, outcome chips, trade ticks.
+// Keys match the CSS data-color attributes on .hmc-outcome-btn so
+// hovers + backgrounds stay in sync (see components.css).
+const HMC_COLORS = {
+  green:   '#22c55e',
+  red:     '#FF4545',
+  navy:    '#4d7fff',
+  orange:  '#FF5500',
+  skyblue: '#38BDF8',
+  gold:    '#F5C842',
+};
+const COLOR_ROTATION = ['navy', 'orange', 'gold', 'skyblue', 'green', 'red'];
+const TRADE_AMOUNTS = [5, 10, 25, 50, 100, 200, 500, 1000, 2500, 5000];
+
+// ── Deterministic RNG so each market renders the same history every
+// time (prevents chart jitter across re-renders / carousel jumps).
+function seededRng(seedStr) {
+  let h = 2166136261;
+  for (let i = 0; i < seedStr.length; i++) {
+    h ^= seedStr.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return () => {
+    h = Math.imul(h, 1597334677);
+    h = (h + 1) | 0;
+    return ((h >>> 0) / 4294967295);
+  };
+}
+
+// Random walk from start → end over n steps. Smoothing pulls each
+// sample back toward the trend line so values don't diverge.
+function hmcGenWalk(start, end, n, noise, smoothing, rand) {
+  const pts = [];
+  let v = start;
+  for (let i = 0; i < n; i++) {
+    const t = i / Math.max(n - 1, 1);
+    const target = start + (end - start) * t;
+    const spike = rand() < 0.08 ? (rand() - 0.5) * noise * 3 : 0;
+    v = v * smoothing + target * (1 - smoothing) + (rand() - 0.5) * noise + spike;
+    pts.push(Math.max(1, Math.min(99, v)));
+  }
+  return pts;
+}
+
+// Normalize each time-step across series so they sum to 100%.
+function hmcNormalize(seriesArr) {
+  const n = seriesArr[0].length;
+  const res = seriesArr.map(s => [...s]);
+  for (let i = 0; i < n; i++) {
+    const total = res.reduce((sum, s) => sum + s[i], 0);
+    res.forEach(s => { s[i] = (s[i] / total) * 100; });
+  }
+  return res;
+}
+
+function hmcBuildHistory(outcomes, days, noiseMult, smoothing, seedStr) {
+  const rand = seededRng(seedStr);
+  const raw = outcomes.map((o, i) =>
+    hmcGenWalk(o.start, o.pct, days, (o.noise || 3) * noiseMult, smoothing, rand),
+  );
+  return hmcNormalize(raw);
+}
+
+// Smooth cubic-bezier path through N points inside an (W, H) box.
+function hmcPointsToPath(data, W, H) {
+  const n = data.length;
+  const PAD = 10;
+  const innerH = H - PAD * 2;
+  const pts = data.map((v, i) => [
+    (i / (n - 1)) * W,
+    PAD + innerH - (v / 100) * innerH,
+  ]);
+  let d = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  for (let i = 1; i < n; i++) {
+    const cx = (pts[i][0] - pts[i - 1][0]) / 3;
+    d += ` C${(pts[i-1][0]+cx).toFixed(1)},${pts[i-1][1].toFixed(1)},`
+       + `${(pts[i][0]-cx).toFixed(1)},${pts[i][1].toFixed(1)},`
+       + `${pts[i][0].toFixed(1)},${pts[i][1].toFixed(1)}`;
+  }
+  return d;
+}
+
+// Development-only fallback list for local empty-chain work.
+const DEMO_MARKETS = [
+  {
+    id: 'demo-mundial-2026',
+    cat: '⚽ Deportes · Mundial 2026',
+    question: '¿México gana el partido inaugural del Mundial 2026?',
+    volume: '$23,412',
+    outcomes: [
+      { label: '🇲🇽 México',    color: 'navy',    pct: 62, start: 51, noise: 3.5 },
+      { label: 'Empate',         color: 'orange',  pct: 21, start: 27, noise: 2   },
+      { label: '🇿🇦 Sudáfrica', color: 'gold',    pct: 17, start: 22, noise: 2   },
+    ],
+  },
+  {
+    id: 'demo-sga-mvp',
+    cat: '🏀 Deportes · NBA 25-26',
+    question: '¿SGA gana el MVP de la NBA 2025-26?',
+    volume: '$18,250',
+    outcomes: [
+      { label: 'Sí', color: 'green', pct: 71, start: 58, noise: 3 },
+      { label: 'No', color: 'red',   pct: 29, start: 42, noise: 3 },
+    ],
+  },
+  {
+    id: 'demo-btc-150k',
+    cat: '₿ Crypto · Dic 2026',
+    question: '¿Bitcoin supera $150k USD antes de 2027?',
+    volume: '$42,810',
+    outcomes: [
+      { label: 'Sí', color: 'gold', pct: 38, start: 24, noise: 4.2 },
+      { label: 'No', color: 'navy', pct: 62, start: 76, noise: 4.2 },
+    ],
+  },
+];
+
+// Map an API row to the HERO shape. /api/protocol/markets returns rows
+// with `outcomes` (labels) + `prices` (probabilities) — not `options`
+// like the legacy gamma client did. Reading the right shape matters
+// because hmcNormalize([]) crashes on seriesArr[0].length, which is
+// what triggers the Sentry "Algo salió mal" boundary in production.
+function apiRowToHeroMarket(m) {
+  const labels = Array.isArray(m.outcomes) ? m.outcomes : [];
+  const prices = Array.isArray(m.prices)   ? m.prices   : [];
+  const outcomes = labels.map((label, i) => {
+    const probability = Number(prices[i]);
+    const pct = Math.round(Math.max(1, Math.min(99,
+      (Number.isFinite(probability) ? probability : 1 / Math.max(1, labels.length)) * 100,
+    )));
+    // No historical series available, so fake a small drift from an
+    // arbitrary starting point near the current pct so the line still
+    // moves into its endpoint.
+    const start = Math.max(1, Math.min(99, pct - 8 + (i * 4)));
+    return {
+      label,
+      color: COLOR_ROTATION[i % COLOR_ROTATION.length],
+      pct,
+      start,
+      noise: 3,
+    };
+  });
+  // Skip rows that don't have any outcome data — they'd produce a
+  // zero-series history and crash hmcNormalize on the next render.
+  if (outcomes.length === 0) return null;
+  const volumeRaw = Number(m.tradeVolume ?? m.volume ?? m.liquidity ?? 0);
+  const volumeLabel = Number.isFinite(volumeRaw)
+    ? `$${volumeRaw.toLocaleString('en-US')}`
+    : '—';
+  return {
+    id: `api-${m.id}`,
+    realId: m.id,
+    cat: `${m.icon || '📈'} ${(m.category || 'general').toUpperCase()}`,
+    question: m.question,
+    volume: volumeLabel,
+    outcomes,
+  };
+}
+
+export default function Hero({ onOpenLogin }) {
   const t = useT();
   const lang = useLang();
-  const { authenticated, login } = usePrivy();
   const navigate = useNavigate();
-  const [featured, setFeatured] = useState([]);
-  const [active, setActive] = useState(0);
-  const [history, setHistory] = useState({});
-  const timerRef = useRef(null);
+  const { authenticated } = usePointsAuth();
 
-  // Load resolutions + approvals so the Hero only shows approved, unresolved,
-  // unexpired polymarket markets. Unapproved ones (like Sheinbaum before admin
-  // approves it) won't appear in the carousel.
-  useEffect(() => {
-    Promise.all([
-      fetchResolutions().catch(() => []),
-      fetchApprovedPolymarket().catch(() => []),
-    ]).then(([resolutions, approved]) => {
-      const resolvedIds = new Set(resolutions.map(r => r.market_id));
-      const approvedSlugs = new Set(approved.map(a => a.slug));
-      const filtered = MARKETS.filter(m => {
-        if (!m.trending || m._resolved || isExpired(m)) return false;
-        if (resolvedIds.has(m.id)) return false;
-        // Polymarket markets require approval; local-only markets pass through
-        if (m._source === 'polymarket' && m._polyId) return approvedSlugs.has(m.id);
-        return true;
-      });
-      if (filtered.length > 0) setFeatured(filtered);
-    });
-  }, []);
+  const [markets, setMarkets] = useState(() => ENABLE_DEMO_MARKETS ? DEMO_MARKETS : []);
+  const [idx, setIdx] = useState(0);
+  const [slideDir, setSlideDir] = useState(null);   // 'left' | 'right' | null
+  const [period, setPeriod] = useState('1M');
+  const [ticks, setTicks] = useState([]);           // floating trade ticks
+  const carouselTimerRef = useRef(null);
+  const tradeTimerRef = useRef(null);
+  const tickIdRef = useRef(0);
 
-  // Batch-fetch real CLOB price history for every featured market's clobTokenIds.
-  // We also use the *last* point of each token's series as the live probability
-  // and patch it back into featured[i].options[j].pct so the colored odds row
-  // under each Sparkline reflects current depth instead of the stale value
-  // baked in at hardcoded-markets time.
+  // Load onchain markets. In production/mainnet an empty protocol table
+  // stays empty so the page never presents demo markets as real ones.
   useEffect(() => {
     let cancelled = false;
-    const ids = [];
-    for (const m of featured) {
-      if (Array.isArray(m?._clobTokenIds)) ids.push(...m._clobTokenIds.filter(Boolean));
-    }
-    if (ids.length === 0) return;
-    fetchPriceHistory(Array.from(new Set(ids)), { interval: '1w', fidelity: 60 })
-      .then(hist => {
-        if (cancelled) return;
-        setHistory(hist);
-
-        // Refresh per-option pct from latest series point. Only re-set the
-        // featured array if at least one number actually changed, to avoid a
-        // useless render loop.
-        let changed = false;
-        const updated = featured.map(m => {
-          const tokenIds = m?._clobTokenIds;
-          if (!Array.isArray(tokenIds) || !Array.isArray(m.options)) return m;
-          const newOptions = m.options.map((opt, i) => {
-            const tid = tokenIds[i];
-            const pts = tid && hist[tid];
-            if (!Array.isArray(pts) || pts.length === 0) return opt;
-            const last = pts[pts.length - 1];
-            const livePct = Math.round(Number(last.p));
-            if (!Number.isFinite(livePct) || livePct === opt.pct) return opt;
-            changed = true;
-            return { ...opt, pct: livePct };
-          });
-          return changed ? { ...m, options: newOptions } : m;
-        });
-        if (changed) setFeatured(updated);
-      })
-      .catch(() => {});
+    (async () => {
+      try {
+        // TODO: re-introduce ?featured=true once protocol_markets has
+        // a featured column + admin toggle. Until then we surface the
+        // most recently-deployed active markets sorted by created_at DESC.
+        const res = await fetch(
+          `/api/protocol/markets?status=active&chainId=${CHAIN_ID}`,
+          { credentials: 'include' },
+        );
+        if (!res.ok) {
+          if (!ENABLE_DEMO_MARKETS) return;
+          return;
+        }
+        const data = await res.json();
+        const rows = Array.isArray(data?.markets) ? data.markets : [];
+        if (cancelled || rows.length === 0) {
+          if (!ENABLE_DEMO_MARKETS) return;
+          return;
+        }
+        const mapped = rows.slice(0, 5).map(apiRowToHeroMarket).filter(Boolean);
+        if (mapped.length > 0) setMarkets(mapped);
+      } catch { /* keep demos */ }
+    })();
     return () => { cancelled = true; };
-  }, [featured]);
+  }, []);
 
-  // Auto-rotate
-  const resetTimer = useCallback(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => {
-      setActive(prev => (prev + 1) % featured.length);
-    }, AUTO_INTERVAL);
-  }, [featured.length]);
+  // Pre-compute per-market histories for all 4 periods. Built off a
+  // stable seed (market id + period) so the chart is deterministic.
+  const histories = useMemo(() => markets.map(m => ({
+    '1D':  hmcBuildHistory(m.outcomes,  48, 1.0, 0.82, `${m.id}-1D`),
+    '1W':  hmcBuildHistory(m.outcomes,  70, 2.2, 0.70, `${m.id}-1W`),
+    '1M':  hmcBuildHistory(m.outcomes, 120, 4.5, 0.60, `${m.id}-1M`),
+    'ALL': hmcBuildHistory(m.outcomes, 200, 8.0, 0.50, `${m.id}-ALL`),
+  })), [markets]);
+
+  // Clamp idx when markets length changes (e.g. went from demo → API)
+  useEffect(() => {
+    if (idx >= markets.length) setIdx(0);
+  }, [markets.length, idx]);
+
+  const resetCarousel = useCallback(() => {
+    if (carouselTimerRef.current) clearInterval(carouselTimerRef.current);
+    if (markets.length < 2) return;
+    carouselTimerRef.current = setInterval(() => {
+      setIdx(prev => (prev + 1) % markets.length);
+      setSlideDir('right');
+    }, AUTO_INTERVAL_MS);
+  }, [markets.length]);
 
   useEffect(() => {
-    if (featured.length < 2) return;
-    resetTimer();
-    return () => clearInterval(timerRef.current);
-  }, [featured.length, resetTimer]);
+    resetCarousel();
+    return () => { if (carouselTimerRef.current) clearInterval(carouselTimerRef.current); };
+  }, [resetCarousel]);
 
-  const goTo = (idx) => {
-    setActive(idx);
-    resetTimer();
+  // Clear the slide direction after the CSS animation completes so the
+  // next slide can re-trigger cleanly.
+  useEffect(() => {
+    if (!slideDir) return;
+    const id = setTimeout(() => setSlideDir(null), 420);
+    return () => clearTimeout(id);
+  }, [slideDir, idx]);
+
+  // Spawn animated "+$amount" trade ticks across the card. Random
+  // intervals + positions so it feels like live order flow. Each tick
+  // auto-removes after 2.4s via the cleanup effect below.
+  useEffect(() => {
+    const m = markets[idx];
+    if (!m) return;
+    let cancelled = false;
+
+    function schedule() {
+      const delay = TRADE_MIN_MS + Math.random() * (TRADE_MAX_MS - TRADE_MIN_MS);
+      tradeTimerRef.current = setTimeout(() => {
+        if (cancelled) return;
+        spawnTick(m);
+        schedule();
+      }, delay);
+    }
+    schedule();
+
+    return () => {
+      cancelled = true;
+      if (tradeTimerRef.current) clearTimeout(tradeTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idx, markets]);
+
+  function spawnTick(m) {
+    const oIdx = Math.floor(Math.random() * m.outcomes.length);
+    const color = HMC_COLORS[m.outcomes[oIdx].color] || '#22c55e';
+    const amount = TRADE_AMOUNTS[Math.floor(Math.random() * TRADE_AMOUNTS.length)];
+    const left = 4 + Math.random() * 80;
+    const bottom = 10 + Math.random() * 70;
+    const id = ++tickIdRef.current;
+    setTicks(prev => [...prev, { id, color, amount, left, bottom }]);
+    setTimeout(() => {
+      setTicks(prev => prev.filter(x => x.id !== id));
+    }, 2500);
+  }
+
+  const goTo = (i, dir = 'right') => {
+    setIdx(i);
+    setSlideDir(dir);
+    resetCarousel();
   };
-  const goPrev = () => goTo((active - 1 + featured.length) % featured.length);
-  const goNext = () => goTo((active + 1) % featured.length);
+  const goPrev = () => goTo((idx - 1 + markets.length) % markets.length, 'left');
+  const goNext = () => goTo((idx + 1) % markets.length, 'right');
 
-  const market = featured[active] || featured[0];
-  if (!market) return null;
+  const m = markets[idx];
+  const ser = histories[idx]?.[period];
+  const W = 420, H = 120;
+
+  if (!m || !ser) {
+    return (
+      <section id="hero">
+        <div className="hero-inner">
+          <div className="hero-left">
+            <div className="hero-badge"><span className="dot" /><span>{t('hero.badge')}</span></div>
+            <h1 className="hero-headline">
+              {t('hero.headline.line1')}<br />
+              {t('hero.headline.line2')}<br />
+              <span className="accent">{t('hero.headline.line3')}</span>
+            </h1>
+            <p className="hero-sub">{t('hero.sub')}</p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  const mainColor = HMC_COLORS[m.outcomes[0].color] || '#22c55e';
+
+  function handleBet(outcomeIdx) {
+    if (!authenticated) { onOpenLogin?.(); return; }
+    const realId = m.realId;
+    if (!realId) return; // demo markets — no real id to navigate to
+    navigate(`/market?id=${realId}&outcome=${outcomeIdx}`);
+  }
 
   return (
     <section id="hero">
       <div className="hero-inner">
-
-        {/* ── Left copy ─────────────────────────────── */}
+        {/* ── Left copy ───────────────────────────── */}
         <div className="hero-left">
-          <div className="hero-badge">
-            <span className="dot" />
-            <span>{t('hero.badge')}</span>
-          </div>
-
+          <div className="hero-badge"><span className="dot" /><span>{t('hero.badge')}</span></div>
           <h1 className="hero-headline">
             {t('hero.headline.line1')}<br />
             {t('hero.headline.line2')}<br />
             <span className="accent">{t('hero.headline.line3')}</span>
           </h1>
-
           <p className="hero-sub">{t('hero.sub')}</p>
 
           <div className="hero-btns">
             {authenticated ? (
               <a href="#markets" className="btn-primary">{t('hero.cta.viewMarkets')}</a>
             ) : (
-              <button className="btn-primary" onClick={login}>{t('hero.cta.start')}</button>
+              <button className="btn-primary" onClick={onOpenLogin}>{t('hero.cta.start')}</button>
             )}
             <a href="#how-it-works" className="btn-ghost">{t('hero.cta.howItWorks')}</a>
           </div>
 
           <div className="hero-stats">
             <div className="hero-stat">
-              <span className="hero-stat-val"><span className="green">$1.2B+</span></span>
-              <span className="hero-stat-label">{t('hero.stats.volumeLabel')}</span>
+              <span className="hero-stat-val"><span className="green">MXNB</span></span>
+              <span className="hero-stat-label">colateral on-chain</span>
             </div>
             <div className="hero-stat">
-              <span className="hero-stat-val">60+</span>
+              <span className="hero-stat-val">{markets.length || '—'}</span>
               <span className="hero-stat-label">{t('hero.stats.activeLabel')}</span>
             </div>
             <div className="hero-stat">
@@ -154,105 +381,179 @@ export default function Hero() {
           </div>
         </div>
 
-        {/* ── Right: single featured card with nav ───── */}
-        <div className="hero-right">
-          {/* Navigation header */}
-          <div className="hero-carousel-nav">
-            <button className="hero-nav-btn" onClick={goPrev} aria-label="Anterior">&#8249;</button>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em' }}>
-              {t('hero.featured')}
-            </span>
-            <button className="hero-nav-btn" onClick={goNext} aria-label="Siguiente">&#8250;</button>
-          </div>
-
-          {/* Single card */}
+        {/* ── Right: Hero Market Card ─────────────── */}
+        <div className="hmc" id="heroMarketCard">
           <div
-            className="hero-featured-card"
-            onClick={() => navigate(`/market?id=${market.id}`)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={e => e.key === 'Enter' && navigate(`/market?id=${market.id}`)}
+            id="hmcInner"
+            className={slideDir === 'right' ? 'slide-right' : slideDir === 'left' ? 'slide-left' : ''}
           >
-            {/* Header */}
-            <div className="hfc-header">
-              <span className="hfc-cat">{market.icon} {market.categoryLabel}</span>
-              <span className="hfc-live">{t('hero.live')}</span>
+            {/* Top bar */}
+            <div className="hmc-topbar">
+              <div className="hmc-cat">
+                <div className="hmc-live-dot" />
+                <span>{m.cat}</span>
+              </div>
+              <div className="hmc-timesel">
+                {TIME_PERIODS.map(p => (
+                  <button
+                    key={p}
+                    className={`hmc-time-btn${period === p ? ' active' : ''}`}
+                    onClick={() => setPeriod(p)}
+                    type="button"
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Title */}
-            <p className="hfc-title">{localizedTitle(market, lang)}</p>
+            {/* Question */}
+            <div
+              className="hmc-question"
+              onClick={() => m.realId && navigate(`/market?id=${m.realId}`)}
+              role={m.realId ? 'button' : undefined}
+              tabIndex={m.realId ? 0 : undefined}
+              style={m.realId ? { cursor: 'pointer' } : undefined}
+            >
+              {m.question}
+            </div>
 
-            {/* Chart(s) — single for yes/no, multi for 3+ options */}
-            <div className="hfc-chart">
-              {(market.options || []).length <= 2 ? (
-                <Sparkline
-                  height={90}
-                  color="var(--yes)"
-                  strokeWidth={2.2}
-                  fill={true}
-                  showValue={true}
-                  valueWidth={50}
-                  data={extractSeries(market, history, 0)}
-                  targetPct={market.options[0]?.pct ?? 50}
-                  seed={`${market.id}-${market.options[0]?.label}`}
-                />
-              ) : (
-                localizedOptions(market, lang).map((opt, i) => (
-                  <Sparkline
+            {/* Chart */}
+            <div className="hmc-chart-wrap">
+              <svg
+                className="hmc-chart-svg"
+                id="hmcChart"
+                viewBox={`0 0 ${W} ${H}`}
+                preserveAspectRatio="none"
+              >
+                <defs>
+                  <linearGradient id={`hmc-g-${idx}`} x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stopColor={mainColor} stopOpacity="0.18" />
+                    <stop offset="100%" stopColor={mainColor} stopOpacity="0" />
+                  </linearGradient>
+                </defs>
+                {/* Dashed horizontal guides */}
+                {[10, 37, 64, 91].map(y => (
+                  <line key={y} x1="0" y1={y} x2={W} y2={y}
+                    stroke="rgba(255,255,255,0.04)" strokeWidth="1" strokeDasharray="4,4" />
+                ))}
+
+                <g>
+                  {ser.map((data, si) => {
+                    const color = HMC_COLORS[m.outcomes[si].color] || '#8b5cf6';
+                    const d = hmcPointsToPath(data, W, H);
+                    const dFill = `${d} L${W},${H} L0,${H} Z`;
+                    const n = data.length;
+                    const PAD = 10;
+                    const innerH = H - PAD * 2;
+                    const ey = PAD + innerH - (data[n - 1] / 100) * innerH;
+                    return (
+                      <React.Fragment key={si}>
+                        {si === 0 && (
+                          <path d={dFill} fill={`url(#hmc-g-${idx})`} stroke="none" />
+                        )}
+                        <path
+                          d={d}
+                          fill="none"
+                          stroke={color}
+                          strokeWidth={si === 0 ? 2 : 1.5}
+                          strokeOpacity={si === 0 ? 1 : 0.7}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <circle
+                          cx={W}
+                          cy={ey.toFixed(1)}
+                          r="3.5"
+                          fill={color}
+                          stroke="var(--surface1)"
+                          strokeWidth="1.5"
+                        />
+                      </React.Fragment>
+                    );
+                  })}
+                </g>
+              </svg>
+              <div className="hmc-y-labels">
+                <span>100%</span>
+                <span>75%</span>
+                <span>50%</span>
+                <span>25%</span>
+                <span>0%</span>
+              </div>
+
+              {/* Floating trade ticks */}
+              <div className="hmc-trade-overlay" id="hmcTradeOverlay">
+                {ticks.map(tk => (
+                  <div
+                    key={tk.id}
+                    className="hmc-trade-tick"
+                    style={{
+                      color: tk.color,
+                      left: `${tk.left}%`,
+                      bottom: `${tk.bottom}%`,
+                      textShadow: `0 0 10px ${tk.color}55`,
+                    }}
+                  >
+                    +${tk.amount.toLocaleString()}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Legend */}
+            <div className="hmc-legend">
+              {m.outcomes.map((o, si) => {
+                const pct = ser[si][ser[si].length - 1].toFixed(0);
+                const col = HMC_COLORS[o.color] || '#8b5cf6';
+                return (
+                  <div key={si} className="hmc-legend-item">
+                    <div className="hmc-legend-line" style={{ background: col }} />
+                    <span>{o.label}</span>
+                    <span className="hmc-legend-pct" style={{ color: col }}>{pct}%</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Outcome buttons */}
+            <div className="hmc-outcomes">
+              {m.outcomes.map((o, si) => {
+                const pct = ser[si][ser[si].length - 1].toFixed(0);
+                return (
+                  <button
+                    key={si}
+                    className="hmc-outcome-btn"
+                    data-color={o.color}
+                    onClick={() => handleBet(si)}
+                    type="button"
+                  >
+                    <span className="hmc-outcome-pct">{pct}%</span>
+                    <span className="hmc-outcome-label">{o.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>{/* /hmcInner */}
+
+          {/* Footer */}
+          <div className="hmc-footer">
+            <div className="hmc-volume">VOL <strong>{m.volume} MXNB</strong></div>
+            <div className="hmc-carousel-nav">
+              <button className="hmc-nav-btn" onClick={goPrev} aria-label="Anterior" type="button">&#8592;</button>
+              <div className="hmc-dots" id="hmcDots">
+                {markets.map((_, i) => (
+                  <div
                     key={i}
-                    height={32}
-                    color={OPTION_COLORS[i] || 'var(--text-muted)'}
-                    strokeWidth={1.8}
-                    fill={i === 0}
-                    label={opt.label.length > 9 ? opt.label.slice(0, 8) + '…' : opt.label}
-                    labelWidth={60}
-                    showValue={true}
-                    valueWidth={42}
-                    data={extractSeries(market, history, i)}
-                    targetPct={opt.pct}
-                    seed={`${market.id}-${opt.label}`}
+                    className={`hmc-dot${i === idx ? ' active' : ''}`}
+                    onClick={() => goTo(i, i > idx ? 'right' : 'left')}
                   />
-                ))
-              )}
+                ))}
+              </div>
+              <button className="hmc-nav-btn" onClick={goNext} aria-label="Siguiente" type="button">&#8594;</button>
             </div>
-
-            {/* Odds */}
-            <div className="hfc-odds">
-              {localizedOptions(market, lang).map((opt, i) => (
-                <div key={i} className={`hfc-odd ${i === 0 ? 'yes' : i === 1 ? 'no' : ''}`}>
-                  <span className="hfc-odd-label">{opt.label}</span>
-                  <span className="hfc-odd-val">{opt.pct}%</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Footer */}
-            <div className="hfc-footer">
-              <span>VOL <strong>${market.volume}</strong></span>
-              <span>{market.deadline}</span>
-            </div>
-          </div>
-
-          {/* Dot indicators */}
-          {featured.length > 1 && (
-            <div className="hero-dots">
-              {featured.map((_, i) => (
-                <button
-                  key={i}
-                  className={`hero-dot${i === active ? ' active' : ''}`}
-                  onClick={() => goTo(i)}
-                  aria-label={`Mercado ${i + 1}`}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Progress bar */}
-          <div className="hero-progress">
-            <div className="hero-progress-bar" key={active} />
           </div>
         </div>
-
       </div>
     </section>
   );

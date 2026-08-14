@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./PronosToken.sol";
 
 /**
@@ -19,11 +20,14 @@ import "./PronosToken.sol";
  * Fees are deducted BEFORE entering the pool and sent to the fee collector.
  * They never touch the AMM reserves.
  */
-contract PronosAMM is ERC1155Holder {
+contract PronosAMM is ERC1155Holder, ReentrancyGuard {
     // ─── State ────────────────────────────────────────────────────────────────
 
     PronosToken public immutable token;
-    IERC20      public immutable collateral;      // USDC
+    // Generic ERC-20 collateral. On Arbitrum One this is MXNB
+    // (0xF197FFC28c23E0309B5559e7a166f2c6164C80aA). On testnets use
+    // MockMXNB with the same 6-decimal convention.
+    IERC20      public immutable collateral;
     address     public immutable factory;
 
     uint256 public immutable marketId;
@@ -35,11 +39,28 @@ contract PronosAMM is ERC1155Holder {
 
     address public feeCollector;
     uint256 public totalFeesCollected;
+    mapping(address => mapping(uint8 => uint256)) public costBasis;
 
     bool public initialized;
     bool public paused;
     bool public resolved;
+    bool public canceled;
+    bool public disputed;
     uint8 public outcome; // 0=unresolved, 1=YES, 2=NO
+
+    /// @notice block.timestamp at which resolve() was called. 0 while
+    /// the market is open. Used by recoverDust() to enforce the
+    /// post-resolution grace period during which holders can redeem
+    /// before any residual liquidity gets swept.
+    uint256 public resolvedAt;
+    uint256 public totalRedeemed;
+
+    /// @notice Window after resolution before the factory can sweep
+    /// leftover collateral. Long enough that any user with a winning
+    /// position has time to redeem; short enough that the protocol
+    /// recovers seed promptly. Constant rather than configurable —
+    /// keeps the trust story simple.
+    uint256 public constant RECOVER_GRACE_PERIOD = 30 days;
 
     // ─── Events ──────────────────────────────────────────────────────────────
 
@@ -49,6 +70,17 @@ contract PronosAMM is ERC1155Holder {
     event MarketResolved(uint256 indexed marketId, uint8 outcome);
     event WinningsRedeemed(address indexed user, uint256 shares, uint256 payout);
     event MarketPaused(bool paused);
+    event MarketCanceled(uint256 indexed marketId);
+    event ResolutionDisputeOpened(uint256 indexed marketId, uint8 outcome);
+    event ResolutionDisputeCleared(uint256 indexed marketId, uint8 outcome);
+    event MarketResolutionCorrected(uint256 indexed marketId, uint8 oldOutcome, uint8 newOutcome);
+    event CancelRefunded(address indexed user, uint256 payout);
+    /// @notice Emitted when the factory sweeps the AMM's leftover
+    /// collateral after resolution + grace period. `amount` is the
+    /// collateral transferred — equal to the AMM's winning-token
+    /// reserve at sweep time, which is exactly the seed minus any
+    /// CPMM convexity drag absorbed by trading.
+    event DustRecovered(address indexed recipient, uint256 amount);
 
     // ─── Constructor ─────────────────────────────────────────────────────────
 
@@ -76,6 +108,11 @@ contract PronosAMM is ERC1155Holder {
 
     modifier whenNotPaused() {
         require(!paused, "PronosAMM: paused");
+        _;
+    }
+
+    modifier whenNotCanceled() {
+        require(!canceled, "PronosAMM: canceled");
         _;
     }
 
@@ -136,14 +173,34 @@ contract PronosAMM is ERC1155Holder {
     // ─── Trading ─────────────────────────────────────────────────────────────
 
     /**
-     * @notice Buy outcome tokens with USDC.
+     * @notice Buy outcome tokens with collateral.
      *         Fee is deducted first and sent to feeCollector.
-     *         Remaining USDC enters the pool.
+     *         Remaining collateral enters the pool.
      */
     function buy(bool buyYes, uint256 collateralAmount)
         external
+        nonReentrant
+        whenNotCanceled
         whenNotPaused
         whenNotResolved
+        returns (uint256 sharesOut)
+    {
+        return _buy(msg.sender, buyYes, collateralAmount, 0);
+    }
+
+    function buy(bool buyYes, uint256 collateralAmount, uint256 minSharesOut)
+        external
+        nonReentrant
+        whenNotCanceled
+        whenNotPaused
+        whenNotResolved
+        returns (uint256 sharesOut)
+    {
+        return _buy(msg.sender, buyYes, collateralAmount, minSharesOut);
+    }
+
+    function _buy(address buyer, bool buyYes, uint256 collateralAmount, uint256 minSharesOut)
+        internal
         returns (uint256 sharesOut)
     {
         require(initialized, "PronosAMM: not initialized");
@@ -152,43 +209,61 @@ contract PronosAMM is ERC1155Holder {
         // 1. Calculate and deduct fee BEFORE pool
         uint256 fee = calculateFee(collateralAmount, buyYes);
         uint256 netAmount = collateralAmount - fee;
+        // Guard against dust trades where the entire amount is fee. With
+        // the round-up minimum-fee-of-1 in calculateFee, very small inputs
+        // can land at fee == amount, leaving netAmount == 0 — the pool
+        // would then mint a 0-pair, transfer 0 shares, but still consume
+        // the user's collateral as a fee. Reject explicitly so the user
+        // doesn't lose dust to a no-op trade.
+        require(netAmount > 0, "PronosAMM: amount below fee");
 
-        // 2. Transfer full amount from user
-        require(collateral.transferFrom(msg.sender, address(this), collateralAmount), "PronosAMM: transfer failed");
-
-        // 3. Send fee directly to fee collector (never enters pool)
-        if (fee > 0) {
-            require(collateral.transfer(feeCollector, fee), "PronosAMM: fee transfer failed");
-            totalFeesCollected += fee;
-        }
-
-        // 4. Mint YES + NO tokens backed by net amount
-        token.mintPair(address(this), marketId, netAmount);
-
-        // 5. Calculate shares out using CPMM
+        // 2. Calculate shares out using CPMM before external transfers so
+        // the min-output guard can fail without moving collateral/tokens.
         uint256 k = reserveYes * reserveNo;
+        uint256 newReserveYes;
+        uint256 newReserveNo;
+        uint256 tokenId;
 
         if (buyYes) {
             uint256 newNo = reserveNo + netAmount;
             uint256 newYes = (k + newNo - 1) / newNo; // round up to protect pool
             sharesOut = (reserveYes + netAmount) - newYes;
-            reserveYes = newYes;
-            reserveNo  = newNo;
-            token.safeTransferFrom(address(this), msg.sender, yesId, sharesOut, "");
+            newReserveYes = newYes;
+            newReserveNo = newNo;
+            tokenId = yesId;
         } else {
             uint256 newYes = reserveYes + netAmount;
             uint256 newNo = (k + newYes - 1) / newYes;
             sharesOut = (reserveNo + netAmount) - newNo;
-            reserveNo  = newNo;
-            reserveYes = newYes;
-            token.safeTransferFrom(address(this), msg.sender, noId, sharesOut, "");
+            newReserveYes = newYes;
+            newReserveNo = newNo;
+            tokenId = noId;
         }
 
-        emit SharesBought(msg.sender, buyYes, collateralAmount, fee, sharesOut);
+        require(sharesOut > 0, "PronosAMM: insufficient output");
+        require(sharesOut >= minSharesOut, "PronosAMM: price moved");
+
+        // 3. Transfer full amount from user.
+        require(collateral.transferFrom(buyer, address(this), collateralAmount), "PronosAMM: transfer failed");
+
+        // 4. Send fee directly to fee collector (never enters pool).
+        if (fee > 0) {
+            require(collateral.transfer(feeCollector, fee), "PronosAMM: fee transfer failed");
+            totalFeesCollected += fee;
+        }
+
+        // 5. Mint YES + NO tokens backed by net amount, then settle state.
+        token.mintPair(address(this), marketId, netAmount);
+        reserveYes = newReserveYes;
+        reserveNo = newReserveNo;
+        costBasis[buyer][buyYes ? 0 : 1] += collateralAmount;
+        token.safeTransferFrom(address(this), buyer, tokenId, sharesOut, "");
+
+        emit SharesBought(buyer, buyYes, collateralAmount, fee, sharesOut);
     }
 
     /**
-     * @notice Sell outcome tokens back for USDC.
+     * @notice Sell outcome tokens back for collateral.
      *         Uses quadratic formula to compute collateral out.
      *         Fee is deducted and sent to feeCollector.
      *
@@ -199,8 +274,28 @@ contract PronosAMM is ERC1155Holder {
      */
     function sell(bool sellYes, uint256 sharesAmount)
         external
+        nonReentrant
+        whenNotCanceled
         whenNotPaused
         whenNotResolved
+        returns (uint256 collateralOut)
+    {
+        return _sell(msg.sender, sellYes, sharesAmount, 0);
+    }
+
+    function sell(bool sellYes, uint256 sharesAmount, uint256 minCollateralOut)
+        external
+        nonReentrant
+        whenNotCanceled
+        whenNotPaused
+        whenNotResolved
+        returns (uint256 collateralOut)
+    {
+        return _sell(msg.sender, sellYes, sharesAmount, minCollateralOut);
+    }
+
+    function _sell(address seller, bool sellYes, uint256 sharesAmount, uint256 minCollateralOut)
+        internal
         returns (uint256 collateralOut)
     {
         require(initialized, "PronosAMM: not initialized");
@@ -211,32 +306,52 @@ contract PronosAMM is ERC1155Holder {
         uint256 b; // other side reserve
 
         if (sellYes) {
-            token.safeTransferFrom(msg.sender, address(this), yesId, sharesAmount, "");
             a = reserveYes + sharesAmount;
             b = reserveNo;
         } else {
-            token.safeTransferFrom(msg.sender, address(this), noId, sharesAmount, "");
             a = reserveNo + sharesAmount;
             b = reserveYes;
         }
 
         // Solve quadratic: c = [(a+b) - sqrt((a-b)^2 + 4k)] / 2
-        uint256 diff = a > b ? a - b : b - a;
-        uint256 discriminant = diff * diff + 4 * k;
-        uint256 sqrtDisc = _sqrt(discriminant);
-        uint256 c = (a + b - sqrtDisc) / 2;
+        //
+        // Round-direction matters here: _sqrt returns FLOOR, which makes
+        // (a+b - sqrt) round UP, which makes c round UP, which means the
+        // pool pays out slightly more than the exact CPMM solution and k
+        // slowly leaks. To pin k as monotonic-non-decreasing across sells
+        // (verified by the fuzz test in test/PronosAMMFuzz.t.sol), we
+        // promote sqrt to its CEILING so the subtraction goes the other
+        // way and c rounds DOWN. The pool keeps the rounding crumb;
+        // sellers receive at most 1 wei less than the exact solution
+        // (negligible at 6-decimal collateral scale).
+        uint256 c;
+        {
+            uint256 diff = a > b ? a - b : b - a;
+            uint256 discriminant = diff * diff + 4 * k;
+            uint256 sqrtDisc = _sqrt(discriminant);
+            if (sqrtDisc * sqrtDisc < discriminant) {
+                sqrtDisc += 1; // promote floor to ceil
+            }
+            require(a + b >= sqrtDisc, "PronosAMM: insufficient output");
+            c = (a + b - sqrtDisc) / 2;
+        }
 
         require(c > 0, "PronosAMM: insufficient output");
 
         // Calculate fee on collateral out (fee based on the side being sold)
         uint256 fee = calculateFee(c, !sellYes); // selling YES = effectively buying NO
         collateralOut = c - fee;
+        require(collateralOut >= minCollateralOut, "PronosAMM: price moved");
 
         // Update reserves
         if (sellYes) {
+            _reduceCostBasis(seller, 0, sharesAmount, token.balanceOf(seller, yesId));
+            token.safeTransferFrom(seller, address(this), yesId, sharesAmount, "");
             reserveYes = a - c;
             reserveNo  = b - c;
         } else {
+            _reduceCostBasis(seller, 1, sharesAmount, token.balanceOf(seller, noId));
+            token.safeTransferFrom(seller, address(this), noId, sharesAmount, "");
             reserveNo  = a - c;
             reserveYes = b - c;
         }
@@ -251,9 +366,9 @@ contract PronosAMM is ERC1155Holder {
         }
 
         // Send collateral to seller
-        require(collateral.transfer(msg.sender, collateralOut), "PronosAMM: transfer failed");
+        require(collateral.transfer(seller, collateralOut), "PronosAMM: transfer failed");
 
-        emit SharesSold(msg.sender, sellYes, sharesAmount, collateralOut, fee);
+        emit SharesSold(seller, sellYes, sharesAmount, collateralOut, fee);
     }
 
     // ─── View functions ──────────────────────────────────────────────────────
@@ -318,6 +433,12 @@ contract PronosAMM is ERC1155Holder {
         uint256 diff = a > b ? a - b : b - a;
         uint256 discriminant = diff * diff + 4 * k;
         uint256 sqrtDisc = _sqrt(discriminant);
+        // Match sell()'s ceil-of-sqrt rounding so the estimate exactly
+        // matches the on-chain payout. See sell() for the full rationale.
+        if (sqrtDisc * sqrtDisc < discriminant) {
+            sqrtDisc += 1;
+        }
+        if (a + b < sqrtDisc) return 0;
         uint256 c = (a + b - sqrtDisc) / 2;
 
         uint256 fee = calculateFee(c, !sellYes);
@@ -327,26 +448,158 @@ contract PronosAMM is ERC1155Holder {
     // ─── Resolution & Redemption ─────────────────────────────────────────────
 
     function resolve(uint8 _outcome) external onlyFactory {
+        require(!canceled, "PronosAMM: canceled");
         require(!resolved, "PronosAMM: already resolved");
         require(_outcome == 1 || _outcome == 2, "PronosAMM: invalid outcome");
         resolved = true;
         outcome = _outcome;
+        resolvedAt = block.timestamp;
         emit MarketResolved(marketId, _outcome);
     }
 
-    /// @notice Redeem winning tokens for USDC (1 token = 1 USDC).
-    function redeem(uint256 amount) external {
+    /// @notice Sweep the AMM's leftover collateral after resolution +
+    /// grace period. Designed for the protocol to recover the seed
+    /// liquidity it provided at market creation, minus whatever
+    /// convexity drag trading inflicted.
+    ///
+    /// Mechanism: at resolution the AMM still holds `reserveYes` (or
+    /// `reserveNo`, depending on outcome) of winning tokens that
+    /// nobody can redeem because the AMM is itself the holder. After
+    /// the grace period, this burns the AMM's own winning tokens and
+    /// transfers an equal amount of collateral to the recipient.
+    /// User-held winning tokens stay intact — every user who hasn't
+    /// redeemed yet can still call `redeem()` because we only
+    /// transfer collateral 1:1 with the burned reserve, preserving
+    /// the `outstanding_winning_tokens == collateral_balance`
+    /// invariant.
+    ///
+    /// Idempotent: subsequent calls after the reserve is drained are
+    /// no-ops (no revert).
+    function recoverDust(address recipient) external onlyFactory nonReentrant {
+        require(!canceled, "PronosAMM: canceled");
+        require(!disputed, "PronosAMM: disputed");
+        require(resolved, "PronosAMM: not resolved");
+        require(block.timestamp >= resolvedAt + RECOVER_GRACE_PERIOD, "PronosAMM: grace period not over");
+        require(recipient != address(0), "PronosAMM: zero recipient");
+
+        uint256 winningTokenId = outcome == 1 ? yesId : noId;
+        uint256 ammWinningBalance = token.balanceOf(address(this), winningTokenId);
+        if (ammWinningBalance == 0) {
+            // Already swept (or never had a reserve, which shouldn't
+            // happen post-initialize). Return cleanly so the caller
+            // doesn't have to special-case idempotent sweeps.
+            return;
+        }
+
+        token.burn(address(this), winningTokenId, ammWinningBalance);
+        require(collateral.transfer(recipient, ammWinningBalance), "PronosAMM: transfer failed");
+
+        emit DustRecovered(recipient, ammWinningBalance);
+    }
+
+    /// @notice Push-redeem: factory pays out a holder's winnings
+    /// without the holder needing to send a tx. The AMM burns
+    /// `amount` of the holder's winning tokens and transfers 1:1
+    /// collateral to that same holder. Caller (factory) pays gas.
+    ///
+    /// Designed for the post-resolution wind-down cron: after the
+    /// 30-day grace period for self-claim, the protocol sweeps each
+    /// remaining winner so nobody is stranded forever holding
+    /// unredeemed tokens. The collateral always lands at `holder` —
+    /// no theft vector even though anyone-via-factory can invoke.
+    function redeemOnBehalf(address holder, uint256 amount) external onlyFactory nonReentrant {
+        require(!canceled, "PronosAMM: canceled");
+        require(!disputed, "PronosAMM: disputed");
+        require(resolved, "PronosAMM: not resolved");
+        require(amount > 0, "PronosAMM: zero amount");
+        require(holder != address(0), "PronosAMM: zero holder");
+
+        uint256 winningTokenId = outcome == 1 ? yesId : noId;
+        token.burn(holder, winningTokenId, amount);
+        require(collateral.transfer(holder, amount), "PronosAMM: transfer failed");
+        totalRedeemed += amount;
+
+        emit WinningsRedeemed(holder, amount, amount);
+    }
+
+    /// @notice Redeem winning tokens for collateral (1 token = 1 collateral unit).
+    function redeem(uint256 amount) external nonReentrant {
+        require(!canceled, "PronosAMM: canceled");
+        require(!disputed, "PronosAMM: disputed");
         require(resolved, "PronosAMM: not resolved");
         require(amount > 0, "PronosAMM: zero amount");
 
         uint256 winningTokenId = outcome == 1 ? yesId : noId;
         token.burn(msg.sender, winningTokenId, amount);
         require(collateral.transfer(msg.sender, amount), "PronosAMM: transfer failed");
+        totalRedeemed += amount;
 
         emit WinningsRedeemed(msg.sender, amount, amount);
     }
 
     // ─── Admin (via factory) ─────────────────────────────────────────────────
+
+    function cancel() external onlyFactory {
+        require(!canceled, "PronosAMM: already canceled");
+        require(!resolved || disputed, "PronosAMM: resolved");
+        require(totalRedeemed == 0, "PronosAMM: payouts started");
+        canceled = true;
+        disputed = false;
+        paused = true;
+        emit MarketCanceled(marketId);
+        emit MarketPaused(true);
+    }
+
+    function openResolutionDispute() external onlyFactory {
+        require(!canceled, "PronosAMM: canceled");
+        require(resolved, "PronosAMM: not resolved");
+        require(!disputed, "PronosAMM: already disputed");
+        disputed = true;
+        emit ResolutionDisputeOpened(marketId, outcome);
+    }
+
+    function clearResolutionDispute() external onlyFactory {
+        require(disputed, "PronosAMM: not disputed");
+        disputed = false;
+        emit ResolutionDisputeCleared(marketId, outcome);
+    }
+
+    function correctResolution(uint8 newOutcome) external onlyFactory {
+        require(disputed, "PronosAMM: not disputed");
+        require(totalRedeemed == 0, "PronosAMM: payouts started");
+        require(newOutcome == 1 || newOutcome == 2, "PronosAMM: invalid outcome");
+        uint8 oldOutcome = outcome;
+        outcome = newOutcome;
+        disputed = false;
+        resolvedAt = block.timestamp;
+        emit MarketResolutionCorrected(marketId, oldOutcome, newOutcome);
+        emit MarketResolved(marketId, newOutcome);
+    }
+
+    function refundOnBehalf(
+        address holder,
+        uint8[] calldata outcomeIndexes,
+        uint256[] calldata amounts,
+        uint256 payout
+    ) external onlyFactory nonReentrant {
+        require(canceled, "PronosAMM: not canceled");
+        require(holder != address(0), "PronosAMM: zero holder");
+        require(outcomeIndexes.length == amounts.length, "PronosAMM: length mismatch");
+        uint256 maxPayout = 0;
+        for (uint256 i = 0; i < outcomeIndexes.length; i++) {
+            uint8 outcomeIndex = outcomeIndexes[i];
+            require(outcomeIndex < 2, "PronosAMM: invalid outcome");
+            if (amounts[i] == 0) continue;
+            uint256 tokenId = outcomeIndex == 0 ? yesId : noId;
+            maxPayout += _reduceCostBasis(holder, outcomeIndex, amounts[i], token.balanceOf(holder, tokenId));
+            token.burn(holder, tokenId, amounts[i]);
+        }
+        require(payout <= maxPayout, "PronosAMM: payout exceeds cost");
+        if (payout > 0) {
+            require(collateral.transfer(holder, payout), "PronosAMM: transfer failed");
+        }
+        emit CancelRefunded(holder, payout);
+    }
 
     function setPaused(bool _paused) external onlyFactory {
         paused = _paused;
@@ -356,6 +609,19 @@ contract PronosAMM is ERC1155Holder {
     function setFeeCollector(address _feeCollector) external onlyFactory {
         require(_feeCollector != address(0), "PronosAMM: zero address");
         feeCollector = _feeCollector;
+    }
+
+    function _reduceCostBasis(
+        address holder,
+        uint8 outcomeIndex,
+        uint256 sharesAmount,
+        uint256 balanceBefore
+    ) internal returns (uint256 reduction) {
+        require(balanceBefore >= sharesAmount, "PronosAMM: insufficient shares");
+        uint256 current = costBasis[holder][outcomeIndex];
+        if (current == 0 || sharesAmount == 0 || balanceBefore == 0) return 0;
+        reduction = (current * sharesAmount) / balanceBefore;
+        costBasis[holder][outcomeIndex] = current - reduction;
     }
 
     // ─── Internal: Babylonian square root ────────────────────────────────────

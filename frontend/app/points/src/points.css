@@ -1,0 +1,791 @@
+/* ============================================================
+   PRONOS — points-app-specific styles
+   Shares base/components/sections CSS with the MVP and landing.
+   This file only carries deltas unique to the points app.
+============================================================ */
+
+/* Top banner for points-app: replaces MVP's USDC banner */
+.points-banner {
+  background: rgba(0, 232, 122, 0.08);
+  border-bottom: 1px solid rgba(0, 232, 122, 0.2);
+  text-align: center;
+  padding: 7px 16px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--green);
+}
+.points-banner strong {
+  color: var(--green);
+  font-weight: 600;
+}
+
+/* Nav CTA for logged-out users */
+.nav-signup-cta {
+  background: var(--green);
+  color: #000;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 18px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+.nav-signup-cta:hover {
+  filter: brightness(1.1);
+}
+
+/* User pill — logged-in state */
+.nav-user-pill-points {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(0, 232, 122, 0.08);
+  border: 1px solid rgba(0, 232, 122, 0.25);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--green);
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.nav-user-pill-points:hover {
+  background: rgba(0, 232, 122, 0.14);
+  box-shadow: 0 0 16px rgba(0, 232, 122, 0.15);
+}
+.nav-user-pill-points .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+}
+.nav-user-pill-points .balance {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.points-lang-toggle,
+.points-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  min-width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, transform 0.15s;
+}
+
+.points-lang-toggle {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.points-lang-toggle:hover,
+.points-theme-toggle:hover {
+  background: var(--surface3);
+  border-color: var(--border-active);
+}
+
+.points-theme-sun {
+  position: relative;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  opacity: 0.45;
+  transition: opacity 0.2s, color 0.2s, box-shadow 0.2s;
+}
+
+.points-theme-sun::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  opacity: 0.18;
+}
+
+.points-theme-toggle.is-on {
+  color: var(--orange);
+  border-color: rgba(255, 90, 31, 0.45);
+}
+
+.points-theme-toggle.is-on .points-theme-sun {
+  opacity: 1;
+  box-shadow: 0 0 12px rgba(255, 90, 31, 0.28);
+}
+
+.points-nav-link-alert {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.points-nav-alert-badge,
+.points-mobile-menu-badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 232, 122, 0.12);
+  border: 1px solid rgba(0, 232, 122, 0.45);
+  color: var(--green);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Dropdown attached to user pill */
+.nav-dropdown-points {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  min-width: 220px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  z-index: 200;
+}
+.nav-dropdown-points button,
+.nav-dropdown-points a {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+.nav-dropdown-points button:hover,
+.nav-dropdown-points a:hover {
+  background: var(--surface3);
+  color: var(--text-primary);
+}
+.nav-dropdown-points .info-row {
+  padding: 10px 16px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+.nav-dropdown-points .info-row strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.points-mobile-menu-user {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  margin-bottom: 6px;
+  border: 1px solid rgba(255, 90, 31, 0.28);
+  border-radius: 12px;
+  background: rgba(255, 90, 31, 0.08);
+  font-family: var(--font-mono);
+}
+.points-mobile-menu-user span {
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+.points-mobile-menu-user strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  letter-spacing: 0.05em;
+}
+
+@media (max-width: 768px) {
+  .points-mobile-menu {
+    display: block;
+  }
+  .points-mobile-menu-panel {
+    width: min(320px, calc(100vw - 32px));
+    max-height: calc(100vh - 96px);
+    overflow-y: auto;
+  }
+}
+
+/* LIVE badge pulse — used on market cards + detail page while a
+   sports event is in progress (start_time has passed, end_time hasn't). */
+@keyframes pronos-live-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+
+/* Buy drawer slide-in from the right. Triggered when the user taps
+   an outcome pill on a market card — the drawer mounts with this
+   animation so it doesn't pop in abruptly. */
+@keyframes points-drawer-slide-in {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
+@keyframes points-skeleton-pulse {
+  0% { background-position: 0% 50%; opacity: 0.62; }
+  50% { background-position: 100% 50%; opacity: 1; }
+  100% { background-position: 0% 50%; opacity: 0.62; }
+}
+
+.points-skeleton-block {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.045), rgba(255, 90, 31, 0.12), rgba(255, 255, 255, 0.045));
+  background-size: 220% 100%;
+  animation: points-skeleton-pulse 1.6s ease-in-out infinite;
+}
+
+.points-market-card-skeleton,
+.points-position-skeleton,
+.points-history-skeleton {
+  background: var(--surface1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.points-market-card-skeleton {
+  min-height: 238px;
+  padding: 22px;
+}
+
+.points-market-card-skeleton-top,
+.points-skeleton-row,
+.points-position-skeleton-grid {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.points-market-card-skeleton-top {
+  justify-content: space-between;
+}
+
+.points-skeleton-list {
+  display: grid;
+  gap: 12px;
+}
+
+.points-skeleton-row {
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.points-position-skeleton,
+.points-history-skeleton {
+  padding: 18px;
+}
+
+.points-position-skeleton-grid {
+  margin-top: 18px;
+  margin-bottom: 18px;
+}
+
+.points-position-skeleton-grid > .points-skeleton-block {
+  flex: 1;
+}
+
+.points-history-skeleton {
+  display: grid;
+  gap: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .points-skeleton-block {
+    animation: none;
+  }
+}
+
+/* World Cup group selector — exactly 4 columns × 3 rows on desktop
+   (12 groups = A..L), stepping down to 2 cols on tablet and 1 col
+   on narrow phones so long team names don't overflow. Lives in a
+   class rather than inline styles because inline can't do
+   media queries. */
+.wc-group-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 880px) {
+  .wc-group-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 460px) {
+  .wc-group-grid { grid-template-columns: 1fr; }
+}
+
+.wc-stage-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.wc-final-stage-layout {
+  display: grid;
+  gap: 12px;
+  max-width: 780px;
+  margin: 0 auto;
+}
+.wc-final-stage-layout .wc-knockout-card.is-compact {
+  max-width: 560px;
+  margin: 0 auto;
+  opacity: 0.92;
+}
+@media (max-width: 920px) {
+  .wc-stage-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 720px) {
+  .wc-final-matchup-strip {
+    grid-template-columns: 1fr !important;
+  }
+  .wc-third-place-strip {
+    align-items: flex-start !important;
+    flex-direction: column;
+  }
+}
+
+/* World Cup bracket tree. Each round is a flex column, every
+   column sharing the same container height (`--bracket-h`).
+   `justify-content: space-around` then places 16 / 8 / 4 / 2 / 1
+   slot(s) equidistantly, so R16 slots land at the vertical midpoint
+   of their two parent R32 slots — and so on up to the Final, which
+   centers at half the height. That's what makes the tree
+   symmetrical without hand-tuned gaps. */
+.wc-bracket {
+  --bracket-h: 820px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(160px, 1fr));
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+  width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+.wc-bracket-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  min-height: var(--bracket-h);
+}
+.wc-bracket-col-medal {
+  justify-content: center;
+  gap: 48px;
+}
+.wc-bracket-col-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  text-align: center;
+  margin-bottom: 10px;
+}
+.wc-bracket-slot {
+  background: var(--surface1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  text-align: center;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 2px;
+}
+.wc-bracket-slot-small {
+  min-height: 32px;
+  padding: 6px 8px;
+  font-size: 9px;
+  opacity: 0.82;
+}
+.wc-bracket-third-place {
+  display: grid;
+  gap: 6px;
+  transform: translateY(76px);
+}
+.wc-bracket-third-label {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  text-align: center;
+}
+/* Shorter bracket container on small screens so the final stages
+   don't have ludicrous vertical padding when a phone can only show
+   two columns at a time (the user will scroll horizontally anyway). */
+@media (max-width: 880px) {
+  .wc-bracket {
+    --bracket-h: 620px;
+    grid-template-columns: repeat(5, minmax(170px, 170px));
+  }
+}
+
+@media (max-width: 720px) {
+  .wc-bracket {
+    --bracket-h: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    overflow-x: visible;
+    padding-bottom: 0;
+  }
+  .wc-bracket-col {
+    min-height: auto;
+    justify-content: flex-start;
+    gap: 10px;
+  }
+  .wc-bracket-col-medal {
+    gap: 10px;
+  }
+  .wc-bracket-third-place {
+    transform: none;
+  }
+  .wc-bracket-third-label {
+    text-align: left;
+  }
+  .wc-group-team-row {
+    align-items: flex-start !important;
+    gap: 7px !important;
+  }
+  .wc-group-team-row > span:not(.wc-group-form-pill) {
+    white-space: normal !important;
+    line-height: 1.25;
+  }
+  .wc-group-form-pill {
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .wc-match-row {
+    grid-template-columns: 1fr !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+  }
+  .wc-match-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .wc-match-teams span {
+    white-space: normal !important;
+    line-height: 1.25;
+  }
+  .wc-match-actions {
+    justify-content: flex-start !important;
+  }
+  .wc-match-odd-btn {
+    max-width: 100%;
+    white-space: normal;
+    line-height: 1.25;
+    text-align: left;
+  }
+  .wc-match-status-pill {
+    max-width: 100%;
+    white-space: normal;
+    line-height: 1.35;
+    border-radius: 10px !important;
+  }
+  .wc-bracket-col-label {
+    position: static;
+    text-align: left;
+    margin: 0 0 8px;
+    padding: 0;
+  }
+  .wc-bracket-slot {
+    align-items: flex-start;
+    justify-content: flex-start;
+    min-height: auto;
+    padding: 12px 14px;
+    text-align: left;
+    width: 100%;
+    font-size: 11px;
+    line-height: 1.3;
+  }
+}
+
+/* Points portfolio */
+.points-portfolio-page {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: clamp(24px, 5vw, 60px) clamp(14px, 4vw, 24px);
+}
+.points-portfolio-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.points-portfolio-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 36px;
+  align-items: start;
+}
+.points-portfolio-main {
+  min-width: 0;
+}
+.points-portfolio-sidebar {
+  position: sticky;
+  top: 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.points-portfolio-stats,
+.points-history-summary-grid {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+.points-portfolio-stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.points-history-summary-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.points-portfolio-stat-card,
+.points-history-summary-card {
+  background: var(--surface1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  min-width: 0;
+}
+.points-history-summary-card {
+  border-radius: 10px;
+  padding: 12px 10px;
+}
+.points-portfolio-stat-value {
+  font-family: var(--font-display);
+  font-size: 26px;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+.points-sidebar-card,
+.points-daily-claim-card {
+  background: var(--surface1);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 20px;
+  min-width: 0;
+}
+.points-daily-claim-card {
+  background: rgba(0,232,122,0.05);
+  border-color: rgba(0,232,122,0.28);
+}
+.points-daily-claim-copy {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+.points-position-card {
+  background: var(--surface1);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.points-position-metrics {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+}
+.points-position-actions {
+  display: flex;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.points-win-share-button {
+  border: 1px solid rgba(255, 90, 20, 0.38);
+  background: rgba(255, 90, 20, 0.09);
+  color: var(--orange);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+.points-win-share-button:hover,
+.points-win-share-button:focus-visible {
+  background: rgba(255, 90, 20, 0.16);
+  border-color: rgba(255, 90, 20, 0.62);
+  color: var(--text-primary);
+}
+.points-win-share-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+.points-history-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.points-portfolio-market-link {
+  color: var(--text-primary);
+  text-decoration: none;
+  font-weight: 700;
+  transition: color 0.14s ease;
+}
+.points-portfolio-market-link:hover,
+.points-portfolio-market-link:focus-visible {
+  color: var(--green);
+}
+.points-portfolio-market-action {
+  color: var(--green);
+  text-decoration: none;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.points-portfolio-market-action:hover,
+.points-portfolio-market-action:focus-visible {
+  color: var(--text-primary);
+}
+.points-history-total-card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+@media (max-width: 980px) {
+  .points-portfolio-layout {
+    grid-template-columns: 1fr;
+    gap: 26px;
+  }
+  .points-portfolio-sidebar {
+    position: static;
+  }
+}
+
+@media (max-width: 720px) {
+  .points-portfolio-page {
+    padding: 28px 14px 48px;
+  }
+  .points-portfolio-tabs {
+    margin-bottom: 22px;
+  }
+  .points-portfolio-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 22px;
+  }
+  .points-history-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .points-portfolio-stat-card,
+  .points-sidebar-card,
+  .points-daily-claim-card {
+    padding: 14px 16px;
+  }
+  .points-portfolio-stat-value {
+    font-size: 22px;
+  }
+  .points-position-card {
+    padding: 16px;
+  }
+  .points-position-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .points-position-actions {
+    flex-direction: column;
+  }
+  .points-position-actions .btn-primary,
+  .points-position-actions .btn-ghost,
+  .points-position-actions button {
+    width: 100%;
+  }
+  .points-history-row-actions {
+    align-items: flex-end;
+    flex-direction: column;
+  }
+  .points-history-total-card {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 16px;
+  }
+}
+
+@media (max-width: 430px) {
+  .points-portfolio-stats,
+  .points-history-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── "Más activos" carousel ──
+   Rows in the live trade tape fade up as the panel fills. The stagger
+   comes from an inline animation-delay so the list reads top-down like a
+   printing ticker. Honors reduced-motion below. */
+@keyframes points-tape-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.points-tape-row {
+  opacity: 0;
+  animation: points-tape-in 0.32s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .points-tape-row {
+    opacity: 1;
+    animation: none;
+  }
+}

@@ -4,18 +4,26 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && mkdir -p ../markets && cp ../mvp/index.html ../markets/index.html",
+    "build:mvp": "vite build",
+    "build:points": "BUILD_TARGET=points vite build",
+    "build": "npm run build:mvp && npm run build:points",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@privy-io/react-auth": "^1.93.0",
+    "@react-three/fiber": "^8.18.0",
     "@safe-global/api-kit": "^4.1.0",
-    "@safe-global/protocol-kit": "^7.0.0",
+    "@safe-global/protocol-kit": "^7.1.0",
     "@sentry/react": "^10.47.0",
+    "@turnkey/sdk-browser": "^5.16.1",
+    "d3-geo": "^3.1.1",
     "ethers": "^5.7.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.26.1"
+    "react-router-dom": "^6.26.1",
+    "three": "^0.184.0",
+    "three-globe": "^2.45.2",
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",

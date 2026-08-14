@@ -1,0 +1,440 @@
+/**
+ * Buy flow for the points-app.
+ *
+ * The user enters an MXNP amount, we quote the trade server-side (which
+ * runs the same AMM math the backend will use when it actually executes),
+ * and show fee + shares-out + price-after. Confirm → POST /api/points/buy
+ * → balance updates → modal closes.
+ *
+ * We intentionally keep this modal simple because the math is authoritative
+ * on the server. No sell-flow here (sells live on the Portfolio page).
+ */
+import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { quoteBuy, executeBuy, publicErrorMessage } from '../lib/pointsApi.js';
+import { useLang, useT } from '@app/lib/i18n.js';
+import { usePointsAuth } from '@app/lib/pointsAuth.js';
+import { emitPointsRefresh } from '../lib/pointsLiveRefresh.js';
+
+const TOURNAMENT_MIN_BUY_MXNP = 100;
+const FIRST_ENTRY_QUICK_AMOUNTS = [100, 200, 500, 1000];
+const TOP_UP_QUICK_AMOUNTS = [5, 10, 25, 50, 100];
+
+function formatMxnp(value, locale) {
+  const numeric = Number(value || 0);
+  return numeric.toLocaleString(locale, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+// `variant='modal'` (default) centers on screen with a darkened backdrop.
+// `variant='drawer'` slides in from the right edge and takes the full
+// viewport height — invoked from market cards so the user can buy
+// without leaving the grid.
+export default function PointsBuyModal({
+  open,
+  market,
+  outcomeIndex,
+  outcomeLabel,
+  onClose,
+  onSuccess,
+  variant = 'modal',
+  minimumEntrySatisfied = false,
+}) {
+  const { user, refresh } = usePointsAuth();
+  const t = useT();
+  const lang = useLang();
+  const [amount, setAmount] = useState(String(TOURNAMENT_MIN_BUY_MXNP));
+  const [quote, setQuote] = useState(null);
+  const [quoteState, setQuoteState] = useState('idle'); // idle | loading | ready | error
+  const [quoteError, setQuoteError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const [success, setSuccess] = useState(false);
+
+  const balance = Number(user?.balance || 0);
+  const numAmount = parseFloat(amount) || 0;
+  const requiresMinimumEntry = !minimumEntrySatisfied;
+  const quickAmounts = requiresMinimumEntry ? FIRST_ENTRY_QUICK_AMOUNTS : TOP_UP_QUICK_AMOUNTS;
+  const defaultAmount = requiresMinimumEntry ? TOURNAMENT_MIN_BUY_MXNP : 50;
+  const inputMin = requiresMinimumEntry ? TOURNAMENT_MIN_BUY_MXNP : 1;
+  const belowMinimum = requiresMinimumEntry && numAmount > 0 && numAmount < TOURNAMENT_MIN_BUY_MXNP;
+  const insufficientBalance = numAmount > balance;
+  const numberLocale = lang === 'en' ? 'en-US' : 'es-MX';
+  const balanceLabel = formatMxnp(balance, numberLocale);
+
+  useEffect(() => {
+    if (!open) return;
+    setAmount(String(defaultAmount));
+    setQuote(null);
+    setQuoteState('idle');
+    setQuoteError('');
+    setSubmitError('');
+    setSuccess(false);
+  }, [open, defaultAmount, market?.id, outcomeIndex]);
+
+  // Debounced quote — re-request when the amount changes
+  useEffect(() => {
+    if (!open || numAmount <= 0 || belowMinimum || !market?.id) {
+      setQuote(null);
+      setQuoteState('idle');
+      return;
+    }
+    let cancelled = false;
+    setQuoteState('loading');
+    setQuoteError('');
+    const handle = setTimeout(() => {
+      quoteBuy({ marketId: market.id, outcomeIndex, collateral: numAmount })
+        .then(q => {
+          if (cancelled) return;
+          setQuote(q);
+          setQuoteState('ready');
+        })
+        .catch(e => {
+          if (cancelled) return;
+          setQuote(null);
+          setQuoteError(publicErrorMessage(e, lang, 'quote_failed'));
+          setQuoteState('error');
+        });
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [open, numAmount, belowMinimum, market?.id, outcomeIndex]);
+
+  if (!open || !market) return null;
+
+  async function handleConfirm() {
+    if (submitting || !quote) return;
+    setSubmitting(true);
+    setSubmitError('');
+    try {
+      // Slippage guard: accept up to 1% fewer shares than the quote
+      // preview promised. If another trader moves the market past
+      // that in the ~200ms between quote + confirm, the server
+      // returns `price_moved` and we surface it as a retry-friendly
+      // error. 1% is generous enough that unlucky timing on a calm
+      // market doesn't fail every attempt.
+      const quotedShares = Number(quote?.sharesOut);
+      const minSharesOut = Number.isFinite(quotedShares) && quotedShares > 0
+        ? quotedShares * 0.99
+        : undefined;
+      await executeBuy({
+        marketId: market.id,
+        outcomeIndex,
+        collateral: numAmount,
+        minSharesOut,
+      });
+      await refresh();
+      emitPointsRefresh({ source: 'buy', marketId: market.id });
+      setSuccess(true);
+      // Give the user a beat to see the success state, then close.
+      setTimeout(() => {
+        setSuccess(false);
+        onSuccess?.();
+      }, 900);
+    } catch (e) {
+      setSubmitError(e.code || e.message || 'buy_failed');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const isYes = outcomeIndex === 0;
+  const accent = isYes ? 'var(--yes)' : 'var(--danger)';
+
+  const isDrawer = variant === 'drawer';
+
+  // Render via createPortal to document.body so the fixed-position
+  // overlay ignores any `transform` on ancestor elements (market cards
+  // apply transform on hover, which would otherwise trap `position:
+  // fixed` into the card's local containing block — the drawer would
+  // then "appear on top of the market" instead of viewport-edge).
+  //
+  // React synthetic events bubble up the COMPONENT tree, not the DOM
+  // tree — which means clicks inside a portaled drawer still reach
+  // the parent card's onClick handler (it would navigate to the
+  // detail page and make the drawer useless). We stop propagation
+  // at the overlay level so nothing below here reaches the card.
+  const overlay = (
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !submitting) onClose();
+        e.stopPropagation();
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9998,
+        display: 'flex',
+        alignItems: isDrawer ? 'stretch' : 'center',
+        justifyContent: isDrawer ? 'flex-end' : 'center',
+        background: 'rgba(0, 0, 0, 0.65)', backdropFilter: 'blur(4px)',
+      }}
+    >
+      <div style={{
+        width: isDrawer ? 'min(440px, 92vw)' : 'min(440px, 92vw)',
+        height: isDrawer ? '100vh' : 'auto',
+        overflowY: isDrawer ? 'auto' : 'visible',
+        background: 'var(--surface1)',
+        border: '1px solid var(--border)',
+        borderLeft: isDrawer ? '1px solid var(--border)' : '1px solid var(--border)',
+        borderTopLeftRadius: isDrawer ? 0 : 16,
+        borderBottomLeftRadius: isDrawer ? 0 : 16,
+        borderTopRightRadius: isDrawer ? 0 : 16,
+        borderBottomRightRadius: isDrawer ? 0 : 16,
+        padding: '28px 26px',
+        fontFamily: 'var(--font-body)',
+        // Slide in from the right — pairs with a keyframe in points.css.
+        animation: isDrawer ? 'points-drawer-slide-in 0.22s ease-out' : undefined,
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 18 }}>
+          <div>
+            <div style={{
+              fontFamily: 'var(--font-mono)', fontSize: 10,
+              letterSpacing: '0.14em', color: 'var(--text-muted)',
+              textTransform: 'uppercase', marginBottom: 4,
+            }}>
+              {t('points.buy.title')}
+            </div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: accent, letterSpacing: '0.02em' }}>
+              {outcomeLabel?.toUpperCase()}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            disabled={submitting}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-muted)',
+              fontSize: 20,
+              cursor: submitting ? 'not-allowed' : 'pointer',
+            }}
+          >
+            ✕
+          </button>
+        </div>
+
+        <p style={{ color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5, marginBottom: 18 }}>
+          {market.question}
+        </p>
+
+        {/* Balance + amount */}
+        <div style={{
+          background: 'var(--surface2)',
+          border: '1px solid var(--border)',
+          borderRadius: 10,
+          padding: '12px 14px',
+          marginBottom: 12,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 12,
+        }}>
+          <span style={{ color: 'var(--text-muted)' }}>{t('points.buy.balance')}</span>
+          <span style={{ color: 'var(--green)', fontWeight: 700 }}>
+            {balanceLabel} MXNP
+          </span>
+        </div>
+
+        <label style={{
+          display: 'block',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          color: 'var(--text-muted)',
+          marginBottom: 6,
+        }}>
+          {t('points.buy.amountLabel')}
+        </label>
+        <input
+          type="number"
+          min={String(inputMin)}
+          step="1"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          disabled={submitting}
+          style={{
+            width: '100%',
+            background: 'var(--surface2)',
+            border: `1px solid ${insufficientBalance || belowMinimum ? 'rgba(255,59,59,0.5)' : 'var(--border)'}`,
+            borderRadius: 10,
+            padding: '12px 14px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 18,
+            color: 'var(--text-primary)',
+            outline: 'none',
+            marginBottom: 10,
+          }}
+        />
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          color: belowMinimum ? 'var(--danger)' : 'var(--text-muted)',
+          letterSpacing: '0.04em',
+          lineHeight: 1.45,
+          margin: '-2px 0 10px',
+        }}>
+          {requiresMinimumEntry
+            ? t('points.buy.minimumEntryHint', { amount: TOURNAMENT_MIN_BUY_MXNP })
+            : t('points.buy.topUpHint')}
+        </div>
+
+        <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+          {quickAmounts.map(v => (
+            <button
+              key={v}
+              onClick={() => setAmount(String(v))}
+              disabled={submitting || v > balance}
+              style={{
+                flex: 1,
+                padding: '8px 0',
+                background: 'transparent',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                color: v > balance ? 'var(--text-muted)' : 'var(--text-secondary)',
+                cursor: v > balance ? 'not-allowed' : 'pointer',
+                opacity: v > balance ? 0.4 : 1,
+              }}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+
+        {/* Quote card */}
+        <div style={{
+          background: 'var(--surface2)',
+          border: '1px solid var(--border)',
+          borderRadius: 10,
+          padding: '14px 16px',
+          marginBottom: 14,
+          fontFamily: 'var(--font-mono)',
+          fontSize: 12,
+        }}>
+          <QuoteRow label={t('points.buy.fee')} value={
+            quoteState === 'ready' ? `${quote.fee.toFixed(2)} MXNP (${quote.feePct.toFixed(2)}%)` :
+            quoteState === 'loading' ? t('points.buy.calculating') :
+            '—'
+          } />
+          <QuoteRow label={t('points.buy.receivedShares')} value={
+            quoteState === 'ready' ? `${quote.sharesOut.toFixed(2)}` :
+            quoteState === 'loading' ? t('points.buy.calculating') :
+            '—'
+          } bold accent={accent} />
+          <QuoteRow label={t('points.buy.winProfit')} value={
+            quoteState === 'ready' ? `+${Math.max(0, quote.sharesOut - numAmount).toFixed(2)} MXNP` :
+            '—'
+          } good />
+          <QuoteRow label={t('points.buy.priceAfter')} value={
+            quoteState === 'ready' ? `${Math.round(quote.priceBefore * 100)}% → ${Math.round(quote.priceAfter * 100)}%` :
+            '—'
+          } />
+          {quoteState === 'error' && (
+            <div style={{ color: 'var(--danger)', fontSize: 11, marginTop: 8 }}>
+              {quoteError || t('points.buy.quoteError')}
+            </div>
+          )}
+        </div>
+
+        {insufficientBalance && (
+          <div style={{
+            background: 'rgba(255,59,59,0.08)',
+            border: '1px solid rgba(255,59,59,0.3)',
+            color: 'var(--danger)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            padding: '10px 12px',
+            borderRadius: 8,
+            marginBottom: 12,
+          }}>
+            {t('points.buy.insufficientBalanceDetail', { amount: balanceLabel })}
+          </div>
+        )}
+
+        {submitError && (
+          <div style={{
+            background: 'rgba(255,59,59,0.08)',
+            border: '1px solid rgba(255,59,59,0.3)',
+            color: 'var(--danger)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            padding: '10px 12px',
+            borderRadius: 8,
+            marginBottom: 12,
+          }}>
+            {mapError(submitError, t)}
+          </div>
+        )}
+
+        <button
+          onClick={handleConfirm}
+          disabled={submitting || insufficientBalance || belowMinimum || quoteState !== 'ready' || numAmount <= 0}
+          style={{
+            width: '100%',
+            padding: '14px 16px',
+            background: success ? 'var(--green)' : accent,
+            color: '#000',
+            border: 'none',
+            borderRadius: 10,
+            fontFamily: 'var(--font-mono)',
+            fontSize: 13,
+            fontWeight: 700,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            cursor: submitting || insufficientBalance || belowMinimum || quoteState !== 'ready' ? 'not-allowed' : 'pointer',
+            opacity: submitting || insufficientBalance || belowMinimum || quoteState !== 'ready' ? 0.6 : 1,
+            transition: 'opacity 0.15s',
+          }}
+        >
+          {success ? t('points.buy.success') :
+           submitting ? t('points.buy.submitting') :
+           insufficientBalance ? t('points.buy.insufficientBalance') :
+           belowMinimum ? t('points.buy.minimumEntryButton', { amount: TOURNAMENT_MIN_BUY_MXNP }) :
+           `${t('points.buy.title')} ${numAmount || '—'} MXNP`}
+        </button>
+      </div>
+    </div>
+  );
+
+  return typeof document !== 'undefined'
+    ? createPortal(overlay, document.body)
+    : overlay;
+}
+
+function QuoteRow({ label, value, bold, accent, good }) {
+  return (
+    <div style={{
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: '5px 0',
+      borderBottom: '1px solid var(--border)',
+    }}>
+      <span style={{ color: 'var(--text-muted)' }}>{label}</span>
+      <span style={{
+        color: accent || (good ? 'var(--green)' : 'var(--text-primary)'),
+        fontWeight: bold ? 700 : 400,
+      }}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function mapError(code, t) {
+  if (!code) return t('points.buy.errorGeneric');
+  if (typeof code !== 'string') return t('points.buy.errorGeneric');
+  if (code.includes('insufficient')) return t('points.buy.errorInsufficient');
+  if (code.includes('not_authenticated')) return t('points.buy.errorNotAuth');
+  if (code.includes('market_closed')) return t('points.buy.errorMarketClosed');
+  if (code.includes('market_not_found')) return t('points.buy.errorMarketNotFound');
+  if (code.includes('tournament_min_entry')) return t('points.buy.errorTournamentMin', { amount: TOURNAMENT_MIN_BUY_MXNP });
+  return t('points.buy.errorPrefix', { code });
+}

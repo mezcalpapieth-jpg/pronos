@@ -7,12 +7,52 @@
     {
       "path": "/api/indexer",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/mananera-transcript",
+      "schedule": "0 0,3,18,21 * * *"
     }
   ],
+  "redirects": [
+    { "source": "/",          "destination": "/points/",          "permanent": false },
+    { "source": "/privacy",   "destination": "/points/privacy",   "permanent": false },
+    { "source": "/terms",     "destination": "/points/terms",     "permanent": false },
+    { "source": "/portfolio",  "destination": "/points/portfolio",  "permanent": true },
+    { "source": "/admin",      "destination": "/points/admin",      "permanent": true },
+    { "source": "/points/deck","destination": "/deck",              "permanent": true },
+    { "source": "/investors",  "destination": "/deck",              "permanent": true },
+    { "source": "/earn",       "destination": "/points/earn",       "permanent": true },
+    { "source": "/market",     "destination": "/points/market",     "permanent": true },
+    { "source": "/teams",      "destination": "/points/teams",      "permanent": true },
+    { "source": "/teams/:sport/:teamSlug", "destination": "/points/teams/:sport/:teamSlug", "permanent": true },
+    { "source": "/u/:username","destination": "/points/u/:username","permanent": true },
+    { "source": "/c/deportes/uefa-champions-league", "destination": "/points/c/deportes/uefa-champions-league", "permanent": true },
+    { "source": "/c/:slug",    "destination": "/points/c/:slug",    "permanent": true }
+  ],
   "rewrites": [
-    { "source": "/mvp/market", "destination": "/mvp/" },
+    { "source": "/r/:username",        "destination": "/api/share/referral?username=:username" },
+    { "source": "/mvp/market",    "destination": "/mvp/" },
     { "source": "/mvp/portfolio", "destination": "/mvp/" },
-    { "source": "/mvp/admin", "destination": "/mvp/" }
+    { "source": "/mvp/admin",     "destination": "/mvp/" },
+    { "source": "/mvp/teams",     "destination": "/mvp/" },
+    { "source": "/mvp/teams/:sport/:teamSlug", "destination": "/mvp/" },
+    { "source": "/mvp/c/deportes/uefa-champions-league", "destination": "/mvp/" },
+    { "source": "/mvp/privacy",   "destination": "/mvp/" },
+    { "source": "/mvp/terms",     "destination": "/mvp/" },
+    { "source": "/points/market",       "destination": "/points/" },
+    { "source": "/points/portfolio",    "destination": "/points/" },
+    { "source": "/points/admin",        "destination": "/points/" },
+    { "source": "/deck",                "destination": "/points/" },
+    { "source": "/points/earn",         "destination": "/points/" },
+    { "source": "/points/teams",        "destination": "/points/" },
+    { "source": "/points/teams/:sport/:teamSlug", "destination": "/points/" },
+    { "source": "/points/privacy",      "destination": "/points/" },
+    { "source": "/points/terms",        "destination": "/points/" },
+    { "source": "/points/r/:username",  "destination": "/points/" },
+    { "source": "/points/u/:username",  "destination": "/points/" },
+    { "source": "/points/c/deportes/uefa-champions-league", "destination": "/points/" },
+    { "source": "/points/c/:slug",      "destination": "/points/" },
+    { "source": "/points/:path*",       "destination": "/points/" }
   ],
   "headers": [
     {
@@ -23,7 +63,11 @@
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
         { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
         { "key": "X-XSS-Protection", "value": "0" },
-        { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload" }
+        { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload" },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.sentry-cdn.com https://browser.sentry-cdn.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https: http://localhost:*; connect-src 'self' https://api.turnkey.com https://*.turnkey.com https://*.alchemy.com https://*.alchemyapi.io https://api.resend.com https://api.twitter.com https://graph.instagram.com https://api.instagram.com https://o0.ingest.sentry.io https://*.ingest.sentry.io https://o4.ingest.us.sentry.io https://api.exchange.coinbase.com wss://*.alchemy.com wss://*.alchemyapi.io wss://ws-feed.exchange.coinbase.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://accounts.google.com https://twitter.com https://www.instagram.com https://api.instagram.com https://www.tiktok.com; object-src 'none'; upgrade-insecure-requests"
+        }
       ]
     },
     {
@@ -34,6 +78,18 @@
     },
     {
       "source": "/mvp/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache" }
+      ]
+    },
+    {
+      "source": "/points/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache" }
+      ]
+    },
+    {
+      "source": "/deck",
       "headers": [
         { "key": "Cache-Control", "value": "no-store, no-cache" }
       ]

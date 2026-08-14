@@ -1,0 +1,208 @@
+/**
+ * OAuth 2.0 helpers for social-linking flows.
+ *
+ * Scope: this module handles the state/PKCE machinery generically
+ * across X / Instagram / TikTok. Each provider's endpoint does its
+ * own token-exchange and profile fetch since the response shapes
+ * differ — but state, cookie signing, and PKCE are identical.
+ *
+ * Security model:
+ *   - `state` is a random 32-byte token the authorize URL carries
+ *     and the callback checks, protecting against CSRF
+ *   - PKCE (S256) stops an attacker who intercepts the auth code
+ *     from exchanging it without the `code_verifier`
+ *   - The transient payload {state, verifier, username, provider}
+ *     rides in an HttpOnly signed cookie keyed by provider —
+ *     separate cookie per provider so concurrent links don't clash
+ *   - Cookie lifetime is 10 minutes; expires well before the user
+ *     could come back days later with a stale code
+ */
+
+import { createHmac, randomBytes, createHash, timingSafeEqual } from 'crypto';
+
+const COOKIE_PREFIX = 'pronos_oauth_';
+const COOKIE_MAX_AGE_SEC = 10 * 60; // 10 min — long enough for the user to
+                                    // complete the provider's consent screen
+
+function b64urlEncode(buf) {
+  return Buffer.from(buf).toString('base64url');
+}
+
+function getSecret() {
+  const s = process.env.POINTS_SESSION_SECRET
+        || process.env.MVP_ACCESS_SECRET
+        || process.env.CLOB_SESSION_SECRET;
+  if (!s || s.length < 16) {
+    throw new Error('POINTS_SESSION_SECRET not configured');
+  }
+  return s;
+}
+
+function sign(payload) {
+  return createHmac('sha256', getSecret()).update(payload).digest();
+}
+
+function verifySig(payload, sigBuf) {
+  const expected = sign(payload);
+  if (expected.length !== sigBuf.length) return false;
+  try { return timingSafeEqual(expected, sigBuf); } catch { return false; }
+}
+
+// ── PKCE helpers ────────────────────────────────────────────────────────
+
+export function generateCodeVerifier() {
+  // RFC 7636: 43-128 chars, URL-safe. 32 random bytes → 43 base64url chars.
+  return b64urlEncode(randomBytes(32));
+}
+
+export function codeChallenge(verifier) {
+  const hash = createHash('sha256').update(verifier).digest();
+  return b64urlEncode(hash);
+}
+
+export function generateState() {
+  return b64urlEncode(randomBytes(24));
+}
+
+// ── Cookie (signed) ─────────────────────────────────────────────────────
+// Payload shape: { state, verifier, username, provider, returnTo }.
+
+export function setOAuthCookie(res, provider, payload) {
+  const body = b64urlEncode(Buffer.from(JSON.stringify(payload)));
+  const sig  = b64urlEncode(sign(body));
+  const value = `${body}.${sig}`;
+  const inProd = process.env.VERCEL_ENV === 'production';
+  const cookie = [
+    `${COOKIE_PREFIX}${provider}=${value}`,
+    `Max-Age=${COOKIE_MAX_AGE_SEC}`,
+    'Path=/',
+    'HttpOnly',
+    `SameSite=Lax`,
+    inProd ? 'Secure' : '',
+  ].filter(Boolean).join('; ');
+  const existing = res.getHeader('Set-Cookie');
+  const next = Array.isArray(existing) ? [...existing, cookie] : existing ? [existing, cookie] : cookie;
+  res.setHeader('Set-Cookie', next);
+}
+
+export function readOAuthCookie(req, provider) {
+  const raw = (req.headers.cookie || '')
+    .split(';')
+    .map(s => s.trim())
+    .find(s => s.startsWith(`${COOKIE_PREFIX}${provider}=`));
+  if (!raw) return null;
+  const [, value] = raw.split('=');
+  const [body, sig] = (value || '').split('.');
+  if (!body || !sig) return null;
+  if (!verifySig(body, Buffer.from(sig, 'base64url'))) return null;
+  try {
+    return JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+  } catch {
+    return null;
+  }
+}
+
+export function clearOAuthCookie(res, provider) {
+  const inProd = process.env.VERCEL_ENV === 'production';
+  const cookie = [
+    `${COOKIE_PREFIX}${provider}=`,
+    'Max-Age=0',
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    inProd ? 'Secure' : '',
+  ].filter(Boolean).join('; ');
+  const existing = res.getHeader('Set-Cookie');
+  const next = Array.isArray(existing) ? [...existing, cookie] : existing ? [existing, cookie] : cookie;
+  res.setHeader('Set-Cookie', next);
+}
+
+// ── URL utility ─────────────────────────────────────────────────────────
+
+/**
+ * Validate a `returnTo` query param so it can only point to a path on
+ * our own origin. Without this guard, `?returnTo=//evil.tld/path` would
+ * pass a naive `startsWith('/')` check and turn the OAuth start endpoint
+ * into an open redirect — useful for phishing pivots after a successful
+ * auth flow.
+ *
+ * The function:
+ *   - rejects non-strings and anything not starting with '/'
+ *   - rejects protocol-relative URLs ('//host', and '/\\host' which some
+ *     browsers normalize to the same thing)
+ *   - rejects values that contain '\r' / '\n' (header injection guard)
+ *   - reconstructs the URL against a placeholder origin and returns
+ *     pathname+search+hash, so any encoding tricks can't change origin
+ *
+ * Returns `fallback` when the input is unsafe.
+ */
+export function safeReturnPath(input, fallback = '/earn') {
+  if (typeof input !== 'string' || input.length === 0 || input.length > 1024) return fallback;
+  if (/[\r\n]/.test(input)) return fallback;
+  if (!input.startsWith('/')) return fallback;
+  if (input.startsWith('//') || input.startsWith('/\\')) return fallback;
+  try {
+    const placeholder = 'http://pronos-return-path.invalid';
+    const u = new URL(input, placeholder);
+    if (u.origin !== placeholder) return fallback;
+    const out = `${u.pathname}${u.search}${u.hash}`;
+    if (!out.startsWith('/') || out.startsWith('//')) return fallback;
+    return out;
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * Resolve our public callback URL for `provider`. Resolution order:
+ *
+ *   1. OAUTH_<PROVIDER>_CALLBACK_URL — explicit override, always wins.
+ *   2. VERCEL_PROJECT_PRODUCTION_URL — Vercel exposes this only on
+ *      production deployments and it's set to the canonical custom
+ *      domain (e.g. "pronos.io"). This is what every OAuth dev portal
+ *      gets registered against, so using it removes the need for a
+ *      manual override env var per provider in the common case.
+ *   3. VERCEL_URL — deployment-specific host like
+ *      "pronos-git-relaunch-fr.vercel.app". Useful only for preview
+ *      OAuth (provider must register the preview URL separately), but
+ *      kept as a last resort.
+ *
+ * In local dev the override env var is required — none of the Vercel
+ * vars are populated by `vercel dev` for unauthenticated paths.
+ */
+export function resolveCallbackUrl(provider) {
+  const override = process.env[`OAUTH_${provider.toUpperCase()}_CALLBACK_URL`];
+  if (override) return override;
+  const host = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
+  if (!host) {
+    throw new Error(`OAUTH_${provider.toUpperCase()}_CALLBACK_URL not set and VERCEL_PROJECT_PRODUCTION_URL/VERCEL_URL missing`);
+  }
+  const scheme = host.startsWith('http') ? '' : 'https://';
+  return `${scheme}${host}/api/social/${provider}/callback`;
+}
+
+/**
+ * Build a redirect response to the caller's original returnTo (or /earn).
+ *
+ * Defense-in-depth: the start endpoints already filter `returnTo` through
+ * `safeReturnPath` before storing it in the OAuth cookie, but we re-run
+ * the same check here so a tampered or stale cookie can't ever produce a
+ * cross-origin redirect.
+ *
+ * Fragment handling: the new query param needs to land in the URL's
+ * search portion, NOT inside the fragment. Naive concatenation
+ * (`${base}?${param}`) breaks when `base` contains a `#fragment` —
+ * the appended `?…` becomes part of the fragment, which the browser
+ * treats as opaque text. We split out the hash and re-attach it after
+ * the param.
+ */
+export function redirectToReturn(res, returnTo, status = 'linked', provider = '') {
+  const base = safeReturnPath(returnTo, '/earn');
+  const hashIdx = base.indexOf('#');
+  const path = hashIdx === -1 ? base : base.slice(0, hashIdx);
+  const hash = hashIdx === -1 ? '' : base.slice(hashIdx);
+  const sep = path.includes('?') ? '&' : '?';
+  const url = `${path}${sep}${status}=${encodeURIComponent(provider)}${hash}`;
+  res.setHeader('Location', url);
+  res.status(302).end();
+}

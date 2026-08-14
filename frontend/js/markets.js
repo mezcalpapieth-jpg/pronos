@@ -3,6 +3,12 @@
 // El mercado on-chain (México vs SA) se maneja directamente en app.js.
 //
 // Categorías: 'musica' | 'mexico' | 'politica' | 'deportes'
+//
+// `const` in a non-module script is block-scoped at the script level —
+// it does NOT attach to `window`. The marketing landing reads MARKETS
+// directly (same script context), but standalone pages like
+// /markets/index.html need an explicit global. We expose it as
+// `window.PRONOS_MARKETS` at the bottom of this file.
 
 const MARKETS = [
   // ── MÚSICA & FARÁNDULA ──────────────────────────────────────────────────
@@ -209,4 +215,69 @@ const MARKETS = [
     ],
     volume: '122,000',
   },
+
+  // ── Hero carousel slugs ──────────────────────────────────────────────────
+  // Mirrors HERO_MARKETS in app.js so the carousel's outcome buttons can
+  // route to /markets?id=<slug> and the mock detail page can look the
+  // outcome / odds up by id. Keep these in sync if HERO_MARKETS changes.
+  {
+    id: 'mundial-mexico-inaugural-2026',
+    category: 'deportes',
+    categoryLabel: 'DEPORTES',
+    icon: '⚽',
+    title: '¿México gana el partido inaugural del Mundial 2026?',
+    deadline: '11 Jun 2026',
+    options: [
+      { label: '🇲🇽 México',    pct: 62 },
+      { label: 'Empate',        pct: 21 },
+      { label: '🇿🇦 Sudáfrica', pct: 17 },
+    ],
+    volume: '23,412',
+  },
+  {
+    id: 'bitcoin-150k-dic-2026',
+    category: 'crypto',
+    categoryLabel: 'CRYPTO',
+    icon: '₿',
+    title: '¿Bitcoin supera los $150,000 USD antes de dic 2026?',
+    deadline: '31 Dic 2026',
+    options: [
+      { label: 'Sí', pct: 54 },
+      { label: 'No', pct: 46 },
+    ],
+    volume: '1,240,000',
+  },
+  {
+    id: 'elecciones-mx-2027',
+    category: 'politica',
+    categoryLabel: 'POLÍTICA',
+    icon: '🏛️',
+    title: '¿Cuál partido gana más escaños en las elecciones MX 2027?',
+    deadline: '7 Jun 2027',
+    options: [
+      { label: 'MORENA', pct: 58 },
+      { label: 'PAN',    pct: 28 },
+      { label: 'PRI',    pct: 14 },
+    ],
+    volume: '87,300',
+  },
+  {
+    id: 'grammy-album-2027',
+    category: 'musica',
+    categoryLabel: 'MÚSICA & FARÁNDULA',
+    icon: '🏆',
+    title: '¿Quién gana el Grammy al Álbum del Año 2027?',
+    deadline: '31 Ene 2027',
+    options: [
+      { label: 'Kendrick', pct: 42 },
+      { label: 'Sabrina',  pct: 31 },
+      { label: 'Otro',     pct: 27 },
+    ],
+    volume: '34,800',
+  },
 ];
+
+// Expose for standalone pages (e.g. /markets/index.html) that aren't
+// in the same script context as app.js. Don't rename — app.js still
+// reads the local `MARKETS` symbol directly.
+if (typeof window !== 'undefined') window.PRONOS_MARKETS = MARKETS;

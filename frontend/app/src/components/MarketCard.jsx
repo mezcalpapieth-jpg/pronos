@@ -1,113 +1,367 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Sparkline from './Sparkline.jsx';
-import { extractSeries } from '../lib/priceHistory.js';
-import { useT, useLang, localizedTitle, localizedOptions } from '../lib/i18n.js';
+import BetModal from './BetModal.jsx';
+import {
+  CHAMPIONS_LEAGUE_FINAL_BADGE,
+  CHAMPIONS_LEAGUE_HUB_PATH,
+  isChampionsLeagueFinalWinnerMarket,
+} from '../lib/championsLeague.js';
+import { useT } from '../lib/i18n.js';
+import {
+  accentForOutcome,
+  formatCardDate,
+  formatCompactVolume,
+  previewGain,
+  priceForOutcome,
+} from '../lib/mvpMarketCard.js';
+import { soccerMatchTypeLabel } from '../lib/soccerMarketType.js';
+import { findTeamByName, teamProfilePath } from '../lib/teamProfiles.js';
+import { marketInterestPayload, teamInterestPayload, trackInterest } from '../lib/interest.js';
 
-export default function MarketCard({ market, history }) {
+export default function MarketCard({ market, onOpenLogin }) {
   const t = useT();
-  const lang = useLang();
   const navigate = useNavigate();
+  const [drawerIndex, setDrawerIndex] = useState(null);
 
-  const handleClick = () => {
-    navigate(`/market?id=${market.id}`);
-  };
+  const outcomes = Array.isArray(market.outcomes) && market.outcomes.length > 0
+    ? market.outcomes
+    : ['Sí', 'No'];
+  const outcomeImages = Array.isArray(market.outcomeImages)
+    && market.outcomeImages.length === outcomes.length
+    ? market.outcomeImages
+    : null;
+  const outcomeCountryLabels = Array.isArray(market.outcomeCountryLabels)
+    && market.outcomeCountryLabels.length === outcomes.length
+    ? market.outcomeCountryLabels
+    : null;
+  const hasAnyLogo = outcomeImages?.some(Boolean) || false;
+  const isResolved = market.status === 'resolved';
+  const isSeriesPending = !isResolved && (market.seriesLocked || market.status === 'pending');
+  const isLive = !isResolved && !!market.live;
+  const isClosed = !isResolved
+    && !isLive
+    && market.status === 'active'
+    && market.endTime
+    && new Date(market.endTime).getTime() < Date.now();
+  const isChampionsFinalCard = isChampionsLeagueFinalWinnerMarket(market);
+  const matchTypeLabel = soccerMatchTypeLabel(market);
+  const drawerOpen = drawerIndex !== null;
 
-  const topOption = market.options?.[0];
-  const pct = topOption?.pct ?? 50;
-  const volumeLabel = market.source === 'protocol' ? t('detail.liquidity') : t('detail.volume');
+  function navigateToDetail() {
+    trackInterest({
+      ...marketInterestPayload('mvp', market, 'click'),
+      objectType: 'protocol_market',
+    });
+    navigate(isChampionsFinalCard
+      ? CHAMPIONS_LEAGUE_HUB_PATH
+      : `/market?id=${encodeURIComponent(market.id)}`);
+  }
+
+  function openDrawer(event, index) {
+    event.stopPropagation();
+    if (isSeriesPending) {
+      navigateToDetail();
+      return;
+    }
+    if (isResolved || isClosed || market.status !== 'active') return;
+    setDrawerIndex(index);
+  }
+
+  function navigateToTeam(event, team) {
+    if (!team) return;
+    event.stopPropagation();
+    trackInterest({
+      ...teamInterestPayload('mvp', team, 'click'),
+      objectType: 'team',
+    });
+    navigate(teamProfilePath(team));
+  }
 
   return (
-    <div className="mock-card" onClick={handleClick} role="button" tabIndex={0}
-      onKeyDown={e => e.key === 'Enter' && handleClick()}
+    <div
+      className="mock-card"
+      onClick={navigateToDetail}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          navigateToDetail();
+        }
+      }}
     >
       <div className="mock-card-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 16 }}>{market.icon}</span>
-          <span className="mock-card-cat">{market.categoryLabel}</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {market._resolved ? (
-            <span className="mock-card-badge" style={{ background: 'rgba(184,144,10,0.1)', border: '1px solid rgba(184,144,10,0.25)', color: 'var(--gold)' }}>
-              {t('card.resolved')}
+        <span className="mock-card-cat">
+          {market.categoryLabel || market.category || 'General'}
+        </span>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {matchTypeLabel && (
+            <span
+              className="mock-card-badge"
+              style={{
+                background: 'rgba(255,85,0,0.08)',
+                border: '1px solid rgba(255,85,0,0.22)',
+                color: 'var(--orange)',
+              }}
+            >
+              {matchTypeLabel}
             </span>
-          ) : market._awaitingResolution ? (
-            <span className="mock-card-badge" style={{ background: 'rgba(148,163,184,0.1)', border: '1px solid rgba(148,163,184,0.3)', color: 'var(--text-muted)' }}>
-              {t('card.closed')}
+          )}
+          {isResolved && (
+            <span className="mock-card-badge live" style={{ background: 'rgba(0,232,122,0.12)', color: 'var(--green)' }}>
+              {t('card.resolved') || 'RESUELTO'}
             </span>
-          ) : (
-            <>
-              {market.trending && <span className="mock-card-badge trending">{t('card.trending')}</span>}
-              {market._source === 'polymarket' && <span className="mock-card-badge live">{t('card.live')}</span>}
-            </>
+          )}
+          {isClosed && (
+            <span className="mock-card-badge" style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b' }}>
+              {t('card.closed') || 'CERRADO'}
+            </span>
+          )}
+          {isLive && (
+            <span className="mock-card-badge" style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: 'rgba(220,38,38,0.18)',
+              color: '#dc2626',
+              fontWeight: 700,
+            }}>
+              <span
+                aria-hidden="true"
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  background: '#dc2626',
+                  boxShadow: '0 0 0 3px rgba(220,38,38,0.18)',
+                }}
+              />
+              {t('card.live') || 'EN VIVO'}
+            </span>
+          )}
+          {isChampionsFinalCard && (
+            <span
+              className="mock-card-badge"
+              aria-label="Final Champions League"
+              title="Final Champions League"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minWidth: 28,
+                background: 'rgba(59,130,246,0.14)',
+                border: '1px solid rgba(245,200,66,0.45)',
+                color: 'var(--gold)',
+                fontSize: 13,
+                lineHeight: 1,
+              }}
+            >
+              {CHAMPIONS_LEAGUE_FINAL_BADGE}
+            </span>
+          )}
+          {isSeriesPending && (
+            <span className="mock-card-badge" style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b' }}>
+              PENDIENTE
+            </span>
+          )}
+          {!isResolved && !isClosed && !isLive && market.trending && (
+            <span className="mock-card-badge trending">{t('card.trending') || 'TRENDING'}</span>
           )}
         </div>
       </div>
 
       <div className="mock-card-body">
-        <p className="mock-card-title">{localizedTitle(market, lang)}</p>
+        <p className="mock-card-title">{market.question}</p>
 
-        <div className="mock-card-opts">
-          {localizedOptions(market, lang).map((opt, i) => {
-            const isWinner = market._resolved && opt.label === market._winner;
-            const pct = market._resolved ? (isWinner ? 100 : 0) : opt.pct;
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+            margin: '10px 0 4px',
+            ...(outcomes.length > 4 ? {
+              maxHeight: 200,
+              overflowY: 'auto',
+              paddingRight: 4,
+              WebkitMaskImage: 'linear-gradient(to bottom, black calc(100% - 18px), transparent 100%)',
+              maskImage: 'linear-gradient(to bottom, black calc(100% - 18px), transparent 100%)',
+            } : null),
+          }}
+          onClick={(event) => {
+            if (outcomes.length > 4) event.stopPropagation();
+          }}
+        >
+          {outcomes.map((label, index) => {
+            const price = priceForOutcome(market, index);
+            const pct = Math.round(price * 100);
+            const gain = previewGain(price);
+            const isWinner = isResolved && Number(market.outcome) === index;
+            const accent = accentForOutcome(index, outcomes.length);
+            const logo = outcomeImages?.[index] || null;
+            const countryLabel = outcomeCountryLabels?.[index] || null;
+            const teamProfile = findTeamByName(market.sport, label);
+
             return (
-              <div key={i} className={`mock-card-opt ${i === 0 ? 'yes' : 'no'}`}>
-                <span className="mock-card-opt-label">{isWinner ? '🏆 ' : ''}{opt.label}</span>
-                <span className="mock-card-opt-pct">{pct}%</span>
+              <div
+                key={`${label}-${index}`}
+                role="button"
+                tabIndex={0}
+                onClick={(event) => openDrawer(event, index)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    openDrawer(event, index);
+                  }
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '6px 6px 6px 8px',
+                  borderRadius: 8,
+                  cursor: isResolved || isClosed || isSeriesPending ? 'default' : 'pointer',
+                  opacity: isResolved && !isWinner ? 0.58 : 1,
+                  transition: 'background 0.12s',
+                }}
+                onMouseEnter={(event) => {
+                  if (!isResolved && !isSeriesPending) event.currentTarget.style.background = 'var(--surface2)';
+                }}
+                onMouseLeave={(event) => { event.currentTarget.style.background = 'transparent'; }}
+              >
+                {logo ? (
+                  <img
+                    src={logo}
+                    alt=""
+                    style={{ width: 26, height: 26, objectFit: 'contain', flexShrink: 0 }}
+                    onError={(event) => { event.currentTarget.style.display = 'none'; }}
+                  />
+                ) : hasAnyLogo ? (
+                  <span style={{ width: 26, height: 26, flexShrink: 0 }} aria-hidden="true" />
+                ) : null}
+                <span
+                  role={teamProfile ? 'link' : undefined}
+                  tabIndex={teamProfile ? 0 : undefined}
+                  onClick={(event) => navigateToTeam(event, teamProfile)}
+                  onKeyDown={(event) => {
+                    if (!teamProfile) return;
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      navigateToTeam(event, teamProfile);
+                    }
+                  }}
+                  style={{
+                  flex: 1,
+                  minWidth: 0,
+                  fontFamily: 'var(--font-body)',
+                  fontSize: 13,
+                  color: 'var(--text-primary)',
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  cursor: teamProfile ? 'pointer' : 'inherit',
+                }}>
+                  {label}
+                </span>
+                {countryLabel && (
+                  <span style={{
+                    maxWidth: 90,
+                    padding: '3px 7px',
+                    borderRadius: 999,
+                    background: 'var(--surface2)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-secondary)',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 9,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    flexShrink: 0,
+                  }}>
+                    {countryLabel}
+                  </span>
+                )}
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '6px 10px',
+                  background: isWinner ? 'rgba(0,232,122,0.14)' : accent.bg,
+                  border: `1px solid ${isWinner ? 'rgba(0,232,122,0.35)' : accent.border}`,
+                  borderRadius: 100,
+                  flexShrink: 0,
+                }}>
+                  {!isResolved && (
+                    <span style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 10,
+                      color: 'var(--text-muted)',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      +{gain}
+                    </span>
+                  )}
+                  <span style={{
+                    fontFamily: 'var(--font-display)',
+                    fontSize: 14,
+                    color: isWinner ? 'var(--green)' : accent.fg,
+                    minWidth: 32,
+                    textAlign: 'right',
+                  }}>
+                    {pct}%
+                  </span>
+                </span>
               </div>
             );
           })}
         </div>
-
-        {/* Sparkline chart(s) — single for yes/no, multi for 3+ options */}
-        <div style={{ margin: '6px 0 2px' }}>
-          {(market.options || []).length <= 2 ? (
-            <Sparkline
-              height={48}
-              color="var(--yes)"
-              strokeWidth={1.8}
-              fill={true}
-              showValue={true}
-              valueWidth={40}
-              data={extractSeries(market, history, 0)}
-              targetPct={market.options[0]?.pct ?? 50}
-              seed={`${market.id}-${market.options[0]?.label}`}
-            />
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              {localizedOptions(market, lang).map((opt, i) => {
-                const colors = ['var(--yes)', 'var(--red)', 'var(--gold)', '#8b5cf6'];
-                return (
-                  <Sparkline
-                    key={i}
-                    height={28}
-                    color={colors[i] || 'var(--text-muted)'}
-                    strokeWidth={1.5}
-                    fill={i === 0}
-                    label={opt.label.length > 8 ? opt.label.slice(0, 7) + '…' : opt.label}
-                    labelWidth={54}
-                    showValue={true}
-                    valueWidth={38}
-                    data={extractSeries(market, history, i)}
-                    targetPct={opt.pct}
-                    seed={`${market.id}-${opt.label}`}
-                  />
-                );
-              })}
-            </div>
-          )}
-        </div>
       </div>
+
+      {isResolved && market.finalScore && (
+        <div style={{
+          margin: '2px 16px 8px',
+          padding: '6px 10px',
+          borderRadius: 8,
+          background: 'var(--surface2)',
+          border: '1px solid var(--border)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          letterSpacing: '0.04em',
+          color: 'var(--text-secondary)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}>
+          <span style={{ color: 'var(--green)', fontWeight: 700 }}>FINAL</span>
+          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{market.finalScore}</span>
+        </div>
+      )}
 
       <div className="mock-card-footer">
-        <div className="mock-card-vol">
-          {volumeLabel} <span>${market.volume}</span>
-        </div>
-        <div className="mock-card-deadline">
-          {market.deadline}
-        </div>
+        <span className="mock-card-vol">
+          LIQ <span>{formatCompactVolume(market.volume)} MXNB</span>
+        </span>
+        <span className="mock-card-deadline">
+          {formatCardDate(market.endTime)}
+        </span>
       </div>
+
+      {drawerOpen && (
+        <BetModal
+          open={drawerOpen}
+          variant="drawer"
+          onClose={() => setDrawerIndex(null)}
+          outcome={outcomes[drawerIndex]}
+          outcomePct={Math.round(priceForOutcome(market, drawerIndex) * 100)}
+          outcomeIndex={drawerIndex}
+          marketId={market.id}
+          marketTitle={market.question}
+          market={market}
+          onOpenLogin={onOpenLogin}
+        />
+      )}
     </div>
   );
 }

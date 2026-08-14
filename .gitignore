@@ -8,8 +8,11 @@ contracts/cache/
 contracts/lib/
 contracts/broadcast/
 
-# Claude Code worktrees
-.claude/worktrees/
+# Claude Code — entire dir is personal config (worktrees, commands, hooks,
+# settings). MCP server wiring + the project-context file are personal too.
+.claude/
+.mcp.json
+CLAUDE.md
 
 # Node
 scripts/node_modules/

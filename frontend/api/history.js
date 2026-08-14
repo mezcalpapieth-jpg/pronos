@@ -267,7 +267,6 @@ export default async function handler(req, res) {
 
       const netPnl = totalReceived - totalInvested;
 
-      return {
       // Merge on-chain redemption events into the transaction list so
       // the UI shows them alongside buys/sells. Each redeem event renders
       // as a "redeem" row with the authoritative on-chain payout.

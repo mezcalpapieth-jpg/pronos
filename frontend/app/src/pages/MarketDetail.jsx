@@ -1,61 +1,182 @@
-import React, { useState, useEffect } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+/**
+ * MVP market detail — /mvp/market?id=<numericId>.
+ *
+ * Single fetch path: GET /api/protocol/market?id=<id>. Reads from
+ * the indexer-owned `protocol_markets` table; trading flows through
+ * the Turnkey-signed BetModal we already have via /api/protocol/buy.
+ *
+ * Drops the legacy gmFetchBySlug / fetchProtocolMarket / MARKETS-static
+ * fallback completely. If a Polymarket-sourced market lands here, it
+ * arrives via the generator → pending → admin-approve pipeline and
+ * carries our own chain_address — Polymarket's chain is never used.
+ *
+ * Layout (matches Points detail visually):
+ *   - Top: category, status badges (LIVE / RESUELTO / POR RESOLVER)
+ *   - Question h1
+ *   - "FINAL · <score>" strip when resolved + finalScore set
+ *   - Ring chart (binary) or compact stat for multi-outcome
+ *   - Outcome list with prices + choose buttons (disabled when resolved)
+ *   - Sparkline-style mini price history with final-point snap on resolved
+ *   - Reglas / methodology block
+ */
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Nav from '../components/Nav.jsx';
+import Footer from '../components/Footer.jsx';
 import BetModal from '../components/BetModal.jsx';
-import { gmFetchBySlug } from '../lib/gamma.js';
-import { fetchResolutions } from '../lib/resolutions.js';
-import { fetchApprovedPolymarket, applyPolymarketApproval, polymarketApprovalKey } from '../lib/polymarketApproved.js';
-import { fetchPriceHistory, extractSeries } from '../lib/priceHistory.js';
-import { isExpired } from '../lib/deadline.js';
+import AmmDepthPanel from '../components/AmmDepthPanel.jsx';
+import CategoryBar from '../components/CategoryBar.jsx';
+import LiveScorePanel from '../components/LiveScorePanel.jsx';
 import Sparkline from '../components/Sparkline.jsx';
-import MARKETS from '../lib/markets.js';
-import { generateMockData } from '../lib/mockTabData.js';
-import { useT, useLang, localizedTitle, localizedOptions } from '../lib/i18n.js';
-import { fetchProtocolMarket, protocolRouteIdToDbId } from '../lib/protocolMarkets.js';
+import ShareButton from '../components/ShareButton.jsx';
+import TeamMarketStrip from '../components/TeamMarketStrip.jsx';
+import { usePointsAuth } from '../lib/pointsAuth.js';
+import { useIsMobile } from '../lib/useIsMobile.js';
+import {
+  formatSeriesGameLabel,
+  formatSeriesScoreSummary,
+  formatSeriesSubtitle,
+} from '../lib/seriesDisplay.js';
+import {
+  finalMarketOptions,
+  findChampionsLeagueFinalMarket,
+} from '../lib/championsLeague.js';
+import { marketInterestPayload, trackInterest } from '../lib/interest.js';
 
-// Final-outcome percentage for a given option on a resolved market:
-// winner → 100, everything else → 0. Used everywhere we previously showed
-// `opt.pct` so closed markets don't display stale pre-cierre prices.
-function finalPct(opt, market) {
-  if (!market?._resolved) return opt.pct;
-  return opt.label === market._winner ? 100 : 0;
+const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 42161);
+
+// Multi-outcome line palette — same hue rotation the Hero uses so
+// chart colors stay consistent across the app.
+const SERIES_COLORS = ['var(--yes)', 'var(--red)', 'var(--gold)', '#8b5cf6', '#38BDF8', '#FF5500'];
+
+async function getJson(url) {
+  const res = await fetch(url, { credentials: 'include' });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
 }
 
-/* ── Ring chart ─────────────────────────────────────────────── */
-function ProbabilityChart({ options, resolved, winner, awaiting }) {
-  if (!options?.length) return null;
-  const top=options[0];
-  const pct=resolved?(top.label===winner?100:0):top.pct;
-  const radius=54, circ=2*Math.PI*radius, dash=(pct/100)*circ;
-  const color='var(--yes)';
+function formatDeadline(iso) {
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
+  } catch { return ''; }
+}
+
+function shortGameDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return '';
+  return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+}
+
+function seriesGameStatus(item) {
+  if (item?.status === 'not_needed') return 'No necesario';
+  if (item?.status === 'resolved') return 'Final';
+  if (item?.placeholder || item?.status === 'pending' || item?.seriesLocked) return 'Pendiente';
+  const now = Date.now();
+  const start = item?.startTime ? new Date(item.startTime).getTime() : NaN;
+  const end = item?.endTime ? new Date(item.endTime).getTime() : NaN;
+  if (item?.status === 'active' && Number.isFinite(start) && Number.isFinite(end) && start <= now && end > now) {
+    return 'En vivo';
+  }
+  if (item?.status === 'active' && Number.isFinite(end) && end < now) {
+    return 'Por resolver';
+  }
+  return 'Abierto';
+}
+
+function SeriesGameStrip({ seriesMeta, currentMarketId, navigate }) {
+  const sequence = Array.isArray(seriesMeta?.sequence) ? seriesMeta.sequence : [];
+  if (sequence.length <= 1) return null;
   return (
-    <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:16,padding:'24px 0'}}>
-      <svg width="140" height="140" viewBox="0 0 140 140">
-        <circle cx="70" cy="70" r={radius} fill="none" stroke="var(--surface3)" strokeWidth="12"/>
-        <circle cx="70" cy="70" r={radius} fill="none" stroke={color} strokeWidth="12" strokeLinecap="round"
-          strokeDasharray={`${dash} ${circ}`} transform="rotate(-90 70 70)"
-          style={{filter:`drop-shadow(0 0 8px ${color})`}}/>
-        {resolved?(<>
-          <text x="70" y="63" textAnchor="middle" fill="var(--yes)" fontSize="26" fontFamily="var(--font-display)">✓</text>
-          <text x="70" y="82" textAnchor="middle" fill="var(--text-muted)" fontSize="8" fontFamily="var(--font-mono)" letterSpacing="0.1em">GANADOR</text>
-        </>):awaiting?(<>
-          <text x="70" y="66" textAnchor="middle" fill="var(--text-muted)" fontSize="18" fontFamily="var(--font-display)">CERRADO</text>
-          <text x="70" y="84" textAnchor="middle" fill="var(--text-muted)" fontSize="8" fontFamily="var(--font-mono)" letterSpacing="0.1em">POR RESOLVER</text>
-        </>):(<>
-          <text x="70" y="66" textAnchor="middle" fill="var(--text-primary)" fontSize="22" fontFamily="var(--font-display)">{pct}%</text>
-          <text x="70" y="84" textAnchor="middle" fill="var(--text-muted)" fontSize="9" fontFamily="var(--font-mono)" letterSpacing="0.1em">{top.label}</text>
-        </>)}
-      </svg>
-      <div style={{display:'flex',gap:12,flexWrap:'wrap',justifyContent:'center'}}>
-        {options.map((opt,i)=>{
-          const isWinner = resolved && opt.label === winner;
-          const display  = resolved ? (isWinner ? 100 : 0) : opt.pct;
+    <div style={{ marginBottom: 22 }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'baseline',
+        justifyContent: 'space-between',
+        gap: 12,
+        marginBottom: 10,
+        fontFamily: 'var(--font-mono)',
+        textTransform: 'uppercase',
+        letterSpacing: '0.08em',
+      }}>
+        <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+          {seriesMeta.round || 'Serie'}
+        </span>
+        {formatSeriesScoreSummary(seriesMeta) && (
+          <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
+            {formatSeriesScoreSummary(seriesMeta)}
+          </span>
+        )}
+      </div>
+      <div style={{
+        display: 'flex',
+        gap: 8,
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        paddingBottom: 2,
+      }}>
+        {sequence.map((item) => {
+          const isCurrent = Number(item.id) === Number(currentMarketId);
+          const clickable = item.id && !isCurrent && !item.seriesLocked && item.status !== 'pending' && item.status !== 'not_needed';
+          const status = seriesGameStatus(item);
+          const muted = item.placeholder || item.seriesLocked || item.status === 'not_needed';
           return (
-            <div key={i} style={{display:'flex',alignItems:'center',gap:6,fontFamily:'var(--font-mono)',fontSize:12,
-              color:isWinner?'var(--yes)':'var(--text-secondary)'}}>
-              <span style={{width:8,height:8,borderRadius:'50%',display:'inline-block',background:i===0?'var(--yes)':'var(--red)'}}/>
-              {opt.label} · {display}%
-            </div>
+            <button
+              key={`${item.gameNumber}-${item.id || item.pendingId || item.status}`}
+              type="button"
+              disabled={!clickable}
+              onClick={() => {
+                if (clickable) navigate(`/market?id=${encodeURIComponent(item.id)}`);
+              }}
+              title={item.subtitle || formatSeriesGameLabel(item.gameNumber)}
+              style={{
+                minWidth: 122,
+                padding: '10px 12px',
+                borderRadius: 10,
+                border: `1px solid ${isCurrent ? 'rgba(0,232,122,0.45)' : 'var(--border)'}`,
+                background: isCurrent ? 'rgba(0,232,122,0.10)' : 'var(--surface1)',
+                opacity: muted ? 0.62 : 1,
+                cursor: clickable ? 'pointer' : 'default',
+                textAlign: 'left',
+                flex: '0 0 auto',
+              }}
+            >
+              <span style={{
+                display: 'block',
+                fontFamily: 'var(--font-display)',
+                fontSize: 15,
+                color: isCurrent ? 'var(--green)' : 'var(--text-primary)',
+                marginBottom: 4,
+              }}>
+                {formatSeriesGameLabel(item.gameNumber)}
+              </span>
+              <span style={{
+                display: 'block',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                color: item.status === 'resolved' ? 'var(--green)'
+                  : item.status === 'not_needed' ? 'var(--text-muted)'
+                  : item.placeholder ? '#f59e0b'
+                  : 'var(--text-secondary)',
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                marginBottom: 4,
+                whiteSpace: 'nowrap',
+              }}>
+                {status}
+              </span>
+              <span style={{
+                display: 'block',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                color: 'var(--text-muted)',
+                letterSpacing: '0.02em',
+                whiteSpace: 'nowrap',
+              }}>
+                {item.startTime ? shortGameDate(item.startTime) : 'Fecha pendiente'}
+              </span>
+            </button>
           );
         })}
       </div>
@@ -63,255 +184,149 @@ function ProbabilityChart({ options, resolved, winner, awaiting }) {
   );
 }
 
-/* ── Two-row tab system (Polymarket style) ───────────────────── */
-function TabsSection({mock,opt0,opt1,comments}){
-  const [topTab,setTopTab]   = useState('Reglas');
-  const [botTab,setBotTab]   = useState('Actividad');
+function outcomeInitials(label) {
+  const words = String(label || '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+  return (words.map(word => word[0]).join('') || '?').toUpperCase();
+}
 
-  const tabBtn = (label,active,onClick,count) => (
-    <button onClick={onClick} style={{
-      fontFamily:'var(--font-mono)',fontSize:12,letterSpacing:'0.04em',
-      padding:'10px 16px',background:'none',border:'none',cursor:'pointer',whiteSpace:'nowrap',
-      color:active?'var(--text-primary)':'var(--text-muted)',fontWeight:active?600:400,
-      borderBottom:active?'2px solid var(--text-primary)':'2px solid transparent',
-      transition:'color 0.15s',
-    }}>
-      {label}{count!=null?<span style={{fontFamily:'var(--font-mono)',fontSize:10,marginLeft:4,color:'var(--text-muted)'}}>({count.toLocaleString()})</span>:null}
-    </button>
-  );
-
-  return(
-    <div>
-      {/* Row 1: Rules | Market Context */}
-      <div style={{display:'flex',borderBottom:'1px solid var(--border)',marginBottom:24}}>
-        {tabBtn('Reglas',    topTab==='Reglas',       ()=>setTopTab('Reglas'))}
-        {tabBtn('Contexto de mercado', topTab==='Contexto', ()=>setTopTab('Contexto'))}
-      </div>
-      {topTab==='Reglas'   && <RulesTab   data={mock.rules}/>}
-      {topTab==='Contexto' && <ContextTab data={mock.context}/>}
-
-      {/* Row 2: Comments | Top Holders | Positions | Activity */}
-      <div style={{display:'flex',borderBottom:'1px solid var(--border)',margin:'40px 0 24px',overflowX:'auto'}}>
-        {tabBtn('Comentarios', botTab==='Comentarios', ()=>setBotTab('Comentarios'), comments.length*437)}
-        {tabBtn('Top Holders', botTab==='Top Holders', ()=>setBotTab('Top Holders'))}
-        {tabBtn('Posiciones',  botTab==='Posiciones',  ()=>setBotTab('Posiciones'))}
-        {tabBtn('Actividad',   botTab==='Actividad',   ()=>setBotTab('Actividad'))}
-      </div>
-      {botTab==='Comentarios' && <CommentsTab comments={comments}/>}
-      {botTab==='Top Holders' && <HoldersTab  yes={mock.yesHolders} no={mock.noHolders} opt0={opt0} opt1={opt1}/>}
-      {botTab==='Posiciones'  && <PositionsTab yes={mock.yesPositions} no={mock.noPositions} opt0={opt0} opt1={opt1}/>}
-      {botTab==='Actividad'   && <ActivityTab  activity={mock.activity} opt0={opt0} opt1={opt1}/>}
+// ── Chart watermark (Pronos brand mark, corner-anchored like Polymarket's) ──
+function ChartWatermark() {
+  return (
+    <div style={{position:'absolute',top:2,right:14,opacity:0.55,pointerEvents:'none',userSelect:'none',zIndex:1}}>
+      <span style={{fontFamily:'var(--font-display)',fontSize:13,letterSpacing:'0.05em',color:'var(--text-primary)'}}>PRONOS.IO</span>
     </div>
   );
 }
 
-/* ── Rules ───────────────────────────────────────────────────── */
-function RulesTab({data}){
-  return(
-    <div style={{fontSize:14,color:'var(--text-secondary)',lineHeight:1.8}}>
-      <p style={{marginBottom:20}}>{data.resolution}</p>
-      <div style={{border:'1px solid var(--border)',borderRadius:10,overflow:'hidden',marginBottom:20}}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',background:'var(--surface2)',borderBottom:'1px solid var(--border)'}}>
-          <div style={{display:'flex',alignItems:'center',gap:8,fontSize:13,fontWeight:500}}>
-            <span style={{fontSize:16}}>ℹ️</span> Contexto adicional
-          </div>
-          <span style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)'}}>Actualizado hoy</span>
-        </div>
-        {data.additional.map((rule,i)=>(
-          <div key={i} style={{padding:'12px 16px',borderBottom:i<data.additional.length-1?'1px solid var(--border)':'none',fontSize:13,color:'var(--text-secondary)',lineHeight:1.6}}>{rule}</div>
-        ))}
-      </div>
-      <p style={{fontSize:13,color:'var(--text-secondary)',marginBottom:8}}>{data.resolution}</p>
-      {data.additional.map((r,i)=><p key={i} style={{fontSize:13,color:'var(--text-secondary)',marginBottom:8}}>{r}</p>)}
-      {data.closes&&<p style={{fontSize:12,color:'var(--text-muted)',marginTop:16}}>Mercado abierto: 1 Ene 2026, 12:00 AM · Cierra: {data.closes}</p>}
-    </div>
-  );
-}
-
-/* ── Context ─────────────────────────────────────────────────── */
-function ContextTab({data}){
-  const now = new Date().toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'});
-  return(
-    <div>
-      <p style={{fontSize:14,color:'var(--text-secondary)',lineHeight:1.85,marginBottom:16}}>{data}</p>
-      <p style={{fontSize:12,color:'var(--text-muted)'}}>
-        Resumen experimental generado con IA referenciando datos de Pronos · Actualizado {now}
-      </p>
-    </div>
-  );
-}
-
-/* ── Comments ────────────────────────────────────────────────── */
-function CommentsTab({comments}){
-  const [liked,setLiked]=useState({});
-  return(
-    <div>
-      <div style={{display:'flex',gap:8,marginBottom:20,alignItems:'center'}}>
-        <div style={{flex:1,background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,
-          padding:'10px 14px',fontFamily:'var(--font-mono)',fontSize:12,color:'var(--text-muted)'}}>
-          Agrega un comentario...
-        </div>
-        <button className="btn-primary" style={{padding:'10px 18px',fontSize:12}} disabled>Publicar</button>
-      </div>
-      <div style={{display:'flex',gap:8,marginBottom:20}}>
-        {['Recientes','Top Holders','Holders'].map(f=>(
-          <button key={f} style={{padding:'6px 12px',background:'var(--surface2)',border:'1px solid var(--border)',
-            borderRadius:6,color:'var(--text-muted)',cursor:'pointer',fontFamily:'var(--font-mono)',fontSize:11}}>{f}</button>
-        ))}
-        <div style={{marginLeft:'auto',fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',display:'flex',alignItems:'center'}}>⚠️ Cuidado con links externos</div>
-      </div>
-      {comments.map(c=>(
-        <div key={c.id} style={{padding:'16px 0',borderBottom:'1px solid var(--border)'}}>
-          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
-            <div style={{width:32,height:32,borderRadius:'50%',background:`hsl(${c.id*47%360},60%,45%)`,
-              display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,color:'#fff',fontWeight:700,flexShrink:0}}>
-              {c.user[0]}
-            </div>
-            <div>
-              <span style={{fontWeight:600,fontSize:13,marginRight:8}}>{c.user}</span>
-              <span style={{fontFamily:'var(--font-mono)',fontSize:10,padding:'2px 7px',borderRadius:4,marginRight:8,
-                background:c.side==='yes'?'rgba(22,163,74,0.12)':'rgba(220,38,38,0.12)',
-                color:c.side==='yes'?'var(--yes)':'var(--no)',
-                border:`1px solid ${c.side==='yes'?'rgba(22,163,74,0.25)':'rgba(220,38,38,0.25)'}`}}>
-                {c.holding.toLocaleString()} {c.side==='yes'?'Sí':'No'}
-              </span>
-              <span style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)'}}>{c.time} atrás</span>
-            </div>
-          </div>
-          <p style={{fontSize:13,color:'var(--text-secondary)',lineHeight:1.6,marginLeft:42,marginBottom:8}}>{c.text}</p>
-          <div style={{display:'flex',gap:16,marginLeft:42}}>
-            <button onClick={()=>setLiked(p=>({...p,[c.id]:!p[c.id]}))} style={{background:'none',border:'none',cursor:'pointer',
-              display:'flex',alignItems:'center',gap:4,fontFamily:'var(--font-mono)',fontSize:11,
-              color:liked[c.id]?'var(--green)':'var(--text-muted)'}}>
-              ♥ {c.likes+(liked[c.id]?1:0)}
-            </button>
-            <button style={{background:'none',border:'none',cursor:'pointer',fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)'}}>
-              ↩ {c.replies} Respuestas
-            </button>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ── Top Holders ─────────────────────────────────────────────── */
-function HoldersTab({yes,no,opt0,opt1}){
-  return(
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:24}}>
-      {[{label:opt0,data:yes,color:'var(--yes)'},{label:opt1,data:no,color:'var(--no)'}].map(col=>(
-        <div key={col.label}>
-          <div style={{fontFamily:'var(--font-mono)',fontSize:11,letterSpacing:'0.08em',color:col.color,marginBottom:12,display:'flex',justifyContent:'space-between'}}>
-            <span>Holders {col.label}</span><span>ACCIONES</span>
-          </div>
-          {col.data.map((h,i)=>(
-            <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
-              <div style={{width:28,height:28,borderRadius:'50%',flexShrink:0,background:`hsl(${(i*61+17)%360},55%,45%)`,
-                display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,color:'#fff',fontWeight:700}}>
-                {h.user[0]}
-              </div>
-              <span style={{flex:1,fontSize:13,fontWeight:500}}>{h.user}</span>
-              <span style={{fontFamily:'var(--font-mono)',fontSize:12,color:col.color}}>{h.shares.toLocaleString()}</span>
-            </div>
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ── Positions ───────────────────────────────────────────────── */
-function PositionsTab({yes,no,opt0,opt1}){
-  return(
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:24}}>
-      {[{label:opt0,data:yes,color:'var(--yes)'},{label:opt1,data:no,color:'var(--no)'}].map(col=>(
-        <div key={col.label}>
-          <div style={{display:'flex',justifyContent:'space-between',fontFamily:'var(--font-mono)',fontSize:11,letterSpacing:'0.08em',color:'var(--text-muted)',marginBottom:12}}>
-            <span style={{color:col.color}}>{col.label}</span><span>PNL</span>
-          </div>
-          {col.data.map((p,i)=>(
-            <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
-              <div style={{width:28,height:28,borderRadius:'50%',flexShrink:0,background:`hsl(${(i*79+43)%360},55%,40%)`,
-                display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,color:'#fff',fontWeight:700}}>
-                {p.user[0]}
-              </div>
-              <div style={{flex:1}}>
-                <div style={{fontSize:13,fontWeight:500}}>{p.user}</div>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)'}}>avg {p.avg}</div>
-              </div>
-              <span style={{fontFamily:'var(--font-mono)',fontSize:12,color:col.color}}>
-                +${p.pnl.toLocaleString('es-MX',{maximumFractionDigits:2})}
-              </span>
-            </div>
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ── Activity ────────────────────────────────────────────────── */
-function ActivityTab({activity, opt0, opt1}){
-  const [filter,setFilter]=useState('Todos');
-  const filtered = filter==='Todos' ? activity : activity.filter(a=> filter==='Sí' ? a.isYes : !a.isYes);
-  const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  const fakeDate = (id) => { const d=new Date(2026,2+Math.floor(id/7),1+(id*13)%28); return `${months[d.getMonth()]} ${d.getDate()}`; };
-  const mxnVal = (amt,price) => Math.round(amt*parseFloat(price)).toLocaleString('es-MX');
-
-  return(
-    <div>
-      {/* Filters row */}
-      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}>
-        {['Todos','Sí','No'].map(f=>(
-          <button key={f} onClick={()=>setFilter(f)} style={{
-            padding:'6px 14px',borderRadius:20,fontFamily:'var(--font-mono)',fontSize:11,cursor:'pointer',
-            border:'1px solid var(--border)',transition:'all 0.15s',
-            background: filter===f ? 'var(--surface3)' : 'var(--surface2)',
-            color: filter===f ? 'var(--text-primary)' : 'var(--text-muted)',
+// ── Ring chart for binary markets ───────────────────────────────────────────
+function ProbabilityRing({ pct, label, logo, color = 'var(--yes)', resolved, winner }) {
+  const radius = 54;
+  const circ = 2 * Math.PI * radius;
+  const safePct = Math.max(0, Math.min(100, Number(pct) || 0));
+  const dash = (safePct / 100) * circ;
+  const ringColor = resolved && !winner ? 'var(--text-muted)' : color;
+  return (
+    <div
+      aria-label={`${label} ${safePct}%`}
+      style={{
+        position: 'relative',
+        width: 140,
+        height: 140,
+        flexShrink: 0,
+      }}
+    >
+      <svg width="140" height="140" viewBox="0 0 140 140" aria-hidden="true">
+        <circle cx="70" cy="70" r={radius} fill="none" stroke="var(--surface3, var(--surface2))" strokeWidth="12" />
+        <circle
+          cx="70" cy="70" r={radius} fill="none" stroke={ringColor} strokeWidth="12"
+          strokeLinecap="round"
+          strokeDasharray={`${dash} ${circ}`}
+          transform="rotate(-90 70 70)"
+          style={{ filter: winner ? `drop-shadow(0 0 8px ${ringColor})` : 'none' }}
+        />
+      </svg>
+      <div style={{
+        position: 'absolute',
+        inset: 24,
+        display: 'grid',
+        placeItems: 'center',
+        alignContent: 'center',
+        gap: 5,
+      }}>
+        {logo ? (
+          <img
+            src={logo}
+            alt=""
+            style={{ width: 44, height: 44, objectFit: 'contain', filter: 'drop-shadow(0 8px 14px rgba(0,0,0,0.35))' }}
+            onError={(event) => { event.currentTarget.style.display = 'none'; }}
+          />
+        ) : (
+          <span style={{
+            width: 44,
+            height: 44,
+            display: 'grid',
+            placeItems: 'center',
+            borderRadius: 8,
+            border: '1px solid var(--border)',
+            background: 'var(--surface2)',
+            color: 'var(--text-primary)',
+            fontFamily: 'var(--font-display)',
+            fontSize: 17,
           }}>
-            {f} {f!=='Todos'&&<span style={{color:f==='Sí'?'var(--yes)':'var(--no)'}}>▾</span>}
-          </button>
-        ))}
-        <button style={{padding:'6px 14px',borderRadius:20,fontFamily:'var(--font-mono)',fontSize:11,cursor:'pointer',
-          border:'1px solid var(--border)',background:'var(--surface2)',color:'var(--text-muted)'}}>
-          Monto mín ▾
-        </button>
-        <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:6,fontFamily:'var(--font-mono)',fontSize:11}}>
-          <span style={{width:7,height:7,borderRadius:'50%',background:'#ef4444',display:'inline-block',boxShadow:'0 0 6px #ef4444'}}/>
-          <span style={{color:'var(--text-secondary)'}}>En vivo</span>
-        </div>
+            {outcomeInitials(label)}
+          </span>
+        )}
+        <span style={{
+          color: winner ? 'var(--green)' : 'var(--text-primary)',
+          fontFamily: 'var(--font-display)',
+          fontSize: 24,
+          lineHeight: 1,
+        }}>
+          {safePct}%
+        </span>
+        {resolved && winner && (
+          <span style={{
+            color: 'var(--green)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 9,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+          }}>
+            Ganador
+          </span>
+        )}
       </div>
+    </div>
+  );
+}
 
-      {/* Activity rows */}
-      {filtered.map(a=>{
-        const priceMXN = (parseFloat(a.price)*18.5).toFixed(1);
-        const totalMXN = mxnVal(a.amount, a.price);
-        return(
-          <div key={a.id} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 0',borderBottom:'1px solid var(--border)'}}>
-            {/* Avatar */}
-            <div style={{width:32,height:32,borderRadius:'50%',flexShrink:0,
-              background:`hsl(${(a.id*97+29)%360},55%,45%)`,
-              display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,color:'#fff',fontWeight:700}}>
-              {a.user[0]}
-            </div>
-            {/* Text */}
-            <div style={{flex:1,fontSize:13,lineHeight:1.5}}>
-              <span style={{fontWeight:600}}>{a.user.length>12?a.user.slice(0,10)+'...':a.user}</span>
-              {' '}
-              <span style={{color:a.action==='Compró'?'var(--yes)':'var(--no)'}}>{a.action}</span>
-              {' '}
-              <span style={{fontWeight:600,color:a.isYes?'var(--yes)':'var(--no)'}}>{a.amount} {a.isYes?opt0:opt1}</span>
-              {' para '}
-              <span style={{fontWeight:600}}>{fakeDate(a.id)}</span>
-              {' a '}
-              <span style={{color:'var(--text-secondary)'}}>${priceMXN}¢</span>
-              {' '}
-              <span style={{color:'var(--text-muted)',fontSize:12}}>(${totalMXN} MXN)</span>
-            </div>
-            {/* Time + link */}
-            <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
-              <span style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)'}}>{a.time} atrás</span>
-              <span style={{color:'var(--text-muted)',fontSize:14,cursor:'pointer'}}>↗</span>
+function ProbabilityGaugeRow({ outcomes, outcomeImages, pctFor, isResolved, winnerIndex, lineColor }) {
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+      gap: 12,
+      marginTop: 18,
+    }}>
+      {outcomes.map((label, i) => {
+        const isWinner = isResolved && winnerIndex === i;
+        return (
+          <div
+            key={label}
+            style={{
+              display: 'grid',
+              justifyItems: 'center',
+              gap: 8,
+              padding: '16px 12px',
+              border: `1px solid ${isWinner ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
+              borderRadius: 12,
+              background: isWinner ? 'rgba(0,232,122,0.08)' : 'var(--surface2)',
+              opacity: isResolved && !isWinner ? 0.58 : 1,
+            }}
+          >
+            <ProbabilityRing
+              pct={pctFor(i)}
+              label={label}
+              logo={outcomeImages?.[i] || null}
+              color={lineColor(i)}
+              resolved={isResolved}
+              winner={isWinner}
+            />
+            <div style={{
+              maxWidth: '100%',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              color: isWinner ? 'var(--green)' : 'var(--text-secondary)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+            }}>
+              {label}
             </div>
           </div>
         );
@@ -320,332 +335,625 @@ function ActivityTab({activity, opt0, opt1}){
   );
 }
 
-/* ── Main ────────────────────────────────────────────────────── */
-export default function MarketDetail() {
-  const t = useT();
-  const lang = useLang();
-  const [searchParams]=useSearchParams(), navigate=useNavigate();
-  const marketId=searchParams.get('id');
-  const [market,setMarket]=useState(null);
-  const [history,setHistory]=useState({});
-  const [loading,setLoading]=useState(true);
-  const [betModal,setBetModal]=useState({open:false,outcome:'',pct:0,outcomeIndex:0,clobTokenId:null,isNegRisk:false});
-  const [isMobile,setIsMobile]=useState(()=>window.innerWidth<768);
-  useEffect(()=>{const h=()=>setIsMobile(window.innerWidth<768);window.addEventListener('resize',h);return()=>window.removeEventListener('resize',h);},[]);
-  const volumeLabel = market?.source === 'protocol' ? t('detail.liquidity') : t('detail.volume');
+// Snap a price-history series to its final 100/0 endpoint when the
+// market is resolved, mirroring what PointsMarketDetail does.
+function snapTail(series, isResolved, isWinner, resolvedAt) {
+  if (!Array.isArray(series)) return [];
+  if (!isResolved) return series;
+  const tailT = resolvedAt
+    ? Math.floor(new Date(resolvedAt).getTime() / 1000)
+    : Math.floor(Date.now() / 1000);
+  const tailP = isWinner ? 100 : 0;
+  const filtered = series.filter(pt => Number(pt.t) <= tailT);
+  const last = filtered[filtered.length - 1];
+  if (last && last.t === tailT && Math.abs(Number(last.p) - tailP) < 0.5) return filtered;
+  return [...filtered, { t: tailT, p: tailP }];
+}
 
-  useEffect(()=>{
-    if(!marketId){navigate('/');return;}
-    let cancelled=false;
-    async function load(){
-      setLoading(true);
-      try{
-        const protocolDbId = protocolRouteIdToDbId(marketId);
-        const [live, resolutions, approved, protocolMarket] = await Promise.all([
-          protocolDbId ? Promise.resolve(null) : gmFetchBySlug(marketId).catch(()=>null),
-          fetchResolutions().catch(()=>[]),
-          fetchApprovedPolymarket().catch(()=>[]),
-          protocolDbId ? fetchProtocolMarket(marketId).catch(()=>null) : Promise.resolve(null),
-        ]);
-        if(cancelled) return;
+function pricesFromReserves(reserves) {
+  if (!Array.isArray(reserves) || reserves.length < 2) return [];
+  const invs = reserves.map(r => (Number(r) > 0 ? 1 / Number(r) : 0));
+  const total = invs.reduce((s, v) => s + v, 0) || 1;
+  return invs.map(v => v / total);
+}
 
-        // ALL polymarket markets (live AND hardcoded) must be in the approval
-        // list. Local-only markets (no _polyId) render unconditionally.
-        const localHit = MARKETS.find(m => m.id === marketId) || null;
-        const approvalKey = live ? polymarketApprovalKey(live) : marketId;
-        const approval = approved.find(a => a.slug === approvalKey || a.slug === marketId) || null;
-        let liveAllowed = null;
-        if (live && approval) {
-          liveAllowed = applyPolymarketApproval(live, approval);
-        }
-        // Hardcoded polymarket markets also need approval
-        let localAllowed = localHit;
-        if (localHit && localHit._source === 'polymarket' && localHit._polyId) {
-          localAllowed = approval ? applyPolymarketApproval(localHit, approval) : null;
-        }
-        let m = protocolMarket || liveAllowed || localAllowed;
-        // Apply resolution data if exists
-        if(m){
-          const r = resolutions.find(r=>r.market_id===m.id);
-          if(r){
-            m = {...m, _resolved:true, _winner:r.winner, _winnerShort:r.winner_short||r.winner,
-              _resolvedDate:new Date(r.resolved_at).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'}),
-              _resolvedBy:r.resolved_by, _description:r.description};
-          } else if (isExpired(m)) {
-            // Deadline passed but the auto-resolve cron hasn't written a
-            // winner yet — mark as closed so the detail page doesn't show
-            // "Comprar" buttons or treat it as active.
-            m = {...m, _awaitingResolution:true};
-          }
-        }
-        setMarket(m);
-        setLoading(false);
-        // Then batch-fetch real CLOB price history so the chart renders real
-        // data. The last point of each token's series is also the *current*
-        // live probability, so we use it to refresh market.options[i].pct —
-        // otherwise hardcoded markets (whose local id isn't a Polymarket
-        // slug, so gmFetchBySlug returned null) would render live sparklines
-        // with stale button percentages.
-        const ids = m?._clobTokenIds;
-        if(Array.isArray(ids)&&ids.length>0){
-          const hist=await fetchPriceHistory(ids,{interval:'1w',fidelity:60});
-          if(cancelled) return;
-          setHistory(hist);
+export default function MarketDetail({ onOpenLogin }) {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const id = searchParams.get('id');
+  const preselectedOutcome = searchParams.get('outcome');
+  const { authenticated } = usePointsAuth();
+  const isMobile = useIsMobile();
 
-          // Refresh option pcts from the latest history point
-          if (m && Array.isArray(m.options)) {
-            const updated = m.options.map((opt, i) => {
-              const tid = ids[i];
-              const pts = tid && hist[tid];
-              if (!Array.isArray(pts) || pts.length === 0) return opt;
-              const last = pts[pts.length - 1];
-              const livePct = Math.round(Number(last.p));
-              if (!Number.isFinite(livePct)) return opt;
-              return { ...opt, pct: livePct };
-            });
-            // Only re-set when something actually changed to avoid a
-            // redundant render.
-            const changed = updated.some((o, i) => o.pct !== m.options[i].pct);
-            if (changed) setMarket({ ...m, options: updated });
-          }
-        }
-      }
-      catch(_){if(!cancelled){setMarket(MARKETS.find(m=>m.id===marketId)||null);setLoading(false);}}
+  const [market, setMarket] = useState(null);
+  const [historyByOutcome, setHistoryByOutcome] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [bet, setBet] = useState(null);
+  const [depthOutcomeIndex, setDepthOutcomeIndex] = useState(0);
+
+  // Fetch the market on mount / id change.
+  useEffect(() => {
+    if (!id) { navigate('/'); return; }
+    const numericId = Number.parseInt(id, 10);
+    if (!Number.isInteger(numericId) || numericId <= 0) {
+      setError('invalid_id');
+      setLoading(false);
+      return;
     }
-    load();
-    return()=>{cancelled=true;};
-  },[marketId,navigate]);
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setHistoryByOutcome(null);
+    (async () => {
+      try {
+        const { ok, data } = await getJson(`/api/protocol/market?id=${numericId}`);
+        if (!ok) throw new Error(data?.error || 'load_failed');
+        if (cancelled) return;
+        setMarket(data?.market || null);
+      } catch (e) {
+        if (!cancelled) setError(e?.message || 'load_failed');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [id, navigate]);
 
-  const openBet=(outcome,pct,idx)=>setBetModal({open:true,outcome,pct,outcomeIndex:idx??0,clobTokenId:market?._clobTokenIds?.[idx??0]??null,isNegRisk:market?._isNegRisk??false});
+  // Once we have the market, fetch one history series per outcome and
+  // snap each to its 100/0 final point if resolved.
+  useEffect(() => {
+    if (!market) return;
+    let cancelled = false;
+    const numericId = Number(market.id);
+    const isResolved = market.status === 'resolved';
+    const winnerIdx = isResolved && market.outcome != null ? Number(market.outcome) : null;
 
-  if(loading)return(<><Nav/><div style={{textAlign:'center',padding:'100px 48px',fontFamily:'var(--font-mono)',fontSize:12,color:'var(--text-muted)',letterSpacing:'0.1em'}}>{t('detail.loading')}</div></>);
-  if(!market)return(<><Nav/><div style={{textAlign:'center',padding:'100px 48px'}}><h2 style={{fontFamily:'var(--font-display)',fontSize:32,color:'var(--text-primary)',marginBottom:16}}>{t('detail.notFound')}</h2><button className="btn-ghost" onClick={()=>navigate('/')}>{t('detail.back')}</button></div></>);
+    const outcomes = Array.isArray(market.outcomes) ? market.outcomes : [];
+    if (outcomes.length === 0) {
+      setHistoryByOutcome([]);
+      return;
+    }
 
-  const resolved=!!market._resolved;
-  const awaiting=!resolved && !!market._awaitingResolution;
-  const locked=resolved || awaiting; // no bets allowed
-  const mock=generateMockData(market);
-  const lOpts = localizedOptions(market, lang);
-  const opt0=lOpts?.[0]?.label??'Sí';
-  const opt1=lOpts?.[1]?.label??'No';
+    Promise.all(outcomes.map((_, i) =>
+      getJson(`/api/points/price-history?ids=${numericId}&days=30&outcome=${i}`)
+        .then(r => Array.isArray(r.data?.history?.[numericId]) ? r.data.history[numericId] : [])
+        .catch(() => []),
+    )).then(seriesArr => {
+      if (cancelled) return;
+      const snapped = seriesArr.map((s, i) =>
+        snapTail(s, isResolved, winnerIdx === i, market.resolvedAt),
+      );
+      setHistoryByOutcome(snapped);
+    });
 
-  return(
+    return () => { cancelled = true; };
+  }, [market]);
+
+  useEffect(() => {
+    if (!market?.id) return;
+    trackInterest({
+      ...marketInterestPayload('mvp', market, 'view'),
+      objectType: 'protocol_market',
+      action: 'view',
+    });
+  }, [market?.id]);
+
+  // When the URL has ?outcome=<i> from the Hero deep-link, auto-open
+  // the bet modal once the market is loaded so users land in the right
+  // buy flow without an extra click.
+  useEffect(() => {
+    if (!market || preselectedOutcome == null) return;
+    const i = Number.parseInt(preselectedOutcome, 10);
+    if (!Number.isInteger(i) || i < 0 || i >= (market.outcomes?.length || 0)) return;
+    if (market.status !== 'active') return; // skip on resolved
+    if (!authenticated) { onOpenLogin?.(); return; }
+    const prices = market.prices || pricesFromReserves(market.reserves || []);
+    setBet({
+      market,
+      outcome: market.outcomes[i],
+      outcomeIndex: i,
+      outcomePct: Math.round((prices[i] || 0) * 100),
+    });
+  }, [market, preselectedOutcome, authenticated, onOpenLogin]);
+
+  useEffect(() => {
+    setDepthOutcomeIndex(0);
+  }, [id]);
+
+  // ── Render shells ────────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <>
+        <Nav onOpenLogin={onOpenLogin} />
+        <div className="category-bar-sticky"><CategoryBar /></div>
+        <main style={{ padding: '60px 48px', maxWidth: 1100, margin: '0 auto', textAlign: 'center', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+          Cargando mercado…
+        </main>
+        <Footer />
+      </>
+    );
+  }
+  if (error || !market) {
+    return (
+      <>
+        <Nav onOpenLogin={onOpenLogin} />
+        <div className="category-bar-sticky"><CategoryBar /></div>
+        <main style={{ padding: '60px 48px', maxWidth: 720, margin: '0 auto' }}>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--text-primary)' }}>
+            Mercado no encontrado
+          </h1>
+          <p style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-muted)', marginTop: 12 }}>
+            {error === 'market_not_found' || error === 'invalid_id'
+              ? 'El mercado que buscas no existe o fue archivado.'
+              : `Error: ${error || 'sin datos'}`}
+          </p>
+          <button onClick={() => navigate('/')} className="btn-primary" style={{ marginTop: 18 }}>
+            Volver a /mvp
+          </button>
+        </main>
+        <Footer />
+      </>
+    );
+  }
+
+  // ── Derived state ─────────────────────────────────────────────────────────
+  const outcomes = Array.isArray(market.outcomes) ? market.outcomes : [];
+  const outcomeImages = Array.isArray(market.outcomeImages)
+    && market.outcomeImages.length === outcomes.length
+    ? market.outcomeImages
+    : null;
+  const outcomeCountryLabels = Array.isArray(market.outcomeCountryLabels)
+    && market.outcomeCountryLabels.length === outcomes.length
+    ? market.outcomeCountryLabels
+    : null;
+  const livePrices = Array.isArray(market.prices) && market.prices.length === outcomes.length
+    ? market.prices
+    : pricesFromReserves(market.reserves || []);
+  const championsFinalOptions = findChampionsLeagueFinalMarket([market])
+    ? finalMarketOptions(market)
+    : null;
+  const displayOutcomeIndices = Array.isArray(championsFinalOptions) && championsFinalOptions.length >= 2
+    ? championsFinalOptions.map(option => option.outcomeIndex)
+    : outcomes.map((_, i) => i);
+  const displayOutcomes = Array.isArray(championsFinalOptions) && championsFinalOptions.length >= 2
+    ? championsFinalOptions.map(option => option.label)
+    : outcomes;
+  const displayPrices = Array.isArray(championsFinalOptions) && championsFinalOptions.length >= 2
+    ? championsFinalOptions.map(option => option.price)
+    : livePrices;
+  const displayOutcomeImages = displayOutcomeIndices.map(i => outcomeImages?.[i] || null);
+  const displayOutcomeCountryLabels = displayOutcomeIndices.map(i => outcomeCountryLabels?.[i] || null);
+  const displayHistoryByOutcome = displayOutcomeIndices.map(i => historyByOutcome?.[i] || []);
+  const hasAnyDisplayLogo = displayOutcomeImages.some(Boolean);
+  const isResolved = market.status === 'resolved';
+  const isCanceled = market.status === 'canceled';
+  const isDisputed = market.status === 'disputed';
+  const winnerIndex = isResolved && market.outcome != null ? Number(market.outcome) : null;
+  const displayWinnerIndex = isResolved ? displayOutcomeIndices.indexOf(winnerIndex) : null;
+  const isTradingLocked = !isResolved && (market.seriesLocked || market.status !== 'active');
+  const lockedLabel = isCanceled ? 'Anulado' : isDisputed ? 'En disputa' : 'Pendiente';
+  const seriesSubtitle = formatSeriesSubtitle(market.seriesMeta);
+  const isOnchain = market.mode === 'onchain';
+  const isLive = typeof market.live === 'boolean'
+    ? (!isResolved && market.live)
+    : (
+        market.status === 'active' && market.startTime &&
+        new Date(market.startTime).getTime() <= Date.now() &&
+        (!market.endTime || new Date(market.endTime).getTime() > Date.now())
+      );
+  const isPending = !isResolved && market.status === 'active' && market.endTime &&
+    new Date(market.endTime).getTime() < Date.now() && !isLive;
+
+  function pctFor(i) {
+    if (isResolved) return displayWinnerIndex === i ? 100 : 0;
+    return Math.round((displayPrices[i] || 0) * 100);
+  }
+
+  function handleBet(i) {
+    setDepthOutcomeIndex(i);
+    if (isResolved || isTradingLocked) return;
+    if (!authenticated) { onOpenLogin?.(); return; }
+    const outcomeIndex = displayOutcomeIndices[i] ?? i;
+    setBet({
+      market,
+      outcome: displayOutcomes[i],
+      outcomeIndex,
+      outcomePct: pctFor(i),
+    });
+  }
+
+  // Sparkline color picker — winner accent on resolved
+  const lineColor = (i) => {
+    if (isResolved) return displayWinnerIndex === i ? 'var(--yes)' : 'var(--text-muted)';
+    return SERIES_COLORS[i % SERIES_COLORS.length];
+  };
+
+  return (
     <>
-      <Nav/>
-      <main style={{maxWidth:1100,margin:'0 auto',padding:isMobile?'24px 16px':'40px 48px'}}>
-        <button onClick={()=>navigate('/')} style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)',letterSpacing:'0.06em',background:'none',border:'none',cursor:'pointer',marginBottom:28,display:'flex',alignItems:'center',gap:6}}>
-          {t('detail.markets')}
-        </button>
+      <Nav onOpenLogin={onOpenLogin} />
+      <div className="category-bar-sticky"><CategoryBar /></div>
 
-        {resolved&&(
-          <div style={{background:'rgba(22,163,74,0.08)',border:'1px solid rgba(22,163,74,0.25)',borderRadius:14,padding:'18px 24px',marginBottom:32,display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
-            <div style={{display:'flex',alignItems:'center',gap:14}}>
-              <span style={{fontSize:28}}>{market.icon}</span>
-              <div>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.12em',marginBottom:4}}>{t('detail.resolvedDate', { date: market._resolvedDate })}</div>
-                <div style={{fontFamily:'var(--font-display)',fontSize:22,color:'var(--yes)',letterSpacing:'0.04em'}}>🏆 {market._winnerShort} — {t('detail.winner')}</div>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-secondary)',marginTop:3}}>{market._resolvedBy}</div>
-              </div>
-            </div>
-            <span style={{fontFamily:'var(--font-mono)',fontSize:10,letterSpacing:'0.1em',padding:'6px 14px',borderRadius:6,background:'rgba(22,163,74,0.12)',border:'1px solid rgba(22,163,74,0.3)',color:'var(--yes)'}}>{t('detail.resolved')}</span>
+      <main style={{
+        padding: isMobile ? '20px 16px 56px' : '28px 48px 80px',
+        maxWidth: 1100,
+        margin: '0 auto',
+      }}>
+        {/* Category + status badges */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          fontFamily: 'var(--font-mono)', fontSize: 10,
+          letterSpacing: '0.12em', color: 'var(--text-muted)',
+          textTransform: 'uppercase', marginBottom: 12,
+        }}>
+          <span>{market.category || 'general'}</span>
+          {isResolved && <span style={{ color: 'var(--green)' }}>· resuelto</span>}
+          {isCanceled && <span style={{ color: 'var(--red, #ef4444)' }}>· anulado</span>}
+          {isDisputed && <span style={{ color: '#f59e0b' }}>· en disputa</span>}
+          {isLive && <span style={{ color: '#dc2626', fontWeight: 700 }}>· en vivo</span>}
+          {isPending && !isLive && !isResolved && <span style={{ color: '#f59e0b' }}>· por resolver</span>}
+          {isTradingLocked && !isResolved && !isCanceled && !isDisputed && <span style={{ color: '#f59e0b' }}>· pendiente</span>}
+          {isOnchain && (
+            <span style={{
+              padding: '2px 8px', borderRadius: 6,
+              background: 'rgba(59,130,246,0.14)', border: '1px solid rgba(59,130,246,0.3)',
+              color: '#60a5fa',
+            }}>
+              on-chain · chain {market.chainId || CHAIN_ID}
+            </span>
+          )}
+          <span style={{ flex: 1 }} />
+          <ShareButton marketId={market.id} app="mvp" question={market.question} />
+        </div>
+
+        <h1 style={{
+          fontFamily: 'var(--font-display)',
+          fontSize: 'clamp(26px, 3vw, 38px)',
+          lineHeight: 1.2,
+          color: 'var(--text-primary)',
+          marginBottom: seriesSubtitle ? 8 : (isResolved && market.finalScore ? 12 : 22),
+        }}>
+          {market.question}
+        </h1>
+
+        {seriesSubtitle && (
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 12,
+            color: 'var(--text-secondary)',
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            marginBottom: isResolved && market.finalScore ? 12 : 22,
+          }}>
+            {seriesSubtitle}
           </div>
         )}
-        {awaiting&&(
-          <div style={{background:'rgba(148,163,184,0.06)',border:'1px solid rgba(148,163,184,0.25)',borderRadius:14,padding:'18px 24px',marginBottom:32,display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
-            <div style={{display:'flex',alignItems:'center',gap:14}}>
-              <span style={{fontSize:28}}>🔒</span>
-              <div>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.12em',marginBottom:4}}>{t('detail.resolvedDate', { date: market.deadline })}</div>
-                <div style={{fontFamily:'var(--font-display)',fontSize:22,color:'var(--text-primary)',letterSpacing:'0.04em'}}>{t('detail.awaitingTitle')}</div>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-secondary)',marginTop:3}}>{t('detail.awaitingSub')}</div>
-              </div>
-            </div>
-            <span style={{fontFamily:'var(--font-mono)',fontSize:10,letterSpacing:'0.1em',padding:'6px 14px',borderRadius:6,background:'rgba(148,163,184,0.1)',border:'1px solid rgba(148,163,184,0.3)',color:'var(--text-muted)'}}>{t('detail.toResolve')}</span>
+
+        <TeamMarketStrip market={market} outcomeImages={outcomeImages} />
+        <LiveScorePanel market={market} />
+
+        {/* Final-score strip */}
+        {isResolved && market.finalScore && (
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 10,
+            padding: '8px 14px', borderRadius: 10,
+            background: 'var(--surface1)', border: '1px solid var(--border)',
+            marginBottom: 22,
+            fontFamily: 'var(--font-mono)', fontSize: 13,
+            color: 'var(--text-primary)', letterSpacing: '0.03em',
+          }}>
+            <span style={{ color: 'var(--green)', fontWeight: 700 }}>FINAL</span>
+            <span>{market.finalScore}</span>
           </div>
         )}
 
-        <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 360px',gap:isMobile?24:48,alignItems:'start'}}>
-          <div>
-            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}>
-              <span style={{fontSize:18}}>{market.icon}</span>
-              <span style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.1em'}}>{market.categoryLabel}</span>
-              {resolved?(
-                <span style={{fontFamily:'var(--font-mono)',fontSize:9,letterSpacing:'0.1em',padding:'3px 8px',borderRadius:4,background:'rgba(184,144,10,0.1)',border:'1px solid rgba(184,144,10,0.25)',color:'var(--gold)'}}>{t('detail.closed')}</span>
-              ):awaiting?(
-                <span style={{fontFamily:'var(--font-mono)',fontSize:9,letterSpacing:'0.1em',padding:'3px 8px',borderRadius:4,background:'rgba(148,163,184,0.1)',border:'1px solid rgba(148,163,184,0.3)',color:'var(--text-muted)'}}>{t('detail.lockedClosed')}</span>
-              ):(
-                <>{market._source==='polymarket'&&<span className="mock-card-badge live">{t('card.live')}</span>}{market.trending&&<span className="mock-card-badge trending">{t('card.trending')}</span>}</>
+        {/* Two-column layout: chart + buy panel.
+            On phones, stack chart on top of the buy panel (single col)
+            so chart + outcome list use the full viewport width. */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile
+            ? 'minmax(0, 1fr)'
+            : 'minmax(0, 1.4fr) minmax(0, 1fr)',
+          gap: isMobile ? 18 : 28,
+          alignItems: 'start',
+        }}>
+          {/* Left: ring + history chart */}
+          <section style={{
+            padding: 20,
+            border: '1px solid var(--border)',
+            borderRadius: 14,
+            background: 'var(--surface1)',
+          }}>
+            {displayOutcomes.length === 2 && (
+              <div style={{ marginBottom: 16 }}>
+                {isResolved ? (
+                  <>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', marginBottom: 7, textTransform: 'uppercase' }}>
+                      Resultado oficial
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--green)' }}>
+                      {displayWinnerIndex >= 0 ? displayOutcomes[displayWinnerIndex] : outcomes[winnerIndex] || '—'}
+                    </div>
+                  </>
+                ) : (
+                  <p style={{ margin: 0, color: 'var(--text-secondary)', fontFamily: 'var(--font-body)', fontSize: 13, lineHeight: 1.55 }}>
+                    La probabilidad se ajusta con cada trade. Compra más barato cuando hay desacuerdo, más caro cuando hay consenso.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Price history chart */}
+            <div style={{
+              padding: '10px 4px 4px',
+              borderTop: displayOutcomes.length === 2 ? '1px solid var(--border)' : 'none',
+              marginTop: displayOutcomes.length === 2 ? 8 : 0,
+              position: 'relative',
+            }}>
+              <ChartWatermark />
+              <div style={{
+                fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em',
+                color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 10,
+              }}>
+                {isResolved ? 'Historial' : 'Tiempo real'} · 30d
+              </div>
+              {historyByOutcome === null ? (
+                <div style={{ height: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+                  Cargando histórico…
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {displayOutcomes.slice(0, 6).map((label, i) => (
+                    <Sparkline
+                      key={i}
+                      data={displayHistoryByOutcome[i] || []}
+                      color={lineColor(i)}
+                      label={label.length > 11 ? `${label.slice(0, 10)}…` : label}
+                      labelWidth={70}
+                      showValue
+                      valueWidth={48}
+                      targetPct={pctFor(i)}
+                      seed={`${market.id}-${i}`}
+                      height={displayOutcomes.length === 2 ? 70 : 36}
+                      fill={i === 0 || (isResolved && displayWinnerIndex === i)}
+                      strokeWidth={isResolved && displayWinnerIndex === i ? 2.4 : 1.8}
+                    />
+                  ))}
+                </div>
               )}
             </div>
 
-            <h1 style={{fontFamily:'var(--font-display)',fontSize:'clamp(28px,3.5vw,44px)',letterSpacing:'0.03em',color:'var(--text-primary)',marginBottom:24,lineHeight:1.15}}>{localizedTitle(market, lang)}</h1>
-
-            {resolved&&market._description&&(
-              <p style={{fontSize:14,color:'var(--text-secondary)',lineHeight:1.7,marginBottom:28,borderLeft:'3px solid var(--yes)',paddingLeft:16}}>{market._description}</p>
-            )}
-
-            <div style={{display:'flex',flexWrap:'wrap',gap:0,borderTop:'1px solid var(--border)',borderBottom:'1px solid var(--border)',marginBottom:36}}>
-              <div style={{padding:'12px 16px 12px 0',marginRight:16,borderRight:'1px solid var(--border)'}}>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.1em',marginBottom:4}}>{volumeLabel}</div>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:isMobile?13:16,color:'var(--text-primary)'}}>${market.volume}</div>
-              </div>
-              <div style={{padding:'12px 16px 12px 0',marginRight:16,borderRight:'1px solid var(--border)'}}>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.1em',marginBottom:4}}>{locked?t('detail.closedOn'):t('detail.closesOn')}</div>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:isMobile?13:16,color:'var(--text-primary)'}}>{market.deadline}</div>
-              </div>
-              <div style={{padding:'12px 0'}}>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.1em',marginBottom:4}}>{t('detail.status')}</div>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:13,color:resolved?'var(--gold)':awaiting?'var(--text-muted)':'var(--green)'}}>{resolved?t('detail.statusClosed'):awaiting?t('detail.statusToResolve'):t('detail.statusActive')}</div>
-              </div>
+            <div style={{ marginTop: 18 }}>
+              <SeriesGameStrip
+                seriesMeta={market.seriesMeta}
+                currentMarketId={market.id}
+                navigate={navigate}
+              />
             </div>
 
-            {/* Price history chart — single for yes/no, multi for 3+ options */}
-            <div style={{background:'var(--surface1)',border:'1px solid var(--border)',borderRadius:16,marginBottom:24}}>
-              <div style={{padding:'16px 20px',borderBottom:'1px solid var(--border)',fontFamily:'var(--font-mono)',fontSize:10,letterSpacing:'0.1em',color:'var(--text-muted)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                <span>{locked?t('detail.priceHistory'):t('detail.realtime')}</span>
-                <span style={{color:'var(--text-muted)',fontSize:10,letterSpacing:'0.08em'}}>{t('detail.last30days')}</span>
-              </div>
-              <div style={{padding:'24px 24px 20px'}}>
-                {(market.options||[]).length<=2?(
-                  <Sparkline
-                    height={140}
-                    color="var(--yes)"
-                    strokeWidth={2.4}
-                    fill={true}
-                    showValue={true}
-                    valueWidth={60}
-                    data={extractSeries(market,history,0)}
-                    targetPct={market.options?.[0]?.pct??50}
-                    seed={`${market.id}-${market.options?.[0]?.label}`}
-                  />
-                ):(
-                  <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                    {localizedOptions(market, lang).map((opt,i)=>{
-                      const colors=['var(--yes)','var(--red)','var(--gold)','#8b5cf6'];
-                      return(
-                        <Sparkline
-                          key={i}
-                          height={isMobile?44:56}
-                          color={colors[i]||'var(--text-muted)'}
-                          strokeWidth={2.2}
-                          fill={i===0}
-                          label={opt.label.length>12?opt.label.slice(0,11)+'…':opt.label}
-                          labelWidth={isMobile?60:90}
-                          showValue={true}
-                          valueWidth={52}
-                          data={extractSeries(market,history,i)}
-                          targetPct={opt.pct}
-                          seed={`${market.id}-${opt.label}`}
-                        />
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div style={{background:'var(--surface1)',border:'1px solid var(--border)',borderRadius:16,marginBottom:24}}>
-              <div style={{padding:'16px 20px',borderBottom:'1px solid var(--border)',fontFamily:'var(--font-mono)',fontSize:10,letterSpacing:'0.1em',color:'var(--text-muted)'}}>
-                {resolved?t('detail.finalProbs'):awaiting?t('detail.closedAwaiting'):t('detail.currentProb')}
-              </div>
-              <ProbabilityChart options={localizedOptions(market, lang)} resolved={resolved} winner={market._winner} awaiting={awaiting}/>
-            </div>
-
-            <div style={{marginBottom:40}}>
-              <div style={{fontFamily:'var(--font-mono)',fontSize:10,letterSpacing:'0.1em',color:'var(--text-muted)',marginBottom:12}}>{resolved?t('detail.finalResults'):t('detail.results')}</div>
-              <div style={{display:'flex',flexDirection:'column',gap:10}}>
-                {localizedOptions(market, lang).map((opt,i)=>{
-                  const isWinner=resolved&&opt.label===market._winner;
-                  const isLoser=resolved&&opt.label!==market._winner;
-                  const displayPct=finalPct(opt,market); // 100/0 when resolved, else opt.pct
-                  return(
-                    <div key={i} style={{background:isWinner?'rgba(22,163,74,0.06)':i===0?'rgba(0,201,107,0.05)':'rgba(255,59,59,0.04)',border:`1px solid ${isWinner?'rgba(22,163,74,0.3)':i===0?'rgba(0,201,107,0.25)':'rgba(255,59,59,0.2)'}`,borderRadius:12,padding:'16px 20px',display:'flex',alignItems:'center',gap:16,opacity:isLoser?0.45:1,cursor:locked?'default':'pointer',transition:'border-color 0.2s'}}
-                      onClick={()=>!locked&&openBet(opt.label,opt.pct,i)}
-                      onMouseOver={e=>!locked&&(e.currentTarget.style.borderColor=i===0?'rgba(0,201,107,0.6)':'rgba(255,59,59,0.5)')}
-                      onMouseOut={e=>!locked&&(e.currentTarget.style.borderColor=isWinner?'rgba(22,163,74,0.3)':i===0?'rgba(0,201,107,0.25)':'rgba(255,59,59,0.2)')}>
-                      <div style={{flex:1}}>
-                        <div style={{display:'flex',justifyContent:'space-between',marginBottom:8,alignItems:'center'}}>
-                          <div style={{display:'flex',alignItems:'center',gap:8}}>
-                            {isWinner&&<span style={{fontSize:16}}>🏆</span>}
-                            <span style={{fontWeight:600,fontSize:15,color:isWinner?'var(--yes)':i===0?'var(--yes)':'var(--red)'}}>{opt.label}</span>
-                          </div>
-                          <span style={{fontFamily:'var(--font-mono)',fontSize:15,fontWeight:500,color:isWinner?'var(--yes)':i===0?'var(--yes)':'var(--red)'}}>{displayPct}%</span>
-                        </div>
-                        <div style={{height:4,background:'var(--surface3)',borderRadius:2,overflow:'hidden'}}>
-                          <div style={{height:'100%',width:`${displayPct}%`,background:isWinner?'var(--yes)':i===0?'var(--yes)':'var(--red)',borderRadius:2}}/>
-                        </div>
-                      </div>
-                      {!locked&&(
-                        <button className={i===0?'btn-yes':'btn-danger'} style={{padding:'8px 16px',fontSize:12,flexShrink:0,whiteSpace:'nowrap'}}
-                          onClick={e=>{e.stopPropagation();openBet(opt.label,opt.pct,i);}}>
-                          {t('detail.buy')}
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <TabsSection mock={mock} opt0={opt0} opt1={opt1} comments={mock.comments}/>
-          </div>
-
-          <div style={{position:isMobile?'static':'sticky',top:88}}>
-            {resolved?(
-              <div style={{background:'var(--surface1)',border:'1px solid rgba(22,163,74,0.3)',borderRadius:16,padding:24}}>
-                <div style={{fontFamily:'var(--font-display)',fontSize:20,letterSpacing:'0.04em',color:'var(--yes)',marginBottom:8}}>{t('detail.marketResolved')}</div>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.08em',marginBottom:20}}>{market._resolvedDate} · {market._resolvedBy}</div>
-                <div style={{background:'var(--surface2)',borderRadius:10,padding:16,marginBottom:20}}>
-                  <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.1em',marginBottom:10}}>{t('detail.officialWinner')}</div>
-                  <div style={{fontFamily:'var(--font-display)',fontSize:24,color:'var(--yes)',letterSpacing:'0.04em',marginBottom:4}}>🏆 {market._winnerShort}</div>
-                  <div style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-secondary)'}}>{market._resolvedBy}</div>
+            {displayOutcomes.length === 2 ? (
+              <ProbabilityGaugeRow
+                outcomes={displayOutcomes}
+                outcomeImages={displayOutcomeImages}
+                pctFor={pctFor}
+                isResolved={isResolved}
+                winnerIndex={displayWinnerIndex}
+                lineColor={lineColor}
+              />
+            ) : (
+              <div style={{ marginTop: 18 }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', marginBottom: 8 }}>
+                  Probabilidades
                 </div>
-                <div style={{borderTop:'1px solid var(--border)',paddingTop:16}}>
-                  {localizedOptions(market, lang).map((opt,i)=>{
-                    const isWinner=opt.label===market._winner;
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {displayOutcomes.map((label, i) => {
+                    const pct = pctFor(i);
+                    const isWinner = isResolved && displayWinnerIndex === i;
+                    const logo = displayOutcomeImages?.[i] || null;
+                    const countryLabel = displayOutcomeCountryLabels?.[i] || null;
                     return (
-                      <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid var(--border)',fontFamily:'var(--font-mono)',fontSize:12}}>
-                        <span style={{color:isWinner?'var(--yes)':'var(--text-muted)'}}>{isWinner?'✓':'✗'} {opt.label}</span>
-                        <span style={{color:isWinner?'var(--yes)':'var(--text-muted)',fontWeight:isWinner?600:400}}>{isWinner?100:0}%</span>
+                      <div key={i} style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        padding: '4px 10px', borderRadius: 16,
+                        border: `1px solid ${isWinner ? 'rgba(0,232,122,0.35)' : 'var(--border)'}`,
+                        background: isWinner ? 'rgba(0,232,122,0.06)' : 'var(--surface2)',
+                        fontFamily: 'var(--font-mono)', fontSize: 11,
+                        color: isWinner ? 'var(--green)' : 'var(--text-secondary)',
+                        opacity: isResolved && !isWinner ? 0.55 : 1,
+                      }}>
+                        {logo ? (
+                          <img
+                            src={logo}
+                            alt=""
+                            style={{ width: 18, height: 18, objectFit: 'contain', flexShrink: 0 }}
+                            onError={(event) => { event.currentTarget.style.display = 'none'; }}
+                          />
+                        ) : hasAnyDisplayLogo ? (
+                          <span style={{ width: 18, height: 18, flexShrink: 0 }} aria-hidden="true" />
+                        ) : null}
+                        <span style={{
+                          display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+                          background: lineColor(i),
+                        }} />
+                        {label} · {pct}%
+                        {countryLabel && (
+                          <span style={{
+                            maxWidth: 90,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            color: 'var(--text-muted)',
+                            textTransform: 'uppercase',
+                            fontSize: 9,
+                          }}>
+                            {countryLabel}
+                          </span>
+                        )}
                       </div>
                     );
                   })}
                 </div>
-                <button disabled style={{width:'100%',marginTop:20,padding:'12px 0',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)',letterSpacing:'0.08em',cursor:'not-allowed'}}>{t('detail.winningsPaid')}</button>
-                <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',textAlign:'center',marginTop:10}}>{t('detail.settledOnchain')}</p>
-              </div>
-            ):awaiting?(
-              <div style={{background:'var(--surface1)',border:'1px solid rgba(148,163,184,0.3)',borderRadius:16,padding:24}}>
-                <div style={{fontFamily:'var(--font-display)',fontSize:20,letterSpacing:'0.04em',color:'var(--text-primary)',marginBottom:8}}>{t('detail.marketClosed')}</div>
-                <div style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',letterSpacing:'0.08em',marginBottom:20}}>{t('detail.closedAt', { date: market.deadline })}</div>
-                <div style={{background:'var(--surface2)',borderRadius:10,padding:16,marginBottom:20,textAlign:'center'}}>
-                  <div style={{fontSize:32,marginBottom:8}}>🔒</div>
-                  <div style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-secondary)',lineHeight:1.5}}>{t('detail.officialSoon')}</div>
-                </div>
-                <button disabled style={{width:'100%',padding:'12px 0',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-muted)',letterSpacing:'0.08em',cursor:'not-allowed'}}>{t('detail.waitingResult')}</button>
-                <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',textAlign:'center',marginTop:10}}>{t('detail.betsClosed')}</p>
-              </div>
-            ):(
-              <div style={{background:'var(--surface1)',border:'1px solid var(--border-active)',borderRadius:16,padding:24}}>
-                <div style={{fontFamily:'var(--font-display)',fontSize:20,letterSpacing:'0.04em',color:'var(--text-primary)',marginBottom:20}}>{t('detail.buyTitle')}</div>
-                <p style={{fontSize:13,color:'var(--text-muted)',marginBottom:20}}>{t('detail.pickOutcome')}</p>
-                <div style={{borderTop:'1px solid var(--border)',paddingTop:20}}>
-                  {localizedOptions(market, lang).map((opt,i)=>(
-                    <button key={i} className={i===0?'btn-yes':'btn-danger'} style={{width:'100%',marginBottom:10}} onClick={()=>openBet(opt.label,opt.pct,i)}>
-                      {opt.label} · {opt.pct}%
-                    </button>
-                  ))}
-                </div>
-                <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',textAlign:'center',marginTop:8}}>{t('detail.onchain')}</p>
               </div>
             )}
-          </div>
+          </section>
+
+          {/* Right: outcomes + buy buttons */}
+          <aside style={{
+            padding: 20,
+            border: '1px solid var(--border)',
+            borderRadius: 14,
+            background: 'var(--surface1)',
+            // Sticky only when there's a sibling column to the left.
+            // On phones the panel is stacked below the chart and
+            // shouldn't follow scroll.
+            position: isMobile ? 'static' : 'sticky',
+            top: isMobile ? undefined : 92,
+          }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 12 }}>
+              {isResolved ? 'Resultado' : isTradingLocked ? lockedLabel : 'Elige un resultado'}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+              {displayOutcomes.map((label, i) => {
+                const pct = pctFor(i);
+                const isWinner = isResolved && displayWinnerIndex === i;
+                const logo = displayOutcomeImages?.[i] || null;
+                const countryLabel = displayOutcomeCountryLabels?.[i] || null;
+                return (
+                  <button
+                    key={i}
+                    onClick={() => handleBet(i)}
+                    onMouseEnter={() => setDepthOutcomeIndex(i)}
+                    onFocus={() => setDepthOutcomeIndex(i)}
+                    disabled={isResolved || isTradingLocked}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'minmax(0, 1fr) auto auto',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: '10px 14px',
+                      borderRadius: 10,
+                      border: `1px solid ${isWinner ? 'rgba(0,232,122,0.35)' : 'var(--border)'}`,
+                      background: isWinner ? 'rgba(0,232,122,0.08)' : 'var(--surface2)',
+                      color: 'var(--text-primary)',
+                      fontFamily: 'var(--font-body)',
+                      fontSize: 13,
+                      cursor: isResolved || isTradingLocked ? 'default' : 'pointer',
+                      opacity: isResolved && !isWinner ? 0.55 : 1,
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, textAlign: 'left' }}>
+                      {logo ? (
+                        <img
+                          src={logo}
+                          alt=""
+                          style={{ width: 28, height: 28, objectFit: 'contain', flexShrink: 0 }}
+                          onError={(event) => { event.currentTarget.style.display = 'none'; }}
+                        />
+                      ) : hasAnyDisplayLogo ? (
+                        <span style={{ width: 28, height: 28, flexShrink: 0 }} aria-hidden="true" />
+                      ) : null}
+                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {label}
+                      </span>
+                      {countryLabel && (
+                        <span style={{
+                          maxWidth: 90,
+                          padding: '3px 7px',
+                          borderRadius: 999,
+                          background: 'var(--surface1)',
+                          border: '1px solid var(--border)',
+                          color: 'var(--text-secondary)',
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 9,
+                          letterSpacing: '0.06em',
+                          textTransform: 'uppercase',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          flexShrink: 0,
+                        }}>
+                          {countryLabel}
+                        </span>
+                      )}
+                    </span>
+                    <span style={{
+                      fontFamily: 'var(--font-mono)', fontSize: 12,
+                      fontWeight: isWinner ? 700 : 500,
+                      color: isWinner ? 'var(--green)' : 'var(--text-secondary)',
+                    }}>
+                      {pct}¢
+                    </span>
+                    <span style={{
+                      fontFamily: 'var(--font-mono)', fontSize: 10,
+                      padding: '3px 10px', borderRadius: 6,
+                      background: isResolved
+                        ? (isWinner ? 'rgba(0,232,122,0.18)' : 'transparent')
+                        : 'rgba(0,232,122,0.12)',
+                      color: isResolved ? (isWinner ? 'var(--green)' : 'var(--text-muted)') : 'var(--green)',
+                      letterSpacing: '0.06em',
+                    }}>
+                      {isResolved ? (isWinner ? 'GANÓ' : '—') : isTradingLocked ? lockedLabel.toUpperCase() : 'ELEGIR'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <AmmDepthPanel
+              marketId={market.id}
+              outcomeIndex={displayOutcomeIndices[depthOutcomeIndex] ?? 0}
+              outcomeLabel={displayOutcomes[depthOutcomeIndex]}
+              disabled={isResolved || isTradingLocked}
+            />
+
+            <div style={{
+              display: 'flex', justifyContent: 'space-between',
+              fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)',
+              borderTop: '1px solid var(--border)', paddingTop: 12,
+              letterSpacing: '0.04em',
+            }}>
+              <span>VOL ${Number(market.tradeVolume || 0).toLocaleString('en-US')}</span>
+              <span>{market.endTime ? `cierra ${formatDeadline(market.endTime)}` : ''}</span>
+            </div>
+          </aside>
         </div>
+
+        {/* Reglas / methodology */}
+        <section style={{
+          marginTop: 32, padding: 20,
+          border: '1px solid var(--border)', borderRadius: 14,
+          background: 'var(--surface1)',
+        }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 10 }}>
+            Reglas
+          </div>
+          <p style={{ fontFamily: 'var(--font-body)', fontSize: 13, lineHeight: 1.6, color: 'var(--text-secondary)' }}>
+            Mercado liquidado en {isOnchain ? 'MXNB on-chain (Arbitrum) con firma delegada vía Turnkey' : 'MXNP off-chain'}.
+            {market.resolverType && (
+              <> Resolución vía <strong>{market.resolverSource || market.resolverType}</strong>.</>
+            )}
+            {market.resolvedAt && (
+              <> Resuelto el {formatDeadline(market.resolvedAt)}.</>
+            )}
+          </p>
+        </section>
       </main>
 
-      <BetModal open={betModal.open} onClose={()=>setBetModal(b=>({...b,open:false}))}
-        outcome={betModal.outcome} outcomePct={betModal.pct} outcomeIndex={betModal.outcomeIndex} marketId={market.id}
-        marketTitle={localizedTitle(market, lang)} clobTokenId={betModal.clobTokenId} isNegRisk={betModal.isNegRisk} market={market}/>
+      <BetModal
+        open={!!bet}
+        onClose={() => setBet(null)}
+        outcome={bet?.outcome}
+        outcomePct={bet?.outcomePct}
+        outcomeIndex={bet?.outcomeIndex}
+        marketId={bet?.market?.id}
+        marketTitle={bet?.market?.question}
+        market={bet?.market}
+        onOpenLogin={onOpenLogin}
+      />
+
+      <Footer />
     </>
   );
 }

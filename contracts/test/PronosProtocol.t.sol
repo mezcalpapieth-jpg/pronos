@@ -50,6 +50,7 @@ contract PronosProtocolTest is Test {
     address liqRes    = address(0x222);
     address emerRes   = address(0x333);
     address feeColl   = address(0x444);
+    address creator   = address(0x555);
     address alice     = address(0xA);
     address bob       = address(0xB);
     address carol     = address(0xC);
@@ -81,6 +82,7 @@ contract PronosProtocolTest is Test {
 
         // Mint USDC for everyone
         usdc.mint(admin, 1_000_000 * ONE_USDC);
+        usdc.mint(creator, 100_000 * ONE_USDC);
         usdc.mint(alice, 100_000 * ONE_USDC);
         usdc.mint(bob,   100_000 * ONE_USDC);
         usdc.mint(carol, 100_000 * ONE_USDC);
@@ -141,6 +143,48 @@ contract PronosProtocolTest is Test {
         assertTrue(active);
     }
 
+    function test_marketCreatorCanCreateAfterSafeOwnsFactory() public {
+        vm.startPrank(admin);
+        factory.setMarketCreator(creator);
+        factory.transferOwnership(bob);
+        vm.stopPrank();
+
+        vm.startPrank(creator);
+        usdc.approve(address(factory), 1_000 * ONE_USDC);
+        uint256 id = factory.createMarket(
+            "Will the creator keep admin market creation automatic?",
+            "deportes",
+            block.timestamp + 30 days,
+            "Pronos admin",
+            1_000 * ONE_USDC
+        );
+        vm.stopPrank();
+
+        assertEq(id, 0);
+        assertEq(factory.owner(), bob);
+        assertEq(factory.marketCreator(), creator);
+        assertEq(factory.marketCount(), 1);
+    }
+
+    function test_nonCreatorCannotCreateAfterSafeOwnsFactory() public {
+        vm.startPrank(admin);
+        factory.setMarketCreator(creator);
+        factory.transferOwnership(bob);
+        vm.stopPrank();
+
+        vm.startPrank(alice);
+        usdc.approve(address(factory), 1_000 * ONE_USDC);
+        vm.expectRevert("MarketFactory: not creator");
+        factory.createMarket(
+            "Can a random wallet create markets?",
+            "deportes",
+            block.timestamp + 30 days,
+            "Pronos admin",
+            1_000 * ONE_USDC
+        );
+        vm.stopPrank();
+    }
+
     function test_createMarket_pool_has_reserves() public {
         _createTestMarket(10_000 * ONE_USDC);
         (address poolAddr,,,,, ) = factory.getMarket(0);
@@ -169,10 +213,10 @@ contract PronosProtocolTest is Test {
         vm.stopPrank();
     }
 
-    function test_createMarket_reverts_non_owner() public {
+    function test_createMarket_reverts_non_creator() public {
         vm.startPrank(alice);
         usdc.approve(address(factory), 10_000 * ONE_USDC);
-        vm.expectRevert("MarketFactory: not owner");
+        vm.expectRevert("MarketFactory: not creator");
         factory.createMarket("test?", "cat", block.timestamp + 1 days, "src", 10_000 * ONE_USDC);
         vm.stopPrank();
     }
@@ -591,5 +635,363 @@ contract PronosProtocolTest is Test {
         vm.prank(admin);
         factory.transferOwnership(alice);
         assertEq(factory.owner(), alice);
+    }
+
+    // ─── Dust recovery (recoverDust / sweepDust) ─────────────────────
+
+    function test_sweepDust_recovers_seed_after_grace() public {
+        uint256 seed = 10_000 * ONE_USDC;
+        _createTestMarket(seed);
+        (address poolAddr,,,,, ) = factory.getMarket(0);
+        PronosAMM pool = PronosAMM(poolAddr);
+
+        // Alice buys YES, market resolves YES, Alice redeems
+        vm.startPrank(alice);
+        usdc.approve(address(pool), 1_000 * ONE_USDC);
+        uint256 aliceShares = pool.buy(true, 1_000 * ONE_USDC);
+        vm.stopPrank();
+
+        vm.prank(admin);
+        factory.resolveMarket(0, 1);
+
+        vm.prank(alice);
+        pool.redeem(aliceShares);
+
+        // Fast-forward past the grace period and sweep
+        vm.warp(block.timestamp + 30 days + 1);
+
+        address sweepRecipient = address(0xCAFE);
+        uint256 before = usdc.balanceOf(sweepRecipient);
+        vm.prank(admin);
+        factory.sweepDust(0, sweepRecipient);
+        uint256 after_ = usdc.balanceOf(sweepRecipient);
+
+        // Recipient receives the AMM's remaining collateral — should
+        // be approximately seed - alice's winning fraction. Either
+        // way it's strictly > 0 and strictly <= seed, and the AMM
+        // ends up with zero collateral.
+        assertGt(after_ - before, 0);
+        assertLe(after_ - before, seed);
+        assertEq(usdc.balanceOf(address(pool)), 0);
+    }
+
+    function test_sweepDust_reverts_before_grace_period() public {
+        _createTestMarket(10_000 * ONE_USDC);
+        vm.prank(admin);
+        factory.resolveMarket(0, 1);
+
+        // Try to sweep immediately — should revert.
+        vm.prank(admin);
+        vm.expectRevert(bytes("PronosAMM: grace period not over"));
+        factory.sweepDust(0, address(0xCAFE));
+
+        // 29 days in is still inside grace
+        vm.warp(block.timestamp + 29 days);
+        vm.prank(admin);
+        vm.expectRevert(bytes("PronosAMM: grace period not over"));
+        factory.sweepDust(0, address(0xCAFE));
+    }
+
+    function test_sweepDust_reverts_before_resolution() public {
+        _createTestMarket(10_000 * ONE_USDC);
+        // Skip ahead well past the would-be grace period — without
+        // resolution this should still revert.
+        vm.warp(block.timestamp + 60 days);
+        vm.prank(admin);
+        vm.expectRevert(bytes("PronosAMM: not resolved"));
+        factory.sweepDust(0, address(0xCAFE));
+    }
+
+    function test_sweepDust_idempotent() public {
+        _createTestMarket(5_000 * ONE_USDC);
+        vm.prank(admin);
+        factory.resolveMarket(0, 1);
+        vm.warp(block.timestamp + 30 days + 1);
+
+        address sink = address(0xCAFE);
+        vm.prank(admin);
+        factory.sweepDust(0, sink);
+        uint256 firstSweep = usdc.balanceOf(sink);
+
+        // Second call drains nothing further (AMM reserve is empty) but
+        // must not revert — lets a "sweep-all-resolved" cron run blindly.
+        vm.prank(admin);
+        factory.sweepDust(0, sink);
+        assertEq(usdc.balanceOf(sink), firstSweep);
+    }
+
+    function test_sweepDust_reverts_non_owner() public {
+        _createTestMarket(5_000 * ONE_USDC);
+        vm.prank(admin);
+        factory.resolveMarket(0, 1);
+        vm.warp(block.timestamp + 30 days + 1);
+
+        // alice isn't the owner — can't call sweepDust.
+        vm.prank(alice);
+        vm.expectRevert(bytes("MarketFactory: not owner"));
+        factory.sweepDust(0, alice);
+    }
+
+    function test_sweepDust_user_redeem_still_works_after_sweep() public {
+        // Edge case: a user who DOESN'T redeem within the grace period
+        // should still be able to redeem after the sweep. The sweep
+        // only drains the AMM's OWN winning reserve, not the
+        // collateral backing user-held tokens.
+        uint256 seed = 5_000 * ONE_USDC;
+        _createTestMarket(seed);
+        (address poolAddr,,,,, ) = factory.getMarket(0);
+        PronosAMM pool = PronosAMM(poolAddr);
+
+        // Alice buys YES but never redeems before sweep
+        vm.startPrank(alice);
+        usdc.approve(address(pool), 500 * ONE_USDC);
+        uint256 aliceShares = pool.buy(true, 500 * ONE_USDC);
+        vm.stopPrank();
+
+        vm.prank(admin);
+        factory.resolveMarket(0, 1);
+
+        vm.warp(block.timestamp + 30 days + 1);
+        vm.prank(admin);
+        factory.sweepDust(0, address(0xCAFE));
+
+        // Alice redeems after sweep — should still get 1:1 collateral
+        // for her winning shares.
+        uint256 aliceBefore = usdc.balanceOf(alice);
+        vm.prank(alice);
+        pool.redeem(aliceShares);
+        assertEq(usdc.balanceOf(alice) - aliceBefore, aliceShares);
+    }
+
+    function test_recoverDust_reverts_non_factory() public {
+        _createTestMarket(5_000 * ONE_USDC);
+        vm.prank(admin);
+        factory.resolveMarket(0, 1);
+        vm.warp(block.timestamp + 30 days + 1);
+
+        (address poolAddr,,,,, ) = factory.getMarket(0);
+        PronosAMM pool = PronosAMM(poolAddr);
+        // Bypassing the factory by calling the pool directly must
+        // fail — only the factory may sweep.
+        vm.prank(admin);
+        vm.expectRevert(bytes("PronosAMM: not factory"));
+        pool.recoverDust(admin);
+    }
+
+    // ─── Push-redeem (pushRedeem / redeemOnBehalf) ───────────────────
+
+    function test_pushRedeem_pays_each_holder() public {
+        _createTestMarket(10_000 * ONE_USDC);
+        (address poolAddr,,,,, ) = factory.getMarket(0);
+        PronosAMM pool = PronosAMM(poolAddr);
+
+        // Alice + Bob buy YES on the same market
+        vm.startPrank(alice);
+        usdc.approve(address(pool), 1_000 * ONE_USDC);
+        uint256 aliceShares = pool.buy(true, 1_000 * ONE_USDC);
+        vm.stopPrank();
+
+        vm.startPrank(bob);
+        usdc.approve(address(pool), 500 * ONE_USDC);
+        uint256 bobShares = pool.buy(true, 500 * ONE_USDC);
+        vm.stopPrank();
+
+        // Resolve YES, then admin pushes redemption to both holders
+        vm.prank(admin);
+        factory.resolveMarket(0, 1);
+
+        address[] memory holders = new address[](2);
+        holders[0] = alice;
+        holders[1] = bob;
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = aliceShares;
+        amounts[1] = bobShares;
+
+        uint256 aliceBefore = usdc.balanceOf(alice);
+        uint256 bobBefore = usdc.balanceOf(bob);
+        vm.prank(admin);
+        factory.pushRedeem(0, holders, amounts);
+
+        // Each holder received 1:1 collateral; neither sent a tx.
+        assertEq(usdc.balanceOf(alice) - aliceBefore, aliceShares);
+        assertEq(usdc.balanceOf(bob)   - bobBefore,   bobShares);
+        // Tokens burned.
+        assertEq(token.balanceOf(alice, pool.yesId()), 0);
+        assertEq(token.balanceOf(bob,   pool.yesId()), 0);
+    }
+
+    function test_pushRedeem_reverts_length_mismatch() public {
+        _createTestMarket(5_000 * ONE_USDC);
+        vm.prank(admin);
+        factory.resolveMarket(0, 1);
+
+        address[] memory holders = new address[](2);
+        holders[0] = alice;
+        holders[1] = bob;
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = 100;
+
+        vm.prank(admin);
+        vm.expectRevert(bytes("MarketFactory: length mismatch"));
+        factory.pushRedeem(0, holders, amounts);
+    }
+
+    function test_pushRedeem_reverts_empty() public {
+        _createTestMarket(5_000 * ONE_USDC);
+        vm.prank(admin);
+        factory.resolveMarket(0, 1);
+
+        address[] memory holders = new address[](0);
+        uint256[] memory amounts = new uint256[](0);
+
+        vm.prank(admin);
+        vm.expectRevert(bytes("MarketFactory: empty batch"));
+        factory.pushRedeem(0, holders, amounts);
+    }
+
+    function test_pushRedeem_reverts_non_owner() public {
+        _createTestMarket(5_000 * ONE_USDC);
+        vm.prank(admin);
+        factory.resolveMarket(0, 1);
+
+        address[] memory holders = new address[](1);
+        holders[0] = alice;
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = 100;
+
+        vm.prank(alice);
+        vm.expectRevert(bytes("MarketFactory: not owner"));
+        factory.pushRedeem(0, holders, amounts);
+    }
+
+    function test_pushRedeem_reverts_before_resolution() public {
+        _createTestMarket(5_000 * ONE_USDC);
+        address[] memory holders = new address[](1);
+        holders[0] = alice;
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = 1;
+
+        // Market still active — push should revert because the AMM
+        // isn't resolved yet, so redeemOnBehalf bails first.
+        vm.prank(admin);
+        vm.expectRevert(bytes("PronosAMM: not resolved"));
+        factory.pushRedeem(0, holders, amounts);
+    }
+
+    function test_cancelMarketBlocksTradingAndPushRefunds() public {
+        uint256 marketId = _createTestMarket(10_000 * ONE_USDC);
+        (address poolAddr,,,,, ) = factory.getMarket(marketId);
+        PronosAMM pool = PronosAMM(poolAddr);
+
+        vm.startPrank(alice);
+        usdc.approve(address(pool), 100 * ONE_USDC);
+        uint256 aliceShares = pool.buy(true, 100 * ONE_USDC);
+        vm.stopPrank();
+        assertEq(pool.costBasis(alice, 0), 100 * ONE_USDC);
+
+        vm.prank(admin);
+        factory.cancelMarket(marketId);
+
+        (,,,,, bool active) = factory.getMarket(marketId);
+        assertFalse(active);
+        assertTrue(pool.canceled());
+        assertTrue(pool.paused());
+
+        vm.startPrank(alice);
+        usdc.approve(address(pool), 1 * ONE_USDC);
+        vm.expectRevert(bytes("PronosAMM: canceled"));
+        pool.buy(true, 1 * ONE_USDC);
+        vm.stopPrank();
+
+        address[] memory holders = new address[](1);
+        holders[0] = alice;
+        uint8[][] memory outcomeIndexes = new uint8[][](1);
+        outcomeIndexes[0] = new uint8[](1);
+        outcomeIndexes[0][0] = 0;
+        uint256[][] memory burnAmounts = new uint256[][](1);
+        burnAmounts[0] = new uint256[](1);
+        burnAmounts[0][0] = aliceShares;
+        uint256[] memory payouts = new uint256[](1);
+        payouts[0] = 100 * ONE_USDC;
+
+        uint256 beforeBalance = usdc.balanceOf(alice);
+        vm.prank(admin);
+        factory.pushCancelRefund(marketId, holders, outcomeIndexes, burnAmounts, payouts);
+
+        assertEq(usdc.balanceOf(alice) - beforeBalance, 100 * ONE_USDC);
+        assertEq(token.balanceOf(alice, pool.yesId()), 0);
+        assertEq(pool.costBasis(alice, 0), 0);
+    }
+
+    function test_disputeBlocksRedeemAndCorrectsResolutionBeforePayout() public {
+        uint256 marketId = _createTestMarket(10_000 * ONE_USDC);
+        (address poolAddr,,,,, ) = factory.getMarket(marketId);
+        PronosAMM pool = PronosAMM(poolAddr);
+
+        vm.startPrank(alice);
+        usdc.approve(address(pool), 100 * ONE_USDC);
+        pool.buy(true, 100 * ONE_USDC);
+        vm.stopPrank();
+
+        vm.startPrank(bob);
+        usdc.approve(address(pool), 100 * ONE_USDC);
+        uint256 bobNoShares = pool.buy(false, 100 * ONE_USDC);
+        vm.stopPrank();
+
+        vm.prank(admin);
+        factory.resolveMarket(marketId, 1);
+
+        vm.prank(admin);
+        factory.openResolutionDispute(marketId);
+        assertTrue(pool.disputed());
+
+        vm.prank(alice);
+        vm.expectRevert(bytes("PronosAMM: disputed"));
+        pool.redeem(1);
+
+        vm.prank(admin);
+        factory.correctResolution(marketId, 2);
+        assertFalse(pool.disputed());
+        assertEq(pool.outcome(), 2);
+
+        uint256 beforeBalance = usdc.balanceOf(bob);
+        vm.prank(bob);
+        pool.redeem(bobNoShares);
+        assertEq(usdc.balanceOf(bob) - beforeBalance, bobNoShares);
+    }
+
+    function test_correctResolutionRevertsAfterAnyPayout() public {
+        uint256 marketId = _createTestMarket(10_000 * ONE_USDC);
+        (address poolAddr,,,,, ) = factory.getMarket(marketId);
+        PronosAMM pool = PronosAMM(poolAddr);
+
+        vm.startPrank(alice);
+        usdc.approve(address(pool), 100 * ONE_USDC);
+        uint256 aliceShares = pool.buy(true, 100 * ONE_USDC);
+        vm.stopPrank();
+
+        vm.prank(admin);
+        factory.resolveMarket(marketId, 1);
+        vm.prank(alice);
+        pool.redeem(aliceShares / 2);
+
+        vm.prank(admin);
+        factory.openResolutionDispute(marketId);
+        vm.prank(admin);
+        vm.expectRevert(bytes("PronosAMM: payouts started"));
+        factory.correctResolution(marketId, 2);
+    }
+
+    function test_redeemOnBehalf_reverts_non_factory() public {
+        _createTestMarket(5_000 * ONE_USDC);
+        (address poolAddr,,,,, ) = factory.getMarket(0);
+        PronosAMM pool = PronosAMM(poolAddr);
+
+        vm.prank(admin);
+        factory.resolveMarket(0, 1);
+
+        vm.prank(admin);
+        vm.expectRevert(bytes("PronosAMM: not factory"));
+        pool.redeemOnBehalf(alice, 100);
     }
 }

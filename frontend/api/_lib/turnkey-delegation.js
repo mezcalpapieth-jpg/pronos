@@ -1,0 +1,256 @@
+/**
+ * Turnkey delegated-signing policy helpers (M2).
+ *
+ * Goal: after a user authorizes ONE policy at signup (or first
+ * on-chain action), the Pronos backend API key can sign their
+ * on-chain trades transparently — zero wallet popups per trade.
+ *
+ * Policy scope (locked in /memory/onchain_turnkey_delegation.md):
+ *   - Allowed selectors: buy / sell / redeem / MXNB.approve
+ *   - Allowed contracts: MarketFactory + every Market it deploys
+ *   - Daily cap: 200,000 MXNB per user (MXN-pegged; ~$10k USD)
+ *   - Lifetime: 180 days, then re-auth via email OTP
+ *   - Blocked: withdrawals to external wallets, policy mutation,
+ *              key export, sub-org deletion
+ *
+ * The actual Turnkey `createPolicy` call is gated behind
+ * `TURNKEY_POLICIES_ENABLED`. In production, policy targets are the
+ * factories, collateral token, env-configured pools, plus the currently
+ * indexed protocol pools passed by the authorize endpoint.
+ */
+
+import {
+  isTurnkeyConfigured,
+  signTransactionForSuborg,
+  createDelegationPolicyOnSuborg,
+  deleteDelegationPolicyOnSuborg,
+} from './turnkey.js';
+
+// ── Tunables (keep in sync with onchain_turnkey_delegation.md) ──────
+
+export const DELEGATION_DAYS = 180;
+export const DELEGATION_DAILY_CAP_MXNB = 200_000;
+
+// Function selectors allowed by the user-delegated EVM policy.
+// Turnkey policies inspect the first 4 calldata bytes via
+// eth.tx.data[0..10] (0x + 8 hex chars).
+export const DELEGATION_ALLOWED_SELECTORS = Object.freeze([
+  '0x095ea7b3', // ERC20.approve(address,uint256)
+  '0xe24c469b', // PronosAMM.buy(bool,uint256)
+  '0xf571c5f3', // PronosAMM.sell(bool,uint256)
+  '0x01a9812c', // PronosAMM.buy(bool,uint256,uint256)
+  '0xde254659', // PronosAMM.sell(bool,uint256,uint256)
+  '0x62f791c0', // PronosAMMMulti.buy(uint8,uint256)
+  '0xd9515e0b', // PronosAMMMulti.sell(uint8,uint256)
+  '0xf6d956df', // PronosAMMMulti.buy(uint8,uint256,uint256)
+  '0x46280a80', // PronosAMMMulti.sell(uint8,uint256,uint256)
+  '0xdb006a75', // redeem(uint256)
+]);
+
+function parseAddressList(value) {
+  return String(value || '')
+    .split(/[,\s]+/)
+    .map(v => v.trim())
+    .filter(Boolean);
+}
+
+function normalizeAddress(value) {
+  const s = String(value || '').trim();
+  return /^0x[0-9a-fA-F]{40}$/.test(s) ? s.toLowerCase() : null;
+}
+
+// Contract addresses the policy will allow the backend key to call.
+function onchainConfig() {
+  return {
+    chainId: Number(process.env.ONCHAIN_CHAIN_ID || 0),
+    marketFactoryV1: process.env.ONCHAIN_MARKET_FACTORY_ADDRESS || null,
+    marketFactoryV2: process.env.ONCHAIN_MARKET_FACTORY_V2_ADDRESS || null,
+    collateralToken: process.env.ONCHAIN_COLLATERAL_ADDRESS || process.env.ONCHAIN_MXNB_ADDRESS || null,
+    marketPools: [
+      ...parseAddressList(process.env.ONCHAIN_MARKET_POOL_ADDRESSES),
+      ...parseAddressList(process.env.ONCHAIN_AMM_ADDRESSES),
+    ],
+  };
+}
+
+export function buildDelegationAllowedTargets({ cfg = onchainConfig(), extraMarketPools = [] } = {}) {
+  const ordered = [
+    cfg.marketFactoryV1,
+    cfg.marketFactoryV2,
+    cfg.collateralToken,
+    ...(Array.isArray(cfg.marketPools) ? cfg.marketPools : []),
+    ...(Array.isArray(extraMarketPools) ? extraMarketPools : []),
+  ];
+  const seen = new Set();
+  const out = [];
+  for (const value of ordered) {
+    const addr = normalizeAddress(value);
+    if (!addr || seen.has(addr)) continue;
+    seen.add(addr);
+    out.push(addr);
+  }
+  return out;
+}
+
+/**
+ * Is the on-chain delegation path wired? Endpoints use this to decide
+ * whether to hit Turnkey or record a simulated policy.
+ */
+export function isDelegationEnabled() {
+  if (process.env.TURNKEY_POLICIES_ENABLED !== 'true') return false;
+  if (!isTurnkeyConfigured()) return false;
+  const cfg = onchainConfig();
+  return Boolean(cfg.chainId > 0 && (cfg.marketFactoryV1 || cfg.marketFactoryV2) && cfg.collateralToken);
+}
+
+export function isSimulatedDelegationPolicyId(policyId) {
+  return String(policyId || '').startsWith('simulated-');
+}
+
+function timeMs(value) {
+  if (!value) return 0;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+export function deriveDelegationPolicyState({
+  policyId,
+  expiresAt,
+  authorizedAt,
+  latestPoolCreatedAt,
+  delegationEnabled,
+  nowMs = Date.now(),
+  refreshThresholdMs = 0,
+} = {}) {
+  const hasPolicy = Boolean(policyId);
+  const expMs = timeMs(expiresAt);
+  const authMs = timeMs(authorizedAt);
+  const latestPoolMs = timeMs(latestPoolCreatedAt);
+  const simulated = isSimulatedDelegationPolicyId(policyId);
+  const expired = !hasPolicy || expMs <= nowMs;
+  const staleForNewPools = hasPolicy && latestPoolMs > authMs;
+  const needsRealPolicy = hasPolicy && simulated && delegationEnabled === true;
+  const expiringSoon = hasPolicy && !expired && expMs - nowMs <= refreshThresholdMs;
+  const needsRefresh = hasPolicy && (expired || staleForNewPools || needsRealPolicy || expiringSoon);
+  const active = hasPolicy && !expired && !staleForNewPools && !needsRealPolicy;
+  const reusable = active && !expiringSoon;
+
+  return {
+    active,
+    reusable,
+    needsRefresh,
+    simulated,
+    expired,
+    expiringSoon,
+    staleForNewPools,
+    needsRealPolicy,
+    expMs,
+    authMs,
+    latestPoolMs,
+  };
+}
+
+// ── Policy creation ────────────────────────────────────────────────
+
+/**
+ * Create a delegation policy on the user's Turnkey sub-organization.
+ *
+ * Until `isDelegationEnabled()` returns true, we DO NOT call Turnkey —
+ * we return a simulated result so the UI flow, DB persistence, and
+ * revoke flow can be tested end-to-end.
+ *
+ * Params:
+ *   suborgId   — Turnkey sub-org UUID (from points_users.turnkey_sub_org_id)
+ *   backendApiPublicKey — the P-256 pubkey of our backend API key
+ *                         (the one in TURNKEY_API_PUBLIC_KEY). The
+ *                         policy scopes signing authority to this key.
+ *
+ * Returns { policyId, expiresAt, dailyCapMxnb, simulated }.
+ */
+export async function createDelegationPolicy({ suborgId, backendApiPublicKey, extraMarketPools = [] }) {
+  if (!suborgId) throw new Error('suborgId required');
+  const expiresAt = new Date(Date.now() + DELEGATION_DAYS * 86_400_000);
+
+  if (!isDelegationEnabled()) {
+    // Simulated path — record intent, surface in UI, plumb everything
+    // EXCEPT the actual signing authority. Swapped out by setting
+    // TURNKEY_POLICIES_ENABLED=true + the ONCHAIN_* env vars.
+    return {
+      policyId: `simulated-${suborgId.slice(0, 8)}-${Date.now()}`,
+      expiresAt: expiresAt.toISOString(),
+      dailyCapMxnb: DELEGATION_DAILY_CAP_MXNB,
+      simulated: true,
+    };
+  }
+
+  // ── Real Turnkey path ─────────────────────────────────────────────
+  // Policy grants the backend API key signing authority for EVM
+  // transactions on the configured chain, zero native value, selected
+  // function selectors, and known Pronos targets. Env targets are merged
+  // with currently indexed protocol pools so fresh/refresh policies can
+  // trade all deployed markets without hand-editing the env for each pool.
+  const cfg = onchainConfig();
+  const allowedTargets = buildDelegationAllowedTargets({ cfg, extraMarketPools });
+  if (allowedTargets.length === 0) {
+    throw new Error('onchain config missing marketFactory/collateralToken');
+  }
+  if (!backendApiPublicKey) {
+    throw new Error('backendApiPublicKey required (set TURNKEY_API_PUBLIC_KEY)');
+  }
+  const { policyId } = await createDelegationPolicyOnSuborg({
+    suborgId,
+    backendApiPublicKey,
+    allowedTargets,
+    chainId: cfg.chainId,
+    allowedFunctionSelectors: DELEGATION_ALLOWED_SELECTORS,
+    policyName: `pronos-delegation-${Date.now()}`,
+    notes: `Valid ${DELEGATION_DAYS} days; cap ${DELEGATION_DAILY_CAP_MXNB} MXNB/day`,
+  });
+  return {
+    policyId,
+    expiresAt: expiresAt.toISOString(),
+    dailyCapMxnb: DELEGATION_DAILY_CAP_MXNB,
+    simulated: false,
+  };
+}
+
+/**
+ * Revoke a previously-created policy. Same simulated/real split as
+ * creation.
+ */
+export async function revokeDelegationPolicy({ suborgId, policyId }) {
+  if (!suborgId || !policyId) throw new Error('suborgId + policyId required');
+  if (!isDelegationEnabled() || String(policyId).startsWith('simulated-')) {
+    return { revoked: true, simulated: true };
+  }
+  await deleteDelegationPolicyOnSuborg({ suborgId, policyId });
+  return { revoked: true, simulated: false };
+}
+
+// ── Signing ────────────────────────────────────────────────────────
+
+/**
+ * Sign an unsigned EVM transaction on behalf of the user via the
+ * backend API key, leaning on the delegation policy attached to
+ * their sub-org.
+ *
+ * Sign an unsigned EVM transaction via the delegation policy. The
+ * caller passes the user's EVM wallet address (signWithAddress) —
+ * usually sourced from points_users.wallet_address, which the
+ * onchain-trader already has from its pre-query. Saves a round-trip
+ * on every trade vs. looking it up from Turnkey each time.
+ */
+export async function signDelegatedTransaction({ suborgId, signWithAddress, unsignedTx }) {
+  if (!isDelegationEnabled()) {
+    const err = new Error('delegation_not_enabled');
+    err.status = 503;
+    throw err;
+  }
+  if (!suborgId || !unsignedTx) throw new Error('suborgId + unsignedTx required');
+  if (!signWithAddress) throw new Error('signWithAddress required');
+  return signTransactionForSuborg({
+    suborgId,
+    signWithAddress,
+    unsignedSerialized: unsignedTx,
+  });
+}

@@ -6,12 +6,26 @@ const sql      = neon(process.env.DATABASE_URL);
 const sqlWrite = sql;
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const FROM_EMAIL = 'Simon <simon@pronos.io>';
+const FROM_EMAIL = 'Pronos <support@pronos.io>';
+
+// Defensive HTML-entity escape for any user-supplied string before it
+// goes into the email body. `name` is freeform input so this matters —
+// even though the email is sent to the submitter's own address (so the
+// blast radius is just self-XSS in their own inbox), this keeps the
+// markup well-formed and avoids any client-specific surprises.
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 async function sendWelcomeEmail(email, name) {
   if (!RESEND_API_KEY) return false;
 
-  const greeting = name ? `Hola ${name}` : 'Hola';
+  const greeting = name ? `Hola ${escapeHtml(name)}` : 'Hola';
 
   const html = `<!DOCTYPE html>
 <html lang="es">

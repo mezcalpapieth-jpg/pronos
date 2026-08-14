@@ -26,7 +26,7 @@ const MIGRATIONS = [
   // Own protocol markets
   `CREATE TABLE IF NOT EXISTS protocol_markets (
     id              SERIAL PRIMARY KEY,
-    chain_id        INTEGER NOT NULL DEFAULT 421614,
+    chain_id        INTEGER NOT NULL DEFAULT 42161,
     factory_address TEXT NOT NULL,
     pool_address    TEXT NOT NULL,
     market_id       INTEGER NOT NULL,
@@ -224,6 +224,381 @@ const MIGRATIONS = [
   // Case-insensitive usernames: normalize existing rows and enforce uniqueness on LOWER(username)
   `UPDATE users SET username = LOWER(username) WHERE username IS NOT NULL AND username <> LOWER(username)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower ON users (LOWER(username))`,
+
+  // ── Points-app tables (off-chain, points-app branch only) ─────────────
+  // These live in the same Neon database as the MVP's protocol_* tables
+  // but share zero state with them. The points-app uses Turnkey for auth
+  // (separate user table) and runs the AMM math server-side (no on-chain
+  // events, no indexer). Full schema and indexes mirror _lib/points-schema.js.
+  `CREATE TABLE IF NOT EXISTS points_users (
+    id                   SERIAL PRIMARY KEY,
+    turnkey_sub_org_id   TEXT UNIQUE NOT NULL,
+    wallet_address       TEXT,
+    username             TEXT UNIQUE,
+    email                TEXT,
+    created_at           TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_points_users_username_lower ON points_users (LOWER(username))`,
+  `CREATE INDEX IF NOT EXISTS idx_points_users_wallet ON points_users(wallet_address)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_users_created_at
+    ON points_users(created_at DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS points_markets (
+    id              SERIAL PRIMARY KEY,
+    question        TEXT NOT NULL,
+    category        TEXT NOT NULL DEFAULT 'general',
+    icon            TEXT,
+    outcomes        JSONB NOT NULL,
+    reserves        JSONB NOT NULL,
+    seed_liquidity  NUMERIC(20,6) NOT NULL DEFAULT 500,
+    end_time        TIMESTAMPTZ NOT NULL,
+    resolution_src  TEXT,
+    status          TEXT NOT NULL DEFAULT 'active',
+    outcome         SMALLINT,
+    created_by      TEXT,
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    resolved_at     TIMESTAMPTZ,
+    resolved_by     TEXT
+  )`,
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES points_markets(id)`,
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT true`,
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS hidden_from_home BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS tournament_featured BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_status ON points_markets(status)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_end_time ON points_markets(end_time)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_category ON points_markets(category)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_active_parent_end
+    ON points_markets(status, end_time ASC, id ASC)
+    WHERE archived_at IS NULL AND parent_id IS NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_featured_active_end
+    ON points_markets(status, end_time ASC, id ASC)
+    WHERE archived_at IS NULL AND parent_id IS NULL AND featured = true`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_tournament_featured_active_end
+    ON points_markets(status, end_time ASC, id ASC)
+    WHERE archived_at IS NULL AND parent_id IS NULL AND tournament_featured = true`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_category_status_end
+    ON points_markets(category, status, end_time ASC, id ASC)
+    WHERE archived_at IS NULL AND parent_id IS NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_resolved_parent_time
+    ON points_markets(resolved_at DESC, id ASC)
+    WHERE archived_at IS NULL AND parent_id IS NULL AND status = 'resolved'`,
+
+  `CREATE TABLE IF NOT EXISTS points_balances (
+    username     TEXT PRIMARY KEY,
+    balance      NUMERIC(20,6) NOT NULL DEFAULT 0,
+    updated_at   TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_balances_rank
+    ON points_balances(balance DESC, username ASC)`,
+
+  `CREATE TABLE IF NOT EXISTS points_trades (
+    id              SERIAL PRIMARY KEY,
+    market_id       INTEGER NOT NULL REFERENCES points_markets(id),
+    username        TEXT NOT NULL,
+    side            TEXT NOT NULL CHECK (side IN ('buy', 'sell', 'redeem')),
+    outcome_index   SMALLINT NOT NULL,
+    shares          NUMERIC(30,18) NOT NULL,
+    collateral      NUMERIC(20,6) NOT NULL,
+    fee             NUMERIC(20,6) NOT NULL DEFAULT 0,
+    price_at_trade  NUMERIC(10,6) NOT NULL,
+    reserves_before JSONB,
+    reserves_after  JSONB,
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_trades_user ON points_trades(username)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_trades_market ON points_trades(market_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_trades_user_market ON points_trades(username, market_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_trades_user_created
+    ON points_trades(username, created_at DESC, market_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_trades_market_side_user
+    ON points_trades(market_id, side, username)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_trades_market_outcome_created
+    ON points_trades(market_id, outcome_index, created_at DESC)
+    WHERE side IN ('buy', 'sell')`,
+  `CREATE INDEX IF NOT EXISTS idx_points_trades_market_created
+    ON points_trades(market_id, created_at DESC)
+    WHERE side IN ('buy', 'sell')`,
+
+  `CREATE TABLE IF NOT EXISTS points_positions (
+    market_id       INTEGER NOT NULL REFERENCES points_markets(id),
+    username        TEXT NOT NULL,
+    outcome_index   SMALLINT NOT NULL,
+    shares          NUMERIC(30,18) NOT NULL DEFAULT 0,
+    cost_basis      NUMERIC(20,6) NOT NULL DEFAULT 0,
+    realized_pnl    NUMERIC(20,6) NOT NULL DEFAULT 0,
+    updated_at      TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (market_id, username, outcome_index)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_positions_user ON points_positions(username)`,
+
+  `CREATE TABLE IF NOT EXISTS points_limit_orders (
+    id                   SERIAL PRIMARY KEY,
+    market_id            INTEGER NOT NULL REFERENCES points_markets(id),
+    username             TEXT NOT NULL,
+    side                 TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
+    outcome_index        SMALLINT NOT NULL,
+    limit_price          NUMERIC(10,6) NOT NULL CHECK (limit_price > 0 AND limit_price < 1),
+    amount               NUMERIC(30,18) NOT NULL,
+    remaining_amount     NUMERIC(30,18) NOT NULL,
+    reserved_collateral  NUMERIC(20,6) NOT NULL DEFAULT 0,
+    reserved_shares      NUMERIC(30,18) NOT NULL DEFAULT 0,
+    maker_reward_accrued NUMERIC(20,6) NOT NULL DEFAULT 0,
+    maker_reward_paid    NUMERIC(20,6) NOT NULL DEFAULT 0,
+    maker_reward_last_at TIMESTAMPTZ DEFAULT NOW(),
+    status               TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'filled', 'cancelled', 'expired')),
+    filled_shares        NUMERIC(30,18) NOT NULL DEFAULT 0,
+    filled_collateral    NUMERIC(20,6) NOT NULL DEFAULT 0,
+    avg_fill_price       NUMERIC(10,6),
+    reason               TEXT,
+    expires_at           TIMESTAMPTZ,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    filled_at            TIMESTAMPTZ,
+    cancelled_at         TIMESTAMPTZ
+  )`,
+  `ALTER TABLE points_limit_orders ADD COLUMN IF NOT EXISTS maker_reward_accrued NUMERIC(20,6) NOT NULL DEFAULT 0`,
+  `ALTER TABLE points_limit_orders ADD COLUMN IF NOT EXISTS maker_reward_paid NUMERIC(20,6) NOT NULL DEFAULT 0`,
+  `ALTER TABLE points_limit_orders ADD COLUMN IF NOT EXISTS maker_reward_last_at TIMESTAMPTZ DEFAULT NOW()`,
+  `CREATE INDEX IF NOT EXISTS idx_points_limit_orders_market_outcome
+    ON points_limit_orders(market_id, outcome_index, side, status, limit_price, created_at)
+    WHERE status = 'open'`,
+  `CREATE INDEX IF NOT EXISTS idx_points_limit_orders_user
+    ON points_limit_orders(username, status, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_limit_orders_expiry
+    ON points_limit_orders(expires_at)
+    WHERE status = 'open' AND expires_at IS NOT NULL`,
+
+  `CREATE TABLE IF NOT EXISTS daily_claims (
+    username      TEXT NOT NULL,
+    claim_date    DATE NOT NULL,
+    amount        NUMERIC(20,6) NOT NULL,
+    streak_day    INTEGER NOT NULL,
+    claimed_at    TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (username, claim_date)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_daily_claims_user ON daily_claims(username, claim_date DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS points_streaks (
+    username        TEXT PRIMARY KEY,
+    current_streak  INTEGER NOT NULL DEFAULT 0,
+    last_claim_date DATE,
+    best_streak     INTEGER NOT NULL DEFAULT 0,
+    updated_at      TIMESTAMPTZ DEFAULT NOW()
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS points_distributions (
+    id             SERIAL PRIMARY KEY,
+    username       TEXT NOT NULL,
+    amount         NUMERIC(20,6) NOT NULL,
+    kind           TEXT NOT NULL,
+    reference_id   INTEGER,
+    reason         TEXT,
+    created_at     TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_distributions_user ON points_distributions(username, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_distributions_kind ON points_distributions(kind, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_distributions_created_kind_user
+    ON points_distributions(created_at DESC, kind, username)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_distributions_user_kind_ref
+    ON points_distributions(username, kind, reference_id, created_at DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS points_site_time_daily (
+    username      TEXT NOT NULL,
+    day           DATE NOT NULL DEFAULT CURRENT_DATE,
+    seconds       INTEGER NOT NULL DEFAULT 0,
+    last_path     TEXT,
+    last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (username, day)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_site_time_day
+    ON points_site_time_daily(day DESC, seconds DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_site_time_user
+    ON points_site_time_daily(username, day DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS points_publicity_daily (
+    source          TEXT NOT NULL,
+    day             DATE NOT NULL DEFAULT CURRENT_DATE,
+    visits          INTEGER NOT NULL DEFAULT 0,
+    unique_visitors INTEGER NOT NULL DEFAULT 0,
+    conversions     INTEGER NOT NULL DEFAULT 0,
+    last_seen_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (source, day)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_publicity_daily_day
+    ON points_publicity_daily(day DESC, source)`,
+  `CREATE TABLE IF NOT EXISTS points_publicity_visitors (
+    visitor_key    TEXT NOT NULL,
+    source         TEXT NOT NULL,
+    day            DATE NOT NULL DEFAULT CURRENT_DATE,
+    first_seen_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (visitor_key, source, day)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_publicity_visitors_source_day
+    ON points_publicity_visitors(source, day DESC)`,
+  `CREATE TABLE IF NOT EXISTS points_publicity_attributions (
+    username      TEXT PRIMARY KEY,
+    source        TEXT NOT NULL,
+    visitor_key   TEXT,
+    converted_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_publicity_attributions_source
+    ON points_publicity_attributions(source, converted_at DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS points_mananera_transcripts (
+    date_ymd          DATE PRIMARY KEY,
+    source            TEXT NOT NULL,
+    url               TEXT NOT NULL,
+    fetched_at        TIMESTAMPTZ NOT NULL,
+    raw_html_gzip     BYTEA NOT NULL,
+    raw_html_sha256   TEXT NOT NULL,
+    raw_html_bytes    INTEGER NOT NULL DEFAULT 0,
+    transcript_text   TEXT NOT NULL,
+    characters        INTEGER NOT NULL DEFAULT 0,
+    words             INTEGER NOT NULL DEFAULT 0,
+    n_turnos          INTEGER NOT NULL DEFAULT 0,
+    speakers          JSONB NOT NULL DEFAULT '[]'::jsonb,
+    turns             JSONB NOT NULL DEFAULT '[]'::jsonb,
+    parse_version     INTEGER NOT NULL DEFAULT 1,
+    complete          BOOLEAN NOT NULL DEFAULT true,
+    created_at        TIMESTAMPTZ DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_mananera_transcripts_fetched
+    ON points_mananera_transcripts(fetched_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_mananera_transcripts_source
+    ON points_mananera_transcripts(source, fetched_at DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS points_referrals (
+    id             SERIAL PRIMARY KEY,
+    referrer       TEXT NOT NULL,
+    referred       TEXT UNIQUE NOT NULL,
+    rewarded       BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at     TIMESTAMPTZ DEFAULT NOW(),
+    rewarded_at    TIMESTAMPTZ
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_referrals_referrer ON points_referrals(referrer)`,
+
+  `CREATE TABLE IF NOT EXISTS social_task_campaigns (
+    id             SERIAL PRIMARY KEY,
+    task_key       TEXT UNIQUE NOT NULL,
+    platform       TEXT NOT NULL,
+    target_url     TEXT NOT NULL,
+    label          TEXT NOT NULL,
+    description    TEXT,
+    reward         NUMERIC(20,6) NOT NULL DEFAULT 10,
+    hidden         BOOLEAN NOT NULL DEFAULT TRUE,
+    active         BOOLEAN NOT NULL DEFAULT TRUE,
+    expires_at     TIMESTAMPTZ NOT NULL,
+    created_by     TEXT,
+    created_at     TIMESTAMPTZ DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_social_task_campaigns_active_expiry
+    ON social_task_campaigns(active, expires_at DESC, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_social_task_campaigns_platform
+    ON social_task_campaigns(platform, created_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS social_tasks (
+    id             SERIAL PRIMARY KEY,
+    username       TEXT NOT NULL,
+    task_key       TEXT NOT NULL,
+    status         TEXT NOT NULL DEFAULT 'pending',
+    reward         NUMERIC(20,6) NOT NULL DEFAULT 0,
+    proof_url      TEXT,
+    reviewer       TEXT,
+    reviewed_at    TIMESTAMPTZ,
+    rejection_note TEXT,
+    created_at     TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(username, task_key)
+  )`,
+  `ALTER TABLE social_tasks ADD COLUMN IF NOT EXISTS reviewer TEXT`,
+  `ALTER TABLE social_tasks ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ`,
+  `ALTER TABLE social_tasks ADD COLUMN IF NOT EXISTS rejection_note TEXT`,
+  `CREATE INDEX IF NOT EXISTS idx_social_tasks_status ON social_tasks(status, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_social_tasks_review_history
+    ON social_tasks(status, reviewed_at DESC, created_at DESC)
+    WHERE status IN ('approved', 'rejected')`,
+  `CREATE TABLE IF NOT EXISTS social_task_reviews (
+    id             SERIAL PRIMARY KEY,
+    social_task_id INTEGER REFERENCES social_tasks(id) ON DELETE SET NULL,
+    username       TEXT NOT NULL,
+    task_key       TEXT NOT NULL,
+    action         TEXT NOT NULL CHECK (action IN ('approved', 'rejected')),
+    reward         NUMERIC(20,6) NOT NULL DEFAULT 0,
+    proof_url      TEXT,
+    reviewer       TEXT,
+    rejection_note TEXT,
+    reviewed_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at     TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_social_task_reviews_status_time
+    ON social_task_reviews(action, reviewed_at DESC, id DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_social_task_reviews_task
+    ON social_task_reviews(social_task_id, reviewed_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_social_task_reviews_user_time
+    ON social_task_reviews(username, reviewed_at DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS points_cycles (
+    id            SERIAL PRIMARY KEY,
+    label         TEXT,
+    started_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    ends_at       TIMESTAMPTZ NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'active',
+    created_at    TIMESTAMPTZ DEFAULT NOW(),
+    closed_at     TIMESTAMPTZ
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_cycles_status ON points_cycles(status, ends_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_cycles_closed_at
+    ON points_cycles(closed_at DESC)
+    WHERE status = 'closed'`,
+
+  `CREATE TABLE IF NOT EXISTS points_cycle_snapshots (
+    id             SERIAL PRIMARY KEY,
+    cycle_id       INTEGER NOT NULL REFERENCES points_cycles(id) ON DELETE CASCADE,
+    username       TEXT NOT NULL,
+    final_balance  NUMERIC(20,6) NOT NULL,
+    final_pnl      NUMERIC(20,6) NOT NULL DEFAULT 0,
+    rank           INTEGER NOT NULL,
+    created_at     TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(cycle_id, username)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_cycle_snapshots_cycle_rank
+    ON points_cycle_snapshots(cycle_id, rank ASC)`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS tournament_score NUMERIC(20,6)`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS market_pnl NUMERIC(20,6)`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS current_position_value NUMERIC(20,6)`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS inactivity_penalty NUMERIC(20,6)`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS inactive_days INTEGER`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS active_days INTEGER`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS qualifying_markets INTEGER`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS qualified BOOLEAN`,
+
+  `CREATE TABLE IF NOT EXISTS points_cycle_position_snapshots (
+    id              SERIAL PRIMARY KEY,
+    cycle_id        INTEGER REFERENCES points_cycles(id) ON DELETE SET NULL,
+    username        TEXT NOT NULL,
+    market_id       INTEGER NOT NULL REFERENCES points_markets(id) ON DELETE CASCADE,
+    outcome_index   SMALLINT NOT NULL,
+    shares          NUMERIC(30,18) NOT NULL DEFAULT 0,
+    cost_basis      NUMERIC(20,6) NOT NULL DEFAULT 0,
+    realized_pnl    NUMERIC(20,6) NOT NULL DEFAULT 0,
+    snapshotted_at  TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_cycle_position_snapshots_cycle_user
+    ON points_cycle_position_snapshots(cycle_id, username)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_cycle_position_snapshots_market
+    ON points_cycle_position_snapshots(market_id, outcome_index)`,
+
+  `CREATE TABLE IF NOT EXISTS points_top_holder_snapshots (
+    market_id      INTEGER PRIMARY KEY REFERENCES points_markets(id) ON DELETE CASCADE,
+    amm_mode       TEXT NOT NULL DEFAULT 'unified',
+    outcomes       JSONB NOT NULL DEFAULT '[]'::jsonb,
+    holders        JSONB NOT NULL DEFAULT '[]'::jsonb,
+    snapshotted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_top_holder_snapshots_time
+    ON points_top_holder_snapshots(snapshotted_at DESC)`,
 ];
 
 export default async function handler(req, res) {
@@ -251,15 +626,40 @@ export default async function handler(req, res) {
     console.warn('[migrate] key passed via query string — prefer Authorization: Bearer header');
   }
 
+  if (!process.env.DATABASE_URL) {
+    console.error('[migrate] DATABASE_URL is not set');
+    return res.status(500).json({ error: 'database_not_configured' });
+  }
+
   const results = [];
+  let wholeErr = null;
   for (const migration of MIGRATIONS) {
     try {
       await sql.query(migration);
       results.push({ sql: migration.slice(0, 60) + '…', ok: true });
     } catch (e) {
-      results.push({ sql: migration.slice(0, 60) + '…', ok: false, error: e.message });
+      console.error('[migrate] statement failed', {
+        head: migration.slice(0, 80),
+        message: e?.message,
+        code: e?.code,
+        detail: e?.detail,
+      });
+      results.push({
+        sql: migration.slice(0, 60) + '…',
+        ok: false,
+        error: e.message,
+        code: e.code,
+      });
+      wholeErr = wholeErr || e;
     }
   }
 
-  return res.status(200).json({ results });
+  // Return 200 if every statement succeeded, 207 (mixed) when at least one
+  // failed, so Vercel still shows a detail body instead of the generic
+  // FUNCTION_INVOCATION_FAILED crash page.
+  const anyFailed = results.some(r => !r.ok);
+  return res.status(anyFailed ? 207 : 200).json({
+    results,
+    firstError: wholeErr ? { message: wholeErr.message, code: wholeErr.code } : null,
+  });
 }

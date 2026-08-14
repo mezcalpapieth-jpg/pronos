@@ -21,7 +21,7 @@ const MAX_TOKENS = 4096;
 
 // Google News RSS — free, no key required
 const NEWS_FEEDS = [
-  { region: 'mexico', url: 'https://news.google.com/rss?hl=es-419&gl=MX&ceid=MX:es-419', label: 'MÉXICO & CDMX' },
+  { region: 'mexico', url: 'https://news.google.com/rss?hl=es-419&gl=MX&ceid=MX:es-419', label: 'MEXICO & LATAM' },
   { region: 'latam',  url: 'https://news.google.com/rss?hl=es-419&gl=US&ceid=US:es-419', label: 'LATAM' },
   { region: 'us',     url: 'https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en',     label: 'USA' },
   { region: 'world',  url: 'https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en&topic=w', label: 'MUNDO' },

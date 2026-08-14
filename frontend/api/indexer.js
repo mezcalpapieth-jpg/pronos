@@ -1,6 +1,11 @@
 import { neon } from '@neondatabase/serverless';
 import { ethers } from 'ethers';
 import { ensureProtocolSchema } from './_lib/protocol-schema.js';
+import { ensurePointsSchema } from './_lib/points-schema.js';
+import { runCrypto5MinTick } from './_lib/crypto-5min.js';
+import { shouldRunMinuteInterval } from './_lib/cron-multiplex.js';
+import { runAutoResolve } from './cron/points-auto-resolve.js';
+import { runProtocolAutoResolve } from './cron/protocol-auto-resolve.js';
 
 /**
  * /api/indexer — On-chain event indexer for Pronos protocol.
@@ -15,7 +20,7 @@ import { ensureProtocolSchema } from './_lib/protocol-schema.js';
  *   FACTORY_ADDRESS    — Deployed MarketFactory address
  *   ARB_RPC_URL        — Arbitrum RPC endpoint
  *
- * Supported aliases for Arbitrum Sepolia deployments:
+ * Supported aliases for Arbitrum deployments:
  *   PROTOCOL_CHAIN_ID / CHAIN_ID
  *   PRONOS_FACTORY_ADDRESS / VITE_PRONOS_ARB_SEPOLIA_FACTORY
  *   ARB_SEPOLIA_RPC / ARBITRUM_SEPOLIA_RPC_URL
@@ -31,6 +36,11 @@ const FACTORY_ABI = [
   'event MarketCreated(uint256 indexed marketId, address pool, string question, string category, uint256 endTime)',
   'event MarketResolved(uint256 indexed marketId, uint8 outcome)',
   'event MarketPaused(uint256 indexed marketId, bool paused)',
+  'event MarketCanceled(uint256 indexed marketId)',
+  'event ResolutionDisputeOpened(uint256 indexed marketId)',
+  'event ResolutionDisputeCleared(uint256 indexed marketId)',
+  'event MarketResolutionCorrected(uint256 indexed marketId, uint8 oldOutcome, uint8 newOutcome)',
+  'event CancelRefundPushed(uint256 indexed marketId, address indexed holder, uint256 payout)',
   'event FeesDistributed(uint256 treasury, uint256 liquidity, uint256 emergency)',
 ];
 
@@ -38,6 +48,11 @@ const FACTORY_V2_ABI = [
   'event MarketCreated(uint256 indexed marketId, address pool, string question, string category, uint256 endTime, string resolutionSource, string[] outcomes)',
   'event MarketResolved(uint256 indexed marketId, uint8 outcome)',
   'event MarketPaused(uint256 indexed marketId, bool paused)',
+  'event MarketCanceled(uint256 indexed marketId)',
+  'event ResolutionDisputeOpened(uint256 indexed marketId)',
+  'event ResolutionDisputeCleared(uint256 indexed marketId)',
+  'event MarketResolutionCorrected(uint256 indexed marketId, uint8 oldOutcome, uint8 newOutcome)',
+  'event CancelRefundPushed(uint256 indexed marketId, address indexed holder, uint256 payout)',
   'event FeesDistributed(uint256 treasury, uint256 liquidity, uint256 emergency)',
 ];
 
@@ -63,7 +78,7 @@ const AMM_MULTI_ABI = [
 const BLOCK_BATCH = 2000; // Process 2000 blocks at a time
 const DEFAULT_LOOKBACK_BLOCKS = 250000;
 const DEFAULT_MAX_BATCHES = 5;
-const CHAIN_ID = parseInteger(process.env.CHAIN_ID) || parseInteger(process.env.PROTOCOL_CHAIN_ID) || 421614;
+const CHAIN_ID = parseInteger(process.env.CHAIN_ID) || parseInteger(process.env.PROTOCOL_CHAIN_ID) || 42161;
 
 function parseInteger(value) {
   const n = Number.parseInt(value, 10);
@@ -141,12 +156,92 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'Unauthorized' });
   }
 
+  // ── Crypto 5-min boundary processing ──────────────────────────────
+  // Multiplexed onto this cron so we don't burn a second Vercel cron
+  // slot. runCrypto5MinTick is gated on VERCEL_ENV='production' so it
+  // does nothing on preview deploys (the feature stays dormant until
+  // points-app merges to main). On a 5-min boundary it fires the
+  // resolve+activate+create lifecycle for BTC and ETH; the rest of
+  // the time it's a fast no-op (minute-bucket gate inside the fn).
+  // Wrapped in try/catch so any crypto-5min failure can't break the
+  // on-chain indexer below.
+  let crypto5MinReport = null;
+  try {
+    await ensurePointsSchema(sql);
+    crypto5MinReport = await runCrypto5MinTick({ sql });
+  } catch (e) {
+    console.error('[indexer] crypto-5min tick failed', {
+      message: e?.message,
+      code: e?.code,
+    });
+    crypto5MinReport = { error: e?.message || 'crypto_5min_failed' };
+  }
+
+  // ── Points auto-resolver multiplex ────────────────────────────────
+  // Vercel's active project config may only schedule /api/indexer, and
+  // Hobby projects have tight cron-slot limits. Piggyback the points
+  // resolver on this already-running minute cron instead of relying on
+  // a separate /api/cron/points-auto-resolve schedule. Manual probe:
+  // /api/indexer?key=...&resolve=1 (add resolveDry=1 for dry-run).
+  let pointsAutoResolveReport = { status: 'skipped', reason: 'not_scheduled' };
+  const forceAutoResolve = req.query.resolve === '1' || req.query.autoResolve === '1';
+  const dryAutoResolve = req.query.resolveDry === '1' || req.query.resolveDry === 'true';
+  const shouldRunPointsAutoResolve = forceAutoResolve
+    || (isVercelCron && shouldRunMinuteInterval({ intervalMinutes: 15 }));
+  if (shouldRunPointsAutoResolve) {
+    try {
+      const result = await runAutoResolve({ dry: dryAutoResolve });
+      pointsAutoResolveReport = { status: 'ok', ...result };
+    } catch (e) {
+      console.error('[indexer] points-auto-resolve failed', {
+        message: e?.message,
+        code: e?.code,
+      });
+      pointsAutoResolveReport = {
+        status: 'error',
+        error: e?.message?.slice(0, 240) || 'points_auto_resolve_failed',
+      };
+    }
+  }
+
+  // ── Protocol auto-resolver multiplex ─────────────────────────────
+  // Same cadence as points, but the write path is an on-chain
+  // resolveMarket() transaction. Manual probe:
+  // /api/indexer?key=...&protocolResolve=1 (protocolResolveDry=1 for dry-run).
+  let protocolAutoResolveReport = { status: 'skipped', reason: 'not_scheduled' };
+  const forceProtocolAutoResolve = forceAutoResolve
+    || req.query.protocolResolve === '1'
+    || req.query.protocolAutoResolve === '1';
+  const dryProtocolAutoResolve = dryAutoResolve
+    || req.query.protocolResolveDry === '1'
+    || req.query.protocolResolveDry === 'true';
+  const shouldRunProtocolAutoResolve = forceProtocolAutoResolve
+    || (isVercelCron && shouldRunMinuteInterval({ intervalMinutes: 15 }));
+  if (shouldRunProtocolAutoResolve) {
+    try {
+      const result = await runProtocolAutoResolve({ dry: dryProtocolAutoResolve });
+      protocolAutoResolveReport = { status: 'ok', ...result };
+    } catch (e) {
+      console.error('[indexer] protocol-auto-resolve failed', {
+        message: e?.message,
+        code: e?.code,
+      });
+      protocolAutoResolveReport = {
+        status: 'error',
+        error: e?.message?.slice(0, 240) || 'protocol_auto_resolve_failed',
+      };
+    }
+  }
+
   const { factories, rpcUrl, startBlock, lookbackBlocks, maxBatches: configuredMaxBatches } = getIndexerConfig();
 
   if (!factories.length || !rpcUrl) {
     return res.status(200).json({
       status: 'skipped',
       reason: 'MarketFactory address or Arbitrum RPC URL not configured',
+      crypto5Min: crypto5MinReport,
+      pointsAutoResolve: pointsAutoResolveReport,
+      protocolAutoResolve: protocolAutoResolveReport,
     });
   }
 
@@ -159,7 +254,7 @@ export default async function handler(req, res) {
     const manualFromBlock = isManual ? parseInteger(req.query.fromBlock) : null;
     const manualToBlock = isManual ? parseInteger(req.query.toBlock) : null;
     const maxBatches = Math.min(Math.max(parseInteger(req.query.maxBatches) || configuredMaxBatches, 1), 25);
-    let processed = { markets: 0, liquidity: 0, trades: 0, resolutions: 0, redemptions: 0 };
+    let processed = { markets: 0, liquidity: 0, trades: 0, resolutions: 0, redemptions: 0, lifecycle: 0 };
     const factoryRuns = [];
 
     for (const factoryConfig of factories) {
@@ -195,6 +290,7 @@ export default async function handler(req, res) {
             trades: processed.trades - before.trades,
             resolutions: processed.resolutions - before.resolutions,
             redemptions: processed.redemptions - before.redemptions,
+            lifecycle: processed.lifecycle - before.lifecycle,
           },
         });
         fromBlock = toBlock + 1;
@@ -215,6 +311,9 @@ export default async function handler(req, res) {
       block: currentBlock,
       factories: factoryRuns,
       processed,
+      crypto5Min: crypto5MinReport,
+      pointsAutoResolve: pointsAutoResolveReport,
+      protocolAutoResolve: protocolAutoResolveReport,
     });
   } catch (e) {
     console.error('Indexer error:', {
@@ -306,12 +405,119 @@ async function indexFactoryRange(provider, factoryConfig, fromBlock, toBlock, pr
     const { marketId, outcome } = event.args;
     await sql`
       UPDATE protocol_markets
-      SET status = 'resolved', outcome = ${outcome}, resolved_at = NOW()
+      SET status = CASE
+            WHEN status IN ('canceled', 'disputed') THEN status ELSE 'resolved'
+          END,
+          outcome = CASE
+            WHEN status IN ('canceled', 'disputed') THEN outcome ELSE ${outcome}
+          END,
+          resolved_at = CASE
+            WHEN status IN ('canceled', 'disputed') THEN resolved_at ELSE NOW()
+          END
       WHERE chain_id = ${CHAIN_ID}
         AND factory_address = ${factoryConfig.address}
         AND market_id = ${marketId.toNumber()}
     `;
     processed.resolutions++;
+  }
+
+  const cancelEvents = await factory.queryFilter(factory.filters.MarketCanceled(), fromBlock, toBlock);
+  for (const event of cancelEvents) {
+    const { marketId } = event.args;
+    await sql`
+      UPDATE protocol_markets
+      SET previous_status = CASE WHEN status <> 'canceled' THEN status ELSE previous_status END,
+          status = 'canceled',
+          outcome = NULL,
+          lifecycle_note = COALESCE(lifecycle_note, 'Mercado anulado on-chain'),
+          lifecycle_updated_at = NOW(),
+          canceled_at = COALESCE(canceled_at, NOW()),
+          dispute_opened_at = NULL
+      WHERE chain_id = ${CHAIN_ID}
+        AND factory_address = ${factoryConfig.address}
+        AND market_id = ${marketId.toNumber()}
+    `;
+    processed.lifecycle++;
+  }
+
+  const disputeEvents = await factory.queryFilter(factory.filters.ResolutionDisputeOpened(), fromBlock, toBlock);
+  for (const event of disputeEvents) {
+    const { marketId } = event.args;
+    await sql`
+      UPDATE protocol_markets
+      SET previous_status = CASE WHEN status <> 'disputed' THEN status ELSE previous_status END,
+          status = 'disputed',
+          lifecycle_note = COALESCE(lifecycle_note, 'Resolución marcada en disputa on-chain'),
+          lifecycle_updated_at = NOW(),
+          dispute_opened_at = COALESCE(dispute_opened_at, NOW())
+      WHERE chain_id = ${CHAIN_ID}
+        AND factory_address = ${factoryConfig.address}
+        AND market_id = ${marketId.toNumber()}
+    `;
+    processed.lifecycle++;
+  }
+
+  const clearDisputeEvents = await factory.queryFilter(factory.filters.ResolutionDisputeCleared(), fromBlock, toBlock);
+  for (const event of clearDisputeEvents) {
+    const { marketId } = event.args;
+    await sql`
+      UPDATE protocol_markets
+      SET status = CASE
+            WHEN previous_status IN ('active', 'resolved') THEN previous_status
+            ELSE 'resolved'
+          END,
+          lifecycle_note = COALESCE(lifecycle_note, 'Disputa cerrada on-chain'),
+          lifecycle_updated_at = NOW(),
+          dispute_opened_at = NULL
+      WHERE chain_id = ${CHAIN_ID}
+        AND factory_address = ${factoryConfig.address}
+        AND market_id = ${marketId.toNumber()}
+    `;
+    processed.lifecycle++;
+  }
+
+  const correctionEvents = await factory.queryFilter(factory.filters.MarketResolutionCorrected(), fromBlock, toBlock);
+  for (const event of correctionEvents) {
+    const { marketId, newOutcome } = event.args;
+    await sql`
+      UPDATE protocol_markets
+      SET status = 'resolved',
+          outcome = ${newOutcome},
+          resolved_at = NOW(),
+          lifecycle_note = COALESCE(lifecycle_note, 'Resolución corregida on-chain'),
+          lifecycle_updated_at = NOW(),
+          dispute_opened_at = NULL
+      WHERE chain_id = ${CHAIN_ID}
+        AND factory_address = ${factoryConfig.address}
+        AND market_id = ${marketId.toNumber()}
+    `;
+    processed.lifecycle++;
+  }
+
+  const cancelRefundEvents = await factory.queryFilter(factory.filters.CancelRefundPushed(), fromBlock, toBlock);
+  for (const event of cancelRefundEvents) {
+    const { marketId, holder, payout: payoutRaw } = event.args;
+    const payout = parseFloat(ethers.utils.formatUnits(payoutRaw, 6));
+    const rows = await sql`
+      SELECT id
+      FROM protocol_markets
+      WHERE chain_id = ${CHAIN_ID}
+        AND factory_address = ${factoryConfig.address}
+        AND market_id = ${marketId.toNumber()}
+      LIMIT 1
+    `;
+    if (rows.length === 0) continue;
+    const inserted = await insertRedemption({
+      marketId: rows[0].id,
+      userAddress: holder.toLowerCase(),
+      outcomeIndex: null,
+      shares: 0,
+      payout,
+      txHash: event.transactionHash,
+      blockNumber: event.blockNumber,
+      logIndex: event.logIndex,
+    });
+    if (inserted) processed.redemptions++;
   }
 
   const pools = await sql`

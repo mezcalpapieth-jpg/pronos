@@ -1,0 +1,1124 @@
+/**
+ * Sports-result readers for the sports_api resolver family.
+ *
+ * Each function fetches the post-game state from its respective public
+ * endpoint and returns a normalized result:
+ *
+ *   { completed: boolean, winner: 'home'|'away'|'draw'|null,
+ *     homeScore?: number, awayScore?: number,
+ *     // for F1:
+ *     winnerDriverId?: string, winnerDriverLabel?: string }
+ *
+ * Callers should treat `completed=false` as "not done yet, try again
+ * next cron tick" (benign skip). `winner=null` on completed games
+ * means abandoned / awarded / weird edge case — surface to admin.
+ */
+
+// ─── ESPN scoreboard (MLB / NBA / soccer) ───────────────────────────────
+// ESPN's per-event endpoint is /summary?event=<id>, but the /scoreboard
+// endpoint filtered by dates returns the same event with winner flags
+// and is consistent across sports. Using dates+eventId lookup keeps the
+// URL pattern identical across MLB / NBA / soccer / Liga MX / MLS.
+
+const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports';
+
+function ymdToDateRange(ymd) {
+  // scoreboard ?dates=YYYYMMDD returns events scheduled THAT day (UTC).
+  // Cover ±1 day so a game that kicks off near a UTC boundary is still
+  // found — cheap insurance.
+  if (!ymd) return null;
+  const [y, m, d] = ymd.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  const start = new Date(Date.UTC(y, m - 1, d - 1));
+  const end   = new Date(Date.UTC(y, m - 1, d + 1));
+  const fmt = (x) => `${x.getUTCFullYear()}${String(x.getUTCMonth() + 1).padStart(2, '0')}${String(x.getUTCDate()).padStart(2, '0')}`;
+  return `${fmt(start)}-${fmt(end)}`;
+}
+
+function normalizeEspnEvent(ev) {
+  const comp = Array.isArray(ev?.competitions) ? ev.competitions[0] : null;
+  const status = ev?.status || comp?.status || null;
+  const state     = status?.type?.state;
+  const completed = Boolean(status?.type?.completed);
+  const ctors = Array.isArray(comp?.competitors) ? comp.competitors : [];
+  const home = ctors.find(c => c.homeAway === 'home');
+  const away = ctors.find(c => c.homeAway === 'away');
+  const homeScore = Number(home?.score);
+  const awayScore = Number(away?.score);
+
+  if (!completed) return { completed: false, winner: null, state };
+
+  // Winner extraction: prefer the `winner: true` flag ESPN sets on the
+  // victorious competitor. Fall back to score comparison.
+  let winner = null;
+  if (home?.winner) winner = 'home';
+  else if (away?.winner) winner = 'away';
+  else if (Number.isFinite(homeScore) && Number.isFinite(awayScore)) {
+    if (homeScore > awayScore) winner = 'home';
+    else if (awayScore > homeScore) winner = 'away';
+    else winner = 'draw';
+  }
+  return {
+    completed: true,
+    winner,
+    homeScore: Number.isFinite(homeScore) ? homeScore : null,
+    awayScore: Number.isFinite(awayScore) ? awayScore : null,
+    // Team names for the final-score strip on resolved cards. Prefer
+    // shortDisplayName ("México") over displayName ("Mexico National
+    // Team") when available; null when ESPN doesn't ship team metadata.
+    homeTeam: home?.team?.shortDisplayName || home?.team?.displayName || home?.team?.name || null,
+    awayTeam: away?.team?.shortDisplayName || away?.team?.displayName || away?.team?.name || null,
+    state,
+  };
+}
+
+function cleanString(value) {
+  const text = String(value || '').trim();
+  return text.length > 0 ? text : null;
+}
+
+function athleteId(c) {
+  const value = c?.athlete?.id || c?.id;
+  return value == null || value === '' ? null : String(value);
+}
+
+function athleteDisplayName(c) {
+  const athlete = c?.athlete || {};
+  return cleanString(athlete.displayName)
+    || cleanString(athlete.fullName)
+    || cleanString(athlete.shortName)
+    || cleanString(`${athlete.firstName || ''} ${athlete.lastName || ''}`)
+    || cleanString(c?.displayName)
+    || cleanString(c?.name)
+    || null;
+}
+
+function dedupeCompetitorEntries(entries) {
+  const seen = new Set();
+  const out = [];
+  for (const entry of entries || []) {
+    if (!entry?.label && !entry?.driverId) continue;
+    const key = entry.driverId ? `id:${entry.driverId}` : `label:${normName(entry.label)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(entry);
+  }
+  return out;
+}
+
+function competitorEntry(c, extra = {}) {
+  const label = athleteDisplayName(c);
+  const normalized = normName(label);
+  if (!label || ['tbd', 'bye', 'winner'].includes(normalized)) return null;
+  if (/to\s+be\s+determined|winner\s+of/i.test(label)) return null;
+  return {
+    driverId: athleteId(c),
+    label,
+    ...extra,
+  };
+}
+
+function normalizeTeamName(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\b(fc|sc|cf|afc|ac|cd|club)\b/g, '')
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+function namesMatch(a, b) {
+  const left = normalizeTeamName(a);
+  const right = normalizeTeamName(b);
+  if (!left || !right) return false;
+  return left === right || left.includes(right) || right.includes(left);
+}
+
+function pickCompetition(event) {
+  return Array.isArray(event?.competitions) ? event.competitions[0] : null;
+}
+
+function pickCompetitors(comp) {
+  const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
+  const home = competitors.find(c => c.homeAway === 'home') || competitors[0] || null;
+  const away = competitors.find(c => c.homeAway === 'away') || competitors[1] || null;
+  return { home, away };
+}
+
+function competitorName(c) {
+  return cleanString(c?.team?.shortDisplayName)
+    || cleanString(c?.team?.displayName)
+    || cleanString(c?.team?.name)
+    || cleanString(c?.team?.abbreviation)
+    || athleteDisplayName(c)
+    || cleanString(c?.displayName)
+    || null;
+}
+
+function competitorNames(c) {
+  return [
+    c?.team?.shortDisplayName,
+    c?.team?.displayName,
+    c?.team?.name,
+    c?.team?.abbreviation,
+    athleteDisplayName(c),
+    c?.displayName,
+  ].map(cleanString).filter(Boolean);
+}
+
+function anyNameMatches(names, target) {
+  return names.some(name => namesMatch(name, target));
+}
+
+function eventTeamOrientation(event, homeName, awayName) {
+  if (!homeName || !awayName) return null;
+  const comp = pickCompetition(event);
+  if (!comp) return null;
+  const { home, away } = pickCompetitors(comp);
+  const eventHomeNames = competitorNames(home);
+  const eventAwayNames = competitorNames(away);
+  if (anyNameMatches(eventHomeNames, homeName) && anyNameMatches(eventAwayNames, awayName)) return 'same';
+  if (anyNameMatches(eventHomeNames, awayName) && anyNameMatches(eventAwayNames, homeName)) return 'swapped';
+  return null;
+}
+
+function eventMatchesTeams(event, homeName, awayName) {
+  return eventTeamOrientation(event, homeName, awayName) !== null;
+}
+
+function normalizeEspnEventForMarket(ev, homeName, awayName) {
+  const normalized = normalizeEspnEvent(ev);
+  const orientation = eventTeamOrientation(ev, homeName, awayName);
+  if (orientation !== 'swapped') return normalized;
+  const winner = normalized.winner === 'home'
+    ? 'away'
+    : normalized.winner === 'away'
+    ? 'home'
+    : normalized.winner;
+  return {
+    ...normalized,
+    winner,
+    homeScore: normalized.awayScore,
+    awayScore: normalized.homeScore,
+    homeTeam: normalized.awayTeam,
+    awayTeam: normalized.homeTeam,
+    eventOrientation: 'swapped',
+  };
+}
+
+export async function readEspnEvent({ leaguePath, eventId, dateYmd, homeName, awayName }) {
+  if (!leaguePath || (!eventId && !(homeName && awayName))) {
+    throw new Error('espn: missing leaguePath/event lookup');
+  }
+  const dateRange = ymdToDateRange(dateYmd);
+  const q = dateRange ? `?dates=${dateRange}&limit=500` : `?limit=500`;
+  const url = `${ESPN_BASE}/${leaguePath}/scoreboard${q}`;
+  const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+  if (!res.ok) throw new Error(`espn: HTTP ${res.status}`);
+  const data = await res.json();
+  const events = Array.isArray(data?.events) ? data.events : [];
+  const ev = eventId
+    ? events.find(e => String(e.id) === String(eventId))
+    : events.find(e => eventMatchesTeams(e, homeName, awayName));
+  if (!ev) {
+    if (!eventId) return { completed: false, winner: null, notFound: true };
+    // Event not in the date-window scoreboard. In playoff series the
+    // same teams can play several times in one week, and a stale/bad
+    // dateYmd on the market row should not strand the resolver if the
+    // stable ESPN eventId is still correct. Fall back to ESPN's
+    // per-event summary endpoint, keyed only by eventId.
+    const summaryUrl = `${ESPN_BASE}/${leaguePath}/summary?event=${encodeURIComponent(eventId)}`;
+    const summaryRes = await fetch(summaryUrl, { headers: { 'Accept': 'application/json' } });
+    if (!summaryRes.ok) throw new Error(`espn-summary: HTTP ${summaryRes.status}`);
+    const summary = await summaryRes.json();
+    if (summary?.header?.id && String(summary.header.id) === String(eventId)) {
+      return { ...normalizeEspnEventForMarket(summary.header, homeName, awayName), dateWindowMiss: true };
+    }
+    // Still not found — either not started yet, removed from ESPN, or
+    // the stored eventId is wrong. Treat as "not done", retry next tick.
+    return { completed: false, winner: null, notFound: true };
+  }
+  return normalizeEspnEventForMarket(ev, homeName, awayName);
+}
+
+// ─── football-data.org match ───────────────────────────────────────────
+// Needs FOOTBALL_DATA_API_KEY (already set for the soccer generator).
+// Clean result schema: score.winner ∈ {HOME_TEAM, AWAY_TEAM, DRAW}.
+
+const FD_BASE = 'https://api.football-data.org/v4';
+
+export async function readFootballDataMatch(matchId) {
+  const key = process.env.FOOTBALL_DATA_API_KEY;
+  if (!key) throw new Error('football-data: FOOTBALL_DATA_API_KEY not set');
+  if (!matchId) throw new Error('football-data: missing matchId');
+  const res = await fetch(`${FD_BASE}/matches/${encodeURIComponent(matchId)}`, {
+    headers: { 'X-Auth-Token': key, 'Accept': 'application/json' },
+  });
+  if (!res.ok) throw new Error(`football-data: HTTP ${res.status}`);
+  const match = await res.json();
+  const status = String(match?.status || '').toUpperCase();
+  if (status !== 'FINISHED') {
+    // SCHEDULED / TIMED / IN_PLAY / PAUSED / POSTPONED / CANCELLED / AWARDED
+    return { completed: false, winner: null, status };
+  }
+  const raw = String(match?.score?.winner || '').toUpperCase();
+  const winner =
+    raw === 'HOME_TEAM' ? 'home' :
+    raw === 'AWAY_TEAM' ? 'away' :
+    raw === 'DRAW'      ? 'draw' : null;
+  const homeScore = Number(match?.score?.fullTime?.home);
+  const awayScore = Number(match?.score?.fullTime?.away);
+  return {
+    completed: true,
+    winner,
+    homeScore: Number.isFinite(homeScore) ? homeScore : null,
+    awayScore: Number.isFinite(awayScore) ? awayScore : null,
+    homeTeam: match?.homeTeam?.shortName || match?.homeTeam?.name || null,
+    awayTeam: match?.awayTeam?.shortName || match?.awayTeam?.name || null,
+    status,
+  };
+}
+
+// ─── ESPN tennis (ATP) result ──────────────────────────────────────────
+// Reuses readEspnEvent under the hood — ATP matches expose the same
+// competitor.winner / score shape as other ESPN sports, so the
+// sports_api 'binary' shape handles them without a separate reader.
+// Kept as its own named export for symmetry / future ESPN tennis
+// quirks (retirements, walkovers).
+export async function readEspnTennisMatch({ eventId, dateYmd }) {
+  return readEspnEvent({ leaguePath: 'tennis/atp', eventId, dateYmd });
+}
+
+// ─── ESPN ATP tournament winner ────────────────────────────────────────
+// For tournament-level markets (replacing the old per-match H2H
+// generator). ESPN's atp/scoreboard returns one event per
+// tournament with a `groupings` array — Men's Singles, Women's
+// Singles, Men's Doubles, Women's Doubles. We pull the Men's
+// Singles grouping, find the Final (round.id='7'), and read the
+// competitor with winner=true.
+//
+// Returns the same winnerDriverId / winnerDriverLabel envelope as
+// the F1 / golf readers so the cron's parallel-shape leg matcher
+// works unchanged. competitor.id mirrors the ESPN athlete id, which
+// matches what the tennis generator stores in cfg.legs[i].driverId.
+
+const ESPN_ATP_BASE = 'https://site.api.espn.com/apis/site/v2/sports/tennis/atp';
+
+function tennisGroupingIsMensSingles(grouping) {
+  const slug = String(grouping?.grouping?.slug || grouping?.slug || '').toLowerCase();
+  const name = String(grouping?.grouping?.name || grouping?.name || grouping?.displayName || '').toLowerCase();
+  return slug === 'mens-singles'
+    || slug === 'mens singles'
+    || name === "men's singles"
+    || name === 'mens singles'
+    || name === 'men s singles'
+    || name.includes('men singles')
+    || name.includes('men s singles');
+}
+
+function eventStatusCompleted(event) {
+  return Boolean(event?.status?.type?.completed)
+    || event?.status?.type?.state === 'post';
+}
+
+async function fetchEspnAtpTournamentEvent(eventId) {
+  if (!eventId) throw new Error('espn-atp-tournament: missing eventId');
+  const now = new Date();
+  const back = new Date(now.getTime() - 7 * 86_400_000);
+  const fwd  = new Date(now.getTime() + 60 * 86_400_000);
+  const fmt = (x) => `${x.getUTCFullYear()}${String(x.getUTCMonth() + 1).padStart(2, '0')}${String(x.getUTCDate()).padStart(2, '0')}`;
+  const range = `${fmt(back)}-${fmt(fwd)}`;
+  const res = await fetch(`${ESPN_ATP_BASE}/scoreboard?dates=${range}&limit=500`, {
+    headers: { 'Accept': 'application/json' },
+  });
+  if (!res.ok) throw new Error(`espn-atp-tournament: HTTP ${res.status}`);
+  const data = await res.json();
+  const events = Array.isArray(data?.events) ? data.events : [];
+  return events.find(e => String(e.id) === String(eventId)) || null;
+}
+
+function atpMensSinglesCompetitions(event) {
+  const groupings = Array.isArray(event?.groupings) ? event.groupings : [];
+  const mens = groupings.find(tennisGroupingIsMensSingles);
+  return Array.isArray(mens?.competitions) ? mens.competitions : [];
+}
+
+function atpCompetitionStatus(competition) {
+  return competition?.status || {};
+}
+
+function atpCompetitionCompleted(competition) {
+  const status = atpCompetitionStatus(competition);
+  return Boolean(status?.type?.completed) || status?.type?.state === 'post';
+}
+
+function atpCompetitionRealEntries(competition, extra = {}) {
+  const competitors = Array.isArray(competition?.competitors) ? competition.competitors : [];
+  return competitors
+    .map(competitor => competitorEntry(competitor, extra))
+    .filter(Boolean);
+}
+
+function extractAtpEliminatedCompetitors(event) {
+  const eliminated = [];
+  for (const competition of atpMensSinglesCompetitions(event)) {
+    const status = atpCompetitionStatus(competition);
+    const completed = atpCompetitionCompleted(competition);
+    if (!completed) continue;
+    const competitors = Array.isArray(competition?.competitors) ? competition.competitors : [];
+    const winner = competitors.find(c => c?.winner === true);
+    if (!winner) continue;
+    for (const competitor of competitors) {
+      if (!competitor || competitor === winner || competitor?.winner === true) continue;
+      eliminated.push({
+        driverId: athleteId(competitor),
+        label: athleteDisplayName(competitor),
+        reason: 'lost',
+        sourceStatus: status?.type?.description || status?.type?.name || status?.type?.state || null,
+      });
+    }
+  }
+  return dedupeCompetitorEntries(eliminated);
+}
+
+function extractAtpRemainingCompetitors(event) {
+  const pending = [];
+  for (const competition of atpMensSinglesCompetitions(event)) {
+    if (atpCompetitionCompleted(competition)) continue;
+    const status = atpCompetitionStatus(competition);
+    pending.push(...atpCompetitionRealEntries(competition, {
+      reason: status?.type?.state === 'in' ? 'live_match' : 'scheduled_match',
+      roundId: competition?.round?.id || null,
+      roundName: competition?.round?.displayName || null,
+    }));
+  }
+  if (pending.length > 0) return dedupeCompetitorEntries(pending);
+
+  // ESPN sometimes posts a bracket before the next round competitors
+  // are materialized. In that gap, derive survivors as every real player
+  // seen in the tournament minus anyone who has a completed-match loss.
+  const eliminated = extractAtpEliminatedCompetitors(event);
+  const eliminatedKeys = new Set(eliminated.map(entry => (
+    entry.driverId ? `id:${entry.driverId}` : `label:${normName(entry.label)}`
+  )));
+  const seen = [];
+  for (const competition of atpMensSinglesCompetitions(event)) {
+    seen.push(...atpCompetitionRealEntries(competition, {
+      reason: 'not_eliminated',
+    }));
+  }
+  return dedupeCompetitorEntries(seen).filter(entry => {
+    const key = entry.driverId ? `id:${entry.driverId}` : `label:${normName(entry.label)}`;
+    return !eliminatedKeys.has(key);
+  });
+}
+
+function normalizeAtpMatchCompetition(competition) {
+  const status = competition?.status || {};
+  const state = status?.type?.state || null;
+  const completed = Boolean(status?.type?.completed) || state === 'post';
+  const competitors = Array.isArray(competition?.competitors) ? competition.competitors : [];
+  const c0 = competitors[0] || null;
+  const c1 = competitors[1] || null;
+  if (!c0 || !c1) return { completed: false, winner: null, state: 'missing_competitors' };
+  if (!completed) return { completed: false, winner: null, state };
+  const winnerC = competitors.find(c => c?.winner === true);
+  const winner = winnerC === c0 ? 'home' : winnerC === c1 ? 'away' : null;
+  return {
+    completed: Boolean(winner),
+    winner,
+    homeTeam: athleteDisplayName(c0),
+    awayTeam: athleteDisplayName(c1),
+    state: winner ? state : 'no_winner_flag',
+  };
+}
+
+export async function readEspnAtpMatchWinner({ eventId, matchId }) {
+  if (!matchId) throw new Error('espn-atp-match: missing matchId');
+  const ev = await fetchEspnAtpTournamentEvent(eventId);
+  if (!ev) return { completed: false, winner: null, notFound: true };
+  const match = atpMensSinglesCompetitions(ev)
+    .find(competition => String(competition?.id) === String(matchId));
+  if (!match) return { completed: false, winner: null, notFound: true };
+  return normalizeAtpMatchCompetition(match);
+}
+
+export async function readEspnAtpTournamentWinner({ eventId }) {
+  // Wide date window — tournaments span 1-2 weeks and we may poll
+  // a few days post-final. -7 / +60 covers in-progress and just-
+  // completed events at the same query.
+  const ev = await fetchEspnAtpTournamentEvent(eventId);
+  if (!ev) {
+    return { completed: false, winner: null, notFound: true };
+  }
+  const eliminatedCompetitors = extractAtpEliminatedCompetitors(ev);
+  const remainingCompetitors = extractAtpRemainingCompetitors(ev);
+  const completed = eventStatusCompleted(ev);
+  if (!completed) {
+    return {
+      completed: false,
+      winner: null,
+      state: ev?.status?.type?.state || null,
+      eliminatedCompetitors,
+      remainingCompetitors,
+    };
+  }
+  // Round id '7' is the Final on ESPN. There can be multiple comps
+  // with that round id across years/groupings, so within Men's
+  // Singles the latest-by-date Final is the right one.
+  const comps = atpMensSinglesCompetitions(ev);
+  if (comps.length === 0) {
+    return { completed: false, winner: null, state: 'no_mens_singles', eliminatedCompetitors, remainingCompetitors };
+  }
+  const finals = comps.filter(c => c?.round?.id === '7');
+  if (finals.length === 0) {
+    return { completed: false, winner: null, state: 'no_final_match', eliminatedCompetitors, remainingCompetitors };
+  }
+  finals.sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime());
+  const final = finals[finals.length - 1];
+  const ctors = Array.isArray(final?.competitors) ? final.competitors : [];
+  const winnerC = ctors.find(c => c?.winner === true);
+  if (!winnerC) {
+    // Final scheduled but result not in yet (TBD competitors, etc.)
+    // — let cron retry next tick.
+    return { completed: false, winner: null, state: 'final_pending', eliminatedCompetitors, remainingCompetitors };
+  }
+  return {
+    completed: true,
+    winner: 'p1',
+    winnerDriverId: athleteId(winnerC),
+    winnerDriverLabel: athleteDisplayName(winnerC),
+    eliminatedCompetitors,
+    remainingCompetitors,
+  };
+}
+
+// ─── ESPN golf scoreboard winner (PGA + LIV) ───────────────────────────
+// Reads the post-tournament leaderboard from ESPN's golf scoreboard
+// and returns the winner. Uses the parallel-shape dispatch in the
+// cron, so the return shape mirrors readJolpicaF1Result —
+// winnerDriverId / winnerDriverLabel — and the same matching logic
+// (id-first, then label, then "Otro" fallback) applies.
+//
+// Notes:
+//   - leaguePath: 'pga' (PGA Tour) or 'liv' (LIV Golf). ESPN exposes
+//     both at the same scoreboard endpoint shape, so a single reader
+//     handles them. Add new tours here when needed.
+//   - The scoreboard endpoint covers ~60 days forward from the query
+//     date; we widen by 7 days back so a tournament that just ended
+//     is still in the window when the cron polls.
+//   - ESPN sets status.type.completed=true once the final round is
+//     official. Sunday-evening cron ticks find the winner the same
+//     night.
+//   - Winner lookup uses competitor.order === 1, NOT
+//     status.position. ESPN doesn't populate status.position on
+//     completed events (verified empirically across 2026 majors,
+//     LIV events, and the PGA Zurich Classic).
+//   - Two competitor shapes ESPN ships:
+//       individual (Masters, every LIV event, etc.): { type:
+//         'athlete', id: <athleteId>, athlete: { displayName, ... } }
+//       team (PGA Zurich Classic, Presidents Cup): { type: 'team',
+//         id: <teamId>, team: { displayName: 'Smalley/Springer', ... } }
+//     Team events return a null id but a team label. Newer generated
+//     markets include ESPN's confirmed team entrants, so label match
+//     can resolve them; older individual-field markets still fall
+//     through to "Otro".
+
+const ESPN_GOLF_BASE = 'https://site.api.espn.com/apis/site/v2/sports/golf';
+
+function golfCompetitorStatusText(competitor) {
+  const status = competitor?.status || {};
+  return [
+    status?.type?.name,
+    status?.type?.description,
+    status?.type?.detail,
+    status?.displayName,
+    status?.name,
+    status?.description,
+    status?.detail,
+    status?.abbreviation,
+    competitor?.lineScores?.at?.(-1)?.displayValue,
+  ].map(cleanString).filter(Boolean).join(' ');
+}
+
+function golfEliminationReason(competitor) {
+  const raw = golfCompetitorStatusText(competitor);
+  const text = raw.toLowerCase();
+  if (!text) return null;
+  if (/\b(disqualified|disqualification|dq|dqd)\b/i.test(raw)) return 'disqualified';
+  if (/\b(withdrawn|withdrawal|wd|w\/d)\b/i.test(raw)) return 'withdrawn';
+  if (/\b(mdf)\b/i.test(raw)) return 'mdf';
+  if (/\b(cut|missed cut|mc)\b/i.test(raw)) return 'cut';
+  if (text.includes('missed the cut')) return 'cut';
+  return null;
+}
+
+function extractGolfEliminatedCompetitors(event) {
+  const comp = Array.isArray(event?.competitions) ? event.competitions[0] : null;
+  const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
+  return dedupeCompetitorEntries(competitors
+    .map((competitor) => {
+      const reason = golfEliminationReason(competitor);
+      if (!reason) return null;
+      const isTeam = competitor?.type === 'team';
+      const label = isTeam
+        ? cleanString(competitor?.team?.displayName)
+          || cleanString(competitor?.team?.shortDisplayName)
+          || cleanString(competitor?.team?.name)
+        : athleteDisplayName(competitor);
+      return {
+        driverId: isTeam ? null : athleteId(competitor),
+        label,
+        reason,
+        sourceStatus: golfCompetitorStatusText(competitor) || reason,
+      };
+    })
+    .filter(Boolean));
+}
+
+async function readEspnGolfWinnerImpl({ leaguePath, eventId }) {
+  if (!leaguePath) throw new Error('espn-golf: missing leaguePath');
+  if (!eventId) throw new Error('espn-golf: missing eventId');
+  // Wide date window so tournaments mid-week or just-finished are
+  // still found (PGA events span Thu→Sun, weather can extend to Mon;
+  // LIV is Fri→Sun shotgun-start).
+  const now = new Date();
+  const back = new Date(now.getTime() - 7 * 86_400_000);
+  const fwd  = new Date(now.getTime() + 60 * 86_400_000);
+  const fmt = (x) => `${x.getUTCFullYear()}${String(x.getUTCMonth() + 1).padStart(2, '0')}${String(x.getUTCDate()).padStart(2, '0')}`;
+  const range = `${fmt(back)}-${fmt(fwd)}`;
+  const res = await fetch(`${ESPN_GOLF_BASE}/${leaguePath}/scoreboard?dates=${range}&limit=50`, {
+    headers: { 'Accept': 'application/json' },
+  });
+  if (!res.ok) throw new Error(`espn-${leaguePath}: HTTP ${res.status}`);
+  const data = await res.json();
+  const events = Array.isArray(data?.events) ? data.events : [];
+  const ev = events.find(e => String(e.id) === String(eventId));
+  if (!ev) {
+    return { completed: false, winner: null, notFound: true };
+  }
+  const eliminatedCompetitors = extractGolfEliminatedCompetitors(ev);
+  const completed = Boolean(ev?.status?.type?.completed);
+  if (!completed) {
+    return {
+      completed: false,
+      winner: null,
+      state: ev?.status?.type?.state || null,
+      eliminatedCompetitors,
+    };
+  }
+  // Find the order=1 competitor. Both individual and team events
+  // expose `order: 1` on the leader; status.position is not reliable
+  // (it's null on completed events as of 2026).
+  const comp = Array.isArray(ev.competitions) ? ev.competitions[0] : null;
+  const ctors = Array.isArray(comp?.competitors) ? comp.competitors : [];
+  const winnerC = ctors.find(c => c?.order === 1);
+  if (!winnerC) {
+    // No order=1 — could be an unresolved playoff or unusual data.
+    // Treat as "not done" so the cron retries.
+    return { completed: false, winner: null, state: 'no_order_1', eliminatedCompetitors };
+  }
+  const isTeam = winnerC?.type === 'team';
+  if (isTeam) {
+    // Team events: surface the team's displayName as the label so
+    // the resolved-card final-score still says something useful, but
+    // pass null id so the leg matcher can't accidentally match a
+    // FIELD player whose id happens to collide with the team id.
+    // Falls through to "Otro" as expected.
+    const teamName = winnerC?.team?.displayName
+      || winnerC?.team?.shortDisplayName
+      || winnerC?.team?.name
+      || null;
+    return {
+      completed: true,
+      winner: 'p1',
+      winnerDriverId: null,
+      winnerDriverLabel: teamName,
+      eliminatedCompetitors,
+    };
+  }
+  // Individual event — pull athlete.id from `competitor.id` (which
+  // mirrors athlete.id in the API) and the display name from
+  // competitor.athlete.
+  const ath = winnerC?.athlete || {};
+  const athleteId = winnerC?.id ? String(winnerC.id) : null;
+  const fullName = ath.displayName
+    || ath.fullName
+    || ath.shortName
+    || `${ath.firstName || ''} ${ath.lastName || ''}`.trim()
+    || null;
+  return {
+    completed: true,
+    winner: 'p1',
+    // Reuse F1's field names so the cron's parallel-shape dispatch
+    // and buildFinalScore can match by id then label without a
+    // golf-specific code path.
+    winnerDriverId: athleteId,
+    winnerDriverLabel: fullName,
+    eliminatedCompetitors,
+  };
+}
+
+export const readEspnPgaWinner = ({ eventId }) =>
+  readEspnGolfWinnerImpl({ leaguePath: 'pga', eventId });
+
+export const readEspnLivWinner = ({ eventId }) =>
+  readEspnGolfWinnerImpl({ leaguePath: 'liv', eventId });
+
+// ─── ESPN MMA (UFC) — per-fight winner reader ────────────────────────
+//
+// One UFC event carries N fights as ESPN "competitions". The cron
+// passes both eventId (the card) and fightId (the specific bout).
+// We find that competition, inspect `winner: true` on each side, and
+// return both:
+//   - winner: 'home' | 'away' for normal binary fight markets
+//   - winnerDriverId/Label for legacy parallel UFC rows created before
+//     UFC fights moved back to unified binary.
+//
+// Draws: UFC has technically-possible draws (split / majority). ESPN
+// represents them as both competitors having winner=false on a
+// completed event. We return completed=false in that case so the
+// market stays open for admin review (rare enough that a dedicated
+// auto-void path isn't worth it — admin uses /api/points/admin/
+// void-market to refund holders).
+export async function readEspnMmaWinner({ eventId, fightId }) {
+  if (!eventId) throw new Error('espn-mma: missing eventId');
+  if (!fightId) throw new Error('espn-mma: missing fightId');
+  const now = new Date();
+  const back = new Date(now.getTime() - 7 * 86_400_000);
+  const fwd  = new Date(now.getTime() + 35 * 86_400_000);
+  const fmt = (x) => `${x.getUTCFullYear()}${String(x.getUTCMonth() + 1).padStart(2, '0')}${String(x.getUTCDate()).padStart(2, '0')}`;
+  const res = await fetch(
+    `https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=${fmt(back)}-${fmt(fwd)}&limit=30`,
+    { headers: { Accept: 'application/json' } },
+  );
+  if (!res.ok) throw new Error(`espn-mma: HTTP ${res.status}`);
+  const data = await res.json();
+  const events = Array.isArray(data?.events) ? data.events : [];
+  const ev = events.find(e => String(e.id) === String(eventId));
+  if (!ev) return { completed: false, winner: null, notFound: true };
+
+  const fights = Array.isArray(ev.competitions) ? ev.competitions : [];
+  const fight = fights.find(f => String(f.id) === String(fightId));
+  if (!fight) return { completed: false, winner: null, notFound: true };
+
+  const completed = Boolean(fight?.status?.type?.completed);
+  if (!completed) {
+    return { completed: false, winner: null, state: fight?.status?.type?.state || null };
+  }
+
+  const ctors = Array.isArray(fight.competitors) ? fight.competitors : [];
+  const winnerIndex = ctors.findIndex(c => c?.winner === true);
+  const winnerC = winnerIndex >= 0 ? ctors[winnerIndex] : null;
+  if (!winnerC) {
+    // Both winner=false on a completed event = draw, no-contest, or
+    // unusual data. Treat as not-done so admin handles via void
+    // endpoint; cron retries next tick (idempotent for normal
+    // completion, harmless re-poll for draws).
+    return { completed: false, winner: null, state: 'no_winner_flag' };
+  }
+  return {
+    completed: true,
+    winner: winnerIndex === 0 ? 'home' : 'away',
+    winnerDriverId: String(winnerC.id || ''),
+    winnerDriverLabel: winnerC.athlete?.displayName
+      || winnerC.athlete?.fullName
+      || null,
+  };
+}
+
+// ─── the-odds-api boxing reader ──────────────────────────────────────
+//
+// Resolves boxing markets generated by market-gen/boxing.js. Hits
+// the /scores endpoint with daysFrom=3 (covers a typical Saturday
+// card resolved by Tuesday). The response shape for a completed
+// fight:
+//   { id, sport_key, completed: true, scores: [{name, score}, ...] }
+// where exactly one score === "1" (winner). Draws / no-contests
+// surface as both scores "0" or null — we return completed=false
+// in those cases so admin can /api/points/admin/void-market.
+//
+// driverId is the fighter NAME (not an id) — same as what we wrote
+// into legs[].driverId at generation time — so the parallel-shape
+// matcher uses straight string-compare.
+const ODDS_API_BASE_RES = 'https://api.the-odds-api.com/v4';
+
+export async function readOddsApiBoxingWinner({ eventId }) {
+  if (!eventId) throw new Error('odds-api-boxing: missing eventId');
+  const key = process.env.ODDS_API_KEY;
+  if (!key) throw new Error('odds-api-boxing: ODDS_API_KEY not set');
+
+  const res = await fetch(
+    `${ODDS_API_BASE_RES}/sports/boxing_boxing/scores?apiKey=${encodeURIComponent(key)}&daysFrom=3`,
+    { headers: { Accept: 'application/json' } },
+  );
+  if (!res.ok) throw new Error(`odds-api-boxing: HTTP ${res.status}`);
+  const events = await res.json();
+  if (!Array.isArray(events)) {
+    return { completed: false, winner: null, state: 'no_events' };
+  }
+  const ev = events.find(e => String(e.id) === String(eventId));
+  if (!ev) return { completed: false, winner: null, notFound: true };
+  if (!ev.completed) {
+    return { completed: false, winner: null, state: 'in_progress' };
+  }
+  const scores = Array.isArray(ev.scores) ? ev.scores : [];
+  // Winner has score === "1"; loser has "0"; draw has both === "0"
+  // (or both null). the-odds-api uses string scores for combat.
+  const winner = scores.find(s => String(s.score) === '1');
+  if (!winner) {
+    // Both 0 / null = draw or no-contest. Cron leaves the market
+    // for admin to void via /api/points/admin/void-market.
+    return { completed: false, winner: null, state: 'no_score_1' };
+  }
+  return {
+    completed: true,
+    winner: 'p1',
+    // Name-as-id since legs[].driverId is also the fighter name.
+    winnerDriverId: winner.name || null,
+    winnerDriverLabel: winner.name || null,
+  };
+}
+
+// ─── Next-opponent reader (UFC + boxing) ─────────────────────────────
+//
+// Resolves "¿Contra quién pelea X a continuación?" markets by
+// scanning the relevant upcoming-events feed for the named fighter.
+// If we find any event with this fighter as a competitor, return
+// the opponent's display name; the cron's parallel-shape matcher
+// resolves the leg whose label matches (case-insensitive substring
+// either direction so "Tank Davis" matches "Gervonta Davis").
+//
+// If no event is found, return completed=false — the cron retries
+// on its next 15-min tick. Admin can void the market via
+// /api/points/admin/void-market once the 6-month window expires
+// with no booking.
+//
+// `cfg.fighterLabel` is the fighter we're tracking; `cfg.resolverSource`
+// picks the upstream feed:
+//   - 'espn-mma-next'   → ESPN MMA scoreboard (UFC fighters)
+//   - 'odds-api-boxing' → the-odds-api events endpoint (boxing)
+
+function normName(s) {
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/["'`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Loose match — A appears in B OR B appears in A. Handles
+// "Sean Strickland" vs "Strickland", "Saúl 'Canelo' Álvarez" vs
+// "Canelo Alvarez", "Brandon Moreno" vs "Moreno", etc.
+function namesOverlap(a, b) {
+  const na = normName(a);
+  const nb = normName(b);
+  if (!na || !nb) return false;
+  return na.includes(nb) || nb.includes(na);
+}
+
+export async function readNextOpponent({ fighterLabel, resolverSource }) {
+  if (!fighterLabel) throw new Error('next-opponent: missing fighterLabel');
+
+  if (resolverSource === 'espn-mma-next') {
+    // ESPN MMA scoreboard — only the upcoming window since the
+    // market is asking about the next fight.
+    const now = new Date();
+    const fwd = new Date(now.getTime() + 120 * 86_400_000);
+    const fmt = (x) => `${x.getUTCFullYear()}${String(x.getUTCMonth() + 1).padStart(2, '0')}${String(x.getUTCDate()).padStart(2, '0')}`;
+    const res = await fetch(
+      `https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=${fmt(now)}-${fmt(fwd)}&limit=30`,
+      { headers: { Accept: 'application/json' } },
+    );
+    if (!res.ok) throw new Error(`next-opponent espn: HTTP ${res.status}`);
+    const data = await res.json();
+    const events = Array.isArray(data?.events) ? data.events : [];
+    for (const ev of events) {
+      for (const fight of ev.competitions || []) {
+        const c0 = fight.competitors?.[0]?.athlete?.displayName;
+        const c1 = fight.competitors?.[1]?.athlete?.displayName;
+        if (!c0 || !c1) continue;
+        if (namesOverlap(c0, fighterLabel)) {
+          return {
+            completed: true,
+            winner: 'p1',
+            winnerDriverId: null,
+            winnerDriverLabel: c1, // opponent
+          };
+        }
+        if (namesOverlap(c1, fighterLabel)) {
+          return {
+            completed: true,
+            winner: 'p1',
+            winnerDriverId: null,
+            winnerDriverLabel: c0,
+          };
+        }
+      }
+    }
+    return { completed: false, winner: null, state: 'no_booking_yet' };
+  }
+
+  if (resolverSource === 'odds-api-boxing') {
+    const key = process.env.ODDS_API_KEY;
+    if (!key) throw new Error('next-opponent boxing: ODDS_API_KEY not set');
+    const res = await fetch(
+      `${ODDS_API_BASE_RES}/sports/boxing_boxing/events?apiKey=${encodeURIComponent(key)}&dateFormat=iso`,
+      { headers: { Accept: 'application/json' } },
+    );
+    if (!res.ok) throw new Error(`next-opponent boxing: HTTP ${res.status}`);
+    const events = await res.json();
+    if (!Array.isArray(events)) {
+      return { completed: false, winner: null, state: 'no_events' };
+    }
+    for (const ev of events) {
+      const home = ev.home_team;
+      const away = ev.away_team;
+      if (!home || !away) continue;
+      if (namesOverlap(home, fighterLabel)) {
+        return {
+          completed: true,
+          winner: 'p1',
+          winnerDriverId: null,
+          winnerDriverLabel: away,
+        };
+      }
+      if (namesOverlap(away, fighterLabel)) {
+        return {
+          completed: true,
+          winner: 'p1',
+          winnerDriverId: null,
+          winnerDriverLabel: home,
+        };
+      }
+    }
+    return { completed: false, winner: null, state: 'no_booking_yet' };
+  }
+
+  throw new Error(`next-opponent: unknown resolverSource=${resolverSource}`);
+}
+
+// ─── LIV Golf team-leaderboard reader (livgolf.com scrape) ───────────
+//
+// ESPN's `golf/liv` API only ships individual scores — their /teams
+// endpoint literally responds "Teams are not currently supported for
+// golf/liv", and /summary returns 502 on LIV events. So we scrape
+// livgolf.com/leaderboard, which renders via Next.js App Router with
+// the team standings embedded in the RSC stream
+// (self.__next_f.push([...]) blocks).
+//
+// Match strategy: parse the events list inside the RSC payload, find
+// the event whose displayName/startDate matches the market's
+// tournamentName/startDateIso, then read the displayed
+// `initialTeamConfig.playoff.teams[]` array (which always reflects
+// the currently-displayed event). If the page is showing a different
+// event than the one we're trying to resolve, we return
+// {completed:false} so the cron retries later (livgolf swaps the
+// displayed event in the days after each tournament ends).
+//
+// Returns the same envelope as the individual ESPN readers
+// (winnerDriverId / winnerDriverLabel) so the cron's parallel-shape
+// matcher picks it up unchanged.
+
+const LIVGOLF_LEADERBOARD = 'https://www.livgolf.com/leaderboard';
+
+// livgolf.com team slug → market_gen/liv.js TEAMS.{id, name}.
+// Verified against an actual rendered RSC payload (LIV Virginia,
+// 2026-05). Add new teams here as LIV expands.
+const LIV_TEAM_BY_SLUG = {
+  '4-aces':           { id: 'fourAces',       name: '4Aces GC' },
+  'fireballs':        { id: 'fireballs',      name: 'Fireballs GC' },
+  'legion':           { id: 'legion',         name: 'Legion XIII' },
+  'crushers':         { id: 'crushers',       name: 'Crushers GC' },
+  'ripper':           { id: 'ripper',         name: 'Ripper GC' },
+  'southern-guards':  { id: 'southernGuards', name: 'Southern Guards GC' },
+  'cleeks':           { id: 'cleeks',         name: 'Cleeks GC' },
+  'torque':           { id: 'torque',         name: 'Torque GC' },
+  'hy-flyers':        { id: 'hyflyers',       name: 'HyFlyers GC' },
+  'okgc':             { id: 'okgc',           name: 'OKGC' },
+  'majesticks':       { id: 'majesticks',     name: 'Majesticks GC' },
+  'range-goats':      { id: 'rangegoats',     name: 'RangeGoats GC' },
+  'korean-golf-club': { id: 'koreanGc',       name: 'Korean GC' },
+};
+
+function decodeRscStream(html) {
+  const re = /self\.__next_f\.push\(\[\s*1\s*,\s*"([\s\S]*?)"\s*\]\)/g;
+  let m, all = '';
+  while ((m = re.exec(html)) !== null) {
+    all += m[1]
+      .replace(/\\"/g, '"')
+      .replace(/\\n/g, '\n')
+      .replace(/\\\\/g, '\\');
+  }
+  return all;
+}
+
+// Match livgolf's event-list entry to our market. Two anchors:
+//   - displayName loosely contains the market's tournamentName
+//     (livgolf prefixes "MAADEN " etc.; we compare loosely)
+//   - startDate's YYYY-MM-DD equals the market's startDateIso prefix
+// Either anchor counts as a match. If neither hits we bail.
+function findDisplayedEvent(rsc, { tournamentName, startDateIso }) {
+  // Event entries look like:
+  //   {"id":"10058","event":"virginia","displayName":"MAADEN LIV Golf Virginia",
+  //    "time":"May 7, 2026","location":"...","disabled":...,"isLive":false,
+  //    "statusLabel":"Round 4","startDate":"2026-05-07T17:05:00.000Z",...}
+  const re = /\{"id":"\d+","event":"[^"]+","displayName":"([^"]+)","time":"[^"]+","location":"[^"]+","disabled":[^,]+,"isLive":[^,]+,"statusLabel":"[^"]+","startDate":"([^"]+)"/g;
+  const wantDate = typeof startDateIso === 'string' ? startDateIso.slice(0, 10) : null;
+  const wantName = String(tournamentName || '').toLowerCase();
+  let m;
+  while ((m = re.exec(rsc)) !== null) {
+    const display = m[1];
+    const startISO = m[2];
+    const dateOk = wantDate && startISO.slice(0, 10) === wantDate;
+    const nameOk = wantName
+      && (display.toLowerCase().includes(wantName)
+       || wantName.includes(display.toLowerCase()));
+    if (dateOk || nameOk) {
+      return { displayName: display, startDate: startISO };
+    }
+  }
+  return null;
+}
+
+export async function readLivTeamWinner({ tournamentName, startDateIso }) {
+  // The page is React Server Components rendered HTML — we need a
+  // browser-ish UA so the CDN doesn't serve a bot-blocked variant.
+  const res = await fetch(LIVGOLF_LEADERBOARD, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 PronosLivBot/1.0',
+      'Accept': 'text/html,application/xhtml+xml',
+    },
+  });
+  if (!res.ok) throw new Error(`livgolf: HTTP ${res.status}`);
+  const html = await res.text();
+  const rsc = decodeRscStream(html);
+  if (!rsc) {
+    return { completed: false, winner: null, state: 'no_rsc_stream' };
+  }
+
+  // Make sure the displayed event is the one we want — livgolf swaps
+  // the active event after Monday or so. If it shows a different one,
+  // bail and let the cron retry later.
+  const matched = findDisplayedEvent(rsc, { tournamentName, startDateIso });
+  if (!matched) {
+    return { completed: false, winner: null, state: 'event_not_displayed' };
+  }
+
+  // Pull the team rankings. Order in the array == final ranking, but
+  // we explicitly key on position="1" so a rendering quirk can't
+  // mislead us.
+  const teamRe = /"teamId":\d+,"team":"([^"]+)","position":"([^"]+)","eventPositionText":"([^"]+)"/g;
+  let t;
+  let winnerSlug = null;
+  while ((t = teamRe.exec(rsc)) !== null) {
+    if (t[2] === '1' || t[3] === '1') {
+      winnerSlug = t[1];
+      break;
+    }
+  }
+  if (!winnerSlug) {
+    return { completed: false, winner: null, state: 'no_position_1' };
+  }
+
+  const mapped = LIV_TEAM_BY_SLUG[winnerSlug];
+  if (!mapped) {
+    // Unknown slug — log + return label so the cron can still resolve
+    // via label-match. id=null prevents an accidental driver-id
+    // collision with the individual market.
+    console.warn('[livgolf-team] unknown slug', { slug: winnerSlug, tournamentName });
+    return {
+      completed: true,
+      winner: 'p1',
+      winnerDriverId: null,
+      winnerDriverLabel: winnerSlug,
+    };
+  }
+  return {
+    completed: true,
+    winner: 'p1',
+    winnerDriverId: mapped.id,
+    winnerDriverLabel: mapped.name,
+  };
+}
+
+// ─── Jolpica F1 season-standings (championship resolver) ─────────────
+// Reads /{season}/{constructorStandings,driverStandings}.json and
+// returns position-1 in the same envelope as the per-race resolver
+// (winnerDriverId / winnerDriverLabel) so the cron's parallel-shape
+// matcher handles championship markets unchanged.
+//
+// Idempotent: standings keep being recomputed after every race, but
+// the cron only auto-resolves markets whose end_time has passed.
+// We set season markets' end_time to ~3 days after the season
+// finale (Abu Dhabi GP), so by the time this is queried the
+// standings are mathematically final.
+//
+// kind: 'drivers' | 'constructors'
+
+const JOLPICA_BASE = 'https://api.jolpi.ca/ergast/f1';
+
+export async function readJolpicaF1Standings({ season, kind }) {
+  if (!season) throw new Error('jolpica: missing season');
+  const path = kind === 'constructors' ? 'constructorStandings' : 'driverStandings';
+  const res = await fetch(
+    `${JOLPICA_BASE}/${encodeURIComponent(season)}/${path}.json`,
+    { headers: { 'Accept': 'application/json' } },
+  );
+  if (!res.ok) throw new Error(`jolpica: HTTP ${res.status}`);
+  const data = await res.json();
+  const lists = data?.MRData?.StandingsTable?.StandingsLists;
+  if (!Array.isArray(lists) || lists.length === 0) {
+    return { completed: false, winner: null };
+  }
+  const items = kind === 'constructors'
+    ? (lists[0].ConstructorStandings || [])
+    : (lists[0].DriverStandings || []);
+  const p1 = items.find(s => String(s.position) === '1');
+  if (!p1) return { completed: false, winner: null };
+  if (kind === 'constructors') {
+    const c = p1.Constructor || {};
+    return {
+      completed: true,
+      winner: 'p1',
+      winnerDriverId: c.constructorId || null,
+      winnerDriverLabel: c.name || null,
+    };
+  }
+  const drv = p1.Driver || {};
+  const label = `${drv.givenName || ''} ${drv.familyName || ''}`.trim();
+  return {
+    completed: true,
+    winner: 'p1',
+    winnerDriverId: drv.driverId || null,
+    winnerDriverLabel: label || null,
+  };
+}
+
+// ─── Jolpica F1 results ────────────────────────────────────────────────
+// Race is settled once /{season}/{round}/results.json has position 1.
+// (JOLPICA_BASE declared above near the season-standings reader.)
+
+export async function readJolpicaF1Result({ season, round }) {
+  if (!season || !round) throw new Error('jolpica: missing season/round');
+  const res = await fetch(`${JOLPICA_BASE}/${encodeURIComponent(season)}/${encodeURIComponent(round)}/results.json`, {
+    headers: { 'Accept': 'application/json' },
+  });
+  if (!res.ok) throw new Error(`jolpica: HTTP ${res.status}`);
+  const data = await res.json();
+  const races = data?.MRData?.RaceTable?.Races || [];
+  const race = races[0];
+  const results = race?.Results || [];
+  const p1 = results.find(r => String(r.position) === '1');
+  if (!p1) return { completed: false, winner: null };
+  const drv = p1.Driver || {};
+  const label = `${drv.givenName || ''} ${drv.familyName || ''}`.trim();
+  return {
+    completed: true,
+    winner: 'p1',
+    winnerDriverId: drv.driverId || null,
+    winnerDriverLabel: label,
+  };
+}

@@ -1,8 +1,23 @@
 {
-  "PronoBet": "0x9a03F59DD857856d930b12f5da63c586d824804D",
-  "USDC": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-  "chainId": 84532,
-  "network": "base-sepolia",
-  "deployedAt": "2026-03-20",
-  "deployer": "0x045BD85db8031e3F348E151"
+  "network": "arbitrum-one",
+  "chainId": 42161,
+  "collateral": {
+    "symbol": "MXNB",
+    "address": "0xF197FFC28c23E0309B5559e7a166f2c6164C80aA",
+    "decimals": 6
+  },
+  "factories": {
+    "v1": "",
+    "v2": ""
+  },
+  "tokens": {
+    "v1": "",
+    "v2": ""
+  },
+  "safes": {
+    "admin": "",
+    "resolver": ""
+  },
+  "indexerStartBlock": null,
+  "deployedAt": null
 }

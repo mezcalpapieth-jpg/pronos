@@ -1,0 +1,14 @@
+{
+  "schedule": "*/30 * * * * *",
+  "status": "dry-run",
+  "source": "sports-api",
+  "sourceEventId": "dry-run-nba-game",
+  "protocolMarketId": "1516",
+  "marketQuestion": "¿Quién gana el siguiente partido de la serie?",
+  "outcomeCount": 2,
+  "dryRunOutcomeIndex": 0,
+  "confidenceBps": 9500,
+  "finalScoreHome": "108",
+  "finalScoreAway": "101",
+  "evidenceUrl": "https://example.com/pronos/cre/dry-run"
+}
