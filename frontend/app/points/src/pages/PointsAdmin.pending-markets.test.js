@@ -37,6 +37,10 @@ test('Points admin can edit generated markets and per-option liquidity before ap
   assert.match(source, /MAX_PENDING_EDIT_OUTCOMES\s*=\s*64/);
   assert.match(source, /pendingSuggestedPricing/);
   assert.match(source, /formatSuggestedPricing/);
+  assert.match(source, /pendingPricingProbabilities/);
+  assert.match(source, /displayLiquiditiesForPendingRow/);
+  assert.match(source, /reserveLiquiditiesFromDisplay/);
+  assert.match(source, /useDisplayLiquidityWeights/);
   assert.match(source, /Odds sugeridos/);
   assert.match(source, /formatSuggestedPricingSource/);
   assert.match(source, /polymarket:/);
@@ -46,6 +50,8 @@ test('Points admin can edit generated markets and per-option liquidity before ap
   assert.match(source, /outcomeImages/);
   assert.match(source, /Logo URL opcional/);
   assert.match(source, /outcomeImages:\s*cleanedImages/);
+  assert.match(source, /seedLiquidities:\s*cleanedLiquidities/);
+  assert.match(source, /Liquidez:/);
   assert.match(apiSource, /export async function adminEditPendingMarket/);
   assert.match(apiSource, /action:\s*'edit'/);
 });

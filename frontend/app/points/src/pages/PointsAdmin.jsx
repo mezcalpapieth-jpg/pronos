@@ -165,6 +165,78 @@ function formatSuggestedPricing(row) {
     .join(' · ');
 }
 
+function pendingPricingProbabilities(row, outcomesOverride = null) {
+  const pricing = pendingSuggestedPricing(row);
+  const outcomes = Array.isArray(outcomesOverride)
+    ? outcomesOverride
+    : Array.isArray(row?.outcomes) ? row.outcomes : [];
+  const raw = pricing?.legProbabilities
+    || pricing?.legProbabilityPct
+    || pricing?.yesProbabilities
+    || pricing?.yesProbabilityPct
+    || pricing?.probabilities
+    || pricing?.probabilityPct
+    || null;
+  if (!Array.isArray(raw) || raw.length !== outcomes.length || outcomes.length < 2) return null;
+  const parsed = raw.map(value => {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? (n > 1 ? n / 100 : n) : null;
+  });
+  if (parsed.some(value => value == null)) return null;
+  const total = parsed.reduce((sum, value) => sum + value, 0);
+  if (!Number.isFinite(total) || total <= 0) return null;
+  return parsed.map(value => value / total);
+}
+
+function clampPendingLiquidity(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 500;
+  return Math.min(10_000_000, Math.max(100, Math.round(n * 100) / 100));
+}
+
+function pendingSeedValues(row, outcomesOverride = null, seedOverride = null) {
+  const outcomes = Array.isArray(outcomesOverride)
+    ? outcomesOverride
+    : Array.isArray(row?.outcomes) ? row.outcomes : [];
+  if (Array.isArray(seedOverride) && seedOverride.length === outcomes.length) {
+    return seedOverride.map(clampPendingLiquidity);
+  }
+  if (Array.isArray(row?.seedLiquidities) && row.seedLiquidities.length === outcomes.length) {
+    return row.seedLiquidities.map(clampPendingLiquidity);
+  }
+  const fallback = clampPendingLiquidity(row?.seedLiquidity || 500);
+  return outcomes.map(() => fallback);
+}
+
+function displayLiquiditiesForPendingRow(row, seedOverride = null, outcomesOverride = null) {
+  const outcomes = Array.isArray(outcomesOverride)
+    ? outcomesOverride
+    : Array.isArray(row?.outcomes) ? row.outcomes : [];
+  const seeds = pendingSeedValues(row, outcomes, seedOverride);
+  const probabilities = pendingPricingProbabilities(row, outcomes);
+  if (!probabilities || probabilities.length !== seeds.length) return seeds;
+  const avgSeed = seeds.reduce((sum, value) => sum + Number(value || 0), 0) / seeds.length;
+  return probabilities.map(probability => clampPendingLiquidity(avgSeed * seeds.length * probability));
+}
+
+function reserveLiquiditiesFromDisplay(displayLiquidities, {
+  ammMode = 'unified',
+  useDisplayWeights = false,
+} = {}) {
+  const values = Array.isArray(displayLiquidities)
+    ? displayLiquidities.map(clampPendingLiquidity)
+    : [];
+  if (values.length < 2 || !useDisplayWeights || ammMode !== 'unified') return values;
+  const total = values.reduce((sum, value) => sum + value, 0);
+  if (!Number.isFinite(total) || total <= 0) return values;
+  const avgSeed = total / values.length;
+  const probabilities = values.map(value => value / total);
+  const inverse = probabilities.map(probability => 1 / probability);
+  const inverseAvg = inverse.reduce((sum, value) => sum + value, 0) / inverse.length;
+  if (!Number.isFinite(inverseAvg) || inverseAvg <= 0) return values;
+  return inverse.map(value => clampPendingLiquidity(avgSeed * (value / inverseAvg)));
+}
+
 function formatOutcomeList(outcomes, limit = 14) {
   if (!Array.isArray(outcomes) || outcomes.length === 0) return '—';
   const visible = outcomes.slice(0, limit).join(' · ');
@@ -4810,6 +4882,7 @@ function PendingMarketsTable({ onQueueChange }) {
         const isPending = r.status === 'pending';
         const isRejected = r.status === 'rejected';
         const suggestedOdds = formatSuggestedPricing(r);
+        const displaySeedLiquidities = displayLiquiditiesForPendingRow(r);
         return (
           <div key={r.id} style={{
             background: 'var(--surface1)',
@@ -4903,9 +4976,9 @@ function PendingMarketsTable({ onQueueChange }) {
                 }}>
                   Opciones ({Array.isArray(r.outcomes) ? r.outcomes.length : 0}): {formatOutcomeList(r.outcomes)}
                   {' · Cierra: '}{formatAdminMarketDate(r.endTime)}
-                  {' · Seed: '}
-                  {Array.isArray(r.seedLiquidities) && r.seedLiquidities.length === r.outcomes?.length
-                    ? r.seedLiquidities.map(v => Number(v).toLocaleString('es-MX')).join(' / ')
+                  {' · Liquidez: '}
+                  {Array.isArray(displaySeedLiquidities) && displaySeedLiquidities.length === r.outcomes?.length
+                    ? displaySeedLiquidities.map(v => Number(v).toLocaleString('es-MX')).join(' / ')
                     : Number(r.seedLiquidity || 0).toLocaleString('es-MX')}
                   {' MXNP'}
                   {suggestedOdds && <> · Odds sugeridos: {suggestedOdds}</>}
@@ -5046,9 +5119,11 @@ function PendingMarketEditModal({ row, onClose, onSaved }) {
   const initialOutcomes = Array.isArray(row.outcomes) && row.outcomes.length >= 2
     ? row.outcomes
     : ['Sí', 'No'];
-  const initialSeeds = Array.isArray(row.seedLiquidities) && row.seedLiquidities.length === initialOutcomes.length
+  const initialReserveSeeds = Array.isArray(row.seedLiquidities) && row.seedLiquidities.length === initialOutcomes.length
     ? row.seedLiquidities
     : initialOutcomes.map(() => Number(row.seedLiquidity || 500));
+  const useDisplayLiquidityWeights = Boolean(pendingPricingProbabilities(row, initialOutcomes));
+  const initialSeeds = displayLiquiditiesForPendingRow(row, initialReserveSeeds, initialOutcomes);
   const initialImages = Array.isArray(row.outcomeImages) && row.outcomeImages.length === initialOutcomes.length
     ? row.outcomeImages.map(url => url || '')
     : initialOutcomes.map(() => '');
@@ -5105,7 +5180,7 @@ function PendingMarketEditModal({ row, onClose, onSaved }) {
       }))
       .filter(p => p.outcome);
     const cleanedOutcomes = pairs.map(p => p.outcome);
-    const cleanedLiquidities = pairs.map(p => Number(p.liquidity));
+    const cleanedDisplayLiquidities = pairs.map(p => Number(p.liquidity));
     const cleanedImages = pairs.map(p => p.image);
     if (question.trim().length < 8) {
       setErr('La pregunta debe tener al menos 8 caracteres.');
@@ -5115,6 +5190,14 @@ function PendingMarketEditModal({ row, onClose, onSaved }) {
       setErr('Al menos 2 opciones con nombre.');
       return;
     }
+    if (cleanedDisplayLiquidities.some(v => !Number.isFinite(v) || v < 100)) {
+      setErr('La liquidez de cada opción debe ser de al menos 100 MXNP.');
+      return;
+    }
+    const cleanedLiquidities = reserveLiquiditiesFromDisplay(cleanedDisplayLiquidities, {
+      ammMode,
+      useDisplayWeights: useDisplayLiquidityWeights,
+    });
     if (cleanedLiquidities.some(v => !Number.isFinite(v) || v < 100)) {
       setErr('La liquidez de cada opción debe ser de al menos 100 MXNP.');
       return;
