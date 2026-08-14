@@ -108,7 +108,7 @@ export default function MultiSparkline({
   // time has no place on it.
   const lines = useMemo(() => series.map((s, i) => {
     const raw = Array.isArray(s?.data) ? s.data : [];
-    const points = raw
+    const sorted = raw
       .map((pt) => {
         if (!pt || typeof pt !== 'object') return null;
         const p = Number(pt.p);
@@ -118,6 +118,11 @@ export default function MultiSparkline({
       })
       .filter(Boolean)
       .sort((a, b) => a.t - b.t);
+    // Snapshots sharing a timestamp collapse to the last one — on a
+    // step-after chart, earlier same-instant values render as a
+    // zero-width spike instead of a hold, since they share an x
+    // coordinate with the value that immediately supersedes them.
+    const points = sorted.filter((pt, i) => i === sorted.length - 1 || sorted[i + 1].t !== pt.t);
     const hasTarget = Number.isFinite(Number(s?.targetPct));
     const target = hasTarget ? clampPct(Number(s.targetPct)) : 50;
     return {
