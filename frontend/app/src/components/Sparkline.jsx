@@ -114,6 +114,8 @@ export default function Sparkline({
   endLabelWidth = 96,
   domainMin,
   domainMax,
+  timeMin,
+  timeMax,
   fitDomain = false,
   xMode = 'time',
   jumpShape = 'step',
@@ -254,9 +256,15 @@ export default function Sparkline({
   // A tick sitting on the baseline would collide with the time axis.
   const visibleYTicks = yTicks.filter(tick => yForValue(tick) < plotBottom - padY - 6);
 
+  // An explicit window wins over the auto-fit — see MultiSparkline for why
+  // fitting the axis to the data misplaces sparse snapshots. Series with no
+  // timestamps at all (the seeded mock) keep the index-based fallback.
   const timeBounds = useMemo(() => {
     if (useMovementAxis) return null;
     if (!hasTimestamps) return null;
+    if (Number.isFinite(timeMin) && Number.isFinite(timeMax) && timeMax > timeMin) {
+      return { min: timeMin, max: timeMax };
+    }
     const priceTimes = points
       .map(pt => Number(pt?.t))
       .filter(t => Number.isFinite(t) && t > 0);
@@ -264,7 +272,7 @@ export default function Sparkline({
     const min = Math.min(...priceTimes);
     const max = Math.max(...priceTimes);
     return max > min ? { min, max } : null;
-  }, [hasTimestamps, points, useMovementAxis]);
+  }, [hasTimestamps, points, useMovementAxis, timeMin, timeMax]);
 
   const xForMovementIndex = (index, count) => {
     const denom = Math.max(1, count - 1);

@@ -81,6 +81,8 @@ export default function MultiSparkline({
   legendNote = null,
   domainMin,
   domainMax,
+  timeMin,
+  timeMax,
   xMode = 'time',
   jumpShape = 'step',
   style = {},
@@ -144,8 +146,18 @@ export default function MultiSparkline({
   const hasRealHistory = lines.some(l => l.hasHistory);
   const useMovementAxis = xMode === 'movement';
 
+  // An explicit window wins over the auto-fit, the same way domainMin/Max
+  // do for the y axis. Fitting the axis to the data is wrong whenever the
+  // series start at different times: a leg whose only snapshot is 12h old
+  // drags the axis back that far, and the burst of trades from the last
+  // two minutes collapses into a one-pixel needle at the right edge. The
+  // detail page pins the range the user actually picked (4H/24H/…), so
+  // "24H" spans 24 hours no matter how sparse the snapshots are.
   const timeBounds = useMemo(() => {
     if (useMovementAxis) return null;
+    if (Number.isFinite(timeMin) && Number.isFinite(timeMax) && timeMax > timeMin) {
+      return { min: timeMin, max: timeMax };
+    }
     const times = lines.flatMap(l => l.points.map(p => p.t));
     if (times.length === 0) {
       const now = Math.floor(Date.now() / 1000);
@@ -154,7 +166,7 @@ export default function MultiSparkline({
     const min = Math.min(...times);
     const max = Math.max(...times);
     return max > min ? { min, max } : { min: min - 60, max };
-  }, [lines, useMovementAxis]);
+  }, [lines, useMovementAxis, timeMin, timeMax]);
 
   const padX = 3;
   const padY = 4;

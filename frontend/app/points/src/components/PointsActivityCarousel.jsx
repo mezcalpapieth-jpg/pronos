@@ -952,6 +952,19 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
             const mDeltaColor = mDelta > 0.05 ? BUY_COLOR : mDelta < -0.05 ? SELL_COLOR : 'var(--text-muted)';
             const mOutcomeEntries = outcomeEntriesForMarket(m);
             const mChartEntries = chartEntriesForMarket(m);
+            // The axis spans the window we fetched, not whatever the
+            // snapshots happen to cover — otherwise one leg's stale point
+            // stretches the axis and squashes the rest into the edge.
+            // Clamped to the market's creation (Polymarket-style): a market
+            // born mid-window charts its own life, full width.
+            const mChartEnd = Math.floor(Date.now() / 1000);
+            const mRangeStart = mChartEnd - CHART_HISTORY_HOURS * 3600;
+            const mOpenedAt = m?.createdAt
+              ? Math.floor(new Date(m.createdAt).getTime() / 1000)
+              : null;
+            const mChartStart = Number.isFinite(mOpenedAt)
+              ? Math.max(mRangeStart, Math.min(mOpenedAt, mChartEnd - 60))
+              : mRangeStart;
             return (
               <div
                 key={m.id}
@@ -1075,6 +1088,8 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                         height={isMobile ? 168 : 200}
                         strokeWidth={1.5}
                         showActivity
+                        timeMin={mChartStart}
+                        timeMax={mChartEnd}
                         series={mChartEntries.map(entry => ({
                           key: `opt-${entry.index}`,
                           label: entry.label,
@@ -1112,6 +1127,8 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                         showEndLabel
                         endLabelText={mOutcomes[0]}
                         endLabelWidth={140}
+                        timeMin={mChartStart}
+                        timeMax={mChartEnd}
                         data={chartSeriesForOutcome(m, mChartEntries[0] || mOutcomeEntries[0], mSeries)}
                         targetPct={mLeadPct}
                         emptyLabel={t('points.activity.noHistory')}

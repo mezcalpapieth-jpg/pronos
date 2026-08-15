@@ -2524,11 +2524,20 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   const marketOpenedAt = market.createdAt
     ? Math.floor(new Date(market.createdAt).getTime() / 1000)
     : null;
-  const chartWindowStart = Math.floor(Date.now() / 1000) - (
+  // Both bounds come off one `now` so the window can't skew, and both the
+  // opening-baseline seed and the chart axis describe the same span.
+  // Polymarket-style clamp: a market younger than the selected range
+  // charts its own life (created 8:22 → axis starts 8:22), so every line
+  // is born at the left edge instead of floating in an empty canvas.
+  const chartWindowEnd = Math.floor(Date.now() / 1000);
+  const chartRangeStart = chartWindowEnd - (
     activeChartRange.hours != null
       ? activeChartRange.hours * 3600
       : activeChartRange.days * 86400
   );
+  const chartWindowStart = Number.isFinite(marketOpenedAt)
+    ? Math.max(chartRangeStart, Math.min(marketOpenedAt, chartWindowEnd - 60))
+    : chartRangeStart;
   const withOpeningBaseline = (series) => {
     if (!Array.isArray(series) || series.length === 0) return series;
     if (!Number.isFinite(marketOpenedAt) || marketOpenedAt < chartWindowStart) return series;
@@ -2975,6 +2984,8 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                     showValue={false}
                     domainMin={0}
                     domainMax={100}
+                    timeMin={chartWindowStart}
+                    timeMax={chartWindowEnd}
                     data={displayHistoryByOutcome?.[0] || []}
                     activity={displayActivityByOutcome?.[0] || []}
                     targetPct={pctFor(0)}
@@ -3000,6 +3011,8 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                         strokeWidth={1.5}
                         domainMin={0}
                         domainMax={100}
+                        timeMin={chartWindowStart}
+                        timeMax={chartWindowEnd}
                         series={chartIndices.map((i) => ({
                           key: `opt-${i}`,
                           label: displayOutcomes[i],

@@ -123,6 +123,39 @@ export default async function handler(req, res) {
         snapshotted_at ASC
     `;
 
+    // Polymarket-style carry-forward: the price at the window's start is
+    // the last one BEFORE it, not the first one inside it. Without this
+    // boundary point a line whose first in-window point lands at noon
+    // starts mid-chart instead of at the left edge. Checked against BOTH
+    // price sources below (AMM snapshots and order-book fills), since a
+    // market's recent history can live entirely in either one. Clamped to
+    // the window start so chart axes never stretch past the range.
+    const boundarySnapshotRows = await sql`
+      SELECT DISTINCT ON (market_id)
+        market_id, prices, snapshotted_at
+      FROM points_price_snapshots
+      WHERE market_id = ANY(${ids}::int[])
+        AND snapshotted_at < NOW() - (${windowHours} || ' hours')::interval
+      ORDER BY market_id ASC, snapshotted_at DESC
+    `;
+    const boundaryTradeRows = outcomeIdx <= 1 ? await sql`
+      SELECT DISTINCT ON (t.market_id)
+        t.market_id, t.outcome_index, t.price_at_trade, t.created_at
+      FROM points_trades t
+      JOIN points_markets m ON m.id = t.market_id
+      WHERE t.market_id = ANY(${ids}::int[])
+        AND t.username <> ${PRONOS_TREASURY_USERNAME}
+        AND t.price_at_trade IS NOT NULL
+        AND t.outcome_index IN (0, 1)
+        AND t.reserves_before IS NOT NULL
+        AND t.reserves_after IS NOT NULL
+        AND t.reserves_before = t.reserves_after
+        AND jsonb_typeof(m.outcomes) = 'array'
+        AND jsonb_array_length(m.outcomes) = 2
+        AND t.created_at < NOW() - (${windowHours} || ' hours')::interval
+      ORDER BY t.market_id ASC, t.created_at DESC, t.id DESC
+    ` : [];
+
     // Order-book fills do not alter reserves, so they do not create AMM
     // snapshots. Add them back as real price points for binary markets.
     const bookRows = outcomeIdx <= 1 ? await sql`
@@ -143,8 +176,33 @@ export default async function handler(req, res) {
     ` : [];
 
     // Group by market_id and project only the requested outcome.
+    const windowStartSec = Date.now() / 1000 - windowHours * 3600;
     const history = {};
     for (const id of ids) history[id] = [];
+    // Per market, carry forward whichever pre-window price is most recent.
+    const boundary = new Map();
+    for (const r of boundarySnapshotRows) {
+      const prices = parseJsonb(r.prices, []);
+      const price = Number(prices[outcomeIdx]);
+      if (!Number.isFinite(price)) continue;
+      boundary.set(r.market_id, { at: new Date(r.snapshotted_at).getTime(), p: price });
+    }
+    for (const r of boundaryTradeRows) {
+      const tradePrice = Number(r.price_at_trade);
+      if (!Number.isFinite(tradePrice) || tradePrice <= 0 || tradePrice >= 1) continue;
+      const projected = Number(r.outcome_index) === outcomeIdx ? tradePrice : 1 - tradePrice;
+      const at = new Date(r.created_at).getTime();
+      const prev = boundary.get(r.market_id);
+      if (!prev || at > prev.at) boundary.set(r.market_id, { at, p: projected });
+    }
+    for (const [marketId, b] of boundary) {
+      history[marketId].push({
+        t: windowStartSec,
+        p: Math.round(b.p * 10000) / 100,
+        // Sorts ahead of any in-window point sharing the same timestamp.
+        _id: -1,
+      });
+    }
     for (const r of rows) {
       const prices = parseJsonb(r.prices, []);
       const price = Number(prices[outcomeIdx]);
