@@ -386,6 +386,23 @@ function chartOutcomeIndicesForDisplay({ displayOutcomes = [], displayPrices = [
   return selected.slice(0, 6);
 }
 
+// True binary markets ("Sí"/"No", "Yes"/"No") collapse to one line since
+// No is just Sí's mirror. Two named rivals — candidates, teams, two
+// different answers — carry real information in both lines, so those
+// get the shared-axis two-line chart instead.
+function isBinaryYesNoOutcomes(outcomes) {
+  if (!Array.isArray(outcomes) || outcomes.length !== 2) return false;
+  const [a, b] = outcomes.map(o => String(o || '').trim().toLowerCase());
+  return (a === 'sí' || a === 'si' || a === 'yes') && b === 'no';
+}
+
+// Same green/red-for-binary rule as accentFor, so a two-rival chart
+// line matches the color of its buy button below.
+function chartColorFor(i, totalOutcomes) {
+  if (totalOutcomes === 2) return i === 0 ? OUTCOME_COLORS[0] : OUTCOME_COLORS[2];
+  return OUTCOME_COLORS[i % OUTCOME_COLORS.length];
+}
+
 // Map (resolver_type, resolver_config.source) → human-readable source
 // name. Brand names stay untranslated — "Chainlink" is "Chainlink" in
 // every language.
@@ -2505,6 +2522,14 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   const displayOutcomeCountryLabels = displayOutcomeIndices.map(i => market.outcomeCountryLabels?.[i] || null);
   const rawHistoryByOutcome = displayOutcomeIndices.map(i => historyByOutcome?.[i] || []);
   const displayActivityByOutcome = displayOutcomeIndices.map(i => activityByOutcome?.[i] || []);
+  // Admin's explicit chart-style pick (only meaningful at N=2) wins over
+  // the label-based auto-detect below.
+  const chartStyleOverride = displayOutcomes.length === 2 ? market.chartStyle : null;
+  const useSingleLineChart = chartStyleOverride === 'rivals'
+    ? false
+    : chartStyleOverride === 'single'
+    ? true
+    : displayOutcomes.length < 2 || isBinaryYesNoOutcomes(displayOutcomes);
   const activeChartRange = detailChartRangeFor(chartRange);
 
   // A market opens at even odds and genuinely sits there until someone
@@ -2929,7 +2954,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                     <DemoTradeFlares marketId={id} />
                   </Suspense>
                 )}
-                {displayOutcomes.length <= 2 && (
+                {useSingleLineChart && (
                   <div style={{
                     display: 'flex',
                     alignItems: 'baseline',
@@ -2968,14 +2993,15 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                     </span>
                   </div>
                 )}
-                {/* Binary markets show one taller chart with just the YES
-                    line (the NO line is its mirror, no extra info). For
-                    3+ outcomes every curve is drawn on ONE shared axis —
+                {/* True Sí/No markets show one taller chart with just the
+                    YES line (the NO line is its mirror, no extra info).
+                    Everything else — two named rivals or 3+ outcomes —
+                    draws every curve on ONE shared axis, Polymarket-style:
                     stacked rows each had their own baseline, so a 20%
                     line and a 95% line looked the same height and the
                     reader could not compare them. One color per option,
                     matching the buy buttons below. */}
-                {displayOutcomes.length <= 2 ? (
+                {useSingleLineChart ? (
                   <Sparkline
                     height={200}
                     color={OUTCOME_COLORS[0]}
@@ -3016,7 +3042,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                         series={chartIndices.map((i) => ({
                           key: `opt-${i}`,
                           label: displayOutcomes[i],
-                          color: OUTCOME_COLORS[i % OUTCOME_COLORS.length],
+                          color: chartColorFor(i, displayOutcomes.length),
                           data: Array.isArray(displayHistoryByOutcome?.[i])
                             ? displayHistoryByOutcome[i]
                             : [],
