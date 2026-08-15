@@ -226,8 +226,9 @@ function isManualReviewMarket({ resolverType, cfg, row, sourceData }) {
   if (rt === 'manual' || rt === 'manual_review') return true;
   if (rt === 'api_lcdlf') return false;
 
-  const source = String(row?.source || cfg?.source || '').trim().toLowerCase();
-  if (isAutoResolvableApiChart({ resolverType: rt, source })) return false;
+  const resolverSource = String(cfg?.source || '').trim().toLowerCase();
+  const source = String(row?.source || resolverSource || '').trim().toLowerCase();
+  if (isAutoResolvableApiChart({ resolverType: rt, source: resolverSource || source })) return false;
 
   if (['entertainment', 'codex-entertainment', 'codex-premios-juventud-2026'].includes(source)) {
     return true;

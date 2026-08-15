@@ -67,15 +67,17 @@ const SLOT_DEFS = [
 
 const BUY_COLOR = 'var(--yes)';
 const SELL_COLOR = 'var(--danger)';
+// Muted to match PointsMarketDetail.jsx's OUTCOME_COLORS — full-saturation
+// hex read as neon against the near-black chart background.
 const OUTCOME_COLORS = [
-  'var(--yes)',
-  'var(--gold)',
-  '#ff3b3b',
-  '#3b82f6',
-  '#a855f7',
-  '#06b6d4',
-  '#ec4899',
-  '#84cc16',
+  '#3FAE72',
+  '#D9A63C',
+  '#E2574F',
+  '#5D8EE0',
+  '#A47FD1',
+  '#4CB3C2',
+  '#D687A8',
+  '#9CB84E',
 ];
 
 function displayCategory(category) {
@@ -1070,10 +1072,9 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
 
                     {isMultiChart ? (
                       <MultiSparkline
-                        height={isMobile ? 138 : 164}
-                        strokeWidth={2}
+                        height={isMobile ? 168 : 200}
+                        strokeWidth={1.5}
                         showActivity
-                        jumpShape="soft-step"
                         series={mChartEntries.map(entry => ({
                           key: `opt-${entry.index}`,
                           label: entry.label,
@@ -1098,16 +1099,19 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                       />
                     ) : (
                       <Sparkline
-                        height={isMobile ? 110 : 148}
+                        height={isMobile ? 140 : 180}
                         color={BUY_COLOR}
-                        strokeWidth={2.2}
-                        fill
-                        // The big % above the chart already states the
-                        // level; Sparkline's auto y-axis (on at h>=100)
-                        // would only collide with the end dot here.
-                        showYAxis={false}
+                        strokeWidth={1.6}
+                        fill={false}
+                        // The end label now reserves its own gutter, so
+                        // the y-axis no longer collides with it — enable
+                        // it for the same scale reference the multi-
+                        // outcome carousel charts already show.
+                        showYAxis
                         fitDomain
-                        jumpShape="soft-step"
+                        showEndLabel
+                        endLabelText={mOutcomes[0]}
+                        endLabelWidth={140}
                         data={chartSeriesForOutcome(m, mChartEntries[0] || mOutcomeEntries[0], mSeries)}
                         targetPct={mLeadPct}
                         emptyLabel={t('points.activity.noHistory')}

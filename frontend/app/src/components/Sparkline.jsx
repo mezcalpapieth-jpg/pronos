@@ -25,6 +25,9 @@ import React, { useMemo, useState, useId, useRef, useLayoutEffect } from 'react'
  * @param {number} valueWidth - Width reserved for the right-side label (default 44)
  * @param {string} label - Optional left-side label (e.g. option name)
  * @param {number} labelWidth - Width reserved for the left-side label
+ * @param {boolean} showEndLabel - Pin name + value to the line's endpoint (Polymarket-style)
+ * @param {string} endLabelText - Name shown above the value in the end label
+ * @param {number} endLabelWidth - Width reserved on the right for the end label (default 96)
  */
 
 const MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -106,6 +109,9 @@ export default function Sparkline({
   showEmptyState = true,
   showYAxis,
   showXAxis,
+  showEndLabel = false,
+  endLabelText,
+  endLabelWidth = 96,
   domainMin,
   domainMax,
   fitDomain = false,
@@ -213,8 +219,9 @@ export default function Sparkline({
     ? measuredWidth
     : Math.max(20, width - labelWidth - (showValue ? valueWidth : 0));
   const yAxisGutter = shouldShowYAxis ? Math.min(34, Math.max(28, chartWidth * 0.06)) : 0;
+  const endLabelGutter = showEndLabel ? endLabelWidth : 0;
   const xAxisHeight = shouldShowXAxis ? 18 : 0;
-  const plotRight = Math.max(20, chartWidth - yAxisGutter);
+  const plotRight = Math.max(20, chartWidth - yAxisGutter - endLabelGutter);
   const plotBottom = Math.max(16, height - xAxisHeight);
   const w = Math.max(20, plotRight - padX * 2);
   const h = Math.max(10, plotBottom - padY * 2);
@@ -448,10 +455,10 @@ export default function Sparkline({
             y1={yForValue(tick)}
             x2={plotRight}
             y2={yForValue(tick)}
-            stroke="var(--border)"
+            stroke="var(--text-muted)"
             strokeWidth={1}
             strokeDasharray="2,4"
-            opacity={0.5}
+            opacity={0.35}
           />
         ))}
 
@@ -528,6 +535,46 @@ export default function Sparkline({
             zIndex: 2,
           }}
         />
+      )}
+
+      {/* End label — outcome name + resting value pinned to the line's
+          endpoint, the way Polymarket annotates each series in place
+          instead of only naming it in a legend above the chart. */}
+      {showEndLabel && hoveredIdx === null && (
+        <div
+          style={{
+            position: 'absolute',
+            left: `${(lastPt.x / chartWidth) * 100}%`,
+            top: `${(lastPt.y / height) * 100}%`,
+            transform: 'translate(10px, -50%)',
+            width: endLabelWidth - 10,
+            pointerEvents: 'none',
+            zIndex: 2,
+          }}
+        >
+          {endLabelText && (
+            <div style={{
+              fontFamily: 'var(--font-body)',
+              fontSize: 12,
+              color: 'var(--text-secondary)',
+              lineHeight: 1.25,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+              {endLabelText}
+            </div>
+          )}
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 15,
+            fontWeight: 700,
+            color,
+            fontVariantNumeric: 'tabular-nums',
+          }}>
+            {lastVal}%
+          </div>
+        </div>
       )}
 
       {shouldShowYAxis && visibleYTicks.map((tick) => (

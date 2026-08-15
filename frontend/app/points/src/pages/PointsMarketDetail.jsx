@@ -61,15 +61,18 @@ const DemoTradeFlares = lazy(() => import('../demo/DemoTradeFlares.jsx'));
 // accents so users recognize the same color for the same outcome.
 // Palette wraps at N>8 (rare); MULTI_ACCENTS below is the matched
 // border / background variant for the buy buttons.
+// Muted on purpose (not var(--yes)/var(--gold), which are also used
+// for unrelated success/positive states app-wide) — full-saturation
+// hex read as neon against the near-black chart background.
 const OUTCOME_COLORS = [
-  'var(--yes)',            // green
-  'var(--gold)',  // gold
-  '#ff3b3b',               // red
-  '#3b82f6',               // blue
-  '#a855f7',               // purple
-  '#06b6d4',               // cyan
-  '#ec4899',               // pink
-  '#84cc16',               // lime
+  '#3FAE72',               // green
+  '#D9A63C',               // gold
+  '#E2574F',               // red
+  '#5D8EE0',               // blue
+  '#A47FD1',               // purple
+  '#4CB3C2',               // cyan
+  '#D687A8',               // pink
+  '#9CB84E',               // lime
 ];
 
 const DETAIL_CHART_RANGES = [
@@ -255,9 +258,8 @@ function ActivityMetric({ label, value, tone = 'neutral' }) {
     <div style={{
       minWidth: 0,
       padding: '9px 10px',
-      borderRadius: 9,
+      borderRadius: 10,
       background: 'var(--surface2)',
-      border: '1px solid var(--border)',
     }}>
       <div style={{
         fontFamily: 'var(--font-mono)',
@@ -288,14 +290,14 @@ function ActivityMetric({ label, value, tone = 'neutral' }) {
 }
 
 const MULTI_ACCENTS = [
-  { border: 'rgba(22,163,74,0.25)',  bg: 'var(--yes-dim)', fg: 'var(--yes)' },
-  { border: 'rgba(184,144,10,0.3)',  bg: 'rgba(184,144,10,0.08)',              fg: 'var(--gold)' },
-  { border: 'rgba(255,59,59,0.25)',  bg: 'rgba(255,59,59,0.08)',               fg: '#ff3b3b' },
-  { border: 'rgba(59,130,246,0.3)',  bg: 'rgba(59,130,246,0.08)',              fg: '#3b82f6' },
-  { border: 'rgba(168,85,247,0.3)',  bg: 'rgba(168,85,247,0.08)',              fg: '#a855f7' },
-  { border: 'rgba(6,182,212,0.3)',   bg: 'rgba(6,182,212,0.08)',               fg: '#06b6d4' },
-  { border: 'rgba(236,72,153,0.3)',  bg: 'rgba(236,72,153,0.08)',              fg: '#ec4899' },
-  { border: 'rgba(132,204,22,0.3)',  bg: 'rgba(132,204,22,0.08)',              fg: '#84cc16' },
+  { border: 'rgba(63,174,114,0.25)', bg: 'rgba(63,174,114,0.08)',  fg: '#3FAE72' },
+  { border: 'rgba(217,166,60,0.3)',  bg: 'rgba(217,166,60,0.08)',  fg: '#D9A63C' },
+  { border: 'rgba(226,87,79,0.25)',  bg: 'rgba(226,87,79,0.08)',   fg: '#E2574F' },
+  { border: 'rgba(93,142,224,0.3)',  bg: 'rgba(93,142,224,0.08)',  fg: '#5D8EE0' },
+  { border: 'rgba(164,127,209,0.3)', bg: 'rgba(164,127,209,0.08)', fg: '#A47FD1' },
+  { border: 'rgba(76,179,194,0.3)',  bg: 'rgba(76,179,194,0.08)',  fg: '#4CB3C2' },
+  { border: 'rgba(214,135,168,0.3)', bg: 'rgba(214,135,168,0.08)', fg: '#D687A8' },
+  { border: 'rgba(156,184,78,0.3)',  bg: 'rgba(156,184,78,0.08)',  fg: '#9CB84E' },
 ];
 
 function accentFor(i, totalOutcomes) {
@@ -2994,7 +2996,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                   <Sparkline
                     height={200}
                     color={OUTCOME_COLORS[0]}
-                    strokeWidth={2}
+                    strokeWidth={1.5}
                     fill={false}
                     showValue={false}
                     domainMin={0}
@@ -3021,7 +3023,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
                     return (
                       <MultiSparkline
                         height={240}
-                        strokeWidth={2}
+                        strokeWidth={1.5}
                         domainMin={0}
                         domainMax={100}
                         series={chartIndices.map((i) => ({

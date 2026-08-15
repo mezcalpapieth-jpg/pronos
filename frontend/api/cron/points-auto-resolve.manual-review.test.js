@@ -24,7 +24,8 @@ test('points auto-resolver lets trusted chart APIs resolve music markets', () =>
   assert.match(SOURCE, /AUTO_RESOLVABLE_API_CHART_SOURCES = new Set/);
   assert.match(SOURCE, /'apple-mx-songs'/);
   assert.match(SOURCE, /'youtube-trending-mx'/);
-  assert.match(SOURCE, /isAutoResolvableApiChart\(\{ resolverType: rt, source \}\)\) return false/);
+  assert.match(SOURCE, /const resolverSource = String\(cfg\?\.source \|\| ''\)/);
+  assert.match(SOURCE, /isAutoResolvableApiChart\(\{ resolverType: rt, source: resolverSource \|\| source \}\)\) return false/);
 });
 
 test('points auto-resolver queues chart API failures for manual review', () => {
