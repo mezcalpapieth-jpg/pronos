@@ -63,9 +63,11 @@ test('pending generated markets support taxonomy filters and filtered bulk actio
 test('parallel pending approvals derive child Yes\\/No reserves from suggested probabilities', () => {
   assert.match(source, /seedLiquiditiesFromProbabilities/);
   assert.match(source, /function parallelLegBinaryReserves/);
+  assert.match(source, /POINTS_PARALLEL_LEG_MIN_BINARY_RESERVE/);
   assert.match(source, /suggestedPricing\.legProbabilities/);
   assert.match(source, /suggestedPricing\.legProbabilityPct/);
   assert.match(source, /minProbability:\s*0\.01/);
+  assert.match(source, /minOutcomeReserve:\s*PARALLEL_LEG_MIN_BINARY_RESERVE/);
   assert.match(source, /JSON\.stringify\(legReserves\)/);
 });
 

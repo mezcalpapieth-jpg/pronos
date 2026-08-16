@@ -49,6 +49,7 @@ export function seedLiquiditiesFromProbabilities(probabilities, {
   minSeed = 100,
   maxSeed = 10_000_000,
   minProbability = MIN_PROBABILITY,
+  minOutcomeReserve = minSeed,
 } = {}) {
   const normalized = normalizeProbabilities(probabilities, null, { minProbability });
   if (normalized.error) return normalized;
@@ -63,10 +64,20 @@ export function seedLiquiditiesFromProbabilities(probabilities, {
   // so the average per-option seed remains the generator's seed.
   const inverse = normalized.probabilities.map(p => 1 / p);
   const inverseAvg = inverse.reduce((sum, v) => sum + v, 0) / inverse.length;
-  const seedLiquidities = inverse.map(v => {
+  const rawSeedLiquidities = inverse.map(v => {
     const next = roundMoney(seed * (v / inverseAvg));
-    return clamp(next, minSeed, maxSeed);
+    return Math.min(maxSeed, Math.max(0.01, next));
   });
+  const reserveFloor = Number(minOutcomeReserve ?? minSeed);
+  let seedLiquidities = rawSeedLiquidities;
+  if (Number.isFinite(reserveFloor) && reserveFloor > minSeed) {
+    const minReserve = Math.min(...seedLiquidities);
+    if (Number.isFinite(minReserve) && minReserve > 0 && minReserve < reserveFloor) {
+      const scale = reserveFloor / minReserve;
+      seedLiquidities = seedLiquidities.map(v => roundMoney(v * scale));
+    }
+  }
+  seedLiquidities = seedLiquidities.map(v => clamp(roundMoney(v), minSeed, maxSeed));
 
   return {
     ...normalized,

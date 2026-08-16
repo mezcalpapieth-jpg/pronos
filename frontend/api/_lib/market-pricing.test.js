@@ -22,6 +22,20 @@ test('seedLiquiditiesFromProbabilities opens skewed CPMM odds with inverse reser
   assert.equal(result.seedLiquidity, 600);
 });
 
+test('seedLiquiditiesFromProbabilities can floor thin longshot reserves without changing odds', () => {
+  const result = seedLiquiditiesFromProbabilities([0.055, 0.945], {
+    seedLiquidity: 876.51,
+    minProbability: 0.01,
+    minOutcomeReserve: 1000,
+  });
+  const [yesReserve, noReserve] = result.seedLiquidities;
+  const yesPrice = noReserve / (yesReserve + noReserve);
+
+  assert.equal(Math.min(...result.seedLiquidities), 1000);
+  assert.ok(yesReserve > 10_000);
+  assert.ok(Math.abs(yesPrice - result.probabilities[0]) < 0.001);
+});
+
 test('impliedProbabilitiesFromOdds removes the bookmaker overround', () => {
   const result = impliedProbabilitiesFromOdds([1.5, 3], { format: 'decimal' });
   assert.deepEqual(result.probabilityPct, [66.7, 33.3]);

@@ -341,6 +341,41 @@ test('Pronos maker depth keeps the middle light and adds shared edge walls', () 
   assert.equal(bestAsk(edgeCryptoDepth).total, bestAsk(edgeDepth).total);
 });
 
+test('Pronos maker depth lets corrective edge flow reach the AMM', () => {
+  const lowOutcomeMarket = {
+    // outcome 0 is about 5.5%, like a longshot tournament leg.
+    reserves: JSON.stringify([1715.54, 100]),
+  };
+  const highOutcomeMarket = {
+    // outcome 0 is about 94.5%, the opposite edge.
+    reserves: JSON.stringify([100, 1715.54]),
+  };
+  const lowDepth = pronosMakerDepthForMarket(lowOutcomeMarket, {
+    outcomeIndex: 0,
+    levels: [10, 25, 50, 100],
+    currentPrice: 0.055,
+  });
+  const highDepth = pronosMakerDepthForMarket(highOutcomeMarket, {
+    outcomeIndex: 0,
+    levels: [10, 25, 50, 100],
+    currentPrice: 0.945,
+  });
+  const midDepth = pronosMakerDepthForMarket({
+    reserves: JSON.stringify([500, 500]),
+  }, {
+    outcomeIndex: 0,
+    levels: [10, 25, 50, 100],
+    currentPrice: 0.5,
+  });
+
+  assert.equal(lowDepth.asks.length, 0);
+  assert.ok(lowDepth.bids.length > 0);
+  assert.ok(highDepth.asks.length > 0);
+  assert.equal(highDepth.bids.length, 0);
+  assert.ok(midDepth.asks.length > 0);
+  assert.ok(midDepth.bids.length > 0);
+});
+
 test('Pronos maker depth depletes from treasury trade usage', () => {
   const market = {
     reserves: JSON.stringify([500, 500]),

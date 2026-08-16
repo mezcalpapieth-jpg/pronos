@@ -36,6 +36,10 @@ export const PRONOS_TROPHY_MAKER_DEPTH_PER_SIDE = configNumber('POINTS_TROPHY_MA
 export const PRONOS_MAKER_EDGE_DEPTH_MULTIPLIER = configNumber('POINTS_MAKER_EDGE_DEPTH_MULTIPLIER', 5);
 export const PRONOS_TROPHY_MAKER_EDGE_DEPTH_MULTIPLIER = configNumber('POINTS_TROPHY_MAKER_EDGE_DEPTH_MULTIPLIER', PRONOS_MAKER_EDGE_DEPTH_MULTIPLIER);
 export const PRONOS_CRYPTO_MAKER_EDGE_DEPTH_MULTIPLIER = configNumber('POINTS_CRYPTO_MAKER_EDGE_DEPTH_MULTIPLIER', PRONOS_MAKER_EDGE_DEPTH_MULTIPLIER);
+export const PRONOS_MAKER_CONTRA_EDGE_CUTOFF = Math.min(
+  0.45,
+  configNumber('POINTS_MAKER_CONTRA_EDGE_CUTOFF', 0.25),
+);
 
 export function parseJsonb(value, fallback) {
   if (Array.isArray(value)) return value;
@@ -580,6 +584,21 @@ function sortedMakerBids(depth) {
   return [...(depth?.bids || [])].sort((a, b) => Number(b.price || 0) - Number(a.price || 0));
 }
 
+function filterContraEdgeMakerDepth({ asks, bids, currentPrice }) {
+  const price = normalizeTakerPrice(currentPrice, null);
+  if (price === null || PRONOS_MAKER_CONTRA_EDGE_CUTOFF <= EPSILON) {
+    return { asks, bids };
+  }
+  const edge = PRONOS_MAKER_CONTRA_EDGE_CUTOFF;
+  if (price <= edge) {
+    return { asks: [], bids };
+  }
+  if (price >= 1 - edge) {
+    return { asks, bids: [] };
+  }
+  return { asks, bids };
+}
+
 function subtractCollateralFromDepth(rows, usedCollateral) {
   let remainingUsed = Math.max(0, Number(usedCollateral || 0));
   const available = [];
@@ -675,17 +694,24 @@ export function pronosMakerDepthForMarket(market, {
     sortedMakerBids(depth),
     usage.bidCollateralUsed,
   ).sort((a, b) => Number(b.price || 0) - Number(a.price || 0));
-  const bestAsk = asks.reduce((best, row) => (
+  const edgeFiltered = filterContraEdgeMakerDepth({
+    asks,
+    bids,
+    currentPrice: currentPrice ?? depth.currentPrice,
+  });
+  const filteredAsks = edgeFiltered.asks;
+  const filteredBids = edgeFiltered.bids;
+  const bestAsk = filteredAsks.reduce((best, row) => (
     best == null || row.price < best ? row.price : best
   ), null);
-  const bestBid = bids.reduce((best, row) => (
+  const bestBid = filteredBids.reduce((best, row) => (
     best == null || row.price > best ? row.price : best
   ), null);
 
   return {
     ...depth,
-    asks,
-    bids,
+    asks: filteredAsks,
+    bids: filteredBids,
     spread: bestAsk == null || bestBid == null ? null : round(Math.max(0, bestAsk - bestBid), 6),
   };
 }

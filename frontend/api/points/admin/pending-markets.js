@@ -33,6 +33,9 @@ const ALLOWED_CATEGORIES = new Set([
   'general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup',
 ]);
 const MAX_PENDING_OUTCOMES = 64;
+const PARALLEL_LEG_MIN_BINARY_RESERVE = Number.isFinite(Number(process.env.POINTS_PARALLEL_LEG_MIN_BINARY_RESERVE))
+  ? Math.max(100, Number(process.env.POINTS_PARALLEL_LEG_MIN_BINARY_RESERVE))
+  : 1000;
 
 function parseJsonb(v, fb) {
   if (Array.isArray(v)) return v;
@@ -176,6 +179,7 @@ function parallelLegBinaryReserves({ sourceData, outcomeIndex, legSeed, parentSe
   const priced = seedLiquiditiesFromProbabilities([probability, 1 - probability], {
     seedLiquidity: legSeed,
     minProbability: 0.01,
+    minOutcomeReserve: PARALLEL_LEG_MIN_BINARY_RESERVE,
   });
   return Array.isArray(priced.seedLiquidities) && priced.seedLiquidities.length === 2
     ? priced.seedLiquidities
