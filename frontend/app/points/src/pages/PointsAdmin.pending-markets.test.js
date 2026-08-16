@@ -184,6 +184,13 @@ test('Points admin can repair active parallel market reserves', () => {
   assert.match(apiSource, /parallelLegs/);
 });
 
+test('Points admin time edits do not block on untouched depleted parallel reserves', () => {
+  const editModalSource = sourceForFunction('EditMarketModal');
+  assert.match(editModalSource, /const changed = !initial[\s\S]+Math\.abs\(noReserve - Number\(initial\.noReserve\)\) > 0\.000001;/);
+  assert.match(editModalSource, /if \(!changed\) continue;[\s\S]+Cada reserva Sí\/No debe ser de al menos 100 MXNP/);
+  assert.match(editModalSource, /patches\.push\(\{ id: row\.id, yesReserve, noReserve \}\)/);
+});
+
 test('Points pending admin can set 24h crypto windows and toggle BTC/ETH generation', () => {
   assert.match(source, /DEFAULT_CRYPTO_INTERVAL_OPTIONS[\s\S]*720[\s\S]*12 horas[\s\S]*1440[\s\S]*24 horas/);
   assert.match(source, /DEFAULT_CRYPTO_ASSET_OPTIONS[\s\S]*btc[\s\S]*eth/);

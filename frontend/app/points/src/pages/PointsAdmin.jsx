@@ -3233,6 +3233,12 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
       for (const row of parallelReserveRows) {
         const yesReserve = Number(row.yesReserve);
         const noReserve = Number(row.noReserve);
+        const initial = initialById.get(row.id);
+        const changed = !initial
+          || Math.abs(yesReserve - Number(initial.yesReserve)) > 0.000001
+          || Math.abs(noReserve - Number(initial.noReserve)) > 0.000001;
+        if (!changed) continue;
+
         if (
           !Number.isFinite(yesReserve) ||
           !Number.isFinite(noReserve) ||
@@ -3243,13 +3249,7 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
           setSaving(false);
           return;
         }
-        const initial = initialById.get(row.id);
-        const changed = !initial
-          || Math.abs(yesReserve - Number(initial.yesReserve)) > 0.000001
-          || Math.abs(noReserve - Number(initial.noReserve)) > 0.000001;
-        if (changed) {
-          patches.push({ id: row.id, yesReserve, noReserve });
-        }
+        patches.push({ id: row.id, yesReserve, noReserve });
       }
       if (patches.length > 0) parallelLegPatches = patches;
     }
