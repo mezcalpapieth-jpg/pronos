@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./points-schema.js', import.meta.url), 'utf8');
+const migrateSource = await readFile(new URL('../migrate.js', import.meta.url), 'utf8');
 
 test('points schema self-healing avoids hot-route migration lock pileups', () => {
   assert.match(source, /POINTS_SCHEMA_READY_PROBE/);
@@ -59,4 +60,30 @@ test('points social links schema supports private-by-default public handles', ()
   assert.match(source, /ALTER TABLE points_social_links ADD COLUMN IF NOT EXISTS token_scope TEXT/);
   assert.match(source, /idx_points_social_links_public_user/);
   assert.match(source, /ON points_social_links\(username, is_public\)/);
+});
+
+test('points schema stores non-punitive risk review signals for admins', () => {
+  assert.match(source, /to_regclass\('public\.points_risk_events'\) IS NOT NULL AS points_risk_events/);
+  assert.match(source, /to_regclass\('public\.points_account_reviews'\) IS NOT NULL AS points_account_reviews/);
+  assert.match(source, /to_regclass\('public\.points_risk_flags'\) IS NOT NULL AS points_risk_flags/);
+  for (const migrationSource of [source, migrateSource]) {
+    assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS points_risk_events/);
+    assert.match(migrationSource, /account_hash\s+TEXT/);
+    assert.match(migrationSource, /ip_hash\s+TEXT/);
+    assert.match(migrationSource, /user_agent_hash\s+TEXT/);
+    assert.match(migrationSource, /device_hash\s+TEXT/);
+    assert.match(migrationSource, /session_hash\s+TEXT/);
+    assert.match(migrationSource, /metadata\s+JSONB NOT NULL DEFAULT '\{\}'::jsonb/);
+    assert.match(migrationSource, /idx_points_risk_events_user_time/);
+    assert.match(migrationSource, /idx_points_risk_events_ip_hash/);
+    assert.match(migrationSource, /idx_points_risk_events_device_hash/);
+    assert.match(migrationSource, /idx_points_risk_events_session_hash/);
+    assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS points_account_reviews/);
+    assert.match(migrationSource, /CHECK \(status IN \('clear', 'watch', 'phone_required', 'under_review', 'ineligible'\)\)/);
+    assert.match(migrationSource, /idx_points_account_reviews_status/);
+    assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS points_risk_flags/);
+    assert.match(migrationSource, /CHECK \(status IN \('open', 'acknowledged', 'closed'\)\)/);
+    assert.match(migrationSource, /idx_points_risk_flags_status_severity/);
+  }
+  assert.match(source, /never debit balances or alter positions/);
 });

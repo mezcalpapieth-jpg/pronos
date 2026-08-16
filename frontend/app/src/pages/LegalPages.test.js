@@ -18,3 +18,11 @@ test('legal pages expose an in-page Spanish and English language switch', () => 
   assert.match(privacySource, /<LegalLanguageSwitch currentLang=\{lang\} \/>/);
   assert.match(termsSource, /<LegalLanguageSwitch currentLang=\{lang\} \/>/);
 });
+
+test('terms prohibit points tournament and rewards exploits', () => {
+  assert.match(termsSource, /Exploit points, tournaments, rewards, referrals, or social tasks/);
+  assert.match(termsSource, /leaderboards, tournaments, prizes, bonuses, and other rewards/);
+  assert.match(termsSource, /Explotar puntos, torneos, recompensas, referidos o tareas sociales/);
+  assert.match(termsSource, /leaderboards, torneos, premios, bonos y otras recompensas/);
+  assert.match(termsSource, /aunque\s+su balance de puntos siga visible en la app/);
+});

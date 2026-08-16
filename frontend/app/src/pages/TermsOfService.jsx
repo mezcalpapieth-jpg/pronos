@@ -131,12 +131,16 @@ export default function TermsOfService() {
           <li>Trade using privileged information about an event outcome (for example, a referee betting against their own match).</li>
           <li>Use bots, scrapers, or any unauthorized automation.</li>
           <li>Impersonate another person or create multiple accounts to evade restrictions.</li>
+          <li>Exploit points, tournaments, rewards, referrals, or social tasks through coordinated accounts, artificial price movement, self-dealing, timing attacks, resolution delays, bugs, or any other behavior intended to farm leaderboard position or rewards without legitimate market risk.</li>
           <li>Use the platform to launder money, finance illegal activities, or evade sanctions.</li>
           <li>Attack the technical integrity of the system (denial of service, exploits, malicious reverse engineering of contracts).</li>
         </Ul>
         <P>
-          Pronos may freeze your account, cancel activity, and report to the
-          appropriate authorities if it detects any of the conduct above.
+          Pronos may freeze your account, cancel activity, disqualify you from
+          leaderboards, tournaments, prizes, bonuses, and other rewards, and
+          report to the appropriate authorities if it detects any of the conduct
+          above. Users caught using these exploits are not eligible to receive
+          rewards, even if their point balance remains visible in the app.
         </P>
 
         <H2>9. Intellectual property</H2>
@@ -351,13 +355,17 @@ export default function TermsOfService() {
         <li>Operar con información privilegiada sobre el resultado de un evento (por ejemplo, un árbitro apostando contra su propio partido).</li>
         <li>Usar bots, scrapers o cualquier automatización no autorizada.</li>
         <li>Suplantar a otra persona o crear múltiples cuentas para evadir restricciones.</li>
+        <li>Explotar puntos, torneos, recompensas, referidos o tareas sociales mediante cuentas coordinadas, movimientos artificiales de precio, auto-operaciones, ataques de temporalidad, retrasos de resolución, bugs o cualquier conducta diseñada para subir en el leaderboard o reclamar recompensas sin riesgo legítimo de mercado.</li>
         <li>Usar la plataforma para lavar dinero, financiar actividades ilegales o evadir sanciones.</li>
         <li>Atentar contra la integridad técnica del sistema (denegación de servicio, exploits, ingeniería inversa de los contratos con fines maliciosos).</li>
       </Ul>
       <P>
-        Pronos puede congelar tu cuenta, cancelar operaciones, y reportar
-        a las autoridades correspondientes si detecta cualquiera de los
-        comportamientos anteriores.
+        Pronos puede congelar tu cuenta, cancelar actividad, descalificarte
+        de leaderboards, torneos, premios, bonos y otras recompensas, y
+        reportar a las autoridades correspondientes si detecta cualquiera
+        de los comportamientos anteriores. Las personas detectadas usando
+        estos exploits no serán elegibles para recibir recompensas, aunque
+        su balance de puntos siga visible en la app.
       </P>
 
       <H2>9. Propiedad intelectual</H2>

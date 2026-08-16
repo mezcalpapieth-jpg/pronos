@@ -38,6 +38,7 @@ import {
   tournamentRulesActive,
 } from '../_lib/points-tournament-config.js';
 import { assertTournamentMinimumEntry } from '../_lib/points-tournament-entry.js';
+import { capturePointsRiskEvent } from '../_lib/points-risk.js';
 
 // Lightweight HTTP client used only to run the idempotent schema bootstrap.
 // Transactional work goes through withTransaction() which uses a WS Pool.
@@ -368,6 +369,25 @@ export default async function handler(req, res) {
         orderbookFills: orderbookMatch.fills,
         triggeredLimitOrders,
       };
+    });
+
+    await capturePointsRiskEvent(schemaSql, req, {
+      username,
+      accountId: session.sub,
+      eventType: 'trade:buy',
+      marketId: mid,
+      tradeSide: 'buy',
+      outcomeIndex: oi,
+      amount: amt,
+      shares: result.sharesOut,
+      metadata: {
+        requestedCollateral: amt,
+        fee: result.fee,
+        priceBefore: result.priceBefore,
+        priceAfter: result.priceAfter,
+        orderbookFillCount: Array.isArray(result.orderbookFills) ? result.orderbookFills.length : 0,
+        triggeredLimitOrderCount: Array.isArray(result.triggeredLimitOrders) ? result.triggeredLimitOrders.length : 0,
+      },
     });
 
     return res.status(200).json({ ok: true, ...result });

@@ -33,6 +33,7 @@ import {
 import { assertCryptoTradeAllowed } from '../_lib/points-crypto-trade-guard.js';
 import { normalizeExecutableSellShares } from '../_lib/points-sell-shares.js';
 import { binaryPricesWithBookTrade } from '../_lib/points-display-prices.js';
+import { capturePointsRiskEvent } from '../_lib/points-risk.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 
@@ -301,6 +302,25 @@ export default async function handler(req, res) {
         orderbookFills: orderbookMatch.fills,
         triggeredLimitOrders,
       };
+    });
+
+    await capturePointsRiskEvent(schemaSql, req, {
+      username,
+      accountId: session.sub,
+      eventType: 'trade:sell',
+      marketId: mid,
+      tradeSide: 'sell',
+      outcomeIndex: oi,
+      amount: result.collateralOut,
+      shares: result.sharesSold,
+      metadata: {
+        requestedShares: n,
+        realizedPnl: result.realizedPnl,
+        priceBefore: result.priceBefore,
+        priceAfter: result.priceAfter,
+        orderbookFillCount: Array.isArray(result.orderbookFills) ? result.orderbookFills.length : 0,
+        triggeredLimitOrderCount: Array.isArray(result.triggeredLimitOrders) ? result.triggeredLimitOrders.length : 0,
+      },
     });
 
     return res.status(200).json({ ok: true, ...result });

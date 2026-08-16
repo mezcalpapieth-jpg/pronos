@@ -14,6 +14,7 @@ import { readSession, createSessionToken, setSessionCookie } from '../../_lib/se
 import { withTransaction } from '../../_lib/db-tx.js';
 import { sendPointsWelcomeEmail } from '../../_lib/welcome-email.js';
 import { TOURNAMENT_REWARDS } from '../../_lib/points-tournament-config.js';
+import { capturePointsRiskEvent } from '../../_lib/points-risk.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -99,6 +100,15 @@ export default async function handler(req, res) {
           });
         });
       }
+
+      await capturePointsRiskEvent(sql, req, {
+        username: claimed.username,
+        accountId: session.sub,
+        eventType: 'auth:username_claim',
+        metadata: {
+          isFirstTime: claimed.isFirstTime,
+        },
+      });
 
       let token;
       try {

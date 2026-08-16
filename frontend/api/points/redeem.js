@@ -12,6 +12,7 @@ import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { requireSession } from '../_lib/session.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { withTransaction } from '../_lib/db-tx.js';
+import { capturePointsRiskEvent } from '../_lib/points-risk.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 
@@ -115,6 +116,20 @@ export default async function handler(req, res) {
       );
 
       return { balance: newBalance, payout, shares };
+    });
+
+    await capturePointsRiskEvent(schemaSql, req, {
+      username,
+      accountId: session.sub,
+      eventType: 'trade:redeem',
+      marketId: mid,
+      tradeSide: 'redeem',
+      outcomeIndex: oi,
+      amount: result.payout,
+      shares: result.shares,
+      metadata: {
+        payout: result.payout,
+      },
     });
 
     return res.status(200).json({ ok: true, ...result });

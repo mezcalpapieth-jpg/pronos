@@ -790,6 +790,22 @@ export async function adminCancelMarket({ marketId, reason } = {}) {
   });
 }
 
+// ─── Admin — points risk review ────────────────────────────────────────────
+export async function adminListRisk({ username, status = 'all' } = {}) {
+  const q = new URLSearchParams();
+  if (username) q.set('username', username);
+  if (status) q.set('status', status);
+  return getJson(`/api/points/admin/risk?${q.toString()}`);
+}
+
+export async function adminUpdateRiskReview({ username, status, reason }) {
+  return postJson('/api/points/admin/risk', {
+    username,
+    status,
+    reason,
+  });
+}
+
 // ─── Cycles (2-week leaderboard windows) ────────────────────────────────────
 export async function fetchCurrentCycle() {
   const data = await getJson('/api/points/cycles/current');

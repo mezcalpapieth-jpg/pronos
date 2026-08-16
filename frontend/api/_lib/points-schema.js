@@ -44,6 +44,9 @@ const POINTS_SCHEMA_READY_PROBE = `
     to_regclass('public.points_social_links') IS NOT NULL AS points_social_links,
     to_regclass('public.points_mananera_transcripts') IS NOT NULL AS points_mananera_transcripts,
     to_regclass('public.points_top_holder_snapshots') IS NOT NULL AS points_top_holder_snapshots,
+    to_regclass('public.points_risk_events') IS NOT NULL AS points_risk_events,
+    to_regclass('public.points_account_reviews') IS NOT NULL AS points_account_reviews,
+    to_regclass('public.points_risk_flags') IS NOT NULL AS points_risk_flags,
     EXISTS (
       SELECT 1 FROM information_schema.columns
       WHERE table_schema = 'public'
@@ -443,6 +446,77 @@ const POINTS_SCHEMA_MIGRATIONS = [
   // indexer writes can both claim the same on-chain event.
   `ALTER TABLE points_trades ADD COLUMN IF NOT EXISTS tx_hash TEXT`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_points_trades_tx_hash ON points_trades(tx_hash) WHERE tx_hash IS NOT NULL`,
+
+  // ── Points-only risk review signals ────────────────────────────────────
+  // These tables are advisory. They never debit balances or alter positions
+  // automatically; admins use them to review prize eligibility when points
+  // exploits or multi-accounting look likely.
+  `CREATE TABLE IF NOT EXISTS points_risk_events (
+    id               BIGSERIAL PRIMARY KEY,
+    username         TEXT,
+    account_hash     TEXT,
+    event_type       TEXT NOT NULL,
+    market_id        INTEGER REFERENCES points_markets(id) ON DELETE SET NULL,
+    trade_side       TEXT,
+    outcome_index    SMALLINT,
+    amount           NUMERIC(20,6),
+    shares           NUMERIC(30,18),
+    ip_hash          TEXT,
+    user_agent_hash  TEXT,
+    device_hash      TEXT,
+    session_hash     TEXT,
+    metadata         JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_risk_events_user_time
+    ON points_risk_events(username, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_risk_events_market_time
+    ON points_risk_events(market_id, created_at DESC)
+    WHERE market_id IS NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_points_risk_events_ip_hash
+    ON points_risk_events(ip_hash, created_at DESC)
+    WHERE ip_hash IS NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_points_risk_events_session_hash
+    ON points_risk_events(session_hash, created_at DESC)
+    WHERE session_hash IS NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_points_risk_events_device_hash
+    ON points_risk_events(device_hash, created_at DESC)
+    WHERE device_hash IS NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_points_risk_events_user_agent_hash
+    ON points_risk_events(user_agent_hash, created_at DESC)
+    WHERE user_agent_hash IS NOT NULL`,
+  `CREATE TABLE IF NOT EXISTS points_account_reviews (
+    username     TEXT PRIMARY KEY,
+    status       TEXT NOT NULL DEFAULT 'clear'
+                 CHECK (status IN ('clear', 'watch', 'phone_required', 'under_review', 'ineligible')),
+    reason       TEXT,
+    updated_by   TEXT,
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_account_reviews_status
+    ON points_account_reviews(status, updated_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS points_risk_flags (
+    id                 BIGSERIAL PRIMARY KEY,
+    username           TEXT NOT NULL,
+    flag_type          TEXT NOT NULL,
+    severity           INTEGER NOT NULL DEFAULT 1 CHECK (severity >= 1 AND severity <= 5),
+    status             TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'acknowledged', 'closed')),
+    market_id          INTEGER REFERENCES points_markets(id) ON DELETE SET NULL,
+    related_usernames  JSONB NOT NULL DEFAULT '[]'::jsonb,
+    details            JSONB NOT NULL DEFAULT '{}'::jsonb,
+    reviewed_by        TEXT,
+    reviewed_at        TIMESTAMPTZ,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_risk_flags_status_severity
+    ON points_risk_flags(status, severity DESC, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_risk_flags_user
+    ON points_risk_flags(username, status, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_risk_flags_market
+    ON points_risk_flags(market_id, created_at DESC)
+    WHERE market_id IS NOT NULL`,
 
   // ── Positions (materialized — updated atomically with each trade) ──────
   `CREATE TABLE IF NOT EXISTS points_positions (

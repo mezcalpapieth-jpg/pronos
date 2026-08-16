@@ -32,6 +32,7 @@ import { verifyOtp, otpLogin, getSuborgWalletAddress, getSuborgRootUserEmail } f
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { createSessionToken, setSessionCookie } from '../../_lib/session.js';
 import { rateLimit, clientIp } from '../../_lib/rate-limit.js';
+import { capturePointsRiskEvent } from '../../_lib/points-risk.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -157,6 +158,17 @@ export default async function handler(req, res) {
         detail: 'POINTS_SESSION_SECRET is not configured on the server.',
       });
     }
+
+    await capturePointsRiskEvent(sql, req, {
+      username,
+      accountId: suborgId,
+      eventType: 'auth:verify_otp',
+      metadata: {
+        needsUsername: !username,
+        hasWalletAddress: Boolean(walletAddress),
+        emailVerified: Boolean(persistEmail),
+      },
+    });
 
     return res.status(200).json({
       ok: true,

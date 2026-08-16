@@ -46,6 +46,8 @@ import {
   adminBulkHideMarkets,
   adminAppendParallelOutcomes,
   adminConvertParallelToBinary,
+  adminListRisk,
+  adminUpdateRiskReview,
 } from '../lib/pointsApi.js';
 import {
   ADMIN_BASEBALL_LEAGUES,
@@ -289,7 +291,7 @@ export default function PointsAdmin({ isAdmin }) {
     if (typeof window === 'undefined') return 'create';
     const sp = new URLSearchParams(window.location.search);
     const t = sp.get('tab');
-    return ['create', 'markets', 'stats', 'pending', 'social', 'support', 'deck', 'cycles'].includes(t) ? t : 'create';
+    return ['create', 'markets', 'stats', 'pending', 'social', 'support', 'deck', 'cycles', 'risk'].includes(t) ? t : 'create';
   })();
   const createPrefill = (() => {
     if (typeof window === 'undefined') return null;
@@ -369,6 +371,7 @@ export default function PointsAdmin({ isAdmin }) {
           { id: 'markets', label: 'Mercados' },
           { id: 'support', label: 'Soporte' },
           { id: 'social',  label: 'Tareas sociales' },
+          { id: 'risk',    label: 'Riesgo' },
           { id: 'deck',    label: 'Deck' },
           { id: 'cycles',  label: 'Ciclos' },
           { id: 'stats',   label: 'Estadísticas' },
@@ -423,6 +426,7 @@ export default function PointsAdmin({ isAdmin }) {
         />
       )}
       {tab === 'social' && <SocialTasksQueue onQueueChange={refreshAdminTaskCounts} />}
+      {tab === 'risk' && <RiskPanel />}
       {tab === 'support' && <SupportTicketsQueue onQueueChange={refreshAdminTaskCounts} />}
       {tab === 'deck' && <DeckAdminPanel />}
       {tab === 'cycles' && <CyclesPanel />}
@@ -3865,6 +3869,458 @@ function ResolveControls({ market, resolving, onResolve }) {
     </>
   );
 }
+
+// ─── Risk review ────────────────────────────────────────────────────────────
+function RiskPanel() {
+  const [data, setData] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [usernameInput, setUsernameInput] = useState('');
+  const [usernameFilter, setUsernameFilter] = useState('');
+  const [reviewDrafts, setReviewDrafts] = useState({});
+  const [working, setWorking] = useState(null);
+  const [err, setErr] = useState(null);
+  const [msg, setMsg] = useState(null);
+
+  async function load() {
+    setErr(null);
+    try {
+      const r = await adminListRisk({
+        status: statusFilter,
+        username: usernameFilter || undefined,
+      });
+      setData(r);
+    } catch (e) {
+      setData(null);
+      setErr(`${e.code || e.message}${e.detail ? ' · ' + e.detail : ''}`);
+    }
+  }
+
+  useEffect(() => { load(); }, [statusFilter, usernameFilter]);
+
+  async function setReview(username, status) {
+    if (status === 'ineligible') {
+      const ok = window.confirm(
+        `¿Marcar @${username} como no elegible para premios?\n\n` +
+        'Esto NO quita puntos ni balance, pero lo deja señalado para no entregar recompensas.'
+      );
+      if (!ok) return;
+    }
+    setWorking(`${username}:${status}`);
+    setErr(null);
+    setMsg(null);
+    try {
+      await adminUpdateRiskReview({
+        username,
+        status,
+        reason: reviewDrafts[username] || '',
+      });
+      setMsg(`@${username} marcado como ${riskStatusLabel(status)}.`);
+      await load();
+    } catch (e) {
+      setErr(`${e.code || e.message}${e.detail ? ' · ' + e.detail : ''}`);
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  const accounts = Array.isArray(data?.accounts) ? data.accounts : [];
+  const loops = Array.isArray(data?.rapidLoops) ? data.rapidLoops : [];
+  const linkedSignals = Array.isArray(data?.linkedSignals) ? data.linkedSignals : [];
+  const sameMarketLinks = Array.isArray(data?.sameMarketLinks) ? data.sameMarketLinks : [];
+  const flags = Array.isArray(data?.flags) ? data.flags : [];
+  const reviewCount = accounts.filter(row => ['watch', 'phone_required', 'under_review', 'ineligible'].includes(row.reviewStatus)).length;
+
+  return (
+    <div>
+      <section style={adminPanelStyle}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          <div>
+            <div style={adminPanelTitle}>Revisión de riesgo</div>
+            <p style={{ ...adminEmptyStyle, margin: 0, lineHeight: 1.6 }}>
+              Solo revisión: esta pantalla no mueve balances, no borra posiciones y no quita MXNP automáticamente.
+            </p>
+          </div>
+          <button type="button" onClick={load} className="btn-ghost" style={{ padding: '8px 12px', fontSize: 11 }}>
+            Actualizar
+          </button>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, marginTop: 16 }}>
+          <RiskStatCard label="Cuentas en revisión" value={reviewCount} tone="orange" />
+          <RiskStatCard label="Loops rápidos" value={loops.length} tone="red" />
+          <RiskStatCard label="Señales compartidas" value={linkedSignals.length} tone="green" />
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 18, alignItems: 'center' }}>
+          {[
+            ['all', 'Todas'],
+            ['clear', 'Limpias'],
+            ['watch', 'Watch'],
+            ['phone_required', 'Teléfono'],
+            ['under_review', 'Revisión'],
+            ['ineligible', 'No elegible'],
+          ].map(([id, label]) => (
+            <button key={id} type="button" onClick={() => setStatusFilter(id)} style={riskFilterButtonStyle(statusFilter === id)}>
+              {label}
+            </button>
+          ))}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              setUsernameFilter(usernameInput.trim().toLowerCase());
+            }}
+            style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 'auto', minWidth: 260 }}
+          >
+            <input
+              value={usernameInput}
+              onChange={(e) => setUsernameInput(e.target.value)}
+              placeholder="@usuario"
+              style={{ ...inputStyle, height: 38, fontFamily: 'var(--font-mono)' }}
+            />
+            <button type="submit" className="btn-ghost" style={{ padding: '9px 12px', fontSize: 11 }}>
+              Buscar
+            </button>
+            {usernameFilter && (
+              <button
+                type="button"
+                onClick={() => {
+                  setUsernameInput('');
+                  setUsernameFilter('');
+                }}
+                className="btn-ghost"
+                style={{ padding: '9px 12px', fontSize: 11 }}
+              >
+                Limpiar
+              </button>
+            )}
+          </form>
+        </div>
+      </section>
+
+      {err && (
+        <div style={{
+          marginTop: 12,
+          padding: '10px 12px',
+          borderRadius: 8,
+          border: '1px solid rgba(239,68,68,0.35)',
+          color: 'var(--red, #ef4444)',
+          background: 'rgba(239,68,68,0.08)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 12,
+        }}>
+          {err}
+        </div>
+      )}
+      {msg && (
+        <div style={{
+          marginTop: 12,
+          padding: '10px 12px',
+          borderRadius: 8,
+          border: '1px solid rgba(16,185,129,0.35)',
+          color: 'var(--green)',
+          background: 'rgba(16,185,129,0.08)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 12,
+        }}>
+          {msg}
+        </div>
+      )}
+
+      <section style={adminPanelStyle}>
+        <div style={adminPanelTitle}>Cuentas</div>
+        {!data ? (
+          <p style={adminEmptyStyle}>Cargando…</p>
+        ) : accounts.length === 0 ? (
+          <p style={adminEmptyStyle}>Sin cuentas para este filtro.</p>
+        ) : (
+          <div style={{ display: 'grid', gap: 12 }}>
+            {accounts.map(row => (
+              <div key={row.username} style={{
+                border: '1px solid var(--border)',
+                borderRadius: 10,
+                padding: 14,
+                background: 'rgba(255,255,255,0.02)',
+                display: 'grid',
+                gap: 12,
+              }}>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(140px, 1fr) minmax(120px, auto) minmax(120px, auto) minmax(120px, auto)',
+                  gap: 12,
+                  alignItems: 'center',
+                }}>
+                  <div style={{ minWidth: 0 }}>
+                    <a
+                      href={`/points/u/${encodeURIComponent(row.username)}`}
+                      style={{
+                        color: 'var(--text-primary)',
+                        fontFamily: 'var(--font-body)',
+                        fontSize: 17,
+                        fontWeight: 800,
+                        textDecoration: 'none',
+                      }}
+                    >
+                      @{row.username}
+                    </a>
+                    <div style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 10, marginTop: 4 }}>
+                      Alta {adminDateTime(row.createdAt)} · Último trade {adminDateTime(row.lastTradeAt)}
+                    </div>
+                  </div>
+                  <RiskNumber label="Score" value={adminNumber(row.riskScore)} color={riskScoreColor(row.riskScore)} />
+                  <RiskNumber label="Balance" value={adminMxnp(row.balance)} color="var(--green)" />
+                  <div style={riskBadgeStyle(row.reviewStatus)}>{riskStatusLabel(row.reviewStatus)}</div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 8, fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+                  <RiskMetric label="Trades 30d" value={adminNumber(row.tradeCount)} />
+                  <RiskMetric label="Mercados" value={adminNumber(row.marketCount)} />
+                  <RiskMetric label="Compras" value={adminMxnp(row.buyVolume)} />
+                  <RiskMetric label="Salidas" value={adminMxnp(row.exitVolume)} />
+                  <RiskMetric label="Señales" value={`${adminNumber(row.sharedSignalCount)} compartidas`} />
+                </div>
+
+                {row.reviewReason && <p style={{ ...adminEmptyStyle, margin: 0, lineHeight: 1.5 }}>Nota: {row.reviewReason}</p>}
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1fr) auto', gap: 10, alignItems: 'center' }}>
+                  <input
+                    value={reviewDrafts[row.username] ?? row.reviewReason ?? ''}
+                    onChange={(e) => setReviewDrafts(prev => ({ ...prev, [row.username]: e.target.value }))}
+                    placeholder="Nota interna de revisión"
+                    style={{ ...inputStyle, fontFamily: 'var(--font-mono)' }}
+                  />
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {['clear', 'watch', 'phone_required', 'under_review', 'ineligible'].map(status => (
+                      <button
+                        key={status}
+                        type="button"
+                        onClick={() => setReview(row.username, status)}
+                        disabled={working === `${row.username}:${status}`}
+                        style={riskReviewButtonStyle(status, row.reviewStatus === status)}
+                      >
+                        {working === `${row.username}:${status}` ? '...' : riskStatusLabel(status)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <RiskEvidencePanel
+        title="Loops rápidos"
+        empty="Sin loops rápidos detectados."
+        rows={loops}
+        renderRow={(row) => (
+          <div key={`${row.username}-${row.marketId}`} style={riskEvidenceRowStyle}>
+            <a href={`/points/u/${encodeURIComponent(row.username)}`} style={riskEvidenceLinkStyle}>@{row.username}</a>
+            <a href={`/points/market/${row.marketId}`} style={riskEvidenceMainStyle}>{row.question || `Mercado #${row.marketId}`}</a>
+            <span style={riskEvidenceMetaStyle}>{row.buyCount} compras · {row.sellCount} ventas · {formatAdminDuration(row.spanSeconds)}</span>
+            <span style={{ ...riskEvidenceMetaStyle, textAlign: 'right' }}>{adminMxnp(row.buyCollateral)} / {adminMxnp(row.sellCollateral)}</span>
+          </div>
+        )}
+      />
+
+      <RiskEvidencePanel
+        title="Señales compartidas"
+        empty="Sin IP/device/sesión compartida entre cuentas."
+        rows={linkedSignals}
+        renderRow={(row) => (
+          <div key={`${row.signalType}-${row.signalKey}`} style={riskEvidenceRowStyle}>
+            <span style={riskEvidenceLinkStyle}>{riskSignalLabel(row.signalType)} · {row.signalKey}</span>
+            <span style={riskEvidenceMainStyle}>{row.usernames.map(u => `@${u}`).join(' · ')}</span>
+            <span style={riskEvidenceMetaStyle}>{row.userCount} cuentas · {row.eventCount} eventos</span>
+            <span style={{ ...riskEvidenceMetaStyle, textAlign: 'right' }}>{adminDateTime(row.lastSeenAt)}</span>
+          </div>
+        )}
+      />
+
+      <RiskEvidencePanel
+        title="Cruces en el mismo mercado"
+        empty="Sin cuentas enlazadas operando el mismo mercado en ventana corta."
+        rows={sameMarketLinks}
+        renderRow={(row) => (
+          <div key={`${row.marketId}-${row.signalType}-${row.usernameA}-${row.usernameB}`} style={riskEvidenceRowStyle}>
+            <span style={riskEvidenceLinkStyle}>@{row.usernameA} / @{row.usernameB}</span>
+            <a href={`/points/market/${row.marketId}`} style={riskEvidenceMainStyle}>{row.question || `Mercado #${row.marketId}`}</a>
+            <span style={riskEvidenceMetaStyle}>{riskSignalLabel(row.signalType)} · {row.overlapCount} cruces</span>
+            <span style={{ ...riskEvidenceMetaStyle, textAlign: 'right' }}>{adminDateTime(row.lastSeenAt)}</span>
+          </div>
+        )}
+      />
+
+      <RiskEvidencePanel
+        title="Flags manuales"
+        empty="Sin flags manuales abiertos."
+        rows={flags}
+        renderRow={(row) => (
+          <div key={row.id} style={riskEvidenceRowStyle}>
+            <a href={`/points/u/${encodeURIComponent(row.username)}`} style={riskEvidenceLinkStyle}>@{row.username}</a>
+            <span style={riskEvidenceMainStyle}>{row.flagType}</span>
+            <span style={riskEvidenceMetaStyle}>Severidad {row.severity}</span>
+            <span style={{ ...riskEvidenceMetaStyle, textAlign: 'right' }}>{adminDateTime(row.createdAt)}</span>
+          </div>
+        )}
+      />
+    </div>
+  );
+}
+
+function RiskNumber({ label, value, color }) {
+  return (
+    <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
+      {label}
+      <div style={{ color, fontSize: 16, fontWeight: 800, marginTop: 4 }}>{value}</div>
+    </div>
+  );
+}
+
+function RiskStatCard({ label, value, tone = 'green' }) {
+  const color = tone === 'red' ? 'var(--red, #ef4444)' : tone === 'orange' ? 'var(--orange)' : 'var(--green)';
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '13px 14px', background: 'rgba(255,255,255,0.025)', fontFamily: 'var(--font-mono)' }}>
+      <div style={{ color: 'var(--text-muted)', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ color, fontSize: 26, fontWeight: 900, marginTop: 4 }}>{adminNumber(value)}</div>
+    </div>
+  );
+}
+
+function RiskMetric({ label, value }) {
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '10px 11px', background: 'rgba(255,255,255,0.02)', minWidth: 0 }}>
+      <div style={{ color: 'var(--text-muted)', fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ color: 'var(--text-secondary)', fontSize: 12, marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
+    </div>
+  );
+}
+
+function RiskEvidencePanel({ title, empty, rows, renderRow }) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  return (
+    <section style={adminPanelStyle}>
+      <div style={adminPanelTitle}>{title}</div>
+      {safeRows.length === 0 ? (
+        <p style={adminEmptyStyle}>{empty}</p>
+      ) : (
+        <div style={{ display: 'grid', gap: 8, overflowX: 'auto' }}>{safeRows.map(renderRow)}</div>
+      )}
+    </section>
+  );
+}
+
+function riskStatusLabel(status) {
+  const labels = {
+    clear: 'Limpia',
+    watch: 'Watch',
+    phone_required: 'Teléfono',
+    under_review: 'En revisión',
+    ineligible: 'No elegible',
+  };
+  return labels[status] || status || 'Limpia';
+}
+
+function riskSignalLabel(type) {
+  const labels = { ip: 'IP', device: 'Dispositivo', session: 'Sesión' };
+  return labels[type] || type || 'Señal';
+}
+
+function riskScoreColor(score) {
+  const n = Number(score || 0);
+  if (n >= 90) return 'var(--red, #ef4444)';
+  if (n >= 45) return 'var(--orange)';
+  return 'var(--green)';
+}
+
+function riskBadgeStyle(status) {
+  const color = riskScoreColor(status === 'ineligible' ? 100 : status === 'under_review' ? 70 : status === 'phone_required' ? 55 : status === 'watch' ? 45 : 0);
+  return {
+    justifySelf: 'end',
+    border: `1px solid ${color}`,
+    borderRadius: 999,
+    color,
+    background: 'rgba(255,255,255,0.025)',
+    padding: '7px 11px',
+    fontFamily: 'var(--font-mono)',
+    fontSize: 10,
+    fontWeight: 800,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+    whiteSpace: 'nowrap',
+  };
+}
+
+function riskFilterButtonStyle(active) {
+  return {
+    border: `1px solid ${active ? 'var(--orange)' : 'var(--border)'}`,
+    background: active ? 'rgba(255,90,0,0.12)' : 'transparent',
+    color: active ? 'var(--orange)' : 'var(--text-muted)',
+    borderRadius: 999,
+    padding: '8px 13px',
+    fontFamily: 'var(--font-mono)',
+    fontSize: 10,
+    fontWeight: active ? 800 : 600,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+    cursor: 'pointer',
+  };
+}
+
+function riskReviewButtonStyle(status, active) {
+  const color = riskScoreColor(status === 'ineligible' ? 100 : status === 'under_review' ? 70 : status === 'phone_required' ? 55 : status === 'watch' ? 45 : 0);
+  return {
+    border: `1px solid ${active ? color : 'var(--border)'}`,
+    background: active ? 'rgba(255,255,255,0.04)' : 'transparent',
+    color: active ? color : 'var(--text-muted)',
+    borderRadius: 8,
+    padding: '8px 9px',
+    fontFamily: 'var(--font-mono)',
+    fontSize: 9,
+    fontWeight: 800,
+    letterSpacing: '0.06em',
+    textTransform: 'uppercase',
+    cursor: 'pointer',
+  };
+}
+
+const riskEvidenceRowStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'minmax(150px, 0.45fr) minmax(260px, 1fr) minmax(140px, auto) minmax(120px, auto)',
+  gap: 12,
+  alignItems: 'center',
+  minWidth: 850,
+  padding: '10px 0',
+  borderBottom: '1px solid var(--border)',
+  fontFamily: 'var(--font-mono)',
+  fontSize: 11,
+};
+
+const riskEvidenceLinkStyle = {
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  color: 'var(--orange)',
+  textDecoration: 'none',
+  fontWeight: 800,
+};
+
+const riskEvidenceMainStyle = {
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  color: 'var(--text-primary)',
+  textDecoration: 'none',
+  fontFamily: 'var(--font-body)',
+  fontSize: 14,
+  fontWeight: 700,
+};
+
+const riskEvidenceMetaStyle = {
+  color: 'var(--text-muted)',
+  whiteSpace: 'nowrap',
+};
 
 // ─── Stats panel ─────────────────────────────────────────────────────────────
 function StatsPanel() {
