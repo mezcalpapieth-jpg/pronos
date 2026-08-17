@@ -27,7 +27,7 @@ import React, { useMemo, useState, useId, useRef, useLayoutEffect } from 'react'
  * @param {number} labelWidth - Width reserved for the left-side label
  * @param {boolean} showEndLabel - Pin name + value to the line's endpoint (Polymarket-style)
  * @param {string} endLabelText - Name shown above the value in the end label
- * @param {number} endLabelWidth - Width reserved on the right for the end label (default 96)
+ * @param {number} endLabelWidth - Width of the end label itself (default 96); it floats over the plot rather than reserving a gutter
  */
 
 const MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -221,9 +221,12 @@ export default function Sparkline({
     ? measuredWidth
     : Math.max(20, width - labelWidth - (showValue ? valueWidth : 0));
   const yAxisGutter = shouldShowYAxis ? Math.min(34, Math.max(28, chartWidth * 0.06)) : 0;
-  const endLabelGutter = showEndLabel ? endLabelWidth : 0;
   const xAxisHeight = shouldShowXAxis ? 18 : 0;
-  const plotRight = Math.max(20, chartWidth - yAxisGutter - endLabelGutter);
+  // The end label used to reserve its own gutter here, which cost the plot
+  // up to a fifth of its width and left the line stopping well short of
+  // the y-axis. It floats above the line's endpoint instead, so the plot
+  // runs the full width up to the axis labels.
+  const plotRight = Math.max(20, chartWidth - yAxisGutter);
   const plotBottom = Math.max(16, height - xAxisHeight);
   const w = Math.max(20, plotRight - padX * 2);
   const h = Math.max(10, plotBottom - padY * 2);
@@ -374,8 +377,18 @@ export default function Sparkline({
     return d;
   };
 
-  const pathD = linePath(coords);
-  const lastPt = coords[coords.length - 1];
+  // Held flat to the right edge, the way MultiSparkline already does it:
+  // the last trade's price is still the price now, so the line reaches the
+  // axis instead of stopping at whenever the market last traded. The extra
+  // point stays out of `coords` so hover keeps mapping 1:1 onto real
+  // snapshots.
+  const edgeX = padX + w;
+  const lastCoord = coords[coords.length - 1];
+  const pathCoords = timeBounds && lastCoord.x < edgeX - 0.5
+    ? [...coords, { ...lastCoord, x: edgeX }]
+    : coords;
+  const pathD = linePath(pathCoords);
+  const lastPt = pathCoords[pathCoords.length - 1];
   const fillD = `${pathD} L${lastPt.x.toFixed(2)},${plotBottom.toFixed(2)} L${coords[0].x.toFixed(2)},${plotBottom.toFixed(2)} Z`;
   const lastVal = Math.round(values[values.length - 1]);
 
@@ -552,10 +565,19 @@ export default function Sparkline({
         <div
           style={{
             position: 'absolute',
-            left: `${(lastPt.x / chartWidth) * 100}%`,
-            top: `${(lastPt.y / height) * 100}%`,
-            transform: 'translate(10px, -50%)',
-            width: endLabelWidth - 10,
+            // Right-aligned against the plot's edge, clear of the y-axis
+            // labels. Sits above the endpoint, or below it when the line is
+            // riding the top of the plot and there is no room above.
+            right: yAxisGutter + 6,
+            top: lastPt.y,
+            // Anchored by its own edge rather than a guessed height, so a
+            // one-line label and a two-line one both clear the line.
+            transform: lastPt.y > 56
+              ? 'translateY(calc(-100% - 8px))'
+              : 'translateY(10px)',
+            width: endLabelWidth,
+            maxWidth: `calc(100% - ${yAxisGutter + 12}px)`,
+            textAlign: 'right',
             pointerEvents: 'none',
             zIndex: 2,
           }}

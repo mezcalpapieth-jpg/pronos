@@ -115,7 +115,11 @@ test('carousel charts use a 24h time window with the shared hard-step line', () 
   assert.match(carousel, /const CHART_HISTORY_HOURS = 24/);
   assert.match(carousel, /fetchPriceHistory\(group\.ids, \{ hours: CHART_HISTORY_HOURS/);
   assert.match(carousel, /function chartSeriesForOutcome/);
-  assert.match(carousel, /points\.unshift\(\{ t: openedAt, p: openingPct \}\)/);
+  // The opening baseline anchors at the axis' left edge — the market's
+  // creation when it was born inside the window, the window start when it
+  // was born earlier — so the line never begins mid-chart.
+  assert.match(carousel, /const anchorT = Math\.max\(openedAt, windowStart\)/);
+  assert.match(carousel, /points\.unshift\(\{ t: anchorT, p: openingPct \}\)/);
   assert.match(carousel, /points\.push\(\{ t: now, p: targetPct \}\)/);
   assert.match(carousel, /pp · 24h/);
   // Carousel charts no longer override jumpShape — they fall back to the

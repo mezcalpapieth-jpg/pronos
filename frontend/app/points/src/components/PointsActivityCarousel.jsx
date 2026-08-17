@@ -390,10 +390,22 @@ function chartSeriesForOutcome(m, entry, rawSeries) {
   const openingPct = openingPctForMarket(m);
   const points = [...series];
 
-  if (Number.isFinite(openedAt) && openedAt >= windowStart) {
+  // The opening price holds until the first trade, so the line starts at
+  // the axis' left edge rather than mid-chart. Which edge that is depends
+  // on when the market was born:
+  //   - inside the window -> anchor at its creation, the market's own start.
+  //   - before the window -> anchor at the window start, but only because
+  //     the price-history API found no pre-window price to carry forward.
+  //     Snapshots are written per trade, so nothing before the window means
+  //     no trade before it either, and the market really was still sitting
+  //     on its opening price when the window opened. When a pre-window
+  //     price does exist the API already returns it at the window start,
+  //     and that real point wins over this seed.
+  if (Number.isFinite(openedAt) && openedAt <= now) {
+    const anchorT = Math.max(openedAt, windowStart);
     const firstT = Number(points[0]?.t);
-    if (!Number.isFinite(firstT) || firstT > openedAt) {
-      points.unshift({ t: openedAt, p: openingPct });
+    if (!Number.isFinite(firstT) || firstT > anchorT) {
+      points.unshift({ t: anchorT, p: openingPct });
     }
   }
 

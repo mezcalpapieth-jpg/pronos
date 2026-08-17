@@ -2565,10 +2565,17 @@ export default function PointsMarketDetail({ onOpenLogin }) {
     : chartRangeStart;
   const withOpeningBaseline = (series) => {
     if (!Array.isArray(series) || series.length === 0) return series;
-    if (!Number.isFinite(marketOpenedAt) || marketOpenedAt < chartWindowStart) return series;
+    if (!Number.isFinite(marketOpenedAt) || marketOpenedAt > chartWindowEnd) return series;
+    // Anchor at the market's birth when that falls inside the window, and
+    // at the window's start when the market is older. The older case is
+    // still truthful: price-history carries the last pre-window price
+    // forward to the window start, so a first point later than that means
+    // nothing traded before the window and the market was in fact still
+    // resting on its opening price when the window opened.
+    const anchorT = Math.max(marketOpenedAt, chartWindowStart);
     const firstT = Number(series[0]?.t);
-    if (!Number.isFinite(firstT) || firstT <= marketOpenedAt) return series;
-    return [{ t: marketOpenedAt, p: openingPct }, ...series];
+    if (!Number.isFinite(firstT) || firstT <= anchorT) return series;
+    return [{ t: anchorT, p: openingPct }, ...series];
   };
   const displayHistoryByOutcome = rawHistoryByOutcome.map(withOpeningBaseline);
 
