@@ -51,6 +51,22 @@ function parseJsonb(value, fallback) {
   try { return JSON.parse(value); } catch { return fallback; }
 }
 
+function buyOrderbookPriceCap(reserves, outcomeIndex, collateral) {
+  const amount = Number(collateral);
+  if (!Array.isArray(reserves) || reserves.length < 2 || !Number.isFinite(amount) || amount <= 0) {
+    return null;
+  }
+  try {
+    const quote = reserves.length === 2
+      ? binaryBuyQuote(reserves, outcomeIndex, amount)
+      : multiBuyQuote(reserves, outcomeIndex, amount);
+    const cap = Number(quote?.avgPrice);
+    return Number.isFinite(cap) && cap > 0 ? cap : null;
+  } catch {
+    return null;
+  }
+}
+
 async function readSeriesTradeLock(client, market) {
   const cfg = parseJsonb(market.resolver_config, null);
   if (cfg?.source !== 'espn' || !cfg?.leaguePath) return null;
@@ -217,12 +233,14 @@ export default async function handler(req, res) {
         const err = new Error('insufficient_balance'); err.status = 400; throw err;
       }
 
+      const bookMaxPrice = buyOrderbookPriceCap(reserves, oi, amt);
       const realOrderbookMatch = await matchRestingAsksForBuy(client, {
         market: m,
         marketId: mid,
         username,
         outcomeIndex: oi,
         collateralBudget: amt,
+        maxPrice: bookMaxPrice,
       });
       const makerOrderbookMatch = realOrderbookMatch.remainingCollateral > 0.000001
         ? await matchPronosMakerAsksForBuy(client, {
@@ -232,6 +250,7 @@ export default async function handler(req, res) {
           outcomeIndex: oi,
           collateralBudget: realOrderbookMatch.remainingCollateral,
           currentPrice: displayPriceBefore || null,
+          maxPrice: bookMaxPrice,
         })
         : null;
       const orderbookMatch = combineBuyOrderbookMatches(realOrderbookMatch, makerOrderbookMatch);
@@ -390,7 +409,13 @@ export default async function handler(req, res) {
       },
     });
 
-    return res.status(200).json({ ok: true, ...result });
+    const { orderbookFills, triggeredLimitOrders, ...publicResult } = result;
+    return res.status(200).json({
+      ok: true,
+      ...publicResult,
+      orderbookFillCount: Array.isArray(orderbookFills) ? orderbookFills.length : 0,
+      triggeredLimitOrderCount: Array.isArray(triggeredLimitOrders) ? triggeredLimitOrders.length : 0,
+    });
   } catch (e) {
     // Structured errors from inside the transaction carry `.status` so we
     // echo them back with a matching HTTP code.

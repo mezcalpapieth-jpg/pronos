@@ -44,6 +44,22 @@ function parseJsonb(value, fallback) {
   try { return JSON.parse(value); } catch { return fallback; }
 }
 
+function sellOrderbookPriceFloor(reserves, outcomeIndex, shares) {
+  const amount = Number(shares);
+  if (!Array.isArray(reserves) || reserves.length < 2 || !Number.isFinite(amount) || amount <= 0) {
+    return null;
+  }
+  try {
+    const quote = reserves.length === 2
+      ? binarySellQuote(reserves, outcomeIndex, amount)
+      : multiSellQuote(reserves, outcomeIndex, amount);
+    const floor = Number(quote?.collateralOut) / amount;
+    return Number.isFinite(floor) && floor > 0 ? floor : null;
+  } catch {
+    return null;
+  }
+}
+
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'POST, OPTIONS', credentials: true });
   if (cors) return cors;
@@ -150,12 +166,14 @@ export default async function handler(req, res) {
         reservedShares,
       });
 
+      const bookMinPrice = sellOrderbookPriceFloor(reserves, oi, sharesToSell);
       const realOrderbookMatch = await matchRestingBidsForSell(client, {
         market: m,
         marketId: mid,
         username,
         outcomeIndex: oi,
         sharesToSell,
+        minPrice: bookMinPrice,
       });
       const makerOrderbookMatch = realOrderbookMatch.remainingShares > 0.000001
         ? await matchPronosMakerBidsForSell(client, {
@@ -165,6 +183,7 @@ export default async function handler(req, res) {
           outcomeIndex: oi,
           sharesToSell: realOrderbookMatch.remainingShares,
           currentPrice: displayPriceBefore || null,
+          minPrice: bookMinPrice,
         })
         : null;
       const orderbookMatch = combineSellOrderbookMatches(realOrderbookMatch, makerOrderbookMatch);
@@ -323,7 +342,13 @@ export default async function handler(req, res) {
       },
     });
 
-    return res.status(200).json({ ok: true, ...result });
+    const { orderbookFills, triggeredLimitOrders, ...publicResult } = result;
+    return res.status(200).json({
+      ok: true,
+      ...publicResult,
+      orderbookFillCount: Array.isArray(orderbookFills) ? orderbookFills.length : 0,
+      triggeredLimitOrderCount: Array.isArray(triggeredLimitOrders) ? triggeredLimitOrders.length : 0,
+    });
   } catch (e) {
     if (e?.status && typeof e?.message === 'string') {
       return res.status(e.status).json({ error: e.message, detail: e.detail });

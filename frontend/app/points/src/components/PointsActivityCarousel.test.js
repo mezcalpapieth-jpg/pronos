@@ -18,12 +18,15 @@ const multiSparkline = await readFile(
   new URL('../../../src/components/MultiSparkline.jsx', import.meta.url),
   'utf8',
 );
+const activityTape = await readFile(
+  new URL('./PointsActivityTape.jsx', import.meta.url),
+  'utf8',
+);
 
-test('carousel reads the existing trade-activity feed, not a parallel endpoint', () => {
-  // /api/points/trade-activity already backs the market detail chart and is
-  // deliberately anonymous. A second fills endpoint would both duplicate it
-  // and leak usernames it chose not to expose.
+test('carousel reads anonymous chart activity and the public named trade tape', () => {
   assert.match(carousel, /fetchTradeActivity/);
+  assert.match(carousel, /fetchTradeTape/);
+  assert.match(carousel, /<PointsActivityTape/);
   assert.doesNotMatch(carousel, /fetchRecentTrades|recent-trades/);
 });
 
@@ -138,7 +141,7 @@ test('carousel charts use a 24h time window with the shared hard-step line', () 
 });
 
 test('bitcoin crypto carousel slide backfills from crypto tick history', () => {
-  assert.match(carousel, /import \{ fetchCryptoHistory, fetchPriceHistory, fetchTradeActivity \}/);
+  assert.match(carousel, /import \{ fetchCryptoHistory, fetchPriceHistory, fetchTradeActivity, fetchTradeTape \}/);
   assert.match(carousel, /const CRYPTO_PRICE_PERCENT_TO_PP = 25/);
   assert.match(carousel, /function cryptoSeriesForMarket/);
   assert.match(carousel, /function mergeCryptoHistoryByParent/);
@@ -155,9 +158,12 @@ test('visible parallel slide polling keeps querying leg activity', () => {
   assert.match(carousel, /const buckets = rolled\?\.\[active\.id\]/);
 });
 
-test('flow sell amounts render as human-readable negative values', () => {
-  assert.match(carousel, /-\{formatCompact\(sell\)\}/);
-  assert.doesNotMatch(carousel, /\\u2212\{formatCompact\(sell\)\}/);
+test('public activity tape renders named buys and sells without execution-source labels', () => {
+  assert.match(activityTape, /@{item\.username/);
+  assert.match(activityTape, /points\.activity\.tapeBought/);
+  assert.match(activityTape, /points\.activity\.tapeSold/);
+  assert.match(activityTape, /formatMoney\(item\.collateral/);
+  assert.doesNotMatch(activityTape, /orderBookSource|source ===|AMM|maker/i);
 });
 
 test('an empty poll never blanks a slide already on screen', () => {

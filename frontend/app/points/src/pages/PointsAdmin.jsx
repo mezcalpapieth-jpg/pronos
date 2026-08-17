@@ -3951,6 +3951,32 @@ function RiskPanel() {
           <RiskStatCard label="Señales compartidas" value={linkedSignals.length} tone="green" />
         </div>
 
+        <div style={{
+          marginTop: 14,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+          gap: 10,
+        }}>
+          <RiskHelpCard
+            title="Cómo se arma el score"
+            body="El score solo ordena la revisión. Suma estado manual, loops rápidos, señales compartidas, actividad reciente y patrones de entrada/salida."
+            lines={[
+              'Estado: limpia +0, watch +35, teléfono requerido +55, en revisión +70, no elegible +100.',
+              'Loops rápidos: +30 por mercado donde compra y sale varias veces en pocas horas.',
+              'Señales: +20 por IP, dispositivo o sesión compartida con otra cuenta.',
+              'Trades 30d: hasta +30 por actividad; entrada/salida balanceada suma +10.',
+            ]}
+          />
+          <RiskHelpCard
+            title="Qué significa Teléfono requerido"
+            body="Sí: significa que le pediríamos verificación telefónica antes de considerarlo elegible para premios. No quita MXNP, no borra posiciones y no bloquea comprar o vender por sí solo."
+            lines={[
+              'Úsalo cuando el patrón merece fricción, pero todavía no amerita marcarlo como no elegible.',
+              'Watch es solo observación. En revisión es una pausa interna más seria. No elegible lo deja fuera de premios.',
+            ]}
+          />
+        </div>
+
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 18, alignItems: 'center' }}>
           {[
             ['all', 'Todas'],
@@ -4079,6 +4105,8 @@ function RiskPanel() {
                   <RiskMetric label="Señales" value={`${adminNumber(row.sharedSignalCount)} compartidas`} />
                 </div>
 
+                <RiskScoreBreakdown row={row} />
+
                 {row.reviewReason && <p style={{ ...adminEmptyStyle, margin: 0, lineHeight: 1.5 }}>Nota: {row.reviewReason}</p>}
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1fr) auto', gap: 10, alignItems: 'center' }}>
@@ -4186,11 +4214,87 @@ function RiskStatCard({ label, value, tone = 'green' }) {
   );
 }
 
+function RiskHelpCard({ title, body, lines = [] }) {
+  return (
+    <div style={{
+      border: '1px solid var(--border)',
+      borderRadius: 10,
+      padding: '12px 14px',
+      background: 'rgba(255,255,255,0.02)',
+      fontFamily: 'var(--font-mono)',
+      minWidth: 0,
+    }}>
+      <div style={{ color: 'var(--orange)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 7 }}>
+        {title}
+      </div>
+      <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 11, lineHeight: 1.55 }}>
+        {body}
+      </p>
+      {lines.length > 0 && (
+        <div style={{ display: 'grid', gap: 5, marginTop: 9 }}>
+          {lines.map(line => (
+            <div key={line} style={{ color: 'var(--text-muted)', fontSize: 10, lineHeight: 1.45 }}>
+              {line}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RiskMetric({ label, value }) {
   return (
     <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '10px 11px', background: 'rgba(255,255,255,0.02)', minWidth: 0 }}>
       <div style={{ color: 'var(--text-muted)', fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{label}</div>
       <div style={{ color: 'var(--text-secondary)', fontSize: 12, marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
+    </div>
+  );
+}
+
+function RiskScoreBreakdown({ row }) {
+  const pieces = riskScoreBreakdown(row);
+  const total = pieces.reduce((sum, piece) => sum + piece.points, 0);
+  return (
+    <div style={{
+      border: '1px dashed var(--border)',
+      borderRadius: 8,
+      padding: '9px 10px',
+      background: 'rgba(255,255,255,0.015)',
+      fontFamily: 'var(--font-mono)',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', marginBottom: 8 }}>
+        <span style={{ color: 'var(--text-muted)', fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          Desglose del score
+        </span>
+        <span style={{ color: riskScoreColor(total), fontSize: 11, fontWeight: 900 }}>
+          {adminNumber(total)} calculado
+        </span>
+      </div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {pieces.map(piece => (
+          <span
+            key={piece.key}
+            title={piece.help}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+              border: '1px solid var(--border)',
+              borderRadius: 999,
+              padding: '5px 8px',
+              background: piece.points > 0 ? 'rgba(255,90,0,0.08)' : 'rgba(255,255,255,0.02)',
+              color: piece.points > 0 ? 'var(--orange)' : 'var(--text-muted)',
+              fontSize: 10,
+              lineHeight: 1.1,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <strong style={{ color: 'var(--text-primary)' }}>{piece.label}</strong>
+            +{adminNumber(piece.points)}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -4213,11 +4317,67 @@ function riskStatusLabel(status) {
   const labels = {
     clear: 'Limpia',
     watch: 'Watch',
-    phone_required: 'Teléfono',
+    phone_required: 'Teléfono requerido',
     under_review: 'En revisión',
     ineligible: 'No elegible',
   };
   return labels[status] || status || 'Limpia';
+}
+
+function riskStatusPoints(status) {
+  const points = {
+    clear: 0,
+    watch: 35,
+    phone_required: 55,
+    under_review: 70,
+    ineligible: 100,
+  };
+  return points[status] || 0;
+}
+
+function riskScoreBreakdown(row = {}) {
+  const tradeCount = Number(row.tradeCount || 0);
+  const loopCount = Number(row.loopCount || 0);
+  const sharedSignalCount = Number(row.sharedSignalCount || 0);
+  const buyVolume = Number(row.buyVolume || 0);
+  const exitVolume = Number(row.exitVolume || 0);
+  const balancedExit =
+    buyVolume > 0 &&
+    exitVolume > 0 &&
+    Math.abs(buyVolume - exitVolume) / Math.max(buyVolume, 1) < 0.15;
+
+  return [
+    {
+      key: 'status',
+      label: `Estado ${riskStatusLabel(row.reviewStatus)}`,
+      points: riskStatusPoints(row.reviewStatus),
+      help: 'Peso del estado manual que marcó admin.',
+    },
+    {
+      key: 'loops',
+      label: `${adminNumber(loopCount)} loops`,
+      points: loopCount * 30,
+      help: '+30 por mercado con compras y salidas rápidas.',
+    },
+    {
+      key: 'signals',
+      label: `${adminNumber(sharedSignalCount)} señales`,
+      points: sharedSignalCount * 20,
+      help: '+20 por IP, dispositivo o sesión compartida con otra cuenta.',
+    },
+    {
+      key: 'trades',
+      label: `${adminNumber(tradeCount)} trades`,
+      points: Math.min(tradeCount, 30),
+      help: 'Actividad reciente, limitado a +30.',
+    },
+    {
+      key: 'flow',
+      label: 'Entrada/salida',
+      points: balancedExit ? 10 : 0,
+      help: '+10 cuando compras y salidas quedan casi balanceadas.',
+    },
+  ];
 }
 
 function riskSignalLabel(type) {

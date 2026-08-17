@@ -35,6 +35,22 @@ function parseJsonb(value, fallback) {
   try { return JSON.parse(value); } catch { return fallback; }
 }
 
+function buyOrderbookPriceCap(reserves, outcomeIndex, collateral) {
+  const amount = Number(collateral);
+  if (!Array.isArray(reserves) || reserves.length < 2 || !Number.isFinite(amount) || amount <= 0) {
+    return null;
+  }
+  try {
+    const quote = reserves.length === 2
+      ? binaryBuyQuote(reserves, outcomeIndex, amount)
+      : multiBuyQuote(reserves, outcomeIndex, amount);
+    const cap = Number(quote?.avgPrice);
+    return Number.isFinite(cap) && cap > 0 ? cap : null;
+  } catch {
+    return null;
+  }
+}
+
 async function readSeriesTradeLock(market) {
   const cfg = parseJsonb(market.resolver_config, null);
   if (cfg?.source !== 'espn' || !cfg?.leaguePath) return null;
@@ -150,7 +166,11 @@ export default async function handler(req, res) {
        ORDER BY limit_price ASC, created_at ASC, id ASC
        LIMIT 24
     `;
-    const realOrderbook = previewRestingAsksForBuy(askRows, { collateral: amt });
+    const bookMaxPrice = buyOrderbookPriceCap(reserves, oi, amt);
+    const realOrderbook = previewRestingAsksForBuy(askRows, {
+      collateral: amt,
+      maxPrice: bookMaxPrice,
+    });
     const usageRows = await sql`
       SELECT side, COALESCE(SUM(collateral), 0)::text AS collateral
         FROM points_trades
@@ -166,6 +186,7 @@ export default async function handler(req, res) {
         collateral: realOrderbook.remainingCollateral,
         usage: makerUsageFromRows(usageRows),
         currentPrice: priceBefore,
+        maxPrice: bookMaxPrice,
       })
       : null;
     const orderbook = combineBuyOrderbookMatches(realOrderbook, makerOrderbook);
@@ -204,8 +225,7 @@ export default async function handler(req, res) {
       priceImpactPts: (priceAfter - priceBefore) * 100,
       pricesBefore,
       pricesAfter,
-      orderbookFills: orderbook.fills,
-      ammCollateral,
+      orderbookFillCount: Array.isArray(orderbook.fills) ? orderbook.fills.length : 0,
     });
   } catch (e) {
     const msg = (e?.message || '').toLowerCase();

@@ -30,6 +30,22 @@ function parseJsonb(value, fallback) {
   try { return JSON.parse(value); } catch { return fallback; }
 }
 
+function sellOrderbookPriceFloor(reserves, outcomeIndex, shares) {
+  const amount = Number(shares);
+  if (!Array.isArray(reserves) || reserves.length < 2 || !Number.isFinite(amount) || amount <= 0) {
+    return null;
+  }
+  try {
+    const quote = reserves.length === 2
+      ? binarySellQuote(reserves, outcomeIndex, amount)
+      : multiSellQuote(reserves, outcomeIndex, amount);
+    const floor = Number(quote?.collateralOut) / amount;
+    return Number.isFinite(floor) && floor > 0 ? floor : null;
+  } catch {
+    return null;
+  }
+}
+
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'POST, OPTIONS', credentials: true });
   if (cors) return cors;
@@ -109,7 +125,11 @@ export default async function handler(req, res) {
        ORDER BY limit_price DESC, created_at ASC, id ASC
        LIMIT 24
     `;
-    const realOrderbook = previewRestingBidsForSell(bidRows, { shares: n });
+    const bookMinPrice = sellOrderbookPriceFloor(reserves, oi, n);
+    const realOrderbook = previewRestingBidsForSell(bidRows, {
+      shares: n,
+      minPrice: bookMinPrice,
+    });
     const usageRows = await sql`
       SELECT side, COALESCE(SUM(collateral), 0)::text AS collateral
         FROM points_trades
@@ -125,6 +145,7 @@ export default async function handler(req, res) {
         shares: realOrderbook.remainingShares,
         usage: makerUsageFromRows(usageRows),
         currentPrice: priceBefore,
+        minPrice: bookMinPrice,
       })
       : null;
     const orderbook = combineSellOrderbookMatches(realOrderbook, makerOrderbook);
@@ -154,8 +175,7 @@ export default async function handler(req, res) {
       priceBefore,
       priceAfter,
       priceImpactPts: (priceAfter - priceBefore) * 100,
-      orderbookFills: orderbook.fills,
-      ammShares,
+      orderbookFillCount: Array.isArray(orderbook.fills) ? orderbook.fills.length : 0,
     });
   } catch (e) {
     const msg = (e?.message || '').toLowerCase();

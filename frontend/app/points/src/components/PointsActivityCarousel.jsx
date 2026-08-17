@@ -8,13 +8,12 @@
  * the rest of the app already uses — green (--yes) for buys, red
  * (--danger) for sells. Never --green, which is the brand orange here.
  *
- * Everything on screen is real data, all of it from /api/points/trade-activity
- * — the same anonymous, bucketed feed the market detail chart already uses.
- * That endpoint deliberately never exposes individual users, so the tape
- * shows hourly buy/sell flow rather than a per-user fill ticker.
+ * Everything on screen is real data. Ranking and pressure bars come from
+ * /api/points/trade-activity, while the visible tape uses
+ * /api/points/trade-tape so users can see the latest public fills.
  *   - slotting     → hidden editorial mix of 1h interaction, volume, 7d activity, BTC 5m
  *   - chart        → binary price history; parallel markets use parent flow
- *   - tape rows    → one row per hour that actually traded
+ *   - tape rows    → latest named buys/sells from the public trade tape
  *   - pressure bar → buy vs sell volume across the window
  *
  * Admission is by real trading, not seed liquidity. Most slots require
@@ -35,7 +34,8 @@ import MultiSparkline from '@app/components/MultiSparkline.jsx';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
 import { useT } from '@app/lib/i18n.js';
 import { ActivityCarouselSkeleton } from './PointsSkeleton.jsx';
-import { fetchCryptoHistory, fetchPriceHistory, fetchTradeActivity } from '../lib/pointsApi.js';
+import PointsActivityTape from './PointsActivityTape.jsx';
+import { fetchCryptoHistory, fetchPriceHistory, fetchTradeActivity, fetchTradeTape } from '../lib/pointsApi.js';
 
 const SLIDE_MS = 8000;      // autoplay dwell per slide
 const TAPE_POLL_MS = 25_000; // how often the visible slide refetches its flow
@@ -91,16 +91,6 @@ function formatCompact(n) {
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
   if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
   return v.toFixed(0);
-}
-
-// Bucket start → compact local date + time. The tape now spans a week,
-// so hour-only labels would be ambiguous.
-function formatHour(unixSeconds) {
-  if (!unixSeconds) return '';
-  const d = new Date(Number(unixSeconds) * 1000);
-  const date = d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
-  const time = d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
-  return `${date}, ${time}`;
 }
 
 function marketIdKey(id) {
@@ -546,6 +536,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
   // Bumped on every slide change so the tape rows remount and replay
   // their stagger — the panel reads as freshly filled, not static.
   const [tapeEpoch, setTapeEpoch] = useState(0);
+  const [tradeTape, setTradeTape] = useState({});
   const touchStartX = useRef(null);
 
   // Candidates: markets with evidence of REAL trading at some point.
@@ -580,6 +571,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
   useEffect(() => {
     if (activityIds.length === 0) {
       setRecent({});
+      setTradeTape({});
       return undefined;
     }
     let cancelled = false;
@@ -593,6 +585,12 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
       buckets: WINDOW_BUCKETS,
     }).then(a => {
       if (!cancelled) setRecent(rollupActivityByParent(a || {}, activityRequest));
+    });
+    fetchTradeTape(activityIds, {
+      hours: WINDOW_HOURS,
+      limit: TAPE_ROWS,
+    }).then(tape => {
+      if (!cancelled) setTradeTape(tape || {});
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -795,6 +793,19 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
             && Number(prevTop.count) === Number(nextTop.count)) return prev;
           setTapeEpoch(e => e + 1);
           return { ...prev, [active.id]: buckets };
+        });
+      });
+      fetchTradeTape(request.ids, {
+        hours: WINDOW_HOURS,
+        limit: TAPE_ROWS,
+      }).then(tape => {
+        const rows = tape?.[marketIdKey(active.id)];
+        if (!Array.isArray(rows)) return;
+        setTradeTape(prev => {
+          const before = prev?.[marketIdKey(active.id)] || [];
+          if (before[0]?.id && rows[0]?.id && Number(before[0].id) === Number(rows[0].id)) return prev;
+          setTapeEpoch(e => e + 1);
+          return { ...prev, [marketIdKey(active.id)]: rows };
         });
       });
     }, TAPE_POLL_MS);
@@ -1253,123 +1264,17 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                       </div>
                     )}
 
-                    {/* The tape. One row per hour that actually traded,
-                        newest first. The feed is anonymous by design, so a
-                        row is aggregate flow — not a named user's fill. */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
-                      {(m._buckets || []).slice(0, TAPE_ROWS).map((b, ti) => {
-                        const buy = Number(b.buyVolume || 0);
-                        const sell = Number(b.sellVolume || 0);
-                        // Which side dominated this hour decides the row's
-                        // tint; both numbers are still printed.
-                        const buyLed = buy >= sell;
-                        return (
-                          <div
-                            key={`${tapeEpoch}-${b.t}`}
-                            className="points-tape-row"
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 8,
-                              padding: '6px 8px',
-                              borderRadius: 7,
-                              background: buyLed ? 'var(--yes-dim)' : 'var(--danger-dim)',
-                              animationDelay: `${ti * 70}ms`,
-                            }}
-                          >
-                            <span style={{
-                              fontFamily: 'var(--font-mono)',
-                              fontSize: 'var(--fs-2xs)',
-                              fontWeight: 700,
-                              color: buyLed ? BUY_COLOR : SELL_COLOR,
-                              letterSpacing: '0.06em',
-                              flexShrink: 0,
-                            }}>
-                              {buyLed ? '\u25b2' : '\u25bc'}
-                            </span>
-                            <span style={{
-                              flex: 1,
-                              minWidth: 0,
-                              fontFamily: 'var(--font-mono)',
-                              fontSize: 'var(--fs-2xs)',
-                              color: 'var(--text-secondary)',
-                              fontVariantNumeric: 'tabular-nums',
-                              whiteSpace: 'nowrap',
-                            }}>
-                              {formatHour(b.t)}
-                            </span>
-                            <span style={{
-                              fontFamily: 'var(--font-mono)',
-                              fontSize: 'var(--fs-2xs)',
-                              color: 'var(--text-muted)',
-                              fontVariantNumeric: 'tabular-nums',
-                              flexShrink: 0,
-                            }}>
-                              {b.count}×
-                            </span>
-                            {buy > 0 && (
-                              <span style={{
-                                fontFamily: 'var(--font-display)',
-                                fontSize: 'var(--fs-md)',
-                                color: BUY_COLOR,
-                                fontVariantNumeric: 'tabular-nums',
-                                letterSpacing: '0.02em',
-                                flexShrink: 0,
-                                textAlign: 'right',
-                              }}>
-                                +{formatCompact(buy)}
-                              </span>
-                            )}
-                            {sell > 0 && (
-                              <span style={{
-                                fontFamily: 'var(--font-display)',
-                                fontSize: 'var(--fs-md)',
-                                color: SELL_COLOR,
-                                fontVariantNumeric: 'tabular-nums',
-                                letterSpacing: '0.02em',
-                                flexShrink: 0,
-                                textAlign: 'right',
-                              }}>
-                                -{formatCompact(sell)}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
-
-                      {/* Only the pinned market can land here: it's in the
-                          carousel for price movement, not for fills. Say
-                          exactly that instead of leaving a blank panel
-                          that implies activity nobody produced. */}
-                      {(m._buckets || []).length === 0 && (
-                        <div style={{
-                          flex: 1,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 6,
-                          textAlign: 'center',
-                          padding: '18px 6px',
-                        }}>
-                          <span style={{
-                            fontFamily: 'var(--font-mono)',
-                            fontSize: 'var(--fs-xs)',
-                            color: 'var(--text-secondary)',
-                            letterSpacing: '0.06em',
-                            textTransform: 'uppercase',
-                          }}>
-                            {m._pinned ? t('points.activity.noBuys') : t('points.activity.noRecent')}
-                          </span>
-                          <span style={{
-                            fontFamily: 'var(--font-body)',
-                            fontSize: 'var(--fs-sm)',
-                            color: 'var(--text-muted)',
-                          }}>
-                            {m._pinned ? t('points.activity.noBuysSub') : t('points.activity.noRecentSub')}
-                          </span>
-                        </div>
-                      )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <PointsActivityTape
+                        key={`${tapeEpoch}-${m.id}`}
+                        embedded
+                        compact
+                        showShares={false}
+                        maxRows={TAPE_ROWS}
+                        items={tradeTape[marketIdKey(m.id)] || []}
+                        emptyTitle={m._pinned ? t('points.activity.noBuys') : t('points.activity.noRecent')}
+                        emptySub={m._pinned ? t('points.activity.noBuysSub') : t('points.activity.noRecentSub')}
+                      />
                     </div>
 
                     <div style={{

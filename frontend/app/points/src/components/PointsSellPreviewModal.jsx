@@ -144,7 +144,7 @@ export default function PointsSellPreviewModal({ state, onClose, onConfirm, onSh
               fontVariantNumeric: 'tabular-nums',
             }}>
               <span>{selectedPct}%</span>
-              <span>{loading ? 'Actualizando cotización...' : 'Cotización real del AMM'}</span>
+              <span>{loading ? 'Actualizando cotización...' : 'Cotización real del mercado'}</span>
             </div>
           </div>
         )}
@@ -246,7 +246,7 @@ export default function PointsSellPreviewModal({ state, onClose, onConfirm, onSh
                   color: 'var(--text-muted)',
                   lineHeight: 1.5,
                 }}>
-                  El PnL real usa la salida del AMM, no el valor marcado antes de vender.
+                  El PnL real usa la salida real del mercado, no el valor marcado antes de vender.
                 </div>
               )}
             </div>

@@ -18,6 +18,7 @@ import {
   fetchPriceHistory,
   fetchPositions,
   fetchTradeActivity,
+  fetchTradeTape,
   executeSell,
   placeLimitOrder,
   publicErrorMessage,
@@ -44,6 +45,7 @@ import TeamMarketStrip from '@app/components/TeamMarketStrip.jsx';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
 import PointsBuyModal from '../components/PointsBuyModal.jsx';
 import PointsSellPreviewModal from '../components/PointsSellPreviewModal.jsx';
+import PointsActivityTape from '../components/PointsActivityTape.jsx';
 import MarketComments from '../components/MarketComments.jsx';
 import Crypto5MinDetail from '../components/Crypto5MinDetail.jsx';
 import TopHolders from '../components/TopHolders.jsx';
@@ -1165,7 +1167,20 @@ function buildOrderBookOptions({ market, displayOutcomes, displayOutcomeIndices,
   }));
 }
 
-function DepthRows({ rows, side, maxTotal, t, onPickRow }) {
+function tradeTapeIdsForMarket(market) {
+  if (!market?.id) return [];
+  if (market.ammMode === 'parallel' && Array.isArray(market.legs)) {
+    return [
+      Number(market.id),
+      ...market.legs
+        .map(leg => Number(leg?.id))
+        .filter(id => Number.isInteger(id) && id > 0),
+    ];
+  }
+  return [Number(market.id)];
+}
+
+function DepthRows({ rows, side, maxTotal, t, onPickRow, showSource = false }) {
   const accent = side === 'ask' ? 'var(--danger)' : 'var(--yes)';
   const bg = side === 'ask' ? 'rgba(255,59,59,0.10)' : 'rgba(0,232,122,0.10)';
   if (!Array.isArray(rows) || rows.length === 0) {
@@ -1232,18 +1247,20 @@ function DepthRows({ rows, side, maxTotal, t, onPickRow }) {
               gap: 2,
             }}>
               <span>{formatDepthAmount(row.shares)}</span>
-              <span style={{
-                fontSize: 8,
-                color: row.source === 'limit' || row.source === 'maker' ? 'var(--orange)' : 'var(--text-muted)',
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-              }}>
-                {row.source === 'limit'
-                  ? t('points.detail.orderBookSourceUsers')
-                  : row.source === 'maker'
-                    ? t('points.detail.orderBookSourceMaker')
-                    : t('points.detail.orderBookSourceAmm')}
-              </span>
+              {showSource && (
+                <span style={{
+                  fontSize: 8,
+                  color: row.source === 'limit' || row.source === 'maker' ? 'var(--orange)' : 'var(--text-muted)',
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                }}>
+                  {row.source === 'limit'
+                    ? t('points.detail.orderBookSourceUsers')
+                    : row.source === 'maker'
+                      ? t('points.detail.orderBookSourceMaker')
+                      : t('points.detail.orderBookSourceAmm')}
+                </span>
+              )}
             </span>
             <span style={{
               position: 'relative',
@@ -2037,6 +2054,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   //              leg's binary CPMM, not the aggregated parent)
   const [buyState, setBuyState] = useState(null);
   const [sellPreview, setSellPreview] = useState(null);
+  const [tradeTape, setTradeTape] = useState([]);
   const [orderBookRefresh, setOrderBookRefresh] = useState(0);
   const [positionRefreshNonce, setPositionRefreshNonce] = useState(0);
   const [redeemState, setRedeemState] = useState({ key: null, message: null, error: null });
@@ -2046,6 +2064,8 @@ export default function PointsMarketDetail({ onOpenLogin }) {
   const cryptoSequenceSig = market?.cryptoMeta
     ? cryptoMarketSequenceSignature(buildCryptoMarketSequence(market))
     : '';
+  const tradeTapeIds = useMemo(() => tradeTapeIdsForMarket(market), [market]);
+  const tradeTapeIdsKey = tradeTapeIds.join(',');
 
   function applyFreshMarket(fresh) {
     if (!fresh) return;
@@ -2064,6 +2084,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
     setError(null);
     setHistoryByOutcome(null);
     setActivityByOutcome(null);
+    setTradeTape([]);
     chartRangeTouchedRef.current = false;
     fetchMarket(id)
       .then(m => {
@@ -2198,6 +2219,22 @@ export default function PointsMarketDetail({ onOpenLogin }) {
     market?.status,
     orderBookRefresh,
   ]);
+
+  useEffect(() => {
+    if (!market?.id || !tradeTapeIdsKey) {
+      setTradeTape([]);
+      return undefined;
+    }
+    let cancelled = false;
+    fetchTradeTape(tradeTapeIds, { hours: 24 * 30, limit: 80 })
+      .then((tape) => {
+        if (cancelled) return;
+        const rows = tape?.[String(market.id)] || tape?.[market.id] || [];
+        setTradeTape(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => { if (!cancelled) setTradeTape([]); });
+    return () => { cancelled = true; };
+  }, [market?.id, tradeTapeIds, tradeTapeIdsKey, orderBookRefresh]);
 
   useEffect(() => {
     if (!market?.id) return;
@@ -3084,6 +3121,11 @@ export default function PointsMarketDetail({ onOpenLogin }) {
             </div>
 
             {isMobile && tradePanel}
+
+            <PointsActivityTape
+              items={tradeTape}
+              maxRows={24}
+            />
 
             <OrderBookPanel
               market={market}

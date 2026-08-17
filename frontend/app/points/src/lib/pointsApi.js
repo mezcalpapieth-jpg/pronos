@@ -411,6 +411,23 @@ export async function fetchTradeActivity(ids, { days = 1, hours, outcome = 0, bu
   }
 }
 
+export async function fetchTradeTape(ids, { hours = 24 * 7, limit = 20 } = {}) {
+  const list = Array.isArray(ids) ? ids : [ids];
+  const cleaned = list.filter(n => Number.isInteger(n) || (typeof n === 'string' && n.length > 0));
+  if (cleaned.length === 0) return {};
+  const q = new URLSearchParams({
+    ids: cleaned.join(','),
+    hours: String(hours),
+    limit: String(limit),
+  });
+  try {
+    const { tape = {} } = await getJson(`/api/points/trade-tape?${q}`);
+    return tape;
+  } catch {
+    return {};
+  }
+}
+
 // ─── Trading ────────────────────────────────────────────────────────────────
 export async function quoteBuy({ marketId, outcomeIndex, collateral }) {
   return postJson('/api/points/quote-buy', { marketId, outcomeIndex, collateral });

@@ -172,6 +172,9 @@ test('orderbook taker previews consume real resting orders before AMM fallback',
 });
 
 test('buy quotes display orderbook-only execution price instead of stale AMM price', () => {
+  assert.match(quoteBuySource, /function buyOrderbookPriceCap/);
+  assert.match(quoteBuySource, /const bookMaxPrice = buyOrderbookPriceCap\(reserves, oi, amt\)/);
+  assert.match(quoteBuySource, /previewRestingAsksForBuy\(askRows, \{\s*collateral: amt,\s*maxPrice: bookMaxPrice,\s*\}\)/s);
   assert.match(quoteBuySource, /binaryPricesWithBookTrade/);
   assert.match(quoteBuySource, /monotonicBuyDisplayPrice/);
   assert.match(quoteBuySource, /displayTradeRows/);
@@ -184,9 +187,17 @@ test('buy quotes display orderbook-only execution price instead of stale AMM pri
   assert.match(quoteBuySource, /const priceAfter = monotonicBuyDisplayPrice\(priceBefore, \[/);
   assert.match(quoteBuySource, /priceImpactPts: \(priceAfter - priceBefore\) \* 100/);
   assert.match(buySource, /binaryPricesWithBookTrade/);
+  assert.match(buySource, /function buyOrderbookPriceCap/);
+  assert.match(buySource, /const bookMaxPrice = buyOrderbookPriceCap\(reserves, oi, amt\)/);
+  assert.match(buySource, /matchRestingAsksForBuy\(client, \{[\s\S]*maxPrice: bookMaxPrice,[\s\S]*\}\)/);
+  assert.match(buySource, /matchPronosMakerAsksForBuy\(client, \{[\s\S]*maxPrice: bookMaxPrice,[\s\S]*\}\)/);
   assert.match(buySource, /PRONOS_TREASURY_USERNAME/);
   assert.match(buySource, /currentPrice: displayPriceBefore \|\| null/);
   assert.match(buySource, /const responsePriceAfter = reserves\.length === 2\s*\?\s*monotonicBuyDisplayPrice\(responsePriceBefore, \[/s);
+  assert.match(quoteBuySource, /orderbookFillCount/);
+  assert.doesNotMatch(quoteBuySource, /orderbookFills: orderbook\.fills/);
+  assert.doesNotMatch(quoteBuySource, /ammCollateral,/);
+  assert.match(buySource, /const \{ orderbookFills, triggeredLimitOrders, \.\.\.publicResult \} = result/);
 });
 
 test('buy display prices never report the selected side moving backward', () => {
@@ -202,6 +213,13 @@ test('sell quotes and orderbook current price only trust latest book-only fills'
     assert.match(source, /is_book_trade/);
   }
   assert.match(quoteSellSource, /binaryPricesWithBookTrade/);
+  assert.match(quoteSellSource, /function sellOrderbookPriceFloor/);
+  assert.match(quoteSellSource, /const bookMinPrice = sellOrderbookPriceFloor\(reserves, oi, n\)/);
+  assert.match(quoteSellSource, /previewRestingBidsForSell\(bidRows, \{\s*shares: n,\s*minPrice: bookMinPrice,\s*\}\)/s);
+  assert.match(sellSource, /function sellOrderbookPriceFloor/);
+  assert.match(sellSource, /const bookMinPrice = sellOrderbookPriceFloor\(reserves, oi, sharesToSell\)/);
+  assert.match(sellSource, /matchRestingBidsForSell\(client, \{[\s\S]*minPrice: bookMinPrice,[\s\S]*\}\)/);
+  assert.match(sellSource, /matchPronosMakerBidsForSell\(client, \{[\s\S]*minPrice: bookMinPrice,[\s\S]*\}\)/);
   assert.match(quoteSellSource, /currentPrice: priceBefore/);
   assert.match(quoteSellSource, /const priceBefore = displayPricesBefore\[oi\] \|\| pricesBefore\[oi\] \|\| 0/);
   assert.match(quoteSellSource, /const lastBookFillPrice = \[\.\.\.\(orderbook\.fills \|\| \[\]\)\]/);
@@ -210,6 +228,10 @@ test('sell quotes and orderbook current price only trust latest book-only fills'
   assert.match(orderbookSource, /outcomeIndex: lastRows\[0\]\?\.outcome_index/);
   assert.match(orderbookSource, /currentPrice: Number\.isFinite\(displayCurrentPrice\) \? displayCurrentPrice : null/);
   assert.match(orderbookSource, /const currentPrice = Number\.isFinite\(displayCurrentPrice\) \? displayCurrentPrice : depth\.currentPrice/);
+  assert.match(quoteSellSource, /orderbookFillCount/);
+  assert.doesNotMatch(quoteSellSource, /orderbookFills: orderbook\.fills/);
+  assert.doesNotMatch(quoteSellSource, /ammShares,/);
+  assert.match(sellSource, /const \{ orderbookFills, triggeredLimitOrders, \.\.\.publicResult \} = result/);
 });
 
 test('top holders price positions with displayed book-trade odds', () => {

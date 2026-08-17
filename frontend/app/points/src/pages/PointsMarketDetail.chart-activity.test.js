@@ -15,6 +15,7 @@ const portfolioSource = await readFile(new URL('./PointsPortfolio.jsx', import.m
 const buyModalSource = await readFile(new URL('../components/PointsBuyModal.jsx', import.meta.url), 'utf8');
 const marketCardSource = await readFile(new URL('../components/PointsMarketCard.jsx', import.meta.url), 'utf8');
 const multiSource = await readFile(new URL('../../../src/components/MultiSparkline.jsx', import.meta.url), 'utf8');
+const tradeTapeSource = await readFile(new URL('../../../../api/points/trade-tape.js', import.meta.url), 'utf8');
 
 test('points market detail overlays real activity and range controls on the chart', () => {
   assert.match(detailSource, /fetchTradeActivity/);
@@ -84,10 +85,22 @@ test('outcome logos fall back to initials when a supplied image fails', () => {
 
 test('points API client exposes anonymous trade activity endpoint', () => {
   assert.match(apiSource, /export async function fetchTradeActivity/);
+  assert.match(apiSource, /export async function fetchTradeTape/);
   assert.match(apiSource, /\/api\/points\/trade-activity\?/);
+  assert.match(apiSource, /\/api\/points\/trade-tape\?/);
   assert.match(apiSource, /hours, outcome = 0/);
   assert.match(apiSource, /q\.set\('hours', String\(hours\)\)/);
   assert.match(apiSource, /buckets: String\(buckets\)/);
+});
+
+test('public trade tape exposes named movements but hides maker and AMM routing', () => {
+  assert.match(tradeTapeSource, /GET \/api\/points\/trade-tape/);
+  assert.match(tradeTapeSource, /t\.username/);
+  assert.match(tradeTapeSource, /t\.collateral/);
+  assert.match(tradeTapeSource, /outcomeLabelFor/);
+  assert.match(tradeTapeSource, /username <> \$\{PRONOS_TREASURY_USERNAME\}/);
+  assert.doesNotMatch(tradeTapeSource, /source\s*:/);
+  assert.doesNotMatch(tradeTapeSource, /executionSource|orderBookSource|makerSource/);
 });
 
 test('chart range copy is translated', () => {

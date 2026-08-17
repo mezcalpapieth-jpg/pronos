@@ -23,6 +23,14 @@ test('Risk panel lets admins filter evidence and set non-payout review states', 
   assert.match(source, /Señales compartidas/);
   assert.match(source, /Cruces en el mismo mercado/);
   assert.match(source, /Flags manuales/);
+  assert.match(source, /Cómo se arma el score/);
+  assert.match(source, /Desglose del score/);
+  assert.match(source, /Teléfono requerido/);
+  assert.match(source, /verificación telefónica/);
+  assert.match(source, /function RiskScoreBreakdown/);
+  assert.match(source, /function riskScoreBreakdown/);
+  assert.match(source, /loopCount \* 30/);
+  assert.match(source, /sharedSignalCount \* 20/);
   assert.match(source, /riskStatusLabel/);
   assert.match(source, /phone_required/);
   assert.match(source, /under_review/);

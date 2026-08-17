@@ -34,7 +34,8 @@ import LivePriceChart from '@app/components/LivePriceChart.jsx';
 import { useLang, useT } from '@app/lib/i18n.js';
 import PointsBuyModal from './PointsBuyModal.jsx';
 import TopHolders from './TopHolders.jsx';
-import { publicErrorMessage, redeemWinnings } from '../lib/pointsApi.js';
+import PointsActivityTape from './PointsActivityTape.jsx';
+import { fetchTradeTape, publicErrorMessage, redeemWinnings } from '../lib/pointsApi.js';
 
 function fmt(n, d = 2) {
   if (n == null || !Number.isFinite(Number(n))) return '—';
@@ -235,12 +236,29 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
   // works without modification.
   const [buyState, setBuyState] = useState(null);
   const [redeemState, setRedeemState] = useState({ key: null, message: null, error: null });
+  const [tradeTape, setTradeTape] = useState([]);
 
   useEffect(() => {
     if (sequence.length === 0) return;
     const stillPresent = sequence.some((item) => String(item.id) === String(selectedMarketId));
     if (!stillPresent) setSelectedMarketId(market.id);
   }, [market.id, selectedMarketId, sequenceSig, sequence]);
+
+  useEffect(() => {
+    if (!selectedMarket?.id) {
+      setTradeTape([]);
+      return undefined;
+    }
+    let cancelled = false;
+    fetchTradeTape([selectedMarket.id], { hours: 24 * 7, limit: 40 })
+      .then((tape) => {
+        if (cancelled) return;
+        const rows = tape?.[String(selectedMarket.id)] || tape?.[selectedMarket.id] || [];
+        setTradeTape(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => { if (!cancelled) setTradeTape([]); });
+    return () => { cancelled = true; };
+  }, [selectedMarket?.id, sequenceSig]);
 
   const nowMs = Date.now();
   const status = selectedMarket.status;
@@ -849,6 +867,11 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
           </button>
         </div>
       )}
+
+      <PointsActivityTape
+        items={tradeTape}
+        maxRows={20}
+      />
 
       {(sequence.length > 1 || alternateAssetMarket) && (
         <div style={{

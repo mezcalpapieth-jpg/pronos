@@ -19,7 +19,7 @@ test('points market detail renders hybrid limit-order book depth', () => {
   assert.match(detailSource, /points\.detail\.orderBook/);
   assert.match(detailSource, /points\.detail\.orderBookSellSide/);
   assert.match(detailSource, /points\.detail\.orderBookBuySide/);
-  assert.match(detailSource, /points\.detail\.orderBookSourceMaker/);
+  assert.match(detailSource, /showSource = false/);
   assert.match(detailSource, /points\.detail\.limitOrderTitle/);
   assert.match(detailSource, /points\.detail\.limitOrderMakerReward/);
   assert.match(detailSource, /points\.detail\.limitOrderRewardEarned/);
@@ -34,6 +34,7 @@ test('points market detail renders hybrid limit-order book depth', () => {
 test('points market detail places mobile trade controls before orderbook', () => {
   const tradePanelIndex = detailSource.indexOf('const tradePanel = (');
   const mobileTradeIndex = detailSource.indexOf('{isMobile && tradePanel}');
+  const activityTapeIndex = detailSource.indexOf('<PointsActivityTape');
   const orderBookIndex = detailSource.indexOf('<OrderBookPanel');
   const seriesStripIndex = detailSource.indexOf('<SeriesGameStrip');
   const asideIndex = detailSource.indexOf('<aside style');
@@ -42,6 +43,8 @@ test('points market detail places mobile trade controls before orderbook', () =>
   assert.ok(mobileTradeIndex > tradePanelIndex, 'expected mobile trade panel placement');
   assert.ok(orderBookIndex > 0, 'expected OrderBookPanel render call');
   assert.ok(mobileTradeIndex < orderBookIndex, 'mobile trade controls should sit between the chart and orderbook');
+  assert.ok(activityTapeIndex > mobileTradeIndex, 'activity tape should sit after mobile trade controls');
+  assert.ok(activityTapeIndex < orderBookIndex, 'activity tape should sit before the orderbook');
   assert.ok(orderBookIndex < seriesStripIndex, 'orderbook should stay after mobile trade controls and before series navigation');
   assert.ok(orderBookIndex < asideIndex, 'orderbook should remain in the left/mobile flow');
   assert.ok(desktopTradeIndex > asideIndex, 'desktop trade controls should stay in the right rail');
