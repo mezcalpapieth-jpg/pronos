@@ -411,7 +411,7 @@ export async function fetchTradeActivity(ids, { days = 1, hours, outcome = 0, bu
   }
 }
 
-export async function fetchTradeTape(ids, { hours = 24 * 7, limit = 20 } = {}) {
+export async function fetchTradeTape(ids, { hours = 24 * 7, limit = 20, details = false } = {}) {
   const list = Array.isArray(ids) ? ids : [ids];
   const cleaned = list.filter(n => Number.isInteger(n) || (typeof n === 'string' && n.length > 0));
   if (cleaned.length === 0) return {};
@@ -420,6 +420,7 @@ export async function fetchTradeTape(ids, { hours = 24 * 7, limit = 20 } = {}) {
     hours: String(hours),
     limit: String(limit),
   });
+  if (details) q.set('details', '1');
   try {
     const { tape = {} } = await getJson(`/api/points/trade-tape?${q}`);
     return tape;

@@ -163,6 +163,16 @@ test('public activity tape renders named buys and sells without execution-source
   assert.match(activityTape, /points\.activity\.tapeBought/);
   assert.match(activityTape, /points\.activity\.tapeSold/);
   assert.match(activityTape, /formatMoney\(item\.collateral/);
+  assert.match(activityTape, /function priceMovementLabel/);
+  assert.match(activityTape, /item\.priceBefore/);
+  assert.match(activityTape, /item\.priceAfter/);
+  assert.match(activityTape, /item\.priceMin/);
+  assert.match(activityTape, /item\.priceMax/);
+  assert.match(activityTape, /showTradeDetails = false/);
+  assert.match(activityTape, /const fills = Array\.isArray\(item\.fills\) \? item\.fills : \[\]/);
+  assert.match(activityTape, /const canShowDetails = showTradeDetails && fills\.length > 1/);
+  assert.match(activityTape, /expandedTradeRows/);
+  assert.doesNotMatch(carousel, /showTradeDetails=\{true\}|showTradeDetails=\{isAdmin\}/);
   assert.doesNotMatch(activityTape, /orderBookSource|source ===|AMM|maker/i);
 });
 

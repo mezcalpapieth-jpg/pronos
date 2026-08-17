@@ -9,6 +9,7 @@ import { readFile } from 'node:fs/promises';
 
 const detailSource = await readFile(new URL('./PointsMarketDetail.jsx', import.meta.url), 'utf8');
 const apiSource = await readFile(new URL('../lib/pointsApi.js', import.meta.url), 'utf8');
+const appSource = await readFile(new URL('../App.jsx', import.meta.url), 'utf8');
 const i18nSource = await readFile(new URL('../../../src/lib/i18n.js', import.meta.url), 'utf8');
 const navSource = await readFile(new URL('../components/PointsNav.jsx', import.meta.url), 'utf8');
 const portfolioSource = await readFile(new URL('./PointsPortfolio.jsx', import.meta.url), 'utf8');
@@ -91,16 +92,44 @@ test('points API client exposes anonymous trade activity endpoint', () => {
   assert.match(apiSource, /hours, outcome = 0/);
   assert.match(apiSource, /q\.set\('hours', String\(hours\)\)/);
   assert.match(apiSource, /buckets: String\(buckets\)/);
+  assert.match(apiSource, /details = false/);
+  assert.match(apiSource, /if \(details\) q\.set\('details', '1'\)/);
 });
 
 test('public trade tape exposes named movements but hides maker and AMM routing', () => {
   assert.match(tradeTapeSource, /GET \/api\/points\/trade-tape/);
+  assert.match(tradeTapeSource, /function aggregateRows/);
+  assert.match(tradeTapeSource, /function tradeGroupKey/);
+  assert.match(tradeTapeSource, /EXECUTION_BUCKET_MS/);
+  assert.match(tradeTapeSource, /priceBefore/);
+  assert.match(tradeTapeSource, /priceAfter/);
+  assert.match(tradeTapeSource, /priceMin/);
+  assert.match(tradeTapeSource, /priceMax/);
+  assert.match(tradeTapeSource, /fillCount/);
   assert.match(tradeTapeSource, /t\.username/);
   assert.match(tradeTapeSource, /t\.collateral/);
+  assert.match(tradeTapeSource, /t\.reserves_before/);
+  assert.match(tradeTapeSource, /t\.reserves_after/);
   assert.match(tradeTapeSource, /outcomeLabelFor/);
   assert.match(tradeTapeSource, /username <> \$\{PRONOS_TREASURY_USERNAME\}/);
+  assert.match(tradeTapeSource, /import \{ readSession \} from '\.\.\/_lib\/session\.js'/);
+  assert.match(tradeTapeSource, /import \{ isAdminUsername \} from '\.\.\/_lib\/points-admin\.js'/);
+  assert.match(tradeTapeSource, /const wantsDetails = req\.query\.details === '1' \|\| req\.query\.details === 'true'/);
+  assert.match(tradeTapeSource, /includeDetails = isAdminUsername\(session\?\.username\)/);
+  assert.match(tradeTapeSource, /setCacheHeaders\(res, includeDetails \? \{/);
+  assert.match(tradeTapeSource, /cachedJson\(cacheKey, includeDetails \? 0 : 2_000/);
+  assert.match(tradeTapeSource, /fills: includeDetails \? \[\] : null/);
+  assert.match(tradeTapeSource, /payload\.fills = \[\.\.\.group\.fills\]/);
   assert.doesNotMatch(tradeTapeSource, /source\s*:/);
   assert.doesNotMatch(tradeTapeSource, /executionSource|orderBookSource|makerSource/);
+});
+
+test('market detail can request admin-only trade fill details without exposing them in the carousel', () => {
+  assert.match(appSource, /<PointsMarketDetail onOpenLogin=\{onOpenLogin\} isAdmin=\{isAdmin\} \/>/);
+  assert.match(detailSource, /export default function PointsMarketDetail\(\{ onOpenLogin, isAdmin = false \}\)/);
+  assert.match(detailSource, /fetchTradeTape\(tradeTapeIds, \{ hours: 24 \* 30, limit: 80, details: isAdmin \}\)/);
+  assert.match(detailSource, /showTradeDetails=\{isAdmin\}/);
+  assert.match(detailSource, /orderBookRefresh, isAdmin/);
 });
 
 test('chart range copy is translated', () => {
@@ -113,6 +142,8 @@ test('chart range copy is translated', () => {
   assert.match(i18nSource, /'points\.detail\.activityVolume'/);
   assert.match(i18nSource, /'points\.detail\.activityVolumeRange'/);
   assert.match(i18nSource, /'points\.detail\.activityPressure'/);
+  assert.match(i18nSource, /'points\.activity\.detailsShow'/);
+  assert.match(i18nSource, /'points\.activity\.detailsHide'/);
   assert.doesNotMatch(detailSource, /activityOpsShort/);
 });
 

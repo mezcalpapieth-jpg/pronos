@@ -345,7 +345,7 @@ function Shell({ onOpenLogin, isAdmin }) {
               adminPath='/admin' targets the points-app's own admin. */}
           <Route path="/c/noticias" element={<NewsPage isAdmin={isAdmin} adminPath="/admin" />} />
           <Route path="/c/:slug" element={<PointsCategoryPage />} />
-          <Route path="/market" element={<PointsMarketDetail onOpenLogin={onOpenLogin} />} />
+          <Route path="/market" element={<PointsMarketDetail onOpenLogin={onOpenLogin} isAdmin={isAdmin} />} />
           <Route path="/portfolio" element={<PointsPortfolio />} />
           <Route path="/torneo" element={<PointsTournament />} />
           <Route path="/earn" element={<PointsEarn onOpenLogin={onOpenLogin} />} />

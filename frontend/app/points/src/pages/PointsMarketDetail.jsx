@@ -2026,7 +2026,7 @@ function OrderBookPanel({
   );
 }
 
-export default function PointsMarketDetail({ onOpenLogin }) {
+export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const id = searchParams.get('id');
@@ -2226,7 +2226,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
       return undefined;
     }
     let cancelled = false;
-    fetchTradeTape(tradeTapeIds, { hours: 24 * 30, limit: 80 })
+    fetchTradeTape(tradeTapeIds, { hours: 24 * 30, limit: 80, details: isAdmin })
       .then((tape) => {
         if (cancelled) return;
         const rows = tape?.[String(market.id)] || tape?.[market.id] || [];
@@ -2234,7 +2234,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
       })
       .catch(() => { if (!cancelled) setTradeTape([]); });
     return () => { cancelled = true; };
-  }, [market?.id, tradeTapeIds, tradeTapeIdsKey, orderBookRefresh]);
+  }, [market?.id, tradeTapeIds, tradeTapeIdsKey, orderBookRefresh, isAdmin]);
 
   useEffect(() => {
     if (!market?.id) return;
@@ -3125,6 +3125,7 @@ export default function PointsMarketDetail({ onOpenLogin }) {
             <PointsActivityTape
               items={tradeTape}
               maxRows={24}
+              showTradeDetails={isAdmin}
             />
 
             <OrderBookPanel

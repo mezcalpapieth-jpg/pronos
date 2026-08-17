@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useLang, useT } from '@app/lib/i18n.js';
 
 const BUY_COLOR = 'var(--yes)';
@@ -40,10 +40,28 @@ function timeAgo(value, lang) {
   return lang === 'en' ? `${days}d ago` : `hace ${days}d`;
 }
 
-function priceLabel(price) {
+function centLabel(price) {
   const n = toNumber(price);
   if (n <= 0) return null;
   return `${Math.round(n * 100)}c`;
+}
+
+function priceMovementLabel(item) {
+  const before = toNumber(item.priceBefore);
+  const after = toNumber(item.priceAfter);
+  if (before > 0 && after > 0 && Math.abs(after - before) >= 0.005) {
+    return `${centLabel(before)} → ${centLabel(after)}`;
+  }
+  const min = toNumber(item.priceMin);
+  const max = toNumber(item.priceMax);
+  if (min > 0 && max > 0 && Math.abs(max - min) >= 0.005) {
+    return `${centLabel(min)}-${centLabel(max)}`;
+  }
+  return centLabel(item.price);
+}
+
+function tradeRowKey(item, i) {
+  return `${item.id || i}-${item.t || item.createdAt || i}`;
 }
 
 export default function PointsActivityTape({
@@ -55,110 +73,208 @@ export default function PointsActivityTape({
   emptyTitle,
   emptySub,
   showShares = true,
+  showTradeDetails = false,
 }) {
   const t = useT();
   const lang = useLang();
   const locale = lang === 'en' ? 'en-US' : 'es-MX';
+  const [expandedTradeRows, setExpandedTradeRows] = useState(() => new Set());
   const rows = Array.isArray(items) ? items.slice(0, maxRows) : [];
   const resolvedTitle = title || t('points.activity.tapeTitle');
   const resolvedEmptyTitle = emptyTitle || t('points.activity.tapeEmpty');
   const resolvedEmptySub = emptySub || t('points.activity.tapeEmptySub');
+  const toggleTradeRow = (key) => {
+    setExpandedTradeRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   const content = rows.length > 0 ? (
     <div style={{ display: 'flex', flexDirection: 'column', gap: compact ? 3 : 6, minWidth: 0 }}>
       {rows.map((item, i) => {
+        const key = tradeRowKey(item, i);
         const isBuy = item.side === 'buy';
         const accent = isBuy ? BUY_COLOR : SELL_COLOR;
         const bg = isBuy ? 'rgba(0,232,122,0.10)' : 'rgba(255,59,59,0.10)';
-        const price = priceLabel(item.price);
+        const price = priceMovementLabel(item);
+        const fills = Array.isArray(item.fills) ? item.fills : [];
+        const canShowDetails = showTradeDetails && fills.length > 1;
+        const expanded = canShowDetails && expandedTradeRows.has(key);
         return (
-          <div
-            key={`${item.id || i}-${item.t || item.createdAt || i}`}
-            className="points-tape-row"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: compact ? '1fr auto' : 'minmax(0, 1fr) auto',
-              alignItems: 'center',
-              gap: compact ? 8 : 12,
-              minHeight: compact ? 34 : 44,
-              padding: compact ? '7px 8px' : '10px 12px',
-              borderRadius: compact ? 7 : 9,
-              background: bg,
-              border: '1px solid rgba(255,255,255,0.04)',
-              animationDelay: `${i * 55}ms`,
-            }}
-          >
-            <div style={{ minWidth: 0 }}>
-              <div style={{
-                display: 'flex',
+          <div key={key}>
+            <div
+              className="points-tape-row"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: compact ? '1fr auto' : 'minmax(0, 1fr) auto',
                 alignItems: 'center',
-                gap: 6,
-                minWidth: 0,
-                color: 'var(--text-primary)',
-                fontFamily: 'var(--font-body)',
-                fontSize: compact ? 'var(--fs-xs)' : 'var(--fs-sm)',
-                fontWeight: 800,
-                lineHeight: 1.2,
-              }}>
-                <span style={{
-                  width: 7,
-                  height: 7,
-                  borderRadius: '50%',
-                  background: accent,
-                  flexShrink: 0,
-                }} />
-                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  @{item.username || t('points.activity.tapeUser')}
-                </span>
-                <span style={{
-                  color: accent,
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: compact ? 'var(--fs-2xs)' : 'var(--fs-xs)',
-                  letterSpacing: '0.04em',
-                  textTransform: 'uppercase',
-                  flexShrink: 0,
+                gap: compact ? 8 : 12,
+                minHeight: compact ? 34 : 44,
+                padding: compact ? '7px 8px' : '10px 12px',
+                borderRadius: compact ? 7 : 9,
+                background: bg,
+                border: '1px solid rgba(255,255,255,0.04)',
+                animationDelay: `${i * 55}ms`,
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  minWidth: 0,
+                  color: 'var(--text-primary)',
+                  fontFamily: 'var(--font-body)',
+                  fontSize: compact ? 'var(--fs-xs)' : 'var(--fs-sm)',
+                  fontWeight: 800,
+                  lineHeight: 1.2,
                 }}>
-                  {isBuy ? t('points.activity.tapeBought') : t('points.activity.tapeSold')}
-                </span>
-              </div>
-              <div style={{
-                marginTop: 3,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                minWidth: 0,
-                color: 'var(--text-muted)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 'var(--fs-2xs)',
-                fontVariantNumeric: 'tabular-nums',
-              }}>
-                <span style={{ color: accent, flexShrink: 0 }}>
-                  {formatMoney(item.collateral, locale)} MXNP
-                </span>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {item.outcomeLabel || t('points.activity.tapeOutcome')}
-                </span>
-                {showShares && item.shares > 0 && (
-                  <span style={{ flexShrink: 0 }}>
-                    {formatShares(item.shares, locale)} {t('points.activity.tapeShares')}
+                  <span style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: '50%',
+                    background: accent,
+                    flexShrink: 0,
+                  }} />
+                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    @{item.username || t('points.activity.tapeUser')}
                   </span>
+                  <span style={{
+                    color: accent,
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: compact ? 'var(--fs-2xs)' : 'var(--fs-xs)',
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
+                    flexShrink: 0,
+                  }}>
+                    {isBuy ? t('points.activity.tapeBought') : t('points.activity.tapeSold')}
+                  </span>
+                </div>
+                <div style={{
+                  marginTop: 3,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  minWidth: 0,
+                  color: 'var(--text-muted)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 'var(--fs-2xs)',
+                  fontVariantNumeric: 'tabular-nums',
+                }}>
+                  <span style={{ color: accent, flexShrink: 0 }}>
+                    {formatMoney(item.collateral, locale)} MXNP
+                  </span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {item.outcomeLabel || t('points.activity.tapeOutcome')}
+                  </span>
+                  {showShares && item.shares > 0 && (
+                    <span style={{ flexShrink: 0 }}>
+                      {formatShares(item.shares, locale)} {t('points.activity.tapeShares')}
+                    </span>
+                  )}
+                </div>
+                {canShowDetails && (
+                  <button
+                    type="button"
+                    onClick={() => toggleTradeRow(key)}
+                    style={{
+                      marginTop: 8,
+                      padding: '5px 8px',
+                      borderRadius: 7,
+                      border: '1px solid var(--border)',
+                      background: 'rgba(255,255,255,0.04)',
+                      color: 'var(--text-secondary)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 'var(--fs-2xs)',
+                      letterSpacing: '0.06em',
+                      textTransform: 'uppercase',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {expanded ? t('points.activity.detailsHide') : t('points.activity.detailsShow')} · {fills.length} {fills.length === 1 ? t('points.activity.detailsFill') : t('points.activity.detailsFills')}
+                  </button>
                 )}
               </div>
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-end',
+                gap: 3,
+                fontFamily: 'var(--font-mono)',
+                fontSize: 'var(--fs-2xs)',
+                color: 'var(--text-muted)',
+                fontVariantNumeric: 'tabular-nums',
+                whiteSpace: 'nowrap',
+              }}>
+                <span>{timeAgo(item, lang)}</span>
+                {price && <span style={{ color: accent }}>{price}</span>}
+              </div>
             </div>
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'flex-end',
-              gap: 3,
-              fontFamily: 'var(--font-mono)',
-              fontSize: 'var(--fs-2xs)',
-              color: 'var(--text-muted)',
-              fontVariantNumeric: 'tabular-nums',
-              whiteSpace: 'nowrap',
-            }}>
-              <span>{timeAgo(item, lang)}</span>
-              {price && <span style={{ color: accent }}>{price}</span>}
-            </div>
+            {expanded && (
+              <div style={{
+                margin: compact ? '3px 0 5px' : '6px 0 8px',
+                padding: compact ? '8px 10px' : '10px 12px',
+                borderRadius: compact ? 7 : 9,
+                background: 'rgba(255,255,255,0.035)',
+                border: '1px solid var(--border)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 5,
+              }}>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 10,
+                  color: 'var(--text-muted)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 'var(--fs-2xs)',
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                }}>
+                  <span>{fills.length} {fills.length === 1 ? t('points.activity.detailsFill') : t('points.activity.detailsFills')}</span>
+                  {item.priceBefore > 0 && item.priceAfter > 0 && (
+                    <span>{centLabel(item.priceBefore)} → {centLabel(item.priceAfter)}</span>
+                  )}
+                </div>
+                {fills.map((fill, fillIndex) => (
+                  <div
+                    key={`${fill.id || fillIndex}-${fill.t || fill.createdAt || fillIndex}`}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: compact ? '1fr auto' : 'auto minmax(0, 1fr) auto',
+                      gap: compact ? 8 : 10,
+                      alignItems: 'center',
+                      minWidth: 0,
+                      color: 'var(--text-muted)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 'var(--fs-2xs)',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    {!compact && <span style={{ color: 'var(--text-secondary)' }}>#{fill.id || fillIndex + 1}</span>}
+                    <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ color: accent }}>{formatMoney(fill.collateral, locale)} MXNP</span>
+                      {' · '}
+                      {fill.outcomeLabel || item.outcomeLabel || t('points.activity.tapeOutcome')}
+                      {showShares && fill.shares > 0 && (
+                        <>
+                          {' · '}
+                          {formatShares(fill.shares, locale)} {t('points.activity.tapeShares')}
+                        </>
+                      )}
+                    </span>
+                    <span style={{ color: accent, whiteSpace: 'nowrap' }}>
+                      {fill.priceBefore > 0 && fill.priceAfter > 0
+                        ? `${centLabel(fill.priceBefore)} → ${centLabel(fill.priceAfter)}`
+                        : centLabel(fill.price)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         );
       })}
