@@ -570,19 +570,33 @@ export function buildLcdlfWeeklyMarketSpec({
     seed_liquidity: seedLiquidity,
     end_time: close.toISOString(),
     amm_mode: 'parallel',
-    resolver_type: 'manual_review',
+    resolver_type: 'api_lcdlf',
     resolver_config: {
       source: LCDLF_SOURCE,
       sourceEventId,
-      criteria: 'Se resuelve con la persona eliminada oficialmente por La Casa de los Famosos México después de la gala. Si hay salida voluntaria, expulsión o cambio oficial, admin debe confirmar con la fuente oficial antes de pagar.',
+      shape: 'parallel-status',
+      statusKey: 'eliminado',
+      yesOutcome: 0,
+      noOutcome: 1,
+      closeOnStatus: false,
+      statusMinStatusCount: 1,
+      legs: snapshot.nominated.map(row => ({
+        label: row.name,
+        residentName: row.name,
+        residentSlug: row.slug,
+        statusKey: 'eliminado',
+        evidenceUrl: row.url || snapshot.sourceUrl,
+      })),
+      criteria: 'Cada nominado se resuelve de forma independiente: Sí si el sitio oficial marca a esa persona como Eliminado/a esta semana. Cuando el eliminado oficial aparezca, los demás nominados se resuelven No. Si no hay una marca clara, el resolver difiere.',
       evidence,
       sourceUrls: evidence.map(item => item.url).filter(Boolean),
+      evidenceUrl: snapshot.sourceUrl,
       timezone: MEXICO_CITY_TZ,
-      requireHumanConfirmation: true,
-      staleReadPolicy: 'Requiere lectura fresca del sitio oficial y confirmación humana si hay duda.',
+      staleReadPolicy: 'Usar lectura fresca del sitio oficial; si el eliminado no se puede leer, diferir o enviar a revisión manual.',
     },
     source_data: {
       kind: 'lcdlf_week',
+      eliminationMarketShape: 'parallel-status',
       showLabel: 'La Casa de los Famosos México',
       seasonLabel,
       weekKey,
@@ -609,7 +623,6 @@ export function buildLcdlfNominationMarketSpecs({
   seasonLabel = process.env.LCDLF_SEASON_LABEL || LCDLF_DEFAULT_SEASON_LABEL,
 } = {}) {
   if (!snapshot?.ok || !Array.isArray(snapshot.active) || snapshot.active.length < 2) return [];
-  if (Array.isArray(snapshot.nominated) && snapshot.nominated.length >= 2) return [];
 
   const activeRows = snapshot.active
     .filter(row => row?.name && row?.slug && row.statusKey !== 'eliminado');
@@ -657,7 +670,8 @@ export function buildLcdlfNominationMarketSpecs({
       statusKey: 'nominado',
       yesOutcome: 0,
       noOutcome: 1,
-      closeOnStatus: true,
+      closeOnStatus: false,
+      statusMinStatusCount: 2,
       nominationMinStatusCount: 2,
       legs: activeRows.map(row => ({
         label: row.name,

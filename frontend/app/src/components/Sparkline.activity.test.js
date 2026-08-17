@@ -47,3 +47,10 @@ test('sparkline renders a time axis and true-scale geometry', () => {
   assert.match(source, /measuredWidth/);
   assert.doesNotMatch(source, /preserveAspectRatio="none"/);
 });
+
+test('sparkline pins the end label above the last point', () => {
+  assert.match(source, /const endLabelX = Math\.max/);
+  assert.match(source, /left: `\$\{endLabelX\}px`/);
+  assert.match(source, /transform: 'translate\(-50%, calc\(-100% - 8px\)\)'/);
+  assert.doesNotMatch(source, /right: yAxisGutter \+ 6/);
+});

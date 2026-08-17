@@ -21,6 +21,8 @@ test('crypto 5-minute markets show and refresh the current user position after b
   assert.doesNotMatch(cryptoSource, /CRYPTO_TRADE_LOCK_MS/);
   assert.match(cryptoSource, /selectedEndMs > nowMs/);
   assert.match(cryptoSource, /setSelectedMarketId\(nextMarket\.id\)/);
+  assert.match(cryptoSource, /fetchTradeTape\(\[selectedMarket\.id\], \{ hours: 24 \* 7, limit: 40, details: true \}\)/);
+  assert.match(cryptoSource, /showTradeDetails/);
 
   assert.match(detailSource, /positionRefreshNonce/);
   assert.match(detailSource, /async function handleTradeSuccess\(\)/);

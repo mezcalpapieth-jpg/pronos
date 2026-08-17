@@ -250,7 +250,7 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
       return undefined;
     }
     let cancelled = false;
-    fetchTradeTape([selectedMarket.id], { hours: 24 * 7, limit: 40 })
+    fetchTradeTape([selectedMarket.id], { hours: 24 * 7, limit: 40, details: true })
       .then((tape) => {
         if (cancelled) return;
         const rows = tape?.[String(selectedMarket.id)] || tape?.[selectedMarket.id] || [];
@@ -871,6 +871,7 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
       <PointsActivityTape
         items={tradeTape}
         maxRows={20}
+        showTradeDetails
       />
 
       {(sequence.length > 1 || alternateAssetMarket) && (

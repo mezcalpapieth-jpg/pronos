@@ -391,6 +391,14 @@ export default function Sparkline({
   const lastPt = pathCoords[pathCoords.length - 1];
   const fillD = `${pathD} L${lastPt.x.toFixed(2)},${plotBottom.toFixed(2)} L${coords[0].x.toFixed(2)},${plotBottom.toFixed(2)} Z`;
   const lastVal = Math.round(values[values.length - 1]);
+  const endLabelActualWidth = Math.min(
+    endLabelWidth,
+    Math.max(72, plotRight - padX * 2 - 8),
+  );
+  const endLabelX = Math.max(
+    padX + endLabelActualWidth / 2,
+    Math.min(lastPt.x, plotRight - endLabelActualWidth / 2 - 4),
+  );
 
   const gradientId = `sg-${uid}`;
 
@@ -565,19 +573,15 @@ export default function Sparkline({
         <div
           style={{
             position: 'absolute',
-            // Right-aligned against the plot's edge, clear of the y-axis
-            // labels. Sits above the endpoint, or below it when the line is
-            // riding the top of the plot and there is no room above.
-            right: yAxisGutter + 6,
+            // Centered over the final dot instead of anchored to the right
+            // gutter, so the label travels with the last price and stays off
+            // the chart line.
+            left: `${endLabelX}px`,
             top: lastPt.y,
-            // Anchored by its own edge rather than a guessed height, so a
-            // one-line label and a two-line one both clear the line.
-            transform: lastPt.y > 56
-              ? 'translateY(calc(-100% - 8px))'
-              : 'translateY(10px)',
-            width: endLabelWidth,
+            transform: 'translate(-50%, calc(-100% - 8px))',
+            width: endLabelActualWidth,
             maxWidth: `calc(100% - ${yAxisGutter + 12}px)`,
-            textAlign: 'right',
+            textAlign: 'center',
             pointerEvents: 'none',
             zIndex: 2,
           }}

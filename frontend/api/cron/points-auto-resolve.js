@@ -260,6 +260,64 @@ function findLcdlfStatusRow(snapshot, cfg = {}) {
   )) || null;
 }
 
+function lcdlfRowsWithStatus(snapshot, statusKey) {
+  const needle = String(statusKey || '').trim().toLowerCase();
+  if (!needle) return [];
+  const rows = Array.isArray(snapshot?.rows) ? snapshot.rows : [];
+  return rows.filter(row => String(row?.statusKey || '').trim().toLowerCase() === needle);
+}
+
+function lcdlfMarketStatusTargets(cfg = {}, marketOutcomes = []) {
+  const legs = Array.isArray(cfg?.legs) && cfg.legs.length > 0
+    ? cfg.legs
+    : marketOutcomes.map(label => ({
+        label,
+        residentName: label,
+        residentSlug: null,
+      }));
+
+  return legs
+    .map(leg => ({
+      slug: String(leg?.residentSlug || '').trim().toLowerCase(),
+      name: normalizeLcdlfName(leg?.residentName || leg?.label || ''),
+    }))
+    .filter(target => target.slug || target.name);
+}
+
+function lcdlfStatusRowsForMarket({ snapshot, statusKey, cfg, marketOutcomes }) {
+  const rows = lcdlfRowsWithStatus(snapshot, statusKey);
+  const targetStatus = String(statusKey || '').trim().toLowerCase();
+  if (targetStatus !== 'eliminado') return rows;
+
+  const targets = lcdlfMarketStatusTargets(cfg, marketOutcomes);
+  if (targets.length === 0) return rows;
+
+  return rows.filter(row => targets.some(target => (
+    (target.slug && String(row?.slug || '').trim().toLowerCase() === target.slug)
+    || (target.name && normalizeLcdlfName(row?.name || '') === target.name)
+  )));
+}
+
+function lcdlfStatusRoundPosted({ snapshot, targetStatus, cfg, marketOutcomes, minStatusCount }) {
+  const minCount = Math.max(1, Number.isFinite(Number(minStatusCount)) ? Number(minStatusCount) : 1);
+  const statusKey = String(targetStatus || '').trim().toLowerCase();
+  if (statusKey === 'nominado' && Array.isArray(snapshot?.nominated)) {
+    return snapshot.nominated.length >= minCount;
+  }
+  return lcdlfStatusRowsForMarket({
+    snapshot,
+    statusKey,
+    cfg,
+    marketOutcomes,
+  }).length >= minCount;
+}
+
+function lcdlfStatusResolutionOpen(m, cfg = {}) {
+  if (cfg?.closeOnStatus === true) return true;
+  const endMs = new Date(m?.end_time).getTime();
+  return Number.isFinite(endMs) && endMs <= Date.now();
+}
+
 function buildLcdlfStatusPatch({ cfg, row, snapshot, winningIdx }) {
   return {
     lcdlfStatusAtResolve: {
@@ -276,22 +334,29 @@ function buildLcdlfStatusPatch({ cfg, row, snapshot, winningIdx }) {
   };
 }
 
-function finalScoreForLcdlfParallelStatus(legResolutions = []) {
+function finalScoreForLcdlfParallelStatus(legResolutions = [], statusKey = 'nominado') {
   const yesRows = legResolutions.filter(row => Number(row.outcomeIndex) === 0);
-  if (yesRows.length === 0) return 'Sin nominados oficiales';
+  const targetStatus = String(statusKey || '').trim().toLowerCase();
+  if (yesRows.length === 0) {
+    if (targetStatus === 'eliminado') return 'Sin eliminado oficial';
+    return 'Sin nominados oficiales';
+  }
   const names = yesRows.map(row => row.residentName || row.label).filter(Boolean);
+  if (targetStatus === 'eliminado') return `Eliminado/a: ${names.join(', ')}`;
   return `Nominados: ${names.join(', ')}`;
 }
 
 function buildLcdlfParallelStatusPatch({ cfg, snapshot, legResolutions }) {
-  const finalScore = finalScoreForLcdlfParallelStatus(legResolutions);
+  const statusKey = cfg?.statusKey || 'nominado';
+  const finalScore = finalScoreForLcdlfParallelStatus(legResolutions, statusKey);
   return {
     lcdlfParallelStatusAtResolve: {
       source: LCDLF_SOURCE,
       sourceEventId: cfg?.sourceEventId || null,
-      statusKey: cfg?.statusKey || null,
+      statusKey,
       observedAt: snapshot?.observedAt || new Date().toISOString(),
       nominatedCount: Array.isArray(snapshot?.nominated) ? snapshot.nominated.length : null,
+      statusCount: lcdlfRowsWithStatus(snapshot, statusKey).length,
       finalScore,
       legs: legResolutions.map(row => ({
         index: row.index,
@@ -307,6 +372,38 @@ function buildLcdlfParallelStatusPatch({ cfg, snapshot, legResolutions }) {
     },
     evidenceUrl: snapshot?.sourceUrl || cfg?.evidenceUrl || null,
     finalScore,
+  };
+}
+
+function buildLegacyLcdlfWeekStatusConfig({ cfg, sourceData, market, outcomes }) {
+  const kind = String(sourceData?.kind || '').trim().toLowerCase();
+  const sourceEventId = String(cfg?.sourceEventId || market?.source_event_id || '').trim();
+  const isEliminationEvent = sourceEventId.startsWith('lcdlf-mx-elimination:')
+    || kind === 'lcdlf_week'
+    || /sale de la casa de los famosos/i.test(String(market?.question || ''));
+  if (!isEliminationEvent) return null;
+  if (!isLcdlfMarket({ cfg, row: market, sourceData })) return null;
+  if (!Array.isArray(outcomes) || outcomes.length < 2) return null;
+
+  const evidenceUrl = cfg?.evidenceUrl || sourceData?.snapshot?.sourceUrl || null;
+  return {
+    ...(cfg || {}),
+    source: LCDLF_SOURCE,
+    sourceEventId: sourceEventId || cfg?.sourceEventId || null,
+    shape: 'parallel-status',
+    statusKey: 'eliminado',
+    yesOutcome: 0,
+    noOutcome: 1,
+    closeOnStatus: false,
+    statusMinStatusCount: 1,
+    legs: outcomes.map(label => ({
+      label,
+      residentName: label,
+      residentSlug: null,
+      statusKey: 'eliminado',
+      evidenceUrl,
+    })),
+    evidenceUrl,
   };
 }
 
@@ -869,6 +966,7 @@ export async function runAutoResolve({ dry = false } = {}) {
               OR (
                 m.resolver_type = 'api_lcdlf'
                 AND m.resolver_config->>'shape' IN ('binary-status', 'parallel-status')
+                AND LOWER(COALESCE(m.resolver_config->>'closeOnStatus', 'false')) = 'true'
                 AND m.start_time IS NOT NULL
                 AND m.start_time < NOW()
                 AND m.end_time > NOW()
@@ -1025,6 +1123,16 @@ export async function runAutoResolve({ dry = false } = {}) {
           };
           resolverType = 'sports_api';
         }
+      }
+      const legacyLcdlfWeekStatusCfg = buildLegacyLcdlfWeekStatusConfig({
+        cfg,
+        sourceData,
+        market: m,
+        outcomes: marketOutcomes,
+      });
+      if (legacyLcdlfWeekStatusCfg) {
+        cfg = legacyLcdlfWeekStatusCfg;
+        resolverType = 'api_lcdlf';
       }
       if (isManualReviewMarket({ resolverType, cfg, row: m, sourceData })) {
         try {
@@ -1323,15 +1431,48 @@ export async function runAutoResolve({ dry = false } = {}) {
           const targetStatus = String(cfg.statusKey || '').trim().toLowerCase();
           const yesOutcome = Number.isInteger(Number(cfg.yesOutcome)) ? Number(cfg.yesOutcome) : 0;
           const noOutcome = Number.isInteger(Number(cfg.noOutcome)) ? Number(cfg.noOutcome) : 1;
-          const nominationMinStatusCount = Math.max(
+          const statusMinRaw = Number.isFinite(Number(cfg.statusMinStatusCount))
+            ? Number(cfg.statusMinStatusCount)
+            : Number(cfg.nominationMinStatusCount);
+          const statusMinStatusCount = Math.max(
             1,
-            Number.isFinite(Number(cfg.nominationMinStatusCount))
-              ? Number(cfg.nominationMinStatusCount)
-              : 2,
+            Number.isFinite(statusMinRaw)
+              ? statusMinRaw
+              : (targetStatus === 'nominado' ? 2 : 1),
           );
-          const nominationRoundPosted = targetStatus === 'nominado'
-            && Array.isArray(snapshot.nominated)
-            && snapshot.nominated.length >= nominationMinStatusCount;
+          const targetStatusRows = lcdlfStatusRowsForMarket({
+            snapshot,
+            statusKey: targetStatus,
+            cfg,
+            marketOutcomes,
+          });
+          const targetRoundPosted = lcdlfStatusRoundPosted({
+            snapshot,
+            targetStatus,
+            cfg,
+            marketOutcomes,
+            minStatusCount: statusMinStatusCount,
+          });
+          const marketClosed = new Date(m.end_time).getTime() <= Date.now();
+          const statusResolutionOpen = lcdlfStatusResolutionOpen(m, cfg);
+          const statusReadyInfo = (extra = {}) => ({
+            source: LCDLF_SOURCE,
+            targetStatus,
+            statusCount: targetStatusRows.length,
+            statusMinStatusCount,
+            closeOnStatus: cfg.closeOnStatus === true,
+            marketClosed,
+            statusResolutionOpen,
+            nominatedCount: Array.isArray(snapshot.nominated) ? snapshot.nominated.length : null,
+            observedAt: snapshot.observedAt,
+            ...extra,
+          });
+          const throwStatusNotReady = (extra = {}) => {
+            const err = new Error('lcdlf_status_not_marked_yet');
+            err.benign = true;
+            err.info = statusReadyInfo(extra);
+            throw err;
+          };
 
           if (cfg.shape === 'binary-status') {
             const row = findLcdlfStatusRow(snapshot, cfg);
@@ -1347,24 +1488,21 @@ export async function runAutoResolve({ dry = false } = {}) {
               throw err;
             }
 
-            const isTargetStatus = String(row.statusKey || '').trim().toLowerCase() === targetStatus;
-            if (isTargetStatus) {
-              winningIdx = yesOutcome;
-            } else if (nominationRoundPosted || new Date(m.end_time).getTime() <= Date.now()) {
-              winningIdx = noOutcome;
-            } else {
-              const err = new Error('lcdlf_status_not_marked_yet');
-              err.benign = true;
-              err.info = {
-                source: LCDLF_SOURCE,
+            if (!statusResolutionOpen || !targetRoundPosted) {
+              throwStatusNotReady({
+                shape: cfg.shape,
                 residentName: row.name,
                 residentSlug: row.slug,
                 statusKey: row.statusKey || null,
                 statusLabel: row.statusLabel || null,
-                nominatedCount: Array.isArray(snapshot.nominated) ? snapshot.nominated.length : null,
-                observedAt: snapshot.observedAt,
-              };
-              throw err;
+              });
+            }
+
+            const isTargetStatus = String(row.statusKey || '').trim().toLowerCase() === targetStatus;
+            if (isTargetStatus) {
+              winningIdx = yesOutcome;
+            } else {
+              winningIdx = noOutcome;
             }
 
             resolverInfo = {
@@ -1376,6 +1514,9 @@ export async function runAutoResolve({ dry = false } = {}) {
               statusLabel: row.statusLabel || null,
               observedAt: snapshot.observedAt,
               sourceUrl: row.url || snapshot.sourceUrl,
+              targetStatus,
+              statusCount: targetStatusRows.length,
+              statusMinStatusCount,
             };
             resolverConfigPatch = buildLcdlfStatusPatch({
               cfg,
@@ -1394,6 +1535,12 @@ export async function runAutoResolve({ dry = false } = {}) {
                 }));
             if (resolverLegs.length !== marketOutcomes.length) {
               throw new Error('lcdlf_parallel_status_leg_mismatch');
+            }
+
+            if (!statusResolutionOpen || !targetRoundPosted) {
+              throwStatusNotReady({
+                shape: cfg.shape,
+              });
             }
 
             const legResolutions = [];
@@ -1431,7 +1578,7 @@ export async function runAutoResolve({ dry = false } = {}) {
                   url: row.url || null,
                   outcomeIndex: yesOutcome,
                 });
-              } else if (nominationRoundPosted || new Date(m.end_time).getTime() <= Date.now()) {
+              } else {
                 legResolutions.push({
                   index: i,
                   label,
@@ -1443,21 +1590,6 @@ export async function runAutoResolve({ dry = false } = {}) {
                   url: row.url || null,
                   outcomeIndex: noOutcome,
                 });
-              } else {
-                const err = new Error('lcdlf_status_not_marked_yet');
-                err.benign = true;
-                err.info = {
-                  source: LCDLF_SOURCE,
-                  shape: cfg.shape,
-                  legIndex: i,
-                  residentName: row.name,
-                  residentSlug: row.slug,
-                  statusKey: row.statusKey || null,
-                  statusLabel: row.statusLabel || null,
-                  nominatedCount: Array.isArray(snapshot.nominated) ? snapshot.nominated.length : null,
-                  observedAt: snapshot.observedAt,
-                };
-                throw err;
               }
             }
 
@@ -1465,9 +1597,12 @@ export async function runAutoResolve({ dry = false } = {}) {
             resolverInfo = {
               source: LCDLF_SOURCE,
               shape: cfg.shape,
+              targetStatus,
               observedAt: snapshot.observedAt,
               sourceUrl: snapshot.sourceUrl,
               nominatedCount: Array.isArray(snapshot.nominated) ? snapshot.nominated.length : null,
+              statusCount: targetStatusRows.length,
+              statusMinStatusCount,
               yesCount: legResolutions.filter(row => Number(row.outcomeIndex) === yesOutcome).length,
             };
             resolverConfigPatch = buildLcdlfParallelStatusPatch({
@@ -1747,7 +1882,7 @@ export async function runAutoResolve({ dry = false } = {}) {
 
       if (Array.isArray(independentLegResolutions)) {
         const finalScore = resolverConfigPatch?.finalScore
-          || finalScoreForLcdlfParallelStatus(independentLegResolutions);
+          || finalScoreForLcdlfParallelStatus(independentLegResolutions, cfg?.statusKey);
         const legAudit = independentLegResolutions.map(row => ({
           index: row.index,
           label: row.label,

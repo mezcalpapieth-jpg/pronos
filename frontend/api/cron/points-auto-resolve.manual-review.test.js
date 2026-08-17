@@ -69,19 +69,24 @@ test('points auto-resolver queues next-day mañanera markets when current transc
   assert.match(SOURCE, /mananera_next_pending_failed/);
 });
 
-test('points auto-resolver polls LCDLF nomination markets before close and resolves by official status', () => {
+test('points auto-resolver handles LCDLF status markets by official status', () => {
   assert.match(SOURCE, /api_lcdlf/);
   assert.match(SOURCE, /if \(rt === 'api_lcdlf'\) return false/);
   assert.match(SOURCE, /readLcdlfOfficialSnapshot/);
   assert.match(SOURCE, /findLcdlfStatusRow/);
   assert.match(SOURCE, /m\.resolver_type = 'api_lcdlf'/);
   assert.match(SOURCE, /m\.resolver_config->>'shape' IN \('binary-status', 'parallel-status'\)/);
-  assert.match(SOURCE, /nominationRoundPosted/);
-  assert.match(SOURCE, /snapshot\.nominated\.length >= nominationMinStatusCount/);
+  assert.match(SOURCE, /m\.resolver_config->>'closeOnStatus'/);
+  assert.match(SOURCE, /lcdlfStatusRoundPosted/);
+  assert.match(SOURCE, /targetRoundPosted/);
+  assert.match(SOURCE, /statusMinStatusCount/);
+  assert.match(SOURCE, /buildLegacyLcdlfWeekStatusConfig/);
+  assert.match(SOURCE, /Eliminado\/a:/);
   assert.match(SOURCE, /lcdlf_status_not_marked_yet/);
   assert.match(SOURCE, /buildLcdlfStatusPatch/);
   assert.match(SOURCE, /cfg\.shape === 'parallel-status'/);
   assert.match(SOURCE, /independentLegResolutions/);
   assert.match(SOURCE, /buildLcdlfParallelStatusPatch/);
   assert.match(SOURCE, /outcome = NULL/);
+  assert.doesNotMatch(SOURCE, /nominationRoundPosted \|\| new Date\(m\.end_time\)\.getTime\(\) <= Date\.now\(\)/);
 });

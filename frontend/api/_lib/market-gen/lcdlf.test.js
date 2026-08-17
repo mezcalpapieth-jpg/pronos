@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateLcdlfMarkets } from './lcdlf.js';
 
-test('generateLcdlfMarkets uses official nominees and suggested balanced pricing', async () => {
+test('generateLcdlfMarkets uses official residents for nomination and elimination drafts', async () => {
   const previousResidents = process.env.LCDLF_RESIDENTS_JSON;
   const previousDiscover = process.env.LCDLF_DISCOVER_RESIDENTS;
   try {
@@ -29,12 +29,25 @@ test('generateLcdlfMarkets uses official nominees and suggested balanced pricing
       fetchImpl,
     });
 
-    assert.equal(specs.length, 1);
-    assert.equal(specs[0].source, 'lcdlf-official');
-    assert.deepEqual(specs[0].outcomes, ['Ernesto Laguardia', 'Memo Schutz']);
-    assert.deepEqual(specs[0].seed_liquidities, [1000, 1000]);
-    assert.equal(specs[0].source_data.suggestedPricing.source, 'lcdlf-official:nominated');
-    assert.equal(specs[0].resolver_config.requireHumanConfirmation, true);
+    assert.equal(specs.length, 2);
+    const nomination = specs.find(spec => String(spec.source_event_id).startsWith('lcdlf-mx-nomination:'));
+    const elimination = specs.find(spec => String(spec.source_event_id).startsWith('lcdlf-mx-elimination:'));
+
+    assert.ok(nomination);
+    assert.ok(elimination);
+    assert.equal(elimination.source, 'lcdlf-official');
+    assert.deepEqual(elimination.outcomes, ['Ernesto Laguardia', 'Memo Schutz']);
+    assert.deepEqual(elimination.seed_liquidities, [1000, 1000]);
+    assert.equal(elimination.source_data.suggestedPricing.source, 'lcdlf-official:nominated');
+    assert.equal(elimination.resolver_type, 'api_lcdlf');
+    assert.equal(elimination.resolver_config.shape, 'parallel-status');
+    assert.equal(elimination.resolver_config.statusKey, 'eliminado');
+    assert.equal(elimination.resolver_config.closeOnStatus, false);
+
+    assert.deepEqual(nomination.outcomes, ['Ernesto Laguardia', 'Memo Schutz', 'Yahir']);
+    assert.equal(nomination.resolver_type, 'api_lcdlf');
+    assert.equal(nomination.resolver_config.shape, 'parallel-status');
+    assert.equal(nomination.resolver_config.statusKey, 'nominado');
   } finally {
     if (previousResidents === undefined) delete process.env.LCDLF_RESIDENTS_JSON;
     else process.env.LCDLF_RESIDENTS_JSON = previousResidents;

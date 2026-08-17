@@ -142,7 +142,7 @@ test('readLcdlfOfficialSnapshot merges discovered cards with configured full ros
   }
 });
 
-test('buildLcdlfWeeklyMarketSpec creates a manual-review market from nominees', () => {
+test('buildLcdlfWeeklyMarketSpec creates an auto-resolving market from nominees', () => {
   const now = new Date('2026-08-10T12:00:00Z');
   const snapshot = {
     ok: true,
@@ -165,14 +165,21 @@ test('buildLcdlfWeeklyMarketSpec creates a manual-review market from nominees', 
 
   const spec = buildLcdlfWeeklyMarketSpec({ snapshot, now });
   assert.equal(spec.source, 'lcdlf-official');
-  assert.equal(spec.resolver_type, 'manual_review');
+  assert.equal(spec.resolver_type, 'api_lcdlf');
   assert.equal(spec.end_time, '2026-08-17T01:55:00.000Z');
   assert.equal(spec.source_data.closeLocalTime, 'domingo 19:55 America/Mexico_City');
   assert.deepEqual(spec.outcomes, ['Ernesto Laguardia', 'Memo Schutz']);
   assert.equal(spec.category, 'musica');
   assert.deepEqual(spec.topic_tags, ['tv', 'farandula']);
   assert.match(spec.source_event_id, /^lcdlf-mx-elimination:/);
-  assert.equal(spec.resolver_config.requireHumanConfirmation, true);
+  assert.equal(spec.resolver_config.shape, 'parallel-status');
+  assert.equal(spec.resolver_config.statusKey, 'eliminado');
+  assert.equal(spec.resolver_config.statusMinStatusCount, 1);
+  assert.equal(spec.resolver_config.closeOnStatus, false);
+  assert.deepEqual(
+    spec.resolver_config.legs.map(leg => leg.residentName),
+    ['Ernesto Laguardia', 'Memo Schutz'],
+  );
 });
 
 test('buildLcdlfNominationMarketSpecs creates one parallel market from active residents before nominees are official', () => {
@@ -208,6 +215,8 @@ test('buildLcdlfNominationMarketSpecs creates one parallel market from active re
   assert.equal(specs[0].resolver_type, 'api_lcdlf');
   assert.equal(specs[0].resolver_config.shape, 'parallel-status');
   assert.equal(specs[0].resolver_config.statusKey, 'nominado');
+  assert.equal(specs[0].resolver_config.statusMinStatusCount, 2);
+  assert.equal(specs[0].resolver_config.closeOnStatus, false);
   assert.deepEqual(
     specs[0].resolver_config.legs.map(leg => leg.residentSlug),
     ['brianda-deyanara', 'flor-vigna', 'yahir'],
