@@ -135,6 +135,35 @@ export function buildMananeraDirectTranscriptUrl(dateYmd) {
   return `${MANANERA_OFFICIAL_BASE_URL}/articulos/version-estenografica-conferencia-de-prensa-de-la-presidenta-claudia-sheinbaum-pardo-del-${dd}-de-${monthName}-de-${year}`;
 }
 
+function uniqueValues(values) {
+  const out = [];
+  const seen = new Set();
+  for (const value of values) {
+    const key = String(value || '').trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
+  }
+  return out;
+}
+
+export function buildMananeraDirectTranscriptUrlVariants(dateYmd) {
+  const directUrl = buildMananeraDirectTranscriptUrl(dateYmd);
+  const spanishUrl = directUrl.replace('/presidencia/articulos/', '/presidencia/es/articulos/');
+  return uniqueValues([
+    directUrl,
+    `${directUrl}.html`,
+    `${directUrl}?idiom=es`,
+    spanishUrl,
+    `${spanishUrl}.html`,
+    `${spanishUrl}?idiom=es`,
+  ]);
+}
+
+function buildReaderFallbackUrl(url) {
+  return `https://r.jina.ai/http://${String(url || '').trim()}`;
+}
+
 export function buildMananeraArchiveUrl() {
   return MANANERA_ARCHIVE_URL;
 }
@@ -270,20 +299,62 @@ async function tryFetchText(fetchImpl, url, extraHeaders = {}, {
 async function readTranscriptCandidate({
   fetchImpl,
   url,
+  sourceUrl = url,
   dateYmd,
   searchUrl,
   directUrl,
   archiveUrl,
+  officialFetchAttempts = null,
+  via = 'official',
   includeRawHtml = false,
 }) {
-  const html = await tryFetchText(fetchImpl, url);
+  let html = null;
+  try {
+    html = await fetchText(fetchImpl, url);
+  } catch (err) {
+    if (officialFetchAttempts) {
+      officialFetchAttempts.push({
+        url: sourceUrl,
+        fetchUrl: url,
+        via,
+        status: err?.status || null,
+        reason: err?.status ? `fetch_failed_${err.status}` : 'fetch_failed',
+      });
+    }
+    if (OFFICIAL_TRANSCRIPT_RETRYABLE_STATUSES.has(err?.status)) return null;
+    throw err;
+  }
   if (!html) return null;
   const text = stripHtml(html);
-  if (text.length < 500) return null;
-  if (!transcriptMatchesDate({ text, html, dateYmd })) return null;
+  if (text.length < 500) {
+    if (officialFetchAttempts) {
+      officialFetchAttempts.push({
+        url: sourceUrl,
+        fetchUrl: url,
+        via,
+        status: 200,
+        reason: 'transcript_too_short',
+        textLength: text.length,
+      });
+    }
+    return null;
+  }
+  if (!transcriptMatchesDate({ text, html, dateYmd })) {
+    if (officialFetchAttempts) {
+      officialFetchAttempts.push({
+        url: sourceUrl,
+        fetchUrl: url,
+        via,
+        status: 200,
+        reason: 'date_mismatch',
+        textLength: text.length,
+      });
+    }
+    return null;
+  }
   return {
     ready: true,
-    url,
+    url: sourceUrl,
     title: extractTitle(html),
     text,
     html: includeRawHtml ? html : undefined,
@@ -1080,37 +1151,61 @@ export async function findMananeraTranscript({
 
   const searchUrl = buildMananeraSearchUrl(dateYmd);
   const directUrl = buildMananeraDirectTranscriptUrl(dateYmd);
+  const directUrlVariants = transcriptUrl
+    ? [transcriptUrl]
+    : buildMananeraDirectTranscriptUrlVariants(dateYmd);
   const archiveUrl = buildMananeraArchiveUrl();
   const urls = [];
   if (transcriptUrl) urls.push(transcriptUrl);
 
   if (!transcriptUrl) {
-    urls.push(directUrl);
+    urls.push(...directUrlVariants);
   }
+  const officialFetchAttempts = [];
 
   for (const url of urls) {
     const transcript = await readTranscriptCandidate({
       fetchImpl,
       url,
+      sourceUrl: url,
       dateYmd,
       searchUrl,
       directUrl,
       archiveUrl,
+      officialFetchAttempts,
       includeRawHtml,
     });
     if (transcript) return transcript;
   }
 
   if (!transcriptUrl) {
+    for (const url of directUrlVariants) {
+      const transcript = await readTranscriptCandidate({
+        fetchImpl,
+        url: buildReaderFallbackUrl(url),
+        sourceUrl: url,
+        dateYmd,
+        searchUrl,
+        directUrl,
+        archiveUrl,
+        officialFetchAttempts,
+        via: 'reader-fallback',
+        includeRawHtml,
+      });
+      if (transcript) return transcript;
+    }
+
     const archiveHtml = await tryFetchText(fetchImpl, archiveUrl);
     for (const url of candidateUrlsFromArchiveHtml(archiveHtml || '', dateYmd)) {
       const transcript = await readTranscriptCandidate({
         fetchImpl,
         url,
+        sourceUrl: url,
         dateYmd,
         searchUrl,
         directUrl,
         archiveUrl,
+        officialFetchAttempts,
         includeRawHtml,
       });
       if (transcript) return transcript;
@@ -1123,10 +1218,12 @@ export async function findMananeraTranscript({
       const transcript = await readTranscriptCandidate({
         fetchImpl,
         url,
+        sourceUrl: url,
         dateYmd,
         searchUrl,
         directUrl,
         archiveUrl,
+        officialFetchAttempts,
         includeRawHtml,
       });
       if (transcript) return transcript;
@@ -1139,6 +1236,7 @@ export async function findMananeraTranscript({
     searchUrl,
     directUrl,
     archiveUrl,
+    officialFetchAttempts,
   };
 }
 
@@ -1186,6 +1284,7 @@ export async function readMananeraPhraseResult(cfg = {}, options = {}) {
       return {
         ...transcript,
         fallbackReason: youtubeTranscript.reason || null,
+        officialFetchAttempts: transcript.officialFetchAttempts || [],
         youtubeSearchUrl: youtubeTranscript.searchUrl || buildMananeraYouTubeSearchUrl(cfg.dateYmd),
         youtubeVideoUrl: youtubeTranscript.videoUrl || null,
         youtubeTranscriptTitle: youtubeTranscript.transcriptTitle || null,

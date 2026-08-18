@@ -1386,6 +1386,7 @@ export async function runAutoResolve({ dry = false } = {}) {
               dateYmd: cfg.dateYmd || null,
               searchUrl: transcript.searchUrl || null,
               fallbackReason: transcript.fallbackReason || null,
+              officialFetchAttempts: transcript.officialFetchAttempts || [],
               youtubeSearchUrl: transcript.youtubeSearchUrl || null,
               youtubeVideoUrl: transcript.youtubeVideoUrl || null,
               youtubeTranscriptTitle: transcript.youtubeTranscriptTitle || null,

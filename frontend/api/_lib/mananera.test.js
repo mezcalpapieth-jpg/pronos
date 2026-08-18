@@ -5,6 +5,7 @@ import {
   MANANERA_TRANSCRIPT_SOURCE,
   MANANERA_YOUTUBE_CAPTIONS_SOURCE,
   buildMananeraDirectTranscriptUrl,
+  buildMananeraDirectTranscriptUrlVariants,
   buildMananeraSearchUrl,
   buildMananeraYouTubeSearchUrl,
   countPhraseOccurrences,
@@ -120,6 +121,37 @@ test('uses browser-like headers when fetching gob.mx transcript pages', async ()
   assert.equal(seen[0].headers.accept, 'text/html,application/xhtml+xml');
 });
 
+test('falls back to text-reader extraction for the same official gob.mx page', async () => {
+  const articleUrl = buildMananeraDirectTranscriptUrl('2026-08-17');
+  const seen = [];
+  const fetchImpl = async (url) => {
+    const href = String(url);
+    seen.push(href);
+    if (href.startsWith('https://r.jina.ai/http://')) {
+      return htmlResponse(`
+        Title: Versión estenográfica. Conferencia de prensa de la presidenta Claudia Sheinbaum Pardo del 17 de agosto de 2026
+        URL Source: ${articleUrl}
+
+        17 de agosto de 2026.
+        La presidenta mencionó huachicol. ${'Contexto oficial de prueba. '.repeat(40)}
+      `);
+    }
+    if (buildMananeraDirectTranscriptUrlVariants('2026-08-17').includes(href)) {
+      return statusResponse(403);
+    }
+    throw new Error(`unexpected fetch ${href}`);
+  };
+
+  const result = await findMananeraTranscript({
+    dateYmd: '2026-08-17',
+    fetchImpl,
+  });
+
+  assert.equal(result.ready, true);
+  assert.equal(result.url, articleUrl);
+  assert.ok(seen.some(url => url.startsWith('https://r.jina.ai/http://')));
+});
+
 test('resolves no when transcript exists but phrase count misses threshold', async () => {
   const fetchImpl = async (url) => {
     if (String(url).startsWith('https://www.gob.mx/busqueda')) {
@@ -176,7 +208,8 @@ test('falls back to official YouTube captions when gob.mx transcript is delayed 
   const fetchImpl = async (url) => {
     const href = String(url);
     seen.push(href);
-    if (href === buildMananeraDirectTranscriptUrl('2026-08-10')) {
+    if (buildMananeraDirectTranscriptUrlVariants('2026-08-10').includes(href)
+      || href.startsWith('https://r.jina.ai/http://')) {
       return statusResponse(403);
     }
     if (href === 'https://www.gob.mx/presidencia/archivo/articulos') {

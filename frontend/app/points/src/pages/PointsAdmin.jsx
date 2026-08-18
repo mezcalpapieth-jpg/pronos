@@ -2430,6 +2430,17 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
         .join('\n');
       const deferredSample = (r.deferred || []).slice(0, 3)
         .map(d => {
+          const officialAttempts = Array.isArray(d.officialFetchAttempts) ? d.officialFetchAttempts : [];
+          const official = officialAttempts.slice(0, 3)
+            .map(a => {
+              const url = String(a.fetchUrl || a.url || '');
+              const label = url.startsWith('https://r.jina.ai/http://') ? 'reader' : (a.via || 'oficial');
+              const parts = [label, a.reason || 'sin texto'];
+              if (a.status != null) parts.push(String(a.status));
+              if (a.textLength != null) parts.push(`${a.textLength} chars`);
+              return parts.join(' ');
+            })
+            .join(' / ');
           const attempts = Array.isArray(d.youtubeCaptionAttempts) ? d.youtubeCaptionAttempts : [];
           const youtube = attempts.slice(0, 2)
             .map(a => {
@@ -2439,7 +2450,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
               return parts.join(' · ');
             })
             .join(' / ');
-          return `#${d.id}: ${d.reason || 'diferido'}${d.fallbackReason ? ` · YouTube: ${d.fallbackReason}` : ''}${youtube ? ` · ${youtube}` : ''}`;
+          return `#${d.id}: ${d.reason || 'diferido'}${official ? ` · Oficial: ${official}` : ''}${d.fallbackReason ? ` · YouTube: ${d.fallbackReason}` : ''}${youtube ? ` · ${youtube}` : ''}`;
         })
         .join('\n');
       alert(
