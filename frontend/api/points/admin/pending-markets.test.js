@@ -100,6 +100,15 @@ test('pending api-price approval syncs edited threshold and operator from questi
   assert.match(source, /const resolverConfig = syncedApiPrice\.resolverConfig \|\| null/);
 });
 
+test('trophy pending markets can be auto-approved by the 9am cron', () => {
+  assert.match(source, /export async function approveTournamentPendingMarkets/);
+  assert.match(source, /reviewer = 'system:trophy-cron'/);
+  assert.match(source, /tournament_featured IS TRUE/);
+  assert.match(source, /end_time > NOW\(\)/);
+  assert.match(source, /approveOne\(row\.id,\s*reviewer,\s*note,\s*approveOpts\)/);
+  assert.match(source, /action:\s*'auto_approve_tournament_pending'/);
+});
+
 test('human re-added sports rows are not immediately auto-rejected again', () => {
   const overrideGuardCount = source.match(/AND \(reviewer IS NULL OR reviewer = 'system'\)/g)?.length || 0;
   assert.ok(overrideGuardCount >= 2);

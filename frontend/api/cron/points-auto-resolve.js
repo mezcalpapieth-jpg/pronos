@@ -39,12 +39,12 @@ import {
 import { readCoinbaseBoundaryPrice } from '../_lib/crypto-price-source.js';
 import { bestEffortPersistResolvedCryptoMarketSnapshot } from '../_lib/crypto-chart-snapshot.js';
 import { readFinnhubQuote } from '../_lib/stockprice.js';
-import { readBanxicoLatest } from '../_lib/banxico.js';
+import { banxicoFechaToYmd, banxicoFixTargetDateYmd, readBanxicoLatest } from '../_lib/banxico.js';
 import { readCreAverageFor } from '../_lib/fuel.js';
 import { MANANERA_TRANSCRIPT_SOURCE, readMananeraPhraseResult } from '../_lib/mananera.js';
 import { readStoredMananeraTranscript } from '../_lib/mananera-ingest.js';
 import { generateMananeraMarkets } from '../_lib/market-gen/mananera.js';
-import { fetchMaxTempC, bucketIndexFor } from '../_lib/weather.js';
+import { fetchMaxTempC, bucketIndexFor, weatherBucketIndexFor } from '../_lib/weather.js';
 import { readAppleMxTopArtist } from '../_lib/charts.js';
 import { readYouTubeTopMxChannel } from '../_lib/youtube.js';
 import { readEspnEvent, readFootballDataMatch, readJolpicaF1Result, readJolpicaF1Standings, readEspnPgaWinner, readEspnLivWinner, readLivTeamWinner, readEspnAtpTournamentWinner, readEspnAtpMatchWinner, readEspnMmaWinner, readOddsApiBoxingWinner, readNextOpponent } from '../_lib/sports-results.js';
@@ -1265,8 +1265,26 @@ export async function runAutoResolve({ dry = false } = {}) {
           } else if (cfg.source === 'banxico-fix') {
             if (!cfg.seriesId) throw new Error('banxico-fix: missing seriesId');
             const r = await readBanxicoLatest(cfg.seriesId);
+            const targetDateYmd = banxicoFixTargetDateYmd({
+              resolverConfig: cfg,
+              sourceData,
+              endTime: m.end_time,
+            });
+            const latestDateYmd = banxicoFechaToYmd(r.fecha);
+            if (targetDateYmd && latestDateYmd !== targetDateYmd) {
+              const err = new Error(`banxico_fix_not_published_for_${targetDateYmd}`);
+              err.benign = true;
+              err.info = {
+                source: cfg.source,
+                seriesId: cfg.seriesId,
+                expectedDateYmd: targetDateYmd,
+                latestDateYmd,
+                latestFecha: r.fecha,
+              };
+              throw err;
+            }
             price = r.value;
-            readerInfo = { seriesId: cfg.seriesId, fecha: r.fecha };
+            readerInfo = { seriesId: cfg.seriesId, fecha: r.fecha, targetDateYmd };
           } else if (cfg.source === 'cre-gasolina') {
             if (!cfg.fuelType) throw new Error('cre-gasolina: missing fuelType');
             const r = await readCreAverageFor(cfg.fuelType);
@@ -1297,9 +1315,7 @@ export async function runAutoResolve({ dry = false } = {}) {
           });
           // Bucket match — prefer the config's own ranges over the
           // library's defaults so regenerated buckets don't desync.
-          winningIdx = cfg.buckets.findIndex(b =>
-            tempC >= Number(b.minC) && tempC < Number(b.maxC),
-          );
+          winningIdx = weatherBucketIndexFor(tempC, cfg.buckets);
           if (winningIdx < 0) winningIdx = bucketIndexFor(tempC); // fallback
           if (winningIdx < 0) throw new Error(`temp ${tempC}°C didn't fit any bucket`);
           resolverInfo = { recordedMaxC: tempC, forecastDateYmd: cfg.forecastDateYmd };

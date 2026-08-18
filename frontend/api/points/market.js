@@ -20,6 +20,11 @@ import { buildEspnLiveScoreConfig } from '../_lib/espn-live-score.js';
 import { deriveOutcomeCountryLabels } from '../_lib/outcome-country-labels.js';
 import { PRONOS_TREASURY_USERNAME } from '../_lib/points-limit-orders.js';
 import { binaryPricesWithBookTrade } from '../_lib/points-display-prices.js';
+import { BANXICO_FIX_RESOLUTION_CRITERIA } from '../_lib/banxico.js';
+import {
+  WEATHER_MAX_TEMP_RESOLUTION_CRITERIA,
+  weatherResolutionCriteriaForBuckets,
+} from '../_lib/weather.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -296,6 +301,15 @@ export default async function handler(req, res) {
       const resolverCfg = parseJsonb(r.resolver_config, null);
       const resolverType = r.resolver_type || null;
       const resolverSource = resolverCfg?.source || null;
+      const resolutionCriteria =
+        (typeof resolverCfg?.criteria === 'string' && resolverCfg.criteria.trim())
+        || (typeof sourceData?.resolutionCriteria === 'string' && sourceData.resolutionCriteria.trim())
+        || (resolverSource === 'banxico-fix' ? BANXICO_FIX_RESOLUTION_CRITERIA : null)
+        || (resolverType === 'weather_api' && Array.isArray(resolverCfg?.buckets)
+          ? weatherResolutionCriteriaForBuckets(resolverCfg.buckets)
+          : null)
+        || (resolverType === 'weather_api' ? WEATHER_MAX_TEMP_RESOLUTION_CRITERIA : null)
+        || null;
       const liveScoreConfig = buildEspnLiveScoreConfig({
         resolverType,
         resolverConfig: resolverCfg,
@@ -510,6 +524,7 @@ export default async function handler(req, res) {
             createdAt: r.created_at,
             resolverType,
             resolverSource,
+            resolutionCriteria,
             liveScoreConfig,
             cryptoMeta,
             seriesMeta,
@@ -562,6 +577,7 @@ export default async function handler(req, res) {
           createdAt: r.created_at,
           resolverType,
           resolverSource,
+          resolutionCriteria,
           liveScoreConfig,
           cryptoMeta,
           seriesMeta,

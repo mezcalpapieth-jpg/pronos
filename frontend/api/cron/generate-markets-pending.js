@@ -14,6 +14,10 @@
  * GET /api/cron/generate-markets-pending              — runs the generator batch
  * GET /api/cron/generate-markets-pending?dry=1        — builds specs, returns them
  *                                                       without DB writes
+ *
+ * This cron is scheduled at 15:00 UTC, which is 09:00 in Mexico City.
+ * After refreshing pending rows, it auto-approves rows with the trophy
+ * flag so tournament markets can launch without manual approval.
  */
 
 import { neon } from '@neondatabase/serverless';
@@ -23,8 +27,20 @@ import {
   syncApprovedMarketSchedules,
   upsertPending,
 } from '../_lib/run-generators.js';
+import { approveTournamentPendingMarkets } from '../points/admin/pending-markets.js';
 
 const sql = neon(process.env.DATABASE_URL);
+const TROPHY_AUTO_APPROVAL_TIMEZONE = 'America/Mexico_City';
+
+export function shouldAutoApproveTournamentPendingMarkets(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: TROPHY_AUTO_APPROVAL_TIMEZONE,
+    hour: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(now);
+  const hour = Number(parts.find(part => part.type === 'hour')?.value);
+  return hour === 9;
+}
 
 export default async function handler(req, res) {
   // Standard cron-secret guard, matches other /api/cron endpoints.
@@ -61,6 +77,14 @@ export default async function handler(req, res) {
 
     const { inserted, updated, skipped } = await upsertPending(sql, allSpecs);
     const scheduleSync = await syncApprovedMarketSchedules(sql, allSpecs);
+    const trophyAutoApproval = shouldAutoApproveTournamentPendingMarkets()
+      ? await approveTournamentPendingMarkets()
+      : {
+          ok: true,
+          action: 'auto_approve_tournament_pending',
+          skipped: true,
+          reason: 'outside_09_mexico_city_hour',
+        };
 
     return res.status(200).json({
       ok: true,
@@ -70,6 +94,7 @@ export default async function handler(req, res) {
       updated,
       skipped,
       scheduleSync,
+      trophyAutoApproval,
       elapsedMs: Date.now() - started,
     });
   } catch (e) {

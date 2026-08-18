@@ -20,10 +20,10 @@ function htmlResponse(body) {
   };
 }
 
-function notFoundResponse() {
+function statusResponse(status) {
   return {
     ok: false,
-    status: 404,
+    status,
     text: async () => '',
   };
 }
@@ -145,7 +145,7 @@ test('resolves from an ingested stored transcript without fetching gob.mx again'
   assert.equal(result.yes, true);
 });
 
-test('falls back to official YouTube captions when gob.mx transcript is delayed', async () => {
+test('falls back to official YouTube captions when gob.mx transcript is delayed or blocked', async () => {
   const videoId = 'abc123DEF45';
   const captionBaseUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=es`;
   const captionFiller = 'Texto de caption oficial simulado. '.repeat(40);
@@ -154,7 +154,7 @@ test('falls back to official YouTube captions when gob.mx transcript is delayed'
     const href = String(url);
     seen.push(href);
     if (href === buildMananeraDirectTranscriptUrl('2026-08-10')) {
-      return notFoundResponse();
+      return statusResponse(403);
     }
     if (href === 'https://www.gob.mx/presidencia/archivo/articulos') {
       return htmlResponse('<html><body>Sin estenográfica del día</body></html>');
@@ -438,6 +438,129 @@ test('discovers official mañanera livestream archives from the channel streams 
   assert.ok(!seen.some(url => url.startsWith('https://www.googleapis.com/youtube/v3/search')));
 });
 
+test('accepts official same-day feed video for the Claudia Sheinbaum channel', async () => {
+  const videoId = '2CX_dvCjMUk';
+  const captionBaseUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=es`;
+  const captionFiller = 'Texto de caption oficial simulado para la conferencia completa. '.repeat(40);
+  const seen = [];
+  const fetchImpl = async (url) => {
+    const href = String(url);
+    seen.push(href);
+    if (href.startsWith('https://www.youtube.com/feeds/videos.xml')) {
+      return htmlResponse(`
+        <feed>
+          <entry>
+            <yt:videoId>${videoId}</yt:videoId>
+            <title>Conferencia de prensa matutina. Lunes 17 de agosto 2026 | Presidenta Claudia Sheinbaum</title>
+            <published>2026-08-17T15:20:00Z</published>
+            <author><name>Claudia Sheinbaum Pardo</name></author>
+          </entry>
+        </feed>
+      `);
+    }
+    if (href.startsWith('https://www.youtube.com/channel/') && href.endsWith('/streams')) {
+      return htmlResponse('<html><body>Sin streams extra</body></html>');
+    }
+    if (href === `https://www.youtube.com/watch?v=${videoId}`) {
+      return htmlResponse(`
+        <script>var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[
+          {"baseUrl":${JSON.stringify(captionBaseUrl)},"languageCode":"es","name":{"simpleText":"Español (generado automáticamente)"},"kind":"asr"}
+        ]}}};</script>
+      `);
+    }
+    if (href.startsWith(captionBaseUrl)) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({
+          events: [
+            { tStartMs: 72000, segs: [{ utf8: `La presidenta mencionó huachicol. ${captionFiller}` }] },
+          ],
+        }),
+      };
+    }
+    throw new Error(`unexpected fetch ${href}`);
+  };
+
+  const result = await findMananeraYouTubeTranscript({
+    dateYmd: '2026-08-17',
+    fetchImpl,
+    youtubeApiKey: null,
+  });
+
+  assert.equal(result.ready, true);
+  assert.equal(result.videoId, videoId);
+  assert.equal(result.discovery, 'youtube-feed');
+  assert.equal(result.channelTitle, 'Claudia Sheinbaum Pardo');
+  assert.ok(seen.some(url => url.startsWith('https://www.youtube.com/feeds/videos.xml')));
+  assert.ok(!seen.some(url => url.startsWith('https://www.googleapis.com/youtube/v3/search')));
+});
+
+test('discovers same-day mañanera captions from public YouTube search when channel pages miss', async () => {
+  const videoId = 'sea111AAA22';
+  const captionBaseUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=es`;
+  const captionFiller = 'Texto de caption oficial simulado para la conferencia completa. '.repeat(40);
+  const seen = [];
+  const fetchImpl = async (url) => {
+    const href = String(url);
+    seen.push(href);
+    if (href.startsWith('https://www.youtube.com/feeds/videos.xml')) {
+      return htmlResponse('<feed></feed>');
+    }
+    if (href.startsWith('https://www.youtube.com/channel/') && href.endsWith('/streams')) {
+      return htmlResponse('<html><body>Sin streams del día</body></html>');
+    }
+    if (href.startsWith('https://www.youtube.com/results')) {
+      return htmlResponse(`
+        <html><body><script>
+          var ytInitialData = {"contents":{"sectionListRenderer":{"contents":[{"itemSectionRenderer":{"contents":[
+            {"videoRenderer":{
+              "videoId":"${videoId}",
+              "title":{"runs":[{"text":"Conferencia de prensa matutina. Martes 18 de agosto | Presidenta Claudia Sheinbaum"}]},
+              "ownerText":{"runs":[{"text":"Claudia Sheinbaum Pardo"}]}
+            }}
+          ]}}]}}};
+        </script></body></html>
+      `);
+    }
+    if (href.startsWith('https://www.googleapis.com/youtube/v3/search')) {
+      throw new Error('Data API should not be needed for public search-page discovery');
+    }
+    if (href === `https://www.youtube.com/watch?v=${videoId}`) {
+      return htmlResponse(`
+        <script>var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[
+          {"baseUrl":${JSON.stringify(captionBaseUrl)},"languageCode":"es","name":{"simpleText":"Español (generado automáticamente)"},"kind":"asr"}
+        ]}}};</script>
+      `);
+    }
+    if (href.startsWith(captionBaseUrl)) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({
+          events: [
+            { tStartMs: 72000, segs: [{ utf8: `Hoy se habló de huachicol. ${captionFiller}` }] },
+          ],
+        }),
+      };
+    }
+    throw new Error(`unexpected fetch ${href}`);
+  };
+
+  const result = await findMananeraYouTubeTranscript({
+    dateYmd: '2026-08-18',
+    fetchImpl,
+    youtubeApiKey: null,
+  });
+
+  assert.equal(result.ready, true);
+  assert.equal(result.videoId, videoId);
+  assert.equal(result.discovery, 'youtube-search-page');
+  assert.equal(result.channelTitle, 'Claudia Sheinbaum Pardo');
+  assert.ok(seen.some(url => url.startsWith('https://www.youtube.com/results')));
+  assert.ok(!seen.some(url => url.startsWith('https://www.googleapis.com/youtube/v3/search')));
+});
+
 test('uses YouTube Data API key as query parameter when feed discovery misses', async () => {
   const videoId = 'api123DEF45';
   const captionBaseUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=es`;
@@ -451,6 +574,9 @@ test('uses YouTube Data API key as query parameter when feed discovery misses', 
     }
     if (href.startsWith('https://www.youtube.com/channel/') && href.endsWith('/streams')) {
       return htmlResponse('<html><body>Sin streams</body></html>');
+    }
+    if (href.startsWith('https://www.youtube.com/results')) {
+      return htmlResponse('<html><body>Sin resultados públicos útiles</body></html>');
     }
     if (href.startsWith('https://www.googleapis.com/youtube/v3/search')) {
       apiSearchUrl = new URL(href);

@@ -131,6 +131,94 @@ test('auto resolver core settles crypto binary-direction markets from Coinbase b
   });
 });
 
+test('auto resolver core settles Banxico FIX only when the target date is published', async (t) => {
+  const originalFetch = globalThis.fetch;
+  const originalToken = process.env.BANXICO_API_TOKEN;
+  process.env.BANXICO_API_TOKEN = 'test-banxico-token';
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    if (originalToken == null) delete process.env.BANXICO_API_TOKEN;
+    else process.env.BANXICO_API_TOKEN = originalToken;
+  });
+
+  globalThis.fetch = async (url, options) => {
+    assert.match(String(url), /series\/SF43718\/datos\/oportuno/);
+    assert.equal(options.headers['Bmx-Token'], 'test-banxico-token');
+    return jsonResponse({
+      bmx: {
+        series: [{
+          titulo: 'Tipo de Cambio FIX',
+          datos: [{ fecha: '15/08/2026', dato: '16.98' }],
+        }],
+      },
+    });
+  };
+
+  const decision = await resolveAutoResolverCandidate({
+    resolver_type: 'api_price',
+    resolver_config: {
+      source: 'banxico-fix',
+      seriesId: 'SF43718',
+      threshold: 17,
+      op: 'lt',
+      yesOutcome: 0,
+      resolveDateYmd: '2026-08-15',
+    },
+    end_time: '2026-08-16T03:59:00.000Z',
+    outcomes: ['Sí', 'No'],
+  });
+
+  assert.equal(decision.winningIdx, 0);
+  assert.equal(decision.resolverInfo.priceAtResolve, 16.98);
+  assert.equal(decision.resolverInfo.fecha, '15/08/2026');
+  assert.equal(decision.resolverInfo.targetDateYmd, '2026-08-15');
+  assert.equal(decision.finalScore, 'banxico-fix · 16.98');
+});
+
+test('auto resolver core defers Banxico FIX when latest value is from an earlier day', async (t) => {
+  const originalFetch = globalThis.fetch;
+  const originalToken = process.env.BANXICO_API_TOKEN;
+  process.env.BANXICO_API_TOKEN = 'test-banxico-token';
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    if (originalToken == null) delete process.env.BANXICO_API_TOKEN;
+    else process.env.BANXICO_API_TOKEN = originalToken;
+  });
+
+  globalThis.fetch = async () => jsonResponse({
+    bmx: {
+      series: [{
+        titulo: 'Tipo de Cambio FIX',
+        datos: [{ fecha: '14/08/2026', dato: '16.98' }],
+      }],
+    },
+  });
+
+  await assert.rejects(
+    resolveAutoResolverCandidate({
+      resolver_type: 'api_price',
+      resolver_config: {
+        source: 'banxico-fix',
+        seriesId: 'SF43718',
+        threshold: 17,
+        op: 'lt',
+        yesOutcome: 0,
+        resolveDateYmd: '2026-08-15',
+      },
+      end_time: '2026-08-16T03:59:00.000Z',
+      outcomes: ['Sí', 'No'],
+    }),
+    (err) => {
+      assert.equal(err.message, 'banxico_fix_not_published_for_2026-08-15');
+      assert.equal(err.benign, true);
+      assert.equal(err.info.expectedDateYmd, '2026-08-15');
+      assert.equal(err.info.latestDateYmd, '2026-08-14');
+      assert.equal(err.info.latestFecha, '14/08/2026');
+      return true;
+    },
+  );
+});
+
 test('auto resolver core settles mañanera transcript phrase markets', async (t) => {
   const originalFetch = globalThis.fetch;
   t.after(() => {

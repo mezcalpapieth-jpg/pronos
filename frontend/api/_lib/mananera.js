@@ -12,8 +12,18 @@ const YOUTUBE_FEED_BASE_URL = 'https://www.youtube.com/feeds/videos.xml';
 const DEFAULT_MANANERA_YOUTUBE_CHANNEL_IDS = [
   // Official Claudia Sheinbaum Pardo channel used for the daily morning stream.
   'UC6mvc52_1j0okpAaXJj2c_Q',
+  // Official Gobierno de México channel. Some uploads are titled by topic
+  // instead of date, so we also use the feed publish date for this channel.
+  'UCvzHrtf9by1-UY67SfZse8w',
 ];
 const OFFICIAL_YOUTUBE_CHANNEL_TITLE_RE = /\b(claudia\s+sheinbaum|gobierno\s+de\s+mexico|gobierno\s+de\s+méxico|presidencia)\b/i;
+const YOUTUBE_HTML_HEADERS = {
+  'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'accept-language': 'es-MX,es;q=0.9,en;q=0.8',
+  // YouTube can serve a consent interstitial to server-side fetches.
+  // This cookie keeps discovery on the public HTML/watch page when allowed.
+  cookie: 'CONSENT=YES+cb.20210328-17-p0.en+FX+410; SOCS=CAI',
+};
 
 const MONTHS_ES = {
   enero: '01',
@@ -138,6 +148,20 @@ function dateSearchTokens(dateYmd) {
   ].filter(Boolean);
 }
 
+function youtubeTitleDateTokens(dateYmd) {
+  const [year, month, day] = String(dateYmd || '').split('-');
+  const monthName = Object.keys(MONTHS_ES).find(name => MONTHS_ES[name] === month);
+  return [
+    ...dateSearchTokens(dateYmd),
+    `${Number(day)} de ${monthName}`,
+    `${String(day).padStart(2, '0')} de ${monthName}`,
+    `${Number(day)} ${monthName}`,
+    `${String(day).padStart(2, '0')} ${monthName}`,
+    `${Number(day)}/${String(month).padStart(2, '0')}/${year}`,
+    `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`,
+  ].filter(Boolean);
+}
+
 export function buildMananeraSearchUrl(dateYmd) {
   const q = `site:gob.mx/presidencia versión estenográfica conferencia de prensa presidenta ${formatSpanishLongDate(dateYmd)}`;
   return `${MANANERA_SEARCH_BASE_URL}?q=${encodeURIComponent(q)}`;
@@ -220,11 +244,22 @@ async function fetchText(fetchImpl, url, extraHeaders = {}) {
   return response.text();
 }
 
-async function tryFetchText(fetchImpl, url, extraHeaders = {}) {
+function youtubeHeaders(extraHeaders = {}) {
+  return {
+    ...YOUTUBE_HTML_HEADERS,
+    ...extraHeaders,
+  };
+}
+
+const OFFICIAL_TRANSCRIPT_RETRYABLE_STATUSES = new Set([403, 404, 429, 500, 502, 503, 504]);
+
+async function tryFetchText(fetchImpl, url, extraHeaders = {}, {
+  retryableStatuses = OFFICIAL_TRANSCRIPT_RETRYABLE_STATUSES,
+} = {}) {
   try {
     return await fetchText(fetchImpl, url, extraHeaders);
   } catch (err) {
-    if (err?.status === 404) return null;
+    if (retryableStatuses?.has?.(err?.status)) return null;
     throw err;
   }
 }
@@ -306,9 +341,48 @@ function titleLooksLikeMananeraForDate(title, dateYmd) {
   const normalized = normalizeTranscriptText(title);
   if (!/\b(conferencia|prensa|matutina|mananera|mananera del pueblo)\b/.test(normalized)) return false;
   if (!/\b(sheinbaum|presidenta)\b/.test(normalized)) return false;
-  return dateSearchTokens(dateYmd)
+  return youtubeTitleDateTokens(dateYmd)
     .map(normalizeTranscriptText)
     .some(token => token && normalized.includes(token));
+}
+
+function youtubeDateYmdInMexico(value) {
+  const d = new Date(value);
+  if (!Number.isFinite(d.getTime())) return null;
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Mexico_City',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(d);
+  const lookup = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  if (!lookup.year || !lookup.month || !lookup.day) return null;
+  return `${lookup.year}-${lookup.month}-${lookup.day}`;
+}
+
+function titleLooksLikeOfficialMananera(title) {
+  const normalized = normalizeTranscriptText(title);
+  if (!/\b(conferencia|prensa|matutina|mananera|mananera del pueblo)\b/.test(normalized)) return false;
+  return /\b(sheinbaum|presidenta)\b/.test(normalized);
+}
+
+function youtubeVideoLooksLikeMananeraForDate({
+  title,
+  dateYmd,
+  publishedAt = null,
+  channelTitle = '',
+  channelId = '',
+  configuredChannelIds = [],
+} = {}) {
+  if (titleLooksLikeMananeraForDate(title, dateYmd)) return true;
+  if (!titleLooksLikeOfficialMananera(title)) return false;
+
+  const trustedChannel = (
+    (channelTitle && OFFICIAL_YOUTUBE_CHANNEL_TITLE_RE.test(channelTitle))
+    || (channelId && configuredChannelIds.includes(String(channelId)))
+  );
+  if (!trustedChannel) return false;
+  return youtubeDateYmdInMexico(publishedAt) === dateYmd;
 }
 
 function addDays(dateYmd, days) {
@@ -363,8 +437,9 @@ function videosFromYouTubeFeedXml(xml) {
     const id = xmlTagText(entry, 'yt:videoId') || xmlTagText(entry, 'videoId');
     const title = xmlTagText(entry, 'title') || '';
     const channelTitle = xmlTagText(xmlTagText(entry, 'author') || '', 'name') || '';
+    const publishedAt = xmlTagText(entry, 'published') || xmlTagText(entry, 'updated') || null;
     if (!id || !title) continue;
-    out.push({ id, title, channelTitle });
+    out.push({ id, title, channelTitle, publishedAt });
   }
   return out;
 }
@@ -401,6 +476,20 @@ function rendererTitleFromYouTubeBlock(block) {
   return '';
 }
 
+function rendererChannelTitleFromYouTubeBlock(block) {
+  const source = String(block || '');
+  const patterns = [
+    /"(?:ownerText|shortBylineText|longBylineText)":\{"runs":\[\{"text":"((?:\\.|[^"\\])*)"/,
+    /"channelTitle":"((?:\\.|[^"\\])*)"/,
+  ];
+  for (const re of patterns) {
+    const match = source.match(re);
+    const title = match ? decodeYouTubeJsonText(match[1]) : '';
+    if (title) return title;
+  }
+  return '';
+}
+
 function videosFromYouTubeStreamsHtml(html) {
   const source = decodeHtmlEntities(String(html || ''))
     .replace(/\\u0026/g, '&')
@@ -415,7 +504,7 @@ function videosFromYouTubeStreamsHtml(html) {
     const block = source.slice(match.index, Math.min(source.length, match.index + 9000));
     const title = rendererTitleFromYouTubeBlock(block);
     if (!title) continue;
-    out.push({ id, title, channelTitle: '' });
+    out.push({ id, title, channelTitle: rendererChannelTitleFromYouTubeBlock(block) });
   }
   return out;
 }
@@ -467,12 +556,20 @@ async function findMananeraYouTubeVideos({
         accept: 'application/atom+xml,application/xml,text/xml',
       });
       for (const item of videosFromYouTubeFeedXml(feedXml)) {
-        if (!titleLooksLikeMananeraForDate(item.title, dateYmd)) continue;
+        if (!youtubeVideoLooksLikeMananeraForDate({
+          title: item.title,
+          dateYmd,
+          publishedAt: item.publishedAt,
+          channelTitle: item.channelTitle,
+          channelId,
+          configuredChannelIds: channelIds,
+        })) continue;
         addYouTubeCandidate(videos, {
           id: item.id,
           url: videoUrl(item.id),
           title: item.title,
           channelTitle: item.channelTitle,
+          publishedAt: item.publishedAt,
           searchUrl,
           channelId,
           discovery: 'youtube-feed',
@@ -487,7 +584,7 @@ async function findMananeraYouTubeVideos({
   for (const channelId of channelIds) {
     try {
       const streamsHtml = await fetchText(fetchImpl, youtubeChannelStreamsUrl(channelId), {
-        accept: 'text/html,application/xhtml+xml',
+        ...youtubeHeaders({ accept: 'text/html,application/xhtml+xml' }),
       });
       for (const item of videosFromYouTubeStreamsHtml(streamsHtml)) {
         if (!titleLooksLikeMananeraForDate(item.title, dateYmd)) continue;
@@ -505,6 +602,27 @@ async function findMananeraYouTubeVideos({
       // The streams tab is a public HTML fallback for livestream archives.
       // If YouTube blocks it, the Data API search path below can still help.
     }
+  }
+
+  try {
+    const searchHtml = await fetchText(fetchImpl, searchUrl, {
+      ...youtubeHeaders({ accept: 'text/html,application/xhtml+xml' }),
+    });
+    for (const item of videosFromYouTubeStreamsHtml(searchHtml)) {
+      if (!titleLooksLikeMananeraForDate(item.title, dateYmd)) continue;
+      if (item.channelTitle && !OFFICIAL_YOUTUBE_CHANNEL_TITLE_RE.test(item.channelTitle)) continue;
+      addYouTubeCandidate(videos, {
+        id: item.id,
+        url: videoUrl(item.id),
+        title: item.title,
+        channelTitle: item.channelTitle,
+        searchUrl,
+        discovery: 'youtube-search-page',
+      });
+    }
+  } catch {
+    // Public search HTML is best-effort. If it is blocked or reshaped,
+    // keep the existing Data API path when a key is configured.
   }
 
   if (videos.length) {
@@ -540,14 +658,23 @@ async function findMananeraYouTubeVideos({
         const id = item?.id?.videoId;
         const title = item?.snippet?.title || '';
         const channelTitle = item?.snippet?.channelTitle || '';
+        const publishedAt = item?.snippet?.publishedAt || null;
         if (!id) continue;
-        if (!titleLooksLikeMananeraForDate(title, dateYmd)) continue;
+        if (!youtubeVideoLooksLikeMananeraForDate({
+          title,
+          dateYmd,
+          publishedAt,
+          channelTitle,
+          channelId,
+          configuredChannelIds: channelIds,
+        })) continue;
         if (channelTitle && !OFFICIAL_YOUTUBE_CHANNEL_TITLE_RE.test(channelTitle) && !channelIds.includes(channelId)) continue;
         addYouTubeCandidate(videos, {
           id,
           url: videoUrl(id),
           title,
           channelTitle,
+          publishedAt,
           searchUrl,
           channelId,
           discovery: eventType ? `youtube-data-api-${eventType}` : 'youtube-data-api',
@@ -796,7 +923,7 @@ function requiredTimestampEvidence({ matchTimestamps, count, threshold } = {}) {
 }
 
 async function fetchYouTubeCaptionText({ fetchImpl, videoId }) {
-  const watchHtml = await fetchText(fetchImpl, videoUrl(videoId));
+  const watchHtml = await fetchText(fetchImpl, videoUrl(videoId), youtubeHeaders());
   const tracks = extractCaptionTracks(watchHtml);
   const track = selectSpanishCaptionTrack(tracks);
   if (!track) {
@@ -814,10 +941,9 @@ async function fetchYouTubeCaptionText({ fetchImpl, videoId }) {
     return { ready: false, reason: 'youtube_captions_invalid_url' };
   }
   const response = await fetchImpl(captionUrl, {
-    headers: {
-      'user-agent': 'Pronos resolver (+https://pronos.io)',
+    headers: youtubeHeaders({
       accept: 'application/json,text/xml,text/plain',
-    },
+    }),
   });
   if (!response?.ok) {
     return { ready: false, reason: `youtube_captions_fetch_failed_${response?.status || 'unknown'}` };
@@ -919,6 +1045,7 @@ export async function findMananeraYouTubeTranscript({
       searchUrl: video.searchUrl || videoResult.searchUrl,
       videoId: video.id,
       channelTitle: video.channelTitle,
+      discovery: video.discovery || videoResult.discovery || null,
       captionUrl: captions.captionUrl,
       captionLanguage: captions.captionLanguage,
       captionName: captions.captionName,

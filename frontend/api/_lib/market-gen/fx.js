@@ -12,7 +12,7 @@
  * Idempotent across re-runs within the same week because source_event_id
  * is namespaced by the Friday-of-week date + strike.
  */
-import { readBanxicoLatest, SERIES } from '../banxico.js';
+import { BANXICO_FIX_RESOLUTION_CRITERIA, readBanxicoLatest, SERIES } from '../banxico.js';
 import { formatMexicoDateEs, formatMexicoDateYmd, nextMexicoFridayClose } from './mexico-time.js';
 
 function nextRoundStrike(current, step) {
@@ -62,6 +62,9 @@ export async function generateFxMarkets() {
       threshold: strike,
       op: 'gt',
       yesOutcome: 0,
+      resolveDateYmd: endYmd,
+      criteria: BANXICO_FIX_RESOLUTION_CRITERIA,
+      rationale: BANXICO_FIX_RESOLUTION_CRITERIA,
     },
     source_data: {
       pair: 'USD/MXN',
@@ -70,7 +73,9 @@ export async function generateFxMarkets() {
       spotAtGeneration: latest.value,
       spotFecha: latest.fecha,
       strike,
+      resolveDateYmd: endYmd,
       endLabel: endEs,
+      resolutionCriteria: BANXICO_FIX_RESOLUTION_CRITERIA,
     },
   }];
 }

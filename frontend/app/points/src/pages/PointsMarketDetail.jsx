@@ -3318,6 +3318,25 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                 </div>
               </div>
             </div>
+            {market.resolutionCriteria && (
+              <div style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 13,
+                lineHeight: 1.6,
+                color: 'var(--text-muted)',
+                paddingBottom: 4,
+              }}>
+                <div style={{
+                  fontSize: 10,
+                  letterSpacing: 0,
+                  textTransform: 'uppercase',
+                  marginBottom: 6,
+                }}>
+                  {t('points.detail.criteriaLabel')}
+                </div>
+                <div>{market.resolutionCriteria}</div>
+              </div>
+            )}
           </div>
 
           {/* Right column: buy panel + user-position panel + holders */}

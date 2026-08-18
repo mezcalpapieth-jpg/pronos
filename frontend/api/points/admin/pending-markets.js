@@ -383,7 +383,7 @@ async function list(req, res) {
  *
  * Throws on validation / DB error. Returns { id, marketId }.
  */
-async function approveOne(pid, reviewer, note, opts = {}) {
+export async function approveOne(pid, reviewer, note, opts = {}) {
   const marketMode = opts.mode === 'onchain' ? 'onchain' : 'points';
   const isOnchain = marketMode === 'onchain';
   let chainIdNum = null;
@@ -736,6 +736,57 @@ async function approveOne(pid, reviewer, note, opts = {}) {
     );
     return { id: pid, marketId: createdMarketId };
   });
+}
+
+export async function approveTournamentPendingMarkets({
+  reviewer = 'system:trophy-cron',
+  note = 'auto-approved: trophy pending cron at 09:00 America/Mexico_City',
+  limit = 200,
+  approveOpts = {},
+} = {}) {
+  await ensurePointsSchema(schemaSql);
+
+  const safeLimit = Math.max(1, Math.min(500, Number.parseInt(limit, 10) || 200));
+  const pending = await readSql`
+    SELECT id, question
+    FROM points_pending_markets
+    WHERE status = 'pending'
+      AND tournament_featured IS TRUE
+      AND end_time IS NOT NULL
+      AND end_time > NOW()
+    ORDER BY end_time ASC NULLS LAST, created_at ASC, id ASC
+    LIMIT ${safeLimit}
+  `;
+
+  const approved = [];
+  const failures = [];
+  for (const row of pending) {
+    try {
+      const result = await approveOne(row.id, reviewer, note, approveOpts);
+      approved.push({
+        pendingId: result.id,
+        marketId: result.marketId,
+        question: row.question,
+      });
+    } catch (e) {
+      failures.push({
+        pendingId: row.id,
+        question: row.question,
+        error: e?.message || 'unknown',
+        detail: e?.detail || null,
+      });
+    }
+  }
+
+  return {
+    ok: true,
+    action: 'auto_approve_tournament_pending',
+    checked: pending.length,
+    approvedCount: approved.length,
+    failedCount: failures.length,
+    approved,
+    failures,
+  };
 }
 
 async function editPending(pid, reviewer, patch = {}, note = null) {

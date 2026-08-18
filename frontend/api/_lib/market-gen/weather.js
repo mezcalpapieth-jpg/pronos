@@ -4,10 +4,10 @@
  * For each city in the whitelist we generate ONE parallel market per
  * day for tomorrow:
  *   Parent: "¿Temperatura máxima en {City} el {dd/mm/yyyy}?"
- *   Legs:   4 adaptive °C buckets centered on Open-Meteo's forecasted
- *           high — e.g. forecast 33°C → [≤29°C / 30–31°C / 32–33°C /
- *           ≥34°C]. Tighter spread means more balanced odds per leg
- *           than the old fixed 6°C bands.
+ *   Legs:   4 adaptive °C buckets anchored on Open-Meteo's forecasted
+ *           high — e.g. forecast 25.6°C → [<25°C / 25°C / 26°C /
+ *           ≥27°C]. Integer labels are floor ranges, not rounded
+ *           values, so 25°C means 25.00–25.99°C.
  *
  * Why parallel (not unified): matches the Polymarket weather pattern
  * Fran screenshotted earlier — each bucket is its own Sí/No market so
@@ -18,7 +18,12 @@
  * cron reads Open-Meteo for the forecast date, picks the matching
  * bucket, and cascades to every leg (winning bucket → Sí, others → No).
  */
-import { CITIES, adaptiveBuckets, fetchMaxTempC } from '../weather.js';
+import {
+  CITIES,
+  adaptiveBuckets,
+  fetchMaxTempC,
+  weatherResolutionCriteriaForBuckets,
+} from '../weather.js';
 
 function formatDateYmd(d) {
   const pad = (n) => String(n).padStart(2, '0');
@@ -63,6 +68,7 @@ export async function generateWeatherMarkets() {
     }
 
     const buckets = adaptiveBuckets(forecastHighC);
+    const resolutionCriteria = weatherResolutionCriteriaForBuckets(buckets);
 
     specs.push({
       source: 'open-meteo',
@@ -86,6 +92,7 @@ export async function generateWeatherMarkets() {
         forecastDateYmd,
         buckets: buckets.map(b => ({ label: b.label, minC: b.minC, maxC: b.maxC })),
         forecastAtGeneration: forecastHighC,
+        criteria: resolutionCriteria,
       },
       source_data: {
         cityKey: city.key,
@@ -94,6 +101,7 @@ export async function generateWeatherMarkets() {
         forecastAtGeneration: forecastHighC,
         lat: city.lat,
         lng: city.lng,
+        resolutionCriteria,
       },
     });
   }

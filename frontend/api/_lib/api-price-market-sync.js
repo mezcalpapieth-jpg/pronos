@@ -1,3 +1,5 @@
+import { BANXICO_FIX_RESOLUTION_CRITERIA } from './banxico.js';
+
 const PRICE_SOURCES = new Set(['finnhub', 'banxico-fix', 'cre-gasolina']);
 
 function asObject(value, fallback = null) {
@@ -68,6 +70,21 @@ export function syncApiPriceFromQuestion({
   const data = asObject(sourceData, {}) || {};
   const nextSourceData = { ...data };
   let changed = false;
+
+  if (nextConfig.source === 'banxico-fix') {
+    if (!nextConfig.criteria) {
+      nextConfig.criteria = BANXICO_FIX_RESOLUTION_CRITERIA;
+      changed = true;
+    }
+    if (!nextConfig.rationale) {
+      nextConfig.rationale = nextConfig.criteria || BANXICO_FIX_RESOLUTION_CRITERIA;
+      changed = true;
+    }
+    if (nextSourceData.resolutionCriteria !== BANXICO_FIX_RESOLUTION_CRITERIA) {
+      nextSourceData.resolutionCriteria = BANXICO_FIX_RESOLUTION_CRITERIA;
+      changed = true;
+    }
+  }
 
   const threshold = extractThreshold(question);
   if (threshold != null && !sameNumber(nextConfig.threshold, threshold)) {

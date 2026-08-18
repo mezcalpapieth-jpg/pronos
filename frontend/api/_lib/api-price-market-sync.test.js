@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { BANXICO_FIX_RESOLUTION_CRITERIA } from './banxico.js';
 import { syncApiPriceFromQuestion } from './api-price-market-sync.js';
 
 test('api price sync turns edited USD/MXN below question into lt 17', () => {
@@ -18,7 +19,10 @@ test('api price sync turns edited USD/MXN below question into lt 17', () => {
   assert.equal(result.changed, true);
   assert.equal(result.resolverConfig.threshold, 17);
   assert.equal(result.resolverConfig.op, 'lt');
+  assert.equal(result.resolverConfig.criteria, BANXICO_FIX_RESOLUTION_CRITERIA);
+  assert.equal(result.resolverConfig.rationale, BANXICO_FIX_RESOLUTION_CRITERIA);
   assert.equal(result.sourceData.strike, 17);
+  assert.equal(result.sourceData.resolutionCriteria, BANXICO_FIX_RESOLUTION_CRITERIA);
 });
 
 test('api price sync keeps Meta above question as gt 610', () => {

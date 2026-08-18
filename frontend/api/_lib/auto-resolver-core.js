@@ -2,10 +2,10 @@ import { readChainlinkPrice, readChainlinkRoundAtOrBefore, comparePrice } from '
 import { formatDirectionFinalScore, resolveDirectionOutcome } from './crypto-5min.js';
 import { readCoinbaseBoundaryPrice } from './crypto-price-source.js';
 import { readFinnhubQuote } from './stockprice.js';
-import { readBanxicoLatest } from './banxico.js';
+import { banxicoFechaToYmd, banxicoFixTargetDateYmd, readBanxicoLatest } from './banxico.js';
 import { readCreAverageFor } from './fuel.js';
 import { readMananeraPhraseResult } from './mananera.js';
-import { fetchMaxTempC, bucketIndexFor } from './weather.js';
+import { fetchMaxTempC, bucketIndexFor, weatherBucketIndexFor } from './weather.js';
 import { readAppleMxTopArtist } from './charts.js';
 import { readYouTubeTopMxChannel } from './youtube.js';
 import {
@@ -121,6 +121,7 @@ export async function resolveAutoResolverCandidate(candidate = {}) {
   let cfg = parseAutoResolverJsonb(candidate.resolver_config, null);
   if (!cfg) throw new Error('missing_resolver_config');
 
+  const sourceData = parseAutoResolverJsonb(candidate.pending_source_data, {});
   const resolverType = candidate.resolver_type;
   let winningIdx = null;
   let resolverInfo = {};
@@ -204,8 +205,26 @@ export async function resolveAutoResolverCandidate(candidate = {}) {
     } else if (cfg.source === 'banxico-fix') {
       if (!cfg.seriesId) throw new Error('banxico-fix: missing seriesId');
       const r = await readBanxicoLatest(cfg.seriesId);
+      const targetDateYmd = banxicoFixTargetDateYmd({
+        resolverConfig: cfg,
+        sourceData,
+        endTime: candidate.end_time,
+      });
+      const latestDateYmd = banxicoFechaToYmd(r.fecha);
+      if (targetDateYmd && latestDateYmd !== targetDateYmd) {
+        const err = new Error(`banxico_fix_not_published_for_${targetDateYmd}`);
+        err.benign = true;
+        err.info = {
+          source: cfg.source,
+          seriesId: cfg.seriesId,
+          expectedDateYmd: targetDateYmd,
+          latestDateYmd,
+          latestFecha: r.fecha,
+        };
+        throw err;
+      }
       price = r.value;
-      readerInfo = { seriesId: cfg.seriesId, fecha: r.fecha };
+      readerInfo = { seriesId: cfg.seriesId, fecha: r.fecha, targetDateYmd };
     } else if (cfg.source === 'cre-gasolina') {
       if (!cfg.fuelType) throw new Error('cre-gasolina: missing fuelType');
       const r = await readCreAverageFor(cfg.fuelType);
@@ -234,9 +253,7 @@ export async function resolveAutoResolverCandidate(candidate = {}) {
       dateYmd: cfg.forecastDateYmd,
       timezone: cfg.timezone,
     });
-    winningIdx = cfg.buckets.findIndex(b =>
-      tempC >= Number(b.minC) && tempC < Number(b.maxC),
-    );
+    winningIdx = weatherBucketIndexFor(tempC, cfg.buckets);
     if (winningIdx < 0) winningIdx = bucketIndexFor(tempC);
     if (winningIdx < 0) throw new Error(`temp ${tempC}°C didn't fit any bucket`);
     resolverInfo = { recordedMaxC: tempC, forecastDateYmd: cfg.forecastDateYmd };
