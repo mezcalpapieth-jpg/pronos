@@ -2431,10 +2431,17 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
       const deferredSample = (r.deferred || []).slice(0, 3)
         .map(d => {
           const officialAttempts = Array.isArray(d.officialFetchAttempts) ? d.officialFetchAttempts : [];
-          const official = officialAttempts.slice(0, 3)
+          const isReaderAttempt = (attempt) => {
+            const url = String(attempt?.fetchUrl || attempt?.url || '');
+            return String(attempt?.via || '') === 'reader-fallback'
+              || url.startsWith('https://r.jina.ai/http://');
+          };
+          const directAttempts = officialAttempts.filter(a => !isReaderAttempt(a)).slice(0, 2);
+          const readerAttempts = officialAttempts.filter(isReaderAttempt).slice(0, 3);
+          const official = [...directAttempts, ...readerAttempts]
             .map(a => {
               const url = String(a.fetchUrl || a.url || '');
-              const label = url.startsWith('https://r.jina.ai/http://') ? 'reader' : (a.via || 'oficial');
+              const label = isReaderAttempt(a) ? 'reader' : (a.via || 'oficial');
               const parts = [label, a.reason || 'sin texto'];
               if (a.status != null) parts.push(String(a.status));
               if (a.textLength != null) parts.push(`${a.textLength} chars`);

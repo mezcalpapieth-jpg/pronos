@@ -21,6 +21,10 @@ const BROWSER_HTML_HEADERS = {
   'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
   'accept-language': 'es-MX,es;q=0.9,en;q=0.8',
 };
+const READER_FALLBACK_HEADERS = {
+  'user-agent': 'Mozilla/5.0',
+  accept: 'text/plain,*/*',
+};
 const YOUTUBE_HTML_HEADERS = {
   ...BROWSER_HTML_HEADERS,
   // YouTube can serve a consent interstitial to server-side fetches.
@@ -306,11 +310,12 @@ async function readTranscriptCandidate({
   archiveUrl,
   officialFetchAttempts = null,
   via = 'official',
+  extraHeaders = {},
   includeRawHtml = false,
 }) {
   let html = null;
   try {
-    html = await fetchText(fetchImpl, url);
+    html = await fetchText(fetchImpl, url, extraHeaders);
   } catch (err) {
     if (officialFetchAttempts) {
       officialFetchAttempts.push({
@@ -1190,6 +1195,7 @@ export async function findMananeraTranscript({
         archiveUrl,
         officialFetchAttempts,
         via: 'reader-fallback',
+        extraHeaders: READER_FALLBACK_HEADERS,
         includeRawHtml,
       });
       if (transcript) return transcript;

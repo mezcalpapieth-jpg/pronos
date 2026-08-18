@@ -124,10 +124,12 @@ test('uses browser-like headers when fetching gob.mx transcript pages', async ()
 test('falls back to text-reader extraction for the same official gob.mx page', async () => {
   const articleUrl = buildMananeraDirectTranscriptUrl('2026-08-17');
   const seen = [];
-  const fetchImpl = async (url) => {
+  const fetchImpl = async (url, options = {}) => {
     const href = String(url);
-    seen.push(href);
+    seen.push({ href, headers: options.headers || {} });
     if (href.startsWith('https://r.jina.ai/http://')) {
+      assert.equal(options.headers?.accept, 'text/plain,*/*');
+      assert.equal(options.headers?.['user-agent'], 'Mozilla/5.0');
       return htmlResponse(`
         Title: Versión estenográfica. Conferencia de prensa de la presidenta Claudia Sheinbaum Pardo del 17 de agosto de 2026
         URL Source: ${articleUrl}
@@ -149,7 +151,7 @@ test('falls back to text-reader extraction for the same official gob.mx page', a
 
   assert.equal(result.ready, true);
   assert.equal(result.url, articleUrl);
-  assert.ok(seen.some(url => url.startsWith('https://r.jina.ai/http://')));
+  assert.ok(seen.some(item => item.href.startsWith('https://r.jina.ai/http://')));
 });
 
 test('resolves no when transcript exists but phrase count misses threshold', async () => {
