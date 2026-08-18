@@ -28,6 +28,12 @@ test('Points admin exposes a re-add action for rejected generated markets', () =
   assert.match(apiSource, /adminReviewPendingMarket\(id,\s*action,\s*note\)/);
 });
 
+test('Points pending approval alerts include backend details', () => {
+  const pendingTableSource = sourceForFunction('PendingMarketsTable');
+  assert.match(pendingTableSource, /\$\{action\} falló/);
+  assert.match(pendingTableSource, /e\.detail \? `\\n\$\{e\.detail\}` : ''/);
+});
+
 test('Points admin can edit generated markets and per-option liquidity before approval', () => {
   assert.match(source, /PendingMarketEditModal/);
   assert.match(source, /setEditingPending\(r\)/);

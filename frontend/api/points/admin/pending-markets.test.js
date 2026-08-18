@@ -49,6 +49,27 @@ test('pending generated markets can be edited before approval', () => {
   assert.match(source, /status !== 'pending'/);
 });
 
+test('pending edit preserves safe public image paths', () => {
+  assert.match(source, /function cleanOptionalImageRef/);
+  assert.match(source, /\^\\\/\[a-z0-9\]\[a-z0-9\/_\\-\.%\]\*\$/);
+  assert.match(source, /!text\.includes\('\.\.'\)/);
+  assert.match(source, /cleanOptionalImageRef\(source\[index\]\)/);
+});
+
+test('reopened canceled pending approvals create a fresh market source event id', () => {
+  assert.match(source, /function marketSourceEventForApproval/);
+  assert.match(source, /approved_market_id/);
+  assert.match(source, /:reopen-\$\{previousMarketId\}-\$\{pendingId\}/);
+  assert.match(source, /const marketSourceEventId = marketSourceEventForApproval\(r,\s*pid\)/);
+  assert.match(source, /reopenedFromCanceledMarketId/);
+});
+
+test('pending approval handler preserves intentional HTTP statuses', () => {
+  assert.match(source, /const status = Number\.isInteger\(e\?\.status\)/);
+  assert.match(source, /res\.status\(status\)\.json/);
+  assert.match(source, /status >= 500 \? 'server_error' : \(e\?\.message \|\| 'request_failed'\)/);
+});
+
 test('pending generated markets support taxonomy filters and filtered bulk actions', () => {
   assert.match(source, /matchesMarketTaxonomy/);
   assert.match(source, /function filteredPendingRows/);
@@ -96,7 +117,7 @@ test('pending api-price approval syncs edited threshold and operator from questi
   assert.match(source, /syncApiPriceFromQuestion\(\{\s*question: r\.question,/);
   assert.match(source, /resolverConfig: syncedMananera\.resolverConfig/);
   assert.match(source, /sourceData: syncedMananera\.sourceData \|\| \{\}/);
-  assert.match(source, /const sourceData = syncedApiPrice\.sourceData \|\| syncedMananera\.sourceData \|\| \{\}/);
+  assert.match(source, /const sourceDataBase = syncedApiPrice\.sourceData \|\| syncedMananera\.sourceData \|\| \{\}/);
   assert.match(source, /const resolverConfig = syncedApiPrice\.resolverConfig \|\| null/);
 });
 

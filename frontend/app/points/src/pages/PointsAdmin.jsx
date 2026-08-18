@@ -5598,7 +5598,7 @@ function PendingMarketsTable({ onQueueChange }) {
       });
       onQueueChange?.();
     } catch (e) {
-      alert(`${action} falló: ${e.code || e.message}`);
+      alert(`${action} falló: ${e.code || e.message}${e.detail ? `\n${e.detail}` : ''}`);
     } finally {
       setBusyId(null);
     }

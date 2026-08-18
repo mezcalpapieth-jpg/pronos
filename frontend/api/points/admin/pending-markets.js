@@ -54,10 +54,14 @@ function normalizeLabelKey(value) {
     .trim();
 }
 
-function cleanOptionalUrl(value) {
+function cleanOptionalImageRef(value) {
   const text = String(value || '').trim();
   if (!text) return null;
-  return /^https?:\/\//i.test(text) ? text.slice(0, 1000) : null;
+  if (/^https?:\/\//i.test(text)) return text.slice(0, 1000);
+  if (/^\/[a-z0-9][a-z0-9/_\-.%]*$/i.test(text) && !text.includes('..')) {
+    return text.slice(0, 1000);
+  }
+  return null;
 }
 
 function normalizeOutcomeImagesForEdit({ row, patch, previousOutcomes, nextOutcomes }) {
@@ -68,7 +72,7 @@ function normalizeOutcomeImagesForEdit({ row, patch, previousOutcomes, nextOutco
     : null;
   if (hasImagesPatch) {
     const source = Array.isArray(patchedImages) ? patchedImages : [];
-    return nextOutcomes.map((_, index) => cleanOptionalUrl(source[index]));
+    return nextOutcomes.map((_, index) => cleanOptionalImageRef(source[index]));
   }
 
   const existing = parseJsonb(row.outcome_images, null);
@@ -82,8 +86,15 @@ function normalizeOutcomeImagesForEdit({ row, patch, previousOutcomes, nextOutco
   return nextOutcomes.map((label, index) => {
     const key = normalizeLabelKey(label);
     const match = key ? byLabel.get(key) : undefined;
-    return cleanOptionalUrl(match ?? existing[index] ?? null);
+    return cleanOptionalImageRef(match ?? existing[index] ?? null);
   });
+}
+
+function marketSourceEventForApproval(row, pendingId) {
+  const sourceEventId = String(row?.source_event_id || '').trim();
+  const previousMarketId = Number(row?.approved_market_id || 0);
+  if (!Number.isInteger(previousMarketId) || previousMarketId <= 0) return sourceEventId;
+  return `${sourceEventId}:reopen-${previousMarketId}-${pendingId}`;
 }
 
 function alignParallelResolverConfig({ row, nextOutcomes }) {
@@ -198,8 +209,20 @@ export default async function handler(req, res) {
     if (req.method === 'POST') return review(req, res, admin);
     return res.status(405).json({ error: 'method_not_allowed' });
   } catch (e) {
-    console.error('[admin/pending-markets] unhandled', { message: e?.message, code: e?.code });
-    return res.status(500).json({ error: 'server_error', detail: e?.message?.slice(0, 240) || null });
+    const status = Number.isInteger(e?.status) && e.status >= 400 && e.status < 600
+      ? e.status
+      : 500;
+    console.error('[admin/pending-markets] unhandled', {
+      message: e?.message,
+      code: e?.code,
+      detail: e?.detail,
+      status,
+    });
+    return res.status(status).json({
+      error: status >= 500 ? 'server_error' : (e?.message || 'request_failed'),
+      detail: e?.detail || e?.message?.slice(0, 240) || null,
+      code: e?.code || null,
+    });
   }
 }
 
@@ -498,8 +521,18 @@ export async function approveOne(pid, reviewer, note, opts = {}) {
       resolverConfig: syncedMananera.resolverConfig,
       sourceData: syncedMananera.sourceData || {},
     });
-    const sourceData = syncedApiPrice.sourceData || syncedMananera.sourceData || {};
+    const reopenedFromCanceledMarketId = Number(r.approved_market_id || 0);
+    const sourceDataBase = syncedApiPrice.sourceData || syncedMananera.sourceData || {};
+    const sourceData = Number.isInteger(reopenedFromCanceledMarketId) && reopenedFromCanceledMarketId > 0
+      ? {
+          ...sourceDataBase,
+          reopenedFromCanceledMarketId: sourceDataBase.reopenedFromCanceledMarketId || reopenedFromCanceledMarketId,
+          reopenedFromSource: sourceDataBase.reopenedFromSource || r.source || null,
+          reopenedFromSourceEventId: sourceDataBase.reopenedFromSourceEventId || r.source_event_id || null,
+        }
+      : sourceDataBase;
     const resolverConfig = syncedApiPrice.resolverConfig || null;
+    const marketSourceEventId = marketSourceEventForApproval(r, pid);
     const tagBundle = deriveMarketTags({
       ...r,
       source_data: sourceData,
@@ -588,7 +621,7 @@ export async function approveOne(pid, reviewer, note, opts = {}) {
          RETURNING id`,
         [
           r.source,
-          r.source_event_id,
+          marketSourceEventId,
           r.question,
           r.category,
           null,
@@ -635,7 +668,7 @@ export async function approveOne(pid, reviewer, note, opts = {}) {
          RETURNING id`,
         [
           r.source,
-          r.source_event_id,
+          marketSourceEventId,
           r.question,
           r.category,
           null,
