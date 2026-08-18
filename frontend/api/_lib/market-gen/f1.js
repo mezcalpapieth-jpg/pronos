@@ -1,5 +1,5 @@
 /**
- * F1 market generator (parallel binary per driver).
+ * F1 market generator.
  *
  * Jolpica is the community-maintained continuation of Ergast after
  * Ergast's shutdown; its schedule + driver-standings endpoints remain
@@ -11,13 +11,9 @@
  * the strict "prices sum to 1" constraint — matches the user's own
  * spec and the F1 DFS-style market convention.
  *
- * Outcome images: per user feedback, we use the **constructor**
- * (team) logo for each driver, not driver portraits. Team logos
- * read better at card scale than face thumbnails and signal which
- * stable a driver belongs to. Each driver's constructor is fetched
- * from Jolpica's /drivers/{id}/constructors endpoint; the
- * constructor's Wikipedia page is then hit once (cached by
- * constructorId) for the logo thumbnail.
+ * Outcome images: the race-winner grid uses constructor logos because
+ * they read better at card scale and signal each driver's stable. Small
+ * side H2H markets can override that with driver portraits.
  *
  * Resolver: sports_api / jolpica-f1 — auto-settles via the results
  * endpoint once the race is over.
@@ -78,8 +74,17 @@ function f1BinaryMarket({
   suffix,
   question,
   resolverConfig,
+  outcomes = ['Sí', 'No'],
+  outcomeImages = null,
   outcomeImage = null,
 }) {
+  const normalizedOutcomes = Array.isArray(outcomes) && outcomes.length >= 2
+    ? outcomes
+    : ['Sí', 'No'];
+  const normalizedImages = Array.isArray(outcomeImages) && outcomeImages.length === normalizedOutcomes.length
+    ? outcomeImages
+    : normalizedOutcomes.map((_, i) => (i === 0 ? outcomeImage : null));
+
   return {
     source: 'jolpica-f1-side',
     source_event_id: `f1:${season}:${round}:${suffix}`,
@@ -88,8 +93,8 @@ function f1BinaryMarket({
     question,
     category: 'deportes',
     icon: '🏁',
-    outcomes: ['Sí', 'No'],
-    outcome_images: [outcomeImage, null],
+    outcomes: normalizedOutcomes,
+    outcome_images: normalizedImages,
     seed_liquidity: 1000,
     start_time: startTime,
     end_time: endTime,
@@ -106,6 +111,9 @@ function f1BinaryMarket({
       round,
       raceName,
       marketKind: suffix,
+      marketStyle: normalizedOutcomes[0] === 'Sí' && normalizedOutcomes[1] === 'No'
+        ? 'binary'
+        : 'head-to-head',
     },
   };
 }
@@ -117,9 +125,19 @@ function buildDutchGpSideMarkets({
   startTime,
   endTime,
   imageByDriverId = new Map(),
+  portraitByDriverId = new Map(),
   imageByTeamKey = new Map(),
 }) {
   if (String(season) !== '2026' || !isDutchGrandPrix(raceName)) return [];
+
+  const perezImage = portraitByDriverId.get('perez')
+    || imageByDriverId.get('perez')
+    || imageByTeamKey.get('cadillac')
+    || null;
+  const bottasImage = portraitByDriverId.get('bottas')
+    || imageByDriverId.get('bottas')
+    || imageByTeamKey.get('cadillac')
+    || null;
 
   return [
     f1BinaryMarket({
@@ -129,8 +147,9 @@ function buildDutchGpSideMarkets({
       startTime,
       endTime,
       suffix: 'perez-ahead-bottas',
-      question: '¿Checo Pérez termina delante de Valtteri Bottas en el Dutch GP 2026?',
-      outcomeImage: imageByDriverId.get('perez') || imageByTeamKey.get('cadillac') || null,
+      question: '¿Quién terminará delante en la carrera del Dutch GP 2026: Checo Pérez o Valtteri Bottas?',
+      outcomes: ['Checo Pérez', 'Valtteri Bottas'],
+      outcomeImages: [perezImage, bottasImage],
       resolverConfig: {
         shape: 'driver-ahead',
         driverAId: 'perez',
@@ -216,6 +235,19 @@ export async function generateF1Markets() {
   const imageByDriverId = new Map(gridDrivers.map((d, i) => [d.id, driverImages[i] || null]));
   const imageByTeamKey = new Map(logoByTeam);
 
+  const portraitByDriverId = new Map();
+  if (String(season) === '2026' && isDutchGrandPrix(raceName)) {
+    const dutchSideDriverIds = new Set(['perez', 'bottas']);
+    const dutchSidePortraitEntries = await Promise.all(
+      gridDrivers
+        .filter(d => dutchSideDriverIds.has(d.id))
+        .map(async d => [d.id, d.wikiUrl ? await fetchWikipediaImage(d.wikiUrl) : null]),
+    );
+    for (const [driverId, image] of dutchSidePortraitEntries) {
+      portraitByDriverId.set(driverId, image);
+    }
+  }
+
   const legs = [
     ...gridDrivers.map(d => ({ label: d.label, driverId: d.id, teamKey: d.teamKey })),
     { label: 'Otro', driverId: null, teamKey: null },
@@ -269,6 +301,7 @@ export async function generateF1Markets() {
       startTime,
       endTime,
       imageByDriverId,
+      portraitByDriverId,
       imageByTeamKey,
     }),
   ];

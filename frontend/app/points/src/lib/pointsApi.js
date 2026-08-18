@@ -808,6 +808,13 @@ export async function adminCancelMarket({ marketId, reason } = {}) {
   });
 }
 
+export async function adminReopenCanceledMarket({ marketId, note } = {}) {
+  return postJson('/api/points/admin/reopen-canceled-market', {
+    marketId,
+    note,
+  });
+}
+
 // ─── Admin — points risk review ────────────────────────────────────────────
 export async function adminListRisk({ username, status = 'all' } = {}) {
   const q = new URLSearchParams();

@@ -238,12 +238,20 @@ test('Points admin does not expose one-off World Cup repair/progress buttons', (
 
 test('Points admin can cancel active and por resolver markets', () => {
   assert.match(source, /adminCancelMarket/);
+  assert.match(source, /adminReopenCanceledMarket/);
   assert.match(source, /Anular mercado/);
+  assert.match(source, /reopenCanceledMarket/);
+  assert.match(source, /A pendientes/);
+  assert.match(source, /En pendientes/);
+  assert.match(source, /pendingStatus === 'pending'/);
+  assert.match(source, /El mercado anulado seguirá anulado y reembolsado/);
   assert.match(source, /filter === 'pending'/);
   assert.match(source, /cancelMarket\(m\)/);
   assert.match(source, /onCancel=\{cancelMarket\}/);
   assert.match(source, /actionMode === 'cancel'/);
   assert.match(source, /Se devolverá el costo base/);
+  assert.match(apiSource, /export async function adminReopenCanceledMarket/);
+  assert.match(apiSource, /\/api\/points\/admin\/reopen-canceled-market/);
 });
 
 test('Points admin stats shows signup sheet and per-user distribution detail', () => {

@@ -11,8 +11,13 @@ test('Dutch GP side markets include hooky auto-resolving F1 props', () => {
     startTime: '2026-08-23T13:00:00.000Z',
     endTime: '2026-08-23T15:00:00.000Z',
     imageByDriverId: new Map([
-      ['perez', 'cadillac.png'],
+      ['perez', 'cadillac-perez.png'],
+      ['bottas', 'cadillac-bottas.png'],
       ['max_verstappen', 'red-bull.png'],
+    ]),
+    portraitByDriverId: new Map([
+      ['perez', 'perez-face.png'],
+      ['bottas', 'bottas-face.png'],
     ]),
     imageByTeamKey: new Map([
       ['cadillac', 'cadillac.png'],
@@ -33,6 +38,10 @@ test('Dutch GP side markets include hooky auto-resolving F1 props', () => {
   ]);
   assert.equal(specs[0].resolver_config.driverAId, 'perez');
   assert.equal(specs[0].resolver_config.driverBId, 'bottas');
+  assert.equal(specs[0].question, '¿Quién terminará delante en la carrera del Dutch GP 2026: Checo Pérez o Valtteri Bottas?');
+  assert.deepEqual(specs[0].outcomes, ['Checo Pérez', 'Valtteri Bottas']);
+  assert.deepEqual(specs[0].outcome_images, ['perez-face.png', 'bottas-face.png']);
+  assert.equal(specs[0].source_data.marketStyle, 'head-to-head');
   assert.equal(specs[1].resolver_config.driverId, 'max_verstappen');
   assert.equal(specs[2].resolver_config.driverId, 'perez');
 });

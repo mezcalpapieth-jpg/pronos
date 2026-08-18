@@ -345,7 +345,7 @@ test('auto resolver core settles F1 Dutch GP side markets from race classificati
       driverBId: 'bottas',
       driverBLabel: 'Valtteri Bottas',
     },
-    outcomes: ['Sí', 'No'],
+    outcomes: ['Checo Pérez', 'Valtteri Bottas'],
   });
   assert.equal(ahead.winningIdx, 0);
   assert.equal(ahead.finalScore, 'Sergio Pérez P9 · Valtteri Bottas P13');

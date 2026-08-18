@@ -29,8 +29,16 @@ test('Risk panel lets admins filter evidence and set non-payout review states', 
   assert.match(source, /verificación telefónica/);
   assert.match(source, /function RiskScoreBreakdown/);
   assert.match(source, /function riskScoreBreakdown/);
+  assert.match(source, /expandedLoopUser/);
+  assert.match(source, /expandedSignalUser/);
+  assert.match(source, /function RiskInlineEvidence/);
+  assert.match(source, /function RiskLoopEvidenceRow/);
+  assert.match(source, /function RiskTradeSequence/);
+  assert.match(source, /function RiskSignalEvidenceRow/);
   assert.match(source, /loopCount \* 30/);
   assert.match(source, /sharedSignalCount \* 20/);
+  assert.match(source, /linkedUsernames/);
+  assert.match(source, /Ver'\} · \{adminNumber\(trades\.length \|\| row\.tradeCount\)\} trades/);
   assert.match(source, /riskStatusLabel/);
   assert.match(source, /phone_required/);
   assert.match(source, /under_review/);

@@ -29,6 +29,7 @@ import {
   adminApplyPreCycleCarryover,
   adminEditMarket,
   adminCancelMarket,
+  adminReopenCanceledMarket,
   adminListPendingMarkets,
   adminReviewPendingMarket,
   adminEditPendingMarket,
@@ -2132,6 +2133,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
   const [resolving, setResolving] = useState(null);
   const [reviewingCandidate, setReviewingCandidate] = useState(null);
   const [canceling, setCanceling] = useState(null);
+  const [reopening, setReopening] = useState(null);
   const [autoResolving, setAutoResolving] = useState(false);
   const [hidingMarkets, setHidingMarkets] = useState(false);
   const [homeMarketVisibility, setHomeMarketVisibility] = useState(normalizeHomeMarketVisibility());
@@ -2302,6 +2304,35 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
       return false;
     } finally {
       setCanceling(null);
+    }
+  }
+
+  async function reopenCanceledMarket(market) {
+    if (!market?.id) return false;
+    const ok = window.confirm(
+      `¿Mandar "${market.question}" de vuelta a pendientes?\n\n`
+      + 'El mercado anulado seguirá anulado y reembolsado. Se creará o recuperará una fila pendiente para editarla y aprobar una versión nueva.',
+    );
+    if (!ok) return false;
+    setReopening(market.id);
+    try {
+      const result = await adminReopenCanceledMarket({
+        marketId: market.id,
+        note: 'manual-reopened from canceled market',
+      });
+      setMarkets(prev => (prev || []).map(m => m.id === market.id ? {
+        ...m,
+        pendingId: result?.pendingId || m.pendingId || null,
+        pendingStatus: 'pending',
+      } : m));
+      onQueueChange?.();
+      alert(`Mercado enviado a pendientes${result?.pendingId ? ` (#${result.pendingId})` : ''}.`);
+      return true;
+    } catch (e) {
+      alert(`No se pudo reenviar a pendientes: ${e.code || e.message}${e.detail ? '\n' + e.detail : ''}`);
+      return false;
+    } finally {
+      setReopening(null);
     }
   }
 
@@ -2926,15 +2957,59 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
                 />
               )}
             </>
+          ) : m.status === 'canceled' ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                color: 'var(--text-muted)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+              }}>
+                Anulado
+              </span>
+              {m.pendingStatus === 'pending' ? (
+                <span style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  color: '#60a5fa',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                }}>
+                  En pendientes
+                </span>
+              ) : (
+                <button
+                  onClick={() => reopenCanceledMarket(m)}
+                  disabled={reopening === m.id}
+                  title="Enviar este mercado anulado a Por aprobar para relanzarlo como versión nueva"
+                  style={{
+                    padding: '6px 10px',
+                    background: 'rgba(59,130,246,0.10)',
+                    border: '1px solid rgba(59,130,246,0.35)',
+                    borderRadius: 8,
+                    color: '#60a5fa',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11,
+                    cursor: reopening === m.id ? 'not-allowed' : 'pointer',
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
+                    opacity: reopening === m.id ? 0.55 : 1,
+                  }}
+                >
+                  {reopening === m.id ? 'Enviando…' : 'A pendientes'}
+                </button>
+              )}
+            </div>
           ) : (
             <span style={{
               fontFamily: 'var(--font-mono)',
               fontSize: 10,
-              color: m.status === 'canceled' ? 'var(--text-muted)' : 'var(--green)',
+              color: 'var(--green)',
               textTransform: 'uppercase',
               letterSpacing: '0.04em',
             }}>
-              {m.status === 'canceled' ? 'Anulado' : `✓ ${m.outcomes[m.outcome]}`}
+              ✓ {m.outcomes[m.outcome]}
             </span>
           )}
         </div>
@@ -3898,6 +3973,8 @@ function RiskPanel() {
   const [working, setWorking] = useState(null);
   const [err, setErr] = useState(null);
   const [msg, setMsg] = useState(null);
+  const [expandedLoopUser, setExpandedLoopUser] = useState(null);
+  const [expandedSignalUser, setExpandedSignalUser] = useState(null);
 
   async function load() {
     setErr(null);
@@ -4078,7 +4155,15 @@ function RiskPanel() {
           <p style={adminEmptyStyle}>Sin cuentas para este filtro.</p>
         ) : (
           <div style={{ display: 'grid', gap: 12 }}>
-            {accounts.map(row => (
+            {accounts.map(row => {
+              const rowLoops = loops.filter(loop => sameRiskUsername(loop.username, row.username));
+              const rowSignals = Array.isArray(row.sharedSignals) && row.sharedSignals.length > 0
+                ? row.sharedSignals
+                : linkedSignals.filter(signal => asRiskUsernames(signal.usernames).some(username => sameRiskUsername(username, row.username)));
+              const loopsOpen = expandedLoopUser === row.username;
+              const signalsOpen = expandedSignalUser === row.username;
+
+              return (
               <div key={row.username} style={{
                 border: '1px solid var(--border)',
                 borderRadius: 10,
@@ -4115,15 +4200,50 @@ function RiskPanel() {
                   <div style={riskBadgeStyle(row.reviewStatus)}>{riskStatusLabel(row.reviewStatus)}</div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 8, fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8, fontFamily: 'var(--font-mono)', fontSize: 11 }}>
                   <RiskMetric label="Trades 30d" value={adminNumber(row.tradeCount)} />
                   <RiskMetric label="Mercados" value={adminNumber(row.marketCount)} />
                   <RiskMetric label="Compras" value={adminMxnp(row.buyVolume)} />
                   <RiskMetric label="Salidas" value={adminMxnp(row.exitVolume)} />
-                  <RiskMetric label="Señales" value={`${adminNumber(row.sharedSignalCount)} compartidas`} />
+                  <RiskMetric
+                    label="Loops"
+                    value={`${adminNumber(row.loopCount)} mercados`}
+                    onClick={row.loopCount > 0 ? () => setExpandedLoopUser(loopsOpen ? null : row.username) : undefined}
+                    active={loopsOpen}
+                  />
+                  <RiskMetric
+                    label="Señales"
+                    value={`${adminNumber(row.sharedSignalCount)} compartidas`}
+                    onClick={row.sharedSignalCount > 0 ? () => setExpandedSignalUser(signalsOpen ? null : row.username) : undefined}
+                    active={signalsOpen}
+                  />
                 </div>
 
                 <RiskScoreBreakdown row={row} />
+
+                {loopsOpen && (
+                  <RiskInlineEvidence
+                    title={`Loops de @${row.username}`}
+                    empty="No se cargaron detalles de loops para este usuario en la ventana actual."
+                    rows={rowLoops}
+                    renderRow={(loop) => <RiskLoopEvidenceRow key={`${loop.username}-${loop.marketId}`} row={loop} />}
+                  />
+                )}
+
+                {signalsOpen && (
+                  <RiskInlineEvidence
+                    title={`Señales de @${row.username}`}
+                    empty="No hay señales compartidas para este usuario."
+                    rows={rowSignals}
+                    renderRow={(signal) => (
+                      <RiskSignalEvidenceRow
+                        key={`${signal.signalType}-${signal.signalKey}-${row.username}`}
+                        row={signal}
+                        focusUsername={row.username}
+                      />
+                    )}
+                  />
+                )}
 
                 {row.reviewReason && <p style={{ ...adminEmptyStyle, margin: 0, lineHeight: 1.5 }}>Nota: {row.reviewReason}</p>}
 
@@ -4149,7 +4269,8 @@ function RiskPanel() {
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
@@ -4158,28 +4279,14 @@ function RiskPanel() {
         title="Loops rápidos"
         empty="Sin loops rápidos detectados."
         rows={loops}
-        renderRow={(row) => (
-          <div key={`${row.username}-${row.marketId}`} style={riskEvidenceRowStyle}>
-            <a href={`/points/u/${encodeURIComponent(row.username)}`} style={riskEvidenceLinkStyle}>@{row.username}</a>
-            <a href={`/points/market/${row.marketId}`} style={riskEvidenceMainStyle}>{row.question || `Mercado #${row.marketId}`}</a>
-            <span style={riskEvidenceMetaStyle}>{row.buyCount} compras · {row.sellCount} ventas · {formatAdminDuration(row.spanSeconds)}</span>
-            <span style={{ ...riskEvidenceMetaStyle, textAlign: 'right' }}>{adminMxnp(row.buyCollateral)} / {adminMxnp(row.sellCollateral)}</span>
-          </div>
-        )}
+        renderRow={(row) => <RiskLoopEvidenceRow key={`${row.username}-${row.marketId}`} row={row} />}
       />
 
       <RiskEvidencePanel
         title="Señales compartidas"
         empty="Sin IP/device/sesión compartida entre cuentas."
         rows={linkedSignals}
-        renderRow={(row) => (
-          <div key={`${row.signalType}-${row.signalKey}`} style={riskEvidenceRowStyle}>
-            <span style={riskEvidenceLinkStyle}>{riskSignalLabel(row.signalType)} · {row.signalKey}</span>
-            <span style={riskEvidenceMainStyle}>{row.usernames.map(u => `@${u}`).join(' · ')}</span>
-            <span style={riskEvidenceMetaStyle}>{row.userCount} cuentas · {row.eventCount} eventos</span>
-            <span style={{ ...riskEvidenceMetaStyle, textAlign: 'right' }}>{adminDateTime(row.lastSeenAt)}</span>
-          </div>
-        )}
+        renderRow={(row) => <RiskSignalEvidenceRow key={`${row.signalType}-${row.signalKey}`} row={row} />}
       />
 
       <RiskEvidencePanel
@@ -4261,11 +4368,169 @@ function RiskHelpCard({ title, body, lines = [] }) {
   );
 }
 
-function RiskMetric({ label, value }) {
-  return (
-    <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '10px 11px', background: 'rgba(255,255,255,0.02)', minWidth: 0 }}>
+function RiskMetric({ label, value, onClick, active = false }) {
+  const interactive = typeof onClick === 'function';
+  const style = {
+    border: `1px solid ${active ? 'rgba(255,90,0,0.65)' : 'var(--border)'}`,
+    borderRadius: 8,
+    padding: '10px 11px',
+    background: active ? 'rgba(255,90,0,0.08)' : 'rgba(255,255,255,0.02)',
+    minWidth: 0,
+    textAlign: 'left',
+    fontFamily: 'var(--font-mono)',
+    cursor: interactive ? 'pointer' : 'default',
+  };
+  const content = (
+    <>
       <div style={{ color: 'var(--text-muted)', fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{label}</div>
       <div style={{ color: 'var(--text-secondary)', fontSize: 12, marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
+    </>
+  );
+
+  if (interactive) {
+    return (
+      <button type="button" onClick={onClick} style={style}>
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <div style={style}>
+      {content}
+    </div>
+  );
+}
+
+function RiskInlineEvidence({ title, empty, rows, renderRow }) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  return (
+    <div style={{
+      border: '1px dashed var(--border)',
+      borderRadius: 8,
+      padding: 10,
+      background: 'rgba(255,255,255,0.012)',
+      display: 'grid',
+      gap: 8,
+      overflowX: 'auto',
+    }}>
+      <div style={{ color: 'var(--orange)', fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+        {title}
+      </div>
+      {safeRows.length === 0 ? (
+        <p style={{ ...adminEmptyStyle, margin: 0 }}>{empty}</p>
+      ) : (
+        safeRows.map(renderRow)
+      )}
+    </div>
+  );
+}
+
+function RiskLoopEvidenceRow({ row }) {
+  const [open, setOpen] = useState(false);
+  const trades = Array.isArray(row.trades) ? row.trades : [];
+  return (
+    <div style={{
+      border: '1px solid var(--border)',
+      borderRadius: 8,
+      padding: 10,
+      background: 'rgba(255,255,255,0.02)',
+      fontFamily: 'var(--font-mono)',
+      display: 'grid',
+      gap: 8,
+      minWidth: 780,
+    }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(120px, 0.35fr) minmax(240px, 1fr) minmax(150px, auto) minmax(130px, auto)',
+        gap: 10,
+        alignItems: 'center',
+      }}>
+        <a href={`/points/u/${encodeURIComponent(row.username)}`} style={riskEvidenceLinkStyle}>@{row.username}</a>
+        <a href={`/points/market/${row.marketId}`} style={riskEvidenceMainStyle}>{row.question || `Mercado #${row.marketId}`}</a>
+        <span style={riskEvidenceMetaStyle}>{row.buyCount} compras · {row.sellCount} ventas · {formatAdminDuration(row.spanSeconds)}</span>
+        <button
+          type="button"
+          onClick={() => setOpen(prev => !prev)}
+          className="btn-ghost"
+          style={{ padding: '6px 9px', fontSize: 10, justifySelf: 'end', whiteSpace: 'nowrap' }}
+        >
+          {open ? 'Ocultar' : 'Ver'} · {adminNumber(trades.length || row.tradeCount)} trades
+        </button>
+      </div>
+      <div style={{ color: 'var(--text-muted)', fontSize: 10 }}>
+        {adminMxnp(row.buyCollateral)} comprado · {adminMxnp(row.sellCollateral)} vendido · {adminNumber(row.outcomesTouched)} resultados tocados
+      </div>
+      {open && <RiskTradeSequence trades={trades} />}
+    </div>
+  );
+}
+
+function RiskTradeSequence({ trades }) {
+  const safeTrades = Array.isArray(trades) ? trades : [];
+  if (safeTrades.length === 0) {
+    return <p style={{ ...adminEmptyStyle, margin: 0 }}>Sin detalle de trades para este loop.</p>;
+  }
+  return (
+    <div style={{
+      borderTop: '1px solid var(--border)',
+      paddingTop: 8,
+      display: 'grid',
+      gap: 5,
+    }}>
+      {safeTrades.map((trade, index) => {
+        const isSell = trade.side === 'sell';
+        return (
+          <div
+            key={trade.id || index}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '70px minmax(120px, 1fr) minmax(100px, auto) minmax(100px, auto) minmax(70px, auto) minmax(120px, auto)',
+              gap: 10,
+              alignItems: 'center',
+              color: 'var(--text-muted)',
+              fontSize: 10,
+            }}
+          >
+            <span style={{ color: isSell ? 'var(--red, #ef4444)' : 'var(--green)', fontWeight: 900 }}>{riskTradeSideLabel(trade.side)}</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{trade.outcomeLabel || `Resultado ${trade.outcomeIndex ?? '-'}`}</span>
+            <span style={{ color: isSell ? 'var(--red, #ef4444)' : 'var(--green)' }}>{adminMxnp(trade.collateral)}</span>
+            <span>{adminNumber(trade.shares, { maximumFractionDigits: 2 })} acc.</span>
+            <span style={{ color: 'var(--text-secondary)' }}>{formatRiskPrice(trade.price)}</span>
+            <span style={{ textAlign: 'right' }}>{adminDateTime(trade.createdAt)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function RiskSignalEvidenceRow({ row, focusUsername = null }) {
+  const usernames = asRiskUsernames(row.usernames);
+  const directLinkedUsernames = asRiskUsernames(row.linkedUsernames);
+  const linkedUsernames = focusUsername
+    ? directLinkedUsernames.concat(
+        usernames.filter(username => !sameRiskUsername(username, focusUsername) && !directLinkedUsernames.some(linked => sameRiskUsername(linked, username)))
+      )
+    : usernames;
+  const displayUsernames = linkedUsernames.length > 0 ? linkedUsernames : usernames;
+  const uniqueDisplayUsernames = Array.from(new Set(displayUsernames.map(username => username.toLowerCase()))).map(lower => (
+    displayUsernames.find(username => username.toLowerCase() === lower) || lower
+  ));
+  return (
+    <div style={riskEvidenceRowStyle}>
+      <span style={riskEvidenceLinkStyle}>{riskSignalLabel(row.signalType)} · {row.signalKey}</span>
+      <span style={riskEvidenceMainStyle}>
+        {focusUsername ? (
+          <>
+            @{focusUsername} conectado con {uniqueDisplayUsernames.map(username => `@${username}`).join(' · ')}
+          </>
+        ) : (
+          uniqueDisplayUsernames.map(username => `@${username}`).join(' · ')
+        )}
+      </span>
+      <span style={riskEvidenceMetaStyle}>{adminNumber(row.userCount)} cuentas · {adminNumber(row.eventCount)} eventos</span>
+      <span style={{ ...riskEvidenceMetaStyle, textAlign: 'right' }}>{adminDateTime(row.lastSeenAt)}</span>
     </div>
   );
 }
@@ -4401,6 +4666,27 @@ function riskScoreBreakdown(row = {}) {
 function riskSignalLabel(type) {
   const labels = { ip: 'IP', device: 'Dispositivo', session: 'Sesión' };
   return labels[type] || type || 'Señal';
+}
+
+function sameRiskUsername(a, b) {
+  return String(a || '').toLowerCase() === String(b || '').toLowerCase();
+}
+
+function asRiskUsernames(value) {
+  return Array.isArray(value) ? value.filter(Boolean).map(username => String(username)) : [];
+}
+
+function riskTradeSideLabel(side) {
+  if (side === 'buy') return 'COMPRÓ';
+  if (side === 'sell') return 'VENDIÓ';
+  return String(side || 'TRADE').toUpperCase();
+}
+
+function formatRiskPrice(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '-';
+  const cents = n <= 1 ? n * 100 : n;
+  return `${adminNumber(cents, { maximumFractionDigits: 0 })}c`;
 }
 
 function riskScoreColor(score) {

@@ -106,7 +106,7 @@ export default async function handler(req, res) {
     let rows;
     if (filter === 'archived') {
       rows = await sql`
-        SELECT m.*, pm.source_data AS pending_source_data,
+        SELECT m.*, pm.id AS pending_id, pm.status AS pending_status, pm.source_data AS pending_source_data,
           (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_count
         FROM points_markets m
         LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
@@ -127,7 +127,7 @@ export default async function handler(req, res) {
       `;
     } else if (filter === 'all') {
       rows = await sql`
-        SELECT m.*, pm.source_data AS pending_source_data,
+        SELECT m.*, pm.id AS pending_id, pm.status AS pending_status, pm.source_data AS pending_source_data,
           (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_count
         FROM points_markets m
         LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
@@ -148,7 +148,7 @@ export default async function handler(req, res) {
       `;
     } else if (filter === 'pending') {
       rows = await sql`
-        SELECT m.*, pm.source_data AS pending_source_data,
+        SELECT m.*, pm.id AS pending_id, pm.status AS pending_status, pm.source_data AS pending_source_data,
           (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_count
         FROM points_markets m
         LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
@@ -172,7 +172,7 @@ export default async function handler(req, res) {
       `;
     } else {
       rows = await sql`
-        SELECT m.*, pm.source_data AS pending_source_data,
+        SELECT m.*, pm.id AS pending_id, pm.status AS pending_status, pm.source_data AS pending_source_data,
           (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_count
         FROM points_markets m
         LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
@@ -301,6 +301,8 @@ export default async function handler(req, res) {
         endTime: r.end_time,
         status: r.status,
         outcome: r.outcome,
+        pendingId: r.pending_id || null,
+        pendingStatus: r.pending_status || null,
         ammMode: r.amm_mode || 'unified',
         createdAt: r.created_at,
         resolvedAt: r.resolved_at,

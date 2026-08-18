@@ -76,7 +76,21 @@ function formatAccountRow(row) {
     loopCount: toNumber(row.loopCount),
     rapidTradeCount: toNumber(row.rapidTradeCount),
     sharedSignalCount: toNumber(row.sharedSignalCount),
+    sharedSignals: asArray(row.sharedSignals).map(formatLinkedSignalRow),
     lastTradeAt: row.lastTradeAt || null,
+    createdAt: row.createdAt || null,
+  };
+}
+
+function formatRiskTradeRow(row) {
+  return {
+    id: toNumber(row.id),
+    side: row.side || '',
+    outcomeIndex: row.outcomeIndex == null ? null : toNumber(row.outcomeIndex),
+    outcomeLabel: row.outcomeLabel || '',
+    collateral: toNumber(row.collateral),
+    shares: toNumber(row.shares),
+    price: toNumber(row.price),
     createdAt: row.createdAt || null,
   };
 }
@@ -97,6 +111,7 @@ function formatRapidLoopRow(row) {
     firstTradeAt: row.firstTradeAt || null,
     lastTradeAt: row.lastTradeAt || null,
     spanSeconds: toNumber(row.spanSeconds),
+    trades: asArray(row.trades).map(formatRiskTradeRow),
   };
 }
 
@@ -105,6 +120,7 @@ function formatLinkedSignalRow(row) {
     signalType: row.signalType,
     signalKey: row.signalKey,
     usernames: asArray(row.usernames),
+    linkedUsernames: asArray(row.linkedUsernames),
     userCount: toNumber(row.userCount),
     eventCount: toNumber(row.eventCount),
     firstSeenAt: row.firstSeenAt || null,
@@ -238,12 +254,35 @@ async function handleList(req, res) {
             SELECT
               signal_type,
               signal_hash,
-              ARRAY_AGG(DISTINCT username ORDER BY username) AS usernames
+              ARRAY_AGG(DISTINCT username ORDER BY username) AS usernames,
+              COUNT(DISTINCT username)::int AS user_count,
+              COUNT(*)::int AS event_count,
+              MIN(created_at) AS first_seen_at,
+              MAX(created_at) AS last_seen_at
             FROM signals
             GROUP BY signal_type, signal_hash
             HAVING COUNT(DISTINCT username) > 1
           )
-          SELECT u.username, COUNT(*)::int AS shared_signal_count
+          SELECT
+            u.username,
+            COUNT(*)::int AS shared_signal_count,
+            JSONB_AGG(
+              JSONB_BUILD_OBJECT(
+                'signalType', c.signal_type,
+                'signalKey', LEFT(c.signal_hash, 12),
+                'usernames', c.usernames,
+                'linkedUsernames', (
+                  SELECT COALESCE(JSONB_AGG(linked.linked_username ORDER BY linked.linked_username), '[]'::jsonb)
+                  FROM unnest(c.usernames) AS linked(linked_username)
+                  WHERE LOWER(linked.linked_username) <> LOWER(u.username)
+                ),
+                'userCount', c.user_count,
+                'eventCount', c.event_count,
+                'firstSeenAt', c.first_seen_at,
+                'lastSeenAt', c.last_seen_at
+              )
+              ORDER BY c.user_count DESC, c.event_count DESC, c.last_seen_at DESC
+            ) AS shared_signals
           FROM clusters c
           CROSS JOIN LATERAL unnest(c.usernames) AS u(username)
           GROUP BY u.username
@@ -263,6 +302,7 @@ async function handleList(req, res) {
           COALESCE(l.loop_count, 0)::int AS "loopCount",
           COALESCE(l.rapid_trade_count, 0)::int AS "rapidTradeCount",
           COALESCE(s.shared_signal_count, 0)::int AS "sharedSignalCount",
+          COALESCE(s.shared_signals, '[]'::jsonb) AS "sharedSignals",
           t.last_trade_at AS "lastTradeAt",
           (
             CASE COALESCE(r.status, 'clear')
@@ -311,6 +351,7 @@ async function handleList(req, res) {
             MAX(created_at) - MIN(created_at) AS span
           FROM points_trades
           WHERE created_at > NOW() - INTERVAL '14 days'
+            AND side IN ('buy', 'sell')
             AND username <> ${PRONOS_TREASURY_USERNAME}
           GROUP BY username, market_id
           HAVING COUNT(*) >= 4
@@ -332,9 +373,31 @@ async function handleList(req, res) {
           l.outcomes_touched AS "outcomesTouched",
           l.first_trade_at AS "firstTradeAt",
           l.last_trade_at AS "lastTradeAt",
-          EXTRACT(EPOCH FROM l.span)::int AS "spanSeconds"
+          EXTRACT(EPOCH FROM l.span)::int AS "spanSeconds",
+          COALESCE(tape.trades, '[]'::jsonb) AS "trades"
         FROM loops l
         JOIN points_markets m ON m.id = l.market_id
+        LEFT JOIN LATERAL (
+          SELECT JSONB_AGG(
+            JSONB_BUILD_OBJECT(
+              'id', t.id,
+              'side', t.side,
+              'outcomeIndex', t.outcome_index,
+              'outcomeLabel', COALESCE(m.outcomes ->> (t.outcome_index::int), CONCAT('Outcome ', t.outcome_index::text)),
+              'collateral', t.collateral::float,
+              'shares', t.shares::float,
+              'price', t.price_at_trade::float,
+              'createdAt', t.created_at
+            )
+            ORDER BY t.created_at ASC, t.id ASC
+          ) AS trades
+          FROM points_trades t
+          WHERE LOWER(t.username) = LOWER(l.username)
+            AND t.market_id = l.market_id
+            AND t.side IN ('buy', 'sell')
+            AND t.created_at >= l.first_trade_at
+            AND t.created_at <= l.last_trade_at
+        ) tape ON TRUE
         WHERE (${usernameFilter}::text IS NULL OR LOWER(l.username) = LOWER(${usernameFilter}))
         ORDER BY l.trade_count DESC, l.last_trade_at DESC
         LIMIT 80

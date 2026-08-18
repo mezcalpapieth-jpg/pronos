@@ -21,12 +21,17 @@ test('admin risk endpoint surfaces loops and shared hashed signals without expos
   assert.match(source, /rapidLoops/);
   assert.match(source, /linkedSignals/);
   assert.match(source, /sameMarketLinks/);
+  assert.match(source, /formatRiskTradeRow/);
+  assert.match(source, /sharedSignals/);
+  assert.match(source, /linkedUsernames/);
   assert.match(source, /points_risk_events/);
   assert.match(source, /ip_hash/);
   assert.match(source, /device_hash/);
   assert.match(source, /session_hash/);
   assert.match(source, /COUNT\(\*\) FILTER \(WHERE side = 'buy'\)/);
   assert.match(source, /COUNT\(\*\) FILTER \(WHERE side = 'sell'\)/);
+  assert.match(source, /COALESCE\(tape\.trades, '(\[\]'::jsonb|\\\[\\\]'::jsonb)\)/);
+  assert.match(source, /outcomeLabel/);
   assert.match(source, /ABS\(EXTRACT\(EPOCH FROM \(a\.created_at - b\.created_at\)\)\) <= 1800/);
   assert.doesNotMatch(source, /SELECT[\s\S]{0,120}ip_address/i);
   assert.doesNotMatch(source, /SELECT[\s\S]{0,120}user_agent/i);
