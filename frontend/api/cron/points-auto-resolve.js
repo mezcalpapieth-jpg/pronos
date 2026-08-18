@@ -1412,6 +1412,9 @@ export async function runAutoResolve({ dry = false } = {}) {
             firstMatchUrl: transcript.firstMatchUrl || null,
             requiredMatchTimestamps: transcript.requiredMatchTimestamps || [],
             matchTimestamps: transcript.matchTimestamps || [],
+            requiredMatchPositions: transcript.requiredMatchPositions || [],
+            matchPositions: transcript.matchPositions || [],
+            timestampEvidenceUnavailableReason: transcript.timestampEvidenceUnavailableReason || null,
           };
           resolverConfigPatch = {
             transcriptUrl: transcript.transcriptUrl,
@@ -1428,6 +1431,9 @@ export async function runAutoResolve({ dry = false } = {}) {
             transcriptFirstMatchUrl: transcript.firstMatchUrl || null,
             transcriptRequiredMatchTimestamps: transcript.requiredMatchTimestamps || [],
             transcriptMatchTimestamps: transcript.matchTimestamps || [],
+            transcriptRequiredMatchPositions: transcript.requiredMatchPositions || [],
+            transcriptMatchPositions: transcript.matchPositions || [],
+            transcriptTimestampEvidenceUnavailableReason: transcript.timestampEvidenceUnavailableReason || null,
           };
         } else if (resolverType === 'api_lcdlf') {
           if (cfg.source !== LCDLF_SOURCE || !cfg.statusKey) {

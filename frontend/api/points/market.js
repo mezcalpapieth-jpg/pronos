@@ -20,6 +20,8 @@ import { buildEspnLiveScoreConfig } from '../_lib/espn-live-score.js';
 import { deriveOutcomeCountryLabels } from '../_lib/outcome-country-labels.js';
 import { PRONOS_TREASURY_USERNAME } from '../_lib/points-limit-orders.js';
 import { binaryPricesWithBookTrade } from '../_lib/points-display-prices.js';
+import { readSession } from '../_lib/session.js';
+import { isAdminUsername } from '../_lib/points-admin.js';
 import { BANXICO_FIX_RESOLUTION_CRITERIA } from '../_lib/banxico.js';
 import {
   WEATHER_MAX_TEMP_RESOLUTION_CRITERIA,
@@ -34,6 +36,92 @@ function parseJsonb(value, fallback) {
   if (value && typeof value === 'object') return value;
   if (typeof value !== 'string') return fallback;
   try { return JSON.parse(value); } catch { return fallback; }
+}
+
+function normalizeTranscriptTimestampItem(item) {
+  if (!item || typeof item !== 'object') return null;
+  const label = typeof item.label === 'string' ? item.label.trim() : '';
+  const seconds = Number(item.seconds);
+  const url = typeof item.url === 'string' && /^https?:\/\//i.test(item.url)
+    ? item.url
+    : null;
+  if (!label && !Number.isFinite(seconds)) return null;
+  return {
+    label: label || `${Math.max(0, Math.floor(seconds))}s`,
+    seconds: Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : null,
+    url,
+    text: typeof item.text === 'string' ? item.text.slice(0, 180) : null,
+  };
+}
+
+function normalizeTranscriptPositionItem(item) {
+  if (!item || typeof item !== 'object') return null;
+  const charIndex = Number(item.charIndex);
+  const totalChars = Number(item.totalChars);
+  if (!Number.isFinite(charIndex) || charIndex < 0) return null;
+  return {
+    charIndex: Math.floor(charIndex),
+    charEnd: Number.isFinite(Number(item.charEnd)) ? Math.floor(Number(item.charEnd)) : null,
+    totalChars: Number.isFinite(totalChars) && totalChars > 0 ? Math.floor(totalChars) : null,
+    percent: Number.isFinite(Number(item.percent)) ? Number(item.percent) : null,
+    snippet: typeof item.snippet === 'string' ? item.snippet.slice(0, 260) : null,
+  };
+}
+
+function transcriptEvidenceFromResolverConfig(resolverCfg, { includeAdminDetails = false } = {}) {
+  if (!resolverCfg || typeof resolverCfg !== 'object') return null;
+  const hasTranscriptResult = resolverCfg.transcriptMatchCount != null
+    || resolverCfg.transcriptSource
+    || Array.isArray(resolverCfg.transcriptRequiredMatchTimestamps)
+    || Array.isArray(resolverCfg.transcriptMatchTimestamps)
+    || Array.isArray(resolverCfg.transcriptRequiredMatchPositions)
+    || Array.isArray(resolverCfg.transcriptMatchPositions);
+  if (!hasTranscriptResult) return null;
+
+  const preferredTimestamps = Array.isArray(resolverCfg.transcriptRequiredMatchTimestamps)
+    && resolverCfg.transcriptRequiredMatchTimestamps.length > 0
+    ? resolverCfg.transcriptRequiredMatchTimestamps
+    : resolverCfg.transcriptMatchTimestamps;
+  const timestamps = (Array.isArray(preferredTimestamps) ? preferredTimestamps : [])
+    .map(normalizeTranscriptTimestampItem)
+    .filter(Boolean)
+    .slice(0, 10);
+
+  const evidence = {
+    phrase: typeof resolverCfg.phrase === 'string' ? resolverCfg.phrase : null,
+    matchCount: resolverCfg.transcriptMatchCount == null ? null : Number(resolverCfg.transcriptMatchCount),
+    op: typeof resolverCfg.op === 'string' ? resolverCfg.op : null,
+    threshold: resolverCfg.threshold == null ? null : Number(resolverCfg.threshold),
+    source: typeof resolverCfg.transcriptSource === 'string'
+      ? resolverCfg.transcriptSource
+      : (typeof resolverCfg.source === 'string' ? resolverCfg.source : null),
+    transcriptUrl: typeof resolverCfg.transcriptUrl === 'string' && /^https?:\/\//i.test(resolverCfg.transcriptUrl)
+      ? resolverCfg.transcriptUrl
+      : null,
+    transcriptTitle: typeof resolverCfg.transcriptTitle === 'string' ? resolverCfg.transcriptTitle : null,
+    timestamps,
+  };
+
+  if (includeAdminDetails) {
+    const preferredPositions = Array.isArray(resolverCfg.transcriptRequiredMatchPositions)
+      && resolverCfg.transcriptRequiredMatchPositions.length > 0
+      ? resolverCfg.transcriptRequiredMatchPositions
+      : resolverCfg.transcriptMatchPositions;
+    evidence.positions = (Array.isArray(preferredPositions) ? preferredPositions : [])
+      .map(normalizeTranscriptPositionItem)
+      .filter(Boolean)
+      .slice(0, 10);
+    evidence.timestampEvidenceUnavailableReason =
+      typeof resolverCfg.transcriptTimestampEvidenceUnavailableReason === 'string'
+        ? resolverCfg.transcriptTimestampEvidenceUnavailableReason
+        : null;
+  }
+
+  const countOk = Number.isFinite(Number(evidence.matchCount));
+  if (!countOk && evidence.timestamps.length === 0 && (!includeAdminDetails || evidence.positions.length === 0)) {
+    return null;
+  }
+  return evidence;
 }
 
 function pricesFromReserves(reserves, outcomeCount) {
@@ -257,6 +345,14 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'invalid_id' });
     }
 
+    let viewerIsAdmin = false;
+    try {
+      const session = readSession(req, res);
+      viewerIsAdmin = isAdminUsername(session?.username);
+    } catch {
+      viewerIsAdmin = false;
+    }
+
     try {
       await ensurePointsSchema(schemaSql);
 
@@ -301,6 +397,9 @@ export default async function handler(req, res) {
       const resolverCfg = parseJsonb(r.resolver_config, null);
       const resolverType = r.resolver_type || null;
       const resolverSource = resolverCfg?.source || null;
+      const transcriptEvidence = viewerIsAdmin
+        ? transcriptEvidenceFromResolverConfig(resolverCfg, { includeAdminDetails: true })
+        : null;
       const resolutionCriteria =
         (typeof resolverCfg?.criteria === 'string' && resolverCfg.criteria.trim())
         || (typeof sourceData?.resolutionCriteria === 'string' && sourceData.resolutionCriteria.trim())
@@ -525,6 +624,7 @@ export default async function handler(req, res) {
             resolverType,
             resolverSource,
             resolutionCriteria,
+            transcriptEvidence,
             liveScoreConfig,
             cryptoMeta,
             seriesMeta,
@@ -578,6 +678,7 @@ export default async function handler(req, res) {
           resolverType,
           resolverSource,
           resolutionCriteria,
+          transcriptEvidence,
           liveScoreConfig,
           cryptoMeta,
           seriesMeta,

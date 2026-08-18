@@ -428,6 +428,148 @@ function resolverLabel(type, source) {
   return RESOLVER_LABELS[composite] || RESOLVER_LABELS[type] || type;
 }
 
+function timestampReasonLabel(reason) {
+  const key = String(reason || '').trim();
+  if (key === 'youtube_captions_not_found') return 'YouTube no entregó captions públicos con tiempo.';
+  if (key === 'official_youtube_video_not_found') return 'No encontramos el video oficial con captions públicos.';
+  if (key === 'timed_caption_segments_not_found') return 'La fuente disponible no trae segmentos con tiempo.';
+  if (key === 'phrase_timestamp_not_found') return 'La frase apareció en el texto, pero no pudimos ubicar su timestamp.';
+  return key ? `Timestamps no disponibles: ${key}.` : 'Timestamps no disponibles.';
+}
+
+function hasTranscriptEvidence(evidence) {
+  if (!evidence || typeof evidence !== 'object') return false;
+  return Number.isFinite(Number(evidence.matchCount))
+    || (Array.isArray(evidence.timestamps) && evidence.timestamps.length > 0)
+    || (Array.isArray(evidence.positions) && evidence.positions.length > 0);
+}
+
+function formatTranscriptPosition(position, locale = 'es-MX') {
+  const charIndex = Number(position?.charIndex);
+  const totalChars = Number(position?.totalChars);
+  if (!Number.isFinite(charIndex)) return null;
+  const nf = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 });
+  const parts = [`caracter ${nf.format(Math.max(0, Math.floor(charIndex)))}`];
+  if (Number.isFinite(totalChars) && totalChars > 0) {
+    parts.push(`de ${nf.format(Math.floor(totalChars))}`);
+  }
+  if (Number.isFinite(Number(position?.percent))) {
+    parts.push(`${Number(position.percent).toFixed(1)}%`);
+  }
+  return parts.join(' ');
+}
+
+function TranscriptEvidencePanel({ evidence, isAdmin, locale }) {
+  if (!isAdmin || !hasTranscriptEvidence(evidence)) return null;
+  const timestamps = Array.isArray(evidence.timestamps) ? evidence.timestamps : [];
+  const positions = Array.isArray(evidence.positions) ? evidence.positions : [];
+  const matchCount = Number(evidence.matchCount);
+  const threshold = Number(evidence.threshold);
+  const countLabel = Number.isFinite(matchCount)
+    ? `${matchCount} menciones${Number.isFinite(threshold) ? ` / meta ${threshold}` : ''}`
+    : null;
+
+  return (
+    <div style={{
+      marginBottom: 24,
+      padding: '14px 16px',
+      borderRadius: 12,
+      background: 'rgba(255, 91, 0, 0.07)',
+      border: '1px solid rgba(255, 91, 0, 0.28)',
+      maxWidth: 980,
+    }}>
+      <div style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        color: 'var(--orange)',
+        letterSpacing: '0.12em',
+        textTransform: 'uppercase',
+        marginBottom: 10,
+      }}>
+        Evidencia del resolver
+      </div>
+      <div style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 8,
+        alignItems: 'center',
+        fontFamily: 'var(--font-mono)',
+        fontSize: 12,
+        color: 'var(--text-secondary)',
+        marginBottom: timestamps.length || positions.length ? 10 : 0,
+      }}>
+        {evidence.phrase && <span>Frase: "{evidence.phrase}"</span>}
+        {countLabel && <span>{countLabel}</span>}
+        {evidence.transcriptUrl && (
+          <a
+            href={evidence.transcriptUrl}
+            target="_blank"
+            rel="noreferrer"
+            style={{ color: 'var(--orange)', textDecoration: 'none' }}
+          >
+            Fuente
+          </a>
+        )}
+      </div>
+      {timestamps.length > 0 ? (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {timestamps.map((item, idx) => {
+            const label = item.label || `${item.seconds}s`;
+            const chipStyle = {
+              display: 'inline-flex',
+              alignItems: 'center',
+              padding: '7px 10px',
+              borderRadius: 999,
+              border: '1px solid rgba(0, 208, 121, 0.34)',
+              background: 'rgba(0, 208, 121, 0.08)',
+              color: 'var(--green)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 12,
+              textDecoration: 'none',
+            };
+            return item.url ? (
+              <a key={`${label}-${idx}`} href={item.url} target="_blank" rel="noreferrer" style={chipStyle}>
+                {label}
+              </a>
+            ) : (
+              <span key={`${label}-${idx}`} style={chipStyle}>{label}</span>
+            );
+          })}
+        </div>
+      ) : positions.length > 0 ? (
+        <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 12,
+            color: 'var(--text-muted)',
+          }}>
+            {timestampReasonLabel(evidence.timestampEvidenceUnavailableReason)}
+          </div>
+          {positions.map((position, idx) => {
+            const label = formatTranscriptPosition(position, locale) || `mención ${idx + 1}`;
+            return (
+              <div key={`${position.charIndex}-${idx}`} style={{
+                padding: '9px 10px',
+                borderRadius: 10,
+                background: 'var(--surface1)',
+                border: '1px solid var(--border)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 12,
+                color: 'var(--text-secondary)',
+              }}>
+                <div style={{ color: 'var(--orange)', marginBottom: position.snippet ? 4 : 0 }}>
+                  {label}
+                </div>
+                {position.snippet && <div>{position.snippet}</div>}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function optionText(option) {
   if (option == null) return '';
   if (typeof option === 'string' || typeof option === 'number') return String(option);
@@ -2904,6 +3046,14 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                 <span style={{ color: 'var(--green)', fontWeight: 700 }}>FINAL</span>
                 <span>{market.finalScore}</span>
               </div>
+            )}
+
+            {isResolved && (
+              <TranscriptEvidencePanel
+                evidence={market.transcriptEvidence}
+                isAdmin={isAdmin}
+                locale={numberLocale}
+              />
             )}
 
             {displayOutcomes.length === 2 && isResolved && (

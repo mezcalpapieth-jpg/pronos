@@ -993,6 +993,102 @@ function findPhraseMatchTimestamps({ segments, phrase, baseUrl, max = 10 } = {})
   return matches;
 }
 
+function transcriptHasTimedSegments(transcript) {
+  return Array.isArray(transcript?.timedSegments)
+    && transcript.timedSegments.some(segment => Number.isFinite(Number(segment?.startMs)));
+}
+
+function normalizeTranscriptWithRawIndex(value) {
+  const raw = String(value || '');
+  const chars = [];
+  const rawIndexByChar = [];
+  let previousWasSpace = true;
+
+  for (let i = 0; i < raw.length; i += 1) {
+    const normalized = raw[i]
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[“”]/g, '"')
+      .replace(/[‘’]/g, "'");
+
+    for (const ch of normalized) {
+      if (/\s/.test(ch)) {
+        if (!previousWasSpace && chars.length > 0) {
+          chars.push(' ');
+          rawIndexByChar.push(i);
+          previousWasSpace = true;
+        }
+        continue;
+      }
+      chars.push(ch);
+      rawIndexByChar.push(i);
+      previousWasSpace = false;
+    }
+  }
+
+  while (chars.length > 0 && chars[chars.length - 1] === ' ') {
+    chars.pop();
+    rawIndexByChar.pop();
+  }
+
+  return {
+    text: chars.join(''),
+    raw,
+    rawLength: raw.length,
+    rawIndexByChar,
+  };
+}
+
+function transcriptSnippet(raw, start, end, contextChars = 90) {
+  const rawText = String(raw || '');
+  const from = Math.max(0, Math.floor(Number(start) || 0) - contextChars);
+  const to = Math.min(
+    rawText.length,
+    Math.max(from, Math.floor(Number(end) || Number(start) || 0)) + contextChars,
+  );
+  return rawText.slice(from, to).replace(/\s+/g, ' ').trim();
+}
+
+function findPhraseMatchPositions({ text, phrase, max = 10 } = {}) {
+  const needle = normalizeTranscriptText(phrase);
+  if (!needle) return [];
+
+  const normalized = normalizeTranscriptWithRawIndex(text);
+  if (!normalized.text) return [];
+
+  const pattern = escapeRegExp(needle).replace(/\s+/g, '\\s+');
+  const re = new RegExp(`(^|[^a-z0-9])(${pattern})(?=$|[^a-z0-9])`, 'g');
+  const matches = [];
+  let match;
+  while ((match = re.exec(normalized.text)) && matches.length < max) {
+    const startIndex = match.index + (match[1] ? match[1].length : 0);
+    if (
+      needle === 'estados unidos'
+      && normalizeTranscriptText(normalized.text.slice(startIndex, startIndex + 'estados unidos mexicanos'.length)) === 'estados unidos mexicanos'
+    ) {
+      continue;
+    }
+    const matchedText = match[2] || '';
+    const endIndex = startIndex + Math.max(0, matchedText.length - 1);
+    const rawStart = normalized.rawIndexByChar[startIndex];
+    const rawEndChar = normalized.rawIndexByChar[endIndex];
+    if (!Number.isFinite(rawStart) || !Number.isFinite(rawEndChar)) continue;
+    const rawEnd = rawEndChar + 1;
+    const percent = normalized.rawLength > 0
+      ? Math.round((rawStart / normalized.rawLength) * 1000) / 10
+      : null;
+    matches.push({
+      charIndex: rawStart,
+      charEnd: rawEnd,
+      totalChars: normalized.rawLength,
+      percent,
+      snippet: transcriptSnippet(normalized.raw, rawStart, rawEnd),
+    });
+  }
+  return matches;
+}
+
 function requiredTimestampEvidence({ matchTimestamps, count, threshold } = {}) {
   if (!Array.isArray(matchTimestamps) || matchTimestamps.length === 0) return [];
   const observed = Math.max(0, Math.floor(Number(count) || 0));
@@ -1275,7 +1371,7 @@ export async function readMananeraPhraseResult(cfg = {}, options = {}) {
     });
   }
 
-  if (!transcript.ready && cfg.youtubeFallback !== false) {
+  if (cfg.youtubeFallback !== false && (!transcript.ready || !transcriptHasTimedSegments(transcript))) {
     const youtubeTranscript = await findMananeraYouTubeTranscript({
       dateYmd: cfg.dateYmd,
       cfg,
@@ -1286,11 +1382,20 @@ export async function readMananeraPhraseResult(cfg = {}, options = {}) {
     });
     if (youtubeTranscript.ready) {
       transcript = youtubeTranscript;
-    } else {
+    } else if (!transcript.ready) {
       return {
         ...transcript,
         fallbackReason: youtubeTranscript.reason || null,
         officialFetchAttempts: transcript.officialFetchAttempts || [],
+        youtubeSearchUrl: youtubeTranscript.searchUrl || buildMananeraYouTubeSearchUrl(cfg.dateYmd),
+        youtubeVideoUrl: youtubeTranscript.videoUrl || null,
+        youtubeTranscriptTitle: youtubeTranscript.transcriptTitle || null,
+        youtubeCaptionAttempts: youtubeTranscript.captionAttempts || [],
+      };
+    } else {
+      transcript = {
+        ...transcript,
+        timestampEvidenceUnavailableReason: youtubeTranscript.reason || 'youtube_captions_not_found',
         youtubeSearchUrl: youtubeTranscript.searchUrl || buildMananeraYouTubeSearchUrl(cfg.dateYmd),
         youtubeVideoUrl: youtubeTranscript.videoUrl || null,
         youtubeTranscriptTitle: youtubeTranscript.transcriptTitle || null,
@@ -1306,12 +1411,26 @@ export async function readMananeraPhraseResult(cfg = {}, options = {}) {
     phrase: cfg.phrase,
     baseUrl: transcript.url,
   });
+  const matchPositions = findPhraseMatchPositions({
+    text: transcript.text,
+    phrase: cfg.phrase,
+  });
   const requiredMatchTimestamps = requiredTimestampEvidence({
     matchTimestamps,
     count,
     threshold: cfg.threshold,
   });
+  const requiredMatchPositions = requiredTimestampEvidence({
+    matchTimestamps: matchPositions,
+    count,
+    threshold: cfg.threshold,
+  });
   const firstMatch = matchTimestamps[0] || null;
+  const timestampEvidenceUnavailableReason = count > 0 && matchTimestamps.length === 0
+    ? (transcript.timestampEvidenceUnavailableReason || (
+        transcriptHasTimedSegments(transcript) ? 'phrase_timestamp_not_found' : 'timed_caption_segments_not_found'
+      ))
+    : null;
   const yes = compareTranscriptCount(count, cfg.op || 'gte', cfg.threshold);
   const yesIdx = Number(cfg.yesOutcome);
   const noIdx = yesIdx === 0 ? 1 : 0;
@@ -1334,6 +1453,9 @@ export async function readMananeraPhraseResult(cfg = {}, options = {}) {
     captionKind: transcript.captionKind || null,
     matchTimestamps,
     requiredMatchTimestamps,
+    matchPositions,
+    requiredMatchPositions,
+    timestampEvidenceUnavailableReason,
     firstMatchSeconds: firstMatch?.seconds ?? null,
     firstMatchTimestamp: firstMatch?.label || null,
     firstMatchUrl: firstMatch?.url || null,

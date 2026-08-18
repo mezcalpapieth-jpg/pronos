@@ -89,6 +89,7 @@ test('reads official transcript direct slug and resolves yes when count reaches 
     op: 'gte',
     threshold: 2,
     yesOutcome: 0,
+    youtubeFallback: false,
   }, { fetchImpl });
 
   assert.equal(result.ready, true);
@@ -169,6 +170,7 @@ test('resolves no when transcript exists but phrase count misses threshold', asy
     op: 'gte',
     threshold: 2,
     yesOutcome: 0,
+    youtubeFallback: false,
   }, { fetchImpl });
 
   assert.equal(result.ready, true);
@@ -185,6 +187,7 @@ test('resolves from an ingested stored transcript without fetching gob.mx again'
     op: 'gte',
     threshold: 2,
     yesOutcome: 0,
+    youtubeFallback: false,
   }, {
     storedTranscript: {
       dateYmd: '2026-08-10',
@@ -200,6 +203,11 @@ test('resolves from an ingested stored transcript without fetching gob.mx again'
   assert.equal(result.ready, true);
   assert.equal(result.count, 2);
   assert.equal(result.yes, true);
+  assert.deepEqual(result.requiredMatchTimestamps, []);
+  assert.equal(result.requiredMatchPositions.length, 2);
+  assert.equal(result.requiredMatchPositions[0].charIndex, 22);
+  assert.ok(result.requiredMatchPositions[0].totalChars > 50);
+  assert.equal(result.timestampEvidenceUnavailableReason, 'timed_caption_segments_not_found');
 });
 
 test('falls back to official YouTube captions when gob.mx transcript is delayed or blocked', async () => {
@@ -300,6 +308,73 @@ test('falls back to official YouTube captions when gob.mx transcript is delayed 
   assert.deepEqual(result.matchTimestamps.map(t => t.label), ['2:01', '3:05', '4:06', '5:07', '6:08']);
   assert.ok(seen.some(url => url.startsWith('https://www.youtube.com/feeds/videos.xml')));
   assert.ok(!seen.some(url => url.startsWith('https://www.googleapis.com/youtube/v3/search')));
+});
+
+test('prefers timed YouTube captions for evidence when official transcript has no timestamps', async () => {
+  const videoId = 'timedEv42AA';
+  const captionBaseUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=es`;
+  const captionFiller = 'Segmento oficial con contexto suficiente. '.repeat(40);
+  const seen = [];
+  const fetchImpl = async (url) => {
+    const href = String(url);
+    seen.push(href);
+    if (buildMananeraDirectTranscriptUrlVariants('2026-08-10').includes(href)) {
+      return htmlResponse(transcriptHtml({
+        dateText: '10 de agosto de 2026',
+        mentions: 'seguridad seguridad seguridad',
+      }));
+    }
+    if (href.startsWith('https://www.youtube.com/feeds/videos.xml')) {
+      return htmlResponse(`
+        <feed>
+          <entry>
+            <yt:videoId>${videoId}</yt:videoId>
+            <title>Conferencia de prensa matutina en vivo. Lunes 10 de agosto 2026 | Presidenta Claudia Sheinbaum</title>
+            <author><name>Claudia Sheinbaum Pardo</name></author>
+          </entry>
+        </feed>
+      `);
+    }
+    if (href === `https://www.youtube.com/watch?v=${videoId}`) {
+      return htmlResponse(`
+        <html><body><script>
+          var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[
+            {"baseUrl":${JSON.stringify(captionBaseUrl)},"languageCode":"es","name":{"simpleText":"Español"}}
+          ]}}};
+        </script></body></html>
+      `);
+    }
+    if (href.startsWith(captionBaseUrl)) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({
+          events: [
+            { tStartMs: 61000, segs: [{ utf8: 'La seguridad fue mencionada. ' }] },
+            { tStartMs: 122000, segs: [{ utf8: 'Seguridad pública y coordinación. ' }] },
+            { tStartMs: 183000, segs: [{ utf8: `Otra vez seguridad. ${captionFiller}` }] },
+          ],
+        }),
+      };
+    }
+    throw new Error(`unexpected fetch ${href}`);
+  };
+
+  const result = await readMananeraPhraseResult({
+    source: MANANERA_TRANSCRIPT_SOURCE,
+    dateYmd: '2026-08-10',
+    phrase: 'seguridad',
+    op: 'gte',
+    threshold: 2,
+    yesOutcome: 0,
+  }, { fetchImpl, youtubeApiKey: null });
+
+  assert.equal(result.ready, true);
+  assert.equal(result.transcriptSource, MANANERA_YOUTUBE_CAPTIONS_SOURCE);
+  assert.deepEqual(result.requiredMatchTimestamps.map(t => t.label), ['1:01', '2:02']);
+  assert.equal(result.requiredMatchPositions.length, 2);
+  assert.ok(seen.includes(buildMananeraDirectTranscriptUrl('2026-08-10')));
+  assert.ok(seen.some(url => url.startsWith('https://www.youtube.com/feeds/videos.xml')));
 });
 
 test('tries the next same-day YouTube video when the first captions are empty', async () => {

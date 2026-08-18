@@ -330,6 +330,9 @@ export async function resolveAutoResolverCandidate(candidate = {}) {
       firstMatchUrl: transcript.firstMatchUrl || null,
       requiredMatchTimestamps: transcript.requiredMatchTimestamps || [],
       matchTimestamps: transcript.matchTimestamps || [],
+      requiredMatchPositions: transcript.requiredMatchPositions || [],
+      matchPositions: transcript.matchPositions || [],
+      timestampEvidenceUnavailableReason: transcript.timestampEvidenceUnavailableReason || null,
     };
     resolverConfigPatch = {
       transcriptUrl: transcript.transcriptUrl,
@@ -346,6 +349,9 @@ export async function resolveAutoResolverCandidate(candidate = {}) {
       transcriptFirstMatchUrl: transcript.firstMatchUrl || null,
       transcriptRequiredMatchTimestamps: transcript.requiredMatchTimestamps || [],
       transcriptMatchTimestamps: transcript.matchTimestamps || [],
+      transcriptRequiredMatchPositions: transcript.requiredMatchPositions || [],
+      transcriptMatchPositions: transcript.matchPositions || [],
+      transcriptTimestampEvidenceUnavailableReason: transcript.timestampEvidenceUnavailableReason || null,
     };
   } else if (resolverType === 'sports_api') {
     if (!cfg.source || !cfg.shape) {
