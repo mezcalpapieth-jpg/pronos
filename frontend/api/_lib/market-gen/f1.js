@@ -23,6 +23,8 @@ import { fetchWikipediaImage } from '../wikipedia.js';
 import { teamForDriver } from '../f1-grid-2026.js';
 
 const BASE = 'https://api.jolpi.ca/ergast/f1';
+const LOCAL_PEREZ_PORTRAIT = '/f1-headshots/checo-perez-face.png';
+const LOCAL_BOTTAS_PORTRAIT = '/f1-headshots/valtteri-bottas-face.png';
 
 async function fetchJson(path) {
   const res = await fetch(`${BASE}${path}`, { headers: { 'Accept': 'application/json' } });
@@ -131,10 +133,12 @@ function buildDutchGpSideMarkets({
   if (String(season) !== '2026' || !isDutchGrandPrix(raceName)) return [];
 
   const perezImage = portraitByDriverId.get('perez')
+    || LOCAL_PEREZ_PORTRAIT
     || imageByDriverId.get('perez')
     || imageByTeamKey.get('cadillac')
     || null;
   const bottasImage = portraitByDriverId.get('bottas')
+    || LOCAL_BOTTAS_PORTRAIT
     || imageByDriverId.get('bottas')
     || imageByTeamKey.get('cadillac')
     || null;

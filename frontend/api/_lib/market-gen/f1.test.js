@@ -63,3 +63,18 @@ test('Dutch GP side markets only emit for the 2026 Dutch race', () => {
     endTime: '2027-08-22T15:00:00.000Z',
   }), []);
 });
+
+test('Checo vs Bottas head-to-head has local portraits without upstream images', () => {
+  const specs = _internal.buildDutchGpSideMarkets({
+    season: '2026',
+    round: '12',
+    raceName: 'Dutch Grand Prix',
+    startTime: '2026-08-23T13:00:00.000Z',
+    endTime: '2026-08-23T15:00:00.000Z',
+  });
+
+  assert.deepEqual(specs[0].outcome_images, [
+    '/f1-headshots/checo-perez-face.png',
+    '/f1-headshots/valtteri-bottas-face.png',
+  ]);
+});

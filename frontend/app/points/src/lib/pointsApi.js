@@ -767,14 +767,15 @@ export async function adminBulkHideMarkets({
   });
 }
 
-// ─── Admin — edit market (question + timing + category + parallel reserves) ─
-export async function adminEditMarket({ marketId, question, startTime, endTime, category, parallelLegs }) {
+// ─── Admin — edit market (question + timing + category + logos + parallel reserves) ─
+export async function adminEditMarket({ marketId, question, startTime, endTime, category, outcomeImages, parallelLegs }) {
   return postJson('/api/points/admin/edit-market', {
     marketId,
     question,
     startTime,
     endTime,
     category,
+    outcomeImages,
     parallelLegs,
   });
 }

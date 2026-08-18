@@ -1,6 +1,6 @@
 /**
  * POST /api/points/admin/edit-market
- * Body: { marketId, question?, startTime?, endTime?, category?, parallelLegs? }
+ * Body: { marketId, question?, startTime?, endTime?, category?, outcomeImages?, parallelLegs? }
  *
  * Admin-only. Updates the editable fields of a points market:
  *   - question: the user-facing title
@@ -8,6 +8,7 @@
  *   - end_time: the trading/resolution deadline (ISO-8601 string or
  *               epoch ms)
  *   - category: display bucket (deportes, politica, etc.)
+ *   - outcome_images: outcome-aligned logo/headshot URLs
  *
  * Only non-null/undefined fields are applied. For active parallel parent
  * markets, admins may also repair child-leg binary reserves. This moves the
@@ -39,6 +40,16 @@ function parseJsonb(value, fallback) {
   if (value && typeof value === 'object') return value;
   if (typeof value !== 'string') return fallback;
   try { return JSON.parse(value); } catch { return fallback; }
+}
+
+function cleanOptionalImageRef(value) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  if (/^https?:\/\//i.test(text)) return text.slice(0, 1000);
+  if (/^\/[a-z0-9][a-z0-9/_\-.%]*$/i.test(text) && !text.includes('..')) {
+    return text.slice(0, 1000);
+  }
+  return null;
 }
 
 function cleanReserve(value) {
@@ -80,7 +91,13 @@ export default async function handler(req, res) {
     const session = requirePointsAdmin(req, res);
     if (!session) return; // 401/403 already sent
 
-    const { marketId, question, startTime, endTime, category, parallelLegs } = req.body || {};
+    const body = req.body || {};
+    const { marketId, question, startTime, endTime, category, parallelLegs } = body;
+    const hasOutcomeImagesPatch = Object.prototype.hasOwnProperty.call(body, 'outcomeImages')
+      || Object.prototype.hasOwnProperty.call(body, 'outcome_images');
+    const rawOutcomeImages = hasOutcomeImagesPatch
+      ? (body.outcomeImages ?? body.outcome_images)
+      : null;
     const mid = parseInt(marketId, 10);
     if (!Number.isInteger(mid) || mid <= 0) {
       return res.status(400).json({ error: 'invalid_market_id' });
@@ -130,6 +147,7 @@ export default async function handler(req, res) {
 
     const existingRows = await sql`
       SELECT id, question, category, start_time, end_time, sport, league,
+             outcomes, outcome_images,
              resolver_type, resolver_config, category_tags, geo_tags, topic_tags,
              status, amm_mode, parent_id, seed_liquidity
       FROM points_markets
@@ -140,6 +158,17 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'market_not_found' });
     }
     const existing = existingRows[0];
+    const existingOutcomes = parseJsonb(existing.outcomes, ['Sí', 'No']);
+    let nextOutcomeImages = null;
+    if (hasOutcomeImagesPatch) {
+      if (!Array.isArray(rawOutcomeImages)) {
+        return res.status(400).json({ error: 'invalid_outcome_images' });
+      }
+      if (rawOutcomeImages.length !== existingOutcomes.length) {
+        return res.status(400).json({ error: 'outcome_images_length_mismatch' });
+      }
+      nextOutcomeImages = rawOutcomeImages.map(cleanOptionalImageRef);
+    }
     const syncedMananera = syncMananeraPhraseFromQuestion({
       question: nextQuestion ?? existing.question,
       resolverConfig: parseJsonb(existing.resolver_config, null),
@@ -155,6 +184,7 @@ export default async function handler(req, res) {
       && nextStartTime === null
       && nextEndTime === null
       && nextCategory === null
+      && !hasOutcomeImagesPatch
       && nextParallelLegs === null
       && !resolverConfigChanged
     ) {
@@ -203,6 +233,13 @@ export default async function handler(req, res) {
         UPDATE points_markets
         SET category = ${nextCategory}
         WHERE id = ${mid} OR parent_id = ${mid}
+      `;
+    }
+    if (hasOutcomeImagesPatch) {
+      await sql`
+        UPDATE points_markets
+        SET outcome_images = ${JSON.stringify(nextOutcomeImages)}::jsonb
+        WHERE id = ${mid}
       `;
     }
     if (nextQuestion !== null || nextCategory !== null) {
@@ -312,7 +349,7 @@ export default async function handler(req, res) {
     }
 
     const rows = await sql`
-      SELECT id, question, category, start_time, end_time, status, outcome, outcomes, amm_mode
+      SELECT id, question, category, start_time, end_time, status, outcome, outcomes, outcome_images, amm_mode
       FROM points_markets
       WHERE id = ${mid}
       LIMIT 1
@@ -329,6 +366,7 @@ export default async function handler(req, res) {
         status: r.status,
         outcome: r.outcome,
         outcomes: r.outcomes,
+        outcomeImages: r.outcome_images,
         ammMode: r.amm_mode || 'unified',
       },
     });

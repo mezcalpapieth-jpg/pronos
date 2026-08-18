@@ -3227,8 +3227,15 @@ function AppendParallelOutcomesModal({ market, onClose, onSaved }) {
 }
 
 function EditMarketModal({ market, onClose, onSaved, onCancel }) {
+  const editOutcomes = Array.isArray(market.outcomes) && market.outcomes.length > 0
+    ? market.outcomes
+    : ['Sí', 'No'];
+  const initialOutcomeImages = Array.isArray(market.outcomeImages) && market.outcomeImages.length === editOutcomes.length
+    ? market.outcomeImages.map(url => url || '')
+    : editOutcomes.map(() => '');
   const [question, setQuestion] = useState(market.question || '');
   const [category, setCategory] = useState(market.category || 'general');
+  const [outcomeImages, setOutcomeImages] = useState(initialOutcomeImages);
   const initialParallelReserveRows = normalizeParallelReserveRows(market);
   const [parallelReserveRows, setParallelReserveRows] = useState(initialParallelReserveRows);
   // Split date + time into three plain inputs so format is stable
@@ -3251,6 +3258,7 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
   const initialEndHour = isoToHourPart(market.endTime);
   const initialEndMinute = isoToMinutePart(market.endTime);
   const initialCategory = market.category || 'general';
+  const canEditOutcomeImages = editOutcomes.length >= 2;
   const canEditParallelReserves = market.ammMode === 'parallel' && initialParallelReserveRows.length > 0;
 
   function normalizeEditedIso(dateValue, hourValue, minuteValue, initialDateValue, initialHourValue, initialMinuteValue, label) {
@@ -3275,6 +3283,10 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
     setParallelReserveRows(prev => prev.map(row => (
       row.id === rowId ? { ...row, [field]: value } : row
     )));
+  }
+
+  function updateOutcomeImage(index, value) {
+    setOutcomeImages(prev => prev.map((url, i) => (i === index ? value : url)));
   }
 
   async function save() {
@@ -3319,6 +3331,14 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
       return;
     }
 
+    let outcomeImagePatch;
+    if (canEditOutcomeImages) {
+      const cleanedImages = editOutcomes.map((_, i) => String(outcomeImages[i] || '').trim());
+      const initialImages = initialOutcomeImages.map(url => String(url || '').trim());
+      const imagesChanged = cleanedImages.some((url, i) => url !== initialImages[i]);
+      if (imagesChanged) outcomeImagePatch = cleanedImages;
+    }
+
     let parallelLegPatches;
     if (canEditParallelReserves) {
       const initialById = new Map(initialParallelReserveRows.map(row => [row.id, row]));
@@ -3354,6 +3374,7 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
         startTime: nextStart.value,
         endTime: nextEnd.value,
         category: category !== initialCategory ? category : undefined,
+        outcomeImages: outcomeImagePatch,
         parallelLegs: parallelLegPatches,
       });
       await onSaved?.();
@@ -3396,7 +3417,7 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
       }}
     >
       <div style={{
-        width: canEditParallelReserves ? 'min(760px, 100%)' : 'min(480px, 100%)',
+        width: (canEditParallelReserves || canEditOutcomeImages) ? 'min(760px, 100%)' : 'min(480px, 100%)',
         maxHeight: 'calc(100vh - 48px)',
         overflowY: 'auto',
         background: 'var(--surface1)',
@@ -3464,6 +3485,59 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
             <option key={c.key} value={c.key}>{c.label}</option>
           ))}
         </select>
+
+        {canEditOutcomeImages && (
+          <div style={{
+            border: '1px solid rgba(255, 90, 0, 0.22)',
+            background: 'rgba(255, 90, 0, 0.05)',
+            borderRadius: 10,
+            padding: 12,
+            marginBottom: 14,
+          }}>
+            <div style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              color: 'var(--orange)',
+              letterSpacing: '0.12em',
+              textTransform: 'uppercase',
+              marginBottom: 8,
+            }}>
+              Logos de opciones
+            </div>
+            <div style={{ display: 'grid', gap: 8 }}>
+              {editOutcomes.map((outcome, i) => (
+                <div
+                  key={`${outcome}-${i}`}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(140px, 0.8fr) minmax(220px, 1.2fr)',
+                    gap: 8,
+                    alignItems: 'center',
+                  }}
+                >
+                  <div style={{
+                    minWidth: 0,
+                    color: 'var(--text-primary)',
+                    fontFamily: 'var(--font-body)',
+                    fontSize: 13,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}>
+                    {outcome}
+                  </div>
+                  <input
+                    value={outcomeImages[i] || ''}
+                    onChange={(e) => updateOutcomeImage(i, e.target.value)}
+                    placeholder="Logo URL opcional"
+                    style={{ ...inputStyle, minWidth: 0 }}
+                    aria-label={`Logo URL ${outcome}`}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
           Fecha de inicio

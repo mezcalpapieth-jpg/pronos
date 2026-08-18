@@ -78,6 +78,7 @@ test('outcome logos fall back to initials when a supplied image fails', () => {
   for (const text of [detailSource, marketCardSource]) {
     assert.match(text, /function outcomeInitials\(label\)/);
     assert.match(text, /const \[failed, setFailed\] = useState\(false\)/);
+    assert.match(text, /pointsPublicAssetSrc\(src\)/);
     assert.match(text, /onError=\{\(\) => setFailed\(true\)\}/);
     assert.match(text, /outcomeInitials\(label\)/);
     assert.doesNotMatch(text, /style\.display = 'none'/);

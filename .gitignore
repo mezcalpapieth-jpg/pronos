@@ -11,6 +11,7 @@ contracts/broadcast/
 # Claude Code — entire dir is personal config (worktrees, commands, hooks,
 # settings). MCP server wiring + the project-context file are personal too.
 .claude/
+.hermes/
 .mcp.json
 CLAUDE.md
 

@@ -29,6 +29,7 @@ import { useT } from '@app/lib/i18n.js';
 import { findTeamByName, teamProfilePath } from '@app/lib/teamProfiles.js';
 import { marketInterestPayload, teamInterestPayload, trackInterest } from '@app/lib/interest.js';
 import { soccerMatchTypeLabel } from '@app/lib/soccerMarketType.js';
+import { pointsPublicAssetSrc } from '@app/lib/publicAssets.js';
 import PointsBuyModal from './PointsBuyModal.jsx';
 
 const STAKE_PREVIEW = 100; // MXNP reference stake for the card payout preview
@@ -97,7 +98,7 @@ function OutcomeLogo({ src, label }) {
   }
   return (
     <img
-      src={src}
+      src={pointsPublicAssetSrc(src)}
       alt=""
       style={{
         width: 26,

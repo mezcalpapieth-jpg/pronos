@@ -18,6 +18,15 @@ test('active api-price market edits sync threshold and operator from question', 
   assert.match(source, /const nextResolverConfig = syncedApiPrice\.resolverConfig \|\| null/);
 });
 
+test('active market edit persists outcome image refs', () => {
+  assert.match(source, /outcomeImages\?/);
+  assert.match(source, /cleanOptionalImageRef/);
+  assert.match(source, /hasOutcomeImagesPatch/);
+  assert.match(source, /outcome_images_length_mismatch/);
+  assert.match(source, /SET outcome_images = \$\{JSON\.stringify\(nextOutcomeImages\)\}::jsonb/);
+  assert.match(source, /outcomeImages: r\.outcome_images/);
+});
+
 test('active parallel market edits can repair child reserves', () => {
   assert.match(source, /normalizeParallelLegPatches/);
   assert.match(source, /parallelLegs/);

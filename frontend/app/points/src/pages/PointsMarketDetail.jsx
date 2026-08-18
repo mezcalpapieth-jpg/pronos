@@ -54,6 +54,7 @@ import {
   cryptoMarketSequenceSignature,
 } from '../lib/cryptoMarketHub.js';
 import { marketInterestPayload, trackInterest } from '@app/lib/interest.js';
+import { pointsPublicAssetSrc } from '@app/lib/publicAssets.js';
 import { emitPointsRefresh } from '../lib/pointsLiveRefresh.js';
 import { isVideoDemoActive, videoDemoPollMs } from '../demo/demoFlag.js';
 
@@ -646,7 +647,7 @@ function OutcomeLogo({ src, label, size = 28 }) {
   }
   return (
     <img
-      src={src}
+      src={pointsPublicAssetSrc(src)}
       alt=""
       style={{
         width: size,

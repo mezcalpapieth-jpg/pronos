@@ -283,6 +283,7 @@ export default async function handler(req, res) {
         category: r.category,
         icon: null,
         outcomes,
+        outcomeImages: parseJsonb(r.outcome_images, null),
         reserves: parseJsonb(r.reserves, []).map(Number),
         seedLiquidity: Number(r.seed_liquidity || 0),
         parallelLegs: r.amm_mode === 'parallel'

@@ -178,15 +178,20 @@ test('Points admin can convert UFC parallel markets without current exposure to 
   assert.match(apiSource, /\/api\/points\/admin\/convert-parallel-binary/);
 });
 
-test('Points admin can repair active parallel market reserves', () => {
+test('Points admin can edit active market logos and repair active parallel market reserves', () => {
   assert.match(source, /normalizeParallelReserveRows/);
   assert.match(source, /parallelYesProbabilityFromReserves/);
+  assert.match(source, /Logos de opciones/);
+  assert.match(source, /initialOutcomeImages/);
+  assert.match(source, /updateOutcomeImage/);
+  assert.match(source, /outcomeImages:\s*outcomeImagePatch/);
   assert.match(source, /Reservas Sí\/No/);
   assert.match(source, /Reserva Sí/);
   assert.match(source, /Reserva No/);
   assert.match(source, /Más reserva No = Sí más alto/);
   assert.match(source, /parallelLegs:\s*parallelLegPatches/);
-  assert.match(apiSource, /adminEditMarket\(\{ marketId, question, startTime, endTime, category, parallelLegs \}\)/);
+  assert.match(apiSource, /adminEditMarket\(\{ marketId, question, startTime, endTime, category, outcomeImages, parallelLegs \}\)/);
+  assert.match(apiSource, /outcomeImages/);
   assert.match(apiSource, /parallelLegs/);
 });
 
