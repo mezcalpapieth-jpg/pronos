@@ -1,19 +1,18 @@
 /**
  * ESPN-backed soccer generator for Liga MX, MLS, Leagues Cup,
- * international friendlies, and selected club friendlies.
+ * international friendlies, and club friendlies.
  *
  * Why not football-data.org: Liga MX and MLS are both paywalled on
- * their free tier, and the user specifically wants Liga MX (all
- * matches) and MLS (Inter Miami). ESPN's soccer scoreboard is a
+ * their free tier, and the user specifically wants Liga MX/MLS coverage.
+ * ESPN's soccer scoreboard is a
  * keyless public JSON API with the same shape we use for MLB/NBA.
  *
  * Scope:
  *   - `mex.1` (Liga MX): every scheduled game inside the 14-day window
- *   - `usa.1` (MLS): filtered to a team whitelist. Today: Inter Miami
- *     only. Expand the MLS_WHITELIST constant to pick up more clubs.
+ *   - `usa.1` (MLS): every scheduled game inside the 14-day window
  *   - `concacaf.leagues.cup` (Leagues Cup): all scheduled games
  *   - `fifa.friendly` (international friendlies): all scheduled games
- *   - `club.friendly` (club friendlies): games involving tracked clubs
+ *   - `club.friendly` (club friendlies): every scheduled game in the feed
  *
  * Outcome shape: regular league/friendly fixtures are 3-way W/D/L.
  * Leagues Cup is binary because knockout-style tournament games must
@@ -23,8 +22,8 @@
 const BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer';
 const HORIZON_DAYS = 14;
 
-// MLS team whitelist — matches ESPN's displayName exactly. Add more
-// teams here to auto-include their MLS fixtures in the queue.
+// Legacy whitelists kept for tests/manual reference. Generation no longer
+// filters by team: every event in the fetched ESPN feeds enters pending.
 const MLS_WHITELIST = new Set([
   'Inter Miami CF',
 ]);
@@ -90,7 +89,6 @@ const ESPN_SOCCER_LEAGUES = [
     league: 'mls',
     leagueLabel: 'MLS',
     outcomeShape: 'draw3',
-    whitelist: MLS_WHITELIST,
   },
   {
     leagueCode: 'concacaf.leagues.cup',
@@ -113,7 +111,6 @@ const ESPN_SOCCER_LEAGUES = [
     leagueLabel: 'Club Friendly',
     outcomeShape: 'draw3',
     matchTypeLabel: 'AMISTOSO',
-    whitelist: CLUB_FRIENDLY_WHITELIST,
   },
 ];
 

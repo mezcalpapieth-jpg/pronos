@@ -7,6 +7,7 @@ import {
   readEspnEvent,
   readEspnMmaWinner,
   readEspnPgaWinner,
+  readJolpicaF1Result,
 } from './sports-results.js';
 
 function jsonResponse(body, ok = true, status = 200) {
@@ -418,6 +419,63 @@ test('readEspnPgaWinner exposes only clearly eliminated golfers before completio
       label: 'Rory McIlroy',
       reason: 'cut',
     }]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('readJolpicaF1Result keeps race classifications for side markets', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    assert.match(String(url), /ergast\/f1\/2026\/12\/results\.json/);
+    return jsonResponse({
+      MRData: {
+        RaceTable: {
+          Races: [{
+            Results: [
+              {
+                position: '1',
+                positionOrder: '1',
+                points: '25',
+                Driver: { driverId: 'max_verstappen', givenName: 'Max', familyName: 'Verstappen' },
+                Constructor: { constructorId: 'red_bull', name: 'Red Bull Racing' },
+              },
+              {
+                position: '9',
+                positionOrder: '9',
+                points: '2',
+                Driver: { driverId: 'perez', givenName: 'Sergio', familyName: 'Pérez' },
+                Constructor: { constructorId: 'cadillac', name: 'Cadillac' },
+              },
+              {
+                position: '13',
+                positionOrder: '13',
+                points: '0',
+                Driver: { driverId: 'bottas', givenName: 'Valtteri', familyName: 'Bottas' },
+                Constructor: { constructorId: 'cadillac', name: 'Cadillac' },
+              },
+            ],
+          }],
+        },
+      },
+    });
+  };
+
+  try {
+    const result = await readJolpicaF1Result({ season: '2026', round: '12' });
+
+    assert.equal(result.completed, true);
+    assert.equal(result.winnerDriverId, 'max_verstappen');
+    assert.deepEqual(result.classifications.map(row => ({
+      driverId: row.driverId,
+      positionOrder: row.positionOrder,
+      points: row.points,
+      constructorId: row.constructorId,
+    })), [
+      { driverId: 'max_verstappen', positionOrder: 1, points: 25, constructorId: 'red_bull' },
+      { driverId: 'perez', positionOrder: 9, points: 2, constructorId: 'cadillac' },
+      { driverId: 'bottas', positionOrder: 13, points: 0, constructorId: 'cadillac' },
+    ]);
   } finally {
     globalThis.fetch = originalFetch;
   }

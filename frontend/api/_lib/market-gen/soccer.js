@@ -1,10 +1,9 @@
 /**
  * Soccer market generator — football-data.org client.
  *
- * Returns an array of market specs for upcoming matches involving the
- * user-defined team whitelist, plus every fixture for selected continental
- * cups: UEFA Champions League, UEFA Europa League, UEFA Conference League,
- * and Copa Libertadores.
+ * Returns an array of market specs for every upcoming match in the fetched
+ * competitions: UEFA Champions League, UEFA Europa League, UEFA Conference
+ * League, Copa Libertadores, La Liga, Premier League, Serie A, and Bundesliga.
  * Only fixtures within the next `horizonDays` (default 14) are returned,
  * and only those with status=SCHEDULED (so finished/live matches don't
  * show up as "pending to create").
@@ -17,9 +16,10 @@
  *   EL  — UEFA Europa League
  *   UCL — UEFA Conference League
  *   CLI — Copa Libertadores
- *   PD  — La Liga (Real Madrid, Barcelona, Atlético)
- *   PL  — Premier League (Arsenal, Chelsea, Man City, Man United)
- *   SA  — Serie A (Juventus, AC Milan)
+ *   PD  — La Liga
+ *   PL  — Premier League
+ *   SA  — Serie A
+ *   BL1 — Bundesliga
  *
  * NOT in free tier (deferred to another source):
  *   Liga MX (Mexico) · MLS (Inter Miami). TheSportsDB covers both for
@@ -27,10 +27,8 @@
  *   without touching the caller.
  */
 
-// Team TLA (three-letter acronym, football-data.org's stable identifier)
-// whitelist. Markets are generated for any fixture where either home or
-// away team is in this set. TLA is preferable to name matching because
-// names can vary ("Manchester United FC" vs "Man United").
+// Legacy team TLA set kept for admin/reference tooling. Generation no longer
+// filters by team: every fixture in the fetched competitions enters pending.
 const TEAM_TLA_WHITELIST = new Set([
   'RMA',   // Real Madrid
   'FCB',   // Barcelona
@@ -50,10 +48,33 @@ const TEAM_TLA_WHITELIST = new Set([
   'RAY',   // Rayo Vallecano
 ]);
 
-// Competition codes to pull. Continental cups are always included; domestic
-// leagues are scanned and filtered to the team whitelist.
-const COMPETITIONS_ALL_FIXTURES = ['CL', 'EL', 'UCL', 'CLI'];
-const COMPETITIONS_TEAM_FILTER  = ['PD', 'PL', 'SA', 'BL1'];
+// Team-specific supplement for attractive clubs whose matches can live
+// outside the configured league feeds (supercups, standalone finals, etc).
+// football-data team IDs are stable and let us chase the club calendar
+// directly in addition to the competition-wide pulls.
+const TEAM_MATCH_SUPPLEMENT_IDS = [
+  { id: 86,  tla: 'RMA', name: 'Real Madrid' },
+  { id: 81,  tla: 'FCB', name: 'Barcelona' },
+  { id: 78,  tla: 'ATL', name: 'Atlético Madrid' },
+  { id: 57,  tla: 'ARS', name: 'Arsenal' },
+  { id: 58,  tla: 'AVL', name: 'Aston Villa' },
+  { id: 61,  tla: 'CHE', name: 'Chelsea' },
+  { id: 354, tla: 'CRY', name: 'Crystal Palace' },
+  { id: 65,  tla: 'MCI', name: 'Manchester City' },
+  { id: 66,  tla: 'MUN', name: 'Manchester United' },
+  { id: 109, tla: 'JUV', name: 'Juventus' },
+  { id: 98,  tla: 'MIL', name: 'AC Milan' },
+  { id: 5,   tla: 'BAY', name: 'Bayern Munich' },
+  { id: 4,   tla: 'BVB', name: 'Borussia Dortmund' },
+  { id: 3,   tla: 'B04', name: 'Bayer Leverkusen' },
+  { id: 17,  tla: 'SCF', name: 'Freiburg' },
+  { id: 87,  tla: 'RAY', name: 'Rayo Vallecano' },
+];
+
+// Competition codes to pull. Everything listed here imports every scheduled
+// fixture inside the window; admin approval is the curation layer.
+const COMPETITIONS_ALL_FIXTURES = ['CL', 'EL', 'UCL', 'CLI', 'PD', 'PL', 'SA', 'BL1'];
+const COMPETITIONS_TEAM_FILTER  = [];
 
 // Map football-data competition code → canonical league slug used by
 // the frontend sidebar. Keep in sync with the slugs used in
@@ -248,6 +269,22 @@ async function fetchCompetitionMatches(apiKey, competitionCode, dateFrom, dateTo
   }
 }
 
+async function fetchTeamMatches(apiKey, team, dateFrom, dateTo) {
+  const url = `${API_BASE}/teams/${team.id}/matches`
+    + `?dateFrom=${dateFrom}&dateTo=${dateTo}&status=SCHEDULED`;
+  try {
+    const data = await fetchJson(url, apiKey);
+    return Array.isArray(data?.matches) ? data.matches : [];
+  } catch (e) {
+    console.error('[market-gen/soccer] team fetch failed', {
+      team: team?.name || team?.id,
+      message: e?.message,
+      status: e?.status,
+    });
+    return [];
+  }
+}
+
 /**
  * Build the primary match-winner market spec from a football-data.org match object.
  * Shape matches points_pending_markets columns so the caller can insert
@@ -270,7 +307,9 @@ function matchToMarketSpec(match, competitionCode) {
   // benign-skips until football-data returns status=FINISHED, so the
   // end_time is just the hard close if the results feed stalls.
   const kickoffMs = new Date(kickoffUtc).getTime();
-  const winnerOnly = isOneLeggedCupFinal(match, competitionCode);
+  const supplementalFinal = match?._teamSupplement === true
+    && String(match?.stage || match?.group || '').trim().toUpperCase().replace(/[\s-]+/g, '_') === 'FINAL';
+  const winnerOnly = isOneLeggedCupFinal(match, competitionCode) || supplementalFinal;
   const manualResolution = match?.manualResolution === true;
   const matchTypeLabel = TOURNAMENT_COMPETITIONS.has(competitionCode) ? 'TORNEO' : null;
   const startTime = new Date(kickoffMs).toISOString();
@@ -409,7 +448,7 @@ export async function generateSoccerMarkets({ horizonDays = 14 } = {}) {
   const seenMatchIds = new Set();
   const specs = [];
 
-  // UCL — every fixture in-window
+  // Every fixture in-window for each configured competition.
   for (const code of COMPETITIONS_ALL_FIXTURES) {
     let matches = await fetchCompetitionMatches(apiKey, code, dateFrom, dateTo);
     if (matches.length === 0) {
@@ -422,16 +461,16 @@ export async function generateSoccerMarkets({ horizonDays = 14 } = {}) {
     }
   }
 
-  // Team-filtered leagues — only whitelisted clubs
-  for (const code of COMPETITIONS_TEAM_FILTER) {
-    const matches = await fetchCompetitionMatches(apiKey, code, dateFrom, dateTo);
-    for (const m of matches) {
-      if (seenMatchIds.has(m.id)) continue;
-      const homeTla = m?.homeTeam?.tla;
-      const awayTla = m?.awayTeam?.tla;
-      if (!TEAM_TLA_WHITELIST.has(homeTla) && !TEAM_TLA_WHITELIST.has(awayTla)) continue;
-      seenMatchIds.add(m.id);
-      specs.push(...matchToMarketSpecs(m, code));
+  // Supplemental team-calendar pass. This catches standalone finals
+  // such as Bayern vs Dortmund even when their competition is not one
+  // of the league codes we pull above.
+  for (const team of TEAM_MATCH_SUPPLEMENT_IDS) {
+    const matches = await fetchTeamMatches(apiKey, team, dateFrom, dateTo);
+    for (const rawMatch of matches) {
+      if (seenMatchIds.has(rawMatch.id)) continue;
+      seenMatchIds.add(rawMatch.id);
+      const code = String(rawMatch?.competition?.code || rawMatch?.competition?.id || `team-${team.id}`);
+      specs.push(...matchToMarketSpecs({ ...rawMatch, _teamSupplement: true }, code));
     }
   }
 
@@ -441,6 +480,7 @@ export async function generateSoccerMarkets({ horizonDays = 14 } = {}) {
 // Exported for tests / unit introspection
 export const _internal = {
   TEAM_TLA_WHITELIST,
+  TEAM_MATCH_SUPPLEMENT_IDS,
   COMPETITIONS_ALL_FIXTURES,
   COMPETITIONS_TEAM_FILTER,
   TOURNAMENT_COMPETITIONS,

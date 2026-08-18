@@ -1113,6 +1113,23 @@ export async function readJolpicaF1Result({ season, round }) {
   const results = race?.Results || [];
   const p1 = results.find(r => String(r.position) === '1');
   if (!p1) return { completed: false, winner: null };
+  const classifications = results.map((r) => {
+    const drv = r?.Driver || {};
+    const constructor = r?.Constructor || {};
+    const label = `${drv.givenName || ''} ${drv.familyName || ''}`.trim();
+    const position = Number(r?.position);
+    const positionOrder = Number(r?.positionOrder ?? r?.position);
+    const points = Number(r?.points ?? 0);
+    return {
+      position: Number.isFinite(position) ? position : null,
+      positionOrder: Number.isFinite(positionOrder) ? positionOrder : null,
+      points: Number.isFinite(points) ? points : 0,
+      driverId: drv.driverId || null,
+      driverLabel: label || null,
+      constructorId: constructor.constructorId || null,
+      constructorLabel: constructor.name || null,
+    };
+  });
   const drv = p1.Driver || {};
   const label = `${drv.givenName || ''} ${drv.familyName || ''}`.trim();
   return {
@@ -1120,5 +1137,6 @@ export async function readJolpicaF1Result({ season, round }) {
     winner: 'p1',
     winnerDriverId: drv.driverId || null,
     winnerDriverLabel: label,
+    classifications,
   };
 }

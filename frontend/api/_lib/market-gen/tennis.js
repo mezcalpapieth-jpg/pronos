@@ -147,24 +147,24 @@ function sortEntrants(a, b) {
     || String(a.name || '').localeCompare(String(b.name || ''));
 }
 
-function heuristicTournamentProbabilities(field, fullFieldSize) {
+function heuristicTournamentProbabilities(field, fullFieldSize, { includeOther = true } = {}) {
   const listedCount = field.length;
   if (listedCount <= 0) return [];
   const totalField = Math.max(Number(fullFieldSize) || listedCount, listedCount);
   const remainingCount = Math.max(0, totalField - listedCount);
-  const otherProbability = remainingCount > 0
-    ? Math.min(0.5, Math.max(0.16, (remainingCount / totalField) * 0.55))
-    : 0.04;
+  const otherProbability = includeOther
+    ? (remainingCount > 0
+      ? Math.min(0.5, Math.max(0.16, (remainingCount / totalField) * 0.55))
+      : 0.04)
+    : 0;
   const listedMass = 1 - otherProbability;
   const weights = field.map((player, index) => {
     const strength = player.seed ?? player.rank ?? fieldPriority(player) ?? index + 1;
     return 1 / Math.pow(Math.max(1, Number(strength) || index + 1), 0.82);
   });
   const totalWeight = weights.reduce((sum, value) => sum + value, 0) || listedCount;
-  return [
-    ...weights.map(weight => (weight / totalWeight) * listedMass),
-    otherProbability,
-  ];
+  const probabilities = weights.map(weight => (weight / totalWeight) * listedMass);
+  return includeOther ? [...probabilities, otherProbability] : probabilities;
 }
 
 function eventCompetitions(event) {
@@ -184,6 +184,49 @@ function eventCanEmitHeadToHeads(event) {
 function competitionCanEmitHeadToHead(competition) {
   const state = statusState(competition);
   return !state || state === 'pre';
+}
+
+function competitionCompleted(competition) {
+  return Boolean(competition?.status?.type?.completed) || statusState(competition) === 'post';
+}
+
+function entrantKey(entrant) {
+  return entrant?.id ? `id:${entrant.id}` : `name:${normalizeName(entrant?.name)}`;
+}
+
+function collectCompetitionEntrants(competitions, predicate = () => true) {
+  const entrants = new Map();
+  let order = 0;
+  for (const competition of competitions) {
+    if (!predicate(competition)) continue;
+    for (const competitor of Array.isArray(competition?.competitors) ? competition.competitors : []) {
+      const entrant = tennisCompetitorToEntrant(competitor, order++);
+      if (!entrant) continue;
+      const key = entrantKey(entrant);
+      entrants.set(key, mergeEntrant(entrants.get(key), entrant));
+    }
+  }
+  return Array.from(entrants.values()).sort(sortEntrants);
+}
+
+function extractCompletedMatchLoserKeys(competitions) {
+  const eliminated = new Set();
+  for (const competition of competitions) {
+    if (!competitionCompleted(competition)) continue;
+    const competitors = Array.isArray(competition?.competitors) ? competition.competitors : [];
+    const winner = competitors.find(competitor => competitor?.winner === true);
+    if (!winner) continue;
+    for (const competitor of competitors) {
+      if (!competitor || competitor === winner || competitor?.winner === true) continue;
+      const entrant = tennisCompetitorToEntrant(competitor, 0);
+      if (entrant) eliminated.add(entrantKey(entrant));
+    }
+  }
+  return eliminated;
+}
+
+function eventHasUnresolvedMensSinglesMatches(event) {
+  return eventCompetitions(event).some(competition => !competitionCompleted(competition));
 }
 
 function headToHeadCompetitors(competition) {
@@ -255,18 +298,94 @@ export function extractAtpMensSinglesField(event) {
   const mens = groupings.find(tennisGroupingIsMensSingles);
   if (!mens) return [];
 
-  const entrants = new Map();
-  let order = 0;
-  for (const competition of Array.isArray(mens.competitions) ? mens.competitions : []) {
-    for (const competitor of Array.isArray(competition?.competitors) ? competition.competitors : []) {
-      const entrant = tennisCompetitorToEntrant(competitor, order++);
-      if (!entrant) continue;
-      const key = entrant.id ? `id:${entrant.id}` : `name:${normalizeName(entrant.name)}`;
-      entrants.set(key, mergeEntrant(entrants.get(key), entrant));
-    }
-  }
+  return collectCompetitionEntrants(Array.isArray(mens.competitions) ? mens.competitions : []);
+}
 
-  return Array.from(entrants.values()).sort(sortEntrants);
+export function extractAtpRemainingMensSinglesField(event) {
+  const competitions = eventCompetitions(event);
+  const eliminatedKeys = extractCompletedMatchLoserKeys(competitions);
+  const knownSurvivors = collectCompetitionEntrants(competitions)
+    .filter(entrant => !eliminatedKeys.has(entrantKey(entrant)));
+  if (knownSurvivors.length > 0) return knownSurvivors;
+
+  return collectCompetitionEntrants(competitions, competition => !competitionCompleted(competition));
+}
+
+function buildTournamentMarket(event, field, {
+  startTime,
+  endTime,
+  includeOther,
+  fieldSource,
+  generationStage,
+}) {
+  const eventField = field.slice(0, MAX_FIELD_OUTCOMES).map(player => ({
+    id: player.id,
+    name: player.name,
+    seed: player.seed,
+    rank: player.rank,
+  }));
+  const includeOtherLeg = includeOther || field.length > eventField.length;
+  const suggestedProbabilities = heuristicTournamentProbabilities(eventField, field.length, {
+    includeOther: includeOtherLeg,
+  });
+
+  const legs = [
+    ...eventField.map(p => ({ label: p.name, driverId: p.id })),
+    ...(includeOtherLeg ? [{ label: 'Otro', driverId: null }] : []),
+  ];
+
+  return {
+    source: 'espn-atp-tournament',
+    source_event_id: `atp:${event.id}`,
+    sport: 'tennis',
+    league: 'atp',
+    question: `¿Quién gana el ${event.name}?`,
+    category: 'deportes',
+    icon: '🎾',
+    outcomes: legs.map(l => l.label),
+    outcome_images: [
+      ...eventField.map(p => headshot(p.id)),
+      ...(includeOtherLeg ? [null] : []),
+    ],
+    seed_liquidity: 1000,
+    start_time: startTime,
+    end_time: endTime,
+    amm_mode: 'parallel',
+    // sports_api auto-resolution via espn-atp-tournament reader.
+    // After the tournament ends the cron fetches the event's
+    // Men's Singles Final (round.id='7') and reads the competitor
+    // with winner=true. Player ID match → exact leg; name match
+    // → fallback; "Otro" catches dark horses.
+    resolver_type: 'sports_api',
+    resolver_config: {
+      source: 'espn-atp-tournament',
+      shape: 'parallel',
+      eventId: event.id,
+      legs,
+    },
+    source_data: {
+      eventId: event.id,
+      tournamentName: event.name,
+      startDateIso: event.date,
+      endDateIso: event.endDate || null,
+      isMajor: event.major === true,
+      field: eventField,
+      confirmedFieldSize: field.length,
+      fieldSource,
+      fieldUpdatedAt: new Date().toISOString(),
+      rankingFallbackDisabled: true,
+      listedFieldSize: eventField.length,
+      fieldCap: MAX_FIELD_OUTCOMES,
+      generationStage,
+      suggestedPricing: {
+        source: 'source-signals:tennis-seed-field',
+        probabilities: suggestedProbabilities,
+        rationale: includeOtherLeg
+          ? 'Probabilidad inicial heurística por seed/ranking y masa de Otro para jugadores no listados.'
+          : 'Probabilidad inicial heurística por seed/ranking entre jugadores activos confirmados por ESPN.',
+      },
+    },
+  };
 }
 
 // Top-tier tournament name matchers. ESPN's `event.major === true`
@@ -342,18 +461,18 @@ export async function generateTennisMarkets({ horizonDays = 60 } = {}) {
     const endIso = ev.endDate || ev.date;  // ESPN ships endDate on tournaments
 
     const fullDrawField = extractAtpMensSinglesField(ev);
+    const startMs = new Date(startIso).getTime();
+    const endMs = new Date(endIso).getTime();
+    const hasTournamentWindow = Number.isFinite(startMs) && Number.isFinite(endMs);
+    // Pad 2 days past tournament endDate so a Sunday-evening final
+    // landing on a UTC-boundary edge doesn't strand the market.
+    const paddedEndMs = hasTournamentWindow ? endMs + 2 * 86_400_000 : null;
+    const canEmitTournamentParent = hasTournamentWindow && paddedEndMs >= now.getTime();
+    const preTournamentStartTime = hasTournamentWindow ? new Date(startMs).toISOString() : null;
+    const activeTournamentStartTime = hasTournamentWindow ? new Date(Math.max(startMs, now.getTime())).toISOString() : null;
+    const endTime = hasTournamentWindow ? new Date(paddedEndMs).toISOString() : null;
 
-    if (state === 'pre') {
-      if (!startIso) continue;
-      const startMs = new Date(startIso).getTime();
-      const endMs = new Date(endIso).getTime();
-      if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) continue;
-
-      // Pad 2 days past tournament endDate so a Sunday-evening final
-      // landing on a UTC-boundary edge doesn't strand the market.
-      const startTime = new Date(startMs).toISOString();
-      const endTime = new Date(endMs + 2 * 86_400_000).toISOString();
-
+    if (canEmitTournamentParent && state === 'pre') {
       if (fullDrawField.length < MIN_CONFIRMED_DRAW_PLAYERS) {
         console.warn('[market-gen/tennis] skipped tournament without confirmed draw field', {
           eventId: ev.id,
@@ -361,68 +480,24 @@ export async function generateTennisMarkets({ horizonDays = 60 } = {}) {
           fieldSize: fullDrawField.length,
         });
       } else {
-        const eventField = fullDrawField.slice(0, MAX_FIELD_OUTCOMES).map(player => ({
-          id: player.id,
-          name: player.name,
-          seed: player.seed,
-          rank: player.rank,
+        specs.push(buildTournamentMarket(ev, fullDrawField, {
+          startTime: preTournamentStartTime,
+          endTime,
+          includeOther: true,
+          fieldSource: 'espn-mens-singles-draw',
+          generationStage: 'pre',
         }));
-        const suggestedProbabilities = heuristicTournamentProbabilities(eventField, fullDrawField.length);
-
-        const legs = [
-          ...eventField.map(p => ({ label: p.name, driverId: p.id })),
-          { label: 'Otro', driverId: null },
-        ];
-
-        specs.push({
-          source: 'espn-atp-tournament',
-          source_event_id: `atp:${ev.id}`,
-          sport: 'tennis',
-          league: 'atp',
-          question: `¿Quién gana el ${ev.name}?`,
-          category: 'deportes',
-          icon: '🎾',
-          outcomes: legs.map(l => l.label),
-          outcome_images: [
-            ...eventField.map(p => headshot(p.id)),
-            null, // Otro
-          ],
-          seed_liquidity: 1000,
-          start_time: startTime,
-          end_time: endTime,
-          amm_mode: 'parallel',
-          // sports_api auto-resolution via espn-atp-tournament reader.
-          // After the tournament ends the cron fetches the event's
-          // Men's Singles Final (round.id='7') and reads the competitor
-          // with winner=true. Player ID match → exact leg; name match
-          // → fallback; "Otro" catches dark horses.
-          resolver_type: 'sports_api',
-          resolver_config: {
-            source: 'espn-atp-tournament',
-            shape: 'parallel',
-            eventId: ev.id,
-            legs,
-          },
-          source_data: {
-            eventId: ev.id,
-            tournamentName: ev.name,
-            startDateIso: ev.date,
-            endDateIso: ev.endDate || null,
-            isMajor: ev.major === true,
-            field: eventField,
-            confirmedFieldSize: fullDrawField.length,
-            fieldSource: 'espn-mens-singles-draw',
-            fieldUpdatedAt: new Date().toISOString(),
-            rankingFallbackDisabled: true,
-            listedFieldSize: eventField.length,
-            fieldCap: MAX_FIELD_OUTCOMES,
-            suggestedPricing: {
-              source: 'source-signals:tennis-seed-field',
-              probabilities: suggestedProbabilities,
-              rationale: 'Probabilidad inicial heurística por seed/ranking y masa de Otro para jugadores no listados.',
-            },
-          },
-        });
+      }
+    } else if (canEmitTournamentParent && eventHasUnresolvedMensSinglesMatches(ev)) {
+      const remainingField = extractAtpRemainingMensSinglesField(ev);
+      if (remainingField.length >= 2) {
+        specs.push(buildTournamentMarket(ev, remainingField, {
+          startTime: activeTournamentStartTime,
+          endTime,
+          includeOther: false,
+          fieldSource: 'espn-mens-singles-active-draw',
+          generationStage: state === 'post' ? 'active-espn-post-with-open-matches' : 'active',
+        }));
       }
     }
 

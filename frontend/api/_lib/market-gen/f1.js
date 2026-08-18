@@ -24,7 +24,7 @@
  */
 
 import { fetchWikipediaImage } from '../wikipedia.js';
-import { teamForDriver, CONSTRUCTORS_2026 } from '../f1-grid-2026.js';
+import { teamForDriver } from '../f1-grid-2026.js';
 
 const BASE = 'https://api.jolpi.ca/ergast/f1';
 
@@ -63,6 +63,113 @@ async function fetchCurrentDrivers() {
     console.error('[market-gen/f1] drivers fetch failed', { message: e?.message });
     return [];
   }
+}
+
+function isDutchGrandPrix(raceName) {
+  return /dutch|netherlands|pa[ií]ses bajos/i.test(String(raceName || ''));
+}
+
+function f1BinaryMarket({
+  season,
+  round,
+  raceName,
+  startTime,
+  endTime,
+  suffix,
+  question,
+  resolverConfig,
+  outcomeImage = null,
+}) {
+  return {
+    source: 'jolpica-f1-side',
+    source_event_id: `f1:${season}:${round}:${suffix}`,
+    sport: 'f1',
+    league: 'formula-1',
+    question,
+    category: 'deportes',
+    icon: '🏁',
+    outcomes: ['Sí', 'No'],
+    outcome_images: [outcomeImage, null],
+    seed_liquidity: 1000,
+    start_time: startTime,
+    end_time: endTime,
+    amm_mode: 'unified',
+    resolver_type: 'sports_api',
+    resolver_config: {
+      source: 'jolpica-f1',
+      season,
+      round,
+      ...resolverConfig,
+    },
+    source_data: {
+      season,
+      round,
+      raceName,
+      marketKind: suffix,
+    },
+  };
+}
+
+function buildDutchGpSideMarkets({
+  season,
+  round,
+  raceName,
+  startTime,
+  endTime,
+  imageByDriverId = new Map(),
+  imageByTeamKey = new Map(),
+}) {
+  if (String(season) !== '2026' || !isDutchGrandPrix(raceName)) return [];
+
+  return [
+    f1BinaryMarket({
+      season,
+      round,
+      raceName,
+      startTime,
+      endTime,
+      suffix: 'perez-ahead-bottas',
+      question: '¿Checo Pérez termina delante de Valtteri Bottas en el Dutch GP 2026?',
+      outcomeImage: imageByDriverId.get('perez') || imageByTeamKey.get('cadillac') || null,
+      resolverConfig: {
+        shape: 'driver-ahead',
+        driverAId: 'perez',
+        driverALabel: 'Sergio Pérez',
+        driverBId: 'bottas',
+        driverBLabel: 'Valtteri Bottas',
+      },
+    }),
+    f1BinaryMarket({
+      season,
+      round,
+      raceName,
+      startTime,
+      endTime,
+      suffix: 'verstappen-first-win-home',
+      question: '¿Max Verstappen gana su primera carrera de la temporada en casa?',
+      outcomeImage: imageByDriverId.get('max_verstappen') || imageByTeamKey.get('red-bull') || null,
+      resolverConfig: {
+        shape: 'driver-wins',
+        driverId: 'max_verstappen',
+        driverLabel: 'Max Verstappen',
+      },
+    }),
+    f1BinaryMarket({
+      season,
+      round,
+      raceName,
+      startTime,
+      endTime,
+      suffix: 'perez-first-points',
+      question: '¿Checo Pérez suma sus primeros puntos de la temporada en la carrera del Dutch GP 2026?',
+      outcomeImage: imageByDriverId.get('perez') || imageByTeamKey.get('cadillac') || null,
+      resolverConfig: {
+        shape: 'driver-points',
+        driverId: 'perez',
+        driverLabel: 'Sergio Pérez',
+      },
+    }),
+  ];
 }
 
 export async function generateF1Markets() {
@@ -106,6 +213,8 @@ export async function generateF1Markets() {
   const driverImages = await Promise.all(
     gridDrivers.map(d => resolveTeamLogo(d.teamKey, d.teamWiki)),
   );
+  const imageByDriverId = new Map(gridDrivers.map((d, i) => [d.id, driverImages[i] || null]));
+  const imageByTeamKey = new Map(logoByTeam);
 
   const legs = [
     ...gridDrivers.map(d => ({ label: d.label, driverId: d.id, teamKey: d.teamKey })),
@@ -113,7 +222,7 @@ export async function generateF1Markets() {
   ];
   const outcomeImages = [...driverImages, null];
 
-  return [{
+  const raceWinnerMarket = {
     source: 'jolpica-f1',
     source_event_id: `f1:${season}:${round}`,
     sport: 'f1',
@@ -149,5 +258,24 @@ export async function generateF1Markets() {
         teamLogo: driverImages[i] || null,
       })),
     },
-  }];
+  };
+
+  return [
+    raceWinnerMarket,
+    ...buildDutchGpSideMarkets({
+      season,
+      round,
+      raceName,
+      startTime,
+      endTime,
+      imageByDriverId,
+      imageByTeamKey,
+    }),
+  ];
 }
+
+export const _internal = {
+  buildDutchGpSideMarkets,
+  f1BinaryMarket,
+  isDutchGrandPrix,
+};

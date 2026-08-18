@@ -48,6 +48,15 @@ export function buildAutoResolverFinalScore({
 
   try {
     if (resolverType === 'sports_api') {
+      if ([
+        'driver-wins',
+        'driver-ahead',
+        'driver-podium',
+        'driver-points',
+        'constructor-points',
+      ].includes(cfg.shape)) {
+        return clip(resolverInfo?.detail || winLabel);
+      }
       if (cfg.shape === 'binary' || cfg.shape === 'draw3' || cfg.shape === 'total-goals-over') {
         const home = Number.isFinite(result.homeScore) ? result.homeScore : null;
         const away = Number.isFinite(result.awayScore) ? result.awayScore : null;
@@ -115,6 +124,48 @@ export function buildAutoResolverFinalScore({
   }
 
   return clip(winLabel);
+}
+
+function normalizeF1Name(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/\./g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function sameF1Identity(actualId, actualLabel, expectedId, expectedLabel) {
+  const idNeedle = String(expectedId || '').trim();
+  if (idNeedle && String(actualId || '').trim() === idNeedle) return true;
+  const labelNeedle = normalizeF1Name(expectedLabel);
+  return Boolean(labelNeedle && normalizeF1Name(actualLabel) === labelNeedle);
+}
+
+function findF1DriverClassification(result, { driverId, driverLabel }) {
+  const rows = Array.isArray(result?.classifications) ? result.classifications : [];
+  return rows.find(row => sameF1Identity(
+    row.driverId,
+    row.driverLabel,
+    driverId,
+    driverLabel,
+  )) || null;
+}
+
+function findF1ConstructorClassifications(result, { constructorId, constructorLabel }) {
+  const rows = Array.isArray(result?.classifications) ? result.classifications : [];
+  return rows.filter(row => sameF1Identity(
+    row.constructorId,
+    row.constructorLabel,
+    constructorId,
+    constructorLabel,
+  ));
+}
+
+function f1Position(row) {
+  const pos = Number(row?.positionOrder ?? row?.position);
+  return Number.isFinite(pos) ? pos : null;
 }
 
 export async function resolveAutoResolverCandidate(candidate = {}) {
@@ -472,6 +523,115 @@ export async function resolveAutoResolverCandidate(candidate = {}) {
         throw new Error('total-goals-over sport got missing score/threshold');
       }
       winningIdx = home + away > threshold ? 0 : 1;
+    } else if (cfg.shape === 'driver-wins') {
+      if (!cfg.driverId && !cfg.driverLabel) {
+        throw new Error('driver-wins sport: missing driver identity');
+      }
+      const didWin = sameF1Identity(
+        result.winnerDriverId,
+        result.winnerDriverLabel,
+        cfg.driverId,
+        cfg.driverLabel,
+      );
+      winningIdx = didWin ? 0 : 1;
+      resolverInfo = {
+        source: cfg.source,
+        shape: cfg.shape,
+        winnerDriver: result.winnerDriverLabel ?? null,
+        targetDriver: cfg.driverLabel || cfg.driverId || null,
+        detail: didWin
+          ? `${cfg.driverLabel || cfg.driverId} ganó`
+          : `Ganó ${result.winnerDriverLabel || 'otro piloto'}`,
+      };
+    } else if (cfg.shape === 'driver-ahead') {
+      const a = findF1DriverClassification(result, {
+        driverId: cfg.driverAId,
+        driverLabel: cfg.driverALabel,
+      });
+      const b = findF1DriverClassification(result, {
+        driverId: cfg.driverBId,
+        driverLabel: cfg.driverBLabel,
+      });
+      const aPos = f1Position(a);
+      const bPos = f1Position(b);
+      if (!a || !b || aPos == null || bPos == null) {
+        throw new Error('driver-ahead sport: missing driver classification');
+      }
+      const aAhead = aPos < bPos;
+      winningIdx = aAhead ? 0 : 1;
+      resolverInfo = {
+        source: cfg.source,
+        shape: cfg.shape,
+        driverA: a.driverLabel,
+        driverB: b.driverLabel,
+        positionA: aPos,
+        positionB: bPos,
+        detail: `${a.driverLabel} P${aPos} · ${b.driverLabel} P${bPos}`,
+      };
+    } else if (cfg.shape === 'driver-podium') {
+      if (!cfg.driverId && !cfg.driverLabel) {
+        throw new Error('driver-podium sport: missing driver identity');
+      }
+      const driver = findF1DriverClassification(result, {
+        driverId: cfg.driverId,
+        driverLabel: cfg.driverLabel,
+      });
+      const pos = f1Position(driver);
+      if (!driver || pos == null) {
+        throw new Error('driver-podium sport: missing driver classification');
+      }
+      const podium = pos <= 3;
+      winningIdx = podium ? 0 : 1;
+      resolverInfo = {
+        source: cfg.source,
+        shape: cfg.shape,
+        driver: driver.driverLabel,
+        position: pos,
+        detail: `${driver.driverLabel} P${pos}`,
+      };
+    } else if (cfg.shape === 'driver-points') {
+      if (!cfg.driverId && !cfg.driverLabel) {
+        throw new Error('driver-points sport: missing driver identity');
+      }
+      const driver = findF1DriverClassification(result, {
+        driverId: cfg.driverId,
+        driverLabel: cfg.driverLabel,
+      });
+      if (!driver) {
+        throw new Error('driver-points sport: missing driver classification');
+      }
+      const points = Number(driver.points);
+      if (!Number.isFinite(points)) {
+        throw new Error('driver-points sport: missing points');
+      }
+      winningIdx = points > 0 ? 0 : 1;
+      resolverInfo = {
+        source: cfg.source,
+        shape: cfg.shape,
+        driver: driver.driverLabel,
+        points,
+        detail: `${driver.driverLabel}: ${points} pts`,
+      };
+    } else if (cfg.shape === 'constructor-points') {
+      if (!cfg.constructorId && !cfg.constructorLabel) {
+        throw new Error('constructor-points sport: missing constructor identity');
+      }
+      const rows = findF1ConstructorClassifications(result, {
+        constructorId: cfg.constructorId,
+        constructorLabel: cfg.constructorLabel,
+      });
+      if (rows.length === 0) {
+        throw new Error('constructor-points sport: missing constructor classification');
+      }
+      const totalPoints = rows.reduce((sum, row) => sum + (Number(row.points) || 0), 0);
+      winningIdx = totalPoints > 0 ? 0 : 1;
+      resolverInfo = {
+        source: cfg.source,
+        shape: cfg.shape,
+        constructor: rows[0]?.constructorLabel || cfg.constructorLabel || cfg.constructorId,
+        points: totalPoints,
+        detail: `${rows[0]?.constructorLabel || cfg.constructorLabel || cfg.constructorId}: ${totalPoints} pts`,
+      };
     } else if (cfg.shape === 'parallel') {
       if (!Array.isArray(cfg.legs) || cfg.legs.length === 0) {
         throw new Error('parallel sport: missing cfg.legs');
@@ -496,6 +656,7 @@ export async function resolveAutoResolverCandidate(candidate = {}) {
         : null,
       threshold: cfg.shape === 'total-goals-over' ? Number(cfg.threshold ?? 2.5) : null,
       winnerDriver: result.winnerDriverLabel ?? null,
+      ...resolverInfo,
     };
   } else {
     throw new Error(`unknown resolver_type: ${resolverType}`);

@@ -72,7 +72,15 @@ test('international friendlies remain three-way and carry an international label
   assert.equal(spec.source_data.matchTypeLabel, 'INTERNACIONAL');
 });
 
-test('club friendlies import only tracked teams', () => {
+test('ESPN soccer configs import all fetched MLS and club friendly events', () => {
+  const mls = _internal.ESPN_SOCCER_LEAGUES.find(c => c.league === 'mls');
+  const clubFriendly = _internal.ESPN_SOCCER_LEAGUES.find(c => c.league === 'club-friendlies');
+
+  assert.equal(mls.whitelist, undefined);
+  assert.equal(clubFriendly.whitelist, undefined);
+});
+
+test('legacy club friendly whitelist remains available for manual inspection', () => {
   assert.equal(
     _internal.eventMatchesWhitelist(
       espnEvent({ homeName: 'Manchester City', awayName: 'Atlético Madrid' }),

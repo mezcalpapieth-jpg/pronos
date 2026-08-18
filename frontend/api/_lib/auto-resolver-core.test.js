@@ -284,3 +284,129 @@ test('auto resolver final score includes required transcript timestamps when ava
 
   assert.equal(score, '7 menciones de "seguridad" · 2:01, 3:05, 4:06, 5:07, 6:08');
 });
+
+test('auto resolver core settles F1 Dutch GP side markets from race classifications', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async (url) => {
+    assert.match(String(url), /ergast\/f1\/2026\/12\/results\.json/);
+    return jsonResponse({
+      MRData: {
+        RaceTable: {
+          Races: [{
+            Results: [
+              {
+                position: '1',
+                positionOrder: '1',
+                points: '25',
+                Driver: { driverId: 'max_verstappen', givenName: 'Max', familyName: 'Verstappen' },
+                Constructor: { constructorId: 'red_bull', name: 'Red Bull Racing' },
+              },
+              {
+                position: '3',
+                positionOrder: '3',
+                points: '15',
+                Driver: { driverId: 'norris', givenName: 'Lando', familyName: 'Norris' },
+                Constructor: { constructorId: 'mclaren', name: 'McLaren' },
+              },
+              {
+                position: '9',
+                positionOrder: '9',
+                points: '2',
+                Driver: { driverId: 'perez', givenName: 'Sergio', familyName: 'Pérez' },
+                Constructor: { constructorId: 'cadillac', name: 'Cadillac' },
+              },
+              {
+                position: '13',
+                positionOrder: '13',
+                points: '0',
+                Driver: { driverId: 'bottas', givenName: 'Valtteri', familyName: 'Bottas' },
+                Constructor: { constructorId: 'cadillac', name: 'Cadillac' },
+              },
+            ],
+          }],
+        },
+      },
+    });
+  };
+
+  const ahead = await resolveAutoResolverCandidate({
+    resolver_type: 'sports_api',
+    resolver_config: {
+      source: 'jolpica-f1',
+      season: '2026',
+      round: '12',
+      shape: 'driver-ahead',
+      driverAId: 'perez',
+      driverALabel: 'Sergio Pérez',
+      driverBId: 'bottas',
+      driverBLabel: 'Valtteri Bottas',
+    },
+    outcomes: ['Sí', 'No'],
+  });
+  assert.equal(ahead.winningIdx, 0);
+  assert.equal(ahead.finalScore, 'Sergio Pérez P9 · Valtteri Bottas P13');
+
+  const maxWins = await resolveAutoResolverCandidate({
+    resolver_type: 'sports_api',
+    resolver_config: {
+      source: 'jolpica-f1',
+      season: '2026',
+      round: '12',
+      shape: 'driver-wins',
+      driverId: 'max_verstappen',
+      driverLabel: 'Max Verstappen',
+    },
+    outcomes: ['Sí', 'No'],
+  });
+  assert.equal(maxWins.winningIdx, 0);
+  assert.equal(maxWins.finalScore, 'Max Verstappen ganó');
+
+  const norrisPodium = await resolveAutoResolverCandidate({
+    resolver_type: 'sports_api',
+    resolver_config: {
+      source: 'jolpica-f1',
+      season: '2026',
+      round: '12',
+      shape: 'driver-podium',
+      driverId: 'norris',
+      driverLabel: 'Lando Norris',
+    },
+    outcomes: ['Sí', 'No'],
+  });
+  assert.equal(norrisPodium.winningIdx, 0);
+  assert.equal(norrisPodium.finalScore, 'Lando Norris P3');
+
+  const perezPoints = await resolveAutoResolverCandidate({
+    resolver_type: 'sports_api',
+    resolver_config: {
+      source: 'jolpica-f1',
+      season: '2026',
+      round: '12',
+      shape: 'driver-points',
+      driverId: 'perez',
+      driverLabel: 'Sergio Pérez',
+    },
+    outcomes: ['Sí', 'No'],
+  });
+  assert.equal(perezPoints.winningIdx, 0);
+  assert.equal(perezPoints.finalScore, 'Sergio Pérez: 2 pts');
+
+  const cadillacPoints = await resolveAutoResolverCandidate({
+    resolver_type: 'sports_api',
+    resolver_config: {
+      source: 'jolpica-f1',
+      season: '2026',
+      round: '12',
+      shape: 'constructor-points',
+      constructorId: 'cadillac',
+      constructorLabel: 'Cadillac',
+    },
+    outcomes: ['Sí', 'No'],
+  });
+  assert.equal(cadillacPoints.winningIdx, 0);
+  assert.equal(cadillacPoints.finalScore, 'Cadillac: 2 pts');
+});

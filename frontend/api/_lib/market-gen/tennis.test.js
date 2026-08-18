@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   extractAtpMensSinglesField,
+  extractAtpRemainingMensSinglesField,
   generateTennisMarkets,
 } from './tennis.js';
 
@@ -284,7 +285,16 @@ test('ATP generator still emits H2H markets once a top-tier tournament is in pro
   try {
     const specs = await generateTennisMarkets();
     const h2h = specs.filter(spec => spec.source === 'espn-atp-match');
-    assert.equal(specs.some(spec => spec.source === 'espn-atp-tournament'), false);
+    const tournament = specs.find(spec => spec.source === 'espn-atp-tournament');
+    assert.ok(tournament);
+    assert.equal(tournament.source_data.generationStage, 'active');
+    assert.equal(tournament.source_data.fieldSource, 'espn-mens-singles-active-draw');
+    assert.deepEqual(tournament.outcomes, [
+      'Alexander Zverev',
+      'Taylor Fritz',
+      'Ben Shelton',
+      'Lorenzo Musetti',
+    ]);
     assert.equal(h2h.length, 2);
     assert.equal(h2h[0].source_data.roundLabel, 'Quarterfinals');
     assert.equal(h2h[0].resolver_config.matchId, 'qf-1');
@@ -326,10 +336,86 @@ test('ATP generator emits H2H when ESPN marks the tournament post but nested mat
 
   try {
     const specs = await generateTennisMarkets();
-    assert.equal(specs.length, 1);
-    assert.equal(specs[0].source, 'espn-atp-match');
-    assert.equal(specs[0].resolver_config.matchId, 'espn-qf-1');
-    assert.deepEqual(specs[0].outcomes, ['Arthur Fils', 'Rafael Jodar']);
+    const tournament = specs.find(spec => spec.source === 'espn-atp-tournament');
+    const h2h = specs.find(spec => spec.source === 'espn-atp-match');
+    assert.ok(tournament);
+    assert.equal(tournament.source_data.generationStage, 'active-espn-post-with-open-matches');
+    assert.deepEqual(tournament.outcomes, ['Arthur Fils', 'Rafael Jodar']);
+    assert.ok(h2h);
+    assert.equal(h2h.resolver_config.matchId, 'espn-qf-1');
+    assert.deepEqual(h2h.outcomes, ['Arthur Fils', 'Rafael Jodar']);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('ATP generator can create a Cincinnati parent during round of 32 / round of 16', async () => {
+  const originalFetch = globalThis.fetch;
+  const matchDate = futureIso(1);
+  const competitions = [
+    {
+      id: 'cincy-r32-done',
+      date: futureIso(-1),
+      round: { displayName: 'Round of 32' },
+      status: { type: { state: 'post', completed: true } },
+      competitors: [
+        { ...tennisPlayer('2946', 'Taylor Fritz', 4), winner: false },
+        { ...tennisPlayer('9250', 'Ben Shelton', 5), winner: true },
+      ],
+    },
+    {
+      id: 'cincy-r32-1',
+      date: matchDate,
+      round: { displayName: 'Round of 32' },
+      status: { type: { state: 'pre' } },
+      competitors: [
+        tennisPlayer('3782', 'Carlos Alcaraz', 1),
+        tennisPlayer('9810', 'Luca Nardi', 24),
+      ],
+    },
+    {
+      id: 'cincy-r16-1',
+      date: matchDate,
+      round: { displayName: 'Round of 16' },
+      status: { type: { state: 'pre' } },
+      competitors: [
+        tennisPlayer('3623', 'Jannik Sinner', 2),
+        tennisPlayer('2375', 'Alexander Zverev', 3),
+      ],
+    },
+  ];
+
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      events: [
+        atpEvent({
+          id: 'cincinnati-open',
+          name: 'Cincinnati Open',
+          state: 'in',
+          date: futureIso(-7),
+          endDate: futureIso(2),
+          groupings: [mensSinglesGrouping(competitions)],
+        }),
+      ],
+    }),
+  });
+
+  try {
+    const specs = await generateTennisMarkets();
+    const tournament = specs.find(spec => spec.source === 'espn-atp-tournament');
+    assert.ok(tournament);
+    assert.equal(tournament.source_event_id, 'atp:cincinnati-open');
+    assert.equal(tournament.question, '¿Quién gana el Cincinnati Open?');
+    assert.deepEqual(tournament.outcomes, [
+      'Carlos Alcaraz',
+      'Jannik Sinner',
+      'Alexander Zverev',
+      'Ben Shelton',
+      'Luca Nardi',
+    ]);
+    assert.equal(tournament.outcomes.includes('Taylor Fritz'), false);
+    assert.equal(tournament.outcomes.includes('Otro'), false);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -362,4 +448,31 @@ test('ATP field extraction ignores placeholder draw slots and dedupes players', 
 
   assert.deepEqual(field.map(player => player.name), ['Taylor Fritz']);
   assert.equal(field[0].seed, 2);
+});
+
+test('ATP remaining field keeps winners whose next match is not materialized yet', () => {
+  const event = atpEvent({
+    state: 'in',
+    groupings: [mensSinglesGrouping([
+      {
+        id: 'r16-done',
+        status: { type: { state: 'post', completed: true } },
+        competitors: [
+          { ...tennisPlayer('2946', 'Taylor Fritz', 4), winner: true },
+          { ...tennisPlayer('3764', 'Lorenzo Musetti', 9), winner: false },
+        ],
+      },
+      {
+        id: 'r16-done-2',
+        status: { type: { state: 'post', completed: true } },
+        competitors: [
+          { ...tennisPlayer('2375', 'Alexander Zverev', 3), winner: true },
+          { ...tennisPlayer('2989', 'Casper Ruud', 8), winner: false },
+        ],
+      },
+    ])],
+  });
+
+  const field = extractAtpRemainingMensSinglesField(event);
+  assert.deepEqual(field.map(player => player.name), ['Alexander Zverev', 'Taylor Fritz']);
 });
