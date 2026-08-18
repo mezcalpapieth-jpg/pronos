@@ -8,6 +8,7 @@ import {
   buildMananeraSearchUrl,
   buildMananeraYouTubeSearchUrl,
   countPhraseOccurrences,
+  findMananeraTranscript,
   findMananeraYouTubeTranscript,
   readMananeraPhraseResult,
 } from './mananera.js';
@@ -95,6 +96,28 @@ test('reads official transcript direct slug and resolves yes when count reaches 
   assert.equal(result.count, 2);
   assert.equal(result.transcriptUrl, articleUrl);
   assert.deepEqual(seen, [articleUrl]);
+});
+
+test('uses browser-like headers when fetching gob.mx transcript pages', async () => {
+  const seen = [];
+  const fetchImpl = async (url, options = {}) => {
+    seen.push({ url: String(url), headers: options.headers || {} });
+    return htmlResponse(transcriptHtml({
+      dateText: '17 de agosto de 2026',
+      mentions: 'huachicol y seguridad',
+    }));
+  };
+
+  const result = await findMananeraTranscript({
+    dateYmd: '2026-08-17',
+    fetchImpl,
+  });
+
+  assert.equal(result.ready, true);
+  assert.equal(result.url, buildMananeraDirectTranscriptUrl('2026-08-17'));
+  assert.match(seen[0].headers['user-agent'], /Mozilla\/5\.0/);
+  assert.match(seen[0].headers['accept-language'], /es-MX/);
+  assert.equal(seen[0].headers.accept, 'text/html,application/xhtml+xml');
 });
 
 test('resolves no when transcript exists but phrase count misses threshold', async () => {

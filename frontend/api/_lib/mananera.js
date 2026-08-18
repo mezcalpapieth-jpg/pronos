@@ -17,9 +17,12 @@ const DEFAULT_MANANERA_YOUTUBE_CHANNEL_IDS = [
   'UCvzHrtf9by1-UY67SfZse8w',
 ];
 const OFFICIAL_YOUTUBE_CHANNEL_TITLE_RE = /\b(claudia\s+sheinbaum|gobierno\s+de\s+mexico|gobierno\s+de\s+méxico|presidencia)\b/i;
-const YOUTUBE_HTML_HEADERS = {
+const BROWSER_HTML_HEADERS = {
   'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
   'accept-language': 'es-MX,es;q=0.9,en;q=0.8',
+};
+const YOUTUBE_HTML_HEADERS = {
+  ...BROWSER_HTML_HEADERS,
   // YouTube can serve a consent interstitial to server-side fetches.
   // This cookie keeps discovery on the public HTML/watch page when allowed.
   cookie: 'CONSENT=YES+cb.20210328-17-p0.en+FX+410; SOCS=CAI',
@@ -231,7 +234,7 @@ function transcriptMatchesDate({ text, html, dateYmd }) {
 async function fetchText(fetchImpl, url, extraHeaders = {}) {
   const response = await fetchImpl(url, {
     headers: {
-      'user-agent': 'Pronos resolver (+https://pronos.io)',
+      ...BROWSER_HTML_HEADERS,
       accept: 'text/html,application/xhtml+xml',
       ...extraHeaders,
     },
