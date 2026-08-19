@@ -10,6 +10,7 @@ import {
   formatDirectionFinalScore,
   normalizeCryptoMinuteMarketAssets,
   normalizeCryptoMinuteMarketInterval,
+  persistCryptoHistoryHeartbeat,
   readCryptoMinuteMarketAssets,
   readCryptoMinuteMarketInterval,
   resolveDirectionOutcome,
@@ -93,6 +94,55 @@ test('readCryptoMinuteMarketAssets reads the stored admin asset toggles', async 
   const sql = () => Promise.resolve([{ value: { btc: false, eth: true } }]);
 
   assert.deepEqual(await readCryptoMinuteMarketAssets(sql), ['eth']);
+});
+
+test('persistCryptoHistoryHeartbeat writes sparse ticker history for enabled assets', async () => {
+  const calls = [];
+  const sql = (strings, ...values) => {
+    const text = strings.join('?');
+    calls.push({ text, values });
+    if (/INSERT INTO crypto_ticks/.test(text)) return Promise.resolve([{ id: 1 }]);
+    if (/DELETE FROM crypto_ticks/.test(text)) return Promise.resolve([{ deleted: 3 }]);
+    throw new Error(`unexpected query ${text}`);
+  };
+
+  const report = await persistCryptoHistoryHeartbeat(sql, {
+    assets: [{ key: 'btc', coinbaseProductId: 'BTC-USD' }],
+    now: '2026-08-19T12:00:00.000Z',
+    readTickerPrice: async ({ productId, capturedAt }) => {
+      assert.equal(productId, 'BTC-USD');
+      assert.equal(capturedAt, '2026-08-19T12:00:00.000Z');
+      return {
+        price: 64000.5,
+        source: 'coinbase-ticker',
+        capturedAt: '2026-08-19T12:00:02.000Z',
+      };
+    },
+  });
+
+  assert.equal(report.checked, 1);
+  assert.equal(report.stored, 1);
+  assert.equal(report.pruned, 3);
+  assert.equal(report.errors.length, 0);
+  assert.equal(report.ticks[0].bucket, '2026-08-19T12:00:00.000Z');
+  assert.equal(calls.filter(q => /INSERT INTO crypto_ticks/.test(q.text)).length, 1);
+  assert.equal(calls.filter(q => /DELETE FROM crypto_ticks/.test(q.text)).length, 1);
+});
+
+test('persistCryptoHistoryHeartbeat dry run avoids fetches and writes', async () => {
+  const report = await persistCryptoHistoryHeartbeat(() => {
+    throw new Error('dry heartbeat should not write');
+  }, {
+    assets: [{ key: 'eth', coinbaseProductId: 'ETH-USD' }],
+    dry: true,
+    readTickerPrice: async () => {
+      throw new Error('dry heartbeat should not fetch');
+    },
+  });
+
+  assert.equal(report.checked, 1);
+  assert.equal(report.stored, 0);
+  assert.deepEqual(report.ticks, [{ asset: 'eth', dry: true }]);
 });
 
 test('ensureUpcomingCryptoMarkets pre-creates the next pending BTC and ETH windows', async () => {

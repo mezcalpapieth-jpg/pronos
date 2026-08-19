@@ -51,10 +51,10 @@ const ASSET_BY_PRODUCT = {
   'ETH-USD': 'eth',
 };
 
-// One POST every 5s per asset is the ceiling the server enforces via
-// its 5-second bucket dedup. Going faster just costs invocations
-// without adding new history.
-const PERSIST_INTERVAL_MS = 5_000;
+// The chart still updates from the WebSocket on every live ticker
+// message. This interval only controls database persistence for future
+// visitors and resolved snapshots, so it can be much calmer.
+const PERSIST_INTERVAL_MS = 15_000;
 
 function getStore(productId) {
   let st = stores.get(productId);
@@ -78,10 +78,8 @@ function getStore(productId) {
 }
 
 // Periodically POSTs the latest WS price to /api/points/crypto-tick
-// so the server-side history table fills as a side-effect of any
-// crypto-page being open. Replaces the standalone Vercel cron worker
-// that used to do this on a schedule — we save the per-minute compute
-// cost and only spend it while users are actually present.
+// so the server-side history table gets denser while users are
+// present. The cron writes the baseline history when nobody is around.
 //
 // Fire-and-forget: server applies plausibility + bucket dedup; client
 // doesn't need to react to the response.

@@ -83,3 +83,44 @@ export async function readCoinbaseBoundaryPrice({
     targetAt: toIso(targetSec * 1000),
   };
 }
+
+export async function readCoinbaseTickerPrice({
+  productId,
+  fetchImpl = globalThis.fetch,
+  capturedAt = new Date(),
+} = {}) {
+  if (typeof fetchImpl !== 'function') {
+    throw new Error('crypto-price-source: fetch unavailable');
+  }
+
+  const normalizedProductId = normalizeProductId(productId);
+  const url = new URL(`/products/${normalizedProductId}/ticker`, COINBASE_EXCHANGE_BASE_URL);
+  const response = await fetchImpl(url);
+  if (!response?.ok) {
+    throw new Error(`crypto-price-source: coinbase ticker failed ${response?.status || 'unknown'}`);
+  }
+
+  const body = await response.json();
+  const price = Number(body?.price);
+  if (!Number.isFinite(price) || price <= 0) {
+    throw new Error('crypto-price-source: invalid coinbase ticker price');
+  }
+
+  const sourceTimeMs = body?.time ? new Date(body.time).getTime() : NaN;
+  const fallbackMs = capturedAt instanceof Date
+    ? capturedAt.getTime()
+    : new Date(capturedAt).getTime();
+  const capturedMs = Number.isFinite(sourceTimeMs)
+    ? sourceTimeMs
+    : fallbackMs;
+  if (!Number.isFinite(capturedMs)) {
+    throw new Error('crypto-price-source: invalid ticker timestamp');
+  }
+
+  return {
+    price,
+    source: 'coinbase-ticker',
+    productId: normalizedProductId,
+    capturedAt: toIso(capturedMs),
+  };
+}

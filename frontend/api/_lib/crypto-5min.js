@@ -11,6 +11,8 @@
  * Lifecycle, run by cron every minute:
  *
  *   Between boundaries:
+ *     - Record sparse server-side chart ticks so fresh visitors see
+ *       movement even if nobody had a browser open.
  *     - Pre-create upcoming pending windows so the UI can already show
  *       the next market before it needs to activate.
  *
@@ -50,7 +52,12 @@ import { initialReserves } from './amm-math.js';
 import { withTransaction } from './db-tx.js';
 import { bestEffortPersistResolvedCryptoMarketSnapshot } from './crypto-chart-snapshot.js';
 import { bestEffortPersistTopHolderSnapshot } from './points-top-holders.js';
-import { readCoinbaseBoundaryPrice } from './crypto-price-source.js';
+import { readCoinbaseBoundaryPrice, readCoinbaseTickerPrice } from './crypto-price-source.js';
+import {
+  CRYPTO_TICK_RETENTION_HOURS,
+  insertCryptoTick,
+  maybePruneCryptoTicks,
+} from './crypto-ticks.js';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -290,6 +297,74 @@ export async function readGeneratedCryptoHiddenFromHome(sql) {
   }
 }
 
+export async function persistCryptoHistoryHeartbeat(sql, {
+  assets = ASSETS,
+  dry = false,
+  now = new Date(),
+  readTickerPrice = readCoinbaseTickerPrice,
+} = {}) {
+  if (!sql) throw new Error('crypto-5min: sql client required');
+
+  const report = {
+    checked: 0,
+    stored: 0,
+    skipped: 0,
+    pruned: 0,
+    errors: [],
+    ticks: [],
+    retentionHours: CRYPTO_TICK_RETENTION_HOURS,
+    dry,
+  };
+
+  for (const asset of assets || []) {
+    if (!asset?.key || !asset?.coinbaseProductId) continue;
+    report.checked += 1;
+    const entry = { asset: asset.key };
+    if (dry) {
+      report.ticks.push({ ...entry, dry: true });
+      continue;
+    }
+
+    try {
+      const price = await readTickerPrice({
+        productId: asset.coinbaseProductId,
+        capturedAt: now,
+      });
+      const tick = await insertCryptoTick(sql, {
+        asset: asset.key,
+        price: price.price,
+        capturedAt: price.capturedAt || now,
+      });
+      const cleanup = await maybePruneCryptoTicks(sql, {
+        asset: asset.key,
+        stored: tick.stored,
+        bucketIso: tick.bucket,
+      });
+
+      if (tick.stored) report.stored += 1;
+      else report.skipped += 1;
+      if (cleanup.pruned) report.pruned += cleanup.deleted;
+
+      report.ticks.push({
+        ...entry,
+        price: price.price,
+        priceSource: price.source,
+        priceAt: price.capturedAt,
+        bucket: tick.bucket,
+        stored: tick.stored,
+        cleanup: cleanup.pruned,
+        pruned: cleanup.deleted,
+      });
+    } catch (e) {
+      const error = e?.message || 'ticker_failed';
+      report.errors.push({ asset: asset.key, error });
+      report.ticks.push({ ...entry, error });
+    }
+  }
+
+  return report;
+}
+
 function parseJsonb(value, fallback) {
   if (value && typeof value === 'object' && !Array.isArray(value)) return value;
   if (Array.isArray(value)) return value;
@@ -340,6 +415,11 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
   const intervalMinutes = await readCryptoMinuteMarketInterval(sql);
   const enabledAssets = await readCryptoMinuteMarketAssets(sql);
   const enabledAssetConfigs = cryptoAssetsFromSetting(enabledAssets);
+  const historyTicks = await persistCryptoHistoryHeartbeat(sql, {
+    assets: enabledAssetConfigs,
+    dry,
+    now,
+  });
   const generatedHiddenFromHome = dry ? false : await readGeneratedCryptoHiddenFromHome(sql);
   const windowMs = windowMsForInterval(intervalMinutes);
   const { boundary, sinceBoundaryMs } = crypto5MinWindowsForTick(now, intervalMinutes);
@@ -365,9 +445,10 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
   }
   let activationCatchup = { checked: 0, activated: [], errors: [], dry };
 
-  // We only do real work in the first ~60s after the selected interval boundary.
+  // We only do settlement work in the first ~60s after the selected interval boundary.
   // Outside that window the tick still pre-creates future pending
-  // windows, but skips price reads and settlement writes.
+  // windows and records sparse chart history, but skips boundary
+  // settlement price reads and settlement writes.
   if (sinceBoundaryMs > 60_000) {
     try {
       activationCatchup = await catchUpCurrentPendingCryptoMarkets(sql, {
@@ -386,6 +467,7 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
       boundaryAt: boundary.toISOString(),
       intervalMinutes,
       enabledAssets,
+      historyTicks,
       precreated: precreateReport.precreated,
       precreateExisting: precreateReport.existing,
       precreate: precreateReport.windows,
@@ -420,6 +502,7 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
     boundaryAt: boundary.toISOString(),
     intervalMinutes,
     enabledAssets,
+    historyTicks,
     precreated: precreateReport.precreated,
     precreateExisting: precreateReport.existing,
     precreate: precreateReport.windows,

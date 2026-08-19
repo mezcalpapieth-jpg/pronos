@@ -24,11 +24,9 @@
  */
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
-import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { readCoinbaseBoundaryPrice } from '../_lib/crypto-price-source.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
-const schemaSql = neon(process.env.DATABASE_URL);
 
 const PRODUCT_ID_BY_ASSET = {
   btc: 'BTC-USD',
@@ -160,8 +158,6 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'invalid_marketId' });
     }
 
-    await ensurePointsSchema(schemaSql);
-
     // Look up window + asset for this market. We don't trust any
     // window passed by the client — keying off `marketId` keeps the
     // endpoint shape minimal and prevents a caller from pulling
@@ -237,6 +233,9 @@ export default async function handler(req, res) {
     });
   } catch (e) {
     console.error('[points/crypto-history] error', { message: e?.message, code: e?.code });
+    if (e?.code === '42P01') {
+      return res.status(503).json({ error: 'schema_not_ready' });
+    }
     return res.status(500).json({ error: 'history_failed', detail: e?.message });
   }
 }

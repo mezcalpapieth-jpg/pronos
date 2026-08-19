@@ -1,13 +1,11 @@
 /**
  * POST /api/points/crypto-tick
  *
- * Records a single price tick for a BTC/ETH 5-min chart. Replaces the
- * old server-side cron worker: instead of having Vercel cron poll
- * Coinbase every minute (which costs compute even when nobody's on a
- * crypto page), browsers already running a Coinbase WebSocket via
- * useCryptoTicker submit one tick per 5 seconds as a side-effect. The
- * chart's read endpoint (/api/points/crypto-history) is unchanged —
- * it serves whatever's in crypto_ticks regardless of who wrote it.
+ * Records a single browser-observed price tick for a BTC/ETH chart.
+ * The cron also writes a sparse one-minute baseline so charts have
+ * history even when nobody is viewing the page. Browser tabs add
+ * denser points while someone is watching, but at a lower cadence than
+ * the live WebSocket UI.
  *
  * Body: { asset: 'btc'|'eth', price: number }
  *
@@ -20,9 +18,8 @@
  *     moves (every honest tick over the noisy one accelerates the
  *     median back to truth).
  *   - Bucket dedup: floor captured_at to 5-second boundaries and rely
- *     on UNIQUE(asset, captured_at) + ON CONFLICT DO NOTHING so 12
- *     ticks/min/asset is the hard ceiling regardless of how many
- *     tabs are open.
+ *     on UNIQUE(asset, captured_at) + ON CONFLICT DO NOTHING so
+ *     concurrent tabs collapse into the same row.
  *
  * Response: 200 with { stored: true } when accepted, { stored: false,
  * reason } when rejected (rate-limited, plausibility, etc.). Either
@@ -30,14 +27,15 @@
  */
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
-import { ensurePointsSchema } from '../_lib/points-schema.js';
+import {
+  CRYPTO_TICK_RETENTION_HOURS,
+  insertCryptoTick,
+  maybePruneCryptoTicks,
+} from '../_lib/crypto-ticks.js';
 
 const sql = neon(process.env.DATABASE_URL);
-const schemaSql = neon(process.env.DATABASE_URL);
 
 const ALLOWED_ASSETS = new Set(['btc', 'eth']);
-const BUCKET_MS = 5_000;
-const RETENTION_DAYS = 7;
 const PLAUSIBILITY_PCT = 0.02; // ±2%
 const PLAUSIBILITY_WINDOW_MS = 30_000;
 // Absolute sanity bounds — if the client sends $0.42 or $42M we drop
@@ -78,8 +76,6 @@ export default async function handler(req, res) {
       return res.status(200).json({ stored: false, reason: 'absurd_price' });
     }
 
-    await ensurePointsSchema(schemaSql);
-
     // Plausibility check against the most recent few ticks. Cold
     // start (no ticks) accepts unconditionally — first writer wins.
     const recent = await sql`
@@ -105,28 +101,25 @@ export default async function handler(req, res) {
       }
     }
 
-    // Floor to a 5-second bucket so concurrent submissions collapse
-    // into one row via the UNIQUE constraint. Postgres handles this
-    // with date_bin in 14+ but we compute it client-side for
-    // portability across the various Neon branches.
-    const bucketIso = new Date(
-      Math.floor(Date.now() / BUCKET_MS) * BUCKET_MS,
-    ).toISOString();
+    const tick = await insertCryptoTick(sql, { asset, price });
+    const cleanup = await maybePruneCryptoTicks(sql, {
+      asset,
+      stored: tick.stored,
+      bucketIso: tick.bucket,
+    });
 
-    await sql`
-      INSERT INTO crypto_ticks (asset, captured_at, price)
-      VALUES (${asset}, ${bucketIso}::timestamptz, ${price})
-      ON CONFLICT (asset, captured_at) DO NOTHING
-    `;
-
-    await sql`
-      DELETE FROM crypto_ticks
-      WHERE captured_at < NOW() - INTERVAL '7 days'
-    `;
-
-    return res.status(200).json({ stored: true, bucket: bucketIso, retentionDays: RETENTION_DAYS });
+    return res.status(200).json({
+      stored: tick.stored,
+      bucket: tick.bucket,
+      retentionHours: CRYPTO_TICK_RETENTION_HOURS,
+      pruned: cleanup.pruned,
+      deleted: cleanup.deleted,
+    });
   } catch (e) {
     console.error('[points/crypto-tick] error', { message: e?.message, code: e?.code });
+    if (e?.code === '42P01') {
+      return res.status(503).json({ error: 'schema_not_ready' });
+    }
     return res.status(500).json({ error: 'tick_failed' });
   }
 }

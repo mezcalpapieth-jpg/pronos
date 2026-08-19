@@ -2,7 +2,7 @@
  * Server-side final chart snapshots for crypto 5-minute markets.
  *
  * Why this exists:
- * - `crypto_ticks` is opportunistic history gathered from active browsers.
+ * - `crypto_ticks` is short-retention history from cron plus active browsers.
  * - Once a market resolves, we want to freeze the exact curve we have so
  *   later page loads do not depend on live tick retention or sparse reads.
  * - We keep the snapshot in its own table so `points_markets` rows stay

@@ -870,11 +870,11 @@ const POINTS_SCHEMA_MIGRATIONS = [
     ON points_cycle_position_snapshots(market_id, outcome_index)`,
 
   // ── Crypto price ticks (server-side history for the 5-min chart) ─────────
-  // Recorded by /api/points/crypto-tick every ~5s for each asset (BTC, ETH)
+  // Recorded by the crypto cron every minute plus denser browser ticks
   // while visitors have the points app open. /api/points/crypto-history
-  // serves these to the chart so a fresh page open shows the same dense
-  // curve as a continuously-mounted page. Retention: 7 days; older rows
-  // are pruned by /api/points/crypto-tick after accepted inserts.
+  // serves these to the chart so a fresh page open still has movement.
+  // Raw retention is short (currently 72h); resolved markets keep their
+  // final curves in points_crypto_market_snapshots.
   `CREATE TABLE IF NOT EXISTS crypto_ticks (
     id          BIGSERIAL PRIMARY KEY,
     asset       TEXT NOT NULL,

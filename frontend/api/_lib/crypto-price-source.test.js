@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { readCoinbaseBoundaryPrice } from './crypto-price-source.js';
+import { readCoinbaseBoundaryPrice, readCoinbaseTickerPrice } from './crypto-price-source.js';
 
 function jsonResponse(body) {
   return {
@@ -60,4 +60,27 @@ test('readCoinbaseBoundaryPrice surfaces upstream failures', async () => {
     }),
     /coinbase candles failed 429/,
   );
+});
+
+test('readCoinbaseTickerPrice reads the current ticker price', async () => {
+  const seen = [];
+  const result = await readCoinbaseTickerPrice({
+    productId: 'eth-usd',
+    capturedAt: '2026-08-19T12:00:00.000Z',
+    fetchImpl: async (url) => {
+      seen.push(String(url));
+      return jsonResponse({
+        price: '4575.42',
+        time: '2026-08-19T12:00:02.123Z',
+      });
+    },
+  });
+
+  assert.deepEqual(result, {
+    price: 4575.42,
+    source: 'coinbase-ticker',
+    productId: 'ETH-USD',
+    capturedAt: '2026-08-19T12:00:02.123Z',
+  });
+  assert.match(seen[0], /products\/ETH-USD\/ticker/);
 });

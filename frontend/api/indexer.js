@@ -161,8 +161,9 @@ export default async function handler(req, res) {
   // slot. runCrypto5MinTick is gated on VERCEL_ENV='production' so it
   // does nothing on preview deploys (the feature stays dormant until
   // points-app merges to main). On a 5-min boundary it fires the
-  // resolve+activate+create lifecycle for BTC and ETH; the rest of
-  // the time it's a fast no-op (minute-bucket gate inside the fn).
+  // resolve+activate+create lifecycle for BTC and ETH; between
+  // boundaries it still writes sparse chart ticks so fresh visitors
+  // see movement even if nobody had the chart open.
   // Wrapped in try/catch so any crypto-5min failure can't break the
   // on-chain indexer below.
   let crypto5MinReport = null;
