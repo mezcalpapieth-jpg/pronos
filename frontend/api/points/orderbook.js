@@ -13,7 +13,7 @@ import { binaryPrices } from '../_lib/amm-math.js';
 import {
   aggregateLimitOrderRows,
   makerUsageFromRows,
-  pronosMakerDepthForMarket,
+  pronosMakerExecutableBidDepthForMarket,
   PRONOS_TREASURY_USERNAME,
 } from '../_lib/points-limit-orders.js';
 import { binaryPricesWithBookTrade } from '../_lib/points-display-prices.js';
@@ -67,7 +67,7 @@ export default async function handler(req, res) {
   });
 
   try {
-    const cacheKey = `points:orderbook:v6:${marketId}:${outcomeIndex}:${requestedLevels.join(',')}`;
+    const cacheKey = `points:orderbook:v7:${marketId}:${outcomeIndex}:${requestedLevels.join(',')}`;
     const { value: payload, hit } = await cachedJson(cacheKey, 1_000, async () => {
       await timer.time('schema', () => ensurePointsSchema(schemaSql));
       const rows = await timer.time('db_market', () => sql`
@@ -131,7 +131,7 @@ export default async function handler(req, res) {
         isBookTrade: lastRows[0]?.is_book_trade,
       }) : [];
       const displayCurrentPrice = Number(displayPrices[outcomeIndex]);
-      const depth = pronosMakerDepthForMarket(market, {
+      const depth = pronosMakerExecutableBidDepthForMarket(market, {
         outcomeIndex,
         levels: requestedLevels,
         usage: makerUsageFromRows(usageRows),

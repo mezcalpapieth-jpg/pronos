@@ -8,14 +8,19 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import {
   combineBuyOrderbookMatches,
+  combineSellOrderbookMatches,
   estimateMakerReward,
   makerUsageFromRows,
+  previewAmmCappedBidsForSell,
   previewPronosMakerAsksForBuy,
+  previewPronosMakerBidsForSell,
   pronosMakerDepthForMarket,
+  pronosMakerExecutableBidDepthForMarket,
   previewRestingAsksForBuy,
   previewRestingBidsForSell,
 } from '../_lib/points-limit-orders.js';
 import { monotonicBuyDisplayPrice } from '../_lib/points-display-prices.js';
+import { binaryBuyQuote, binarySellQuote } from '../_lib/amm-math.js';
 
 const schemaSource = await readFile(new URL('../_lib/points-schema.js', import.meta.url), 'utf8');
 const migrateSource = await readFile(new URL('../migrate.js', import.meta.url), 'utf8');
@@ -39,6 +44,14 @@ const voidMarketSource = await readFile(new URL('./admin/void-market.js', import
 const cronResolveSource = await readFile(new URL('../cron/points-auto-resolve.js', import.meta.url), 'utf8');
 const crypto5MinSource = await readFile(new URL('../_lib/crypto-5min.js', import.meta.url), 'utf8');
 const vercelSource = await readFile(new URL('../../../vercel.json', import.meta.url), 'utf8');
+
+function approxEqual(actual, expected, epsilon, message) {
+  const diff = Math.abs(actual - expected);
+  assert.ok(
+    diff <= epsilon,
+    `${message || 'values'}: expected ${actual} to be within ${epsilon} of ${expected} (diff = ${diff})`,
+  );
+}
 
 test('points schema and manual migration create reserved limit-order book storage', () => {
   for (const source of [schemaSource, migrateSource]) {
@@ -171,6 +184,101 @@ test('orderbook taker previews consume real resting orders before AMM fallback',
   assert.equal(sellPreview.remainingShares, 15.454545);
 });
 
+test('synthetic sell previews cap maker bids to AMM unwind value', () => {
+  const reserves = [671.397244, 1489.4312];
+  const shares = 100;
+  const amm = binarySellQuote(reserves, 0, shares);
+  const preview = previewAmmCappedBidsForSell([
+    { id: 'maker-bid-high', username: 'pronos_treasury', limit_price: 0.9, remaining_amount: 1000, source: 'maker' },
+  ], {
+    reserves,
+    outcomeIndex: 0,
+    shares,
+  });
+
+  assert.equal(preview.fills.length, 1);
+  assert.equal(preview.remainingShares, 0);
+  approxEqual(preview.collateralOut, amm.collateralOut, 0.000001, 'maker payout should match AMM sell quote');
+  assert.ok(preview.fills[0].cappedToAmm);
+  assert.ok(preview.fills[0].price < preview.fills[0].makerLimitPrice);
+  assert.ok(preview.reservesAfter[0] > reserves[0], 'selling YES should add YES reserve');
+  assert.ok(preview.reservesAfter[1] < reserves[1], 'selling YES should remove NO reserve');
+});
+
+test('synthetic maker sell cap is identity-independent across coordinated exits', () => {
+  const initialReserves = [1000, 1000];
+  const buyA = binaryBuyQuote(initialReserves, 0, 100);
+  const buyB = binaryBuyQuote(buyA.reservesAfter, 0, 100);
+  const pumpedReserves = buyB.reservesAfter;
+  const generousBid = { username: 'pronos_treasury', limit_price: 0.99, remaining_amount: 1000, source: 'maker' };
+
+  const sellA = previewAmmCappedBidsForSell([
+    { ...generousBid, id: 'maker-bid-a' },
+  ], {
+    reserves: pumpedReserves,
+    outcomeIndex: 0,
+    shares: buyA.sharesOut,
+  });
+  const sellB = previewAmmCappedBidsForSell([
+    { ...generousBid, id: 'maker-bid-b' },
+  ], {
+    reserves: sellA.reservesAfter,
+    outcomeIndex: 0,
+    shares: buyB.sharesOut,
+  });
+
+  const combinedOut = sellA.collateralOut + sellB.collateralOut;
+  const netIntoPool = 200 - buyA.fee - buyB.fee;
+  approxEqual(combinedOut, netIntoPool, 0.00001, 'coordinated synthetic exits should recover only net AMM input');
+  assert.ok(sellA.priceAfter > sellB.priceAfter, 'second exit should continue unwinding the same virtual pool');
+});
+
+test('Pronos maker sell preview feeds post-maker reserves into combined fallback', () => {
+  const reserves = [671.397244, 1489.4312];
+  const maker = previewPronosMakerBidsForSell({
+    reserves: JSON.stringify(reserves),
+    seed_liquidity: 500,
+    seed_liquidities: null,
+  }, {
+    outcomeIndex: 0,
+    shares: 120,
+    levels: [10, 25, 50, 100],
+    currentPrice: 0.7,
+  });
+  const combined = combineSellOrderbookMatches(
+    { fills: [], sharesSold: 0, collateralOut: 0, remainingShares: 120, realizedPnl: 0, avgPrice: 0 },
+    maker,
+  );
+
+  assert.ok(maker.fills.length > 0);
+  assert.ok(Array.isArray(combined.reservesAfter));
+  assert.equal(combined.reservesAfter, maker.reservesAfter);
+  assert.equal(combined.priceAfter, maker.priceAfter);
+});
+
+test('orderbook maker bid depth displays AMM-capped synthetic prices', () => {
+  const rawDepth = pronosMakerDepthForMarket({
+    reserves: JSON.stringify([671.397244, 1489.4312]),
+  }, {
+    outcomeIndex: 0,
+    levels: [10, 25, 50, 100],
+    currentPrice: 0.7,
+  });
+  const executableDepth = pronosMakerExecutableBidDepthForMarket({
+    reserves: JSON.stringify([671.397244, 1489.4312]),
+  }, {
+    outcomeIndex: 0,
+    levels: [10, 25, 50, 100],
+    currentPrice: 0.7,
+  });
+
+  assert.ok(rawDepth.bids.length > 0);
+  assert.ok(executableDepth.bids.length > 0);
+  assert.ok(executableDepth.bids[0].price <= rawDepth.bids[0].price);
+  assert.ok(executableDepth.bids.every(row => row.source === 'maker'));
+  assert.ok(executableDepth.bids.every(row => row.total <= row.shares * row.makerLimitPrice + 0.000001));
+});
+
 test('buy quotes display orderbook-only execution price instead of stale AMM price', () => {
   assert.match(quoteBuySource, /function buyOrderbookPriceCap/);
   assert.match(quoteBuySource, /const bookMaxPrice = buyOrderbookPriceCap\(reserves, oi, amt\)/);
@@ -216,14 +324,18 @@ test('sell quotes and orderbook current price only trust latest book-only fills'
   assert.match(quoteSellSource, /function sellOrderbookPriceFloor/);
   assert.match(quoteSellSource, /const bookMinPrice = sellOrderbookPriceFloor\(reserves, oi, n\)/);
   assert.match(quoteSellSource, /previewRestingBidsForSell\(bidRows, \{\s*shares: n,\s*minPrice: bookMinPrice,\s*\}\)/s);
+  assert.match(quoteSellSource, /const reservesForAmm = Array\.isArray\(orderbook\.reservesAfter\)/);
+  assert.match(quoteSellSource, /binarySellQuote\(reservesForAmm, oi, ammShares\)/);
   assert.match(sellSource, /function sellOrderbookPriceFloor/);
   assert.match(sellSource, /const bookMinPrice = sellOrderbookPriceFloor\(reserves, oi, sharesToSell\)/);
   assert.match(sellSource, /matchRestingBidsForSell\(client, \{[\s\S]*minPrice: bookMinPrice,[\s\S]*\}\)/);
   assert.match(sellSource, /matchPronosMakerBidsForSell\(client, \{[\s\S]*minPrice: bookMinPrice,[\s\S]*\}\)/);
+  assert.match(sellSource, /const reservesForAmm = Array\.isArray\(orderbookMatch\.reservesAfter\)/);
+  assert.match(sellSource, /binarySellQuote\(reservesForAmm, oi, ammShares\)/);
   assert.match(quoteSellSource, /currentPrice: priceBefore/);
   assert.match(quoteSellSource, /const priceBefore = displayPricesBefore\[oi\] \|\| pricesBefore\[oi\] \|\| 0/);
   assert.match(quoteSellSource, /const lastBookFillPrice = \[\.\.\.\(orderbook\.fills \|\| \[\]\)\]/);
-  assert.match(quoteSellSource, /const priceAfter = q\?\.priceAfter \?\? lastBookFillPrice \?\? executionPrice \?\? priceBefore/);
+  assert.match(quoteSellSource, /const priceAfter = q\?\.priceAfter \?\? orderbook\.priceAfter \?\? lastBookFillPrice \?\? executionPrice \?\? priceBefore/);
   assert.match(orderbookSource, /binaryPricesWithBookTrade/);
   assert.match(orderbookSource, /outcomeIndex: lastRows\[0\]\?\.outcome_index/);
   assert.match(orderbookSource, /currentPrice: Number\.isFinite\(displayCurrentPrice\) \? displayCurrentPrice : null/);
@@ -428,7 +540,8 @@ test('orderbook exposes executable user rows with depleted Pronos maker depth', 
   assert.match(helperSource, /source: 'limit'/);
   assert.match(helperSource, /matchPronosMakerAsksForBuy/);
   assert.match(helperSource, /matchPronosMakerBidsForSell/);
-  assert.match(orderbookSource, /pronosMakerDepthForMarket/);
+  assert.match(helperSource, /pronosMakerExecutableBidDepthForMarket/);
+  assert.match(orderbookSource, /pronosMakerExecutableBidDepthForMarket/);
   assert.match(orderbookSource, /makerUsageFromRows/);
   assert.match(orderbookSource, /PRONOS_TREASURY_USERNAME/);
   assert.match(orderbookSource, /m\.seed_liquidity,\s*m\.seed_liquidities/);

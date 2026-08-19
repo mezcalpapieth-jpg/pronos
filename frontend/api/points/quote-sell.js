@@ -152,10 +152,13 @@ export default async function handler(req, res) {
     const ammShares = orderbook.remainingShares > 0.000001
       ? orderbook.remainingShares
       : 0;
+    const reservesForAmm = Array.isArray(orderbook.reservesAfter)
+      ? orderbook.reservesAfter.map(Number)
+      : reserves;
     const q = ammShares > 0
-      ? (reserves.length === 2
-        ? binarySellQuote(reserves, oi, ammShares)
-        : multiSellQuote(reserves, oi, ammShares))
+      ? (reservesForAmm.length === 2
+        ? binarySellQuote(reservesForAmm, oi, ammShares)
+        : multiSellQuote(reservesForAmm, oi, ammShares))
       : null;
     const collateralOut = orderbook.collateralOut + Number(q?.collateralOut || 0);
     const avgPrice = n > 0 ? collateralOut / n : 0;
@@ -164,7 +167,7 @@ export default async function handler(req, res) {
       .reverse()
       .map(fill => Number(fill.price))
       .find(price => Number.isFinite(price) && price > 0);
-    const priceAfter = q?.priceAfter ?? lastBookFillPrice ?? executionPrice ?? priceBefore;
+    const priceAfter = q?.priceAfter ?? orderbook.priceAfter ?? lastBookFillPrice ?? executionPrice ?? priceBefore;
     return res.status(200).json({
       shares: n,
       gross: collateralOut,

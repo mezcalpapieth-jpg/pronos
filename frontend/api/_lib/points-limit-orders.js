@@ -761,6 +761,9 @@ export function combineSellOrderbookMatches(...matches) {
   const sharesSold = round(clean.reduce((sum, match) => sum + Number(match.sharesSold || 0), 0), 6);
   const collateralOut = round(clean.reduce((sum, match) => sum + Number(match.collateralOut || 0), 0), 6);
   const realizedPnl = round(clean.reduce((sum, match) => sum + Number(match.realizedPnl || 0), 0), 6);
+  const reserveMatch = [...clean].reverse().find(match => Array.isArray(match.reservesAfter));
+  const priceAfterMatch = [...clean].reverse().find(match => Number.isFinite(Number(match.priceAfter)));
+  const priceBeforeMatch = clean.find(match => Number.isFinite(Number(match.priceBefore)));
   const remainingShares = clean.length > 0
     ? Number(clean[clean.length - 1].remainingShares || 0)
     : 0;
@@ -771,6 +774,9 @@ export function combineSellOrderbookMatches(...matches) {
     realizedPnl,
     remainingShares: round(remainingShares, 6),
     avgPrice: orderbookAverage(collateralOut, sharesSold),
+    reservesAfter: reserveMatch?.reservesAfter || null,
+    priceBefore: priceBeforeMatch ? Number(priceBeforeMatch.priceBefore) : null,
+    priceAfter: priceAfterMatch ? Number(priceAfterMatch.priceAfter) : null,
   };
 }
 
@@ -862,6 +868,95 @@ export function previewRestingBidsForSell(rows = [], {
   };
 }
 
+export function previewAmmCappedBidsForSell(rows = [], {
+  reserves,
+  outcomeIndex,
+  shares,
+  minPrice = null,
+} = {}) {
+  let remainingShares = Math.max(0, Number(shares || 0));
+  const priceFloor = normalizeTakerPrice(minPrice, null);
+  const virtualReserves = Array.isArray(reserves) ? reserves.map(Number) : [];
+  const fills = [];
+  let collateralOut = 0;
+  let sharesSold = 0;
+  let nextReserves = virtualReserves;
+  let priceBefore = null;
+  let priceAfter = null;
+
+  if (
+    remainingShares <= EPSILON
+    || nextReserves.length < 2
+    || nextReserves.some(value => !Number.isFinite(value) || value <= 0)
+  ) {
+    return {
+      fills,
+      sharesSold,
+      collateralOut,
+      remainingShares,
+      avgPrice: 0,
+      reservesAfter: null,
+      priceBefore,
+      priceAfter,
+    };
+  }
+
+  for (const row of rows) {
+    if (remainingShares <= EPSILON) break;
+    const makerLimitPrice = normalizeTakerPrice(row.limit_price, null);
+    const remainingCollateral = Math.max(0, Number(row.remaining_amount || 0));
+    if (!makerLimitPrice || remainingCollateral <= EPSILON) continue;
+    if (priceFloor !== null && makerLimitPrice + EPSILON < priceFloor) continue;
+
+    const fillShares = round(Math.min(remainingShares, remainingCollateral / makerLimitPrice), 6);
+    const rawCollateral = round(fillShares * makerLimitPrice, 6);
+    if (fillShares <= EPSILON || rawCollateral <= EPSILON) continue;
+
+    let quote;
+    try {
+      quote = quoteSell(nextReserves, outcomeIndex, fillShares);
+    } catch {
+      continue;
+    }
+
+    const cappedCollateral = round(Number(quote.collateralOut || 0), 6);
+    if (cappedCollateral <= EPSILON || rawCollateral + EPSILON < cappedCollateral) continue;
+
+    const price = orderbookAverage(cappedCollateral, fillShares);
+    fills.push({
+      orderId: serializeOrderId(row.id),
+      maker: row.username,
+      side: 'buy',
+      source: row.source || 'limit',
+      price,
+      makerLimitPrice,
+      shares: fillShares,
+      collateral: cappedCollateral,
+      cappedToAmm: makerLimitPrice > price + EPSILON,
+      reservesBefore: nextReserves,
+      reservesAfter: quote.reservesAfter,
+    });
+
+    sharesSold = round(sharesSold + fillShares, 6);
+    collateralOut = round(collateralOut + cappedCollateral, 6);
+    remainingShares = round(Math.max(0, remainingShares - fillShares), 6);
+    priceBefore = priceBefore ?? quote.priceBefore ?? null;
+    priceAfter = quote.priceAfter ?? priceAfter;
+    nextReserves = Array.isArray(quote.reservesAfter) ? quote.reservesAfter.map(Number) : nextReserves;
+  }
+
+  return {
+    fills,
+    sharesSold,
+    collateralOut,
+    remainingShares,
+    avgPrice: orderbookAverage(collateralOut, sharesSold),
+    reservesAfter: fills.length > 0 ? nextReserves : null,
+    priceBefore,
+    priceAfter,
+  };
+}
+
 export function previewPronosMakerAsksForBuy(market, {
   outcomeIndex,
   collateral,
@@ -887,13 +982,66 @@ export function previewPronosMakerBidsForSell(market, {
   minPrice = null,
   currentPrice = null,
 } = {}) {
+  const reserves = reservesForMarket(market, outcomeIndex);
   const depth = pronosMakerDepthForMarket(market, {
     outcomeIndex,
     levels,
     usage,
     currentPrice,
   });
-  return previewRestingBidsForSell(makerBidRows(depth), { shares, minPrice });
+  return previewAmmCappedBidsForSell(makerBidRows(depth), {
+    reserves,
+    outcomeIndex,
+    shares,
+    minPrice,
+  });
+}
+
+export function pronosMakerExecutableBidDepthForMarket(market, {
+  outcomeIndex = 0,
+  levels = AMM_DEPTH_LEVELS,
+  usage = {},
+  currentPrice = null,
+} = {}) {
+  const reserves = reservesForMarket(market, Number(outcomeIndex));
+  const depth = pronosMakerDepthForMarket(market, {
+    outcomeIndex,
+    levels,
+    usage,
+    currentPrice,
+  });
+  const rows = makerBidRows(depth);
+  const targetShares = rows.reduce((sum, row) => (
+    sum + Math.max(0, Number(row.maker_shares || 0))
+  ), 0);
+  const capped = previewAmmCappedBidsForSell(rows, {
+    reserves,
+    outcomeIndex,
+    shares: targetShares,
+  });
+  const bids = capped.fills.map(fill => ({
+    side: 'bid',
+    price: fill.price,
+    shares: fill.shares,
+    total: fill.collateral,
+    fee: 0,
+    priceImpactPts: 0,
+    source: 'maker',
+    cappedToAmm: fill.cappedToAmm,
+    makerLimitPrice: fill.makerLimitPrice,
+  }));
+  const bestAsk = depth.asks.reduce((best, row) => (
+    best == null || row.price < best ? row.price : best
+  ), null);
+  const bestBid = bids.reduce((best, row) => (
+    best == null || row.price > best ? row.price : best
+  ), null);
+
+  return {
+    ...depth,
+    bids,
+    spread: bestAsk == null || bestBid == null ? null : round(Math.max(0, bestAsk - bestBid), 6),
+  };
 }
 
 async function updateLimitOrderFill(client, order, {
@@ -1416,7 +1564,12 @@ export async function matchPronosMakerBidsForSell(client, {
   const usage = await readPronosMakerUsage(client, { marketId, outcomeIndex });
   const depth = pronosMakerDepthForMarket(market, { outcomeIndex, usage, currentPrice });
   const rows = makerBidRows(depth, Math.max(1, Number.parseInt(maxOrders, 10) || MAX_TRIGGERED_PER_PASS));
-  const preview = previewRestingBidsForSell(rows, { shares: targetShares, minPrice });
+  const preview = previewAmmCappedBidsForSell(rows, {
+    reserves,
+    outcomeIndex,
+    shares: targetShares,
+    minPrice,
+  });
   if (preview.sharesSold <= EPSILON || preview.collateralOut <= EPSILON) {
     return { ...preview, realizedPnl: 0 };
   }
@@ -1426,11 +1579,14 @@ export async function matchPronosMakerBidsForSell(client, {
   let collateralOut = 0;
   let realizedPnl = 0;
   let remainingShares = targetShares;
+  let reservesAfter = null;
+  let priceBefore = preview.priceBefore ?? null;
+  let priceAfter = preview.priceAfter ?? null;
 
   for (const fill of preview.fills) {
     if (remainingShares <= EPSILON) break;
     const fillShares = round(Math.min(fill.shares, remainingShares), 6);
-    const fillCollateral = round(fillShares * fill.price, 6);
+    const fillCollateral = round(Number(fill.collateral || fillShares * fill.price), 6);
     if (fillShares <= EPSILON || fillCollateral <= EPSILON) continue;
 
     const sellerPosition = await reduceSoldPosition(client, {
@@ -1455,8 +1611,8 @@ export async function matchPronosMakerBidsForSell(client, {
       collateral: fillCollateral,
       fee: 0,
       priceAtTrade: fill.price,
-      reservesBefore: reserves,
-      reservesAfter: reserves,
+      reservesBefore: fill.reservesBefore || reserves,
+      reservesAfter: fill.reservesAfter || reserves,
       snapshotLabel: null,
     });
     await insertTradeAndSnapshot(client, {
@@ -1468,8 +1624,8 @@ export async function matchPronosMakerBidsForSell(client, {
       collateral: fillCollateral,
       fee: 0,
       priceAtTrade: fill.price,
-      reservesBefore: reserves,
-      reservesAfter: reserves,
+      reservesBefore: fill.reservesBefore || reserves,
+      reservesAfter: fill.reservesAfter || reserves,
       snapshotLabel: null,
     });
 
@@ -1482,6 +1638,16 @@ export async function matchPronosMakerBidsForSell(client, {
     collateralOut = round(collateralOut + fillCollateral, 6);
     realizedPnl = round(realizedPnl + sellerPosition.addedRealized, 6);
     remainingShares = round(Math.max(0, remainingShares - fillShares), 6);
+    if (Array.isArray(fill.reservesAfter)) {
+      reservesAfter = fill.reservesAfter.map(Number);
+    }
+  }
+
+  if (Array.isArray(reservesAfter)) {
+    await client.query(
+      `UPDATE points_markets SET reserves = $1::jsonb WHERE id = $2`,
+      [JSON.stringify(reservesAfter), marketId],
+    );
   }
 
   return {
@@ -1491,6 +1657,9 @@ export async function matchPronosMakerBidsForSell(client, {
     realizedPnl,
     remainingShares,
     avgPrice: orderbookAverage(collateralOut, sharesSold),
+    reservesAfter,
+    priceBefore,
+    priceAfter,
   };
 }
 

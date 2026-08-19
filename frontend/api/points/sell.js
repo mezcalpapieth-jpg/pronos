@@ -190,6 +190,9 @@ export default async function handler(req, res) {
       const ammShares = orderbookMatch.remainingShares > 0.000001
         ? orderbookMatch.remainingShares
         : 0;
+      const reservesForAmm = Array.isArray(orderbookMatch.reservesAfter)
+        ? orderbookMatch.reservesAfter.map(Number)
+        : reserves;
 
       let quote = null;
       let addedAmmRealized = 0;
@@ -214,9 +217,9 @@ export default async function handler(req, res) {
         }
 
         try {
-          quote = reserves.length === 2
-            ? binarySellQuote(reserves, oi, ammShares)
-            : multiSellQuote(reserves, oi, ammShares);
+          quote = reservesForAmm.length === 2
+            ? binarySellQuote(reservesForAmm, oi, ammShares)
+            : multiSellQuote(reservesForAmm, oi, ammShares);
         } catch (e) {
           const err = new Error('invalid_quote'); err.status = 400; err.detail = e.message; throw err;
         }
@@ -261,7 +264,7 @@ export default async function handler(req, res) {
           [
             mid, username, oi,
             ammShares, quote.collateralOut, quote.fee, quote.priceBefore || 0,
-            JSON.stringify(reserves),
+            JSON.stringify(reservesForAmm),
             JSON.stringify(quote.reservesAfter),
           ],
         );
@@ -269,6 +272,12 @@ export default async function handler(req, res) {
         await bestEffortInsertPointsPriceSnapshot(client, {
           marketId: mid,
           reserves: quote.reservesAfter,
+          logLabel: 'points-sell-price-snapshot',
+        });
+      } else if (Array.isArray(orderbookMatch.reservesAfter)) {
+        await bestEffortInsertPointsPriceSnapshot(client, {
+          marketId: mid,
+          reserves: orderbookMatch.reservesAfter,
           logLabel: 'points-sell-price-snapshot',
         });
       }
@@ -316,8 +325,8 @@ export default async function handler(req, res) {
         collateralOut: totalCollateralOut,
         sharesSold: sharesToSell,
         realizedPnl: orderbookMatch.realizedPnl + addedAmmRealized,
-        priceBefore: quote?.priceBefore ?? orderbookMatch.avgPrice,
-        priceAfter: quote?.priceAfter ?? orderbookMatch.avgPrice,
+        priceBefore: orderbookMatch.priceBefore ?? quote?.priceBefore ?? orderbookMatch.avgPrice,
+        priceAfter: quote?.priceAfter ?? orderbookMatch.priceAfter ?? orderbookMatch.avgPrice,
         orderbookFills: orderbookMatch.fills,
         triggeredLimitOrders,
       };
