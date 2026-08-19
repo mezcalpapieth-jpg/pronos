@@ -106,6 +106,7 @@ export default async function handler(req, res) {
       ),
       sampled AS (
         SELECT
+          id,
           market_id,
           prices,
           snapshotted_at,
