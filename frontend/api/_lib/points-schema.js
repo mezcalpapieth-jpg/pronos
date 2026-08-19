@@ -38,6 +38,7 @@ const POINTS_SCHEMA_READY_PROBE = `
     to_regclass('public.points_site_time_daily') IS NOT NULL AS points_site_time_daily,
     to_regclass('public.points_publicity_daily') IS NOT NULL AS points_publicity_daily,
     to_regclass('public.points_resolution_candidates') IS NOT NULL AS points_resolution_candidates,
+    to_regclass('public.points_resolver_checkpoints') IS NOT NULL AS points_resolver_checkpoints,
     to_regclass('public.points_support_tickets') IS NOT NULL AS points_support_tickets,
     to_regclass('public.points_support_messages') IS NOT NULL AS points_support_messages,
     to_regclass('public.points_pwa_install_claims') IS NOT NULL AS points_pwa_install_claims,
@@ -188,50 +189,6 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_markets_category_tags ON points_markets USING GIN (category_tags)`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_geo_tags ON points_markets USING GIN (geo_tags)`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_topic_tags ON points_markets USING GIN (topic_tags)`,
-  `UPDATE points_markets
-     SET category_tags = CASE
-       WHEN category IN ('crypto', 'world-cup') THEN to_jsonb(ARRAY[category])
-       WHEN category = 'deportes' AND (
-         league IN ('liga-mx', 'lmb')
-         OR question ~* '(cruz azul|chivas|guadalajara|america|américa|pumas|tigres|rayados|monterrey|liga mx|diablos rojos|lmb)'
-       ) THEN '["deportes","mexico"]'::jsonb
-       WHEN category <> 'mexico' AND question ~* '(mexico|méxico|cdmx|latam|latinoamérica|latinoamerica|américa latina|america latina|argentina|brasil|brazil|colombia|chile|peru|uruguay|peso mexicano|mxn|pemex|aeromexico|volaris)'
-         THEN to_jsonb(ARRAY[COALESCE(NULLIF(category, ''), 'general'), 'mexico'])
-       ELSE to_jsonb(ARRAY[COALESCE(NULLIF(category, ''), 'general')])
-     END
-   WHERE category_tags IS NULL OR category_tags = '[]'::jsonb`,
-  `UPDATE points_markets
-     SET geo_tags = CASE
-       WHEN category IN ('crypto', 'world-cup') THEN '[]'::jsonb
-       WHEN category = 'mexico'
-         OR league IN ('liga-mx', 'lmb')
-         OR question ~* '(mexico|méxico|cdmx|cruz azul|chivas|guadalajara|america|américa|pumas|tigres|rayados|monterrey|liga mx|diablos rojos|lmb|peso mexicano|mxn|pemex|aeromexico|volaris)'
-         THEN '["mexico"]'::jsonb
-       WHEN question ~* '(latam|latinoamérica|latinoamerica|américa latina|america latina|argentina|brasil|brazil|colombia|chile|peru|uruguay)'
-         THEN '["latam"]'::jsonb
-       ELSE '[]'::jsonb
-     END
-   WHERE geo_tags IS NULL OR geo_tags = '[]'::jsonb`,
-  `UPDATE points_markets
-     SET topic_tags = CASE
-       WHEN category IN ('crypto', 'world-cup') THEN to_jsonb(ARRAY[category])
-       WHEN resolver_type = 'weather_api' OR question ~* '(weather|temperatura|lluvia)' THEN '["weather"]'::jsonb
-       WHEN category = 'mexico' THEN '["general"]'::jsonb
-       ELSE to_jsonb(ARRAY[COALESCE(NULLIF(category, ''), 'general')])
-     END
-   WHERE topic_tags IS NULL OR topic_tags = '[]'::jsonb`,
-  `UPDATE points_markets
-     SET category_tags = to_jsonb(ARRAY[category])
-   WHERE category IN ('crypto', 'world-cup')
-     AND (category_tags = '[]'::jsonb OR category_tags ? 'mexico' OR NOT (category_tags ? category))`,
-  `UPDATE points_markets
-     SET geo_tags = '[]'::jsonb
-   WHERE category IN ('crypto', 'world-cup')
-     AND geo_tags <> '[]'::jsonb`,
-  `UPDATE points_markets
-     SET topic_tags = to_jsonb(ARRAY[category])
-   WHERE category IN ('crypto', 'world-cup')
-     AND (topic_tags = '[]'::jsonb OR topic_tags ? 'mexico' OR NOT (topic_tags ? category))`,
 
   // amm_mode: 'unified' (default — one pool, N-outcome CPMM) or 'parallel'
   // (Polymarket-style: each outcome is its own binary market, grouped under
@@ -265,7 +222,6 @@ const POINTS_SCHEMA_MIGRATIONS = [
   // UI sub-filter keys on sport='baseball' with the MLB/LMB split
   // carried by `league`. Collapse 'mlb' into 'baseball' so existing
   // markets show up under the Béisbol tab.
-  `UPDATE points_markets SET sport = 'baseball', league = COALESCE(league, 'mlb') WHERE sport = 'mlb'`,
 
   // outcome_images: JSONB array index-aligned with `outcomes`. Each slot
   // is either a URL string (team crest / player portrait) or null when
@@ -1020,6 +976,20 @@ const POINTS_SCHEMA_MIGRATIONS = [
     ON points_resolution_candidates(points_market_id)
     WHERE status = 'pending'`,
 
+  // ── Resolver checkpoints (scheduler state off the hot market row) ───────
+  // Tracks retry/heartbeat timestamps such as sports next-opponent checks
+  // without rewriting points_markets.resolver_config on every resolver pass.
+  `CREATE TABLE IF NOT EXISTS points_resolver_checkpoints (
+    market_id       INTEGER NOT NULL REFERENCES points_markets(id) ON DELETE CASCADE,
+    checkpoint_key  TEXT NOT NULL,
+    last_checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    metadata        JSONB NOT NULL DEFAULT '{}'::jsonb,
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (market_id, checkpoint_key)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_resolver_checkpoints_key_checked
+    ON points_resolver_checkpoints(checkpoint_key, last_checked_at DESC)`,
+
   // ── Mañanera official transcript cache ────────────────────────────────────
   // The resolver can settle phrase markets from the same durable record
   // instead of repeatedly scraping gob.mx. date_ymd is the primary key
@@ -1092,18 +1062,6 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_pending_category_tags ON points_pending_markets USING GIN (category_tags)`,
   `CREATE INDEX IF NOT EXISTS idx_points_pending_geo_tags ON points_pending_markets USING GIN (geo_tags)`,
   `CREATE INDEX IF NOT EXISTS idx_points_pending_topic_tags ON points_pending_markets USING GIN (topic_tags)`,
-  `UPDATE points_pending_markets
-     SET category_tags = to_jsonb(ARRAY[category])
-   WHERE category IN ('crypto', 'world-cup')
-     AND (category_tags = '[]'::jsonb OR category_tags ? 'mexico' OR NOT (category_tags ? category))`,
-  `UPDATE points_pending_markets
-     SET geo_tags = '[]'::jsonb
-   WHERE category IN ('crypto', 'world-cup')
-     AND geo_tags <> '[]'::jsonb`,
-  `UPDATE points_pending_markets
-     SET topic_tags = to_jsonb(ARRAY[category])
-   WHERE category IN ('crypto', 'world-cup')
-     AND (topic_tags = '[]'::jsonb OR topic_tags ? 'mexico' OR NOT (topic_tags ? category))`,
   // featured mirrors the final column on points_markets so admin can
   // pre-set "show in Trending?" from the pending queue before approval.
   // Default false on pending — admin explicitly ticks the 🔥 to feature.
@@ -1122,6 +1080,145 @@ const POINTS_SCHEMA_MIGRATIONS = [
   // 3+ outcome markets always draw one shared-axis line per outcome
   // and ignore this column.
   `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS chart_style TEXT`,
+];
+
+// Historical row-shaping backfills are intentionally NOT part of
+// POINTS_SCHEMA_MIGRATIONS. Hot public routes call ensurePointsSchema(), so
+// broad points_markets UPDATEs here would turn normal traffic into table
+// rewrite work after a schema probe miss. Run these only from an explicit
+// admin/manual repair path, after ensurePointsSchema(), and after taking the
+// usual production backup/branch precautions.
+export const POINTS_MARKET_DATA_BACKFILLS = [
+  `WITH candidate AS (
+     SELECT id,
+            CASE
+              WHEN category IN ('crypto', 'world-cup') THEN to_jsonb(ARRAY[category])
+              WHEN category = 'deportes' AND (
+                league IN ('liga-mx', 'lmb')
+                OR question ~* '(cruz azul|chivas|guadalajara|america|américa|pumas|tigres|rayados|monterrey|liga mx|diablos rojos|lmb)'
+              ) THEN '["deportes","mexico"]'::jsonb
+              WHEN category <> 'mexico' AND question ~* '(mexico|méxico|cdmx|latam|latinoamérica|latinoamerica|américa latina|america latina|argentina|brasil|brazil|colombia|chile|peru|uruguay|peso mexicano|mxn|pemex|aeromexico|volaris)'
+                THEN to_jsonb(ARRAY[COALESCE(NULLIF(category, ''), 'general'), 'mexico'])
+              ELSE to_jsonb(ARRAY[COALESCE(NULLIF(category, ''), 'general')])
+            END AS next_category_tags
+       FROM points_markets
+      WHERE category_tags IS NULL OR category_tags = '[]'::jsonb
+   )
+   UPDATE points_markets m
+      SET category_tags = c.next_category_tags
+     FROM candidate c
+    WHERE m.id = c.id
+      AND m.category_tags IS DISTINCT FROM c.next_category_tags`,
+  `WITH candidate AS (
+     SELECT id,
+            CASE
+              WHEN category IN ('crypto', 'world-cup') THEN '[]'::jsonb
+              WHEN category = 'mexico'
+                OR league IN ('liga-mx', 'lmb')
+                OR question ~* '(mexico|méxico|cdmx|cruz azul|chivas|guadalajara|america|américa|pumas|tigres|rayados|monterrey|liga mx|diablos rojos|lmb|peso mexicano|mxn|pemex|aeromexico|volaris)'
+                THEN '["mexico"]'::jsonb
+              WHEN question ~* '(latam|latinoamérica|latinoamerica|américa latina|america latina|argentina|brasil|brazil|colombia|chile|peru|uruguay)'
+                THEN '["latam"]'::jsonb
+              ELSE '[]'::jsonb
+            END AS next_geo_tags
+       FROM points_markets
+      WHERE geo_tags IS NULL OR geo_tags = '[]'::jsonb
+   )
+   UPDATE points_markets m
+      SET geo_tags = c.next_geo_tags
+     FROM candidate c
+    WHERE m.id = c.id
+      AND m.geo_tags IS DISTINCT FROM c.next_geo_tags`,
+  `WITH candidate AS (
+     SELECT id,
+            CASE
+              WHEN category IN ('crypto', 'world-cup') THEN to_jsonb(ARRAY[category])
+              WHEN resolver_type = 'weather_api' OR question ~* '(weather|temperatura|lluvia)' THEN '["weather"]'::jsonb
+              WHEN category = 'mexico' THEN '["general"]'::jsonb
+              ELSE to_jsonb(ARRAY[COALESCE(NULLIF(category, ''), 'general')])
+            END AS next_topic_tags
+       FROM points_markets
+      WHERE topic_tags IS NULL OR topic_tags = '[]'::jsonb
+   )
+   UPDATE points_markets m
+      SET topic_tags = c.next_topic_tags
+     FROM candidate c
+    WHERE m.id = c.id
+      AND m.topic_tags IS DISTINCT FROM c.next_topic_tags`,
+  `WITH candidate AS (
+     SELECT id, to_jsonb(ARRAY[category]) AS next_category_tags
+       FROM points_markets
+      WHERE category IN ('crypto', 'world-cup')
+        AND (category_tags = '[]'::jsonb OR category_tags ? 'mexico' OR NOT (category_tags ? category))
+   )
+   UPDATE points_markets m
+      SET category_tags = c.next_category_tags
+     FROM candidate c
+    WHERE m.id = c.id
+      AND m.category_tags IS DISTINCT FROM c.next_category_tags`,
+  `WITH candidate AS (
+     SELECT id, '[]'::jsonb AS next_geo_tags
+       FROM points_markets
+      WHERE category IN ('crypto', 'world-cup')
+        AND geo_tags <> '[]'::jsonb
+   )
+   UPDATE points_markets m
+      SET geo_tags = c.next_geo_tags
+     FROM candidate c
+    WHERE m.id = c.id
+      AND m.geo_tags IS DISTINCT FROM c.next_geo_tags`,
+  `WITH candidate AS (
+     SELECT id, to_jsonb(ARRAY[category]) AS next_topic_tags
+       FROM points_markets
+      WHERE category IN ('crypto', 'world-cup')
+        AND (topic_tags = '[]'::jsonb OR topic_tags ? 'mexico' OR NOT (topic_tags ? category))
+   )
+   UPDATE points_markets m
+      SET topic_tags = c.next_topic_tags
+     FROM candidate c
+    WHERE m.id = c.id
+      AND m.topic_tags IS DISTINCT FROM c.next_topic_tags`,
+  `UPDATE points_markets
+      SET sport = 'baseball',
+          league = COALESCE(league, 'mlb')
+    WHERE sport = 'mlb'
+      AND (
+        sport IS DISTINCT FROM 'baseball'
+        OR league IS DISTINCT FROM COALESCE(league, 'mlb')
+      )`,
+  `WITH candidate AS (
+     SELECT id, to_jsonb(ARRAY[category]) AS next_category_tags
+       FROM points_pending_markets
+      WHERE category IN ('crypto', 'world-cup')
+        AND (category_tags = '[]'::jsonb OR category_tags ? 'mexico' OR NOT (category_tags ? category))
+   )
+   UPDATE points_pending_markets p
+      SET category_tags = c.next_category_tags
+     FROM candidate c
+    WHERE p.id = c.id
+      AND p.category_tags IS DISTINCT FROM c.next_category_tags`,
+  `WITH candidate AS (
+     SELECT id, '[]'::jsonb AS next_geo_tags
+       FROM points_pending_markets
+      WHERE category IN ('crypto', 'world-cup')
+        AND geo_tags <> '[]'::jsonb
+   )
+   UPDATE points_pending_markets p
+      SET geo_tags = c.next_geo_tags
+     FROM candidate c
+    WHERE p.id = c.id
+      AND p.geo_tags IS DISTINCT FROM c.next_geo_tags`,
+  `WITH candidate AS (
+     SELECT id, to_jsonb(ARRAY[category]) AS next_topic_tags
+       FROM points_pending_markets
+      WHERE category IN ('crypto', 'world-cup')
+        AND (topic_tags = '[]'::jsonb OR topic_tags ? 'mexico' OR NOT (topic_tags ? category))
+   )
+   UPDATE points_pending_markets p
+      SET topic_tags = c.next_topic_tags
+     FROM candidate c
+    WHERE p.id = c.id
+      AND p.topic_tags IS DISTINCT FROM c.next_topic_tags`,
 ];
 
 // PostgreSQL error codes we treat as idempotent no-ops during migration.
@@ -1204,6 +1301,26 @@ async function runSchemaMigration(sql, migration) {
     return;
   }
   await sql.query(migration);
+}
+
+export async function runPointsMarketDataBackfills(sql) {
+  await ensurePointsSchema(sql);
+  const results = [];
+  for (const backfill of POINTS_MARKET_DATA_BACKFILLS) {
+    try {
+      await runSchemaMigration(sql, backfill);
+      results.push({ sql: backfill.slice(0, 80), ok: true });
+    } catch (err) {
+      results.push({
+        sql: backfill.slice(0, 80),
+        ok: false,
+        error: err?.message,
+        code: err?.code,
+      });
+      throw err;
+    }
+  }
+  return results;
 }
 
 export async function ensurePointsSchema(sql) {

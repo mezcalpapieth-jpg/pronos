@@ -11,6 +11,8 @@ const cycleHistory = await readFile(new URL('./cycles/history.js', import.meta.u
 const history = await readFile(new URL('./history.js', import.meta.url), 'utf8');
 const adminStats = await readFile(new URL('./admin/stats.js', import.meta.url), 'utf8');
 const orderbook = await readFile(new URL('./orderbook.js', import.meta.url), 'utf8');
+const adminMarkets = await readFile(new URL('./admin/markets.js', import.meta.url), 'utf8');
+const adminPendingMarkets = await readFile(new URL('./admin/pending-markets.js', import.meta.url), 'utf8');
 const pointsSchema = await readFile(new URL('../_lib/points-schema.js', import.meta.url), 'utf8');
 const migrate = await readFile(new URL('../migrate.js', import.meta.url), 'utf8');
 
@@ -63,4 +65,11 @@ test('manual migration creates columns before partial indexes that reference the
   assert.ok(parentColumn > 0 && parentColumn < firstPartialIndex);
   assert.ok(featuredColumn > 0 && featuredColumn < firstPartialIndex);
   assert.ok(archivedColumn > 0 && archivedColumn < firstPartialIndex);
+});
+
+test('high-volume admin list endpoints avoid row-star overfetch', () => {
+  assert.doesNotMatch(adminMarkets, /SELECT\s+m\.\*/);
+  assert.doesNotMatch(adminPendingMarkets, /SELECT\s+p\.\*/);
+  assert.match(adminMarkets, /m\.resolver_config/);
+  assert.match(adminPendingMarkets, /p\.resolver_config/);
 });

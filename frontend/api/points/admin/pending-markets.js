@@ -310,9 +310,38 @@ async function list(req, res) {
   // and the join returns nulls.
   const rows = status === 'all'
     ? await readSql`
-        SELECT p.*, mk.featured AS market_featured,
-               mk.tournament_featured AS market_tournament_featured,
-               mk.status AS market_status
+        SELECT
+          p.id,
+          p.source,
+          p.source_event_id,
+          p.source_data,
+          p.question,
+          p.category,
+          p.outcomes,
+          p.outcome_images,
+          p.seed_liquidity,
+          p.seed_liquidities,
+          p.start_time,
+          p.end_time,
+          p.amm_mode,
+          p.resolver_type,
+          p.resolver_config,
+          p.sport,
+          p.league,
+          p.category_tags,
+          p.geo_tags,
+          p.topic_tags,
+          p.status,
+          p.admin_note,
+          p.reviewer,
+          p.reviewed_at,
+          p.approved_market_id,
+          p.created_at,
+          p.featured,
+          p.tournament_featured,
+          mk.featured AS market_featured,
+          mk.tournament_featured AS market_tournament_featured,
+          mk.status AS market_status
         FROM points_pending_markets p
         LEFT JOIN points_markets mk ON mk.id = p.approved_market_id
         ORDER BY
@@ -323,9 +352,38 @@ async function list(req, res) {
         LIMIT 2000
       `
     : await readSql`
-        SELECT p.*, mk.featured AS market_featured,
-               mk.tournament_featured AS market_tournament_featured,
-               mk.status AS market_status
+        SELECT
+          p.id,
+          p.source,
+          p.source_event_id,
+          p.source_data,
+          p.question,
+          p.category,
+          p.outcomes,
+          p.outcome_images,
+          p.seed_liquidity,
+          p.seed_liquidities,
+          p.start_time,
+          p.end_time,
+          p.amm_mode,
+          p.resolver_type,
+          p.resolver_config,
+          p.sport,
+          p.league,
+          p.category_tags,
+          p.geo_tags,
+          p.topic_tags,
+          p.status,
+          p.admin_note,
+          p.reviewer,
+          p.reviewed_at,
+          p.approved_market_id,
+          p.created_at,
+          p.featured,
+          p.tournament_featured,
+          mk.featured AS market_featured,
+          mk.tournament_featured AS market_tournament_featured,
+          mk.status AS market_status
         FROM points_pending_markets p
         LEFT JOIN points_markets mk ON mk.id = p.approved_market_id
         WHERE p.status = ${status}

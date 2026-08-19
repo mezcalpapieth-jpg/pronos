@@ -930,6 +930,9 @@ export async function runAutoResolve({ dry = false } = {}) {
          ORDER BY id DESC
          LIMIT 1
       ) pm ON true
+      LEFT JOIN points_resolver_checkpoints noc
+        ON noc.market_id = m.id
+       AND noc.checkpoint_key = 'next-opponent'
       WHERE m.status = 'active'
         AND m.end_time IS NOT NULL
         AND m.parent_id IS NULL
@@ -950,8 +953,14 @@ export async function runAutoResolve({ dry = false } = {}) {
                 AND m.resolver_config->>'source' = 'next-opponent'
                 AND m.end_time > NOW()
                 AND (
-                  m.resolver_config->>'nextOpponentLastCheckedAt' IS NULL
-                  OR NULLIF(m.resolver_config->>'nextOpponentLastCheckedAt', '')::timestamptz
+                  COALESCE(
+                    noc.last_checked_at,
+                    NULLIF(m.resolver_config->>'nextOpponentLastCheckedAt', '')::timestamptz
+                  ) IS NULL
+                  OR COALESCE(
+                    noc.last_checked_at,
+                    NULLIF(m.resolver_config->>'nextOpponentLastCheckedAt', '')::timestamptz
+                  )
                        < NOW() - (${NEXT_OPPONENT_RECHECK_INTERVAL_HOURS}::int * INTERVAL '1 hour')
                 )
               )
@@ -1865,13 +1874,30 @@ export async function runAutoResolve({ dry = false } = {}) {
             const checkedAt = new Date().toISOString();
             try {
               await schemaSql`
-                UPDATE points_markets
-                   SET resolver_config = COALESCE(resolver_config, '{}'::jsonb)
-                     || ${JSON.stringify({ nextOpponentLastCheckedAt: checkedAt })}::jsonb
-                 WHERE id = ${m.id}
-                   AND status = 'active'
+                INSERT INTO points_resolver_checkpoints (
+                  market_id, checkpoint_key, last_checked_at, metadata, updated_at
+                )
+                VALUES (
+                  ${m.id},
+                  'next-opponent',
+                  ${checkedAt}::timestamptz,
+                  ${JSON.stringify({
+                    reason: e.message || 'deferred',
+                    source: cfg.source || null,
+                    state: e.info?.state || null,
+                    notFound: e.info?.notFound === true,
+                  })}::jsonb,
+                  NOW()
+                )
+                ON CONFLICT (market_id, checkpoint_key) DO UPDATE
+                  SET last_checked_at = EXCLUDED.last_checked_at,
+                      metadata = EXCLUDED.metadata,
+                      updated_at = NOW()
+                  WHERE points_resolver_checkpoints.last_checked_at IS DISTINCT FROM EXCLUDED.last_checked_at
+                     OR points_resolver_checkpoints.metadata IS DISTINCT FROM EXCLUDED.metadata
               `;
               deferred.nextOpponentLastCheckedAt = checkedAt;
+              deferred.nextOpponentCheckpoint = 'points_resolver_checkpoints';
             } catch (patchErr) {
               deferred.checkPatchError = patchErr?.message?.slice(0, 160) || 'patch_failed';
             }

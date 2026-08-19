@@ -46,13 +46,17 @@ export default async function handler(req, res) {
     await ensurePointsSchema(sql);
 
     const rows = await readSql`
-      SELECT id, question, category, status, resolver_type, resolver_config,
-             start_time, end_time,
-             EXTRACT(EPOCH FROM (NOW() - end_time))::int AS seconds_past_end
-      FROM points_markets
-      WHERE status = 'active'
-        AND parent_id IS NULL
-      ORDER BY end_time ASC NULLS LAST
+      SELECT m.id, m.question, m.category, m.status, m.resolver_type, m.resolver_config,
+             m.start_time, m.end_time,
+             noc.last_checked_at AS next_opponent_checkpoint_at,
+             EXTRACT(EPOCH FROM (NOW() - m.end_time))::int AS seconds_past_end
+      FROM points_markets m
+      LEFT JOIN points_resolver_checkpoints noc
+        ON noc.market_id = m.id
+       AND noc.checkpoint_key = 'next-opponent'
+      WHERE m.status = 'active'
+        AND m.parent_id IS NULL
+      ORDER BY m.end_time ASC NULLS LAST
       LIMIT 500
     `;
 
@@ -67,6 +71,9 @@ export default async function handler(req, res) {
 
     for (const r of rows) {
       const cfg = parseJsonb(r.resolver_config, null);
+      const resolverLastCheckedAt = r.next_opponent_checkpoint_at
+        || cfg?.nextOpponentLastCheckedAt
+        || null;
       const entry = {
         id: r.id,
         question: r.question,
@@ -75,7 +82,10 @@ export default async function handler(req, res) {
         resolverSource: cfg?.source || null,
         resolverEventId: cfg?.eventId || null,
         resolverDateYmd: cfg?.dateYmd || null,
-        resolverLastCheckedAt: cfg?.nextOpponentLastCheckedAt || null,
+        resolverLastCheckedAt,
+        resolverLastCheckedSource: resolverLastCheckedAt
+          ? (r.next_opponent_checkpoint_at ? 'checkpoint' : 'resolver_config')
+          : null,
         startTime: r.start_time,
         endTime: r.end_time,
         secondsPastEnd: r.seconds_past_end,
@@ -89,7 +99,9 @@ export default async function handler(req, res) {
         && startMs < Date.now() - 90 * 60_000;
       const nextOpponentCheckDue = isNextOpponentCheckDue({
         resolverType: r.resolver_type,
-        resolverConfig: cfg,
+        resolverConfig: resolverLastCheckedAt
+          ? { ...(cfg || {}), nextOpponentLastCheckedAt: resolverLastCheckedAt }
+          : cfg,
         endTime: r.end_time,
       });
 

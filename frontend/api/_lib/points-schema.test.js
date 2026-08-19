@@ -9,6 +9,7 @@ test('points schema self-healing avoids hot-route migration lock pileups', () =>
   assert.match(source, /POINTS_SCHEMA_READY_PROBE/);
   assert.match(source, /to_regclass\('public\.points_publicity_daily'\)/);
   assert.match(source, /to_regclass\('public\.points_resolution_candidates'\)/);
+  assert.match(source, /to_regclass\('public\.points_resolver_checkpoints'\) IS NOT NULL AS points_resolver_checkpoints/);
   assert.match(source, /to_regclass\('public\.points_pwa_install_claims'\) IS NOT NULL AS points_pwa_install_claims/);
   assert.match(source, /to_regclass\('public\.points_social_links'\) IS NOT NULL AS points_social_links/);
   assert.match(source, /to_regclass\('public\.points_mananera_transcripts'\) IS NOT NULL AS points_mananera_transcripts/);
@@ -30,6 +31,29 @@ test('points schema self-healing avoids hot-route migration lock pileups', () =>
   assert.match(source, /deadlock_detected/);
   assert.match(source, /lock_not_available/);
   assert.match(source, /statement_timeout/);
+});
+
+test('points schema stores resolver checkpoints off market rows', () => {
+  for (const migrationSource of [source, migrateSource]) {
+    assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS points_resolver_checkpoints/);
+    assert.match(migrationSource, /PRIMARY KEY \(market_id, checkpoint_key\)/);
+    assert.match(migrationSource, /idx_points_resolver_checkpoints_key_checked/);
+  }
+});
+
+test('points schema keeps market data backfills out of hot migrations', () => {
+  const migrationsStart = source.indexOf('const POINTS_SCHEMA_MIGRATIONS = [');
+  const backfillsStart = source.indexOf('export const POINTS_MARKET_DATA_BACKFILLS');
+  assert.ok(migrationsStart >= 0);
+  assert.ok(backfillsStart > migrationsStart);
+
+  const migrationBody = source.slice(migrationsStart, backfillsStart);
+  assert.doesNotMatch(migrationBody, /UPDATE\s+points_markets/i);
+  assert.doesNotMatch(migrationBody, /UPDATE\s+points_pending_markets/i);
+
+  assert.match(source, /export const POINTS_MARKET_DATA_BACKFILLS/);
+  assert.match(source, /export async function runPointsMarketDataBackfills/);
+  assert.match(source, /IS DISTINCT FROM/);
 });
 
 test('points schema stores official Mañanera transcripts by local date', () => {

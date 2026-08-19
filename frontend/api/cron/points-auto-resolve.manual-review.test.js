@@ -12,6 +12,14 @@ test('points auto-resolver queues manual-review markets instead of auto-paying t
   assert.match(SOURCE, /ON CONFLICT \(points_market_id\) WHERE status = 'pending'/);
 });
 
+test('points auto-resolver stores next-opponent check state off market rows', () => {
+  assert.match(SOURCE, /LEFT JOIN points_resolver_checkpoints noc/);
+  assert.match(SOURCE, /noc\.last_checked_at/);
+  assert.match(SOURCE, /INSERT INTO points_resolver_checkpoints/);
+  assert.match(SOURCE, /ON CONFLICT \(market_id, checkpoint_key\) DO UPDATE/);
+  assert.doesNotMatch(SOURCE, /UPDATE points_markets[\s\S]{0,240}nextOpponentLastCheckedAt/);
+});
+
 test('points auto-resolver picks up entertainment markets after close time', () => {
   assert.match(SOURCE, /m\.resolver_type IN \('manual', 'manual_review'\)/);
   assert.match(SOURCE, /m\.source IN \('entertainment', 'codex-entertainment', 'codex-premios-juventud-2026'\)/);

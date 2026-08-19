@@ -357,7 +357,15 @@ export default async function handler(req, res) {
       await ensurePointsSchema(schemaSql);
 
       const rows = await sql`
-        SELECT m.*, pm.source_data AS pending_source_data,
+        SELECT
+          m.id, m.parent_id, m.question, m.category, m.outcomes, m.reserves,
+          m.seed_liquidity, m.start_time, m.end_time, m.status, m.outcome,
+          m.created_at, m.resolved_at, m.final_score, m.amm_mode, m.chart_style,
+          m.resolver_type, m.resolver_config, m.sport, m.league, m.category_tags,
+          m.geo_tags, m.topic_tags, m.outcome_images, m.mode, m.chain_id,
+          m.chain_market_id, m.chain_address, m.archived_at, m.source,
+          m.source_event_id,
+          pm.source_data AS pending_source_data,
           (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_volume,
           (SELECT MAX(created_at) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS last_trade_at,
           (SELECT t.outcome_index FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.price_at_trade IS NOT NULL ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS display_trade_outcome_index,

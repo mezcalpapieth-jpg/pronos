@@ -512,6 +512,17 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_publicity_attributions_source
     ON points_publicity_attributions(source, converted_at DESC)`,
 
+  `CREATE TABLE IF NOT EXISTS points_resolver_checkpoints (
+    market_id       INTEGER NOT NULL REFERENCES points_markets(id) ON DELETE CASCADE,
+    checkpoint_key  TEXT NOT NULL,
+    last_checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    metadata        JSONB NOT NULL DEFAULT '{}'::jsonb,
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (market_id, checkpoint_key)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_resolver_checkpoints_key_checked
+    ON points_resolver_checkpoints(checkpoint_key, last_checked_at DESC)`,
+
   `CREATE TABLE IF NOT EXISTS points_mananera_transcripts (
     date_ymd          DATE PRIMARY KEY,
     source            TEXT NOT NULL,

@@ -177,17 +177,22 @@ export default async function handler(req, res) {
     crypto5MinReport = { error: e?.message || 'crypto_5min_failed' };
   }
 
-  // ── Points auto-resolver multiplex ────────────────────────────────
-  // Vercel's active project config may only schedule /api/indexer, and
-  // Hobby projects have tight cron-slot limits. Piggyback the points
-  // resolver on this already-running minute cron instead of relying on
-  // a separate /api/cron/points-auto-resolve schedule. Manual probe:
-  // /api/indexer?key=...&resolve=1 (add resolveDry=1 for dry-run).
-  let pointsAutoResolveReport = { status: 'skipped', reason: 'not_scheduled' };
+  // ── Points auto-resolver manual/legacy multiplex ──────────────────
+  // The repo now has a dedicated /api/cron/points-auto-resolve schedule.
+  // Keep this indexer hook for manual probes and for deployments that
+  // explicitly opt in, but do not run duplicate resolver passes by default.
+  // Manual probe: /api/indexer?key=...&resolve=1 (add resolveDry=1 for dry-run).
+  let pointsAutoResolveReport = { status: 'skipped', reason: 'dedicated_cron' };
   const forceAutoResolve = req.query.resolve === '1' || req.query.autoResolve === '1';
   const dryAutoResolve = req.query.resolveDry === '1' || req.query.resolveDry === 'true';
+  const pointsAutoResolveOnIndexer = process.env.POINTS_AUTO_RESOLVE_ON_INDEXER === '1'
+    || process.env.POINTS_AUTO_RESOLVE_ON_INDEXER === 'true';
   const shouldRunPointsAutoResolve = forceAutoResolve
-    || (isVercelCron && shouldRunMinuteInterval({ intervalMinutes: 15 }));
+    || (
+      pointsAutoResolveOnIndexer
+      && isVercelCron
+      && shouldRunMinuteInterval({ intervalMinutes: 15 })
+    );
   if (shouldRunPointsAutoResolve) {
     try {
       const result = await runAutoResolve({ dry: dryAutoResolve });

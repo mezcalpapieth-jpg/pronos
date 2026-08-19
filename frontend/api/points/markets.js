@@ -175,124 +175,50 @@ export default async function handler(req, res) {
     // literal; a CASE/COALESCE around `m.mode = $` keeps the plan simple
     // and indexable. Rows with mode IS NULL are treated as 'points' for
     // backward-compat with pre-M3 schemas that hadn't populated the column.
-      const rows = await timer.time('db_markets', () => category
-        ? sql`
-          SELECT m.*, pm.source_data AS pending_source_data,
-            (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_volume,
-            (SELECT t.outcome_index FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.price_at_trade IS NOT NULL ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS display_trade_outcome_index,
-            (SELECT t.price_at_trade FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.price_at_trade IS NOT NULL ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS display_trade_price,
-            (SELECT (t.reserves_before IS NOT NULL AND t.reserves_after IS NOT NULL AND t.reserves_before = t.reserves_after) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.price_at_trade IS NOT NULL ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS display_trade_is_book
-          FROM points_markets m
-          LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
-          WHERE m.status = ${status}
-            AND (m.category = ${category} OR COALESCE(m.category_tags, '[]'::jsonb) ? ${category})
-            AND m.parent_id IS NULL
-            AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
-            AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
-            AND m.archived_at IS NULL
-            AND (
-              ${status}::text <> 'active'
-              OR m.hidden_from_home IS NOT TRUE
-              OR m.tournament_featured = true
-            )
-          ORDER BY
-            CASE WHEN ${status}::text = 'resolved' THEN m.resolved_at END DESC NULLS LAST,
-            -- Live markets first (kickoff has passed, deadline hasn't).
-            CASE WHEN m.start_time IS NOT NULL
-                  AND m.start_time <= NOW()
-                  AND m.end_time > NOW() THEN 0 ELSE 1 END,
-            m.end_time ASC,
-            m.id ASC
-          LIMIT ${limit}
-        `
-        : tournamentOnly
-          ? sql`
-            SELECT m.*, pm.source_data AS pending_source_data,
-              (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_volume,
-              (SELECT t.outcome_index FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.price_at_trade IS NOT NULL ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS display_trade_outcome_index,
-              (SELECT t.price_at_trade FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.price_at_trade IS NOT NULL ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS display_trade_price,
-              (SELECT (t.reserves_before IS NOT NULL AND t.reserves_after IS NOT NULL AND t.reserves_before = t.reserves_after) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.price_at_trade IS NOT NULL ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS display_trade_is_book
-            FROM points_markets m
-            LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
-            WHERE m.status = ${status}
-              AND m.tournament_featured = true
-              AND m.parent_id IS NULL
-              AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
-              AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
-              AND m.archived_at IS NULL
-            ORDER BY
-              CASE WHEN ${status}::text = 'resolved' THEN m.resolved_at END DESC NULLS LAST,
-              CASE WHEN m.start_time IS NOT NULL
-                    AND m.start_time <= NOW()
-                    AND m.end_time > NOW() THEN 0 ELSE 1 END,
-              m.end_time ASC,
-              m.id ASC
-            LIMIT ${limit}
-          `
-          : featuredOnly
-          ? sql`
-            SELECT m.*, pm.source_data AS pending_source_data,
-              (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_volume,
-              (SELECT t.outcome_index FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.price_at_trade IS NOT NULL ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS display_trade_outcome_index,
-              (SELECT t.price_at_trade FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.price_at_trade IS NOT NULL ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS display_trade_price,
-              (SELECT (t.reserves_before IS NOT NULL AND t.reserves_after IS NOT NULL AND t.reserves_before = t.reserves_after) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.price_at_trade IS NOT NULL ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS display_trade_is_book
-            FROM points_markets m
-            LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
-            WHERE m.status = ${status}
-              AND (
-                (m.featured = true AND m.hidden_from_home = false)
-                OR m.tournament_featured = true
-              )
-              AND m.parent_id IS NULL
-              AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
-            AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
-            AND m.archived_at IS NULL
-            ORDER BY
-              CASE WHEN ${status}::text = 'resolved' THEN m.resolved_at END DESC NULLS LAST,
-              -- Live markets first (kickoff has passed, deadline hasn't).
-              -- Sports stories where the game is in progress jump to the
-              -- front of the grid + the trending tab. Non-sports markets
-              -- have NULL start_time and fall through to the end_time
-              -- ordering below as before.
-              CASE WHEN m.start_time IS NOT NULL
-                    AND m.start_time <= NOW()
-                    AND m.end_time > NOW() THEN 0 ELSE 1 END,
-              m.end_time ASC,
-              m.id ASC
-            LIMIT ${limit}
-          `
-          : sql`
-            SELECT m.*, pm.source_data AS pending_source_data,
-              (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_volume,
-              (SELECT t.outcome_index FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.price_at_trade IS NOT NULL ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS display_trade_outcome_index,
-              (SELECT t.price_at_trade FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.price_at_trade IS NOT NULL ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS display_trade_price,
-              (SELECT (t.reserves_before IS NOT NULL AND t.reserves_after IS NOT NULL AND t.reserves_before = t.reserves_after) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.price_at_trade IS NOT NULL ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS display_trade_is_book
-            FROM points_markets m
-            LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
-            WHERE m.status = ${status}
-              AND m.parent_id IS NULL
-              AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
-            AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
-            AND m.archived_at IS NULL
-            AND (
-              ${status}::text <> 'active'
-              OR m.hidden_from_home IS NOT TRUE
-              OR m.tournament_featured = true
-            )
-            ORDER BY
-              CASE WHEN ${status}::text = 'resolved' THEN m.resolved_at END DESC NULLS LAST,
-              -- Live markets first (kickoff has passed, deadline hasn't).
-              -- Sports stories where the game is in progress jump to the
-              -- front of the grid + the trending tab. Non-sports markets
-              -- have NULL start_time and fall through to the end_time
-              -- ordering below as before.
-              CASE WHEN m.start_time IS NOT NULL
-                    AND m.start_time <= NOW()
-                    AND m.end_time > NOW() THEN 0 ELSE 1 END,
-              m.end_time ASC,
-              m.id ASC
-            LIMIT ${limit}
-            `);
+      const rows = await timer.time('db_markets', () => sql`
+        SELECT
+          m.id, m.question, m.category, m.outcomes, m.reserves, m.seed_liquidity,
+          m.end_time, m.status, m.outcome, m.created_at, m.resolved_at, m.mode,
+          m.chain_id, m.chain_market_id, m.chain_address, m.category_tags,
+          m.geo_tags, m.topic_tags, m.amm_mode, m.start_time, m.sport, m.league,
+          m.outcome_images, m.featured, m.hidden_from_home, m.tournament_featured,
+          m.source, m.source_event_id, m.final_score, m.resolver_type,
+          m.resolver_config,
+          pm.source_data AS pending_source_data,
+          (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_volume,
+          (SELECT t.outcome_index FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.price_at_trade IS NOT NULL ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS display_trade_outcome_index,
+          (SELECT t.price_at_trade FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.price_at_trade IS NOT NULL ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS display_trade_price,
+          (SELECT (t.reserves_before IS NOT NULL AND t.reserves_after IS NOT NULL AND t.reserves_before = t.reserves_after) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.price_at_trade IS NOT NULL ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS display_trade_is_book
+        FROM points_markets m
+        LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
+        WHERE m.status = ${status}
+          AND m.parent_id IS NULL
+          AND (${category}::text IS NULL OR m.category = ${category}::text OR COALESCE(m.category_tags, '[]'::jsonb) ? ${category}::text)
+          AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
+          AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
+          AND m.archived_at IS NULL
+          AND (${tournamentOnly}::boolean = false OR m.tournament_featured = true)
+          AND (
+            ${featuredOnly}::boolean = false
+            OR (m.featured = true AND m.hidden_from_home = false)
+            OR m.tournament_featured = true
+          )
+          AND (
+            ${tournamentOnly}::boolean = true
+            OR ${featuredOnly}::boolean = true
+            OR ${status}::text <> 'active'
+            OR m.hidden_from_home IS NOT TRUE
+            OR m.tournament_featured = true
+          )
+        ORDER BY
+          CASE WHEN ${status}::text = 'resolved' THEN m.resolved_at END DESC NULLS LAST,
+          CASE WHEN m.start_time IS NOT NULL
+                AND m.start_time <= NOW()
+                AND m.end_time > NOW() THEN 0 ELSE 1 END,
+          m.end_time ASC,
+          m.id ASC
+        LIMIT ${limit}
+      `);
 
     // Collect parallel-parent ids so we can batch-fetch their legs in
     // one query instead of N+1 round-trips.
