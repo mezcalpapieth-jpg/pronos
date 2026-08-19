@@ -25,8 +25,12 @@ test('AICM hub renders the departures board, counters, and window cards', () => 
   assert.match(pageSource, /Ventanas de mercado/);
   assert.match(pageSource, /Cada 60 min/);
   assert.match(pageSource, /24 horas/);
+  assert.match(pageSource, /48 horas/);
   assert.match(pageSource, /7 días/);
   assert.match(pageSource, /findDailyAicmMarket/);
+  assert.match(pageSource, /AICM_DELAY_SOURCES/);
+  assert.match(pageSource, /'aviation-edge-timetable'/);
+  assert.match(pageSource, /acceptedWindows = new Set\(\['day', '48h'\]\)/);
   assert.match(pageSource, /sourceEventId/);
 });
 

@@ -34,6 +34,7 @@ export const CATEGORY_TABS = [
   { slug: 'politica',    tKey: 'points.cat.politica'    },
   { slug: 'crypto',      tKey: 'points.cat.crypto'      },
   { slug: 'finanzas',    tKey: 'points.cat.finanzas'    },
+  { slug: 'infraestructura', tKey: 'points.cat.infraestructura' },
   { slug: 'porresolver', tKey: 'points.cat.porresolver' },
   { slug: 'resueltos',   tKey: 'points.cat.resueltos'   },
 ];

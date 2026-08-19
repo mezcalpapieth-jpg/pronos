@@ -123,6 +123,7 @@ const RESUELTOS_CATEGORIES = [
   { key: 'politica', tKey: 'points.cat.politica'   },
   { key: 'crypto',   tKey: 'points.cat.crypto'     },
   { key: 'finanzas', tKey: 'points.cat.finanzas'   },
+  { key: 'infraestructura', tKey: 'points.cat.infraestructura' },
 ];
 
 // Crypto type sub-row — splits the BTC/ETH rapid "sube o baja" rollover
@@ -162,7 +163,10 @@ const CATEGORY_SLUG_ALIASES = {
 
 const TOURNAMENT_SHELF_SLUGS = new Set(['nuevos-mercados']);
 const AICM_HUB_PATH = '/c/infraestructura/aicm';
-const AICM_SOURCE = 'aicm-official-flight-board';
+const AICM_DELAY_SOURCES = new Set([
+  'aicm-official-flight-board',
+  'aviation-edge-timetable',
+]);
 const AICM_HUB_SEARCH_TEXT = [
   'aicm',
   'pulso',
@@ -183,7 +187,7 @@ function canonicalCategorySlug(value) {
 const GEO_FILTER_EXCLUDED_CATEGORIES = new Set(['all', 'crypto', 'world-cup', 'nuevos-mercados', 'porresolver', 'resueltos', 'noticias']);
 
 function isAicmDelayMarket(m) {
-  return String(m?.source || '') === AICM_SOURCE
+  return AICM_DELAY_SOURCES.has(String(m?.source || ''))
     && String(m?.sourceEventId || '').includes(':departure:')
     && String(m?.resolverConfig?.shape || '') === 'delay-bucket';
 }

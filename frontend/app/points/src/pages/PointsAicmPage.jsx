@@ -5,6 +5,10 @@ import { fetchAicmOverview, fetchMarkets } from '../lib/pointsApi.js';
 
 const AEROMEXICO_NAVY = '#040C3E';
 const AEROMEXICO_BLUE = '#8fb8ff';
+const AICM_DELAY_SOURCES = new Set([
+  'aicm-official-flight-board',
+  'aviation-edge-timetable',
+]);
 
 const ACCENTS = {
   green: { fg: 'var(--yes)', bg: 'rgba(0, 232, 122, 0.12)', border: 'rgba(0, 232, 122, 0.28)' },
@@ -491,12 +495,29 @@ function MarketWindowCard({ title, cadence, status, market, locked, isAdmin, onO
   );
 }
 
+function isAicmDelayWindowMarket(m, acceptedWindows) {
+  const cfg = m?.resolverConfig || {};
+  const source = String(m?.source || cfg.source || '');
+  const sourceEventId = String(m?.sourceEventId || cfg.sourceEventId || '');
+  const windowKey = String(cfg.window || '').toLowerCase();
+  return AICM_DELAY_SOURCES.has(source)
+    && acceptedWindows.has(windowKey)
+    && sourceEventId.includes(':departure:')
+    && String(cfg.shape || '') === 'delay-bucket';
+}
+
 function findDailyAicmMarket(markets) {
-  return markets.find(m => (
-    String(m?.source || '') === 'aicm-official-flight-board'
-    && String(m?.resolverConfig?.window || '').toLowerCase() === 'day'
-    && String(m?.sourceEventId || '').includes(':departure:day:')
-  )) || null;
+  const acceptedWindows = new Set(['day', '48h']);
+  const candidates = markets.filter(m => isAicmDelayWindowMarket(m, acceptedWindows));
+  return candidates.find(m => String(m?.resolverConfig?.window || '').toLowerCase() === 'day')
+    || candidates.find(m => String(m?.resolverConfig?.window || '').toLowerCase() === '48h')
+    || null;
+}
+
+function marketWindowCopy(market) {
+  const windowKey = String(market?.resolverConfig?.window || '').toLowerCase();
+  if (windowKey === '48h') return { title: '48h', cadence: '48 horas' };
+  return { title: 'Día', cadence: '24 horas' };
 }
 
 export default function PointsAicmPage({ isAdmin = false }) {
@@ -533,6 +554,7 @@ export default function PointsAicmPage({ isAdmin = false }) {
   }, []);
 
   const dailyMarket = useMemo(() => findDailyAicmMarket(markets), [markets]);
+  const dailyMarketWindow = marketWindowCopy(dailyMarket);
   const counters = overview?.counters || {};
   const source = overview?.source || {};
   const dailyRows = Array.isArray(overview?.daily) ? overview.daily : [];
@@ -739,8 +761,8 @@ export default function PointsAicmPage({ isAdmin = false }) {
           onOpenAdmin={openAdmin}
         />
         <MarketWindowCard
-          title="Día"
-          cadence="24 horas"
+          title={dailyMarketWindow.title}
+          cadence={dailyMarketWindow.cadence}
           status={dailyMarket ? 'Abierto' : 'Por aprobar'}
           market={dailyMarket}
           isAdmin={isAdmin}

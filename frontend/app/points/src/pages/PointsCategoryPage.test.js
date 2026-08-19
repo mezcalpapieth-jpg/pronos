@@ -11,13 +11,16 @@ test('new markets page is a trophy shelf instead of a taxonomy category', () => 
   assert.doesNotMatch(source, /CATEGORY_TAXONOMY_ALIASES/);
 });
 
-test('category page keeps the hidden infrastructure taxonomy route available', () => {
+test('category page exposes the infrastructure taxonomy route and resolved chip', () => {
   assert.match(source, /infraestructura:\s*'points\.cat\.infraestructura'/);
-  assert.doesNotMatch(source, /RESUELTOS_CATEGORIES[\s\S]*?\{ key:\s*'infraestructura'/);
+  assert.match(source, /RESUELTOS_CATEGORIES[\s\S]*?\{ key:\s*'infraestructura'/);
 });
 
 test('infrastructure page renders AICM as a hub and gates child markets behind promotion', () => {
   assert.match(source, /const AICM_HUB_PATH = '\/c\/infraestructura\/aicm'/);
+  assert.match(source, /const AICM_DELAY_SOURCES = new Set/);
+  assert.match(source, /'aviation-edge-timetable'/);
+  assert.match(source, /AICM_DELAY_SOURCES\.has/);
   assert.match(source, /function AicmInfrastructureHubCard/);
   assert.match(source, /Pulso AICM: demoras de salida/);
   assert.match(source, /out = out\.filter\(isPromotedAicmChildMarket\)/);
