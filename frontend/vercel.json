@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/aicm-poll",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/aicm-timetable-poll",
+      "schedule": "*/20 * * * *"
     }
   ],
   "redirects": [

@@ -273,6 +273,14 @@ export default function PointsMarketCard({ market, userPosition }) {
         <span className="mock-card-cat">
           {market.category || 'General'}
         </span>
+        {market.isTestMarket && (
+          <span
+            className="mock-card-badge test-market-badge"
+            title={t('points.testMarket.tooltip')}
+          >
+            {t('points.testMarket.badge')}
+          </span>
+        )}
         {matchTypeLabel && (
           <span className="mock-card-badge" style={{
             background: 'rgba(255,85,0,0.08)',

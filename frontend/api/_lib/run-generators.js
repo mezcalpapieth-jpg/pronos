@@ -29,6 +29,7 @@ import { generateCryptoMarkets }        from './market-gen/crypto.js';
 import { generateStockMarkets }         from './market-gen/stocks.js';
 import { generateWeatherMarkets }       from './market-gen/weather.js';
 import { generateAicmMarkets }          from './market-gen/aicm.js';
+import { generateAicm48hMarkets }       from './market-gen/aicm-48h.js';
 import { generateMlbMarkets }           from './market-gen/mlb.js';
 import { generateNbaMarkets }           from './market-gen/nba.js';
 import { generateNflMarkets }           from './market-gen/nfl.js';
@@ -70,6 +71,7 @@ export const GENERATORS = [
   { name: 'mananera',       run: generateMananeraMarkets      },
   { name: 'weather',        run: generateWeatherMarkets       },
   { name: 'aicm',           run: generateAicmMarkets          },
+  { name: 'aicm-48h',       run: generateAicm48hMarkets       },
   { name: 'mlb',            run: generateMlbMarkets           },
   { name: 'nba',            run: generateNbaMarkets           },
   { name: 'nfl',            run: generateNflMarkets           },
@@ -149,7 +151,7 @@ export async function upsertPending(sql, allSpecs) {
           (source, source_event_id, source_data, question, category, icon,
            outcomes, seed_liquidity, seed_liquidities, start_time, end_time, amm_mode,
            resolver_type, resolver_config, sport, league, outcome_images,
-           category_tags, geo_tags, topic_tags)
+           category_tags, geo_tags, topic_tags, is_test_market)
         VALUES (
           ${s.source},
           ${s.source_event_id},
@@ -170,7 +172,8 @@ export async function upsertPending(sql, allSpecs) {
           ${s.outcome_images ? JSON.stringify(s.outcome_images) : null}::jsonb,
           ${JSON.stringify(tags.categoryTags)}::jsonb,
           ${JSON.stringify(tags.geoTags)}::jsonb,
-          ${JSON.stringify(tags.topicTags)}::jsonb
+          ${JSON.stringify(tags.topicTags)}::jsonb,
+          ${s.is_test_market === true}
         )
         ON CONFLICT (source, source_event_id) DO UPDATE
         SET source_data     = EXCLUDED.source_data,
@@ -185,6 +188,7 @@ export async function upsertPending(sql, allSpecs) {
             amm_mode        = EXCLUDED.amm_mode,
             resolver_type   = EXCLUDED.resolver_type,
             resolver_config = EXCLUDED.resolver_config,
+            is_test_market  = points_pending_markets.is_test_market OR EXCLUDED.is_test_market,
             sport           = EXCLUDED.sport,
             league          = EXCLUDED.league,
             outcome_images  = EXCLUDED.outcome_images,

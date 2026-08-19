@@ -1328,6 +1328,24 @@ html[data-theme="light"] .btn-theme-toggle::before {
   text-transform: uppercase;
 }
 
+/* Disclosure badge: this market's resolution method is not proven yet.
+   The header is space-between, so this sits at the far right on its own. */
+.test-market-badge {
+  margin-left: auto;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(245, 200, 66, 0.12);
+  border: 1px solid rgba(245, 200, 66, 0.3);
+  color: var(--gold);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: help;
+}
+
 .mock-card-body {
   padding: 18px 16px 14px;
 }

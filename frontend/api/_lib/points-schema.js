@@ -46,6 +46,8 @@ const POINTS_SCHEMA_READY_PROBE = `
     to_regclass('public.points_mananera_transcripts') IS NOT NULL AS points_mananera_transcripts,
     to_regclass('public.points_aicm_poll_runs') IS NOT NULL AS points_aicm_poll_runs,
     to_regclass('public.points_aicm_flight_observations') IS NOT NULL AS points_aicm_flight_observations,
+    to_regclass('public.points_aicm_timetable_runs') IS NOT NULL AS points_aicm_timetable_runs,
+    to_regclass('public.points_aicm_timetable_observations') IS NOT NULL AS points_aicm_timetable_observations,
     to_regclass('public.points_top_holder_snapshots') IS NOT NULL AS points_top_holder_snapshots,
     to_regclass('public.points_risk_events') IS NOT NULL AS points_risk_events,
     to_regclass('public.points_account_reviews') IS NOT NULL AS points_account_reviews,
@@ -62,6 +64,18 @@ const POINTS_SCHEMA_READY_PROBE = `
         AND table_name = 'points_pending_markets'
         AND column_name = 'seed_liquidities'
     ) AS points_pending_seed_liquidities,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'points_markets'
+        AND column_name = 'is_test_market'
+    ) AS points_markets_is_test_market,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'points_pending_markets'
+        AND column_name = 'is_test_market'
+    ) AS points_pending_is_test_market,
     EXISTS (
       SELECT 1 FROM information_schema.columns
       WHERE table_schema = 'public'
@@ -247,6 +261,10 @@ const POINTS_SCHEMA_MIGRATIONS = [
   // These stay visible on the home feed even after admins bulk-hide the
   // regular market set.
   `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS tournament_featured BOOLEAN NOT NULL DEFAULT false`,
+  // is_test_market: shows a "MERCADO DE PRUEBA" badge on the card and detail
+  // page. Used when a market's resolution method has not been proven yet, so
+  // traders can see that before putting points on it.
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS is_test_market BOOLEAN NOT NULL DEFAULT false`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_featured_status
     ON points_markets(featured, status) WHERE featured = true`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_tournament_featured_active_end
@@ -1077,6 +1095,45 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_aicm_observations_flight
     ON points_aicm_flight_observations(flight_key)`,
 
+  // ── AICM live timetable (Aviation Edge) ──────────────────────────────────
+  // Separate from the board tables above: this feed carries a delay in
+  // minutes, which the airport's own board never publishes.
+  `CREATE TABLE IF NOT EXISTS points_aicm_timetable_runs (
+    id             BIGSERIAL PRIMARY KEY,
+    source         TEXT NOT NULL DEFAULT 'aviation-edge-timetable',
+    direction      TEXT NOT NULL CHECK (direction IN ('departure', 'arrival')),
+    status         TEXT NOT NULL CHECK (status IN ('ok', 'empty', 'http_error', 'fetch_error')),
+    observed_at    TIMESTAMPTZ NOT NULL,
+    total_rows     INTEGER NOT NULL DEFAULT 0,
+    operator_rows  INTEGER NOT NULL DEFAULT 0,
+    error          TEXT,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_aicm_tt_runs_observed
+    ON points_aicm_timetable_runs(direction, observed_at DESC)`,
+  // One row per operator flight, overwritten as its delay grows across polls.
+  `CREATE TABLE IF NOT EXISTS points_aicm_timetable_observations (
+    id                BIGSERIAL PRIMARY KEY,
+    source            TEXT NOT NULL DEFAULT 'aviation-edge-timetable',
+    flight_key        TEXT NOT NULL UNIQUE,
+    direction         TEXT NOT NULL CHECK (direction IN ('departure', 'arrival')),
+    flight_date       DATE NOT NULL,
+    flight_number     TEXT NOT NULL,
+    airline_iata      TEXT,
+    arrival_iata      TEXT,
+    scheduled_local   TEXT NOT NULL,
+    actual_local      TEXT,
+    delay_minutes     INTEGER,
+    status            TEXT NOT NULL,
+    first_observed_at TIMESTAMPTZ NOT NULL,
+    last_observed_at  TIMESTAMPTZ NOT NULL,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_aicm_tt_obs_date
+    ON points_aicm_timetable_observations(flight_date, direction)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_aicm_tt_obs_delay
+    ON points_aicm_timetable_observations(flight_date, direction, delay_minutes)`,
+
   // ── Pending markets (agent-generated, awaiting admin approval) ────────────
   // The daily generator cron writes one row here per discovered event. The
   // admin queue UI reads live rows; approving copies the spec into
@@ -1127,6 +1184,7 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `ALTER TABLE points_pending_markets ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT false`,
   // tournament_featured mirrors the 🏆 override before approval.
   `ALTER TABLE points_pending_markets ADD COLUMN IF NOT EXISTS tournament_featured BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE points_pending_markets ADD COLUMN IF NOT EXISTS is_test_market BOOLEAN NOT NULL DEFAULT false`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_points_pending_source_event
     ON points_pending_markets(source, source_event_id)`,
   `CREATE INDEX IF NOT EXISTS idx_points_pending_status

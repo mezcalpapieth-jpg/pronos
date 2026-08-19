@@ -748,6 +748,17 @@ export async function adminRunAutoResolve({ dry = false } = {}) {
 // Toggle curation flags. Featured (🔥) markets appear publicly unless
 // bulk-hidden; tournamentFeatured (🏆) markets appear even after the
 // regular active market set is hidden.
+// Marks a market as "MERCADO DE PRUEBA" — a disclosure that its resolution
+// method has not been proven yet. Purely informational; does not affect
+// pricing, listing or resolution.
+export async function adminToggleTestMarket({ marketId, pendingId, isTestMarket }) {
+  return postJson('/api/points/admin/toggle-test-market', {
+    marketId,
+    pendingId,
+    isTestMarket,
+  });
+}
+
 export async function adminToggleFeatured({ marketId, pendingId, featured, tournamentFeatured }) {
   return postJson('/api/points/admin/toggle-featured', {
     marketId,
