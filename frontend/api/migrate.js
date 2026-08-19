@@ -547,6 +547,59 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_mananera_transcripts_source
     ON points_mananera_transcripts(source, fetched_at DESC)`,
 
+  `CREATE TABLE IF NOT EXISTS points_aicm_poll_runs (
+    id               BIGSERIAL PRIMARY KEY,
+    source           TEXT NOT NULL DEFAULT 'aicm-official-flight-board',
+    direction        TEXT NOT NULL CHECK (direction IN ('departure', 'arrival')),
+    status           TEXT NOT NULL CHECK (status IN ('ok', 'empty', 'maintenance', 'no_table', 'http_error', 'fetch_error')),
+    observed_at      TIMESTAMPTZ NOT NULL,
+    flight_date      DATE NOT NULL,
+    source_url       TEXT NOT NULL,
+    http_status      INTEGER,
+    raw_html_sha256  TEXT,
+    raw_html_bytes   INTEGER NOT NULL DEFAULT 0,
+    row_count        INTEGER NOT NULL DEFAULT 0,
+    delayed_count    INTEGER NOT NULL DEFAULT 0,
+    cancelled_count  INTEGER NOT NULL DEFAULT 0,
+    rows_capped      BOOLEAN NOT NULL DEFAULT false,
+    error            TEXT,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_aicm_poll_runs_observed
+    ON points_aicm_poll_runs(observed_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_aicm_poll_runs_direction_observed
+    ON points_aicm_poll_runs(direction, observed_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_aicm_poll_runs_status_observed
+    ON points_aicm_poll_runs(status, observed_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS points_aicm_flight_observations (
+    id                    BIGSERIAL PRIMARY KEY,
+    poll_run_id           BIGINT REFERENCES points_aicm_poll_runs(id) ON DELETE SET NULL,
+    source                TEXT NOT NULL DEFAULT 'aicm-official-flight-board',
+    flight_key            TEXT NOT NULL,
+    direction             TEXT NOT NULL CHECK (direction IN ('departure', 'arrival')),
+    flight_date           DATE NOT NULL,
+    flight_code           TEXT,
+    airline               TEXT,
+    city                  TEXT,
+    scheduled_time_local  TEXT,
+    estimated_time_local  TEXT,
+    terminal              TEXT,
+    gate                  TEXT,
+    status_raw            TEXT NOT NULL,
+    status_norm           TEXT NOT NULL,
+    raw_cells             JSONB NOT NULL DEFAULT '[]'::jsonb,
+    source_url            TEXT NOT NULL,
+    observed_at           TIMESTAMPTZ NOT NULL,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(flight_key, status_norm)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_aicm_observations_date_status
+    ON points_aicm_flight_observations(flight_date, direction, status_norm)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_aicm_observations_observed
+    ON points_aicm_flight_observations(observed_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_aicm_observations_flight
+    ON points_aicm_flight_observations(flight_key)`,
+
   `CREATE TABLE IF NOT EXISTS points_referrals (
     id             SERIAL PRIMARY KEY,
     referrer       TEXT NOT NULL,

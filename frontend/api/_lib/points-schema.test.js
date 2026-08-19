@@ -13,6 +13,8 @@ test('points schema self-healing avoids hot-route migration lock pileups', () =>
   assert.match(source, /to_regclass\('public\.points_pwa_install_claims'\) IS NOT NULL AS points_pwa_install_claims/);
   assert.match(source, /to_regclass\('public\.points_social_links'\) IS NOT NULL AS points_social_links/);
   assert.match(source, /to_regclass\('public\.points_mananera_transcripts'\) IS NOT NULL AS points_mananera_transcripts/);
+  assert.match(source, /to_regclass\('public\.points_aicm_poll_runs'\) IS NOT NULL AS points_aicm_poll_runs/);
+  assert.match(source, /to_regclass\('public\.points_aicm_flight_observations'\) IS NOT NULL AS points_aicm_flight_observations/);
   assert.match(source, /points_support_message_attachments/);
   assert.match(source, /points_social_links_is_public/);
   assert.match(source, /points_social_links_source/);
@@ -64,6 +66,21 @@ test('points schema stores official Mañanera transcripts by local date', () => 
   assert.match(source, /speakers\s+JSONB NOT NULL DEFAULT '\[\]'::jsonb/);
   assert.match(source, /turns\s+JSONB NOT NULL DEFAULT '\[\]'::jsonb/);
   assert.match(source, /idx_points_mananera_transcripts_fetched/);
+});
+
+test('points schema stores AICM oracle evidence separately from markets', () => {
+  for (const migrationSource of [source, migrateSource]) {
+    assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS points_aicm_poll_runs/);
+    assert.match(migrationSource, /source\s+TEXT NOT NULL DEFAULT 'aicm-official-flight-board'/);
+    assert.match(migrationSource, /status\s+TEXT NOT NULL CHECK \(status IN \('ok', 'empty', 'maintenance', 'no_table', 'http_error', 'fetch_error'\)\)/);
+    assert.match(migrationSource, /raw_html_sha256\s+TEXT/);
+    assert.match(migrationSource, /rows_capped\s+BOOLEAN NOT NULL DEFAULT false/);
+    assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS points_aicm_flight_observations/);
+    assert.match(migrationSource, /UNIQUE\(flight_key, status_norm\)/);
+    assert.match(migrationSource, /raw_cells\s+JSONB NOT NULL DEFAULT '\[\]'::jsonb/);
+    assert.match(migrationSource, /idx_points_aicm_poll_runs_direction_observed/);
+    assert.match(migrationSource, /idx_points_aicm_observations_date_status/);
+  }
 });
 
 test('points social links schema supports private-by-default public handles', () => {

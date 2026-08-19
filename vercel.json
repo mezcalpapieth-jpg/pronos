@@ -32,6 +32,10 @@
     {
       "path": "/api/cron/mananera-transcript",
       "schedule": "0 0,3,18,21 * * *"
+    },
+    {
+      "path": "/api/cron/aicm-poll",
+      "schedule": "*/5 * * * *"
     }
   ],
   "redirects": [

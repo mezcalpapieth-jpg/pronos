@@ -50,6 +50,13 @@ test('Mañanera transcript ingestion cron runs at the Mexico City attempt cadenc
   );
 });
 
+test('AICM flight-board oracle cron runs at the evidence collection cadence', () => {
+  assert.ok(
+    hasCron('/api/cron/aicm-poll', '*/5 * * * *'),
+    'expected AICM oracle polling cron every five minutes',
+  );
+});
+
 test('public user profile route hard-refreshes through the points SPA', () => {
   assert.ok(
     hasRule(vercelConfig.rewrites, '/points/u/:username', '/points/'),
