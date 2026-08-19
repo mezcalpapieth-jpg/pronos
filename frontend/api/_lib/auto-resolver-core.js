@@ -7,6 +7,11 @@ import { readCreAverageFor } from './fuel.js';
 import { readMananeraPhraseResult } from './mananera.js';
 import { fetchMaxTempC, bucketIndexFor, weatherBucketIndexFor } from './weather.js';
 import { aicmDelayBucketIndexFor, readAicmDelayCount } from './aicm-board.js';
+import {
+  aicmAeBucketIndexFor,
+  countAicmAeDaysInclusive,
+  readAicmAeDelayCount,
+} from './aicm-aviation-edge.js';
 import { readAppleMxTopArtist } from './charts.js';
 import { readYouTubeTopMxChannel } from './youtube.js';
 import {
@@ -99,6 +104,16 @@ export function buildAutoResolverFinalScore({
 
     if (resolverType === 'aicm_delay_count') {
       const count = Number(resolverInfo?.count);
+      if (Number.isFinite(count)) return clip(`${count} salidas demoradas`);
+      return clip(winLabel);
+    }
+
+    if (resolverType === 'aicm_delay_minutes') {
+      const count = Number(resolverInfo?.count);
+      const mins = Number(resolverInfo?.thresholdMinutes);
+      if (Number.isFinite(count) && Number.isFinite(mins)) {
+        return clip(`${count} salidas con más de ${mins} min de retraso`);
+      }
       if (Number.isFinite(count)) return clip(`${count} salidas demoradas`);
       return clip(winLabel);
     }
@@ -353,6 +368,55 @@ export async function resolveAutoResolverCandidate(candidate = {}, { sql = null 
     resolverInfo = {
       ...countResult,
       source: cfg.source || countResult.source,
+      shape: cfg.shape || 'delay-bucket',
+      window: cfg.window || null,
+    };
+  } else if (resolverType === 'aicm_delay_minutes') {
+    if (!cfg.fromDateYmd || !cfg.toDateYmd || !Array.isArray(cfg.buckets)) {
+      throw new Error('invalid aicm_delay_minutes config');
+    }
+    // Throws a benign aicm_ae_history_not_ready until the archive publishes the
+    // window, which lags the flight date by three days.
+    const countResult = await readAicmAeDelayCount({
+      fromDateYmd: cfg.fromDateYmd,
+      toDateYmd: cfg.toDateYmd,
+      thresholdMinutes: cfg.thresholdMinutes,
+      airportCode: cfg.airportCode || 'MEX',
+      direction: cfg.direction || 'departure',
+    });
+    // A short window means the feed returned an incomplete archive; resolving
+    // on it would undercount the market rather than fail it.
+    const expectedDays = countAicmAeDaysInclusive(cfg.fromDateYmd, cfg.toDateYmd);
+    if (countResult.daysCovered.length < expectedDays) {
+      const err = new Error('aicm_ae_window_incomplete');
+      err.benign = true;
+      err.info = {
+        source: countResult.source,
+        fromDateYmd: cfg.fromDateYmd,
+        toDateYmd: cfg.toDateYmd,
+        expectedDays,
+        daysCovered: countResult.daysCovered,
+      };
+      throw err;
+    }
+    const minFlights = Number(cfg.minOperatorFlights ?? 0);
+    if (countResult.operatorFlights < minFlights) {
+      const err = new Error('aicm_ae_too_few_flights');
+      err.benign = true;
+      err.info = {
+        source: countResult.source,
+        operatorFlights: countResult.operatorFlights,
+        minOperatorFlights: minFlights,
+      };
+      throw err;
+    }
+    winningIdx = aicmAeBucketIndexFor(countResult.count, cfg.buckets);
+    if (winningIdx < 0) {
+      throw new Error(`AICM delay count ${countResult.count} did not fit any bucket`);
+    }
+    result = { completed: true, ...countResult };
+    resolverInfo = {
+      ...countResult,
       shape: cfg.shape || 'delay-bucket',
       window: cfg.window || null,
     };
