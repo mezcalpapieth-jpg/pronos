@@ -3,11 +3,15 @@ import { useNavigate } from 'react-router-dom';
 
 import { fetchAicmOverview, fetchMarkets } from '../lib/pointsApi.js';
 
+const AEROMEXICO_NAVY = '#040C3E';
+const AEROMEXICO_BLUE = '#8fb8ff';
+
 const ACCENTS = {
   green: { fg: 'var(--yes)', bg: 'rgba(0, 232, 122, 0.12)', border: 'rgba(0, 232, 122, 0.28)' },
   amber: { fg: 'var(--gold)', bg: 'rgba(245, 158, 11, 0.12)', border: 'rgba(245, 158, 11, 0.28)' },
   red: { fg: 'var(--danger)', bg: 'rgba(255, 69, 69, 0.12)', border: 'rgba(255, 69, 69, 0.28)' },
-  blue: { fg: '#60a5fa', bg: 'rgba(96, 165, 250, 0.11)', border: 'rgba(96, 165, 250, 0.28)' },
+  blue: { fg: AEROMEXICO_BLUE, bg: 'rgba(4, 12, 62, 0.40)', border: 'rgba(143, 184, 255, 0.24)' },
+  neutral: { fg: 'var(--text-primary)', bg: 'linear-gradient(180deg, rgba(255,255,255,0.045), rgba(4,12,62,0.16))', border: 'rgba(148, 163, 184, 0.18)' },
 };
 
 function formatNumber(n) {
@@ -84,7 +88,7 @@ function boardStatusLabel(status) {
   return 'Esperando vuelos';
 }
 
-function CounterCard({ label, title, counter, accent = ACCENTS.green }) {
+function CounterCard({ label, title, counter, accent = ACCENTS.neutral }) {
   return (
     <div style={{
       border: `1px solid ${accent.border}`,
@@ -95,6 +99,7 @@ function CounterCard({ label, title, counter, accent = ACCENTS.green }) {
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'space-between',
+      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.035)',
     }}>
       <div style={{
         fontFamily: 'var(--font-mono)',
@@ -141,10 +146,10 @@ function DailyBars({ rows }) {
   const visible = rows.slice(-7);
   return (
     <div style={{
-      border: '1px solid var(--border)',
+      border: '1px solid rgba(143,184,255,0.14)',
       borderRadius: 8,
       padding: 18,
-      background: 'var(--surface0)',
+      background: `linear-gradient(180deg, rgba(4,12,62,0.20), rgba(8,8,10,0.90))`,
       minHeight: 180,
     }}>
       <div style={{
@@ -175,8 +180,8 @@ function DailyBars({ rows }) {
                 <div style={{
                   height,
                   borderRadius: 6,
-                  background: 'linear-gradient(180deg, var(--danger), var(--orange))',
-                  border: '1px solid rgba(255,85,0,0.36)',
+                  background: `linear-gradient(180deg, ${AEROMEXICO_BLUE}, ${AEROMEXICO_NAVY})`,
+                  border: '1px solid rgba(143,184,255,0.26)',
                 }} />
                 <div style={{
                   marginTop: 8,
@@ -225,9 +230,9 @@ function Timetable({ rows, board, source }) {
   const shownFlights = Number(board?.shownFlights || rows.length || 0);
   return (
     <div style={{
-      border: '1px solid var(--border)',
+      border: '1px solid rgba(143,184,255,0.14)',
       borderRadius: 8,
-      background: '#050505',
+      background: `linear-gradient(180deg, rgba(4,12,62,0.30), #050505 34%)`,
       overflow: 'hidden',
       boxShadow: '0 16px 60px rgba(0,0,0,0.34)',
     }}>
@@ -237,7 +242,7 @@ function Timetable({ rows, board, source }) {
         gap: 16,
         padding: '18px 20px 16px',
         borderBottom: '1px solid rgba(255,255,255,0.12)',
-        background: 'linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.015))',
+        background: `linear-gradient(180deg, rgba(4,12,62,0.74), rgba(4,12,62,0.18))`,
         alignItems: 'center',
         flexWrap: 'wrap',
       }}>
@@ -548,9 +553,9 @@ export default function PointsAicmPage({ isAdmin = false }) {
         alignItems: 'stretch',
       }}>
         <div style={{
-          border: '1px solid var(--border)',
+          border: '1px solid rgba(143,184,255,0.22)',
           borderRadius: 8,
-          background: 'linear-gradient(140deg, rgba(255,85,0,0.16), rgba(0,232,122,0.08) 52%, rgba(96,165,250,0.10))',
+          background: `linear-gradient(140deg, ${AEROMEXICO_NAVY}, rgba(7,23,54,0.90) 52%, rgba(0,0,0,0.88))`,
           padding: 'clamp(22px, 4vw, 38px)',
           minHeight: 340,
           display: 'flex',
@@ -563,7 +568,7 @@ export default function PointsAicmPage({ isAdmin = false }) {
               fontSize: 12,
               letterSpacing: '0.18em',
               textTransform: 'uppercase',
-              color: 'var(--orange)',
+              color: AEROMEXICO_BLUE,
               marginBottom: 14,
               fontWeight: 900,
             }}>
@@ -630,7 +635,7 @@ export default function PointsAicmPage({ isAdmin = false }) {
         <div style={{
           border: '1px solid var(--border)',
           borderRadius: 8,
-          background: 'var(--surface0)',
+          background: `linear-gradient(180deg, rgba(4,12,62,0.20), rgba(8,8,10,0.88))`,
           padding: 24,
           display: 'flex',
           flexDirection: 'column',
@@ -675,9 +680,9 @@ export default function PointsAicmPage({ isAdmin = false }) {
         gap: 14,
         marginTop: 18,
       }}>
-        <CounterCard label="Última hora" title="salidas demoradas" counter={counters.hour} accent={ACCENTS.green} />
-        <CounterCard label="Hoy" title="salidas demoradas" counter={counters.day} accent={ACCENTS.amber} />
-        <CounterCard label="7 días" title="salidas demoradas" counter={counters.week} accent={ACCENTS.red} />
+        <CounterCard label="Última hora" title="salidas demoradas" counter={counters.hour} />
+        <CounterCard label="Hoy" title="salidas demoradas" counter={counters.day} />
+        <CounterCard label="7 días" title="salidas demoradas" counter={counters.week} />
       </div>
 
       <div style={{ marginTop: 22 }}>

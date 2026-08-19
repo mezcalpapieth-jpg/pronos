@@ -45,3 +45,11 @@ test('AICM hub places the departures board before the weekly rhythm card', () =>
       < pageSource.indexOf('<DailyBars rows={dailyRows} />')
   );
 });
+
+test('AICM hub uses a navy airport palette with neutral delay counters', () => {
+  assert.match(pageSource, /AEROMEXICO_NAVY = '#040C3E'/);
+  assert.match(pageSource, /ACCENTS\.neutral/);
+  assert.match(pageSource, /<CounterCard label="Última hora" title="salidas demoradas" counter=\{counters\.hour\} \/>/);
+  assert.match(pageSource, /<CounterCard label="Hoy" title="salidas demoradas" counter=\{counters\.day\} \/>/);
+  assert.match(pageSource, /<CounterCard label="7 días" title="salidas demoradas" counter=\{counters\.week\} \/>/);
+});
