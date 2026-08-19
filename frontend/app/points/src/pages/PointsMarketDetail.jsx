@@ -361,21 +361,63 @@ function sortParallelDisplayLegs(legs) {
     });
 }
 
-function chartOutcomeIndicesForDisplay({ displayOutcomes = [], displayPrices = [], parallelDisplayLegs = null }) {
+function chartActivityScore(activity) {
+  if (!Array.isArray(activity) || activity.length === 0) return 0;
+  return activity.reduce((score, pt) => {
+    const count = Number(pt?.count || 0);
+    const volume = Number(pt?.volume || 0);
+    const t = Number(pt?.t || 0);
+    return score
+      + (Number.isFinite(count) ? count : 0)
+      + (Number.isFinite(volume) ? volume / 100 : 0)
+      + (Number.isFinite(t) ? t / 1e12 : 0);
+  }, 0);
+}
+
+function chartOutcomeIndicesForDisplay({
+  displayOutcomes = [],
+  displayPrices = [],
+  displayActivityByOutcome = [],
+  parallelDisplayLegs = null,
+}) {
   const all = displayOutcomes.map((_, i) => i);
   if (all.length <= 4) return all;
 
   const ranked = [...all].sort((a, b) =>
     (displayPrices[b] ?? 0) - (displayPrices[a] ?? 0) || a - b,
   );
-  if (!Array.isArray(parallelDisplayLegs)) return ranked.slice(0, 4);
+  const activeMovers = [...all]
+    .filter(i => chartActivityScore(displayActivityByOutcome?.[i]) > 0)
+    .sort((a, b) =>
+      chartActivityScore(displayActivityByOutcome?.[b]) - chartActivityScore(displayActivityByOutcome?.[a])
+      || (displayPrices[b] ?? 0) - (displayPrices[a] ?? 0)
+      || a - b,
+    );
 
-  const selected = ranked
+  const selected = [];
+  const add = (i) => {
+    if (Number.isInteger(i) && i >= 0 && i < all.length && !selected.includes(i)) {
+      selected.push(i);
+    }
+  };
+
+  for (const i of ranked.slice(0, 4)) add(i);
+  for (const i of activeMovers.slice(0, 2)) add(i);
+  if (!Array.isArray(parallelDisplayLegs)) return selected.slice(0, 6);
+
+  const liveSelected = selected
     .filter(i => parallelDisplayLegs[i]?.status === 'active')
-    .slice(0, 4);
+    .slice(0, 6);
+  selected.length = 0;
+  liveSelected.forEach(add);
+
   for (const i of ranked) {
     if (selected.length >= 4) break;
     if (!selected.includes(i)) selected.push(i);
+  }
+  for (const i of activeMovers) {
+    if (selected.length >= 6) break;
+    add(i);
   }
 
   const zeroed = all
@@ -3224,6 +3266,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                     const chartIndices = chartOutcomeIndicesForDisplay({
                       displayOutcomes,
                       displayPrices,
+                      displayActivityByOutcome,
                       parallelDisplayLegs,
                     });
                     return (

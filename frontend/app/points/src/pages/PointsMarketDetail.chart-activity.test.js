@@ -42,6 +42,11 @@ test('points market detail overlays real activity and range controls on the char
   // Multi-outcome markets pass every outcome's activity to one chart,
   // which merges them into a single volume band.
   assert.match(detailSource, /activity=\{chartIndices\.map\(i => displayActivityByOutcome\?\.\[i\] \|\| \[\]\)\}/);
+  assert.match(detailSource, /function chartActivityScore\(activity\)/);
+  assert.match(detailSource, /displayActivityByOutcome = \[\]/);
+  assert.match(detailSource, /chartActivityScore\(displayActivityByOutcome\?\.\[i\]\) > 0/);
+  assert.match(detailSource, /for \(const i of activeMovers\.slice\(0, 2\)\) add\(i\)/);
+  assert.match(detailSource, /displayActivityByOutcome,/);
   assert.match(detailSource, /orderBookRefresh/);
 });
 
@@ -112,6 +117,9 @@ test('public trade tape exposes named movements but hides maker and AMM routing'
   assert.match(tradeTapeSource, /t\.reserves_before/);
   assert.match(tradeTapeSource, /t\.reserves_after/);
   assert.match(tradeTapeSource, /outcomeLabelFor/);
+  assert.match(tradeTapeSource, /outcomeSideLabelFor/);
+  assert.match(tradeTapeSource, /outcomeDisplayLabelFor/);
+  assert.match(tradeTapeSource, /\$\{label\} · \$\{sideLabel\}/);
   assert.match(tradeTapeSource, /username <> \$\{PRONOS_TREASURY_USERNAME\}/);
   assert.match(tradeTapeSource, /import \{ readSession \} from '\.\.\/_lib\/session\.js'/);
   assert.match(tradeTapeSource, /import \{ isAdminUsername \} from '\.\.\/_lib\/points-admin\.js'/);

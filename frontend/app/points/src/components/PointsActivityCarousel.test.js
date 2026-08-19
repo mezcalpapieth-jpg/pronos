@@ -163,6 +163,8 @@ test('public activity tape renders named buys and sells without execution-source
   assert.match(activityTape, /points\.activity\.tapeBought/);
   assert.match(activityTape, /points\.activity\.tapeSold/);
   assert.match(activityTape, /formatMoney\(item\.collateral/);
+  assert.match(activityTape, /item\.outcomeDisplayLabel \|\| item\.outcomeLabel/);
+  assert.match(activityTape, /fill\.outcomeDisplayLabel \|\| fill\.outcomeLabel/);
   assert.match(activityTape, /function priceMovementLabel/);
   assert.match(activityTape, /item\.priceBefore/);
   assert.match(activityTape, /item\.priceAfter/);

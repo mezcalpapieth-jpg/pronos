@@ -168,7 +168,7 @@ export default function PointsActivityTape({
                     {formatMoney(item.collateral, locale)} MXNP
                   </span>
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {item.outcomeLabel || t('points.activity.tapeOutcome')}
+                    {item.outcomeDisplayLabel || item.outcomeLabel || t('points.activity.tapeOutcome')}
                   </span>
                   {showShares && item.shares > 0 && (
                     <span style={{ flexShrink: 0 }}>
@@ -258,7 +258,7 @@ export default function PointsActivityTape({
                     <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       <span style={{ color: accent }}>{formatMoney(fill.collateral, locale)} MXNP</span>
                       {' · '}
-                      {fill.outcomeLabel || item.outcomeLabel || t('points.activity.tapeOutcome')}
+                      {fill.outcomeDisplayLabel || fill.outcomeLabel || item.outcomeDisplayLabel || item.outcomeLabel || t('points.activity.tapeOutcome')}
                       {showShares && fill.shares > 0 && (
                         <>
                           {' · '}

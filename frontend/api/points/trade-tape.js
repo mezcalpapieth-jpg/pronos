@@ -79,6 +79,19 @@ function outcomeLabelFor(row) {
   return `Opción ${Number(row.outcome_index || 0) + 1}`;
 }
 
+function outcomeSideLabelFor(row) {
+  const outcomes = parseJsonb(row.outcomes, []);
+  const fromArray = outcomes[Number(row.outcome_index)];
+  return fromArray ? String(fromArray) : null;
+}
+
+function outcomeDisplayLabelFor(row) {
+  const label = outcomeLabelFor(row);
+  const sideLabel = outcomeSideLabelFor(row);
+  if (!row.leg_label || !sideLabel) return label;
+  return `${label} · ${sideLabel}`;
+}
+
 function tradeGroupKey(row) {
   return [
     Number(row.display_market_id || row.market_id || 0),
@@ -97,6 +110,8 @@ function fillDetailFor(row) {
     marketId: Number(row.market_id),
     outcomeIndex: Number(row.outcome_index || 0),
     outcomeLabel: outcomeLabelFor(row),
+    outcomeSideLabel: outcomeSideLabelFor(row),
+    outcomeDisplayLabel: outcomeDisplayLabelFor(row),
     side: row.side,
     shares: money(row.shares),
     collateral: money(row.collateral),
@@ -122,6 +137,8 @@ function createTradeGroup(row, includeDetails = false) {
     side: row.side,
     outcomeIndex: Number(row.outcome_index || 0),
     outcomeLabel: outcomeLabelFor(row),
+    outcomeSideLabel: outcomeSideLabelFor(row),
+    outcomeDisplayLabel: outcomeDisplayLabelFor(row),
     question: row.question || '',
     shares: 0,
     collateral: 0,
@@ -199,6 +216,8 @@ function serializeTradeGroup(group) {
     side: group.side,
     outcomeIndex: Number(group.outcomeIndex || 0),
     outcomeLabel: group.outcomeLabel,
+    outcomeSideLabel: group.outcomeSideLabel || null,
+    outcomeDisplayLabel: group.outcomeDisplayLabel || group.outcomeLabel,
     question: group.question || '',
     shares: money(group.shares),
     collateral: money(group.collateral),
