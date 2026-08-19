@@ -70,7 +70,11 @@ export const GENERATORS = [
   { name: 'fuel',           run: generateFuelMarkets          },
   { name: 'mananera',       run: generateMananeraMarkets      },
   { name: 'weather',        run: generateWeatherMarkets       },
-  { name: 'aicm',           run: generateAicmMarkets          },
+  // 'aicm' (the board-scraper daily market) is retired from the pipeline: the
+  // airport's own board flags DEMORADO on 0.8% of departures against a ~99%
+  // real rate, so its buckets never leave the first one and the market cannot
+  // resolve meaningfully. generateAicmMarkets and its oracle are kept intact —
+  // only the scheduled generation stops. 'aicm-48h' replaces it.
   { name: 'aicm-48h',       run: generateAicm48hMarkets       },
   { name: 'mlb',            run: generateMlbMarkets           },
   { name: 'nba',            run: generateNbaMarkets           },

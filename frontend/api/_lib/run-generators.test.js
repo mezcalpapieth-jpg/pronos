@@ -19,7 +19,11 @@ test('runAllGenerators attaches suggested pricing to generated specs before upse
 
 test('generator runner includes the AICM infrastructure pipeline', () => {
   assert.match(source, /generateAicmMarkets/);
-  assert.match(source, /\{ name:\s*'aicm',\s*run:\s*generateAicmMarkets/);
+  // The board-scraper generator is retired from the registry — it cannot
+  // resolve (0.8% detection against a ~99% real rate). Its replacement runs
+  // on Aviation Edge instead.
+  assert.doesNotMatch(source, /\{ name:\s*'aicm',\s*run:\s*generateAicmMarkets/);
+  assert.match(source, /\{ name:\s*'aicm-48h',\s*run:\s*generateAicm48hMarkets/);
 });
 
 test('points pending upsert persists per-option seed liquidities', () => {
