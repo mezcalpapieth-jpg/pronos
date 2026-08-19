@@ -64,6 +64,26 @@ function statusLabel(status, raw) {
   return raw || 'Sin estatus';
 }
 
+function delayVerdict(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'delayed') return { label: 'Sí', accent: ACCENTS.amber };
+  if (s === 'cancelled') return { label: 'Cancelado', accent: ACCENTS.red };
+  if (['scheduled', 'boarding', 'closed', 'departed'].includes(s)) return { label: 'No', accent: ACCENTS.green };
+  return {
+    label: 'N/D',
+    accent: { fg: 'var(--text-muted)', bg: 'rgba(255,255,255,0.04)', border: 'rgba(255,255,255,0.12)' },
+  };
+}
+
+function boardStatusLabel(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'ok') return 'En vivo';
+  if (s === 'maintenance') return 'Fuente en mantenimiento';
+  if (s === 'fetch_error' || s === 'http_error') return 'Fuente sin respuesta';
+  if (s === 'no_table') return 'Sin tabla oficial';
+  return 'Esperando vuelos';
+}
+
 function CounterCard({ label, title, counter, accent = ACCENTS.green }) {
   return (
     <div style={{
@@ -176,107 +196,163 @@ function DailyBars({ rows }) {
   );
 }
 
-function Timetable({ rows }) {
-  const visible = rows.slice(0, 14);
+function FlightBoardCell({ children, muted = false, color = null }) {
+  return (
+    <span style={{
+      display: 'block',
+      minHeight: 34,
+      padding: '8px 9px',
+      borderRadius: 3,
+      border: '1px solid rgba(255,255,255,0.08)',
+      background: 'linear-gradient(180deg, rgba(255,255,255,0.065), rgba(255,255,255,0.025) 48%, rgba(0,0,0,0.24) 49%, rgba(255,255,255,0.035))',
+      color: color || (muted ? 'var(--text-muted)' : 'var(--text-primary)'),
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+      textTransform: 'uppercase',
+      boxShadow: 'inset 0 -1px 0 rgba(0,0,0,0.32)',
+    }}>
+      {children}
+    </span>
+  );
+}
+
+function Timetable({ rows, board, source }) {
+  const visible = rows;
+  const boardStatus = board?.status || source?.status || 'empty';
+  const statusAccentValue = statusAccent(boardStatus);
+  const totalFlights = Number(board?.totalFlights || rows.length || 0);
+  const shownFlights = Number(board?.shownFlights || rows.length || 0);
   return (
     <div style={{
       border: '1px solid var(--border)',
       borderRadius: 8,
-      background: 'var(--surface0)',
+      background: '#050505',
       overflow: 'hidden',
+      boxShadow: '0 16px 60px rgba(0,0,0,0.34)',
     }}>
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         gap: 16,
-        padding: '18px 20px',
-        borderBottom: '1px solid var(--border)',
+        padding: '18px 20px 16px',
+        borderBottom: '1px solid rgba(255,255,255,0.12)',
+        background: 'linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.015))',
+        alignItems: 'center',
+        flexWrap: 'wrap',
       }}>
-        <div style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 12,
-          letterSpacing: '0.14em',
-          textTransform: 'uppercase',
-          color: 'var(--text-muted)',
-        }}>
-          Tablero de salidas
+        <div>
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 12,
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+            color: 'var(--text-muted)',
+            marginBottom: 8,
+          }}>
+            Tablero de salidas
+          </div>
+          <div style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 34,
+            lineHeight: 1,
+            color: 'var(--text-primary)',
+            letterSpacing: 0,
+          }}>
+            MEX Salidas
+          </div>
         </div>
-        <div style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11,
-          color: 'var(--text-muted)',
-          whiteSpace: 'nowrap',
-        }}>
-          {formatNumber(rows.length)} vuelos
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            border: `1px solid ${statusAccentValue.border}`,
+            background: statusAccentValue.bg,
+            color: statusAccentValue.fg,
+            borderRadius: 999,
+            padding: '7px 10px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            fontWeight: 900,
+            letterSpacing: '0.1em',
+            textTransform: 'uppercase',
+          }}>
+            <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: 'currentColor' }} />
+            {boardStatusLabel(boardStatus)}
+          </span>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            color: 'var(--text-muted)',
+            whiteSpace: 'nowrap',
+          }}>
+            {formatNumber(shownFlights)} / {formatNumber(totalFlights)} vuelos
+          </span>
         </div>
       </div>
       <div style={{ overflowX: 'auto' }}>
-        <div style={{ minWidth: 760 }}>
+        <div style={{ minWidth: 1120 }}>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: '76px 104px 1fr 120px 86px 126px',
-            gap: 14,
-            padding: '14px 20px',
+            gridTemplateColumns: '82px 104px minmax(130px, 1fr) minmax(190px, 1.25fr) 96px 132px 92px 132px',
+            gap: 8,
+            padding: '14px 18px 10px',
             fontFamily: 'var(--font-mono)',
-            fontSize: 11,
+            fontSize: 10,
             letterSpacing: '0.1em',
             textTransform: 'uppercase',
             color: 'var(--text-muted)',
-            borderBottom: '1px solid var(--border)',
+            borderBottom: '1px solid rgba(255,255,255,0.08)',
           }}>
             <span>Hora</span>
             <span>Vuelo</span>
+            <span>Aerolínea</span>
             <span>Destino</span>
+            <span>Demora</span>
             <span>Estatus</span>
             <span>Puerta</span>
             <span>Lectura</span>
           </div>
           {visible.length === 0 ? (
             <div style={{
-              padding: '32px 20px',
+              padding: '36px 20px 40px',
               fontFamily: 'var(--font-mono)',
               color: 'var(--text-muted)',
               fontSize: 13,
+              lineHeight: 1.6,
             }}>
-              Sin salidas registradas hoy
+              {boardStatus === 'maintenance'
+                ? 'AICM reporta el tablero oficial en mantenimiento. La lista se llenará cuando vuelva a publicar salidas.'
+                : 'Sin salidas registradas hoy.'}
             </div>
           ) : visible.map(row => {
             const accent = statusAccent(row.statusNorm);
+            const verdict = delayVerdict(row.statusNorm);
             return (
               <div
                 key={`${row.flightKey}:${row.observedAt}`}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '76px 104px 1fr 120px 86px 126px',
-                  gap: 14,
+                  gridTemplateColumns: '82px 104px minmax(130px, 1fr) minmax(190px, 1.25fr) 96px 132px 92px 132px',
+                  gap: 8,
                   padding: '14px 20px',
                   alignItems: 'center',
                   borderBottom: '1px solid rgba(255,255,255,0.06)',
                   fontFamily: 'var(--font-mono)',
-                  color: 'var(--text-secondary)',
+                  color: '#f7c66f',
                   fontSize: 12,
+                  letterSpacing: '0.02em',
                 }}
               >
-                <strong style={{ color: 'var(--text-primary)' }}>{row.scheduledTimeLocal || '--:--'}</strong>
-                <span>{row.flightCode || 'N/D'}</span>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {row.city || row.airline || 'Sin destino'}
-                </span>
-                <span style={{
-                  display: 'inline-flex',
-                  width: 'fit-content',
-                  maxWidth: '100%',
-                  border: `1px solid ${accent.border}`,
-                  background: accent.bg,
-                  color: accent.fg,
-                  borderRadius: 999,
-                  padding: '5px 9px',
-                  fontWeight: 800,
-                }}>
-                  {statusLabel(row.statusNorm, row.statusRaw)}
-                </span>
-                <span>{row.gate || row.terminal || 'N/D'}</span>
-                <span>{formatObservedTime(row.observedAt)}</span>
+                <FlightBoardCell color="#fef3c7">{row.scheduledTimeLocal || '--:--'}</FlightBoardCell>
+                <FlightBoardCell>{row.flightCode || 'N/D'}</FlightBoardCell>
+                <FlightBoardCell muted={!row.airline}>{row.airline || 'N/D'}</FlightBoardCell>
+                <FlightBoardCell muted={!row.city}>{row.city || 'Sin destino'}</FlightBoardCell>
+                <FlightBoardCell color={verdict.accent.fg}>{verdict.label}</FlightBoardCell>
+                <FlightBoardCell color={accent.fg}>{statusLabel(row.statusNorm, row.statusRaw)}</FlightBoardCell>
+                <FlightBoardCell muted={!row.gate && !row.terminal}>{row.gate || row.terminal || 'N/D'}</FlightBoardCell>
+                <FlightBoardCell muted>{formatObservedTime(row.observedAt)}</FlightBoardCell>
               </div>
             );
           })}
@@ -605,7 +681,7 @@ export default function PointsAicmPage({ isAdmin = false }) {
       </div>
 
       <div style={{ marginTop: 22 }}>
-        <Timetable rows={timetable} />
+        <Timetable rows={timetable} board={overview?.board} source={source} />
       </div>
 
       <div style={{ marginTop: 22 }}>

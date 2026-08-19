@@ -16,6 +16,11 @@ test('AICM hub has a dedicated infrastructure route and public overview fetch', 
 test('AICM hub renders the departures board, counters, and window cards', () => {
   assert.match(pageSource, /Pulso AICM/);
   assert.match(pageSource, /Tablero de salidas/);
+  assert.match(pageSource, /MEX Salidas/);
+  assert.match(pageSource, /Aerolínea/);
+  assert.match(pageSource, /Demora/);
+  assert.match(pageSource, /delayVerdict/);
+  assert.match(pageSource, /boardStatusLabel/);
   assert.match(pageSource, /Última hora/);
   assert.match(pageSource, /Ventanas de mercado/);
   assert.match(pageSource, /Cada 60 min/);
@@ -25,11 +30,18 @@ test('AICM hub renders the departures board, counters, and window cards', () => 
   assert.match(pageSource, /sourceEventId/);
 });
 
+test('AICM departures board renders the full overview row set', () => {
+  assert.match(pageSource, /const visible = rows;/);
+  assert.doesNotMatch(pageSource, /rows\.slice\(0, 14\)/);
+  assert.match(pageSource, /shownFlights/);
+  assert.match(pageSource, /totalFlights/);
+});
+
 test('AICM hub places the departures board before the weekly rhythm card', () => {
-  assert.ok(pageSource.indexOf('<Timetable rows={timetable} />') > 0);
+  assert.ok(pageSource.indexOf('<Timetable rows={timetable} board={overview?.board} source={source} />') > 0);
   assert.ok(pageSource.indexOf('<DailyBars rows={dailyRows} />') > 0);
   assert.ok(
-    pageSource.indexOf('<Timetable rows={timetable} />')
+    pageSource.indexOf('<Timetable rows={timetable} board={overview?.board} source={source} />')
       < pageSource.indexOf('<DailyBars rows={dailyRows} />')
   );
 });

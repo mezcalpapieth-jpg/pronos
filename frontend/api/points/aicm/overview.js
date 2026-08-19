@@ -52,6 +52,12 @@ function emptyOverview(reason = 'no_oracle_data') {
       lastObservedAt: null,
       status: 'empty',
     },
+    board: {
+      status: 'empty',
+      totalFlights: 0,
+      shownFlights: 0,
+      rowLimit: 180,
+    },
     counters: {
       hour: { key: 'hour', label: '1h', delayedFlights: 0, cancelledFlights: 0, observedFlights: 0, lastObservedAt: null },
       day: { key: 'day', label: 'Hoy', delayedFlights: 0, cancelledFlights: 0, observedFlights: 0, lastObservedAt: null },
@@ -98,6 +104,7 @@ function formatDaily(row) {
 }
 
 function formatFlight(row) {
+  const statusNorm = row.statusNorm || 'unknown';
   return {
     flightKey: row.flightKey,
     flightDate: row.flightDate,
@@ -109,7 +116,9 @@ function formatFlight(row) {
     terminal: row.terminal || null,
     gate: row.gate || null,
     statusRaw: row.statusRaw || 'unknown',
-    statusNorm: row.statusNorm || 'unknown',
+    statusNorm,
+    isDelayed: statusNorm === 'delayed',
+    isCancelled: statusNorm === 'cancelled',
     observedAt: row.observedAt || null,
   };
 }
@@ -121,7 +130,7 @@ export default async function handler(req, res) {
 
   try {
     setCacheHeaders(res, { scope: 'public', maxAge: 10, sMaxage: 30, staleWhileRevalidate: 120 });
-    const { value: payload, hit } = await cachedJson('points:aicm:overview:v1', 15_000, async () => {
+    const { value: payload, hit } = await cachedJson('points:aicm:overview:v2', 15_000, async () => {
       const sql = getReadSql();
 
       try {
@@ -221,16 +230,18 @@ export default async function handler(req, res) {
                 AND o.flight_date = (SELECT today FROM clock)
               ORDER BY o.flight_key, o.observed_at DESC, o.id DESC
             )
-            SELECT *
+            SELECT *, COUNT(*) OVER()::int AS "totalFlights"
             FROM latest
             ORDER BY ("scheduledTimeLocal" IS NULL), "scheduledTimeLocal" ASC, "observedAt" DESC
-            LIMIT 80
+            LIMIT 180
           `,
         ]);
 
         const counterEntries = counterRows.map(formatCounter);
         const counters = Object.fromEntries(counterEntries.map(row => [row.key, row]));
         const lastRun = latestRuns[0] ? formatRun(latestRuns[0]) : null;
+        const timetable = timetableRows.map(formatFlight);
+        const totalFlights = toNumber(timetableRows[0]?.totalFlights || timetable.length);
         return {
           ...emptyOverview(),
           source: {
@@ -239,13 +250,19 @@ export default async function handler(req, res) {
             status: lastRun?.status || 'empty',
             lastObservedAt: lastRun?.observedAt || null,
           },
+          board: {
+            status: lastRun?.status || (timetable.length ? 'ok' : 'empty'),
+            totalFlights,
+            shownFlights: timetable.length,
+            rowLimit: 180,
+          },
           counters: {
             hour: counters.hour || emptyOverview().counters.hour,
             day: counters.day || emptyOverview().counters.day,
             week: counters.week || emptyOverview().counters.week,
           },
           daily: dailyRows.map(formatDaily),
-          timetable: timetableRows.map(formatFlight),
+          timetable,
           latestRuns: latestRuns.map(formatRun),
           generatedAt: new Date().toISOString(),
         };

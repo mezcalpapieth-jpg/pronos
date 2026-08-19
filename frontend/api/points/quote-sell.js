@@ -13,8 +13,7 @@ import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { cryptoTradeLock } from '../_lib/points-crypto-trade-guard.js';
 import {
   combineSellOrderbookMatches,
-  makerUsageFromRows,
-  previewPronosMakerBidsForSell,
+  previewPronosMakerInventoryBidsForSell,
   previewRestingBidsForSell,
   PRONOS_TREASURY_USERNAME,
 } from '../_lib/points-limit-orders.js';
@@ -130,22 +129,18 @@ export default async function handler(req, res) {
       shares: n,
       minPrice: bookMinPrice,
     });
-    const usageRows = await sql`
-      SELECT side, COALESCE(SUM(collateral), 0)::text AS collateral
+    const makerTradeRows = await sql`
+      SELECT id, side, shares, collateral, price_at_trade, created_at
         FROM points_trades
        WHERE market_id = ${mid}
          AND outcome_index = ${oi}
          AND username = ${PRONOS_TREASURY_USERNAME}
          AND side IN ('buy', 'sell')
-       GROUP BY side
+       ORDER BY created_at ASC, id ASC
     `;
     const makerOrderbook = realOrderbook.remainingShares > 0.000001
-      ? previewPronosMakerBidsForSell(r, {
-        outcomeIndex: oi,
+      ? previewPronosMakerInventoryBidsForSell(makerTradeRows, {
         shares: realOrderbook.remainingShares,
-        usage: makerUsageFromRows(usageRows),
-        currentPrice: priceBefore,
-        minPrice: bookMinPrice,
       })
       : null;
     const orderbook = combineSellOrderbookMatches(realOrderbook, makerOrderbook);

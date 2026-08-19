@@ -576,6 +576,11 @@ function serializeOrderId(id, fallback = null) {
   return fallback;
 }
 
+function timestampForSort(value) {
+  const ms = new Date(value || 0).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+}
+
 function sortedMakerAsks(depth) {
   return [...(depth?.asks || [])].sort((a, b) => Number(a.price || 0) - Number(b.price || 0));
 }
@@ -626,14 +631,159 @@ function subtractCollateralFromDepth(rows, usedCollateral) {
 }
 
 export function makerUsageFromRows(rows = []) {
-  const usage = { askCollateralUsed: 0, bidCollateralUsed: 0 };
+  let askCollateralSold = 0;
+  let bidCollateralUsed = 0;
+  let buybackCollateral = 0;
   for (const row of rows || []) {
     const collateral = Math.max(0, Number(row.collateral || row.total || 0));
     if (!Number.isFinite(collateral) || collateral <= EPSILON) continue;
-    if (row.side === 'sell') usage.askCollateralUsed = round(usage.askCollateralUsed + collateral, 6);
-    if (row.side === 'buy') usage.bidCollateralUsed = round(usage.bidCollateralUsed + collateral, 6);
+    if (row.side === 'sell') askCollateralSold = round(askCollateralSold + collateral, 6);
+    if (row.side === 'buy') {
+      buybackCollateral = round(buybackCollateral + collateral, 6);
+      bidCollateralUsed = round(bidCollateralUsed + collateral, 6);
+    }
   }
-  return usage;
+  return {
+    askCollateralUsed: round(Math.max(0, askCollateralSold - buybackCollateral), 6),
+    bidCollateralUsed,
+  };
+}
+
+export function pronosMakerInventoryLotsFromRows(rows = []) {
+  const lots = [];
+  const sorted = [...(rows || [])].sort((a, b) => {
+    const byTime = timestampForSort(a.created_at) - timestampForSort(b.created_at);
+    if (byTime !== 0) return byTime;
+    return Number(a.id || 0) - Number(b.id || 0);
+  });
+
+  for (const row of sorted) {
+    const side = String(row.side || '').toLowerCase();
+    const shares = Math.max(0, Number(row.shares || 0));
+    const collateral = Math.max(0, Number(row.collateral || 0));
+    const price = normalizeTakerPrice(
+      row.price_at_trade ?? (shares > EPSILON ? collateral / shares : null),
+      null,
+    );
+    if (!price || shares <= EPSILON || collateral <= EPSILON) continue;
+
+    if (side === 'sell') {
+      lots.push({
+        sourceTradeId: serializeOrderId(row.id),
+        createdAt: row.created_at || null,
+        price,
+        remainingShares: round(shares, 6),
+        remainingCollateral: round(collateral, 6),
+      });
+      continue;
+    }
+
+    if (side !== 'buy') continue;
+
+    let remaining = shares;
+    for (let i = lots.length - 1; i >= 0 && remaining > EPSILON; i -= 1) {
+      const lot = lots[i];
+      const lotShares = Math.max(0, Number(lot.remainingShares || 0));
+      if (lotShares <= EPSILON) continue;
+
+      const consumeShares = round(Math.min(lotShares, remaining), 6);
+      const lotPrice = lot.remainingCollateral / lotShares;
+      lot.remainingShares = round(Math.max(0, lotShares - consumeShares), 6);
+      lot.remainingCollateral = round(Math.max(0, lot.remainingCollateral - (consumeShares * lotPrice)), 6);
+      remaining = round(Math.max(0, remaining - consumeShares), 6);
+    }
+  }
+
+  const byPrice = new Map();
+  for (const lot of lots) {
+    if (lot.remainingShares <= EPSILON || lot.remainingCollateral <= EPSILON) continue;
+    const key = lot.price.toFixed(6);
+    const current = byPrice.get(key) || {
+      sourceTradeId: lot.sourceTradeId,
+      createdAt: lot.createdAt,
+      price: lot.price,
+      remainingShares: 0,
+      remainingCollateral: 0,
+    };
+    current.remainingShares = round(current.remainingShares + lot.remainingShares, 6);
+    current.remainingCollateral = round(current.remainingCollateral + lot.remainingCollateral, 6);
+    byPrice.set(key, current);
+  }
+
+  return [...byPrice.values()].sort((a, b) => {
+    const byPriceDesc = Number(b.price || 0) - Number(a.price || 0);
+    if (byPriceDesc !== 0) return byPriceDesc;
+    return timestampForSort(b.createdAt) - timestampForSort(a.createdAt);
+  });
+}
+
+export function pronosMakerInventoryBidDepthFromRows(rows = [], {
+  limit = MAX_TRIGGERED_PER_PASS,
+} = {}) {
+  const maxRows = Math.max(1, Number.parseInt(limit, 10) || MAX_TRIGGERED_PER_PASS);
+  return pronosMakerInventoryLotsFromRows(rows)
+    .slice(0, maxRows)
+    .map((lot, index) => ({
+      side: 'bid',
+      price: round(lot.price, 6),
+      shares: round(lot.remainingShares, 6),
+      total: round(lot.remainingCollateral, 6),
+      fee: 0,
+      priceImpactPts: 0,
+      source: 'maker_inventory',
+      sourceTradeId: lot.sourceTradeId,
+      orderId: `maker-inventory-${index + 1}`,
+    }));
+}
+
+export function previewPronosMakerInventoryBidsForSell(rows = [], {
+  shares,
+  maxFills = MAX_TRIGGERED_PER_PASS * 8,
+} = {}) {
+  let remainingShares = Math.max(0, Number(shares || 0));
+  const fills = [];
+  let collateralOut = 0;
+  let sharesSold = 0;
+
+  if (remainingShares <= EPSILON) {
+    return { fills, sharesSold, collateralOut, remainingShares, avgPrice: 0 };
+  }
+
+  const lots = pronosMakerInventoryLotsFromRows(rows)
+    .slice(0, Math.max(1, Number.parseInt(maxFills, 10) || MAX_TRIGGERED_PER_PASS));
+  for (const lot of lots) {
+    if (remainingShares <= EPSILON) break;
+    const availableShares = Math.max(0, Number(lot.remainingShares || 0));
+    const availableCollateral = Math.max(0, Number(lot.remainingCollateral || 0));
+    const price = normalizeTakerPrice(lot.price, null);
+    if (!price || availableShares <= EPSILON || availableCollateral <= EPSILON) continue;
+
+    const fillShares = round(Math.min(availableShares, remainingShares), 6);
+    const fillCollateral = round(Math.min(availableCollateral, fillShares * price), 6);
+    if (fillShares <= EPSILON || fillCollateral <= EPSILON) continue;
+
+    fills.push({
+      orderId: `maker-inventory-${serializeOrderId(lot.sourceTradeId, fills.length + 1)}`,
+      maker: PRONOS_TREASURY_USERNAME,
+      side: 'buy',
+      source: 'maker_inventory',
+      sourceTradeId: lot.sourceTradeId,
+      price: orderbookAverage(fillCollateral, fillShares),
+      shares: fillShares,
+      collateral: fillCollateral,
+    });
+    sharesSold = round(sharesSold + fillShares, 6);
+    collateralOut = round(collateralOut + fillCollateral, 6);
+    remainingShares = round(Math.max(0, remainingShares - fillShares), 6);
+  }
+
+  return {
+    fills,
+    sharesSold,
+    collateralOut,
+    remainingShares,
+    avgPrice: orderbookAverage(collateralOut, sharesSold),
+  };
 }
 
 export async function readPronosMakerUsage(client, { marketId, outcomeIndex } = {}) {
@@ -1541,6 +1691,109 @@ export async function matchRestingBidsForSell(client, {
     collateralOut,
     remainingShares,
     realizedPnl,
+    avgPrice: orderbookAverage(collateralOut, sharesSold),
+  };
+}
+
+export async function matchPronosMakerInventoryBidsForSell(client, {
+  market,
+  marketId,
+  username,
+  outcomeIndex,
+  sharesToSell,
+} = {}) {
+  const targetShares = Math.max(0, Number(sharesToSell || 0));
+  if (targetShares <= EPSILON) {
+    return { fills: [], sharesSold: 0, collateralOut: 0, remainingShares: targetShares, realizedPnl: 0, avgPrice: 0 };
+  }
+
+  const reserves = reservesForMarket(market, outcomeIndex);
+  const inventoryRows = await client.query(
+    `SELECT id, side, shares, collateral, price_at_trade, created_at
+       FROM points_trades
+      WHERE market_id = $1
+        AND outcome_index = $2
+        AND username = $3
+        AND side IN ('buy', 'sell')
+      ORDER BY created_at ASC, id ASC`,
+    [marketId, outcomeIndex, PRONOS_TREASURY_USERNAME],
+  );
+  const preview = previewPronosMakerInventoryBidsForSell(inventoryRows.rows, {
+    shares: targetShares,
+  });
+  if (preview.sharesSold <= EPSILON || preview.collateralOut <= EPSILON) {
+    return { ...preview, realizedPnl: 0 };
+  }
+
+  const fills = [];
+  let sharesSold = 0;
+  let collateralOut = 0;
+  let realizedPnl = 0;
+  let remainingShares = targetShares;
+
+  for (const fill of preview.fills) {
+    if (remainingShares <= EPSILON) break;
+    const fillShares = round(Math.min(fill.shares, remainingShares), 6);
+    const fillCollateral = round(Number(fill.collateral || fillShares * fill.price), 6);
+    if (fillShares <= EPSILON || fillCollateral <= EPSILON) continue;
+
+    const sellerPosition = await reduceSoldPosition(client, {
+      marketId,
+      username,
+      outcomeIndex,
+      shares: fillShares,
+      collateralOut: fillCollateral,
+    });
+    if (!sellerPosition) {
+      const err = new Error('insufficient_available_shares');
+      err.status = 400;
+      throw err;
+    }
+
+    await insertTradeAndSnapshot(client, {
+      marketId,
+      username,
+      side: 'sell',
+      outcomeIndex,
+      shares: fillShares,
+      collateral: fillCollateral,
+      fee: 0,
+      priceAtTrade: fill.price,
+      reservesBefore: reserves,
+      reservesAfter: reserves,
+      snapshotLabel: null,
+    });
+    await insertTradeAndSnapshot(client, {
+      marketId,
+      username: PRONOS_TREASURY_USERNAME,
+      side: 'buy',
+      outcomeIndex,
+      shares: fillShares,
+      collateral: fillCollateral,
+      fee: 0,
+      priceAtTrade: fill.price,
+      reservesBefore: reserves,
+      reservesAfter: reserves,
+      snapshotLabel: null,
+    });
+
+    fills.push({
+      ...fill,
+      status: 'filled',
+      source: 'maker_inventory',
+    });
+    sharesSold = round(sharesSold + fillShares, 6);
+    collateralOut = round(collateralOut + fillCollateral, 6);
+    realizedPnl = round(realizedPnl + sellerPosition.addedRealized, 6);
+    remainingShares = round(Math.max(0, remainingShares - fillShares), 6);
+  }
+
+  return {
+    fills,
+    sharesSold,
+    collateralOut,
+    realizedPnl,
+    remainingShares,
     avgPrice: orderbookAverage(collateralOut, sharesSold),
   };
 }

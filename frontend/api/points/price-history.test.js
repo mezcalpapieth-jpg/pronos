@@ -13,9 +13,12 @@ test('points price history supports short hour windows for detail charts', () =>
 
 test('points price history includes binary orderbook fills that do not move reserves', () => {
   assert.match(source, /PRONOS_TREASURY_USERNAME/);
-  assert.match(source, /const bookRows = outcomeIdx <= 1 \? await sql/);
-  assert.match(source, /t\.reserves_before = t\.reserves_after/);
+  assert.match(source, /displayTradePointsFromRows/);
+  assert.match(source, /mergeDisplayPricePoints/);
+  assert.match(source, /const displayTradeRows = outcomeIdx <= 1 \? await sql/);
+  assert.match(source, /t\.side IN \('buy', 'sell'\)/);
   assert.match(source, /jsonb_array_length\(m\.outcomes\) = 2/);
-  assert.match(source, /const projected = tradeOutcome === outcomeIdx \? tradePrice : 1 - tradePrice/);
+  assert.match(source, /tradeRowCap/);
+  assert.match(source, /priceHistoryExecutionBucket\(r\.snapshotted_at\)/);
   assert.match(source, /sort\(\(a, b\) => a\.t - b\.t \|\| a\._id - b\._id\)/);
 });

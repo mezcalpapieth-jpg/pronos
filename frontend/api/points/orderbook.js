@@ -2,8 +2,9 @@
  * GET /api/points/orderbook?marketId=<id>&outcomeIndex=<idx>&levels=<n>
  *
  * Hybrid points order book. User bids/asks come from reserved limit
- * orders; Pronos maker rows add light treasury depth and are depleted
- * by treasury fills before the AMM sees any leftover flow.
+ * orders; Pronos maker asks add light treasury depth, while maker bids
+ * reflect outstanding treasury inventory that can be bought back without
+ * moving the AMM twice.
  */
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
@@ -13,7 +14,8 @@ import { binaryPrices } from '../_lib/amm-math.js';
 import {
   aggregateLimitOrderRows,
   makerUsageFromRows,
-  pronosMakerExecutableBidDepthForMarket,
+  pronosMakerDepthForMarket,
+  pronosMakerInventoryBidDepthFromRows,
   PRONOS_TREASURY_USERNAME,
 } from '../_lib/points-limit-orders.js';
 import { binaryPricesWithBookTrade } from '../_lib/points-display-prices.js';
@@ -67,7 +69,7 @@ export default async function handler(req, res) {
   });
 
   try {
-    const cacheKey = `points:orderbook:v7:${marketId}:${outcomeIndex}:${requestedLevels.join(',')}`;
+    const cacheKey = `points:orderbook:v8:${marketId}:${outcomeIndex}:${requestedLevels.join(',')}`;
     const { value: payload, hit } = await cachedJson(cacheKey, 1_000, async () => {
       await timer.time('schema', () => ensurePointsSchema(schemaSql));
       const rows = await timer.time('db_market', () => sql`
@@ -104,14 +106,14 @@ export default async function handler(req, res) {
         };
       }
 
-      const usageRows = await timer.time('db_maker_usage', () => sql`
-        SELECT side, COALESCE(SUM(collateral), 0)::text AS collateral
+      const makerTradeRows = await timer.time('db_maker_trades', () => sql`
+        SELECT id, side, shares, collateral, price_at_trade, created_at
           FROM points_trades
          WHERE market_id = ${marketId}
            AND outcome_index = ${outcomeIndex}
            AND username = ${PRONOS_TREASURY_USERNAME}
            AND side IN ('buy', 'sell')
-         GROUP BY side
+         ORDER BY created_at ASC, id ASC
       `);
       const lastRows = reserves.length === 2 ? await timer.time('db_last_trade', () => sql`
         SELECT outcome_index, price_at_trade,
@@ -131,10 +133,10 @@ export default async function handler(req, res) {
         isBookTrade: lastRows[0]?.is_book_trade,
       }) : [];
       const displayCurrentPrice = Number(displayPrices[outcomeIndex]);
-      const depth = pronosMakerExecutableBidDepthForMarket(market, {
+      const depth = pronosMakerDepthForMarket(market, {
         outcomeIndex,
         levels: requestedLevels,
-        usage: makerUsageFromRows(usageRows),
+        usage: makerUsageFromRows(makerTradeRows),
         currentPrice: Number.isFinite(displayCurrentPrice) ? displayCurrentPrice : null,
       });
       const limitRows = await timer.time('db_limit_orders', () => sql`
@@ -150,7 +152,9 @@ export default async function handler(req, res) {
       `);
       const limitBook = aggregateLimitOrderRows(limitRows);
       const makerAsks = depth.asks;
-      const makerBids = depth.bids;
+      const makerBids = pronosMakerInventoryBidDepthFromRows(makerTradeRows, {
+        limit: requestedLevels.length,
+      });
       const asks = [...limitBook.asks, ...makerAsks]
         .sort((a, b) => b.price - a.price)
         .slice(0, requestedLevels.length + limitBook.asks.length);
@@ -166,7 +170,7 @@ export default async function handler(req, res) {
         null,
       );
       const spread = bestAsk == null || bestBid == null
-        ? depth.spread
+        ? null
         : Math.max(0, bestAsk - bestBid);
       const currentPrice = Number.isFinite(displayCurrentPrice) ? displayCurrentPrice : depth.currentPrice;
 

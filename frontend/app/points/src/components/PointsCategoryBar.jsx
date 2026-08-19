@@ -29,7 +29,6 @@ export const CATEGORY_TABS = [
   { slug: 'all',         tKey: 'points.cat.trending'    },
   { slug: 'nuevos-mercados', tKey: 'points.cat.worldCup', highlight: true },
   { slug: 'mexico',      tKey: 'points.cat.mexico',      regional: true },
-  { slug: 'infraestructura', tKey: 'points.cat.infraestructura' },
   { slug: 'deportes',    tKey: 'points.cat.deportes'    },
   { slug: 'musica',      tKey: 'points.cat.musica'      },
   { slug: 'politica',    tKey: 'points.cat.politica'    },

@@ -11,9 +11,9 @@ test('new markets page is a trophy shelf instead of a taxonomy category', () => 
   assert.doesNotMatch(source, /CATEGORY_TAXONOMY_ALIASES/);
 });
 
-test('category page supports the infrastructure taxonomy bucket', () => {
+test('category page keeps the hidden infrastructure taxonomy route available', () => {
   assert.match(source, /infraestructura:\s*'points\.cat\.infraestructura'/);
-  assert.match(source, /\{ key:\s*'infraestructura',\s*tKey:\s*'points\.cat\.infraestructura'/);
+  assert.doesNotMatch(source, /RESUELTOS_CATEGORIES[\s\S]*?\{ key:\s*'infraestructura'/);
 });
 
 test('infrastructure page renders AICM as a hub and gates child markets behind promotion', () => {

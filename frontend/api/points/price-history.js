@@ -30,6 +30,11 @@ import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { PRONOS_TREASURY_USERNAME } from '../_lib/points-limit-orders.js';
+import {
+  displayTradePointsFromRows,
+  mergeDisplayPricePoints,
+  priceHistoryExecutionBucket,
+} from '../_lib/points-price-history-display.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -89,6 +94,7 @@ export default async function handler(req, res) {
     const rows = await sql`
       WITH ranked AS (
         SELECT
+          id,
           market_id,
           prices,
           snapshotted_at,
@@ -114,7 +120,7 @@ export default async function handler(req, res) {
         FROM ranked
       )
       SELECT DISTINCT ON (market_id, bucket)
-        market_id, prices, snapshotted_at
+        id, market_id, prices, snapshotted_at
       FROM sampled
       ORDER BY
         market_id ASC,
@@ -156,24 +162,64 @@ export default async function handler(req, res) {
       ORDER BY t.market_id ASC, t.created_at DESC, t.id DESC
     ` : [];
 
-    // Order-book fills do not alter reserves, so they do not create AMM
-    // snapshots. Add them back as real price points for binary markets.
-    const bookRows = outcomeIdx <= 1 ? await sql`
-      SELECT t.id, t.market_id, t.outcome_index, t.price_at_trade, t.created_at
-      FROM points_trades t
-      JOIN points_markets m ON m.id = t.market_id
-      WHERE t.market_id = ANY(${ids}::int[])
-        AND t.username <> ${PRONOS_TREASURY_USERNAME}
-        AND t.price_at_trade IS NOT NULL
-        AND t.outcome_index IN (0, 1)
-        AND t.reserves_before IS NOT NULL
-        AND t.reserves_after IS NOT NULL
-        AND t.reserves_before = t.reserves_after
-        AND jsonb_typeof(m.outcomes) = 'array'
-        AND jsonb_array_length(m.outcomes) = 2
-        AND t.created_at >= NOW() - (${windowHours} || ' hours')::interval
-      ORDER BY t.market_id ASC, t.created_at ASC, t.id ASC
+    // Public charts should move like the movement tape: one visible
+    // execution burst should leave one final display price. Raw reserve
+    // snapshots can include internal AMM steps from a mixed book/AMM fill,
+    // and rendering those alongside book fills makes a single 50c -> 54c buy
+    // look like a spike to ~60c and then a reversal. Fetch recent binary
+    // trade rows, collapse them by the same short execution bucket, and
+    // replace nearby snapshots with that public terminal price.
+    const tradeRowCap = Math.min(Math.max(maxPoints * 12, 240), 2400);
+    const displayTradeRows = outcomeIdx <= 1 ? await sql`
+      WITH ranked_trades AS (
+        SELECT
+          t.id,
+          t.market_id,
+          t.username,
+          t.side,
+          t.outcome_index,
+          t.price_at_trade,
+          t.reserves_before,
+          t.reserves_after,
+          t.created_at,
+          ROW_NUMBER() OVER (
+            PARTITION BY t.market_id
+            ORDER BY t.created_at DESC, t.id DESC
+          ) AS rn
+        FROM points_trades t
+        JOIN points_markets m ON m.id = t.market_id
+        WHERE t.market_id = ANY(${ids}::int[])
+          AND t.username <> ${PRONOS_TREASURY_USERNAME}
+          AND t.side IN ('buy', 'sell')
+          AND t.price_at_trade IS NOT NULL
+          AND t.outcome_index IN (0, 1)
+          AND t.reserves_before IS NOT NULL
+          AND t.reserves_after IS NOT NULL
+          AND jsonb_typeof(m.outcomes) = 'array'
+          AND jsonb_array_length(m.outcomes) = 2
+          AND t.created_at >= NOW() - (${windowHours} || ' hours')::interval
+      )
+      SELECT
+        id,
+        market_id,
+        username,
+        side,
+        outcome_index,
+        price_at_trade,
+        reserves_before,
+        reserves_after,
+        created_at
+      FROM ranked_trades
+      WHERE rn <= ${tradeRowCap}
+      ORDER BY market_id ASC, created_at ASC, id ASC
     ` : [];
+    const displayTradePoints = displayTradePointsFromRows(displayTradeRows, outcomeIdx);
+    const tradePointsByMarket = new Map();
+    for (const pt of displayTradePoints) {
+      const key = Number(pt.market_id);
+      if (!tradePointsByMarket.has(key)) tradePointsByMarket.set(key, []);
+      tradePointsByMarket.get(key).push(pt);
+    }
 
     // Group by market_id and project only the requested outcome.
     const windowStartSec = Date.now() / 1000 - windowHours * 3600;
@@ -212,22 +258,13 @@ export default async function handler(req, res) {
         // Snapshots store probability 0-1; the Sparkline component expects
         // 0-100 to match MVP CLOB series.
         p: Math.round(price * 10000) / 100,
-        _id: 0,
-      });
-    }
-    for (const r of bookRows) {
-      const tradePrice = Number(r.price_at_trade);
-      const tradeOutcome = Number(r.outcome_index);
-      if (!Number.isFinite(tradePrice) || tradePrice <= 0 || tradePrice >= 1) continue;
-      const projected = tradeOutcome === outcomeIdx ? tradePrice : 1 - tradePrice;
-      history[r.market_id].push({
-        t: new Date(r.created_at).getTime() / 1000,
-        p: Math.round(projected * 10000) / 100,
         _id: Number(r.id) || 0,
+        _source: 'snapshot',
+        _bucket: priceHistoryExecutionBucket(r.snapshotted_at),
       });
     }
     for (const id of ids) {
-      history[id] = history[id]
+      history[id] = mergeDisplayPricePoints(history[id], tradePointsByMarket.get(id) || [])
         .filter(pt => Number.isFinite(pt.t) && Number.isFinite(pt.p))
         .sort((a, b) => a.t - b.t || a._id - b._id)
         .map(({ t, p }) => ({ t, p }));

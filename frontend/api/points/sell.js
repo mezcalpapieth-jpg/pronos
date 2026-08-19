@@ -26,7 +26,7 @@ import {
   combineSellOrderbookMatches,
   executeTriggeredLimitOrders,
   lockedReservedShares,
-  matchPronosMakerBidsForSell,
+  matchPronosMakerInventoryBidsForSell,
   matchRestingBidsForSell,
   PRONOS_TREASURY_USERNAME,
 } from '../_lib/points-limit-orders.js';
@@ -176,14 +176,12 @@ export default async function handler(req, res) {
         minPrice: bookMinPrice,
       });
       const makerOrderbookMatch = realOrderbookMatch.remainingShares > 0.000001
-        ? await matchPronosMakerBidsForSell(client, {
+        ? await matchPronosMakerInventoryBidsForSell(client, {
           market: m,
           marketId: mid,
           username,
           outcomeIndex: oi,
           sharesToSell: realOrderbookMatch.remainingShares,
-          currentPrice: displayPriceBefore || null,
-          minPrice: bookMinPrice,
         })
         : null;
       const orderbookMatch = combineSellOrderbookMatches(realOrderbookMatch, makerOrderbookMatch);
@@ -325,7 +323,7 @@ export default async function handler(req, res) {
         collateralOut: totalCollateralOut,
         sharesSold: sharesToSell,
         realizedPnl: orderbookMatch.realizedPnl + addedAmmRealized,
-        priceBefore: orderbookMatch.priceBefore ?? quote?.priceBefore ?? orderbookMatch.avgPrice,
+        priceBefore: (displayPriceBefore || orderbookMatch.priceBefore) ?? quote?.priceBefore ?? orderbookMatch.avgPrice,
         priceAfter: quote?.priceAfter ?? orderbookMatch.priceAfter ?? orderbookMatch.avgPrice,
         orderbookFills: orderbookMatch.fills,
         triggeredLimitOrders,

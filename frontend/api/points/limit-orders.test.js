@@ -14,13 +14,15 @@ import {
   previewAmmCappedBidsForSell,
   previewPronosMakerAsksForBuy,
   previewPronosMakerBidsForSell,
+  previewPronosMakerInventoryBidsForSell,
   pronosMakerDepthForMarket,
   pronosMakerExecutableBidDepthForMarket,
+  pronosMakerInventoryBidDepthFromRows,
   previewRestingAsksForBuy,
   previewRestingBidsForSell,
 } from '../_lib/points-limit-orders.js';
 import { monotonicBuyDisplayPrice } from '../_lib/points-display-prices.js';
-import { binaryBuyQuote, binarySellQuote } from '../_lib/amm-math.js';
+import { binaryBuyQuote, binaryPrices, binarySellQuote } from '../_lib/amm-math.js';
 
 const schemaSource = await readFile(new URL('../_lib/points-schema.js', import.meta.url), 'utf8');
 const migrateSource = await readFile(new URL('../migrate.js', import.meta.url), 'utf8');
@@ -233,6 +235,69 @@ test('synthetic maker sell cap is identity-independent across coordinated exits'
   assert.ok(sellA.priceAfter > sellB.priceAfter, 'second exit should continue unwinding the same virtual pool');
 });
 
+test('Pronos maker inventory buybacks unwind synthetic shares before AMM shares', () => {
+  let tradeId = 1;
+  let reserves = [500, 500];
+  let usage = {};
+  let totalShares = 0;
+  let totalSpent = 0;
+  let ammGrossSpent = 0;
+  let ammFees = 0;
+  const treasuryRows = [];
+
+  for (const collateral of [700, 300]) {
+    const maker = previewPronosMakerAsksForBuy({
+      reserves: JSON.stringify(reserves),
+      seed_liquidity: 500,
+      seed_liquidities: null,
+    }, {
+      outcomeIndex: 0,
+      collateral,
+      usage,
+      currentPrice: binaryPrices(reserves)[0],
+    });
+
+    for (const fill of maker.fills) {
+      treasuryRows.push({
+        id: tradeId,
+        side: 'sell',
+        shares: fill.shares,
+        collateral: fill.collateral,
+        price_at_trade: fill.price,
+        created_at: new Date(1_800_000_000_000 + tradeId).toISOString(),
+      });
+      tradeId += 1;
+    }
+
+    const remainingCollateral = Math.max(0, collateral - maker.collateralSpent);
+    if (remainingCollateral > 0.000001) {
+      const amm = binaryBuyQuote(reserves, 0, remainingCollateral);
+      reserves = amm.reservesAfter;
+      totalShares += amm.sharesOut;
+      ammGrossSpent += remainingCollateral;
+      ammFees += amm.fee;
+    }
+
+    totalShares += maker.sharesOut;
+    totalSpent += collateral;
+    usage = makerUsageFromRows(treasuryRows);
+  }
+
+  const buyback = previewPronosMakerInventoryBidsForSell(treasuryRows, {
+    shares: totalShares,
+  });
+  const ammShares = buyback.remainingShares;
+  const ammSell = binarySellQuote(reserves, 0, ammShares);
+  const totalOut = buyback.collateralOut + ammSell.collateralOut;
+
+  approxEqual(ammSell.priceAfter, 0.5, 0.00001, 'AMM shares should return the pool to the starting price');
+  approxEqual(totalOut, totalSpent - ammFees, 0.0001, 'full self-unwind should return spent collateral minus buy fees');
+  assert.ok(buyback.remainingShares > 0, 'AMM-created shares should remain for the AMM fallback');
+  assert.ok(buyback.remainingShares < totalShares, 'synthetic inventory should absorb the maker-created shares first');
+  assert.ok(buyback.fills.length > 0);
+  assert.ok(pronosMakerInventoryBidDepthFromRows(treasuryRows).length > 0);
+});
+
 test('Pronos maker sell preview feeds post-maker reserves into combined fallback', () => {
   const reserves = [671.397244, 1489.4312];
   const maker = previewPronosMakerBidsForSell({
@@ -329,10 +394,10 @@ test('sell quotes and orderbook current price only trust latest book-only fills'
   assert.match(sellSource, /function sellOrderbookPriceFloor/);
   assert.match(sellSource, /const bookMinPrice = sellOrderbookPriceFloor\(reserves, oi, sharesToSell\)/);
   assert.match(sellSource, /matchRestingBidsForSell\(client, \{[\s\S]*minPrice: bookMinPrice,[\s\S]*\}\)/);
-  assert.match(sellSource, /matchPronosMakerBidsForSell\(client, \{[\s\S]*minPrice: bookMinPrice,[\s\S]*\}\)/);
+  assert.match(sellSource, /matchPronosMakerInventoryBidsForSell\(client, \{/);
   assert.match(sellSource, /const reservesForAmm = Array\.isArray\(orderbookMatch\.reservesAfter\)/);
   assert.match(sellSource, /binarySellQuote\(reservesForAmm, oi, ammShares\)/);
-  assert.match(quoteSellSource, /currentPrice: priceBefore/);
+  assert.match(quoteSellSource, /previewPronosMakerInventoryBidsForSell\(makerTradeRows, \{/);
   assert.match(quoteSellSource, /const priceBefore = displayPricesBefore\[oi\] \|\| pricesBefore\[oi\] \|\| 0/);
   assert.match(quoteSellSource, /const lastBookFillPrice = \[\.\.\.\(orderbook\.fills \|\| \[\]\)\]/);
   assert.match(quoteSellSource, /const priceAfter = q\?\.priceAfter \?\? orderbook\.priceAfter \?\? lastBookFillPrice \?\? executionPrice \?\? priceBefore/);
@@ -539,9 +604,9 @@ test('orderbook exposes executable user rows with depleted Pronos maker depth', 
   assert.match(orderbookSource, /FROM points_limit_orders/);
   assert.match(helperSource, /source: 'limit'/);
   assert.match(helperSource, /matchPronosMakerAsksForBuy/);
-  assert.match(helperSource, /matchPronosMakerBidsForSell/);
-  assert.match(helperSource, /pronosMakerExecutableBidDepthForMarket/);
-  assert.match(orderbookSource, /pronosMakerExecutableBidDepthForMarket/);
+  assert.match(helperSource, /matchPronosMakerInventoryBidsForSell/);
+  assert.match(helperSource, /pronosMakerInventoryBidDepthFromRows/);
+  assert.match(orderbookSource, /pronosMakerInventoryBidDepthFromRows/);
   assert.match(orderbookSource, /makerUsageFromRows/);
   assert.match(orderbookSource, /PRONOS_TREASURY_USERNAME/);
   assert.match(orderbookSource, /m\.seed_liquidity,\s*m\.seed_liquidities/);

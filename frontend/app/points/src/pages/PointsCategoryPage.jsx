@@ -120,7 +120,6 @@ const RESUELTOS_CATEGORIES = [
   { key: 'deportes', tKey: 'points.cat.deportes'   },
   { key: 'musica',   tKey: 'points.cat.musica'     },
   { key: 'mexico',   tKey: 'points.cat.mexico'     },
-  { key: 'infraestructura', tKey: 'points.cat.infraestructura' },
   { key: 'politica', tKey: 'points.cat.politica'   },
   { key: 'crypto',   tKey: 'points.cat.crypto'     },
   { key: 'finanzas', tKey: 'points.cat.finanzas'   },
