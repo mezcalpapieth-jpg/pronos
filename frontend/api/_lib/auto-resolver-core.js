@@ -12,6 +12,7 @@ import {
   countAicmAeDaysInclusive,
   readAicmAeDelayCount,
 } from './aicm-aviation-edge.js';
+import { readAicmTimetableDelayCount } from './aicm-timetable.js';
 import { readAppleMxTopArtist } from './charts.js';
 import { readYouTubeTopMxChannel } from './youtube.js';
 import {
@@ -108,7 +109,7 @@ export function buildAutoResolverFinalScore({
       return clip(winLabel);
     }
 
-    if (resolverType === 'aicm_delay_minutes') {
+    if (resolverType === 'aicm_delay_minutes' || resolverType === 'aicm_delay_minutes_live') {
       const count = Number(resolverInfo?.count);
       const mins = Number(resolverInfo?.thresholdMinutes);
       if (Number.isFinite(count) && Number.isFinite(mins)) {
@@ -413,6 +414,57 @@ export async function resolveAutoResolverCandidate(candidate = {}, { sql = null 
     winningIdx = aicmAeBucketIndexFor(countResult.count, cfg.buckets);
     if (winningIdx < 0) {
       throw new Error(`AICM delay count ${countResult.count} did not fit any bucket`);
+    }
+    result = { completed: true, ...countResult };
+    resolverInfo = {
+      ...countResult,
+      shape: cfg.shape || 'delay-bucket',
+      window: cfg.window || null,
+    };
+  } else if (resolverType === 'aicm_delay_minutes_live') {
+    if (!sql) throw new Error('aicm_delay_minutes_live_requires_sql');
+    if (!cfg.fromDateYmd || !cfg.toDateYmd || !Array.isArray(cfg.buckets)) {
+      throw new Error('invalid aicm_delay_minutes_live config');
+    }
+    // Late flights keep accruing delay past midnight, so the count is only
+    // final once the last scheduled departure has actually gone. resolveAfterUtc
+    // holds the market until then.
+    if (cfg.resolveAfterUtc && Date.now() < new Date(cfg.resolveAfterUtc).getTime()) {
+      const err = new Error('aicm_live_window_still_settling');
+      err.benign = true;
+      err.info = { source: cfg.source, resolveAfterUtc: cfg.resolveAfterUtc };
+      throw err;
+    }
+    const countResult = await readAicmTimetableDelayCount(sql, {
+      fromDateYmd: cfg.fromDateYmd,
+      toDateYmd: cfg.toDateYmd,
+      thresholdMinutes: cfg.thresholdMinutes,
+      direction: cfg.direction || 'departure',
+    });
+    const expectedDays = countAicmAeDaysInclusive(cfg.fromDateYmd, cfg.toDateYmd);
+    const minPolls = Number(cfg.minOkPolls ?? 1);
+    const minFlights = Number(cfg.minOperatorFlights ?? 0);
+    // A thin store means the poller missed most of the window; resolving on it
+    // would undercount the market rather than fail it.
+    if (countResult.daysCovered < expectedDays
+      || countResult.okPollCount < minPolls
+      || countResult.operatorFlights < minFlights) {
+      const err = new Error('aicm_live_observations_not_ready');
+      err.benign = true;
+      err.info = {
+        source: countResult.source,
+        expectedDays,
+        daysCovered: countResult.daysCovered,
+        okPollCount: countResult.okPollCount,
+        minOkPolls: minPolls,
+        operatorFlights: countResult.operatorFlights,
+        minOperatorFlights: minFlights,
+      };
+      throw err;
+    }
+    winningIdx = aicmAeBucketIndexFor(countResult.count, cfg.buckets);
+    if (winningIdx < 0) {
+      throw new Error(`AICM live delay count ${countResult.count} did not fit any bucket`);
     }
     result = { completed: true, ...countResult };
     resolverInfo = {

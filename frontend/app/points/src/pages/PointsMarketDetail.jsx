@@ -3020,6 +3020,11 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                 <span style={{ color: 'var(--warning)' }}>· {t('points.series.pending')}</span>
               )}
               <span style={{ flex: 1 }} />
+              {market.isTestMarket && (
+                <span className="test-market-badge" title={t('points.testMarket.tooltip')}>
+                  {t('points.testMarket.badge')}
+                </span>
+              )}
               <ShareButton marketId={market.id} app="points" question={market.question} />
             </div>
 

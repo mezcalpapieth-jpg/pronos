@@ -1,8 +1,8 @@
 import {
   AICM_AE_48H_DELAY_BUCKETS,
   AICM_AE_DEFAULT_THRESHOLD_MIN,
-  AICM_AE_SOURCE,
 } from '../aicm-aviation-edge.js';
+import { AICM_TT_SOURCE } from '../aicm-timetable.js';
 import { AICM_AIRPORT } from './aicm.js';
 import {
   dateAtMexicoCityTime,
@@ -57,8 +57,8 @@ export function aicm48hResolutionCriteria({
     `que hayan salido con más de ${thresholdMinutes} minutos de retraso, según el campo de retraso publicado por Aviation Edge.`,
     'Se cuenta una sola vez cada vuelo operado: los códigos compartidos no suman.',
     'Los vuelos cancelados no cuentan como demorados.',
-    'El archivo de Aviation Edge publica cada día con tres días de retraso, así que el mercado se resuelve el lunes siguiente.',
-    'Si el archivo no devuelve los dos días completos, el mercado pasa a revisión manual.',
+    'El conteo se toma del tablero en vivo de Aviation Edge, muestreado durante toda la ventana, y se cierra el sábado a las 04:00 (hora de la Ciudad de México), cuando ya salió hasta el último vuelo programado del viernes.',
+    'Si el muestreo no cubre los dos días completos, el mercado pasa a revisión manual.',
   ].join(' ');
 }
 
@@ -81,6 +81,12 @@ export async function generateAicm48hMarkets({
   });
   if (end.getTime() <= now.getTime()) return [];
 
+  // Saturday 04:00 local: late Friday departures have all gone by then.
+  const resolveAfter = dateAtMexicoCityTime({
+    ...ymdParts(formatMexicoDateYmd(shiftDays(new Date(`${fridayYmd}T12:00:00Z`), 1))),
+    hour: 4, minute: 0, second: 0,
+  });
+
   const buckets = AICM_AE_48H_DELAY_BUCKETS.map(bucket => ({ ...bucket }));
   const criteria = aicm48hResolutionCriteria({
     fromDateYmd: thursdayYmd, toDateYmd: fridayYmd, thresholdMinutes,
@@ -89,7 +95,7 @@ export async function generateAicm48hMarkets({
   const fridayEs = formatMexicoDateEs(new Date(`${fridayYmd}T12:00:00Z`));
 
   return [{
-    source: AICM_AE_SOURCE,
+    source: AICM_TT_SOURCE,
     source_event_id: `aicm:${AICM_AIRPORT.code}:departure:48h:${thursdayYmd}`,
     question: `¿Cuántas salidas del AICM se retrasarán más de ${thresholdMinutes} minutos el ${thursdayEs} y ${fridayEs}?`,
     category: 'infraestructura',
@@ -97,10 +103,14 @@ export async function generateAicm48hMarkets({
     outcomes: buckets.map(bucket => bucket.label),
     seed_liquidity: seedLiquidity,
     end_time: end.toISOString(),
+    // First market resolved from the live timetable rather than the archive:
+    // the method has not been reconciled against flightsHistory yet, and
+    // traders should see that before committing points.
+    is_test_market: true,
     amm_mode: 'parallel',
-    resolver_type: 'aicm_delay_minutes',
+    resolver_type: 'aicm_delay_minutes_live',
     resolver_config: {
-      source: AICM_AE_SOURCE,
+      source: AICM_TT_SOURCE,
       shape: 'delay-bucket',
       airportKey: AICM_AIRPORT.key,
       airportCode: AICM_AIRPORT.code,
@@ -112,13 +122,18 @@ export async function generateAicm48hMarkets({
       fromDateYmd: thursdayYmd,
       toDateYmd: fridayYmd,
       thresholdMinutes,
-      // Two full days must come back or the window is incomplete. The floor of
+      // Friday's last departures keep slipping past midnight — a 23:59 flight
+      // at the 99th percentile of delay leaves around 03:39 — so the count is
+      // only final at 04:00 Saturday local.
+      resolveAfterUtc: resolveAfter.toISOString(),
+      // Two full days must be covered or the window is incomplete. The floor of
       // 600 operator flights sits well under the ~857 a real jue+vie carries,
-      // so it catches a truncated archive without tripping on a quiet week.
+      // so it catches a thin poll log without tripping on a quiet week.
       minOperatorFlights: 600,
+      minOkPolls: 12,
       buckets,
       criteria,
-      evidenceUrl: 'https://aviation-edge.com/v2/public/flightsHistory',
+      evidenceUrl: 'https://aviation-edge.com/v2/public/timetable',
     },
     source_data: {
       kind: 'aicm_delay_window',
@@ -136,7 +151,8 @@ export async function generateAicm48hMarkets({
       fromDateYmd: thursdayYmd,
       toDateYmd: fridayYmd,
       thresholdMinutes,
-      resolutionSource: 'Aviation Edge — flightsHistory (MEX, salidas)',
+      resolutionSource: 'Aviation Edge — timetable en vivo (MEX, salidas)',
+      resolvesAt: resolveAfter.toISOString(),
       resolutionCriteria: criteria,
       tags: {
         categoryTags: ['infraestructura', 'mexico'],

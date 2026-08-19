@@ -10,7 +10,7 @@ test('generateAicm48hMarkets targets the coming Thursday and Friday', async () =
 
   assert.equal(market.resolver_config.fromDateYmd, '2026-08-20');
   assert.equal(market.resolver_config.toDateYmd, '2026-08-21');
-  assert.equal(market.resolver_type, 'aicm_delay_minutes');
+  assert.equal(market.resolver_type, 'aicm_delay_minutes_live');
   assert.equal(market.source_event_id, 'aicm:MEX:departure:48h:2026-08-20');
   assert.equal(market.amm_mode, 'parallel');
   assert.equal(market.category, 'infraestructura');
@@ -50,8 +50,11 @@ test('resolver config carries the completeness guards', async () => {
   assert.equal(cfg.direction, 'departure');
   assert.equal(cfg.airportCode, 'MEX');
   // A real jue+vie carries ~857 operator flights; the floor catches a
-  // truncated archive without tripping on a quiet week.
+  // thin poll log without tripping on a quiet week.
   assert.ok(cfg.minOperatorFlights > 0 && cfg.minOperatorFlights < 857);
+  assert.ok(cfg.minOkPolls > 0);
+  // Saturday 04:00 in Mexico City is 10:00 UTC (UTC-6, no DST).
+  assert.equal(cfg.resolveAfterUtc, '2026-08-22T10:00:00.000Z');
 });
 
 test('criteria spell out codeshares, cancellations and the resolution lag', async () => {
@@ -60,7 +63,7 @@ test('criteria spell out codeshares, cancellations and the resolution lag', asyn
   assert.match(criteria, /30 minutos/);
   assert.match(criteria, /compartidos/);
   assert.match(criteria, /cancelados/);
-  assert.match(criteria, /tres días/);
+  assert.match(criteria, /04:00/);
   assert.equal(market.source_data.resolutionCriteria, criteria);
 });
 

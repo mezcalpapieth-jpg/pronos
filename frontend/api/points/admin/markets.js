@@ -451,6 +451,7 @@ export default async function handler(req, res) {
         featured: r.featured === true || r.featured === false ? r.featured : true,
         hiddenFromHome: r.hidden_from_home === true,
         tournamentFeatured: r.tournament_featured === true,
+        isTestMarket: r.is_test_market === true,
         resolverType: r.resolver_type || null,
         mode: r.mode || 'points',
         chainId: r.chain_id || null,

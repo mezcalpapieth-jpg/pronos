@@ -737,6 +737,11 @@ const STRINGS = {
   'points.league.lmp':        { es: 'LMP',                    en: 'LMP' },
 
   'points.card.resolved':     { es: 'RESUELTO',              en: 'RESOLVED' },
+  'points.testMarket.badge':  { es: 'MERCADO DE PRUEBA',     en: 'TEST MARKET' },
+  'points.testMarket.tooltip': {
+    es: 'Este mercado aún se está probando el método de resolución, ya que es el primero de su estilo.',
+    en: 'The resolution method for this market is still being tested — it is the first of its kind.',
+  },
   'points.card.pending':      { es: 'PENDIENTE',             en: 'PENDING' },
   'points.card.live':         { es: 'EN VIVO',               en: 'LIVE' },
   'points.card.yourPos':      { es: 'Tu posición',           en: 'Your position' },

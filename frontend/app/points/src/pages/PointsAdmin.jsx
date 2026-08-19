@@ -44,6 +44,7 @@ import {
   adminRunAutoResolve,
   adminRunGenerators,
   adminToggleFeatured,
+  adminToggleTestMarket,
   adminBulkHideMarkets,
   adminAppendParallelOutcomes,
   adminConvertParallelToBinary,
@@ -2405,6 +2406,20 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
     }
   }
 
+  // "MERCADO DE PRUEBA": a disclosure that this market's resolution method has
+  // not been proven yet. Purely informational — it does not change pricing,
+  // listing or how the market resolves.
+  async function toggleTestMarket(m) {
+    const next = !m.isTestMarket;
+    setMarkets(prev => (prev || []).map(x => x.id === m.id ? { ...x, isTestMarket: next } : x));
+    try {
+      await adminToggleTestMarket({ marketId: m.id, isTestMarket: next });
+    } catch (e) {
+      setMarkets(prev => (prev || []).map(x => x.id === m.id ? { ...x, isTestMarket: !next } : x));
+      alert(`No se pudo actualizar mercado de prueba: ${e.code || e.message}`);
+    }
+  }
+
   async function toggleHomeMarketsVisibility() {
     setHidingMarkets(true);
     try {
@@ -2831,6 +2846,31 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
             }}
           >
             🏆
+          </button>
+          <button
+            onClick={() => toggleTestMarket(m)}
+            title={m.isTestMarket
+              ? 'Quitar el badge de "MERCADO DE PRUEBA"'
+              : 'Marcar como "MERCADO DE PRUEBA" — avisa que el método de resolución aún se está probando'}
+            style={{
+              flexShrink: 0,
+              width: 32, height: 32,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '50%',
+              border: `1px solid ${m.isTestMarket ? 'rgba(245,200,66,0.58)' : 'var(--border)'}`,
+              background: m.isTestMarket ? 'rgba(245,200,66,0.16)' : 'transparent',
+              cursor: 'pointer',
+              fontSize: 16,
+              lineHeight: 1,
+              padding: 0,
+              filter: m.isTestMarket ? 'none' : 'grayscale(1)',
+              opacity: m.isTestMarket ? 1 : 0.45,
+              transition: 'opacity 0.15s, background 0.15s, border-color 0.15s',
+            }}
+          >
+            🧪
           </button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>
