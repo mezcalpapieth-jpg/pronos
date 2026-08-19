@@ -1,4 +1,4 @@
-const CATEGORY_KEYS = new Set(['general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup']);
+const CATEGORY_KEYS = new Set(['general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup', 'infraestructura']);
 const GEO_KEYS = new Set(['mexico', 'latam', 'world']);
 const TOPIC_KEYS = new Set([
   'general',
@@ -11,10 +11,14 @@ const TOPIC_KEYS = new Set([
   'tv',
   'farandula',
   'weather',
+  'infraestructura',
+  'aeropuertos',
+  'trafico',
+  'movilidad',
   'world-cup',
 ]);
 const ISOLATED_CATEGORY_KEYS = new Set(['crypto', 'world-cup']);
-const FLEXIBLE_TOPIC_CATEGORY_KEYS = new Set(['general', 'mexico', 'musica']);
+const FLEXIBLE_TOPIC_CATEGORY_KEYS = new Set(['general', 'mexico', 'musica', 'infraestructura']);
 
 const MEXICO_LEAGUES = new Set(['liga-mx', 'lmb', 'lmp']);
 const LATAM_LEAGUES = new Set(['copa-libertadores']);
@@ -48,6 +52,9 @@ const MEXICO_KEYWORDS = [
   'mxn',
   'aeromexico',
   'volaris',
+  'aicm',
+  'aifa',
+  'aeropuerto',
   'pemex',
   ...MEXICO_SPORT_KEYWORDS,
 ];

@@ -27,6 +27,8 @@ test('points series game strip copy translates between Spanish and English', () 
 test('points Mexico category uses Latam label', () => {
   assert.equal(translate('points.cat.mexico', 'es'), 'Mexico & Latam');
   assert.equal(translate('points.cat.mexico', 'en'), 'Mexico & Latam');
+  assert.equal(translate('points.cat.infraestructura', 'es'), 'Infraestructura');
+  assert.equal(translate('points.cat.infraestructura', 'en'), 'Infrastructure');
 });
 
 test('points public category filter labels translate region and climate copy', () => {

@@ -49,6 +49,7 @@
     { "source": "/earn",       "destination": "/points/earn",       "permanent": true },
     { "source": "/market",     "destination": "/points/market",     "permanent": true },
     { "source": "/u/:username","destination": "/points/u/:username","permanent": true },
+    { "source": "/c/infraestructura/aicm", "destination": "/points/c/infraestructura/aicm", "permanent": true },
     { "source": "/c/deportes/uefa-champions-league", "destination": "/points/c/deportes/uefa-champions-league", "permanent": true },
     { "source": "/c/:slug",    "destination": "/points/c/:slug",    "permanent": true }
   ],
@@ -93,6 +94,7 @@
     { "source": "/points/terms",        "destination": "/points/" },
     { "source": "/points/r/:username",  "destination": "/points/" },
     { "source": "/points/u/:username",  "destination": "/points/" },
+    { "source": "/points/c/infraestructura/aicm", "destination": "/points/" },
     { "source": "/points/c/deportes/uefa-champions-league", "destination": "/points/" },
     { "source": "/points/c/:slug",      "destination": "/points/" },
     { "source": "/points/:path*",       "destination": "/points/" }

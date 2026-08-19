@@ -3,7 +3,7 @@
  *
  * Scans points_markets for active rows whose trading window has closed
  * AND whose resolver_type is one we know how to settle automatically.
- * Active resolver types: chainlink_price, api_price, weather_api,
+ * Active resolver types: chainlink_price, api_price, weather_api, aicm_delay_count,
  * api_chart, api_transcript, api_lcdlf, sports_api (espn / espn-pga / espn-liv / etc.).
  * manual_review/manual markets are not auto-settled; they are queued
  * into points_resolution_candidates when their close time passes.
@@ -45,6 +45,7 @@ import { MANANERA_TRANSCRIPT_SOURCE, readMananeraPhraseResult } from '../_lib/ma
 import { readStoredMananeraTranscript } from '../_lib/mananera-ingest.js';
 import { generateMananeraMarkets } from '../_lib/market-gen/mananera.js';
 import { fetchMaxTempC, bucketIndexFor, weatherBucketIndexFor } from '../_lib/weather.js';
+import { aicmDelayBucketIndexFor, readAicmDelayCount } from '../_lib/aicm-board.js';
 import { readAppleMxTopArtist } from '../_lib/charts.js';
 import { readYouTubeTopMxChannel } from '../_lib/youtube.js';
 import { readEspnEvent, readFootballDataMatch, readJolpicaF1Result, readJolpicaF1Standings, readEspnPgaWinner, readEspnLivWinner, readLivTeamWinner, readEspnAtpTournamentWinner, readEspnAtpMatchWinner, readEspnMmaWinner, readOddsApiBoxingWinner, readNextOpponent } from '../_lib/sports-results.js';
@@ -138,6 +139,12 @@ function buildFinalScore({ resolverType, cfg, result, resolverInfo, outcomes, wi
     if (resolverType === 'weather_api') {
       const temp = resolverInfo?.recordedMaxC;
       if (Number.isFinite(temp)) return clip(`${Number(temp).toFixed(1)}°C máx`);
+      return clip(winLabel);
+    }
+
+    if (resolverType === 'aicm_delay_count') {
+      const count = Number(resolverInfo?.count);
+      if (Number.isFinite(count)) return clip(`${count} salidas demoradas`);
       return clip(winLabel);
     }
 
@@ -938,7 +945,7 @@ export async function runAutoResolve({ dry = false } = {}) {
         AND m.parent_id IS NULL
         AND (
           (
-            m.resolver_type IN ('chainlink_price', 'api_price', 'weather_api', 'api_chart', 'api_transcript', 'api_lcdlf', 'sports_api')
+            m.resolver_type IN ('chainlink_price', 'api_price', 'weather_api', 'aicm_delay_count', 'api_chart', 'api_transcript', 'api_lcdlf', 'sports_api')
             AND (
               m.end_time < NOW()
               OR (
@@ -1328,6 +1335,46 @@ export async function runAutoResolve({ dry = false } = {}) {
           if (winningIdx < 0) winningIdx = bucketIndexFor(tempC); // fallback
           if (winningIdx < 0) throw new Error(`temp ${tempC}°C didn't fit any bucket`);
           resolverInfo = { recordedMaxC: tempC, forecastDateYmd: cfg.forecastDateYmd };
+        } else if (resolverType === 'aicm_delay_count') {
+          if (!cfg.fromDateYmd || !cfg.toDateYmd || !Array.isArray(cfg.buckets)) {
+            throw new Error('invalid aicm_delay_count config');
+          }
+          const countResult = await readAicmDelayCount(readSql, {
+            fromDateYmd: cfg.fromDateYmd,
+            toDateYmd: cfg.toDateYmd,
+            direction: cfg.direction || 'departure',
+            statusNorm: cfg.statusNorm || 'delayed',
+          });
+          const minObservedPolls = Number(cfg.minObservedPolls ?? 1);
+          const minObservedFlights = Number(cfg.minObservedFlights ?? 1);
+          const okPolls = Number(countResult.okPollCount || 0);
+          const observedFlights = Number(countResult.flightsWithAnyStatus || 0);
+          if (okPolls < minObservedPolls || observedFlights < minObservedFlights) {
+            const err = new Error('aicm_oracle_observations_not_ready');
+            err.benign = true;
+            err.info = {
+              source: cfg.source || countResult.source,
+              fromDateYmd: cfg.fromDateYmd,
+              toDateYmd: cfg.toDateYmd,
+              okPollCount: okPolls,
+              minObservedPolls,
+              flightsWithAnyStatus: observedFlights,
+              minObservedFlights,
+              lastPollObservedAt: countResult.lastPollObservedAt || null,
+            };
+            throw err;
+          }
+          winningIdx = aicmDelayBucketIndexFor(countResult.count, cfg.buckets);
+          if (winningIdx < 0) {
+            throw new Error(`AICM delay count ${countResult.count} did not fit any bucket`);
+          }
+          result = { completed: true, ...countResult };
+          resolverInfo = {
+            ...countResult,
+            source: cfg.source || countResult.source,
+            shape: cfg.shape || 'delay-bucket',
+            window: cfg.window || null,
+          };
         } else if (resolverType === 'api_chart') {
           // Parallel music / trending markets. Each leg has a match
           // rule; the "Otro" leg's rule is all-null and wins when no

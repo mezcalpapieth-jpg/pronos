@@ -4,18 +4,22 @@ import test from 'node:test';
 
 const source = await readFile(new URL('./PointsCategoryBar.jsx', import.meta.url), 'utf8');
 
-test('points category bar puts new markets before Mexico and Latam, then sports', () => {
+test('points category bar puts new markets before Mexico, Infrastructure, then sports', () => {
   const newMarketsIndex = source.indexOf("slug: 'nuevos-mercados'");
   const mexicoIndex = source.indexOf("slug: 'mexico'");
+  const infrastructureIndex = source.indexOf("slug: 'infraestructura'");
   const sportsIndex = source.indexOf("slug: 'deportes'");
 
   assert.ok(newMarketsIndex >= 0, 'New markets tab should exist');
   assert.doesNotMatch(source, /slug:\s*'world-cup'/);
   assert.ok(mexicoIndex >= 0, 'Mexico & Latam tab should exist');
+  assert.ok(infrastructureIndex >= 0, 'Infrastructure tab should exist');
   assert.ok(sportsIndex >= 0, 'Sports tab should exist');
   assert.match(source, /points\.cat\.worldCup/);
+  assert.match(source, /points\.cat\.infraestructura/);
   assert.ok(newMarketsIndex < mexicoIndex, 'Nuevos mercados should stay before Mexico & Latam');
-  assert.ok(mexicoIndex < sportsIndex, 'Mexico & Latam should appear before Deportes');
+  assert.ok(mexicoIndex < infrastructureIndex, 'Mexico & Latam should appear before Infrastructure');
+  assert.ok(infrastructureIndex < sportsIndex, 'Infrastructure should appear before Deportes');
 });
 
 test('points category bar gives Mexico and Latam a subtle text-only treatment', () => {

@@ -40,6 +40,7 @@ const SLUG_TO_TITLE_KEY = {
   deportes:    'points.cat.deportes',
   musica:      'points.cat.musica',
   mexico:      'points.cat.mexico',
+  infraestructura: 'points.cat.infraestructura',
   'nuevos-mercados': 'points.cat.worldCup',
   'world-cup':       'points.cat.worldCup',
   politica:    'points.cat.politica',
@@ -119,6 +120,7 @@ const RESUELTOS_CATEGORIES = [
   { key: 'deportes', tKey: 'points.cat.deportes'   },
   { key: 'musica',   tKey: 'points.cat.musica'     },
   { key: 'mexico',   tKey: 'points.cat.mexico'     },
+  { key: 'infraestructura', tKey: 'points.cat.infraestructura' },
   { key: 'politica', tKey: 'points.cat.politica'   },
   { key: 'crypto',   tKey: 'points.cat.crypto'     },
   { key: 'finanzas', tKey: 'points.cat.finanzas'   },
@@ -160,12 +162,43 @@ const CATEGORY_SLUG_ALIASES = {
 };
 
 const TOURNAMENT_SHELF_SLUGS = new Set(['nuevos-mercados']);
+const AICM_HUB_PATH = '/c/infraestructura/aicm';
+const AICM_SOURCE = 'aicm-official-flight-board';
+const AICM_HUB_SEARCH_TEXT = [
+  'aicm',
+  'pulso',
+  'infraestructura',
+  'aeropuerto',
+  'aeropuertos',
+  'ciudad de mexico',
+  'mexico',
+  'salidas',
+  'demoras',
+  'vuelos',
+].join(' ');
 
 function canonicalCategorySlug(value) {
   return CATEGORY_SLUG_ALIASES[value] || value;
 }
 
 const GEO_FILTER_EXCLUDED_CATEGORIES = new Set(['all', 'crypto', 'world-cup', 'nuevos-mercados', 'porresolver', 'resueltos', 'noticias']);
+
+function isAicmDelayMarket(m) {
+  return String(m?.source || '') === AICM_SOURCE
+    && String(m?.sourceEventId || '').includes(':departure:')
+    && String(m?.resolverConfig?.shape || '') === 'delay-bucket';
+}
+
+function isPromotedAicmChildMarket(m) {
+  return !isAicmDelayMarket(m)
+    || m?.featured === true
+    || m?.tournamentFeatured === true;
+}
+
+function aicmHubMatchesSearch(searchQuery) {
+  const q = String(searchQuery || '').trim().toLowerCase();
+  return !q || AICM_HUB_SEARCH_TEXT.includes(q);
+}
 
 export default function PointsCategoryPage() {
   const { slug: routeSlug } = useParams();
@@ -286,6 +319,12 @@ export default function PointsCategoryPage() {
       // Regular category: hide pending from the main grid.
       out = out.filter(m => !isPending(m));
       out = out.filter(m => marketInCategory(m, categoryFilter));
+      if (slug === 'infraestructura') {
+        // Infrastructure has persistent "main" hubs. AICM child markets
+        // still exist as normal markets, but only surface in the category
+        // grid when the admin promotes them with the flame or trophy flags.
+        out = out.filter(isPromotedAicmChildMarket);
+      }
     }
 
     // Sports sub-filter: only when on /c/deportes OR when scoping
@@ -404,6 +443,8 @@ export default function PointsCategoryPage() {
   // Friendly sidebar header. "Disciplinas" feels right for combat
   // sports vs "Ligas" for soccer / baseball.
   const leagueSidebarLabel = sport === 'combate' ? 'Disciplinas' : 'Ligas';
+  const showAicmHubCard = slug === 'infraestructura' && aicmHubMatchesSearch(searchQuery);
+  const visibleCount = filtered.length + (showAicmHubCard ? 1 : 0);
 
   return (
     <section style={{
@@ -428,7 +469,7 @@ export default function PointsCategoryPage() {
         textTransform: 'uppercase',
         margin: '0 0 20px',
       }}>
-        {t('points.catpage.eyebrow', { n: filtered.length })}
+        {t('points.catpage.eyebrow', { n: visibleCount })}
       </p>
 
       {/* Top-level category chips — only on /c/resueltos. Lets users
@@ -619,6 +660,7 @@ export default function PointsCategoryPage() {
             emptyKey={slug === 'porresolver' ? 'points.home.emptyPending' : 'points.home.empty'}
             searchQuery={searchQuery}
             t={t}
+            before={showAicmHubCard ? <AicmInfrastructureHubCard /> : null}
           />
         </div>
       ) : (
@@ -630,13 +672,93 @@ export default function PointsCategoryPage() {
           emptyKey={slug === 'porresolver' ? 'points.home.emptyPending' : 'points.home.empty'}
           searchQuery={searchQuery}
           t={t}
+          before={showAicmHubCard ? <AicmInfrastructureHubCard /> : null}
         />
       )}
     </section>
   );
 }
 
-function MarketsGrid({ loading, error, filtered, positionByMarket, emptyKey, searchQuery, t }) {
+function AicmInfrastructureHubCard() {
+  const navigate = useNavigate();
+  const open = () => navigate(AICM_HUB_PATH);
+  return (
+    <div
+      className="mock-card"
+      role="button"
+      tabIndex={0}
+      onClick={open}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          open();
+        }
+      }}
+      style={{
+        borderColor: 'rgba(96,165,250,0.36)',
+        background: 'linear-gradient(145deg, rgba(96,165,250,0.12), rgba(255,85,0,0.08) 58%, rgba(0,232,122,0.08))',
+      }}
+    >
+      <div className="mock-card-header">
+        <span className="mock-card-cat">Infraestructura</span>
+        <span className="mock-card-badge" style={{
+          background: 'rgba(96,165,250,0.14)',
+          border: '1px solid rgba(96,165,250,0.36)',
+          color: '#60a5fa',
+          padding: '2px 6px',
+          borderRadius: 4,
+          fontFamily: 'var(--font-mono)',
+          fontSize: 9,
+          fontWeight: 800,
+          letterSpacing: '0.08em',
+        }}>
+          HUB
+        </span>
+      </div>
+      <div className="mock-card-body">
+        <p className="mock-card-title">Pulso AICM: demoras de salida</p>
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          margin: '12px 0 4px',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 12,
+          color: 'var(--text-secondary)',
+        }}>
+          {[
+            ['Tablero oficial', 'salidas'],
+            ['Mercado diario', '24h'],
+            ['Hora y semana', 'cerrados'],
+          ].map(([label, value]) => (
+            <div key={label} style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr auto',
+              gap: 12,
+              alignItems: 'center',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 8,
+              padding: '9px 10px',
+            }}>
+              <span>{label}</span>
+              <strong style={{ color: 'var(--text-primary)' }}>{value}</strong>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="mock-card-footer">
+        <span className="mock-card-vol">
+          AICM <span>MEX</span>
+        </span>
+        <span className="mock-card-deadline">
+          Abrir
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function MarketsGrid({ loading, error, filtered, positionByMarket, emptyKey, searchQuery, t, before = null }) {
   if (loading) {
     return <MarketGridSkeleton count={6} />;
   }
@@ -653,7 +775,7 @@ function MarketsGrid({ loading, error, filtered, positionByMarket, emptyKey, sea
       </div>
     );
   }
-  if (filtered.length === 0) {
+  if (filtered.length === 0 && !before) {
     return (
       <div style={{
         textAlign: 'center',
@@ -670,6 +792,7 @@ function MarketsGrid({ loading, error, filtered, positionByMarket, emptyKey, sea
   }
   return (
     <div className="markets-grid">
+      {before}
       {filtered.map(m => (
         <PointsMarketCard key={m.id} market={m} userPosition={positionByMarket[m.id]} />
       ))}

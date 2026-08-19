@@ -6,6 +6,7 @@ import { banxicoFechaToYmd, banxicoFixTargetDateYmd, readBanxicoLatest } from '.
 import { readCreAverageFor } from './fuel.js';
 import { readMananeraPhraseResult } from './mananera.js';
 import { fetchMaxTempC, bucketIndexFor, weatherBucketIndexFor } from './weather.js';
+import { aicmDelayBucketIndexFor, readAicmDelayCount } from './aicm-board.js';
 import { readAppleMxTopArtist } from './charts.js';
 import { readYouTubeTopMxChannel } from './youtube.js';
 import {
@@ -96,6 +97,12 @@ export function buildAutoResolverFinalScore({
       return clip(winLabel);
     }
 
+    if (resolverType === 'aicm_delay_count') {
+      const count = Number(resolverInfo?.count);
+      if (Number.isFinite(count)) return clip(`${count} salidas demoradas`);
+      return clip(winLabel);
+    }
+
     if (resolverType === 'api_chart') {
       const top = resolverInfo?.topArtist
         || resolverInfo?.topChannel
@@ -168,7 +175,7 @@ function f1Position(row) {
   return Number.isFinite(pos) ? pos : null;
 }
 
-export async function resolveAutoResolverCandidate(candidate = {}) {
+export async function resolveAutoResolverCandidate(candidate = {}, { sql = null } = {}) {
   let cfg = parseAutoResolverJsonb(candidate.resolver_config, null);
   if (!cfg) throw new Error('missing_resolver_config');
 
@@ -308,6 +315,47 @@ export async function resolveAutoResolverCandidate(candidate = {}) {
     if (winningIdx < 0) winningIdx = bucketIndexFor(tempC);
     if (winningIdx < 0) throw new Error(`temp ${tempC}°C didn't fit any bucket`);
     resolverInfo = { recordedMaxC: tempC, forecastDateYmd: cfg.forecastDateYmd };
+  } else if (resolverType === 'aicm_delay_count') {
+    if (!sql) throw new Error('aicm_delay_count_requires_sql');
+    if (!cfg.fromDateYmd || !cfg.toDateYmd || !Array.isArray(cfg.buckets)) {
+      throw new Error('invalid aicm_delay_count config');
+    }
+    const countResult = await readAicmDelayCount(sql, {
+      fromDateYmd: cfg.fromDateYmd,
+      toDateYmd: cfg.toDateYmd,
+      direction: cfg.direction || 'departure',
+      statusNorm: cfg.statusNorm || 'delayed',
+    });
+    const minObservedPolls = Number(cfg.minObservedPolls ?? 1);
+    const minObservedFlights = Number(cfg.minObservedFlights ?? 1);
+    const okPolls = Number(countResult.okPollCount || 0);
+    const observedFlights = Number(countResult.flightsWithAnyStatus || 0);
+    if (okPolls < minObservedPolls || observedFlights < minObservedFlights) {
+      const err = new Error('aicm_oracle_observations_not_ready');
+      err.benign = true;
+      err.info = {
+        source: cfg.source || countResult.source,
+        fromDateYmd: cfg.fromDateYmd,
+        toDateYmd: cfg.toDateYmd,
+        okPollCount: okPolls,
+        minObservedPolls,
+        flightsWithAnyStatus: observedFlights,
+        minObservedFlights,
+        lastPollObservedAt: countResult.lastPollObservedAt || null,
+      };
+      throw err;
+    }
+    winningIdx = aicmDelayBucketIndexFor(countResult.count, cfg.buckets);
+    if (winningIdx < 0) {
+      throw new Error(`AICM delay count ${countResult.count} did not fit any bucket`);
+    }
+    result = { completed: true, ...countResult };
+    resolverInfo = {
+      ...countResult,
+      source: cfg.source || countResult.source,
+      shape: cfg.shape || 'delay-bucket',
+      window: cfg.window || null,
+    };
   } else if (resolverType === 'api_chart') {
     if (!Array.isArray(cfg.legs) || cfg.legs.length === 0) {
       throw new Error('invalid api_chart config: missing legs');

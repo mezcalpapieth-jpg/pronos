@@ -98,3 +98,14 @@ test('points auto-resolver handles LCDLF status markets by official status', () 
   assert.match(SOURCE, /outcome = NULL/);
   assert.doesNotMatch(SOURCE, /nominationRoundPosted \|\| new Date\(m\.end_time\)\.getTime\(\) <= Date\.now\(\)/);
 });
+
+test('points auto-resolver settles AICM delay-count markets from stored oracle evidence', () => {
+  assert.match(SOURCE, /aicm_delay_count/);
+  assert.match(SOURCE, /readAicmDelayCount/);
+  assert.match(SOURCE, /aicmDelayBucketIndexFor/);
+  assert.match(SOURCE, /m\.resolver_type IN \('chainlink_price', 'api_price', 'weather_api', 'aicm_delay_count'/);
+  assert.match(SOURCE, /aicm_oracle_observations_not_ready/);
+  assert.match(SOURCE, /minObservedPolls/);
+  assert.match(SOURCE, /flightsWithAnyStatus/);
+  assert.match(SOURCE, /salidas demoradas/);
+});

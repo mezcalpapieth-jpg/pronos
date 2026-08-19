@@ -175,6 +175,82 @@ test('auto resolver core settles Banxico FIX only when the target date is publis
   assert.equal(decision.finalScore, 'banxico-fix · 16.98');
 });
 
+test('auto resolver core settles AICM delay-count bucket markets from stored oracle evidence', async () => {
+  const calls = [];
+  const sql = {
+    query: async (statement, params) => {
+      calls.push({ statement, params });
+      return {
+        rows: [{
+          count: 18,
+          flights_with_any_status: 180,
+          poll_count: 260,
+          ok_poll_count: 244,
+          first_observed_at: '2026-08-20T06:00:00.000Z',
+          last_observed_at: '2026-08-21T05:57:00.000Z',
+          last_poll_observed_at: '2026-08-21T05:58:00.000Z',
+        }],
+      };
+    },
+  };
+
+  const decision = await resolveAutoResolverCandidate({
+    resolver_type: 'aicm_delay_count',
+    resolver_config: {
+      source: 'aicm-official-flight-board',
+      shape: 'delay-bucket',
+      direction: 'departure',
+      fromDateYmd: '2026-08-20',
+      toDateYmd: '2026-08-20',
+      minObservedPolls: 36,
+      minObservedFlights: 20,
+      buckets: [
+        { label: '0-5', minCount: 0, maxCount: 5 },
+        { label: '6-15', minCount: 6, maxCount: 15 },
+        { label: '16-30', minCount: 16, maxCount: 30 },
+        { label: '31+', minCount: 31, maxCount: null },
+      ],
+    },
+    outcomes: ['0-5', '6-15', '16-30', '31+'],
+  }, { sql });
+
+  assert.equal(decision.winningIdx, 2);
+  assert.equal(decision.resolverInfo.count, 18);
+  assert.equal(decision.finalScore, '18 salidas demoradas');
+  assert.equal(calls[0].params[0], '2026-08-20');
+  assert.equal(calls[0].params[2], 'departure');
+});
+
+test('auto resolver core defers AICM markets when oracle coverage is too thin', async () => {
+  const sql = {
+    query: async () => ({
+      rows: [{
+        count: 0,
+        flights_with_any_status: 0,
+        poll_count: 1,
+        ok_poll_count: 1,
+        last_poll_observed_at: '2026-08-20T07:00:00.000Z',
+      }],
+    }),
+  };
+
+  await assert.rejects(
+    resolveAutoResolverCandidate({
+      resolver_type: 'aicm_delay_count',
+      resolver_config: {
+        source: 'aicm-official-flight-board',
+        fromDateYmd: '2026-08-20',
+        toDateYmd: '2026-08-20',
+        minObservedPolls: 36,
+        minObservedFlights: 20,
+        buckets: [{ label: '0-5', minCount: 0, maxCount: 5 }],
+      },
+      outcomes: ['0-5'],
+    }, { sql }),
+    (err) => err?.benign === true && err?.message === 'aicm_oracle_observations_not_ready',
+  );
+});
+
 test('auto resolver core defers Banxico FIX when latest value is from an earlier day', async (t) => {
   const originalFetch = globalThis.fetch;
   const originalToken = process.env.BANXICO_API_TOKEN;

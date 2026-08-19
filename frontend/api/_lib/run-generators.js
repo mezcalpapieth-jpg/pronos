@@ -28,6 +28,7 @@ import { generateEspnSoccerMarkets }    from './market-gen/espn-soccer.js';
 import { generateCryptoMarkets }        from './market-gen/crypto.js';
 import { generateStockMarkets }         from './market-gen/stocks.js';
 import { generateWeatherMarkets }       from './market-gen/weather.js';
+import { generateAicmMarkets }          from './market-gen/aicm.js';
 import { generateMlbMarkets }           from './market-gen/mlb.js';
 import { generateNbaMarkets }           from './market-gen/nba.js';
 import { generateNflMarkets }           from './market-gen/nfl.js';
@@ -68,6 +69,7 @@ export const GENERATORS = [
   { name: 'fuel',           run: generateFuelMarkets          },
   { name: 'mananera',       run: generateMananeraMarkets      },
   { name: 'weather',        run: generateWeatherMarkets       },
+  { name: 'aicm',           run: generateAicmMarkets          },
   { name: 'mlb',            run: generateMlbMarkets           },
   { name: 'nba',            run: generateNbaMarkets           },
   { name: 'nfl',            run: generateNflMarkets           },

@@ -17,6 +17,11 @@ test('runAllGenerators attaches suggested pricing to generated specs before upse
   assert.match(source, /const contextualSpecs = await prepareGeneratedSpecs\(specs\)/);
 });
 
+test('generator runner includes the AICM infrastructure pipeline', () => {
+  assert.match(source, /generateAicmMarkets/);
+  assert.match(source, /\{ name:\s*'aicm',\s*run:\s*generateAicmMarkets/);
+});
+
 test('points pending upsert persists per-option seed liquidities', () => {
   assert.match(source, /seed_liquidity,\s*seed_liquidities/);
   assert.match(source, /\$\{s\.seed_liquidities \? JSON\.stringify\(s\.seed_liquidities\) : null\}::jsonb/);

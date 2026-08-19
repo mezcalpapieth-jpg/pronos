@@ -6,6 +6,13 @@ export const AICM_SOURCE = 'aicm-official-flight-board';
 export const AICM_DEFAULT_FLIGHTS_URL = 'https://www.aicm.com.mx/pasajeros/vuelos';
 export const AICM_MAX_OBSERVATIONS_PER_POLL = 750;
 
+export const AICM_DAILY_DELAY_BUCKETS = [
+  { label: '0-5', minCount: 0, maxCount: 5 },
+  { label: '6-15', minCount: 6, maxCount: 15 },
+  { label: '16-30', minCount: 16, maxCount: 30 },
+  { label: '31+', minCount: 31, maxCount: null },
+];
+
 const DIRECTION_CONFIG = {
   departure: { key: 'departure', da: 'd', label: 'salidas' },
   departures: { key: 'departure', da: 'd', label: 'salidas' },
@@ -103,6 +110,19 @@ export function normalizeAicmFlightStatus(value) {
   if (/\b(despego|despega|despegado|departed|salio|salida confirmada)\b/.test(text)) return 'departed';
   if (/\b(arribo|arribado|aterrizo|aterrizado|llego|arrived)\b/.test(text)) return 'arrived';
   return 'unknown';
+}
+
+export function aicmDelayBucketIndexFor(count, buckets = AICM_DAILY_DELAY_BUCKETS) {
+  const n = Number(count);
+  if (!Number.isFinite(n) || n < 0 || !Array.isArray(buckets)) return -1;
+  return buckets.findIndex((bucket) => {
+    const min = Number(bucket?.minCount ?? bucket?.min ?? 0);
+    const rawMax = bucket?.maxCount ?? bucket?.max ?? null;
+    const max = rawMax == null ? null : Number(rawMax);
+    if (!Number.isFinite(min)) return false;
+    if (max != null && !Number.isFinite(max)) return false;
+    return n >= min && (max == null || n <= max);
+  });
 }
 
 function fieldForHeader(header) {
@@ -547,15 +567,37 @@ export async function readAicmDelayCount(sql, {
   }
   const dir = normalizeAicmDirection(direction).key;
   const rows = await sql.query(`
+    WITH poll_summary AS (
+      SELECT
+        COUNT(*)::int AS poll_count,
+        COUNT(*) FILTER (WHERE status = 'ok')::int AS ok_poll_count,
+        MAX(observed_at) AS last_poll_observed_at
+      FROM points_aicm_poll_runs
+      WHERE flight_date >= $1::date
+        AND flight_date <= $2::date
+        AND direction = $3
+    ),
+    observation_summary AS (
+      SELECT
+        COUNT(DISTINCT flight_key) FILTER (WHERE status_norm = $4)::int AS count,
+        COUNT(DISTINCT flight_key)::int AS flights_with_any_status,
+        MIN(observed_at) AS first_observed_at,
+        MAX(observed_at) AS last_observed_at
+      FROM points_aicm_flight_observations
+      WHERE flight_date >= $1::date
+        AND flight_date <= $2::date
+        AND direction = $3
+    )
     SELECT
-      COUNT(DISTINCT flight_key)::int AS count,
-      MIN(observed_at) AS first_observed_at,
-      MAX(observed_at) AS last_observed_at
-    FROM points_aicm_flight_observations
-    WHERE flight_date >= $1::date
-      AND flight_date <= $2::date
-      AND direction = $3
-      AND status_norm = $4
+      COALESCE(o.count, 0)::int AS count,
+      COALESCE(o.flights_with_any_status, 0)::int AS flights_with_any_status,
+      o.first_observed_at,
+      o.last_observed_at,
+      COALESCE(p.poll_count, 0)::int AS poll_count,
+      COALESCE(p.ok_poll_count, 0)::int AS ok_poll_count,
+      p.last_poll_observed_at
+    FROM observation_summary o
+    CROSS JOIN poll_summary p
   `, [fromDateYmd, toDateYmd, dir, statusNorm]);
   const row = rowsFromResult(rows)[0] || {};
   return {
@@ -565,7 +607,11 @@ export async function readAicmDelayCount(sql, {
     fromDateYmd,
     toDateYmd,
     count: Number(row.count || 0),
+    flightsWithAnyStatus: Number(row.flights_with_any_status || 0),
+    pollCount: Number(row.poll_count || 0),
+    okPollCount: Number(row.ok_poll_count || 0),
     firstObservedAt: row.first_observed_at || null,
     lastObservedAt: row.last_observed_at || null,
+    lastPollObservedAt: row.last_poll_observed_at || null,
   };
 }

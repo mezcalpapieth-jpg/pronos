@@ -321,6 +321,10 @@ export async function fetchMarkets({ status = 'active', category, limit, feature
   return markets;
 }
 
+export async function fetchAicmOverview() {
+  return getJson('/api/points/aicm/overview');
+}
+
 export async function fetchMarket(id) {
   // For parallel (amm_mode='parallel') markets the payload also carries
   // a `legs: [...]` array with one entry per outcome. Attach it onto the

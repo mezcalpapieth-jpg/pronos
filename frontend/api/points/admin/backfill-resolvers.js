@@ -33,6 +33,7 @@ import { generateEspnSoccerMarkets }    from '../../_lib/market-gen/espn-soccer.
 import { generateCryptoMarkets }        from '../../_lib/market-gen/crypto.js';
 import { generateStockMarkets }         from '../../_lib/market-gen/stocks.js';
 import { generateWeatherMarkets }       from '../../_lib/market-gen/weather.js';
+import { generateAicmMarkets }          from '../../_lib/market-gen/aicm.js';
 import { generateMlbMarkets }           from '../../_lib/market-gen/mlb.js';
 import { generateNbaMarkets }           from '../../_lib/market-gen/nba.js';
 import { generateF1Markets }            from '../../_lib/market-gen/f1.js';
@@ -62,7 +63,7 @@ const GENERATORS = [
   generateSoccerMarkets, generateEspnSoccerMarkets,
   generateCryptoMarkets, generateStockMarkets, generateFxMarkets, generateFuelMarkets,
   generateMananeraMarkets,
-  generateWeatherMarkets,
+  generateWeatherMarkets, generateAicmMarkets,
   generateMlbMarkets, generateNbaMarkets, generateF1Markets,
   generateChartsMarkets, generateYouTubeMarkets, generateEntertainmentMarkets,
   generateWorldCupMarkets,

@@ -677,6 +677,7 @@ const STRINGS = {
   'points.cat.deportes':      { es: 'Deportes',               en: 'Sports' },
   'points.cat.musica':        { es: 'Entretenimiento',        en: 'Entertainment' },
   'points.cat.mexico':        { es: 'Mexico & Latam',         en: 'Mexico & Latam' },
+  'points.cat.infraestructura': { es: 'Infraestructura',       en: 'Infrastructure' },
   'points.cat.politica':      { es: 'Política Intl.',         en: 'World Politics' },
   'points.cat.crypto':        { es: 'Crypto',                 en: 'Crypto' },
   'points.cat.finanzas':      { es: 'Finanzas',               en: 'Finance' },

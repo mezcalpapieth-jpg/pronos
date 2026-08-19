@@ -40,6 +40,30 @@ test('derives weather as a Mexico-only topic when the primary category is Mexico
   assert.equal(matchesMarketTaxonomy({ ...tags, category: 'mexico' }, { category: 'mexico', geo: 'mexico', topic: 'weather' }), true);
 });
 
+test('routes AICM markets into Infrastructure and Mexico airport topics', () => {
+  const tags = deriveMarketTags({
+    category: 'infraestructura',
+    resolver_type: 'aicm_delay_count',
+    source: 'aicm-official-flight-board',
+    source_data: {
+      marketRegion: 'mexico',
+      tags: {
+        categoryTags: ['infraestructura', 'mexico'],
+        geoTags: ['mexico'],
+        topicTags: ['aeropuertos'],
+      },
+    },
+    question: '¿Cuántas salidas del AICM estarán demoradas mañana?',
+  });
+
+  assert.deepEqual(tags.categoryTags, ['infraestructura', 'mexico']);
+  assert.deepEqual(tags.geoTags, ['mexico']);
+  assert.deepEqual(tags.topicTags, ['aeropuertos', 'infraestructura']);
+
+  assert.equal(matchesMarketTaxonomy({ ...tags, category: 'infraestructura' }, { category: 'infraestructura' }), true);
+  assert.equal(matchesMarketTaxonomy({ ...tags, category: 'infraestructura' }, { category: 'mexico', geo: 'mexico', topic: 'aeropuertos' }), true);
+});
+
 test('derives Latam geo membership from generator source metadata', () => {
   const tags = deriveMarketTags({
     category: 'politica',
