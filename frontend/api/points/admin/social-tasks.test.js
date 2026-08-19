@@ -97,3 +97,14 @@ test('social task admin review queue includes exact campaign post metadata', () 
   assert.match(source, /c\.label AS task_label/);
   assert.match(source, /c\.expires_at AS task_expires_at/);
 });
+
+test('social task admin review queue includes the matching saved social account', () => {
+  assert.match(source, /enriched_events/);
+  assert.match(source, /enriched_tasks/);
+  assert.match(source, /AS resolved_platform/);
+  assert.match(source, /LEFT JOIN points_social_links sl/);
+  assert.match(source, /LOWER\(sl\.username\) = LOWER\(e\.username\)/);
+  assert.match(source, /sl\.provider = e\.resolved_platform/);
+  assert.match(source, /sl\.handle AS social_account/);
+  assert.match(source, /sl\.profile_url AS social_account_url/);
+});

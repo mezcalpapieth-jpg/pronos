@@ -96,6 +96,7 @@ export default async function handler(req, res) {
   const requestedTaskKey = String(req.query.task || '').trim();
 
   let submissions = {};
+  let socialHandles = {};
   let campaignTasks = [];
   let schemaReady = false;
   try {
@@ -119,12 +120,22 @@ export default async function handler(req, res) {
   if (session?.username) {
     try {
       if (schemaReady) {
-        const rows = await sql`
+        const [submissionRows, socialRows] = await Promise.all([
+          sql`
           SELECT task_key, status, reviewed_at, rejection_note
           FROM social_tasks
-          WHERE username = ${session.username.toLowerCase()}
-        `;
-        for (const r of rows) submissions[r.task_key] = r;
+          WHERE LOWER(username) = ${session.username.toLowerCase()}
+        `,
+          sql`
+          SELECT provider, handle
+          FROM points_social_links
+          WHERE LOWER(username) = ${session.username.toLowerCase()}
+        `,
+        ]);
+        for (const r of submissionRows) submissions[r.task_key] = r;
+        socialHandles = Object.fromEntries(
+          socialRows.map(r => [normalizePlatform(r.provider), r.handle || null]),
+        );
       }
     } catch (e) {
       console.error('[social-tasks/catalog] db error', { message: e?.message });
@@ -133,11 +144,15 @@ export default async function handler(req, res) {
 
   const tasks = requestedTaskKey ? [...campaignTasks, ...STATIC_TASK_CATALOG] : [...STATIC_TASK_CATALOG, ...campaignTasks];
   return res.status(200).json({
-    tasks: tasks.map(t => ({
-      ...t,
-      status: submissions[t.key]?.status || 'not_submitted',
-      reviewedAt: submissions[t.key]?.reviewed_at || null,
-      rejectionNote: submissions[t.key]?.rejection_note || null,
-    })),
+    tasks: tasks.map(t => {
+      const network = normalizePlatform(t.network || t.platform);
+      return {
+        ...t,
+        socialAccount: network ? (socialHandles[network] || null) : null,
+        status: submissions[t.key]?.status || 'not_submitted',
+        reviewedAt: submissions[t.key]?.reviewed_at || null,
+        rejectionNote: submissions[t.key]?.rejection_note || null,
+      };
+    }),
   });
 }

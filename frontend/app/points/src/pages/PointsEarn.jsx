@@ -473,6 +473,19 @@ function InstallAppBonusCard({ onClaimed }) {
 }
 
 // ─── Social tasks ────────────────────────────────────────────────────────────
+function socialTaskNetworkLabel(task) {
+  const network = String(task?.network || task?.platform || '').trim().toLowerCase();
+  if (network === 'x' || network === 'twitter') return 'X';
+  if (network === 'instagram') return 'Instagram';
+  if (network === 'tiktok') return 'TikTok';
+  return 'social';
+}
+
+function socialTaskAccountText(task) {
+  const account = task?.socialAccount || task?.social_account || null;
+  return account ? `@${String(account).replace(/^@/, '')}` : 'null';
+}
+
 function SocialTaskRow({ task, onSubmit }) {
   const [submitting, setSubmitting] = useState(false);
   const isAutoVerify = !!task.autoVerify;
@@ -511,6 +524,9 @@ function SocialTaskRow({ task, onSubmit }) {
         </div>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
           {task.description}
+        </div>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-secondary)', marginTop: 4 }}>
+          Cuenta {socialTaskNetworkLabel(task)} guardada: {socialTaskAccountText(task)}
         </div>
         {task.status === 'rejected' && task.rejectionNote && (
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--danger)', marginTop: 4 }}>
@@ -973,6 +989,7 @@ function SocialTasksCard() {
       <h3 style={panelTitleStyle}>Tareas verificadas de Pronos</h3>
       <p style={panelBodyStyle}>
         X, Instagram, TikTok y campañas temporales siguen en revisión manual.
+        Para que sea más fácil verificar, guarda arriba tus usuarios de cada red antes de enviar revisión.
         Algunas tareas solo aparecen desde enlaces temporales del equipo.
       </p>
       {err && (

@@ -55,6 +55,13 @@ test('hidden campaign tasks require an exact expiring task link', () => {
   assert.match(source, /requestedTaskKey \? \[\.\.\.campaignTasks, \.\.\.STATIC_TASK_CATALOG\]/);
 });
 
+test('catalog includes the caller saved account for each social task network', () => {
+  assert.match(source, /let socialHandles = \{\}/);
+  assert.match(source, /FROM points_social_links/);
+  assert.match(source, /socialRows\.map\(r => \[normalizePlatform\(r\.provider\), r\.handle \|\| null\]\)/);
+  assert.match(source, /socialAccount: network \? \(socialHandles\[network\] \|\| null\) : null/);
+});
+
 test('submit API can resolve static and campaign tasks through a shared lookup', async () => {
   const submitSource = await readFile(new URL('./submit.js', import.meta.url), 'utf8');
   assert.match(source, /export async function findSocialTaskByKey/);

@@ -34,7 +34,14 @@ test('X follow social task stays manual while OAuth verification is paused', () 
   assert.match(source, /x_reconnect_required/);
   assert.match(source, /socialLinkStartUrl\('x', '\/earn'\)/);
   assert.match(source, /X, Instagram, TikTok y campañas temporales siguen en revisión manual/);
+  assert.match(source, /guarda arriba tus usuarios de cada red antes de enviar revisión/);
   assert.doesNotMatch(source, /X se verifica automáticamente con tu cuenta conectada/);
+});
+
+test('public social tasks show the saved account used for manual review', () => {
+  assert.match(source, /function socialTaskNetworkLabel\(task\)/);
+  assert.match(source, /function socialTaskAccountText\(task\)/);
+  assert.match(source, /Cuenta \{socialTaskNetworkLabel\(task\)\} guardada: \{socialTaskAccountText\(task\)\}/);
 });
 
 test('public social tasks card shows all catalog tasks without network filter tabs', () => {

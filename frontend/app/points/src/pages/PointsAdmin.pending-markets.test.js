@@ -331,6 +331,8 @@ test('Points admin social task tabs show review history details', () => {
   assert.match(source, /Sin historial de revisiones todavía/);
   assert.match(source, /review_id/);
   assert.match(source, /Usuario: @/);
+  assert.match(source, /function socialTaskAccountText\(task\)/);
+  assert.match(source, /Cuenta \{socialTaskPlatformLabel\(t\)\}: \{socialTaskAccountText\(t\)\}/);
   assert.match(source, /Enviada:/);
   assert.match(source, /Revisada:/);
   assert.match(source, /Admin: @/);

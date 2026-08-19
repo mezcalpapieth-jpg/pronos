@@ -172,13 +172,33 @@ async function handleList(req, res) {
                 FROM social_task_reviews r
                 WHERE r.social_task_id = s.id
               )
+          ),
+          enriched_events AS (
+            SELECT e.*, c.target_url, c.label AS task_label, c.expires_at AS task_expires_at,
+                   CASE
+                     WHEN LOWER(COALESCE(c.platform, '')) = 'twitter' THEN 'x'
+                     WHEN LOWER(COALESCE(c.platform, '')) IN ('x', 'instagram', 'tiktok') THEN LOWER(c.platform)
+                     WHEN LOWER(COALESCE(e.task_key, '')) LIKE 'tiktok_%'
+                       OR LOWER(COALESCE(e.task_key, '')) LIKE '%tiktok_follow%' THEN 'tiktok'
+                     WHEN LOWER(COALESCE(e.task_key, '')) LIKE 'instagram_%'
+                       OR LOWER(COALESCE(e.task_key, '')) LIKE '%instagram_follow%' THEN 'instagram'
+                     WHEN LOWER(COALESCE(e.task_key, '')) LIKE 'twitter_%'
+                       OR LOWER(COALESCE(e.task_key, '')) LIKE 'x_%'
+                       OR LOWER(COALESCE(e.task_key, '')) LIKE '%twitter_follow%' THEN 'x'
+                     ELSE NULL
+                   END AS resolved_platform
+            FROM review_events e
+            LEFT JOIN social_task_campaigns c ON c.task_key = e.task_key
           )
           SELECT e.review_id, e.id, e.username, e.task_key, e.status, e.reward,
                  e.proof_url, e.reviewer, e.reviewed_at, e.rejection_note,
-                 e.created_at, c.platform, c.target_url, c.label AS task_label,
-                 c.expires_at AS task_expires_at
-          FROM review_events e
-          LEFT JOIN social_task_campaigns c ON c.task_key = e.task_key
+                 e.created_at, e.resolved_platform AS platform, e.target_url, e.task_label,
+                 e.task_expires_at, sl.handle AS social_account,
+                 sl.profile_url AS social_account_url
+          FROM enriched_events e
+          LEFT JOIN points_social_links sl
+            ON LOWER(sl.username) = LOWER(e.username)
+           AND sl.provider = e.resolved_platform
           ORDER BY COALESCE(e.reviewed_at, e.created_at) DESC, e.review_id DESC NULLS LAST
           LIMIT 100
         `
@@ -201,25 +221,67 @@ async function handleList(req, res) {
                 FROM social_task_reviews r
                 WHERE r.social_task_id = s.id
               )
+          ),
+          enriched_events AS (
+            SELECT e.*, c.target_url, c.label AS task_label, c.expires_at AS task_expires_at,
+                   CASE
+                     WHEN LOWER(COALESCE(c.platform, '')) = 'twitter' THEN 'x'
+                     WHEN LOWER(COALESCE(c.platform, '')) IN ('x', 'instagram', 'tiktok') THEN LOWER(c.platform)
+                     WHEN LOWER(COALESCE(e.task_key, '')) LIKE 'tiktok_%'
+                       OR LOWER(COALESCE(e.task_key, '')) LIKE '%tiktok_follow%' THEN 'tiktok'
+                     WHEN LOWER(COALESCE(e.task_key, '')) LIKE 'instagram_%'
+                       OR LOWER(COALESCE(e.task_key, '')) LIKE '%instagram_follow%' THEN 'instagram'
+                     WHEN LOWER(COALESCE(e.task_key, '')) LIKE 'twitter_%'
+                       OR LOWER(COALESCE(e.task_key, '')) LIKE 'x_%'
+                       OR LOWER(COALESCE(e.task_key, '')) LIKE '%twitter_follow%' THEN 'x'
+                     ELSE NULL
+                   END AS resolved_platform
+            FROM review_events e
+            LEFT JOIN social_task_campaigns c ON c.task_key = e.task_key
           )
           SELECT e.review_id, e.id, e.username, e.task_key, e.status, e.reward,
                  e.proof_url, e.reviewer, e.reviewed_at, e.rejection_note,
-                 e.created_at, c.platform, c.target_url, c.label AS task_label,
-                 c.expires_at AS task_expires_at
-          FROM review_events e
-          LEFT JOIN social_task_campaigns c ON c.task_key = e.task_key
+                 e.created_at, e.resolved_platform AS platform, e.target_url, e.task_label,
+                 e.task_expires_at, sl.handle AS social_account,
+                 sl.profile_url AS social_account_url
+          FROM enriched_events e
+          LEFT JOIN points_social_links sl
+            ON LOWER(sl.username) = LOWER(e.username)
+           AND sl.provider = e.resolved_platform
           ORDER BY COALESCE(e.reviewed_at, e.created_at) DESC, e.review_id DESC NULLS LAST
           LIMIT 100
         `
         : await sql`
-          SELECT s.id, s.username, s.task_key, s.status, s.reward, s.proof_url,
-                 NULL::INTEGER AS review_id, s.reviewer, s.reviewed_at, s.rejection_note, s.created_at,
-                 c.platform, c.target_url, c.label AS task_label,
-                 c.expires_at AS task_expires_at
-          FROM social_tasks s
-          LEFT JOIN social_task_campaigns c ON c.task_key = s.task_key
-          WHERE s.status = ${status}
-          ORDER BY s.created_at DESC
+          WITH enriched_tasks AS (
+            SELECT s.id, s.username, s.task_key, s.status, s.reward, s.proof_url,
+                   NULL::INTEGER AS review_id, s.reviewer, s.reviewed_at, s.rejection_note, s.created_at,
+                   c.target_url, c.label AS task_label, c.expires_at AS task_expires_at,
+                   CASE
+                     WHEN LOWER(COALESCE(c.platform, '')) = 'twitter' THEN 'x'
+                     WHEN LOWER(COALESCE(c.platform, '')) IN ('x', 'instagram', 'tiktok') THEN LOWER(c.platform)
+                     WHEN LOWER(COALESCE(s.task_key, '')) LIKE 'tiktok_%'
+                       OR LOWER(COALESCE(s.task_key, '')) LIKE '%tiktok_follow%' THEN 'tiktok'
+                     WHEN LOWER(COALESCE(s.task_key, '')) LIKE 'instagram_%'
+                       OR LOWER(COALESCE(s.task_key, '')) LIKE '%instagram_follow%' THEN 'instagram'
+                     WHEN LOWER(COALESCE(s.task_key, '')) LIKE 'twitter_%'
+                       OR LOWER(COALESCE(s.task_key, '')) LIKE 'x_%'
+                       OR LOWER(COALESCE(s.task_key, '')) LIKE '%twitter_follow%' THEN 'x'
+                     ELSE NULL
+                   END AS resolved_platform
+            FROM social_tasks s
+            LEFT JOIN social_task_campaigns c ON c.task_key = s.task_key
+            WHERE s.status = ${status}
+          )
+          SELECT e.id, e.username, e.task_key, e.status, e.reward, e.proof_url,
+                 e.review_id, e.reviewer, e.reviewed_at, e.rejection_note, e.created_at,
+                 e.resolved_platform AS platform, e.target_url, e.task_label,
+                 e.task_expires_at, sl.handle AS social_account,
+                 sl.profile_url AS social_account_url
+          FROM enriched_tasks e
+          LEFT JOIN points_social_links sl
+            ON LOWER(sl.username) = LOWER(e.username)
+           AND sl.provider = e.resolved_platform
+          ORDER BY e.created_at DESC
           LIMIT 100
         `;
     return res.status(200).json({ tasks: normalizePendingSocialTaskRows(rows) });

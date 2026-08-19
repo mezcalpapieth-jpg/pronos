@@ -747,6 +747,11 @@ function socialTaskPlatformLabel(task) {
   return 'SOCIAL';
 }
 
+function socialTaskAccountText(task) {
+  const account = task?.social_account || task?.socialAccount || null;
+  return account ? `@${String(account).replace(/^@/, '')}` : 'null';
+}
+
 function SocialTasksQueue({ onQueueChange }) {
   const [status, setStatus] = useState('pending');
   const [networkFilter, setNetworkFilter] = useState('all');
@@ -1119,6 +1124,7 @@ function SocialTasksQueue({ onQueueChange }) {
                 marginBottom: 8,
               }}>
                 <span>Usuario: @{t.username}</span>
+                <span>Cuenta {socialTaskPlatformLabel(t)}: {socialTaskAccountText(t)}</span>
                 {submittedLabel && <span>Enviada: {submittedLabel}</span>}
                 {reviewedLabel && <span>Revisada: {reviewedLabel}</span>}
                 {t.reviewer && <span>Admin: @{t.reviewer}</span>}
