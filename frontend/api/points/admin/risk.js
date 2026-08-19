@@ -11,6 +11,7 @@ import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import {
+  hashRiskSignal,
   normalizeRiskReviewStatus,
   RISK_REVIEW_STATUSES,
 } from '../../_lib/points-risk.js';
@@ -20,6 +21,22 @@ let readSql;
 let schemaSql;
 
 const USERNAME_RE = /^[a-z][a-z0-9_]{2,19}$/;
+const GENERIC_DEVICE_HINT_VALUES = [
+  '"Android"',
+  '"Chrome OS"',
+  '"Chromium OS"',
+  '"iOS"',
+  '"Linux"',
+  '"macOS"',
+  '"Windows"',
+  'Android',
+  'Chrome OS',
+  'Chromium OS',
+  'iOS',
+  'Linux',
+  'macOS',
+  'Windows',
+];
 
 function getReadSql() {
   if (!readSql) {
@@ -58,6 +75,10 @@ function toNumber(value) {
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function genericDeviceSignalHashes() {
+  return Array.from(new Set(GENERIC_DEVICE_HINT_VALUES.map(hashRiskSignal).filter(Boolean)));
 }
 
 function formatAccountRow(row) {
@@ -180,6 +201,7 @@ async function handleList(req, res) {
   const rawStatus = String(req.query.status || '').trim().toLowerCase();
   const statusFilter = rawStatus === 'all' ? null : normalizeRiskReviewStatus(rawStatus);
   const statusParam = rawStatus && rawStatus !== 'all' ? statusFilter : null;
+  const ignoredDeviceHashes = genericDeviceSignalHashes();
 
   try {
     const [
@@ -242,6 +264,7 @@ async function handleList(req, res) {
               AND username IS NOT NULL
               AND username <> ${PRONOS_TREASURY_USERNAME}
               AND device_hash IS NOT NULL
+              AND NOT (device_hash = ANY(${ignoredDeviceHashes}::text[]))
             UNION ALL
             SELECT username, 'session' AS signal_type, session_hash AS signal_hash, created_at
             FROM points_risk_events
@@ -417,6 +440,7 @@ async function handleList(req, res) {
             AND username IS NOT NULL
             AND username <> ${PRONOS_TREASURY_USERNAME}
             AND device_hash IS NOT NULL
+            AND NOT (device_hash = ANY(${ignoredDeviceHashes}::text[]))
           UNION ALL
           SELECT username, 'session' AS signal_type, session_hash AS signal_hash, created_at
           FROM points_risk_events
@@ -468,6 +492,7 @@ async function handleList(req, res) {
             AND username <> ${PRONOS_TREASURY_USERNAME}
             AND market_id IS NOT NULL
             AND device_hash IS NOT NULL
+            AND NOT (device_hash = ANY(${ignoredDeviceHashes}::text[]))
           UNION ALL
           SELECT username, market_id, created_at, 'session' AS signal_type, session_hash AS signal_hash
           FROM points_risk_events

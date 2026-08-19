@@ -4591,17 +4591,14 @@ function RiskSignalEvidenceRow({ row, focusUsername = null }) {
   const uniqueDisplayUsernames = Array.from(new Set(displayUsernames.map(username => username.toLowerCase()))).map(lower => (
     displayUsernames.find(username => username.toLowerCase() === lower) || lower
   ));
+  const signalText = focusUsername
+    ? `@${focusUsername} comparte señal con ${uniqueDisplayUsernames.map(username => `@${username}`).join(' · ')}`
+    : uniqueDisplayUsernames.map(username => `@${username}`).join(' · ');
   return (
     <div style={riskEvidenceRowStyle}>
       <span style={riskEvidenceLinkStyle}>{riskSignalLabel(row.signalType)} · {row.signalKey}</span>
-      <span style={riskEvidenceMainStyle}>
-        {focusUsername ? (
-          <>
-            @{focusUsername} conectado con {uniqueDisplayUsernames.map(username => `@${username}`).join(' · ')}
-          </>
-        ) : (
-          uniqueDisplayUsernames.map(username => `@${username}`).join(' · ')
-        )}
+      <span style={riskEvidenceSignalMainStyle} title={signalText}>
+        {signalText}
       </span>
       <span style={riskEvidenceMetaStyle}>{adminNumber(row.userCount)} cuentas · {adminNumber(row.eventCount)} eventos</span>
       <span style={{ ...riskEvidenceMetaStyle, textAlign: 'right' }}>{adminDateTime(row.lastSeenAt)}</span>
@@ -4853,6 +4850,14 @@ const riskEvidenceMainStyle = {
   fontFamily: 'var(--font-body)',
   fontSize: 14,
   fontWeight: 700,
+};
+
+const riskEvidenceSignalMainStyle = {
+  ...riskEvidenceMainStyle,
+  overflow: 'visible',
+  textOverflow: 'clip',
+  whiteSpace: 'normal',
+  lineHeight: 1.45,
 };
 
 const riskEvidenceMetaStyle = {

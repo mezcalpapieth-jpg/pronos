@@ -32,6 +32,21 @@ test('risk signals are hashed and do not expose raw request identifiers', () => 
   }
 });
 
+test('risk device signal ignores generic browser platform hints', () => {
+  const req = {
+    headers: {
+      'x-forwarded-for': '203.0.113.44',
+      'user-agent': 'Risk Test Browser',
+      'sec-ch-ua-platform': '"macOS"',
+      cookie: 'pronos_points_session=session-token-123',
+    },
+  };
+  const signals = pointsRiskSignals(req);
+  assert.equal(signals.deviceHash, null);
+  assert.equal(signals.ipHash, hashRiskSignal('203.0.113.44'));
+  assert.equal(signals.sessionHash, hashRiskSignal('session-token-123'));
+});
+
 test('risk metadata drops direct PII-like keys and accepts only known review statuses', () => {
   const safe = safeRiskMetadata({
     ip: '203.0.113.44',

@@ -35,6 +35,9 @@ test('Risk panel lets admins filter evidence and set non-payout review states', 
   assert.match(source, /function RiskLoopEvidenceRow/);
   assert.match(source, /function RiskTradeSequence/);
   assert.match(source, /function RiskSignalEvidenceRow/);
+  assert.match(source, /comparte señal con/);
+  assert.match(source, /riskEvidenceSignalMainStyle/);
+  assert.match(source, /whiteSpace:\s*'normal'/);
   assert.match(source, /loopCount \* 30/);
   assert.match(source, /sharedSignalCount \* 20/);
   assert.match(source, /linkedUsernames/);

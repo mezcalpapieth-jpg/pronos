@@ -54,8 +54,7 @@ export function hashRiskSignal(value) {
 
 function safeDeviceId(req) {
   const header = firstHeaderValue(req.headers?.['x-pronos-device-id'])
-    || firstHeaderValue(req.headers?.['x-device-id'])
-    || firstHeaderValue(req.headers?.['sec-ch-ua-platform']);
+    || firstHeaderValue(req.headers?.['x-device-id']);
   if (header) return String(header).slice(0, 512);
   const cookies = parseCookieHeader(req.headers?.cookie);
   return cookies.pronos_device_id || cookies.points_device_id || null;
