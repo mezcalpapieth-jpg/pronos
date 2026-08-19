@@ -90,6 +90,14 @@ test('Points pending queue has taxonomy filters and filtered bulk actions', () =
   assert.match(apiSource, /action:\s*'approve_all',\s*note,\s*filters/);
 });
 
+test('Points pending generator button shows an in-progress state', () => {
+  const pendingTableSource = sourceForFunction('PendingMarketsTable');
+  assert.match(pendingTableSource, /const \[generatingNow,\s*setGeneratingNow\]/);
+  assert.match(pendingTableSource, /setGeneratingNow\(true\)[\s\S]*adminRunGenerators/);
+  assert.match(pendingTableSource, /setGeneratingNow\(false\)[\s\S]*setBulkBusy\(false\)/);
+  assert.match(pendingTableSource, /generatingNow \? 'Generando\.\.\.' : '🔄 Generar ahora'/);
+});
+
 test('Points pending queue keeps large generated fields readable', () => {
   assert.match(source, /function formatOutcomeList\(outcomes,\s*limit = 14\)/);
   assert.match(source, /Opciones \(\{Array\.isArray\(r\.outcomes\) \? r\.outcomes\.length : 0\}\): \{formatOutcomeList\(r\.outcomes\)\}/);

@@ -23,6 +23,21 @@ test('points pending upsert persists per-option seed liquidities', () => {
   assert.match(source, /seed_liquidities\s*=\s*EXCLUDED\.seed_liquidities/);
 });
 
+test('points pending upsert avoids rewriting unchanged pending rows', () => {
+  assert.match(source, /points_pending_markets\.status = 'pending'[\s\S]*IS DISTINCT FROM EXCLUDED\.source_data/);
+  assert.match(source, /points_pending_markets\.question IS DISTINCT FROM EXCLUDED\.question/);
+  assert.match(source, /points_pending_markets\.seed_liquidities IS DISTINCT FROM EXCLUDED\.seed_liquidities/);
+  assert.match(source, /points_pending_markets\.topic_tags IS DISTINCT FROM EXCLUDED\.topic_tags/);
+  assert.match(source, /unchanged pending row/);
+});
+
+test('protocol pending upsert avoids rewriting unchanged pending rows', () => {
+  assert.match(source, /protocol_pending_markets\.status = 'pending'[\s\S]*IS DISTINCT FROM EXCLUDED\.source_data/);
+  assert.match(source, /protocol_pending_markets\.question IS DISTINCT FROM EXCLUDED\.question/);
+  assert.match(source, /protocol_pending_markets\.seed_liquidity IS DISTINCT FROM EXCLUDED\.seed_liquidity/);
+  assert.match(source, /protocol_pending_markets\.topic_tags IS DISTINCT FROM EXCLUDED\.topic_tags/);
+});
+
 test('generator runner can sync approved ATP H2H schedule changes', () => {
   assert.match(source, /APPROVED_SCHEDULE_SYNC_SOURCES[\s\S]*espn-atp-match/);
   assert.match(source, /export async function syncApprovedMarketSchedules/);

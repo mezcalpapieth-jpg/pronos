@@ -12,8 +12,9 @@
  *                          source logs + records the error but doesn't
  *                          drop the batch
  *   upsertPending(sql, specs) — ON CONFLICT DO UPDATE upsert into
- *                          points_pending_markets. WHERE status='pending'
- *                          guard keeps approved/rejected rows frozen.
+ *                          points_pending_markets. WHERE guards keep
+ *                          approved/rejected rows frozen and avoid no-op
+ *                          rewrites of unchanged pending rows.
  *   upsertProtocolPending(sql, specs) — same generator output, but into
  *                          protocol_pending_markets for MVP/on-chain review.
  *
@@ -216,7 +217,29 @@ export async function upsertPending(sql, allSpecs) {
               THEN NULL
               ELSE points_pending_markets.reviewed_at
             END
-        WHERE points_pending_markets.status = 'pending'
+        WHERE (
+             points_pending_markets.status = 'pending'
+             AND (
+               points_pending_markets.source_data IS DISTINCT FROM EXCLUDED.source_data
+               OR points_pending_markets.question IS DISTINCT FROM EXCLUDED.question
+               OR points_pending_markets.category IS DISTINCT FROM EXCLUDED.category
+               OR points_pending_markets.icon IS DISTINCT FROM EXCLUDED.icon
+               OR points_pending_markets.outcomes IS DISTINCT FROM EXCLUDED.outcomes
+               OR points_pending_markets.seed_liquidity IS DISTINCT FROM EXCLUDED.seed_liquidity
+               OR points_pending_markets.seed_liquidities IS DISTINCT FROM EXCLUDED.seed_liquidities
+               OR points_pending_markets.start_time IS DISTINCT FROM EXCLUDED.start_time
+               OR points_pending_markets.end_time IS DISTINCT FROM EXCLUDED.end_time
+               OR points_pending_markets.amm_mode IS DISTINCT FROM EXCLUDED.amm_mode
+               OR points_pending_markets.resolver_type IS DISTINCT FROM EXCLUDED.resolver_type
+               OR points_pending_markets.resolver_config IS DISTINCT FROM EXCLUDED.resolver_config
+               OR points_pending_markets.sport IS DISTINCT FROM EXCLUDED.sport
+               OR points_pending_markets.league IS DISTINCT FROM EXCLUDED.league
+               OR points_pending_markets.outcome_images IS DISTINCT FROM EXCLUDED.outcome_images
+               OR points_pending_markets.category_tags IS DISTINCT FROM EXCLUDED.category_tags
+               OR points_pending_markets.geo_tags IS DISTINCT FROM EXCLUDED.geo_tags
+               OR points_pending_markets.topic_tags IS DISTINCT FROM EXCLUDED.topic_tags
+             )
+           )
            OR (
              points_pending_markets.status = 'rejected'
              AND points_pending_markets.reviewer = 'system'
@@ -228,8 +251,8 @@ export async function upsertPending(sql, allSpecs) {
         if (result[0].inserted) inserted += 1;
         else updated += 1;
       } else {
-        // Conflict hit an approved/rejected row — WHERE blocked the
-        // update, so the row is untouched.
+        // Conflict hit a frozen reviewed row or an unchanged pending row,
+        // so the WHERE blocked the update and the row is untouched.
         skipped += 1;
       }
     } catch (e) {
@@ -460,7 +483,28 @@ export async function upsertProtocolPending(sql, allSpecs) {
               THEN NULL
               ELSE protocol_pending_markets.reviewed_at
             END
-        WHERE protocol_pending_markets.status = 'pending'
+        WHERE (
+             protocol_pending_markets.status = 'pending'
+             AND (
+               protocol_pending_markets.source_data IS DISTINCT FROM EXCLUDED.source_data
+               OR protocol_pending_markets.question IS DISTINCT FROM EXCLUDED.question
+               OR protocol_pending_markets.category IS DISTINCT FROM EXCLUDED.category
+               OR protocol_pending_markets.icon IS DISTINCT FROM EXCLUDED.icon
+               OR protocol_pending_markets.outcomes IS DISTINCT FROM EXCLUDED.outcomes
+               OR protocol_pending_markets.seed_liquidity IS DISTINCT FROM EXCLUDED.seed_liquidity
+               OR protocol_pending_markets.start_time IS DISTINCT FROM EXCLUDED.start_time
+               OR protocol_pending_markets.end_time IS DISTINCT FROM EXCLUDED.end_time
+               OR protocol_pending_markets.amm_mode IS DISTINCT FROM EXCLUDED.amm_mode
+               OR protocol_pending_markets.resolver_type IS DISTINCT FROM EXCLUDED.resolver_type
+               OR protocol_pending_markets.resolver_config IS DISTINCT FROM EXCLUDED.resolver_config
+               OR protocol_pending_markets.sport IS DISTINCT FROM EXCLUDED.sport
+               OR protocol_pending_markets.league IS DISTINCT FROM EXCLUDED.league
+               OR protocol_pending_markets.outcome_images IS DISTINCT FROM EXCLUDED.outcome_images
+               OR protocol_pending_markets.category_tags IS DISTINCT FROM EXCLUDED.category_tags
+               OR protocol_pending_markets.geo_tags IS DISTINCT FROM EXCLUDED.geo_tags
+               OR protocol_pending_markets.topic_tags IS DISTINCT FROM EXCLUDED.topic_tags
+             )
+           )
            OR (
              protocol_pending_markets.status = 'rejected'
              AND protocol_pending_markets.reviewer = 'system'

@@ -140,11 +140,15 @@ test('UEFA final fallbacks only apply inside the generation window', () => {
 test('team-calendar supplement imports standalone finals for whitelisted clubs', async (t) => {
   const originalFetch = globalThis.fetch;
   const originalKey = process.env.FOOTBALL_DATA_API_KEY;
+  const originalSupplement = process.env.POINTS_SOCCER_TEAM_SUPPLEMENT;
   process.env.FOOTBALL_DATA_API_KEY = 'test-football-data-key';
+  process.env.POINTS_SOCCER_TEAM_SUPPLEMENT = '1';
   t.after(() => {
     globalThis.fetch = originalFetch;
     if (originalKey == null) delete process.env.FOOTBALL_DATA_API_KEY;
     else process.env.FOOTBALL_DATA_API_KEY = originalKey;
+    if (originalSupplement == null) delete process.env.POINTS_SOCCER_TEAM_SUPPLEMENT;
+    else process.env.POINTS_SOCCER_TEAM_SUPPLEMENT = originalSupplement;
   });
 
   const urls = [];
@@ -196,4 +200,40 @@ test('team-calendar supplement imports standalone finals for whitelisted clubs',
   assert.equal(matchSpec.resolver_config.source, 'football-data');
   assert.equal(matchSpec.resolver_config.shape, 'binary');
   assert.equal(matchSpec.source_data.knockoutFinal, true);
+});
+
+test('team-calendar supplement is skipped by default', async (t) => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.FOOTBALL_DATA_API_KEY;
+  const originalSupplement = process.env.POINTS_SOCCER_TEAM_SUPPLEMENT;
+  process.env.FOOTBALL_DATA_API_KEY = 'test-football-data-key';
+  delete process.env.POINTS_SOCCER_TEAM_SUPPLEMENT;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    if (originalKey == null) delete process.env.FOOTBALL_DATA_API_KEY;
+    else process.env.FOOTBALL_DATA_API_KEY = originalKey;
+    if (originalSupplement == null) delete process.env.POINTS_SOCCER_TEAM_SUPPLEMENT;
+    else process.env.POINTS_SOCCER_TEAM_SUPPLEMENT = originalSupplement;
+  });
+
+  const urls = [];
+  const response = (body) => ({
+    ok: true,
+    status: 200,
+    headers: { get: () => null },
+    json: async () => body,
+  });
+
+  globalThis.fetch = async (url) => {
+    const text = String(url);
+    urls.push(text);
+    return response({ matches: [] });
+  };
+
+  const specs = await generateSoccerMarkets({ horizonDays: 14 });
+
+  assert.deepEqual(specs, []);
+  assert.ok(urls.length > 0);
+  assert.ok(urls.every(url => !url.includes('/teams/')));
+  assert.equal(_internal.soccerTeamSupplementEnabled(), false);
 });

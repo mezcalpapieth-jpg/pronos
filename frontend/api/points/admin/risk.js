@@ -229,21 +229,21 @@ async function handleList(req, res) {
         ),
         shared AS (
           WITH signals AS (
-            SELECT username, 'ip' AS signal_type, ip_hash AS signal_hash
+            SELECT username, 'ip' AS signal_type, ip_hash AS signal_hash, created_at
             FROM points_risk_events
             WHERE created_at > NOW() - INTERVAL '30 days'
               AND username IS NOT NULL
               AND username <> ${PRONOS_TREASURY_USERNAME}
               AND ip_hash IS NOT NULL
             UNION ALL
-            SELECT username, 'device' AS signal_type, device_hash AS signal_hash
+            SELECT username, 'device' AS signal_type, device_hash AS signal_hash, created_at
             FROM points_risk_events
             WHERE created_at > NOW() - INTERVAL '30 days'
               AND username IS NOT NULL
               AND username <> ${PRONOS_TREASURY_USERNAME}
               AND device_hash IS NOT NULL
             UNION ALL
-            SELECT username, 'session' AS signal_type, session_hash AS signal_hash
+            SELECT username, 'session' AS signal_type, session_hash AS signal_hash, created_at
             FROM points_risk_events
             WHERE created_at > NOW() - INTERVAL '30 days'
               AND username IS NOT NULL

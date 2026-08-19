@@ -50,8 +50,8 @@ const TEAM_TLA_WHITELIST = new Set([
 
 // Team-specific supplement for attractive clubs whose matches can live
 // outside the configured league feeds (supercups, standalone finals, etc).
-// football-data team IDs are stable and let us chase the club calendar
-// directly in addition to the competition-wide pulls.
+// This is intentionally opt-in: the extra 16 serial calls can push
+// football-data free-tier runs into a full rate-limit wait.
 const TEAM_MATCH_SUPPLEMENT_IDS = [
   { id: 86,  tla: 'RMA', name: 'Real Madrid' },
   { id: 81,  tla: 'FCB', name: 'Barcelona' },
@@ -105,6 +105,11 @@ const ONE_LEGGED_FINAL_COMPETITIONS = new Set(['CL', 'EL', 'UCL', 'CLI']);
 const TOURNAMENT_COMPETITIONS = new Set(['CL', 'EL', 'UCL', 'CLI']);
 
 const API_BASE = 'https://api.football-data.org/v4';
+
+function soccerTeamSupplementEnabled() {
+  const raw = String(process.env.POINTS_SOCCER_TEAM_SUPPLEMENT || '').trim().toLowerCase();
+  return raw === '1' || raw === 'true' || raw === 'yes';
+}
 
 const UEFA_FINAL_FALLBACKS = {
   EL: {
@@ -461,16 +466,18 @@ export async function generateSoccerMarkets({ horizonDays = 14 } = {}) {
     }
   }
 
-  // Supplemental team-calendar pass. This catches standalone finals
-  // such as Bayern vs Dortmund even when their competition is not one
-  // of the league codes we pull above.
-  for (const team of TEAM_MATCH_SUPPLEMENT_IDS) {
-    const matches = await fetchTeamMatches(apiKey, team, dateFrom, dateTo);
-    for (const rawMatch of matches) {
-      if (seenMatchIds.has(rawMatch.id)) continue;
-      seenMatchIds.add(rawMatch.id);
-      const code = String(rawMatch?.competition?.code || rawMatch?.competition?.id || `team-${team.id}`);
-      specs.push(...matchToMarketSpecs({ ...rawMatch, _teamSupplement: true }, code));
+  if (soccerTeamSupplementEnabled()) {
+    // Supplemental team-calendar pass. This catches standalone finals
+    // such as Bayern vs Dortmund even when their competition is not one
+    // of the league codes we pull above.
+    for (const team of TEAM_MATCH_SUPPLEMENT_IDS) {
+      const matches = await fetchTeamMatches(apiKey, team, dateFrom, dateTo);
+      for (const rawMatch of matches) {
+        if (seenMatchIds.has(rawMatch.id)) continue;
+        seenMatchIds.add(rawMatch.id);
+        const code = String(rawMatch?.competition?.code || rawMatch?.competition?.id || `team-${team.id}`);
+        specs.push(...matchToMarketSpecs({ ...rawMatch, _teamSupplement: true }, code));
+      }
     }
   }
 
@@ -489,5 +496,6 @@ export const _internal = {
   fallbackFinalMatchesForCompetition,
   matchToMarketSpec,
   matchToMarketSpecs,
+  soccerTeamSupplementEnabled,
   formatDate,
 };

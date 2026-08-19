@@ -5479,6 +5479,7 @@ function PendingMarketsTable({ onQueueChange }) {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [generatingNow, setGeneratingNow] = useState(false);
   const [err, setErr] = useState(null);
   const [editingPending, setEditingPending] = useState(null);
   const [cryptoInterval, setCryptoInterval] = useState(5);
@@ -5756,6 +5757,7 @@ function PendingMarketsTable({ onQueueChange }) {
     if (!confirm('¿Ejecutar todos los generadores ahora? Inserta/actualiza filas en la cola de pendientes.')) {
       return;
     }
+    setGeneratingNow(true);
     setBulkBusy(true);
     try {
       const r = await adminRunGenerators({ dry: false });
@@ -5769,6 +5771,7 @@ function PendingMarketsTable({ onQueueChange }) {
     } catch (e) {
       alert(`Generar falló: ${e.code || e.message}`);
     } finally {
+      setGeneratingNow(false);
       setBulkBusy(false);
     }
   }
@@ -5982,7 +5985,7 @@ function PendingMarketsTable({ onQueueChange }) {
             fontWeight: 600,
           }}
         >
-          🔄 Generar ahora
+          {generatingNow ? 'Generando...' : '🔄 Generar ahora'}
         </button>
 
         <label
