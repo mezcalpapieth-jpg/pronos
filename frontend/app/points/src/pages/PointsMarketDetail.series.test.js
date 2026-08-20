@@ -13,7 +13,8 @@ const source = await readFile(new URL('./PointsMarketDetail.jsx', import.meta.ur
 
 test('points resolved binary ring follows the winning outcome', () => {
   assert.match(source, /const displayWinnerIndex = isResolved \? displayOutcomeIndices\.indexOf\(winnerIndex\) : null;/);
-  assert.match(source, /if \(isResolved\) return displayWinnerIndex === i \? 100 : 0;/);
+  assert.match(source, /if \(isResolved\) \{[\s\S]*?return displayWinnerIndex === i \? 100 : 0;[\s\S]*?\}/);
+  assert.match(source, /market\.ammMode === 'parallel' && Array\.isArray\(parallelDisplayLegs\)/);
   assert.match(source, /winnerIndex=\{displayWinnerIndex\}/);
 });
 

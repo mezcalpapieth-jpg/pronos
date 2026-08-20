@@ -48,7 +48,9 @@ test('AICM departures board renders the full overview row set', () => {
   assert.match(pageSource, /shownFlights/);
   assert.match(pageSource, /totalFlights/);
   assert.match(pageSource, /hiddenClosedFlights/);
+  assert.match(pageSource, /hiddenStaleFlights/);
   assert.match(pageSource, /cerrados ocultos/);
+  assert.match(pageSource, /salidas vencidas ocultas/);
   assert.match(pageSource, /closedGraceMinutes/);
 });
 

@@ -336,6 +336,7 @@ function Timetable({ rows, board, source }) {
   const totalFlights = Number(board?.totalFlights || rows.length || 0);
   const shownFlights = Number(board?.shownFlights || rows.length || 0);
   const hiddenClosedFlights = Number(board?.hiddenClosedFlights || 0);
+  const hiddenStaleFlights = Number(board?.hiddenStaleFlights || 0);
   const closedGraceMinutes = Number(board?.closedGraceMinutes || 10);
   return (
     <div style={{
@@ -404,6 +405,9 @@ function Timetable({ rows, board, source }) {
             {formatNumber(shownFlights)} / {formatNumber(totalFlights)} vuelos
             {hiddenClosedFlights > 0
               ? ` · ${formatNumber(hiddenClosedFlights)} cerrados ocultos +${formatNumber(closedGraceMinutes)}m`
+              : ''}
+            {hiddenStaleFlights > 0
+              ? ` · ${formatNumber(hiddenStaleFlights)} salidas vencidas ocultas`
               : ''}
           </span>
         </div>

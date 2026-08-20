@@ -18,6 +18,9 @@ import {
 
 const AICM_TIMEZONE = 'America/Mexico_City';
 const CLOSED_FLIGHT_GRACE_MINUTES = 10;
+const DEPARTED_FLIGHT_GRACE_MINUTES = 10;
+const STALE_SCHEDULED_GRACE_MINUTES = 30;
+const AICM_LOCAL_OFFSET = '-06:00';
 
 let readSql;
 
@@ -35,8 +38,98 @@ function toNumber(value) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function toOptionalNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 function isMissingAicmTable(err) {
   return err?.code === '42P01' || /points_aicm_/i.test(String(err?.message || ''));
+}
+
+function parseAicmLocalTimeMs(value, fallbackDate) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+
+  const full = text.match(/^(\d{4}-\d{2}-\d{2})[Tt\s](\d{1,2}):(\d{2})/);
+  const timeOnly = text.match(/^(\d{1,2}):(\d{2})/);
+  const date = full?.[1] || fallbackDate;
+  const hour = full?.[2] || timeOnly?.[1];
+  const minute = full?.[3] || timeOnly?.[2];
+  if (!date || !hour || !minute) return null;
+
+  const hh = hour.padStart(2, '0');
+  const mm = minute.padStart(2, '0');
+  const ms = Date.parse(`${date}T${hh}:${mm}:00${AICM_LOCAL_OFFSET}`);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function isoFromMs(ms) {
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+}
+
+function statusFromTimetable(displayRow, timetableMatch, delayMinutes) {
+  const fallbackStatus = displayRow.statusNorm || 'unknown';
+  const apiStatus = String(timetableMatch?.status || '').toLowerCase();
+
+  if (apiStatus === 'cancelled' || apiStatus === 'canceled' || fallbackStatus === 'cancelled') {
+    return { statusNorm: 'cancelled', statusRaw: 'Cancelado' };
+  }
+
+  if (Number.isFinite(delayMinutes) && delayMinutes > 0) {
+    return { statusNorm: 'delayed', statusRaw: `${delayMinutes} min demora AE` };
+  }
+
+  if (timetableMatch?.actualLocal || ['active', 'departed', 'landed', 'arrived'].includes(apiStatus)) {
+    return { statusNorm: 'departed', statusRaw: 'Despegado AE' };
+  }
+
+  if (apiStatus === 'scheduled' && (!fallbackStatus || fallbackStatus === 'unknown')) {
+    return { statusNorm: 'scheduled', statusRaw: 'A tiempo AE' };
+  }
+
+  return {
+    statusNorm: fallbackStatus,
+    statusRaw: displayRow.statusRaw || apiStatus || 'unknown',
+  };
+}
+
+function departureVisibility(row, now = new Date()) {
+  const nowMs = now instanceof Date ? now.getTime() : Date.parse(now);
+  if (!Number.isFinite(nowMs)) {
+    return { hiddenStale: false, staleDisplayExpiresAt: null, staleReason: null };
+  }
+
+  const actualMs = parseAicmLocalTimeMs(row.actualLocal, row.flightDate);
+  if (actualMs) {
+    const expiresAt = actualMs + DEPARTED_FLIGHT_GRACE_MINUTES * 60_000;
+    return {
+      hiddenStale: nowMs >= expiresAt,
+      staleDisplayExpiresAt: isoFromMs(expiresAt),
+      staleReason: 'actual_departure',
+    };
+  }
+
+  const scheduledMs = parseAicmLocalTimeMs(row.scheduledTimeLocal, row.flightDate);
+  if (!scheduledMs) {
+    return { hiddenStale: false, staleDisplayExpiresAt: null, staleReason: null };
+  }
+
+  const delayMinutes = Math.max(0, toOptionalNumber(row.delayMinutes) ?? 0);
+  const expectedDepartureMs = scheduledMs + delayMinutes * 60_000;
+  const hasKnownDepartureSignal = delayMinutes > 0
+    || ['cancelled', 'closed', 'departed', 'delayed'].includes(row.statusNorm);
+  const graceMinutes = hasKnownDepartureSignal
+    ? DEPARTED_FLIGHT_GRACE_MINUTES
+    : STALE_SCHEDULED_GRACE_MINUTES;
+  const expiresAt = expectedDepartureMs + graceMinutes * 60_000;
+
+  return {
+    hiddenStale: nowMs >= expiresAt,
+    staleDisplayExpiresAt: isoFromMs(expiresAt),
+    staleReason: hasKnownDepartureSignal ? 'expected_departure' : 'scheduled_departure',
+  };
 }
 
 function emptyOverview(reason = 'no_oracle_data') {
@@ -64,7 +157,10 @@ function emptyOverview(reason = 'no_oracle_data') {
       shownFlights: 0,
       rowLimit: 180,
       hiddenClosedFlights: 0,
+      hiddenStaleFlights: 0,
       closedGraceMinutes: CLOSED_FLIGHT_GRACE_MINUTES,
+      departedGraceMinutes: DEPARTED_FLIGHT_GRACE_MINUTES,
+      staleScheduledGraceMinutes: STALE_SCHEDULED_GRACE_MINUTES,
     },
     counters: {
       hour: { key: 'hour', label: '1h', delayedFlights: 0, cancelledFlights: 0, observedFlights: 0, lastObservedAt: null },
@@ -135,11 +231,12 @@ function timetableKeyFor({ flightDate, flightCode }) {
   return `${flightDate}|${code.toLowerCase()}`;
 }
 
-function formatFlight(row, timetableByFlight = new Map()) {
+function formatFlight(row, timetableByFlight = new Map(), { now = new Date() } = {}) {
   const displayRow = normalizeAicmObservationForDisplay(row);
   const timetableMatch = timetableByFlight.get(timetableKeyFor(displayRow)) || null;
-  const statusNorm = displayRow.statusNorm || 'unknown';
-  return {
+  const delayMinutes = toOptionalNumber(timetableMatch?.delayMinutes);
+  const status = statusFromTimetable(displayRow, timetableMatch, delayMinutes);
+  const base = {
     flightKey: displayRow.flightKey,
     flightDate: displayRow.flightDate,
     flightCode: displayRow.flightCode || null,
@@ -149,17 +246,21 @@ function formatFlight(row, timetableByFlight = new Map()) {
     estimatedTimeLocal: displayRow.estimatedTimeLocal || null,
     terminal: displayRow.terminal || null,
     gate: displayRow.gate || null,
-    statusRaw: displayRow.statusRaw || 'unknown',
-    statusNorm,
-    isDelayed: statusNorm === 'delayed',
-    isCancelled: statusNorm === 'cancelled',
-    delayMinutes: timetableMatch?.delayMinutes ?? null,
+    statusRaw: status.statusRaw || 'unknown',
+    statusNorm: status.statusNorm,
+    isDelayed: status.statusNorm === 'delayed',
+    isCancelled: status.statusNorm === 'cancelled',
+    delayMinutes,
     actualLocal: timetableMatch?.actualLocal || null,
     delaySource: timetableMatch ? timetableMatch.source : null,
     delayObservedAt: timetableMatch?.lastObservedAt || null,
     observedAt: displayRow.observedAt || null,
     hiddenClosed: Boolean(row.hiddenClosed),
     closedDisplayExpiresAt: row.closedDisplayExpiresAt || null,
+  };
+  return {
+    ...base,
+    ...departureVisibility(base, now),
   };
 }
 
@@ -170,7 +271,7 @@ export default async function handler(req, res) {
 
   try {
     setCacheHeaders(res, { scope: 'public', maxAge: 10, sMaxage: 30, staleWhileRevalidate: 120 });
-    const { value: payload, hit } = await cachedJson('points:aicm:overview:v6', 15_000, async () => {
+    const { value: payload, hit } = await cachedJson('points:aicm:overview:v7', 15_000, async () => {
       const sql = getReadSql();
 
       try {
@@ -345,6 +446,7 @@ export default async function handler(req, res) {
                 o.flight_number AS "flightCode",
                 o.delay_minutes AS "delayMinutes",
                 o.actual_local AS "actualLocal",
+                o.status AS "status",
                 o.source,
                 o.last_observed_at AS "lastObservedAt"
               FROM points_aicm_timetable_observations o
@@ -367,10 +469,11 @@ export default async function handler(req, res) {
             .map(row => [timetableKeyFor(row), row])
             .filter(([key]) => key)
         );
+        const now = new Date();
         const rawTimetable = timetableRows
-          .map(row => formatFlight(row, timetableByFlight))
+          .map(row => formatFlight(row, timetableByFlight, { now }))
           .filter(row => row.flightCode && row.scheduledTimeLocal && row.city);
-        const timetable = rawTimetable.filter(row => !row.hiddenClosed);
+        const timetable = rawTimetable.filter(row => !row.hiddenClosed && !row.hiddenStale);
         timetable.sort((a, b) => {
           const aTime = a.scheduledTimeLocal || '99:99';
           const bTime = b.scheduledTimeLocal || '99:99';
@@ -382,6 +485,7 @@ export default async function handler(req, res) {
           timetableRows[0]?.hiddenClosedFlights
             || rawTimetable.filter(row => row.hiddenClosed).length
         );
+        const hiddenStaleFlights = rawTimetable.filter(row => row.hiddenStale).length;
         return {
           ...emptyOverview(),
           source: {
@@ -396,7 +500,10 @@ export default async function handler(req, res) {
             shownFlights: timetable.length,
             rowLimit: 180,
             hiddenClosedFlights,
+            hiddenStaleFlights,
             closedGraceMinutes: CLOSED_FLIGHT_GRACE_MINUTES,
+            departedGraceMinutes: DEPARTED_FLIGHT_GRACE_MINUTES,
+            staleScheduledGraceMinutes: STALE_SCHEDULED_GRACE_MINUTES,
           },
           counters: {
             hour: counters.hour || emptyOverview().counters.hour,
