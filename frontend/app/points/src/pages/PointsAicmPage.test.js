@@ -69,5 +69,6 @@ test('AICM hub uses a navy airport palette with neutral delay counters', () => {
   assert.match(pageSource, /<CounterCard label="Última hora" title="demoras medidas" counter=\{counters\.hour\} footerLabel="vuelos medidos AE" \/>/);
   assert.match(pageSource, /<CounterCard label="Hoy" title="demoras medidas" counter=\{counters\.day\} footerLabel="vuelos medidos AE" \/>/);
   assert.match(pageSource, /<CounterCard label="7 días" title="demoras medidas" counter=\{counters\.week\} footerLabel="vuelos medidos AE" \/>/);
+  assert.match(pageSource, /gridTemplateColumns: 'repeat\(auto-fit, minmax\(min\(100%, 180px\), 1fr\)\)'/);
   assert.match(pageSource, /valueKey="thresholdFlights"/);
 });

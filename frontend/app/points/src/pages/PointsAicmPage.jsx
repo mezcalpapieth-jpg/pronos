@@ -118,8 +118,8 @@ function CounterCard({
       border: `1px solid ${accent.border}`,
       background: accent.bg,
       borderRadius: 8,
-      padding: 18,
-      minHeight: 132,
+      padding: 16,
+      minHeight: 150,
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'space-between',
@@ -137,7 +137,7 @@ function CounterCard({
       <div>
         <div style={{
           fontFamily: 'var(--font-display)',
-          fontSize: 42,
+          fontSize: 40,
           lineHeight: 1,
           color: accent.fg,
           letterSpacing: 0,
@@ -148,7 +148,7 @@ function CounterCard({
           marginTop: 8,
           fontFamily: 'var(--font-mono)',
           color: 'var(--text-secondary)',
-          fontSize: 12,
+          fontSize: 11,
           letterSpacing: '0.04em',
         }}>
           {title}
@@ -157,7 +157,7 @@ function CounterCard({
       <div style={{
         fontFamily: 'var(--font-mono)',
         color: 'var(--text-muted)',
-        fontSize: 11,
+        fontSize: 10,
       }}>
         {formatNumber(counter?.observedFlights)} {footerLabel}
       </div>
@@ -822,8 +822,8 @@ export default function PointsAicmPage({ isAdmin = false }) {
 
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
-        gap: 14,
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))',
+        gap: 10,
         marginTop: 18,
       }}>
         <CounterCard label="Última hora" title="demoras medidas" counter={counters.hour} footerLabel="vuelos medidos AE" />
