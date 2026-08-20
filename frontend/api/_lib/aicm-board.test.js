@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   airlineNameForAicmFlightCode,
   buildAicmFlightBoardUrl,
+  normalizeAicmBoardPages,
   normalizeAicmObservationForDisplay,
   normalizeAicmFlightStatus,
   parseAicmFlightBoard,
@@ -22,6 +23,19 @@ test('buildAicmFlightBoardUrl targets official AICM departure and arrival filter
   assert.equal(departure.searchParams.get('ciudad'), '');
   assert.equal(departure.searchParams.get('air'), '');
   assert.equal(departure.searchParams.get('in0'), 'n');
+  assert.equal(departure.searchParams.get('cpage'), null);
+
+  const departurePage2 = new URL(buildAicmFlightBoardUrl('departure', {
+    baseUrl: 'https://example.com/vuelos',
+    page: 2,
+  }));
+  assert.equal(departurePage2.searchParams.get('da'), 'd');
+  assert.equal(departurePage2.searchParams.get('cpage'), '2');
+});
+
+test('normalizeAicmBoardPages keeps a small unique official-board page list', () => {
+  assert.deepEqual(normalizeAicmBoardPages('1,2,2,0,abc,11'), [1, 2]);
+  assert.deepEqual(normalizeAicmBoardPages([]), [1]);
 });
 
 test('normalizeAicmFlightStatus recognizes delay, cancellation, and normal states', () => {
@@ -183,6 +197,44 @@ test('readAicmFlightBoard returns a compact source hash without raw HTML', async
   assert.equal(snapshot.rawHtmlSha256.length, 64);
   assert.ok(snapshot.rawHtmlBytes > 0);
   assert.equal(Object.hasOwn(snapshot, 'rawHtml'), false);
+});
+
+test('readAicmFlightBoard merges the first two official AICM pages', async () => {
+  const seenUrls = [];
+  const snapshot = await readAicmFlightBoard({
+    direction: 'departure',
+    now: new Date('2026-08-20T12:45:00.000Z'),
+    baseUrl: 'https://example.com/vuelos',
+    pages: [1, 2],
+    fetchImpl: async (url) => {
+      seenUrls.push(String(url));
+      const page = new URL(String(url)).searchParams.get('cpage') || '1';
+      const rows = page === '2'
+        ? '<tr><td>Volaris</td><td>Y4 262</td><td>05:05</td><td>Tuxtla Gutierrez</td><td>T1</td><td>B</td><td>A Tiempo</td></tr>'
+        : '<tr><td>Aeromexico</td><td>AM 614</td><td>08:45</td><td>Phoenix</td><td>T2</td><td>63</td><td>Demorado</td></tr>';
+      return {
+        ok: true,
+        status: 200,
+        text: async () => `
+          <table>
+            <thead>
+              <tr><th>Aerolínea</th><th>Vuelo</th><th>Hora</th><th>Destino</th><th>Terminal</th><th>Sala</th><th>Estatus</th></tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        `,
+      };
+    },
+  });
+
+  assert.equal(seenUrls.length, 2);
+  assert.equal(new URL(seenUrls[0]).searchParams.get('cpage'), null);
+  assert.equal(new URL(seenUrls[1]).searchParams.get('cpage'), '2');
+  assert.equal(snapshot.status, 'ok');
+  assert.equal(snapshot.rowCount, 2);
+  assert.deepEqual(snapshot.sourceUrls.map(url => new URL(url).searchParams.get('cpage')), [null, '2']);
+  assert.deepEqual(snapshot.rows.map(row => row.flightCode), ['AM614', 'Y4262']);
+  assert.equal(snapshot.delayedCount, 1);
 });
 
 test('runAicmOraclePoll supports a dry-run both-direction probe', async () => {

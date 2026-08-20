@@ -5,6 +5,7 @@ import { formatMexicoDateYmd } from './market-gen/mexico-time.js';
 export const AICM_SOURCE = 'aicm-official-flight-board';
 export const AICM_DEFAULT_FLIGHTS_URL = 'https://www.aicm.com.mx/pasajeros/vuelos';
 export const AICM_MAX_OBSERVATIONS_PER_POLL = 750;
+export const AICM_DEFAULT_BOARD_PAGES = Object.freeze([1, 2]);
 
 export const AICM_AIRLINE_BY_FLIGHT_PREFIX = Object.freeze({
   '5D': 'Aeromexico Connect',
@@ -124,8 +125,28 @@ export function normalizeAicmDirection(value = 'departure') {
   return DIRECTION_CONFIG[key] || DIRECTION_CONFIG.departure;
 }
 
+export function normalizeAicmBoardPages(value = AICM_DEFAULT_BOARD_PAGES) {
+  const rawPages = Array.isArray(value)
+    ? value
+    : String(value || '').split(/[,\s]+/);
+  const pages = [];
+  for (const rawPage of rawPages) {
+    const page = Number.parseInt(String(rawPage).trim(), 10);
+    if (!Number.isSafeInteger(page) || page < 1 || page > 10) continue;
+    if (!pages.includes(page)) pages.push(page);
+  }
+  return pages.length ? pages : [1];
+}
+
+function defaultAicmBoardPages() {
+  return process.env.AICM_FLIGHTS_PAGES
+    ? normalizeAicmBoardPages(process.env.AICM_FLIGHTS_PAGES)
+    : AICM_DEFAULT_BOARD_PAGES;
+}
+
 export function buildAicmFlightBoardUrl(direction = 'departure', {
   baseUrl = process.env.AICM_FLIGHTS_URL || AICM_DEFAULT_FLIGHTS_URL,
+  page = 1,
 } = {}) {
   const cfg = normalizeAicmDirection(direction);
   const url = new URL(baseUrl || AICM_DEFAULT_FLIGHTS_URL);
@@ -134,6 +155,12 @@ export function buildAicmFlightBoardUrl(direction = 'departure', {
   url.searchParams.set('ciudad', '');
   url.searchParams.set('air', '');
   url.searchParams.set('in0', 'n');
+  const pageNumber = Number.parseInt(String(page), 10);
+  if (Number.isSafeInteger(pageNumber) && pageNumber > 1) {
+    url.searchParams.set('cpage', String(pageNumber));
+  } else {
+    url.searchParams.delete('cpage');
+  }
   return url.toString();
 }
 
@@ -202,7 +229,7 @@ export function normalizeAicmFlightCode(value, { allowNumeric = true } = {}) {
     .trim();
   if (!cleaned) return null;
   if (/^T\s?[12]$/.test(cleaned) || /^TERMINAL\s?[12]$/.test(cleaned)) return null;
-  const alphaMatch = cleaned.match(/\b[A-Z]{1,4}\s?\d{1,5}[A-Z]?\b/);
+  const alphaMatch = cleaned.match(/\b(?:[A-Z]\d|\d[A-Z]|[A-Z]{1,4})\s?\d{1,5}[A-Z]?\b/);
   if (alphaMatch) return alphaMatch[0].replace(/\s+/g, '');
   if (allowNumeric) {
     const numericMatch = cleaned.match(/\b\d{2,5}\b/);
@@ -500,6 +527,30 @@ export function parseAicmFlightBoard(html, {
   };
 }
 
+function dedupeAicmRows(rows) {
+  const seen = new Set();
+  const uniqueRows = [];
+  for (const row of rows) {
+    const key = [
+      row.flightKey,
+      row.statusNorm,
+    ].map(normalizeKeyText).join('|');
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    uniqueRows.push(row);
+  }
+  return uniqueRows;
+}
+
+function mergedAicmStatus(pageResults, rows) {
+  if (rows.length) return 'ok';
+  const statuses = pageResults.map(page => page.parsed?.status).filter(Boolean);
+  if (statuses.includes('maintenance')) return 'maintenance';
+  if (statuses.includes('empty')) return 'empty';
+  if (pageResults.some(page => page.response && !page.response.ok)) return 'http_error';
+  return statuses[0] || 'no_table';
+}
+
 async function fetchWithTimeout(fetchImpl, url, options, timeoutMs) {
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
@@ -519,30 +570,71 @@ export async function readAicmFlightBoard({
   now = new Date(),
   baseUrl = process.env.AICM_FLIGHTS_URL || AICM_DEFAULT_FLIGHTS_URL,
   timeoutMs = Number(process.env.AICM_FETCH_TIMEOUT_MS || 12_000),
+  pages = defaultAicmBoardPages(),
 } = {}) {
   if (typeof fetchImpl !== 'function') {
     throw new Error('fetch_not_available');
   }
-  const sourceUrl = buildAicmFlightBoardUrl(direction, { baseUrl });
+  const boardPages = normalizeAicmBoardPages(pages);
+  const sourceUrls = boardPages.map(page => buildAicmFlightBoardUrl(direction, { baseUrl, page }));
+  const sourceUrl = sourceUrls[0] || buildAicmFlightBoardUrl(direction, { baseUrl, page: 1 });
   const observedAt = now.toISOString();
   try {
-    const response = await fetchWithTimeout(fetchImpl, sourceUrl, {
-      method: 'GET',
-      headers: {
-        Accept: 'text/html,application/xhtml+xml',
-        'User-Agent': 'PronosAICMDelayOracle/1.0 (+https://pronos.io)',
-      },
-    }, timeoutMs);
-    const html = await response.text();
-    const parsed = parseAicmFlightBoard(html, { direction, sourceUrl, observedAt });
+    const pageResults = [];
+    const pageErrors = [];
+    const htmlParts = [];
+
+    for (const pageUrl of sourceUrls) {
+      try {
+        const response = await fetchWithTimeout(fetchImpl, pageUrl, {
+          method: 'GET',
+          headers: {
+            Accept: 'text/html,application/xhtml+xml',
+            'User-Agent': 'PronosAICMDelayOracle/1.0 (+https://pronos.io)',
+          },
+        }, timeoutMs);
+        const html = await response.text();
+        const parsed = parseAicmFlightBoard(html, { direction, sourceUrl: pageUrl, observedAt });
+        htmlParts.push(html);
+        pageResults.push({ sourceUrl: pageUrl, response, parsed });
+        if (!response.ok) pageErrors.push(`${pageUrl}: http_${response.status}`);
+      } catch (err) {
+        pageErrors.push(`${pageUrl}: ${err?.message?.slice(0, 160) || 'fetch_failed'}`);
+      }
+    }
+
+    if (!pageResults.length) {
+      throw new Error(pageErrors[0] || 'fetch_failed');
+    }
+
+    const mergedRows = dedupeAicmRows(pageResults.flatMap(page => (
+      page.response?.ok && Array.isArray(page.parsed?.rows) ? page.parsed.rows : []
+    )));
+    const rows = mergedRows.slice(0, AICM_MAX_OBSERVATIONS_PER_POLL);
+    const status = mergedAicmStatus(pageResults, rows);
+    const delayedCount = rows.filter(row => row.statusNorm === 'delayed').length;
+    const cancelledCount = rows.filter(row => row.statusNorm === 'cancelled').length;
+    const dir = normalizeAicmDirection(direction);
     return {
-      ...parsed,
-      httpStatus: response.status || null,
-      rawHtmlSha256: hashText(html),
-      rawHtmlBytes: byteLength(html),
-      ok: Boolean(response.ok) && parsed.ok,
-      status: response.ok ? parsed.status : 'http_error',
-      error: response.ok ? null : `http_${response.status}`,
+      ok: (status === 'ok' || status === 'empty') && pageResults.some(page => page.response?.ok),
+      source: AICM_SOURCE,
+      direction: dir.key,
+      directionLabel: dir.label,
+      status,
+      observedAt,
+      flightDate: pageResults[0]?.parsed?.flightDate || formatMexicoDateYmd(now),
+      sourceUrl,
+      sourceUrls,
+      httpStatus: pageResults.find(page => page.response)?.response?.status || null,
+      rawHtmlSha256: htmlParts.length ? hashText(htmlParts.join('\n<!-- aicm-page-boundary -->\n')) : null,
+      rawHtmlBytes: htmlParts.reduce((sum, html) => sum + byteLength(html), 0),
+      rowCount: rows.length,
+      delayedCount,
+      cancelledCount,
+      tableCount: pageResults.reduce((sum, page) => sum + Number(page.parsed?.tableCount || 0), 0),
+      rowsCapped: mergedRows.length > rows.length || pageResults.some(page => page.parsed?.rowsCapped),
+      rows,
+      error: pageErrors.length ? pageErrors.join(' | ').slice(0, 240) : null,
     };
   } catch (err) {
     const dir = normalizeAicmDirection(direction);
@@ -555,6 +647,7 @@ export async function readAicmFlightBoard({
       observedAt,
       flightDate: formatMexicoDateYmd(now),
       sourceUrl,
+      sourceUrls,
       httpStatus: null,
       rawHtmlSha256: null,
       rawHtmlBytes: 0,
@@ -706,6 +799,7 @@ export async function runAicmOraclePoll({
       observedAt: snapshot.observedAt,
       flightDate: snapshot.flightDate,
       sourceUrl: snapshot.sourceUrl,
+      sourceUrls: snapshot.sourceUrls || [snapshot.sourceUrl].filter(Boolean),
       httpStatus: snapshot.httpStatus,
       rawHtmlSha256: snapshot.rawHtmlSha256,
       rawHtmlBytes: snapshot.rawHtmlBytes,
