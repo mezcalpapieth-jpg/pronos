@@ -18,6 +18,8 @@ test('AICM hub renders the departures board, counters, and window cards', () => 
   assert.match(pageSource, /Tablero de salidas/);
   assert.match(pageSource, /MEX Salidas/);
   assert.match(pageSource, /Aerolínea/);
+  assert.match(pageSource, /Terminal/);
+  assert.match(pageSource, /Sala/);
   assert.match(pageSource, /Demora/);
   assert.match(pageSource, /delayVerdict/);
   assert.match(pageSource, /boardStatusLabel/);
@@ -29,7 +31,7 @@ test('AICM hub renders the departures board, counters, and window cards', () => 
   assert.match(pageSource, /7 días/);
   assert.match(pageSource, /findDailyAicmMarket/);
   assert.match(pageSource, /AICM_DELAY_SOURCES/);
-  assert.match(pageSource, /'aviation-edge-timetable'/);
+  assert.match(pageSource, /from '..\/lib\/aicmMarkets\.js'/);
   assert.match(pageSource, /acceptedWindows = new Set\(\['day', '48h'\]\)/);
   assert.match(pageSource, /sourceEventId/);
 });

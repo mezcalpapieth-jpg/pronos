@@ -68,6 +68,51 @@ test('parseAicmFlightBoard extracts normalized observations from a Spanish table
   assert.equal(parsed.rows[1].statusNorm, 'scheduled');
 });
 
+test('parseAicmFlightBoard keeps official AICM departure-board columns aligned', () => {
+  const parsed = parseAicmFlightBoard(`
+    <table>
+      <thead>
+        <tr>
+          <th>Aerolínea</th><th>Vuelo</th><th>Hora</th><th>Destino</th>
+          <th>Terminal</th><th>Sala</th><th>Estatus</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><img src="/logos/viva.png" alt="Viva"></td>
+          <td>VB1232</td><td>05:00</td><td>Tijuana</td>
+          <td>T1</td><td>B</td><td>DEMORADO</td>
+        </tr>
+        <tr>
+          <td><img src="/logos/hainan.png"></td>
+          <td>HU7926</td><td>04:50</td><td>Beijing</td>
+          <td>T1</td><td>24</td><td>DEMORADO</td>
+        </tr>
+      </tbody>
+    </table>
+  `, {
+    direction: 'departure',
+    sourceUrl: 'https://example.com/vuelos?da=d',
+    observedAt: '2026-08-20T09:00:00.000Z',
+  });
+
+  assert.equal(parsed.status, 'ok');
+  assert.equal(parsed.rowCount, 2);
+  assert.equal(parsed.rows[0].airline, 'Viva');
+  assert.equal(parsed.rows[0].flightCode, 'VB1232');
+  assert.equal(parsed.rows[0].scheduledTimeLocal, '05:00');
+  assert.equal(parsed.rows[0].city, 'Tijuana');
+  assert.equal(parsed.rows[0].terminal, 'T1');
+  assert.equal(parsed.rows[0].gate, 'B');
+  assert.equal(parsed.rows[0].statusNorm, 'delayed');
+  assert.equal(parsed.rows[1].airline, null);
+  assert.equal(parsed.rows[1].flightCode, 'HU7926');
+  assert.equal(parsed.rows[1].scheduledTimeLocal, '04:50');
+  assert.equal(parsed.rows[1].city, 'Beijing');
+  assert.equal(parsed.rows[1].terminal, 'T1');
+  assert.equal(parsed.rows[1].gate, '24');
+});
+
 test('parseAicmFlightBoard treats maintenance as missing oracle data, not zero delays', () => {
   const parsed = parseAicmFlightBoard(`
     <main>

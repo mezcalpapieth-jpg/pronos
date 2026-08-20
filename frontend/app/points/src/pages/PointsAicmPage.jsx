@@ -2,13 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { fetchAicmOverview, fetchMarkets } from '../lib/pointsApi.js';
+import { AICM_DELAY_SOURCES } from '../lib/aicmMarkets.js';
 
 const AEROMEXICO_NAVY = '#040C3E';
 const AEROMEXICO_BLUE = '#8fb8ff';
-const AICM_DELAY_SOURCES = new Set([
-  'aicm-official-flight-board',
-  'aviation-edge-timetable',
-]);
 
 const ACCENTS = {
   green: { fg: 'var(--yes)', bg: 'rgba(0, 232, 122, 0.12)', border: 'rgba(0, 232, 122, 0.28)' },
@@ -304,7 +301,7 @@ function Timetable({ rows, board, source }) {
         <div style={{ minWidth: 1120 }}>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: '82px 104px minmax(130px, 1fr) minmax(190px, 1.25fr) 96px 132px 92px 132px',
+            gridTemplateColumns: '82px 104px minmax(130px, 1fr) minmax(190px, 1.25fr) 76px 76px 96px 132px 132px',
             gap: 8,
             padding: '14px 18px 10px',
             fontFamily: 'var(--font-mono)',
@@ -318,9 +315,10 @@ function Timetable({ rows, board, source }) {
             <span>Vuelo</span>
             <span>Aerolínea</span>
             <span>Destino</span>
+            <span>Terminal</span>
+            <span>Sala</span>
             <span>Demora</span>
             <span>Estatus</span>
-            <span>Puerta</span>
             <span>Lectura</span>
           </div>
           {visible.length === 0 ? (
@@ -343,7 +341,7 @@ function Timetable({ rows, board, source }) {
                 key={`${row.flightKey}:${row.observedAt}`}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '82px 104px minmax(130px, 1fr) minmax(190px, 1.25fr) 96px 132px 92px 132px',
+                  gridTemplateColumns: '82px 104px minmax(130px, 1fr) minmax(190px, 1.25fr) 76px 76px 96px 132px 132px',
                   gap: 8,
                   padding: '14px 20px',
                   alignItems: 'center',
@@ -358,9 +356,10 @@ function Timetable({ rows, board, source }) {
                 <FlightBoardCell>{row.flightCode || 'N/D'}</FlightBoardCell>
                 <FlightBoardCell muted={!row.airline}>{row.airline || 'N/D'}</FlightBoardCell>
                 <FlightBoardCell muted={!row.city}>{row.city || 'Sin destino'}</FlightBoardCell>
+                <FlightBoardCell muted={!row.terminal}>{row.terminal || 'N/D'}</FlightBoardCell>
+                <FlightBoardCell muted={!row.gate}>{row.gate || 'N/D'}</FlightBoardCell>
                 <FlightBoardCell color={verdict.accent.fg}>{verdict.label}</FlightBoardCell>
                 <FlightBoardCell color={accent.fg}>{statusLabel(row.statusNorm, row.statusRaw)}</FlightBoardCell>
-                <FlightBoardCell muted={!row.gate && !row.terminal}>{row.gate || row.terminal || 'N/D'}</FlightBoardCell>
                 <FlightBoardCell muted>{formatObservedTime(row.observedAt)}</FlightBoardCell>
               </div>
             );

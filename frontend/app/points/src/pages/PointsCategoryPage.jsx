@@ -31,6 +31,7 @@ import {
   marketInGeo,
   marketInTopic,
 } from '../lib/pointsCategoryFilters.js';
+import { AICM_HUB_PATH, isAicmDelayMarket } from '../lib/aicmMarkets.js';
 import PointsMarketCard from '../components/PointsMarketCard.jsx';
 import { MarketGridSkeleton } from '../components/PointsSkeleton.jsx';
 
@@ -162,11 +163,6 @@ const CATEGORY_SLUG_ALIASES = {
 };
 
 const TOURNAMENT_SHELF_SLUGS = new Set(['nuevos-mercados']);
-const AICM_HUB_PATH = '/c/infraestructura/aicm';
-const AICM_DELAY_SOURCES = new Set([
-  'aicm-official-flight-board',
-  'aviation-edge-timetable',
-]);
 const AICM_HUB_SEARCH_TEXT = [
   'aicm',
   'pulso',
@@ -185,12 +181,6 @@ function canonicalCategorySlug(value) {
 }
 
 const GEO_FILTER_EXCLUDED_CATEGORIES = new Set(['all', 'crypto', 'world-cup', 'nuevos-mercados', 'porresolver', 'resueltos', 'noticias']);
-
-function isAicmDelayMarket(m) {
-  return AICM_DELAY_SOURCES.has(String(m?.source || ''))
-    && String(m?.sourceEventId || '').includes(':departure:')
-    && String(m?.resolverConfig?.shape || '') === 'delay-bucket';
-}
 
 function isPromotedAicmChildMarket(m) {
   return !isAicmDelayMarket(m)

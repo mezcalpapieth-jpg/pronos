@@ -30,6 +30,7 @@ import { findTeamByName, teamProfilePath } from '@app/lib/teamProfiles.js';
 import { marketInterestPayload, teamInterestPayload, trackInterest } from '@app/lib/interest.js';
 import { soccerMatchTypeLabel } from '@app/lib/soccerMarketType.js';
 import { pointsPublicAssetSrc } from '@app/lib/publicAssets.js';
+import { AICM_HUB_PATH, isAicmDelayMarket } from '../lib/aicmMarkets.js';
 import PointsBuyModal from './PointsBuyModal.jsx';
 
 const STAKE_PREVIEW = 100; // MXNP reference stake for the card payout preview
@@ -185,9 +186,14 @@ export default function PointsMarketCard({ market, userPosition }) {
     && market.endTime
     && new Date(market.endTime) < now;
   const isChampionsFinalCard = isChampionsLeagueFinalWinnerMarket(market);
+  const isAicmDelayCard = isAicmDelayMarket(market);
   const matchTypeLabel = soccerMatchTypeLabel(market);
   const marketDetailPath = `/market?id=${encodeURIComponent(market.id)}`;
-  const cardTargetPath = isChampionsFinalCard ? CHAMPIONS_LEAGUE_HUB_PATH : marketDetailPath;
+  const cardTargetPath = isChampionsFinalCard
+    ? CHAMPIONS_LEAGUE_HUB_PATH
+    : isAicmDelayCard
+      ? AICM_HUB_PATH
+      : marketDetailPath;
   const navigateToCardTarget = () => {
     trackInterest({
       ...marketInterestPayload('points', market, 'click'),

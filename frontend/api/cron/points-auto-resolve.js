@@ -4,6 +4,7 @@
  * Scans points_markets for active rows whose trading window has closed
  * AND whose resolver_type is one we know how to settle automatically.
  * Active resolver types: chainlink_price, api_price, weather_api, aicm_delay_count,
+ * aicm_delay_minutes_live,
  * api_chart, api_transcript, api_lcdlf, sports_api (espn / espn-pga / espn-liv / etc.).
  * manual_review/manual markets are not auto-settled; they are queued
  * into points_resolution_candidates when their close time passes.
@@ -46,6 +47,8 @@ import { readStoredMananeraTranscript } from '../_lib/mananera-ingest.js';
 import { generateMananeraMarkets } from '../_lib/market-gen/mananera.js';
 import { fetchMaxTempC, bucketIndexFor, weatherBucketIndexFor } from '../_lib/weather.js';
 import { aicmDelayBucketIndexFor, readAicmDelayCount } from '../_lib/aicm-board.js';
+import { aicmAeBucketIndexFor, countAicmAeDaysInclusive } from '../_lib/aicm-aviation-edge.js';
+import { readAicmTimetableDelayCount } from '../_lib/aicm-timetable.js';
 import { readAppleMxTopArtist } from '../_lib/charts.js';
 import { readYouTubeTopMxChannel } from '../_lib/youtube.js';
 import { readEspnEvent, readFootballDataMatch, readJolpicaF1Result, readJolpicaF1Standings, readEspnPgaWinner, readEspnLivWinner, readLivTeamWinner, readEspnAtpTournamentWinner, readEspnAtpMatchWinner, readEspnMmaWinner, readOddsApiBoxingWinner, readNextOpponent } from '../_lib/sports-results.js';
@@ -144,6 +147,16 @@ function buildFinalScore({ resolverType, cfg, result, resolverInfo, outcomes, wi
 
     if (resolverType === 'aicm_delay_count') {
       const count = Number(resolverInfo?.count);
+      if (Number.isFinite(count)) return clip(`${count} salidas demoradas`);
+      return clip(winLabel);
+    }
+
+    if (resolverType === 'aicm_delay_minutes_live') {
+      const count = Number(resolverInfo?.count);
+      const mins = Number(resolverInfo?.thresholdMinutes);
+      if (Number.isFinite(count) && Number.isFinite(mins)) {
+        return clip(`${count} salidas con más de ${mins} min de retraso`);
+      }
       if (Number.isFinite(count)) return clip(`${count} salidas demoradas`);
       return clip(winLabel);
     }
@@ -945,7 +958,7 @@ export async function runAutoResolve({ dry = false } = {}) {
         AND m.parent_id IS NULL
         AND (
           (
-            m.resolver_type IN ('chainlink_price', 'api_price', 'weather_api', 'aicm_delay_count', 'api_chart', 'api_transcript', 'api_lcdlf', 'sports_api')
+            m.resolver_type IN ('chainlink_price', 'api_price', 'weather_api', 'aicm_delay_count', 'aicm_delay_minutes_live', 'api_chart', 'api_transcript', 'api_lcdlf', 'sports_api')
             AND (
               m.end_time < NOW()
               OR (
@@ -1372,6 +1385,53 @@ export async function runAutoResolve({ dry = false } = {}) {
           resolverInfo = {
             ...countResult,
             source: cfg.source || countResult.source,
+            shape: cfg.shape || 'delay-bucket',
+            window: cfg.window || null,
+          };
+        } else if (resolverType === 'aicm_delay_minutes_live') {
+          if (!cfg.fromDateYmd || !cfg.toDateYmd || !Array.isArray(cfg.buckets)) {
+            throw new Error('invalid aicm_delay_minutes_live config');
+          }
+          if (cfg.resolveAfterUtc && Date.now() < new Date(cfg.resolveAfterUtc).getTime()) {
+            const err = new Error('aicm_live_window_still_settling');
+            err.benign = true;
+            err.info = { source: cfg.source, resolveAfterUtc: cfg.resolveAfterUtc };
+            throw err;
+          }
+          const countResult = await readAicmTimetableDelayCount(readSql, {
+            fromDateYmd: cfg.fromDateYmd,
+            toDateYmd: cfg.toDateYmd,
+            thresholdMinutes: cfg.thresholdMinutes,
+            direction: cfg.direction || 'departure',
+          });
+          const expectedDays = countAicmAeDaysInclusive(cfg.fromDateYmd, cfg.toDateYmd);
+          const minOkPolls = Number(cfg.minOkPolls ?? 1);
+          const minOperatorFlights = Number(cfg.minOperatorFlights ?? 0);
+          if (
+            countResult.daysCovered < expectedDays
+            || countResult.okPollCount < minOkPolls
+            || countResult.operatorFlights < minOperatorFlights
+          ) {
+            const err = new Error('aicm_live_observations_not_ready');
+            err.benign = true;
+            err.info = {
+              source: countResult.source,
+              expectedDays,
+              daysCovered: countResult.daysCovered,
+              okPollCount: countResult.okPollCount,
+              minOkPolls,
+              operatorFlights: countResult.operatorFlights,
+              minOperatorFlights,
+            };
+            throw err;
+          }
+          winningIdx = aicmAeBucketIndexFor(countResult.count, cfg.buckets);
+          if (winningIdx < 0) {
+            throw new Error(`AICM live delay count ${countResult.count} did not fit any bucket`);
+          }
+          result = { completed: true, ...countResult };
+          resolverInfo = {
+            ...countResult,
             shape: cfg.shape || 'delay-bucket',
             window: cfg.window || null,
           };

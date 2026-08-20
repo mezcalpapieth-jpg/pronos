@@ -59,6 +59,11 @@ function cleanHtmlText(value) {
   return decodeHtmlEntities(String(value || '')
     .replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style\b[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<img\b[^>]*>/gi, (tag) => {
+      const alt = tag.match(/\balt=(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+      const title = tag.match(/\btitle=(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+      return ` ${alt?.[1] || alt?.[2] || alt?.[3] || title?.[1] || title?.[2] || title?.[3] || ''} `;
+    })
     .replace(BLOCK_TAG_RE, ' ')
     .replace(/<[^>]+>/g, ' '))
     .replace(/\s+/g, ' ')
@@ -145,7 +150,7 @@ function extractCells(rowHtml) {
   CELL_RE.lastIndex = 0;
   while ((match = CELL_RE.exec(rowHtml))) {
     const text = cleanHtmlText(match[2]);
-    if (text) cells.push({ tag: match[1].toLowerCase(), text });
+    cells.push({ tag: match[1].toLowerCase(), text });
   }
   return cells;
 }
@@ -156,24 +161,51 @@ function looksLikeHeaderRow(cells) {
   return cells.map(cell => fieldForHeader(cell.text)).filter(Boolean).length >= 2;
 }
 
-function normalizeFlightCode(value) {
+function normalizeFlightCode(value, { allowNumeric = true } = {}) {
   const cleaned = stripAccents(String(value || ''))
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   if (!cleaned) return null;
-  const match = cleaned.match(/\b[A-Z]{2,4}\s?\d{1,5}[A-Z]?\b/) || cleaned.match(/\b\d{2,5}\b/);
-  return match ? match[0].replace(/\s+/g, '') : cleaned.slice(0, 32);
+  if (/^T\s?[12]$/.test(cleaned) || /^TERMINAL\s?[12]$/.test(cleaned)) return null;
+  const alphaMatch = cleaned.match(/\b[A-Z]{1,4}\s?\d{1,5}[A-Z]?\b/);
+  if (alphaMatch) return alphaMatch[0].replace(/\s+/g, '');
+  if (allowNumeric) {
+    const numericMatch = cleaned.match(/\b\d{2,5}\b/);
+    if (numericMatch) return numericMatch[0];
+  }
+  return null;
 }
 
 function looksLikeFlightCode(value) {
-  return !!normalizeFlightCode(value) && /\d/.test(normalizeFlightCode(value));
+  if (looksLikeTerminal(value)) return false;
+  const code = normalizeFlightCode(value, { allowNumeric: false });
+  return !!code && /[A-Z]/.test(code) && /\d/.test(code);
 }
 
 function extractTime(value) {
   const match = String(value || '').match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
   return match ? `${match[1].padStart(2, '0')}:${match[2]}` : null;
+}
+
+function sameText(a, b) {
+  return Boolean(a && b && normalizeKeyText(a) === normalizeKeyText(b));
+}
+
+function looksLikeTerminal(value) {
+  const text = normalizeKeyText(value);
+  return /^t\s*[12]$/.test(text) || /^terminal\s*[12]$/.test(text);
+}
+
+function looksLikeGateValue(value) {
+  const text = String(value || '').trim();
+  if (!text) return false;
+  if (looksLikeTerminal(text) || extractTime(text) || looksLikeFlightCode(text)) return false;
+  if (normalizeAicmFlightStatus(text) !== 'unknown') return false;
+  const key = normalizeKeyText(text);
+  if (/^(sala|puerta|gate)\s+[a-z0-9-]{1,6}$/.test(key)) return true;
+  return /^[A-Z]$/i.test(text) || /^\d{1,3}[A-Z]?$/i.test(text);
 }
 
 function inferFlightFields(cells) {
@@ -189,10 +221,10 @@ function inferFlightFields(cells) {
     }
   }
 
-  out.flightCode = texts.find(looksLikeFlightCode) || null;
   const timeCells = texts.map(extractTime).filter(Boolean);
   out.scheduledTimeLocal = timeCells[0] || null;
   out.estimatedTimeLocal = timeCells[1] || null;
+  out.flightCode = texts.find(text => !extractTime(text) && looksLikeFlightCode(text)) || null;
 
   const statusText = out.statusRaw || '';
   const flightText = out.flightCode || '';
@@ -203,10 +235,23 @@ function inferFlightFields(cells) {
     && normalizeAicmFlightStatus(text) === 'unknown'
   ));
 
-  out.airline = remaining[0] || null;
-  out.city = remaining[1] || null;
-  out.terminal = remaining.find(text => /\bT[12]\b|terminal/i.test(text)) || null;
-  out.gate = remaining.find(text => /\b(?:sala|puerta|gate)\b/i.test(text)) || null;
+  out.terminal = remaining.find(looksLikeTerminal) || null;
+  out.gate = remaining.find(text => !sameText(text, out.terminal) && looksLikeGateValue(text)) || null;
+
+  const entityCandidates = remaining.filter(text => (
+    !sameText(text, out.terminal)
+    && !sameText(text, out.gate)
+    && !looksLikeTerminal(text)
+    && !looksLikeGateValue(text)
+  ));
+
+  if (entityCandidates.length >= 2) {
+    out.airline = entityCandidates[0] || null;
+    out.city = entityCandidates[1] || null;
+  } else {
+    out.airline = null;
+    out.city = entityCandidates[0] || null;
+  }
   return out;
 }
 
@@ -236,18 +281,32 @@ function normalizeAicmRow(cells, headers, context) {
   const mapped = headers?.length ? mapCellsWithHeaders(cells, headers) : {};
   const inferred = inferFlightFields(cells);
   const rawCells = cells.map(cell => cell.text);
+  const mappedFlightCode = normalizeFlightCode(mapped.flightCode);
+  const inferredFlightCode = normalizeFlightCode(inferred.flightCode, { allowNumeric: false })
+    || normalizeFlightCode(inferred.flightCode);
+  const flightCode = mappedFlightCode && (/[A-Z]/.test(mappedFlightCode) || !inferredFlightCode)
+    ? mappedFlightCode
+    : inferredFlightCode;
+  const mappedCity = cleanHtmlText(mapped.city);
+  const inferredCity = cleanHtmlText(inferred.city);
+  const city = looksLikeTerminal(mappedCity) && inferredCity ? inferredCity : (mappedCity || inferredCity);
+  const mappedGate = cleanHtmlText(mapped.gate);
+  const inferredGate = cleanHtmlText(inferred.gate);
+  const gate = normalizeAicmFlightStatus(mappedGate) !== 'unknown' && inferredGate
+    ? inferredGate
+    : (mappedGate || inferredGate);
   const row = {
     direction: context.direction,
     flightDate: context.flightDate,
     observedAt: context.observedAt,
     sourceUrl: context.sourceUrl,
-    flightCode: normalizeFlightCode(mapped.flightCode || inferred.flightCode),
+    flightCode,
     airline: cleanHtmlText(mapped.airline || inferred.airline).slice(0, 120) || null,
-    city: cleanHtmlText(mapped.city || inferred.city).slice(0, 120) || null,
+    city: city.slice(0, 120) || null,
     scheduledTimeLocal: extractTime(mapped.scheduledTimeLocal || inferred.scheduledTimeLocal) || null,
     estimatedTimeLocal: extractTime(mapped.estimatedTimeLocal || inferred.estimatedTimeLocal) || null,
     terminal: cleanHtmlText(mapped.terminal || inferred.terminal).slice(0, 32) || null,
-    gate: cleanHtmlText(mapped.gate || inferred.gate).slice(0, 32) || null,
+    gate: gate.slice(0, 32) || null,
     statusRaw: cleanHtmlText(mapped.statusRaw || inferred.statusRaw).slice(0, 80) || 'unknown',
     rawCells,
   };
@@ -256,7 +315,7 @@ function normalizeAicmRow(cells, headers, context) {
 
   const hasIdentity = row.flightCode || row.scheduledTimeLocal || row.city || row.airline;
   if (!hasIdentity) return null;
-  if (row.rawCells.length < 2) return null;
+  if (row.rawCells.filter(Boolean).length < 2) return null;
   return row;
 }
 
@@ -268,7 +327,7 @@ function extractTableObservations(html, context) {
     const rows = [...tableHtml.matchAll(ROW_RE)].map(match => match[0]);
     for (const rowHtml of rows) {
       const cells = extractCells(rowHtml);
-      if (!cells.length) continue;
+      if (!cells.some(cell => cell.text)) continue;
       if (looksLikeHeaderRow(cells)) {
         headers = cells.map(cell => cell.text);
         continue;

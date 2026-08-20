@@ -17,10 +17,7 @@ test('category page exposes the infrastructure taxonomy route and resolved chip'
 });
 
 test('infrastructure page renders AICM as a hub and gates child markets behind promotion', () => {
-  assert.match(source, /const AICM_HUB_PATH = '\/c\/infraestructura\/aicm'/);
-  assert.match(source, /const AICM_DELAY_SOURCES = new Set/);
-  assert.match(source, /'aviation-edge-timetable'/);
-  assert.match(source, /AICM_DELAY_SOURCES\.has/);
+  assert.match(source, /AICM_HUB_PATH, isAicmDelayMarket/);
   assert.match(source, /function AicmInfrastructureHubCard/);
   assert.match(source, /Pulso AICM: demoras de salida/);
   assert.match(source, /out = out\.filter\(isPromotedAicmChildMarket\)/);

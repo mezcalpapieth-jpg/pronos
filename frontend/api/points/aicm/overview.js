@@ -228,6 +228,9 @@ export default async function handler(req, res) {
               FROM points_aicm_flight_observations o
               WHERE o.direction = 'departure'
                 AND o.flight_date = (SELECT today FROM clock)
+                AND COALESCE(o.flight_code, '') ~ '[A-Za-z]'
+                AND o.scheduled_time_local IS NOT NULL
+                AND COALESCE(o.city, '') !~* '^T[12]$'
               ORDER BY o.flight_key, o.observed_at DESC, o.id DESC
             )
             SELECT *, COUNT(*) OVER()::int AS "totalFlights"
