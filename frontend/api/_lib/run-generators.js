@@ -26,6 +26,7 @@
 import { generateSoccerMarkets }        from './market-gen/soccer.js';
 import { generateEspnSoccerMarkets }    from './market-gen/espn-soccer.js';
 import { generateCryptoMarkets }        from './market-gen/crypto.js';
+import { generateSolanaMcapMarkets }    from './market-gen/solana-mcap.js';
 import { generateStockMarkets }         from './market-gen/stocks.js';
 import { generateWeatherMarkets }       from './market-gen/weather.js';
 import { generateAicmMarkets }          from './market-gen/aicm.js';
@@ -65,6 +66,7 @@ export const GENERATORS = [
   { name: 'soccer',         run: generateSoccerMarkets        },
   { name: 'espn-soccer',    run: generateEspnSoccerMarkets    },
   { name: 'crypto',         run: generateCryptoMarkets        },
+  { name: 'solana-mcap',    run: generateSolanaMcapMarkets    },
   { name: 'stocks',         run: generateStockMarkets         },
   { name: 'fx',             run: generateFxMarkets            },
   { name: 'fuel',           run: generateFuelMarkets          },

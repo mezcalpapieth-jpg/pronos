@@ -175,6 +175,84 @@ test('auto resolver core settles Banxico FIX only when the target date is publis
   assert.equal(decision.finalScore, 'banxico-fix · 16.98');
 });
 
+test('auto resolver core settles Solana token mcap markets from stored CoinGecko snapshots', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const tokenAddress = 'BS7HxRitaY5ipGfbek1nmatWLbaS9yoWRSEQzCb3pump';
+  const sql = {
+    query: async () => ({
+      rows: [{
+        id: 91,
+        market_id: 444,
+        coin_id: 'holder',
+        network: 'solana',
+        token_address: tokenAddress,
+        source: 'coingecko-markets',
+        market_cap_usd: '125000',
+        price_usd: '0.000125',
+        circulating_supply: '1000000000',
+        total_supply: '1000000000',
+        fdv_usd: '125000',
+        captured_at: new Date('2026-08-24T05:59:40.000Z'),
+        source_updated_at: new Date('2026-08-24T05:59:20.000Z'),
+        raw: { symbol: 'doggy' },
+      }],
+    }),
+  };
+
+  globalThis.fetch = async (url) => {
+    const text = String(url);
+    if (text.includes('/tokens/')) {
+      return jsonResponse({
+        data: [
+          { id: 'solana_pool', attributes: { address: 'pool-address-1234567890', reserve_in_usd: '5000' } },
+        ],
+      });
+    }
+    assert.match(text, /ohlcv\/minute/);
+    return jsonResponse({
+      data: {
+        attributes: {
+          ohlcv_list: [
+            [1787551140, 0.000125, 0.000125, 0.000125, 0.000125, 10],
+          ],
+        },
+      },
+    });
+  };
+
+  const decision = await resolveAutoResolverCandidate({
+    id: 444,
+    resolver_type: 'api_price',
+    resolver_config: {
+      source: 'coingecko-token-mcap',
+      coinId: 'holder',
+      network: 'solana',
+      tokenAddress,
+      symbol: 'DOGGY',
+      threshold: 125000,
+      op: 'gt',
+      yesOutcome: 0,
+      closesAt: '2026-08-24T05:59:59.000Z',
+      snapshotToleranceSeconds: 300,
+      disputeBps: 200,
+    },
+    end_time: '2026-08-24T05:59:59.000Z',
+    outcomes: ['Sí', 'No'],
+  }, { sql });
+
+  assert.equal(decision.winningIdx, 1);
+  assert.equal(decision.resolverInfo.priceAtResolve, 125000);
+  assert.equal(decision.resolverInfo.source, 'coingecko-token-mcap');
+  assert.equal(decision.resolverInfo.verificationMarketCap, 125000);
+  assert.equal(decision.finalScore, 'DOGGY · 125,000');
+  assert.equal(decision.resolverConfigPatch.closeMarketCapUsd, 125000);
+  assert.equal(decision.resolverConfigPatch.verificationMarketCapUsd, 125000);
+});
+
 test('auto resolver core settles AICM delay-count bucket markets from stored oracle evidence', async () => {
   const calls = [];
   const sql = {

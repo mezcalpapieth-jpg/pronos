@@ -42,6 +42,10 @@ import { bestEffortPersistResolvedCryptoMarketSnapshot } from '../_lib/crypto-ch
 import { readFinnhubQuote } from '../_lib/stockprice.js';
 import { banxicoFechaToYmd, banxicoFixTargetDateYmd, readBanxicoLatest } from '../_lib/banxico.js';
 import { readCreAverageFor } from '../_lib/fuel.js';
+import {
+  COINGECKO_TOKEN_MCAP_SOURCE,
+  resolveSolanaTokenMcapOutcome,
+} from '../_lib/solana-token-mcap.js';
 import { MANANERA_TRANSCRIPT_SOURCE, readMananeraPhraseResult } from '../_lib/mananera.js';
 import { readStoredMananeraTranscript } from '../_lib/mananera-ingest.js';
 import { generateMananeraMarkets } from '../_lib/market-gen/mananera.js';
@@ -1319,6 +1323,16 @@ export async function runAutoResolve({ dry = false } = {}) {
             const r = await readCreAverageFor(cfg.fuelType);
             price = r.value;
             readerInfo = { fuelType: cfg.fuelType, sampleSize: r.sampleSize };
+          } else if (cfg.source === COINGECKO_TOKEN_MCAP_SOURCE) {
+            const resolved = await resolveSolanaTokenMcapOutcome({
+              sql: readSql,
+              marketId: m.id,
+              resolverConfig: cfg,
+              endTime: m.end_time,
+            });
+            price = resolved.price;
+            readerInfo = resolved.readerInfo;
+            resolverConfigPatch = resolved.resolverConfigPatch;
           } else {
             throw new Error(`unsupported api_price source: ${cfg.source}`);
           }

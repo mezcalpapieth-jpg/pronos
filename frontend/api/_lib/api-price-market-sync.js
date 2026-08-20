@@ -1,6 +1,7 @@
 import { BANXICO_FIX_RESOLUTION_CRITERIA } from './banxico.js';
+import { COINGECKO_TOKEN_MCAP_SOURCE } from './solana-token-mcap.js';
 
-const PRICE_SOURCES = new Set(['finnhub', 'banxico-fix', 'cre-gasolina']);
+const PRICE_SOURCES = new Set(['finnhub', 'banxico-fix', 'cre-gasolina', COINGECKO_TOKEN_MCAP_SOURCE]);
 
 function asObject(value, fallback = null) {
   if (value && typeof value === 'object' && !Array.isArray(value)) return value;

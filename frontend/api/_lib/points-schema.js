@@ -48,6 +48,7 @@ const POINTS_SCHEMA_READY_PROBE = `
     to_regclass('public.points_aicm_flight_observations') IS NOT NULL AS points_aicm_flight_observations,
     to_regclass('public.points_aicm_timetable_runs') IS NOT NULL AS points_aicm_timetable_runs,
     to_regclass('public.points_aicm_timetable_observations') IS NOT NULL AS points_aicm_timetable_observations,
+    to_regclass('public.points_token_mcap_snapshots') IS NOT NULL AS points_token_mcap_snapshots,
     to_regclass('public.points_top_holder_snapshots') IS NOT NULL AS points_top_holder_snapshots,
     to_regclass('public.points_risk_events') IS NOT NULL AS points_risk_events,
     to_regclass('public.points_account_reviews') IS NOT NULL AS points_account_reviews,
@@ -817,6 +818,33 @@ const POINTS_SCHEMA_MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_points_price_snapshots_market_time
     ON points_price_snapshots(market_id, snapshotted_at DESC)`,
+
+  // ── Token market-cap oracle snapshots ──────────────────────────────────
+  // Stores independent close-time evidence for small-cap crypto markets.
+  // Kept separate from points_price_snapshots, which tracks Pronos AMM odds
+  // rather than external oracle state.
+  `CREATE TABLE IF NOT EXISTS points_token_mcap_snapshots (
+    id                   BIGSERIAL PRIMARY KEY,
+    market_id            INTEGER NOT NULL REFERENCES points_markets(id) ON DELETE CASCADE,
+    coin_id              TEXT NOT NULL,
+    network              TEXT NOT NULL DEFAULT 'solana',
+    token_address        TEXT NOT NULL,
+    source               TEXT NOT NULL,
+    market_cap_usd       NUMERIC(30,8) NOT NULL,
+    price_usd            NUMERIC(30,18),
+    circulating_supply   NUMERIC(40,12),
+    total_supply         NUMERIC(40,12),
+    fdv_usd              NUMERIC(30,8),
+    captured_at          TIMESTAMPTZ NOT NULL,
+    source_updated_at    TIMESTAMPTZ,
+    raw                  JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(market_id, source, captured_at)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_token_mcap_snapshots_market_time
+    ON points_token_mcap_snapshots(market_id, captured_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_token_mcap_snapshots_coin_time
+    ON points_token_mcap_snapshots(coin_id, token_address, captured_at DESC)`,
 
   // ── Lightweight app settings ────────────────────────────────────────────
   // Small feature switches that need to survive deploys without introducing
