@@ -41,6 +41,26 @@ export function activeSlugFromLocation(pathname, params) {
   return m ? m[1] : null;
 }
 
+function RegionalCategoryLabel() {
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        display: 'inline-flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 2,
+        lineHeight: 1.08,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <span>Mexico &amp;</span>
+      <span>Latam</span>
+    </span>
+  );
+}
+
 export default function CategoryBar() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -95,21 +115,12 @@ export default function CategoryBar() {
                     letterSpacing: '0.08em',
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: 7,
+                    justifyContent: 'center',
+                    minWidth: 104,
+                    whiteSpace: 'nowrap',
                   }}
                 >
-                  <span
-                    aria-hidden="true"
-                    style={{
-                      color: 'var(--gold, #f59e0b)',
-                      fontSize: 10,
-                      lineHeight: 1,
-                      textShadow: '0 0 8px rgba(245,158,11,0.35)',
-                    }}
-                  >
-                    ✦
-                  </span>
-                  {cat.label}
+                  <RegionalCategoryLabel />
                 </button>
               );
             }

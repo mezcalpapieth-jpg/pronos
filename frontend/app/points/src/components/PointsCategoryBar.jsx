@@ -50,6 +50,26 @@ export function activeSlugFromLocation(pathname, params) {
   return m ? m[1] : null; // null on unrelated pages (market detail, portfolio)
 }
 
+function RegionalCategoryLabel() {
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        display: 'inline-flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 2,
+        lineHeight: 1.08,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <span>Mexico &amp;</span>
+      <span>Latam</span>
+    </span>
+  );
+}
+
 export default function PointsCategoryBar() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -110,9 +130,12 @@ export default function PointsCategoryBar() {
                     letterSpacing: '0.08em',
                     display: 'inline-flex',
                     alignItems: 'center',
+                    justifyContent: 'center',
+                    minWidth: 104,
+                    whiteSpace: 'nowrap',
                   }}
                 >
-                  {t(cat.tKey)}
+                  <RegionalCategoryLabel />
                 </button>
               );
             }
