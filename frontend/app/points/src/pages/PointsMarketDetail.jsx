@@ -42,6 +42,7 @@ import MultiSparkline from '@app/components/MultiSparkline.jsx';
 import LiveScorePanel from '@app/components/LiveScorePanel.jsx';
 import ShareButton from '@app/components/ShareButton.jsx';
 import TeamMarketStrip from '@app/components/TeamMarketStrip.jsx';
+import TokenMarketStrip from '../components/TokenMarketStrip.jsx';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
 import PointsBuyModal from '../components/PointsBuyModal.jsx';
 import PointsSellPreviewModal from '../components/PointsSellPreviewModal.jsx';
@@ -3052,6 +3053,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
             )}
 
             <TeamMarketStrip market={market} outcomeImages={market.outcomeImages} />
+            <TokenMarketStrip market={market} />
             <LiveScorePanel market={market} />
 
             {isCanceled && (

@@ -23,6 +23,7 @@ import { binaryPricesWithBookTrade } from '../_lib/points-display-prices.js';
 import { readSession } from '../_lib/session.js';
 import { isAdminUsername } from '../_lib/points-admin.js';
 import { BANXICO_FIX_RESOLUTION_CRITERIA } from '../_lib/banxico.js';
+import { COINGECKO_TOKEN_MCAP_SOURCE } from '../_lib/solana-token-mcap.js';
 import {
   WEATHER_MAX_TEMP_RESOLUTION_CRITERIA,
   weatherResolutionCriteriaForBuckets,
@@ -164,6 +165,19 @@ function cryptoMetaFromResolverConfig(resolverCfg) {
     openedAt:         resolverCfg.openedAt          || null,
     closesAt:         resolverCfg.closesAt          || null,
     rounding:         resolverCfg.rounding          || 1,
+  };
+}
+
+// Solana token market-cap markets carry the token's identity in their
+// resolver config. Expose the public bits so the detail page can show
+// the token art, its contract address and a CoinGecko link.
+function tokenMcapMetaFromResolverConfig(resolverCfg) {
+  if (resolverCfg?.source !== COINGECKO_TOKEN_MCAP_SOURCE) return null;
+  return {
+    symbol:       resolverCfg.symbol       || null,
+    coinId:       resolverCfg.coinId       || null,
+    network:      resolverCfg.network      || null,
+    tokenAddress: resolverCfg.tokenAddress || null,
   };
 }
 
@@ -417,6 +431,7 @@ export default async function handler(req, res) {
           : null)
         || (resolverType === 'weather_api' ? WEATHER_MAX_TEMP_RESOLUTION_CRITERIA : null)
         || null;
+      const tokenMeta = tokenMcapMetaFromResolverConfig(resolverCfg);
       const liveScoreConfig = buildEspnLiveScoreConfig({
         resolverType,
         resolverConfig: resolverCfg,
@@ -635,6 +650,7 @@ export default async function handler(req, res) {
             transcriptEvidence,
             liveScoreConfig,
             cryptoMeta,
+            tokenMeta,
             seriesMeta,
             sport: r.sport || null,
             league: r.league || null,
@@ -689,6 +705,7 @@ export default async function handler(req, res) {
           transcriptEvidence,
           liveScoreConfig,
           cryptoMeta,
+          tokenMeta,
           seriesMeta,
           sport: r.sport || null,
           league: r.league || null,

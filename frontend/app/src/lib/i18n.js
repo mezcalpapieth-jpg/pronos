@@ -599,6 +599,8 @@ const STRINGS = {
   'points.detail.resolverAdmin':   { es: 'Admin',              en: 'Admin' },
   'points.detail.criteriaLabel':   { es: 'CRITERIO',           en: 'CRITERIA' },
   'points.detail.marketNotFound':  { es: 'Mercado no encontrado', en: 'Market not found' },
+  'points.detail.tokenContract':   { es: 'CA',                 en: 'CA' },
+  'points.detail.tokenCoingecko':  { es: 'Ver en CoinGecko',   en: 'View on CoinGecko' },
   'points.detail.back':            { es: '← Volver',            en: '← Back' },
   'points.detail.closedHint':      { es: 'Este mercado ya cerró. Los ganadores pueden reclamar su pago en el portafolio.', en: 'This market is closed. Winners can claim their payout in the portfolio.' },
   'points.detail.pendingHint':     { es: 'Las inversiones están cerradas. El resultado se publicará pronto.', en: 'Trading is closed. The outcome will be published soon.' },
