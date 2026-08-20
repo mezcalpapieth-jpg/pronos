@@ -104,7 +104,15 @@ function boardStatusLabel(status) {
   return 'Esperando vuelos';
 }
 
-function CounterCard({ label, title, counter, accent = ACCENTS.neutral }) {
+function CounterCard({
+  label,
+  title,
+  counter,
+  accent = ACCENTS.neutral,
+  valueKey = 'delayedFlights',
+  footerLabel = 'vuelos vistos',
+}) {
+  const value = counter?.[valueKey];
   return (
     <div style={{
       border: `1px solid ${accent.border}`,
@@ -134,7 +142,7 @@ function CounterCard({ label, title, counter, accent = ACCENTS.neutral }) {
           color: accent.fg,
           letterSpacing: 0,
         }}>
-          {formatNumber(counter?.delayedFlights)}
+          {formatNumber(value)}
         </div>
         <div style={{
           marginTop: 8,
@@ -151,7 +159,7 @@ function CounterCard({ label, title, counter, accent = ACCENTS.neutral }) {
         color: 'var(--text-muted)',
         fontSize: 11,
       }}>
-        {formatNumber(counter?.observedFlights)} vuelos vistos
+        {formatNumber(counter?.observedFlights)} {footerLabel}
       </div>
     </div>
   );
@@ -419,50 +427,58 @@ function Timetable({ rows, board, source }) {
             <span>Estatus</span>
             <span>Lectura</span>
           </div>
-          {visible.length === 0 ? (
-            <div style={{
-              padding: '36px 20px 40px',
-              fontFamily: 'var(--font-mono)',
-              color: 'var(--text-muted)',
-              fontSize: 13,
-              lineHeight: 1.6,
-            }}>
-              {boardStatus === 'maintenance'
-                ? 'AICM reporta el tablero oficial en mantenimiento. La lista se llenará cuando vuelva a publicar salidas.'
-                : 'Sin salidas registradas hoy.'}
-            </div>
-          ) : visible.map(row => {
-            const accent = statusAccent(row.statusNorm);
-            const verdict = delayVerdict(row.statusNorm);
-            const delay = delayMinutesLabel(row, verdict);
-            return (
-              <div
-                key={`${row.flightKey}:${row.observedAt}`}
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '82px 104px minmax(130px, 1fr) minmax(190px, 1.25fr) 76px 76px 96px 132px 132px',
-                  gap: 8,
-                  padding: '14px 20px',
-                  alignItems: 'center',
-                  borderBottom: '1px solid rgba(255,255,255,0.06)',
-                  fontFamily: 'var(--font-mono)',
-                  color: '#f7c66f',
-                  fontSize: 12,
-                  letterSpacing: '0.02em',
-                }}
-              >
-                <FlightBoardCell color="#fef3c7">{row.scheduledTimeLocal || '--:--'}</FlightBoardCell>
-                <FlightBoardCell>{row.flightCode || 'N/D'}</FlightBoardCell>
-                <FlightBoardCell muted={!row.airline}>{row.airline || 'N/D'}</FlightBoardCell>
-                <FlightBoardCell muted={!row.city}>{row.city || 'Sin destino'}</FlightBoardCell>
-                <FlightBoardCell muted={!row.terminal}>{row.terminal || 'N/D'}</FlightBoardCell>
-                <FlightBoardCell muted={!row.gate}>{row.gate || 'N/D'}</FlightBoardCell>
-                <FlightBoardCell color={delay.accent.fg}>{delay.label}</FlightBoardCell>
-                <FlightBoardCell color={accent.fg}>{statusLabel(row.statusNorm, row.statusRaw)}</FlightBoardCell>
-                <FlightBoardCell muted>{formatObservedTime(row.observedAt)}</FlightBoardCell>
+          <div style={{
+            maxHeight: 'min(58vh, 680px)',
+            overflowY: 'auto',
+            overscrollBehavior: 'contain',
+            WebkitOverflowScrolling: 'touch',
+            scrollbarGutter: 'stable',
+          }}>
+            {visible.length === 0 ? (
+              <div style={{
+                padding: '36px 20px 40px',
+                fontFamily: 'var(--font-mono)',
+                color: 'var(--text-muted)',
+                fontSize: 13,
+                lineHeight: 1.6,
+              }}>
+                {boardStatus === 'maintenance'
+                  ? 'AICM reporta el tablero oficial en mantenimiento. La lista se llenará cuando vuelva a publicar salidas.'
+                  : 'Sin salidas registradas hoy.'}
               </div>
-            );
-          })}
+            ) : visible.map(row => {
+              const accent = statusAccent(row.statusNorm);
+              const verdict = delayVerdict(row.statusNorm);
+              const delay = delayMinutesLabel(row, verdict);
+              return (
+                <div
+                  key={`${row.flightKey}:${row.observedAt}`}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '82px 104px minmax(130px, 1fr) minmax(190px, 1.25fr) 76px 76px 96px 132px 132px',
+                    gap: 8,
+                    padding: '14px 20px',
+                    alignItems: 'center',
+                    borderBottom: '1px solid rgba(255,255,255,0.06)',
+                    fontFamily: 'var(--font-mono)',
+                    color: '#f7c66f',
+                    fontSize: 12,
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  <FlightBoardCell color="#fef3c7">{row.scheduledTimeLocal || '--:--'}</FlightBoardCell>
+                  <FlightBoardCell>{row.flightCode || 'N/D'}</FlightBoardCell>
+                  <FlightBoardCell muted={!row.airline}>{row.airline || 'N/D'}</FlightBoardCell>
+                  <FlightBoardCell muted={!row.city}>{row.city || 'Sin destino'}</FlightBoardCell>
+                  <FlightBoardCell muted={!row.terminal}>{row.terminal || 'N/D'}</FlightBoardCell>
+                  <FlightBoardCell muted={!row.gate}>{row.gate || 'N/D'}</FlightBoardCell>
+                  <FlightBoardCell color={delay.accent.fg}>{delay.label}</FlightBoardCell>
+                  <FlightBoardCell color={accent.fg}>{statusLabel(row.statusNorm, row.statusRaw)}</FlightBoardCell>
+                  <FlightBoardCell muted>{formatObservedTime(row.observedAt)}</FlightBoardCell>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
@@ -654,6 +670,7 @@ export default function PointsAicmPage({ isAdmin = false }) {
   const dailyMarket = useMemo(() => findDailyAicmMarket(markets), [markets]);
   const dailyMarketWindow = marketWindowCopy(dailyMarket);
   const counters = overview?.counters || {};
+  const resolverCounters = overview?.resolverCounters || {};
   const source = overview?.source || {};
   const dailyRows = Array.isArray(overview?.daily) ? overview.daily : [];
   const timetable = Array.isArray(overview?.timetable) ? overview.timetable : [];
@@ -800,9 +817,30 @@ export default function PointsAicmPage({ isAdmin = false }) {
         gap: 14,
         marginTop: 18,
       }}>
-        <CounterCard label="Última hora" title="salidas demoradas" counter={counters.hour} />
-        <CounterCard label="Hoy" title="salidas demoradas" counter={counters.day} />
-        <CounterCard label="7 días" title="salidas demoradas" counter={counters.week} />
+        <CounterCard label="Última hora" title="demoras AICM" counter={counters.hour} />
+        <CounterCard label="Hoy" title="demoras AICM" counter={counters.day} />
+        <CounterCard label="7 días" title="demoras AICM" counter={counters.week} />
+        <CounterCard
+          label="Última hora"
+          title=">30 min mercado"
+          counter={resolverCounters.hour}
+          valueKey="thresholdFlights"
+          footerLabel="vuelos medidos AE"
+        />
+        <CounterCard
+          label="Hoy"
+          title=">30 min mercado"
+          counter={resolverCounters.day}
+          valueKey="thresholdFlights"
+          footerLabel="vuelos medidos AE"
+        />
+        <CounterCard
+          label="7 días"
+          title=">30 min mercado"
+          counter={resolverCounters.week}
+          valueKey="thresholdFlights"
+          footerLabel="vuelos medidos AE"
+        />
       </div>
 
       <div style={{ marginTop: 22 }}>

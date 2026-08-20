@@ -68,6 +68,12 @@ function emptyOverview(reason = 'no_oracle_data') {
       day: { key: 'day', label: 'Hoy', delayedFlights: 0, cancelledFlights: 0, observedFlights: 0, lastObservedAt: null },
       week: { key: 'week', label: '7d', delayedFlights: 0, cancelledFlights: 0, observedFlights: 0, lastObservedAt: null },
     },
+    resolverCounters: {
+      thresholdMinutes: 30,
+      hour: { key: 'hour', label: '1h', thresholdFlights: 0, cancelledFlights: 0, observedFlights: 0, lastObservedAt: null },
+      day: { key: 'day', label: 'Hoy', thresholdFlights: 0, cancelledFlights: 0, observedFlights: 0, lastObservedAt: null },
+      week: { key: 'week', label: '7d', thresholdFlights: 0, cancelledFlights: 0, observedFlights: 0, lastObservedAt: null },
+    },
     daily: [],
     timetable: [],
     latestRuns: [],
@@ -93,6 +99,18 @@ function formatCounter(row) {
     key: row.windowKey,
     label: row.label,
     delayedFlights: toNumber(row.delayedFlights),
+    cancelledFlights: toNumber(row.cancelledFlights),
+    observedFlights: toNumber(row.observedFlights),
+    lastObservedAt: row.lastObservedAt || null,
+  };
+}
+
+function formatResolverCounter(row) {
+  return {
+    key: row.windowKey,
+    label: row.label,
+    thresholdMinutes: toNumber(row.thresholdMinutes || 30),
+    thresholdFlights: toNumber(row.thresholdFlights),
     cancelledFlights: toNumber(row.cancelledFlights),
     observedFlights: toNumber(row.observedFlights),
     lastObservedAt: row.lastObservedAt || null,
@@ -147,11 +165,11 @@ export default async function handler(req, res) {
 
   try {
     setCacheHeaders(res, { scope: 'public', maxAge: 10, sMaxage: 30, staleWhileRevalidate: 120 });
-    const { value: payload, hit } = await cachedJson('points:aicm:overview:v2', 15_000, async () => {
+    const { value: payload, hit } = await cachedJson('points:aicm:overview:v3', 15_000, async () => {
       const sql = getReadSql();
 
       try {
-        const [latestRuns, counterRows, dailyRows, timetableRows, delayRows] = await Promise.all([
+        const [latestRuns, counterRows, resolverCounterRows, dailyRows, timetableRows, delayRows] = await Promise.all([
           sql`
             SELECT
               id,
@@ -199,6 +217,50 @@ export default async function handler(req, res) {
               ON o.direction = 'departure'
              AND (
                   (p.since_at IS NOT NULL AND o.observed_at >= p.since_at)
+                  OR (
+                    p.since_at IS NULL
+                    AND o.flight_date >= p.from_date
+                    AND o.flight_date <= p.to_date
+                  )
+             )
+            GROUP BY p.window_key, p.label
+            ORDER BY CASE p.window_key WHEN 'hour' THEN 1 WHEN 'day' THEN 2 ELSE 3 END
+          `,
+          sql`
+            WITH clock AS (
+              SELECT
+                NOW() AS now_utc,
+                (NOW() AT TIME ZONE 'America/Mexico_City')::date AS today
+            ),
+            periods AS (
+              SELECT 'hour'::text AS window_key, '1h'::text AS label,
+                     (SELECT now_utc FROM clock) - INTERVAL '1 hour' AS since_at,
+                     NULL::date AS from_date,
+                     NULL::date AS to_date
+              UNION ALL
+              SELECT 'day'::text, 'Hoy'::text, NULL::timestamptz,
+                     (SELECT today FROM clock),
+                     (SELECT today FROM clock)
+              UNION ALL
+              SELECT 'week'::text, '7d'::text, NULL::timestamptz,
+                     (SELECT today FROM clock) - 6,
+                     (SELECT today FROM clock)
+            )
+            SELECT
+              p.window_key AS "windowKey",
+              p.label,
+              30::int AS "thresholdMinutes",
+              COUNT(DISTINCT o.flight_key) FILTER (
+                WHERE o.status <> 'cancelled' AND o.delay_minutes > 30
+              )::int AS "thresholdFlights",
+              COUNT(DISTINCT o.flight_key) FILTER (WHERE o.status = 'cancelled')::int AS "cancelledFlights",
+              COUNT(DISTINCT o.flight_key)::int AS "observedFlights",
+              MAX(o.last_observed_at) AS "lastObservedAt"
+            FROM periods p
+            LEFT JOIN points_aicm_timetable_observations o
+              ON o.direction = 'departure'
+             AND (
+                  (p.since_at IS NOT NULL AND o.last_observed_at >= p.since_at)
                   OR (
                     p.since_at IS NULL
                     AND o.flight_date >= p.from_date
@@ -282,6 +344,8 @@ export default async function handler(req, res) {
 
         const counterEntries = counterRows.map(formatCounter);
         const counters = Object.fromEntries(counterEntries.map(row => [row.key, row]));
+        const resolverCounterEntries = resolverCounterRows.map(formatResolverCounter);
+        const resolverCounters = Object.fromEntries(resolverCounterEntries.map(row => [row.key, row]));
         const lastRun = latestRuns[0] ? formatRun(latestRuns[0]) : null;
         const timetableByFlight = new Map(
           delayRows
@@ -316,6 +380,12 @@ export default async function handler(req, res) {
             hour: counters.hour || emptyOverview().counters.hour,
             day: counters.day || emptyOverview().counters.day,
             week: counters.week || emptyOverview().counters.week,
+          },
+          resolverCounters: {
+            thresholdMinutes: 30,
+            hour: resolverCounters.hour || emptyOverview().resolverCounters.hour,
+            day: resolverCounters.day || emptyOverview().resolverCounters.day,
+            week: resolverCounters.week || emptyOverview().resolverCounters.week,
           },
           daily: dailyRows.map(formatDaily),
           timetable,
