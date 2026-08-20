@@ -335,6 +335,8 @@ function Timetable({ rows, board, source }) {
   const statusAccentValue = statusAccent(boardStatus);
   const totalFlights = Number(board?.totalFlights || rows.length || 0);
   const shownFlights = Number(board?.shownFlights || rows.length || 0);
+  const hiddenClosedFlights = Number(board?.hiddenClosedFlights || 0);
+  const closedGraceMinutes = Number(board?.closedGraceMinutes || 10);
   return (
     <div style={{
       border: '1px solid rgba(143,184,255,0.14)',
@@ -400,6 +402,9 @@ function Timetable({ rows, board, source }) {
             whiteSpace: 'nowrap',
           }}>
             {formatNumber(shownFlights)} / {formatNumber(totalFlights)} vuelos
+            {hiddenClosedFlights > 0
+              ? ` · ${formatNumber(hiddenClosedFlights)} cerrados ocultos +${formatNumber(closedGraceMinutes)}m`
+              : ''}
           </span>
         </div>
       </div>

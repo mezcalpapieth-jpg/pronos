@@ -17,6 +17,7 @@ import {
 } from '../../_lib/aicm-board.js';
 
 const AICM_TIMEZONE = 'America/Mexico_City';
+const CLOSED_FLIGHT_GRACE_MINUTES = 10;
 
 let readSql;
 
@@ -62,6 +63,8 @@ function emptyOverview(reason = 'no_oracle_data') {
       totalFlights: 0,
       shownFlights: 0,
       rowLimit: 180,
+      hiddenClosedFlights: 0,
+      closedGraceMinutes: CLOSED_FLIGHT_GRACE_MINUTES,
     },
     counters: {
       hour: { key: 'hour', label: '1h', delayedFlights: 0, cancelledFlights: 0, observedFlights: 0, lastObservedAt: null },
@@ -155,6 +158,8 @@ function formatFlight(row, timetableByFlight = new Map()) {
     delaySource: timetableMatch ? timetableMatch.source : null,
     delayObservedAt: timetableMatch?.lastObservedAt || null,
     observedAt: displayRow.observedAt || null,
+    hiddenClosed: Boolean(row.hiddenClosed),
+    closedDisplayExpiresAt: row.closedDisplayExpiresAt || null,
   };
 }
 
@@ -165,7 +170,7 @@ export default async function handler(req, res) {
 
   try {
     setCacheHeaders(res, { scope: 'public', maxAge: 10, sMaxage: 30, staleWhileRevalidate: 120 });
-    const { value: payload, hit } = await cachedJson('points:aicm:overview:v3', 15_000, async () => {
+    const { value: payload, hit } = await cachedJson('points:aicm:overview:v4', 15_000, async () => {
       const sql = getReadSql();
 
       try {
@@ -288,7 +293,9 @@ export default async function handler(req, res) {
           `,
           sql`
             WITH clock AS (
-              SELECT (NOW() AT TIME ZONE 'America/Mexico_City')::date AS today
+              SELECT
+                NOW() AS now_utc,
+                (NOW() AT TIME ZONE 'America/Mexico_City')::date AS today
             ),
             latest AS (
               SELECT DISTINCT ON (o.flight_key)
@@ -315,9 +322,23 @@ export default async function handler(req, res) {
                 )
               ORDER BY o.flight_key, o.observed_at DESC, o.id DESC
             )
-            SELECT *, COUNT(*) OVER()::int AS "totalFlights"
+            SELECT *,
+                   (
+                     "statusNorm" = 'closed'
+                     AND "observedAt" < (SELECT now_utc FROM clock) - INTERVAL '10 minutes'
+                   ) AS "hiddenClosed",
+                   CASE
+                     WHEN "statusNorm" = 'closed'
+                     THEN "observedAt" + INTERVAL '10 minutes'
+                     ELSE NULL
+                   END AS "closedDisplayExpiresAt",
+                   COUNT(*) OVER()::int AS "totalFlights",
+                   COUNT(*) FILTER (
+                     WHERE "statusNorm" = 'closed'
+                       AND "observedAt" < (SELECT now_utc FROM clock) - INTERVAL '10 minutes'
+                   ) OVER()::int AS "hiddenClosedFlights"
             FROM latest
-            ORDER BY ("scheduledTimeLocal" IS NULL), "scheduledTimeLocal" ASC, "observedAt" DESC
+            ORDER BY "hiddenClosed" ASC, ("scheduledTimeLocal" IS NULL), "scheduledTimeLocal" ASC, "observedAt" DESC
             LIMIT 180
           `,
           sql`
@@ -352,16 +373,21 @@ export default async function handler(req, res) {
             .map(row => [timetableKeyFor(row), row])
             .filter(([key]) => key)
         );
-        const timetable = timetableRows
+        const rawTimetable = timetableRows
           .map(row => formatFlight(row, timetableByFlight))
           .filter(row => row.flightCode && row.scheduledTimeLocal && row.city);
+        const timetable = rawTimetable.filter(row => !row.hiddenClosed);
         timetable.sort((a, b) => {
           const aTime = a.scheduledTimeLocal || '99:99';
           const bTime = b.scheduledTimeLocal || '99:99';
           if (aTime !== bTime) return aTime.localeCompare(bTime);
           return String(a.flightCode || '').localeCompare(String(b.flightCode || ''));
         });
-        const totalFlights = timetable.length;
+        const totalFlights = toNumber(timetableRows[0]?.totalFlights || rawTimetable.length);
+        const hiddenClosedFlights = toNumber(
+          timetableRows[0]?.hiddenClosedFlights
+            || rawTimetable.filter(row => row.hiddenClosed).length
+        );
         return {
           ...emptyOverview(),
           source: {
@@ -375,6 +401,8 @@ export default async function handler(req, res) {
             totalFlights,
             shownFlights: timetable.length,
             rowLimit: 180,
+            hiddenClosedFlights,
+            closedGraceMinutes: CLOSED_FLIGHT_GRACE_MINUTES,
           },
           counters: {
             hour: counters.hour || emptyOverview().counters.hour,

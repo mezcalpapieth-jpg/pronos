@@ -47,6 +47,9 @@ test('AICM departures board renders the full overview row set', () => {
   assert.match(pageSource, /scrollbarGutter: 'stable'/);
   assert.match(pageSource, /shownFlights/);
   assert.match(pageSource, /totalFlights/);
+  assert.match(pageSource, /hiddenClosedFlights/);
+  assert.match(pageSource, /cerrados ocultos/);
+  assert.match(pageSource, /closedGraceMinutes/);
 });
 
 test('AICM hub places the departures board before the weekly rhythm card', () => {

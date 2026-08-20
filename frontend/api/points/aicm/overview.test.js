@@ -6,7 +6,7 @@ const source = await readFile(new URL('./overview.js', import.meta.url), 'utf8')
 
 test('AICM overview endpoint is public, cached, and read-only', () => {
   assert.match(source, /GET \/api\/points\/aicm\/overview/);
-  assert.match(source, /cachedJson\('points:aicm:overview:v3'/);
+  assert.match(source, /cachedJson\('points:aicm:overview:v4'/);
   assert.match(source, /DATABASE_READ_URL \|\| process\.env\.DATABASE_URL/);
   assert.match(source, /points_aicm_poll_runs/);
   assert.match(source, /points_aicm_flight_observations/);
@@ -19,6 +19,11 @@ test('AICM overview endpoint is public, cached, and read-only', () => {
   assert.match(source, /normalizeAicmFlightCode/);
   assert.match(source, /delayMinutes/);
   assert.match(source, /timetableByFlight/);
+  assert.match(source, /CLOSED_FLIGHT_GRACE_MINUTES = 10/);
+  assert.match(source, /"observedAt" < \(SELECT now_utc FROM clock\) - INTERVAL '10 minutes'/);
+  assert.match(source, /"closedDisplayExpiresAt"/);
+  assert.match(source, /"hiddenClosedFlights"/);
+  assert.match(source, /rawTimetable\.filter\(row => !row\.hiddenClosed\)/);
   assert.match(source, /COALESCE\(o\.flight_code, ''\) ~ '\[A-Za-z\]'/);
   assert.match(source, /COALESCE\(o\.raw_cells::text, ''\) ~ '\[A-Za-z\]\{1,4\}\[0-9\]'/);
   assert.match(source, /\.filter\(row => row\.flightCode && row\.scheduledTimeLocal && row\.city\)/);
