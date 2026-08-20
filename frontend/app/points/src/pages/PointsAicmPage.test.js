@@ -22,6 +22,8 @@ test('AICM hub renders the departures board, counters, and window cards', () => 
   assert.match(pageSource, /Sala/);
   assert.match(pageSource, /Demora/);
   assert.match(pageSource, /delayVerdict/);
+  assert.match(pageSource, /delayMinutesLabel/);
+  assert.match(pageSource, /delayMinutes/);
   assert.match(pageSource, /boardStatusLabel/);
   assert.match(pageSource, /Última hora/);
   assert.match(pageSource, /Ventanas de mercado/);

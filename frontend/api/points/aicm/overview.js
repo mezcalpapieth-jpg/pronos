@@ -9,7 +9,12 @@ import { neon } from '@neondatabase/serverless';
 
 import { applyCors } from '../../_lib/cors.js';
 import { cachedJson, setCacheHeaders } from '../../_lib/api-performance.js';
-import { AICM_DEFAULT_FLIGHTS_URL, AICM_SOURCE } from '../../_lib/aicm-board.js';
+import {
+  AICM_DEFAULT_FLIGHTS_URL,
+  AICM_SOURCE,
+  normalizeAicmFlightCode,
+  normalizeAicmObservationForDisplay,
+} from '../../_lib/aicm-board.js';
 
 const AICM_TIMEZONE = 'America/Mexico_City';
 
@@ -103,23 +108,35 @@ function formatDaily(row) {
   };
 }
 
-function formatFlight(row) {
-  const statusNorm = row.statusNorm || 'unknown';
+function timetableKeyFor({ flightDate, flightCode }) {
+  const code = normalizeAicmFlightCode(flightCode, { allowNumeric: false });
+  if (!flightDate || !code) return null;
+  return `${flightDate}|${code.toLowerCase()}`;
+}
+
+function formatFlight(row, timetableByFlight = new Map()) {
+  const displayRow = normalizeAicmObservationForDisplay(row);
+  const timetableMatch = timetableByFlight.get(timetableKeyFor(displayRow)) || null;
+  const statusNorm = displayRow.statusNorm || 'unknown';
   return {
-    flightKey: row.flightKey,
-    flightDate: row.flightDate,
-    flightCode: row.flightCode || null,
-    airline: row.airline || null,
-    city: row.city || null,
-    scheduledTimeLocal: row.scheduledTimeLocal || null,
-    estimatedTimeLocal: row.estimatedTimeLocal || null,
-    terminal: row.terminal || null,
-    gate: row.gate || null,
-    statusRaw: row.statusRaw || 'unknown',
+    flightKey: displayRow.flightKey,
+    flightDate: displayRow.flightDate,
+    flightCode: displayRow.flightCode || null,
+    airline: displayRow.airline || null,
+    city: displayRow.city || null,
+    scheduledTimeLocal: displayRow.scheduledTimeLocal || null,
+    estimatedTimeLocal: displayRow.estimatedTimeLocal || null,
+    terminal: displayRow.terminal || null,
+    gate: displayRow.gate || null,
+    statusRaw: displayRow.statusRaw || 'unknown',
     statusNorm,
     isDelayed: statusNorm === 'delayed',
     isCancelled: statusNorm === 'cancelled',
-    observedAt: row.observedAt || null,
+    delayMinutes: timetableMatch?.delayMinutes ?? null,
+    actualLocal: timetableMatch?.actualLocal || null,
+    delaySource: timetableMatch ? timetableMatch.source : null,
+    delayObservedAt: timetableMatch?.lastObservedAt || null,
+    observedAt: displayRow.observedAt || null,
   };
 }
 
@@ -134,7 +151,7 @@ export default async function handler(req, res) {
       const sql = getReadSql();
 
       try {
-        const [latestRuns, counterRows, dailyRows, timetableRows] = await Promise.all([
+        const [latestRuns, counterRows, dailyRows, timetableRows, delayRows] = await Promise.all([
           sql`
             SELECT
               id,
@@ -224,13 +241,16 @@ export default async function handler(req, res) {
                 o.gate,
                 o.status_raw AS "statusRaw",
                 o.status_norm AS "statusNorm",
+                o.raw_cells AS "rawCells",
                 o.observed_at AS "observedAt"
               FROM points_aicm_flight_observations o
               WHERE o.direction = 'departure'
                 AND o.flight_date = (SELECT today FROM clock)
-                AND COALESCE(o.flight_code, '') ~ '[A-Za-z]'
-                AND o.scheduled_time_local IS NOT NULL
-                AND COALESCE(o.city, '') !~* '^T[12]$'
+                AND (
+                  COALESCE(o.flight_code, '') ~ '[A-Za-z]'
+                  OR COALESCE(o.airline, '') ~ '[A-Za-z]{1,4}[0-9]'
+                  OR COALESCE(o.raw_cells::text, '') ~ '[A-Za-z]{1,4}[0-9]'
+                )
               ORDER BY o.flight_key, o.observed_at DESC, o.id DESC
             )
             SELECT *, COUNT(*) OVER()::int AS "totalFlights"
@@ -238,13 +258,46 @@ export default async function handler(req, res) {
             ORDER BY ("scheduledTimeLocal" IS NULL), "scheduledTimeLocal" ASC, "observedAt" DESC
             LIMIT 180
           `,
+          sql`
+            WITH clock AS (
+              SELECT (NOW() AT TIME ZONE 'America/Mexico_City')::date AS today
+            ),
+            latest AS (
+              SELECT DISTINCT ON (o.flight_date, lower(o.flight_number))
+                o.flight_date::text AS "flightDate",
+                o.flight_number AS "flightCode",
+                o.delay_minutes AS "delayMinutes",
+                o.actual_local AS "actualLocal",
+                o.source,
+                o.last_observed_at AS "lastObservedAt"
+              FROM points_aicm_timetable_observations o
+              WHERE o.direction = 'departure'
+                AND o.flight_date = (SELECT today FROM clock)
+              ORDER BY o.flight_date, lower(o.flight_number), o.last_observed_at DESC, o.id DESC
+            )
+            SELECT *
+            FROM latest
+          `,
         ]);
 
         const counterEntries = counterRows.map(formatCounter);
         const counters = Object.fromEntries(counterEntries.map(row => [row.key, row]));
         const lastRun = latestRuns[0] ? formatRun(latestRuns[0]) : null;
-        const timetable = timetableRows.map(formatFlight);
-        const totalFlights = toNumber(timetableRows[0]?.totalFlights || timetable.length);
+        const timetableByFlight = new Map(
+          delayRows
+            .map(row => [timetableKeyFor(row), row])
+            .filter(([key]) => key)
+        );
+        const timetable = timetableRows
+          .map(row => formatFlight(row, timetableByFlight))
+          .filter(row => row.flightCode && row.scheduledTimeLocal && row.city);
+        timetable.sort((a, b) => {
+          const aTime = a.scheduledTimeLocal || '99:99';
+          const bTime = b.scheduledTimeLocal || '99:99';
+          if (aTime !== bTime) return aTime.localeCompare(bTime);
+          return String(a.flightCode || '').localeCompare(String(b.flightCode || ''));
+        });
+        const totalFlights = timetable.length;
         return {
           ...emptyOverview(),
           source: {

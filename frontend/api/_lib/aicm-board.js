@@ -6,6 +6,39 @@ export const AICM_SOURCE = 'aicm-official-flight-board';
 export const AICM_DEFAULT_FLIGHTS_URL = 'https://www.aicm.com.mx/pasajeros/vuelos';
 export const AICM_MAX_OBSERVATIONS_PER_POLL = 750;
 
+export const AICM_AIRLINE_BY_FLIGHT_PREFIX = Object.freeze({
+  '5D': 'Aeromexico Connect',
+  AA: 'American Airlines',
+  AC: 'Air Canada',
+  AF: 'Air France',
+  AM: 'Aeromexico',
+  AR: 'Aerolíneas Argentinas',
+  AV: 'Avianca',
+  BA: 'British Airways',
+  CM: 'Copa Airlines',
+  CZ: 'China Southern Airlines',
+  DL: 'Delta',
+  EK: 'Emirates',
+  F8: 'Flair Airlines',
+  HU: 'Hainan Airlines',
+  IB: 'Iberia',
+  KL: 'KLM',
+  LA: 'LATAM',
+  LH: 'Lufthansa',
+  LR: 'Avianca Costa Rica',
+  N3: 'Volaris El Salvador',
+  NH: 'ANA',
+  Q6: 'Volaris Costa Rica',
+  TA: 'Avianca',
+  TK: 'Turkish Airlines',
+  UA: 'United Airlines',
+  UX: 'Air Europa',
+  VB: 'Viva Aerobus',
+  VW: 'Aeromar',
+  WS: 'WestJet',
+  Y4: 'Volaris',
+});
+
 export const AICM_DAILY_DELAY_BUCKETS = [
   { label: '0-5', minCount: 0, maxCount: 5 },
   { label: '6-15', minCount: 6, maxCount: 15 },
@@ -161,7 +194,7 @@ function looksLikeHeaderRow(cells) {
   return cells.map(cell => fieldForHeader(cell.text)).filter(Boolean).length >= 2;
 }
 
-function normalizeFlightCode(value, { allowNumeric = true } = {}) {
+export function normalizeAicmFlightCode(value, { allowNumeric = true } = {}) {
   const cleaned = stripAccents(String(value || ''))
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, ' ')
@@ -178,10 +211,20 @@ function normalizeFlightCode(value, { allowNumeric = true } = {}) {
   return null;
 }
 
+function normalizeFlightCode(value, options) {
+  return normalizeAicmFlightCode(value, options);
+}
+
 function looksLikeFlightCode(value) {
   if (looksLikeTerminal(value)) return false;
   const code = normalizeFlightCode(value, { allowNumeric: false });
   return !!code && /[A-Z]/.test(code) && /\d/.test(code);
+}
+
+export function airlineNameForAicmFlightCode(value) {
+  const code = normalizeFlightCode(value, { allowNumeric: false });
+  if (!code) return null;
+  return AICM_AIRLINE_BY_FLIGHT_PREFIX[code.slice(0, 2)] || null;
 }
 
 function extractTime(value) {
@@ -206,6 +249,24 @@ function looksLikeGateValue(value) {
   const key = normalizeKeyText(text);
   if (/^(sala|puerta|gate)\s+[a-z0-9-]{1,6}$/.test(key)) return true;
   return /^[A-Z]$/i.test(text) || /^\d{1,3}[A-Z]?$/i.test(text);
+}
+
+function looksLikeAirlineValue(value) {
+  const text = cleanHtmlText(value);
+  if (!text) return false;
+  if (extractTime(text) || looksLikeFlightCode(text) || looksLikeTerminal(text) || looksLikeGateValue(text)) return false;
+  if (normalizeAicmFlightStatus(text) !== 'unknown') return false;
+  return /[a-z]/i.test(stripAccents(text));
+}
+
+function chooseBestFlightCode(values, { allowNumeric = true } = {}) {
+  const candidates = values
+    .flat()
+    .map(value => normalizeFlightCode(value, { allowNumeric }))
+    .filter(Boolean);
+  return candidates.find(code => /[A-Z]/.test(code) && /\d/.test(code))
+    || candidates[0]
+    || null;
 }
 
 function inferFlightFields(cells) {
@@ -281,12 +342,13 @@ function normalizeAicmRow(cells, headers, context) {
   const mapped = headers?.length ? mapCellsWithHeaders(cells, headers) : {};
   const inferred = inferFlightFields(cells);
   const rawCells = cells.map(cell => cell.text);
-  const mappedFlightCode = normalizeFlightCode(mapped.flightCode);
-  const inferredFlightCode = normalizeFlightCode(inferred.flightCode, { allowNumeric: false })
-    || normalizeFlightCode(inferred.flightCode);
-  const flightCode = mappedFlightCode && (/[A-Z]/.test(mappedFlightCode) || !inferredFlightCode)
-    ? mappedFlightCode
-    : inferredFlightCode;
+  const flightCode = chooseBestFlightCode([
+    mapped.flightCode,
+    inferred.flightCode,
+    mapped.airline,
+    inferred.airline,
+    rawCells,
+  ]);
   const mappedCity = cleanHtmlText(mapped.city);
   const inferredCity = cleanHtmlText(inferred.city);
   const city = looksLikeTerminal(mappedCity) && inferredCity ? inferredCity : (mappedCity || inferredCity);
@@ -295,13 +357,17 @@ function normalizeAicmRow(cells, headers, context) {
   const gate = normalizeAicmFlightStatus(mappedGate) !== 'unknown' && inferredGate
     ? inferredGate
     : (mappedGate || inferredGate);
+  const airlineCandidate = cleanHtmlText(mapped.airline || inferred.airline);
+  const airline = looksLikeAirlineValue(airlineCandidate)
+    ? airlineCandidate
+    : airlineNameForAicmFlightCode(flightCode);
   const row = {
     direction: context.direction,
     flightDate: context.flightDate,
     observedAt: context.observedAt,
     sourceUrl: context.sourceUrl,
     flightCode,
-    airline: cleanHtmlText(mapped.airline || inferred.airline).slice(0, 120) || null,
+    airline: cleanHtmlText(airline).slice(0, 120) || null,
     city: city.slice(0, 120) || null,
     scheduledTimeLocal: extractTime(mapped.scheduledTimeLocal || inferred.scheduledTimeLocal) || null,
     estimatedTimeLocal: extractTime(mapped.estimatedTimeLocal || inferred.estimatedTimeLocal) || null,
@@ -317,6 +383,55 @@ function normalizeAicmRow(cells, headers, context) {
   if (!hasIdentity) return null;
   if (row.rawCells.filter(Boolean).length < 2) return null;
   return row;
+}
+
+export function normalizeAicmObservationForDisplay(row = {}) {
+  const rawCells = Array.isArray(row.rawCells)
+    ? row.rawCells.map(cell => cleanHtmlText(cell)).filter(Boolean)
+    : [];
+  const inferred = rawCells.length
+    ? inferFlightFields(rawCells.map(text => ({ text })))
+    : {};
+  const flightCode = chooseBestFlightCode([
+    row.flightCode,
+    row.airline,
+    inferred.flightCode,
+    rawCells,
+  ]);
+  const airlineCandidate = cleanHtmlText(row.airline);
+  const airline = looksLikeAirlineValue(airlineCandidate)
+    ? airlineCandidate
+    : (airlineNameForAicmFlightCode(flightCode) || cleanHtmlText(inferred.airline) || null);
+  const cityCandidate = cleanHtmlText(row.city);
+  const inferredCity = cleanHtmlText(inferred.city);
+  const cityLooksShifted = looksLikeTerminal(cityCandidate)
+    || looksLikeFlightCode(cityCandidate)
+    || looksLikeGateValue(cityCandidate)
+    || normalizeAicmFlightStatus(cityCandidate) !== 'unknown';
+  const gateCandidate = cleanHtmlText(row.gate);
+  const inferredGate = cleanHtmlText(inferred.gate);
+  const gateLooksShifted = normalizeAicmFlightStatus(gateCandidate) !== 'unknown'
+    || looksLikeFlightCode(gateCandidate)
+    || looksLikeTerminal(gateCandidate);
+  const terminalCandidate = cleanHtmlText(row.terminal);
+  const statusCandidate = cleanHtmlText(row.statusRaw || inferred.statusRaw);
+  const storedStatusNorm = String(row.statusNorm || '').toLowerCase();
+  const statusNorm = storedStatusNorm && storedStatusNorm !== 'unknown'
+    ? storedStatusNorm
+    : normalizeAicmFlightStatus(statusCandidate);
+
+  return {
+    ...row,
+    flightCode: flightCode || row.flightCode || null,
+    airline: cleanHtmlText(airline).slice(0, 120) || null,
+    city: (cityLooksShifted && inferredCity ? inferredCity : cityCandidate).slice(0, 120) || null,
+    scheduledTimeLocal: extractTime(row.scheduledTimeLocal || inferred.scheduledTimeLocal) || null,
+    estimatedTimeLocal: extractTime(row.estimatedTimeLocal || inferred.estimatedTimeLocal) || null,
+    terminal: (looksLikeTerminal(terminalCandidate) ? terminalCandidate : cleanHtmlText(inferred.terminal)).slice(0, 32) || null,
+    gate: (gateLooksShifted && inferredGate ? inferredGate : gateCandidate).slice(0, 32) || null,
+    statusRaw: statusCandidate.slice(0, 80) || 'unknown',
+    statusNorm,
+  };
 }
 
 function extractTableObservations(html, context) {

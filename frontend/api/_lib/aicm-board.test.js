@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  airlineNameForAicmFlightCode,
   buildAicmFlightBoardUrl,
+  normalizeAicmObservationForDisplay,
   normalizeAicmFlightStatus,
   parseAicmFlightBoard,
   readAicmFlightBoard,
@@ -105,12 +107,43 @@ test('parseAicmFlightBoard keeps official AICM departure-board columns aligned',
   assert.equal(parsed.rows[0].terminal, 'T1');
   assert.equal(parsed.rows[0].gate, 'B');
   assert.equal(parsed.rows[0].statusNorm, 'delayed');
-  assert.equal(parsed.rows[1].airline, null);
+  assert.equal(parsed.rows[1].airline, 'Hainan Airlines');
   assert.equal(parsed.rows[1].flightCode, 'HU7926');
   assert.equal(parsed.rows[1].scheduledTimeLocal, '04:50');
   assert.equal(parsed.rows[1].city, 'Beijing');
   assert.equal(parsed.rows[1].terminal, 'T1');
   assert.equal(parsed.rows[1].gate, '24');
+});
+
+test('AICM airline names can be inferred from flight-number prefixes', () => {
+  assert.equal(airlineNameForAicmFlightCode('VB1232'), 'Viva Aerobus');
+  assert.equal(airlineNameForAicmFlightCode('Y4 262'), 'Volaris');
+  assert.equal(airlineNameForAicmFlightCode('HU7926'), 'Hainan Airlines');
+  assert.equal(airlineNameForAicmFlightCode('TA433'), 'Avianca');
+});
+
+test('normalizeAicmObservationForDisplay repairs shifted official-board rows', () => {
+  const row = normalizeAicmObservationForDisplay({
+    flightDate: '2026-08-20',
+    flightCode: '05',
+    airline: 'VB1232',
+    city: 'T1',
+    scheduledTimeLocal: null,
+    estimatedTimeLocal: null,
+    terminal: null,
+    gate: 'DEMORADO',
+    statusRaw: 'DEMORADO',
+    statusNorm: 'delayed',
+    rawCells: ['', 'VB1232', '05:00', 'Tijuana', 'T1', 'B', 'DEMORADO'],
+  });
+
+  assert.equal(row.flightCode, 'VB1232');
+  assert.equal(row.airline, 'Viva Aerobus');
+  assert.equal(row.scheduledTimeLocal, '05:00');
+  assert.equal(row.city, 'Tijuana');
+  assert.equal(row.terminal, 'T1');
+  assert.equal(row.gate, 'B');
+  assert.equal(row.statusNorm, 'delayed');
 });
 
 test('parseAicmFlightBoard treats maintenance as missing oracle data, not zero delays', () => {

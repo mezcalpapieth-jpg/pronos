@@ -80,6 +80,21 @@ function delayVerdict(status) {
   };
 }
 
+function delayMinutesLabel(row, verdict) {
+  const minutes = Number(row?.delayMinutes);
+  if (Number.isFinite(minutes)) {
+    if (String(row?.statusNorm || '').toLowerCase() === 'cancelled') {
+      return { label: 'Cancelado', accent: ACCENTS.red };
+    }
+    const rounded = Math.max(0, Math.round(minutes));
+    return {
+      label: `${formatNumber(rounded)} min`,
+      accent: rounded > 30 ? ACCENTS.amber : rounded > 0 ? ACCENTS.blue : ACCENTS.green,
+    };
+  }
+  return verdict;
+}
+
 function boardStatusLabel(status) {
   const s = String(status || '').toLowerCase();
   if (s === 'ok') return 'En vivo';
@@ -143,25 +158,37 @@ function CounterCard({ label, title, counter, accent = ACCENTS.neutral }) {
 }
 
 function DailyBars({ rows }) {
-  const max = Math.max(1, ...rows.map(row => Number(row.delayedFlights || 0)));
   const visible = rows.slice(-7);
+  const max = Math.max(1, ...visible.map(row => Number(row.delayedFlights || 0)));
+  const chartHeight = 108;
+  const ticks = Array.from(new Set([max, Math.ceil(max / 2), 0]));
   return (
     <div style={{
       border: '1px solid rgba(143,184,255,0.14)',
       borderRadius: 8,
       padding: 18,
       background: `linear-gradient(180deg, rgba(4,12,62,0.20), rgba(8,8,10,0.90))`,
-      minHeight: 180,
+      minHeight: 204,
     }}>
-      <div style={{
-        fontFamily: 'var(--font-mono)',
-        fontSize: 12,
-        letterSpacing: '0.14em',
-        textTransform: 'uppercase',
-        color: 'var(--text-muted)',
-        marginBottom: 16,
-      }}>
-        Ritmo semanal
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 12,
+          letterSpacing: '0.14em',
+          textTransform: 'uppercase',
+          color: 'var(--text-muted)',
+        }}>
+          Ritmo semanal
+        </div>
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          color: 'rgba(255,255,255,0.38)',
+        }}>
+          demoras
+        </div>
       </div>
       {visible.length === 0 ? (
         <div style={{
@@ -173,19 +200,90 @@ function DailyBars({ rows }) {
           Sin lecturas recientes
         </div>
       ) : (
-        <div style={{ display: 'flex', alignItems: 'end', gap: 10, minHeight: 104 }}>
-          {visible.map(row => {
-            const height = Math.max(8, Math.round((Number(row.delayedFlights || 0) / max) * 92));
-            return (
-              <div key={row.flightDate} style={{ flex: 1, minWidth: 26 }}>
-                <div style={{
-                  height,
-                  borderRadius: 6,
-                  background: `linear-gradient(180deg, ${AEROMEXICO_BLUE}, ${AEROMEXICO_NAVY})`,
-                  border: '1px solid rgba(143,184,255,0.26)',
-                }} />
-                <div style={{
-                  marginTop: 8,
+        <div style={{ display: 'grid', gridTemplateColumns: '34px 1fr', columnGap: 12 }}>
+          <div style={{ position: 'relative', height: chartHeight }}>
+            {ticks.map(tick => (
+              <div key={tick} style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                top: `${((max - tick) / max) * 100}%`,
+                transform: 'translateY(-50%)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                color: 'rgba(255,255,255,0.34)',
+                textAlign: 'right',
+              }}>
+                {formatNumber(tick)}
+              </div>
+            ))}
+          </div>
+          <div style={{ position: 'relative' }}>
+            {[100, 50, 0].map(line => (
+              <div key={line} style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                top: `${100 - line}%`,
+                borderTop: '1px dashed rgba(255,255,255,0.08)',
+              }} />
+            ))}
+            <div style={{ display: 'flex', alignItems: 'end', gap: 10, height: chartHeight, position: 'relative' }}>
+              {visible.map(row => {
+                const delayed = Number(row.delayedFlights || 0);
+                const observed = Number(row.observedFlights || 0);
+                const height = delayed > 0
+                  ? Math.max(18, Math.round((delayed / max) * chartHeight))
+                  : 6;
+                const labelFitsInside = height >= 28;
+                return (
+                  <div
+                    key={row.flightDate}
+                    title={`${formatNumber(delayed)} demoras / ${formatNumber(observed)} vuelos vistos`}
+                    style={{
+                      flex: 1,
+                      minWidth: 30,
+                      height: chartHeight,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'flex-end',
+                    }}
+                  >
+                    <div style={{
+                      height,
+                      position: 'relative',
+                      borderRadius: 5,
+                      background: delayed > 0
+                        ? `linear-gradient(180deg, ${AEROMEXICO_BLUE}, ${AEROMEXICO_NAVY})`
+                        : 'rgba(143,184,255,0.12)',
+                      border: '1px solid rgba(143,184,255,0.26)',
+                      boxShadow: delayed > 0 ? '0 0 18px rgba(143,184,255,0.12)' : 'none',
+                    }}>
+                      <span style={{
+                        position: 'absolute',
+                        left: 0,
+                        right: 0,
+                        top: labelFitsInside ? '50%' : -20,
+                        transform: labelFitsInside ? 'translateY(-50%)' : 'none',
+                        textAlign: 'center',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 11,
+                        fontWeight: 800,
+                        color: labelFitsInside ? '#f8fbff' : AEROMEXICO_BLUE,
+                        textShadow: labelFitsInside ? '0 1px 2px rgba(0,0,0,0.45)' : 'none',
+                      }}>
+                        {formatNumber(delayed)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+              {visible.map(row => (
+                <div key={row.flightDate} style={{
+                  flex: 1,
+                  minWidth: 30,
                   fontFamily: 'var(--font-mono)',
                   fontSize: 10,
                   color: 'var(--text-muted)',
@@ -193,9 +291,9 @@ function DailyBars({ rows }) {
                 }}>
                   {String(row.flightDate || '').slice(5)}
                 </div>
-              </div>
-            );
-          })}
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -336,6 +434,7 @@ function Timetable({ rows, board, source }) {
           ) : visible.map(row => {
             const accent = statusAccent(row.statusNorm);
             const verdict = delayVerdict(row.statusNorm);
+            const delay = delayMinutesLabel(row, verdict);
             return (
               <div
                 key={`${row.flightKey}:${row.observedAt}`}
@@ -358,7 +457,7 @@ function Timetable({ rows, board, source }) {
                 <FlightBoardCell muted={!row.city}>{row.city || 'Sin destino'}</FlightBoardCell>
                 <FlightBoardCell muted={!row.terminal}>{row.terminal || 'N/D'}</FlightBoardCell>
                 <FlightBoardCell muted={!row.gate}>{row.gate || 'N/D'}</FlightBoardCell>
-                <FlightBoardCell color={verdict.accent.fg}>{verdict.label}</FlightBoardCell>
+                <FlightBoardCell color={delay.accent.fg}>{delay.label}</FlightBoardCell>
                 <FlightBoardCell color={accent.fg}>{statusLabel(row.statusNorm, row.statusRaw)}</FlightBoardCell>
                 <FlightBoardCell muted>{formatObservedTime(row.observedAt)}</FlightBoardCell>
               </div>

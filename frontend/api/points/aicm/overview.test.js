@@ -10,10 +10,15 @@ test('AICM overview endpoint is public, cached, and read-only', () => {
   assert.match(source, /DATABASE_READ_URL \|\| process\.env\.DATABASE_URL/);
   assert.match(source, /points_aicm_poll_runs/);
   assert.match(source, /points_aicm_flight_observations/);
+  assert.match(source, /points_aicm_timetable_observations/);
   assert.match(source, /COUNT\(\*\) OVER\(\)::int AS "totalFlights"/);
+  assert.match(source, /normalizeAicmObservationForDisplay/);
+  assert.match(source, /normalizeAicmFlightCode/);
+  assert.match(source, /delayMinutes/);
+  assert.match(source, /timetableByFlight/);
   assert.match(source, /COALESCE\(o\.flight_code, ''\) ~ '\[A-Za-z\]'/);
-  assert.match(source, /o\.scheduled_time_local IS NOT NULL/);
-  assert.match(source, /COALESCE\(o\.city, ''\) !~\* '\^T\[12\]\$'/);
+  assert.match(source, /COALESCE\(o\.raw_cells::text, ''\) ~ '\[A-Za-z\]\{1,4\}\[0-9\]'/);
+  assert.match(source, /\.filter\(row => row\.flightCode && row\.scheduledTimeLocal && row\.city\)/);
   assert.match(source, /LIMIT 180/);
   assert.match(source, /board: \{/);
   assert.match(source, /aicm_tables_missing/);
