@@ -170,7 +170,7 @@ export default async function handler(req, res) {
 
   try {
     setCacheHeaders(res, { scope: 'public', maxAge: 10, sMaxage: 30, staleWhileRevalidate: 120 });
-    const { value: payload, hit } = await cachedJson('points:aicm:overview:v4', 15_000, async () => {
+    const { value: payload, hit } = await cachedJson('points:aicm:overview:v6', 15_000, async () => {
       const sql = getReadSql();
 
       try {
@@ -199,8 +199,8 @@ export default async function handler(req, res) {
             periods AS (
               SELECT 'hour'::text AS window_key, '1h'::text AS label,
                      (SELECT now_utc FROM clock) - INTERVAL '1 hour' AS since_at,
-                     NULL::date AS from_date,
-                     NULL::date AS to_date
+                     (SELECT today FROM clock) AS from_date,
+                     (SELECT today FROM clock) AS to_date
               UNION ALL
               SELECT 'day'::text, 'Hoy'::text, NULL::timestamptz,
                      (SELECT today FROM clock),
@@ -213,21 +213,18 @@ export default async function handler(req, res) {
             SELECT
               p.window_key AS "windowKey",
               p.label,
-              COUNT(DISTINCT o.flight_key) FILTER (WHERE o.status_norm = 'delayed')::int AS "delayedFlights",
-              COUNT(DISTINCT o.flight_key) FILTER (WHERE o.status_norm = 'cancelled')::int AS "cancelledFlights",
+              COUNT(DISTINCT o.flight_key) FILTER (
+                WHERE o.status <> 'cancelled' AND o.delay_minutes > 0
+              )::int AS "delayedFlights",
+              COUNT(DISTINCT o.flight_key) FILTER (WHERE o.status = 'cancelled')::int AS "cancelledFlights",
               COUNT(DISTINCT o.flight_key)::int AS "observedFlights",
-              MAX(o.observed_at) AS "lastObservedAt"
+              MAX(o.last_observed_at) AS "lastObservedAt"
             FROM periods p
-            LEFT JOIN points_aicm_flight_observations o
+            LEFT JOIN points_aicm_timetable_observations o
               ON o.direction = 'departure'
-             AND (
-                  (p.since_at IS NOT NULL AND o.observed_at >= p.since_at)
-                  OR (
-                    p.since_at IS NULL
-                    AND o.flight_date >= p.from_date
-                    AND o.flight_date <= p.to_date
-                  )
-             )
+             AND o.flight_date >= p.from_date
+             AND o.flight_date <= p.to_date
+             AND (p.since_at IS NULL OR o.last_observed_at >= p.since_at)
             GROUP BY p.window_key, p.label
             ORDER BY CASE p.window_key WHEN 'hour' THEN 1 WHEN 'day' THEN 2 ELSE 3 END
           `,
@@ -240,8 +237,8 @@ export default async function handler(req, res) {
             periods AS (
               SELECT 'hour'::text AS window_key, '1h'::text AS label,
                      (SELECT now_utc FROM clock) - INTERVAL '1 hour' AS since_at,
-                     NULL::date AS from_date,
-                     NULL::date AS to_date
+                     (SELECT today FROM clock) AS from_date,
+                     (SELECT today FROM clock) AS to_date
               UNION ALL
               SELECT 'day'::text, 'Hoy'::text, NULL::timestamptz,
                      (SELECT today FROM clock),
@@ -264,14 +261,9 @@ export default async function handler(req, res) {
             FROM periods p
             LEFT JOIN points_aicm_timetable_observations o
               ON o.direction = 'departure'
-             AND (
-                  (p.since_at IS NOT NULL AND o.last_observed_at >= p.since_at)
-                  OR (
-                    p.since_at IS NULL
-                    AND o.flight_date >= p.from_date
-                    AND o.flight_date <= p.to_date
-                  )
-             )
+             AND o.flight_date >= p.from_date
+             AND o.flight_date <= p.to_date
+             AND (p.since_at IS NULL OR o.last_observed_at >= p.since_at)
             GROUP BY p.window_key, p.label
             ORDER BY CASE p.window_key WHEN 'hour' THEN 1 WHEN 'day' THEN 2 ELSE 3 END
           `,
@@ -281,10 +273,12 @@ export default async function handler(req, res) {
             )
             SELECT
               o.flight_date::text AS "flightDate",
-              COUNT(DISTINCT o.flight_key) FILTER (WHERE o.status_norm = 'delayed')::int AS "delayedFlights",
-              COUNT(DISTINCT o.flight_key) FILTER (WHERE o.status_norm = 'cancelled')::int AS "cancelledFlights",
+              COUNT(DISTINCT o.flight_key) FILTER (
+                WHERE o.status <> 'cancelled' AND o.delay_minutes > 0
+              )::int AS "delayedFlights",
+              COUNT(DISTINCT o.flight_key) FILTER (WHERE o.status = 'cancelled')::int AS "cancelledFlights",
               COUNT(DISTINCT o.flight_key)::int AS "observedFlights"
-            FROM points_aicm_flight_observations o
+            FROM points_aicm_timetable_observations o
             WHERE o.direction = 'departure'
               AND o.flight_date >= (SELECT today FROM clock) - 6
               AND o.flight_date <= (SELECT today FROM clock)

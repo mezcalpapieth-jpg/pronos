@@ -26,7 +26,7 @@ test('AICM hub renders the departures board, counters, and window cards', () => 
   assert.match(pageSource, /delayMinutes/);
   assert.match(pageSource, /boardStatusLabel/);
   assert.match(pageSource, /resolverCounters/);
-  assert.match(pageSource, />30 min mercado/);
+  assert.match(pageSource, />30 min demorado/);
   assert.match(pageSource, /Última hora/);
   assert.match(pageSource, /Ventanas de mercado/);
   assert.match(pageSource, /Cada 60 min/);
@@ -64,8 +64,8 @@ test('AICM hub places the departures board before the weekly rhythm card', () =>
 test('AICM hub uses a navy airport palette with neutral delay counters', () => {
   assert.match(pageSource, /AEROMEXICO_NAVY = '#040C3E'/);
   assert.match(pageSource, /ACCENTS\.neutral/);
-  assert.match(pageSource, /<CounterCard label="Última hora" title="demoras AICM" counter=\{counters\.hour\} \/>/);
-  assert.match(pageSource, /<CounterCard label="Hoy" title="demoras AICM" counter=\{counters\.day\} \/>/);
-  assert.match(pageSource, /<CounterCard label="7 días" title="demoras AICM" counter=\{counters\.week\} \/>/);
+  assert.match(pageSource, /<CounterCard label="Última hora" title="demoras medidas" counter=\{counters\.hour\} footerLabel="vuelos medidos AE" \/>/);
+  assert.match(pageSource, /<CounterCard label="Hoy" title="demoras medidas" counter=\{counters\.day\} footerLabel="vuelos medidos AE" \/>/);
+  assert.match(pageSource, /<CounterCard label="7 días" title="demoras medidas" counter=\{counters\.week\} footerLabel="vuelos medidos AE" \/>/);
   assert.match(pageSource, /valueKey="thresholdFlights"/);
 });

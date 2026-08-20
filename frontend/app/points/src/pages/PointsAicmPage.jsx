@@ -822,26 +822,26 @@ export default function PointsAicmPage({ isAdmin = false }) {
         gap: 14,
         marginTop: 18,
       }}>
-        <CounterCard label="Última hora" title="demoras AICM" counter={counters.hour} />
-        <CounterCard label="Hoy" title="demoras AICM" counter={counters.day} />
-        <CounterCard label="7 días" title="demoras AICM" counter={counters.week} />
+        <CounterCard label="Última hora" title="demoras medidas" counter={counters.hour} footerLabel="vuelos medidos AE" />
+        <CounterCard label="Hoy" title="demoras medidas" counter={counters.day} footerLabel="vuelos medidos AE" />
+        <CounterCard label="7 días" title="demoras medidas" counter={counters.week} footerLabel="vuelos medidos AE" />
         <CounterCard
           label="Última hora"
-          title=">30 min mercado"
+          title=">30 min demorado"
           counter={resolverCounters.hour}
           valueKey="thresholdFlights"
           footerLabel="vuelos medidos AE"
         />
         <CounterCard
           label="Hoy"
-          title=">30 min mercado"
+          title=">30 min demorado"
           counter={resolverCounters.day}
           valueKey="thresholdFlights"
           footerLabel="vuelos medidos AE"
         />
         <CounterCard
           label="7 días"
-          title=">30 min mercado"
+          title=">30 min demorado"
           counter={resolverCounters.week}
           valueKey="thresholdFlights"
           footerLabel="vuelos medidos AE"

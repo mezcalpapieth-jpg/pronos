@@ -6,14 +6,17 @@ const source = await readFile(new URL('./overview.js', import.meta.url), 'utf8')
 
 test('AICM overview endpoint is public, cached, and read-only', () => {
   assert.match(source, /GET \/api\/points\/aicm\/overview/);
-  assert.match(source, /cachedJson\('points:aicm:overview:v4'/);
+  assert.match(source, /cachedJson\('points:aicm:overview:v6'/);
   assert.match(source, /DATABASE_READ_URL \|\| process\.env\.DATABASE_URL/);
   assert.match(source, /points_aicm_poll_runs/);
   assert.match(source, /points_aicm_flight_observations/);
   assert.match(source, /points_aicm_timetable_observations/);
   assert.match(source, /resolverCounters/);
   assert.match(source, /thresholdFlights/);
+  assert.match(source, /o\.delay_minutes > 0/);
   assert.match(source, /o\.delay_minutes > 30/);
+  assert.match(source, /o\.flight_date >= p\.from_date/);
+  assert.match(source, /p\.since_at IS NULL OR o\.last_observed_at >= p\.since_at/);
   assert.match(source, /COUNT\(\*\) OVER\(\)::int AS "totalFlights"/);
   assert.match(source, /normalizeAicmObservationForDisplay/);
   assert.match(source, /normalizeAicmFlightCode/);
