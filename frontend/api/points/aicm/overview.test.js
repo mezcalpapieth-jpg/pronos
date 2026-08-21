@@ -6,13 +6,14 @@ const source = await readFile(new URL('./overview.js', import.meta.url), 'utf8')
 
 test('AICM overview endpoint is public, cached, and read-only', () => {
   assert.match(source, /GET \/api\/points\/aicm\/overview/);
-  assert.match(source, /cachedJson\('points:aicm:overview:v7'/);
+  assert.match(source, /cachedJson\('points:aicm:overview:v9'/);
   assert.match(source, /DATABASE_READ_URL \|\| process\.env\.DATABASE_URL/);
   assert.match(source, /points_aicm_poll_runs/);
   assert.match(source, /points_aicm_flight_observations/);
   assert.match(source, /points_aicm_timetable_observations/);
   assert.match(source, /resolverCounters/);
   assert.match(source, /thresholdFlights/);
+  assert.match(source, /thresholdFlights: toNumber\(row\.thresholdFlights\)/);
   assert.match(source, /o\.delay_minutes > 0/);
   assert.match(source, /o\.delay_minutes > 30/);
   assert.match(source, /o\.flight_date >= p\.from_date/);
@@ -27,6 +28,11 @@ test('AICM overview endpoint is public, cached, and read-only', () => {
   assert.match(source, /STALE_SCHEDULED_GRACE_MINUTES = 30/);
   assert.match(source, /statusFromTimetable/);
   assert.match(source, /delayMinutes\) && delayMinutes > 0/);
+  assert.match(source, /isFutureActual/);
+  assert.match(source, /isFutureScheduled/);
+  assert.match(source, /actualMs && actualMs <= nowMs/);
+  assert.match(source, /\['departed', 'landed', 'arrived'\]\.includes\(apiStatus\)/);
+  assert.match(source, /\['active', 'scheduled'\]\.includes\(apiStatus\)/);
   assert.match(source, /departureVisibility/);
   assert.match(source, /"observedAt" < \(SELECT now_utc FROM clock\) - INTERVAL '10 minutes'/);
   assert.match(source, /"closedDisplayExpiresAt"/);

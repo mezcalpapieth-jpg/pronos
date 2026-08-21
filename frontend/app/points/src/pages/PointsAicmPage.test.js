@@ -72,3 +72,13 @@ test('AICM hub uses a navy airport palette with neutral delay counters', () => {
   assert.match(pageSource, /gridTemplateColumns: 'repeat\(auto-fit, minmax\(min\(100%, 180px\), 1fr\)\)'/);
   assert.match(pageSource, /valueKey="thresholdFlights"/);
 });
+
+test('AICM hub renders separate weekly rhythm cards for all delays and 30 minute delays', () => {
+  assert.match(pageSource, /function DailyBars\(\{/);
+  assert.match(pageSource, /valueKey = 'delayedFlights'/);
+  assert.match(pageSource, /metricLabel = 'demoras'/);
+  assert.match(pageSource, /row\[valueKey\]/);
+  assert.match(pageSource, /title="Ritmo semanal \+30"/);
+  assert.match(pageSource, /metricLabel=">30 min"/);
+  assert.match(pageSource, /valueKey="thresholdFlights"/);
+});

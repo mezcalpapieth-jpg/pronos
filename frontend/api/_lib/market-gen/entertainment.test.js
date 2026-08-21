@@ -110,3 +110,87 @@ test('popular event spec supports one multi-outcome manual market', () => {
   assert.deepEqual(spec.topic_tags, ['cine']);
   assert.deepEqual(spec.source_data.suggestedPricing.probabilityPct, [22, 13, 20, 45]);
 });
+
+test('TMDb weekend box-office discovery emits manual-review pending specs', () => {
+  const weekend = _internal.currentWeekendWindow(new Date('2026-08-21T12:00:00Z'));
+  const spec = _internal.movieWeekendBoxOfficeSpec({
+    id: 123,
+    title: 'Spider-Man: Brand New Day',
+    release_date: '2026-08-20',
+    popularity: 210,
+    poster_path: '/poster.jpg',
+    overview: 'A new Spider-Man movie.',
+  }, { weekend, rank: 0 });
+
+  assert.equal(spec.source, 'entertainment-api');
+  assert.equal(spec.source_event_id, 'tmdb-box-office-weekend:2026-08-21:123');
+  assert.equal(spec.question, '¿Spider-Man: Brand New Day será #1 en taquilla de EE.UU. este fin de semana?');
+  assert.equal(spec.start_time, '2026-08-21T00:00:00.000Z');
+  assert.equal(spec.end_time, '2026-08-24T18:00:00.000Z');
+  assert.equal(spec.resolver_type, 'manual_review');
+  assert.equal(spec.source_data.kind, 'box_office_weekend');
+  assert.equal(spec.source_data.tmdbId, 123);
+  assert.equal(spec.source_data.posterUrl, 'https://image.tmdb.org/t/p/w500/poster.jpg');
+  assert.deepEqual(spec.outcomes, ['Sí', 'No']);
+  assert.deepEqual(spec.geo_tags, ['us-canada']);
+  assert.deepEqual(spec.topic_tags, ['cine']);
+  assert.equal(spec.source_data.suggestedPricing.source, 'source-signals:tmdb-popularity');
+});
+
+test('Netflix Top 10 TSV rows create global and Mexico manual-review specs', () => {
+  const rows = _internal.parseTsv([
+    'week\tcategory\tweekly_rank\tshow_title\tcountry_name',
+    '2026-08-10\tTV (English)\t1\tOuter Banks\tMexico',
+    '2026-08-10\tTV (English)\t2\tWednesday\tMexico',
+    '2026-08-17\tTV (English)\t2\tOuter Banks\tMexico',
+    '2026-08-17\tTV (Non-English)\t1\tLa Casa\tMexico',
+    '2026-08-17\tFilms (English)\t1\tNot TV\tMexico',
+  ].join('\n'));
+
+  assert.equal(_internal.latestNetflixWeek(rows), '2026-08-17');
+  const picked = _internal.topNetflixRows(rows, { country: 'Mexico', limit: 2 });
+  assert.deepEqual(picked.map(item => item.title), ['La Casa', 'Outer Banks']);
+
+  const close = new Date('2026-08-25T06:00:00Z');
+  const globalSpec = _internal.netflixTop10Spec(picked[0], { scope: 'global', mode: 'number1', close });
+  const mexicoSpec = _internal.netflixTop10Spec(picked[1], { scope: 'mx', mode: 'top3', close });
+
+  assert.equal(globalSpec.source, 'entertainment-api');
+  assert.equal(globalSpec.question, '¿La Casa será #1 global en Netflix TV esta semana?');
+  assert.equal(globalSpec.start_time, '2026-08-18T06:00:00.000Z');
+  assert.equal(globalSpec.end_time, '2026-08-25T06:00:00.000Z');
+  assert.equal(globalSpec.resolver_type, 'manual_review');
+  assert.equal(globalSpec.source_data.kind, 'netflix_top10');
+  assert.equal(globalSpec.source_data.targetRank, 1);
+  assert.deepEqual(globalSpec.geo_tags, ['world']);
+  assert.deepEqual(globalSpec.topic_tags, ['tv']);
+  assert.equal(mexicoSpec.question, '¿Outer Banks entra al Top 3 de Netflix México esta semana?');
+  assert.equal(mexicoSpec.source_data.targetRank, 3);
+  assert.deepEqual(mexicoSpec.geo_tags, ['mexico']);
+  assert.equal(mexicoSpec.source_data.suggestedPricing.source, 'source-signals:netflix-top10-rank');
+});
+
+test('API entertainment discovery is gated by env vars', () => {
+  const oldFlag = process.env.ENTERTAINMENT_API_DISCOVERY_ENABLED;
+  const oldTmdbKey = process.env.TMDB_API_KEY;
+  const oldTmdbToken = process.env.TMDB_READ_ACCESS_TOKEN;
+  try {
+    delete process.env.ENTERTAINMENT_API_DISCOVERY_ENABLED;
+    delete process.env.TMDB_API_KEY;
+    delete process.env.TMDB_READ_ACCESS_TOKEN;
+    assert.equal(_internal.apiDiscoveryEnabled(), true);
+    assert.equal(_internal.tmdbEnabled(), false);
+    process.env.TMDB_API_KEY = 'test-key';
+    assert.equal(_internal.tmdbEnabled(), true);
+    process.env.ENTERTAINMENT_API_DISCOVERY_ENABLED = 'false';
+    assert.equal(_internal.apiDiscoveryEnabled(), false);
+    assert.equal(_internal.tmdbEnabled(), false);
+  } finally {
+    if (oldFlag == null) delete process.env.ENTERTAINMENT_API_DISCOVERY_ENABLED;
+    else process.env.ENTERTAINMENT_API_DISCOVERY_ENABLED = oldFlag;
+    if (oldTmdbKey == null) delete process.env.TMDB_API_KEY;
+    else process.env.TMDB_API_KEY = oldTmdbKey;
+    if (oldTmdbToken == null) delete process.env.TMDB_READ_ACCESS_TOKEN;
+    else process.env.TMDB_READ_ACCESS_TOKEN = oldTmdbToken;
+  }
+});

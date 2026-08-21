@@ -165,9 +165,14 @@ function CounterCard({
   );
 }
 
-function DailyBars({ rows }) {
+function DailyBars({
+  rows,
+  title = 'Ritmo semanal',
+  metricLabel = 'demoras',
+  valueKey = 'delayedFlights',
+}) {
   const visible = rows.slice(-7);
-  const max = Math.max(1, ...visible.map(row => Number(row.delayedFlights || 0)));
+  const max = Math.max(1, ...visible.map(row => Number(row[valueKey] || 0)));
   const chartHeight = 108;
   const ticks = Array.from(new Set([max, Math.ceil(max / 2), 0]));
   return (
@@ -186,7 +191,7 @@ function DailyBars({ rows }) {
           textTransform: 'uppercase',
           color: 'var(--text-muted)',
         }}>
-          Ritmo semanal
+          {title}
         </div>
         <div style={{
           fontFamily: 'var(--font-mono)',
@@ -195,7 +200,7 @@ function DailyBars({ rows }) {
           textTransform: 'uppercase',
           color: 'rgba(255,255,255,0.38)',
         }}>
-          demoras
+          {metricLabel}
         </div>
       </div>
       {visible.length === 0 ? (
@@ -238,7 +243,7 @@ function DailyBars({ rows }) {
             ))}
             <div style={{ display: 'flex', alignItems: 'end', gap: 10, height: chartHeight, position: 'relative' }}>
               {visible.map(row => {
-                const delayed = Number(row.delayedFlights || 0);
+                const delayed = Number(row[valueKey] || 0);
                 const observed = Number(row.observedFlights || 0);
                 const height = delayed > 0
                   ? Math.max(18, Math.round((delayed / max) * chartHeight))
@@ -247,7 +252,7 @@ function DailyBars({ rows }) {
                 return (
                   <div
                     key={row.flightDate}
-                    title={`${formatNumber(delayed)} demoras / ${formatNumber(observed)} vuelos vistos`}
+                    title={`${formatNumber(delayed)} ${metricLabel} / ${formatNumber(observed)} vuelos vistos`}
                     style={{
                       flex: 1,
                       minWidth: 30,
@@ -856,8 +861,19 @@ export default function PointsAicmPage({ isAdmin = false }) {
         <Timetable rows={timetable} board={overview?.board} source={source} />
       </div>
 
-      <div style={{ marginTop: 22 }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))',
+        gap: 16,
+        marginTop: 22,
+      }}>
         <DailyBars rows={dailyRows} />
+        <DailyBars
+          rows={dailyRows}
+          title="Ritmo semanal +30"
+          metricLabel=">30 min"
+          valueKey="thresholdFlights"
+        />
       </div>
 
       <div style={{

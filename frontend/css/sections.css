@@ -557,6 +557,12 @@
     height: 40px;
     padding: 0 8px;
   }
+  .category-bar .market-filters {
+    scroll-padding-inline: 8px;
+  }
+  .category-bar .market-filters::after {
+    flex-basis: 8px;
+  }
   .filter-btn {
     font-size: 9px;
     padding: 5px 8px;

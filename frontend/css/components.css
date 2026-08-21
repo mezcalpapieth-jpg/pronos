@@ -1237,18 +1237,28 @@ html[data-theme="light"] .btn-theme-toggle::before {
   border-bottom: 1px solid var(--border);
 }
 .category-bar-inner {
-  max-width: 1280px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  margin: 0;
   padding: 0 48px;
   height: 48px;
   display: flex;
   align-items: center;
 }
 .category-bar .market-filters {
+  width: 100%;
+  min-width: 0;
   margin-bottom: 0;
   flex-wrap: nowrap;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-padding-inline: 48px;
   scrollbar-width: none;
+}
+.category-bar .market-filters::after {
+  content: '';
+  flex: 0 0 48px;
 }
 .category-bar .market-filters::-webkit-scrollbar { display: none; }
 
@@ -2136,6 +2146,12 @@ html[data-theme="light"] .btn-theme-toggle::before {
   .category-bar-inner {
     padding: 0 12px;
     height: 44px;
+  }
+  .category-bar .market-filters {
+    scroll-padding-inline: 12px;
+  }
+  .category-bar .market-filters::after {
+    flex-basis: 12px;
   }
   .filter-btn {
     font-size: 10px;

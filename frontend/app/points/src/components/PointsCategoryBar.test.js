@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const source = await readFile(new URL('./PointsCategoryBar.jsx', import.meta.url), 'utf8');
+const componentsCss = await readFile(new URL('../../../../css/components.css', import.meta.url), 'utf8');
+const sectionsCss = await readFile(new URL('../../../../css/sections.css', import.meta.url), 'utf8');
 
 test('points category bar shows Infrastructure while preserving the main category order', () => {
   const newMarketsIndex = source.indexOf("slug: 'nuevos-mercados'");
@@ -36,4 +38,13 @@ test('points category bar gives Mexico and Latam a subtle text-only treatment', 
   );
   assert.doesNotMatch(regionalBlock, /pronos-news-pulse/);
   assert.doesNotMatch(regionalBlock, /✦/);
+});
+
+test('points category bar spans the viewport and gives the last chip scroll room', () => {
+  assert.match(componentsCss, /\.category-bar-inner\s*\{[\s\S]*?width:\s*100%/);
+  assert.match(componentsCss, /\.category-bar-inner\s*\{[\s\S]*?max-width:\s*none/);
+  assert.match(componentsCss, /\.category-bar \.market-filters\s*\{[\s\S]*?width:\s*100%/);
+  assert.match(componentsCss, /scroll-padding-inline:\s*48px/);
+  assert.match(componentsCss, /\.category-bar \.market-filters::after\s*\{[\s\S]*?flex:\s*0 0 48px/);
+  assert.match(sectionsCss, /\.category-bar \.market-filters::after\s*\{[\s\S]*?flex-basis:\s*8px/);
 });

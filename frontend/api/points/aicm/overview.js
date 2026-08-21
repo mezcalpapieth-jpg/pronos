@@ -69,9 +69,18 @@ function isoFromMs(ms) {
   return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
 }
 
-function statusFromTimetable(displayRow, timetableMatch, delayMinutes) {
+function statusFromTimetable(displayRow, timetableMatch, delayMinutes, { now = new Date() } = {}) {
   const fallbackStatus = displayRow.statusNorm || 'unknown';
   const apiStatus = String(timetableMatch?.status || '').toLowerCase();
+  const nowMs = now instanceof Date ? now.getTime() : Date.parse(now);
+  const flightDate = displayRow.flightDate || timetableMatch?.flightDate;
+  const actualMs = parseAicmLocalTimeMs(timetableMatch?.actualLocal, flightDate);
+  const scheduledMs = parseAicmLocalTimeMs(
+    timetableMatch?.scheduledLocal || displayRow.scheduledTimeLocal,
+    flightDate,
+  );
+  const isFutureActual = Number.isFinite(actualMs) && Number.isFinite(nowMs) && actualMs > nowMs;
+  const isFutureScheduled = Number.isFinite(scheduledMs) && Number.isFinite(nowMs) && scheduledMs > nowMs;
 
   if (apiStatus === 'cancelled' || apiStatus === 'canceled' || fallbackStatus === 'cancelled') {
     return { statusNorm: 'cancelled', statusRaw: 'Cancelado' };
@@ -81,11 +90,16 @@ function statusFromTimetable(displayRow, timetableMatch, delayMinutes) {
     return { statusNorm: 'delayed', statusRaw: `${delayMinutes} min demora AE` };
   }
 
-  if (timetableMatch?.actualLocal || ['active', 'departed', 'landed', 'arrived'].includes(apiStatus)) {
+  if (fallbackStatus === 'delayed') {
+    return { statusNorm: 'delayed', statusRaw: displayRow.statusRaw || 'Demorado' };
+  }
+
+  if ((actualMs && actualMs <= nowMs)
+    || (['departed', 'landed', 'arrived'].includes(apiStatus) && !isFutureActual && !isFutureScheduled)) {
     return { statusNorm: 'departed', statusRaw: 'Despegado AE' };
   }
 
-  if (apiStatus === 'scheduled' && (!fallbackStatus || fallbackStatus === 'unknown')) {
+  if (['active', 'scheduled'].includes(apiStatus) || isFutureActual || isFutureScheduled) {
     return { statusNorm: 'scheduled', statusRaw: 'A tiempo AE' };
   }
 
@@ -102,7 +116,7 @@ function departureVisibility(row, now = new Date()) {
   }
 
   const actualMs = parseAicmLocalTimeMs(row.actualLocal, row.flightDate);
-  if (actualMs) {
+  if (actualMs && actualMs <= nowMs) {
     const expiresAt = actualMs + DEPARTED_FLIGHT_GRACE_MINUTES * 60_000;
     return {
       hiddenStale: nowMs >= expiresAt,
@@ -220,6 +234,7 @@ function formatDaily(row) {
   return {
     flightDate: row.flightDate,
     delayedFlights: toNumber(row.delayedFlights),
+    thresholdFlights: toNumber(row.thresholdFlights),
     cancelledFlights: toNumber(row.cancelledFlights),
     observedFlights: toNumber(row.observedFlights),
   };
@@ -235,7 +250,7 @@ function formatFlight(row, timetableByFlight = new Map(), { now = new Date() } =
   const displayRow = normalizeAicmObservationForDisplay(row);
   const timetableMatch = timetableByFlight.get(timetableKeyFor(displayRow)) || null;
   const delayMinutes = toOptionalNumber(timetableMatch?.delayMinutes);
-  const status = statusFromTimetable(displayRow, timetableMatch, delayMinutes);
+  const status = statusFromTimetable(displayRow, timetableMatch, delayMinutes, { now });
   const base = {
     flightKey: displayRow.flightKey,
     flightDate: displayRow.flightDate,
@@ -271,7 +286,7 @@ export default async function handler(req, res) {
 
   try {
     setCacheHeaders(res, { scope: 'public', maxAge: 10, sMaxage: 30, staleWhileRevalidate: 120 });
-    const { value: payload, hit } = await cachedJson('points:aicm:overview:v7', 15_000, async () => {
+    const { value: payload, hit } = await cachedJson('points:aicm:overview:v9', 15_000, async () => {
       const sql = getReadSql();
 
       try {
@@ -377,6 +392,9 @@ export default async function handler(req, res) {
               COUNT(DISTINCT o.flight_key) FILTER (
                 WHERE o.status <> 'cancelled' AND o.delay_minutes > 0
               )::int AS "delayedFlights",
+              COUNT(DISTINCT o.flight_key) FILTER (
+                WHERE o.status <> 'cancelled' AND o.delay_minutes > 30
+              )::int AS "thresholdFlights",
               COUNT(DISTINCT o.flight_key) FILTER (WHERE o.status = 'cancelled')::int AS "cancelledFlights",
               COUNT(DISTINCT o.flight_key)::int AS "observedFlights"
             FROM points_aicm_timetable_observations o
