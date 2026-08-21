@@ -114,6 +114,14 @@ function buildFinalScore({ resolverType, cfg, result, resolverInfo, outcomes, wi
         if (score) return clip(score);
         return clip(winLabel);
       }
+      if (cfg.shape === 'combo-win-count') {
+        const wins = Number(resolverInfo?.comboWins ?? result?.wins);
+        const total = Number(resolverInfo?.comboTotal ?? result?.total);
+        if (Number.isFinite(wins) && Number.isFinite(total) && total > 0) {
+          return clip(`${wins}/${total} ganaron`);
+        }
+        return clip(winLabel);
+      }
       if (cfg.shape === 'parallel') {
         const driver = result.winnerDriverLabel || resolverInfo?.winnerDriver;
         if (driver) return clip(`🏁 ${driver}`);
@@ -466,6 +474,241 @@ async function queueNextMananeraPendingMarkets({ candidates, dry, report, now = 
 function isEarlyTournamentLegSource(cfg = {}) {
   return cfg?.shape === 'parallel'
     && ['espn-atp-tournament', 'espn-pga'].includes(String(cfg?.source || ''));
+}
+
+function isComboWinCountConfig(cfg = {}) {
+  return cfg?.source === 'espn'
+    && cfg?.shape === 'combo-win-count'
+    && Array.isArray(cfg?.legs)
+    && cfg.legs.length > 0;
+}
+
+function comboRangeFromLabel(label) {
+  const nums = String(label || '')
+    .match(/\d+/g)
+    ?.map(n => Number(n))
+    .filter(Number.isFinite) || [];
+  if (nums.length >= 2) return { minWins: Math.min(nums[0], nums[1]), maxWins: Math.max(nums[0], nums[1]) };
+  if (nums.length === 1) return { minWins: nums[0], maxWins: nums[0] };
+  return null;
+}
+
+function normalizeComboWinRange(range, label) {
+  const minWins = Number(range?.minWins);
+  const maxWins = Number(range?.maxWins);
+  if (Number.isInteger(minWins) && Number.isInteger(maxWins) && minWins >= 0 && maxWins >= minWins) {
+    return { minWins, maxWins };
+  }
+  return comboRangeFromLabel(range?.label || label);
+}
+
+function comboOutcomeRangeAt({ cfg, outcomes = [], index }) {
+  const label = outcomes[index];
+  const ranges = Array.isArray(cfg?.outcomeRanges) ? cfg.outcomeRanges : [];
+  const byIndex = ranges[index] ? normalizeComboWinRange(ranges[index], label) : null;
+  if (byIndex) return byIndex;
+  const byLabel = ranges
+    .map(range => (String(range?.label || '') === String(label || '') ? normalizeComboWinRange(range, label) : null))
+    .find(Boolean);
+  return byLabel || normalizeComboWinRange(null, label);
+}
+
+function comboRangeOverlaps(range, possibleMin, possibleMax) {
+  return range && range.minWins <= possibleMax && range.maxWins >= possibleMin;
+}
+
+function comboRangeContains(range, possibleMin, possibleMax) {
+  return range && range.minWins <= possibleMin && range.maxWins >= possibleMax;
+}
+
+function comboChildOutcomeForRange(range, progress) {
+  if (!range || !progress) return null;
+  if (!comboRangeOverlaps(range, progress.possibleMin, progress.possibleMax)) return 1;
+  if (progress.allComplete) {
+    return comboRangeContains(range, progress.wins, progress.wins) ? 0 : 1;
+  }
+  if (comboRangeContains(range, progress.possibleMin, progress.possibleMax)) return 0;
+  return null;
+}
+
+function comboWinningOutcomeIndex({ cfg, outcomes = [], wins }) {
+  const n = Number(wins);
+  if (!Number.isInteger(n) || n < 0) return -1;
+  for (let i = 0; i < outcomes.length; i++) {
+    const range = comboOutcomeRangeAt({ cfg, outcomes, index: i });
+    if (range && range.minWins <= n && n <= range.maxWins) return i;
+  }
+  return -1;
+}
+
+function inferComboTargetSide(leg = {}) {
+  const explicit = String(leg.targetSide || '').trim().toLowerCase();
+  if (explicit === 'home' || explicit === 'away') return explicit;
+  if (leg.targetTeam && leg.homeName && resolverLabelsOverlap(leg.targetTeam, leg.homeName)) return 'home';
+  if (leg.targetTeam && leg.awayName && resolverLabelsOverlap(leg.targetTeam, leg.awayName)) return 'away';
+  return null;
+}
+
+async function readComboWinCountProgress(cfg = {}) {
+  if (!isComboWinCountConfig(cfg)) {
+    throw new Error('combo-win-count: missing cfg.legs');
+  }
+
+  const legs = [];
+  for (let i = 0; i < cfg.legs.length; i++) {
+    const leg = cfg.legs[i] || {};
+    const targetSide = inferComboTargetSide(leg);
+    const result = await readEspnEvent({
+      leaguePath: leg.leaguePath || cfg.leaguePath,
+      eventId: leg.eventId,
+      dateYmd: leg.dateYmd || cfg.dateYmd,
+      homeName: leg.homeName,
+      awayName: leg.awayName,
+    });
+    if (result?.completed && !targetSide) {
+      throw new Error(`combo-win-count missing targetSide for leg ${i}`);
+    }
+    const targetWon = result?.completed ? result.winner === targetSide : null;
+    legs.push({
+      index: i,
+      label: leg.displayLabel || leg.label || leg.targetTeam || null,
+      targetTeam: leg.targetTeam || null,
+      targetSide,
+      eventId: leg.eventId || null,
+      completed: result?.completed === true,
+      winner: result?.winner || null,
+      targetWon,
+      homeScore: result?.homeScore ?? null,
+      awayScore: result?.awayScore ?? null,
+      state: result?.state || null,
+      notFound: result?.notFound === true,
+    });
+  }
+
+  const wins = legs.filter(leg => leg.targetWon === true).length;
+  const completedCount = legs.filter(leg => leg.completed).length;
+  const pendingCount = legs.length - completedCount;
+  const allComplete = pendingCount === 0;
+  return {
+    completed: allComplete,
+    allComplete,
+    wins,
+    total: legs.length,
+    completedCount,
+    pendingCount,
+    possibleMin: wins,
+    possibleMax: wins + pendingCount,
+    legs,
+    state: allComplete ? 'post' : 'in',
+  };
+}
+
+async function resolveComboWinCountChildLegs({ market, cfg, outcomes = [], progress, dry, report }) {
+  if (!isComboWinCountConfig(cfg) || !progress) return 0;
+  const decisions = outcomes
+    .map((label, index) => ({
+      index,
+      label,
+      range: comboOutcomeRangeAt({ cfg, outcomes, index }),
+    }))
+    .map(item => ({
+      ...item,
+      outcomeIndex: comboChildOutcomeForRange(item.range, progress),
+    }))
+    .filter(item => item.outcomeIndex === 0 || item.outcomeIndex === 1);
+
+  if (decisions.length === 0) return 0;
+
+  if (dry) {
+    for (const decision of decisions) {
+      report.resolved.push({
+        id: market.id,
+        parentId: market.id,
+        legIndex: decision.index,
+        legLabel: decision.label || null,
+        winningIdx: decision.outcomeIndex,
+        source: cfg.source,
+        shape: cfg.shape,
+        reason: decision.outcomeIndex === 0 ? 'combo_range_guaranteed' : 'combo_range_impossible',
+        comboWins: progress.wins,
+        comboPossibleMin: progress.possibleMin,
+        comboPossibleMax: progress.possibleMax,
+        dry: true,
+      });
+    }
+    return decisions.length;
+  }
+
+  let resolvedCount = 0;
+  await withTransaction(async (client) => {
+    const legs = await client.query(
+      `SELECT id, leg_label, status, outcome
+         FROM points_markets
+        WHERE parent_id = $1
+          AND status <> 'canceled'
+        ORDER BY id ASC
+        FOR UPDATE`,
+      [market.id],
+    );
+    if (legs.rows.length !== outcomes.length) {
+      throw new Error(`combo_win_count_leg_count_mismatch: db=${legs.rows.length} cfg=${outcomes.length}`);
+    }
+
+    const targetIds = decisions
+      .map(decision => legs.rows[decision.index])
+      .filter(row => row && row.status === 'active')
+      .map(row => Number(row.id))
+      .filter(Number.isFinite);
+    if (targetIds.length > 0) {
+      await releaseOpenLimitOrdersForMarkets(client, targetIds, {
+        reason: 'market_resolved',
+      });
+    }
+
+    for (const decision of decisions) {
+      const row = legs.rows[decision.index];
+      if (!row?.id || row.status !== 'active') continue;
+      const finalScore = decision.outcomeIndex === 0
+        ? `${decision.label || row.leg_label || 'Rango'} confirmado: ${progress.wins}/${progress.total} ganaron`
+        : `${decision.label || row.leg_label || 'Rango'} imposible: ${progress.possibleMin}-${progress.possibleMax} posibles`;
+      const updated = await client.query(
+        `UPDATE points_markets
+            SET status = 'resolved',
+                outcome = $1,
+                resolved_at = NOW(),
+                resolved_by = $2
+          WHERE id = $3
+            AND status = 'active'
+          RETURNING id`,
+        [decision.outcomeIndex, 'resolver:espn:combo-win-count', row.id],
+      );
+      if (updated.rows.length === 0) continue;
+      resolvedCount += 1;
+      try {
+        await client.query(
+          `UPDATE points_markets SET final_score = $1 WHERE id = $2`,
+          [finalScore.slice(0, 240), row.id],
+        );
+      } catch (e) {
+        if (e?.code !== '42703') throw e;
+      }
+      report.resolved.push({
+        id: row.id,
+        parentId: market.id,
+        legIndex: decision.index,
+        legLabel: decision.label || row.leg_label || null,
+        winningIdx: decision.outcomeIndex,
+        source: cfg.source,
+        shape: cfg.shape,
+        reason: decision.outcomeIndex === 0 ? 'combo_range_guaranteed' : 'combo_range_impossible',
+        comboWins: progress.wins,
+        comboPossibleMin: progress.possibleMin,
+        comboPossibleMax: progress.possibleMax,
+      });
+    }
+  });
+
+  return resolvedCount;
 }
 
 function labelIsOther(label) {
@@ -994,6 +1237,14 @@ export async function runAutoResolve({ dry = false } = {}) {
                 AND m.resolver_config->>'source' IN ('espn-atp-tournament', 'espn-pga')
                 AND m.start_time IS NOT NULL
                 AND m.start_time < NOW()
+                AND m.end_time > NOW()
+              )
+              OR (
+                m.resolver_type = 'sports_api'
+                AND m.resolver_config->>'source' = 'espn'
+                AND m.resolver_config->>'shape' = 'combo-win-count'
+                AND m.start_time IS NOT NULL
+                AND m.start_time < NOW() - INTERVAL '90 minutes'
                 AND m.end_time > NOW()
               )
               OR (
@@ -1781,13 +2032,17 @@ export async function runAutoResolve({ dry = false } = {}) {
           // iteration-scope `result` declared above so buildFinalScore
           // can see it after the dispatch.
           if (cfg.source === 'espn') {
-            result = await readEspnEvent({
-              leaguePath: cfg.leaguePath,
-              eventId: cfg.eventId,
-              dateYmd: cfg.dateYmd,
-              homeName: cfg.homeName,
-              awayName: cfg.awayName,
-            });
+            if (cfg.shape === 'combo-win-count') {
+              result = await readComboWinCountProgress(cfg);
+            } else {
+              result = await readEspnEvent({
+                leaguePath: cfg.leaguePath,
+                eventId: cfg.eventId,
+                dateYmd: cfg.dateYmd,
+                homeName: cfg.homeName,
+                awayName: cfg.awayName,
+              });
+            }
           } else if (cfg.source === 'football-data') {
             const footballDataEspnFallback = buildFootballDataEspnFallbackConfig({
               resolverConfig: cfg,
@@ -1917,6 +2172,14 @@ export async function runAutoResolve({ dry = false } = {}) {
             dry,
             report,
           });
+          await resolveComboWinCountChildLegs({
+            market: m,
+            cfg,
+            outcomes: marketOutcomes,
+            progress: result,
+            dry,
+            report,
+          });
 
           // Not completed yet = benign skip. Cron will retry on the
           // next tick; a postponed game just keeps retrying until
@@ -1965,6 +2228,15 @@ export async function runAutoResolve({ dry = false } = {}) {
               throw new Error(`no leg matched winner "${result.winnerDriverLabel}"`);
             }
             winningIdx = idx;
+          } else if (cfg.shape === 'combo-win-count') {
+            winningIdx = comboWinningOutcomeIndex({
+              cfg,
+              outcomes: marketOutcomes,
+              wins: result.wins,
+            });
+            if (winningIdx < 0) {
+              throw new Error(`combo-win-count got unmatched wins total: ${result.wins}`);
+            }
           } else {
             throw new Error(`unknown sports_api shape: ${cfg.shape}`);
           }
@@ -1980,6 +2252,13 @@ export async function runAutoResolve({ dry = false } = {}) {
               : null,
             threshold: cfg.shape === 'total-goals-over' ? Number(cfg.threshold ?? 2.5) : null,
             winnerDriver: result.winnerDriverLabel ?? null,
+            comboWins: cfg.shape === 'combo-win-count' ? result.wins ?? null : null,
+            comboTotal: cfg.shape === 'combo-win-count' ? result.total ?? null : null,
+            comboCompleted: cfg.shape === 'combo-win-count' ? result.completedCount ?? null : null,
+            comboPending: cfg.shape === 'combo-win-count' ? result.pendingCount ?? null : null,
+            comboLegs: cfg.shape === 'combo-win-count'
+              ? (Array.isArray(result.legs) ? result.legs : [])
+              : null,
           };
         } else {
           throw new Error(`unknown resolver_type: ${resolverType}`);

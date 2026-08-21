@@ -67,6 +67,20 @@ test('points auto-resolver settles eliminated tennis and golf child legs early',
   assert.match(SOURCE, /row && row\.status === 'active'/);
 });
 
+test('points auto-resolver progressively settles combo win-count child legs', () => {
+  assert.match(SOURCE, /combo-win-count/);
+  assert.match(SOURCE, /function readComboWinCountProgress/);
+  assert.match(SOURCE, /function resolveComboWinCountChildLegs/);
+  assert.match(SOURCE, /function comboWinningOutcomeIndex/);
+  assert.match(SOURCE, /m\.resolver_config->>'shape' = 'combo-win-count'/);
+  assert.match(SOURCE, /m\.resolver_config->>'source' = 'espn'/);
+  assert.match(SOURCE, /possibleMin/);
+  assert.match(SOURCE, /possibleMax/);
+  assert.match(SOURCE, /combo_range_impossible/);
+  assert.match(SOURCE, /combo_range_guaranteed/);
+  assert.match(SOURCE, /resolver:espn:combo-win-count/);
+});
+
 test('points auto-resolver queues next-day mañanera markets when current transcript markets close', () => {
   assert.match(SOURCE, /generateMananeraMarkets/);
   assert.match(SOURCE, /prepareGeneratedSpecs/);
