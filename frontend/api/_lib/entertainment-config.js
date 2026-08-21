@@ -283,4 +283,70 @@ export const POPULAR_EVENTS = [
       topicTags: ['deportes'],
     },
   },
+  // ─── Taquilla China · 牛来 (Niu Lai) ─────────────────────────────────
+  // Escalera de 12 rangos de $1M USD sobre el 综合票房 acumulado — la
+  // taquilla bruta, con cargo por servicio — que publica el dashboard
+  // de 猫眼专业版. Ancla al generar: 3691.1万 = ¥36.91M = $5.49M el
+  // 21/08/2026 06:15 hora de Pekín, día 18 en cartelera.
+  //
+  // Tipo de cambio CONGELADO en 6.7220 CNY/USD al crear el mercado. No
+  // se vuelve a consultar al cierre: esto es un mercado de taquilla, no
+  // de divisas, y un rate flotante metería una segunda fuente que
+  // disputar. Los criterios cargan la tabla de fronteras ya convertida
+  // a 万 para que resolver no requiera ninguna cuenta.
+  //
+  // Escalón de $1M por decisión explícita del admin. A 6.72 cada
+  // escalón vale ¥6.72M, así que el peso real se concentra en las dos
+  // primeras casillas: la frontera de $6.5M cae en 4369.3万 y el
+  // consenso al crear el mercado ronda 4200–4500万. De la casilla 4 en
+  // adelante la película tendría que sumar en tres días más de lo que
+  // lleva en dieciocho.
+  //
+  // Resolución MANUAL a propósito: la API de Maoyan devuelve 403 sin su
+  // signKey/uuid y la ficha por película exige login, así que no hay
+  // fetch server-side posible. El admin lee el acumulado en el
+  // dashboard público a la hora de cierre y guarda evidencia.
+  //
+  // amm_mode parallel (no unified): 12 legs Sí/No. PronosAMMMulti topa
+  // en MAX_OUTCOMES=8, así que un unified de 12 no se podría desplegar
+  // on-chain (ver onchain-trader.js).
+  {
+    kind: 'popular_event',
+    key: 'niulai-box-office-2026-08-23',
+    topic: 'cine',
+    movie: '牛来 (Niu Lai)',
+    eventLabel: 'Taquilla China · 牛来',
+    question: '¿Cuánto acumulará 牛来 (Niu Lai) en taquilla china (USD) al cierre del domingo 23 de agosto?',
+    category: 'musica',
+    icon: '🎬',
+    ammMode: 'parallel',
+    outcomes: [
+      'Menos de $6.5M',
+      '$6.5M – $7.5M',
+      '$7.5M – $8.5M',
+      '$8.5M – $9.5M',
+      '$9.5M – $10.5M',
+      '$10.5M – $11.5M',
+      '$11.5M – $12.5M',
+      '$12.5M – $13.5M',
+      '$13.5M – $14.5M',
+      '$14.5M – $15.5M',
+      '$15.5M – $16.5M',
+      '$16.5M o más',
+    ],
+    probabilities: [0.52, 0.32, 0.08, 0.03, 0.015, 0.01, 0.007, 0.005, 0.004, 0.003, 0.003, 0.003],
+    resolveAt: '2026-08-24T03:00:00Z',
+    criteria: 'Todos los rangos están en dólares (USD), convertidos desde yuanes (RMB) con un tipo de cambio FIJO de 6.7220 CNY por USD, congelado el 21 de agosto de 2026 (fuentes: BCE vía frankfurter.dev en 6.7206 y currency-api en 6.7224). El tipo de cambio NO se vuelve a consultar al cierre: este mercado es sobre taquilla, no sobre divisas. Procedimiento: leer el 综合票房 acumulado (taquilla bruta, incluye cargo por servicio) de la película 牛来, movieId 1455644, en el dashboard público de 猫眼专业版 en https://piaofang.maoyan.com/dashboard el domingo 23 de agosto de 2026 a las 21:00 hora CDMX, equivalente a lunes 24 de agosto a las 11:00 hora de Pekín. Gana la opción cuyo rango contenga ese valor, con límite inferior inclusivo y superior exclusivo. Tabla de equivalencia ya calculada, para resolver sin hacer ninguna cuenta comparando directamente contra el número que muestra el dashboard: Menos de $6.5M = menos de 4369.3万; $6.5M–$7.5M = 4369.3万 a 5041.5万; $7.5M–$8.5M = 5041.5万 a 5713.7万; $8.5M–$9.5M = 5713.7万 a 6385.9万; $9.5M–$10.5M = 6385.9万 a 7058.1万; $10.5M–$11.5M = 7058.1万 a 7730.3万; $11.5M–$12.5M = 7730.3万 a 8402.5万; $12.5M–$13.5M = 8402.5万 a 9074.7万; $13.5M–$14.5M = 9074.7万 a 9746.9万; $14.5M–$15.5M = 9746.9万 a 10419.1万; $15.5M–$16.5M = 10419.1万 a 11091.3万; $16.5M o más = 11091.3万 en adelante. Las doce fronteras caen en valores que el dashboard puede reportar exactamente, así que la regla de límite inferior inclusivo decide en cada una: un acumulado de exactamente 4369.3万 pertenece a $6.5M–$7.5M, no a la opción anterior. OJO con las unidades: el dashboard cambia de 万 a 亿 al cruzar 1亿, que son 10000万, y ahí muestra por ejemplo 1.04亿, que equivale a 10400万; hay que convertir antes de comparar, y eso solo aplica a las últimas tres opciones. NO usar el 分账票房 (taquilla neta repartible), que es alrededor de 15% menor y aparece en el otro tab del mismo dashboard. Si la película ya no aparece en el listado al momento del cierre, resolver con el último valor acumulado observado. La lectura es manual: el admin debe guardar captura de pantalla del dashboard y la hora de Pekín visible como evidencia. Valor de referencia al generar el mercado: 3691.1万 = ¥36.91M = $5.49M el 21/08/2026 a las 06:15 hora de Pekín, con 18 días en cartelera.',
+    evidence: [
+      {
+        title: '猫眼专业版 · 实时票房 (dashboard público, taquilla en vivo)',
+        url: 'https://piaofang.maoyan.com/dashboard',
+      },
+    ],
+    tags: {
+      categoryTags: ['musica'],
+      geoTags: ['world'],
+      topicTags: ['cine'],
+    },
+  },
 ];
