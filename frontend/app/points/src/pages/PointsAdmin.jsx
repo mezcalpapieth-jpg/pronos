@@ -5884,6 +5884,23 @@ function PendingMarketsTable({ onQueueChange }) {
     }
   }
 
+  // Toggle the 🧪 "MERCADO DE PRUEBA" badge on a PENDING row. Carries into the
+  // created market at approval time, same as the flags above.
+  async function togglePendingTestMarket(row) {
+    const next = !row.pendingIsTestMarket;
+    setRows(prev => (prev || []).map(r =>
+      r.id === row.id ? { ...r, pendingIsTestMarket: next } : r,
+    ));
+    try {
+      await adminToggleTestMarket({ pendingId: row.id, isTestMarket: next });
+    } catch (e) {
+      setRows(prev => (prev || []).map(r =>
+        r.id === row.id ? { ...r, pendingIsTestMarket: !next } : r,
+      ));
+      alert(`No se pudo actualizar mercado de prueba: ${e.code || e.message}`);
+    }
+  }
+
   async function showResolveDiagnostic() {
     try {
       const r = await adminResolveDiagnostic();
@@ -6329,6 +6346,31 @@ function PendingMarketsTable({ onQueueChange }) {
                     }}
                   >
                     🏆
+                  </button>
+                  <button
+                    onClick={() => togglePendingTestMarket(r)}
+                    title={r.pendingIsTestMarket
+                      ? 'Se creará con el badge "MERCADO DE PRUEBA" (click para quitar)'
+                      : 'Click para marcarlo como "MERCADO DE PRUEBA" — avisa que el método de resolución aún se está probando'}
+                    style={{
+                      flexShrink: 0,
+                      width: 32, height: 32,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: '50%',
+                      border: `1px solid ${r.pendingIsTestMarket ? 'rgba(245,200,66,0.58)' : 'var(--border)'}`,
+                      background: r.pendingIsTestMarket ? 'rgba(245,200,66,0.16)' : 'transparent',
+                      cursor: 'pointer',
+                      fontSize: 16,
+                      lineHeight: 1,
+                      padding: 0,
+                      filter: r.pendingIsTestMarket ? 'none' : 'grayscale(1)',
+                      opacity: r.pendingIsTestMarket ? 1 : 0.45,
+                      transition: 'opacity 0.15s, background 0.15s, border-color 0.15s',
+                    }}
+                  >
+                    🧪
                   </button>
                 </div>
               )}

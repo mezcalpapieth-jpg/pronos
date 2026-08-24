@@ -84,20 +84,31 @@ test('summarizeAicmAeDelays excludes cancelled flights and days outside the wind
 });
 
 test('aicmAeBucketIndexFor maps counts onto the 48h buckets', () => {
+  assert.equal(AICM_AE_48H_DELAY_BUCKETS.length, 8);
   assert.equal(aicmAeBucketIndexFor(0), 0);
-  assert.equal(aicmAeBucketIndexFor(263), 0);
-  assert.equal(aicmAeBucketIndexFor(264), 1);
-  assert.equal(aicmAeBucketIndexFor(280), 1);
-  assert.equal(aicmAeBucketIndexFor(281), 2);
-  assert.equal(aicmAeBucketIndexFor(305), 2);
-  assert.equal(aicmAeBucketIndexFor(306), 3);
-  assert.equal(aicmAeBucketIndexFor(9999), 3);
+  assert.equal(aicmAeBucketIndexFor(255), 0);
+  assert.equal(aicmAeBucketIndexFor(256), 1);
+  assert.equal(aicmAeBucketIndexFor(265), 1);
+  assert.equal(aicmAeBucketIndexFor(275), 2);
+  assert.equal(aicmAeBucketIndexFor(285), 3);
+  assert.equal(aicmAeBucketIndexFor(295), 4);
+  assert.equal(aicmAeBucketIndexFor(310), 5);
+  assert.equal(aicmAeBucketIndexFor(330), 6);
+  assert.equal(aicmAeBucketIndexFor(331), 7);
+  assert.equal(aicmAeBucketIndexFor(9999), 7);
   assert.equal(aicmAeBucketIndexFor(-1), -1);
   assert.equal(aicmAeBucketIndexFor('nope'), -1);
 });
 
+test('every historical jue+vie window lands in a bucket', () => {
+  // The 13 real windows the bands were drawn from.
+  for (const n of [248, 252, 257, 263, 266, 277, 280, 283, 288, 305, 308, 334, 336]) {
+    assert.ok(aicmAeBucketIndexFor(n) >= 0, `window of ${n} fell outside every bucket`);
+  }
+});
+
 test('the 48h buckets leave no gap and no overlap', () => {
-  for (let n = 0; n <= 400; n += 1) {
+  for (let n = 0; n <= 500; n += 1) {
     const hits = AICM_AE_48H_DELAY_BUCKETS.filter((b) => (
       n >= b.minCount && (b.maxCount == null || n <= b.maxCount)
     ));

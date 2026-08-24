@@ -22,14 +22,22 @@ export const AICM_AE_HISTORY_LAG_DAYS = 3;
 export const AICM_AE_DEFAULT_THRESHOLD_MIN = 30;
 
 /**
- * Delay-count buckets for a Thursday+Friday (48 h) window, derived from the
- * quartiles of 13 real jue+vie windows: mean 284, range 248-336.
+ * Delay-count buckets for a Thursday+Friday (48 h) window.
+ *
+ * Drawn from 13 real jue+vie windows — 248, 252, 257, 263, 266, 277, 280, 283,
+ * 288, 305, 308, 334, 336 — so the bands tighten around the 276-295 cluster
+ * where most windows land and widen at the tails. 311-330 has no historical
+ * sample: that is a genuine gap in 13 windows, not an impossible outcome.
  */
 export const AICM_AE_48H_DELAY_BUCKETS = [
-  { label: '0-263', minCount: 0, maxCount: 263 },
-  { label: '264-280', minCount: 264, maxCount: 280 },
-  { label: '281-305', minCount: 281, maxCount: 305 },
-  { label: '306+', minCount: 306, maxCount: null },
+  { label: '0-255', minCount: 0, maxCount: 255 },
+  { label: '256-265', minCount: 256, maxCount: 265 },
+  { label: '266-275', minCount: 266, maxCount: 275 },
+  { label: '276-285', minCount: 276, maxCount: 285 },
+  { label: '286-295', minCount: 286, maxCount: 295 },
+  { label: '296-310', minCount: 296, maxCount: 310 },
+  { label: '311-330', minCount: 311, maxCount: 330 },
+  { label: '331+', minCount: 331, maxCount: null },
 ];
 
 function toInt(value) {
