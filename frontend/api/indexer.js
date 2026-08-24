@@ -5,6 +5,7 @@ import { ensurePointsSchema } from './_lib/points-schema.js';
 import { runCrypto5MinTick } from './_lib/crypto-5min.js';
 import { shouldRunMinuteInterval } from './_lib/cron-multiplex.js';
 import { runAutoResolve } from './cron/points-auto-resolve.js';
+import { runTokenMcapSnapshots } from './cron/points-token-mcap-snapshots.js';
 import { runProtocolAutoResolve } from './cron/protocol-auto-resolve.js';
 
 /**
@@ -178,16 +179,50 @@ export default async function handler(req, res) {
     crypto5MinReport = { error: e?.message || 'crypto_5min_failed' };
   }
 
+  // ── Token market-cap oracle snapshot fallback ─────────────────────
+  // DOGGY-style markets resolve from stored close-time CoinGecko snapshots.
+  // The dedicated snapshot cron is still registered, but this keeps evidence
+  // capture alive on the reliable minute cron if Vercel skips that path.
+  let tokenMcapSnapshotsReport = { status: 'skipped', reason: 'not_scheduled' };
+  const forceTokenMcapSnapshots = req.query.tokenMcapSnapshots === '1'
+    || req.query.tokenMcap === '1';
+  const dryTokenMcapSnapshots = req.query.tokenMcapDry === '1'
+    || req.query.tokenMcapDry === 'true';
+  const tokenMcapSnapshotsOnIndexer = process.env.POINTS_TOKEN_MCAP_SNAPSHOTS_ON_INDEXER !== '0'
+    && process.env.POINTS_TOKEN_MCAP_SNAPSHOTS_ON_INDEXER !== 'false';
+  const shouldRunTokenMcapSnapshots = forceTokenMcapSnapshots
+    || (
+      tokenMcapSnapshotsOnIndexer
+      && isVercelCron
+      && shouldRunMinuteInterval({ intervalMinutes: 5 })
+    );
+  if (shouldRunTokenMcapSnapshots) {
+    try {
+      const result = await runTokenMcapSnapshots({ dryRun: dryTokenMcapSnapshots, purgeOld: false });
+      tokenMcapSnapshotsReport = { status: 'ok', ...result };
+    } catch (e) {
+      console.error('[indexer] points-token-mcap-snapshots failed', {
+        message: e?.message,
+        code: e?.code,
+      });
+      tokenMcapSnapshotsReport = {
+        status: 'error',
+        error: e?.message?.slice(0, 240) || 'points_token_mcap_snapshots_failed',
+      };
+    }
+  }
+
   // ── Points auto-resolver manual/legacy multiplex ──────────────────
-  // The repo now has a dedicated /api/cron/points-auto-resolve schedule.
-  // Keep this indexer hook for manual probes and for deployments that
-  // explicitly opt in, but do not run duplicate resolver passes by default.
+  // The repo also has a dedicated /api/cron/points-auto-resolve schedule, but
+  // keep a production safety net here because /api/indexer is the cron that
+  // reliably fires every minute. Auto-resolve writes are status-guarded, so a
+  // duplicate dedicated cron pass should no-op after the first resolver wins.
   // Manual probe: /api/indexer?key=...&resolve=1 (add resolveDry=1 for dry-run).
-  let pointsAutoResolveReport = { status: 'skipped', reason: 'dedicated_cron' };
+  let pointsAutoResolveReport = { status: 'skipped', reason: 'not_scheduled' };
   const forceAutoResolve = req.query.resolve === '1' || req.query.autoResolve === '1';
   const dryAutoResolve = req.query.resolveDry === '1' || req.query.resolveDry === 'true';
-  const pointsAutoResolveOnIndexer = process.env.POINTS_AUTO_RESOLVE_ON_INDEXER === '1'
-    || process.env.POINTS_AUTO_RESOLVE_ON_INDEXER === 'true';
+  const pointsAutoResolveOnIndexer = process.env.POINTS_AUTO_RESOLVE_ON_INDEXER !== '0'
+    && process.env.POINTS_AUTO_RESOLVE_ON_INDEXER !== 'false';
   const shouldRunPointsAutoResolve = forceAutoResolve
     || (
       pointsAutoResolveOnIndexer
@@ -246,6 +281,7 @@ export default async function handler(req, res) {
       status: 'skipped',
       reason: 'MarketFactory address or Arbitrum RPC URL not configured',
       crypto5Min: crypto5MinReport,
+      tokenMcapSnapshots: tokenMcapSnapshotsReport,
       pointsAutoResolve: pointsAutoResolveReport,
       protocolAutoResolve: protocolAutoResolveReport,
     });
@@ -318,6 +354,7 @@ export default async function handler(req, res) {
       factories: factoryRuns,
       processed,
       crypto5Min: crypto5MinReport,
+      tokenMcapSnapshots: tokenMcapSnapshotsReport,
       pointsAutoResolve: pointsAutoResolveReport,
       protocolAutoResolve: protocolAutoResolveReport,
     });

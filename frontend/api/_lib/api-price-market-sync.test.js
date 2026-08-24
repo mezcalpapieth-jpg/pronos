@@ -42,6 +42,25 @@ test('api price sync keeps Meta above question as gt 610', () => {
   assert.equal(result.resolverConfig.op, 'gt');
 });
 
+test('api price sync preserves shorthand market-cap suffixes', () => {
+  const result = syncApiPriceFromQuestion({
+    question: '¿$DOGGY cerrará arriba de $130K de market cap el 23/08/2026?',
+    resolverConfig: {
+      source: 'coingecko-token-mcap',
+      coinId: 'holder',
+      threshold: 125000,
+      op: 'gt',
+      yesOutcome: 0,
+    },
+    sourceData: { strike: 125000 },
+  });
+
+  assert.equal(result.changed, true);
+  assert.equal(result.resolverConfig.threshold, 130000);
+  assert.equal(result.resolverConfig.op, 'gt');
+  assert.equal(result.sourceData.strike, 130000);
+});
+
 test('api price sync ignores non-price resolvers', () => {
   const resolverConfig = { source: 'espn', threshold: 17.25, op: 'gt' };
   const result = syncApiPriceFromQuestion({

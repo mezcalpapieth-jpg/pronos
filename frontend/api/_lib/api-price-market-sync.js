@@ -27,15 +27,30 @@ function parseNumber(raw) {
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
+function applyMagnitude(value, suffix) {
+  if (!Number.isFinite(value)) return value;
+  const s = String(suffix || '').trim().toLowerCase();
+  if (s === 'k') return value * 1000;
+  if (s === 'm') return value * 1000000;
+  if (s === 'b') return value * 1000000000;
+  return value;
+}
+
+function parseThresholdAmount(raw, suffix) {
+  const value = parseNumber(raw);
+  if (value == null) return null;
+  return applyMagnitude(value, suffix);
+}
+
 function extractThreshold(question) {
   const q = String(question || '');
-  const money = q.match(/\$\s*([0-9][0-9.,]*)/);
-  if (money) return parseNumber(money[1]);
+  const money = q.match(/\$\s*([0-9][0-9.,]*)\s*([kKmMbB])?\b/);
+  if (money) return parseThresholdAmount(money[1], money[2]);
 
   const directional = q.match(
-    /(?:below|under|less than|debajo de|por debajo de|menor(?:\s+(?:que|a))?|menos de|baja de|above|over|greater than|encima de|por encima de|mayor(?:\s+(?:que|a))?|arriba de|supera)\s*\$?\s*([0-9][0-9.,]*)/i,
+    /(?:below|under|less than|debajo de|por debajo de|menor(?:\s+(?:que|a))?|menos de|baja de|above|over|greater than|encima de|por encima de|mayor(?:\s+(?:que|a))?|arriba de|supera)\s*\$?\s*([0-9][0-9.,]*)\s*([kKmMbB])?\b/i,
   );
-  if (directional) return parseNumber(directional[1]);
+  if (directional) return parseThresholdAmount(directional[1], directional[2]);
 
   return null;
 }
