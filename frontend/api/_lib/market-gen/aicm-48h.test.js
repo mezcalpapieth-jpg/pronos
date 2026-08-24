@@ -33,12 +33,11 @@ test('trading closes exactly when the counted window closes', async () => {
 
 test('outcomes match the calibrated 48h buckets and cover every count', async () => {
   const [market] = await generateAicm48hMarkets({ now: new Date('2026-08-19T18:00:00Z') });
-  assert.deepEqual(market.outcomes, ['0-263', '264-280', '281-305', '306+']);
+  assert.deepEqual(market.outcomes, ['0-199', '200-230', '231-260', '261+']);
 
   const buckets = market.resolver_config.buckets;
-  // 266 is the real jue+vie count for 13-14 Aug 2026, verified against the feed.
-  assert.equal(aicmAeBucketIndexFor(266, buckets), 1);
-  for (const n of [0, 263, 264, 305, 306, 1000]) {
+  assert.equal(aicmAeBucketIndexFor(266, buckets), 3);
+  for (const n of [0, 199, 200, 260, 261, 1000]) {
     assert.ok(aicmAeBucketIndexFor(n, buckets) >= 0, `count ${n} fell outside every bucket`);
   }
 });

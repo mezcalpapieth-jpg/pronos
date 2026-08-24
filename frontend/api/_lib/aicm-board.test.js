@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  AICM_DAILY_DELAY_BUCKETS,
   airlineNameForAicmFlightCode,
+  aicmDelayBucketIndexFor,
+  buildAicmDelayBucketsForDays,
   buildAicmFlightBoardUrl,
   normalizeAicmBoardPages,
   normalizeAicmObservationForDisplay,
@@ -134,6 +137,27 @@ test('AICM airline names can be inferred from flight-number prefixes', () => {
   assert.equal(airlineNameForAicmFlightCode('Y4 262'), 'Volaris');
   assert.equal(airlineNameForAicmFlightCode('HU7926'), 'Hainan Airlines');
   assert.equal(airlineNameForAicmFlightCode('TA433'), 'Avianca');
+});
+
+test('general AICM delay-count buckets match the daily operating scale', () => {
+  assert.deepEqual(AICM_DAILY_DELAY_BUCKETS.map(b => b.label), ['0-419', '420-430', '431-440', '441+']);
+  assert.equal(aicmDelayBucketIndexFor(419), 0);
+  assert.equal(aicmDelayBucketIndexFor(420), 1);
+  assert.equal(aicmDelayBucketIndexFor(430), 1);
+  assert.equal(aicmDelayBucketIndexFor(431), 2);
+  assert.equal(aicmDelayBucketIndexFor(440), 2);
+  assert.equal(aicmDelayBucketIndexFor(441), 3);
+});
+
+test('general AICM delay-count buckets scale by counted days', () => {
+  const buckets = buildAicmDelayBucketsForDays(2);
+  assert.deepEqual(buckets.map(b => b.label), ['0-839', '840-860', '861-880', '881+']);
+  assert.equal(aicmDelayBucketIndexFor(839, buckets), 0);
+  assert.equal(aicmDelayBucketIndexFor(840, buckets), 1);
+  assert.equal(aicmDelayBucketIndexFor(860, buckets), 1);
+  assert.equal(aicmDelayBucketIndexFor(861, buckets), 2);
+  assert.equal(aicmDelayBucketIndexFor(880, buckets), 2);
+  assert.equal(aicmDelayBucketIndexFor(881, buckets), 3);
 });
 
 test('normalizeAicmObservationForDisplay repairs shifted official-board rows', () => {

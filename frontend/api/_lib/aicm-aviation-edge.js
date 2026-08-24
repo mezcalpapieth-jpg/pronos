@@ -13,6 +13,8 @@
  * the two have been reconciled against each other over real windows.
  */
 
+import { scaleDailyCountBuckets } from './aicm-delay-buckets.js';
+
 export const AICM_AE_SOURCE = 'aviation-edge-flights-history';
 export const AICM_AE_BASE_URL = 'https://aviation-edge.com/v2/public';
 
@@ -22,15 +24,31 @@ export const AICM_AE_HISTORY_LAG_DAYS = 3;
 export const AICM_AE_DEFAULT_THRESHOLD_MIN = 30;
 
 /**
- * Delay-count buckets for a Thursday+Friday (48 h) window, derived from the
- * quartiles of 13 real jue+vie windows: mean 284, range 248-336.
+ * Delay-count buckets for one full AICM local day, counting departures delayed
+ * more than 30 minutes.
  */
-export const AICM_AE_48H_DELAY_BUCKETS = [
-  { label: '0-263', minCount: 0, maxCount: 263 },
-  { label: '264-280', minCount: 264, maxCount: 280 },
-  { label: '281-305', minCount: 281, maxCount: 305 },
-  { label: '306+', minCount: 306, maxCount: null },
+export const AICM_AE_DAILY_DELAY_BUCKET_BASE = [
+  { label: '0-99', minCount: 0, maxCount: 99 },
+  { label: '100-115', minCount: 100, maxCount: 115 },
+  { label: '116-130', minCount: 116, maxCount: 130 },
+  { label: '131+', minCount: 131, maxCount: null },
 ];
+
+/**
+ * Delay-count buckets for a multi-day window. The range is scaled from the
+ * one-day business buckets so a 2-day market uses doubled thresholds.
+ */
+export function buildAicmAeDelayBucketsForDays(days = 1) {
+  return scaleDailyCountBuckets(AICM_AE_DAILY_DELAY_BUCKET_BASE, days);
+}
+
+export const AICM_AE_DAILY_DELAY_BUCKETS = Object.freeze(
+  buildAicmAeDelayBucketsForDays(1),
+);
+
+export const AICM_AE_48H_DELAY_BUCKETS = Object.freeze(
+  buildAicmAeDelayBucketsForDays(2),
+);
 
 function toInt(value) {
   if (value == null) return null;

@@ -1,6 +1,7 @@
 import {
-  AICM_AE_48H_DELAY_BUCKETS,
   AICM_AE_DEFAULT_THRESHOLD_MIN,
+  buildAicmAeDelayBucketsForDays,
+  countAicmAeDaysInclusive,
 } from '../aicm-aviation-edge.js';
 import { AICM_TT_SOURCE } from '../aicm-timetable.js';
 import { AICM_AIRPORT } from './aicm.js';
@@ -87,7 +88,8 @@ export async function generateAicm48hMarkets({
     hour: 4, minute: 0, second: 0,
   });
 
-  const buckets = AICM_AE_48H_DELAY_BUCKETS.map(bucket => ({ ...bucket }));
+  const dayCount = countAicmAeDaysInclusive(thursdayYmd, fridayYmd);
+  const buckets = buildAicmAeDelayBucketsForDays(dayCount).map(bucket => ({ ...bucket }));
   const criteria = aicm48hResolutionCriteria({
     fromDateYmd: thursdayYmd, toDateYmd: fridayYmd, thresholdMinutes,
   });

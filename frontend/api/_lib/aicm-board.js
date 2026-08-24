@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import { scaleDailyCountBuckets } from './aicm-delay-buckets.js';
 import { formatMexicoDateYmd } from './market-gen/mexico-time.js';
 
 export const AICM_SOURCE = 'aicm-official-flight-board';
@@ -40,12 +41,20 @@ export const AICM_AIRLINE_BY_FLIGHT_PREFIX = Object.freeze({
   Y4: 'Volaris',
 });
 
-export const AICM_DAILY_DELAY_BUCKETS = [
-  { label: '0-5', minCount: 0, maxCount: 5 },
-  { label: '6-15', minCount: 6, maxCount: 15 },
-  { label: '16-30', minCount: 16, maxCount: 30 },
-  { label: '31+', minCount: 31, maxCount: null },
+export const AICM_DAILY_DELAY_BUCKET_BASE = [
+  { label: '0-419', minCount: 0, maxCount: 419 },
+  { label: '420-430', minCount: 420, maxCount: 430 },
+  { label: '431-440', minCount: 431, maxCount: 440 },
+  { label: '441+', minCount: 441, maxCount: null },
 ];
+
+export function buildAicmDelayBucketsForDays(days = 1) {
+  return scaleDailyCountBuckets(AICM_DAILY_DELAY_BUCKET_BASE, days);
+}
+
+export const AICM_DAILY_DELAY_BUCKETS = Object.freeze(
+  buildAicmDelayBucketsForDays(1),
+);
 
 const DIRECTION_CONFIG = {
   departure: { key: 'departure', da: 'd', label: 'salidas' },

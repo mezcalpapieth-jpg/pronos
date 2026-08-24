@@ -2,10 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  AICM_AE_DAILY_DELAY_BUCKETS,
   AICM_AE_48H_DELAY_BUCKETS,
   aicmAeBucketIndexFor,
   aicmAeHistoryReady,
   aicmAeMaxAvailableYmd,
+  buildAicmAeDelayBucketsForDays,
   buildAicmAeHistoryUrl,
   readAicmAeDelayCount,
   summarizeAicmAeDelays,
@@ -85,20 +87,46 @@ test('summarizeAicmAeDelays excludes cancelled flights and days outside the wind
 
 test('aicmAeBucketIndexFor maps counts onto the 48h buckets', () => {
   assert.equal(aicmAeBucketIndexFor(0), 0);
-  assert.equal(aicmAeBucketIndexFor(263), 0);
-  assert.equal(aicmAeBucketIndexFor(264), 1);
-  assert.equal(aicmAeBucketIndexFor(280), 1);
-  assert.equal(aicmAeBucketIndexFor(281), 2);
-  assert.equal(aicmAeBucketIndexFor(305), 2);
-  assert.equal(aicmAeBucketIndexFor(306), 3);
+  assert.equal(aicmAeBucketIndexFor(199), 0);
+  assert.equal(aicmAeBucketIndexFor(200), 1);
+  assert.equal(aicmAeBucketIndexFor(230), 1);
+  assert.equal(aicmAeBucketIndexFor(231), 2);
+  assert.equal(aicmAeBucketIndexFor(260), 2);
+  assert.equal(aicmAeBucketIndexFor(261), 3);
   assert.equal(aicmAeBucketIndexFor(9999), 3);
   assert.equal(aicmAeBucketIndexFor(-1), -1);
   assert.equal(aicmAeBucketIndexFor('nope'), -1);
 });
 
+test('daily AICM buckets cover the realistic 30+ minute day range', () => {
+  assert.equal(aicmAeBucketIndexFor(0, AICM_AE_DAILY_DELAY_BUCKETS), 0);
+  assert.equal(aicmAeBucketIndexFor(99, AICM_AE_DAILY_DELAY_BUCKETS), 0);
+  assert.equal(aicmAeBucketIndexFor(100, AICM_AE_DAILY_DELAY_BUCKETS), 1);
+  assert.equal(aicmAeBucketIndexFor(115, AICM_AE_DAILY_DELAY_BUCKETS), 1);
+  assert.equal(aicmAeBucketIndexFor(116, AICM_AE_DAILY_DELAY_BUCKETS), 2);
+  assert.equal(aicmAeBucketIndexFor(130, AICM_AE_DAILY_DELAY_BUCKETS), 2);
+  assert.equal(aicmAeBucketIndexFor(131, AICM_AE_DAILY_DELAY_BUCKETS), 3);
+  assert.equal(aicmAeBucketIndexFor(9999, AICM_AE_DAILY_DELAY_BUCKETS), 3);
+});
+
+test('AICM 30+ minute buckets scale by counted days', () => {
+  assert.deepEqual(AICM_AE_DAILY_DELAY_BUCKETS.map(b => b.label), ['0-99', '100-115', '116-130', '131+']);
+  assert.deepEqual(AICM_AE_48H_DELAY_BUCKETS.map(b => b.label), ['0-199', '200-230', '231-260', '261+']);
+  assert.deepEqual(buildAicmAeDelayBucketsForDays(3).map(b => b.label), ['0-299', '300-345', '346-390', '391+']);
+});
+
 test('the 48h buckets leave no gap and no overlap', () => {
   for (let n = 0; n <= 400; n += 1) {
     const hits = AICM_AE_48H_DELAY_BUCKETS.filter((b) => (
+      n >= b.minCount && (b.maxCount == null || n <= b.maxCount)
+    ));
+    assert.equal(hits.length, 1, `count ${n} matched ${hits.length} buckets`);
+  }
+});
+
+test('the daily buckets leave no gap and no overlap', () => {
+  for (let n = 0; n <= 240; n += 1) {
+    const hits = AICM_AE_DAILY_DELAY_BUCKETS.filter((b) => (
       n >= b.minCount && (b.maxCount == null || n <= b.maxCount)
     ));
     assert.equal(hits.length, 1, `count ${n} matched ${hits.length} buckets`);
