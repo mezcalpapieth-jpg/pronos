@@ -6,7 +6,7 @@ const source = await readFile(new URL('./overview.js', import.meta.url), 'utf8')
 
 test('AICM overview endpoint is public, cached, and read-only', () => {
   assert.match(source, /GET \/api\/points\/aicm\/overview/);
-  assert.match(source, /cachedJson\('points:aicm:overview:v9'/);
+  assert.match(source, /cachedJson\('points:aicm:overview:v10'/);
   assert.match(source, /DATABASE_READ_URL \|\| process\.env\.DATABASE_URL/);
   assert.match(source, /points_aicm_poll_runs/);
   assert.match(source, /points_aicm_flight_observations/);
@@ -14,6 +14,13 @@ test('AICM overview endpoint is public, cached, and read-only', () => {
   assert.match(source, /resolverCounters/);
   assert.match(source, /thresholdFlights/);
   assert.match(source, /thresholdFlights: toNumber\(row\.thresholdFlights\)/);
+  assert.match(source, /hasAicmSourceData/);
+  assert.match(source, /aicmDisplayStatus/);
+  assert.match(source, /latestAicmSourceObservedAt/);
+  assert.match(source, /const sourceStatus = aicmDisplayStatus\(lastRun\?\.status, sourceHasData\)/);
+  assert.match(source, /const boardStatus = aicmDisplayStatus\(lastRun\?\.status, boardHasData\)/);
+  assert.match(source, /status: sourceStatus/);
+  assert.match(source, /status: boardStatus/);
   assert.match(source, /o\.delay_minutes > 0/);
   assert.match(source, /o\.delay_minutes > 30/);
   assert.match(source, /o\.flight_date >= p\.from_date/);

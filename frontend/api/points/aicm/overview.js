@@ -240,6 +240,44 @@ function formatDaily(row) {
   };
 }
 
+function hasObservedCounterData(counters = {}) {
+  return Object.values(counters || {}).some(row => toNumber(row?.observedFlights) > 0);
+}
+
+function hasAicmSourceData({ timetable = [], counters = {}, resolverCounters = {} } = {}) {
+  return (Array.isArray(timetable) && timetable.length > 0)
+    || hasObservedCounterData(counters)
+    || hasObservedCounterData(resolverCounters);
+}
+
+function aicmDisplayStatus(fallbackStatus, hasData) {
+  return hasData ? 'ok' : fallbackStatus || 'empty';
+}
+
+function latestIso(...values) {
+  let latestMs = null;
+  for (const value of values.flat()) {
+    if (!value) continue;
+    const ms = Date.parse(value);
+    if (!Number.isFinite(ms)) continue;
+    latestMs = latestMs === null ? ms : Math.max(latestMs, ms);
+  }
+  return latestMs === null ? null : new Date(latestMs).toISOString();
+}
+
+function latestCounterObservedAt(counters = {}) {
+  return latestIso(Object.values(counters || {}).map(row => row?.lastObservedAt));
+}
+
+function latestAicmSourceObservedAt({ lastRun, timetable = [], counters = {}, resolverCounters = {} } = {}) {
+  const latestDataObservedAt = latestIso(
+    timetable.map(row => row?.observedAt),
+    latestCounterObservedAt(counters),
+    latestCounterObservedAt(resolverCounters),
+  );
+  return latestDataObservedAt || lastRun?.observedAt || null;
+}
+
 function timetableKeyFor({ flightDate, flightCode }) {
   const code = normalizeAicmFlightCode(flightCode, { allowNumeric: false });
   if (!flightDate || !code) return null;
@@ -286,7 +324,7 @@ export default async function handler(req, res) {
 
   try {
     setCacheHeaders(res, { scope: 'public', maxAge: 10, sMaxage: 30, staleWhileRevalidate: 120 });
-    const { value: payload, hit } = await cachedJson('points:aicm:overview:v9', 15_000, async () => {
+    const { value: payload, hit } = await cachedJson('points:aicm:overview:v10', 15_000, async () => {
       const sql = getReadSql();
 
       try {
@@ -504,16 +542,26 @@ export default async function handler(req, res) {
             || rawTimetable.filter(row => row.hiddenClosed).length
         );
         const hiddenStaleFlights = rawTimetable.filter(row => row.hiddenStale).length;
+        const sourceHasData = hasAicmSourceData({ timetable, counters, resolverCounters });
+        const boardHasData = timetable.length > 0;
+        const sourceStatus = aicmDisplayStatus(lastRun?.status, sourceHasData);
+        const boardStatus = aicmDisplayStatus(lastRun?.status, boardHasData);
+        const sourceLastObservedAt = latestAicmSourceObservedAt({
+          lastRun,
+          timetable,
+          counters,
+          resolverCounters,
+        });
         return {
           ...emptyOverview(),
           source: {
             key: AICM_SOURCE,
             url: AICM_DEFAULT_FLIGHTS_URL,
-            status: lastRun?.status || 'empty',
-            lastObservedAt: lastRun?.observedAt || null,
+            status: sourceStatus,
+            lastObservedAt: sourceLastObservedAt,
           },
           board: {
-            status: lastRun?.status || (timetable.length ? 'ok' : 'empty'),
+            status: boardStatus,
             totalFlights,
             shownFlights: timetable.length,
             rowLimit: 180,

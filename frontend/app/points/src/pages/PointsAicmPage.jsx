@@ -337,7 +337,6 @@ function FlightBoardCell({ children, muted = false, color = null }) {
 function Timetable({ rows, board, source, isAdmin = false }) {
   const visible = rows;
   const boardStatus = board?.status || source?.status || 'empty';
-  const statusAccentValue = statusAccent(boardStatus);
   const totalFlights = Number(board?.totalFlights || rows.length || 0);
   const shownFlights = Number(board?.shownFlights || rows.length || 0);
   const hiddenClosedFlights = Number(board?.hiddenClosedFlights || 0);
@@ -383,26 +382,6 @@ function Timetable({ rows, board, source, isAdmin = false }) {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          {isAdmin && (
-            <span style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              border: `1px solid ${statusAccentValue.border}`,
-              background: statusAccentValue.bg,
-              color: statusAccentValue.fg,
-              borderRadius: 999,
-              padding: '7px 10px',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              fontWeight: 900,
-              letterSpacing: '0.1em',
-              textTransform: 'uppercase',
-            }}>
-              <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: 'currentColor' }} />
-              {boardStatusLabel(boardStatus)}
-            </span>
-          )}
           <span style={{
             fontFamily: 'var(--font-mono)',
             fontSize: 11,
@@ -497,6 +476,38 @@ function Timetable({ rows, board, source, isAdmin = false }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function AdminAicmDiagnostics({ source, board, error }) {
+  const sourceStatus = source?.status || 'empty';
+  const boardStatus = board?.status || sourceStatus || 'empty';
+  const sourceAccent = statusAccent(sourceStatus);
+  const boardAccent = statusAccent(boardStatus);
+  return (
+    <div style={{
+      border: '1px dashed rgba(143,184,255,0.18)',
+      borderRadius: 8,
+      padding: '10px 12px',
+      display: 'flex',
+      gap: 10,
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      fontFamily: 'var(--font-mono)',
+      fontSize: 10,
+      color: 'var(--text-muted)',
+      background: 'rgba(255,255,255,0.025)',
+    }}>
+      <span style={{
+        letterSpacing: '0.12em',
+        textTransform: 'uppercase',
+      }}>
+        Diagnóstico admin
+      </span>
+      <span style={{ color: sourceAccent.fg }}>Oracle: {sourceStatus}</span>
+      <span style={{ color: boardAccent.fg }}>Tablero: {boardStatusLabel(boardStatus)}</span>
+      {error && <span style={{ color: ACCENTS.red.fg }}>Error: {error}</span>}
     </div>
   );
 }
@@ -755,26 +766,6 @@ export default function PointsAicmPage({ isAdmin = false }) {
             alignItems: 'center',
             marginTop: 28,
           }}>
-            {isAdmin && (
-              <span style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                border: `1px solid ${statusAccent(source.status).border}`,
-                background: statusAccent(source.status).bg,
-                color: statusAccent(source.status).fg,
-                borderRadius: 999,
-                padding: '8px 12px',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 11,
-                fontWeight: 900,
-                letterSpacing: '0.1em',
-                textTransform: 'uppercase',
-              }}>
-                <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: 'currentColor' }} />
-                Oracle {source.status || 'empty'}
-              </span>
-            )}
             <a
               href={source.url}
               target="_blank"
@@ -823,7 +814,7 @@ export default function PointsAicmPage({ isAdmin = false }) {
               fontSize: 12,
               lineHeight: 1.55,
             }}>
-              {isAdmin && error ? `Error: ${error}` : 'Tablero oficial AICM · salidas'}
+              Tablero oficial AICM · salidas
             </p>
           </div>
         </div>
@@ -864,6 +855,12 @@ export default function PointsAicmPage({ isAdmin = false }) {
       <div style={{ marginTop: 22 }}>
         <Timetable rows={timetable} board={overview?.board} source={source} isAdmin={isAdmin} />
       </div>
+
+      {isAdmin && (
+        <div style={{ marginTop: 12 }}>
+          <AdminAicmDiagnostics source={source} board={overview?.board} error={error} />
+        </div>
+      )}
 
       <div style={{
         display: 'grid',

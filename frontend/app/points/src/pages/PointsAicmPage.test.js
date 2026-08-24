@@ -65,10 +65,15 @@ test('AICM hub places the departures board before the weekly rhythm card', () =>
 
 test('AICM source diagnostics are admin-only', () => {
   assert.match(pageSource, /function Timetable\(\{ rows, board, source, isAdmin = false \}\)/);
-  assert.match(pageSource, /\{isAdmin && \(\s*<span[\s\S]*?\{boardStatusLabel\(boardStatus\)\}/);
-  assert.match(pageSource, /\{isAdmin && \(\s*<span[\s\S]*?Oracle \{source\.status \|\| 'empty'\}/);
-  assert.match(pageSource, /\{isAdmin && error \? `Error: \$\{error\}` : 'Tablero oficial AICM · salidas'\}/);
+  assert.match(pageSource, /function AdminAicmDiagnostics\(\{ source, board, error \}\)/);
+  assert.match(pageSource, /Diagnóstico admin/);
+  assert.match(pageSource, /Oracle: \{sourceStatus\}/);
+  assert.match(pageSource, /Tablero: \{boardStatusLabel\(boardStatus\)\}/);
+  assert.match(pageSource, /\{error && <span[\s\S]*?Error: \{error\}/);
+  assert.match(pageSource, /<AdminAicmDiagnostics source=\{source\} board=\{overview\?\.board\} error=\{error\} \/>/);
   assert.match(pageSource, /<Timetable rows=\{timetable\} board=\{overview\?\.board\} source=\{source\} isAdmin=\{isAdmin\} \/>/);
+  assert.doesNotMatch(pageSource, /Oracle \{source\.status \|\| 'empty'\}/);
+  assert.doesNotMatch(pageSource, /isAdmin && error \? `Error: \$\{error\}`/);
 });
 
 test('AICM hub uses a navy airport palette with neutral delay counters', () => {

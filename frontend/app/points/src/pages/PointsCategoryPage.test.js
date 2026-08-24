@@ -4,10 +4,12 @@ import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./PointsCategoryPage.jsx', import.meta.url), 'utf8');
 
-test('new markets page is a trophy shelf instead of a taxonomy category', () => {
-  assert.match(source, /const TOURNAMENT_SHELF_SLUGS = new Set\(\['nuevos-mercados'\]\)/);
-  assert.match(source, /featured:\s*isTournamentShelf \? 'tournament' : 'all'/);
-  assert.match(source, /out = out\.filter\(m => m\.tournamentFeatured === true\)/);
+test('new markets page is a rolling 24h shelf instead of a taxonomy category', () => {
+  assert.match(source, /const NEW_MARKETS_SHELF_SLUGS = new Set\(\['nuevos-mercados'\]\)/);
+  assert.match(source, /const NEW_MARKET_WINDOW_MS = 24 \* 60 \* 60 \* 1000/);
+  assert.match(source, /function isRecentlyOpenedMarket\(m, now = Date\.now\(\)\)/);
+  assert.match(source, /featured:\s*'all'/);
+  assert.match(source, /out = out\.filter\(m => isRecentlyOpenedMarket\(m, now\)\)/);
   assert.doesNotMatch(source, /CATEGORY_TAXONOMY_ALIASES/);
 });
 

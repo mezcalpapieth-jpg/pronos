@@ -162,7 +162,8 @@ const CATEGORY_SLUG_ALIASES = {
   'world-cup': 'nuevos-mercados',
 };
 
-const TOURNAMENT_SHELF_SLUGS = new Set(['nuevos-mercados']);
+const NEW_MARKETS_SHELF_SLUGS = new Set(['nuevos-mercados']);
+const NEW_MARKET_WINDOW_MS = 24 * 60 * 60 * 1000;
 const AICM_HUB_SEARCH_TEXT = [
   'aicm',
   'pulso',
@@ -193,6 +194,12 @@ function aicmHubMatchesSearch(searchQuery) {
   return !q || AICM_HUB_SEARCH_TEXT.includes(q);
 }
 
+function isRecentlyOpenedMarket(m, now = Date.now()) {
+  const openedAt = m?.createdAt ? new Date(m.createdAt).getTime() : NaN;
+  if (!Number.isFinite(openedAt)) return false;
+  return openedAt >= now - NEW_MARKET_WINDOW_MS && openedAt <= now + 5 * 60 * 1000;
+}
+
 export default function PointsCategoryPage() {
   const { slug: routeSlug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -202,7 +209,7 @@ export default function PointsCategoryPage() {
   const { authenticated } = usePointsAuth();
   const slug = canonicalCategorySlug(routeSlug);
   const categoryFilter = slug;
-  const isTournamentShelf = TOURNAMENT_SHELF_SLUGS.has(slug);
+  const isNewMarketsShelf = NEW_MARKETS_SHELF_SLUGS.has(slug);
   // Drives layout collapses for the league sidebar + page padding on
   // phones. The sport sub-filter row is already overflow-scrollable
   // via existing inline styles, so it doesn't need this hook.
@@ -211,6 +218,7 @@ export default function PointsCategoryPage() {
   const [positionByMarket, setPositionByMarket] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const featuredTeamKeys = useFeaturedTeamKeys();
 
   const searchQuery = (searchParams.get('q') || '').trim();
@@ -252,7 +260,7 @@ export default function PointsCategoryPage() {
         const m = await fetchMarkets({
           status: fetchStatus,
           limit: 2000,
-          featured: isTournamentShelf ? 'tournament' : 'all',
+          featured: 'all',
         });
         if (cancelled) return;
         setMarkets(m);
@@ -282,11 +290,17 @@ export default function PointsCategoryPage() {
     }
     load();
     return () => { cancelled = true; };
-  }, [fetchStatus, isTournamentShelf, authenticated]);
+  }, [fetchStatus, authenticated]);
+
+  useEffect(() => {
+    if (!isNewMarketsShelf) return undefined;
+    const id = window.setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => window.clearInterval(id);
+  }, [isNewMarketsShelf]);
 
   const filtered = useMemo(() => {
     const q = searchQuery.toLowerCase();
-    const now = Date.now();
+    const now = isNewMarketsShelf ? nowMs : Date.now();
     const isPending = (m) =>
       m.status === 'active'
       && m.endTime
@@ -303,11 +317,12 @@ export default function PointsCategoryPage() {
       if (resueltosCat !== 'all') {
         out = out.filter(m => marketInCategory(m, resueltosCat));
       }
-    } else if (isTournamentShelf) {
-      // Nuevos mercados is a curated shelf keyed by the admin trophy
-      // flag. Markets keep their real taxonomy category.
+    } else if (isNewMarketsShelf) {
+      // Nuevos mercados is a rolling "freshly approved/opened" shelf.
+      // Approval creates the real points_markets row, so createdAt is
+      // the public timestamp that decides the 24h window.
       out = out.filter(m => !isPending(m));
-      out = out.filter(m => m.tournamentFeatured === true);
+      out = out.filter(m => isRecentlyOpenedMarket(m, now));
     } else {
       // Regular category: hide pending from the main grid.
       out = out.filter(m => !isPending(m));
@@ -354,7 +369,7 @@ export default function PointsCategoryPage() {
     }
 
     return prioritizeFeaturedMarkets(out, featuredTeamKeys);
-  }, [markets, slug, categoryFilter, isTournamentShelf, sport, league, resueltosCat, cryptoType, geo, topic, supportsGeoFilters, supportsTopicFilters, searchQuery, featuredTeamKeys]);
+  }, [markets, slug, categoryFilter, isNewMarketsShelf, nowMs, sport, league, resueltosCat, cryptoType, geo, topic, supportsGeoFilters, supportsTopicFilters, searchQuery, featuredTeamKeys]);
 
   function setSport(next) {
     const params = new URLSearchParams(searchParams);

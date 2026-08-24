@@ -18,8 +18,8 @@ test('points market payload keeps admin featured and tournament markets on home'
 
 test('points public lists hide bulk-hidden active markets outside trophy overrides', () => {
   assert.match(source, /points:markets:v7/);
-  const visibilityMatches = source.match(/m\.hidden_from_home IS NOT TRUE\s+OR m\.tournament_featured = true/g) || [];
-  assert.ok(visibilityMatches.length >= 2);
+  assert.match(source, /m\.hidden_from_home IS NOT TRUE[\s\S]*?OR m\.tournament_featured = true/);
+  assert.match(source, /m\.featured = true AND m\.hidden_from_home = false[\s\S]*?OR m\.tournament_featured = true/);
 });
 
 test('points market list supports trophy shelf independent of category', () => {
@@ -28,12 +28,12 @@ test('points market list supports trophy shelf independent of category', () => {
   assert.match(source, /publicCategoryAlias\(req\.query\.category\)/);
   assert.match(source, /featuredParam === 'tournament'/);
   assert.match(source, /tournamentOnly \? 'tournament-featured'/);
-  assert.match(source, /AND m\.tournament_featured = true/);
+  assert.match(source, /\$\{tournamentOnly\}::boolean = false OR m\.tournament_featured = true/);
 });
 
 test('points market payload exposes featured and trending for parallel and unified markets', () => {
   const featuredMatches = source.match(/featured:\s*r\.featured === true/g) || [];
-  const trendingMatches = source.match(/trending:\s*r\.hidden_from_home !== true && \(r\.featured === true \|\| live\)/g) || [];
+  const trendingMatches = source.match(/trending:\s*r\.tournament_featured === true \|\| \(r\.hidden_from_home !== true && \(r\.featured === true \|\| live\)\)/g) || [];
   const tournamentMatches = source.match(/tournamentFeatured:\s*r\.tournament_featured === true/g) || [];
   assert.equal(featuredMatches.length, 2);
   assert.equal(trendingMatches.length, 2);
