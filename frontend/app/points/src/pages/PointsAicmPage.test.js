@@ -55,12 +55,20 @@ test('AICM departures board renders the full overview row set', () => {
 });
 
 test('AICM hub places the departures board before the weekly rhythm card', () => {
-  assert.ok(pageSource.indexOf('<Timetable rows={timetable} board={overview?.board} source={source} />') > 0);
+  assert.ok(pageSource.indexOf('<Timetable rows={timetable} board={overview?.board} source={source} isAdmin={isAdmin} />') > 0);
   assert.ok(pageSource.indexOf('<DailyBars rows={dailyRows} />') > 0);
   assert.ok(
-    pageSource.indexOf('<Timetable rows={timetable} board={overview?.board} source={source} />')
+    pageSource.indexOf('<Timetable rows={timetable} board={overview?.board} source={source} isAdmin={isAdmin} />')
       < pageSource.indexOf('<DailyBars rows={dailyRows} />')
   );
+});
+
+test('AICM source diagnostics are admin-only', () => {
+  assert.match(pageSource, /function Timetable\(\{ rows, board, source, isAdmin = false \}\)/);
+  assert.match(pageSource, /\{isAdmin && \(\s*<span[\s\S]*?\{boardStatusLabel\(boardStatus\)\}/);
+  assert.match(pageSource, /\{isAdmin && \(\s*<span[\s\S]*?Oracle \{source\.status \|\| 'empty'\}/);
+  assert.match(pageSource, /\{isAdmin && error \? `Error: \$\{error\}` : 'Tablero oficial AICM · salidas'\}/);
+  assert.match(pageSource, /<Timetable rows=\{timetable\} board=\{overview\?\.board\} source=\{source\} isAdmin=\{isAdmin\} \/>/);
 });
 
 test('AICM hub uses a navy airport palette with neutral delay counters', () => {

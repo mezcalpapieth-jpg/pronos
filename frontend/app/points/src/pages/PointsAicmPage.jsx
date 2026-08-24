@@ -334,7 +334,7 @@ function FlightBoardCell({ children, muted = false, color = null }) {
   );
 }
 
-function Timetable({ rows, board, source }) {
+function Timetable({ rows, board, source, isAdmin = false }) {
   const visible = rows;
   const boardStatus = board?.status || source?.status || 'empty';
   const statusAccentValue = statusAccent(boardStatus);
@@ -383,24 +383,26 @@ function Timetable({ rows, board, source }) {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <span style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            border: `1px solid ${statusAccentValue.border}`,
-            background: statusAccentValue.bg,
-            color: statusAccentValue.fg,
-            borderRadius: 999,
-            padding: '7px 10px',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 10,
-            fontWeight: 900,
-            letterSpacing: '0.1em',
-            textTransform: 'uppercase',
-          }}>
-            <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: 'currentColor' }} />
-            {boardStatusLabel(boardStatus)}
-          </span>
+          {isAdmin && (
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              border: `1px solid ${statusAccentValue.border}`,
+              background: statusAccentValue.bg,
+              color: statusAccentValue.fg,
+              borderRadius: 999,
+              padding: '7px 10px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              fontWeight: 900,
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+            }}>
+              <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: 'currentColor' }} />
+              {boardStatusLabel(boardStatus)}
+            </span>
+          )}
           <span style={{
             fontFamily: 'var(--font-mono)',
             fontSize: 11,
@@ -408,10 +410,10 @@ function Timetable({ rows, board, source }) {
             whiteSpace: 'nowrap',
           }}>
             {formatNumber(shownFlights)} / {formatNumber(totalFlights)} vuelos
-            {hiddenClosedFlights > 0
+            {isAdmin && hiddenClosedFlights > 0
               ? ` · ${formatNumber(hiddenClosedFlights)} cerrados ocultos +${formatNumber(closedGraceMinutes)}m`
               : ''}
-            {hiddenStaleFlights > 0
+            {isAdmin && hiddenStaleFlights > 0
               ? ` · ${formatNumber(hiddenStaleFlights)} salidas vencidas ocultas`
               : ''}
           </span>
@@ -456,7 +458,7 @@ function Timetable({ rows, board, source }) {
                 fontSize: 13,
                 lineHeight: 1.6,
               }}>
-                {boardStatus === 'maintenance'
+                {isAdmin && boardStatus === 'maintenance'
                   ? 'AICM reporta el tablero oficial en mantenimiento. La lista se llenará cuando vuelva a publicar salidas.'
                   : 'Sin salidas registradas hoy.'}
               </div>
@@ -753,24 +755,26 @@ export default function PointsAicmPage({ isAdmin = false }) {
             alignItems: 'center',
             marginTop: 28,
           }}>
-            <span style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              border: `1px solid ${statusAccent(source.status).border}`,
-              background: statusAccent(source.status).bg,
-              color: statusAccent(source.status).fg,
-              borderRadius: 999,
-              padding: '8px 12px',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-              fontWeight: 900,
-              letterSpacing: '0.1em',
-              textTransform: 'uppercase',
-            }}>
-              <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: 'currentColor' }} />
-              Oracle {source.status || 'empty'}
-            </span>
+            {isAdmin && (
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                border: `1px solid ${statusAccent(source.status).border}`,
+                background: statusAccent(source.status).bg,
+                color: statusAccent(source.status).fg,
+                borderRadius: 999,
+                padding: '8px 12px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                fontWeight: 900,
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+              }}>
+                <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: 'currentColor' }} />
+                Oracle {source.status || 'empty'}
+              </span>
+            )}
             <a
               href={source.url}
               target="_blank"
@@ -819,7 +823,7 @@ export default function PointsAicmPage({ isAdmin = false }) {
               fontSize: 12,
               lineHeight: 1.55,
             }}>
-              {error ? `Error: ${error}` : 'Tablero oficial AICM · salidas'}
+              {isAdmin && error ? `Error: ${error}` : 'Tablero oficial AICM · salidas'}
             </p>
           </div>
         </div>
@@ -858,7 +862,7 @@ export default function PointsAicmPage({ isAdmin = false }) {
       </div>
 
       <div style={{ marginTop: 22 }}>
-        <Timetable rows={timetable} board={overview?.board} source={source} />
+        <Timetable rows={timetable} board={overview?.board} source={source} isAdmin={isAdmin} />
       </div>
 
       <div style={{
