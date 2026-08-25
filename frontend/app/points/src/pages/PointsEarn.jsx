@@ -1,7 +1,7 @@
 /**
- * Earn MXNP — dedicated page at /earn.
+ * Perfil — dedicated page at /earn.
  *
- * Single surface for every way users earn MXNP outside of trading:
+ * Single user hub for account rewards outside of trading:
  *   1. Daily claim with streak display
  *   2. Referral link + stats
  *   3. Social task catalog with submit flow
@@ -24,6 +24,7 @@ import {
   fetchSocialTaskCatalog,
   submitSocialTask,
   fetchSocialLinks,
+  saveProfileSettings,
   saveSocialLink,
   unlinkSocial,
   socialLinkStartUrl,
@@ -49,6 +50,17 @@ function installPlatform() {
   }
   if (/Android/i.test(ua)) return 'android';
   return 'mobile';
+}
+
+function safeProfileImageUrl(value) {
+  if (!value) return '';
+  try {
+    const url = new URL(String(value).trim());
+    if (url.protocol === 'http:' || url.protocol === 'https:') return url.href;
+  } catch {
+    return '';
+  }
+  return '';
 }
 
 // ─── Daily claim card ────────────────────────────────────────────────────────
@@ -930,6 +942,163 @@ function socialActionButtonStyle({ primary, disabled = false } = {}) {
   };
 }
 
+function ProfileSettingsCard({ user, onSaved }) {
+  const lang = useLang();
+  const [displayName, setDisplayName] = useState(user?.displayName || '');
+  const [profileImageUrl, setProfileImageUrl] = useState(user?.profileImageUrl || '');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [ok, setOk] = useState(null);
+  const previewUrl = safeProfileImageUrl(profileImageUrl);
+  const publicProfilePath = user?.username ? `/u/${encodeURIComponent(user.username)}` : null;
+
+  useEffect(() => {
+    setDisplayName(user?.displayName || '');
+    setProfileImageUrl(user?.profileImageUrl || '');
+  }, [user?.displayName, user?.profileImageUrl]);
+
+  async function handleSave() {
+    setBusy(true);
+    setErr(null);
+    setOk(null);
+    try {
+      await saveProfileSettings({ displayName, profileImageUrl });
+      await onSaved?.();
+      setOk(lang === 'en' ? 'Profile saved.' : 'Perfil guardado.');
+    } catch (e) {
+      setErr(publicErrorMessage(e, lang, 'profile_update_failed'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section style={panelStyle}>
+      <div style={eyebrowStyle}>{lang === 'en' ? 'Public profile' : 'Perfil público'}</div>
+      <h3 style={panelTitleStyle}>
+        {lang === 'en' ? 'Personalize how others see you' : 'Personaliza cómo te ven'}
+      </h3>
+      <p style={panelBodyStyle}>
+        {lang === 'en'
+          ? 'Add a name and profile picture for your public profile. Your email stays private and is only visible to admins.'
+          : 'Agrega tu nombre y foto para tu perfil público. Tu email se mantiene privado y solo lo ven admins.'}
+      </p>
+      {err && (
+        <div style={{ ...noticeStyle, color: 'var(--danger)' }}>{err}</div>
+      )}
+      {ok && (
+        <div style={{ ...noticeStyle, color: 'var(--green)' }}>{ok}</div>
+      )}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '72px minmax(0, 1fr)',
+        gap: 14,
+        alignItems: 'center',
+        marginTop: 16,
+      }}>
+        <div style={{
+          width: 72,
+          height: 72,
+          borderRadius: '50%',
+          overflow: 'hidden',
+          border: '1px solid var(--border)',
+          background: 'linear-gradient(135deg, rgba(255,80,0,0.22), rgba(0,232,122,0.12))',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'var(--text-primary)',
+          fontFamily: 'var(--font-display)',
+          fontSize: 26,
+          lineHeight: 1,
+        }}>
+          {previewUrl ? (
+            <img
+              src={previewUrl}
+              alt=""
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            />
+          ) : (
+            <span>{String(displayName || user?.username || '?').trim().slice(0, 1).toUpperCase()}</span>
+          )}
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{
+            fontFamily: 'var(--font-body)',
+            fontSize: 15,
+            fontWeight: 800,
+            color: 'var(--text-primary)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>
+            {displayName?.trim() || `@${user?.username || 'usuario'}`}
+          </div>
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            color: 'var(--text-muted)',
+            marginTop: 3,
+          }}>
+            @{user?.username || 'usuario'}
+          </div>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gap: 10, marginTop: 16 }}>
+        <label style={profileFieldLabelStyle}>
+          {lang === 'en' ? 'Name' : 'Nombre'}
+          <input
+            value={displayName}
+            onChange={(e) => {
+              setDisplayName(e.target.value);
+              setErr(null);
+              setOk(null);
+            }}
+            maxLength={60}
+            placeholder={lang === 'en' ? 'Your public name' : 'Tu nombre público'}
+            style={profileInputStyle}
+          />
+        </label>
+        <label style={profileFieldLabelStyle}>
+          {lang === 'en' ? 'Profile picture URL' : 'URL de foto de perfil'}
+          <input
+            value={profileImageUrl}
+            onChange={(e) => {
+              setProfileImageUrl(e.target.value);
+              setErr(null);
+              setOk(null);
+            }}
+            placeholder="https://..."
+            style={profileInputStyle}
+          />
+        </label>
+      </div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 16 }}>
+        <button
+          onClick={handleSave}
+          disabled={busy}
+          style={socialActionButtonStyle({ primary: true, disabled: busy })}
+        >
+          {busy ? '...' : (lang === 'en' ? 'Save profile' : 'Guardar perfil')}
+        </button>
+        {publicProfilePath && (
+          <Link
+            to={publicProfilePath}
+            style={{
+              ...socialActionButtonStyle({ primary: false }),
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              textDecoration: 'none',
+            }}
+          >
+            {lang === 'en' ? 'View public profile' : 'Ver perfil público'}
+          </Link>
+        )}
+      </div>
+    </section>
+  );
+}
+
 // (Turnkey delegated-signing card was removed from this page on
 // 2026-04-30. The points app is purely off-chain MXNP and never calls
 // into a signing flow, so prompting here just confused users. The MVP
@@ -1027,11 +1196,65 @@ function SocialTasksCard() {
   );
 }
 
+function DeveloperApiCard() {
+  const lang = useLang();
+  const copy = lang === 'en'
+    ? {
+        eyebrow: 'Developer access',
+        title: 'Create an API key for bots or dashboards',
+        body: 'Read markets, inspect your account, and request trading access from the developer page. Keep secrets private and rotate keys you stop using.',
+        meta: 'Phone verification may be required before higher-risk usage is approved.',
+        cta: 'Create API key',
+      }
+    : {
+        eyebrow: 'Acceso developer',
+        title: 'Crea una API key para bots o dashboards',
+        body: 'Lee mercados, revisa tu cuenta y solicita acceso de trading desde la página developer. Mantén tus secretos privados y revoca keys que ya no uses.',
+        meta: 'Podemos pedir verificación telefónica antes de aprobar uso de mayor riesgo.',
+        cta: 'Crear API key',
+      };
+
+  return (
+    <section style={panelStyle}>
+      <div style={eyebrowStyle}>{copy.eyebrow}</div>
+      <h3 style={panelTitleStyle}>{copy.title}</h3>
+      <p style={panelBodyStyle}>{copy.body}</p>
+      <p style={{ ...panelBodyStyle, marginTop: 10, color: 'var(--text-muted)' }}>
+        {copy.meta}
+      </p>
+      <Link
+        to="/developer"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: 44,
+          width: '100%',
+          marginTop: 18,
+          padding: '12px 18px',
+          borderRadius: 8,
+          background: 'var(--orange)',
+          color: '#090909',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          fontWeight: 900,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          textDecoration: 'none',
+        }}
+      >
+        {copy.cta}
+      </Link>
+    </section>
+  );
+}
+
 // ─── Main page ───────────────────────────────────────────────────────────────
 export default function PointsEarn({ onOpenLogin }) {
   const navigate = useNavigate();
   const { authenticated, user, loading, refresh } = usePointsAuth();
   const isMobile = useIsMobile();
+  const lang = useLang();
   const t = useT();
 
   useEffect(() => {
@@ -1098,9 +1321,11 @@ export default function PointsEarn({ onOpenLogin }) {
         gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
         gap: 24,
       }}>
+        <ProfileSettingsCard user={user} onSaved={refresh} />
         <DailyClaimCardWithStatus onClaimed={refresh} />
         <ReferralCard />
         <InstallAppBonusCard onClaimed={refresh} />
+        <DeveloperApiCard />
       </div>
 
       <div style={{ marginTop: 24 }}>
@@ -1162,6 +1387,29 @@ const panelBodyStyle = {
   color: 'var(--text-secondary)',
   lineHeight: 1.6,
   margin: 0,
+};
+
+const profileFieldLabelStyle = {
+  display: 'grid',
+  gap: 6,
+  color: 'var(--text-muted)',
+  fontFamily: 'var(--font-mono)',
+  fontSize: 10,
+  letterSpacing: '0.08em',
+  textTransform: 'uppercase',
+};
+
+const profileInputStyle = {
+  width: '100%',
+  boxSizing: 'border-box',
+  background: 'rgba(0,0,0,0.18)',
+  border: '1px solid var(--border)',
+  borderRadius: 8,
+  color: 'var(--text-primary)',
+  padding: '10px 11px',
+  fontFamily: 'var(--font-body)',
+  fontSize: 14,
+  outline: 'none',
 };
 
 const noticeStyle = {

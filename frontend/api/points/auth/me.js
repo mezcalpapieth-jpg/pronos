@@ -5,7 +5,7 @@
  * to hydrate auth state on page load and after refresh.
  *
  * Response:
- *   { authenticated: true, suborgId, username, email, walletAddress, balance }
+ *   { authenticated: true, suborgId, username, email, walletAddress, balance, displayName, profileImageUrl }
  *   or
  *   { authenticated: false }
  *
@@ -47,6 +47,7 @@ export default async function handler(req, res) {
       await ensurePointsSchema(schemaSql);
       const rows = await sql`
         SELECT u.turnkey_sub_org_id, u.wallet_address, u.username, u.email,
+               u.display_name, u.profile_image_url,
                COALESCE(b.balance, 0) AS balance
         FROM points_users u
         LEFT JOIN points_balances b ON b.username = u.username
@@ -64,6 +65,8 @@ export default async function handler(req, res) {
         suborgId: r.turnkey_sub_org_id,
         username: r.username,
         email: r.email || session.email || null,
+        displayName: r.display_name || null,
+        profileImageUrl: r.profile_image_url || null,
         walletAddress: r.wallet_address,
         balance: Number(r.balance || 0),
         needsUsername: !r.username,

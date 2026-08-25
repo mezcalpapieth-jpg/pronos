@@ -1,0 +1,23 @@
+{
+  "name": "Pronos",
+  "short_name": "Pronos",
+  "description": "Mercado de predicciones de Pronos.",
+  "start_url": "/points/",
+  "scope": "/points/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "icons": [
+    {
+      "src": "apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "favicon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

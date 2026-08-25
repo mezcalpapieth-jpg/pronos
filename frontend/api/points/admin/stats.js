@@ -30,7 +30,7 @@ export default async function handler(req, res) {
 
   try {
     setCacheHeaders(res, { scope: 'private', maxAge: 20, staleWhileRevalidate: 60 });
-    const { value: payload, hit } = await cachedJson('points:admin:stats:v5', 20_000, async () => {
+    const { value: payload, hit } = await cachedJson('points:admin:stats:v6', 20_000, async () => {
     await timer.time('schema_points', () => ensurePointsSchema(schemaSql));
     await timer.time('schema_interest', () => ensureInterestSchema(schemaSql));
 
@@ -321,6 +321,8 @@ export default async function handler(req, res) {
           SELECT
             u.username,
             u.email,
+            u.display_name,
+            u.profile_image_url,
             u.created_at
           FROM points_users u
           WHERE u.username IS NOT NULL
@@ -350,6 +352,8 @@ export default async function handler(req, res) {
         SELECT
           ru.username,
           ru.email,
+          ru.display_name,
+          ru.profile_image_url,
           ru.created_at,
           COALESCE(b.balance, 0) AS balance,
           pa.source AS publicity_source,
@@ -393,6 +397,8 @@ export default async function handler(req, res) {
       userSignups: signupRows.map(r => ({
         username: r.username,
         email: r.email,
+        displayName: r.display_name || null,
+        profileImageUrl: r.profile_image_url || null,
         createdAt: r.created_at,
         balance: Number(r.balance || 0),
         publicitySource: r.publicity_source || null,

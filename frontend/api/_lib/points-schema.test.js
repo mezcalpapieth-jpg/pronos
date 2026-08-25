@@ -16,6 +16,9 @@ test('points schema self-healing avoids hot-route migration lock pileups', () =>
   assert.match(source, /to_regclass\('public\.points_aicm_poll_runs'\) IS NOT NULL AS points_aicm_poll_runs/);
   assert.match(source, /to_regclass\('public\.points_aicm_flight_observations'\) IS NOT NULL AS points_aicm_flight_observations/);
   assert.match(source, /points_support_message_attachments/);
+  assert.match(source, /points_users_display_name/);
+  assert.match(source, /points_users_profile_image_url/);
+  assert.match(source, /points_users_profile_updated_at/);
   assert.match(source, /points_social_links_is_public/);
   assert.match(source, /points_social_links_source/);
   assert.match(source, /points_social_links_updated_at/);
@@ -40,6 +43,40 @@ test('points schema stores resolver checkpoints off market rows', () => {
     assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS points_resolver_checkpoints/);
     assert.match(migrationSource, /PRIMARY KEY \(market_id, checkpoint_key\)/);
     assert.match(migrationSource, /idx_points_resolver_checkpoints_key_checked/);
+  }
+});
+
+test('points schema supports public api keys, idempotency, and api trade audit fields', () => {
+  assert.match(source, /to_regclass\('public\.points_api_keys'\) IS NOT NULL AS points_api_keys/);
+  assert.match(source, /to_regclass\('public\.points_api_idempotency_keys'\) IS NOT NULL AS points_api_idempotency_keys/);
+  assert.match(source, /to_regclass\('public\.points_api_request_logs'\) IS NOT NULL AS points_api_request_logs/);
+  assert.match(source, /points_trades_source/);
+  assert.match(source, /points_trades_api_key_id/);
+  assert.match(source, /points_api_keys_secret_ciphertext/);
+
+  for (const migrationSource of [source, migrateSource]) {
+    assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS points_api_keys/);
+    assert.match(migrationSource, /key_hash\s+TEXT NOT NULL UNIQUE/);
+    assert.match(migrationSource, /secret_hash\s+TEXT NOT NULL/);
+    assert.match(migrationSource, /secret_ciphertext\s+TEXT NOT NULL/);
+    assert.match(migrationSource, /permissions\s+JSONB NOT NULL DEFAULT '\["READ"\]'::jsonb/);
+    assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS points_api_idempotency_keys/);
+    assert.match(migrationSource, /UNIQUE\(api_key_id, idempotency_key\)/);
+    assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS points_api_request_logs/);
+    assert.match(migrationSource, /request_id\s+TEXT NOT NULL UNIQUE/);
+    assert.match(migrationSource, /ALTER TABLE points_trades ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'web'/);
+    assert.match(migrationSource, /ALTER TABLE points_trades ADD COLUMN IF NOT EXISTS api_key_id BIGINT/);
+  }
+});
+
+test('points schema supports public profile personalization', () => {
+  for (const migrationSource of [source, migrateSource]) {
+    assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS points_users[\s\S]+display_name\s+TEXT/);
+    assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS points_users[\s\S]+profile_image_url\s+TEXT/);
+    assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS points_users[\s\S]+profile_updated_at\s+TIMESTAMPTZ/);
+    assert.match(migrationSource, /ALTER TABLE points_users ADD COLUMN IF NOT EXISTS display_name TEXT/);
+    assert.match(migrationSource, /ALTER TABLE points_users ADD COLUMN IF NOT EXISTS profile_image_url TEXT/);
+    assert.match(migrationSource, /ALTER TABLE points_users ADD COLUMN IF NOT EXISTS profile_updated_at TIMESTAMPTZ/);
   }
 });
 

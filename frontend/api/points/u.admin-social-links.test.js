@@ -33,6 +33,15 @@ test('public profile only exposes social handles users marked public', () => {
   assert.match(SOURCE, /publicSocialLinks = \[\]/);
 });
 
+test('public profile exposes display identity and keeps email admin-only', () => {
+  assert.match(SOURCE, /display_name/);
+  assert.match(SOURCE, /profile_image_url/);
+  assert.match(SOURCE, /displayName: userRow\[0\]\.display_name \|\| null/);
+  assert.match(SOURCE, /profileImageUrl: userRow\[0\]\.profile_image_url \|\| null/);
+  assert.match(SOURCE, /adminEmail: userRow\[0\]\.email \|\| null/);
+  assert.match(SOURCE, /\.\.\.\(viewerIsAdmin \? \{ adminEmail/);
+});
+
 test('public profile lookup falls back to public points activity rows', () => {
   assert.match(SOURCE, /WITH candidates AS/);
   assert.match(SOURCE, /FROM points_balances/);

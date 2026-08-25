@@ -66,6 +66,41 @@ function normalizeHolderList(holders, limit) {
     .slice(0, max);
 }
 
+async function resolvedParallelLegOutcomes(client, parentMarketId) {
+  const result = await client.query(
+    `SELECT id, leg_label, status, outcome
+       FROM points_markets
+      WHERE parent_id = $1
+      ORDER BY id ASC`,
+    [parentMarketId],
+  );
+  const legs = result.rows || [];
+  if (!legs.length || legs.some(leg => leg.status !== 'resolved')) return null;
+  const expectedByLabel = new Map();
+  for (const leg of legs) {
+    const label = String(leg.leg_label || '').trim();
+    if (!label) continue;
+    const winningIdx = outcomeIndexOrNull(leg.outcome);
+    if (!Number.isInteger(winningIdx)) return null;
+    expectedByLabel.set(`${label} — Sí`, winningIdx === 0);
+    expectedByLabel.set(`${label} — No`, winningIdx === 1);
+  }
+  return expectedByLabel.size ? expectedByLabel : null;
+}
+
+function parallelSnapshotMatchesResolvedLegs(holders, expectedByLabel) {
+  if (!expectedByLabel) return true;
+  let compared = 0;
+  for (const holder of holders || []) {
+    const expectedWinner = expectedByLabel.get(holder?.outcomeLabel);
+    if (typeof expectedWinner !== 'boolean') continue;
+    compared += 1;
+    const hasPayout = Math.round(Math.max(0, Number(holder?.payoutValue) || 0)) > 0;
+    if (hasPayout !== expectedWinner) return false;
+  }
+  return true;
+}
+
 async function marketRow(client, marketId) {
   const result = await client.query(
     `SELECT m.id, m.parent_id, m.outcomes, m.reserves, m.amm_mode, m.status, m.outcome,
@@ -123,11 +158,16 @@ export async function readTopHolderSnapshot(client, marketId, { limit = DEFAULT_
   );
   const row = result.rows[0];
   if (!row) return null;
+  const holders = normalizeHolderList(parseJsonb(row.holders, []), limit);
+  if ((row.amm_mode || 'unified') === 'parallel') {
+    const expectedByLabel = await resolvedParallelLegOutcomes(client, mid);
+    if (!parallelSnapshotMatchesResolvedLegs(holders, expectedByLabel)) return null;
+  }
   return {
     marketId: Number(row.market_id),
     ammMode: row.amm_mode || 'unified',
     outcomes: parseJsonb(row.outcomes, []),
-    holders: normalizeHolderList(parseJsonb(row.holders, []), limit),
+    holders,
     snapshottedAt: row.snapshotted_at,
     frozen: true,
   };
@@ -150,13 +190,6 @@ export async function buildTopHoldersForMarket(client, marketId, {
     err.status = 404;
     throw err;
   }
-  if (m.parent_id) {
-    const err = new Error('leg_not_addressable');
-    err.status = 400;
-    err.detail = 'use parent id';
-    throw err;
-  }
-
   const parentOutcomes = parseJsonb(m.outcomes, ['Sí', 'No']);
   const ammMode = m.amm_mode || 'unified';
   const isResolved = m.status === 'resolved';
@@ -167,7 +200,7 @@ export async function buildTopHoldersForMarket(client, marketId, {
     : null;
   const max = clampLimit(limit);
 
-  if (ammMode === 'parallel') {
+  if (ammMode === 'parallel' && !m.parent_id) {
     const legsResult = await client.query(
       `SELECT l.id, l.reserves, l.status, l.outcome, l.leg_label,
               (SELECT t.outcome_index

@@ -20,7 +20,15 @@
 
 const buckets = new Map();
 
-export function rateLimit(req, res, { key, limit, windowMs }) {
+export function rateLimit(req, res, {
+  key,
+  limit,
+  windowMs,
+  structuredError = false,
+  requestId = null,
+  errorCode = 'rate_limited',
+  errorMessage = 'Too many requests',
+} = {}) {
   if (!key || !limit || !windowMs) return false;
 
   const now = Date.now();
@@ -41,7 +49,18 @@ export function rateLimit(req, res, { key, limit, windowMs }) {
     res.setHeader('X-RateLimit-Limit', String(limit));
     res.setHeader('X-RateLimit-Remaining', '0');
     res.setHeader('X-RateLimit-Reset', String(Math.ceil(bucket.resetAt / 1000)));
-    res.status(429).json({ error: 'Too many requests', retryAfter: retryAfterSec });
+    if (structuredError) {
+      res.status(429).json({
+        error: {
+          code: errorCode,
+          message: errorMessage,
+        },
+        requestId,
+        retryAfter: retryAfterSec,
+      });
+    } else {
+      res.status(429).json({ error: 'Too many requests', retryAfter: retryAfterSec });
+    }
     return true;
   }
 

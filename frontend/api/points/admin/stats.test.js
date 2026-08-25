@@ -16,6 +16,8 @@ test('admin stats includes invested volume, site time, publicity links, and per-
   assert.match(statsSource, /activityRows/);
   assert.match(statsSource, /distributionUserRows/);
   assert.match(statsSource, /signupRows/);
+  assert.match(statsSource, /display_name/);
+  assert.match(statsSource, /profile_image_url/);
   assert.match(statsSource, /volume:\s*\{/);
   assert.match(statsSource, /siteTime:\s*\{/);
   assert.match(statsSource, /publicity:\s*\{/);
@@ -26,6 +28,8 @@ test('admin stats includes invested volume, site time, publicity links, and per-
   assert.match(statsSource, /recentDistributions: distRows\.map/);
   assert.match(statsSource, /usersForKind = distributionUserRows\.filter/);
   assert.match(statsSource, /hiddenUsers:/);
+  assert.match(statsSource, /displayName:\s*r\.display_name/);
+  assert.match(statsSource, /profileImageUrl:\s*r\.profile_image_url/);
   assert.doesNotMatch(statsSource, /rn <= CASE WHEN kind = 'referral_bonus'/);
 });
 

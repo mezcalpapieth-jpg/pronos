@@ -364,18 +364,22 @@ async function insertTradeAndSnapshot(client, {
   reservesBefore,
   reservesAfter,
   snapshotLabel,
+  source = 'web',
+  apiKeyId = null,
 }) {
   await client.query(
     `INSERT INTO points_trades (
        market_id, username, side, outcome_index,
        shares, collateral, fee, price_at_trade,
-       reserves_before, reserves_after
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb)`,
+       reserves_before, reserves_after, source, api_key_id
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11, $12)`,
     [
       marketId, username, side, outcomeIndex,
       shares, collateral, fee || 0, priceAtTrade || 0,
       JSON.stringify(reservesBefore),
       JSON.stringify(reservesAfter),
+      source || 'web',
+      apiKeyId || null,
     ],
   );
 
@@ -1327,6 +1331,8 @@ export async function matchRestingAsksForBuy(client, {
   collateralBudget,
   maxPrice = null,
   maxOrders = MAX_TRIGGERED_PER_PASS,
+  source = 'web',
+  apiKeyId = null,
 } = {}) {
   const budget = Math.max(0, Number(collateralBudget || 0));
   if (budget <= EPSILON) {
@@ -1412,6 +1418,8 @@ export async function matchRestingAsksForBuy(client, {
       reservesBefore: reserves,
       reservesAfter: reserves,
       snapshotLabel: null,
+      source,
+      apiKeyId,
     });
     await insertTradeAndSnapshot(client, {
       marketId,
@@ -1470,6 +1478,8 @@ export async function matchPronosMakerAsksForBuy(client, {
   maxPrice = null,
   maxOrders = MAX_TRIGGERED_PER_PASS,
   currentPrice = null,
+  source = 'web',
+  apiKeyId = null,
 } = {}) {
   const budget = Math.max(0, Number(collateralBudget || 0));
   if (budget <= EPSILON) {
@@ -1521,6 +1531,8 @@ export async function matchPronosMakerAsksForBuy(client, {
       reservesBefore: reserves,
       reservesAfter: reserves,
       snapshotLabel: null,
+      source,
+      apiKeyId,
     });
     await insertTradeAndSnapshot(client, {
       marketId,
@@ -1563,6 +1575,8 @@ export async function matchRestingBidsForSell(client, {
   sharesToSell,
   minPrice = null,
   maxOrders = MAX_TRIGGERED_PER_PASS,
+  source = 'web',
+  apiKeyId = null,
 } = {}) {
   const targetShares = Math.max(0, Number(sharesToSell || 0));
   if (targetShares <= EPSILON) {
@@ -1644,6 +1658,8 @@ export async function matchRestingBidsForSell(client, {
       reservesBefore: reserves,
       reservesAfter: reserves,
       snapshotLabel: null,
+      source,
+      apiKeyId,
     });
     await insertTradeAndSnapshot(client, {
       marketId,
@@ -1701,6 +1717,8 @@ export async function matchPronosMakerInventoryBidsForSell(client, {
   username,
   outcomeIndex,
   sharesToSell,
+  source = 'web',
+  apiKeyId = null,
 } = {}) {
   const targetShares = Math.max(0, Number(sharesToSell || 0));
   if (targetShares <= EPSILON) {
@@ -1762,6 +1780,8 @@ export async function matchPronosMakerInventoryBidsForSell(client, {
       reservesBefore: reserves,
       reservesAfter: reserves,
       snapshotLabel: null,
+      source,
+      apiKeyId,
     });
     await insertTradeAndSnapshot(client, {
       marketId,
@@ -1807,6 +1827,8 @@ export async function matchPronosMakerBidsForSell(client, {
   minPrice = null,
   maxOrders = MAX_TRIGGERED_PER_PASS,
   currentPrice = null,
+  source = 'web',
+  apiKeyId = null,
 } = {}) {
   const targetShares = Math.max(0, Number(sharesToSell || 0));
   if (targetShares <= EPSILON) {
@@ -1867,6 +1889,8 @@ export async function matchPronosMakerBidsForSell(client, {
       reservesBefore: fill.reservesBefore || reserves,
       reservesAfter: fill.reservesAfter || reserves,
       snapshotLabel: null,
+      source,
+      apiKeyId,
     });
     await insertTradeAndSnapshot(client, {
       marketId,

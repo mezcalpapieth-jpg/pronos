@@ -7,10 +7,12 @@
  * parallel markets:
  *
  *   Unified: aggregates rows from points_positions where market_id = X.
- *   Parallel: marketId refers to the parent; we expand to all its legs
+ *   Parallel parent: marketId refers to the parent; we expand to all its legs
  *            and aggregate per (username, leg, outcome). Each leg is a
  *            distinct "side" the user holds, labeled "<leg> — Sí/No" to
  *            match positions.js's display convention.
+ *   Parallel child: marketId may also refer to one leg, which renders the
+ *            regular Sí/No holder table for the resolved detail page.
  *
  * Read-only. Rate-limited to 30 req/min/IP to cap discovery-page load.
  */

@@ -104,6 +104,18 @@ const PUBLIC_ERROR_COPY = {
     es: 'No pudimos conectar esa cuenta. Intenta otra vez.',
     en: 'Could not connect that account. Try again.',
   },
+  invalid_display_name: {
+    es: 'Usa un nombre más corto y sin caracteres raros.',
+    en: 'Use a shorter display name without unusual characters.',
+  },
+  invalid_profile_image_url: {
+    es: 'Usa una URL válida de imagen que empiece con https:// o http://.',
+    en: 'Use a valid image URL that starts with https:// or http://.',
+  },
+  profile_update_failed: {
+    es: 'No pudimos guardar tu perfil. Intenta otra vez.',
+    en: 'Could not save your profile. Try again.',
+  },
   x_account_required: {
     es: 'Conecta X primero y vuelve a verificar.',
     en: 'Connect X first, then verify again.',
@@ -165,6 +177,16 @@ export async function getJson(url) {
 export async function postJson(url, body) {
   const res = await fetch(url, {
     method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
+  return handle(res);
+}
+
+export async function deleteJson(url, body) {
+  const res = await fetch(url, {
+    method: 'DELETE',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body || {}),
@@ -285,6 +307,23 @@ export async function revokeDelegation() {
 // their provider approvals are ready. Each handle is private by default.
 export async function fetchSocialLinks() {
   return getJson('/api/points/social-links');
+}
+
+export async function saveProfileSettings({ displayName, profileImageUrl }) {
+  return postJson('/api/points/profile', { displayName, profileImageUrl });
+}
+
+// ─── Public API keys ───────────────────────────────────────────────────────
+export async function fetchApiKeys() {
+  return getJson('/api/points/api-keys');
+}
+
+export async function createApiKey({ name, permissions = ['READ'], expiresAt = null } = {}) {
+  return postJson('/api/points/api-keys', { name, permissions, expiresAt });
+}
+
+export async function revokeApiKey(id) {
+  return deleteJson('/api/points/api-keys', { id });
 }
 
 export async function saveSocialLink({ provider, handle, isPublic = false }) {
@@ -613,6 +652,11 @@ export async function adminSetSupportTicketStatus({ id, status }) {
     id,
     action: status === 'closed' ? 'close' : 'reopen',
   });
+}
+
+// ─── Admin — public API usage ──────────────────────────────────────────────
+export async function adminListApiUsage() {
+  return getJson('/api/points/admin/api-usage');
 }
 
 // ─── Admin — resolution candidates ─────────────────────────────────────────

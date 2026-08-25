@@ -44,6 +44,15 @@ test('public social tasks show the saved account used for manual review', () => 
   assert.match(source, /Cuenta \{socialTaskNetworkLabel\(task\)\} guardada: \{socialTaskAccountText\(task\)\}/);
 });
 
+test('usuario page lets users personalize a public profile', () => {
+  assert.match(source, /saveProfileSettings/);
+  assert.match(source, /function ProfileSettingsCard/);
+  assert.match(source, /profileImageUrl/);
+  assert.match(source, /Tu email se mantiene privado y solo lo ven admins/);
+  assert.match(source, /Ver perfil público/);
+  assert.match(source, /<ProfileSettingsCard user=\{user\} onSaved=\{refresh\} \/>/);
+});
+
 test('public social tasks card shows all catalog tasks without network filter tabs', () => {
   const socialTasksSource = source.slice(source.indexOf('function SocialTasksCard'));
   assert.doesNotMatch(socialTasksSource, /const SOCIAL_TASK_FILTERS = \[/);

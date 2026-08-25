@@ -191,7 +191,7 @@ export default function PointsMarketCard({ market, userPosition }) {
   const marketDetailPath = `/market?id=${encodeURIComponent(market.id)}`;
   const cardTargetPath = isChampionsFinalCard
     ? CHAMPIONS_LEAGUE_HUB_PATH
-    : isAicmDelayCard
+    : isAicmDelayCard && !isResolved
       ? AICM_HUB_PATH
       : marketDetailPath;
   const navigateToCardTarget = () => {

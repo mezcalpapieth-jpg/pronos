@@ -1,0 +1,1 @@
+const i=/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i;function n(){const r="/points/";return r.endsWith("/")?r:`${r}/`}function e(r){const t=String(r||"").trim();if(!t)return"";if(i.test(t)||!t.startsWith("/"))return t;const s=n();return t===s.slice(0,-1)||t.startsWith(s)||t.startsWith("/api/")||t.startsWith("/css/")||t.startsWith("/mvp/")?t:`${s}${t.replace(/^\/+/,"")}`}export{e as p};

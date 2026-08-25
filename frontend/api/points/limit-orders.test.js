@@ -23,6 +23,7 @@ import {
 } from '../_lib/points-limit-orders.js';
 import { monotonicBuyDisplayPrice } from '../_lib/points-display-prices.js';
 import { binaryBuyQuote, binaryPrices, binarySellQuote } from '../_lib/amm-math.js';
+import { readTopHolderSnapshot } from '../_lib/points-top-holders.js';
 
 const schemaSource = await readFile(new URL('../_lib/points-schema.js', import.meta.url), 'utf8');
 const migrateSource = await readFile(new URL('../migrate.js', import.meta.url), 'utf8');
@@ -35,6 +36,7 @@ const cancelOrderSource = await readFile(new URL('./cancel-limit-order.js', impo
 const makerRewardsSource = await readFile(new URL('./maker-rewards.js', import.meta.url), 'utf8');
 const makerRewardsCronSource = await readFile(new URL('../cron/points-maker-rewards.js', import.meta.url), 'utf8');
 const buySource = await readFile(new URL('./buy.js', import.meta.url), 'utf8');
+const tradeServiceSource = await readFile(new URL('../_lib/points-trading-service.js', import.meta.url), 'utf8');
 const quoteBuySource = await readFile(new URL('./quote-buy.js', import.meta.url), 'utf8');
 const quoteSellSource = await readFile(new URL('./quote-sell.js', import.meta.url), 'utf8');
 const topHoldersSource = await readFile(new URL('./top-holders.js', import.meta.url), 'utf8');
@@ -119,11 +121,11 @@ test('tournament minimum applies only before a market is covered', () => {
   assert.match(helperSource, /SELECT id, question, status, reserves, outcomes, end_time, resolver_config,\s*amm_mode, parent_id/s);
   assert.match(helperSource, /await assertTournamentMinimumEntry\(client, \{\s*market,\s*username,\s*amount: qty,\s*\}\)/s);
   assert.doesNotMatch(helperSource, /qty < TOURNAMENT_MIN_ENTRY_MXNP/);
-  assert.match(buySource, /import \{ assertTournamentMinimumEntry \} from '\.\.\/_lib\/points-tournament-entry\.js'/);
-  assert.match(buySource, /m\.seed_liquidity, m\.seed_liquidities, m\.amm_mode, m\.parent_id/);
-  assert.match(buySource, /COALESCE\(m\.tournament_featured, p\.tournament_featured, false\) AS tournament_featured/);
-  assert.match(buySource, /await assertTournamentMinimumEntry\(client, \{\s*market: m,\s*username,\s*amount: amt,\s*\}\)/s);
-  assert.doesNotMatch(buySource, /amt < TOURNAMENT_MIN_ENTRY_MXNP/);
+  assert.match(tradeServiceSource, /import \{ assertTournamentMinimumEntry \} from '\.\/points-tournament-entry\.js'/);
+  assert.match(tradeServiceSource, /m\.seed_liquidity, m\.seed_liquidities, m\.amm_mode, m\.parent_id/);
+  assert.match(tradeServiceSource, /COALESCE\(m\.tournament_featured, p\.tournament_featured, false\) AS tournament_featured/);
+  assert.match(tradeServiceSource, /await assertTournamentMinimumEntry\(client, \{\s*market,\s*username,\s*amount: amt,\s*\}\)/s);
+  assert.doesNotMatch(tradeServiceSource, /amt < TOURNAMENT_MIN_ENTRY_MXNP/);
 });
 
 test('maker rewards accrue after resting near the current price with no per-order cap', () => {
@@ -359,14 +361,14 @@ test('buy quotes display orderbook-only execution price instead of stale AMM pri
   assert.match(quoteBuySource, /const rawPriceAfter = q\?\.pricesAfter\?\.\[oi\] \?\? null/);
   assert.match(quoteBuySource, /const priceAfter = monotonicBuyDisplayPrice\(priceBefore, \[/);
   assert.match(quoteBuySource, /priceImpactPts: \(priceAfter - priceBefore\) \* 100/);
-  assert.match(buySource, /binaryPricesWithBookTrade/);
-  assert.match(buySource, /function buyOrderbookPriceCap/);
-  assert.match(buySource, /const bookMaxPrice = buyOrderbookPriceCap\(reserves, oi, amt\)/);
-  assert.match(buySource, /matchRestingAsksForBuy\(client, \{[\s\S]*maxPrice: bookMaxPrice,[\s\S]*\}\)/);
-  assert.match(buySource, /matchPronosMakerAsksForBuy\(client, \{[\s\S]*maxPrice: bookMaxPrice,[\s\S]*\}\)/);
-  assert.match(buySource, /PRONOS_TREASURY_USERNAME/);
-  assert.match(buySource, /currentPrice: displayPriceBefore \|\| null/);
-  assert.match(buySource, /const responsePriceAfter = reserves\.length === 2\s*\?\s*monotonicBuyDisplayPrice\(responsePriceBefore, \[/s);
+  assert.match(tradeServiceSource, /binaryPricesWithBookTrade/);
+  assert.match(tradeServiceSource, /function buyOrderbookPriceCap/);
+  assert.match(tradeServiceSource, /const bookMaxPrice = buyOrderbookPriceCap\(reserves, oi, amt\)/);
+  assert.match(tradeServiceSource, /matchRestingAsksForBuy\(client, \{[\s\S]*maxPrice: bookMaxPrice,[\s\S]*\}\)/);
+  assert.match(tradeServiceSource, /matchPronosMakerAsksForBuy\(client, \{[\s\S]*maxPrice: bookMaxPrice,[\s\S]*\}\)/);
+  assert.match(tradeServiceSource, /PRONOS_TREASURY_USERNAME/);
+  assert.match(tradeServiceSource, /currentPrice: displayPriceBefore \|\| null/);
+  assert.match(tradeServiceSource, /const responsePriceAfter = reserves\.length === 2\s*\?\s*monotonicBuyDisplayPrice\(responsePriceBefore, \[/s);
   assert.match(quoteBuySource, /orderbookFillCount/);
   assert.doesNotMatch(quoteBuySource, /orderbookFills: orderbook\.fills/);
   assert.doesNotMatch(quoteBuySource, /ammCollateral,/);
@@ -391,12 +393,12 @@ test('sell quotes and orderbook current price only trust latest book-only fills'
   assert.match(quoteSellSource, /previewRestingBidsForSell\(bidRows, \{\s*shares: n,\s*minPrice: bookMinPrice,\s*\}\)/s);
   assert.match(quoteSellSource, /const reservesForAmm = Array\.isArray\(orderbook\.reservesAfter\)/);
   assert.match(quoteSellSource, /binarySellQuote\(reservesForAmm, oi, ammShares\)/);
-  assert.match(sellSource, /function sellOrderbookPriceFloor/);
-  assert.match(sellSource, /const bookMinPrice = sellOrderbookPriceFloor\(reserves, oi, sharesToSell\)/);
-  assert.match(sellSource, /matchRestingBidsForSell\(client, \{[\s\S]*minPrice: bookMinPrice,[\s\S]*\}\)/);
-  assert.match(sellSource, /matchPronosMakerInventoryBidsForSell\(client, \{/);
-  assert.match(sellSource, /const reservesForAmm = Array\.isArray\(orderbookMatch\.reservesAfter\)/);
-  assert.match(sellSource, /binarySellQuote\(reservesForAmm, oi, ammShares\)/);
+  assert.match(tradeServiceSource, /function sellOrderbookPriceFloor/);
+  assert.match(tradeServiceSource, /const bookMinPrice = sellOrderbookPriceFloor\(reserves, oi, sharesToSell\)/);
+  assert.match(tradeServiceSource, /matchRestingBidsForSell\(client, \{[\s\S]*minPrice: bookMinPrice,[\s\S]*\}\)/);
+  assert.match(tradeServiceSource, /matchPronosMakerInventoryBidsForSell\(client, \{/);
+  assert.match(tradeServiceSource, /const reservesForAmm = Array\.isArray\(orderbookMatch\.reservesAfter\)/);
+  assert.match(tradeServiceSource, /binarySellQuote\(reservesForAmm, oi, ammShares\)/);
   assert.match(quoteSellSource, /previewPronosMakerInventoryBidsForSell\(makerTradeRows, \{/);
   assert.match(quoteSellSource, /const priceBefore = displayPricesBefore\[oi\] \|\| pricesBefore\[oi\] \|\| 0/);
   assert.match(quoteSellSource, /const lastBookFillPrice = \[\.\.\.\(orderbook\.fills \|\| \[\]\)\]/);
@@ -425,6 +427,57 @@ test('top holders price positions with displayed book-trade odds', () => {
   assert.match(topHoldersHelperSource, /holderHasDisplayValue/);
   assert.match(topHoldersHelperSource, /Math\.round\(Math\.max\(0, beforeValue, payoutValue\)\) > 0/);
   assert.match(topHoldersHelperSource, /\.filter\(holderHasDisplayValue\)/);
+  assert.match(topHoldersHelperSource, /ammMode === 'parallel' && !m\.parent_id/);
+  assert.match(topHoldersHelperSource, /resolvedParallelLegOutcomes/);
+  assert.match(topHoldersHelperSource, /parallelSnapshotMatchesResolvedLegs/);
+  assert.match(topHoldersHelperSource, /if \(!parallelSnapshotMatchesResolvedLegs\(holders, expectedByLabel\)\) return null/);
+  assert.doesNotMatch(topHoldersHelperSource, /leg_not_addressable/);
+});
+
+test('stale parallel top-holder snapshots are ignored after resolution correction', async () => {
+  const staleSnapshotClient = {
+    async query(sql) {
+      if (/FROM points_top_holder_snapshots/.test(sql)) {
+        return {
+          rows: [{
+            market_id: 92265,
+            amm_mode: 'parallel',
+            outcomes: JSON.stringify(['0-255', '256-275']),
+            holders: JSON.stringify([
+              {
+                username: 'alexis',
+                outcomeLabel: '256-275 — Sí',
+                shares: 5400.84,
+                costBasis: 2000,
+                value: 3251.16,
+                payoutValue: 0,
+              },
+              {
+                username: 'mrtriangulo',
+                outcomeLabel: '0-255 — Sí',
+                shares: 3481.1,
+                costBasis: 1586,
+                value: 1546.77,
+                payoutValue: 3481.1,
+              },
+            ]),
+            snapshotted_at: '2026-08-22T11:11:41.534Z',
+          }],
+        };
+      }
+      if (/FROM points_markets/.test(sql) && /parent_id = \$1/.test(sql)) {
+        return {
+          rows: [
+            { id: 92266, leg_label: '0-255', status: 'resolved', outcome: 1 },
+            { id: 92267, leg_label: '256-275', status: 'resolved', outcome: 0 },
+          ],
+        };
+      }
+      throw new Error(`unexpected query: ${sql}`);
+    },
+  };
+
+  assert.equal(await readTopHolderSnapshot(staleSnapshotClient, 92265), null);
 });
 
 test('market resolution freezes top-holder snapshots before final odds collapse', () => {
@@ -644,14 +697,14 @@ test('portfolio and cron expose daily maker-reward payouts', () => {
 });
 
 test('market writes trigger orders and close paths release open reserves', () => {
-  assert.match(buySource, /executeTriggeredLimitOrders\(client, \{\s*marketId: mid,\s*\}\)/s);
-  assert.match(sellSource, /executeTriggeredLimitOrders\(client, \{\s*marketId: mid,\s*\}\)/s);
-  assert.match(buySource, /dismissed_at = NULL/);
+  assert.match(tradeServiceSource, /executeTriggeredLimitOrders\(client, \{\s*marketId: mid\s*\}\)/s);
+  assert.match(tradeServiceSource, /executeTriggeredLimitOrders\(client, \{\s*marketId: mid\s*\}\)/s);
+  assert.match(tradeServiceSource, /dismissed_at = NULL/);
   assert.match(helperSource, /dismissed_at = NULL/);
-  assert.match(buySource, /assertCryptoTradeAllowed/);
-  assert.match(sellSource, /assertCryptoTradeAllowed/);
+  assert.match(tradeServiceSource, /assertCryptoTradeAllowed/);
+  assert.match(tradeServiceSource, /assertCryptoTradeAllowed/);
   assert.match(helperSource, /const outcomeIndices = await resolveTriggeredOutcomeIndices/);
-  assert.match(sellSource, /lockedReservedShares/);
+  assert.match(tradeServiceSource, /lockedReservedShares/);
   for (const source of [resolveSource, cancelMarketSource, voidMarketSource, cronResolveSource]) {
     assert.match(source, /releaseOpenLimitOrdersForMarkets/);
   }

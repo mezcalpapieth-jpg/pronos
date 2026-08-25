@@ -20,7 +20,7 @@ export default function TermsOfService() {
   const t = useT();
   const title = t('legal.terms.title');
   const isEn = lang === 'en';
-  const lastUpdated = isEn ? 'May 6, 2026' : '6 de mayo de 2026';
+  const lastUpdated = isEn ? 'August 25, 2026' : '25 de agosto de 2026';
 
   useEffect(() => {
     document.title = title;
@@ -87,6 +87,7 @@ export default function TermsOfService() {
           <li>Pronos does not store passwords. Your session is maintained through an HMAC-signed cookie valid for 30 days.</li>
           <li>You are responsible for securing your email account - whoever has access to it may access your Pronos account.</li>
           <li>The wallet associated with your account is managed through Turnkey delegated signing. We do not have direct access to your private keys.</li>
+          <li>If you add a public display name, profile picture, social handle, or other profile content, you are responsible for making sure it is accurate, lawful, and appropriate for the platform.</li>
         </Ul>
 
         <H2>5. How markets work</H2>
@@ -129,18 +130,21 @@ export default function TermsOfService() {
         <Ul>
           <li>Manipulate prices through coordinated activity (wash trading, pump-and-dump, spoofing).</li>
           <li>Trade using privileged information about an event outcome (for example, a referee betting against their own match).</li>
-          <li>Use bots, scrapers, or any unauthorized automation.</li>
-          <li>Impersonate another person or create multiple accounts to evade restrictions.</li>
+          <li>Use bots, scrapers, API keys, or automation in a way that is unauthorized, abusive, misleading, excessive, or designed to bypass platform limits.</li>
+          <li>Impersonate another person or create, control, or coordinate multiple accounts to evade restrictions, loop trades, manipulate markets, farm rewards, or gain an unfair tournament advantage.</li>
+          <li>Upload, link, or display profile pictures or other content that includes nudity, explicit sexual material, racism, xenophobia, hate, harassment, threats, gore, illegal content, or anything else that Pronos considers indecent or unsafe for the community.</li>
           <li>Exploit points, tournaments, rewards, referrals, or social tasks through coordinated accounts, artificial price movement, self-dealing, timing attacks, resolution delays, bugs, or any other behavior intended to farm leaderboard position or rewards without legitimate market risk.</li>
           <li>Use the platform to launder money, finance illegal activities, or evade sanctions.</li>
           <li>Attack the technical integrity of the system (denial of service, exploits, malicious reverse engineering of contracts).</li>
         </Ul>
         <P>
-          Pronos may freeze your account, cancel activity, disqualify you from
-          leaderboards, tournaments, prizes, bonuses, and other rewards, and
-          report to the appropriate authorities if it detects any of the conduct
-          above. Users caught using these exploits are not eligible to receive
-          rewards, even if their point balance remains visible in the app.
+          Pronos may freeze your account, remove content, cancel activity,
+          limit or withhold winnings, disqualify you from leaderboards,
+          tournaments, prizes, bonuses, and other rewards, ban your account,
+          and report to the appropriate authorities if it detects any of the
+          conduct above. Users caught using these exploits are not eligible to
+          receive rewards, even if their point balance remains visible in the
+          app.
         </P>
 
         <H2>9. Intellectual property</H2>
@@ -311,6 +315,7 @@ export default function TermsOfService() {
         <li>Pronos no almacena contraseñas. La sesión se mantiene mediante una cookie firmada con HMAC, vigente 30 días.</li>
         <li>Eres responsable de la seguridad de tu correo electrónico — quien tenga acceso a él puede acceder a tu cuenta.</li>
         <li>La wallet asociada a tu cuenta se gestiona vía Turnkey (firmas delegadas). No tenemos acceso directo a tus claves privadas.</li>
+        <li>Si agregas un nombre público, foto de perfil, usuario social u otro contenido de perfil, eres responsable de que sea exacto, legal y apropiado para la plataforma.</li>
       </Ul>
 
       <H2>5. Cómo funcionan los mercados</H2>
@@ -353,15 +358,17 @@ export default function TermsOfService() {
       <Ul>
         <li>Manipular precios mediante operaciones coordinadas (wash trading, pump-and-dump, spoofing).</li>
         <li>Operar con información privilegiada sobre el resultado de un evento (por ejemplo, un árbitro apostando contra su propio partido).</li>
-        <li>Usar bots, scrapers o cualquier automatización no autorizada.</li>
-        <li>Suplantar a otra persona o crear múltiples cuentas para evadir restricciones.</li>
+        <li>Usar bots, scrapers, API keys o automatización de forma no autorizada, abusiva, engañosa, excesiva o diseñada para evadir límites de la plataforma.</li>
+        <li>Suplantar a otra persona o crear, controlar o coordinar múltiples cuentas para evadir restricciones, hacer loops de trades, manipular mercados, farmear recompensas o ganar una ventaja injusta en torneos.</li>
+        <li>Subir, enlazar o mostrar fotos de perfil u otro contenido con desnudez, material sexual explícito, racismo, xenofobia, odio, acoso, amenazas, violencia gráfica, contenido ilegal o cualquier otra cosa que Pronos considere indecente o insegura para la comunidad.</li>
         <li>Explotar puntos, torneos, recompensas, referidos o tareas sociales mediante cuentas coordinadas, movimientos artificiales de precio, auto-operaciones, ataques de temporalidad, retrasos de resolución, bugs o cualquier conducta diseñada para subir en el leaderboard o reclamar recompensas sin riesgo legítimo de mercado.</li>
         <li>Usar la plataforma para lavar dinero, financiar actividades ilegales o evadir sanciones.</li>
         <li>Atentar contra la integridad técnica del sistema (denegación de servicio, exploits, ingeniería inversa de los contratos con fines maliciosos).</li>
       </Ul>
       <P>
-        Pronos puede congelar tu cuenta, cancelar actividad, descalificarte
-        de leaderboards, torneos, premios, bonos y otras recompensas, y
+        Pronos puede congelar tu cuenta, retirar contenido, cancelar actividad,
+        limitar o retener tus ganancias, descalificarte de leaderboards,
+        torneos, premios, bonos y otras recompensas, banear tu cuenta y
         reportar a las autoridades correspondientes si detecta cualquiera
         de los comportamientos anteriores. Las personas detectadas usando
         estos exploits no serán elegibles para recibir recompensas, aunque

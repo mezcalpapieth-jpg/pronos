@@ -48,8 +48,14 @@ function signedFmt(n) {
   return `${v >= 0 ? '+' : '-'}${Math.abs(v).toFixed(2)}`;
 }
 
+const RESOLVED_HISTORY_STATES = new Set(['won', 'lost', 'canceled']);
+
 function portfolioMarketHref(item) {
-  const id = item?.parentMarketId || item?.marketId;
+  const useChildMarket = item?.status === 'resolved'
+    || RESOLVED_HISTORY_STATES.has(item?.outcomeStatus);
+  const id = useChildMarket
+    ? (item?.marketId || item?.parentMarketId)
+    : (item?.parentMarketId || item?.marketId);
   return id ? `/market?id=${encodeURIComponent(id)}` : null;
 }
 
@@ -1089,6 +1095,8 @@ export default function PointsPortfolio() {
               username={user?.username}
               cycleScope={historyCycleScope}
               onCycleScopeChange={setHistoryCycleScope}
+              onRedeem={handleRedeem}
+              actionState={actionState}
             />
           )}
 
@@ -1158,7 +1166,16 @@ function CycleScopeToggle({ value = 'current', onChange }) {
 }
 
 // ─── History view (inlined — mirrors MVP HistoryTab structure) ───────────────
-function HistoryView({ history, summary, loading, username, cycleScope = 'current', onCycleScopeChange }) {
+function HistoryView({
+  history,
+  summary,
+  loading,
+  username,
+  cycleScope = 'current',
+  onCycleScopeChange,
+  onRedeem,
+  actionState,
+}) {
   const cycleToggle = <CycleScopeToggle value={cycleScope} onChange={onCycleScopeChange} />;
   if (loading) {
     return (
@@ -1225,6 +1242,12 @@ function HistoryView({ history, summary, loading, username, cycleScope = 'curren
           const pnlPos = pnl >= 0;
           const marketHref = portfolioMarketHref(m);
           const pickedLabel = m.pickedOutcomeLabel || pickedOutcomeLabelFromTransactions(m.transactions);
+          const winningOutcomeIndex = Number(m.winningOutcomeIndex);
+          const canClaim = m.outcomeStatus === 'won'
+            && Number(m.claimablePayout || 0) > 0.000001
+            && Number.isInteger(winningOutcomeIndex);
+          const claimKey = `${m.marketId}-${winningOutcomeIndex}`;
+          const claiming = actionState?.id === claimKey && actionState?.type === 'redeeming';
           return (
             <div key={m.marketId} style={{
               background: 'var(--surface1)',
@@ -1255,6 +1278,20 @@ function HistoryView({ history, summary, loading, username, cycleScope = 'curren
                       outcomeLabel={pickedLabel || m.winningOutcomeLabel}
                       compact
                     />
+                  )}
+                  {canClaim && (
+                    <button
+                      className="btn-primary"
+                      onClick={() => onRedeem?.({
+                        marketId: m.marketId,
+                        outcomeIndex: winningOutcomeIndex,
+                        claimablePayout: m.claimablePayout,
+                      })}
+                      disabled={claiming}
+                      style={{ padding: '6px 10px', fontSize: 10 }}
+                    >
+                      {claiming ? 'Reclamando…' : 'Reclamar'}
+                    </button>
                   )}
                   <span style={{
                     fontFamily: 'var(--font-mono)', fontSize: 10,

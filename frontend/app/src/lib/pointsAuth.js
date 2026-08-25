@@ -141,7 +141,7 @@ function clearPendingReferrer() {
 
 export async function fetchMe() {
   const { data } = await getJson('/api/points/auth/me');
-  return data; // { authenticated, suborgId, username, email, walletAddress, balance, needsUsername }
+  return data; // { authenticated, suborgId, username, email, walletAddress, balance, displayName, profileImageUrl, needsUsername }
 }
 
 export async function logout() {

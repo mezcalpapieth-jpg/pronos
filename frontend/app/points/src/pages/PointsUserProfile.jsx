@@ -59,6 +59,43 @@ function safeExternalHref(value) {
   return null;
 }
 
+function ProfileAvatar({ src, name, username, size = 72 }) {
+  const [broken, setBroken] = useState(false);
+  const safeSrc = safeExternalHref(src);
+  useEffect(() => { setBroken(false); }, [safeSrc]);
+  const initial = String(name || username || '?').trim().slice(0, 1).toUpperCase() || '?';
+
+  return (
+    <div style={{
+      width: size,
+      height: size,
+      borderRadius: '50%',
+      overflow: 'hidden',
+      flex: '0 0 auto',
+      border: '1px solid var(--border)',
+      background: 'linear-gradient(135deg, rgba(255,80,0,0.22), rgba(0,232,122,0.12))',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: 'var(--text-primary)',
+      fontFamily: 'var(--font-display)',
+      fontSize: Math.max(22, Math.round(size * 0.38)),
+      lineHeight: 1,
+    }}>
+      {safeSrc && !broken ? (
+        <img
+          src={safeSrc}
+          alt=""
+          onError={() => setBroken(true)}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
+      ) : (
+        <span>{initial}</span>
+      )}
+    </div>
+  );
+}
+
 function decodeUsername(value) {
   try {
     return decodeURIComponent(value);
@@ -293,29 +330,35 @@ export default function PointsUserProfile() {
   const balance = Number(user.balance ?? user.currentBalance ?? stats.currentBalance ?? 0);
   const currentPnlValue = currentCyclePnl == null ? null : Number(currentCyclePnl);
   const publicSocialLinks = Array.isArray(user.socialLinks) ? user.socialLinks : [];
+  const displayName = String(user.displayName || '').trim();
+  const profileImageUrl = safeExternalHref(user.profileImageUrl);
   const showAdminSocials = Object.prototype.hasOwnProperty.call(user, 'adminSocials')
     || Object.prototype.hasOwnProperty.call(user, 'adminSocialLinks');
 
   return (
     <main style={{ maxWidth: 1100, margin: '0 auto', padding: 'clamp(20px, 4vw, 36px)' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 8 }}>
-        <div>
-          <div style={{
-            fontFamily: 'var(--font-mono)', fontSize: 11,
-            letterSpacing: '0.14em', color: 'var(--text-muted)',
-            textTransform: 'uppercase', marginBottom: 4,
-          }}>
-            Perfil público
-          </div>
-          <h1 style={{
-            fontFamily: 'var(--font-display)', fontSize: 'clamp(28px, 5vw, 42px)',
-            color: 'var(--text-primary)', margin: 0, letterSpacing: '0.02em',
-          }}>
-            @{user.username}
-          </h1>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-            Miembro desde {fmtDate(user.joinedAt)}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14, marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+          <ProfileAvatar src={profileImageUrl} name={displayName} username={user.username} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{
+              fontFamily: 'var(--font-mono)', fontSize: 11,
+              letterSpacing: '0.14em', color: 'var(--text-muted)',
+              textTransform: 'uppercase', marginBottom: 4,
+            }}>
+              Perfil público
+            </div>
+            <h1 style={{
+              fontFamily: 'var(--font-display)', fontSize: 'clamp(28px, 5vw, 42px)',
+              color: 'var(--text-primary)', margin: 0, letterSpacing: '0.02em',
+              overflowWrap: 'anywhere',
+            }}>
+              {displayName || `@${user.username}`}
+            </h1>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+              {displayName ? `@${user.username} · ` : ''}Miembro desde {fmtDate(user.joinedAt)}
+            </div>
           </div>
         </div>
         <button
@@ -339,6 +382,7 @@ export default function PointsUserProfile() {
         <AdminSocialsPanel
           rows={Array.isArray(user.adminSocials) ? user.adminSocials : []}
           links={Array.isArray(user.adminSocialLinks) ? user.adminSocialLinks : []}
+          email={user.adminEmail || null}
         />
       )}
 
@@ -489,9 +533,10 @@ function PublicSocialLinksPanel({ links }) {
   );
 }
 
-function AdminSocialsPanel({ rows, links = [] }) {
+function AdminSocialsPanel({ rows, links = [], email = null }) {
   const hasRows = rows.length > 0;
   const hasLinks = links.length > 0;
+  const emailText = email || 'Sin email';
   return (
     <section style={{
       marginTop: 18,
@@ -506,7 +551,7 @@ function AdminSocialsPanel({ rows, links = [] }) {
         justifyContent: 'space-between',
         gap: 12,
         alignItems: 'center',
-        marginBottom: hasRows || hasLinks ? 10 : 0,
+        marginBottom: 10,
       }}>
         <div style={{
           fontFamily: 'var(--font-mono)',
@@ -523,6 +568,33 @@ function AdminSocialsPanel({ rows, links = [] }) {
           color: 'var(--text-muted)',
         }}>
           {links.length} conectadas · {rows.length} envíos
+        </div>
+      </div>
+      <div style={{
+        display: 'grid',
+        gap: 3,
+        padding: '8px 10px',
+        marginBottom: hasRows || hasLinks ? 10 : 0,
+        background: 'rgba(0,0,0,0.14)',
+        border: '1px solid rgba(255,255,255,0.07)',
+        borderRadius: 8,
+      }}>
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 9,
+          color: 'var(--text-muted)',
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+        }}>
+          Email admin
+        </div>
+        <div style={{
+          fontFamily: 'var(--font-body)',
+          fontSize: 13,
+          color: email ? 'var(--text-primary)' : 'var(--text-muted)',
+          overflowWrap: 'anywhere',
+        }}>
+          {emailText}
         </div>
       </div>
 

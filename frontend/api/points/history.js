@@ -33,6 +33,12 @@ function labelFor(outcomes, i) {
   return outcomes[i] || `Opción ${i + 1}`;
 }
 
+function outcomeIndexOrNull(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isInteger(n) ? n : null;
+}
+
 function parseCycleScope(value) {
   const raw = String(value || 'current').toLowerCase();
   if (raw === 'previous' || raw === 'all') return raw;
@@ -284,11 +290,11 @@ export default async function handler(req, res) {
       if (m.status === 'canceled' || (m.status === 'resolved' && (m.outcome === null || m.outcome === undefined))) {
         outcomeStatus = 'canceled';
       } else if (m.status === 'resolved') {
-        const winningIdx = Number(m.outcome);
+        const winningIdx = outcomeIndexOrNull(m.outcome);
         // Did they hold winning shares at resolution time? heldByOutcome
         // isn't zeroed on redeem so this captures both "already claimed"
         // and "still holding" — both are wins.
-        const winningGross = m.heldByOutcome.get(winningIdx) || 0;
+        const winningGross = Number.isInteger(winningIdx) ? (m.heldByOutcome.get(winningIdx) || 0) : 0;
         let anyGross = false;
         for (const v of m.heldByOutcome.values()) {
           if (v > 0.000001) { anyGross = true; break; }
@@ -308,15 +314,23 @@ export default async function handler(req, res) {
       }
 
       let claimablePayout = 0;
+      const winningOutcomeIndex = outcomeIndexOrNull(m.outcome);
+      const winningOutcomeLabel = Number.isInteger(winningOutcomeIndex)
+        ? labelFor(m.outcomes, winningOutcomeIndex)
+        : null;
       if (outcomeStatus === 'won') {
-        const winningIdx = Number(m.outcome);
-        const winningGross = m.heldByOutcome.get(winningIdx) || 0;
-        const redeemedWinning = m.redeemedByOutcome.get(winningIdx) || 0;
+        const winningGross = Number.isInteger(winningOutcomeIndex)
+          ? (m.heldByOutcome.get(winningOutcomeIndex) || 0)
+          : 0;
+        const redeemedWinning = Number.isInteger(winningOutcomeIndex)
+          ? (m.redeemedByOutcome.get(winningOutcomeIndex) || 0)
+          : 0;
         claimablePayout = Math.max(0, winningGross - redeemedWinning);
       }
       const effectiveReceived = m.totalReceived + claimablePayout;
       const pickedOutcome = pickedOutcomeSummary(m.transactions);
       const settledNetPnl = round2(effectiveReceived - m.totalInvested);
+      const canRedeem = claimablePayout > 0.000001;
 
       // Snapshot of unsold shares' mark-to-market for "open" rows. This
       // keeps history.summary.totalPnl aligned with /pnl-history's final
@@ -341,10 +355,13 @@ export default async function handler(req, res) {
           category: m.category,
           status: m.status,
           outcomeStatus,
+          winningOutcomeIndex,
+          winningOutcomeLabel,
           totalInvested: round2(m.totalInvested),
           totalReceived: round2(effectiveReceived),
           realizedReceived: round2(m.totalReceived),
           claimablePayout: round2(claimablePayout),
+          canRedeem,
           markToMarket: round2(mtm),
           netPnl,
           ...pickedOutcome,
@@ -358,10 +375,13 @@ export default async function handler(req, res) {
         category: m.category,
         status: m.status,
         outcomeStatus,
+        winningOutcomeIndex,
+        winningOutcomeLabel,
         totalInvested: round2(m.totalInvested),
         totalReceived: round2(effectiveReceived),
         realizedReceived: round2(m.totalReceived),
         claimablePayout: round2(claimablePayout),
+        canRedeem,
         netPnl: settledNetPnl,
         ...pickedOutcome,
         transactions: m.transactions,

@@ -12,6 +12,16 @@ test('admin profile view renders connected social handles as well as social task
   assert.match(SOURCE, /link\.handle/);
 });
 
+test('public profile renders display name and profile picture without leaking email', () => {
+  assert.match(SOURCE, /function ProfileAvatar/);
+  assert.match(SOURCE, /safeExternalHref\(user\.profileImageUrl\)/);
+  assert.match(SOURCE, /String\(user\.displayName \|\| ''\)\.trim\(\)/);
+  assert.match(SOURCE, /\{displayName \|\| `@\$\\?\{user\.username\}`\}/);
+  assert.match(SOURCE, /user\.adminEmail \|\| null/);
+  assert.match(SOURCE, /Email admin/);
+  assert.doesNotMatch(SOURCE, /user\.email/);
+});
+
 test('admin profile view exposes exact campaign post links for social task review', () => {
   assert.match(SOURCE, /row\.targetUrl/);
   assert.match(SOURCE, /targetHref/);

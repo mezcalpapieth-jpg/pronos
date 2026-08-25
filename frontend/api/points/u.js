@@ -18,7 +18,8 @@
  *
  * Response:
  *   {
- *     user: { username, joinedAt, balance, totalVolume, adminSocials? },
+ *     user: { username, joinedAt, displayName, profileImageUrl, balance, totalVolume,
+ *             adminEmail?, adminSocials? },
  *     stats: { totalPnl, currentBalance, marketsTraded, marketsWon, marketsOpen, winRate },
  *     active: [{ marketId, question, category, outcomeIndex, outcomeLabel,
  *                shares, costBasis, currentValue, unrealizedPnl, ... }],
@@ -27,8 +28,9 @@
  *   }
  *
  * Admin-only: when the viewer has a valid points admin session,
- * `user.adminSocials` includes that user's social-task proof rows and
- * `user.adminSocialLinks` includes connected account handles.
+ * `user.adminEmail` includes the email on the account, `user.adminSocials`
+ * includes that user's social-task proof rows, and `user.adminSocialLinks`
+ * includes connected account handles.
  * Logged-out / non-admin callers never receive it.
  */
 import { neon } from '@neondatabase/serverless';
@@ -105,46 +107,51 @@ export default async function handler(req, res) {
     // full public points footprint and prefer points_users when present.
     const userRow = await sql`
       WITH candidates AS (
-        SELECT LOWER(username) AS username, created_at, 0 AS priority
+        SELECT LOWER(username) AS username, created_at, display_name, profile_image_url, email, 0 AS priority
         FROM points_users
         WHERE username IS NOT NULL
           AND LOWER(username) = ${username}
 
         UNION ALL
-        SELECT LOWER(username) AS username, updated_at AS created_at, 1 AS priority
+        SELECT LOWER(username) AS username, updated_at AS created_at,
+               NULL::text AS display_name, NULL::text AS profile_image_url, NULL::text AS email, 1 AS priority
         FROM points_balances
         WHERE username IS NOT NULL
           AND LOWER(username) = ${username}
 
         UNION ALL
-        SELECT LOWER(username) AS username, MIN(created_at) AS created_at, 2 AS priority
+        SELECT LOWER(username) AS username, MIN(created_at) AS created_at,
+               NULL::text AS display_name, NULL::text AS profile_image_url, NULL::text AS email, 2 AS priority
         FROM points_trades
         WHERE username IS NOT NULL
           AND LOWER(username) = ${username}
         GROUP BY LOWER(username)
 
         UNION ALL
-        SELECT LOWER(username) AS username, MIN(updated_at) AS created_at, 3 AS priority
+        SELECT LOWER(username) AS username, MIN(updated_at) AS created_at,
+               NULL::text AS display_name, NULL::text AS profile_image_url, NULL::text AS email, 3 AS priority
         FROM points_positions
         WHERE username IS NOT NULL
           AND LOWER(username) = ${username}
         GROUP BY LOWER(username)
 
         UNION ALL
-        SELECT LOWER(username) AS username, MIN(created_at) AS created_at, 4 AS priority
+        SELECT LOWER(username) AS username, MIN(created_at) AS created_at,
+               NULL::text AS display_name, NULL::text AS profile_image_url, NULL::text AS email, 4 AS priority
         FROM points_distributions
         WHERE username IS NOT NULL
           AND LOWER(username) = ${username}
         GROUP BY LOWER(username)
 
         UNION ALL
-        SELECT LOWER(username) AS username, MIN(created_at) AS created_at, 5 AS priority
+        SELECT LOWER(username) AS username, MIN(created_at) AS created_at,
+               NULL::text AS display_name, NULL::text AS profile_image_url, NULL::text AS email, 5 AS priority
         FROM points_cycle_snapshots
         WHERE username IS NOT NULL
           AND LOWER(username) = ${username}
         GROUP BY LOWER(username)
       )
-      SELECT username, created_at
+      SELECT username, created_at, display_name, profile_image_url, email
       FROM candidates
       ORDER BY priority ASC, created_at ASC NULLS LAST
       LIMIT 1
@@ -311,11 +318,13 @@ export default async function handler(req, res) {
       user: {
         username: userRow[0].username,
         joinedAt: userRow[0].created_at,
+        displayName: userRow[0].display_name || null,
+        profileImageUrl: userRow[0].profile_image_url || null,
         balance: currentBalance,
         currentBalance,
         totalVolume: stats.totalVolume,
         socialLinks: publicSocialLinks,
-        ...(viewerIsAdmin ? { adminSocials, adminSocialLinks } : {}),
+        ...(viewerIsAdmin ? { adminEmail: userRow[0].email || null, adminSocials, adminSocialLinks } : {}),
       },
       stats: {
         totalPnl: stats.totalPnl,

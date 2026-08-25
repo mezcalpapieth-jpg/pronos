@@ -9,6 +9,7 @@ const detailSource = await readFile(new URL('./PointsMarketDetail.jsx', import.m
 const earnSource = await readFile(new URL('./PointsEarn.jsx', import.meta.url), 'utf8');
 const i18nSource = await readFile(new URL('../../../src/lib/i18n.js', import.meta.url), 'utf8');
 const winShareSource = await readFile(new URL('../components/PointsWinShareButton.jsx', import.meta.url), 'utf8');
+const historyApiSource = await readFile(new URL('../../../../api/points/history.js', import.meta.url), 'utf8');
 
 test('portfolio sell flow previews the real AMM quote before executing', () => {
   assert.match(source, /setSellPreview\(/);
@@ -77,16 +78,30 @@ test('portfolio and earn page labels use points translations', () => {
   assert.match(earnSource, /points\.earn\.title/);
   assert.match(i18nSource, /'points\.portfolio\.title':\s*\{\s*es:\s*'Portafolio',\s*en:\s*'Portfolio'/);
   assert.match(i18nSource, /'points\.portfolio\.tab\.rewards':\s*\{\s*es:\s*'Recompensas',\s*en:\s*'Rewards'/);
-  assert.match(i18nSource, /'points\.nav\.earn':\s*\{\s*es:\s*'Gana MXNP',\s*en:\s*'Earn MXNP'/);
-  assert.match(i18nSource, /'points\.earn\.title':\s*\{\s*es:\s*'Gana MXNP',\s*en:\s*'Earn MXNP'/);
+  assert.match(i18nSource, /'points\.nav\.earn':\s*\{\s*es:\s*'Perfil',\s*en:\s*'Profile'/);
+  assert.match(i18nSource, /'points\.earn\.title':\s*\{\s*es:\s*'Perfil',\s*en:\s*'Profile'/);
 });
 
 test('portfolio active and history markets link back to market detail', () => {
   assert.match(source, /function portfolioMarketHref\(item\)/);
+  assert.match(source, /RESOLVED_HISTORY_STATES\.has\(item\?\.outcomeStatus\)/);
+  assert.match(source, /item\?\.marketId\s*\|\|\s*item\?\.parentMarketId/);
   assert.match(source, /item\?\.parentMarketId\s*\|\|\s*item\?\.marketId/);
   assert.match(source, /`\/market\?id=\$\{encodeURIComponent\(id\)\}`/);
   assert.match(source, /to=\{marketHref\}/);
   assert.match(source, /Ver mercado/);
+});
+
+test('portfolio history can claim unredeemed winning resolved markets', () => {
+  assert.match(historyApiSource, /winningOutcomeIndex/);
+  assert.match(historyApiSource, /winningOutcomeLabel/);
+  assert.match(historyApiSource, /claimablePayout/);
+  assert.match(historyApiSource, /canRedeem/);
+  assert.match(source, /onRedeem=\{handleRedeem\}/);
+  assert.match(source, /Number\(m\.winningOutcomeIndex\)/);
+  assert.match(source, /Number\(m\.claimablePayout \|\| 0\) > 0\.000001/);
+  assert.match(source, /onRedeem\?\.\(\{/);
+  assert.match(source, /Reclamar/);
 });
 
 test('portfolio shows maker reward payouts in their own market-linked tab', () => {

@@ -39,6 +39,7 @@ const TeamProfilePage = lazy(() => import('@app/pages/TeamProfilePage.jsx'));
 const PointsPortfolio = lazy(() => import('./pages/PointsPortfolio.jsx'));
 const PointsTournament = lazy(() => import('./pages/PointsTournament.jsx'));
 const PointsEarn = lazy(() => import('./pages/PointsEarn.jsx'));
+const PointsDeveloper = lazy(() => import('./pages/PointsDeveloper.jsx'));
 const PointsSupport = lazy(() => import('./pages/PointsSupport.jsx'));
 const PointsAdmin = lazy(() => import('./pages/PointsAdmin.jsx'));
 const PointsReferralLanding = lazy(() => import('./pages/PointsReferralLanding.jsx'));
@@ -351,6 +352,7 @@ function Shell({ onOpenLogin, isAdmin }) {
           <Route path="/portfolio" element={<PointsPortfolio />} />
           <Route path="/torneo" element={<PointsTournament />} />
           <Route path="/earn" element={<PointsEarn onOpenLogin={onOpenLogin} />} />
+          <Route path="/developer" element={<PointsDeveloper onOpenLogin={onOpenLogin} />} />
           <Route path="/support" element={<PointsSupport onOpenLogin={onOpenLogin} />} />
           <Route path="/admin" element={<PointsAdmin isAdmin={isAdmin} />} />
           <Route path="/deck" element={<InvestorDeck />} />

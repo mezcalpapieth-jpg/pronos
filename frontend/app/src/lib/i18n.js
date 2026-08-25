@@ -488,7 +488,8 @@ const STRINGS = {
   'points.nav.home':          { es: 'Inicio',                en: 'Home' },
   'points.nav.portfolio':     { es: 'Portafolio',            en: 'Portfolio' },
   'points.nav.tournament':    { es: 'Torneo Pronos',         en: 'Pronos Tournament' },
-  'points.nav.earn':          { es: 'Gana MXNP',             en: 'Earn MXNP' },
+  'points.nav.earn':          { es: 'Perfil',                en: 'Profile' },
+  'points.nav.developer':     { es: 'Crear API key',         en: 'Create API key' },
   'points.nav.admin':         { es: 'Admin',                 en: 'Admin' },
   'points.nav.signIn':        { es: 'Iniciar sesión',        en: 'Sign in' },
   'points.nav.signOut':       { es: 'Cerrar sesión',         en: 'Sign out' },
@@ -879,7 +880,7 @@ const STRINGS = {
   'points.portfolio.rewards.payouts': { es: 'Pagos',         en: 'Payouts' },
   'points.portfolio.rewards.reason': { es: 'Recompensa por liquidez', en: 'Liquidity reward' },
 
-  'points.earn.title':        { es: 'Gana MXNP',             en: 'Earn MXNP' },
+  'points.earn.title':        { es: 'Perfil',                en: 'Profile' },
   'points.earn.install.eyebrow': { es: 'App en pantalla de inicio', en: 'Home screen app' },
   'points.earn.install.title': { es: 'Instala Pronos y reclama 50 MXNP', en: 'Install Pronos and claim 50 MXNP' },
   'points.earn.install.body': { es: 'Agrega Pronos a la pantalla de inicio para entrar más rápido y mantener tu racha.', en: 'Add Pronos to your home screen for faster access and streak retention.' },

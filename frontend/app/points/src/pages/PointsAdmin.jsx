@@ -50,6 +50,7 @@ import {
   adminConvertParallelToBinary,
   adminListRisk,
   adminUpdateRiskReview,
+  adminListApiUsage,
 } from '../lib/pointsApi.js';
 import {
   ADMIN_BASEBALL_LEAGUES,
@@ -293,7 +294,7 @@ export default function PointsAdmin({ isAdmin }) {
     if (typeof window === 'undefined') return 'create';
     const sp = new URLSearchParams(window.location.search);
     const t = sp.get('tab');
-    return ['create', 'markets', 'stats', 'pending', 'social', 'support', 'deck', 'cycles', 'risk'].includes(t) ? t : 'create';
+    return ['create', 'markets', 'stats', 'pending', 'social', 'support', 'deck', 'cycles', 'risk', 'api'].includes(t) ? t : 'create';
   })();
   const createPrefill = (() => {
     if (typeof window === 'undefined') return null;
@@ -374,6 +375,7 @@ export default function PointsAdmin({ isAdmin }) {
           { id: 'support', label: 'Soporte' },
           { id: 'social',  label: 'Tareas sociales' },
           { id: 'risk',    label: 'Riesgo' },
+          { id: 'api',     label: 'API' },
           { id: 'deck',    label: 'Deck' },
           { id: 'cycles',  label: 'Ciclos' },
           { id: 'stats',   label: 'Estadísticas' },
@@ -429,6 +431,7 @@ export default function PointsAdmin({ isAdmin }) {
       )}
       {tab === 'social' && <SocialTasksQueue onQueueChange={refreshAdminTaskCounts} />}
       {tab === 'risk' && <RiskPanel />}
+      {tab === 'api' && <ApiUsagePanel />}
       {tab === 'support' && <SupportTicketsQueue onQueueChange={refreshAdminTaskCounts} />}
       {tab === 'deck' && <DeckAdminPanel />}
       {tab === 'cycles' && <CyclesPanel />}
@@ -4973,6 +4976,259 @@ function StatsPanel() {
   );
 }
 
+function apiKeyStatus(row) {
+  if (row.revokedAt) return 'Revocada';
+  if (row.expiresAt && new Date(row.expiresAt).getTime() <= Date.now()) return 'Expirada';
+  return 'Activa';
+}
+
+function apiPermissionLabel(permissions) {
+  const list = Array.isArray(permissions) ? permissions : [];
+  if (list.includes('TRADE')) return 'READ + TRADE';
+  return 'READ';
+}
+
+function apiResultColor(row) {
+  if (row.result === 'success' || (row.statusCode >= 200 && row.statusCode < 300)) return 'var(--green)';
+  if (row.statusCode >= 400 || row.result === 'error') return 'var(--danger)';
+  return 'var(--text-muted)';
+}
+
+function apiMetadataSummary(metadata) {
+  if (!metadata || typeof metadata !== 'object') return '-';
+  const keys = ['marketId', 'outcomeIndex', 'side', 'amount', 'idempotencyKey', 'code'];
+  const parts = keys
+    .filter(key => metadata[key] != null && metadata[key] !== '')
+    .map(key => `${key}: ${metadata[key]}`);
+  if (parts.length > 0) return parts.join(' · ');
+  const fallback = Object.keys(metadata)
+    .slice(0, 4)
+    .map(key => `${key}: ${metadata[key]}`);
+  return fallback.length ? fallback.join(' · ') : '-';
+}
+
+function ApiUsagePanel() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState(null);
+
+  async function load() {
+    setLoading(true);
+    setErr(null);
+    try {
+      const result = await adminListApiUsage();
+      setData(result);
+    } catch (error) {
+      setErr(error?.code || error?.message || 'api_usage_failed');
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  const summary = data?.summary || {};
+  const keys = Array.isArray(data?.keys) ? data.keys : [];
+  const recent = Array.isArray(data?.recent) ? data.recent : [];
+
+  if (loading && !data) {
+    return <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Cargando…</p>;
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 16 }}>
+        <p style={{ ...adminEmptyStyle, margin: 0 }}>
+          Uso de llaves publicas, requests, errores y endpoints recientes.
+        </p>
+        <button
+          type="button"
+          onClick={load}
+          disabled={loading}
+          style={{
+            border: '1px solid var(--border)',
+            background: 'var(--surface2)',
+            color: 'var(--text-secondary)',
+            borderRadius: 8,
+            padding: '9px 12px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            cursor: 'pointer',
+          }}
+        >
+          {loading ? 'Cargando' : 'Actualizar'}
+        </button>
+      </div>
+
+      {err && (
+        <div style={{
+          ...adminPanelStyle,
+          color: 'var(--danger)',
+          borderColor: 'rgba(239,68,68,0.45)',
+          background: 'rgba(239,68,68,0.08)',
+        }}>
+          {err}
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12, marginBottom: 20 }}>
+        <StatCard label="Keys activas" value={adminNumber(summary.activeKeys)} />
+        <StatCard label="Requests 24h" value={adminNumber(summary.requests24h)} />
+        <StatCard label="Requests 7d" value={adminNumber(summary.requests7d)} />
+        <StatCard label="Trading 24h" value={adminNumber(summary.tradeRequests24h)} />
+        <StatCard label="Errores 24h" value={adminNumber(summary.errors24h)} />
+        <StatCard label="Usuarios 7d" value={adminNumber(summary.distinctUsers7d)} />
+      </div>
+
+      <section style={adminPanelStyle}>
+        <div style={adminPanelTitle}>Uso por API key</div>
+        {keys.length === 0 ? (
+          <p style={adminEmptyStyle}>Todavia no hay API keys.</p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <div style={{
+              minWidth: 1080,
+              display: 'grid',
+              gap: 0,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+            }}>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(150px, 0.8fr) minmax(200px, 1fr) 120px 100px 100px 100px 100px 130px',
+                gap: 12,
+                paddingBottom: 8,
+                borderBottom: '1px solid var(--border)',
+                color: 'var(--text-muted)',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+              }}>
+                <span>Usuario</span>
+                <span>Key</span>
+                <span>Permisos</span>
+                <span style={{ textAlign: 'right' }}>24h</span>
+                <span style={{ textAlign: 'right' }}>7d</span>
+                <span style={{ textAlign: 'right' }}>Trades</span>
+                <span style={{ textAlign: 'right' }}>Errores</span>
+                <span style={{ textAlign: 'right' }}>Ultimo uso</span>
+              </div>
+              {keys.map(row => (
+                <div key={row.id} style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(150px, 0.8fr) minmax(200px, 1fr) 120px 100px 100px 100px 100px 130px',
+                  gap: 12,
+                  alignItems: 'center',
+                  padding: '11px 0',
+                  borderBottom: '1px solid var(--border)',
+                }}>
+                  <a
+                    href={row.username ? `/points/u/${encodeURIComponent(row.username)}` : '#'}
+                    style={{
+                      color: row.username ? 'var(--text-primary)' : 'var(--text-muted)',
+                      textDecoration: 'none',
+                      fontFamily: 'var(--font-body)',
+                      fontSize: 14,
+                      fontWeight: 700,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {row.username ? `@${row.username}` : 'sin usuario'}
+                  </a>
+                  <span style={{ minWidth: 0 }}>
+                    <strong style={{ display: 'block', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {row.name || 'Pronos API'}
+                    </strong>
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      {row.keyPrefix}... · {apiKeyStatus(row)}
+                      {row.distinctIpHashes7d > 0 ? ` · ${adminNumber(row.distinctIpHashes7d)} IP 7d` : ''}
+                    </span>
+                  </span>
+                  <span style={{ color: row.permissions?.includes('TRADE') ? 'var(--orange)' : 'var(--text-muted)' }}>
+                    {apiPermissionLabel(row.permissions)}
+                  </span>
+                  <span style={{ color: 'var(--text-secondary)', textAlign: 'right' }}>{adminNumber(row.requests24h)}</span>
+                  <span style={{ color: 'var(--text-secondary)', textAlign: 'right' }}>{adminNumber(row.requests7d)}</span>
+                  <span style={{ color: 'var(--green)', textAlign: 'right' }}>{adminNumber(row.tradeRequests24h)}</span>
+                  <span style={{ color: row.errors24h > 0 ? 'var(--danger)' : 'var(--text-muted)', textAlign: 'right' }}>{adminNumber(row.errors24h)}</span>
+                  <span style={{ color: 'var(--text-muted)', textAlign: 'right' }}>
+                    {adminDateTime(row.lastRequestAt || row.lastUsedAt)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section style={adminPanelStyle}>
+        <div style={adminPanelTitle}>Requests recientes</div>
+        {recent.length === 0 ? (
+          <p style={adminEmptyStyle}>Sin requests registrados.</p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <div style={{
+              minWidth: 1060,
+              display: 'grid',
+              gap: 0,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+            }}>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '130px 120px 70px minmax(220px, 1fr) 90px 100px minmax(200px, 0.8fr)',
+                gap: 12,
+                paddingBottom: 8,
+                borderBottom: '1px solid var(--border)',
+                color: 'var(--text-muted)',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+              }}>
+                <span>Hora</span>
+                <span>Usuario</span>
+                <span>Metodo</span>
+                <span>Endpoint</span>
+                <span>Status</span>
+                <span>Resultado</span>
+                <span>Metadata</span>
+              </div>
+              {recent.map(row => (
+                <div key={row.requestId || `${row.createdAt}-${row.endpoint}`} style={{
+                  display: 'grid',
+                  gridTemplateColumns: '130px 120px 70px minmax(220px, 1fr) 90px 100px minmax(200px, 0.8fr)',
+                  gap: 12,
+                  alignItems: 'center',
+                  padding: '10px 0',
+                  borderBottom: '1px solid var(--border)',
+                  color: 'var(--text-secondary)',
+                }}>
+                  <span style={{ color: 'var(--text-muted)' }}>{adminDateTime(row.createdAt)}</span>
+                  <span style={{ color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {row.username ? `@${row.username}` : row.keyPrefix || '-'}
+                  </span>
+                  <span style={{ color: 'var(--orange)' }}>{row.method || '-'}</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.endpoint || '-'}</span>
+                  <span style={{ color: apiResultColor(row) }}>{row.statusCode || '-'}</span>
+                  <span style={{ color: apiResultColor(row), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {row.errorCode || row.result || '-'}
+                  </span>
+                  <span style={{ color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {apiMetadataSummary(row.metadata)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 function adminNumber(value, options = {}) {
   return Number(value || 0).toLocaleString('es-MX', options);
 }
@@ -4996,6 +5252,52 @@ function adminDateTime(value) {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function safeProfileImageUrl(value) {
+  if (!value) return null;
+  try {
+    const url = new URL(String(value).trim());
+    if (url.protocol === 'http:' || url.protocol === 'https:') return url.href;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function AdminUserAvatar({ row }) {
+  const [broken, setBroken] = useState(false);
+  const src = safeProfileImageUrl(row.profileImageUrl);
+  useEffect(() => { setBroken(false); }, [src]);
+  const initial = String(row.displayName || row.username || '?').trim().slice(0, 1).toUpperCase() || '?';
+
+  return (
+    <span style={{
+      width: 34,
+      height: 34,
+      borderRadius: '50%',
+      overflow: 'hidden',
+      flex: '0 0 34px',
+      border: '1px solid var(--border)',
+      background: 'rgba(255,80,0,0.12)',
+      color: 'var(--text-primary)',
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontFamily: 'var(--font-display)',
+      fontSize: 14,
+      lineHeight: 1,
+    }}>
+      {src && !broken ? (
+        <img
+          src={src}
+          alt=""
+          onError={() => setBroken(true)}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
+      ) : initial}
+    </span>
+  );
 }
 
 function formatAdminDuration(seconds) {
@@ -5047,7 +5349,7 @@ function AdminUserSignupPanel({ users, totalUsers }) {
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <div style={{
-            minWidth: 840,
+            minWidth: 960,
             display: 'grid',
             gap: 0,
             fontFamily: 'var(--font-mono)',
@@ -5055,7 +5357,7 @@ function AdminUserSignupPanel({ users, totalUsers }) {
           }}>
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'minmax(120px, 0.8fr) minmax(210px, 1.25fr) minmax(90px, 0.55fr) minmax(110px, 0.6fr) minmax(90px, 0.45fr) minmax(125px, 0.6fr)',
+              gridTemplateColumns: 'minmax(220px, 1.1fr) minmax(210px, 1.15fr) minmax(90px, 0.55fr) minmax(110px, 0.6fr) minmax(90px, 0.45fr) minmax(125px, 0.6fr)',
               gap: 12,
               padding: '0 0 8px',
               borderBottom: '1px solid var(--border)',
@@ -5073,7 +5375,7 @@ function AdminUserSignupPanel({ users, totalUsers }) {
             {rows.map(row => (
               <div key={row.username} style={{
                 display: 'grid',
-                gridTemplateColumns: 'minmax(120px, 0.8fr) minmax(210px, 1.25fr) minmax(90px, 0.55fr) minmax(110px, 0.6fr) minmax(90px, 0.45fr) minmax(125px, 0.6fr)',
+                gridTemplateColumns: 'minmax(220px, 1.1fr) minmax(210px, 1.15fr) minmax(90px, 0.55fr) minmax(110px, 0.6fr) minmax(90px, 0.45fr) minmax(125px, 0.6fr)',
                 gap: 12,
                 alignItems: 'center',
                 padding: '10px 0',
@@ -5082,18 +5384,37 @@ function AdminUserSignupPanel({ users, totalUsers }) {
                 <a
                   href={`/points/u/${encodeURIComponent(row.username)}`}
                   style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
                     minWidth: 0,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
                     color: 'var(--text-primary)',
-                    fontFamily: 'var(--font-body)',
-                    fontSize: 14,
-                    fontWeight: 700,
                     textDecoration: 'none',
                   }}
                 >
-                  @{row.username}
+                  <AdminUserAvatar row={row} />
+                  <span style={{ minWidth: 0, display: 'grid', gap: 2 }}>
+                    <span style={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      fontFamily: 'var(--font-body)',
+                      fontSize: 14,
+                      fontWeight: 700,
+                    }}>
+                      {row.displayName || `@${row.username}`}
+                    </span>
+                    <span style={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      color: 'var(--text-muted)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 10,
+                    }}>
+                      @{row.username}
+                    </span>
+                  </span>
                 </a>
                 <span style={{
                   minWidth: 0,

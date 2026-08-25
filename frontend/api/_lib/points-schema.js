@@ -33,6 +33,9 @@ const POINTS_SCHEMA_READY_PROBE = `
     to_regclass('public.points_markets') IS NOT NULL AS points_markets,
     to_regclass('public.points_balances') IS NOT NULL AS points_balances,
     to_regclass('public.points_trades') IS NOT NULL AS points_trades,
+    to_regclass('public.points_api_keys') IS NOT NULL AS points_api_keys,
+    to_regclass('public.points_api_idempotency_keys') IS NOT NULL AS points_api_idempotency_keys,
+    to_regclass('public.points_api_request_logs') IS NOT NULL AS points_api_request_logs,
     to_regclass('public.points_positions') IS NOT NULL AS points_positions,
     to_regclass('public.points_limit_orders') IS NOT NULL AS points_limit_orders,
     to_regclass('public.points_site_time_daily') IS NOT NULL AS points_site_time_daily,
@@ -86,6 +89,24 @@ const POINTS_SCHEMA_READY_PROBE = `
     EXISTS (
       SELECT 1 FROM information_schema.columns
       WHERE table_schema = 'public'
+        AND table_name = 'points_users'
+        AND column_name = 'display_name'
+    ) AS points_users_display_name,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'points_users'
+        AND column_name = 'profile_image_url'
+    ) AS points_users_profile_image_url,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'points_users'
+        AND column_name = 'profile_updated_at'
+    ) AS points_users_profile_updated_at,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
         AND table_name = 'points_cycle_snapshots'
         AND column_name = 'tournament_score'
     ) AS points_cycle_snapshot_tournament_score,
@@ -118,7 +139,25 @@ const POINTS_SCHEMA_READY_PROBE = `
       WHERE table_schema = 'public'
         AND table_name = 'points_social_links'
         AND column_name = 'token_expires_at'
-    ) AS points_social_links_token_expires_at
+    ) AS points_social_links_token_expires_at,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'points_trades'
+        AND column_name = 'source'
+    ) AS points_trades_source,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'points_trades'
+        AND column_name = 'api_key_id'
+    ) AS points_trades_api_key_id,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'points_api_keys'
+        AND column_name = 'secret_ciphertext'
+    ) AS points_api_keys_secret_ciphertext
 `;
 
 const POINTS_SCHEMA_LOCK_TABLE = `
@@ -137,6 +176,9 @@ const POINTS_SCHEMA_MIGRATIONS = [
     wallet_address       TEXT,
     username             TEXT UNIQUE,
     email                TEXT,
+    display_name         TEXT,
+    profile_image_url    TEXT,
+    profile_updated_at   TIMESTAMPTZ,
     created_at           TIMESTAMPTZ DEFAULT NOW()
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_points_users_username_lower ON points_users (LOWER(username))`,
@@ -153,6 +195,9 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS delegation_expires_at TIMESTAMPTZ`,
   `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS delegation_daily_cap_mxnb NUMERIC(20,6)`,
   `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS delegation_authorized_at TIMESTAMPTZ`,
+  `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS display_name TEXT`,
+  `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS profile_image_url TEXT`,
+  `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS profile_updated_at TIMESTAMPTZ`,
 
   // ── Markets (off-chain, admin-curated) ─────────────────────────────────
   `CREATE TABLE IF NOT EXISTS points_markets (
@@ -400,6 +445,8 @@ const POINTS_SCHEMA_MIGRATIONS = [
     price_at_trade  NUMERIC(10,6) NOT NULL,
     reserves_before JSONB,
     reserves_after  JSONB,
+    source          TEXT NOT NULL DEFAULT 'web',
+    api_key_id      BIGINT,
     created_at      TIMESTAMPTZ DEFAULT NOW()
   )`,
   `CREATE INDEX IF NOT EXISTS idx_points_trades_user ON points_trades(username)`,
@@ -423,6 +470,68 @@ const POINTS_SCHEMA_MIGRATIONS = [
   // indexer writes can both claim the same on-chain event.
   `ALTER TABLE points_trades ADD COLUMN IF NOT EXISTS tx_hash TEXT`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_points_trades_tx_hash ON points_trades(tx_hash) WHERE tx_hash IS NOT NULL`,
+  `ALTER TABLE points_trades ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'web'`,
+  `ALTER TABLE points_trades ADD COLUMN IF NOT EXISTS api_key_id BIGINT`,
+
+  // ── Public API credentials, idempotency and audit logs ────────────────
+  // API keys are owned by an existing points user; bots/scripts never get
+  // their own account. `secret_ciphertext` is used to verify HMAC requests,
+  // while `secret_hash` lets us audit/revoke without exposing raw secrets.
+  `CREATE TABLE IF NOT EXISTS points_api_keys (
+    id                   BIGSERIAL PRIMARY KEY,
+    username             TEXT NOT NULL,
+    user_sub             TEXT,
+    name                 TEXT NOT NULL,
+    key_prefix           TEXT NOT NULL UNIQUE,
+    key_hash             TEXT NOT NULL UNIQUE,
+    secret_hash          TEXT NOT NULL,
+    secret_ciphertext    TEXT NOT NULL,
+    permissions          JSONB NOT NULL DEFAULT '["READ"]'::jsonb,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_used_at         TIMESTAMPTZ,
+    last_used_ip_hash    TEXT,
+    revoked_at           TIMESTAMPTZ,
+    expires_at           TIMESTAMPTZ,
+    created_from_ip_hash TEXT
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_api_keys_username
+    ON points_api_keys(username, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_api_keys_active
+    ON points_api_keys(username, revoked_at, expires_at)`,
+  `CREATE TABLE IF NOT EXISTS points_api_idempotency_keys (
+    id              BIGSERIAL PRIMARY KEY,
+    api_key_id      BIGINT NOT NULL REFERENCES points_api_keys(id) ON DELETE CASCADE,
+    idempotency_key TEXT NOT NULL,
+    request_hash    TEXT NOT NULL,
+    status_code     INTEGER,
+    response_body   JSONB,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at      TIMESTAMPTZ NOT NULL,
+    UNIQUE(api_key_id, idempotency_key)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_api_idempotency_expiry
+    ON points_api_idempotency_keys(expires_at)`,
+  `CREATE TABLE IF NOT EXISTS points_api_request_logs (
+    id              BIGSERIAL PRIMARY KEY,
+    request_id      TEXT NOT NULL UNIQUE,
+    api_key_id      BIGINT REFERENCES points_api_keys(id) ON DELETE SET NULL,
+    username        TEXT,
+    method          TEXT NOT NULL,
+    endpoint        TEXT NOT NULL,
+    result          TEXT NOT NULL,
+    status_code     INTEGER,
+    error_code      TEXT,
+    ip_hash         TEXT,
+    user_agent_hash TEXT,
+    metadata        JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_api_request_logs_key_time
+    ON points_api_request_logs(api_key_id, created_at DESC)
+    WHERE api_key_id IS NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_points_api_request_logs_user_time
+    ON points_api_request_logs(username, created_at DESC)
+    WHERE username IS NOT NULL`,
 
   // ── Points-only risk review signals ────────────────────────────────────
   // These tables are advisory. They never debit balances or alter positions
