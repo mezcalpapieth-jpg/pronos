@@ -71,7 +71,7 @@ function summarize(outcomes, prices, isResolved, winnerIdx) {
   if (!Array.isArray(outcomes) || outcomes.length === 0) return 'Predice y gana MXNB on-chain.';
   if (isResolved && winnerIdx != null) {
     const winner = outcomes[winnerIdx];
-    return winner ? `Ganó: ${winner}.` : 'Mercado resuelto.';
+    return winner ? `Resultado: ${winner}.` : 'Mercado resuelto.';
   }
   const parts = outcomes.slice(0, 4).map((label, i) => {
     const pct = Math.round((prices[i] || 0) * 100);

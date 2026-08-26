@@ -62,7 +62,7 @@ test('buy modal mirrors tournament minimum before submitting', () => {
   assert.match(buyModalSource, /belowMinimum \|\| quoteState !== 'ready'/);
   assert.match(buyModalSource, /points\.buy\.minimumEntryHint/);
   assert.match(buyModalSource, /points\.buy\.topUpHint/);
-  assert.match(buyModalSource, /points\.buy\.errorTournamentMin/);
+  assert.doesNotMatch(buyModalSource, /minSharesOut/);
   assert.match(translationLine('points.buy.minimumEntryHint'), /Mínimo \{amount\} MXNP/);
   assert.match(translationLine('points.buy.topUpHint'), /Ya cubriste este mercado/);
   assert.match(translationLine('points.buy.errorTournamentMin'), /mínimo para cubrir un mercado/);

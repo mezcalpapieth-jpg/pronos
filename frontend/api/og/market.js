@@ -247,8 +247,8 @@ function renderSvg({
   const pickedLabel = outcome || outcomes[pickedIdx] || 'Sí';
   const pickedPct = Math.round((prices[pickedIdx] || 0) * 100);
   const statusText = isResolved ? 'RESUELTO' : isOnchain ? 'ON-CHAIN' : 'EN VIVO';
-  const resultTitle = isResolved
-    ? `Ganó en ${pickedLabel}`
+  const resultTitle = isResolved || cashout
+    ? pickedLabel
     : `${pickedLabel} en Pronos`;
   const rightMetricLabel = cashout ? 'Cobro' : 'Probabilidad';
   const rightMetricValue = cashout || `${pickedPct}%`;

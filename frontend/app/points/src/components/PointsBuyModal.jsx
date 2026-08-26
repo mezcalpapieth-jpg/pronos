@@ -111,21 +111,10 @@ export default function PointsBuyModal({
     setSubmitting(true);
     setSubmitError('');
     try {
-      // Slippage guard: accept up to 1% fewer shares than the quote
-      // preview promised. If another trader moves the market past
-      // that in the ~200ms between quote + confirm, the server
-      // returns `price_moved` and we surface it as a retry-friendly
-      // error. 1% is generous enough that unlucky timing on a calm
-      // market doesn't fail every attempt.
-      const quotedShares = Number(quote?.sharesOut);
-      const minSharesOut = Number.isFinite(quotedShares) && quotedShares > 0
-        ? quotedShares * 0.99
-        : undefined;
       await executeBuy({
         marketId: market.id,
         outcomeIndex,
         collateral: numAmount,
-        minSharesOut,
       });
       await refresh();
       emitPointsRefresh({ source: 'buy', marketId: market.id });
@@ -136,7 +125,7 @@ export default function PointsBuyModal({
         onSuccess?.();
       }, 900);
     } catch (e) {
-      setSubmitError(e.code || e.message || 'buy_failed');
+      setSubmitError(publicErrorMessage(e, lang, e.code || e.message || 'buy_failed'));
     } finally {
       setSubmitting(false);
     }
@@ -369,7 +358,7 @@ export default function PointsBuyModal({
             borderRadius: 8,
             marginBottom: 12,
           }}>
-            {mapError(submitError, t)}
+            {submitError}
           </div>
         )}
 
@@ -426,15 +415,4 @@ function QuoteRow({ label, value, bold, accent, good }) {
       </span>
     </div>
   );
-}
-
-function mapError(code, t) {
-  if (!code) return t('points.buy.errorGeneric');
-  if (typeof code !== 'string') return t('points.buy.errorGeneric');
-  if (code.includes('insufficient')) return t('points.buy.errorInsufficient');
-  if (code.includes('not_authenticated')) return t('points.buy.errorNotAuth');
-  if (code.includes('market_closed')) return t('points.buy.errorMarketClosed');
-  if (code.includes('market_not_found')) return t('points.buy.errorMarketNotFound');
-  if (code.includes('tournament_min_entry')) return t('points.buy.errorTournamentMin', { amount: TOURNAMENT_MIN_BUY_MXNP });
-  return t('points.buy.errorPrefix', { code });
 }

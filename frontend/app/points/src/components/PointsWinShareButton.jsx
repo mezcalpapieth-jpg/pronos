@@ -241,12 +241,12 @@ async function makeWinCard({ item, username, amount, outcomeLabel }) {
   const pct = latestProbability(series, item);
   const oddsText = pct == null ? '—' : `${Math.round(pct)}%`;
   const cost = Number(item?.costBasis ?? item?.totalInvested ?? 0);
-  const resultLabel = String(outcomeLabel || item?.outcomeLabel || 'Resultado ganador').slice(0, 28);
+  const resultLabel = String(outcomeLabel || item?.outcomeLabel || 'Resultado ganador').slice(0, 34);
   const rightX = cutX + 42;
   const rightMaxWidth = ticket.x + ticket.w - 42 - rightX;
   ctx.textAlign = 'left';
   ctx.fillStyle = '#079c59';
-  fillTextFit(ctx, `Ganó en ${resultLabel}`, rightX, 184, rightMaxWidth, size => `900 ${size}px Arial, sans-serif`, 36, 27);
+  fillTextFit(ctx, resultLabel, rightX, 184, rightMaxWidth, size => `900 ${size}px Arial, sans-serif`, 36, 27);
   ctx.fillStyle = '#6b6258';
   ctx.font = '700 20px Arial, sans-serif';
   ctx.fillText('Costo', rightX, 224);

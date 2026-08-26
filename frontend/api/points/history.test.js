@@ -25,6 +25,9 @@ test('open-market history PnL includes mark-to-market like the chart', () => {
 });
 
 test('portfolio history exposes the bought outcome at market level', () => {
+  assert.match(source, /function displayOutcomeLabel\(m, i\)/);
+  assert.match(source, /m\?\.parentMarketId/);
+  assert.match(source, /m\.legLabel \|\| 'Opción'/);
   assert.match(source, /function pickedOutcomeSummary\(transactions = \[\]\)/);
   assert.match(source, /tx\?\.side !== 'buy'/);
   assert.match(source, /pickedOutcomeLabels: labels/);

@@ -33,6 +33,14 @@ function labelFor(outcomes, i) {
   return outcomes[i] || `Opción ${i + 1}`;
 }
 
+function displayOutcomeLabel(m, i) {
+  if (m?.parentMarketId) {
+    const side = Number(i) === 0 ? 'Sí' : 'No';
+    return `${m.legLabel || 'Opción'} — ${side}`;
+  }
+  return labelFor(m?.outcomes, i);
+}
+
 function outcomeIndexOrNull(value) {
   if (value === null || value === undefined || value === '') return null;
   const n = Number(value);
@@ -161,7 +169,7 @@ export default async function handler(req, res) {
     const rows = await timer.time('db_trades', () => sql`
       SELECT t.id, t.market_id, t.side, t.outcome_index, t.shares,
              t.collateral, t.fee, t.price_at_trade, t.tx_hash, t.created_at,
-             m.parent_id, m.question, m.category, m.outcomes, m.reserves,
+             m.parent_id, m.leg_label, m.question, m.category, m.outcomes, m.reserves,
              pm.id AS parent_market_id,
              pm.question AS parent_question,
              pm.category AS parent_category,
@@ -177,7 +185,7 @@ export default async function handler(req, res) {
     `);
     const refundRows = await timer.time('db_refunds', () => sql`
       SELECT d.id, d.kind, d.reference_id AS market_id, d.amount, d.created_at,
-             m.parent_id, m.question, m.category, m.outcomes, m.reserves,
+             m.parent_id, m.leg_label, m.question, m.category, m.outcomes, m.reserves,
              pm.id AS parent_market_id,
              pm.question AS parent_question,
              pm.category AS parent_category,
@@ -202,6 +210,7 @@ export default async function handler(req, res) {
         markets.set(mid, {
           marketId: mid,
           parentMarketId: r.parent_market_id || null,
+          legLabel: r.leg_label || null,
           question: r.parent_question || r.question,
           category: r.parent_category || r.category,
           status: r.status,
@@ -250,7 +259,7 @@ export default async function handler(req, res) {
         id: r.id,
         side: r.side,
         outcomeIndex: oi,
-        outcomeLabel: labelFor(bucket.outcomes, oi),
+        outcomeLabel: displayOutcomeLabel(bucket, oi),
         shares,
         collateral,
         fee: Number(r.fee || 0),
@@ -318,7 +327,7 @@ export default async function handler(req, res) {
       let claimablePayout = 0;
       const winningOutcomeIndex = outcomeIndexOrNull(m.outcome);
       const winningOutcomeLabel = Number.isInteger(winningOutcomeIndex)
-        ? labelFor(m.outcomes, winningOutcomeIndex)
+        ? displayOutcomeLabel(m, winningOutcomeIndex)
         : null;
       if (outcomeStatus === 'won') {
         const winningGross = Number.isInteger(winningOutcomeIndex)
