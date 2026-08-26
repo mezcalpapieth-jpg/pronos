@@ -18,7 +18,9 @@ import {
   TOURNAMENT_RANKING_CUTOFF_ISO,
   TOURNAMENT_REWARDS,
   TOURNAMENT_START_ISO,
+  getTournamentWindow,
   mexicoDateKey,
+  nextMexicoMidnightUtcIso,
   previousMexicoDateKey,
 } from '../_lib/points-tournament-config.js';
 
@@ -56,6 +58,10 @@ export default async function handler(req, res) {
   const now = new Date();
   const today = mexicoDateKey(now);
   const yesterday = previousMexicoDateKey(now);
+  const tournamentWindow = getTournamentWindow(now);
+  const rescueWindowStartIso = tournamentWindow?.startsAt || TOURNAMENT_START_ISO;
+  const rescueWindowEndIso = tournamentWindow?.rankingCutoffAt || TOURNAMENT_RANKING_CUTOFF_ISO;
+  const nextClaimAtUtc = nextMexicoMidnightUtcIso(now);
 
   try {
     await ensurePointsSchema(schemaSql);
@@ -132,7 +138,7 @@ export default async function handler(req, res) {
               AND created_at >= $2::timestamptz
               AND created_at <= $3::timestamptz
             FOR UPDATE`,
-          [username, TOURNAMENT_START_ISO, TOURNAMENT_RANKING_CUTOFF_ISO],
+          [username, rescueWindowStartIso, rescueWindowEndIso],
         );
         rescueClaimsUsed = rescueRows.rows.length;
         if (rescueClaimsUsed < RESCUE_MAX_CLAIMS) {
@@ -185,7 +191,7 @@ export default async function handler(req, res) {
       return { alreadyClaimedToday: false, amount, streakDay, balance: newBalance, rescueBonus, rescueClaimsUsed };
     });
 
-    return res.status(200).json({ ok: true, ...result });
+    return res.status(200).json({ ok: true, ...result, nextClaimAtUtc });
   } catch (e) {
     if (e?.status && typeof e?.message === 'string') {
       return res.status(e.status).json({ error: e.message, detail: e.detail });

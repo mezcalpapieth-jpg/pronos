@@ -22,6 +22,7 @@ import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { cachedJson, createApiTimer, setCacheHeaders } from '../../_lib/api-performance.js';
 import {
+  configuredCycleWindowFromRow,
   getTournamentWindow,
   tournamentRulesPayload,
 } from '../../_lib/points-tournament-config.js';
@@ -90,31 +91,41 @@ function pausedPayload() {
 
 function dbCyclePayload(row, window = getTournamentWindow()) {
   const now = Date.now();
-  const startsAtMs = new Date(row.started_at).getTime();
-  const endsAtMs = new Date(row.ends_at).getTime();
+  const cycleWindow = configuredCycleWindowFromRow(row) || {
+    label: row.label || window.label,
+    startsAt: row.started_at,
+    operationCloseAt: row.ends_at,
+    rankingCutoffAt: row.ends_at,
+    endsAt: row.ends_at,
+  };
+  const startsAtMs = new Date(cycleWindow.startsAt).getTime();
+  const operationCloseMs = new Date(cycleWindow.operationCloseAt || cycleWindow.endsAt).getTime();
+  const endsAtMs = new Date(cycleWindow.rankingCutoffAt || cycleWindow.endsAt).getTime();
   const secondsUntilStart = Math.max(0, Math.floor((startsAtMs - now) / 1000));
   const secondsRemaining = Math.max(0, Math.floor((endsAtMs - now) / 1000));
+  const secondsUntilOperationClose = Math.max(0, Math.floor((operationCloseMs - now) / 1000));
   const active = now >= startsAtMs && secondsRemaining > 0;
+  const closing = active && secondsUntilOperationClose === 0;
   return {
     paused: false,
-    label: row.label || window.label,
+    label: cycleWindow.label || window.label,
     window,
     rules: tournamentRulesPayload(),
     cycle: {
       id: row.id,
-      label: row.label || window.label,
-      startedAt: row.started_at,
-      startsAt: row.started_at,
-      operationCloseAt: row.ends_at,
-      rankingCutoffAt: row.ends_at,
-      endsAt: row.ends_at,
-      status: secondsRemaining === 0 ? 'closed' : active ? 'active' : 'scheduled',
+      label: cycleWindow.label || window.label,
+      startedAt: cycleWindow.startsAt,
+      startsAt: cycleWindow.startsAt,
+      operationCloseAt: cycleWindow.operationCloseAt || cycleWindow.endsAt,
+      rankingCutoffAt: cycleWindow.rankingCutoffAt || cycleWindow.endsAt,
+      endsAt: cycleWindow.endsAt,
+      status: secondsRemaining === 0 ? 'closed' : closing ? 'closing' : active ? 'active' : 'scheduled',
       paused: false,
       scheduled: now < startsAtMs,
       createdAt: row.created_at,
       closedAt: row.closed_at,
       secondsUntilStart,
-      secondsUntilOperationClose: secondsRemaining,
+      secondsUntilOperationClose,
       secondsRemaining,
       pastDeadline: secondsRemaining === 0,
     },

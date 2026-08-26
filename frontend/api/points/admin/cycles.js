@@ -15,8 +15,8 @@
  *       2. Archives and clears materialized positions, then cancels open
  *          limit orders so old exposure cannot leak into the next cycle.
  *       3. Marks the cycle as 'closed' with closed_at = now.
- *       4. Opens a new active cycle starting now, ending at the configured
- *          tournament close while that launch window is still open.
+ *       4. Opens the next configured cycle window, or a fallback cycle when
+ *          there is no configured tournament window.
  *       5. Resets balances to the tournament starting balance. The first
  *          bootstrap reset also carries forward only pre-cycle promotional
  *          bonuses: 200 MXNP for existing signups, 50 MXNP per referral,
@@ -32,9 +32,11 @@ import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 import {
-  TOURNAMENT_OPERATION_CLOSE_ISO,
   TOURNAMENT_STARTING_BALANCE,
   TOURNAMENT_REWARDS,
+  getTournamentWindow,
+  configuredCycleEndIso,
+  configuredCycleWindowFromRow,
 } from '../../_lib/points-tournament-config.js';
 import {
   buildTournamentLeaderboardRows,
@@ -58,12 +60,31 @@ function cycleLabel(startIso, endIso) {
 }
 
 function cycleEndIso(startIso) {
-  const startMs = new Date(startIso).getTime();
-  const tournamentCloseMs = new Date(TOURNAMENT_OPERATION_CLOSE_ISO).getTime();
-  if (Number.isFinite(startMs) && Number.isFinite(tournamentCloseMs) && tournamentCloseMs > startMs) {
-    return TOURNAMENT_OPERATION_CLOSE_ISO;
+  return configuredCycleEndIso(startIso, CYCLE_DAYS);
+}
+
+function cycleWindowForOpen(now = new Date()) {
+  const configured = getTournamentWindow(now);
+  const nowIso = now.toISOString();
+  if (configured.status === 'scheduled') {
+    return {
+      startIso: configured.startsAt,
+      endIso: configured.operationCloseAt || configured.endsAt,
+      label: configured.label,
+    };
   }
-  return new Date(startMs + CYCLE_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  if (configured.status === 'active' || configured.status === 'closing') {
+    return {
+      startIso: nowIso,
+      endIso: cycleEndIso(nowIso),
+      label: configured.label,
+    };
+  }
+  return {
+    startIso: nowIso,
+    endIso: cycleEndIso(nowIso),
+    label: null,
+  };
 }
 
 function parseSettingBool(value, fallback = true) {
@@ -110,11 +131,10 @@ async function setCyclesPaused(client, paused) {
 
 async function openNewCycle(client, nextCycleLabel) {
   const now = new Date();
-  const startIso = now.toISOString();
-  const endIso = cycleEndIso(startIso);
+  const { startIso, endIso, label: configuredLabel } = cycleWindowForOpen(now);
   const label = nextCycleLabel && typeof nextCycleLabel === 'string'
     ? nextCycleLabel.slice(0, 80)
-    : cycleLabel(startIso, endIso);
+    : configuredLabel || cycleLabel(startIso, endIso);
   const inserted = await client.query(
     `INSERT INTO points_cycles (label, started_at, ends_at, status)
      VALUES ($1, $2, $3, 'active')
@@ -141,16 +161,17 @@ async function handleGet(req, res) {
     LIMIT 10
   `;
   const paused = await getCyclesPaused();
+  const currentWindow = configuredCycleWindowFromRow(current[0]);
   return res.status(200).json({
     paused,
     current: current[0]
       ? {
           id: current[0].id,
-          label: current[0].label,
+          label: currentWindow?.label || current[0].label,
           startedAt: current[0].started_at,
-          endsAt: current[0].ends_at,
+          endsAt: currentWindow?.endsAt || current[0].ends_at,
           status: current[0].status,
-          pastDeadline: new Date(current[0].ends_at).getTime() <= Date.now(),
+          pastDeadline: new Date(currentWindow?.endsAt || current[0].ends_at).getTime() <= Date.now(),
         }
       : null,
     closed: closed.map(r => ({

@@ -63,28 +63,73 @@ function safeProfileImageUrl(value) {
   return '';
 }
 
+function millisUntilIso(iso, nowMs = Date.now()) {
+  const targetMs = Date.parse(iso || '');
+  if (!Number.isFinite(targetMs)) return null;
+  return Math.max(0, targetMs - nowMs);
+}
+
+export function formatDailyClaimCountdown(ms) {
+  const totalSeconds = Math.max(0, Math.ceil((Number(ms) || 0) / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const ss = String(seconds).padStart(2, '0');
+  if (hours > 0) {
+    return `${hours}h ${String(minutes).padStart(2, '0')}m ${ss}s`;
+  }
+  return `${minutes}m ${ss}s`;
+}
+
 // ─── Daily claim card ────────────────────────────────────────────────────────
 // Remembers if the caller already claimed today (via /api/points/history
 // response OR a claim that came back with alreadyClaimedToday=true). When
 // already claimed, the button greys out and becomes non-interactive until
-// the next server day (UTC midnight rollover).
-function DailyClaimCard({ onClaimed, alreadyClaimedToday: initialClaimed, onClaim }) {
+// the next Mexico City midnight rollover.
+function DailyClaimCard({ onClaimed, alreadyClaimedToday: initialClaimed, nextClaimAtUtc, onClaim }) {
   const lang = useLang();
+  const [nowMs, setNowMs] = useState(Date.now());
   const [state, setState] = useState({
     loading: false,
     msg: null,
     err: null,
     streakDay: null,
     claimed: !!initialClaimed,
+    nextClaimAtUtc: nextClaimAtUtc || null,
   });
 
   // Keep local `claimed` in sync with parent updates (e.g. after a
   // refresh of the history list).
   useEffect(() => {
-    if (initialClaimed && !state.claimed) {
-      setState(s => ({ ...s, claimed: true }));
+    if (initialClaimed || nextClaimAtUtc) {
+      setState(s => ({
+        ...s,
+        claimed: initialClaimed ? true : s.claimed,
+        nextClaimAtUtc: nextClaimAtUtc || s.nextClaimAtUtc,
+      }));
     }
-  }, [initialClaimed]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [initialClaimed, nextClaimAtUtc]);
+
+  const nextClaimIso = state.nextClaimAtUtc || nextClaimAtUtc;
+  const remainingMs = millisUntilIso(nextClaimIso, nowMs);
+  const hasClaimTimer = remainingMs !== null;
+
+  useEffect(() => {
+    if (!state.claimed || !hasClaimTimer) return undefined;
+    setNowMs(Date.now());
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [state.claimed, nextClaimIso, hasClaimTimer]);
+
+  useEffect(() => {
+    if (!state.claimed || !hasClaimTimer || remainingMs > 0) return;
+    setState(s => ({
+      ...s,
+      claimed: false,
+      msg: null,
+      nextClaimAtUtc: null,
+    }));
+  }, [state.claimed, hasClaimTimer, remainingMs]);
 
   async function handle() {
     if (state.claimed || state.loading) return;
@@ -96,6 +141,7 @@ function DailyClaimCard({ onClaimed, alreadyClaimedToday: initialClaimed, onClai
         err: null,
         streakDay: r.streakDay,
         claimed: true,
+        nextClaimAtUtc: r.nextClaimAtUtc || nextClaimIso || null,
         msg: r.alreadyClaimedToday
           ? `Ya reclamaste hoy (+${r.amount} MXNP, racha día ${r.streakDay})`
           : `+${r.amount} MXNP — Racha día ${r.streakDay}`,
@@ -111,7 +157,9 @@ function DailyClaimCard({ onClaimed, alreadyClaimedToday: initialClaimed, onClai
   const buttonLabel = state.loading
     ? 'Reclamando…'
     : locked
-    ? 'Ya reclamaste hoy'
+    ? remainingMs !== null
+      ? `Disponible en ${formatDailyClaimCountdown(remainingMs)}`
+      : 'Ya reclamaste hoy'
     : 'Reclamar';
 
   return (
@@ -159,7 +207,7 @@ function DailyClaimCard({ onClaimed, alreadyClaimedToday: initialClaimed, onClai
           marginTop: 8,
           letterSpacing: '0.04em',
         }}>
-          Vuelve mañana para mantener la racha.
+          Se reinicia a medianoche de Ciudad de México.
         </p>
       )}
     </section>
@@ -187,6 +235,7 @@ function DailyClaimCardWithStatus({ onClaimed }) {
   return (
     <DailyClaimCard
       alreadyClaimedToday={!!status?.alreadyClaimedToday}
+      nextClaimAtUtc={status?.nextClaimAtUtc}
       onClaimed={(r) => {
         onClaimed?.(r);
         load();

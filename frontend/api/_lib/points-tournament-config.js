@@ -1,9 +1,14 @@
 export const TOURNAMENT_TIME_ZONE = 'America/Mexico_City';
 
 export const TOURNAMENT_START_ISO = '2026-08-12T06:00:00.000Z';
-export const TOURNAMENT_OPERATION_CLOSE_ISO = '2026-08-25T20:00:00.000Z';
-export const TOURNAMENT_RANKING_CUTOFF_ISO = '2026-08-26T05:59:00.000Z';
-export const TOURNAMENT_CYCLE_LABEL = 'Ciclo 12 ago - 25 ago';
+export const TOURNAMENT_OPERATION_CLOSE_ISO = '2026-08-27T05:59:00.000Z';
+export const TOURNAMENT_RANKING_CUTOFF_ISO = '2026-08-27T05:59:00.000Z';
+export const TOURNAMENT_CYCLE_LABEL = 'Ciclo 12 ago - 26 ago';
+
+export const NEXT_TOURNAMENT_START_ISO = '2026-09-01T15:00:00.000Z';
+export const NEXT_TOURNAMENT_OPERATION_CLOSE_ISO = '2026-10-01T05:59:00.000Z';
+export const NEXT_TOURNAMENT_RANKING_CUTOFF_ISO = '2026-10-01T05:59:00.000Z';
+export const NEXT_TOURNAMENT_CYCLE_LABEL = 'Ciclo septiembre 2026';
 
 export const TOURNAMENT_STARTING_BALANCE = 500;
 export const TOURNAMENT_MIN_ENTRY_MXNP = 100;
@@ -34,6 +39,23 @@ export const TOURNAMENT_PRIZES = Object.freeze([
   { rank: '3', prize: '$1,800 MXN', amount: 1800 },
   { rank: '4', prize: '$1,200 MXN', amount: 1200 },
   { rank: '5', prize: '$1,000 MXN', amount: 1000 },
+]);
+
+export const TOURNAMENT_WINDOWS = Object.freeze([
+  Object.freeze({
+    label: TOURNAMENT_CYCLE_LABEL,
+    startsAt: TOURNAMENT_START_ISO,
+    operationCloseAt: TOURNAMENT_OPERATION_CLOSE_ISO,
+    rankingCutoffAt: TOURNAMENT_RANKING_CUTOFF_ISO,
+    endsAt: TOURNAMENT_RANKING_CUTOFF_ISO,
+  }),
+  Object.freeze({
+    label: NEXT_TOURNAMENT_CYCLE_LABEL,
+    startsAt: NEXT_TOURNAMENT_START_ISO,
+    operationCloseAt: NEXT_TOURNAMENT_OPERATION_CLOSE_ISO,
+    rankingCutoffAt: NEXT_TOURNAMENT_RANKING_CUTOFF_ISO,
+    endsAt: NEXT_TOURNAMENT_RANKING_CUTOFF_ISO,
+  }),
 ]);
 
 const MEXICO_DATE_FORMAT = new Intl.DateTimeFormat('en-US', {
@@ -97,11 +119,61 @@ export function roundTournamentAmount(value) {
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
 }
 
+function tournamentWindowForNow(now = new Date()) {
+  const current = now instanceof Date ? now : new Date(now);
+  const nowMs = current.getTime();
+  if (!Number.isFinite(nowMs)) return TOURNAMENT_WINDOWS[0];
+  return TOURNAMENT_WINDOWS.find(window => nowMs < new Date(window.rankingCutoffAt).getTime())
+    || TOURNAMENT_WINDOWS[TOURNAMENT_WINDOWS.length - 1];
+}
+
+export function configuredTournamentWindowForStart(startIso) {
+  const startMs = new Date(startIso).getTime();
+  if (!Number.isFinite(startMs)) return null;
+  return TOURNAMENT_WINDOWS.find((window) => {
+    const windowStartMs = new Date(window.startsAt).getTime();
+    const windowEndMs = new Date(window.rankingCutoffAt).getTime();
+    return startMs >= windowStartMs && startMs < windowEndMs;
+  }) || null;
+}
+
+export function configuredCycleEndIso(startIso, fallbackDays = 14) {
+  const startMs = new Date(startIso).getTime();
+  if (!Number.isFinite(startMs)) return null;
+  const window = configuredTournamentWindowForStart(startIso);
+  const configuredEndMs = new Date(window?.operationCloseAt || '').getTime();
+  if (window && Number.isFinite(configuredEndMs) && configuredEndMs > startMs) {
+    return window.operationCloseAt;
+  }
+  return new Date(startMs + fallbackDays * 24 * 60 * 60 * 1000).toISOString();
+}
+
+export function configuredCycleWindowFromRow(row) {
+  if (!row?.started_at || !row?.ends_at) return null;
+  const configured = configuredTournamentWindowForStart(row.started_at);
+  const currentEndMs = new Date(row.ends_at).getTime();
+  const configuredEndMs = new Date(configured?.rankingCutoffAt || '').getTime();
+  const shouldExtend = configured
+    && Number.isFinite(currentEndMs)
+    && Number.isFinite(configuredEndMs)
+    && configuredEndMs > currentEndMs;
+  const endsAt = shouldExtend ? configured.rankingCutoffAt : row.ends_at;
+  return {
+    id: row.id ?? null,
+    label: shouldExtend ? configured.label : (row.label || configured?.label || null),
+    startsAt: row.started_at,
+    operationCloseAt: shouldExtend ? configured.operationCloseAt : endsAt,
+    rankingCutoffAt: endsAt,
+    endsAt,
+  };
+}
+
 export function getTournamentWindow(now = new Date()) {
   const current = now instanceof Date ? now : new Date(now);
-  const startsAt = new Date(TOURNAMENT_START_ISO);
-  const operationCloseAt = new Date(TOURNAMENT_OPERATION_CLOSE_ISO);
-  const rankingCutoffAt = new Date(TOURNAMENT_RANKING_CUTOFF_ISO);
+  const configured = tournamentWindowForNow(current);
+  const startsAt = new Date(configured.startsAt);
+  const operationCloseAt = new Date(configured.operationCloseAt);
+  const rankingCutoffAt = new Date(configured.rankingCutoffAt);
   const nowMs = current.getTime();
 
   let status = 'scheduled';
@@ -114,15 +186,15 @@ export function getTournamentWindow(now = new Date()) {
   const secondsUntilOperationClose = Math.max(0, Math.floor((operationCloseAt.getTime() - nowMs) / 1000));
 
   return {
-    label: TOURNAMENT_CYCLE_LABEL,
+    label: configured.label,
     status,
     paused: false,
     scheduled: status === 'scheduled',
     active: status === 'active' || status === 'closing',
-    startsAt: TOURNAMENT_START_ISO,
-    operationCloseAt: TOURNAMENT_OPERATION_CLOSE_ISO,
-    rankingCutoffAt: TOURNAMENT_RANKING_CUTOFF_ISO,
-    endsAt: TOURNAMENT_RANKING_CUTOFF_ISO,
+    startsAt: configured.startsAt,
+    operationCloseAt: configured.operationCloseAt,
+    rankingCutoffAt: configured.rankingCutoffAt,
+    endsAt: configured.endsAt,
     secondsUntilStart,
     secondsUntilOperationClose,
     secondsRemaining,

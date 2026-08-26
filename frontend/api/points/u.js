@@ -248,7 +248,7 @@ export default async function handler(req, res) {
       JOIN points_markets m ON m.id = d.reference_id
       LEFT JOIN points_markets pm ON pm.id = m.parent_id
       WHERE LOWER(d.username) = ${username}
-        AND d.kind IN ('market_cancel_refund', 'void_refund', 'invalid_field_refund')
+        AND d.kind IN ('market_cancel_refund', 'void_refund', 'invalid_field_refund', 'redemption_reversal')
         AND COALESCE(m.mode, 'points') = 'points'
       ORDER BY d.created_at ASC
     `;

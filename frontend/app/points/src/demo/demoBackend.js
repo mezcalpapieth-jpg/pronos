@@ -332,7 +332,13 @@ const EMPTY_PAYLOADS = {
   '/api/points/maker-rewards': { rewards: [] },
   '/api/points/pnl-history': { series: [] },
   '/api/points/support-tickets': { tickets: [] },
-  '/api/points/daily-status': { claimed: true, streak: 6, nextAmount: 0, canClaim: false },
+  '/api/points/daily-status': {
+    alreadyClaimedToday: true,
+    claimedAmount: 200,
+    streakDay: 6,
+    bestStreak: 6,
+    nextClaimAtUtc: '2026-08-27T06:00:00.000Z',
+  },
   '/api/points/pwa-install-status': { eligible: false, claimed: true },
   '/api/points/turnkey/delegation-status': { delegated: true },
 };

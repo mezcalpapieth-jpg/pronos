@@ -53,6 +53,8 @@ const POINTS_SCHEMA_READY_PROBE = `
     to_regclass('public.points_aicm_timetable_observations') IS NOT NULL AS points_aicm_timetable_observations,
     to_regclass('public.points_token_mcap_snapshots') IS NOT NULL AS points_token_mcap_snapshots,
     to_regclass('public.points_top_holder_snapshots') IS NOT NULL AS points_top_holder_snapshots,
+    to_regclass('public.points_resolution_corrections') IS NOT NULL AS points_resolution_corrections,
+    to_regclass('public.points_redemption_reversals') IS NOT NULL AS points_redemption_reversals,
     to_regclass('public.points_risk_events') IS NOT NULL AS points_risk_events,
     to_regclass('public.points_account_reviews') IS NOT NULL AS points_account_reviews,
     to_regclass('public.points_risk_flags') IS NOT NULL AS points_risk_flags,
@@ -791,6 +793,41 @@ const POINTS_SCHEMA_MIGRATIONS = [
     ON points_distributions(created_at DESC, kind, username)`,
   `CREATE INDEX IF NOT EXISTS idx_points_distributions_user_kind_ref
     ON points_distributions(username, kind, reference_id, created_at DESC)`,
+
+  // ── Resolution corrections (admin audit + idempotent payout reversals) ──
+  // Used when a resolved market was settled to the wrong outcome. We keep the
+  // original redeem trade immutable, debit wrong claims through a negative
+  // distribution, and mark each redeem trade once so a retry cannot double-debit.
+  `CREATE TABLE IF NOT EXISTS points_resolution_corrections (
+    id                  BIGSERIAL PRIMARY KEY,
+    market_id           INTEGER NOT NULL REFERENCES points_markets(id) ON DELETE CASCADE,
+    old_outcome         SMALLINT,
+    new_outcome         SMALLINT NOT NULL,
+    admin_username      TEXT,
+    reason              TEXT,
+    final_score         TEXT,
+    affected_market_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+    reversed_total      NUMERIC(20,6) NOT NULL DEFAULT 0,
+    reversed_count      INTEGER NOT NULL DEFAULT 0,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_resolution_corrections_market
+    ON points_resolution_corrections(market_id, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_resolution_corrections_created
+    ON points_resolution_corrections(created_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS points_redemption_reversals (
+    redeem_trade_id INTEGER PRIMARY KEY REFERENCES points_trades(id) ON DELETE CASCADE,
+    correction_id   BIGINT REFERENCES points_resolution_corrections(id) ON DELETE SET NULL,
+    market_id       INTEGER NOT NULL REFERENCES points_markets(id) ON DELETE CASCADE,
+    username        TEXT NOT NULL,
+    outcome_index   SMALLINT NOT NULL,
+    amount          NUMERIC(20,6) NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_redemption_reversals_correction
+    ON points_redemption_reversals(correction_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_redemption_reversals_market_user
+    ON points_redemption_reversals(market_id, username)`,
 
   // ── Site-time analytics (admin-only aggregate) ─────────────────────────
   // The client sends a low-frequency heartbeat while an authenticated user

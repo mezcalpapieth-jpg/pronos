@@ -789,6 +789,15 @@ export async function adminRunAutoResolve({ dry = false } = {}) {
   return postJson(`/api/points/admin/run-auto-resolve${q}`, {});
 }
 
+export async function adminCorrectResolution({ marketId, winningOutcomeIndex, finalScore, reason } = {}) {
+  return postJson('/api/points/admin/correct-resolution', {
+    marketId,
+    winningOutcomeIndex,
+    finalScore,
+    reason,
+  });
+}
+
 // Toggle curation flags. Featured (🔥) markets appear publicly unless
 // bulk-hidden; tournamentFeatured (🏆) markets appear even after the
 // regular active market set is hidden.

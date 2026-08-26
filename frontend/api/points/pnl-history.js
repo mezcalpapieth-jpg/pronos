@@ -164,11 +164,11 @@ export default async function handler(req, res) {
     }
 
     const refundRows = await timer.time('db_refunds', () => sql`
-      SELECT d.reference_id AS market_id, d.amount, d.created_at
+      SELECT d.reference_id AS market_id, d.kind, d.amount, d.created_at
       FROM points_distributions d
       JOIN points_markets m ON m.id = d.reference_id
       WHERE LOWER(d.username) = ${username}
-        AND d.kind IN ('market_cancel_refund', 'void_refund', 'invalid_field_refund')
+        AND d.kind IN ('market_cancel_refund', 'void_refund', 'invalid_field_refund', 'redemption_reversal')
         AND COALESCE(m.mode, 'points') = ${modeFilter}
         AND (${cycleWindow.fromIso}::timestamptz IS NULL OR d.created_at >= ${cycleWindow.fromIso}::timestamptz)
         AND (${cycleWindow.toIso}::timestamptz IS NULL OR d.created_at < ${cycleWindow.toIso}::timestamptz)
@@ -210,6 +210,7 @@ export default async function handler(req, res) {
       })),
       refunds: refundRows.map(r => ({
         marketId: Number(r.market_id),
+        kind: r.kind,
         amount: Number(r.amount || 0),
         createdAt: r.created_at,
       })),

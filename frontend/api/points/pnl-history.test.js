@@ -52,3 +52,8 @@ test('pnl-history defaults to the active cycle and can read the previous cycle',
   assert.match(source, /d\.created_at >= \$\{cycleWindow\.fromIso\}::timestamptz/);
   assert.match(source, /cycle: cycleWindow/);
 });
+
+test('pnl-history includes resolution correction reversals', () => {
+  assert.match(source, /d\.kind IN \('market_cancel_refund', 'void_refund', 'invalid_field_refund', 'redemption_reversal'\)/);
+  assert.match(source, /kind: r\.kind/);
+});

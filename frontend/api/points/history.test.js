@@ -6,7 +6,8 @@ const source = await readFile(new URL('./history.js', import.meta.url), 'utf8');
 
 test('winning unresolved history includes claimable payout in displayed PnL', () => {
   assert.match(source, /claimablePayout/);
-  assert.match(source, /redeemedByOutcome\.get\(winningIdx\)/);
+  assert.match(source, /redeemedWinning = Number\.isInteger\(winningOutcomeIndex\)/);
+  assert.match(source, /m\.redeemedByOutcome\.get\(winningOutcomeIndex\)/);
   assert.match(source, /effectiveReceived = m\.totalReceived \+ claimablePayout/);
   assert.match(source, /settledNetPnl = round2\(effectiveReceived - m\.totalInvested\)/);
 });
@@ -45,4 +46,10 @@ test('portfolio history defaults to the current cycle window', () => {
 test('previous-cycle unresolved markets are not labeled open', () => {
   assert.match(source, /outcomeStatus = 'cycle_closed'/);
   assert.match(source, /marketsCycleClosed: history\.filter\(m => m\.outcomeStatus === 'cycle_closed'\)\.length/);
+});
+
+test('portfolio history includes resolution correction reversals', () => {
+  assert.match(source, /redemption_reversal/);
+  assert.match(source, /Corrección de resolución/);
+  assert.match(source, /bucket\.totalReceived \+= collateral/);
 });

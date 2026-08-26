@@ -72,7 +72,7 @@ function priceLookup(snapshotsByMarket) {
 
 /**
  * @param {object[]} trades   {marketId, side, outcomeIndex, shares, collateral, createdAt}
- * @param {object[]} refunds  {marketId, amount, createdAt} — cancel/void refunds
+ * @param {object[]} refunds  {marketId, amount, createdAt, kind?} — cancel/void refunds and correction reversals
  * @param {object[]} markets  {marketId, outcomeCount, status, outcome, resolvedAt}
  * @param {object[]} snapshots {marketId, prices:number[], snapshottedAt}
  * @param {number}   fromMs   window start; earlier trades still replay, they
@@ -127,7 +127,8 @@ export function buildPnlSeries({
   for (const rf of refunds) {
     const t = toMs(rf.createdAt);
     if (t == null) continue;
-    events.push({ t, marketId: rf.marketId, side: 'refund', collateral: num(rf.amount) });
+    const side = rf.kind === 'redemption_reversal' ? 'redemption_reversal' : 'refund';
+    events.push({ t, marketId: rf.marketId, side, collateral: num(rf.amount) });
   }
   events.sort((a, b) => a.t - b.t);
 
@@ -170,6 +171,13 @@ export function buildPnlSeries({
         // A refunded market is unwound — drop the stake so it stops being
         // marked to market on a book that no longer settles.
         sharesByMarket.delete(e.marketId);
+        continue;
+      }
+      if (e.side === 'redemption_reversal') {
+        // A correction only claws back an incorrect redeem payout. It must
+        // not unwind the whole market, because the user may also hold the
+        // newly-correct winning outcome on the same market.
+        cashReceived += e.collateral;
         continue;
       }
       if (!sharesByMarket.has(e.marketId)) sharesByMarket.set(e.marketId, new Map());

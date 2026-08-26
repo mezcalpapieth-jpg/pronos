@@ -186,7 +186,7 @@ export default async function handler(req, res) {
       JOIN points_markets m ON m.id = d.reference_id
       LEFT JOIN points_markets pm ON pm.id = m.parent_id
       WHERE d.username = ${username}
-        AND d.kind IN ('market_cancel_refund', 'void_refund', 'invalid_field_refund')
+        AND d.kind IN ('market_cancel_refund', 'void_refund', 'invalid_field_refund', 'redemption_reversal')
         AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
         AND (${cycleWindow.fromIso}::timestamptz IS NULL OR d.created_at >= ${cycleWindow.fromIso}::timestamptz)
         AND (${cycleWindow.toIso}::timestamptz IS NULL OR d.created_at < ${cycleWindow.toIso}::timestamptz)
@@ -267,7 +267,9 @@ export default async function handler(req, res) {
         id: `refund-${r.id}`,
         side: 'refund',
         outcomeIndex: null,
-        outcomeLabel: r.kind === 'invalid_field_refund' ? 'Reembolso por participante fuera del campo' : 'Reembolso',
+        outcomeLabel: r.kind === 'redemption_reversal'
+          ? 'Corrección de resolución'
+          : r.kind === 'invalid_field_refund' ? 'Reembolso por participante fuera del campo' : 'Reembolso',
         shares: 0,
         collateral,
         fee: 0,

@@ -42,6 +42,7 @@ import {
   adminBackfillResolvers,
   adminResolveDiagnostic,
   adminRunAutoResolve,
+  adminCorrectResolution,
   adminRunGenerators,
   adminToggleFeatured,
   adminToggleTestMarket,
@@ -2141,6 +2142,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
   const [curationFilter, setCurationFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState(null);
+  const [correcting, setCorrecting] = useState(null);
   const [reviewingCandidate, setReviewingCandidate] = useState(null);
   const [canceling, setCanceling] = useState(null);
   const [reopening, setReopening] = useState(null);
@@ -2241,6 +2243,62 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
       alert(`No se pudo resolver: ${e.code || e.message}${e.detail ? '\n' + e.detail : ''}`);
     } finally {
       setResolving(null);
+    }
+  }
+
+  async function correctResolution(market, winningOutcomeIndex) {
+    if (!market?.id || market.status !== 'resolved') return;
+    const outcomes = Array.isArray(market.outcomes) ? market.outcomes : [];
+    const label = outcomes[winningOutcomeIndex] || `Resultado ${Number(winningOutcomeIndex) + 1}`;
+    const ok = window.confirm(
+      `¿Cambiar resolución de "${market.question}" a "${label}"?\n\n`
+      + 'Se revertirán cobros que ahora sean perdedores y los ganadores correctos podrán cobrar.',
+    );
+    if (!ok) return;
+
+    const reason = window.prompt('Motivo de la corrección', 'Corrección manual de resolución');
+    if (reason === null) return;
+    const finalScore = window.prompt('Resultado final mostrado (opcional)', market.finalScore || '');
+    if (finalScore === null) return;
+
+    setCorrecting(market.id);
+    try {
+      const result = await adminCorrectResolution({
+        marketId: market.id,
+        winningOutcomeIndex,
+        reason,
+        finalScore,
+      });
+      setMarkets(prev => (prev || []).map((m) => {
+        if (m.id !== market.id) return m;
+        const nextLegs = Array.isArray(m.parallelLegs)
+          ? m.parallelLegs.map((leg, index) => ({
+              ...leg,
+              status: 'resolved',
+              outcome: index === winningOutcomeIndex ? 0 : 1,
+              resolvedAt: new Date().toISOString(),
+            }))
+          : m.parallelLegs;
+        return {
+          ...m,
+          status: 'resolved',
+          outcome: winningOutcomeIndex,
+          resolvedAt: new Date().toISOString(),
+          finalScore: result?.finalScore ?? m.finalScore,
+          parallelLegs: nextLegs,
+        };
+      }));
+      const reversed = Number(result?.reversedTotal || 0);
+      alert(
+        `Resolución corregida.\n`
+        + `Cobros revertidos: ${result?.reversedCount || 0}\n`
+        + `MXNP revertidos: ${reversed.toLocaleString('es-MX', { maximumFractionDigits: 2 })}`,
+      );
+      onQueueChange?.();
+    } catch (e) {
+      alert(`No se pudo corregir: ${e.code || e.message}${e.detail ? '\n' + e.detail : ''}`);
+    } finally {
+      setCorrecting(null);
     }
   }
 
@@ -3051,15 +3109,26 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
               )}
             </div>
           ) : (
-            <span style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              color: 'var(--green)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.04em',
-            }}>
-              ✓ {m.outcomes[m.outcome]}
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <span style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                color: 'var(--green)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+              }}>
+                ✓ {m.outcomes[m.outcome]}
+              </span>
+              <ResolveControls
+                market={m}
+                resolving={correcting === m.id}
+                onResolve={(winnerIndex) => correctResolution(m, winnerIndex)}
+                initialSelected={Number.isInteger(Number(m.outcome)) ? Number(m.outcome) : 0}
+                actionLabel="Cambiar a"
+                busyLabel="Corrigiendo…"
+                buttonLabel="Corregir"
+              />
+            </div>
           )}
         </div>
       ))}
@@ -4047,9 +4116,25 @@ function ResolutionCandidatePanel({ market, candidate, reviewing, onReview }) {
 // Compact dropdown + confirm button that works for any N outcomes. The
 // previous hardcoded "Ganó X / Ganó Y" pair of buttons only covered
 // N=2 markets, which broke resolution for 3-outcome W/D/L markets.
-function ResolveControls({ market, resolving, onResolve }) {
-  const [selected, setSelected] = useState(0);
+function ResolveControls({
+  market,
+  resolving,
+  onResolve,
+  initialSelected = 0,
+  actionLabel = 'Ganó',
+  busyLabel = 'Resolviendo…',
+  buttonLabel = null,
+}) {
   const outcomes = Array.isArray(market.outcomes) ? market.outcomes : [];
+  const safeInitial = Number.isInteger(Number(initialSelected))
+    ? Math.min(Math.max(0, Number(initialSelected)), Math.max(0, outcomes.length - 1))
+    : 0;
+  const [selected, setSelected] = useState(safeInitial);
+
+  useEffect(() => {
+    setSelected(safeInitial);
+  }, [market?.id, safeInitial]);
+
   return (
     <>
       <select
@@ -4080,7 +4165,7 @@ function ResolveControls({ market, resolving, onResolve }) {
         className="btn-primary"
         style={{ padding: '6px 12px', fontSize: 11 }}
       >
-        {resolving ? 'Resolviendo…' : `Ganó ${outcomes[selected] || '—'}`}
+        {resolving ? busyLabel : (buttonLabel || `${actionLabel} ${outcomes[selected] || '—'}`)}
       </button>
     </>
   );

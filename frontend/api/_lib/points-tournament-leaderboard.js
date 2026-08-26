@@ -6,6 +6,7 @@ import {
   TOURNAMENT_QUALIFYING_MARKETS,
   TOURNAMENT_RANKING_CUTOFF_ISO,
   TOURNAMENT_START_ISO,
+  configuredCycleWindowFromRow,
   mexicoDateKey,
   mexicoDateKeyToUtcNoon,
   previousMexicoDateKey,
@@ -49,15 +50,7 @@ function dateKeysInclusive(startDate, endKey) {
 }
 
 export function cycleWindowFromRow(row) {
-  if (!row?.started_at || !row?.ends_at) return null;
-  return {
-    id: row.id ?? null,
-    label: row.label || null,
-    startsAt: row.started_at,
-    operationCloseAt: row.ends_at,
-    rankingCutoffAt: row.ends_at,
-    endsAt: row.ends_at,
-  };
+  return configuredCycleWindowFromRow(row);
 }
 
 export async function resolveTournamentScoringWindow(db, { now = new Date() } = {}) {

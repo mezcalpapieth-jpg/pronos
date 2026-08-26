@@ -536,6 +536,37 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_distributions_user_kind_ref
     ON points_distributions(username, kind, reference_id, created_at DESC)`,
 
+  `CREATE TABLE IF NOT EXISTS points_resolution_corrections (
+    id                  BIGSERIAL PRIMARY KEY,
+    market_id           INTEGER NOT NULL REFERENCES points_markets(id) ON DELETE CASCADE,
+    old_outcome         SMALLINT,
+    new_outcome         SMALLINT NOT NULL,
+    admin_username      TEXT,
+    reason              TEXT,
+    final_score         TEXT,
+    affected_market_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+    reversed_total      NUMERIC(20,6) NOT NULL DEFAULT 0,
+    reversed_count      INTEGER NOT NULL DEFAULT 0,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_resolution_corrections_market
+    ON points_resolution_corrections(market_id, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_resolution_corrections_created
+    ON points_resolution_corrections(created_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS points_redemption_reversals (
+    redeem_trade_id INTEGER PRIMARY KEY REFERENCES points_trades(id) ON DELETE CASCADE,
+    correction_id   BIGINT REFERENCES points_resolution_corrections(id) ON DELETE SET NULL,
+    market_id       INTEGER NOT NULL REFERENCES points_markets(id) ON DELETE CASCADE,
+    username        TEXT NOT NULL,
+    outcome_index   SMALLINT NOT NULL,
+    amount          NUMERIC(20,6) NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_redemption_reversals_correction
+    ON points_redemption_reversals(correction_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_redemption_reversals_market_user
+    ON points_redemption_reversals(market_id, username)`,
+
   `CREATE TABLE IF NOT EXISTS points_site_time_daily (
     username      TEXT NOT NULL,
     day           DATE NOT NULL DEFAULT CURRENT_DATE,

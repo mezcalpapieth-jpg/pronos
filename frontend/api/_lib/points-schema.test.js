@@ -15,6 +15,8 @@ test('points schema self-healing avoids hot-route migration lock pileups', () =>
   assert.match(source, /to_regclass\('public\.points_mananera_transcripts'\) IS NOT NULL AS points_mananera_transcripts/);
   assert.match(source, /to_regclass\('public\.points_aicm_poll_runs'\) IS NOT NULL AS points_aicm_poll_runs/);
   assert.match(source, /to_regclass\('public\.points_aicm_flight_observations'\) IS NOT NULL AS points_aicm_flight_observations/);
+  assert.match(source, /to_regclass\('public\.points_resolution_corrections'\) IS NOT NULL AS points_resolution_corrections/);
+  assert.match(source, /to_regclass\('public\.points_redemption_reversals'\) IS NOT NULL AS points_redemption_reversals/);
   assert.match(source, /points_support_message_attachments/);
   assert.match(source, /points_users_display_name/);
   assert.match(source, /points_users_profile_image_url/);
@@ -66,6 +68,20 @@ test('points schema supports public api keys, idempotency, and api trade audit f
     assert.match(migrationSource, /request_id\s+TEXT NOT NULL UNIQUE/);
     assert.match(migrationSource, /ALTER TABLE points_trades ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'web'/);
     assert.match(migrationSource, /ALTER TABLE points_trades ADD COLUMN IF NOT EXISTS api_key_id BIGINT/);
+  }
+});
+
+test('points schema supports auditable resolution corrections', () => {
+  for (const migrationSource of [source, migrateSource]) {
+    assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS points_resolution_corrections/);
+    assert.match(migrationSource, /old_outcome\s+SMALLINT/);
+    assert.match(migrationSource, /new_outcome\s+SMALLINT NOT NULL/);
+    assert.match(migrationSource, /affected_market_ids JSONB NOT NULL DEFAULT '\[\]'::jsonb/);
+    assert.match(migrationSource, /reversed_total\s+NUMERIC\(20,6\) NOT NULL DEFAULT 0/);
+    assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS points_redemption_reversals/);
+    assert.match(migrationSource, /redeem_trade_id INTEGER PRIMARY KEY REFERENCES points_trades\(id\)/);
+    assert.match(migrationSource, /correction_id\s+BIGINT REFERENCES points_resolution_corrections\(id\)/);
+    assert.match(migrationSource, /idx_points_redemption_reversals_market_user/);
   }
 });
 

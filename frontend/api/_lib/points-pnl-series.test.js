@@ -133,6 +133,22 @@ test('a cancel refund unwinds the position instead of leaving it marked', () => 
   assert.equal(current, 0);
 });
 
+test('a resolution correction reversal debits cash without unwinding the market', () => {
+  const { current } = buildPnlSeries({
+    trades: [
+      { marketId: 1, side: 'buy', outcomeIndex: 0, shares: 100, collateral: 100, createdAt: at(0) },
+      { marketId: 1, side: 'buy', outcomeIndex: 1, shares: 100, collateral: 100, createdAt: at(1) },
+      { marketId: 1, side: 'redeem', outcomeIndex: 0, shares: 100, collateral: 140, createdAt: at(10) },
+    ],
+    refunds: [{ marketId: 1, kind: 'redemption_reversal', amount: -140, createdAt: at(20) }],
+    markets: [{ marketId: 1, outcomeCount: 2, status: 'resolved', outcome: 1, resolvedAt: at(15) }],
+    snapshots: [{ marketId: 1, prices: [0.5, 0.5], snapshottedAt: at(0) }],
+    nowMs: T0 + 30 * MIN,
+  });
+
+  assert.equal(current, -100);
+});
+
 test('PnL accumulates across several markets at once', () => {
   const { current } = buildPnlSeries({
     trades: [
