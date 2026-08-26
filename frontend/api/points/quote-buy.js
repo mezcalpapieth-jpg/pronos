@@ -13,7 +13,10 @@ import { binaryBuyQuote, binaryPrices, multiBuyQuote, multiPrices } from '../_li
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { seriesTradeLockFromRows } from '../_lib/series-markets.js';
 import { cryptoTradeLock } from '../_lib/points-crypto-trade-guard.js';
-import { tournamentSettlementLock } from '../_lib/points-tournament-entry.js';
+import {
+  tournamentCutoffSnapshotLock,
+  tournamentSettlementLock,
+} from '../_lib/points-tournament-entry.js';
 import {
   combineBuyOrderbookMatches,
   makerUsageFromRows,
@@ -119,6 +122,13 @@ export default async function handler(req, res) {
       return res.status(tournamentLock.status).json({
         error: tournamentLock.error,
         detail: tournamentLock.detail,
+      });
+    }
+    const snapshotLock = await tournamentCutoffSnapshotLock(sql, r);
+    if (snapshotLock) {
+      return res.status(snapshotLock.status).json({
+        error: snapshotLock.error,
+        detail: snapshotLock.detail,
       });
     }
     const cryptoLock = cryptoTradeLock(r);

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  tournamentCutoffSnapshotLock,
   tournamentMarketSettlementMs,
   tournamentSettlementLock,
 } from './points-tournament-entry.js';
@@ -52,4 +53,60 @@ test('tournament settlement guard ignores non-tournament markets', () => {
   }, duringTournament);
 
   assert.equal(lock, null);
+});
+
+function snapshotStatusDb({ activeCycle = true, snapshotCount = 0 } = {}) {
+  return {
+    async query(text) {
+      if (/FROM points_cycles/.test(text)) {
+        return {
+          rows: activeCycle
+            ? [{
+              id: 12,
+              label: 'Ciclo 12 ago - 26 ago',
+              started_at: '2026-08-12T15:00:00.000Z',
+              ends_at: '2026-08-27T05:59:00.000Z',
+            }]
+            : [],
+        };
+      }
+      if (/FROM points_cycle_snapshots/.test(text)) {
+        return { rows: [{ count: snapshotCount }] };
+      }
+      return { rows: [] };
+    },
+  };
+}
+
+test('tournament cutoff snapshot lock waits after cutoff until the photo is written', async () => {
+  const lock = await tournamentCutoffSnapshotLock(
+    snapshotStatusDb({ snapshotCount: 0 }),
+    { tournament_featured: true },
+    new Date('2026-08-27T06:00:00.000Z'),
+  );
+
+  assert.equal(lock?.error, 'tournament_snapshot_pending');
+  assert.equal(lock?.status, 423);
+});
+
+test('tournament cutoff snapshot lock allows trading before cutoff or after photo exists', async () => {
+  const beforeCutoff = await tournamentCutoffSnapshotLock(
+    snapshotStatusDb({ snapshotCount: 0 }),
+    { tournament_featured: true },
+    new Date('2026-08-27T05:58:59.000Z'),
+  );
+  const afterSnapshot = await tournamentCutoffSnapshotLock(
+    snapshotStatusDb({ snapshotCount: 4 }),
+    { tournament_featured: true },
+    new Date('2026-08-27T06:00:00.000Z'),
+  );
+  const regularMarket = await tournamentCutoffSnapshotLock(
+    snapshotStatusDb({ snapshotCount: 0 }),
+    { tournament_featured: false },
+    new Date('2026-08-27T06:00:00.000Z'),
+  );
+
+  assert.equal(beforeCutoff, null);
+  assert.equal(afterSnapshot, null);
+  assert.equal(regularMarket, null);
 });

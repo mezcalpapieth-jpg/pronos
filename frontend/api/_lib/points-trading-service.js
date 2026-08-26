@@ -28,6 +28,7 @@ import {
   tournamentRulesActive,
 } from './points-tournament-config.js';
 import {
+  assertTournamentCutoffSnapshotReady,
   assertTournamentMinimumEntry,
   assertTournamentSettlementAllowed,
 } from './points-tournament-entry.js';
@@ -175,6 +176,7 @@ export async function executePointsBuy(client, {
   if (market.end_time && new Date(market.end_time) <= new Date()) throw apiError('market_expired', 400);
 
   assertTournamentSettlementAllowed(market);
+  await assertTournamentCutoffSnapshotReady(client, { market });
   await assertTournamentMinimumEntry(client, {
     market,
     username,
@@ -408,6 +410,7 @@ export async function executePointsSell(client, {
   const market = marketResult.rows[0];
   if (market.status !== 'active') throw apiError('market_closed', 400);
   if (market.end_time && new Date(market.end_time) <= new Date()) throw apiError('market_expired', 400);
+  await assertTournamentCutoffSnapshotReady(client, { market });
   assertCryptoTradeAllowed(market);
 
   const reserves = parseJsonb(market.reserves, []).map(Number);

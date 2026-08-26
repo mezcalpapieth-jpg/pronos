@@ -13,7 +13,10 @@ import {
   TOURNAMENT_MAX_SHARES_PER_MARKET,
   tournamentRulesActive,
 } from './points-tournament-config.js';
-import { assertTournamentMinimumEntry } from './points-tournament-entry.js';
+import {
+  assertTournamentCutoffSnapshotReady,
+  assertTournamentMinimumEntry,
+} from './points-tournament-entry.js';
 
 const EPSILON = 0.000001;
 const MAX_TRIGGERED_PER_PASS = 24;
@@ -2013,6 +2016,7 @@ export async function createLimitOrder(client, {
   }
   const market = await lockMarket(client, marketId);
   assertMarketCanTrade(market);
+  await assertTournamentCutoffSnapshotReady(client, { market });
   if (normalizedSide === 'buy') {
     await assertTournamentMinimumEntry(client, {
       market,

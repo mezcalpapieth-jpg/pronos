@@ -34,6 +34,10 @@
       "schedule": "0 16 * * *"
     },
     {
+      "path": "/api/cron/points-tournament-snapshot",
+      "schedule": "59 5 * * *"
+    },
+    {
       "path": "/api/cron/mananera-transcript",
       "schedule": "0 0,3,18,21 * * *"
     },

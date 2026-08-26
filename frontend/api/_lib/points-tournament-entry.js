@@ -6,6 +6,7 @@ import {
   tournamentRulesActive,
 } from './points-tournament-config.js';
 import { resolveTournamentScoringWindow } from './points-tournament-leaderboard.js';
+import { readActiveCycleCutoffSnapshotStatus } from './points-cycle-snapshot.js';
 
 function parseJsonb(value, fallback = null) {
   if (Array.isArray(value) || (value && typeof value === 'object')) return value;
@@ -50,6 +51,28 @@ export function tournamentSettlementLock(market = {}, now = new Date()) {
 
 export function assertTournamentSettlementAllowed(market = {}, now = new Date()) {
   const lock = tournamentSettlementLock(market, now);
+  if (!lock) return;
+  const err = new Error(lock.error);
+  err.status = lock.status;
+  err.detail = lock.detail;
+  throw err;
+}
+
+export async function tournamentCutoffSnapshotLock(client, market = {}, now = new Date()) {
+  if (!truthy(market.tournament_featured ?? market.tournamentFeatured)) return null;
+
+  const status = await readActiveCycleCutoffSnapshotStatus(client, { now }).catch(() => null);
+  if (!status?.cutoffPassed || status.snapshotTaken) return null;
+
+  return {
+    error: 'tournament_snapshot_pending',
+    status: 423,
+    detail: 'Estamos guardando la foto final del torneo. El mercado reabre en cuanto termine.',
+  };
+}
+
+export async function assertTournamentCutoffSnapshotReady(client, { market = {}, now = new Date() } = {}) {
+  const lock = await tournamentCutoffSnapshotLock(client, market, now);
   if (!lock) return;
   const err = new Error(lock.error);
   err.status = lock.status;

@@ -957,6 +957,12 @@ export async function adminApplyPreCycleCarryover() {
   });
 }
 
+export async function adminSnapshotCycleCutoff() {
+  return postJson('/api/points/admin/cycles', {
+    action: 'snapshot_cutoff',
+  });
+}
+
 // ─── News (Mexican RSS aggregator) ──────────────────────────────────────────
 export async function fetchNews({ category = 'featured', limit = 60 } = {}) {
   const q = new URLSearchParams();

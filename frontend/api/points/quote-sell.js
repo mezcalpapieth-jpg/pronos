@@ -18,6 +18,7 @@ import {
   PRONOS_TREASURY_USERNAME,
 } from '../_lib/points-limit-orders.js';
 import { binaryPricesWithBookTrade } from '../_lib/points-display-prices.js';
+import { tournamentCutoffSnapshotLock } from '../_lib/points-tournament-entry.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -81,6 +82,13 @@ export default async function handler(req, res) {
     if (r.status !== 'active') return res.status(400).json({ error: 'market_closed' });
     if (r.end_time && new Date(r.end_time) <= new Date()) {
       return res.status(400).json({ error: 'market_expired' });
+    }
+    const snapshotLock = await tournamentCutoffSnapshotLock(sql, r);
+    if (snapshotLock) {
+      return res.status(snapshotLock.status).json({
+        error: snapshotLock.error,
+        detail: snapshotLock.detail,
+      });
     }
     const cryptoLock = cryptoTradeLock(r);
     if (cryptoLock) {

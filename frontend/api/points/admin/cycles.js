@@ -8,10 +8,11 @@
  *     cycles. Drives the "Ciclos" tab in the admin panel.
  *
  *   POST /api/points/admin/cycles
- *     Body: { action: 'rollover', nextCycleLabel? } or { action: 'pause' }
+ *     Body: { action: 'rollover', nextCycleLabel? }, { action: 'snapshot_cutoff' },
+ *           { action: 'pause' }, or { action: 'apply_pre_cycle_carryover' }
  *     Closes the current active cycle:
- *       1. Snapshots the top-100 leaderboard (by tournament score) into
- *          points_cycle_snapshots.
+ *       1. Snapshots the tournament leaderboard into points_cycle_snapshots
+ *          if the cutoff photo was not already taken.
  *       2. Archives and clears materialized positions, then cancels open
  *          limit orders so old exposure cannot leak into the next cycle.
  *       3. Marks the cycle as 'closed' with closed_at = now.
@@ -25,6 +26,9 @@
  * Response on rollover:
  *   { ok: true, closedCycleId, newCycleId, snapshotted, resetCount,
  *     winners: [top 5] }
+ *
+ * Response on snapshot_cutoff:
+ *   { ok: true, cycleId, cutoffAt, snapshotted, winners: [top 5] }
  */
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
@@ -39,9 +43,9 @@ import {
   configuredCycleWindowFromRow,
 } from '../../_lib/points-tournament-config.js';
 import {
-  buildTournamentLeaderboardRows,
-  cycleWindowFromRow,
-} from '../../_lib/points-tournament-leaderboard.js';
+  snapshotActiveCycleAtCutoff,
+  snapshotCycleLeaderboard,
+} from '../../_lib/points-cycle-snapshot.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -146,10 +150,11 @@ async function openNewCycle(client, nextCycleLabel) {
 
 async function handleGet(req, res) {
   const current = await sql`
-    SELECT id, label, started_at, ends_at, status, created_at, closed_at
-    FROM points_cycles
-    WHERE status = 'active'
-    ORDER BY ends_at DESC
+    SELECT c.id, c.label, c.started_at, c.ends_at, c.status, c.created_at, c.closed_at,
+      (SELECT COUNT(*) FROM points_cycle_snapshots s WHERE s.cycle_id = c.id) AS snapshot_count
+    FROM points_cycles c
+    WHERE c.status = 'active'
+    ORDER BY c.ends_at DESC
     LIMIT 1
   `;
   const closed = await sql`
@@ -172,6 +177,8 @@ async function handleGet(req, res) {
           endsAt: currentWindow?.endsAt || current[0].ends_at,
           status: current[0].status,
           pastDeadline: new Date(currentWindow?.endsAt || current[0].ends_at).getTime() <= Date.now(),
+          snapshotCount: Number(current[0].snapshot_count || 0),
+          cutoffSnapshotTaken: Number(current[0].snapshot_count || 0) > 0,
         }
       : null,
     closed: closed.map(r => ({
@@ -204,46 +211,6 @@ function numericSql(value) {
 
 function cycleResetReason(cycleId) {
   return `Reinicio de ciclo #${cycleId} — balance base ${CYCLE_STARTING_BALANCE} MXNP`;
-}
-
-async function snapshotLeaderboard(client, activeCycle, now) {
-  if (!activeCycle) return [];
-  const top = await buildTournamentLeaderboardRows(client, {
-    limit: 100,
-    now,
-    window: cycleWindowFromRow(activeCycle),
-  });
-
-  let rank = 0;
-  for (const row of top) {
-    rank += 1;
-    await client.query(
-      `INSERT INTO points_cycle_snapshots (
-         cycle_id, username, final_balance, final_pnl, rank,
-         tournament_score, market_pnl, current_position_value,
-         inactivity_penalty, inactive_days, active_days,
-         qualifying_markets, qualified
-       )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-       ON CONFLICT (cycle_id, username) DO NOTHING`,
-      [
-        activeCycle.id,
-        row.username,
-        row.balance,
-        row.score,
-        rank,
-        row.score,
-        row.marketPnl,
-        row.currentPositionValue,
-        row.inactivityPenalty,
-        row.inactiveDays,
-        row.activeDays,
-        row.qualifyingMarkets,
-        row.qualified,
-      ],
-    );
-  }
-  return top;
 }
 
 async function cancelOpenLimitOrdersForCycleReset(client) {
@@ -629,7 +596,7 @@ async function handleRollover(req, res, nextCycleLabel) {
     const activeCycle = cur.rows[0];
 
     // ── 1. Snapshot the top 100 users by tournament score ───────────
-    const top = await snapshotLeaderboard(client, activeCycle, now);
+    const top = await snapshotCycleLeaderboard(client, activeCycle, { now });
 
     // ── 2. Clear old exposure before the next cycle opens ──────────
     const positions = await archiveAndClearPositionsForCycleReset(client, activeCycle.id);
@@ -677,6 +644,14 @@ async function handleRollover(req, res, nextCycleLabel) {
   });
 
   return res.status(200).json({ ok: true, ...result });
+}
+
+async function handleSnapshotCutoff(req, res) {
+  const result = await withTransaction(async (client) => (
+    snapshotActiveCycleAtCutoff(client, { now: new Date() })
+  ));
+
+  return res.status(200).json(result);
 }
 
 async function handleApplyPreCycleCarryover(req, res) {
@@ -738,6 +713,9 @@ export default async function handler(req, res) {
       }
       if (action === 'apply_pre_cycle_carryover') {
         return await handleApplyPreCycleCarryover(req, res);
+      }
+      if (action === 'snapshot_cutoff') {
+        return await handleSnapshotCutoff(req, res);
       }
       if (action !== 'rollover') {
         return res.status(400).json({ error: 'invalid_action' });

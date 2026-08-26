@@ -122,14 +122,19 @@ test('tournament minimum applies only before a market is covered', () => {
   assert.match(helperSource, /await assertTournamentMinimumEntry\(client, \{\s*market,\s*username,\s*amount: qty,\s*\}\)/s);
   assert.doesNotMatch(helperSource, /qty < TOURNAMENT_MIN_ENTRY_MXNP/);
   assert.match(tradeServiceSource, /assertTournamentMinimumEntry/);
+  assert.match(tradeServiceSource, /assertTournamentCutoffSnapshotReady/);
   assert.match(tradeServiceSource, /assertTournamentSettlementAllowed/);
   assert.match(tradeServiceSource, /m\.seed_liquidity, m\.seed_liquidities, m\.amm_mode, m\.parent_id/);
   assert.match(tradeServiceSource, /COALESCE\(m\.tournament_featured, p\.tournament_featured, false\) AS tournament_featured/);
   assert.match(tradeServiceSource, /assertTournamentSettlementAllowed\(market\)/);
+  assert.match(tradeServiceSource, /await assertTournamentCutoffSnapshotReady\(client, \{ market \}\)/);
   assert.match(tradeServiceSource, /await assertTournamentMinimumEntry\(client, \{\s*market,\s*username,\s*amount: amt,\s*\}\)/s);
   assert.doesNotMatch(tradeServiceSource, /amt < TOURNAMENT_MIN_ENTRY_MXNP/);
   assert.match(entrySource, /tournament_market_after_cutoff/);
+  assert.match(entrySource, /tournament_snapshot_pending/);
   assert.match(quoteBuySource, /tournamentSettlementLock/);
+  assert.match(quoteBuySource, /tournamentCutoffSnapshotLock/);
+  assert.match(quoteSellSource, /tournamentCutoffSnapshotLock/);
 });
 
 test('maker rewards accrue after resting near the current price with no per-order cap', () => {

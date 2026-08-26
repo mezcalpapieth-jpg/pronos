@@ -19,6 +19,7 @@ import {
   tournamentRulesPayload,
 } from '../_lib/points-tournament-config.js';
 import { buildTournamentLeaderboardRows } from '../_lib/points-tournament-leaderboard.js';
+import { readFrozenLeaderboardRowsForActiveCutoff } from '../_lib/points-cycle-snapshot.js';
 import { buildWalletLeaderboardRows } from '../_lib/points-wallet-leaderboard.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -84,9 +85,13 @@ export default async function handler(req, res) {
   try {
     setCacheHeaders(res, { scope: 'private', maxAge: 15, staleWhileRevalidate: 60 });
 
-    const { value: ranked, hit } = await cachedJson('points:leaderboard:ranked:v3', 15_000, async () => {
+    const { value: ranked, hit } = await cachedJson('points:leaderboard:ranked:v4', 15_000, async () => {
       await timer.time('schema', () => ensurePointsSchema(schemaSql));
-      return await timer.time('db_leaderboard', () => buildTournamentLeaderboardRows(sql, { limit: 5000 }));
+      return await timer.time('db_leaderboard', async () => {
+        const frozen = await readFrozenLeaderboardRowsForActiveCutoff(sql, { limit: 5000 });
+        if (frozen?.rows?.length) return frozen.rows;
+        return buildTournamentLeaderboardRows(sql, { limit: 5000 });
+      });
     });
 
     const { value: walletRanked, hit: walletHit } = await cachedJson('points:leaderboard:wallet:v1', 15_000, async () => {

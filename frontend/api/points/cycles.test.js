@@ -4,7 +4,10 @@ import { readFile } from 'node:fs/promises';
 
 const currentSource = await readFile(new URL('./cycles/current.js', import.meta.url), 'utf8');
 const adminSource = await readFile(new URL('./admin/cycles.js', import.meta.url), 'utf8');
+const snapshotCronSource = await readFile(new URL('../cron/points-tournament-snapshot.js', import.meta.url), 'utf8');
 const schemaSource = await readFile(new URL('../_lib/points-schema.js', import.meta.url), 'utf8');
+const vercelSource = await readFile(new URL('../../../vercel.json', import.meta.url), 'utf8');
+const frontendVercelSource = await readFile(new URL('../../vercel.json', import.meta.url), 'utf8');
 
 test('public points cycles default to a paused coming-soon state', () => {
   assert.match(schemaSource, /points_app_settings/);
@@ -45,6 +48,21 @@ test('points rollover archives exposure and carries only approved pre-cycle bonu
   assert.match(adminSource, /action === 'apply_pre_cycle_carryover'/);
   assert.match(adminSource, /applyPreCycleCarryoverForCycle/);
   assert.match(adminSource, /WHERE kind = 'cycle_carryover'[\s\S]*AND reference_id = \$1/);
+});
+
+test('points cycle cutoff snapshot freezes leaderboard without rolling over', () => {
+  assert.match(adminSource, /action === 'snapshot_cutoff'/);
+  assert.match(adminSource, /handleSnapshotCutoff/);
+  assert.match(adminSource, /snapshotActiveCycleAtCutoff/);
+  assert.match(adminSource, /cutoffSnapshotTaken/);
+  assert.match(adminSource, /snapshot_count/);
+  assert.match(snapshotCronSource, /snapshotActiveCycleAtCutoff/);
+  assert.match(snapshotCronSource, /tournament_snapshot_failed/);
+  assert.match(snapshotCronSource, /does not close the cycle/);
+  assert.match(snapshotCronSource, /does not close the cycle, clear positions, cancel\s*\n \* orders, or reset balances/);
+  assert.match(vercelSource, /"path": "\/api\/cron\/points-tournament-snapshot"[\s\S]*"schedule": "59 5 \* \* \*"/);
+  assert.match(frontendVercelSource, /"path": "\/api\/cron\/points-tournament-snapshot"[\s\S]*"schedule": "59 5 \* \* \*"/);
+  assert.doesNotMatch(snapshotCronSource, /archiveAndClearPositionsForCycleReset|cancelOpenLimitOrdersForCycleReset|resetBalancesForCycle/);
 });
 
 test('public cycles prefer the active database cycle once admin opens one', () => {

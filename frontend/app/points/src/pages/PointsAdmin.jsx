@@ -27,6 +27,7 @@ import {
   adminRolloverCycle,
   adminPauseCycles,
   adminApplyPreCycleCarryover,
+  adminSnapshotCycleCutoff,
   adminEditMarket,
   adminCancelMarket,
   adminReopenCanceledMarket,
@@ -446,7 +447,7 @@ export default function PointsAdmin({ isAdmin }) {
 // ─── Competition cycles ───────────────────────────────────────────────────
 // Admin tool for pausing/restarting public prize cycles. Pause is
 // non-destructive; restart/rollover is the deliberate action that snapshots,
-// resets balances, and opens a fresh 14-day window.
+// resets balances, and opens a fresh configured window.
 function CyclesPanel() {
   const [data, setData] = useState(null);
   const [working, setWorking] = useState(false);
@@ -546,6 +547,32 @@ function CyclesPanel() {
     }
   }
 
+  async function snapshotCutoff() {
+    const ok = window.confirm(
+      '¿Tomar la foto final del torneo?\n\n' +
+      'Esto NO cierra mercados, NO borra posiciones, NO cancela órdenes y NO reinicia balances. Solo congela el leaderboard del corte si ya pasó la hora oficial.'
+    );
+    if (!ok) return;
+    setWorking(true);
+    setMsg(null);
+    setErr(null);
+    try {
+      const r = await adminSnapshotCycleCutoff();
+      if (r.skipped === 'before_cutoff') {
+        setMsg(`Todavía no pasa el corte. Hora de foto: ${new Date(r.cutoffAt).toLocaleString('es-MX')}.`);
+      } else if (r.skipped === 'already_snapshotted') {
+        setMsg(`✓ Foto ya existente — ${r.snapshotted || 0} usuarios congelados.`);
+      } else {
+        setMsg(`✓ Foto tomada — ${r.snapshotted || 0} usuarios congelados.`);
+      }
+      await load();
+    } catch (e) {
+      setErr(`${e.code || e.message}${e.detail ? ' · ' + e.detail : ''}`);
+    } finally {
+      setWorking(false);
+    }
+  }
+
   if (!data && !err) {
     return <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', padding: 20 }}>Cargando ciclos…</div>;
   }
@@ -591,8 +618,32 @@ function CyclesPanel() {
               Inicio: {new Date(current.startedAt).toLocaleString('es-MX')} ·
               Cierra: {new Date(current.endsAt).toLocaleString('es-MX')}
               {current.pastDeadline && <span style={{ color: '#f59e0b', marginLeft: 8 }}>⏳ DEADLINE PASADO</span>}
+              {current.cutoffSnapshotTaken && (
+                <span style={{ color: 'var(--green)', marginLeft: 8 }}>
+                  FOTO 11:59 TOMADA ({current.snapshotCount || 0})
+                </span>
+              )}
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                onClick={snapshotCutoff}
+                disabled={working}
+                style={{
+                  padding: '10px 18px',
+                  background: current.cutoffSnapshotTaken ? 'rgba(16,185,129,0.12)' : 'transparent',
+                  color: current.cutoffSnapshotTaken ? 'var(--green)' : '#93c5fd',
+                  border: `1px solid ${current.cutoffSnapshotTaken ? 'rgba(16,185,129,0.45)' : 'rgba(147,197,253,0.45)'}`,
+                  borderRadius: 8,
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  cursor: working ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {working ? 'Trabajando…' : current.cutoffSnapshotTaken ? 'Foto 11:59 lista' : 'Tomar foto 11:59'}
+              </button>
               <button
                 onClick={rollover}
                 disabled={working}

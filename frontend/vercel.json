@@ -19,6 +19,10 @@
     {
       "path": "/api/cron/aicm-timetable-poll",
       "schedule": "*/20 * * * *"
+    },
+    {
+      "path": "/api/cron/points-tournament-snapshot",
+      "schedule": "59 5 * * *"
     }
   ],
   "redirects": [
