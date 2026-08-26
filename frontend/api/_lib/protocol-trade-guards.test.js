@@ -6,6 +6,7 @@ import {
   enforceProtocolSellSlippage,
   formatProtocolBuyQuote,
   formatProtocolSellQuote,
+  optionalFiniteNumber,
 } from './protocol-trade-guards.js';
 
 test('formatProtocolBuyQuote exposes on-chain quote fields used by the MVP modal', () => {
@@ -73,4 +74,12 @@ test('enforceProtocolSellSlippage rejects stale sell min-out quotes', () => {
     }),
     err => err?.message === 'price_moved' && err?.status === 409,
   );
+});
+
+test('optional slippage numbers treat omitted guards as absent', () => {
+  assert.equal(optionalFiniteNumber(null), null);
+  assert.equal(optionalFiniteNumber(undefined), null);
+  assert.equal(optionalFiniteNumber(''), null);
+  assert.equal(optionalFiniteNumber('0'), 0);
+  assert.equal(optionalFiniteNumber(0.52), 0.52);
 });

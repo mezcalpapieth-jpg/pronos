@@ -29,6 +29,7 @@ import {
 } from './points-tournament-config.js';
 import { assertTournamentMinimumEntry } from './points-tournament-entry.js';
 import { normalizeExecutableSellShares } from './points-sell-shares.js';
+import { optionalFiniteNumber } from './protocol-trade-guards.js';
 
 const EPSILON = 0.000001;
 
@@ -149,8 +150,8 @@ export async function executePointsBuy(client, {
   if (!Number.isInteger(oi) || oi < 0) throw apiError('invalid_outcome_index', 400);
   if (!Number.isFinite(amt) || amt <= 0) throw apiError('invalid_amount', 400);
 
-  const minShares = Number.isFinite(Number(minSharesOut)) ? Number(minSharesOut) : null;
-  const maxPrice = Number.isFinite(Number(maxAvgPrice)) ? Number(maxAvgPrice) : null;
+  const minShares = optionalFiniteNumber(minSharesOut);
+  const maxPrice = optionalFiniteNumber(maxAvgPrice);
   const tradeSource = normalizeTradeSource(source);
   const tradeApiKeyId = normalizeApiKeyId(apiKeyId);
 
@@ -385,7 +386,7 @@ export async function executePointsSell(client, {
   if (!Number.isInteger(oi) || oi < 0) throw apiError('invalid_outcome_index', 400);
   if (!Number.isFinite(requestedShares) || requestedShares <= 0) throw apiError('invalid_shares', 400);
 
-  const minOut = Number.isFinite(Number(minCollateralOut)) ? Number(minCollateralOut) : null;
+  const minOut = optionalFiniteNumber(minCollateralOut);
   const tradeSource = normalizeTradeSource(source);
   const tradeApiKeyId = normalizeApiKeyId(apiKeyId);
 
