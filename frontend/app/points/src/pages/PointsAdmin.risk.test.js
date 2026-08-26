@@ -8,7 +8,7 @@ const apiSource = await readFile(new URL('../lib/pointsApi.js', import.meta.url)
 test('Points admin exposes a risk review tab', () => {
   assert.match(source, /adminListRisk/);
   assert.match(source, /adminUpdateRiskReview/);
-  assert.match(source, /return \['create', 'markets', 'stats', 'pending', 'social', 'support', 'deck', 'cycles', 'risk'\]/);
+  assert.match(source, /\['create', 'markets', 'stats', 'pending', 'social', 'support', 'deck', 'cycles', 'risk', 'api'\]/);
   assert.match(source, /\{ id: 'risk',\s+label: 'Riesgo' \}/);
   assert.match(source, /\{tab === 'risk' && <RiskPanel \/>\}/);
   assert.match(source, /function RiskPanel\(\)/);
@@ -26,6 +26,8 @@ test('Risk panel lets admins filter evidence and set non-payout review states', 
   assert.match(source, /Cómo se arma el score/);
   assert.match(source, /Desglose del score/);
   assert.match(source, /Teléfono requerido/);
+  assert.match(source, /Pedir teléfono/);
+  assert.match(source, /lo muestra en Perfil/);
   assert.match(source, /verificación telefónica/);
   assert.match(source, /function RiskScoreBreakdown/);
   assert.match(source, /function riskScoreBreakdown/);

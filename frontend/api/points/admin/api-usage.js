@@ -1,5 +1,6 @@
 /**
- * GET /api/points/admin/api-usage
+ * GET  /api/points/admin/api-usage
+ * POST /api/points/admin/api-usage
  *
  * Admin-only observability for public API keys. This endpoint exposes
  * usage shape and recent request metadata, but never credential hashes,
@@ -11,7 +12,10 @@ import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 
 let readSql;
+let writeSql;
 let schemaSql;
+
+const USERNAME_RE = /^[a-z][a-z0-9_]{2,19}$/;
 
 function getReadSql() {
   if (!readSql) {
@@ -24,6 +28,18 @@ function getReadSql() {
     readSql = neon(databaseUrl);
   }
   return readSql;
+}
+
+function getWriteSql() {
+  if (!writeSql) {
+    if (!process.env.DATABASE_URL) {
+      const err = new Error('DATABASE_URL not configured');
+      err.status = 500;
+      throw err;
+    }
+    writeSql = neon(process.env.DATABASE_URL);
+  }
+  return writeSql;
 }
 
 function getSchemaSql() {
@@ -53,6 +69,16 @@ function parseJson(value, fallback) {
   }
 }
 
+function normalizeUsername(value) {
+  const username = String(value || '').toLowerCase().trim().replace(/^@/, '');
+  return USERNAME_RE.test(username) ? username : null;
+}
+
+function normalizeBlockReason(value) {
+  const reason = String(value || '').trim().replace(/\s+/g, ' ');
+  return reason.slice(0, 240);
+}
+
 function formatKeyUsageRow(row) {
   return {
     id: toNumber(row.id),
@@ -64,6 +90,9 @@ function formatKeyUsageRow(row) {
     lastUsedAt: row.last_used_at || null,
     revokedAt: row.revoked_at || null,
     expiresAt: row.expires_at || null,
+    apiBlockedAt: row.api_blocked_at || null,
+    apiBlockedBy: row.api_blocked_by || null,
+    apiBlockReason: row.api_block_reason || null,
     requestsTotal: toNumber(row.requests_total),
     requests24h: toNumber(row.requests_24h),
     requests7d: toNumber(row.requests_7d),
@@ -94,15 +123,16 @@ function formatRecentRequestRow(row) {
 }
 
 export default async function handler(req, res) {
-  const cors = applyCors(req, res, { methods: 'GET, OPTIONS', credentials: true });
+  const cors = applyCors(req, res, { methods: 'GET, POST, OPTIONS', credentials: true });
   if (cors) return cors;
-  if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
+  if (!['GET', 'POST'].includes(req.method)) return res.status(405).json({ error: 'method_not_allowed' });
 
   const admin = requirePointsAdmin(req, res);
   if (!admin) return;
 
   try {
     await ensurePointsSchema(getSchemaSql());
+    if (req.method === 'POST') return await handleMutation(req, res, admin.username);
     const sql = getReadSql();
 
     const [
@@ -148,6 +178,9 @@ export default async function handler(req, res) {
           k.last_used_at,
           k.revoked_at,
           k.expires_at,
+          u.api_blocked_at,
+          u.api_blocked_by,
+          u.api_block_reason,
           COUNT(l.id)::int AS requests_total,
           COUNT(l.id) FILTER (WHERE l.created_at > NOW() - INTERVAL '24 hours')::int AS requests_24h,
           COUNT(l.id) FILTER (WHERE l.created_at > NOW() - INTERVAL '7 days')::int AS requests_7d,
@@ -168,8 +201,10 @@ export default async function handler(req, res) {
           (ARRAY_AGG(l.result ORDER BY l.created_at DESC) FILTER (WHERE l.id IS NOT NULL))[1] AS last_result
         FROM points_api_keys k
         LEFT JOIN points_api_request_logs l ON l.api_key_id = k.id
+        LEFT JOIN points_users u ON LOWER(u.username) = LOWER(k.username)
         GROUP BY k.id, k.username, k.name, k.key_prefix, k.permissions, k.created_at,
-                 k.last_used_at, k.revoked_at, k.expires_at
+                 k.last_used_at, k.revoked_at, k.expires_at,
+                 u.api_blocked_at, u.api_blocked_by, u.api_block_reason
         ORDER BY last_request_at DESC NULLS LAST, k.created_at DESC
         LIMIT 100
       `,
@@ -216,4 +251,69 @@ export default async function handler(req, res) {
     console.error('[points/admin/api-usage] failed', { message: e?.message, code: e?.code });
     return res.status(e?.status || 500).json({ error: 'api_usage_failed' });
   }
+}
+
+async function handleMutation(req, res, adminUsername) {
+  const sql = getWriteSql();
+  const action = String(req.body?.action || '').trim();
+  const username = normalizeUsername(req.body?.username);
+  if (!username) return res.status(400).json({ error: 'invalid_username' });
+
+  if (action === 'block_user_api') {
+    const reason = normalizeBlockReason(req.body?.reason)
+      || 'Bloqueado desde admin API';
+    const userRows = await sql`
+      UPDATE points_users
+         SET api_blocked_at = COALESCE(api_blocked_at, NOW()),
+             api_blocked_by = ${adminUsername || 'admin'},
+             api_block_reason = ${reason}
+       WHERE LOWER(username) = LOWER(${username})
+      RETURNING username, api_blocked_at, api_blocked_by, api_block_reason
+    `;
+    if (!userRows[0]) return res.status(404).json({ error: 'user_not_found' });
+
+    const revokedRows = await sql`
+      UPDATE points_api_keys
+         SET revoked_at = COALESCE(revoked_at, NOW())
+       WHERE LOWER(username) = LOWER(${username})
+         AND revoked_at IS NULL
+      RETURNING id
+    `;
+    return res.status(200).json({
+      ok: true,
+      action,
+      revokedKeys: revokedRows.length,
+      user: {
+        username: userRows[0].username,
+        apiBlockedAt: userRows[0].api_blocked_at || null,
+        apiBlockedBy: userRows[0].api_blocked_by || null,
+        apiBlockReason: userRows[0].api_block_reason || null,
+      },
+    });
+  }
+
+  if (action === 'unblock_user_api') {
+    const userRows = await sql`
+      UPDATE points_users
+         SET api_blocked_at = NULL,
+             api_blocked_by = NULL,
+             api_block_reason = NULL
+       WHERE LOWER(username) = LOWER(${username})
+      RETURNING username, api_blocked_at, api_blocked_by, api_block_reason
+    `;
+    if (!userRows[0]) return res.status(404).json({ error: 'user_not_found' });
+    return res.status(200).json({
+      ok: true,
+      action,
+      revokedKeys: 0,
+      user: {
+        username: userRows[0].username,
+        apiBlockedAt: null,
+        apiBlockedBy: null,
+        apiBlockReason: null,
+      },
+    });
+  }
+
+  return res.status(400).json({ error: 'invalid_action' });
 }

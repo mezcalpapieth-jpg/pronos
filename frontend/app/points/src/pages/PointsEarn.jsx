@@ -1032,6 +1032,30 @@ function ProfileSettingsCard({ user, onSaved }) {
           ? 'Add a name and profile picture for your public profile. Your email stays private and is only visible to admins.'
           : 'Agrega tu nombre y foto para tu perfil público. Tu email se mantiene privado y solo lo ven admins.'}
       </p>
+      {user?.phoneRequired && (
+        <div style={{
+          ...noticeStyle,
+          color: 'var(--orange)',
+          borderColor: 'rgba(255,80,0,0.35)',
+          background: 'rgba(255,80,0,0.08)',
+        }}>
+          {lang === 'en'
+            ? 'Phone verification requested: add or confirm your phone with the team before prize/API review.'
+            : 'Verificación telefónica solicitada: agrega o confirma tu teléfono con el equipo antes de revisión de premios/API.'}
+        </div>
+      )}
+      {user?.apiBlockedAt && (
+        <div style={{
+          ...noticeStyle,
+          color: 'var(--danger)',
+          borderColor: 'rgba(239,68,68,0.4)',
+          background: 'rgba(239,68,68,0.08)',
+        }}>
+          {lang === 'en'
+            ? 'API access is blocked for this account. Contact the team if you think this is a mistake.'
+            : 'El acceso API está bloqueado para esta cuenta. Contacta al equipo si crees que es un error.'}
+        </div>
+      )}
       {err && (
         <div style={{ ...noticeStyle, color: 'var(--danger)' }}>{err}</div>
       )}

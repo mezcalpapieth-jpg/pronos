@@ -26,6 +26,8 @@ test('Perfil page and account menu link users to API key creation', () => {
   assert.match(i18nSource, /'points\.nav\.developer':\s*\{\s*es:\s*'Crear API key',\s*en:\s*'Create API key'/);
   assert.match(earnSource, /function DeveloperApiCard\(\)/);
   assert.match(earnSource, /to="\/developer"/);
+  assert.match(earnSource, /user\?\.phoneRequired/);
+  assert.match(earnSource, /user\?\.apiBlockedAt/);
   assert.match(navSource, /to="\/developer"[\s\S]*?points\.nav\.developer/);
 });
 
@@ -33,6 +35,10 @@ test('developer page manages API keys and documents HMAC authentication', () => 
   assert.match(developerSource, /fetchApiKeys/);
   assert.match(developerSource, /createApiKey/);
   assert.match(developerSource, /revokeApiKey/);
+  assert.match(developerSource, /apiBlocked/);
+  assert.match(developerSource, /phoneRequired/);
+  assert.match(developerSource, /Acceso API bloqueado|API access blocked/);
+  assert.match(developerSource, /Verificación telefónica solicitada|Phone verification requested/);
   assert.match(developerSource, /created\?\.apiSecret/);
   assert.match(developerSource, /X-PRONOS-API-KEY/);
   assert.match(developerSource, /X-PRONOS-TIMESTAMP/);
@@ -46,6 +52,7 @@ test('points API client exposes session key helpers', () => {
   assert.match(apiSource, /export async function fetchApiKeys\(\)/);
   assert.match(apiSource, /export async function createApiKey\(\{ name, permissions = \['READ'\], expiresAt = null \} = \{\}\)/);
   assert.match(apiSource, /export async function revokeApiKey\(id\)/);
+  assert.match(apiSource, /api_access_blocked/);
   assert.match(apiSource, /export async function deleteJson\(url, body\)/);
   assert.match(apiSource, /\/api\/points\/api-keys/);
 });

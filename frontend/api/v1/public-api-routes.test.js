@@ -39,3 +39,12 @@ test('public api auth signs requests without returning stored secrets', () => {
   assert.doesNotMatch(keyRoute, /secretCiphertext[^\n]*json/);
   assert.doesNotMatch(keyRoute, /secretHash[^\n]*json/);
 });
+
+test('public api auth blocks account-level API access before signed requests execute', () => {
+  assert.match(authHelper, /LEFT JOIN points_users u/);
+  assert.match(authHelper, /u\.api_blocked_at/);
+  assert.match(authHelper, /api_access_blocked/);
+  assert.match(keyRoute, /getAccountAccessState/);
+  assert.match(keyRoute, /apiBlockedAt/);
+  assert.match(keyRoute, /phoneRequired/);
+});

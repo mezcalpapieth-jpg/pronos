@@ -239,6 +239,9 @@ const MIGRATIONS = [
     display_name         TEXT,
     profile_image_url    TEXT,
     profile_updated_at   TIMESTAMPTZ,
+    api_blocked_at       TIMESTAMPTZ,
+    api_blocked_by       TEXT,
+    api_block_reason     TEXT,
     created_at           TIMESTAMPTZ DEFAULT NOW()
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_points_users_username_lower ON points_users (LOWER(username))`,
@@ -248,6 +251,9 @@ const MIGRATIONS = [
   `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS display_name TEXT`,
   `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS profile_image_url TEXT`,
   `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS profile_updated_at TIMESTAMPTZ`,
+  `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS api_blocked_at TIMESTAMPTZ`,
+  `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS api_blocked_by TEXT`,
+  `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS api_block_reason TEXT`,
 
   `CREATE TABLE IF NOT EXISTS points_markets (
     id              SERIAL PRIMARY KEY,

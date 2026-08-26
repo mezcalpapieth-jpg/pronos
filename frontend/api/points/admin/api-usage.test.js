@@ -7,7 +7,7 @@ const source = await readFile(new URL('./api-usage.js', import.meta.url), 'utf8'
 test('admin api usage endpoint is admin-only and schema-aware', () => {
   assert.match(source, /requirePointsAdmin/);
   assert.match(source, /ensurePointsSchema/);
-  assert.match(source, /methods: 'GET, OPTIONS'/);
+  assert.match(source, /methods: 'GET, POST, OPTIONS'/);
   assert.match(source, /method_not_allowed/);
 });
 
@@ -22,7 +22,19 @@ test('admin api usage endpoint exposes evaluation data without credential materi
   assert.match(source, /last_endpoint/);
   assert.match(source, /metadata/);
   assert.match(source, /key_prefix/);
+  assert.match(source, /api_blocked_at/);
+  assert.match(source, /api_block_reason/);
   assert.doesNotMatch(source, /secret_hash/);
   assert.doesNotMatch(source, /secret_ciphertext/);
   assert.doesNotMatch(source, /user_agent_hash/);
+});
+
+test('admin api usage endpoint can block account-level API access without exposing secrets', () => {
+  assert.match(source, /block_user_api/);
+  assert.match(source, /unblock_user_api/);
+  assert.match(source, /UPDATE points_users[\s\S]+api_blocked_at/);
+  assert.match(source, /UPDATE points_api_keys[\s\S]+revoked_at/);
+  assert.match(source, /revokedKeys/);
+  assert.match(source, /invalid_username/);
+  assert.match(source, /user_not_found/);
 });

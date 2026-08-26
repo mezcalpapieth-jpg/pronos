@@ -109,6 +109,24 @@ const POINTS_SCHEMA_READY_PROBE = `
     EXISTS (
       SELECT 1 FROM information_schema.columns
       WHERE table_schema = 'public'
+        AND table_name = 'points_users'
+        AND column_name = 'api_blocked_at'
+    ) AS points_users_api_blocked_at,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'points_users'
+        AND column_name = 'api_blocked_by'
+    ) AS points_users_api_blocked_by,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'points_users'
+        AND column_name = 'api_block_reason'
+    ) AS points_users_api_block_reason,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
         AND table_name = 'points_cycle_snapshots'
         AND column_name = 'tournament_score'
     ) AS points_cycle_snapshot_tournament_score,
@@ -181,6 +199,9 @@ const POINTS_SCHEMA_MIGRATIONS = [
     display_name         TEXT,
     profile_image_url    TEXT,
     profile_updated_at   TIMESTAMPTZ,
+    api_blocked_at       TIMESTAMPTZ,
+    api_blocked_by       TEXT,
+    api_block_reason     TEXT,
     created_at           TIMESTAMPTZ DEFAULT NOW()
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_points_users_username_lower ON points_users (LOWER(username))`,
@@ -200,6 +221,9 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS display_name TEXT`,
   `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS profile_image_url TEXT`,
   `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS profile_updated_at TIMESTAMPTZ`,
+  `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS api_blocked_at TIMESTAMPTZ`,
+  `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS api_blocked_by TEXT`,
+  `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS api_block_reason TEXT`,
 
   // ── Markets (off-chain, admin-curated) ─────────────────────────────────
   `CREATE TABLE IF NOT EXISTS points_markets (

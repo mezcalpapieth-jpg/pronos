@@ -52,6 +52,8 @@ import {
   adminListRisk,
   adminUpdateRiskReview,
   adminListApiUsage,
+  adminBlockApiUser,
+  adminUnblockApiUser,
 } from '../lib/pointsApi.js';
 import {
   ADMIN_BASEBALL_LEAGUES,
@@ -4463,7 +4465,16 @@ function RiskPanel() {
                     style={{ ...inputStyle, fontFamily: 'var(--font-mono)' }}
                   />
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                    {['clear', 'watch', 'phone_required', 'under_review', 'ineligible'].map(status => (
+                    <button
+                      type="button"
+                      onClick={() => setReview(row.username, 'phone_required')}
+                      disabled={working === `${row.username}:phone_required`}
+                      title="Pide verificación telefónica y lo muestra en Perfil."
+                      style={riskReviewButtonStyle('phone_required', row.reviewStatus === 'phone_required')}
+                    >
+                      {working === `${row.username}:phone_required` ? '...' : 'Pedir teléfono'}
+                    </button>
+                    {['clear', 'watch', 'under_review', 'ineligible'].map(status => (
                       <button
                         key={status}
                         type="button"
@@ -5096,6 +5107,8 @@ function ApiUsagePanel() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
+  const [msg, setMsg] = useState(null);
+  const [workingUser, setWorkingUser] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -5116,6 +5129,42 @@ function ApiUsagePanel() {
   const summary = data?.summary || {};
   const keys = Array.isArray(data?.keys) ? data.keys : [];
   const recent = Array.isArray(data?.recent) ? data.recent : [];
+  const keyGridColumns = 'minmax(150px, 0.8fr) minmax(200px, 1fr) 120px 100px 100px 100px 100px 130px 140px';
+
+  async function handleApiAccess(row) {
+    if (!row?.username || workingUser) return;
+    const blocked = !!row.apiBlockedAt;
+    let blockReason = '';
+    if (blocked) {
+      const ok = window.confirm(`¿Desbloquear API para @${row.username}?\n\nPodrá crear nuevas keys, pero las keys ya revocadas no se reactivan.`);
+      if (!ok) return;
+    } else {
+      const reason = window.prompt(
+        `Motivo interno para bloquear API de @${row.username}:`,
+        row.apiBlockReason || 'Uso de API no aprobado por el equipo',
+      );
+      if (reason == null) return;
+      if (!window.confirm(`¿Bloquear API para @${row.username} y revocar sus keys activas?`)) return;
+      blockReason = reason;
+    }
+
+    setWorkingUser(row.username);
+    setErr(null);
+    setMsg(null);
+    try {
+      const result = blocked
+        ? await adminUnblockApiUser({ username: row.username })
+        : await adminBlockApiUser({ username: row.username, reason: blockReason });
+      setMsg(blocked
+        ? `API desbloqueada para @${row.username}. Las keys anteriores siguen revocadas.`
+        : `API bloqueada para @${row.username}. Keys revocadas: ${adminNumber(result.revokedKeys)}.`);
+      await load();
+    } catch (error) {
+      setErr(error?.code || error?.message || 'api_access_update_failed');
+    } finally {
+      setWorkingUser(null);
+    }
+  }
 
   if (loading && !data) {
     return <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Cargando…</p>;
@@ -5158,6 +5207,16 @@ function ApiUsagePanel() {
           {err}
         </div>
       )}
+      {msg && (
+        <div style={{
+          ...adminPanelStyle,
+          color: 'var(--green)',
+          borderColor: 'rgba(0,232,122,0.35)',
+          background: 'rgba(0,232,122,0.08)',
+        }}>
+          {msg}
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12, marginBottom: 20 }}>
         <StatCard label="Keys activas" value={adminNumber(summary.activeKeys)} />
@@ -5175,7 +5234,7 @@ function ApiUsagePanel() {
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <div style={{
-              minWidth: 1080,
+              minWidth: 1220,
               display: 'grid',
               gap: 0,
               fontFamily: 'var(--font-mono)',
@@ -5183,7 +5242,7 @@ function ApiUsagePanel() {
             }}>
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'minmax(150px, 0.8fr) minmax(200px, 1fr) 120px 100px 100px 100px 100px 130px',
+                gridTemplateColumns: keyGridColumns,
                 gap: 12,
                 paddingBottom: 8,
                 borderBottom: '1px solid var(--border)',
@@ -5199,11 +5258,12 @@ function ApiUsagePanel() {
                 <span style={{ textAlign: 'right' }}>Trades</span>
                 <span style={{ textAlign: 'right' }}>Errores</span>
                 <span style={{ textAlign: 'right' }}>Ultimo uso</span>
+                <span style={{ textAlign: 'right' }}>Control</span>
               </div>
               {keys.map(row => (
                 <div key={row.id} style={{
                   display: 'grid',
-                  gridTemplateColumns: 'minmax(150px, 0.8fr) minmax(200px, 1fr) 120px 100px 100px 100px 100px 130px',
+                  gridTemplateColumns: keyGridColumns,
                   gap: 12,
                   alignItems: 'center',
                   padding: '11px 0',
@@ -5231,6 +5291,7 @@ function ApiUsagePanel() {
                     <span style={{ color: 'var(--text-muted)' }}>
                       {row.keyPrefix}... · {apiKeyStatus(row)}
                       {row.distinctIpHashes7d > 0 ? ` · ${adminNumber(row.distinctIpHashes7d)} IP 7d` : ''}
+                      {row.apiBlockedAt ? ' · API bloqueada' : ''}
                     </span>
                   </span>
                   <span style={{ color: row.permissions?.includes('TRADE') ? 'var(--orange)' : 'var(--text-muted)' }}>
@@ -5243,6 +5304,30 @@ function ApiUsagePanel() {
                   <span style={{ color: 'var(--text-muted)', textAlign: 'right' }}>
                     {adminDateTime(row.lastRequestAt || row.lastUsedAt)}
                   </span>
+                  <button
+                    type="button"
+                    disabled={!row.username || workingUser === row.username}
+                    onClick={() => handleApiAccess(row)}
+                    style={{
+                      border: `1px solid ${row.apiBlockedAt ? 'rgba(0,232,122,0.35)' : 'rgba(239,68,68,0.45)'}`,
+                      background: row.apiBlockedAt ? 'rgba(0,232,122,0.08)' : 'rgba(239,68,68,0.08)',
+                      color: row.apiBlockedAt ? 'var(--green)' : 'var(--danger)',
+                      borderRadius: 8,
+                      padding: '8px 10px',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 9,
+                      fontWeight: 900,
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                      cursor: (!row.username || workingUser === row.username) ? 'not-allowed' : 'pointer',
+                      opacity: (!row.username || workingUser === row.username) ? 0.55 : 1,
+                      justifySelf: 'end',
+                    }}
+                  >
+                    {workingUser === row.username
+                      ? '...'
+                      : (row.apiBlockedAt ? 'Desbloquear' : 'Bloquear API')}
+                  </button>
                 </div>
               ))}
             </div>

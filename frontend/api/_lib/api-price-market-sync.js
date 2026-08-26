@@ -3,6 +3,12 @@ import { COINGECKO_TOKEN_MCAP_SOURCE } from './solana-token-mcap.js';
 
 const PRICE_SOURCES = new Set(['finnhub', 'banxico-fix', 'cre-gasolina', COINGECKO_TOKEN_MCAP_SOURCE]);
 
+function isSupportedPriceConfig(cfg) {
+  if (!cfg) return false;
+  if (PRICE_SOURCES.has(String(cfg.source || ''))) return true;
+  return Boolean(cfg.feedAddress && cfg.threshold != null && (cfg.symbol || cfg.chainId));
+}
+
 function asObject(value, fallback = null) {
   if (value && typeof value === 'object' && !Array.isArray(value)) return value;
   if (typeof value !== 'string') return fallback;
@@ -21,7 +27,14 @@ function parseNumber(raw) {
   if (normalized.includes(',') && normalized.includes('.')) {
     normalized = normalized.replace(/,/g, '');
   } else if (normalized.includes(',') && !normalized.includes('.')) {
-    normalized = normalized.replace(',', '.');
+    const parts = normalized.split(',');
+    const looksLikeThousands = parts.length > 1
+      && parts[0].length >= 1
+      && parts[0].length <= 3
+      && parts.slice(1).every(part => part.length === 3);
+    normalized = looksLikeThousands
+      ? parts.join('')
+      : normalized.replace(',', '.');
   }
   const value = Number(normalized);
   return Number.isFinite(value) && value > 0 ? value : null;
@@ -74,7 +87,7 @@ export function syncApiPriceFromQuestion({
   sourceData,
 } = {}) {
   const cfg = asObject(resolverConfig, null);
-  if (!cfg || !PRICE_SOURCES.has(String(cfg.source || ''))) {
+  if (!isSupportedPriceConfig(cfg)) {
     return {
       resolverConfig,
       sourceData,

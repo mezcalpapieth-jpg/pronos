@@ -5,7 +5,10 @@
  * to hydrate auth state on page load and after refresh.
  *
  * Response:
- *   { authenticated: true, suborgId, username, email, walletAddress, balance, displayName, profileImageUrl }
+ *   {
+ *     authenticated: true, suborgId, username, email, walletAddress, balance,
+ *     displayName, profileImageUrl, reviewStatus, phoneRequired, apiBlockedAt
+ *   }
  *   or
  *   { authenticated: false }
  *
@@ -48,9 +51,12 @@ export default async function handler(req, res) {
       const rows = await sql`
         SELECT u.turnkey_sub_org_id, u.wallet_address, u.username, u.email,
                u.display_name, u.profile_image_url,
+               u.api_blocked_at,
+               COALESCE(r.status, 'clear') AS review_status,
                COALESCE(b.balance, 0) AS balance
         FROM points_users u
         LEFT JOIN points_balances b ON b.username = u.username
+        LEFT JOIN points_account_reviews r ON LOWER(r.username) = LOWER(u.username)
         WHERE u.turnkey_sub_org_id = ${session.sub}
         LIMIT 1
       `;
@@ -60,6 +66,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ authenticated: false });
       }
       const r = rows[0];
+      const reviewStatus = r.review_status || 'clear';
       return res.status(200).json({
         authenticated: true,
         suborgId: r.turnkey_sub_org_id,
@@ -67,6 +74,9 @@ export default async function handler(req, res) {
         email: r.email || session.email || null,
         displayName: r.display_name || null,
         profileImageUrl: r.profile_image_url || null,
+        reviewStatus,
+        phoneRequired: reviewStatus === 'phone_required',
+        apiBlockedAt: r.api_blocked_at || null,
         walletAddress: r.wallet_address,
         balance: Number(r.balance || 0),
         needsUsername: !r.username,

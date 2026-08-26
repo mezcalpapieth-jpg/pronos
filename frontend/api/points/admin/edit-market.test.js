@@ -7,15 +7,22 @@ const source = await readFile(new URL('./edit-market.js', import.meta.url), 'utf
 test('active market edit syncs mañanera resolver phrase from quoted question', () => {
   assert.match(source, /syncMananeraPhraseFromQuestion/);
   assert.match(source, /question:\s*nextQuestion \?\? existing\.question/);
-  assert.match(source, /resolverConfigChanged = syncedMananera\.changed === true \|\| syncedApiPrice\.changed === true/);
+  assert.match(source, /const resolverConfigChanged = !sameJson\(nextResolverConfig, existingResolverConfig\)/);
   assert.match(source, /&& !resolverConfigChanged/);
   assert.match(source, /resolver_config = \$\{nextResolverConfig \? JSON\.stringify\(nextResolverConfig\) : null\}::jsonb/);
+  assert.doesNotMatch(source, /UPDATE points_markets[\s\S]*source_data =/);
 });
 
 test('active api-price market edits sync threshold and operator from question', () => {
   assert.match(source, /syncApiPriceFromQuestion/);
   assert.match(source, /resolverConfig: syncedMananera\.resolverConfig/);
-  assert.match(source, /const nextResolverConfig = syncedApiPrice\.resolverConfig \|\| null/);
+  assert.match(source, /const nextResolverConfig = syncedWeather\.resolverConfig \|\| null/);
+});
+
+test('active weather market edits sync forecast date from question or end date', () => {
+  assert.match(source, /syncWeatherDateFromMarket/);
+  assert.match(source, /endTime:\s*nextEndTime \?\? existing\.end_time/);
+  assert.match(source, /resolverConfig: syncedApiPrice\.resolverConfig/);
 });
 
 test('active market edit persists outcome image refs', () => {

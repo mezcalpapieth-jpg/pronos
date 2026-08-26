@@ -27,6 +27,7 @@ import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { deriveMarketTags } from '../../_lib/category-tags.js';
 import { syncMananeraPhraseFromQuestion } from '../../_lib/mananera-market-sync.js';
 import { syncApiPriceFromQuestion } from '../../_lib/api-price-market-sync.js';
+import { syncWeatherDateFromMarket } from '../../_lib/weather-market-sync.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 
 const sql = neon(process.env.DATABASE_URL);
@@ -40,6 +41,10 @@ function parseJsonb(value, fallback) {
   if (value && typeof value === 'object') return value;
   if (typeof value !== 'string') return fallback;
   try { return JSON.parse(value); } catch { return fallback; }
+}
+
+function sameJson(a, b) {
+  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 }
 
 function cleanOptionalImageRef(value) {
@@ -159,6 +164,7 @@ export default async function handler(req, res) {
     }
     const existing = existingRows[0];
     const existingOutcomes = parseJsonb(existing.outcomes, ['Sí', 'No']);
+    const existingResolverConfig = parseJsonb(existing.resolver_config, null);
     let nextOutcomeImages = null;
     if (hasOutcomeImagesPatch) {
       if (!Array.isArray(rawOutcomeImages)) {
@@ -171,14 +177,19 @@ export default async function handler(req, res) {
     }
     const syncedMananera = syncMananeraPhraseFromQuestion({
       question: nextQuestion ?? existing.question,
-      resolverConfig: parseJsonb(existing.resolver_config, null),
+      resolverConfig: existingResolverConfig,
     });
     const syncedApiPrice = syncApiPriceFromQuestion({
       question: nextQuestion ?? existing.question,
       resolverConfig: syncedMananera.resolverConfig,
     });
-    const nextResolverConfig = syncedApiPrice.resolverConfig || null;
-    const resolverConfigChanged = syncedMananera.changed === true || syncedApiPrice.changed === true;
+    const syncedWeather = syncWeatherDateFromMarket({
+      question: nextQuestion ?? existing.question,
+      endTime: nextEndTime ?? existing.end_time,
+      resolverConfig: syncedApiPrice.resolverConfig,
+    });
+    const nextResolverConfig = syncedWeather.resolverConfig || null;
+    const resolverConfigChanged = !sameJson(nextResolverConfig, existingResolverConfig);
     if (
       nextQuestion === null
       && nextStartTime === null

@@ -88,6 +88,7 @@ export default function PointsDeveloper({ onOpenLogin }) {
   const lang = useLang();
   const { authenticated, loading, user } = usePointsAuth();
   const [keys, setKeys] = useState(null);
+  const [access, setAccess] = useState(null);
   const [loadingKeys, setLoadingKeys] = useState(false);
   const [err, setErr] = useState(null);
   const [msg, setMsg] = useState(null);
@@ -124,6 +125,10 @@ export default function PointsDeveloper({ onOpenLogin }) {
         endpoints: 'Endpoints',
         phone: 'Phone verification',
         phoneBody: 'For now, phone confirmation is part of the manual approval flow. Once your phone is confirmed, use this page to create a key and tell the team what you plan to build.',
+        phoneRequiredTitle: 'Phone verification requested',
+        phoneRequiredBody: 'The team needs your phone number before approving higher-risk account or API usage.',
+        blockedTitle: 'API access blocked',
+        blockedBody: 'API key creation and signed API requests are blocked for this account. Existing keys may have been revoked.',
       }
     : {
         title: 'Developer API',
@@ -150,7 +155,14 @@ export default function PointsDeveloper({ onOpenLogin }) {
         endpoints: 'Endpoints',
         phone: 'Verificacion telefonica',
         phoneBody: 'Por ahora, la confirmacion telefonica vive en el flujo manual de aprobacion. Cuando tu telefono este confirmado, crea la key aqui y dile al equipo que quieres construir.',
+        phoneRequiredTitle: 'Verificación telefónica solicitada',
+        phoneRequiredBody: 'El equipo necesita tu teléfono antes de aprobar uso de mayor riesgo en tu cuenta o API.',
+        blockedTitle: 'Acceso API bloqueado',
+        blockedBody: 'La creación de API keys y los requests firmados están bloqueados para esta cuenta. Las keys existentes pueden haber sido revocadas.',
       }), [lang]);
+
+  const apiBlocked = !!(access?.apiBlockedAt || user?.apiBlockedAt);
+  const phoneRequired = !!(access?.phoneRequired || user?.phoneRequired);
 
   async function loadKeys() {
     if (!authenticated) return;
@@ -159,8 +171,10 @@ export default function PointsDeveloper({ onOpenLogin }) {
     try {
       const result = await fetchApiKeys();
       setKeys(Array.isArray(result.keys) ? result.keys : []);
+      setAccess(result.access || null);
     } catch (error) {
       setErr(publicErrorMessage(error, lang, 'default'));
+      setAccess(null);
     } finally {
       setLoadingKeys(false);
     }
@@ -178,6 +192,10 @@ export default function PointsDeveloper({ onOpenLogin }) {
   async function handleCreate(event) {
     event.preventDefault();
     if (busy) return;
+    if (apiBlocked) {
+      setErr(copy.blockedBody);
+      return;
+    }
     setBusy(true);
     setErr(null);
     setMsg(null);
@@ -268,6 +286,30 @@ export default function PointsDeveloper({ onOpenLogin }) {
         </div>
       )}
 
+      {apiBlocked && (
+        <div style={{
+          ...noticeStyle,
+          color: 'var(--danger)',
+          borderColor: 'rgba(239,68,68,0.4)',
+          background: 'rgba(239,68,68,0.08)',
+        }}>
+          <strong style={{ display: 'block', marginBottom: 4 }}>{copy.blockedTitle}</strong>
+          {copy.blockedBody}
+        </div>
+      )}
+
+      {!apiBlocked && phoneRequired && (
+        <div style={{
+          ...noticeStyle,
+          color: 'var(--orange)',
+          borderColor: 'rgba(255,80,0,0.35)',
+          background: 'rgba(255,80,0,0.08)',
+        }}>
+          <strong style={{ display: 'block', marginBottom: 4 }}>{copy.phoneRequiredTitle}</strong>
+          {copy.phoneRequiredBody}
+        </div>
+      )}
+
       <section style={twoColumnStyle}>
         <form onSubmit={handleCreate} style={panelStyle}>
           <div style={sectionTitleStyle}>{copy.createTitle}</div>
@@ -277,12 +319,13 @@ export default function PointsDeveloper({ onOpenLogin }) {
               value={name}
               onChange={event => setName(event.target.value)}
               maxLength={80}
+              disabled={apiBlocked}
               style={inputStyle}
             />
           </label>
           <label style={labelStyle}>
             <span>{copy.expires}</span>
-            <select value={expiry} onChange={event => setExpiry(event.target.value)} style={inputStyle}>
+            <select value={expiry} onChange={event => setExpiry(event.target.value)} disabled={apiBlocked} style={inputStyle}>
               <option value="none">{lang === 'en' ? 'Never' : 'Nunca'}</option>
               <option value="30d">30 dias</option>
               <option value="90d">90 dias</option>
@@ -298,12 +341,13 @@ export default function PointsDeveloper({ onOpenLogin }) {
                 type="checkbox"
                 checked={tradeAccess}
                 onChange={event => setTradeAccess(event.target.checked)}
+                disabled={apiBlocked}
               />
               <span>{copy.trading}</span>
             </label>
           </div>
           <p style={{ ...bodyStyle, fontSize: 12, marginTop: 12 }}>{copy.tradingNote}</p>
-          <button type="submit" className="btn-primary" disabled={busy} style={primaryButtonStyle}>
+          <button type="submit" className="btn-primary" disabled={busy || apiBlocked} style={primaryButtonStyle}>
             {busy ? copy.creating : copy.create}
           </button>
         </form>

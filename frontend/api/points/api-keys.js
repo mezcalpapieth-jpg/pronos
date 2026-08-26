@@ -46,6 +46,30 @@ function publicKeyRow(row) {
   };
 }
 
+function publicAccessState(row = {}) {
+  const reviewStatus = row.review_status || 'clear';
+  return {
+    apiBlockedAt: row.api_blocked_at || null,
+    reviewStatus,
+    phoneRequired: reviewStatus === 'phone_required',
+  };
+}
+
+async function getAccountAccessState(sql, session) {
+  const rows = await sql`
+    SELECT
+      u.api_blocked_at,
+      COALESCE(r.status, 'clear') AS review_status
+    FROM points_users u
+    LEFT JOIN points_account_reviews r ON LOWER(r.username) = LOWER(u.username)
+    WHERE u.turnkey_sub_org_id = ${session.sub || null}
+       OR LOWER(u.username) = LOWER(${session.username})
+    ORDER BY CASE WHEN u.turnkey_sub_org_id = ${session.sub || null} THEN 0 ELSE 1 END
+    LIMIT 1
+  `;
+  return publicAccessState(rows[0] || {});
+}
+
 function normalizeName(value) {
   const name = String(value || '').trim();
   if (!name || name.length > 80) return null;
@@ -78,14 +102,17 @@ export default async function handler(req, res) {
     await ensurePointsSchema(getSchemaSql());
 
     if (req.method === 'GET') {
-      const rows = await sql`
-        SELECT id, name, key_prefix, permissions, created_at, last_used_at, revoked_at, expires_at
-          FROM points_api_keys
-         WHERE username = ${session.username}
-         ORDER BY created_at DESC, id DESC
-         LIMIT 50
-      `;
-      return res.status(200).json({ keys: rows.map(publicKeyRow) });
+      const [rows, access] = await Promise.all([
+        sql`
+          SELECT id, name, key_prefix, permissions, created_at, last_used_at, revoked_at, expires_at
+            FROM points_api_keys
+           WHERE username = ${session.username}
+           ORDER BY created_at DESC, id DESC
+           LIMIT 50
+        `,
+        getAccountAccessState(sql, session),
+      ]);
+      return res.status(200).json({ keys: rows.map(publicKeyRow), access });
     }
 
     if (req.method === 'DELETE') {
@@ -108,6 +135,14 @@ export default async function handler(req, res) {
       windowMs: 60 * 60_000,
     });
     if (limited) return;
+
+    const access = await getAccountAccessState(sql, session);
+    if (access.apiBlockedAt) {
+      return res.status(403).json({
+        error: 'api_access_blocked',
+        detail: 'API access has been blocked for this account.',
+      });
+    }
 
     const name = normalizeName(req.body?.name);
     if (!name) return res.status(400).json({ error: 'invalid_name' });

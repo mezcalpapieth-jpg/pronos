@@ -26,6 +26,7 @@ import { tryAttachPolymarketPricing } from '../../_lib/polymarket-pricing.js';
 import { LCDLF_SOURCE } from '../../_lib/lcdlf-official.js';
 import { syncMananeraPhraseFromQuestion } from '../../_lib/mananera-market-sync.js';
 import { syncApiPriceFromQuestion } from '../../_lib/api-price-market-sync.js';
+import { syncWeatherDateFromMarket } from '../../_lib/weather-market-sync.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -588,8 +589,14 @@ export async function approveOne(pid, reviewer, note, opts = {}) {
       resolverConfig: syncedMananera.resolverConfig,
       sourceData: syncedMananera.sourceData || {},
     });
+    const syncedWeather = syncWeatherDateFromMarket({
+      question: r.question,
+      endTime: endDate.toISOString(),
+      resolverConfig: syncedApiPrice.resolverConfig,
+      sourceData: syncedApiPrice.sourceData || syncedMananera.sourceData || {},
+    });
     const reopenedFromCanceledMarketId = Number(r.approved_market_id || 0);
-    const sourceDataBase = syncedApiPrice.sourceData || syncedMananera.sourceData || {};
+    const sourceDataBase = syncedWeather.sourceData || syncedApiPrice.sourceData || syncedMananera.sourceData || {};
     const sourceData = Number.isInteger(reopenedFromCanceledMarketId) && reopenedFromCanceledMarketId > 0
       ? {
           ...sourceDataBase,
@@ -598,7 +605,7 @@ export async function approveOne(pid, reviewer, note, opts = {}) {
           reopenedFromSourceEventId: sourceDataBase.reopenedFromSourceEventId || r.source_event_id || null,
         }
       : sourceDataBase;
-    const resolverConfig = syncedApiPrice.resolverConfig || null;
+    const resolverConfig = syncedWeather.resolverConfig || null;
     const marketSourceEventId = marketSourceEventForApproval(r, pid);
     const tagBundle = deriveMarketTags({
       ...r,
@@ -1008,8 +1015,14 @@ async function editPending(pid, reviewer, patch = {}, note = null) {
       resolverConfig: syncedMananera.resolverConfig,
       sourceData: syncedMananera.sourceData || previousSourceData,
     });
-    const resolverConfig = syncedApiPrice.resolverConfig || null;
-    const sourceData = syncedApiPrice.sourceData || syncedMananera.sourceData || previousSourceData;
+    const syncedWeather = syncWeatherDateFromMarket({
+      question,
+      endTime: nextEndIso,
+      resolverConfig: syncedApiPrice.resolverConfig,
+      sourceData: syncedApiPrice.sourceData || syncedMananera.sourceData || previousSourceData,
+    });
+    const resolverConfig = syncedWeather.resolverConfig || null;
+    const sourceData = syncedWeather.sourceData || syncedApiPrice.sourceData || syncedMananera.sourceData || previousSourceData;
 
     const tagBundle = deriveMarketTags({
       ...r,

@@ -2,9 +2,60 @@ import {
   TOURNAMENT_MIN_ENTRY_MXNP,
   TOURNAMENT_RANKING_CUTOFF_ISO,
   TOURNAMENT_START_ISO,
+  getTournamentWindow,
   tournamentRulesActive,
 } from './points-tournament-config.js';
 import { resolveTournamentScoringWindow } from './points-tournament-leaderboard.js';
+
+function parseJsonb(value, fallback = null) {
+  if (Array.isArray(value) || (value && typeof value === 'object')) return value;
+  if (typeof value !== 'string') return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function truthy(value) {
+  if (value === true) return true;
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'true' || normalized === '1' || normalized === 'yes';
+}
+
+export function tournamentMarketSettlementMs(market = {}) {
+  const cfg = parseJsonb(market.resolver_config ?? market.resolverConfig, {});
+  const closeValue = cfg?.closesAt || market.end_time || market.endTime;
+  const closeMs = closeValue ? new Date(closeValue).getTime() : NaN;
+  return Number.isFinite(closeMs) ? closeMs : null;
+}
+
+export function tournamentSettlementLock(market = {}, now = new Date()) {
+  if (!tournamentRulesActive(now) || !truthy(market.tournament_featured ?? market.tournamentFeatured)) {
+    return null;
+  }
+
+  const window = getTournamentWindow(now);
+  const cutoffMs = new Date(window?.rankingCutoffAt || TOURNAMENT_RANKING_CUTOFF_ISO).getTime();
+  const settlementMs = tournamentMarketSettlementMs(market);
+  if (!Number.isFinite(cutoffMs) || !Number.isFinite(settlementMs)) return null;
+  if (settlementMs <= cutoffMs) return null;
+
+  return {
+    error: 'tournament_market_after_cutoff',
+    status: 400,
+    detail: 'Este mercado termina despues del cierre del torneo y no cuenta para este ciclo.',
+  };
+}
+
+export function assertTournamentSettlementAllowed(market = {}, now = new Date()) {
+  const lock = tournamentSettlementLock(market, now);
+  if (!lock) return;
+  const err = new Error(lock.error);
+  err.status = lock.status;
+  err.detail = lock.detail;
+  throw err;
+}
 
 async function relatedTournamentMarketIds(client, market) {
   const id = Number(market?.id);

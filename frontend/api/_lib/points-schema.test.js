@@ -21,6 +21,9 @@ test('points schema self-healing avoids hot-route migration lock pileups', () =>
   assert.match(source, /points_users_display_name/);
   assert.match(source, /points_users_profile_image_url/);
   assert.match(source, /points_users_profile_updated_at/);
+  assert.match(source, /points_users_api_blocked_at/);
+  assert.match(source, /points_users_api_blocked_by/);
+  assert.match(source, /points_users_api_block_reason/);
   assert.match(source, /points_social_links_is_public/);
   assert.match(source, /points_social_links_source/);
   assert.match(source, /points_social_links_updated_at/);
@@ -93,6 +96,17 @@ test('points schema supports public profile personalization', () => {
     assert.match(migrationSource, /ALTER TABLE points_users ADD COLUMN IF NOT EXISTS display_name TEXT/);
     assert.match(migrationSource, /ALTER TABLE points_users ADD COLUMN IF NOT EXISTS profile_image_url TEXT/);
     assert.match(migrationSource, /ALTER TABLE points_users ADD COLUMN IF NOT EXISTS profile_updated_at TIMESTAMPTZ/);
+  }
+});
+
+test('points schema supports account-level public API blocks', () => {
+  for (const migrationSource of [source, migrateSource]) {
+    assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS points_users[\s\S]+api_blocked_at\s+TIMESTAMPTZ/);
+    assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS points_users[\s\S]+api_blocked_by\s+TEXT/);
+    assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS points_users[\s\S]+api_block_reason\s+TEXT/);
+    assert.match(migrationSource, /ALTER TABLE points_users ADD COLUMN IF NOT EXISTS api_blocked_at TIMESTAMPTZ/);
+    assert.match(migrationSource, /ALTER TABLE points_users ADD COLUMN IF NOT EXISTS api_blocked_by TEXT/);
+    assert.match(migrationSource, /ALTER TABLE points_users ADD COLUMN IF NOT EXISTS api_block_reason TEXT/);
   }
 });
 

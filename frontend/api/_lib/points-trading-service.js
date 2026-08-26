@@ -27,7 +27,10 @@ import {
   TOURNAMENT_MAX_SHARES_PER_MARKET,
   tournamentRulesActive,
 } from './points-tournament-config.js';
-import { assertTournamentMinimumEntry } from './points-tournament-entry.js';
+import {
+  assertTournamentMinimumEntry,
+  assertTournamentSettlementAllowed,
+} from './points-tournament-entry.js';
 import { normalizeExecutableSellShares } from './points-sell-shares.js';
 import { optionalFiniteNumber } from './protocol-trade-guards.js';
 
@@ -171,6 +174,7 @@ export async function executePointsBuy(client, {
   if (market.status !== 'active') throw apiError('market_closed', 400);
   if (market.end_time && new Date(market.end_time) <= new Date()) throw apiError('market_expired', 400);
 
+  assertTournamentSettlementAllowed(market);
   await assertTournamentMinimumEntry(client, {
     market,
     username,

@@ -42,6 +42,7 @@ test('pending generated markets can be edited before approval', () => {
   assert.match(source, /source_data = \$12::jsonb/);
   assert.match(source, /syncMananeraPhraseFromQuestion/);
   assert.match(source, /syncApiPriceFromQuestion/);
+  assert.match(source, /syncWeatherDateFromMarket/);
   assert.match(source, /const sourceData = parseJsonb\(r\.source_data,\s*\{\}\)/);
   assert.match(source, /suggestedPricing:\s*sourceData\?\.suggestedPricing\s*\|\|\s*null/);
   assert.match(source, /pricingSearch:\s*sourceData\?\.pricingSearch\s*\|\|\s*null/);
@@ -117,8 +118,14 @@ test('pending api-price approval syncs edited threshold and operator from questi
   assert.match(source, /syncApiPriceFromQuestion\(\{\s*question: r\.question,/);
   assert.match(source, /resolverConfig: syncedMananera\.resolverConfig/);
   assert.match(source, /sourceData: syncedMananera\.sourceData \|\| \{\}/);
-  assert.match(source, /const sourceDataBase = syncedApiPrice\.sourceData \|\| syncedMananera\.sourceData \|\| \{\}/);
-  assert.match(source, /const resolverConfig = syncedApiPrice\.resolverConfig \|\| null/);
+  assert.match(source, /const sourceDataBase = syncedWeather\.sourceData \|\| syncedApiPrice\.sourceData \|\| syncedMananera\.sourceData \|\| \{\}/);
+  assert.match(source, /const resolverConfig = syncedWeather\.resolverConfig \|\| null/);
+});
+
+test('pending weather approval syncs edited forecast date before insertion', () => {
+  assert.match(source, /syncWeatherDateFromMarket\(\{\s*question: r\.question,/);
+  assert.match(source, /endTime: endDate\.toISOString\(\)/);
+  assert.match(source, /resolverConfig: syncedApiPrice\.resolverConfig/);
 });
 
 test('trophy pending markets can be auto-approved by the 9am cron', () => {

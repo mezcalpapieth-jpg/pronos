@@ -13,6 +13,7 @@ import { binaryBuyQuote, binaryPrices, multiBuyQuote, multiPrices } from '../_li
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { seriesTradeLockFromRows } from '../_lib/series-markets.js';
 import { cryptoTradeLock } from '../_lib/points-crypto-trade-guard.js';
+import { tournamentSettlementLock } from '../_lib/points-tournament-entry.js';
 import {
   combineBuyOrderbookMatches,
   makerUsageFromRows,
@@ -112,6 +113,13 @@ export default async function handler(req, res) {
     if (r.status !== 'active') return res.status(400).json({ error: 'market_closed' });
     if (r.end_time && new Date(r.end_time) <= new Date()) {
       return res.status(400).json({ error: 'market_expired' });
+    }
+    const tournamentLock = tournamentSettlementLock(r);
+    if (tournamentLock) {
+      return res.status(tournamentLock.status).json({
+        error: tournamentLock.error,
+        detail: tournamentLock.detail,
+      });
     }
     const cryptoLock = cryptoTradeLock(r);
     if (cryptoLock) {

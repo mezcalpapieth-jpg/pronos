@@ -260,14 +260,40 @@ export async function resolveAutoResolverCandidate(candidate = {}, { sql = null 
       if (!cfg.feedAddress || !cfg.op || cfg.threshold == null || cfg.yesOutcome == null) {
         throw new Error('invalid chainlink_price config');
       }
-      const price = await readChainlinkPrice({
-        feedAddress: cfg.feedAddress,
-        chainId: cfg.chainId,
-      });
+      const closesAt = cfg.closesAt || candidate.end_time;
+      let price;
+      let roundUpdatedAt = null;
+      if (closesAt) {
+        const round = await readChainlinkRoundAtOrBefore({
+          feedAddress: cfg.feedAddress,
+          chainId: cfg.chainId,
+          timestamp: closesAt,
+        });
+        price = round.price;
+        roundUpdatedAt = Number.isFinite(Number(round.updatedAt))
+          ? new Date(Number(round.updatedAt) * 1000).toISOString()
+          : null;
+        resolverConfigPatch = {
+          closePrice: round.price,
+          resolvedRoundId: round.roundId?.toString?.() || String(round.roundId),
+          resolvedRoundUpdatedAt: roundUpdatedAt,
+        };
+      } else {
+        price = await readChainlinkPrice({
+          feedAddress: cfg.feedAddress,
+          chainId: cfg.chainId,
+        });
+      }
       const yes = comparePrice(price, cfg.op, Number(cfg.threshold));
       const yesIdx = Number(cfg.yesOutcome);
       winningIdx = yes ? yesIdx : (1 - yesIdx);
-      resolverInfo = { priceAtResolve: price, op: cfg.op, threshold: cfg.threshold };
+      resolverInfo = {
+        priceAtResolve: price,
+        op: cfg.op,
+        threshold: cfg.threshold,
+        source: cfg.symbol || 'chainlink',
+        roundUpdatedAt,
+      };
     }
   } else if (resolverType === 'api_price') {
     if (!cfg.source || !cfg.op || cfg.threshold == null || cfg.yesOutcome == null) {

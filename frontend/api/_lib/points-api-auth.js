@@ -261,18 +261,32 @@ export async function authenticatePointsApiRequest(sql, req, {
   }
 
   const rows = await sql`
-    SELECT id, username, user_sub, key_prefix, secret_ciphertext, permissions
-      FROM points_api_keys
-     WHERE key_hash = ${hashApiCredential(apiKey)}
-       AND revoked_at IS NULL
-       AND (expires_at IS NULL OR expires_at > NOW())
-     LIMIT 1
+    SELECT
+      k.id,
+      k.username,
+      k.user_sub,
+      k.key_prefix,
+      k.secret_ciphertext,
+      k.permissions,
+      u.api_blocked_at
+    FROM points_api_keys k
+    LEFT JOIN points_users u ON LOWER(u.username) = LOWER(k.username)
+    WHERE k.key_hash = ${hashApiCredential(apiKey)}
+      AND k.revoked_at IS NULL
+      AND (k.expires_at IS NULL OR k.expires_at > NOW())
+    LIMIT 1
   `;
   const key = rows[0];
   if (!key) {
     const err = new Error('invalid_api_key');
     err.status = 401;
     err.code = 'invalid_api_key';
+    throw err;
+  }
+  if (key.api_blocked_at) {
+    const err = new Error('api_access_blocked');
+    err.status = 403;
+    err.code = 'api_access_blocked';
     throw err;
   }
 

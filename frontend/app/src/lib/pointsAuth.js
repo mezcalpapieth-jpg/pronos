@@ -141,7 +141,7 @@ function clearPendingReferrer() {
 
 export async function fetchMe() {
   const { data } = await getJson('/api/points/auth/me');
-  return data; // { authenticated, suborgId, username, email, walletAddress, balance, displayName, profileImageUrl, needsUsername }
+  return data; // { authenticated, suborgId, username, email, walletAddress, balance, displayName, profileImageUrl, reviewStatus, phoneRequired, apiBlockedAt, needsUsername }
 }
 
 export async function logout() {
@@ -208,6 +208,11 @@ export function PointsAuthProvider({ children }) {
             suborgId: me.suborgId,
             username: me.username,
             email: me.email,
+            displayName: me.displayName || null,
+            profileImageUrl: me.profileImageUrl || null,
+            reviewStatus: me.reviewStatus || 'clear',
+            phoneRequired: !!me.phoneRequired,
+            apiBlockedAt: me.apiBlockedAt || null,
             walletAddress: me.walletAddress,
             balance: Number(me.balance || 0),
             needsUsername: !!me.needsUsername,

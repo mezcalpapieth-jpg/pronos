@@ -56,6 +56,10 @@ const PUBLIC_ERROR_COPY = {
     es: 'Llegaste al máximo de acciones permitido por mercado en este torneo.',
     en: 'You reached the maximum shares allowed per market in this tournament.',
   },
+  tournament_market_after_cutoff: {
+    es: 'Este mercado termina después del cierre del torneo. Usa uno que cierre antes de las 11:59pm.',
+    en: 'This market settles after the tournament closes. Pick one that closes before 11:59pm.',
+  },
   order_not_open: {
     es: 'Esa orden ya no está abierta.',
     en: 'That order is no longer open.',
@@ -115,6 +119,10 @@ const PUBLIC_ERROR_COPY = {
   profile_update_failed: {
     es: 'No pudimos guardar tu perfil. Intenta otra vez.',
     en: 'Could not save your profile. Try again.',
+  },
+  api_access_blocked: {
+    es: 'El acceso API de esta cuenta está bloqueado por el equipo.',
+    en: 'API access for this account has been blocked by the team.',
   },
   x_account_required: {
     es: 'Conecta X primero y vuelve a verificar.',
@@ -657,6 +665,21 @@ export async function adminSetSupportTicketStatus({ id, status }) {
 // ─── Admin — public API usage ──────────────────────────────────────────────
 export async function adminListApiUsage() {
   return getJson('/api/points/admin/api-usage');
+}
+
+export async function adminBlockApiUser({ username, reason } = {}) {
+  return postJson('/api/points/admin/api-usage', {
+    action: 'block_user_api',
+    username,
+    reason,
+  });
+}
+
+export async function adminUnblockApiUser({ username } = {}) {
+  return postJson('/api/points/admin/api-usage', {
+    action: 'unblock_user_api',
+    username,
+  });
 }
 
 // ─── Admin — resolution candidates ─────────────────────────────────────────

@@ -42,6 +42,44 @@ test('api price sync keeps Meta above question as gt 610', () => {
   assert.equal(result.resolverConfig.op, 'gt');
 });
 
+test('api price sync updates Chainlink crypto thresholds without explicit source', () => {
+  const result = syncApiPriceFromQuestion({
+    question: '¿BTC cerrará por encima de $78,000 USD el 26/08/2026?',
+    resolverConfig: {
+      feedAddress: '0x6ce185860a4963106506C203335A2910413708e9',
+      chainId: 42161,
+      symbol: 'BTC/USD',
+      threshold: 80000,
+      op: 'gt',
+      yesOutcome: 0,
+    },
+    sourceData: { strike: 80000 },
+  });
+
+  assert.equal(result.changed, true);
+  assert.equal(result.resolverConfig.threshold, 78000);
+  assert.equal(result.resolverConfig.op, 'gt');
+  assert.equal(result.sourceData.strike, 78000);
+});
+
+test('api price sync updates Chainlink crypto thresholds with k suffixes', () => {
+  const result = syncApiPriceFromQuestion({
+    question: '¿BTC cerrará arriba de $78k USD el 26/08/2026?',
+    resolverConfig: {
+      feedAddress: '0x6ce185860a4963106506C203335A2910413708e9',
+      chainId: 42161,
+      symbol: 'BTC/USD',
+      threshold: 80000,
+      op: 'gt',
+      yesOutcome: 0,
+    },
+  });
+
+  assert.equal(result.changed, true);
+  assert.equal(result.resolverConfig.threshold, 78000);
+  assert.equal(result.resolverConfig.op, 'gt');
+});
+
 test('api price sync preserves shorthand market-cap suffixes', () => {
   const result = syncApiPriceFromQuestion({
     question: '¿$DOGGY cerrará arriba de $130K de market cap el 23/08/2026?',
