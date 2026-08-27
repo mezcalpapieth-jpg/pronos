@@ -24,6 +24,7 @@ import {
   adminListTaskCounts,
   adminReviewResolutionCandidate,
   adminListCycles,
+  adminFetchCycleStandingsSnapshot,
   adminRolloverCycle,
   adminPauseCycles,
   adminApplyPreCycleCarryover,
@@ -448,9 +449,162 @@ export default function PointsAdmin({ isAdmin }) {
 // Admin tool for pausing/restarting public prize cycles. Pause is
 // non-destructive; restart/rollover is the deliberate action that snapshots,
 // resets balances, and opens a fresh configured window.
+const STANDINGS_SNAPSHOT_WIDTH = 1200;
+const STANDINGS_SNAPSHOT_ROW_LIMIT = 24;
+
+function snapshotRows(rows) {
+  return Array.isArray(rows) ? rows.slice(0, STANDINGS_SNAPSHOT_ROW_LIMIT) : [];
+}
+
+function snapshotImageSize(rowCount) {
+  return {
+    width: STANDINGS_SNAPSHOT_WIDTH,
+    height: Math.max(760, 260 + Math.max(1, rowCount) * 54),
+  };
+}
+
+function escapeSvgText(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function snapshotMoney(value, digits = 0) {
+  return Number(value || 0).toLocaleString('es-MX', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+}
+
+function snapshotFileName(cycle, extension) {
+  const cycleId = cycle?.id ? `ciclo-${cycle.id}` : 'ciclo-actual';
+  const date = new Date().toISOString().slice(0, 10);
+  return `pronos-standings-${cycleId}-${date}.${extension}`;
+}
+
+function buildTournamentStandingsSvg({ cycle, rows = [], generatedAt = new Date() } = {}) {
+  const topRows = snapshotRows(rows);
+  const { width, height } = snapshotImageSize(topRows.length);
+  const title = cycle?.label || (cycle?.id ? `Ciclo #${cycle.id}` : 'Torneo Pronos');
+  const generatedLabel = generatedAt.toLocaleString('es-MX', {
+    timeZone: 'America/Mexico_City',
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+  const cutoffLabel = cycle?.cutoffSnapshotTaken
+    ? `Foto 11:59 tomada (${cycle.snapshotCount || topRows.length})`
+    : 'Standings actuales';
+
+  const rowSvg = topRows.length
+    ? topRows.map((row, index) => {
+      const y = 244 + index * 54;
+      const rank = Number(row.rank || index + 1);
+      const username = String(row.username || 'usuario').slice(0, 24);
+      const score = Number(row.score ?? row.cycleDelta ?? row.marketPnl ?? 0);
+      const pnl = Number(row.marketPnl ?? 0);
+      const qualifyingMarkets = Number(row.qualifyingMarkets || 0);
+      const status = row.qualified ? 'CALIFICA' : `${qualifyingMarkets} mercados`;
+      const rowFill = rank <= 5 ? 'rgba(0,232,122,0.12)' : 'rgba(255,255,255,0.035)';
+      const rowStroke = rank <= 5 ? 'rgba(0,232,122,0.42)' : 'rgba(255,255,255,0.12)';
+      const scoreFill = score >= 0 ? '#00e87a' : '#ff4d4d';
+      return `
+        <g transform="translate(56 ${y})">
+          <rect width="${width - 112}" height="42" rx="12" fill="${rowFill}" stroke="${rowStroke}" />
+          <text x="22" y="27" fill="#ff5500" font-size="18" font-weight="900">${rank}</text>
+          <text x="82" y="27" fill="#f4f4f5" font-size="22" font-weight="900">@${escapeSvgText(username)}</text>
+          <text x="470" y="27" fill="#9ca3af" font-size="16" font-weight="700">${escapeSvgText(status)}</text>
+          <text x="790" y="27" fill="${scoreFill}" font-size="22" font-weight="900" text-anchor="end">${snapshotMoney(score, 0)} MXNP</text>
+          <text x="1056" y="27" fill="#9ca3af" font-size="16" font-weight="700" text-anchor="end">PnL ${snapshotMoney(pnl, 0)} MXNP</text>
+        </g>`;
+    }).join('')
+    : `
+        <g transform="translate(56 244)">
+          <rect width="${width - 112}" height="90" rx="16" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.12)" />
+          <text x="34" y="55" fill="#9ca3af" font-size="22" font-weight="800">Sin standings disponibles</text>
+        </g>`;
+
+  return `
+    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" font-family="Arial, Helvetica, sans-serif">
+      <defs>
+        <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0%" stop-color="#050505" />
+          <stop offset="55%" stop-color="#0b0f1e" />
+          <stop offset="100%" stop-color="#020617" />
+        </linearGradient>
+        <linearGradient id="panel" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="rgba(255,255,255,0.08)" />
+          <stop offset="100%" stop-color="rgba(255,255,255,0.02)" />
+        </linearGradient>
+      </defs>
+      <rect width="${width}" height="${height}" fill="url(#bg)" />
+      <rect x="32" y="32" width="${width - 64}" height="${height - 64}" rx="28" fill="url(#panel)" stroke="rgba(255,255,255,0.14)" />
+      <text x="56" y="90" fill="#ff5500" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="900" letter-spacing="6">PRONOS</text>
+      <text x="56" y="146" fill="#f4f4f5" font-family="Arial Black, Impact, Arial, sans-serif" font-size="48" font-weight="900">STANDINGS DEL TORNEO</text>
+      <text x="56" y="184" fill="#9ca3af" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">${escapeSvgText(title)} · ${escapeSvgText(cutoffLabel)}</text>
+      <text x="${width - 56}" y="184" fill="#6b7280" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" text-anchor="end">${escapeSvgText(generatedLabel)}</text>
+      <line x1="56" y1="214" x2="${width - 56}" y2="214" stroke="rgba(255,255,255,0.12)" />
+      ${rowSvg}
+    </svg>`;
+}
+
+function downloadBlob(blob, filename) {
+  if (typeof document === 'undefined' || typeof URL === 'undefined') return;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function downloadTournamentStandingsPng({ cycle, rows } = {}) {
+  const topRows = snapshotRows(rows);
+  const { width, height } = snapshotImageSize(topRows.length);
+  const svg = buildTournamentStandingsSvg({ cycle, rows: topRows });
+  const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+
+  if (typeof document === 'undefined' || typeof Image === 'undefined') {
+    downloadBlob(svgBlob, snapshotFileName(cycle, 'svg'));
+    return 'svg';
+  }
+
+  const svgUrl = URL.createObjectURL(svgBlob);
+  try {
+    const img = new Image();
+    const loaded = new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+    });
+    img.src = svgUrl;
+    await loaded;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx || typeof canvas.toBlob !== 'function') throw new Error('canvas_unavailable');
+    ctx.drawImage(img, 0, 0, width, height);
+    const pngBlob = await new Promise((resolve, reject) => {
+      canvas.toBlob(blob => (blob ? resolve(blob) : reject(new Error('png_export_failed'))), 'image/png');
+    });
+    downloadBlob(pngBlob, snapshotFileName(cycle, 'png'));
+    return 'png';
+  } catch {
+    downloadBlob(svgBlob, snapshotFileName(cycle, 'svg'));
+    return 'svg';
+  } finally {
+    URL.revokeObjectURL(svgUrl);
+  }
+}
+
 function CyclesPanel() {
   const [data, setData] = useState(null);
   const [working, setWorking] = useState(false);
+  const [downloadBusy, setDownloadBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   const [err, setErr] = useState(null);
 
@@ -573,6 +727,28 @@ function CyclesPanel() {
     }
   }
 
+  async function downloadStandingsSnapshot() {
+    setDownloadBusy(true);
+    setMsg(null);
+    setErr(null);
+    try {
+      const snapshot = await adminFetchCycleStandingsSnapshot({
+        cycleId: current?.id,
+        limit: STANDINGS_SNAPSHOT_ROW_LIMIT,
+      });
+      const rows = Array.isArray(snapshot?.rows) ? snapshot.rows : [];
+      const cycle = snapshot?.cycle || current;
+      const format = await downloadTournamentStandingsPng({ cycle, rows });
+      setMsg(format === 'png'
+        ? `✓ PNG de standings descargado (${snapshot?.source || 'snapshot'}).`
+        : `✓ Standings descargados como SVG (${snapshot?.source || 'snapshot'}).`);
+    } catch (e) {
+      setErr(`${e.code || e.message}${e.detail ? ' · ' + e.detail : ''}`);
+    } finally {
+      setDownloadBusy(false);
+    }
+  }
+
   if (!data && !err) {
     return <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', padding: 20 }}>Cargando ciclos…</div>;
   }
@@ -627,7 +803,7 @@ function CyclesPanel() {
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <button
                 onClick={snapshotCutoff}
-                disabled={working}
+                disabled={working || downloadBusy}
                 style={{
                   padding: '10px 18px',
                   background: current.cutoffSnapshotTaken ? 'rgba(16,185,129,0.12)' : 'transparent',
@@ -645,8 +821,27 @@ function CyclesPanel() {
                 {working ? 'Trabajando…' : current.cutoffSnapshotTaken ? 'Foto 11:59 lista' : 'Tomar foto 11:59'}
               </button>
               <button
+                onClick={downloadStandingsSnapshot}
+                disabled={working || downloadBusy}
+                style={{
+                  padding: '10px 18px',
+                  background: 'transparent',
+                  color: '#cbd5e1',
+                  border: '1px solid rgba(203,213,225,0.35)',
+                  borderRadius: 8,
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  cursor: working || downloadBusy ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {downloadBusy ? 'Preparando…' : 'Descargar standings PNG'}
+              </button>
+              <button
                 onClick={rollover}
-                disabled={working}
+                disabled={working || downloadBusy}
                 style={{
                   padding: '10px 18px',
                   background: current.pastDeadline || paused ? 'var(--green)' : 'var(--surface2)',
@@ -658,7 +853,7 @@ function CyclesPanel() {
                   fontWeight: 700,
                   letterSpacing: '0.06em',
                   textTransform: 'uppercase',
-                  cursor: working ? 'not-allowed' : 'pointer',
+                  cursor: working || downloadBusy ? 'not-allowed' : 'pointer',
                 }}
               >
                 {working ? 'Trabajando…' : paused ? '▶ Reanudar con ciclo nuevo' : '▶ Cerrar ciclo y abrir siguiente'}
@@ -666,7 +861,7 @@ function CyclesPanel() {
               {!paused && (
                 <button
                   onClick={pauseCycles}
-                  disabled={working}
+                  disabled={working || downloadBusy}
                   style={{
                     padding: '10px 18px',
                     background: 'transparent',
@@ -678,7 +873,7 @@ function CyclesPanel() {
                     fontWeight: 700,
                     letterSpacing: '0.06em',
                     textTransform: 'uppercase',
-                    cursor: working ? 'not-allowed' : 'pointer',
+                    cursor: working || downloadBusy ? 'not-allowed' : 'pointer',
                   }}
                 >
                   Pausar ciclos
@@ -686,7 +881,7 @@ function CyclesPanel() {
               )}
               <button
                 onClick={applyPreCycleCarryover}
-                disabled={working}
+                disabled={working || downloadBusy}
                 style={{
                   padding: '10px 18px',
                   background: 'transparent',
@@ -698,7 +893,7 @@ function CyclesPanel() {
                   fontWeight: 700,
                   letterSpacing: '0.06em',
                   textTransform: 'uppercase',
-                  cursor: working ? 'not-allowed' : 'pointer',
+                  cursor: working || downloadBusy ? 'not-allowed' : 'pointer',
                 }}
               >
                 Aplicar bonos preciclo

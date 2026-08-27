@@ -430,7 +430,6 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
                   )}
                 </Link>
                 <Link to="/earn" onClick={closeMobileMenu}>{t('points.nav.earn')}</Link>
-                <Link to="/developer" onClick={closeMobileMenu}>{t('points.nav.developer')}</Link>
               </>
             )}
             {/* Public — see the desktop nav for why this one isn't gated. */}
@@ -592,8 +591,8 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
                 <Link to="/support" onClick={() => setDropdownOpen(false)}>
                   {lang === 'en' ? 'Support' : 'Soporte'}
                 </Link>
-                <Link to="/developer" onClick={() => setDropdownOpen(false)}>
-                  {t('points.nav.developer')}
+                <Link to="/earn" onClick={() => setDropdownOpen(false)}>
+                  {t('points.nav.earn')}
                 </Link>
                 {isAdmin && (
                   <Link

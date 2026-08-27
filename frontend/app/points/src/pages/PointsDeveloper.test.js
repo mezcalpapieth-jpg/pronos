@@ -20,7 +20,7 @@ test('developer page is reachable from top-level and points routes', () => {
   }
 });
 
-test('Perfil page and account menu link users to API key creation', () => {
+test('Perfil page links users to API key creation while account menu stays on Perfil', () => {
   assert.match(i18nSource, /'points\.nav\.earn':\s*\{\s*es:\s*'Perfil',\s*en:\s*'Profile'/);
   assert.match(i18nSource, /'points\.earn\.title':\s*\{\s*es:\s*'Perfil',\s*en:\s*'Profile'/);
   assert.match(i18nSource, /'points\.nav\.developer':\s*\{\s*es:\s*'Crear API key',\s*en:\s*'Create API key'/);
@@ -28,7 +28,8 @@ test('Perfil page and account menu link users to API key creation', () => {
   assert.match(earnSource, /to="\/developer"/);
   assert.match(earnSource, /user\?\.phoneRequired/);
   assert.match(earnSource, /user\?\.apiBlockedAt/);
-  assert.match(navSource, /to="\/developer"[\s\S]*?points\.nav\.developer/);
+  assert.match(navSource, /nav-dropdown-points[\s\S]*?to="\/earn"[\s\S]*?points\.nav\.earn/);
+  assert.doesNotMatch(navSource, /to="\/developer"[\s\S]*?points\.nav\.developer/);
 });
 
 test('developer page manages API keys and documents HMAC authentication', () => {

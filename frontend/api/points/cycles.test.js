@@ -53,6 +53,10 @@ test('points rollover archives exposure and carries only approved pre-cycle bonu
 test('points cycle cutoff snapshot freezes leaderboard without rolling over', () => {
   assert.match(adminSource, /action === 'snapshot_cutoff'/);
   assert.match(adminSource, /handleSnapshotCutoff/);
+  assert.match(adminSource, /action === 'standings_snapshot'/);
+  assert.match(adminSource, /handleGetStandingsSnapshot/);
+  assert.match(adminSource, /readCycleSnapshotRows/);
+  assert.match(adminSource, /buildTournamentLeaderboardRows/);
   assert.match(adminSource, /snapshotActiveCycleAtCutoff/);
   assert.match(adminSource, /cutoffSnapshotTaken/);
   assert.match(adminSource, /snapshot_count/);

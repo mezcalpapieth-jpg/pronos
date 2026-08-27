@@ -9,7 +9,13 @@ import {
   resolveSolanaTokenMcapOutcome,
 } from './solana-token-mcap.js';
 import { readMananeraPhraseResult } from './mananera.js';
-import { fetchMaxTempC, bucketIndexFor, weatherBucketIndexFor } from './weather.js';
+import {
+  fetchMaxTempC,
+  bucketIndexFor,
+  weatherBucketIndexFor,
+  resolveObservedWeatherMaxTempC,
+  WEATHER_MODEL_AUDIT_THRESHOLD_C,
+} from './weather.js';
 import { aicmDelayBucketIndexFor, readAicmDelayCount } from './aicm-board.js';
 import {
   aicmAeBucketIndexFor,
@@ -362,16 +368,53 @@ export async function resolveAutoResolverCandidate(candidate = {}, { sql = null 
     if (!cfg.lat || !cfg.lng || !cfg.forecastDateYmd || !Array.isArray(cfg.buckets)) {
       throw new Error('invalid weather_api config');
     }
-    const tempC = await fetchMaxTempC({
-      lat: cfg.lat,
-      lng: cfg.lng,
-      dateYmd: cfg.forecastDateYmd,
-      timezone: cfg.timezone,
-    });
-    winningIdx = weatherBucketIndexFor(tempC, cfg.buckets);
-    if (winningIdx < 0) winningIdx = bucketIndexFor(tempC);
-    if (winningIdx < 0) throw new Error(`temp ${tempC}°C didn't fit any bucket`);
-    resolverInfo = { recordedMaxC: tempC, forecastDateYmd: cfg.forecastDateYmd };
+    if (cfg.resolutionSource === 'open-meteo-archive') {
+      const reviewDeltaC = Number(cfg.manualReviewDeltaC);
+      const weather = await resolveObservedWeatherMaxTempC({
+        lat: cfg.lat,
+        lng: cfg.lng,
+        dateYmd: cfg.forecastDateYmd,
+        timezone: cfg.timezone,
+        buckets: cfg.buckets,
+        mismatchThresholdC: Number.isFinite(reviewDeltaC)
+          ? reviewDeltaC
+          : WEATHER_MODEL_AUDIT_THRESHOLD_C,
+      });
+      winningIdx = weather.winningIdx;
+      resolverInfo = {
+        ...weather.resolverInfo,
+        finalScore: weather.finalScore,
+      };
+      resolverConfigPatch = weather.resolverConfigPatch;
+      if (weather.requiresManualReview) {
+        const err = new Error('weather_manual_review_required');
+        err.benign = true;
+        err.manualReview = true;
+        err.info = {
+          source: 'open-meteo-archive',
+          forecastDateYmd: cfg.forecastDateYmd,
+          suggestedOutcomeIndex: winningIdx,
+          finalScore: weather.finalScore,
+          weatherAudit: weather.resolverInfo?.weatherAudit || null,
+        };
+        throw err;
+      }
+    } else {
+      const tempC = await fetchMaxTempC({
+        lat: cfg.lat,
+        lng: cfg.lng,
+        dateYmd: cfg.forecastDateYmd,
+        timezone: cfg.timezone,
+      });
+      winningIdx = weatherBucketIndexFor(tempC, cfg.buckets);
+      if (winningIdx < 0) winningIdx = bucketIndexFor(tempC);
+      if (winningIdx < 0) throw new Error(`temp ${tempC}°C didn't fit any bucket`);
+      resolverInfo = {
+        recordedMaxC: tempC,
+        source: 'open-meteo-forecast',
+        forecastDateYmd: cfg.forecastDateYmd,
+      };
+    }
   } else if (resolverType === 'aicm_delay_count') {
     if (!sql) throw new Error('aicm_delay_count_requires_sql');
     if (!cfg.fromDateYmd || !cfg.toDateYmd || !Array.isArray(cfg.buckets)) {

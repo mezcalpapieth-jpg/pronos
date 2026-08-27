@@ -427,7 +427,9 @@ export default async function handler(req, res) {
         || (typeof sourceData?.resolutionCriteria === 'string' && sourceData.resolutionCriteria.trim())
         || (resolverSource === 'banxico-fix' ? BANXICO_FIX_RESOLUTION_CRITERIA : null)
         || (resolverType === 'weather_api' && Array.isArray(resolverCfg?.buckets)
-          ? weatherResolutionCriteriaForBuckets(resolverCfg.buckets)
+          ? weatherResolutionCriteriaForBuckets(resolverCfg.buckets, {
+              resolutionSource: resolverCfg?.resolutionSource || null,
+            })
           : null)
         || (resolverType === 'weather_api' ? WEATHER_MAX_TEMP_RESOLUTION_CRITERIA : null)
         || null;

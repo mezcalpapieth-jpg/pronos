@@ -42,7 +42,9 @@ import {
   configuredCycleEndIso,
   configuredCycleWindowFromRow,
 } from '../../_lib/points-tournament-config.js';
+import { buildTournamentLeaderboardRows } from '../../_lib/points-tournament-leaderboard.js';
 import {
+  readCycleSnapshotRows,
   snapshotActiveCycleAtCutoff,
   snapshotCycleLeaderboard,
 } from '../../_lib/points-cycle-snapshot.js';
@@ -89,6 +91,13 @@ function cycleWindowForOpen(now = new Date()) {
     endIso: cycleEndIso(nowIso),
     label: null,
   };
+}
+
+function parsePositiveInt(value, fallback, max = 5000) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n <= 0) return fallback;
+  return Math.min(n, max);
 }
 
 function parseSettingBool(value, fallback = true) {
@@ -149,6 +158,10 @@ async function openNewCycle(client, nextCycleLabel) {
 }
 
 async function handleGet(req, res) {
+  if (req.query?.action === 'standings_snapshot') {
+    return await handleGetStandingsSnapshot(req, res);
+  }
+
   const current = await sql`
     SELECT c.id, c.label, c.started_at, c.ends_at, c.status, c.created_at, c.closed_at,
       (SELECT COUNT(*) FROM points_cycle_snapshots s WHERE s.cycle_id = c.id) AS snapshot_count
@@ -190,6 +203,93 @@ async function handleGet(req, res) {
       snapshotCount: Number(r.snapshot_count || 0),
     })),
   });
+}
+
+async function handleGetStandingsSnapshot(req, res) {
+  const cycleId = parsePositiveInt(req.query?.cycleId, null, Number.MAX_SAFE_INTEGER);
+  const limit = parsePositiveInt(req.query?.limit, 100, 5000);
+
+  const result = await withTransaction(async (client) => {
+    const cycleResult = cycleId
+      ? await client.query(
+        `SELECT id, label, started_at, ends_at, status, closed_at
+         FROM points_cycles
+         WHERE id = $1
+         LIMIT 1`,
+        [cycleId],
+      )
+      : await client.query(
+        `SELECT id, label, started_at, ends_at, status, closed_at
+         FROM points_cycles
+         WHERE status = 'active'
+         ORDER BY ends_at DESC
+         LIMIT 1`,
+      );
+    const cycle = cycleResult.rows[0] || null;
+    if (!cycle) {
+      return {
+        ok: true,
+        cycle: null,
+        rows: [],
+        source: 'none',
+        totalRows: 0,
+      };
+    }
+
+    const countResult = await client.query(
+      `SELECT COUNT(*)::int AS count
+       FROM points_cycle_snapshots
+       WHERE cycle_id = $1`,
+      [cycle.id],
+    );
+    const snapshotCount = Number(countResult.rows[0]?.count || 0);
+    const window = configuredCycleWindowFromRow(cycle);
+    const label = window?.label || cycle.label;
+
+    if (snapshotCount > 0) {
+      const rows = await readCycleSnapshotRows(client, { cycleId: cycle.id, limit });
+      return {
+        ok: true,
+        source: 'cutoff_snapshot',
+        totalRows: snapshotCount,
+        cycle: {
+          id: cycle.id,
+          label,
+          status: cycle.status,
+          startedAt: cycle.started_at,
+          endsAt: window?.endsAt || cycle.ends_at,
+          closedAt: cycle.closed_at,
+          cutoffSnapshotTaken: true,
+          snapshotCount,
+        },
+        rows,
+      };
+    }
+
+    const rows = await buildTournamentLeaderboardRows(client, {
+      limit,
+      now: new Date(),
+      window,
+    });
+    return {
+      ok: true,
+      source: 'live_leaderboard',
+      totalRows: rows.length,
+      cycle: {
+        id: cycle.id,
+        label,
+        status: cycle.status,
+        startedAt: cycle.started_at,
+        endsAt: window?.endsAt || cycle.ends_at,
+        closedAt: cycle.closed_at,
+        cutoffSnapshotTaken: false,
+        snapshotCount: 0,
+      },
+      rows,
+    };
+  });
+
+  return res.status(200).json(result);
 }
 
 // Every cycle restarts at the tournament starting balance. A fresh

@@ -49,7 +49,13 @@ import {
 import { MANANERA_TRANSCRIPT_SOURCE, readMananeraPhraseResult } from '../_lib/mananera.js';
 import { readStoredMananeraTranscript } from '../_lib/mananera-ingest.js';
 import { generateMananeraMarkets } from '../_lib/market-gen/mananera.js';
-import { fetchMaxTempC, bucketIndexFor, weatherBucketIndexFor } from '../_lib/weather.js';
+import {
+  fetchMaxTempC,
+  bucketIndexFor,
+  weatherBucketIndexFor,
+  resolveObservedWeatherMaxTempC,
+  WEATHER_MODEL_AUDIT_THRESHOLD_C,
+} from '../_lib/weather.js';
 import { aicmDelayBucketIndexFor, readAicmDelayCount } from '../_lib/aicm-board.js';
 import { aicmAeBucketIndexFor, countAicmAeDaysInclusive } from '../_lib/aicm-aviation-edge.js';
 import { readAicmTimetableDelayCount } from '../_lib/aicm-timetable.js';
@@ -245,6 +251,76 @@ function firstEvidenceUrl(evidence) {
   const hit = (Array.isArray(evidence) ? evidence : [])
     .find(item => item?.url && /^https?:\/\//i.test(item.url));
   return hit?.url || null;
+}
+
+function openMeteoEvidenceUrl(base, params = {}) {
+  const url = new URL(base);
+  for (const [key, value] of Object.entries(params)) {
+    if (value == null) continue;
+    url.searchParams.set(key, Array.isArray(value) ? value.join(',') : String(value));
+  }
+  return url.toString();
+}
+
+function weatherReviewEvidence({ cfg, resolverInfo } = {}) {
+  const lat = cfg?.lat;
+  const lng = cfg?.lng;
+  const dateYmd = cfg?.forecastDateYmd;
+  const timezone = cfg?.timezone || 'America/Mexico_City';
+  const evidence = [
+    {
+      title: 'Open-Meteo Archive hourly temperature',
+      url: openMeteoEvidenceUrl('https://archive-api.open-meteo.com/v1/archive', {
+        latitude: lat,
+        longitude: lng,
+        hourly: 'temperature_2m',
+        daily: 'temperature_2m_max',
+        timezone,
+        start_date: dateYmd,
+        end_date: dateYmd,
+        models: 'best_match',
+      }),
+    },
+    {
+      title: 'Open-Meteo forecast model audit',
+      url: openMeteoEvidenceUrl('https://api.open-meteo.com/v1/forecast', {
+        latitude: lat,
+        longitude: lng,
+        daily: 'temperature_2m_max',
+        timezone,
+        start_date: dateYmd,
+        end_date: dateYmd,
+        models: ['best_match', 'gfs_seamless', 'ecmwf_ifs025', 'icon_seamless'],
+      }),
+    },
+  ];
+  const peakHours = Array.isArray(resolverInfo?.peakHours) ? resolverInfo.peakHours : [];
+  if (peakHours.length) {
+    evidence.push({ title: `Pico observado: ${peakHours.join(', ')}`, url: null });
+  }
+  return evidence;
+}
+
+function buildWeatherManualReviewCandidate({ market, cfg, resolverInfo, outcomes, winningIdx }) {
+  const audit = resolverInfo?.weatherAudit || {};
+  const winLabel = Array.isArray(outcomes) ? outcomes[winningIdx] : null;
+  const mismatched = Array.isArray(audit?.mismatchedBucketModels)
+    ? audit.mismatchedBucketModels.join(', ')
+    : '';
+  const temp = Number(resolverInfo?.observedMaxC ?? resolverInfo?.recordedMaxC);
+  const tempLabel = Number.isFinite(temp) ? `${temp.toFixed(1)}°C` : 'temperatura observada';
+  const label = winLabel ? `"${winLabel}"` : `opción ${Number(winningIdx) + 1}`;
+
+  return {
+    ...(cfg || {}),
+    source: 'open-meteo-archive',
+    sourceEventId: cfg?.sourceEventId || market?.source_event_id || `weather:${cfg?.forecastDateYmd || market?.id}`,
+    suggestedOutcomeIndex: winningIdx,
+    confidenceBps: 6500,
+    finalScore: resolverInfo?.finalScore || `${tempLabel} máx`,
+    evidence: weatherReviewEvidence({ cfg, resolverInfo }),
+    rationale: `Open-Meteo Archive sugiere ${label} con ${tempLabel} máximo, pero la auditoría de modelos${mismatched ? ` (${mismatched})` : ''} cae en otra opción o difiere demasiado. Requiere revisión manual antes de pagar MXNP.`,
+  };
 }
 
 function isAutoResolvableApiChart({ resolverType, source }) {
@@ -1464,6 +1540,7 @@ export async function runAutoResolve({ dry = false } = {}) {
       let resolverConfigPatch = null;
       let independentLegResolutions = null;
       let result = null;
+      let manualReviewCandidate = null;
       try {
         if (resolverType === 'chainlink_price') {
           if (cfg.shape === 'binary-direction') {
@@ -1627,18 +1704,51 @@ export async function runAutoResolve({ dry = false } = {}) {
           if (!cfg.lat || !cfg.lng || !cfg.forecastDateYmd || !Array.isArray(cfg.buckets)) {
             throw new Error('invalid weather_api config');
           }
-          const tempC = await fetchMaxTempC({
-            lat: cfg.lat,
-            lng: cfg.lng,
-            dateYmd: cfg.forecastDateYmd,
-            timezone: cfg.timezone,
-          });
-          // Bucket match — prefer the config's own ranges over the
-          // library's defaults so regenerated buckets don't desync.
-          winningIdx = weatherBucketIndexFor(tempC, cfg.buckets);
-          if (winningIdx < 0) winningIdx = bucketIndexFor(tempC); // fallback
-          if (winningIdx < 0) throw new Error(`temp ${tempC}°C didn't fit any bucket`);
-          resolverInfo = { recordedMaxC: tempC, forecastDateYmd: cfg.forecastDateYmd };
+          if (cfg.resolutionSource === 'open-meteo-archive') {
+            const reviewDeltaC = Number(cfg.manualReviewDeltaC);
+            const weather = await resolveObservedWeatherMaxTempC({
+              lat: cfg.lat,
+              lng: cfg.lng,
+              dateYmd: cfg.forecastDateYmd,
+              timezone: cfg.timezone,
+              buckets: cfg.buckets,
+              mismatchThresholdC: Number.isFinite(reviewDeltaC)
+                ? reviewDeltaC
+                : WEATHER_MODEL_AUDIT_THRESHOLD_C,
+            });
+            winningIdx = weather.winningIdx;
+            resolverInfo = {
+              ...weather.resolverInfo,
+              finalScore: weather.finalScore,
+            };
+            resolverConfigPatch = weather.resolverConfigPatch;
+            if (weather.requiresManualReview) {
+              manualReviewCandidate = buildWeatherManualReviewCandidate({
+                market: m,
+                cfg,
+                resolverInfo,
+                outcomes: marketOutcomes,
+                winningIdx,
+              });
+            }
+          } else {
+            const tempC = await fetchMaxTempC({
+              lat: cfg.lat,
+              lng: cfg.lng,
+              dateYmd: cfg.forecastDateYmd,
+              timezone: cfg.timezone,
+            });
+            // Bucket match — prefer the config's own ranges over the
+            // library's defaults so regenerated buckets don't desync.
+            winningIdx = weatherBucketIndexFor(tempC, cfg.buckets);
+            if (winningIdx < 0) winningIdx = bucketIndexFor(tempC); // fallback
+            if (winningIdx < 0) throw new Error(`temp ${tempC}°C didn't fit any bucket`);
+            resolverInfo = {
+              recordedMaxC: tempC,
+              source: 'open-meteo-forecast',
+              forecastDateYmd: cfg.forecastDateYmd,
+            };
+          }
         } else if (resolverType === 'aicm_delay_count') {
           if (!cfg.fromDateYmd || !cfg.toDateYmd || !Array.isArray(cfg.buckets)) {
             throw new Error('invalid aicm_delay_count config');
@@ -2352,6 +2462,25 @@ export async function runAutoResolve({ dry = false } = {}) {
           continue;
         }
         report.errors.push({ id: m.id, error: `resolve_failed: ${e.message}` });
+        continue;
+      }
+
+      if (manualReviewCandidate) {
+        try {
+          await queueManualReviewCandidate({
+            market: m,
+            cfg: manualReviewCandidate,
+            sourceData: {
+              ...sourceData,
+              resolverInfo,
+            },
+            outcomes: marketOutcomes,
+            dry,
+            report,
+          });
+        } catch (e) {
+          report.errors.push({ id: m.id, error: `weather_manual_review_queue_failed: ${e.message}` });
+        }
         continue;
       }
 

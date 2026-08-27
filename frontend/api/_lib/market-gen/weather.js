@@ -4,8 +4,8 @@
  * For each city in the whitelist we generate ONE parallel market per
  * day for tomorrow:
  *   Parent: "¿Temperatura máxima en {City} el {dd/mm/yyyy}?"
- *   Legs:   4 adaptive °C buckets anchored on Open-Meteo's forecasted
- *           high — e.g. forecast 25.6°C → [<25°C / 25°C / 26°C /
+ *   Legs:   4 adaptive °C buckets anchored on Open-Meteo best_match
+ *           forecast — e.g. forecast 25.6°C → [<25°C / 25°C / 26°C /
  *           ≥27°C]. Integer labels are floor ranges, not rounded
  *           values, so 25°C means 25.00–25.99°C.
  *
@@ -15,13 +15,14 @@
  * per-bucket liquidity.
  *
  * resolver_type='weather_api' on the parent. The points auto-resolve
- * cron reads Open-Meteo for the forecast date, picks the matching
- * bucket, and cascades to every leg (winning bucket → Sí, others → No).
+ * cron reads Open-Meteo Archive after the day completes, picks the
+ * matching bucket, and cascades to every leg (winning bucket → Sí,
+ * others → No).
  */
 import {
   CITIES,
   adaptiveBuckets,
-  fetchMaxTempC,
+  fetchForecastModelMaxTempsC,
   weatherResolutionCriteriaForBuckets,
 } from '../weather.js';
 
@@ -42,19 +43,19 @@ export async function generateWeatherMarkets() {
   const forecastDateYmd = formatDateYmd(tomorrow);
   const forecastDateEs  = formatDateEs(tomorrow);
 
-  // Trading closes at 23:59 UTC of the forecast day (≈ evening local in
-  // MX), when the day's measured high is locked in. Auto-resolver picks
-  // up shortly after.
+  // Trading closes at 23:00 UTC of the forecast day (17:00 in Mexico City),
+  // after the usual hottest window but before the full-day archive can be
+  // known with confidence. Auto-resolver waits for the archive afterward.
   const end = new Date(tomorrow);
-  end.setUTCHours(23, 59, 0, 0);
+  end.setUTCHours(23, 0, 0, 0);
   const endIso = end.toISOString();
 
   for (const city of CITIES) {
     // Fetch the forecast both to probe availability AND to feed the
     // adaptive bucket builder. Skip the city if Open-Meteo errors.
-    let forecastHighC;
+    let forecast;
     try {
-      forecastHighC = await fetchMaxTempC({
+      forecast = await fetchForecastModelMaxTempsC({
         lat: city.lat,
         lng: city.lng,
         dateYmd: forecastDateYmd,
@@ -67,8 +68,11 @@ export async function generateWeatherMarkets() {
       continue;
     }
 
+    const forecastHighC = forecast.bestMatchC;
     const buckets = adaptiveBuckets(forecastHighC);
-    const resolutionCriteria = weatherResolutionCriteriaForBuckets(buckets);
+    const resolutionCriteria = weatherResolutionCriteriaForBuckets(buckets, {
+      resolutionSource: 'open-meteo-archive',
+    });
 
     specs.push({
       source: 'open-meteo',
@@ -86,6 +90,10 @@ export async function generateWeatherMarkets() {
       resolver_type: 'weather_api',
       resolver_config: {
         source: 'open-meteo',
+        resolutionSource: 'open-meteo-archive',
+        forecastModel: 'best_match',
+        forecastAuditModels: forecast.valuesByModel,
+        manualReviewDeltaC: 1.5,
         lat: city.lat,
         lng: city.lng,
         timezone: city.tz,
@@ -99,6 +107,8 @@ export async function generateWeatherMarkets() {
         cityLabel: city.label,
         forecastDateYmd,
         forecastAtGeneration: forecastHighC,
+        forecastModel: 'best_match',
+        forecastAuditModels: forecast.valuesByModel,
         lat: city.lat,
         lng: city.lng,
         resolutionCriteria,

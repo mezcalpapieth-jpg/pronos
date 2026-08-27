@@ -1274,15 +1274,15 @@ function DeveloperApiCard() {
   const copy = lang === 'en'
     ? {
         eyebrow: 'Developer access',
-        title: 'Create an API key for bots or dashboards',
-        body: 'Read markets, inspect your account, and request trading access from the developer page. Keep secrets private and rotate keys you stop using.',
+        title: 'API access',
+        body: 'Create a key only if you are building bots, dashboards, or internal tooling. Keep secrets private and rotate keys you stop using.',
         meta: 'Phone verification may be required before higher-risk usage is approved.',
         cta: 'Create API key',
       }
     : {
         eyebrow: 'Acceso developer',
-        title: 'Crea una API key para bots o dashboards',
-        body: 'Lee mercados, revisa tu cuenta y solicita acceso de trading desde la página developer. Mantén tus secretos privados y revoca keys que ya no uses.',
+        title: 'Acceso API',
+        body: 'Crea una key solo si vas a construir bots, dashboards o herramientas internas. Mantén tus secretos privados y revoca keys que ya no uses.',
         meta: 'Podemos pedir verificación telefónica antes de aprobar uso de mayor riesgo.',
         cta: 'Crear API key',
       };
@@ -1306,8 +1306,9 @@ function DeveloperApiCard() {
           marginTop: 18,
           padding: '12px 18px',
           borderRadius: 8,
-          background: 'var(--orange)',
-          color: '#090909',
+          background: 'transparent',
+          border: '1px solid rgba(255, 85, 0, 0.5)',
+          color: 'var(--orange)',
           fontFamily: 'var(--font-mono)',
           fontSize: 11,
           fontWeight: 900,
@@ -1398,7 +1399,6 @@ export default function PointsEarn({ onOpenLogin }) {
         <DailyClaimCardWithStatus onClaimed={refresh} />
         <ReferralCard />
         <InstallAppBonusCard onClaimed={refresh} />
-        <DeveloperApiCard />
       </div>
 
       <div style={{ marginTop: 24 }}>
@@ -1407,6 +1407,10 @@ export default function PointsEarn({ onOpenLogin }) {
 
       <div style={{ marginTop: 24 }}>
         <SocialTasksCard />
+      </div>
+
+      <div style={{ marginTop: 24, maxWidth: 520 }}>
+        <DeveloperApiCard />
       </div>
 
       <div style={{

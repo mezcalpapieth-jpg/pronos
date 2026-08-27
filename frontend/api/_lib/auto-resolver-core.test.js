@@ -175,6 +175,68 @@ test('auto resolver core settles Banxico FIX only when the target date is publis
   assert.equal(decision.finalScore, 'banxico-fix · 16.98');
 });
 
+test('auto resolver core sends archive weather model mismatches to manual review', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const hourlyTimes = Array.from({ length: 24 }, (_, hour) =>
+    `2024-01-01T${String(hour).padStart(2, '0')}:00`);
+  const hourlyTemps = hourlyTimes.map((_, hour) => (hour === 14 ? 23.9 : 19 + hour * 0.1));
+  const buckets = [
+    { label: '< 23°C', minC: -999, maxC: 23 },
+    { label: '23°C', minC: 23, maxC: 24 },
+    { label: '24°C', minC: 24, maxC: 25 },
+    { label: '≥ 25°C', minC: 25, maxC: 999 },
+  ];
+
+  globalThis.fetch = async (url) => {
+    if (String(url).includes('archive-api.open-meteo.com')) {
+      return jsonResponse({
+        daily: { temperature_2m_max: [23.9] },
+        hourly: {
+          time: hourlyTimes,
+          temperature_2m: hourlyTemps,
+        },
+      });
+    }
+    return jsonResponse({
+      daily: {
+        temperature_2m_max_best_match: [23.9],
+        temperature_2m_max_gfs_seamless: [24.8],
+        temperature_2m_max_ecmwf_ifs025: [23.3],
+        temperature_2m_max_icon_seamless: [25.8],
+      },
+    });
+  };
+
+  await assert.rejects(
+    () => resolveAutoResolverCandidate({
+      resolver_type: 'weather_api',
+      resolver_config: {
+        source: 'open-meteo',
+        resolutionSource: 'open-meteo-archive',
+        lat: 19.4326,
+        lng: -99.1332,
+        timezone: 'America/Mexico_City',
+        forecastDateYmd: '2024-01-01',
+        manualReviewDeltaC: 1.5,
+        buckets,
+      },
+      outcomes: buckets.map(bucket => bucket.label),
+    }),
+    (err) => {
+      assert.equal(err.message, 'weather_manual_review_required');
+      assert.equal(err.benign, true);
+      assert.equal(err.manualReview, true);
+      assert.equal(err.info.suggestedOutcomeIndex, 1);
+      assert.equal(err.info.weatherAudit.requiresManualReview, true);
+      return true;
+    },
+  );
+});
+
 test('auto resolver core settles Solana token mcap markets from stored CoinGecko snapshots', async (t) => {
   const originalFetch = globalThis.fetch;
   t.after(() => {

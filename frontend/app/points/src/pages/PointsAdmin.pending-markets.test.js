@@ -152,6 +152,17 @@ test('Points admin can pause public cycles and restart them later', () => {
   assert.match(apiSource, /action:\s*'pause'/);
 });
 
+test('Points admin can download tournament standings as a PNG snapshot', () => {
+  assert.match(source, /adminFetchCycleStandingsSnapshot/);
+  assert.match(source, /buildTournamentStandingsSvg/);
+  assert.match(source, /downloadTournamentStandingsPng/);
+  assert.match(source, /Descargar standings PNG/);
+  assert.match(apiSource, /export async function adminFetchCycleStandingsSnapshot/);
+  assert.match(apiSource, /standings_snapshot/);
+  assert.match(source, /image\/png/);
+  assert.match(source, /image\/svg\+xml/);
+});
+
 test('Points markets filter surfaces por resolver count while inside Mercados', () => {
   assert.match(source, /pendingResolveCount=\{adminTaskCounts\.markets\}/);
   assert.match(source, /function MarketsTable\(\{ onQueueChange, pendingResolveCount = 0 \}\)/);

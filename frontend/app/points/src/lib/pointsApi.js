@@ -938,6 +938,14 @@ export async function adminListCycles() {
   return getJson('/api/points/admin/cycles');
 }
 
+export async function adminFetchCycleStandingsSnapshot({ cycleId, limit = 100 } = {}) {
+  const q = new URLSearchParams();
+  q.set('action', 'standings_snapshot');
+  if (cycleId) q.set('cycleId', String(cycleId));
+  if (limit) q.set('limit', String(limit));
+  return getJson(`/api/points/admin/cycles?${q.toString()}`);
+}
+
 export async function adminRolloverCycle(nextCycleLabel) {
   return postJson('/api/points/admin/cycles', {
     action: 'rollover',
