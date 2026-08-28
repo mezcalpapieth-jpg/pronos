@@ -373,7 +373,7 @@ export default async function handler(req, res) {
       const rows = await sql`
         SELECT
           m.id, m.parent_id, m.question, m.category, m.outcomes, m.reserves,
-          m.seed_liquidity, m.start_time, m.end_time, m.status, m.outcome,
+          m.seed_liquidity, m.image_url, m.start_time, m.end_time, m.status, m.outcome,
           m.created_at, m.resolved_at, m.final_score, m.amm_mode, m.chart_style,
           m.resolver_type, m.resolver_config, m.sport, m.league, m.category_tags,
           m.geo_tags, m.topic_tags, m.outcome_images, m.mode, m.chain_id,
@@ -630,6 +630,7 @@ export default async function handler(req, res) {
             ammMode: 'parallel',
             question: r.question,
             category: r.category,
+            imageUrl: r.image_url || null,
             icon: null,
             outcomes,
             chartStyle: r.chart_style || null,
@@ -685,6 +686,7 @@ export default async function handler(req, res) {
           ammMode: 'unified',
           question: r.question,
           category: r.category,
+          imageUrl: r.image_url || null,
           icon: null,
           outcomes,
           chartStyle: r.chart_style || null,

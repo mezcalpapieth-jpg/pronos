@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Finance market">
+  <rect width="160" height="160" rx="28" fill="#151719"/>
+  <path d="M32 113h96" stroke="#2a2a2a" stroke-width="8" stroke-linecap="round"/>
+  <path d="M40 102l22-25 21 15 34-44" fill="none" stroke="#00e87a" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M110 48h18v18" fill="none" stroke="#00e87a" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="38" y="68" width="15" height="36" rx="4" fill="#ff5a00"/>
+  <rect x="66" y="50" width="15" height="54" rx="4" fill="#f5c542"/>
+  <rect x="94" y="79" width="15" height="25" rx="4" fill="#4d8dff"/>
+</svg>

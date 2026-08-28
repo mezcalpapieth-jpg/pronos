@@ -1,6 +1,6 @@
 /**
  * POST /api/points/admin/edit-market
- * Body: { marketId, question?, startTime?, endTime?, category?, outcomeImages?, parallelLegs? }
+ * Body: { marketId, question?, startTime?, endTime?, category?, imageUrl?, outcomeImages?, parallelLegs? }
  *
  * Admin-only. Updates the editable fields of a points market:
  *   - question: the user-facing title
@@ -8,6 +8,7 @@
  *   - end_time: the trading/resolution deadline (ISO-8601 string or
  *               epoch ms)
  *   - category: display bucket (deportes, politica, etc.)
+ *   - image_url: market-level display image URL/path
  *   - outcome_images: outcome-aligned logo/headshot URLs
  *
  * Only non-null/undefined fields are applied. For active parallel parent
@@ -98,6 +99,11 @@ export default async function handler(req, res) {
 
     const body = req.body || {};
     const { marketId, question, startTime, endTime, category, parallelLegs } = body;
+    const hasMarketImagePatch = Object.prototype.hasOwnProperty.call(body, 'imageUrl')
+      || Object.prototype.hasOwnProperty.call(body, 'image_url');
+    const rawMarketImageUrl = hasMarketImagePatch
+      ? (body.imageUrl ?? body.image_url)
+      : null;
     const hasOutcomeImagesPatch = Object.prototype.hasOwnProperty.call(body, 'outcomeImages')
       || Object.prototype.hasOwnProperty.call(body, 'outcome_images');
     const rawOutcomeImages = hasOutcomeImagesPatch
@@ -148,11 +154,19 @@ export default async function handler(req, res) {
       nextCategory = category;
     }
 
+    let nextMarketImageUrl = null;
+    if (hasMarketImagePatch) {
+      nextMarketImageUrl = cleanOptionalImageRef(rawMarketImageUrl);
+      if (rawMarketImageUrl != null && String(rawMarketImageUrl).trim() && !nextMarketImageUrl) {
+        return res.status(400).json({ error: 'invalid_market_image_url' });
+      }
+    }
+
     await ensurePointsSchema(sql);
 
     const existingRows = await sql`
       SELECT id, question, category, start_time, end_time, sport, league,
-             outcomes, outcome_images,
+             outcomes, image_url, outcome_images,
              resolver_type, resolver_config, category_tags, geo_tags, topic_tags,
              status, amm_mode, parent_id, seed_liquidity
       FROM points_markets
@@ -195,6 +209,7 @@ export default async function handler(req, res) {
       && nextStartTime === null
       && nextEndTime === null
       && nextCategory === null
+      && !hasMarketImagePatch
       && !hasOutcomeImagesPatch
       && nextParallelLegs === null
       && !resolverConfigChanged
@@ -243,6 +258,13 @@ export default async function handler(req, res) {
       await sql`
         UPDATE points_markets
         SET category = ${nextCategory}
+        WHERE id = ${mid} OR parent_id = ${mid}
+      `;
+    }
+    if (hasMarketImagePatch) {
+      await sql`
+        UPDATE points_markets
+        SET image_url = ${nextMarketImageUrl}
         WHERE id = ${mid} OR parent_id = ${mid}
       `;
     }
@@ -360,7 +382,7 @@ export default async function handler(req, res) {
     }
 
     const rows = await sql`
-      SELECT id, question, category, start_time, end_time, status, outcome, outcomes, outcome_images, amm_mode
+      SELECT id, question, category, image_url, start_time, end_time, status, outcome, outcomes, outcome_images, amm_mode
       FROM points_markets
       WHERE id = ${mid}
       LIMIT 1
@@ -372,6 +394,7 @@ export default async function handler(req, res) {
         id: r.id,
         question: r.question,
         category: r.category,
+        imageUrl: r.image_url || null,
         startTime: r.start_time,
         endTime: r.end_time,
         status: r.status,

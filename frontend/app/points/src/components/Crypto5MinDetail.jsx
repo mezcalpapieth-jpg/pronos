@@ -32,6 +32,8 @@ import {
 } from '../lib/cryptoMarketHub.js';
 import LivePriceChart from '@app/components/LivePriceChart.jsx';
 import { useLang, useT } from '@app/lib/i18n.js';
+import { pointsPublicAssetSrc } from '@app/lib/publicAssets.js';
+import { marketImageSrc, marketPlaceholderImageSrc } from '../lib/marketImages.js';
 import PointsBuyModal from './PointsBuyModal.jsx';
 import TopHolders from './TopHolders.jsx';
 import PointsActivityTape from './PointsActivityTape.jsx';
@@ -40,6 +42,35 @@ import { fetchTradeTape, publicErrorMessage, redeemWinnings } from '../lib/point
 function fmt(n, d = 2) {
   if (n == null || !Number.isFinite(Number(n))) return '—';
   return Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+
+function CryptoMarketImage({ market }) {
+  const [usePlaceholder, setUsePlaceholder] = useState(false);
+  const fallback = marketPlaceholderImageSrc(market);
+  const src = usePlaceholder ? fallback : marketImageSrc(market);
+  return (
+    <img
+      src={pointsPublicAssetSrc(src)}
+      alt=""
+      aria-hidden="true"
+      style={{
+        width: 58,
+        height: 58,
+        borderRadius: 8,
+        objectFit: 'cover',
+        background: 'var(--surface1)',
+        border: '1px solid var(--border)',
+        flex: '0 0 58px',
+      }}
+      onError={(event) => {
+        if (!usePlaceholder && src !== fallback) {
+          setUsePlaceholder(true);
+          return;
+        }
+        event.currentTarget.style.visibility = 'hidden';
+      }}
+    />
+  );
 }
 
 const SNAPSHOT_STORAGE_PREFIX = 'pronos-crypto-chart:v2:';
@@ -544,23 +575,32 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
             {meta.symbol || '—'} · {windowDurationLabel} · Chainlink
           </div>
         </div>
-        <h1 style={{
-          fontFamily: 'var(--font-display)', fontSize: 'clamp(22px, 4vw, 32px)',
-          color: 'var(--text-primary)', margin: 0, letterSpacing: '0.02em',
-        }}>
-          {t('points.crypto.title', {
-            asset: meta.asset === 'eth' ? 'Ethereum' : 'Bitcoin',
-            duration: windowDurationLabel,
-          })}
-        </h1>
         <div style={{
-          marginTop: 6,
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11,
-          color: 'var(--text-secondary)',
-          letterSpacing: '0.04em',
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 12,
         }}>
-          {selectedTimeLabel} · {selectedMarket.question}
+          <CryptoMarketImage market={selectedMarket} />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <h1 style={{
+              fontFamily: 'var(--font-display)', fontSize: 'clamp(22px, 4vw, 32px)',
+              color: 'var(--text-primary)', margin: 0, letterSpacing: '0.02em',
+            }}>
+              {t('points.crypto.title', {
+                asset: meta.asset === 'eth' ? 'Ethereum' : 'Bitcoin',
+                duration: windowDurationLabel,
+              })}
+            </h1>
+            <div style={{
+              marginTop: 6,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              color: 'var(--text-secondary)',
+              letterSpacing: '0.04em',
+            }}>
+              {selectedTimeLabel} · {selectedMarket.question}
+            </div>
+          </div>
         </div>
       </div>
 

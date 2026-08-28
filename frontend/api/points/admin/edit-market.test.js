@@ -34,6 +34,14 @@ test('active market edit persists outcome image refs', () => {
   assert.match(source, /outcomeImages: r\.outcome_images/);
 });
 
+test('active market edit persists the main market image ref', () => {
+  assert.match(source, /imageUrl\?/);
+  assert.match(source, /hasMarketImagePatch/);
+  assert.match(source, /invalid_market_image_url/);
+  assert.match(source, /SET image_url = \$\{nextMarketImageUrl\}/);
+  assert.match(source, /imageUrl:\s*r\.image_url \|\| null/);
+});
+
 test('active parallel market edits can repair child reserves', () => {
   assert.match(source, /normalizeParallelLegPatches/);
   assert.match(source, /parallelLegs/);

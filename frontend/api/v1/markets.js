@@ -79,7 +79,7 @@ export default async function handler(req, res) {
     const limit = normalizeLimit(req.query?.limit);
     const rows = await getSql()`
       SELECT
-        m.id, m.question, m.category, m.outcomes, m.reserves,
+        m.id, m.question, m.category, m.image_url, m.outcomes, m.reserves,
         m.end_time, m.status, m.outcome, m.created_at, m.resolved_at,
         m.mode, m.amm_mode, m.parent_id, m.leg_label, m.featured,
         m.tournament_featured, m.source, m.source_event_id, m.final_score,

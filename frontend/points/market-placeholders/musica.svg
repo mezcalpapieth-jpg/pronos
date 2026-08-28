@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Entertainment market">
+  <rect width="160" height="160" rx="28" fill="#181617"/>
+  <path d="M60 42v67" stroke="#ff5a00" stroke-width="10" stroke-linecap="round"/>
+  <path d="M60 42l56-12v67" stroke="#f5c542" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="47" cy="112" r="17" fill="#ff5a00"/>
+  <circle cx="103" cy="100" r="17" fill="#f5c542"/>
+  <path d="M35 50h26M99 122h26" stroke="#00e87a" stroke-width="8" stroke-linecap="round"/>
+</svg>

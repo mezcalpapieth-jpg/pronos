@@ -5,6 +5,7 @@ import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useLang } from '@app/lib/i18n.js';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
 import { LeaderboardSkeleton } from '../components/PointsSkeleton.jsx';
+import { pointsPublicAssetSrc } from '@app/lib/publicAssets.js';
 import { isVideoDemoActive, videoDemoPollMs } from '../demo/demoFlag.js';
 import { useFlipRows } from '../demo/useFlipRows.js';
 
@@ -49,6 +50,8 @@ const DEFAULT_RULES = {
   ],
 };
 const MEXICO_CITY_TIME_ZONE = 'America/Mexico_City';
+const LEADERBOARD_DISPLAY_LIMIT = 20;
+const WINNERS_DISPLAY_LIMIT = 5;
 
 function fmt(n, digits = 2) {
   return Number(n || 0).toLocaleString('es-MX', {
@@ -59,6 +62,69 @@ function fmt(n, digits = 2) {
 
 function fmtInteger(n) {
   return Number(n || 0).toLocaleString('es-MX', { maximumFractionDigits: 0 });
+}
+
+function cleanPodiumProfileImageUrl(value) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  if (/^https?:\/\//i.test(text)) return text;
+  if (/^\/[a-z0-9][a-z0-9/_\-.%]*$/i.test(text) && !text.includes('..')) return text;
+  return null;
+}
+
+function PodiumAvatar({ row, rank, medal }) {
+  const [failed, setFailed] = useState(false);
+  const src = failed ? null : cleanPodiumProfileImageUrl(row?.profileImageUrl);
+  const size = rank === 1 ? 58 : 50;
+  return (
+    <span style={{
+      position: 'relative',
+      width: size,
+      height: size,
+      display: 'inline-grid',
+      placeItems: 'center',
+      borderRadius: 999,
+      border: `1px solid ${rank === 1 ? 'rgba(250,204,21,0.52)' : 'rgba(255,255,255,0.18)'}`,
+      background: 'var(--surface1)',
+      overflow: 'visible',
+      boxSizing: 'border-box',
+      boxShadow: rank === 1 ? '0 0 0 4px rgba(250,204,21,0.08)' : 'none',
+    }}>
+      {src ? (
+        <img
+          src={pointsPublicAssetSrc(src)}
+          alt=""
+          aria-hidden="true"
+          style={{
+            width: '100%',
+            height: '100%',
+            borderRadius: 999,
+            objectFit: 'cover',
+            display: 'block',
+          }}
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <span style={{ fontSize: rank === 1 ? 25 : 22, lineHeight: 1 }}>{medal}</span>
+      )}
+      <span style={{
+        position: 'absolute',
+        right: -5,
+        bottom: -5,
+        width: 22,
+        height: 22,
+        borderRadius: 999,
+        display: 'inline-grid',
+        placeItems: 'center',
+        background: 'var(--surface2)',
+        border: '1px solid rgba(255,255,255,0.18)',
+        fontSize: 13,
+        lineHeight: 1,
+      }}>
+        {medal}
+      </span>
+    </span>
+  );
 }
 
 function formatCountdown(totalSeconds, lang) {
@@ -327,6 +393,180 @@ function PrizeRows({ rules }) {
         </div>
       ))}
     </div>
+  );
+}
+
+function WinnerPodium({ cycle, rows, currentUsername, lang = 'es' }) {
+  const winners = (Array.isArray(rows) ? rows : []).slice(0, WINNERS_DISPLAY_LIMIT);
+  if (winners.length === 0) return null;
+
+  const podiumOrder = [winners[1], winners[0], winners[2]].filter(Boolean);
+  const medalByRank = {
+    1: '🥇',
+    2: '🥈',
+    3: '🥉',
+  };
+  const toneByRank = {
+    1: 'rgba(250,204,21,0.22)',
+    2: 'rgba(229,231,235,0.18)',
+    3: 'rgba(251,146,60,0.18)',
+  };
+  const heightByRank = {
+    1: 128,
+    2: 104,
+    3: 92,
+  };
+  const cycleDate = cycle?.closedAt
+    ? new Date(cycle.closedAt).toLocaleDateString(lang === 'en' ? 'en-US' : 'es-MX')
+    : null;
+
+  return (
+    <TournamentCard style={{ marginBottom: 18 }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'baseline',
+        justifyContent: 'space-between',
+        gap: 14,
+        marginBottom: 16,
+      }}>
+        <div>
+          <SectionLabel>{lang === 'en' ? 'Winners' : 'Ganadores'}</SectionLabel>
+          <h2 style={{
+            margin: 0,
+            color: 'var(--text-primary)',
+            fontFamily: 'var(--font-display)',
+            fontSize: 'clamp(22px, 2.6vw, 34px)',
+            lineHeight: 1,
+            textTransform: 'uppercase',
+            letterSpacing: '0.01em',
+          }}>
+            {lang === 'en' ? 'Top 5 final' : 'Top 5 final'}
+          </h2>
+        </div>
+        {(cycle?.label || cycleDate) && (
+          <span style={{
+            color: 'var(--text-muted)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            textAlign: 'right',
+            lineHeight: 1.35,
+          }}>
+            {cycle?.label || ''}
+            {cycleDate && (
+              <span style={{ display: 'block', marginTop: 3 }}>{cycleDate}</span>
+            )}
+          </span>
+        )}
+      </div>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+        gap: 12,
+        alignItems: 'end',
+      }}>
+        {podiumOrder.map((row) => {
+          const rank = Number(row.rank || winners.indexOf(row) + 1);
+          const score = Number(row.score ?? row.cycleDelta ?? row.finalPnl ?? 0);
+          const isMe = row.username === currentUsername;
+          return (
+            <Link
+              key={row.username}
+              to={`/u/${encodeURIComponent(row.username)}`}
+              style={{
+                minHeight: heightByRank[rank] || 88,
+                display: 'grid',
+                alignContent: 'center',
+                justifyItems: 'center',
+                gap: 6,
+                padding: '15px 10px',
+                borderRadius: 8,
+                border: `1px solid ${isMe ? 'rgba(0,232,122,0.44)' : 'rgba(255,255,255,0.11)'}`,
+                background: toneByRank[rank] || 'var(--surface2)',
+                textDecoration: 'none',
+                color: 'var(--text-primary)',
+                boxSizing: 'border-box',
+              }}
+            >
+              <PodiumAvatar row={row} rank={rank} medal={medalByRank[rank] || String(rank)} />
+              <strong style={{
+                maxWidth: '100%',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                fontFamily: 'var(--font-body)',
+                fontSize: 15,
+                color: isMe ? 'var(--green)' : 'var(--text-primary)',
+              }}>
+                {row.username}
+              </strong>
+              <span style={{
+                color: score >= 0 ? 'var(--green)' : 'var(--danger)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+              }}>
+                {score >= 0 ? '+' : ''}{fmt(score)} MXNP
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+
+      {winners.length > 3 && (
+        <div style={{
+          marginTop: 12,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+          gap: 10,
+        }}>
+          {winners.slice(3).map((row) => {
+            const score = Number(row.score ?? row.cycleDelta ?? row.finalPnl ?? 0);
+            const isMe = row.username === currentUsername;
+            return (
+              <Link
+                key={row.username}
+                to={`/u/${encodeURIComponent(row.username)}`}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '34px minmax(0, 1fr) minmax(90px, auto)',
+                  gap: 10,
+                  alignItems: 'center',
+                  padding: '12px',
+                  borderRadius: 8,
+                  border: `1px solid ${isMe ? 'rgba(0,232,122,0.34)' : 'var(--border)'}`,
+                  background: 'var(--surface2)',
+                  color: 'var(--text-primary)',
+                  textDecoration: 'none',
+                }}
+              >
+                <span style={{ color: 'var(--orange)', fontFamily: 'var(--font-display)', fontSize: 18 }}>
+                  {row.rank}.
+                </span>
+                <strong style={{
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  color: isMe ? 'var(--green)' : 'var(--text-primary)',
+                  fontFamily: 'var(--font-body)',
+                  fontSize: 14,
+                }}>
+                  {row.username}
+                </strong>
+                <span style={{
+                  color: score >= 0 ? 'var(--green)' : 'var(--danger)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  textAlign: 'right',
+                }}>
+                  {score >= 0 ? '+' : ''}{fmt(score)}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </TournamentCard>
   );
 }
 
@@ -604,10 +844,19 @@ export default function PointsTournament() {
   }, [showMarketDropTimer, nextMarketDropIso, lang, tick]);
 
   const top = Array.isArray(leaderboard?.top) ? leaderboard.top : [];
+  const leaderboardRows = top.slice(0, LEADERBOARD_DISPLAY_LIMIT);
   const cycles = Array.isArray(history) ? history : [];
   const status = cycle?.status || 'scheduled';
   const me = leaderboard?.me || null;
   const qualifiedCount = top.filter(row => row.qualified).length;
+  const latestHistoryCycle = cycles.find(row => Array.isArray(row?.top) && row.top.length > 0);
+  const winnersCycle = status === 'closed' && leaderboardRows.length > 0
+    ? {
+        label: cycle?.label,
+        closedAt: cycle?.closedAt || cycle?.endsAt,
+        top: leaderboardRows,
+      }
+    : (status === 'active' || status === 'closing') ? null : latestHistoryCycle;
   const prizeRows = Array.isArray(rules.prizes) && rules.prizes.length > 0
     ? rules.prizes
     : DEFAULT_RULES.prizes;
@@ -615,7 +864,7 @@ export default function PointsTournament() {
 
   // Slides rows to their new rank instead of snapping. Demo-only.
   const leaderboardRef = useRef(null);
-  useFlipRows(leaderboardRef, top.map(row => row.username).join(','), isVideoDemoActive());
+  useFlipRows(leaderboardRef, leaderboardRows.map(row => row.username).join(','), isVideoDemoActive());
 
   return (
     <main style={{
@@ -700,6 +949,15 @@ export default function PointsTournament() {
         </TournamentCard>
       </div>
 
+      {winnersCycle && (
+        <WinnerPodium
+          cycle={winnersCycle}
+          rows={winnersCycle.top}
+          currentUsername={user?.username}
+          lang={lang}
+        />
+      )}
+
       <div style={{
         display: 'grid',
         gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 0.92fr) minmax(0, 1.08fr)',
@@ -721,10 +979,10 @@ export default function PointsTournament() {
             <p style={emptyText}>{lang === 'en' ? 'No participants yet.' : 'Aún no hay participantes.'}</p>
           ) : (
             <div ref={leaderboardRef}>
-              {top.map(row => (
+              {leaderboardRows.map(row => (
                 <LeaderboardRow key={row.username} row={row} currentUsername={user?.username} rules={rules} compact={isMobile} lang={lang} />
               ))}
-              {me && me.rank > top.length && (
+              {me && me.rank > leaderboardRows.length && (
                 <div style={{
                   marginTop: 12,
                   paddingTop: 12,
@@ -808,7 +1066,7 @@ export default function PointsTournament() {
                     </span>
                   )}
                 </div>
-                {(cycleRow.top || []).slice(0, 10).map(row => (
+                {(cycleRow.top || []).slice(0, LEADERBOARD_DISPLAY_LIMIT).map(row => (
                   <LeaderboardRow key={`${cycleRow.id}-${row.username}`} row={row} currentUsername={user?.username} rules={rules} compact={isMobile} lang={lang} />
                 ))}
               </div>

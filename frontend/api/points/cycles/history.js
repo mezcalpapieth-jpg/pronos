@@ -1,7 +1,7 @@
 /**
  * GET /api/points/cycles/history?limit=10
  *
- * Returns closed cycles with their top-10 snapshot. Drives a "winners of
+ * Returns closed cycles with their top-20 snapshot. Drives a "winners of
  * past cycles" strip on the home page and inside the admin panel.
  *
  * Response:
@@ -23,6 +23,7 @@ import { cachedJson, createApiTimer, setCacheHeaders } from '../../_lib/api-perf
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
+const CYCLE_HISTORY_LEADERBOARD_LIMIT = 20;
 
 export default async function handler(req, res) {
   const timer = createApiTimer(res, 'points/cycles/history');
@@ -35,7 +36,7 @@ export default async function handler(req, res) {
     const limit = Number.isInteger(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 50) : 10;
     setCacheHeaders(res, { scope: 'public', maxAge: 30, sMaxage: 60, staleWhileRevalidate: 300 });
 
-    const { value: payload, hit } = await cachedJson(`points:cycles:history:v2:${limit}`, 60_000, async () => {
+    const { value: payload, hit } = await cachedJson(`points:cycles:history:v4:${limit}`, 60_000, async () => {
       await timer.time('schema', () => ensurePointsSchema(schemaSql));
       const cycles = await timer.time('db_cycles', () => sql`
         SELECT id, label, started_at, ends_at, closed_at
@@ -51,14 +52,15 @@ export default async function handler(req, res) {
       // N per cycle without an extra round-trip per row.
       const ids = cycles.map(c => c.id);
       const snaps = await timer.time('db_snapshots', () => sql`
-        SELECT cycle_id, username, final_balance, final_pnl, rank,
-               tournament_score, market_pnl, current_position_value,
-               inactivity_penalty, inactive_days, active_days,
-               qualifying_markets, qualified
-        FROM points_cycle_snapshots
-        WHERE cycle_id = ANY(${ids}::int[])
-          AND rank <= 10
-        ORDER BY cycle_id ASC, rank ASC
+        SELECT s.cycle_id, s.username, u.profile_image_url, s.final_balance, s.final_pnl, s.rank,
+               s.tournament_score, s.market_pnl, s.current_position_value,
+               s.inactivity_penalty, s.inactive_days, s.active_days,
+               s.qualifying_markets, s.qualified
+        FROM points_cycle_snapshots s
+        LEFT JOIN points_users u ON LOWER(u.username) = LOWER(s.username)
+        WHERE s.cycle_id = ANY(${ids}::int[])
+          AND s.rank <= ${CYCLE_HISTORY_LEADERBOARD_LIMIT}
+        ORDER BY s.cycle_id ASC, s.rank ASC
       `);
 
       const byCycle = new Map();
@@ -67,6 +69,7 @@ export default async function handler(req, res) {
         arr.push({
           rank: s.rank,
           username: s.username,
+          profileImageUrl: s.profile_image_url || null,
           finalBalance: Number(s.final_balance),
           finalPnl: Number(s.final_pnl),
           score: Number(s.tournament_score ?? s.final_pnl ?? 0),

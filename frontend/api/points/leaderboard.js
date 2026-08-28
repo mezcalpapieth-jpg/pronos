@@ -24,6 +24,7 @@ import { buildWalletLeaderboardRows } from '../_lib/points-wallet-leaderboard.js
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
+const PUBLIC_LEADERBOARD_LIMIT = 20;
 
 function findByUsername(rows, username) {
   const key = String(username || '').toLowerCase();
@@ -34,6 +35,7 @@ function emptyTournamentRow(username) {
   return {
     rank: null,
     username,
+    profileImageUrl: null,
     balance: 0,
     score: 0,
     cycleDelta: 0,
@@ -91,7 +93,7 @@ export default async function handler(req, res) {
   try {
     setCacheHeaders(res, { scope: 'private', maxAge: 15, staleWhileRevalidate: 60 });
 
-    const { value: ranked, hit } = await cachedJson('points:leaderboard:ranked:v6', 15_000, async () => {
+    const { value: ranked, hit } = await cachedJson('points:leaderboard:ranked:v7', 15_000, async () => {
       await timer.time('schema', () => ensurePointsSchema(schemaSql));
       return await timer.time('db_leaderboard', async () => {
         const frozen = await readFrozenLeaderboardRowsForActiveCutoff(sql, { limit: 5000 });
@@ -105,7 +107,7 @@ export default async function handler(req, res) {
       return await timer.time('db_wallet_leaderboard', () => buildWalletLeaderboardRows(sql, { limit: 5000 }));
     });
 
-    const top = ranked.slice(0, 10);
+    const top = ranked.slice(0, PUBLIC_LEADERBOARD_LIMIT);
     const walletTop = walletRanked.slice(0, 10);
     const pnlRanked = rankPnlLeaderboardRows(ranked);
     const pnlTop = pnlRanked.slice(0, 10);

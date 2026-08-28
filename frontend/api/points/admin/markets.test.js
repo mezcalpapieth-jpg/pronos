@@ -29,6 +29,8 @@ test('active admin markets sort live rows before stale active rows', () => {
   assert.match(source, /CASE WHEN \$\{filter\}::text = 'active' THEN m\.end_time END ASC NULLS LAST/);
 });
 
-test('admin markets includes editable outcome image metadata', () => {
+test('admin markets includes editable market and outcome image metadata', () => {
+  assert.match(source, /m\.image_url/);
+  assert.match(source, /imageUrl:\s*r\.image_url \|\| null/);
   assert.match(source, /outcomeImages:\s*parseJsonb\(r\.outcome_images,\s*null\)/);
 });

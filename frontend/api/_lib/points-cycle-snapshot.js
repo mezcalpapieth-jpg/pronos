@@ -23,6 +23,7 @@ function snapshotRow(row) {
   return {
     rank: Number(row.rank || 0) || null,
     username: row.username,
+    profileImageUrl: row.profile_image_url || null,
     createdAt: null,
     balance: roundTournamentAmount(row.final_balance),
     finalBalance: roundTournamentAmount(row.final_balance),
@@ -70,14 +71,15 @@ export async function readCycleSnapshotRows(db, { cycleId, limit = DEFAULT_CYCLE
   const id = Number(cycleId);
   if (!Number.isInteger(id) || id <= 0) return [];
   const rows = await queryRows(db, `
-    SELECT username, final_balance, final_pnl, rank,
-           tournament_score, market_pnl, current_position_value,
-           hold_bonus, liquidity_reward, parlay_pnl, parlay_tickets, parlay_wins,
-           inactivity_penalty, inactive_days, active_days,
-           qualifying_markets, qualified
-    FROM points_cycle_snapshots
-    WHERE cycle_id = $1
-    ORDER BY rank ASC, username ASC
+    SELECT s.username, u.profile_image_url, s.final_balance, s.final_pnl, s.rank,
+           s.tournament_score, s.market_pnl, s.current_position_value,
+           s.hold_bonus, s.liquidity_reward, s.parlay_pnl, s.parlay_tickets, s.parlay_wins,
+           s.inactivity_penalty, s.inactive_days, s.active_days,
+           s.qualifying_markets, s.qualified
+    FROM points_cycle_snapshots s
+    LEFT JOIN points_users u ON LOWER(u.username) = LOWER(s.username)
+    WHERE s.cycle_id = $1
+    ORDER BY s.rank ASC, s.username ASC
     LIMIT $2
   `, [id, Math.max(1, Number(limit) || DEFAULT_CYCLE_SNAPSHOT_LIMIT)]);
   return rows.map(snapshotRow);

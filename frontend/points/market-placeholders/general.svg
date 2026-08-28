@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="General market">
+  <rect width="160" height="160" rx="28" fill="#171717"/>
+  <path d="M32 105h96" stroke="#ff5a00" stroke-width="10" stroke-linecap="round"/>
+  <path d="M40 78h80" stroke="#00e87a" stroke-width="10" stroke-linecap="round"/>
+  <path d="M52 51h56" stroke="#f5c542" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="38" cy="105" r="14" fill="#ff5a00"/>
+  <circle cx="104" cy="78" r="14" fill="#00e87a"/>
+  <circle cx="68" cy="51" r="14" fill="#f5c542"/>
+</svg>

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Airport market">
+  <rect width="160" height="160" rx="28" fill="#151719"/>
+  <path d="M28 92l104-34 7 13-43 31 20 28-12 5-32-22-32 23-9-8 26-29-28 7-1-14z" fill="#e8e8e8"/>
+  <path d="M47 48h66" stroke="#00e87a" stroke-width="8" stroke-linecap="round"/>
+  <path d="M46 116h76" stroke="#ff5a00" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="119" cy="43" r="10" fill="#f5c542"/>
+</svg>

@@ -22,5 +22,13 @@ test('points admin direct create keeps parallel leg markets free of duplicate so
   assert.match(source, /resolverConfigJson/);
   assert.match(source, /display metadata; legs carry/);
   assert.match(source, /parent_id,\s*leg_label/);
-  assert.match(source, /\(question,\s*category,\s*icon,\s*outcomes,\s*reserves/);
+  assert.match(source, /\(question,\s*category,\s*icon,\s*image_url,\s*outcomes,\s*reserves/);
+});
+
+test('points admin direct create stores market display image refs', () => {
+  assert.match(source, /imageUrl\?/);
+  assert.match(source, /cleanOptionalMarketImageRef/);
+  assert.match(source, /invalid_market_image_url/);
+  assert.match(source, /image_url/);
+  assert.match(source, /imageUrl:\s*marketImageUrl/);
 });

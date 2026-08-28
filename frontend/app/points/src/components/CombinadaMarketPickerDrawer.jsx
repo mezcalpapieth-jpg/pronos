@@ -2,12 +2,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchMarkets } from '../lib/pointsApi.js';
 import { parlayLegGroupId } from '../lib/combinadaSlip.js';
+import { marketImageSrc, marketPlaceholderImageSrc } from '../lib/marketImages.js';
+import { pointsPublicAssetSrc } from '@app/lib/publicAssets.js';
 import CombinadaSlipPanel from './CombinadaSlipPanel.jsx';
 
 function outcomeLabels(market) {
   return Array.isArray(market?.outcomes) && market.outcomes.length > 0
     ? market.outcomes
-    : ['Si', 'No'];
+    : ['Sí', 'No'];
 }
 
 function outcomePrices(market, count) {
@@ -20,6 +22,35 @@ function formatPercent(price) {
   const n = Number(price);
   if (!Number.isFinite(n)) return '--';
   return `${Math.round(Math.max(0, Math.min(1, n)) * 100)}%`;
+}
+
+function DrawerMarketThumbnail({ market }) {
+  const [usePlaceholder, setUsePlaceholder] = useState(false);
+  const fallback = marketPlaceholderImageSrc(market);
+  const src = usePlaceholder ? fallback : marketImageSrc(market);
+  return (
+    <img
+      src={pointsPublicAssetSrc(src)}
+      alt=""
+      aria-hidden="true"
+      style={{
+        width: 42,
+        height: 42,
+        borderRadius: 8,
+        objectFit: 'cover',
+        background: 'var(--surface1)',
+        border: '1px solid var(--border)',
+        flex: '0 0 42px',
+      }}
+      onError={(event) => {
+        if (!usePlaceholder && src !== fallback) {
+          setUsePlaceholder(true);
+          return;
+        }
+        event.currentTarget.style.visibility = 'hidden';
+      }}
+    />
+  );
 }
 
 function activeMarket(market, now = Date.now()) {
@@ -52,7 +83,7 @@ function parallelChoiceGroups(market, outcomes, prices) {
           question: `${market.question} - ${label}`,
         },
         options: [
-          { outcomeIndex: 0, displayLabel: 'Si', outcomeLabel: `${label} - Si`, price: yesPrice },
+          { outcomeIndex: 0, displayLabel: 'Sí', outcomeLabel: `${label} - Sí`, price: yesPrice },
           { outcomeIndex: 1, displayLabel: 'No', outcomeLabel: `${label} - No`, price: 1 - yesPrice },
         ],
       };
@@ -98,25 +129,25 @@ function drawerCopy(lang) {
   return lang === 'en'
     ? {
         title: 'Combo slip',
-        eyebrow: 'Tournament markets',
+        eyebrow: 'Available markets',
         search: 'Search market',
         close: 'Close',
         loading: 'Loading markets...',
-        empty: 'No tournament markets available.',
+        empty: 'No active markets available.',
         add: 'Add',
         selected: 'Selected',
-        loadError: 'Could not load tournament markets.',
+        loadError: 'Could not load markets.',
       }
     : {
         title: 'Combinada',
-        eyebrow: 'Mercados del torneo',
+        eyebrow: 'Mercados disponibles',
         search: 'Buscar mercado',
         close: 'Cerrar',
         loading: 'Cargando mercados...',
-        empty: 'Sin mercados del torneo disponibles.',
+        empty: 'Sin mercados activos disponibles.',
         add: 'Agregar',
         selected: 'Seleccionado',
-        loadError: 'No pudimos cargar los mercados del torneo.',
+        loadError: 'No pudimos cargar los mercados.',
       };
 }
 
@@ -148,7 +179,7 @@ export default function CombinadaMarketPickerDrawer({
     let cancelled = false;
     setLoading(true);
     setLoadError(false);
-    fetchMarkets({ status: 'active', featured: 'tournament', limit: 240 })
+    fetchMarkets({ status: 'active', featured: 'all', limit: 240 })
       .then(rows => {
         if (cancelled) return;
         setMarkets(Array.isArray(rows) ? rows : []);
@@ -174,7 +205,6 @@ export default function CombinadaMarketPickerDrawer({
   const visibleMarkets = useMemo(() => {
     const now = Date.now();
     return (markets || [])
-      .filter(market => market?.tournamentFeatured === true)
       .filter(market => activeMarket(market, now))
       .filter(market => marketMatchesQuery(market, query))
       .filter(market => choiceGroupsForMarket(market).length > 0)
@@ -330,14 +360,22 @@ export default function CombinadaMarketPickerDrawer({
                   }}
                 >
                   <div style={{
-                    fontFamily: 'var(--font-body)',
-                    fontSize: 13,
-                    fontWeight: 700,
-                    color: 'var(--text-primary)',
-                    lineHeight: 1.35,
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 10,
                     marginBottom: 10,
                   }}>
-                    {market.question}
+                    <DrawerMarketThumbnail market={market} />
+                    <div style={{
+                      minWidth: 0,
+                      fontFamily: 'var(--font-body)',
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: 'var(--text-primary)',
+                      lineHeight: 1.35,
+                    }}>
+                      {market.question}
+                    </div>
                   </div>
                   <div style={{ display: 'grid', gap: 8 }}>
                     {groups.map((group) => {

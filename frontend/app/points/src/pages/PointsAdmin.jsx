@@ -14,6 +14,12 @@ import { useNavigate } from 'react-router-dom';
 import DeckAdminPanel from '../components/DeckAdminPanel.jsx';
 import AdminInterestPanel from '@app/components/AdminInterestPanel.jsx';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
+import { pointsPublicAssetSrc } from '@app/lib/publicAssets.js';
+import {
+  MARKET_CATEGORY_IMAGE_PLACEHOLDERS,
+  marketImageSrc,
+  marketPlaceholderImageSrc,
+} from '../lib/marketImages.js';
 import {
   getJson,
   postJson,
@@ -254,6 +260,118 @@ function displayLiquiditiesForPendingRow(row, seedOverride = null, outcomesOverr
   if (!probabilities || probabilities.length !== seeds.length) return seeds;
   const avgSeed = seeds.reduce((sum, value) => sum + Number(value || 0), 0) / seeds.length;
   return probabilities.map(probability => clampPendingLiquidity(avgSeed * seeds.length * probability));
+}
+
+function MarketImageField({ value, onChange, category, topic, question, label = 'Imagen del mercado' }) {
+  const [previewFailed, setPreviewFailed] = useState(false);
+  useEffect(() => {
+    setPreviewFailed(false);
+  }, [value, category, topic, question]);
+
+  const previewMarket = {
+    imageUrl: value,
+    category,
+    question,
+    topicTags: topic ? [topic] : [],
+  };
+  const fallback = marketPlaceholderImageSrc(previewMarket);
+  const previewSrc = previewFailed ? fallback : marketImageSrc(previewMarket);
+  const placeholderOptions = CATEGORIES
+    .filter(c => MARKET_CATEGORY_IMAGE_PLACEHOLDERS[c.key])
+    .map(c => ({ ...c, src: MARKET_CATEGORY_IMAGE_PLACEHOLDERS[c.key] }));
+
+  return (
+    <Field label={label}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '72px minmax(0, 1fr)',
+        gap: 12,
+        alignItems: 'start',
+      }}>
+        <img
+          src={pointsPublicAssetSrc(previewSrc)}
+          alt=""
+          aria-hidden="true"
+          style={{
+            width: 72,
+            height: 72,
+            borderRadius: 8,
+            objectFit: 'cover',
+            background: 'var(--surface2)',
+            border: '1px solid var(--border)',
+          }}
+          onError={(event) => {
+            if (!previewFailed && previewSrc !== fallback) {
+              setPreviewFailed(true);
+              return;
+            }
+            event.currentTarget.style.visibility = 'hidden';
+          }}
+        />
+        <div style={{ minWidth: 0 }}>
+          <input
+            type="text"
+            value={value || ''}
+            onChange={e => onChange?.(e.target.value)}
+            placeholder="https://... o /market-placeholders/deportes.svg"
+            style={{ ...inputStyle, marginBottom: 8 }}
+          />
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            <button
+              type="button"
+              onClick={() => onChange?.('')}
+              style={{
+                minHeight: 28,
+                padding: '0 9px',
+                borderRadius: 8,
+                border: `1px solid ${value ? 'var(--border)' : 'rgba(0,232,122,0.42)'}`,
+                background: value ? 'transparent' : 'rgba(0,232,122,0.1)',
+                color: value ? 'var(--text-muted)' : 'var(--green)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 9,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                cursor: 'pointer',
+              }}
+            >
+              Auto
+            </button>
+            {placeholderOptions.map(option => (
+              <button
+                key={option.key}
+                type="button"
+                onClick={() => onChange?.(option.src)}
+                style={{
+                  minHeight: 28,
+                  padding: '0 9px',
+                  borderRadius: 8,
+                  border: `1px solid ${value === option.src ? 'rgba(255,85,0,0.44)' : 'var(--border)'}`,
+                  background: value === option.src ? 'rgba(255,85,0,0.12)' : 'transparent',
+                  color: value === option.src ? 'var(--orange)' : 'var(--text-muted)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 9,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  cursor: 'pointer',
+                }}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <p style={{
+            margin: '7px 0 0',
+            color: 'var(--text-muted)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            letterSpacing: '0.04em',
+          }}>
+            Vacío usa el placeholder de la categoría.
+          </p>
+        </div>
+      </div>
+    </Field>
+  );
 }
 
 function reserveLiquiditiesFromDisplay(displayLiquidities, {
@@ -1761,6 +1879,7 @@ function CreateMarketForm({ prefill }) {
     category: prefill?.category || 'deportes',
     geo: prefill?.geo || 'auto',
     topic: prefill?.topic || (prefill?.category === 'musica' ? 'musica' : 'general'),
+    imageUrl: '',
     endDate: '',   // dd/mm/yyyy (text)
     endHour: '',   // 0-23 (string, validated on submit)
     endMinute: '', // 0-59 (string, validated on submit)
@@ -1873,6 +1992,7 @@ function CreateMarketForm({ prefill }) {
         geo: form.geo === 'auto' ? null : form.geo,
         topicTags: (form.category === 'mexico' || form.category === 'musica') ? [form.topic] : null,
         icon: null,
+        imageUrl: form.imageUrl.trim() || null,
         endTime: endIso,
         outcomes: cleaned,
         seedLiquidity: cleanedLiquidities[0] || 500,
@@ -1890,6 +2010,7 @@ function CreateMarketForm({ prefill }) {
       setForm(f => ({
         ...f,
         question: '',
+        imageUrl: '',
         endDate: '',
         endHour: '',
         endMinute: '',
@@ -2010,6 +2131,14 @@ function CreateMarketForm({ prefill }) {
           </select>
         </Field>
       )}
+
+      <MarketImageField
+        value={form.imageUrl}
+        onChange={value => setForm(f => ({ ...f, imageUrl: value }))}
+        category={form.category}
+        topic={form.topic}
+        question={form.question}
+      />
 
       <Field label="Fecha de cierre">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 8px 70px', gap: 8, alignItems: 'center' }}>
@@ -3599,8 +3728,10 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
   const initialOutcomeImages = Array.isArray(market.outcomeImages) && market.outcomeImages.length === editOutcomes.length
     ? market.outcomeImages.map(url => url || '')
     : editOutcomes.map(() => '');
+  const initialMarketImageUrl = market.imageUrl || '';
   const [question, setQuestion] = useState(market.question || '');
   const [category, setCategory] = useState(market.category || 'general');
+  const [imageUrl, setImageUrl] = useState(initialMarketImageUrl);
   const [outcomeImages, setOutcomeImages] = useState(initialOutcomeImages);
   const initialParallelReserveRows = normalizeParallelReserveRows(market);
   const [parallelReserveRows, setParallelReserveRows] = useState(initialParallelReserveRows);
@@ -3697,6 +3828,11 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
       return;
     }
 
+    const cleanedMarketImageUrl = String(imageUrl || '').trim();
+    const imageUrlPatch = cleanedMarketImageUrl !== String(initialMarketImageUrl || '').trim()
+      ? cleanedMarketImageUrl
+      : undefined;
+
     let outcomeImagePatch;
     if (canEditOutcomeImages) {
       const cleanedImages = editOutcomes.map((_, i) => String(outcomeImages[i] || '').trim());
@@ -3740,6 +3876,7 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
         startTime: nextStart.value,
         endTime: nextEnd.value,
         category: category !== initialCategory ? category : undefined,
+        imageUrl: imageUrlPatch,
         outcomeImages: outcomeImagePatch,
         parallelLegs: parallelLegPatches,
       });
@@ -3851,6 +3988,13 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
             <option key={c.key} value={c.key}>{c.label}</option>
           ))}
         </select>
+
+        <MarketImageField
+          value={imageUrl}
+          onChange={setImageUrl}
+          category={category}
+          question={question}
+        />
 
         {canEditOutcomeImages && (
           <div style={{

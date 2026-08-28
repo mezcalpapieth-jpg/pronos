@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Politics market">
+  <rect width="160" height="160" rx="28" fill="#171717"/>
+  <path d="M36 124h88" stroke="#ff5a00" stroke-width="10" stroke-linecap="round"/>
+  <path d="M47 70h66v44H47z" fill="#222" stroke="#f5c542" stroke-width="8"/>
+  <path d="M80 37l47 26H33l47-26z" fill="#00e87a"/>
+  <path d="M55 70v43M80 70v43M105 70v43" stroke="#e8e8e8" stroke-width="8" stroke-linecap="round"/>
+</svg>

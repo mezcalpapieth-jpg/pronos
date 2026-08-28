@@ -152,7 +152,7 @@ export default async function handler(req, res) {
   const tournamentOnly = !category && featuredParam === 'tournament';
   const featuredOnly = !category && !tournamentOnly && featuredParam !== 'all';
   const cacheKey = [
-    'points:markets:v7',
+    'points:markets:v8',
     status,
     category || 'all',
     modeFilter || 'all-modes',
@@ -178,6 +178,7 @@ export default async function handler(req, res) {
       const rows = await timer.time('db_markets', () => sql`
         SELECT
           m.id, m.question, m.category, m.outcomes, m.reserves, m.seed_liquidity,
+          m.image_url,
           m.end_time, m.status, m.outcome, m.created_at, m.resolved_at, m.mode,
           m.chain_id, m.chain_market_id, m.chain_address, m.category_tags,
           m.geo_tags, m.topic_tags, m.amm_mode, m.start_time, m.sport, m.league,
@@ -316,6 +317,7 @@ export default async function handler(req, res) {
           ammMode: 'parallel',
           question: r.question,
           category: r.category,
+          imageUrl: r.image_url || null,
           icon: null,
           outcomes,
           reserves: [],   // parent has no pool
@@ -392,6 +394,7 @@ export default async function handler(req, res) {
         ammMode: 'unified',
         question: r.question,
         category: r.category,
+        imageUrl: r.image_url || null,
         icon: null,
         outcomes,
         reserves,

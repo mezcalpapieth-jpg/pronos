@@ -38,10 +38,6 @@ function parseJson(value, fallback) {
   }
 }
 
-function dbBool(value) {
-  return value === true || value === 't' || value === 'true' || value === 1 || value === '1';
-}
-
 function round6(value) {
   const n = Number(value);
   return Number.isFinite(n) ? Math.round(n * 1_000_000) / 1_000_000 : 0;
@@ -143,28 +139,34 @@ async function readParlayMarkets(db, marketIds, { lock = false } = {}) {
   `, [marketIds]);
 }
 
+function activeScoringWindow(scoringWindow, now) {
+  if (!scoringWindow?.id) return null;
+  const nowMs = (now instanceof Date ? now : new Date(now)).getTime();
+  const startsAtMs = new Date(scoringWindow.startsAt).getTime();
+  const cutoffMs = new Date(scoringWindow.rankingCutoffAt).getTime();
+  if (!Number.isFinite(nowMs) || !Number.isFinite(startsAtMs) || !Number.isFinite(cutoffMs)) return null;
+  return nowMs >= startsAtMs && nowMs < cutoffMs ? scoringWindow : null;
+}
+
 export async function readParlayQuote(db, { legs, stake, now = new Date(), lockMarkets = false } = {}) {
   const normalizedLegs = normalizeParlayLegs(legs);
   const stakeAmount = normalizeStake(stake);
-  const scoringWindow = await resolveTournamentScoringWindow(db, { now });
-  if (!scoringWindow?.id) {
-    throw apiError('tournament_not_active', 400);
-  }
+  const scoringWindow = activeScoringWindow(
+    await resolveTournamentScoringWindow(db, { now }),
+    now,
+  );
 
   const marketIds = [...new Set(normalizedLegs.map(leg => leg.marketId))].sort((a, b) => a - b);
   const markets = await readParlayMarkets(db, marketIds, { lock: lockMarkets });
   const marketById = new Map(markets.map(market => [Number(market.id), market]));
   const seenGroups = new Set();
-  const cutoffMs = new Date(scoringWindow.rankingCutoffAt).getTime();
+  const cutoffMs = scoringWindow ? new Date(scoringWindow.rankingCutoffAt).getTime() : NaN;
   const nowMs = (now instanceof Date ? now : new Date(now)).getTime();
 
   const pricedLegs = normalizedLegs.map((leg) => {
     const market = marketById.get(leg.marketId);
     if (!market) throw apiError('market_not_found', 404, { marketId: leg.marketId });
     if (market.status !== 'active') throw apiError('market_not_active', 400, { marketId: leg.marketId });
-    if (!dbBool(market.tournament_featured)) {
-      throw apiError('market_not_in_tournament', 400, { marketId: leg.marketId });
-    }
 
     const groupId = Number(market.exposure_group_id || market.id);
     if (seenGroups.has(groupId)) {
@@ -176,7 +178,7 @@ export async function readParlayQuote(db, { legs, stake, now = new Date(), lockM
     if (Number.isFinite(endMs) && endMs <= nowMs) {
       throw apiError('market_expired', 400, { marketId: leg.marketId });
     }
-    if (Number.isFinite(endMs) && Number.isFinite(cutoffMs) && endMs > cutoffMs) {
+    if (scoringWindow && Number.isFinite(endMs) && Number.isFinite(cutoffMs) && endMs > cutoffMs) {
       throw apiError('market_after_tournament_cutoff', 400, { marketId: leg.marketId });
     }
 
@@ -205,7 +207,7 @@ export async function readParlayQuote(db, { legs, stake, now = new Date(), lockM
   const potentialPayout = round6(stakeAmount * math.multiplier);
   return {
     ok: true,
-    cycleId: scoringWindow.id,
+    cycleId: scoringWindow?.id || null,
     stake: stakeAmount,
     multiplier: math.multiplier,
     fairMultiplier: math.fairMultiplier,

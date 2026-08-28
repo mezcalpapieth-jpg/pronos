@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Weather market">
+  <rect width="160" height="160" rx="28" fill="#14191c"/>
+  <circle cx="57" cy="57" r="22" fill="#f5c542"/>
+  <path d="M52 108h55c14 0 24-8 24-20 0-11-9-20-21-20-5-16-19-26-36-26-22 0-39 17-39 39 0 3 0 5 1 8-11 2-19 9-19 19 0 12 10 20 35 20z" fill="#e8e8e8"/>
+  <path d="M55 121l-8 13M83 121l-8 13M111 121l-8 13" stroke="#4d8dff" stroke-width="8" stroke-linecap="round"/>
+</svg>

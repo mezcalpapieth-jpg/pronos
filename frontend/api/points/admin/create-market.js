@@ -10,7 +10,7 @@
  *   chartStyle?: 'auto' | 'single' | 'rivals'  // default 'auto'; only
  *     meaningful at N=2 — 'single' forces one line, 'rivals' forces two
  *     on a shared axis, 'auto' detects from the outcome labels
- *   sport?, league?, outcomeImages?, geo?,
+ *   sport?, league?, imageUrl?, outcomeImages?, geo?,
  *   resolverType?, resolverConfig?, resolutionSource?, resolutionCriteria?,
  *   source?, sourceEventId?
  * }
@@ -78,6 +78,14 @@ function trimOrNull(value, maxLen = 500) {
   const trimmed = value.trim();
   if (!trimmed) return null;
   return trimmed.slice(0, maxLen);
+}
+
+function cleanOptionalMarketImageRef(value) {
+  const text = trimOrNull(value, 1000);
+  if (!text) return null;
+  if (/^https?:\/\//i.test(text)) return text;
+  if (/^\/[a-z0-9][a-z0-9/_\-.%]*$/i.test(text) && !text.includes('..')) return text;
+  return null;
 }
 
 function normalizeUrlArray(value) {
@@ -193,7 +201,7 @@ export default async function handler(req, res) {
   const {
     question, category, endTime, outcomes, seedLiquidity, seedLiquidities, ammMode,
     featured, chartStyle,
-    sport, league, outcomeImages, geo, topicTags,
+    sport, league, imageUrl, image_url: imageUrlSnake, outcomeImages, geo, topicTags,
     resolverType, resolverConfig, resolutionSource, resolutionCriteria, source, sourceEventId,
   } = req.body || {};
   const mode = ammMode === 'parallel' ? 'parallel' : 'unified';
@@ -210,6 +218,11 @@ export default async function handler(req, res) {
   const sportVal = typeof sport === 'string' && sport.trim() ? sport.trim().toLowerCase() : null;
   const leagueVal = typeof league === 'string' && league.trim() ? league.trim().toLowerCase() : null;
   const geoVal = typeof geo === 'string' && geo.trim() ? geo.trim().toLowerCase() : null;
+  const rawMarketImageUrl = imageUrl ?? imageUrlSnake;
+  const marketImageUrl = cleanOptionalMarketImageRef(rawMarketImageUrl);
+  if (rawMarketImageUrl != null && String(rawMarketImageUrl).trim() && !marketImageUrl) {
+    return res.status(400).json({ error: 'invalid_market_image_url' });
+  }
   // outcomeImages must be an array of strings (URLs) the same length as
   // `outcomes`. Anything else is rejected to avoid index-misaligned crests.
   let outcomeImagesJson = null;
@@ -340,17 +353,17 @@ export default async function handler(req, res) {
         const r = await client.query(
           `INSERT INTO points_markets
              (source, source_event_id, resolver_type, resolver_config,
-              question, category, icon, outcomes, reserves, seed_liquidity, seed_liquidities,
+              question, category, icon, image_url, outcomes, reserves, seed_liquidity, seed_liquidities,
               end_time, status, created_by, amm_mode, featured,
               mode, chain_id, chain_market_id, chain_address,
               sport, league, outcome_images, category_tags, geo_tags, topic_tags,
               chart_style)
            VALUES ($1, $2, $3, $4::jsonb,
-                   $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11::jsonb,
-                   $12, 'active', $13, 'unified', $14,
-                   $15, $16, $17, $18,
-                   $19, $20, $21::jsonb, $22::jsonb, $23::jsonb, $24::jsonb,
-                   $25)
+                   $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11, $12::jsonb,
+                   $13, 'active', $14, 'unified', $15,
+                   $16, $17, $18, $19,
+                   $20, $21, $22::jsonb, $23::jsonb, $24::jsonb, $25::jsonb,
+                   $26)
            RETURNING id`,
           [
             sourceVal,
@@ -360,6 +373,7 @@ export default async function handler(req, res) {
             question.trim(),
             category,
             marketIcon,
+            marketImageUrl,
             JSON.stringify(normalizedOutcomes),
             JSON.stringify(reserves),
             seed,
@@ -387,6 +401,7 @@ export default async function handler(req, res) {
         marketId: result,
         ammMode: 'unified',
         mode: marketMode,
+        imageUrl: marketImageUrl,
         autoDeploy: autoDeployResult ? {
           chainAddress: autoDeployResult.marketAddress,
           chainMarketId: autoDeployResult.marketId,
@@ -405,17 +420,17 @@ export default async function handler(req, res) {
       const parent = await client.query(
         `INSERT INTO points_markets
            (source, source_event_id, resolver_type, resolver_config,
-            question, category, icon, outcomes, reserves, seed_liquidity, seed_liquidities,
+            question, category, icon, image_url, outcomes, reserves, seed_liquidity, seed_liquidities,
             end_time, status, created_by, amm_mode, featured,
             mode, chain_id, chain_market_id, chain_address,
             sport, league, outcome_images, category_tags, geo_tags, topic_tags,
             chart_style)
          VALUES ($1, $2, $3, $4::jsonb,
-                 $5, $6, $7, $8::jsonb, '[]'::jsonb, $9, $10::jsonb,
-                 $11, 'active', $12, 'parallel', $13,
-                 $14, $15, $16, $17,
-                 $18, $19, $20::jsonb, $21::jsonb, $22::jsonb, $23::jsonb,
-                 $24)
+                 $5, $6, $7, $8, $9::jsonb, '[]'::jsonb, $10, $11::jsonb,
+                 $12, 'active', $13, 'parallel', $14,
+                 $15, $16, $17, $18,
+                 $19, $20, $21::jsonb, $22::jsonb, $23::jsonb, $24::jsonb,
+                 $25)
          RETURNING id`,
         [
           sourceVal,
@@ -425,6 +440,7 @@ export default async function handler(req, res) {
           question.trim(),
           category,
           marketIcon,
+          marketImageUrl,
           JSON.stringify(normalizedOutcomes),
           seed,
           seedLiquiditiesJson,
@@ -462,13 +478,13 @@ export default async function handler(req, res) {
 
         await client.query(
           `INSERT INTO points_markets
-             (question, category, icon, outcomes, reserves, seed_liquidity, seed_liquidities,
+             (question, category, icon, image_url, outcomes, reserves, seed_liquidity, seed_liquidities,
               end_time, status, created_by, amm_mode, parent_id, leg_label,
               mode, chain_id, chain_market_id, chain_address,
               category_tags, geo_tags, topic_tags)
-           VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7::jsonb, $8, 'active', $9,
-                   'parallel', $10, $11, $12, $13, $14, $15,
-                   $16::jsonb, $17::jsonb, $18::jsonb)`,
+           VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8::jsonb, $9, 'active', $10,
+                   'parallel', $11, $12, $13, $14, $15, $16,
+                   $17::jsonb, $18::jsonb, $19::jsonb)`,
           [
             // Leg "question" is synthetic — positions.js + portfolio use
             // parent.question + leg_label for display, but keeping a
@@ -476,6 +492,7 @@ export default async function handler(req, res) {
             `${question.trim()} — ${normalizedOutcomes[i]}`,
             category,
             marketIcon,
+            marketImageUrl,
             JSON.stringify(['Sí', 'No']),
             JSON.stringify(legReserves),
             legSeed,
@@ -501,6 +518,7 @@ export default async function handler(req, res) {
       marketId: result,
       ammMode: 'parallel',
       mode: marketMode,
+      imageUrl: marketImageUrl,
     });
   } catch (e) {
     console.error('[admin/create-market] error', { message: e?.message, code: e?.code });

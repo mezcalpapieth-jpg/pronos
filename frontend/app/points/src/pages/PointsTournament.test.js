@@ -33,6 +33,14 @@ test('tournament page shows current leaderboard, past leaderboards, countdown an
   assert.match(pageSource, /America\/Mexico_City/);
   assert.match(pageSource, /Reglas/);
   assert.match(pageSource, /Preguntas frecuentes/);
+  assert.match(pageSource, /WinnerPodium/);
+  assert.match(pageSource, /PodiumAvatar/);
+  assert.match(pageSource, /profileImageUrl/);
+  assert.match(pageSource, /cleanPodiumProfileImageUrl/);
+  assert.match(pageSource, /Ganadores/);
+  assert.match(pageSource, /Top 5 final/);
+  assert.match(pageSource, /LEADERBOARD_DISPLAY_LIMIT = 20/);
+  assert.match(pageSource, /top\.slice\(0, LEADERBOARD_DISPLAY_LIMIT\)/);
   assert.match(pageSource, /¿Qué significa PnL\?/);
   assert.match(pageSource, /PnL significa ganancia o pérdida/);
   assert.match(pageSource, /What does PnL mean\?/);

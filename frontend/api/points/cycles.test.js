@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const currentSource = await readFile(new URL('./cycles/current.js', import.meta.url), 'utf8');
+const historySource = await readFile(new URL('./cycles/history.js', import.meta.url), 'utf8');
 const adminSource = await readFile(new URL('./admin/cycles.js', import.meta.url), 'utf8');
 const snapshotCronSource = await readFile(new URL('../cron/points-tournament-snapshot.js', import.meta.url), 'utf8');
 const schemaSource = await readFile(new URL('../_lib/points-schema.js', import.meta.url), 'utf8');
@@ -77,4 +78,13 @@ test('public cycles prefer the active database cycle once admin opens one', () =
   assert.match(currentSource, /const row = await timer\.time\('db_current'/);
   assert.match(currentSource, /return pausedPayload\(\);/);
   assert.doesNotMatch(currentSource, /tournamentPayload/);
+});
+
+test('public cycle history exposes enough rows for expanded tournament leaderboards', () => {
+  assert.match(historySource, /top-20 snapshot/);
+  assert.match(historySource, /CYCLE_HISTORY_LEADERBOARD_LIMIT = 20/);
+  assert.match(historySource, /rank <= \$\{CYCLE_HISTORY_LEADERBOARD_LIMIT\}/);
+  assert.match(historySource, /points:cycles:history:v4/);
+  assert.match(historySource, /u\.profile_image_url/);
+  assert.match(historySource, /profileImageUrl:\s*s\.profile_image_url \|\| null/);
 });

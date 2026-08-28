@@ -81,6 +81,7 @@ export async function resolveTournamentScoringWindow(db, { now = new Date() } = 
 function buildNeutralLeaderboardRows(users, limit) {
   const ranked = users.map(user => ({
     username: user.username,
+    profileImageUrl: user.profile_image_url || null,
     createdAt: user.created_at,
     balance: roundTournamentAmount(user.balance),
     score: 0,
@@ -367,7 +368,7 @@ async function readLiquidityRewardRows(db, startIso, cutoffIso) {
 
 export async function buildTournamentLeaderboardRows(db, { limit = 500, now = new Date(), window = null } = {}) {
   const users = await queryRows(db, `
-    SELECT u.username, u.created_at, COALESCE(b.balance, 0) AS balance
+    SELECT u.username, u.created_at, u.profile_image_url, COALESCE(b.balance, 0) AS balance
     FROM points_users u
     LEFT JOIN points_balances b ON b.username = u.username
     WHERE u.username IS NOT NULL
@@ -460,6 +461,7 @@ export async function buildTournamentLeaderboardRows(db, { limit = 500, now = ne
     const score = marketPnl + holdBonus + liquidityReward + parlayPnl - penalty.inactivityPenalty;
     return {
       username: user.username,
+      profileImageUrl: user.profile_image_url || null,
       createdAt: user.created_at,
       balance: roundTournamentAmount(user.balance),
       score: roundTournamentAmount(score),

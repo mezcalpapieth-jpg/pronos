@@ -17,7 +17,7 @@ test('points market payload keeps admin featured and tournament markets on home'
 });
 
 test('points public lists hide bulk-hidden active markets outside trophy overrides', () => {
-  assert.match(source, /points:markets:v7/);
+  assert.match(source, /points:markets:v8/);
   assert.match(source, /m\.hidden_from_home IS NOT TRUE[\s\S]*?OR m\.tournament_featured = true/);
   assert.match(source, /m\.featured = true AND m\.hidden_from_home = false[\s\S]*?OR m\.tournament_featured = true/);
 });
@@ -38,6 +38,10 @@ test('points market payload exposes featured and trending for parallel and unifi
   assert.equal(featuredMatches.length, 2);
   assert.equal(trendingMatches.length, 2);
   assert.equal(tournamentMatches.length, 2);
+  assert.match(source, /m\.image_url/);
+  assert.match(source, /imageUrl:\s*r\.image_url \|\| null/);
+  assert.match(detailSource, /m\.image_url/);
+  assert.match(detailSource, /imageUrl:\s*r\.image_url \|\| null/);
 });
 
 test('parallel payload prices resolved loser legs as zero instead of stale AMM odds', () => {

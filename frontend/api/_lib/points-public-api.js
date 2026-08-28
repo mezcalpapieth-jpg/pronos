@@ -76,6 +76,7 @@ export function serializePublicMarket(row) {
     marketId: String(row.id),
     question: row.question,
     category: row.category || null,
+    imageUrl: row.image_url || null,
     status: row.status,
     outcome: row.outcome == null ? null : Number(row.outcome),
     outcomes,

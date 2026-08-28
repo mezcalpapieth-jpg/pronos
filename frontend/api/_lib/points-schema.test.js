@@ -21,6 +21,7 @@ test('points schema self-healing avoids hot-route migration lock pileups', () =>
   assert.match(source, /points_users_display_name/);
   assert.match(source, /points_users_profile_image_url/);
   assert.match(source, /points_users_profile_updated_at/);
+  assert.match(source, /points_markets_image_url/);
   assert.match(source, /points_users_api_blocked_at/);
   assert.match(source, /points_users_api_blocked_by/);
   assert.match(source, /points_users_api_block_reason/);
@@ -119,6 +120,13 @@ test('points schema supports public profile personalization', () => {
     assert.match(migrationSource, /ALTER TABLE points_users ADD COLUMN IF NOT EXISTS display_name TEXT/);
     assert.match(migrationSource, /ALTER TABLE points_users ADD COLUMN IF NOT EXISTS profile_image_url TEXT/);
     assert.match(migrationSource, /ALTER TABLE points_users ADD COLUMN IF NOT EXISTS profile_updated_at TIMESTAMPTZ/);
+  }
+});
+
+test('points schema supports market display images', () => {
+  for (const migrationSource of [source, migrateSource]) {
+    assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS points_markets[\s\S]+image_url\s+TEXT/);
+    assert.match(migrationSource, /ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS image_url TEXT/);
   }
 });
 

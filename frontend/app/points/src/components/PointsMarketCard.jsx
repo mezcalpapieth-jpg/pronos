@@ -31,6 +31,7 @@ import { marketInterestPayload, teamInterestPayload, trackInterest } from '@app/
 import { soccerMatchTypeLabel } from '@app/lib/soccerMarketType.js';
 import { pointsPublicAssetSrc } from '@app/lib/publicAssets.js';
 import { AICM_HUB_PATH, isAicmDelayMarket } from '../lib/aicmMarkets.js';
+import { marketImageSrc, marketPlaceholderImageSrc } from '../lib/marketImages.js';
 import PointsBuyModal from './PointsBuyModal.jsx';
 
 const STAKE_PREVIEW = 100; // MXNP reference stake for the card payout preview
@@ -108,6 +109,35 @@ function OutcomeLogo({ src, label }) {
         flexShrink: 0,
       }}
       onError={() => setFailed(true)}
+    />
+  );
+}
+
+function MarketThumbnail({ market }) {
+  const [usePlaceholder, setUsePlaceholder] = useState(false);
+  const fallback = marketPlaceholderImageSrc(market);
+  const src = usePlaceholder ? fallback : marketImageSrc(market);
+  return (
+    <img
+      src={pointsPublicAssetSrc(src)}
+      alt=""
+      aria-hidden="true"
+      style={{
+        width: 46,
+        height: 46,
+        borderRadius: 8,
+        objectFit: 'cover',
+        background: 'var(--surface2)',
+        border: '1px solid var(--border)',
+        flex: '0 0 46px',
+      }}
+      onError={(event) => {
+        if (!usePlaceholder && src !== fallback) {
+          setUsePlaceholder(true);
+          return;
+        }
+        event.currentTarget.style.visibility = 'hidden';
+      }}
     />
   );
 }
@@ -372,23 +402,32 @@ export default function PointsMarketCard({ market, userPosition }) {
       </div>
 
       <div className="mock-card-body">
-        <p className="mock-card-title">{market.question}</p>
-        {market.seriesMeta?.subtitle && (
-          <div style={{
-            marginTop: -2,
-            marginBottom: 8,
-            fontFamily: 'var(--font-mono)',
-            fontSize: 10,
-            letterSpacing: '0.06em',
-            color: 'var(--text-secondary)',
-            textTransform: 'uppercase',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}>
-            {market.seriesMeta.subtitle}
+        <div style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 12,
+          marginBottom: 8,
+        }}>
+          <MarketThumbnail market={market} />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <p className="mock-card-title" style={{ margin: 0 }}>{market.question}</p>
+            {market.seriesMeta?.subtitle && (
+              <div style={{
+                marginTop: 6,
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                letterSpacing: '0.06em',
+                color: 'var(--text-secondary)',
+                textTransform: 'uppercase',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}>
+                {market.seriesMeta.subtitle}
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
         {/* Single-column list of wide rows — logo + label on the left,
             a clickable +gain/% pill on the right. When the market has

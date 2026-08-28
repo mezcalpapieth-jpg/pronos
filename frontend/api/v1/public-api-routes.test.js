@@ -4,9 +4,12 @@ import { readFile } from 'node:fs/promises';
 
 const buyRoute = await readFile(new URL('../points/buy.js', import.meta.url), 'utf8');
 const sellRoute = await readFile(new URL('../points/sell.js', import.meta.url), 'utf8');
+const marketsRoute = await readFile(new URL('./markets.js', import.meta.url), 'utf8');
+const marketRoute = await readFile(new URL('./market.js', import.meta.url), 'utf8');
 const tradeRoute = await readFile(new URL('./trades.js', import.meta.url), 'utf8');
 const authHelper = await readFile(new URL('../_lib/points-api-auth.js', import.meta.url), 'utf8');
 const keyRoute = await readFile(new URL('../points/api-keys.js', import.meta.url), 'utf8');
+const publicSerializer = await readFile(new URL('../_lib/points-public-api.js', import.meta.url), 'utf8');
 
 test('web and public api trades use the same trading service', () => {
   assert.match(buyRoute, /executePointsBuy/);
@@ -47,4 +50,10 @@ test('public api auth blocks account-level API access before signed requests exe
   assert.match(keyRoute, /getAccountAccessState/);
   assert.match(keyRoute, /apiBlockedAt/);
   assert.match(keyRoute, /phoneRequired/);
+});
+
+test('public api market payloads include display images for clients', () => {
+  assert.match(marketsRoute, /m\.image_url/);
+  assert.match(marketRoute, /m\.image_url/);
+  assert.match(publicSerializer, /imageUrl:\s*row\.image_url \|\| null/);
 });

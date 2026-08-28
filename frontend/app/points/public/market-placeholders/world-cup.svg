@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Tournament market">
+  <rect width="160" height="160" rx="28" fill="#161616"/>
+  <path d="M57 38h46v17c0 25-9 41-23 48-14-7-23-23-23-48V38z" fill="#f5c542" stroke="#ff5a00" stroke-width="7"/>
+  <path d="M57 51H35c2 20 10 33 30 37M103 51h22c-2 20-10 33-30 37" fill="none" stroke="#f5c542" stroke-width="8" stroke-linecap="round"/>
+  <path d="M80 103v24M61 127h38" stroke="#e8e8e8" stroke-width="9" stroke-linecap="round"/>
+  <path d="M80 53l7 15 16 2-12 11 4 16-15-8-15 8 4-16-12-11 16-2 7-15z" fill="#171717"/>
+</svg>

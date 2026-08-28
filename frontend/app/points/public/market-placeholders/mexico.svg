@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Mexico market">
+  <rect width="160" height="160" rx="28" fill="#161a18"/>
+  <path d="M30 113c18-29 39-45 63-45 17 0 30 8 37 24" fill="none" stroke="#00e87a" stroke-width="10" stroke-linecap="round"/>
+  <path d="M43 99c17 4 35 3 54-4 11-4 20-4 27 0" fill="none" stroke="#f5c542" stroke-width="8" stroke-linecap="round"/>
+  <path d="M79 37l9 20 22 2-17 14 5 22-19-12-19 12 5-22-17-14 22-2 9-20z" fill="#ff5a00"/>
+</svg>

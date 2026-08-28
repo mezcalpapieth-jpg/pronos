@@ -64,6 +64,12 @@ const POINTS_SCHEMA_READY_PROBE = `
       SELECT 1 FROM information_schema.columns
       WHERE table_schema = 'public'
         AND table_name = 'points_markets'
+        AND column_name = 'image_url'
+    ) AS points_markets_image_url,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'points_markets'
         AND column_name = 'seed_liquidities'
     ) AS points_markets_seed_liquidities,
     EXISTS (
@@ -263,6 +269,7 @@ const POINTS_SCHEMA_MIGRATIONS = [
     question        TEXT NOT NULL,
     category        TEXT NOT NULL DEFAULT 'general',
     icon            TEXT,
+    image_url       TEXT,
     outcomes        JSONB NOT NULL,
     reserves        JSONB NOT NULL,
     seed_liquidity  NUMERIC(20,6) NOT NULL DEFAULT 500,
@@ -297,6 +304,7 @@ const POINTS_SCHEMA_MIGRATIONS = [
   // seed_liquidities is index-aligned with outcomes and lets admin seed
   // asymmetric AMMs (e.g. favorites get deeper starting liquidity). The
   // older scalar seed_liquidity stays as a fallback/default for legacy rows.
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS image_url TEXT`,
   `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS seed_liquidities JSONB`,
   // category_tags let one market live in multiple browse/admin buckets.
   // Example: a Liga MX match is primarily category='deportes', but also

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Sports market">
+  <rect width="160" height="160" rx="28" fill="#151817"/>
+  <circle cx="80" cy="80" r="47" fill="#e8e8e8"/>
+  <path d="M80 33c16 14 25 30 25 47s-9 33-25 47M80 33C64 47 55 63 55 80s9 33 25 47" fill="none" stroke="#111" stroke-width="6"/>
+  <path d="M36 80h88" stroke="#111" stroke-width="6"/>
+  <path d="M48 52c20 12 43 12 64 0M48 108c20-12 43-12 64 0" fill="none" stroke="#111" stroke-width="6"/>
+  <circle cx="116" cy="43" r="12" fill="#ff5a00"/>
+</svg>

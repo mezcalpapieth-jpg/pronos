@@ -69,6 +69,7 @@ import {
 } from '../lib/cryptoMarketHub.js';
 import { marketInterestPayload, trackInterest } from '@app/lib/interest.js';
 import { pointsPublicAssetSrc } from '@app/lib/publicAssets.js';
+import { marketImageSrc, marketPlaceholderImageSrc } from '../lib/marketImages.js';
 import { emitPointsRefresh } from '../lib/pointsLiveRefresh.js';
 import { isVideoDemoActive, videoDemoPollMs } from '../demo/demoFlag.js';
 
@@ -712,6 +713,36 @@ function OutcomeLogo({ src, label, size = 28 }) {
         flexShrink: 0,
       }}
       onError={() => setFailed(true)}
+    />
+  );
+}
+
+function MarketHeroImage({ market, compact = false }) {
+  const [usePlaceholder, setUsePlaceholder] = useState(false);
+  const fallback = marketPlaceholderImageSrc(market);
+  const src = usePlaceholder ? fallback : marketImageSrc(market);
+  const size = compact ? 58 : 72;
+  return (
+    <img
+      src={pointsPublicAssetSrc(src)}
+      alt=""
+      aria-hidden="true"
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 8,
+        objectFit: 'cover',
+        background: 'var(--surface1)',
+        border: '1px solid var(--border)',
+        flex: `0 0 ${size}px`,
+      }}
+      onError={(event) => {
+        if (!usePlaceholder && src !== fallback) {
+          setUsePlaceholder(true);
+          return;
+        }
+        event.currentTarget.style.visibility = 'hidden';
+      }}
     />
   );
 }
@@ -3360,28 +3391,38 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
               <ShareButton marketId={market.id} app="points" question={market.question} />
             </div>
 
-            <h1 style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: 'clamp(26px, 3vw, 38px)',
-              lineHeight: 1.2,
-              color: 'var(--text-primary)',
-              marginBottom: seriesSubtitle ? 8 : (market.finalScore && isResolved ? 12 : 24),
+            <div style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: isMobile ? 12 : 16,
+              marginBottom: market.finalScore && isResolved ? 12 : 24,
             }}>
-              {market.question}
-            </h1>
+              <MarketHeroImage market={market} compact={isMobile} />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <h1 style={{
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 'clamp(26px, 3vw, 38px)',
+                  lineHeight: 1.2,
+                  color: 'var(--text-primary)',
+                  margin: 0,
+                }}>
+                  {market.question}
+                </h1>
 
-            {seriesSubtitle && (
-              <div style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 12,
-                color: 'var(--text-secondary)',
-                letterSpacing: '0.06em',
-                textTransform: 'uppercase',
-                marginBottom: market.finalScore && isResolved ? 12 : 24,
-              }}>
-                {seriesSubtitle}
+                {seriesSubtitle && (
+                  <div style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 12,
+                    color: 'var(--text-secondary)',
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    marginTop: 8,
+                  }}>
+                    {seriesSubtitle}
+                  </div>
+                )}
               </div>
-            )}
+            </div>
 
             <TeamMarketStrip market={market} outcomeImages={market.outcomeImages} />
             <TokenMarketStrip market={market} />

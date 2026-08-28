@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Crypto market">
+  <rect width="160" height="160" rx="28" fill="#171717"/>
+  <path d="M80 30l45 26v48l-45 26-45-26V56l45-26z" fill="#1f1f1f" stroke="#ff5a00" stroke-width="8"/>
+  <path d="M64 56h23c12 0 20 6 20 16 0 7-4 12-11 14 8 2 13 8 13 16 0 11-9 18-23 18H64V56z" fill="none" stroke="#f5c542" stroke-width="8" stroke-linejoin="round"/>
+  <path d="M70 82h17M70 108h18M75 45v11M91 45v11M75 120v11M91 120v11" stroke="#00e87a" stroke-width="7" stroke-linecap="round"/>
+</svg>

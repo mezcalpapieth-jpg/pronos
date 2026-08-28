@@ -93,8 +93,8 @@ const PUBLIC_ERROR_COPY = {
     en: 'You cannot combine outcomes from the same event in one combo slip.',
   },
   market_not_in_tournament: {
-    es: 'Solo los mercados del torneo pueden entrar a una combinada.',
-    en: 'Only tournament markets can be added to a combo slip.',
+    es: 'Ese mercado no está disponible para combinada.',
+    en: 'That market is not available for a combo slip.',
   },
   parlay_failed: {
     es: 'No pudimos crear la combinada. Intenta otra vez.',
@@ -159,6 +159,10 @@ const PUBLIC_ERROR_COPY = {
   invalid_profile_image_url: {
     es: 'Usa una URL válida de imagen que empiece con https:// o http://.',
     en: 'Use a valid image URL that starts with https:// or http://.',
+  },
+  invalid_market_image_url: {
+    es: 'Usa una URL de imagen válida o una ruta interna como /market-placeholders/deportes.svg.',
+    en: 'Use a valid image URL or an internal path like /market-placeholders/deportes.svg.',
   },
   profile_update_failed: {
     es: 'No pudimos guardar tu perfil. Intenta otra vez.',
@@ -915,14 +919,15 @@ export async function adminBulkHideMarkets({
   });
 }
 
-// ─── Admin — edit market (question + timing + category + logos + parallel reserves) ─
-export async function adminEditMarket({ marketId, question, startTime, endTime, category, outcomeImages, parallelLegs }) {
+// ─── Admin — edit market (question + timing + category + market/outcome images + parallel reserves) ─
+export async function adminEditMarket({ marketId, question, startTime, endTime, category, imageUrl, outcomeImages, parallelLegs }) {
   return postJson('/api/points/admin/edit-market', {
     marketId,
     question,
     startTime,
     endTime,
     category,
+    imageUrl,
     outcomeImages,
     parallelLegs,
   });

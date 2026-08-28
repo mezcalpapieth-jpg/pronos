@@ -260,6 +260,7 @@ const MIGRATIONS = [
     question        TEXT NOT NULL,
     category        TEXT NOT NULL DEFAULT 'general',
     icon            TEXT,
+    image_url       TEXT,
     outcomes        JSONB NOT NULL,
     reserves        JSONB NOT NULL,
     seed_liquidity  NUMERIC(20,6) NOT NULL DEFAULT 500,
@@ -272,6 +273,7 @@ const MIGRATIONS = [
     resolved_at     TIMESTAMPTZ,
     resolved_by     TEXT
   )`,
+  `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS image_url TEXT`,
   `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES points_markets(id)`,
   `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT true`,
   `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS hidden_from_home BOOLEAN NOT NULL DEFAULT false`,
