@@ -36,6 +36,11 @@
  *   Sells have NO FEE. Users get the full CPMM quadratic-formula
  *   output back as collateral.
  *
+ *   For buys larger than 100 MXNP, the quote walks the buy in 100 MXNP
+ *   fee slices and recomputes the fee rate after each slice. That keeps
+ *   one large buy economically aligned with repeated smaller buys instead
+ *   of charging the whole order at the initial probability.
+ *
  *   This deviates from the on-chain contract (which also charges
  *   a sell fee). The deviation is intentional for the points-app:
  *   simpler UX, easier to explain, and the "spread" is already
@@ -48,6 +53,7 @@ const PRICE_SCALE = 1_000_000n;        // probabilities stored as ×1e6
 const FEE_SLOPE_BPS = 500n;            // fee = 5% × (1 - P)
 const FEE_DENOM = 10_000n;             // bps denominator
 const DEFAULT_FEE_AT_FIFTY = 25_000n;  // 2.5% in 1e6 — used when pool is empty
+const DYNAMIC_BUY_FEE_SLICE_RAW = 100n * SCALE;
 
 // ─── Conversions ─────────────────────────────────────────────────────────────
 export function toRaw(value) {
@@ -112,21 +118,15 @@ export function calculateFeeRaw(amountRaw, reserveYesRaw, reserveNoRaw, buyConte
   return (amountRaw * feeRate) / SCALE;
 }
 
+function nextFeeSlice(remainingRaw) {
+  return remainingRaw > DYNAMIC_BUY_FEE_SLICE_RAW
+    ? DYNAMIC_BUY_FEE_SLICE_RAW
+    : remainingRaw;
+}
+
 // ─── Binary CPMM (mirrors PronosAMM.sol) ─────────────────────────────────────
-/**
- * Quote a buy of `collateral` MXNP on the given outcome (0 = YES, 1 = NO).
- * Pure function — does NOT mutate reserves. Returns human-readable fields
- * plus the BigInt reserves-after so callers can persist the new state.
- */
-export function binaryBuyQuote(reservesHuman, outcome, collateralHuman) {
-  if (collateralHuman <= 0) throw new Error('amm-math: collateral must be > 0');
+function binaryBuyQuoteSliceRaw(reserveYes, reserveNo, outcome, collateralRaw) {
   const buyYes = outcome === 0;
-
-  let reserveYes = toRaw(reservesHuman[0]);
-  let reserveNo  = toRaw(reservesHuman[1]);
-  const collateralRaw = toRaw(collateralHuman);
-
-  // Fee charged on gross collateral, side = the one being bought
   const feeRaw = calculateFeeRaw(collateralRaw, reserveYes, reserveNo, buyYes);
   const netRaw = collateralRaw - feeRaw;
 
@@ -156,12 +156,56 @@ export function binaryBuyQuote(reservesHuman, outcome, collateralHuman) {
     throw new Error('amm-math: trade too small or reserves invalid');
   }
 
-  const totalBefore = reserveYes + reserveNo || 1n;
-  const pYesBefore = (reserveNo * PRICE_SCALE) / totalBefore;
-  const pNoBefore  = (reserveYes * PRICE_SCALE) / totalBefore;
-  const totalAfter = newReserveYes + newReserveNo;
-  const pYesAfter = totalAfter === 0n ? 0n : (newReserveNo * PRICE_SCALE) / totalAfter;
-  const pNoAfter  = totalAfter === 0n ? 0n : (newReserveYes * PRICE_SCALE) / totalAfter;
+  return {
+    feeRaw,
+    netRaw,
+    sharesOutRaw,
+    newReserveYes,
+    newReserveNo,
+  };
+}
+
+/**
+ * Quote a buy of `collateral` MXNP on the given outcome (0 = YES, 1 = NO).
+ * Pure function — does NOT mutate reserves. Returns human-readable fields
+ * plus the BigInt reserves-after so callers can persist the new state.
+ */
+export function binaryBuyQuote(reservesHuman, outcome, collateralHuman) {
+  if (collateralHuman <= 0) throw new Error('amm-math: collateral must be > 0');
+
+  let reserveYes = toRaw(reservesHuman[0]);
+  let reserveNo  = toRaw(reservesHuman[1]);
+  const originalReserveYes = reserveYes;
+  const originalReserveNo = reserveNo;
+  const collateralRaw = toRaw(collateralHuman);
+  if (collateralRaw <= 0n) throw new Error('amm-math: collateral must be > 0');
+
+  let remainingRaw = collateralRaw;
+  let feeRaw = 0n;
+  let netRaw = 0n;
+  let sharesOutRaw = 0n;
+
+  while (remainingRaw > 0n) {
+    const sliceRaw = nextFeeSlice(remainingRaw);
+    const slice = binaryBuyQuoteSliceRaw(reserveYes, reserveNo, outcome, sliceRaw);
+    feeRaw += slice.feeRaw;
+    netRaw += slice.netRaw;
+    sharesOutRaw += slice.sharesOutRaw;
+    reserveYes = slice.newReserveYes;
+    reserveNo = slice.newReserveNo;
+    remainingRaw -= sliceRaw;
+  }
+
+  if (sharesOutRaw <= 0n) {
+    throw new Error('amm-math: trade too small or reserves invalid');
+  }
+
+  const totalBefore = originalReserveYes + originalReserveNo || 1n;
+  const pYesBefore = (originalReserveNo * PRICE_SCALE) / totalBefore;
+  const pNoBefore  = (originalReserveYes * PRICE_SCALE) / totalBefore;
+  const totalAfter = reserveYes + reserveNo;
+  const pYesAfter = totalAfter === 0n ? 0n : (reserveNo * PRICE_SCALE) / totalAfter;
+  const pNoAfter  = totalAfter === 0n ? 0n : (reserveYes * PRICE_SCALE) / totalAfter;
 
   const pricesBefore = [rawToProbability(pYesBefore), rawToProbability(pNoBefore)];
   const pricesAfter  = [rawToProbability(pYesAfter),  rawToProbability(pNoAfter)];
@@ -177,8 +221,8 @@ export function binaryBuyQuote(reservesHuman, outcome, collateralHuman) {
     priceImpactPts: (pricesAfter[outcome] - pricesBefore[outcome]) * 100,
     pricesBefore,
     pricesAfter,
-    reservesAfter: [fromRaw(newReserveYes), fromRaw(newReserveNo)],
-    reservesAfterRaw: [newReserveYes, newReserveNo],
+    reservesAfter: [fromRaw(reserveYes), fromRaw(reserveNo)],
+    reservesAfterRaw: [reserveYes, reserveNo],
   };
 }
 
@@ -399,6 +443,43 @@ function calculateMultiFeeRaw(amountRaw, reservesRaw, outcomeIdx) {
   return (amountRaw * feeRate) / SCALE;
 }
 
+function multiBuyQuoteSliceRaw(reserves, outcomeIdx, collateralRaw) {
+  const n = reserves.length;
+  const feeRaw = calculateMultiFeeRaw(collateralRaw, reserves, outcomeIdx);
+  const netRaw = collateralRaw - feeRaw;
+
+  // K_pre = ∏_j r_j (kept from BEFORE the complete-set mint).
+  let K = 1n;
+  for (const r of reserves) K = K * r;
+
+  // Denom = ∏_{j≠i} (r_j + net)
+  let denom = 1n;
+  for (let j = 0; j < n; j++) {
+    if (j !== outcomeIdx) denom = denom * (reserves[j] + netRaw);
+  }
+
+  // new r_i after the trade. ceilDiv so we round UP → user gets fewer
+  // shares (safer for pool). Inline-guard the call so the analyser
+  // can see the division is protected at its evaluation site.
+  const newReserveI = denom === 0n ? 0n : ceilDiv(K, denom);
+  const sharesOutRaw = (reserves[outcomeIdx] + netRaw) - newReserveI;
+  if (sharesOutRaw <= 0n) {
+    throw new Error('amm-math: trade too small or reserves invalid');
+  }
+
+  // Compose the post-trade reserves vector.
+  const newReservesRaw = reserves.map((r, j) =>
+    j === outcomeIdx ? newReserveI : r + netRaw,
+  );
+
+  return {
+    feeRaw,
+    netRaw,
+    sharesOutRaw,
+    newReservesRaw,
+  };
+}
+
 /**
  * Quote a buy of `collateral` MXNP on outcome `outcomeIdx` in an N-outcome
  * pool. Closed-form solution.
@@ -431,44 +512,35 @@ export function multiBuyQuote(reservesHuman, outcomeIdx, collateralHuman) {
   }
 
   const collateralRaw = toRaw(collateralHuman);
-  const feeRaw = calculateMultiFeeRaw(collateralRaw, reserves, outcomeIdx);
-  const netRaw = collateralRaw - feeRaw;
+  if (collateralRaw <= 0n) throw new Error('amm-math: collateral must be > 0');
 
-  // K_pre = ∏_j r_j (kept from BEFORE the complete-set mint).
-  let K = 1n;
-  for (const r of reserves) K = K * r;
+  const originalReservesRaw = [...reserves];
+  let currentReservesRaw = [...reserves];
+  let remainingRaw = collateralRaw;
+  let feeRaw = 0n;
+  let netRaw = 0n;
+  let sharesOutRaw = 0n;
 
-  // Denom = ∏_{j≠i} (r_j + net)
-  let denom = 1n;
-  for (let j = 0; j < n; j++) {
-    if (j !== outcomeIdx) denom = denom * (reserves[j] + netRaw);
+  while (remainingRaw > 0n) {
+    const sliceRaw = nextFeeSlice(remainingRaw);
+    const slice = multiBuyQuoteSliceRaw(currentReservesRaw, outcomeIdx, sliceRaw);
+    feeRaw += slice.feeRaw;
+    netRaw += slice.netRaw;
+    sharesOutRaw += slice.sharesOutRaw;
+    currentReservesRaw = slice.newReservesRaw;
+    remainingRaw -= sliceRaw;
   }
-
-  // new r_i after the trade. ceilDiv so we round UP → user gets fewer
-  // shares (safer for pool). Inline-guard the call so the analyser
-  // can see the division is protected at its evaluation site.
-  const newReserveI = denom === 0n ? 0n : ceilDiv(K, denom);
-  const sharesOutRaw = (reserves[outcomeIdx] + netRaw) - newReserveI;
-  if (sharesOutRaw <= 0n) {
-    throw new Error('amm-math: trade too small or reserves invalid');
-  }
-
-  // Compose the post-trade reserves vector.
-  const newReservesRaw = reserves.map((r, j) =>
-    j === outcomeIdx ? newReserveI : r + netRaw,
-  );
 
   // Both vectors are guaranteed to be fully-positive BigInt[] at this
-  // point (checked above for `reserves`; `newReserveI` is ceilDiv'd
-  // from a positive K, and other slots are `r + netRaw` where netRaw
-  // ≤ collateralRaw is non-negative), so we can call multiPriceRaw
+  // point (checked above for the original reserves; each slice keeps
+  // reserves positive), so we can call multiPriceRaw
   // without another guard. Allocated explicitly (no `|| fallback`) to
   // keep every intermediate typed BigInt, never BigInt|null.
   const pricesBefore = new Array(n);
   const pricesAfter = new Array(n);
   for (let i = 0; i < n; i++) {
-    pricesBefore[i] = rawToProbability(multiPriceRaw(reserves, i));
-    pricesAfter[i] = rawToProbability(multiPriceRaw(newReservesRaw, i));
+    pricesBefore[i] = rawToProbability(multiPriceRaw(originalReservesRaw, i));
+    pricesAfter[i] = rawToProbability(multiPriceRaw(currentReservesRaw, i));
   }
 
   return {
@@ -482,8 +554,8 @@ export function multiBuyQuote(reservesHuman, outcomeIdx, collateralHuman) {
     priceImpactPts: (pricesAfter[outcomeIdx] - pricesBefore[outcomeIdx]) * 100,
     pricesBefore,
     pricesAfter,
-    reservesAfter: newReservesRaw.map(fromRaw),
-    reservesAfterRaw: newReservesRaw,
+    reservesAfter: currentReservesRaw.map(fromRaw),
+    reservesAfterRaw: currentReservesRaw,
   };
 }
 

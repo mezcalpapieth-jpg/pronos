@@ -10,6 +10,7 @@ import {
   combineBuyOrderbookMatches,
   combineSellOrderbookMatches,
   estimateMakerReward,
+  MAKER_REWARD_WEEKLY_RATE,
   makerUsageFromRows,
   previewAmmCappedBidsForSell,
   previewPronosMakerAsksForBuy,
@@ -80,7 +81,7 @@ test('points schema and manual migration create reserved limit-order book storag
   }
 });
 
-test('limit-order helper reserves funds, rewards makers, and fills against AMM quotes', () => {
+test('limit-order helper reserves funds, rewards liquidity, and fills against AMM quotes', () => {
   assert.match(helperSource, /export async function createLimitOrder/);
   assert.match(helperSource, /export async function cancelLimitOrder/);
   assert.match(helperSource, /export async function executeTriggeredLimitOrders/);
@@ -90,7 +91,8 @@ test('limit-order helper reserves funds, rewards makers, and fills against AMM q
   assert.match(helperSource, /export async function lockedReservedShares/);
   assert.match(helperSource, /export async function payDailyMakerRewards/);
   assert.match(helperSource, /export function estimateMakerReward/);
-  assert.match(helperSource, /POINTS_MAKER_REWARD_MAX_DAILY_PER_USER', 100/);
+  assert.match(helperSource, /POINTS_LIQUIDITY_REWARD_WEEKLY_RATE/);
+  assert.match(helperSource, /POINTS_LIQUIDITY_REWARD_MAX_DAILY_PER_USER/);
   assert.doesNotMatch(helperSource, /MAKER_REWARD_MAX_PER_ORDER/);
   assert.match(helperSource, /MAKER_REWARD_MAX_DISTANCE/);
   assert.match(helperSource, /qualityMultiplier/);
@@ -137,7 +139,7 @@ test('tournament minimum applies only before a market is covered', () => {
   assert.match(quoteSellSource, /tournamentCutoffSnapshotLock/);
 });
 
-test('maker rewards accrue after resting near the current price with no per-order cap', () => {
+test('liquidity rewards accrue after resting near the current price with no per-order cap', () => {
   const now = new Date('2026-08-04T12:00:00.000Z');
   const market = { end_time: '2026-08-05T12:00:00.000Z' };
   const baseOrder = {
@@ -173,6 +175,26 @@ test('maker rewards accrue after resting near the current price with no per-orde
   assert.equal(far, 0, 'far-away order should not earn');
   assert.equal(tooFresh, 0, 'fresh order should wait for the minimum resting time');
   assert.ok(alreadyPaidOrder > 10, 'paid order should keep accruing because there is no per-order cap');
+});
+
+test('liquidity rewards pay 20 percent weekly prorated by resting time', () => {
+  const market = { end_time: '2026-08-20T12:00:00.000Z' };
+  const order = {
+    id: 1,
+    status: 'open',
+    side: 'buy',
+    outcome_index: 0,
+    remaining_amount: 1000,
+    created_at: '2026-08-04T10:00:00.000Z',
+    maker_reward_last_at: '2026-08-04T12:00:00.000Z',
+    limit_price: 0.49,
+  };
+  const oneWeek = estimateMakerReward(order, market, [500, 500], new Date('2026-08-11T12:00:00.000Z'));
+  const oneDay = estimateMakerReward(order, market, [500, 500], new Date('2026-08-05T12:00:00.000Z'));
+
+  assert.equal(MAKER_REWARD_WEEKLY_RATE, 0.20);
+  approxEqual(oneWeek, 200, 0.000001, 'one-week liquidity reward');
+  approxEqual(oneDay, 1000 * 0.20 / 7, 0.000001, 'one-day liquidity reward');
 });
 
 test('orderbook taker previews consume real resting orders before AMM fallback', () => {
@@ -523,6 +545,20 @@ test('Pronos maker previews use seeded depth after real resting orders', () => {
   assert.equal(combined.fills[1].source, 'maker');
 });
 
+test('buy quotes and execution prioritize user orderbook liquidity before Pronos depth', () => {
+  const quoteRealIndex = quoteBuySource.indexOf('const realOrderbook = previewRestingAsksForBuy');
+  const quoteSyntheticIndex = quoteBuySource.indexOf('const makerOrderbook = realOrderbook.remainingCollateral');
+  const tradeRealIndex = tradeServiceSource.indexOf('const realOrderbookMatch = await matchRestingAsksForBuy');
+  const tradeSyntheticIndex = tradeServiceSource.indexOf('const makerOrderbookMatch = realOrderbookMatch.remainingCollateral');
+
+  assert.ok(quoteRealIndex > 0, 'quote-buy should preview real user asks');
+  assert.ok(quoteSyntheticIndex > quoteRealIndex, 'quote-buy should preview Pronos depth after user asks');
+  assert.match(quoteBuySource, /collateral: realOrderbook\.remainingCollateral/);
+  assert.ok(tradeRealIndex > 0, 'buy execution should match real user asks');
+  assert.ok(tradeSyntheticIndex > tradeRealIndex, 'buy execution should match Pronos depth after user asks');
+  assert.match(tradeServiceSource, /collateralBudget: realOrderbookMatch\.remainingCollateral/);
+});
+
 test('Pronos maker previews can anchor to displayed binary odds', () => {
   const market = {
     reserves: JSON.stringify([500, 500]),
@@ -692,7 +728,7 @@ test('public endpoints create, list, and cancel authenticated limit orders', () 
   assert.match(cancelOrderSource, /orderId/);
 });
 
-test('portfolio and cron expose daily maker-reward payouts', () => {
+test('portfolio and cron expose daily liquidity payouts', () => {
   assert.match(makerRewardsSource, /GET \/api\/points\/maker-rewards/);
   assert.match(makerRewardsSource, /limit_maker_reward/);
   assert.match(makerRewardsSource, /totalPaid/);

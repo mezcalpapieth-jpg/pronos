@@ -12,6 +12,9 @@ test('points leaderboard returns wallet and PnL rankings separately', () => {
   assert.match(source, /pnlTop/);
   assert.match(source, /pnlMe/);
   assert.match(source, /tournamentTop/);
+  assert.match(source, /holdBonus/);
+  assert.match(source, /liquidityReward/);
+  assert.match(source, /parlayPnl/);
 });
 
 test('points leaderboard keeps tournament top distinct from portfolio wallet top', () => {
@@ -28,7 +31,10 @@ test('points tournament leaderboard scores against the active cycle window', () 
   assert.match(tournamentSource, /buildNeutralLeaderboardRows/);
   assert.match(tournamentSource, /const startIso = scoringWindow\.startsAt/);
   assert.match(tournamentSource, /const cutoffIso = scoringWindow\.rankingCutoffAt/);
-  assert.match(source, /points:leaderboard:ranked:v4/);
+  assert.match(tournamentSource, /readLiquidityRewardRows/);
+  assert.match(tournamentSource, /kind = 'limit_maker_reward'/);
+  assert.match(tournamentSource, /marketPnl \+ holdBonus \+ liquidityReward \+ parlayPnl/);
+  assert.match(source, /points:leaderboard:ranked:v6/);
   assert.match(source, /readFrozenLeaderboardRowsForActiveCutoff/);
   assert.match(source, /if \(frozen\?\.rows\?\.length\) return frozen\.rows/);
 });

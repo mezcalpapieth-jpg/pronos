@@ -88,6 +88,29 @@ test('points schema supports auditable resolution corrections', () => {
   }
 });
 
+test('points schema supports tournament parlays and score component snapshots', () => {
+  assert.match(source, /to_regclass\('public\.points_parlay_tickets'\) IS NOT NULL AS points_parlay_tickets/);
+  assert.match(source, /to_regclass\('public\.points_parlay_legs'\) IS NOT NULL AS points_parlay_legs/);
+  assert.match(source, /points_cycle_snapshot_hold_bonus/);
+  assert.match(source, /points_cycle_snapshot_liquidity_reward/);
+  assert.match(source, /points_cycle_snapshot_parlay_pnl/);
+  assert.match(source, /points_cycle_snapshot_parlay_tickets/);
+  assert.match(source, /points_cycle_snapshot_parlay_wins/);
+  for (const migrationSource of [source, migrateSource]) {
+    assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS points_parlay_tickets/);
+    assert.match(migrationSource, /potential_payout\s+NUMERIC\(20,6\) NOT NULL/);
+    assert.match(migrationSource, /CHECK \(status IN \('open', 'won', 'lost', 'void'\)\)/);
+    assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS points_parlay_legs/);
+    assert.match(migrationSource, /UNIQUE\(ticket_id, market_id\)/);
+    assert.match(migrationSource, /idx_points_parlay_tickets_status_time/);
+    assert.match(migrationSource, /ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS hold_bonus NUMERIC\(20,6\)/);
+    assert.match(migrationSource, /ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS liquidity_reward NUMERIC\(20,6\)/);
+    assert.match(migrationSource, /ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS parlay_pnl NUMERIC\(20,6\)/);
+    assert.match(migrationSource, /ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS parlay_tickets INTEGER/);
+    assert.match(migrationSource, /ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS parlay_wins INTEGER/);
+  }
+});
+
 test('points schema supports public profile personalization', () => {
   for (const migrationSource of [source, migrateSource]) {
     assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS points_users[\s\S]+display_name\s+TEXT/);

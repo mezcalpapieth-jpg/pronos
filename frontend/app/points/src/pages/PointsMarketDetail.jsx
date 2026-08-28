@@ -19,9 +19,11 @@ import {
   fetchPositions,
   fetchTradeActivity,
   fetchTradeTape,
+  createParlay,
   executeSell,
   placeLimitOrder,
   publicErrorMessage,
+  quoteParlay,
   quoteSell,
   redeemWinnings,
 } from '../lib/pointsApi.js';
@@ -128,6 +130,58 @@ function formatCompactMxnp(value, locale = 'es-MX') {
     notation: n >= 1000 ? 'compact' : 'standard',
     maximumFractionDigits: n >= 1000 ? 1 : 0,
   }).format(n);
+}
+
+const PARLAY_SLIP_STORAGE_KEY = 'pronos:points:parlay-slip:v1';
+const PARLAY_RULES_FALLBACK = {
+  minLegs: 3,
+  maxLegs: 6,
+  minStakeMxnp: 10,
+  maxStakeMxnp: 100,
+};
+
+function sanitizeParlaySlip(raw) {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set();
+  return raw
+    .map((leg) => ({
+      marketId: Number(leg?.marketId),
+      outcomeIndex: Number(leg?.outcomeIndex),
+      question: String(leg?.question || '').slice(0, 180),
+      outcomeLabel: String(leg?.outcomeLabel || '').slice(0, 80),
+      price: Number.isFinite(Number(leg?.price)) ? Number(leg.price) : null,
+    }))
+    .filter((leg) => {
+      if (!Number.isInteger(leg.marketId) || leg.marketId <= 0) return false;
+      if (!Number.isInteger(leg.outcomeIndex) || leg.outcomeIndex < 0) return false;
+      if (seen.has(leg.marketId)) return false;
+      seen.add(leg.marketId);
+      return true;
+    })
+    .slice(-PARLAY_RULES_FALLBACK.maxLegs);
+}
+
+function readStoredParlaySlip() {
+  if (typeof window === 'undefined') return [];
+  try {
+    return sanitizeParlaySlip(JSON.parse(window.localStorage.getItem(PARLAY_SLIP_STORAGE_KEY) || '[]'));
+  } catch {
+    return [];
+  }
+}
+
+function storeParlaySlip(legs) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(PARLAY_SLIP_STORAGE_KEY, JSON.stringify(sanitizeParlaySlip(legs)));
+  } catch {
+    // Storage can be unavailable in private contexts; the in-memory slip still works.
+  }
+}
+
+function compactQuestion(value) {
+  const text = String(value || '').trim();
+  return text.length > 74 ? `${text.slice(0, 71)}...` : text;
 }
 
 function formatActivityAge(unixSeconds, t) {
@@ -743,7 +797,16 @@ function ScrollableList({ count, children }) {
   );
 }
 
-function UnifiedOutcomeList({ outcomes, prices, outcomeImages, outcomeCountryLabels, outcomeIndices, market, onBuyClick }) {
+function UnifiedOutcomeList({
+  outcomes,
+  prices,
+  outcomeImages,
+  outcomeCountryLabels,
+  outcomeIndices,
+  market,
+  onBuyClick,
+  onParlayAdd,
+}) {
   return (
     <ScrollableList count={outcomes.length}>
       {outcomes.map((label, i) => {
@@ -753,19 +816,17 @@ function UnifiedOutcomeList({ outcomes, prices, outcomeImages, outcomeCountryLab
         const countryLabel = outcomeCountryLabels?.[i] || null;
         const originalIndex = Array.isArray(outcomeIndices) ? outcomeIndices[i] : i;
         return (
-          <button
+          <div
             key={i}
-            onClick={() => onBuyClick(market, originalIndex, label)}
             style={{
               width: '100%',
-              padding: '10px 14px 10px 10px',
+              padding: '6px',
               marginBottom: 8,
               borderRadius: 10,
               border: '1px solid var(--border)',
               background: 'var(--surface2)',
               color: 'var(--text-primary)',
               fontFamily: 'var(--font-mono)',
-              cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: 10,
@@ -780,30 +841,60 @@ function UnifiedOutcomeList({ outcomes, prices, outcomeImages, outcomeCountryLab
               e.currentTarget.style.background = 'var(--surface2)';
             }}
           >
-            <OutcomeLogo src={logo} label={label} />
-            <span style={{
-              flex: 1,
-              minWidth: 0,
-              fontSize: 13,
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-              textAlign: 'left',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}>
-              {label}
-            </span>
-            <CountryChip label={countryLabel} />
-            <span style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: 20,
-              flexShrink: 0,
-              color: accent.fg,
-            }}>
-              {pct}%
-            </span>
-          </button>
+            <button
+              type="button"
+              onClick={() => onBuyClick(market, originalIndex, label)}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                border: 'none',
+                background: 'transparent',
+                color: 'inherit',
+                padding: '4px 0 4px 4px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                fontFamily: 'var(--font-mono)',
+              }}
+            >
+              <OutcomeLogo src={logo} label={label} />
+              <span style={{
+                flex: 1,
+                minWidth: 0,
+                fontSize: 13,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                textAlign: 'left',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}>
+                {label}
+              </span>
+              <CountryChip label={countryLabel} />
+              <span style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: 20,
+                flexShrink: 0,
+                color: accent.fg,
+              }}>
+                {pct}%
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onParlayAdd?.({
+                market,
+                outcomeIndex: originalIndex,
+                outcomeLabel: label,
+                price: prices[i],
+              })}
+              style={parlayAddButtonStyle}
+            >
+              + Combo
+            </button>
+          </div>
         );
       })}
     </ScrollableList>
@@ -816,7 +907,7 @@ function UnifiedOutcomeList({ outcomes, prices, outcomeImages, outcomeCountryLab
 //
 // Leg images are passed in display order. The parent stores one image
 // per original outcome; the caller sorts those alongside the legs.
-function ParallelLegList({ market, legs, outcomeImages, outcomeCountryLabels, onBuyClick }) {
+function ParallelLegList({ market, legs, outcomeImages, outcomeCountryLabels, onBuyClick, onParlayAdd }) {
   return (
     <ScrollableList count={legs.length}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -911,6 +1002,30 @@ function ParallelLegList({ market, legs, outcomeImages, outcomeCountryLabels, on
                   >
                     No <span style={legPriceStyle}>{Math.round(noPrice * 100)}¢</span>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => onParlayAdd?.({
+                      market: legMarket,
+                      outcomeIndex: 0,
+                      outcomeLabel: `${leg.label} — Sí`,
+                      price: yesPrice,
+                    })}
+                    style={parlayAddButtonStyle}
+                  >
+                    + Sí
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onParlayAdd?.({
+                      market: legMarket,
+                      outcomeIndex: 1,
+                      outcomeLabel: `${leg.label} — No`,
+                      price: noPrice,
+                    })}
+                    style={parlayAddButtonStyle}
+                  >
+                    + No
+                  </button>
                 </div>
               ) : (
                 <div style={{
@@ -1002,6 +1117,313 @@ function OddsSummary({ outcomes, prices, outcomeImages, outcomeCountryLabels }) 
     </ScrollableList>
   );
 }
+
+function ParlaySlipPanel({
+  legs,
+  stake,
+  state,
+  rules,
+  lang,
+  authenticated,
+  onStakeChange,
+  onQuote,
+  onSubmit,
+  onRemove,
+  onClear,
+  onOpenLogin,
+}) {
+  const copy = lang === 'en'
+    ? {
+        title: 'Combo slip',
+        empty: 'Add 3 to 6 picks.',
+        stake: 'Stake',
+        quote: 'Quote',
+        create: 'Create combo',
+        creating: 'Creating...',
+        multiplier: 'Multiplier',
+        payout: 'Payout',
+        profit: 'Profit',
+        remove: 'Remove',
+        clear: 'Clear',
+        signIn: 'Sign in',
+      }
+    : {
+        title: 'Combinada',
+        empty: 'Agrega 3 a 6 selecciones.',
+        stake: 'Stake',
+        quote: 'Cotizar',
+        create: 'Crear combinada',
+        creating: 'Creando...',
+        multiplier: 'Multiplicador',
+        payout: 'Paga',
+        profit: 'Ganancia',
+        remove: 'Quitar',
+        clear: 'Limpiar',
+        signIn: 'Inicia sesión',
+      };
+  const minLegs = Number(rules?.minLegs || PARLAY_RULES_FALLBACK.minLegs);
+  const maxLegs = Number(rules?.maxLegs || PARLAY_RULES_FALLBACK.maxLegs);
+  const minStake = Number(rules?.minStakeMxnp || PARLAY_RULES_FALLBACK.minStakeMxnp);
+  const maxStake = Number(rules?.maxStakeMxnp || PARLAY_RULES_FALLBACK.maxStakeMxnp);
+  const canQuote = legs.length >= minLegs && !state?.loading && !state?.submitting;
+  const canSubmit = canQuote && !state?.submitting;
+  const quote = state?.quote;
+
+  return (
+    <div style={{
+      marginTop: 16,
+      paddingTop: 16,
+      borderTop: '1px solid var(--border)',
+    }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: 12,
+        marginBottom: 10,
+      }}>
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          color: 'var(--text-muted)',
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+        }}>
+          {copy.title}
+        </div>
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          color: legs.length >= minLegs ? 'var(--green)' : 'var(--text-muted)',
+          letterSpacing: '0.08em',
+        }}>
+          {legs.length}/{maxLegs}
+        </div>
+      </div>
+
+      {legs.length === 0 ? (
+        <p style={{ margin: '0 0 12px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+          {copy.empty}
+        </p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+          {legs.map((leg) => (
+            <div
+              key={`${leg.marketId}-${leg.outcomeIndex}`}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(0, 1fr) auto',
+                gap: 10,
+                alignItems: 'center',
+                padding: '9px 10px',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                background: 'var(--surface2)',
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div style={{
+                  fontFamily: 'var(--font-body)',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: 'var(--text-primary)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {leg.outcomeLabel || `#${leg.outcomeIndex + 1}`}
+                </div>
+                <div style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 9,
+                  color: 'var(--text-muted)',
+                  letterSpacing: '0.04em',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  marginTop: 3,
+                }}>
+                  {compactQuestion(leg.question)}
+                  {Number.isFinite(Number(leg.price)) ? ` · ${formatDepthCents(leg.price)}` : ''}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onRemove(leg.marketId)}
+                title={copy.remove}
+                style={{
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                  width: 30,
+                  height: 30,
+                  background: 'transparent',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 14,
+                }}
+              >
+                x
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'end' }}>
+        <label style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6,
+          fontFamily: 'var(--font-mono)',
+          fontSize: 9,
+          letterSpacing: '0.08em',
+          color: 'var(--text-muted)',
+          textTransform: 'uppercase',
+        }}>
+          {copy.stake}
+          <input
+            value={stake}
+            onChange={e => onStakeChange(e.target.value)}
+            inputMode="decimal"
+            min={minStake}
+            max={maxStake}
+            style={{
+              width: '100%',
+              height: 38,
+              borderRadius: 8,
+              border: '1px solid var(--border)',
+              background: 'var(--surface2)',
+              color: 'var(--text-primary)',
+              padding: '0 10px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 14,
+              boxSizing: 'border-box',
+            }}
+          />
+        </label>
+        <button
+          type="button"
+          onClick={onQuote}
+          disabled={!canQuote}
+          style={{
+            height: 38,
+            borderRadius: 8,
+            border: '1px solid var(--border)',
+            background: canQuote ? 'var(--surface2)' : 'rgba(255,255,255,0.03)',
+            color: canQuote ? 'var(--text-primary)' : 'var(--text-muted)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            cursor: canQuote ? 'pointer' : 'not-allowed',
+            padding: '0 12px',
+          }}
+        >
+          {state?.loading ? '...' : copy.quote}
+        </button>
+      </div>
+
+      {quote && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+          gap: 8,
+          marginTop: 12,
+          fontFamily: 'var(--font-mono)',
+        }}>
+          {[
+            [copy.multiplier, `${Number(quote.multiplier || 0).toFixed(2)}x`],
+            [copy.payout, `${Number(quote.potentialPayout || 0).toFixed(2)} MXNP`],
+            [copy.profit, `${Number(quote.potentialProfit || 0).toFixed(2)} MXNP`],
+          ].map(([label, value]) => (
+            <div key={label} style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 8, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                {label}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-primary)', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {value}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {(state?.error || state?.message) && (
+        <p style={{
+          margin: '10px 0 0',
+          color: state?.error ? 'var(--danger)' : 'var(--green)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          lineHeight: 1.5,
+        }}>
+          {state.error || state.message}
+        </p>
+      )}
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <button
+          type="button"
+          onClick={authenticated ? onSubmit : onOpenLogin}
+          disabled={authenticated ? !canSubmit : false}
+          style={{
+            flex: 1,
+            minHeight: 40,
+            borderRadius: 8,
+            border: 'none',
+            background: authenticated && !canSubmit ? 'rgba(255,85,0,0.35)' : 'var(--orange)',
+            color: '#050505',
+            fontFamily: 'var(--font-mono)',
+            fontWeight: 800,
+            fontSize: 10,
+            letterSpacing: '0.1em',
+            textTransform: 'uppercase',
+            cursor: authenticated && !canSubmit ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {authenticated
+            ? (state?.submitting ? copy.creating : copy.create)
+            : copy.signIn}
+        </button>
+        {legs.length > 0 && (
+          <button
+            type="button"
+            onClick={onClear}
+            title={copy.clear}
+            style={{
+              width: 42,
+              borderRadius: 8,
+              border: '1px solid var(--border)',
+              background: 'transparent',
+              color: 'var(--text-muted)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 16,
+              cursor: 'pointer',
+            }}
+          >
+            x
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const parlayAddButtonStyle = {
+  minHeight: 30,
+  padding: '0 9px',
+  borderRadius: 8,
+  border: '1px solid rgba(255,85,0,0.35)',
+  background: 'rgba(255,85,0,0.08)',
+  color: 'var(--orange)',
+  fontFamily: 'var(--font-mono)',
+  fontSize: 10,
+  fontWeight: 800,
+  letterSpacing: '0.04em',
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+  flexShrink: 0,
+};
 
 function legButtonStyle(fg, bg, border) {
   return {
@@ -1776,16 +2198,34 @@ function OrderBookPanel({
             {t('points.detail.orderBookHint')}
           </div>
         </div>
-        {book?.spread != null && (
-          <div style={{ textAlign: 'right', flexShrink: 0 }}>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              {t('points.detail.orderBookSpread')}
+        <div style={{ textAlign: 'right', flexShrink: 0, display: 'grid', gap: 6, justifyItems: 'end' }}>
+          <a
+            href="/que-es-el-libro-de-ordenes"
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 9,
+              color: 'var(--orange)',
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              textDecoration: 'none',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Cómo funciona
+          </a>
+          {book?.spread != null && (
+            <div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                {t('points.detail.orderBookSpread')}
+              </div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--text-primary)' }}>
+                {formatDepthCents(book.spread)}
+              </div>
             </div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--text-primary)' }}>
-              {formatDepthCents(book.spread)}
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       <div style={{
@@ -2239,6 +2679,15 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   //   parallel → the individual leg market (so the buy endpoint hits the
   //              leg's binary CPMM, not the aggregated parent)
   const [buyState, setBuyState] = useState(null);
+  const [parlaySlip, setParlaySlip] = useState(() => readStoredParlaySlip());
+  const [parlayStake, setParlayStake] = useState('25');
+  const [parlayState, setParlayState] = useState({
+    loading: false,
+    submitting: false,
+    error: null,
+    message: null,
+    quote: null,
+  });
   const [sellPreview, setSellPreview] = useState(null);
   const [tradeTape, setTradeTape] = useState([]);
   const [orderBookRefresh, setOrderBookRefresh] = useState(0);
@@ -2262,6 +2711,10 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   useEffect(() => () => {
     if (sellQuoteTimerRef.current) window.clearTimeout(sellQuoteTimerRef.current);
   }, []);
+
+  useEffect(() => {
+    storeParlaySlip(parlaySlip);
+  }, [parlaySlip]);
 
   useEffect(() => {
     if (!id) return;
@@ -2536,6 +2989,103 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
       outcomeLabel,
       minimumEntrySatisfied: Boolean(options.minimumEntrySatisfied),
     });
+  }
+
+  function handleAddParlayLeg({ market: targetMarket, outcomeIndex, outcomeLabel, price }) {
+    const marketId = Number(targetMarket?.id);
+    const oi = Number(outcomeIndex);
+    if (!Number.isInteger(marketId) || marketId <= 0 || !Number.isInteger(oi) || oi < 0) return;
+    const nextLeg = {
+      marketId,
+      outcomeIndex: oi,
+      question: targetMarket?.question || market?.question || '',
+      outcomeLabel: outcomeLabel || `Opcion ${oi + 1}`,
+      price: Number.isFinite(Number(price)) ? Number(price) : null,
+    };
+    setParlaySlip((current) => {
+      const withoutMarket = sanitizeParlaySlip(current).filter(leg => leg.marketId !== marketId);
+      return sanitizeParlaySlip([...withoutMarket, nextLeg]);
+    });
+    setParlayState({
+      loading: false,
+      submitting: false,
+      error: null,
+      message: lang === 'en' ? 'Added to combo.' : 'Agregado a combinada.',
+      quote: null,
+    });
+  }
+
+  function parlayPayloadLegs() {
+    return sanitizeParlaySlip(parlaySlip).map(leg => ({
+      marketId: leg.marketId,
+      outcomeIndex: leg.outcomeIndex,
+    }));
+  }
+
+  async function handleQuoteParlay() {
+    setParlayState(prev => ({ ...prev, loading: true, error: null, message: null }));
+    try {
+      const quote = await quoteParlay({
+        legs: parlayPayloadLegs(),
+        stake: parlayStake,
+      });
+      setParlayState({
+        loading: false,
+        submitting: false,
+        error: null,
+        message: null,
+        quote,
+      });
+    } catch (e) {
+      setParlayState({
+        loading: false,
+        submitting: false,
+        error: publicErrorMessage(e, lang, 'parlay_quote_failed'),
+        message: null,
+        quote: null,
+      });
+    }
+  }
+
+  async function handleCreateParlay() {
+    if (!authenticated) {
+      onOpenLogin?.();
+      return;
+    }
+    setParlayState(prev => ({ ...prev, submitting: true, error: null, message: null }));
+    try {
+      const result = await createParlay({
+        legs: parlayPayloadLegs(),
+        stake: parlayStake,
+      });
+      setParlaySlip([]);
+      setParlayState({
+        loading: false,
+        submitting: false,
+        error: null,
+        message: lang === 'en' ? 'Combo created.' : 'Combinada creada.',
+        quote: null,
+      });
+      await refresh?.();
+    } catch (e) {
+      setParlayState(prev => ({
+        ...prev,
+        loading: false,
+        submitting: false,
+        error: publicErrorMessage(e, lang, 'parlay_failed'),
+        message: null,
+      }));
+    }
+  }
+
+  function handleRemoveParlayLeg(marketId) {
+    setParlaySlip(current => sanitizeParlaySlip(current).filter(leg => leg.marketId !== Number(marketId)));
+    setParlayState(prev => ({ ...prev, error: null, message: null, quote: null }));
+  }
+
+  function handleClearParlaySlip() {
+    setParlaySlip([]);
+    setParlayState({ loading: false, submitting: false, error: null, message: null, quote: null });
   }
 
   async function loadSellPreviewQuote(position, shares) {
@@ -2884,6 +3434,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
               outcomeImages={displayOutcomeImages}
               outcomeCountryLabels={displayOutcomeCountryLabels}
               onBuyClick={handleBuyClick}
+              onParlayAdd={handleAddParlayLeg}
             />
           : <UnifiedOutcomeList
               outcomes={displayOutcomes}
@@ -2893,7 +3444,28 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
               outcomeIndices={displayOutcomeIndices}
               market={market}
               onBuyClick={handleBuyClick}
+              onParlayAdd={handleAddParlayLeg}
             />
+      )}
+
+      {!isResolved && !isPendingResolution && !isTradingLocked && (
+        <ParlaySlipPanel
+          legs={parlaySlip}
+          stake={parlayStake}
+          state={parlayState}
+          rules={PARLAY_RULES_FALLBACK}
+          lang={lang}
+          authenticated={authenticated}
+          onStakeChange={(value) => {
+            setParlayStake(value);
+            setParlayState(prev => ({ ...prev, error: null, message: null, quote: null }));
+          }}
+          onQuote={handleQuoteParlay}
+          onSubmit={handleCreateParlay}
+          onRemove={handleRemoveParlayLeg}
+          onClear={handleClearParlaySlip}
+          onOpenLogin={onOpenLogin}
+        />
       )}
 
       {(isResolved || isPendingResolution || isTradingLocked) && (

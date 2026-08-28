@@ -104,7 +104,7 @@ test('portfolio history can claim unredeemed winning resolved markets', () => {
   assert.match(source, /Reclamar/);
 });
 
-test('portfolio shows maker reward payouts in their own market-linked tab', () => {
+test('portfolio shows liquidity reward payouts in their own market-linked tab', () => {
   assert.match(source, /fetchMakerRewards/);
   assert.match(source, /function RewardsView/);
   assert.match(source, /rewardSummary/);

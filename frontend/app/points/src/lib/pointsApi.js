@@ -56,9 +56,53 @@ const PUBLIC_ERROR_COPY = {
     es: 'Llegaste al máximo de acciones permitido por mercado en este torneo.',
     en: 'You reached the maximum shares allowed per market in this tournament.',
   },
+  tournament_not_active: {
+    es: 'El torneo todavía no está activo.',
+    en: 'The tournament is not active yet.',
+  },
   tournament_market_after_cutoff: {
     es: 'Este mercado termina después del cierre del torneo. Usa uno que cierre antes de las 11:59pm.',
     en: 'This market settles after the tournament closes. Pick one that closes before 11:59pm.',
+  },
+  invalid_stake: {
+    es: 'Ingresa un stake válido para la combinada.',
+    en: 'Enter a valid combo-slip stake.',
+  },
+  stake_too_low: {
+    es: 'El stake de la combinada es demasiado bajo.',
+    en: 'The combo-slip stake is too low.',
+  },
+  stake_too_high: {
+    es: 'El stake de la combinada es demasiado alto.',
+    en: 'The combo-slip stake is too high.',
+  },
+  not_enough_legs: {
+    es: 'La combinada necesita al menos 3 mercados.',
+    en: 'The combo slip needs at least 3 markets.',
+  },
+  too_many_legs: {
+    es: 'La combinada permite máximo 6 mercados.',
+    en: 'The combo slip allows up to 6 markets.',
+  },
+  duplicate_market: {
+    es: 'Cada mercado solo puede entrar una vez en la combinada.',
+    en: 'Each market can only appear once in the combo slip.',
+  },
+  correlated_legs_not_allowed: {
+    es: 'No se pueden combinar resultados del mismo evento en una combinada.',
+    en: 'You cannot combine outcomes from the same event in one combo slip.',
+  },
+  market_not_in_tournament: {
+    es: 'Solo los mercados del torneo pueden entrar a una combinada.',
+    en: 'Only tournament markets can be added to a combo slip.',
+  },
+  parlay_failed: {
+    es: 'No pudimos crear la combinada. Intenta otra vez.',
+    en: 'Could not create the combo slip. Try again.',
+  },
+  parlay_quote_failed: {
+    es: 'No pudimos cotizar la combinada. Intenta otra vez.',
+    en: 'Could not quote the combo slip. Try again.',
   },
   order_not_open: {
     es: 'Esa orden ya no está abierta.',
@@ -506,6 +550,19 @@ export async function fetchOrderBook({ marketId, outcomeIndex = 0, levels = 8 })
     levels: String(levels),
   });
   return getJson(`/api/points/orderbook?${q}`);
+}
+
+export async function quoteParlay({ legs, stake }) {
+  return postJson('/api/points/parlays/quote', { legs, stake });
+}
+
+export async function createParlay({ legs, stake }) {
+  return postJson('/api/points/parlays', { legs, stake });
+}
+
+export async function fetchMyParlays(limit = 20) {
+  const q = new URLSearchParams({ limit: String(limit) });
+  return getJson(`/api/points/parlays?${q}`);
 }
 
 export async function fetchMyLimitOrders({ marketId }) {

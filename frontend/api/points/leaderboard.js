@@ -3,8 +3,8 @@
  *
  * Top predictors ranked by tournament score for /torneo, plus the old wallet
  * leaderboard for Portfolio while the current cycle finishes. Bonuses and
- * referrals fund the wallet leaderboard; tournament score stays tied to
- * market PnL and the friendly inactivity penalty.
+ * referrals fund the wallet leaderboard; tournament score combines market
+ * PnL, hold rewards, liquidity rewards, realized parlay PnL, and the friendly inactivity penalty.
  *
  * Unauthenticated caller gets the public leaderboard. Authenticated
  * caller additionally receives their own rank + balance.
@@ -38,6 +38,12 @@ function emptyTournamentRow(username) {
     score: 0,
     cycleDelta: 0,
     marketPnl: 0,
+    currentPositionValue: 0,
+    holdBonus: 0,
+    liquidityReward: 0,
+    parlayPnl: 0,
+    parlayTickets: 0,
+    parlayWins: 0,
     inactivityPenalty: 0,
     inactiveDays: 0,
     activeDays: 0,
@@ -85,7 +91,7 @@ export default async function handler(req, res) {
   try {
     setCacheHeaders(res, { scope: 'private', maxAge: 15, staleWhileRevalidate: 60 });
 
-    const { value: ranked, hit } = await cachedJson('points:leaderboard:ranked:v4', 15_000, async () => {
+    const { value: ranked, hit } = await cachedJson('points:leaderboard:ranked:v6', 15_000, async () => {
       await timer.time('schema', () => ensurePointsSchema(schemaSql));
       return await timer.time('db_leaderboard', async () => {
         const frozen = await readFrozenLeaderboardRowsForActiveCutoff(sql, { limit: 5000 });

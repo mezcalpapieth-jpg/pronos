@@ -44,6 +44,8 @@
   ],
   "rewrites": [
     { "source": "/r/:username",        "destination": "/api/share/referral?username=:username" },
+    { "source": "/que-es-el-libro-de-ordenes",  "destination": "/que-es-el-libro-de-ordenes.html" },
+    { "source": "/que-es-el-libro-de-ordenes/", "destination": "/que-es-el-libro-de-ordenes.html" },
     { "source": "/mvp/market",    "destination": "/mvp/" },
     { "source": "/mvp/portfolio", "destination": "/mvp/" },
     { "source": "/mvp/admin",     "destination": "/mvp/" },

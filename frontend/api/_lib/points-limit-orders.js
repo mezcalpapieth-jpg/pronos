@@ -10,6 +10,8 @@ import { buildMockMakerDepth, AMM_DEPTH_LEVELS } from './amm-depth.js';
 import { bestEffortInsertPointsPriceSnapshot } from './points-price-snapshots.js';
 import { assertCryptoTradeAllowed, cryptoTradeLock } from './points-crypto-trade-guard.js';
 import {
+  TOURNAMENT_LIQUIDITY_REWARD_MAX_DAILY_PER_USER,
+  TOURNAMENT_LIQUIDITY_REWARD_WEEKLY_RATE,
   TOURNAMENT_MAX_SHARES_PER_MARKET,
   tournamentRulesActive,
 } from './points-tournament-config.js';
@@ -21,6 +23,7 @@ import {
 const EPSILON = 0.000001;
 const MAX_TRIGGERED_PER_PASS = 24;
 const SECONDS_PER_YEAR = 365 * 24 * 60 * 60;
+const SECONDS_PER_WEEK = 7 * 24 * 60 * 60;
 
 export const PRONOS_TREASURY_USERNAME = process.env.POINTS_TREASURY_USERNAME || 'pronos_treasury';
 
@@ -29,8 +32,23 @@ function configNumber(name, fallback) {
   return Number.isFinite(value) && value >= 0 ? value : fallback;
 }
 
-export const MAKER_REWARD_ANNUAL_RATE = configNumber('POINTS_MAKER_REWARD_ANNUAL_RATE', 0.12);
-export const MAKER_REWARD_MAX_DAILY_PER_USER = configNumber('POINTS_MAKER_REWARD_MAX_DAILY_PER_USER', 100);
+function configNumberAny(names, fallback) {
+  for (const name of names) {
+    const value = Number(process.env[name]);
+    if (Number.isFinite(value) && value >= 0) return value;
+  }
+  return fallback;
+}
+
+export const MAKER_REWARD_WEEKLY_RATE = configNumberAny(
+  ['POINTS_LIQUIDITY_REWARD_WEEKLY_RATE', 'POINTS_MAKER_REWARD_WEEKLY_RATE'],
+  TOURNAMENT_LIQUIDITY_REWARD_WEEKLY_RATE,
+);
+export const MAKER_REWARD_ANNUAL_RATE = MAKER_REWARD_WEEKLY_RATE * (SECONDS_PER_YEAR / SECONDS_PER_WEEK);
+export const MAKER_REWARD_MAX_DAILY_PER_USER = configNumberAny(
+  ['POINTS_LIQUIDITY_REWARD_MAX_DAILY_PER_USER', 'POINTS_MAKER_REWARD_MAX_DAILY_PER_USER'],
+  TOURNAMENT_LIQUIDITY_REWARD_MAX_DAILY_PER_USER,
+);
 export const MAKER_REWARD_MAX_DISTANCE = configNumber('POINTS_MAKER_REWARD_MAX_DISTANCE', 0.10);
 export const MAKER_REWARD_FULL_DISTANCE = configNumber('POINTS_MAKER_REWARD_FULL_DISTANCE', 0.03);
 export const MAKER_REWARD_MIN_SECONDS = configNumber('POINTS_MAKER_REWARD_MIN_SECONDS', 300);
@@ -119,7 +137,7 @@ export function estimateMakerReward(order, market, reserves, now = new Date()) {
   const multiplier = qualityMultiplier(Number(order.limit_price), currentPrice);
   if (baseValue <= 0 || multiplier <= 0) return 0;
 
-  const reward = baseValue * MAKER_REWARD_ANNUAL_RATE * (eligibleSeconds / SECONDS_PER_YEAR) * multiplier;
+  const reward = baseValue * MAKER_REWARD_WEEKLY_RATE * (eligibleSeconds / SECONDS_PER_WEEK) * multiplier;
   return round(Math.max(0, reward), 6);
 }
 

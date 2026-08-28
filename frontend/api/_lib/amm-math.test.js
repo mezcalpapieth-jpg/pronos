@@ -43,6 +43,40 @@ function approxEqual(actual, expected, epsilon, message) {
   );
 }
 
+function buyBinaryInSteps(reserves, outcome, totalCollateral, stepCollateral) {
+  let remaining = totalCollateral;
+  let currentReserves = [...reserves];
+  const total = { fee: 0, sharesOut: 0, reservesAfter: currentReserves, priceAfter: 0 };
+  while (remaining > 0) {
+    const chunk = Math.min(stepCollateral, remaining);
+    const quote = binaryBuyQuote(currentReserves, outcome, chunk);
+    total.fee += quote.fee;
+    total.sharesOut += quote.sharesOut;
+    total.reservesAfter = quote.reservesAfter;
+    total.priceAfter = quote.priceAfter;
+    currentReserves = quote.reservesAfter;
+    remaining -= chunk;
+  }
+  return total;
+}
+
+function buyMultiInSteps(reserves, outcome, totalCollateral, stepCollateral) {
+  let remaining = totalCollateral;
+  let currentReserves = [...reserves];
+  const total = { fee: 0, sharesOut: 0, reservesAfter: currentReserves, priceAfter: 0 };
+  while (remaining > 0) {
+    const chunk = Math.min(stepCollateral, remaining);
+    const quote = multiBuyQuote(currentReserves, outcome, chunk);
+    total.fee += quote.fee;
+    total.sharesOut += quote.sharesOut;
+    total.reservesAfter = quote.reservesAfter;
+    total.priceAfter = quote.priceAfter;
+    currentReserves = quote.reservesAfter;
+    remaining -= chunk;
+  }
+  return total;
+}
+
 // ─── Conversions ─────────────────────────────────────────────────────────────
 test('toRaw / fromRaw round-trip at 6 decimals', () => {
   assert.equal(toRaw(1), 1_000_000n);
@@ -147,6 +181,19 @@ test('larger buy has more slippage than smaller buy', () => {
   const smallImpact = small.priceAfter - small.priceBefore;
   const bigImpact = big.priceAfter - big.priceBefore;
   assert.ok(bigImpact > smallImpact, 'big trade should have bigger price impact');
+});
+
+test('binaryBuyQuote: large buy fee matches repeated 100 MXNP buys', () => {
+  // P(YES) starts near 7%; old single-shot fee logic overcharged the full
+  // order at that initial high fee rate instead of walking the trade path.
+  const reserves = [930, 70];
+  const single = binaryBuyQuote(reserves, 0, 1000);
+  const stepped = buyBinaryInSteps(reserves, 0, 1000, 100);
+
+  approxEqual(single.fee, stepped.fee, 0.00001, 'single buy fee equals 10 × 100 path fee');
+  approxEqual(single.sharesOut, stepped.sharesOut, 0.00001, 'single buy shares equal stepped shares');
+  approxEqual(single.reservesAfter[0], stepped.reservesAfter[0], 0.00001, 'YES reserve matches');
+  approxEqual(single.reservesAfter[1], stepped.reservesAfter[1], 0.00001, 'NO reserve matches');
 });
 
 test('price monotonic across sequential buys', () => {
@@ -436,6 +483,18 @@ test('multiBuyQuote: N=2 matches binary within tolerance', () => {
   approxEqual(multi.fee, binary.fee, 0.001, 'multi(N=2) ≈ binary fee');
   approxEqual(multi.priceAfter, binary.priceAfter, 0.001,
     'multi(N=2) ≈ binary priceAfter');
+});
+
+test('multiBuyQuote: large buy fee matches repeated 100 MXNP buys', () => {
+  const reserves = [100, 900, 900];
+  const single = multiBuyQuote(reserves, 1, 1000);
+  const stepped = buyMultiInSteps(reserves, 1, 1000, 100);
+
+  approxEqual(single.fee, stepped.fee, 0.00001, 'single multi buy fee equals 10 × 100 path fee');
+  approxEqual(single.sharesOut, stepped.sharesOut, 0.00001, 'single multi buy shares equal stepped shares');
+  single.reservesAfter.forEach((reserve, index) => {
+    approxEqual(reserve, stepped.reservesAfter[index], 0.00001, `reserve ${index} matches`);
+  });
 });
 
 // Unified multi-outcome (N ≥ 4) — same math, just larger N.

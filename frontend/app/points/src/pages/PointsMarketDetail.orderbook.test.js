@@ -29,6 +29,8 @@ test('points market detail renders hybrid limit-order book depth', () => {
   assert.match(detailSource, /handlePickRow/);
   assert.match(detailSource, /bookCacheRef/);
   assert.match(detailSource, /requestIdleCallback/);
+  assert.match(detailSource, /\/que-es-el-libro-de-ordenes/);
+  assert.match(detailSource, /Cómo funciona/);
 });
 
 test('points market detail places mobile trade controls before orderbook', () => {
@@ -60,6 +62,24 @@ test('points API client exposes orderbook and limit-order endpoints', () => {
   assert.match(apiSource, /\/api\/points\/cancel-limit-order/);
   assert.match(apiSource, /outcomeIndex/);
   assert.match(apiSource, /levels/);
+});
+
+test('points market detail supports local parlay slip actions', () => {
+  assert.match(detailSource, /PARLAY_SLIP_STORAGE_KEY/);
+  assert.match(detailSource, /function ParlaySlipPanel/);
+  assert.match(detailSource, /handleAddParlayLeg/);
+  assert.match(detailSource, /quoteParlay/);
+  assert.match(detailSource, /createParlay/);
+  assert.match(detailSource, /\+ Combo/);
+  assert.match(detailSource, /Combinada/);
+});
+
+test('points API client exposes parlay endpoints', () => {
+  assert.match(apiSource, /export async function quoteParlay/);
+  assert.match(apiSource, /export async function createParlay/);
+  assert.match(apiSource, /export async function fetchMyParlays/);
+  assert.match(apiSource, /\/api\/points\/parlays\/quote/);
+  assert.match(apiSource, /\/api\/points\/parlays/);
 });
 
 test('points market detail hides sold-out dust positions', () => {

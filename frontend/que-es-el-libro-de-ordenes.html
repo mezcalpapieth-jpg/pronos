@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Qué es el libro de órdenes | Pronos</title>
+    <meta
+      name="description"
+      content="Cómo leer el libro de órdenes de Pronos: profundidad, órdenes límite, recompensa por dar liquidez, compras, ventas, precio promedio y comisiones dinámicas."
+    />
+    <link rel="icon" href="/favicon.svg" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #090909;
+        --surface: #121212;
+        --surface-2: #181818;
+        --border: rgba(255, 255, 255, 0.12);
+        --text: #f4f1eb;
+        --muted: rgba(244, 241, 235, 0.62);
+        --orange: #ff5500;
+        --green: #00e87a;
+        --danger: #ff3b3b;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .page {
+        width: min(960px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 36px 0 72px;
+      }
+
+      .nav {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 44px;
+        font-family: "SFMono-Regular", ui-monospace, "Roboto Mono", monospace;
+        font-size: 12px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .brand {
+        color: var(--text);
+        text-decoration: none;
+        font-weight: 800;
+      }
+
+      .back {
+        color: var(--orange);
+        text-decoration: none;
+      }
+
+      .eyebrow,
+      .section-label {
+        font-family: "SFMono-Regular", ui-monospace, "Roboto Mono", monospace;
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--orange);
+      }
+
+      h1 {
+        margin: 12px 0 16px;
+        max-width: 800px;
+        font-size: clamp(36px, 7vw, 76px);
+        line-height: 0.95;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      .lead {
+        max-width: 720px;
+        margin: 0;
+        color: var(--muted);
+        font-size: clamp(17px, 2.2vw, 21px);
+        line-height: 1.55;
+      }
+
+      .hero-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(260px, 0.9fr);
+        gap: 20px;
+        align-items: start;
+        margin-top: 34px;
+      }
+
+      .orderbook-demo,
+      .panel {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface);
+      }
+
+      .orderbook-demo {
+        padding: 18px;
+      }
+
+      .demo-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+        margin-bottom: 16px;
+        font-family: "SFMono-Regular", ui-monospace, "Roboto Mono", monospace;
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .spread {
+        color: var(--orange);
+      }
+
+      .book-table {
+        display: grid;
+        gap: 8px;
+        font-family: "SFMono-Regular", ui-monospace, "Roboto Mono", monospace;
+      }
+
+      .row,
+      .table-head {
+        display: grid;
+        grid-template-columns: 76px 1fr 86px;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .table-head {
+        color: var(--muted);
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        padding: 0 8px 4px;
+      }
+
+      .row {
+        position: relative;
+        overflow: hidden;
+        min-height: 38px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 6px;
+        padding: 0 8px;
+        color: var(--text);
+      }
+
+      .row::before {
+        content: "";
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: var(--depth);
+        opacity: 0.16;
+        background: currentColor;
+      }
+
+      .row > span {
+        position: relative;
+      }
+
+      .ask {
+        color: var(--danger);
+      }
+
+      .bid {
+        color: var(--green);
+      }
+
+      .mid {
+        padding: 8px;
+        color: var(--muted);
+        text-align: center;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .panel {
+        padding: 20px;
+      }
+
+      .panel p {
+        margin: 8px 0 0;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .sections {
+        display: grid;
+        gap: 18px;
+        margin-top: 22px;
+      }
+
+      .section {
+        border-top: 1px solid var(--border);
+        padding-top: 22px;
+      }
+
+      h2 {
+        margin: 8px 0 10px;
+        font-size: clamp(22px, 3vw, 32px);
+        line-height: 1.1;
+        letter-spacing: 0;
+      }
+
+      .section p,
+      li {
+        color: var(--muted);
+        font-size: 16px;
+        line-height: 1.62;
+      }
+
+      ul,
+      ol {
+        margin: 12px 0 0;
+        padding-left: 22px;
+      }
+
+      li + li {
+        margin-top: 8px;
+      }
+
+      .formula {
+        margin-top: 14px;
+        border: 1px solid rgba(255, 85, 0, 0.28);
+        border-radius: 8px;
+        background: rgba(255, 85, 0, 0.08);
+        padding: 14px 16px;
+        font-family: "SFMono-Regular", ui-monospace, "Roboto Mono", monospace;
+        color: var(--text);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .note {
+        margin-top: 18px;
+        border: 1px solid rgba(0, 232, 122, 0.24);
+        border-radius: 8px;
+        background: rgba(0, 232, 122, 0.06);
+        padding: 16px;
+      }
+
+      .note strong {
+        color: var(--green);
+      }
+
+      @media (max-width: 760px) {
+        .page {
+          width: min(100% - 28px, 960px);
+          padding-top: 26px;
+        }
+
+        .nav {
+          margin-bottom: 30px;
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .hero-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .row,
+        .table-head {
+          grid-template-columns: 64px 1fr 74px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <nav class="nav" aria-label="Navegación principal">
+        <a class="brand" href="/points/">Pronos</a>
+        <a class="back" href="/points/market">Volver a mercados</a>
+      </nav>
+
+      <header>
+        <div class="eyebrow">Guía de trading</div>
+        <h1>Qué es el libro de órdenes</h1>
+        <p class="lead">
+          El libro de órdenes muestra la profundidad disponible para comprar y vender una opción. En Pronos convive con el AMM: primero se cruzan órdenes de usuarios al mejor precio disponible y el resto puede llenarse contra la curva automática. Durante el torneo, también te muestra dónde puedes dejar liquidez para buscar una recompensa por dar liquidez.
+        </p>
+      </header>
+
+      <div class="hero-grid">
+        <section class="orderbook-demo" aria-label="Ejemplo visual de libro de órdenes">
+          <div class="demo-head">
+            <span>Profundidad</span>
+            <span class="spread">Spread 2.0¢</span>
+          </div>
+          <div class="book-table">
+            <div class="table-head">
+              <span>Precio</span>
+              <span style="text-align:right">Acciones</span>
+              <span style="text-align:right">Total</span>
+            </div>
+            <div class="row ask" style="--depth: 44%">
+              <span>55.0¢</span><span style="text-align:right">140</span><span style="text-align:right">77.00</span>
+            </div>
+            <div class="row ask" style="--depth: 68%">
+              <span>54.0¢</span><span style="text-align:right">260</span><span style="text-align:right">140.40</span>
+            </div>
+            <div class="mid">Precio actual 52.0¢</div>
+            <div class="row bid" style="--depth: 58%">
+              <span>52.0¢</span><span style="text-align:right">210</span><span style="text-align:right">109.20</span>
+            </div>
+            <div class="row bid" style="--depth: 36%">
+              <span>51.0¢</span><span style="text-align:right">120</span><span style="text-align:right">61.20</span>
+            </div>
+          </div>
+        </section>
+
+        <aside class="panel">
+          <div class="section-label">Lectura rápida</div>
+          <p>
+            Las ventas son ofertas de usuarios que están dispuestos a vender acciones. Las compras son ofertas de usuarios que quieren comprar si el precio baja hasta su límite.
+          </p>
+          <p>
+            Mientras más grande es la barra, más liquidez hay en ese nivel. Si tu orden es más grande que un nivel, puede tomar varios precios.
+          </p>
+          <p>
+            Poner una orden cerca del precio actual puede pagarte una recompensa por dar liquidez mientras espera, y si se ejecuta te da entrada automática sin estar pegado a la pantalla.
+          </p>
+        </aside>
+      </div>
+
+      <div class="sections">
+        <section class="section">
+          <div class="section-label">Cómo se llena una compra</div>
+          <h2>Mejor precio primero</h2>
+          <ol>
+            <li>Si hay alguien vendiendo al precio que aceptas, tu compra toma esas acciones primero.</li>
+            <li>Si tu monto no se completa con órdenes de usuarios, el resto puede entrar al AMM.</li>
+            <li>El precio promedio final mezcla todos los niveles que tomaste, por eso una orden grande puede tener más impacto que una pequeña.</li>
+          </ol>
+        </section>
+
+        <section class="section">
+          <div class="section-label">Entrada y salida</div>
+          <h2>Órdenes límite</h2>
+          <p>
+            Una orden límite reserva MXNP o acciones y espera hasta que el mercado toque tu precio. Si compras con límite, defines el precio máximo que aceptas. Si vendes con límite, defines el precio mínimo al que quieres salir.
+          </p>
+          <p>
+            Cuando otra persona toma tu orden, se ejecuta automáticamente. Mientras está abierta, puedes cancelarla y recuperar lo reservado.
+          </p>
+        </section>
+
+        <section class="section">
+          <div class="section-label">Por qué poner dinero ahí</div>
+          <h2>Prioridad, control y recompensa por dar liquidez</h2>
+          <p>
+            Una orden límite deja tu MXNP o tus acciones trabajando. No persigues el precio: eliges el nivel que te gusta y esperas a que el mercado llegue ahí. Si alguien cruza contra tu orden, tú das liquidez y la operación se llena a tu precio límite o mejor.
+          </p>
+          <ul>
+            <li><strong>Mejor entrada:</strong> puedes intentar comprar más barato en vez de aceptar el precio instantáneo del AMM.</li>
+            <li><strong>Salida ordenada:</strong> puedes vender si el mercado sube al precio que querías, sin reaccionar tarde.</li>
+            <li><strong>Recompensa por dar liquidez:</strong> las órdenes abiertas cerca del precio actual pueden acumular un pago diario limitado por aportar profundidad útil.</li>
+          </ul>
+          <div class="note">
+            <strong>Durante el torneo:</strong> una orden abierta cerca del precio puede ganar una recompensa por dar liquidez de 20% semanal, prorrateada diario. Si una compra se ejecuta, ese nuevo lote empieza su propio reloj de holding para las recompensas por permanecer en posición.
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-label">Comisiones</div>
+          <h2>La comisión sigue el camino del precio</h2>
+          <p>
+            En compras, la comisión es dinámica: comprar una opción muy barata paga más porcentaje que comprar una opción que ya es favorita. Para órdenes grandes, Pronos recalcula la comisión por tramos conforme el precio se mueve.
+          </p>
+          <div class="formula">
+            Comisión de compra = 5% × (1 - probabilidad de la opción comprada)
+          </div>
+          <p>
+            Eso evita que una compra grande se cobre completa con la probabilidad inicial. Una compra de 1000 MXNP debe comportarse como varias compras consecutivas más pequeñas, no como si todo hubiera entrado al primer precio.
+          </p>
+        </section>
+
+        <section class="section">
+          <div class="section-label">Ejemplo</div>
+          <h2>Por qué importa la profundidad</h2>
+          <p>
+            Si quieres comprar 100 MXNP y hay 100 MXNP disponibles a 52¢, tu precio promedio queda cerca de 52¢. Si quieres comprar 1000 MXNP, probablemente tomes el nivel de 52¢, luego 53¢, 54¢ y parte del AMM. El resultado es un precio promedio más alto porque empujaste el mercado.
+          </p>
+          <div class="note">
+            <strong>Idea clave:</strong> el libro te dice cuánto puedes comprar o vender cerca del precio actual antes de moverlo demasiado.
+          </div>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>

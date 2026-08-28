@@ -26,6 +26,10 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/cron/points-parlay-settle",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/points-auto-feature",
       "schedule": "*/5 * * * *"
     },
@@ -91,6 +95,8 @@
     { "source": "/points/twitter",     "destination": "/api/points/publicity/redirect?source=x" },
     { "source": "/points/twitter/",    "destination": "/api/points/publicity/redirect?source=x" },
     { "source": "/r/:username",        "destination": "/api/share/referral?username=:username" },
+    { "source": "/que-es-el-libro-de-ordenes",  "destination": "/que-es-el-libro-de-ordenes.html" },
+    { "source": "/que-es-el-libro-de-ordenes/", "destination": "/que-es-el-libro-de-ordenes.html" },
     { "source": "/mvp/market",    "destination": "/mvp/" },
     { "source": "/mvp/portfolio", "destination": "/mvp/" },
     { "source": "/mvp/admin",     "destination": "/mvp/" },

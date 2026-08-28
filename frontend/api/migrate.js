@@ -786,6 +786,44 @@ const MIGRATIONS = [
     ON points_cycles(closed_at DESC)
     WHERE status = 'closed'`,
 
+  `CREATE TABLE IF NOT EXISTS points_parlay_tickets (
+    id                SERIAL PRIMARY KEY,
+    username          TEXT NOT NULL,
+    cycle_id          INTEGER REFERENCES points_cycles(id) ON DELETE SET NULL,
+    stake             NUMERIC(20,6) NOT NULL CHECK (stake > 0),
+    multiplier        NUMERIC(12,6) NOT NULL CHECK (multiplier > 0),
+    potential_payout  NUMERIC(20,6) NOT NULL CHECK (potential_payout >= 0),
+    payout            NUMERIC(20,6) NOT NULL DEFAULT 0,
+    status            TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'won', 'lost', 'void')),
+    submitted_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    settled_at        TIMESTAMPTZ,
+    reason            TEXT
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_parlay_tickets_user_time
+    ON points_parlay_tickets(username, submitted_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_parlay_tickets_status_time
+    ON points_parlay_tickets(status, submitted_at ASC)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_parlay_tickets_cycle_status
+    ON points_parlay_tickets(cycle_id, status)`,
+  `CREATE TABLE IF NOT EXISTS points_parlay_legs (
+    id                      SERIAL PRIMARY KEY,
+    ticket_id               INTEGER NOT NULL REFERENCES points_parlay_tickets(id) ON DELETE CASCADE,
+    market_id               INTEGER NOT NULL REFERENCES points_markets(id) ON DELETE CASCADE,
+    outcome_index           SMALLINT NOT NULL,
+    price_snapshot          NUMERIC(10,6) NOT NULL,
+    question_snapshot       TEXT,
+    outcome_label_snapshot  TEXT,
+    market_end_time         TIMESTAMPTZ,
+    resolved_outcome        SMALLINT,
+    status                  TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'won', 'lost', 'void')),
+    settled_at              TIMESTAMPTZ,
+    UNIQUE(ticket_id, market_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_parlay_legs_ticket
+    ON points_parlay_legs(ticket_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_points_parlay_legs_market
+    ON points_parlay_legs(market_id, outcome_index)`,
+
   `CREATE TABLE IF NOT EXISTS points_cycle_snapshots (
     id             SERIAL PRIMARY KEY,
     cycle_id       INTEGER NOT NULL REFERENCES points_cycles(id) ON DELETE CASCADE,
@@ -801,6 +839,11 @@ const MIGRATIONS = [
   `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS tournament_score NUMERIC(20,6)`,
   `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS market_pnl NUMERIC(20,6)`,
   `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS current_position_value NUMERIC(20,6)`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS hold_bonus NUMERIC(20,6)`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS liquidity_reward NUMERIC(20,6)`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS parlay_pnl NUMERIC(20,6)`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS parlay_tickets INTEGER`,
+  `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS parlay_wins INTEGER`,
   `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS inactivity_penalty NUMERIC(20,6)`,
   `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS inactive_days INTEGER`,
   `ALTER TABLE points_cycle_snapshots ADD COLUMN IF NOT EXISTS active_days INTEGER`,

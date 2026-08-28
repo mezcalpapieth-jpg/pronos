@@ -30,6 +30,11 @@ function snapshotRow(row) {
     cycleDelta: roundTournamentAmount(score),
     marketPnl: roundTournamentAmount(row.market_pnl ?? row.final_pnl ?? 0),
     currentPositionValue: roundTournamentAmount(row.current_position_value ?? 0),
+    holdBonus: roundTournamentAmount(row.hold_bonus ?? 0),
+    liquidityReward: roundTournamentAmount(row.liquidity_reward ?? 0),
+    parlayPnl: roundTournamentAmount(row.parlay_pnl ?? 0),
+    parlayTickets: Number(row.parlay_tickets || 0),
+    parlayWins: Number(row.parlay_wins || 0),
     inactivityPenalty: roundTournamentAmount(row.inactivity_penalty ?? 0),
     inactiveDays: Number(row.inactive_days || 0),
     activeDays: Number(row.active_days || 0),
@@ -67,6 +72,7 @@ export async function readCycleSnapshotRows(db, { cycleId, limit = DEFAULT_CYCLE
   const rows = await queryRows(db, `
     SELECT username, final_balance, final_pnl, rank,
            tournament_score, market_pnl, current_position_value,
+           hold_bonus, liquidity_reward, parlay_pnl, parlay_tickets, parlay_wins,
            inactivity_penalty, inactive_days, active_days,
            qualifying_markets, qualified
     FROM points_cycle_snapshots
@@ -102,10 +108,11 @@ export async function snapshotCycleLeaderboard(
       `INSERT INTO points_cycle_snapshots (
          cycle_id, username, final_balance, final_pnl, rank,
          tournament_score, market_pnl, current_position_value,
+         hold_bonus, liquidity_reward, parlay_pnl, parlay_tickets, parlay_wins,
          inactivity_penalty, inactive_days, active_days,
          qualifying_markets, qualified
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
        ON CONFLICT (cycle_id, username) DO NOTHING`,
       [
         activeCycle.id,
@@ -116,6 +123,11 @@ export async function snapshotCycleLeaderboard(
         numeric(row.score),
         numeric(row.marketPnl),
         numeric(row.currentPositionValue),
+        numeric(row.holdBonus),
+        numeric(row.liquidityReward),
+        numeric(row.parlayPnl),
+        Number(row.parlayTickets || 0),
+        Number(row.parlayWins || 0),
         numeric(row.inactivityPenalty),
         Number(row.inactiveDays || 0),
         Number(row.activeDays || 0),

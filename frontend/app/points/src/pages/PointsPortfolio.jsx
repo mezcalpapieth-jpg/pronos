@@ -2,7 +2,7 @@
  * Portfolio for the points-app.
  *
  * Three tabs: "Activo" (current positions), "Historial" (all trades grouped
- * by market), and "Recompensas" (paid maker-reward credits). Same visual
+ * by market), and "Recompensas" (paid liquidity credits). Same visual
  * structure as the MVP's Portfolio with USDC -> MXNP swapped and the
  * on-chain sell flow replaced with a server-side call.
  *
