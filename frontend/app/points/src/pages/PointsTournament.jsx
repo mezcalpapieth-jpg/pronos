@@ -332,18 +332,8 @@ function PrizeRows({ rules }) {
 
 function RuleList({ lang, rules }) {
   const r = rules || DEFAULT_RULES;
-  const holdRate = fmtInteger(Number(r.holdReward?.weeklyRate || DEFAULT_RULES.holdReward.weeklyRate) * 100);
-  const holdWeeks = fmtInteger(r.holdReward?.maxWeeks || DEFAULT_RULES.holdReward.maxWeeks);
-  const liquidityRate = fmtInteger(Number(r.liquidityReward?.weeklyRate || DEFAULT_RULES.liquidityReward.weeklyRate) * 100);
-  const liquidityDailyCap = fmtInteger(r.liquidityReward?.maxDailyPerUser || DEFAULT_RULES.liquidityReward.maxDailyPerUser);
-  const parlayMin = fmtInteger(r.parlay?.minLegs || DEFAULT_RULES.parlay.minLegs);
-  const parlayMax = fmtInteger(r.parlay?.maxLegs || DEFAULT_RULES.parlay.maxLegs);
-  const parlayFactor = Number(r.parlay?.edgeFactor || DEFAULT_RULES.parlay.edgeFactor).toFixed(2);
   const items = lang === 'en' ? [
     `Ranking score is market PnL plus per-lot hold rewards, liquidity rewards, and realized combo-slip PnL, minus ${fmtInteger(r.inactivityPenalty)} MXNP for each inactive day.`,
-    `Each buy lot has its own clock: it earns ${holdRate}% of eligible exposure per completed week while still open, capped at ${holdWeeks} weeks. Sells and redeems remove eligible lots.`,
-    `Combo slips combine ${parlayMin} to ${parlayMax} tournament markets and pay fair odds times ${parlayFactor}, capped by the rules. Create them from the + Combo buttons on market pages.`,
-    `Limit orders near the live price can earn liquidity rewards at ${liquidityRate}% per week, prorated daily and capped at ${liquidityDailyCap} MXNP per user per day. If a buy order fills, that filled lot starts its own hold clock.`,
     `Bonuses fund your account, but signup, streak, social, and referral rewards do not directly add to the score.`,
     `You qualify with ${fmtInteger(r.qualifyingMarkets)} entries in distinct markets. Each entry has a ${fmtInteger(r.minEntryMxnp)} MXNP minimum.`,
     `Each user can hold up to ${fmtInteger(r.maxSharesPerMarket)} shares per market.`,
@@ -351,9 +341,6 @@ function RuleList({ lang, rules }) {
     'Ties break by fewer inactive days, more distinct liquidated markets, then older registration.',
   ] : [
     `El puntaje es PnL de mercados más recompensas por holding por lote, recompensas por dar liquidez y PnL de combinadas liquidadas, menos ${fmtInteger(r.inactivityPenalty)} MXNP por cada día inactivo.`,
-    `Cada compra tiene su propio reloj: suma ${holdRate}% de la exposición elegible por semana completa mientras siga abierta, máximo ${holdWeeks} semanas. Ventas y cobros quitan lotes elegibles.`,
-    `Las combinadas juntan ${parlayMin} a ${parlayMax} mercados del torneo y pagan momios justos por ${parlayFactor}, con tope de reglas. Se arman desde los botones + Combo en las páginas de mercado.`,
-    `Las órdenes límite cerca del precio actual pueden ganar recompensa por dar liquidez de ${liquidityRate}% semanal, prorrateada diario y con tope de ${liquidityDailyCap} MXNP por usuario al día. Si una orden de compra se ejecuta, ese lote empieza su propio reloj de holding.`,
     'Los bonos fondean tu cuenta, pero registro, racha, redes y referidos no suman directo al puntaje.',
     `Calificas con ${fmtInteger(r.qualifyingMarkets)} entradas en mercados distintos. Cada entrada tiene mínimo de ${fmtInteger(r.minEntryMxnp)} MXNP.`,
     `Cada usuario puede tener hasta ${fmtInteger(r.maxSharesPerMarket)} acciones por mercado.`,
@@ -388,6 +375,72 @@ function RuleList({ lang, rules }) {
   );
 }
 
+function NewFeatureList({ lang, rules }) {
+  const r = rules || DEFAULT_RULES;
+  const holdRate = fmtInteger(Number(r.holdReward?.weeklyRate || DEFAULT_RULES.holdReward.weeklyRate) * 100);
+  const holdWeeks = fmtInteger(r.holdReward?.maxWeeks || DEFAULT_RULES.holdReward.maxWeeks);
+  const liquidityRate = fmtInteger(Number(r.liquidityReward?.weeklyRate || DEFAULT_RULES.liquidityReward.weeklyRate) * 100);
+  const liquidityDailyCap = fmtInteger(r.liquidityReward?.maxDailyPerUser || DEFAULT_RULES.liquidityReward.maxDailyPerUser);
+  const parlayMin = fmtInteger(r.parlay?.minLegs || DEFAULT_RULES.parlay.minLegs);
+  const parlayMax = fmtInteger(r.parlay?.maxLegs || DEFAULT_RULES.parlay.maxLegs);
+  const parlayFactor = Number(r.parlay?.edgeFactor || DEFAULT_RULES.parlay.edgeFactor).toFixed(2);
+  const rows = lang === 'en' ? [
+    [
+      'Per-lot holding',
+      `Each buy lot has its own clock: it earns ${holdRate}% of eligible exposure per completed week while still open, capped at ${holdWeeks} weeks. Sells and redeems remove eligible lots.`,
+    ],
+    [
+      'Combinadas',
+      `Combo slips combine ${parlayMin} to ${parlayMax} tournament markets and pay fair odds times ${parlayFactor}, capped by the rules. Create them from the Combinada button on the markets page or the Combinada mode inside a market.`,
+    ],
+    [
+      'Liquidity rewards',
+      `Limit orders near the live price can earn liquidity rewards at ${liquidityRate}% per week, prorated daily and capped at ${liquidityDailyCap} MXNP per user per day. If a buy order fills, that filled lot starts its own hold clock.`,
+    ],
+  ] : [
+    [
+      'Holding por lote',
+      `Cada compra tiene su propio reloj: suma ${holdRate}% de la exposición elegible por semana completa mientras siga abierta, máximo ${holdWeeks} semanas. Ventas y cobros quitan lotes elegibles.`,
+    ],
+    [
+      'Combinadas',
+      `Las combinadas juntan ${parlayMin} a ${parlayMax} mercados del torneo y pagan momios justos por ${parlayFactor}, con tope de reglas. Se arman desde el botón Combinada en mercados o desde el modo Combinada dentro de un mercado.`,
+    ],
+    [
+      'Recompensa por dar liquidez',
+      `Las órdenes límite cerca del precio actual pueden ganar recompensa por dar liquidez de ${liquidityRate}% semanal, prorrateada diario y con tope de ${liquidityDailyCap} MXNP por usuario al día. Si una orden de compra se ejecuta, ese lote empieza su propio reloj de holding.`,
+    ],
+  ];
+  return (
+    <div style={{
+      marginTop: 20,
+      paddingTop: 18,
+      borderTop: '1px solid var(--border)',
+      display: 'grid',
+      gap: 12,
+    }}>
+      <SectionLabel>{lang === 'en' ? 'New features' : 'Nuevos features'}</SectionLabel>
+      <div style={{ display: 'grid', gap: 10 }}>
+        {rows.map(([label, text]) => (
+          <div key={label} style={{
+            display: 'grid',
+            gap: 5,
+            borderBottom: '1px solid var(--border)',
+            paddingBottom: 11,
+          }}>
+            <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-body)', fontSize: 14 }}>
+              {label}
+            </strong>
+            <p style={{ margin: 0, color: 'var(--text-secondary)', fontFamily: 'var(--font-body)', fontSize: 13, lineHeight: 1.55 }}>
+              {text}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TournamentFaq({ lang, rules }) {
   const r = rules || DEFAULT_RULES;
   const rows = lang === 'en' ? [
@@ -401,7 +454,7 @@ function TournamentFaq({ lang, rules }) {
     ],
     [
       'Where do I create combo slips?',
-      'Open any tournament market, tap + Combo next to the outcome you want, then quote and create the slip from the panel on that market page.',
+      'Use the Combo slip button on the markets page, or switch a tournament market to Combo slip mode and add the outcomes you want.',
     ],
     [
       'What do I need to qualify?',
@@ -418,7 +471,7 @@ function TournamentFaq({ lang, rules }) {
     ],
     [
       '¿Dónde creo combinadas?',
-      'Abre cualquier mercado del torneo, toca + Combo junto al resultado que quieres, y luego cotiza y crea la combinada desde el panel de esa página.',
+      'Usa el botón Combinada en mercados, o cambia un mercado del torneo al modo Combinada y agrega los resultados que quieras.',
     ],
     [
       '¿Qué necesito para calificar?',
@@ -656,6 +709,7 @@ export default function PointsTournament() {
         <TournamentCard>
           <SectionLabel>{lang === 'en' ? 'Rules' : 'Reglas'}</SectionLabel>
           <RuleList lang={lang} rules={rules} />
+          <NewFeatureList lang={lang} rules={rules} />
           <TournamentFaq lang={lang} rules={rules} />
         </TournamentCard>
 

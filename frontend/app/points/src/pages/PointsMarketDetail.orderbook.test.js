@@ -9,6 +9,9 @@ import { readFile } from 'node:fs/promises';
 
 const detailSource = await readFile(new URL('./PointsMarketDetail.jsx', import.meta.url), 'utf8');
 const apiSource = await readFile(new URL('../lib/pointsApi.js', import.meta.url), 'utf8');
+const combinadaSlipSource = await readFile(new URL('../lib/combinadaSlip.js', import.meta.url), 'utf8');
+const combinadaPanelSource = await readFile(new URL('../components/CombinadaSlipPanel.jsx', import.meta.url), 'utf8');
+const combinadaDrawerSource = await readFile(new URL('../components/CombinadaMarketPickerDrawer.jsx', import.meta.url), 'utf8');
 
 test('points market detail renders hybrid limit-order book depth', () => {
   assert.match(detailSource, /fetchOrderBook/);
@@ -65,12 +68,20 @@ test('points API client exposes orderbook and limit-order endpoints', () => {
 });
 
 test('points market detail supports local parlay slip actions', () => {
-  assert.match(detailSource, /PARLAY_SLIP_STORAGE_KEY/);
-  assert.match(detailSource, /function ParlaySlipPanel/);
+  assert.match(combinadaSlipSource, /PARLAY_SLIP_STORAGE_KEY/);
+  assert.match(combinadaSlipSource, /addParlayLeg/);
+  assert.match(combinadaSlipSource, /parlayPayloadLegs/);
+  assert.match(combinadaPanelSource, /export default function CombinadaSlipPanel/);
+  assert.match(combinadaDrawerSource, /export default function CombinadaMarketPickerDrawer/);
+  assert.match(combinadaDrawerSource, /featured: 'tournament'/);
+  assert.match(detailSource, /tradeMode/);
+  assert.match(detailSource, /CombinadaSlipPanel/);
+  assert.match(detailSource, /CombinadaMarketPickerDrawer/);
   assert.match(detailSource, /handleAddParlayLeg/);
   assert.match(detailSource, /quoteParlay/);
   assert.match(detailSource, /createParlay/);
-  assert.match(detailSource, /\+ Combo/);
+  assert.match(detailSource, /selectionMode=\{tradeMode\}/);
+  assert.doesNotMatch(detailSource, /\+ Combo/);
   assert.match(detailSource, /Combinada/);
 });
 

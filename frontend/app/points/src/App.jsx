@@ -73,7 +73,7 @@ function RouteFallback() {
   );
 }
 
-function PointsHomeEntry() {
+function PointsHomeEntry({ onOpenLogin }) {
   const location = useLocation();
   const routeLooksLikeProfile = useMemo(() => {
     const params = new URLSearchParams(String(location.search || '').replace(/^\?/, ''));
@@ -83,9 +83,7 @@ function PointsHomeEntry() {
   }, [location.search]);
 
   if (routeLooksLikeProfile) return <PointsUserProfile />;
-  // Home no longer takes onOpenLogin — its only login CTA was the hero,
-  // which moved to PointsIntroModal (mounted at the App root).
-  return <PointsHome />;
+  return <PointsHome onOpenLogin={onOpenLogin} />;
 }
 
 function PublicityRedirect({ source }) {
@@ -340,7 +338,7 @@ function Shell({ onOpenLogin, isAdmin }) {
           <Route path="/instagram" element={<PublicityRedirect source="instagram" />} />
           <Route path="/tiktok" element={<PublicityRedirect source="tiktok" />} />
           <Route path="/twitter" element={<PublicityRedirect source="x" />} />
-          <Route path="/" element={<PointsHomeEntry />} />
+          <Route path="/" element={<PointsHomeEntry onOpenLogin={onOpenLogin} />} />
           <Route path="/c/deportes/uefa-champions-league" element={<PointsChampionsLeaguePage />} />
           <Route path="/c/infraestructura/aicm" element={<PointsAicmPage isAdmin={isAdmin} />} />
           {/* News page — registered BEFORE the generic /c/:slug so the

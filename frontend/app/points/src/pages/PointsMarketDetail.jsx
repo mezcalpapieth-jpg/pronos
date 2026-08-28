@@ -52,6 +52,17 @@ import PointsActivityTape from '../components/PointsActivityTape.jsx';
 import MarketComments from '../components/MarketComments.jsx';
 import Crypto5MinDetail from '../components/Crypto5MinDetail.jsx';
 import TopHolders from '../components/TopHolders.jsx';
+import CombinadaSlipPanel from '../components/CombinadaSlipPanel.jsx';
+import CombinadaMarketPickerDrawer from '../components/CombinadaMarketPickerDrawer.jsx';
+import {
+  PARLAY_RULES_FALLBACK,
+  addParlayLeg,
+  buildParlayLeg,
+  parlayPayloadLegs,
+  readStoredParlaySlip,
+  sanitizeParlaySlip,
+  storeParlaySlip,
+} from '../lib/combinadaSlip.js';
 import {
   buildCryptoMarketSequence,
   cryptoMarketSequenceSignature,
@@ -130,58 +141,6 @@ function formatCompactMxnp(value, locale = 'es-MX') {
     notation: n >= 1000 ? 'compact' : 'standard',
     maximumFractionDigits: n >= 1000 ? 1 : 0,
   }).format(n);
-}
-
-const PARLAY_SLIP_STORAGE_KEY = 'pronos:points:parlay-slip:v1';
-const PARLAY_RULES_FALLBACK = {
-  minLegs: 3,
-  maxLegs: 6,
-  minStakeMxnp: 10,
-  maxStakeMxnp: 100,
-};
-
-function sanitizeParlaySlip(raw) {
-  if (!Array.isArray(raw)) return [];
-  const seen = new Set();
-  return raw
-    .map((leg) => ({
-      marketId: Number(leg?.marketId),
-      outcomeIndex: Number(leg?.outcomeIndex),
-      question: String(leg?.question || '').slice(0, 180),
-      outcomeLabel: String(leg?.outcomeLabel || '').slice(0, 80),
-      price: Number.isFinite(Number(leg?.price)) ? Number(leg.price) : null,
-    }))
-    .filter((leg) => {
-      if (!Number.isInteger(leg.marketId) || leg.marketId <= 0) return false;
-      if (!Number.isInteger(leg.outcomeIndex) || leg.outcomeIndex < 0) return false;
-      if (seen.has(leg.marketId)) return false;
-      seen.add(leg.marketId);
-      return true;
-    })
-    .slice(-PARLAY_RULES_FALLBACK.maxLegs);
-}
-
-function readStoredParlaySlip() {
-  if (typeof window === 'undefined') return [];
-  try {
-    return sanitizeParlaySlip(JSON.parse(window.localStorage.getItem(PARLAY_SLIP_STORAGE_KEY) || '[]'));
-  } catch {
-    return [];
-  }
-}
-
-function storeParlaySlip(legs) {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(PARLAY_SLIP_STORAGE_KEY, JSON.stringify(sanitizeParlaySlip(legs)));
-  } catch {
-    // Storage can be unavailable in private contexts; the in-memory slip still works.
-  }
-}
-
-function compactQuestion(value) {
-  const text = String(value || '').trim();
-  return text.length > 74 ? `${text.slice(0, 71)}...` : text;
 }
 
 function formatActivityAge(unixSeconds, t) {
@@ -806,7 +765,9 @@ function UnifiedOutcomeList({
   market,
   onBuyClick,
   onParlayAdd,
+  selectionMode = 'single',
 }) {
+  const isCombinadaMode = selectionMode === 'combo';
   return (
     <ScrollableList count={outcomes.length}>
       {outcomes.map((label, i) => {
@@ -815,6 +776,12 @@ function UnifiedOutcomeList({
         const logo = outcomeImages?.[i] || null;
         const countryLabel = outcomeCountryLabels?.[i] || null;
         const originalIndex = Array.isArray(outcomeIndices) ? outcomeIndices[i] : i;
+        const addLeg = () => onParlayAdd?.({
+          market,
+          outcomeIndex: originalIndex,
+          outcomeLabel: label,
+          price: prices[i],
+        });
         return (
           <div
             key={i}
@@ -843,7 +810,10 @@ function UnifiedOutcomeList({
           >
             <button
               type="button"
-              onClick={() => onBuyClick(market, originalIndex, label)}
+              onClick={() => {
+                if (isCombinadaMode) addLeg();
+                else onBuyClick(market, originalIndex, label);
+              }}
               style={{
                 flex: 1,
                 minWidth: 0,
@@ -882,18 +852,15 @@ function UnifiedOutcomeList({
                 {pct}%
               </span>
             </button>
-            <button
-              type="button"
-              onClick={() => onParlayAdd?.({
-                market,
-                outcomeIndex: originalIndex,
-                outcomeLabel: label,
-                price: prices[i],
-              })}
-              style={parlayAddButtonStyle}
-            >
-              + Combo
-            </button>
+            {isCombinadaMode && (
+              <button
+                type="button"
+                onClick={addLeg}
+                style={parlayAddButtonStyle}
+              >
+                Agregar
+              </button>
+            )}
           </div>
         );
       })}
@@ -907,7 +874,8 @@ function UnifiedOutcomeList({
 //
 // Leg images are passed in display order. The parent stores one image
 // per original outcome; the caller sorts those alongside the legs.
-function ParallelLegList({ market, legs, outcomeImages, outcomeCountryLabels, onBuyClick, onParlayAdd }) {
+function ParallelLegList({ market, legs, outcomeImages, outcomeCountryLabels, onBuyClick, onParlayAdd, selectionMode = 'single' }) {
+  const isCombinadaMode = selectionMode === 'combo';
   return (
     <ScrollableList count={legs.length}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -928,6 +896,8 @@ function ParallelLegList({ market, legs, outcomeImages, outcomeCountryLabels, on
           // the buy click is silently swallowed.
           const legMarket = {
             id: leg.id,
+            parentId: market.id,
+            groupId: market.id,
             question: `${market.question} — ${leg.label}`,
             status: leg.status ?? market.status,
             seriesLocked: leg.seriesLocked ?? market.seriesLocked,
@@ -986,46 +956,56 @@ function ParallelLegList({ market, legs, outcomeImages, outcomeCountryLabels, on
                   // label when there's not.
                   marginLeft: 'auto',
                 }}>
-                  <button
-                    onClick={() => onBuyClick(legMarket, 0, `${leg.label} — Sí`)}
-                    style={legButtonStyle('var(--yes)', 'rgba(22,163,74,0.15)', 'rgba(22,163,74,0.4)')}
-                    onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
-                    onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-                  >
-                    Sí <span style={legPriceStyle}>{Math.round(yesPrice * 100)}¢</span>
-                  </button>
-                  <button
-                    onClick={() => onBuyClick(legMarket, 1, `${leg.label} — No`)}
-                    style={legButtonStyle('var(--danger)', 'rgba(255,59,59,0.12)', 'rgba(255,59,59,0.4)')}
-                    onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
-                    onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-                  >
-                    No <span style={legPriceStyle}>{Math.round(noPrice * 100)}¢</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onParlayAdd?.({
-                      market: legMarket,
-                      outcomeIndex: 0,
-                      outcomeLabel: `${leg.label} — Sí`,
-                      price: yesPrice,
-                    })}
-                    style={parlayAddButtonStyle}
-                  >
-                    + Sí
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onParlayAdd?.({
-                      market: legMarket,
-                      outcomeIndex: 1,
-                      outcomeLabel: `${leg.label} — No`,
-                      price: noPrice,
-                    })}
-                    style={parlayAddButtonStyle}
-                  >
-                    + No
-                  </button>
+                  {!isCombinadaMode && (
+                    <>
+                      <button
+                        onClick={() => onBuyClick(legMarket, 0, `${leg.label} — Sí`)}
+                        type="button"
+                        style={legButtonStyle('var(--yes)', 'rgba(22,163,74,0.15)', 'rgba(22,163,74,0.4)')}
+                        onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                        onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                      >
+                        Sí <span style={legPriceStyle}>{Math.round(yesPrice * 100)}¢</span>
+                      </button>
+                      <button
+                        onClick={() => onBuyClick(legMarket, 1, `${leg.label} — No`)}
+                        type="button"
+                        style={legButtonStyle('var(--danger)', 'rgba(255,59,59,0.12)', 'rgba(255,59,59,0.4)')}
+                        onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                        onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                      >
+                        No <span style={legPriceStyle}>{Math.round(noPrice * 100)}¢</span>
+                      </button>
+                    </>
+                  )}
+                  {isCombinadaMode && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => onParlayAdd?.({
+                          market: legMarket,
+                          outcomeIndex: 0,
+                          outcomeLabel: `${leg.label} — Sí`,
+                          price: yesPrice,
+                        })}
+                        style={parlayAddButtonStyle}
+                      >
+                        + Sí
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onParlayAdd?.({
+                          market: legMarket,
+                          outcomeIndex: 1,
+                          outcomeLabel: `${leg.label} — No`,
+                          price: noPrice,
+                        })}
+                        style={parlayAddButtonStyle}
+                      >
+                        + No
+                      </button>
+                    </>
+                  )}
                 </div>
               ) : (
                 <div style={{
@@ -1115,297 +1095,6 @@ function OddsSummary({ outcomes, prices, outcomeImages, outcomeCountryLabels }) 
         })}
       </div>
     </ScrollableList>
-  );
-}
-
-function ParlaySlipPanel({
-  legs,
-  stake,
-  state,
-  rules,
-  lang,
-  authenticated,
-  onStakeChange,
-  onQuote,
-  onSubmit,
-  onRemove,
-  onClear,
-  onOpenLogin,
-}) {
-  const copy = lang === 'en'
-    ? {
-        title: 'Combo slip',
-        empty: 'Add 3 to 6 picks.',
-        stake: 'Stake',
-        quote: 'Quote',
-        create: 'Create combo',
-        creating: 'Creating...',
-        multiplier: 'Multiplier',
-        payout: 'Payout',
-        profit: 'Profit',
-        remove: 'Remove',
-        clear: 'Clear',
-        signIn: 'Sign in',
-      }
-    : {
-        title: 'Combinada',
-        empty: 'Agrega 3 a 6 selecciones.',
-        stake: 'Stake',
-        quote: 'Cotizar',
-        create: 'Crear combinada',
-        creating: 'Creando...',
-        multiplier: 'Multiplicador',
-        payout: 'Paga',
-        profit: 'Ganancia',
-        remove: 'Quitar',
-        clear: 'Limpiar',
-        signIn: 'Inicia sesión',
-      };
-  const minLegs = Number(rules?.minLegs || PARLAY_RULES_FALLBACK.minLegs);
-  const maxLegs = Number(rules?.maxLegs || PARLAY_RULES_FALLBACK.maxLegs);
-  const minStake = Number(rules?.minStakeMxnp || PARLAY_RULES_FALLBACK.minStakeMxnp);
-  const maxStake = Number(rules?.maxStakeMxnp || PARLAY_RULES_FALLBACK.maxStakeMxnp);
-  const canQuote = legs.length >= minLegs && !state?.loading && !state?.submitting;
-  const canSubmit = canQuote && !state?.submitting;
-  const quote = state?.quote;
-
-  return (
-    <div style={{
-      marginTop: 16,
-      paddingTop: 16,
-      borderTop: '1px solid var(--border)',
-    }}>
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        gap: 12,
-        marginBottom: 10,
-      }}>
-        <div style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 10,
-          color: 'var(--text-muted)',
-          letterSpacing: '0.12em',
-          textTransform: 'uppercase',
-        }}>
-          {copy.title}
-        </div>
-        <div style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 10,
-          color: legs.length >= minLegs ? 'var(--green)' : 'var(--text-muted)',
-          letterSpacing: '0.08em',
-        }}>
-          {legs.length}/{maxLegs}
-        </div>
-      </div>
-
-      {legs.length === 0 ? (
-        <p style={{ margin: '0 0 12px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-          {copy.empty}
-        </p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-          {legs.map((leg) => (
-            <div
-              key={`${leg.marketId}-${leg.outcomeIndex}`}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'minmax(0, 1fr) auto',
-                gap: 10,
-                alignItems: 'center',
-                padding: '9px 10px',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
-                background: 'var(--surface2)',
-              }}
-            >
-              <div style={{ minWidth: 0 }}>
-                <div style={{
-                  fontFamily: 'var(--font-body)',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: 'var(--text-primary)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}>
-                  {leg.outcomeLabel || `#${leg.outcomeIndex + 1}`}
-                </div>
-                <div style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 9,
-                  color: 'var(--text-muted)',
-                  letterSpacing: '0.04em',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  marginTop: 3,
-                }}>
-                  {compactQuestion(leg.question)}
-                  {Number.isFinite(Number(leg.price)) ? ` · ${formatDepthCents(leg.price)}` : ''}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => onRemove(leg.marketId)}
-                title={copy.remove}
-                style={{
-                  border: '1px solid var(--border)',
-                  borderRadius: 8,
-                  width: 30,
-                  height: 30,
-                  background: 'transparent',
-                  color: 'var(--text-muted)',
-                  cursor: 'pointer',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 14,
-                }}
-              >
-                x
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'end' }}>
-        <label style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 6,
-          fontFamily: 'var(--font-mono)',
-          fontSize: 9,
-          letterSpacing: '0.08em',
-          color: 'var(--text-muted)',
-          textTransform: 'uppercase',
-        }}>
-          {copy.stake}
-          <input
-            value={stake}
-            onChange={e => onStakeChange(e.target.value)}
-            inputMode="decimal"
-            min={minStake}
-            max={maxStake}
-            style={{
-              width: '100%',
-              height: 38,
-              borderRadius: 8,
-              border: '1px solid var(--border)',
-              background: 'var(--surface2)',
-              color: 'var(--text-primary)',
-              padding: '0 10px',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 14,
-              boxSizing: 'border-box',
-            }}
-          />
-        </label>
-        <button
-          type="button"
-          onClick={onQuote}
-          disabled={!canQuote}
-          style={{
-            height: 38,
-            borderRadius: 8,
-            border: '1px solid var(--border)',
-            background: canQuote ? 'var(--surface2)' : 'rgba(255,255,255,0.03)',
-            color: canQuote ? 'var(--text-primary)' : 'var(--text-muted)',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 10,
-            letterSpacing: '0.08em',
-            textTransform: 'uppercase',
-            cursor: canQuote ? 'pointer' : 'not-allowed',
-            padding: '0 12px',
-          }}
-        >
-          {state?.loading ? '...' : copy.quote}
-        </button>
-      </div>
-
-      {quote && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-          gap: 8,
-          marginTop: 12,
-          fontFamily: 'var(--font-mono)',
-        }}>
-          {[
-            [copy.multiplier, `${Number(quote.multiplier || 0).toFixed(2)}x`],
-            [copy.payout, `${Number(quote.potentialPayout || 0).toFixed(2)} MXNP`],
-            [copy.profit, `${Number(quote.potentialProfit || 0).toFixed(2)} MXNP`],
-          ].map(([label, value]) => (
-            <div key={label} style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 8, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                {label}
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--text-primary)', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {value}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {(state?.error || state?.message) && (
-        <p style={{
-          margin: '10px 0 0',
-          color: state?.error ? 'var(--danger)' : 'var(--green)',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 10,
-          lineHeight: 1.5,
-        }}>
-          {state.error || state.message}
-        </p>
-      )}
-
-      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-        <button
-          type="button"
-          onClick={authenticated ? onSubmit : onOpenLogin}
-          disabled={authenticated ? !canSubmit : false}
-          style={{
-            flex: 1,
-            minHeight: 40,
-            borderRadius: 8,
-            border: 'none',
-            background: authenticated && !canSubmit ? 'rgba(255,85,0,0.35)' : 'var(--orange)',
-            color: '#050505',
-            fontFamily: 'var(--font-mono)',
-            fontWeight: 800,
-            fontSize: 10,
-            letterSpacing: '0.1em',
-            textTransform: 'uppercase',
-            cursor: authenticated && !canSubmit ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {authenticated
-            ? (state?.submitting ? copy.creating : copy.create)
-            : copy.signIn}
-        </button>
-        {legs.length > 0 && (
-          <button
-            type="button"
-            onClick={onClear}
-            title={copy.clear}
-            style={{
-              width: 42,
-              borderRadius: 8,
-              border: '1px solid var(--border)',
-              background: 'transparent',
-              color: 'var(--text-muted)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 16,
-              cursor: 'pointer',
-            }}
-          >
-            x
-          </button>
-        )}
-      </div>
-    </div>
   );
 }
 
@@ -2679,6 +2368,8 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   //   parallel → the individual leg market (so the buy endpoint hits the
   //              leg's binary CPMM, not the aggregated parent)
   const [buyState, setBuyState] = useState(null);
+  const [tradeMode, setTradeMode] = useState('single');
+  const [comboPickerOpen, setComboPickerOpen] = useState(false);
   const [parlaySlip, setParlaySlip] = useState(() => readStoredParlaySlip());
   const [parlayStake, setParlayStake] = useState('25');
   const [parlayState, setParlayState] = useState({
@@ -2992,20 +2683,15 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   }
 
   function handleAddParlayLeg({ market: targetMarket, outcomeIndex, outcomeLabel, price }) {
-    const marketId = Number(targetMarket?.id);
-    const oi = Number(outcomeIndex);
-    if (!Number.isInteger(marketId) || marketId <= 0 || !Number.isInteger(oi) || oi < 0) return;
-    const nextLeg = {
-      marketId,
-      outcomeIndex: oi,
-      question: targetMarket?.question || market?.question || '',
-      outcomeLabel: outcomeLabel || `Opcion ${oi + 1}`,
-      price: Number.isFinite(Number(price)) ? Number(price) : null,
-    };
-    setParlaySlip((current) => {
-      const withoutMarket = sanitizeParlaySlip(current).filter(leg => leg.marketId !== marketId);
-      return sanitizeParlaySlip([...withoutMarket, nextLeg]);
+    const nextLeg = buildParlayLeg({
+      market: targetMarket,
+      fallbackQuestion: market?.question,
+      outcomeIndex,
+      outcomeLabel,
+      price,
     });
+    if (!nextLeg) return;
+    setParlaySlip(current => addParlayLeg(current, nextLeg));
     setParlayState({
       loading: false,
       submitting: false,
@@ -3015,18 +2701,11 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     });
   }
 
-  function parlayPayloadLegs() {
-    return sanitizeParlaySlip(parlaySlip).map(leg => ({
-      marketId: leg.marketId,
-      outcomeIndex: leg.outcomeIndex,
-    }));
-  }
-
   async function handleQuoteParlay() {
     setParlayState(prev => ({ ...prev, loading: true, error: null, message: null }));
     try {
       const quote = await quoteParlay({
-        legs: parlayPayloadLegs(),
+        legs: parlayPayloadLegs(parlaySlip),
         stake: parlayStake,
       });
       setParlayState({
@@ -3055,7 +2734,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     setParlayState(prev => ({ ...prev, submitting: true, error: null, message: null }));
     try {
       const result = await createParlay({
-        legs: parlayPayloadLegs(),
+        legs: parlayPayloadLegs(parlaySlip),
         stake: parlayStake,
       });
       setParlaySlip([]);
@@ -3405,6 +3084,10 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     && market.endTime
     && new Date(market.endTime) < _now;
   const showTemperatureResolutionNote = isTemperatureMarket(market);
+  const canTrade = !isResolved && !isPendingResolution && !isTradingLocked;
+  const modeCopy = lang === 'en'
+    ? { individual: 'Individual', combinada: 'Combo slip', otherMarkets: 'Other markets' }
+    : { individual: 'Individual', combinada: 'Combinada', otherMarkets: 'Otros mercados' };
 
   const tradePanel = (
     <div style={{
@@ -3414,42 +3097,118 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
       padding: 24,
     }}>
       <div style={{
-        fontFamily: 'var(--font-mono)',
-        fontSize: 10,
-        letterSpacing: '0.12em',
-        color: 'var(--text-muted)',
-        textTransform: 'uppercase',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: 12,
+        flexWrap: 'wrap',
         marginBottom: 16,
       }}>
-        {isResolved ? t('points.detail.marketClosed')
-         : isPendingResolution ? t('points.detail.awaitingResult')
-         : t('points.detail.chooseOutcome')}
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          letterSpacing: '0.12em',
+          color: 'var(--text-muted)',
+          textTransform: 'uppercase',
+        }}>
+          {isResolved ? t('points.detail.marketClosed')
+           : isPendingResolution ? t('points.detail.awaitingResult')
+           : t('points.detail.chooseOutcome')}
+        </div>
+        {canTrade && (
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            padding: 3,
+            border: '1px solid var(--border)',
+            borderRadius: 999,
+            background: 'var(--surface2)',
+          }}>
+            {[
+              ['single', modeCopy.individual],
+              ['combo', modeCopy.combinada],
+            ].map(([key, label]) => {
+              const active = tradeMode === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setTradeMode(key)}
+                  style={{
+                    minHeight: 26,
+                    padding: '0 10px',
+                    borderRadius: 999,
+                    border: `1px solid ${active ? 'rgba(255,85,0,0.42)' : 'transparent'}`,
+                    background: active ? 'rgba(255,85,0,0.16)' : 'transparent',
+                    color: active ? 'var(--orange)' : 'var(--text-muted)',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 9,
+                    fontWeight: 800,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {!isResolved && !isPendingResolution && !isTradingLocked && (
-        market.ammMode === 'parallel' && Array.isArray(market.legs)
-          ? <ParallelLegList
-              market={market}
-              legs={parallelDisplayLegs || market.legs}
-              outcomeImages={displayOutcomeImages}
-              outcomeCountryLabels={displayOutcomeCountryLabels}
-              onBuyClick={handleBuyClick}
-              onParlayAdd={handleAddParlayLeg}
-            />
-          : <UnifiedOutcomeList
-              outcomes={displayOutcomes}
-              prices={displayPrices}
-              outcomeImages={displayOutcomeImages}
-              outcomeCountryLabels={displayOutcomeCountryLabels}
-              outcomeIndices={displayOutcomeIndices}
-              market={market}
-              onBuyClick={handleBuyClick}
-              onParlayAdd={handleAddParlayLeg}
-            />
+      {canTrade && (
+        <>
+          {tradeMode === 'combo' && (
+            <button
+              type="button"
+              onClick={() => setComboPickerOpen(true)}
+              style={{
+                width: '100%',
+                minHeight: 34,
+                marginBottom: 12,
+                borderRadius: 8,
+                border: '1px solid rgba(255,85,0,0.34)',
+                background: 'rgba(255,85,0,0.08)',
+                color: 'var(--orange)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                fontWeight: 800,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                cursor: 'pointer',
+              }}
+            >
+              {modeCopy.otherMarkets}
+            </button>
+          )}
+          {market.ammMode === 'parallel' && Array.isArray(market.legs)
+            ? <ParallelLegList
+                market={market}
+                legs={parallelDisplayLegs || market.legs}
+                outcomeImages={displayOutcomeImages}
+                outcomeCountryLabels={displayOutcomeCountryLabels}
+                onBuyClick={handleBuyClick}
+                onParlayAdd={handleAddParlayLeg}
+                selectionMode={tradeMode}
+              />
+            : <UnifiedOutcomeList
+                outcomes={displayOutcomes}
+                prices={displayPrices}
+                outcomeImages={displayOutcomeImages}
+                outcomeCountryLabels={displayOutcomeCountryLabels}
+                outcomeIndices={displayOutcomeIndices}
+                market={market}
+                onBuyClick={handleBuyClick}
+                onParlayAdd={handleAddParlayLeg}
+                selectionMode={tradeMode}
+              />}
+        </>
       )}
 
-      {!isResolved && !isPendingResolution && !isTradingLocked && (
-        <ParlaySlipPanel
+      {canTrade && tradeMode === 'combo' && (
+        <CombinadaSlipPanel
           legs={parlaySlip}
           stake={parlayStake}
           state={parlayState}
@@ -3468,7 +3227,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
         />
       )}
 
-      {(isResolved || isPendingResolution || isTradingLocked) && (
+      {!canTrade && (
         <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
           {isCanceled
             ? 'Este mercado fue anulado porque el evento no ocurrió. No cuenta como ganado o perdido.'
@@ -4278,6 +4037,27 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
           </aside>
         </div>
       </main>
+
+      <CombinadaMarketPickerDrawer
+        open={comboPickerOpen}
+        onClose={() => setComboPickerOpen(false)}
+        legs={parlaySlip}
+        stake={parlayStake}
+        state={parlayState}
+        rules={PARLAY_RULES_FALLBACK}
+        lang={lang}
+        authenticated={authenticated}
+        onStakeChange={(value) => {
+          setParlayStake(value);
+          setParlayState(prev => ({ ...prev, error: null, message: null, quote: null }));
+        }}
+        onQuote={handleQuoteParlay}
+        onSubmit={handleCreateParlay}
+        onRemove={handleRemoveParlayLeg}
+        onClear={handleClearParlaySlip}
+        onOpenLogin={onOpenLogin}
+        onAddLeg={handleAddParlayLeg}
+      />
 
       {buyState && (
         <PointsBuyModal

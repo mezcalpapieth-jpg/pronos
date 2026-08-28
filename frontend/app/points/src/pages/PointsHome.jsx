@@ -18,9 +18,15 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { fetchMarkets, fetchPositions } from '../lib/pointsApi.js';
+import {
+  createParlay,
+  fetchMarkets,
+  fetchPositions,
+  publicErrorMessage,
+  quoteParlay,
+} from '../lib/pointsApi.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
-import { useT } from '@app/lib/i18n.js';
+import { useLang, useT } from '@app/lib/i18n.js';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
 import {
   marketMatchesFeaturedTeam,
@@ -33,6 +39,16 @@ import NewsMapView from '@app/components/NewsMapView.jsx';
 import PointsMarketCard from '../components/PointsMarketCard.jsx';
 import PointsActivityCarousel from '../components/PointsActivityCarousel.jsx';
 import { ActivityCarouselSkeleton, MarketGridSkeleton } from '../components/PointsSkeleton.jsx';
+import CombinadaMarketPickerDrawer from '../components/CombinadaMarketPickerDrawer.jsx';
+import {
+  PARLAY_RULES_FALLBACK,
+  addParlayLeg,
+  buildParlayLeg,
+  parlayPayloadLegs,
+  readStoredParlaySlip,
+  sanitizeParlaySlip,
+  storeParlaySlip,
+} from '../lib/combinadaSlip.js';
 
 function isPendingMarket(market, now = Date.now()) {
   return market?.status === 'active'
@@ -46,9 +62,10 @@ function shouldShowOnHome(market, featuredTeamKeys) {
   return Boolean(market?.featured || market?.trending || marketMatchesFeaturedTeam(market, featuredTeamKeys));
 }
 
-export default function PointsHome() {
-  const { authenticated } = usePointsAuth();
+export default function PointsHome({ onOpenLogin }) {
+  const { authenticated, refresh } = usePointsAuth();
   const t = useT();
+  const lang = useLang();
   const [searchParams] = useSearchParams();
   // Used to tighten section padding (60px → 24px horizontal) on phones.
   // The Hero + markets grid get their responsive treatment from CSS;
@@ -63,6 +80,16 @@ export default function PointsHome() {
   const [mapNewsItems, setMapNewsItems] = useState([]);
   const [sharedMapMarkets, setSharedMapMarkets] = useState([]);
   const [sharedMapLoaded, setSharedMapLoaded] = useState(false);
+  const [comboOpen, setComboOpen] = useState(false);
+  const [parlaySlip, setParlaySlip] = useState(() => readStoredParlaySlip());
+  const [parlayStake, setParlayStake] = useState('25');
+  const [parlayState, setParlayState] = useState({
+    loading: false,
+    submitting: false,
+    error: null,
+    message: null,
+    quote: null,
+  });
   const featuredTeamKeys = useFeaturedTeamKeys();
   // Search value comes from the nav input (mirrored to ?q=<text>). Living
   // in the URL keeps deep-links work and lets the nav share state without
@@ -140,6 +167,10 @@ export default function PointsHome() {
     return () => { cancelled = true; };
   }, [trendingView, sharedMapLoaded]);
 
+  useEffect(() => {
+    storeParlaySlip(parlaySlip);
+  }, [parlaySlip]);
+
   // Map mode is broader than the home cards: it should expose every
   // active market with a geo signal, while the card grid stays curated.
   const mapMarkets = useMemo(() => {
@@ -166,6 +197,90 @@ export default function PointsHome() {
       ? sharedMapMarkets.filter(m => shouldShowOnHome(m, featuredTeamKeys))
       : carouselMarkets
   ), [sharedMapLoaded, sharedMapMarkets, carouselMarkets, featuredTeamKeys]);
+
+  function handleAddParlayLeg({ market: targetMarket, outcomeIndex, outcomeLabel, price }) {
+    const nextLeg = buildParlayLeg({
+      market: targetMarket,
+      outcomeIndex,
+      outcomeLabel,
+      price,
+    });
+    if (!nextLeg) return;
+    setParlaySlip(current => addParlayLeg(current, nextLeg));
+    setParlayState({
+      loading: false,
+      submitting: false,
+      error: null,
+      message: lang === 'en' ? 'Added to combo.' : 'Agregado a combinada.',
+      quote: null,
+    });
+  }
+
+  async function handleQuoteParlay() {
+    setParlayState(prev => ({ ...prev, loading: true, error: null, message: null }));
+    try {
+      const quote = await quoteParlay({
+        legs: parlayPayloadLegs(parlaySlip),
+        stake: parlayStake,
+      });
+      setParlayState({
+        loading: false,
+        submitting: false,
+        error: null,
+        message: null,
+        quote,
+      });
+    } catch (error) {
+      setParlayState({
+        loading: false,
+        submitting: false,
+        error: publicErrorMessage(error, lang, 'parlay_quote_failed'),
+        message: null,
+        quote: null,
+      });
+    }
+  }
+
+  async function handleCreateParlay() {
+    if (!authenticated) {
+      onOpenLogin?.();
+      return;
+    }
+    setParlayState(prev => ({ ...prev, submitting: true, error: null, message: null }));
+    try {
+      await createParlay({
+        legs: parlayPayloadLegs(parlaySlip),
+        stake: parlayStake,
+      });
+      setParlaySlip([]);
+      setParlayState({
+        loading: false,
+        submitting: false,
+        error: null,
+        message: lang === 'en' ? 'Combo created.' : 'Combinada creada.',
+        quote: null,
+      });
+      await refresh?.();
+    } catch (error) {
+      setParlayState(prev => ({
+        ...prev,
+        loading: false,
+        submitting: false,
+        error: publicErrorMessage(error, lang, 'parlay_failed'),
+        message: null,
+      }));
+    }
+  }
+
+  function handleRemoveParlayLeg(marketId) {
+    setParlaySlip(current => sanitizeParlaySlip(current).filter(leg => leg.marketId !== Number(marketId)));
+    setParlayState(prev => ({ ...prev, error: null, message: null, quote: null }));
+  }
+
+  function handleClearParlaySlip() {
+    setParlaySlip([]);
+    setParlayState({ loading: false, submitting: false, error: null, message: null, quote: null });
+  }
 
   return (
     <>
@@ -198,7 +313,7 @@ export default function PointsHome() {
           }}>
             <button
               type="button"
-              className={`filter-btn${trendingView === 'markets' ? ' active' : ''}`}
+              className={`filter-btn${trendingView === 'markets' && !comboOpen ? ' active' : ''}`}
               onClick={() => setTrendingView('markets')}
               style={{ fontSize: 11 }}
             >
@@ -206,7 +321,15 @@ export default function PointsHome() {
             </button>
             <button
               type="button"
-              className={`filter-btn${trendingView === 'map' ? ' active' : ''}`}
+              className={`filter-btn${comboOpen ? ' active' : ''}`}
+              onClick={() => setComboOpen(true)}
+              style={{ fontSize: 11 }}
+            >
+              Combinada
+            </button>
+            <button
+              type="button"
+              className={`filter-btn${trendingView === 'map' && !comboOpen ? ' active' : ''}`}
               onClick={() => setTrendingView('map')}
               style={{ fontSize: 11 }}
             >
@@ -214,6 +337,26 @@ export default function PointsHome() {
             </button>
           </div>
         )}
+        <CombinadaMarketPickerDrawer
+          open={comboOpen}
+          onClose={() => setComboOpen(false)}
+          legs={parlaySlip}
+          stake={parlayStake}
+          state={parlayState}
+          rules={PARLAY_RULES_FALLBACK}
+          lang={lang}
+          authenticated={authenticated}
+          onStakeChange={(value) => {
+            setParlayStake(value);
+            setParlayState(prev => ({ ...prev, error: null, message: null, quote: null }));
+          }}
+          onQuote={handleQuoteParlay}
+          onSubmit={handleCreateParlay}
+          onRemove={handleRemoveParlayLeg}
+          onClear={handleClearParlaySlip}
+          onOpenLogin={onOpenLogin}
+          onAddLeg={handleAddParlayLeg}
+        />
         {loading && <MarketGridSkeleton count={6} />}
         {error && !loading && (
           <div style={{

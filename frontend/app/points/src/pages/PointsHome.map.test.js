@@ -15,6 +15,9 @@ test('points home trending can switch from market cards to a market globe', () =
   assert.match(source, /setTrendingView\('map'\)/);
   assert.match(source, /setTrendingView\('markets'\)/);
   assert.match(source, /Mapa/);
+  assert.match(source, /CombinadaMarketPickerDrawer/);
+  assert.match(source, /setComboOpen\(true\)/);
+  assert.match(source, />\s*Combinada\s*</);
   assert.match(source, /items=\{mapNewsItems\}/);
   assert.match(source, /markets=\{homeMapMarkets\}/);
   assert.doesNotMatch(source, /showNewsPanel=\{false\}/);
@@ -31,8 +34,9 @@ test('points home keeps cards curated but feeds all active markets to the map', 
   assert.doesNotMatch(mapMarketsBlock, /marketMatchesFeaturedTeam/);
 
   const filteredBlock = source.slice(filteredIndex, source.indexOf('const homeMapMarkets'));
-  assert.match(filteredBlock, /m\.trending/);
-  assert.match(filteredBlock, /marketMatchesFeaturedTeam/);
+  assert.match(filteredBlock, /shouldShowOnHome\(m, featuredTeamKeys\)/);
+  assert.match(source, /function shouldShowOnHome[\s\S]*market\?\.trending/);
+  assert.match(source, /function shouldShowOnHome[\s\S]*marketMatchesFeaturedTeam\(market, featuredTeamKeys\)/);
 });
 
 test('points home map loads the same shared news and market feed as the news globe', () => {
