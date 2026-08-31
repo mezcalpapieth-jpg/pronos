@@ -13,9 +13,9 @@ import { capturePointsRiskEvent } from '../../_lib/points-risk.js';
 import {
   createParlayTicket,
   listParlayTicketsForUser,
+  settleOpenParlayTickets,
 } from '../../_lib/points-parlays.js';
 
-const readSql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
 
 export default async function handler(req, res) {
@@ -34,9 +34,15 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       const limit = Number.parseInt(req.query?.limit, 10) || 20;
-      const tickets = await listParlayTicketsForUser(readSql, {
-        username: session.username,
-        limit,
+      const tickets = await withTransaction(async (client) => {
+        await settleOpenParlayTickets(client, {
+          username: session.username,
+          limit: Math.max(limit, 100),
+        });
+        return listParlayTicketsForUser(client, {
+          username: session.username,
+          limit,
+        });
       });
       return res.status(200).json({ ok: true, tickets });
     }

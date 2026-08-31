@@ -118,8 +118,13 @@ test('portfolio shows combinada tickets in their own tab', () => {
   assert.match(source, /fetchMyParlays/);
   assert.match(source, /function ParlaysView/);
   assert.match(source, /function ParlayTicketCard/);
+  assert.match(source, /function ParlayTicketSection/);
+  assert.match(source, /parlayWonCount/);
+  assert.match(source, /resolvedOutcomeLabel/);
   assert.match(source, /points\.portfolio\.tab\.parlays/);
   assert.match(source, /tab === 'combinadas'/);
+  assert.match(source, /Ganó:/);
+  assert.match(source, /title="Liquidadas"/);
   assert.match(source, /<ParlaysView parlays=\{parlays\} loading=\{loading\}/);
 });
 

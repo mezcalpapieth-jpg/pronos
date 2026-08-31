@@ -731,10 +731,10 @@ function parlayStatusMeta(status) {
 
 function parlayLegStatusMeta(status) {
   const key = String(status || '').toLowerCase();
-  if (key === 'won') return { label: 'OK', color: 'var(--green)' };
-  if (key === 'lost') return { label: 'FALLA', color: 'var(--danger)' };
-  if (key === 'void') return { label: 'ANULADO', color: 'var(--text-secondary)' };
-  return { label: 'PENDIENTE', color: 'var(--text-muted)' };
+  if (key === 'won') return { label: 'Correcta', icon: '✓', color: 'var(--green)', bg: 'rgba(0,232,122,0.12)', border: 'rgba(0,232,122,0.35)' };
+  if (key === 'lost') return { label: 'Falló', icon: '×', color: 'var(--danger)', bg: 'rgba(239,68,68,0.12)', border: 'rgba(239,68,68,0.35)' };
+  if (key === 'void') return { label: 'Anulada', icon: '–', color: 'var(--text-secondary)', bg: 'rgba(148,163,184,0.08)', border: 'var(--border)' };
+  return { label: 'Pendiente', icon: '•', color: 'var(--text-muted)', bg: 'rgba(148,163,184,0.08)', border: 'var(--border)' };
 }
 
 function parlayTicketPnl(ticket) {
@@ -756,6 +756,23 @@ function formatParlayDate(value) {
   });
 }
 
+function parlayLegCount(ticket, legs) {
+  const explicit = Number(ticket?.legCount);
+  return Number.isFinite(explicit) && explicit > 0 ? explicit : legs.length;
+}
+
+function parlayWonCount(ticket, legs) {
+  const explicit = Number(ticket?.wonLegs);
+  if (Number.isFinite(explicit) && explicit >= 0) return explicit;
+  return legs.filter(leg => String(leg.status || '').toLowerCase() === 'won').length;
+}
+
+function parlayResolvedOutcomeText(leg) {
+  if (leg?.resolvedOutcomeLabel) return leg.resolvedOutcomeLabel;
+  const index = Number(leg?.resolvedOutcome);
+  return Number.isInteger(index) && index >= 0 ? `Resultado ${index + 1}` : null;
+}
+
 function ParlayTicketCard({ ticket }) {
   const status = parlayStatusMeta(ticket.status);
   const statusKey = String(ticket.status || '').toLowerCase();
@@ -763,6 +780,13 @@ function ParlayTicketCard({ ticket }) {
   const pnl = parlayTicketPnl(ticket);
   const pnlPositive = pnl >= 0;
   const legs = Array.isArray(ticket.legs) ? ticket.legs : [];
+  const totalLegs = parlayLegCount(ticket, legs);
+  const wonLegs = parlayWonCount(ticket, legs);
+  const progressColor = statusKey === 'lost'
+    ? 'var(--danger)'
+    : wonLegs === totalLegs && totalLegs > 0
+      ? 'var(--green)'
+      : 'var(--text-secondary)';
 
   return (
     <div style={{
@@ -787,18 +811,29 @@ function ParlayTicketCard({ ticket }) {
             {Number(ticket.multiplier || 0).toFixed(2)}x
           </div>
         </div>
-        <span style={{
-          background: status.bg,
-          color: status.color,
-          borderRadius: 999,
-          padding: '5px 10px',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 10,
-          letterSpacing: '0.08em',
-          whiteSpace: 'nowrap',
-        }}>
-          {status.label}
-        </span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, textAlign: 'right' }}>
+          <span style={{
+            background: status.bg,
+            color: status.color,
+            borderRadius: 999,
+            padding: '5px 10px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            letterSpacing: '0.08em',
+            whiteSpace: 'nowrap',
+          }}>
+            {status.label}
+          </span>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            color: progressColor,
+            letterSpacing: '0.06em',
+            whiteSpace: 'nowrap',
+          }}>
+            {wonLegs}/{totalLegs} · {fmt(ticket.stake)} MXNP
+          </span>
+        </div>
       </div>
 
       <div className="points-history-summary-grid" style={{ marginBottom: 14 }}>
@@ -821,6 +856,8 @@ function ParlayTicketCard({ ticket }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {legs.map((leg, index) => {
           const legStatus = parlayLegStatusMeta(leg.status);
+          const legStatusKey = String(leg.status || '').toLowerCase();
+          const winningOutcome = legStatusKey === 'lost' ? parlayResolvedOutcomeText(leg) : null;
           const href = leg.marketId ? `/market?id=${encodeURIComponent(leg.marketId)}` : null;
           const content = (
             <>
@@ -846,16 +883,47 @@ function ParlayTicketCard({ ticket }) {
                 }}>
                   {leg.question || `Mercado #${leg.marketId || index + 1}`}
                 </div>
+                {winningOutcome && (
+                  <div style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 10,
+                    color: 'var(--danger)',
+                    marginTop: 5,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    Ganó: {winningOutcome}
+                  </div>
+                )}
               </div>
-              <span style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 10,
-                color: legStatus.color,
-                letterSpacing: '0.08em',
-                whiteSpace: 'nowrap',
-              }}>
-                {legStatus.label}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span aria-hidden="true" style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: 999,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: legStatus.bg,
+                  border: `1px solid ${legStatus.border}`,
+                  color: legStatus.color,
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 18,
+                  lineHeight: 1,
+                }}>
+                  {legStatus.icon}
+                </span>
+                <span style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  color: legStatus.color,
+                  letterSpacing: '0.08em',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {legStatus.label}
+                </span>
+              </div>
             </>
           );
           const style = {
@@ -864,7 +932,7 @@ function ParlayTicketCard({ ticket }) {
             gap: 10,
             alignItems: 'center',
             padding: '10px 12px',
-            border: '1px solid var(--border)',
+            border: `1px solid ${legStatus.border}`,
             borderRadius: 8,
             background: 'var(--surface2)',
             textDecoration: 'none',
@@ -881,6 +949,25 @@ function ParlayTicketCard({ ticket }) {
         })}
       </div>
     </div>
+  );
+}
+
+function ParlayTicketSection({ title, tickets }) {
+  if (!tickets.length) return null;
+  return (
+    <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <h2 style={{
+        fontFamily: 'var(--font-mono)',
+        color: 'var(--text-muted)',
+        fontSize: 11,
+        letterSpacing: '0.12em',
+        textTransform: 'uppercase',
+        margin: '4px 0 0',
+      }}>
+        {title}
+      </h2>
+      {tickets.map(ticket => <ParlayTicketCard key={ticket.id} ticket={ticket} />)}
+    </section>
   );
 }
 
@@ -929,8 +1016,9 @@ function ParlaysView({ parlays, loading }) {
         ))}
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {parlays.map(ticket => <ParlayTicketCard key={ticket.id} ticket={ticket} />)}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <ParlayTicketSection title="En curso" tickets={open} />
+        <ParlayTicketSection title="Liquidadas" tickets={settled} />
       </div>
     </>
   );

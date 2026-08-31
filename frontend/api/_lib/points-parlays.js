@@ -226,6 +226,11 @@ export async function readParlayQuote(db, { legs, stake, now = new Date(), lockM
 
 export function serializeParlayTicket(row) {
   const legs = parseJson(row.legs, []);
+  const legStatuses = legs.map(leg => String(leg.status || 'open').toLowerCase());
+  const legCount = legs.length;
+  const wonLegs = legStatuses.filter(status => status === 'won').length;
+  const lostLegs = legStatuses.filter(status => status === 'lost').length;
+  const voidLegs = legStatuses.filter(status => status === 'void').length;
   return {
     id: Number(row.id),
     username: row.username,
@@ -239,6 +244,10 @@ export function serializeParlayTicket(row) {
     submittedAt: row.submitted_at || null,
     settledAt: row.settled_at || null,
     reason: row.reason || null,
+    legCount,
+    wonLegs,
+    lostLegs,
+    voidLegs,
     legs: legs.map(leg => ({
       id: leg.id == null ? null : Number(leg.id),
       marketId: Number(leg.marketId ?? leg.market_id),
@@ -248,6 +257,7 @@ export function serializeParlayTicket(row) {
       outcomeLabel: leg.outcomeLabel ?? leg.outcome_label_snapshot ?? null,
       marketEndTime: leg.marketEndTime ?? leg.market_end_time ?? null,
       resolvedOutcome: leg.resolvedOutcome ?? leg.resolved_outcome ?? null,
+      resolvedOutcomeLabel: leg.resolvedOutcomeLabel ?? leg.resolved_outcome_label ?? null,
       status: leg.status || 'open',
       settledAt: leg.settledAt ?? leg.settled_at ?? null,
     })),
@@ -349,6 +359,11 @@ export async function listParlayTicketsForUser(db, { username, limit = 20 } = {}
                  'outcomeLabel', l.outcome_label_snapshot,
                  'marketEndTime', l.market_end_time,
                  'resolvedOutcome', l.resolved_outcome,
+                 'resolvedOutcomeLabel',
+                   CASE
+                     WHEN l.resolved_outcome IS NULL THEN NULL
+                     ELSE m.outcomes ->> (l.resolved_outcome::int)
+                   END,
                  'status', l.status,
                  'settledAt', l.settled_at
                )
@@ -358,6 +373,7 @@ export async function listParlayTicketsForUser(db, { username, limit = 20 } = {}
            ) AS legs
     FROM points_parlay_tickets t
     LEFT JOIN points_parlay_legs l ON l.ticket_id = t.id
+    LEFT JOIN points_markets m ON m.id = l.market_id
     WHERE t.username = $1
     GROUP BY t.id
     ORDER BY t.submitted_at DESC
@@ -387,6 +403,7 @@ function normalizeLegOutcomeStatus(leg) {
 async function settleTicket(client, ticket) {
   const legs = await queryRows(client, `
     SELECT l.id, l.ticket_id, l.outcome_index, l.status AS leg_status,
+           l.resolved_outcome,
            m.status AS market_status, m.outcome AS market_outcome
     FROM points_parlay_legs l
     JOIN points_markets m ON m.id = l.market_id
@@ -415,27 +432,37 @@ async function settleTicket(client, ticket) {
     reason = 'all_legs_won';
   }
 
-  if (!finalStatus) return { settled: false };
-
+  let progressed = 0;
   for (let index = 0; index < legs.length; index += 1) {
     const status = statuses[index];
     if (status.status === 'open') continue;
-    await client.query(
+    const updateResult = await client.query(
       `UPDATE points_parlay_legs
-       SET status = $1, resolved_outcome = $2, settled_at = NOW()
-       WHERE id = $3`,
+       SET status = $1,
+           resolved_outcome = $2,
+           settled_at = COALESCE(settled_at, NOW())
+       WHERE id = $3
+         AND (
+           status IS DISTINCT FROM $1
+           OR resolved_outcome IS DISTINCT FROM $2
+           OR settled_at IS NULL
+         )`,
       [status.status, status.resolvedOutcome, legs[index].id],
     );
+    progressed += Number(updateResult?.rowCount || 0);
   }
 
-  await client.query(
+  if (!finalStatus) return { settled: false, progressed };
+
+  const ticketUpdate = await client.query(
     `UPDATE points_parlay_tickets
      SET status = $1, payout = $2, settled_at = NOW(), reason = $3
      WHERE id = $4 AND status = 'open'`,
     [finalStatus, payout, reason, ticket.id],
   );
+  const ticketSettled = Number(ticketUpdate?.rowCount || 0) > 0;
 
-  if (payout > 0) {
+  if (ticketSettled && payout > 0) {
     await client.query(
       `INSERT INTO points_balances (username, balance, updated_at)
        VALUES ($1, $2, NOW())
@@ -459,23 +486,31 @@ async function settleTicket(client, ticket) {
     );
   }
 
-  return { settled: true, status: finalStatus, payout };
+  return { settled: ticketSettled, status: finalStatus, payout, progressed };
 }
 
-export async function settleOpenParlayTickets(client, { limit = 200 } = {}) {
+export async function settleOpenParlayTickets(client, { limit = 200, username = null } = {}) {
   const max = Math.min(500, Math.max(1, Number(limit) || 200));
+  const params = [max];
+  let userFilter = '';
+  if (username) {
+    params.push(username);
+    userFilter = `AND username = $${params.length}`;
+  }
   const tickets = await queryRows(client, `
     SELECT id, username, stake, multiplier, potential_payout
     FROM points_parlay_tickets
     WHERE status = 'open'
+      ${userFilter}
     ORDER BY submitted_at ASC
     LIMIT $1
     FOR UPDATE SKIP LOCKED
-  `, [max]);
+  `, params);
 
-  const counts = { checked: tickets.length, settled: 0, won: 0, lost: 0, void: 0, payout: 0 };
+  const counts = { checked: tickets.length, progressed: 0, settled: 0, won: 0, lost: 0, void: 0, payout: 0 };
   for (const ticket of tickets) {
     const result = await settleTicket(client, ticket);
+    counts.progressed += Number(result.progressed || 0);
     if (!result.settled) continue;
     counts.settled += 1;
     counts[result.status] += 1;
