@@ -23,6 +23,7 @@ import { binaryPricesWithBookTrade } from '../_lib/points-display-prices.js';
 import { readSession } from '../_lib/session.js';
 import { isAdminUsername } from '../_lib/points-admin.js';
 import { BANXICO_FIX_RESOLUTION_CRITERIA } from '../_lib/banxico.js';
+import { FRANKFURTER_RESOLUTION_CRITERIA, FRANKFURTER_SOURCE } from '../_lib/frankfurter.js';
 import { COINGECKO_TOKEN_MCAP_SOURCE } from '../_lib/solana-token-mcap.js';
 import {
   WEATHER_MAX_TEMP_RESOLUTION_CRITERIA,
@@ -426,6 +427,7 @@ export default async function handler(req, res) {
         (typeof resolverCfg?.criteria === 'string' && resolverCfg.criteria.trim())
         || (typeof sourceData?.resolutionCriteria === 'string' && sourceData.resolutionCriteria.trim())
         || (resolverSource === 'banxico-fix' ? BANXICO_FIX_RESOLUTION_CRITERIA : null)
+        || (resolverSource === FRANKFURTER_SOURCE ? FRANKFURTER_RESOLUTION_CRITERIA : null)
         || (resolverType === 'weather_api' && Array.isArray(resolverCfg?.buckets)
           ? weatherResolutionCriteriaForBuckets(resolverCfg.buckets, {
               resolutionSource: resolverCfg?.resolutionSource || null,

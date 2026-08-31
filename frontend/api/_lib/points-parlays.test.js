@@ -102,3 +102,34 @@ test('parlay quote treats a finished scoring window as general combo mode', asyn
   assert.equal(quote.cycleId, null);
   assert.equal(quote.legs.length, 3);
 });
+
+test('parlay stake is capped by potential payout instead of a fixed 100 MXNP stake', async () => {
+  const db = fakeDb({
+    markets: [makeMarket(1), makeMarket(2), makeMarket(3)],
+  });
+  const allowed = await readParlayQuote(db, {
+    legs: [
+      { marketId: 1, outcomeIndex: 0 },
+      { marketId: 2, outcomeIndex: 0 },
+      { marketId: 3, outcomeIndex: 0 },
+    ],
+    stake: 800,
+    now: new Date('2026-08-28T12:00:00.000Z'),
+  });
+
+  assert.equal(allowed.multiplier, 6);
+  assert.equal(allowed.potentialPayout, 4800);
+
+  await assert.rejects(
+    () => readParlayQuote(db, {
+      legs: [
+        { marketId: 1, outcomeIndex: 0 },
+        { marketId: 2, outcomeIndex: 0 },
+        { marketId: 3, outcomeIndex: 0 },
+      ],
+      stake: 1000,
+      now: new Date('2026-08-28T12:00:00.000Z'),
+    }),
+    /payout_too_high/,
+  );
+});

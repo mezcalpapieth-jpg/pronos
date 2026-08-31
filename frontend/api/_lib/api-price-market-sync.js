@@ -1,7 +1,8 @@
 import { BANXICO_FIX_RESOLUTION_CRITERIA } from './banxico.js';
+import { FRANKFURTER_RESOLUTION_CRITERIA, FRANKFURTER_SOURCE } from './frankfurter.js';
 import { COINGECKO_TOKEN_MCAP_SOURCE } from './solana-token-mcap.js';
 
-const PRICE_SOURCES = new Set(['finnhub', 'banxico-fix', 'cre-gasolina', COINGECKO_TOKEN_MCAP_SOURCE]);
+const PRICE_SOURCES = new Set(['finnhub', 'banxico-fix', FRANKFURTER_SOURCE, 'cre-gasolina', COINGECKO_TOKEN_MCAP_SOURCE]);
 
 function isSupportedPriceConfig(cfg) {
   if (!cfg) return false;
@@ -111,6 +112,22 @@ export function syncApiPriceFromQuestion({
     }
     if (nextSourceData.resolutionCriteria !== BANXICO_FIX_RESOLUTION_CRITERIA) {
       nextSourceData.resolutionCriteria = BANXICO_FIX_RESOLUTION_CRITERIA;
+      changed = true;
+    }
+  } else if (nextConfig.source === FRANKFURTER_SOURCE) {
+    const criteria = nextConfig.pair
+      ? `${FRANKFURTER_RESOLUTION_CRITERIA} Par: ${nextConfig.pair}.`
+      : FRANKFURTER_RESOLUTION_CRITERIA;
+    if (!nextConfig.criteria) {
+      nextConfig.criteria = criteria;
+      changed = true;
+    }
+    if (!nextConfig.rationale) {
+      nextConfig.rationale = nextConfig.criteria || criteria;
+      changed = true;
+    }
+    if (nextSourceData.resolutionCriteria !== criteria) {
+      nextSourceData.resolutionCriteria = criteria;
       changed = true;
     }
   }

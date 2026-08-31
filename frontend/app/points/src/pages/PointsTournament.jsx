@@ -28,7 +28,7 @@ const DEFAULT_RULES = {
     maxLegs: 6,
     edgeFactor: 0.75,
     minStakeMxnp: 10,
-    maxStakeMxnp: 100,
+    maxPayoutMxnp: 5000,
     maxMultiplier: 25,
   },
   rewards: {
@@ -624,6 +624,7 @@ function NewFeatureList({ lang, rules }) {
   const parlayMin = fmtInteger(r.parlay?.minLegs || DEFAULT_RULES.parlay.minLegs);
   const parlayMax = fmtInteger(r.parlay?.maxLegs || DEFAULT_RULES.parlay.maxLegs);
   const parlayFactor = Number(r.parlay?.edgeFactor || DEFAULT_RULES.parlay.edgeFactor).toFixed(2);
+  const parlayPayoutCap = fmtInteger(r.parlay?.maxPayoutMxnp || DEFAULT_RULES.parlay.maxPayoutMxnp);
   const rows = lang === 'en' ? [
     [
       'Per-lot holding',
@@ -631,7 +632,7 @@ function NewFeatureList({ lang, rules }) {
     ],
     [
       'Combinadas',
-      `Combo slips combine ${parlayMin} to ${parlayMax} tournament markets and pay fair odds times ${parlayFactor}, capped by the rules. Create them from the Combinada button on the markets page or the Combinada mode inside a market.`,
+      `Combo slips combine ${parlayMin} to ${parlayMax} tournament markets and pay fair odds times ${parlayFactor}, with a max payout of ${parlayPayoutCap} MXNP. Create them from the Combinada button on the markets page or the Combinada mode inside a market.`,
     ],
     [
       'Liquidity rewards',
@@ -644,7 +645,7 @@ function NewFeatureList({ lang, rules }) {
     ],
     [
       'Combinadas',
-      `Las combinadas juntan ${parlayMin} a ${parlayMax} mercados del torneo y pagan momios justos por ${parlayFactor}, con tope de reglas. Se arman desde el botón Combinada en mercados o desde el modo Combinada dentro de un mercado.`,
+      `Las combinadas juntan ${parlayMin} a ${parlayMax} mercados del torneo y pagan momios justos por ${parlayFactor}, con tope de pago de ${parlayPayoutCap} MXNP. Se arman desde el botón Combinada en mercados o desde el modo Combinada dentro de un mercado.`,
     ],
     [
       'Recompensa por dar liquidez',

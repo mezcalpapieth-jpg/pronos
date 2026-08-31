@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BANXICO_FIX_RESOLUTION_CRITERIA } from './banxico.js';
+import { FRANKFURTER_SOURCE } from './frankfurter.js';
 import { syncApiPriceFromQuestion } from './api-price-market-sync.js';
 
 test('api price sync turns edited USD/MXN below question into lt 17', () => {
@@ -40,6 +41,29 @@ test('api price sync keeps Meta above question as gt 610', () => {
   assert.equal(result.changed, true);
   assert.equal(result.resolverConfig.threshold, 610);
   assert.equal(result.resolverConfig.op, 'gt');
+});
+
+test('api price sync supports Frankfurter FX questions', () => {
+  const result = syncApiPriceFromQuestion({
+    question: 'EUR/MXN cierre del viernes > $21.50',
+    resolverConfig: {
+      source: FRANKFURTER_SOURCE,
+      base: 'EUR',
+      quote: 'MXN',
+      pair: 'EUR/MXN',
+      threshold: 21.25,
+      op: 'lt',
+      yesOutcome: 0,
+    },
+    sourceData: { strike: 21.25 },
+  });
+
+  assert.equal(result.changed, true);
+  assert.equal(result.resolverConfig.threshold, 21.5);
+  assert.equal(result.resolverConfig.op, 'gt');
+  assert.match(result.resolverConfig.criteria, /Frankfurter/);
+  assert.equal(result.sourceData.strike, 21.5);
+  assert.match(result.sourceData.resolutionCriteria, /EUR\/MXN/);
 });
 
 test('api price sync updates Chainlink crypto thresholds without explicit source', () => {

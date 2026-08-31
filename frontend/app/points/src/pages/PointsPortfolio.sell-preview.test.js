@@ -114,6 +114,15 @@ test('portfolio shows liquidity reward payouts in their own market-linked tab', 
   assert.match(source, /<RewardsView rewards=\{rewards\} summary=\{rewardSummary\} loading=\{loading\}/);
 });
 
+test('portfolio shows combinada tickets in their own tab', () => {
+  assert.match(source, /fetchMyParlays/);
+  assert.match(source, /function ParlaysView/);
+  assert.match(source, /function ParlayTicketCard/);
+  assert.match(source, /points\.portfolio\.tab\.parlays/);
+  assert.match(source, /tab === 'combinadas'/);
+  assert.match(source, /<ParlaysView parlays=\{parlays\} loading=\{loading\}/);
+});
+
 test('portfolio separates open PnL from total account PnL', () => {
   assert.match(source, /Promise\.all\(\[\s*fetchPositions\(\),\s*fetchHistory\(\{ cycle: 'current' \}\)\.catch\(\(\) => null\),\s*\]\)/s);
   assert.match(source, /const openPnl = Number\(summary\?\.pnl \|\| 0\)/);

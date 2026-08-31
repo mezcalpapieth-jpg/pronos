@@ -76,6 +76,10 @@ const PUBLIC_ERROR_COPY = {
     es: 'El stake de la combinada es demasiado alto.',
     en: 'The combo-slip stake is too high.',
   },
+  payout_too_high: {
+    es: 'La combinada paga máximo 5,000 MXNP. Baja el stake.',
+    en: 'The combo slip pays up to 5,000 MXNP. Lower the stake.',
+  },
   not_enough_legs: {
     es: 'La combinada necesita al menos 3 mercados.',
     en: 'The combo slip needs at least 3 markets.',

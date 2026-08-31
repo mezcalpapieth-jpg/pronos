@@ -12,6 +12,7 @@ import {
   TOURNAMENT_OPERATION_CLOSE_ISO,
   TOURNAMENT_PARLAY_EDGE_FACTOR,
   TOURNAMENT_PARLAY_MAX_LEGS,
+  TOURNAMENT_PARLAY_MAX_PAYOUT_MXNP,
   TOURNAMENT_PARLAY_MIN_LEGS,
   TOURNAMENT_QUALIFYING_MARKETS,
   TOURNAMENT_RANKING_CUTOFF_ISO,
@@ -39,9 +40,11 @@ test('points tournament exposes hold reward and parlay rules', () => {
   assert.equal(TOURNAMENT_PARLAY_MIN_LEGS, 3);
   assert.equal(TOURNAMENT_PARLAY_MAX_LEGS, 6);
   assert.equal(TOURNAMENT_PARLAY_EDGE_FACTOR, 0.75);
+  assert.equal(TOURNAMENT_PARLAY_MAX_PAYOUT_MXNP, 5000);
   assert.equal(rules.parlay.minLegs, 3);
   assert.equal(rules.parlay.maxLegs, 6);
   assert.equal(rules.parlay.edgeFactor, 0.75);
+  assert.equal(rules.parlay.maxPayoutMxnp, 5000);
 });
 
 test('points tournament social follow and post rewards are 100 MXNP', () => {

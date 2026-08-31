@@ -3,7 +3,7 @@ import {
   TOURNAMENT_PARLAY_EDGE_FACTOR,
   TOURNAMENT_PARLAY_MAX_LEGS,
   TOURNAMENT_PARLAY_MAX_MULTIPLIER,
-  TOURNAMENT_PARLAY_MAX_STAKE_MXNP,
+  TOURNAMENT_PARLAY_MAX_PAYOUT_MXNP,
   TOURNAMENT_PARLAY_MIN_LEGS,
   TOURNAMENT_PARLAY_MIN_STAKE_MXNP,
   TOURNAMENT_PARLAY_PRICE_CEILING,
@@ -67,9 +67,6 @@ function normalizeStake(stake) {
   }
   if (amount < TOURNAMENT_PARLAY_MIN_STAKE_MXNP) {
     throw apiError('stake_too_low', 400, { minStakeMxnp: TOURNAMENT_PARLAY_MIN_STAKE_MXNP });
-  }
-  if (amount > TOURNAMENT_PARLAY_MAX_STAKE_MXNP) {
-    throw apiError('stake_too_high', 400, { maxStakeMxnp: TOURNAMENT_PARLAY_MAX_STAKE_MXNP });
   }
   return round6(amount);
 }
@@ -205,6 +202,13 @@ export async function readParlayQuote(db, { legs, stake, now = new Date(), lockM
 
   const math = calculateParlayMultiplier(pricedLegs.map(leg => leg.price));
   const potentialPayout = round6(stakeAmount * math.multiplier);
+  if (potentialPayout > TOURNAMENT_PARLAY_MAX_PAYOUT_MXNP) {
+    throw apiError('payout_too_high', 400, {
+      maxPayoutMxnp: TOURNAMENT_PARLAY_MAX_PAYOUT_MXNP,
+      maxStakeMxnp: round6(TOURNAMENT_PARLAY_MAX_PAYOUT_MXNP / math.multiplier),
+      multiplier: math.multiplier,
+    });
+  }
   return {
     ok: true,
     cycleId: scoringWindow?.id || null,

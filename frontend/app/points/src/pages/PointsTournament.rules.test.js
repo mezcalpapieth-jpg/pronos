@@ -18,6 +18,8 @@ test('tournament rules place new tournament features below the base rules', () =
   assert.match(source, /\$\{liquidityRate\}% per week/);
   assert.match(source, /combo-slip PnL/);
   assert.match(source, /combinadas liquidadas/);
+  assert.match(source, /max payout of/);
+  assert.match(source, /tope de pago de/);
 
   const rulesIndex = source.indexOf('<RuleList lang={lang} rules={rules} />');
   const featuresIndex = source.indexOf('<NewFeatureList lang={lang} rules={rules} />');

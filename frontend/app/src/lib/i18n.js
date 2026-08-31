@@ -870,6 +870,7 @@ const STRINGS = {
 
   'points.portfolio.title':   { es: 'Portafolio',            en: 'Portfolio' },
   'points.portfolio.tab.open': { es: 'Activo',               en: 'Active' },
+  'points.portfolio.tab.parlays': { es: 'Combinadas',        en: 'Combo slips' },
   'points.portfolio.tab.history': { es: 'Historial',         en: 'History' },
   'points.portfolio.tab.rewards': { es: 'Recompensas',       en: 'Rewards' },
   'points.portfolio.tab.claim': { es: 'Reclamar',            en: 'Claim' },

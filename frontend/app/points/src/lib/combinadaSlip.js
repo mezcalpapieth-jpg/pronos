@@ -4,7 +4,7 @@ export const PARLAY_RULES_FALLBACK = {
   minLegs: 3,
   maxLegs: 6,
   minStakeMxnp: 10,
-  maxStakeMxnp: 100,
+  maxPayoutMxnp: 5000,
 };
 
 function positiveInt(value) {

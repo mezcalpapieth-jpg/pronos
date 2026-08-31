@@ -32,6 +32,7 @@ import {
   fetchDailyStatus,
   dismissPosition,
   fetchPnlHistory,
+  fetchMyParlays,
   publicErrorMessage,
 } from '../lib/pointsApi.js';
 import PnlChartCard from '../components/PnlChartCard.jsx';
@@ -720,16 +721,232 @@ function RewardsView({ rewards, summary, loading }) {
   );
 }
 
+function parlayStatusMeta(status) {
+  const key = String(status || '').toLowerCase();
+  if (key === 'won') return { label: 'GANADA', color: 'var(--green)', bg: 'rgba(0,232,122,0.12)' };
+  if (key === 'lost') return { label: 'PERDIDA', color: 'var(--danger)', bg: 'rgba(239,68,68,0.1)' };
+  if (key === 'void') return { label: 'ANULADA', color: 'var(--text-secondary)', bg: 'rgba(148,163,184,0.08)' };
+  return { label: 'EN CURSO', color: 'var(--gold)', bg: 'rgba(245,200,66,0.08)' };
+}
+
+function parlayLegStatusMeta(status) {
+  const key = String(status || '').toLowerCase();
+  if (key === 'won') return { label: 'OK', color: 'var(--green)' };
+  if (key === 'lost') return { label: 'FALLA', color: 'var(--danger)' };
+  if (key === 'void') return { label: 'ANULADO', color: 'var(--text-secondary)' };
+  return { label: 'PENDIENTE', color: 'var(--text-muted)' };
+}
+
+function parlayTicketPnl(ticket) {
+  const status = String(ticket?.status || '').toLowerCase();
+  if (status === 'won') return Number(ticket?.payout || 0) - Number(ticket?.stake || 0);
+  if (status === 'lost') return -Number(ticket?.stake || 0);
+  if (status === 'void') return 0;
+  return Number(ticket?.potentialProfit || 0);
+}
+
+function formatParlayDate(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  return date.toLocaleDateString('es-MX', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function ParlayTicketCard({ ticket }) {
+  const status = parlayStatusMeta(ticket.status);
+  const statusKey = String(ticket.status || '').toLowerCase();
+  const isOpen = !statusKey || statusKey === 'open';
+  const pnl = parlayTicketPnl(ticket);
+  const pnlPositive = pnl >= 0;
+  const legs = Array.isArray(ticket.legs) ? ticket.legs : [];
+
+  return (
+    <div style={{
+      background: 'var(--surface1)',
+      border: '1px solid var(--border)',
+      borderRadius: 12,
+      padding: '16px 18px',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
+        <div>
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            color: 'var(--text-muted)',
+            letterSpacing: '0.1em',
+            textTransform: 'uppercase',
+            marginBottom: 5,
+          }}>
+            Combinada #{ticket.id}{ticket.submittedAt ? ` · ${formatParlayDate(ticket.submittedAt)}` : ''}
+          </div>
+          <div style={{ fontFamily: 'var(--font-display)', color: 'var(--text-primary)', fontSize: 24 }}>
+            {Number(ticket.multiplier || 0).toFixed(2)}x
+          </div>
+        </div>
+        <span style={{
+          background: status.bg,
+          color: status.color,
+          borderRadius: 999,
+          padding: '5px 10px',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          letterSpacing: '0.08em',
+          whiteSpace: 'nowrap',
+        }}>
+          {status.label}
+        </span>
+      </div>
+
+      <div className="points-history-summary-grid" style={{ marginBottom: 14 }}>
+        {[
+          ['Stake', `${fmt(ticket.stake)} MXNP`, 'var(--text-primary)'],
+          [isOpen ? 'Pago posible' : 'Pago', `${fmt(isOpen ? ticket.potentialPayout : ticket.payout)} MXNP`, 'var(--green)'],
+          [isOpen ? 'Ganancia posible' : 'PnL', signedFmt(pnl), pnlPositive ? 'var(--success)' : 'var(--danger)'],
+        ].map(([label, value, color]) => (
+          <div key={label} className="points-history-summary-card">
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 4, textTransform: 'uppercase' }}>
+              {label}
+            </div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color }}>
+              {value}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {legs.map((leg, index) => {
+          const legStatus = parlayLegStatusMeta(leg.status);
+          const href = leg.marketId ? `/market?id=${encodeURIComponent(leg.marketId)}` : null;
+          const content = (
+            <>
+              <div style={{ minWidth: 0 }}>
+                <div style={{
+                  fontFamily: 'var(--font-body)',
+                  fontSize: 13,
+                  color: 'var(--text-primary)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  marginBottom: 3,
+                }}>
+                  {leg.outcomeLabel || `Resultado ${index + 1}`}
+                </div>
+                <div style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  color: 'var(--text-muted)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {leg.question || `Mercado #${leg.marketId || index + 1}`}
+                </div>
+              </div>
+              <span style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                color: legStatus.color,
+                letterSpacing: '0.08em',
+                whiteSpace: 'nowrap',
+              }}>
+                {legStatus.label}
+              </span>
+            </>
+          );
+          const style = {
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1fr) auto',
+            gap: 10,
+            alignItems: 'center',
+            padding: '10px 12px',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            background: 'var(--surface2)',
+            textDecoration: 'none',
+          };
+          return href ? (
+            <Link key={`${ticket.id}-${index}`} to={href} style={style}>
+              {content}
+            </Link>
+          ) : (
+            <div key={`${ticket.id}-${index}`} style={style}>
+              {content}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ParlaysView({ parlays, loading }) {
+  if (loading) {
+    return <HistorySkeleton count={3} />;
+  }
+  if (!parlays || parlays.length === 0) {
+    return (
+      <div style={{
+        textAlign: 'center', padding: '60px 24px',
+        border: '1px dashed var(--border)', borderRadius: 16,
+      }}>
+        <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
+          No tienes combinadas todavía.
+        </p>
+        <Link to="/" className="btn-primary" style={{ display: 'inline-block', marginTop: 20, textDecoration: 'none' }}>
+          Armar combinada
+        </Link>
+      </div>
+    );
+  }
+
+  const open = parlays.filter(ticket => String(ticket.status || '').toLowerCase() === 'open');
+  const settled = parlays.filter(ticket => String(ticket.status || '').toLowerCase() !== 'open');
+  const openPayout = open.reduce((sum, ticket) => sum + Number(ticket.potentialPayout || 0), 0);
+  const settledPnl = settled.reduce((sum, ticket) => sum + parlayTicketPnl(ticket), 0);
+
+  return (
+    <>
+      <div className="points-history-summary-grid">
+        {[
+          ['Abiertas', open.length, 'var(--gold)'],
+          ['Pago posible', `${fmt(openPayout)} MXNP`, 'var(--green)'],
+          ['Liquidadas', settled.length, 'var(--text-primary)'],
+          ['PnL liquidado', signedFmt(settledPnl), settledPnl >= 0 ? 'var(--success)' : 'var(--danger)'],
+        ].map(([label, value, color]) => (
+          <div key={label} className="points-history-summary-card">
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 4, textTransform: 'uppercase' }}>
+              {label}
+            </div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color }}>
+              {value}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {parlays.map(ticket => <ParlayTicketCard key={ticket.id} ticket={ticket} />)}
+      </div>
+    </>
+  );
+}
+
 // ─── Main Portfolio ──────────────────────────────────────────────────────────
 export default function PointsPortfolio() {
   const navigate = useNavigate();
   const t = useT();
   const lang = useLang();
   const { authenticated, user, loading: authLoading, refresh } = usePointsAuth();
-  const [tab, setTab] = useState('activo'); // 'activo' | 'historial' | 'recompensas'
+  const [tab, setTab] = useState('activo'); // 'activo' | 'combinadas' | 'historial' | 'recompensas'
   const [positions, setPositions] = useState([]);
   const [history, setHistory] = useState([]);
   const [rewards, setRewards] = useState([]);
+  const [parlays, setParlays] = useState([]);
   const [summary, setSummary] = useState(null);
   const [historySummary, setHistorySummary] = useState(null);
   const [rewardSummary, setRewardSummary] = useState(null);
@@ -788,6 +1005,9 @@ export default function PointsPortfolio() {
         const r = await fetchMakerRewards();
         setRewards(r.rewards || []);
         setRewardSummary(r.summary || null);
+      } else if (tab === 'combinadas') {
+        const r = await fetchMyParlays(100);
+        setParlays(r.tickets || []);
       } else {
         const r = await fetchHistory({ cycle: historyCycleScope });
         setHistory(r.history || []);
@@ -983,6 +1203,7 @@ export default function PointsPortfolio() {
       <div className="points-portfolio-tabs">
         {[
           { id: 'activo', label: t('points.portfolio.tab.open') },
+          { id: 'combinadas', label: t('points.portfolio.tab.parlays') },
           { id: 'historial', label: t('points.portfolio.tab.history') },
           { id: 'recompensas', label: t('points.portfolio.tab.rewards') },
         ].map(t => {
@@ -1098,6 +1319,10 @@ export default function PointsPortfolio() {
               onRedeem={handleRedeem}
               actionState={actionState}
             />
+          )}
+
+          {tab === 'combinadas' && (
+            <ParlaysView parlays={parlays} loading={loading} />
           )}
 
           {tab === 'recompensas' && (

@@ -37,6 +37,7 @@ export default function CombinadaSlipPanel({
         multiplier: 'Multiplier',
         payout: 'Payout',
         profit: 'Profit',
+        cap: 'Max payout',
         remove: 'Remove',
         clear: 'Clear',
         signIn: 'Sign in',
@@ -51,6 +52,7 @@ export default function CombinadaSlipPanel({
         multiplier: 'Multiplicador',
         payout: 'Paga',
         profit: 'Ganancia',
+        cap: 'Tope',
         remove: 'Quitar',
         clear: 'Limpiar',
         signIn: 'Inicia sesion',
@@ -58,7 +60,7 @@ export default function CombinadaSlipPanel({
   const minLegs = Number(rules?.minLegs || PARLAY_RULES_FALLBACK.minLegs);
   const maxLegs = Number(rules?.maxLegs || PARLAY_RULES_FALLBACK.maxLegs);
   const minStake = Number(rules?.minStakeMxnp || PARLAY_RULES_FALLBACK.minStakeMxnp);
-  const maxStake = Number(rules?.maxStakeMxnp || PARLAY_RULES_FALLBACK.maxStakeMxnp);
+  const maxPayout = Number(rules?.maxPayoutMxnp || PARLAY_RULES_FALLBACK.maxPayoutMxnp);
   const canQuote = legs.length >= minLegs && !state?.loading && !state?.submitting;
   const canSubmit = canQuote && !state?.submitting;
   const quote = state?.quote;
@@ -181,7 +183,7 @@ export default function CombinadaSlipPanel({
             onChange={e => onStakeChange(e.target.value)}
             inputMode="decimal"
             min={minStake}
-            max={maxStake}
+            max={maxPayout}
             style={{
               width: '100%',
               height: 38,
@@ -195,6 +197,9 @@ export default function CombinadaSlipPanel({
               boxSizing: 'border-box',
             }}
           />
+          <span style={{ fontSize: 8, color: 'var(--text-muted)', letterSpacing: '0.05em', textTransform: 'none' }}>
+            {copy.cap}: {Number(maxPayout || 0).toLocaleString('es-MX', { maximumFractionDigits: 0 })} MXNP
+          </span>
         </label>
         <button
           type="button"

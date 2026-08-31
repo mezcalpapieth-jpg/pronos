@@ -175,6 +175,46 @@ test('auto resolver core settles Banxico FIX only when the target date is publis
   assert.equal(decision.finalScore, 'banxico-fix · 16.98');
 });
 
+test('auto resolver core settles Frankfurter FX pairs by target date', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async (url) => {
+    assert.match(String(url), /api\.frankfurter\.dev\/v2\/rate\/EUR\/MXN/);
+    assert.match(String(url), /date=2026-08-21/);
+    return jsonResponse({
+      date: '2026-08-21',
+      base: 'EUR',
+      quote: 'MXN',
+      rate: 21.56,
+    });
+  };
+
+  const decision = await resolveAutoResolverCandidate({
+    resolver_type: 'api_price',
+    resolver_config: {
+      source: 'frankfurter',
+      base: 'EUR',
+      quote: 'MXN',
+      pair: 'EUR/MXN',
+      threshold: 21.5,
+      op: 'gt',
+      yesOutcome: 0,
+      resolveDateYmd: '2026-08-21',
+    },
+    end_time: '2026-08-22T05:59:00.000Z',
+    outcomes: ['Sí', 'No'],
+  });
+
+  assert.equal(decision.winningIdx, 0);
+  assert.equal(decision.resolverInfo.priceAtResolve, 21.56);
+  assert.equal(decision.resolverInfo.pair, 'EUR/MXN');
+  assert.equal(decision.resolverInfo.targetDateYmd, '2026-08-21');
+  assert.equal(decision.finalScore, 'EUR/MXN · 21.56');
+});
+
 test('auto resolver core sends archive weather model mismatches to manual review', async (t) => {
   const originalFetch = globalThis.fetch;
   t.after(() => {

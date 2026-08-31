@@ -3,6 +3,7 @@ import { formatDirectionFinalScore, resolveDirectionOutcome } from './crypto-5mi
 import { readCoinbaseBoundaryPrice } from './crypto-price-source.js';
 import { readFinnhubQuote } from './stockprice.js';
 import { banxicoFechaToYmd, banxicoFixTargetDateYmd, readBanxicoLatest } from './banxico.js';
+import { FRANKFURTER_SOURCE, frankfurterTargetDateYmd, readFrankfurterRate } from './frankfurter.js';
 import { readCreAverageFor } from './fuel.js';
 import {
   COINGECKO_TOKEN_MCAP_SOURCE,
@@ -97,7 +98,7 @@ export function buildAutoResolverFinalScore({
         return clip(formatDirectionFinalScore(cfg.threshold, price));
       }
       if (price != null) {
-        const sym = cfg.symbol || cfg.feedAddress || resolverInfo?.source || '';
+        const sym = cfg.symbol || cfg.pair || cfg.feedAddress || resolverInfo?.pair || resolverInfo?.source || '';
         const short = typeof sym === 'string' ? sym.slice(0, 20) : '';
         const priceStr = typeof price === 'number'
           ? price.toLocaleString('en-US', { maximumFractionDigits: 4 })
@@ -335,6 +336,38 @@ export async function resolveAutoResolverCandidate(candidate = {}, { sql = null 
       }
       price = r.value;
       readerInfo = { seriesId: cfg.seriesId, fecha: r.fecha, targetDateYmd };
+    } else if (cfg.source === FRANKFURTER_SOURCE) {
+      if (!cfg.base) throw new Error('frankfurter: missing base');
+      const targetDateYmd = frankfurterTargetDateYmd({
+        resolverConfig: cfg,
+        sourceData,
+        endTime: candidate.end_time,
+      });
+      const r = await readFrankfurterRate({
+        base: cfg.base,
+        quote: cfg.quote || 'MXN',
+        dateYmd: targetDateYmd,
+      });
+      if (targetDateYmd && r.date !== targetDateYmd) {
+        const err = new Error(`frankfurter_not_published_for_${targetDateYmd}`);
+        err.benign = true;
+        err.info = {
+          source: cfg.source,
+          base: cfg.base,
+          quote: cfg.quote || 'MXN',
+          expectedDateYmd: targetDateYmd,
+          latestDateYmd: r.date,
+        };
+        throw err;
+      }
+      price = r.value;
+      readerInfo = {
+        pair: cfg.pair || `${r.base}/${r.quote}`,
+        base: r.base,
+        quote: r.quote,
+        date: r.date,
+        targetDateYmd,
+      };
     } else if (cfg.source === 'cre-gasolina') {
       if (!cfg.fuelType) throw new Error('cre-gasolina: missing fuelType');
       const r = await readCreAverageFor(cfg.fuelType);

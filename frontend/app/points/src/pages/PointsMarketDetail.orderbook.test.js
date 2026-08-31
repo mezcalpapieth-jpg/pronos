@@ -72,6 +72,7 @@ test('points API client exposes orderbook and limit-order endpoints', () => {
 
 test('points market detail supports local parlay slip actions', () => {
   assert.match(combinadaSlipSource, /PARLAY_SLIP_STORAGE_KEY/);
+  assert.match(combinadaSlipSource, /maxPayoutMxnp:\s*5000/);
   assert.match(combinadaSlipSource, /addParlayLeg/);
   assert.match(combinadaSlipSource, /parlayPayloadLegs/);
   assert.match(combinadaPanelSource, /export default function CombinadaSlipPanel/);
