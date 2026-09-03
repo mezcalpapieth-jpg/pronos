@@ -217,6 +217,45 @@ npx vercel frontend/
 
 ---
 
+## Demo mode (presentations)
+
+A click-through of the MVP with **no login, no wallet, no chain and no API calls** —
+for showing the product live without depending on the room's wifi or a testnet.
+
+| | |
+|---|---|
+| Enter | `/mvp?demo=1` |
+| Leave | `/mvp?demo=0` |
+
+Once entered, the mode sticks for that browser tab, so navigating inside the app
+(market → bet → portfolio) stays in the demo. Closing the tab clears it.
+
+**What it does**
+
+- Signs you in as a demo account with **$1,000 USDC** and three open positions
+- Shows a curated market set whose deadlines are computed forward from *today*,
+  so the grid is never empty and never shows a past date
+- Placing a bet runs the real modal and steps, then writes to a local ledger:
+  the balance drops, the position appears in Portfolio, the trade appears in
+  Historial. Nothing is signed or broadcast.
+- A **"Demo · datos simulados"** badge stays on screen with a **Reiniciar**
+  button (click twice) that puts the demo back to its starting state — use it
+  to rehearse, then reset before the real run
+- The password gate is skipped, so the demo link works for anyone you share it
+  with. Only the simulated UI is reachable this way — no API, no user data.
+
+**Editing the demo**
+
+| What | Where |
+|---|---|
+| Markets shown | `frontend/app/src/lib/demoMarkets.js` |
+| Starting balance, positions, history | `frontend/app/src/lib/demo.js` |
+| Badge + reset button | `frontend/app/src/components/DemoBadge.jsx` |
+
+Rebuild with `cd frontend/app && npm run build`.
+
+---
+
 ## Go to mainnet
 
 1. Change `chainId` in `deployments.json` to `8453`

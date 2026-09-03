@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { usePrivy, useWallets } from '../lib/privyShim.js';
 import { ethers } from 'ethers';
 import {
   getUsdcBalance,
@@ -17,6 +17,7 @@ import { buyShares } from '../lib/contracts.js';
 import { getProtocolBuyQuote } from '../lib/protocolPricing.js';
 import { isProtocolMarket, getUsdcAddress, CHAIN_IDS, getChainDisplayName, getChainReadProvider, switchWalletChain } from '../lib/protocol.js';
 import { useT } from '../lib/i18n.js';
+import { IS_DEMO, getDemoBalance, placeDemoBet } from '../lib/demo.js';
 
 const QUICK_AMOUNTS = [5, 10, 25, 50];
 const ERC20_BALANCE_ABI = ['function balanceOf(address) view returns (uint256)'];
@@ -52,7 +53,9 @@ export default function BetModal({ open, onClose, outcome, outcomePct, outcomeIn
   const protocolVersion = market?.protocolVersion || 'v1';
   // v1 still uses the deployed dynamic fee. v2 uses the requested fixed 2%
   // upfront fee that never enters the liquidity pool.
-  const fallbackFeePct = protocolMarket && protocolVersion === 'v2' ? 2 : 5 * (1 - (outcomePct || 50) / 100);
+  // Demo mode quotes the headline flat 2% so the numbers on stage match the
+  // 2% the demo ledger actually charges.
+  const fallbackFeePct = IS_DEMO || (protocolMarket && protocolVersion === 'v2') ? 2 : 5 * (1 - (outcomePct || 50) / 100);
   const fallbackFee = numAmount * fallbackFeePct / 100;
   const afterFee = numAmount - fallbackFee;
   const fallbackPayout = outcomePct > 0 && numAmount > 0 ? (afterFee / (outcomePct / 100)).toFixed(2) : '—';
@@ -79,8 +82,9 @@ export default function BetModal({ open, onClose, outcome, outcomePct, outcomeIn
   // Slippage preview is only meaningful when we have a live book. Local/demo
   // markets without a `clobTokenId` can't be simulated — show a hint instead
   // of silently hiding the section so the user knows why numbers are missing.
-  const noLiveBook = !clobTokenId && !protocolMarket;
-  const liveTradingUnavailable = protocolMarket ? !market?.poolAddress : !clobTokenId;
+  const noLiveBook = !IS_DEMO && !clobTokenId && !protocolMarket;
+  // Every demo market is tradable — the fill is simulated locally.
+  const liveTradingUnavailable = IS_DEMO ? false : (protocolMarket ? !market?.poolAddress : !clobTokenId);
   const previewLoading = protocolMarket
     ? numAmount > 0 && protocolQuoteState === 'loading'
     : false;
@@ -164,6 +168,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, outcomeIn
   // Load USDC balance when modal opens
   useEffect(() => {
     if (!open || !authenticated) return;
+    if (IS_DEMO) { setBalance(getDemoBalance()); return; }
     const wallet = wallets?.[0];
     if (!wallet) return;
     wallet.getEthereumProvider().then(async (prov) => {
@@ -205,6 +210,31 @@ export default function BetModal({ open, onClose, outcome, outcomePct, outcomeIn
     if (numAmount <= 0) {
       setStep(STEPS.ERROR);
       setStatusMsg(t('bet.invalidAmount'));
+      return;
+    }
+
+    // Demo: run the same visible steps against the local ledger — no chain,
+    // no signature prompt, no way for the network to embarrass us on stage.
+    if (IS_DEMO) {
+      const demoBalance = getDemoBalance();
+      if (demoBalance < numAmount) {
+        setStep(STEPS.ERROR);
+        setStatusMsg(t('bet.insufficient', { bal: demoBalance.toFixed(2) }));
+        return;
+      }
+      const pause = (ms) => new Promise(r => setTimeout(r, ms));
+      setStep(STEPS.CHECKING);
+      setStatusMsg(t('bet.checking'));
+      await pause(500);
+      setStep(STEPS.PLACING);
+      setStatusMsg(t('bet.placing'));
+      await pause(700);
+      placeDemoBet({ marketId, marketTitle, outcome, pct: outcomePct, amount: numAmount });
+      setBalance(getDemoBalance());
+      setOrderId(`demo-${Date.now().toString(16)}`);
+      setStep(STEPS.SUCCESS);
+      setStatusMsg(t('bet.placed', { amt: numAmount, outcome }));
+      setAmount('');
       return;
     }
 
@@ -554,7 +584,7 @@ export default function BetModal({ open, onClose, outcome, outcomePct, outcomeIn
 
         {authenticated && (
           <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-muted)', marginTop: 12, fontFamily: 'var(--font-mono)' }}>
-            {isProtocolMarket(market) ? t('bet.protocol.own') : t('bet.protocol.poly')}
+            {IS_DEMO ? t('bet.protocol.demo') : isProtocolMarket(market) ? t('bet.protocol.own') : t('bet.protocol.poly')}
           </p>
         )}
       </div>

@@ -12,6 +12,8 @@ import MARKETS from '../lib/markets.js';
 import { generateMockData } from '../lib/mockTabData.js';
 import { useT, useLang, localizedTitle, localizedOptions } from '../lib/i18n.js';
 import { fetchProtocolMarket, protocolRouteIdToDbId } from '../lib/protocolMarkets.js';
+import { IS_DEMO } from '../lib/demo.js';
+import DEMO_MARKETS from '../lib/demoMarkets.js';
 
 // Final-outcome percentage for a given option on a resolved market:
 // winner → 100, everything else → 0. Used everywhere we previously showed
@@ -336,6 +338,13 @@ export default function MarketDetail() {
 
   useEffect(()=>{
     if(!marketId){navigate('/');return;}
+    if(IS_DEMO){
+      // Curated local market only — no Gamma, no resolutions API, no RPC.
+      const local=DEMO_MARKETS.find(m=>m.id===marketId)||null;
+      setMarket(local&&!local._resolved&&isExpired(local)?{...local,_awaitingResolution:true}:local);
+      setLoading(false);
+      return;
+    }
     let cancelled=false;
     async function load(){
       setLoading(true);

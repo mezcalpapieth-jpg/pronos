@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { usePrivy } from '@privy-io/react-auth';
+import { usePrivy } from '../lib/privyShim.js';
 import { useNavigate } from 'react-router-dom';
 import MARKETS from '../lib/markets.js';
 import { fetchResolutions } from '../lib/resolutions.js';
@@ -8,6 +8,8 @@ import { fetchPriceHistory, extractSeries } from '../lib/priceHistory.js';
 import { isExpired } from '../lib/deadline.js';
 import { useT, useLang, localizedTitle, localizedOptions } from '../lib/i18n.js';
 import Sparkline from './Sparkline.jsx';
+import { IS_DEMO } from '../lib/demo.js';
+import DEMO_MARKETS from '../lib/demoMarkets.js';
 
 const OPTION_COLORS = ['var(--yes)', 'var(--red)', 'var(--gold)', '#8b5cf6'];
 const AUTO_INTERVAL = 6000; // ms
@@ -27,6 +29,10 @@ export default function Hero() {
   // unexpired polymarket markets. Unapproved ones (like Sheinbaum before admin
   // approves it) won't appear in the carousel.
   useEffect(() => {
+    if (IS_DEMO) {
+      setFeatured(DEMO_MARKETS.filter(m => m.trending && !m._resolved && !isExpired(m)));
+      return;
+    }
     Promise.all([
       fetchResolutions().catch(() => []),
       fetchApprovedPolymarket().catch(() => []),

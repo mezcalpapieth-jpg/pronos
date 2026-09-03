@@ -236,6 +236,7 @@ const STRINGS = {
                                 en: 'This protocol market does not have a configured pool or contracts yet.' },
   'bet.protocol.poly':        { es: 'Polymarket · Polygon', en: 'Polymarket · Polygon' },
   'bet.protocol.own':         { es: 'Pronos Protocol · Arbitrum Sepolia', en: 'Pronos Protocol · Arbitrum Sepolia' },
+  'bet.protocol.demo':        { es: 'Pronos Protocol · Modo demo', en: 'Pronos Protocol · Demo mode' },
 
   // ── MarketDetail ──────────────────────────────────────────────────────────
   'detail.loading':           { es: 'CARGANDO MERCADO…',    en: 'LOADING MARKET…' },
@@ -433,6 +434,8 @@ const STRINGS = {
   'um.skip':                  { es: 'Saltar — generar automáticamente', en: 'Skip — generate automatically' },
 
   // ── Home / generic ────────────────────────────────────────────────────────
+  'home.banner.demo':         { es: '🎬 DEMO — Recorrido de producto · Datos simulados · Ninguna transacción es real',
+                                en: '🎬 DEMO — Product walkthrough · Simulated data · No real transactions' },
   'home.banner':              { es: '⚡ BETA — Mercados en vivo · Powered by Polymarket · Trading con USDC real',
                                 en: '⚡ BETA — Live markets · Powered by Polymarket · Real USDC trading' },
   'home.markets':             { es: 'Mercados',             en: 'Markets' },

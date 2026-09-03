@@ -5,15 +5,31 @@ import { polygon, arbitrum, arbitrumSepolia } from 'viem/chains';
 import { Sentry, initSentry } from './lib/sentry.js';
 import App from './App.jsx';
 import PasswordGate from './components/PasswordGate.jsx';
+import DemoBadge from './components/DemoBadge.jsx';
+import { IS_DEMO } from './lib/demo.js';
 import './styles/mvp.css';
 
-initSentry();
+if (!IS_DEMO) initSentry();
 
 const PRIVY_APP_ID = 'cmmy28vhi00pe0cladoexcy0o';
 
+const errorFallback = <div style={{padding:40,textAlign:'center',color:'var(--text-muted)',fontFamily:'var(--font-mono)'}}>Algo salió mal. Recarga la página.</div>;
+
+// Demo mode mounts without PrivyProvider at all: no auth SDK, no requests to
+// auth.privy.io, nothing that needs the network to reach the first paint.
+if (IS_DEMO) {
+  ReactDOM.createRoot(document.getElementById('root')).render(
+    <React.StrictMode>
+      <Sentry.ErrorBoundary fallback={errorFallback}>
+        <App />
+        <DemoBadge />
+      </Sentry.ErrorBoundary>
+    </React.StrictMode>
+  );
+} else {
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <Sentry.ErrorBoundary fallback={<div style={{padding:40,textAlign:'center',color:'var(--text-muted)',fontFamily:'var(--font-mono)'}}>Algo salió mal. Recarga la página.</div>}>
+    <Sentry.ErrorBoundary fallback={errorFallback}>
     <PrivyProvider
       appId={PRIVY_APP_ID}
       config={{
@@ -41,3 +57,4 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     </Sentry.ErrorBoundary>
   </React.StrictMode>
 );
+}

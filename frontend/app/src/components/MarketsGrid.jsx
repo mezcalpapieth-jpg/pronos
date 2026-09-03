@@ -10,6 +10,8 @@ import { useT } from '../lib/i18n.js';
 import MARKETS from '../lib/markets.js';
 import { getProtocolMode } from '../lib/protocol.js';
 import { fetchProtocolMarkets } from '../lib/protocolMarkets.js';
+import { IS_DEMO } from '../lib/demo.js';
+import DEMO_MARKETS from '../lib/demoMarkets.js';
 
 const GRID_CACHE_KEY = 'pronos-markets-grid-cache-v1';
 
@@ -83,6 +85,14 @@ export default function MarketsGrid({ activeFilter }) {
   }, []);
 
   useEffect(() => {
+    // Demo mode renders the curated local set only: instant, identical every
+    // run, and unaffected by wifi in the room.
+    if (IS_DEMO) {
+      setMarkets(DEMO_MARKETS);
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
     const cachedMarkets = readCachedMarkets(protocolMode);
 

@@ -12,6 +12,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import { useT } from '../lib/i18n.js';
+import { IS_DEMO, getDemoHistory, onDemoChange } from '../lib/demo.js';
 
 function formatDate(iso) {
   if (!iso) return '—';
@@ -294,6 +295,11 @@ export default function HistoryTab({ address }) {
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    if (IS_DEMO) {
+      const sync = () => setData(getDemoHistory());
+      sync();
+      return onDemoChange(sync);
+    }
     if (!address) return;
     let cancelled = false;
     setLoading(true);

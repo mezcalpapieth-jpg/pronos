@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { usePrivy, useWallets, useLinkAccount } from '@privy-io/react-auth';
+import { usePrivy, useWallets, useLinkAccount } from '../lib/privyShim.js';
 import { ethers } from 'ethers';
 import { Link, useNavigate } from 'react-router-dom';
 import { POLYGON_CHAIN_ID } from '../lib/clob.js';
@@ -7,6 +7,8 @@ import { getProtocolMode, getUsdcAddress, getRequiredChainId, getChainDisplayNam
 import MARKETS from '../lib/markets.js';
 import { useT, useLang, setLang } from '../lib/i18n.js';
 import { authFetch } from '../lib/apiAuth.js';
+import { IS_DEMO, DEMO_USERNAME, DEMO_CHAIN_ID, getDemoBalance, onDemoChange } from '../lib/demo.js';
+import DEMO_MARKETS from '../lib/demoMarkets.js';
 
 function getInitialTheme() {
   const saved = localStorage.getItem('pronos-theme');
@@ -74,6 +76,7 @@ export default function Nav() {
   });
 
   useEffect(() => {
+    if (IS_DEMO) { setUsername(DEMO_USERNAME); return; }
     if (!authenticated || !user?.id) { setUsername(null); setAdminFlag(false); return; }
     authFetch(getAccessToken, `/api/user?privyId=${encodeURIComponent(user.id)}`)
       .then(async (r) => {
@@ -97,6 +100,12 @@ export default function Nav() {
 
   // Fetch USDC balance + chain ID (chain-aware)
   useEffect(() => {
+    if (IS_DEMO) {
+      const sync = () => setBalance(getDemoBalance());
+      sync();
+      setChainId(DEMO_CHAIN_ID);
+      return onDemoChange(sync);
+    }
     if (!authenticated) { setBalance(null); setChainId(null); return; }
     const wallet = wallets?.[0];
     if (!wallet) return;
@@ -142,7 +151,8 @@ export default function Nav() {
   useEffect(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) { setSearchResults([]); setSearchOpen(false); return; }
-    const results = MARKETS.filter(m => m.title.toLowerCase().includes(q)).slice(0, 6);
+    const source = IS_DEMO ? DEMO_MARKETS : MARKETS;
+    const results = source.filter(m => m.title.toLowerCase().includes(q)).slice(0, 6);
     setSearchResults(results);
     setSearchOpen(true);
   }, [searchQuery]);

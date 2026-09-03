@@ -7,6 +7,7 @@ import MarketsGrid from '../components/MarketsGrid.jsx';
 import HowItWorks from '../components/HowItWorks.jsx';
 import Footer from '../components/Footer.jsx';
 import { useT } from '../lib/i18n.js';
+import { IS_DEMO } from '../lib/demo.js';
 
 export default function Home() {
   const t = useT();
@@ -16,7 +17,7 @@ export default function Home() {
     <>
       {/* MVP Banner */}
       <div className="mvp-banner">
-        {t('home.banner')}
+        {t(IS_DEMO ? 'home.banner.demo' : 'home.banner')}
       </div>
 
       <Ticker />

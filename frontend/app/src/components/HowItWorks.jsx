@@ -1,5 +1,5 @@
 import React from 'react';
-import { usePrivy } from '@privy-io/react-auth';
+import { usePrivy } from '../lib/privyShim.js';
 import { useT } from '../lib/i18n.js';
 
 export default function HowItWorks() {

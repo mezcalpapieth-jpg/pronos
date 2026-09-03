@@ -1,8 +1,9 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { usePrivy } from '@privy-io/react-auth';
+import { usePrivy } from './lib/privyShim.js';
 import UsernameModal from './components/UsernameModal.jsx';
 import { authFetch } from './lib/apiAuth.js';
+import { IS_DEMO, DEMO_USERNAME } from './lib/demo.js';
 
 const IS_PUBLIC_MARKETS = window.location.pathname.startsWith('/markets');
 const Home = lazy(() => import('./pages/Home.jsx'));
@@ -20,13 +21,14 @@ function RouteFallback() {
 
 export default function App() {
   const { authenticated, user, getAccessToken } = usePrivy();
-  const [username, setUsername] = useState(null);
+  const [username, setUsername] = useState(IS_DEMO ? DEMO_USERNAME : null);
   const [userIsAdmin, setUserIsAdmin] = useState(false);
   const [checkingUsername, setCheckingUsername] = useState(false);
   const [needsUsername, setNeedsUsername] = useState(false);
 
   // Check if logged-in user already has a username + admin status
   useEffect(() => {
+    if (IS_DEMO) return; // demo account is pre-provisioned — no user API call
     if (!authenticated || !user?.id) {
       setNeedsUsername(false);
       setUsername(null);

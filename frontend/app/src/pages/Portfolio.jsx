@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { usePrivy, useWallets } from '../lib/privyShim.js';
 import { ethers } from 'ethers';
 import Nav from '../components/Nav.jsx';
 import Footer from '../components/Footer.jsx';
@@ -11,6 +11,7 @@ import { ERC20_ABI, sellShares } from '../lib/contracts.js';
 import { getProtocolSellQuote } from '../lib/protocolPricing.js';
 import { CHAIN_IDS, CONTRACTS, getChainReadProvider, getUsdcAddress, switchWalletChain } from '../lib/protocol.js';
 import { useT } from '../lib/i18n.js';
+import { IS_DEMO, DEMO_WALLET, getDemoBalance, getDemoPositions, onDemoChange } from '../lib/demo.js';
 
 function formatTokenAmount(value) {
   return Number(value || 0).toFixed(6).replace(/\.?0+$/, '') || '0';
@@ -362,6 +363,15 @@ export default function Portfolio() {
   const [activeTab, setActiveTab]   = useState('activo'); // 'activo' | 'historial'
 
   useEffect(() => {
+    if (IS_DEMO) {
+      const sync = () => {
+        setAddress(DEMO_WALLET);
+        setBalance(getDemoBalance());
+        setPositions(getDemoPositions());
+      };
+      sync();
+      return onDemoChange(sync);
+    }
     if (!authenticated || !wallets?.length) return;
     loadData();
   }, [authenticated, wallets]);

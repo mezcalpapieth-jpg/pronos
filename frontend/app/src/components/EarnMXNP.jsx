@@ -8,7 +8,7 @@
  * MXNP balance + streak live in localStorage — visual only, no real value.
  */
 import React, { useState, useEffect } from 'react';
-import { usePrivy, useLinkAccount } from '@privy-io/react-auth';
+import { usePrivy, useLinkAccount } from '../lib/privyShim.js';
 
 // ─── Storage helpers ──────────────────────────────────────────────────────────
 const SK = {
