@@ -319,12 +319,94 @@ export function rankLeaderboard(rows) {
   return sorted;
 }
 
+const DAYS_OF_TRADING_HISTORY = 21;
+
+/**
+ * Gives the demo account a portfolio it already holds.
+ *
+ * Signing in to an empty portfolio, an empty history and a flat P&L chart is
+ * the fastest way to make a working product look unfinished — three of the
+ * screens most likely to get clicked during a demo would be blank. So the
+ * account arrives mid-story: a handful of open positions, most of them up,
+ * and three weeks of trades behind them for the history tab and P&L curve to
+ * be built from.
+ *
+ * Positions are entered at a price below the current one so the portfolio
+ * opens showing a gain — the demo should show the product working, and a
+ * losing book invites a conversation about risk rather than about Pronos.
+ */
+export function buildStartingPortfolio(markets, now = Date.now()) {
+  const tradable = markets.filter(m => m.status === 'active' && m.outcomes.length >= 2);
+  const positions = [];
+  const userTrades = [];
+  if (tradable.length === 0) return { positions, userTrades };
+
+  // Spread across the board rather than the first N, so the portfolio isn't
+  // six variations of the same category.
+  const step = Math.max(1, Math.floor(tradable.length / 7));
+  for (let i = 0; i < 7 && i * step < tradable.length; i += 1) {
+    const market = tradable[i * step];
+    const outcomeIndex = i % market.outcomes.length;
+    const price = Number(market.prices?.[outcomeIndex] ?? 0.5);
+
+    const collateral = [250, 500, 300, 800, 150, 450, 600][i];
+    // Entered 6-18% below the current price, so the position shows a gain.
+    const entryPrice = Math.max(0.02, price * (0.82 + (i % 4) * 0.04));
+    const shares = Number((collateral / entryPrice).toFixed(2));
+    const createdAt = new Date(now - (2 + i * 2.5) * 24 * 60 * 60 * 1000).toISOString();
+
+    positions.push({ marketId: market.id, outcomeIndex, shares, costBasis: collateral });
+    userTrades.push({
+      marketId: market.id,
+      outcomeIndex,
+      side: 'buy',
+      shares,
+      collateral,
+      price: entryPrice,
+      createdAt,
+    });
+  }
+
+  // A few closed round-trips so the history tab has settled rows and the P&L
+  // curve has realised steps rather than being pure mark-to-market drift.
+  for (let i = 0; i < 5; i += 1) {
+    const market = tradable[(i * step + 3) % tradable.length];
+    const outcomeIndex = i % market.outcomes.length;
+    const price = Number(market.prices?.[outcomeIndex] ?? 0.5);
+    const entryPrice = Math.max(0.02, price * 0.88);
+    const collateral = [200, 350, 500, 275, 400][i];
+    const shares = Number((collateral / entryPrice).toFixed(2));
+    const openedAt = now - (DAYS_OF_TRADING_HISTORY - i * 2) * 24 * 60 * 60 * 1000;
+
+    userTrades.push({
+      marketId: market.id, outcomeIndex, side: 'buy', shares, collateral,
+      price: entryPrice, createdAt: new Date(openedAt).toISOString(),
+    });
+    // Closed a day or two later, up ~14%.
+    userTrades.push({
+      marketId: market.id,
+      outcomeIndex,
+      side: 'sell',
+      shares,
+      collateral: Number((collateral * 1.14).toFixed(2)),
+      price: entryPrice * 1.14,
+      createdAt: new Date(openedAt + 1.5 * 24 * 60 * 60 * 1000).toISOString(),
+    });
+  }
+
+  userTrades.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  return { positions, userTrades };
+}
+
 export function buildSeedState(now = Date.now()) {
+  const markets = MARKET_SPECS.map((spec, i) => buildMarket(spec, i, now));
+  const { positions, userTrades } = buildStartingPortfolio(markets, now);
   return {
-    version: 1,
-    markets: MARKET_SPECS.map((spec, i) => buildMarket(spec, i, now)),
+    version: 2,
+    markets,
     leaderboard: buildLeaderboard(now),
-    positions: [],
+    positions,
+    userTrades,
     user: {
       authenticated: true,
       suborgId: 'demo-suborg',

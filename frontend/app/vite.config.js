@@ -17,6 +17,12 @@ import {
   verifyVideoAccessCookie,
   verifyVideoAccessPassword,
 } from '../api/_lib/video-access-gate.js';
+import {
+  buildDemoAccessCookie,
+  readDemoAccessCookie,
+  verifyDemoAccessCookie,
+  verifyDemoAccessPassword,
+} from '../api/_lib/demo-access-gate.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../..');
@@ -211,6 +217,13 @@ function pointsRootDeckDevMiddleware() {
           req.url = `/points/${pathname.slice('/deck/'.length)}${query ? `?${query}` : ''}`;
           return next();
         }
+        // The presentation demo gate, same trick as /deck: serve the points
+        // bundle without changing the browser URL, so App.jsx still sees
+        // /points-demo in window.location and renders the gate.
+        if (pathname === '/points-demo' || pathname === '/points-demo/') {
+          req.url = `/points/${query ? `?${query}` : ''}`;
+          return next();
+        }
         return next();
       });
     },
@@ -277,6 +290,42 @@ function videoAccessDevGate() {
 
         return sendJson(res, 200, { ok: true }, {
           'Set-Cookie': buildVideoAccessCookie({ headers: req.headers }),
+        });
+      });
+    },
+  };
+}
+
+// Same shape as videoAccessDevGate, against the presentation demo's own
+// cookie and password. Both import the real gate module so dev and the
+// serverless handler can never drift apart.
+function demoAccessDevGate() {
+  return {
+    name: 'demo-access-dev-gate',
+    configureServer(server) {
+      server.middlewares.use('/api/demo-access', async (req, res, next) => {
+        if (req.method === 'OPTIONS') {
+          res.statusCode = 204;
+          return res.end();
+        }
+
+        if (req.method === 'GET') {
+          const cookie = readDemoAccessCookie(req.headers);
+          return sendJson(res, 200, { ok: verifyDemoAccessCookie(cookie) });
+        }
+
+        if (req.method !== 'POST') {
+          return sendJson(res, 405, { error: 'GET or POST only' });
+        }
+
+        const body = await readRequestJson(req);
+        const result = verifyDemoAccessPassword(body.password);
+        if (!result.ok) {
+          return sendJson(res, result.status, { error: result.error });
+        }
+
+        return sendJson(res, 200, { ok: true }, {
+          'Set-Cookie': buildDemoAccessCookie({ headers: req.headers }),
         });
       });
     },
@@ -650,7 +699,7 @@ export function turnkeyBrowserNodecryptoStub() {
 const isPoints = process.env.BUILD_TARGET === 'points';
 
 export default defineConfig({
-  plugins: [pointsRootDeckDevMiddleware(), sharedCssDevMiddleware(), mvpAccessDevGate(), videoAccessDevGate(), deckDevApiMiddleware(), turnkeyBrowserNodecryptoStub(), react()],
+  plugins: [pointsRootDeckDevMiddleware(), sharedCssDevMiddleware(), mvpAccessDevGate(), videoAccessDevGate(), demoAccessDevGate(), deckDevApiMiddleware(), turnkeyBrowserNodecryptoStub(), react()],
   base: isPoints ? '/points/' : '/mvp/',
   root: isPoints ? path.resolve(__dirname, 'points') : __dirname,
   build: {

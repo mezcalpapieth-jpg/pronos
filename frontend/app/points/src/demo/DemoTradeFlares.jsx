@@ -15,6 +15,14 @@ import { getDemoState, setFocusedMarket, subscribeDemoState } from './demoStore.
 const LIFETIME_MS = 2600;
 const MAX_VISIBLE = 7;
 
+// Placement lanes across the plot area. Kept left of ~62% so a label never
+// runs off the right edge or collides with the current-price readout. One
+// lane per simultaneously-visible flare, so a full screen still can't put two
+// labels in the same column.
+const LANES = MAX_VISIBLE;
+const LANE_LEFT = 8;
+const LANE_WIDTH = 7.5;
+
 const KEYFRAMES = `
 @keyframes demo-flare {
   0%   { opacity: 0; transform: translateY(6px) scale(0.94); }
@@ -29,6 +37,10 @@ export default function DemoTradeFlares({ marketId }) {
   // (once a second) would re-spawn the entire buffer.
   const seenRef = useRef(new Set());
   const idRef = useRef(0);
+  // Next lane to place a label in. Purely random placement let two labels
+  // land on the same spot and render as one unreadable smear ("+$1,197"
+  // stacked on "+$1"), so they now cycle through fixed columns instead.
+  const laneRef = useRef(0);
 
   useEffect(() => {
     seenRef.current = new Set();
@@ -52,16 +64,23 @@ export default function DemoTradeFlares({ marketId }) {
         const key = `${trade.t}:${trade.size}:${trade.side}:${i}`;
         if (seenRef.current.has(key)) continue;
         seenRef.current.add(key);
+        // Lanes, not scatter. MAX_VISIBLE labels share the width, each one
+        // takes the next lane, and a small jitter inside the lane keeps the
+        // result from looking like a grid. Consecutive orders can no longer
+        // collide, which is what produced overlapping amounts before.
+        const lane = laneRef.current % LANES;
+        laneRef.current += 1;
+
         fresh.push({
           id: (idRef.current += 1),
           side: trade.side,
           size: trade.size,
-          // Scattered so consecutive orders don't stack into one column.
+          left: LANE_LEFT + lane * LANE_WIDTH + Math.random() * (LANE_WIDTH * 0.35),
           // The vertical band is deliberately narrow: this overlay spans the
           // whole chart card, and anything lower than ~40% lands on top of
-          // the ACTIVIDAD / VOLUMEN tiles underneath the plot.
-          left: 9 + Math.random() * 44,
-          bottom: 41 + Math.random() * 25,
+          // the ACTIVIDAD / VOLUMEN tiles underneath the plot. Staggering by
+          // lane keeps neighbours on different rows as they drift up.
+          bottom: 42 + (lane % 3) * 8 + Math.random() * 5,
         });
       }
 

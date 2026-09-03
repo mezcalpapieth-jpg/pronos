@@ -13,10 +13,33 @@
  */
 import { buildSeedState, pricesFromReserves, rankLeaderboard } from './demoSeed.js';
 
-const STORAGE_KEY = 'pronos-video-demo-v1';
+// Read inline rather than importing demoFlag.js. That module lives in the main
+// bundle (regular pages import it for the poll interval), so importing it here
+// widens this chunk's dependency graph — which shows up as a bigger preload
+// manifest inside PointsMarketDetail, a chunk every visitor downloads. Two
+// lines of duplication is the cheaper trade.
+function liveSeedDemo() {
+  try {
+    return window.sessionStorage.getItem('pronos-demo-live-seed') === '1';
+  } catch {
+    return false;
+  }
+}
+
+// Namespaced per demo, because the two hold different boards: the video demo
+// records against invented markets while the presentation demo runs on the
+// real ones. A shared key would let whichever ran last hand the other its
+// scenario. v2 because the shape gained userTrades — a v1 blob would
+// short-circuit readStored() and serve a board with no trade history.
+const STATE_VERSION = 2;
+const STORAGE_KEY = liveSeedDemo()
+  ? 'pronos-demo-live-v2'
+  : 'pronos-video-demo-v2';
 const HISTORY_POINT_SECONDS = 10;
 const MAX_HISTORY_POINTS = 360;
-const MAX_RECENT_TRADES = 600;
+// Sized for the presentation board (~90 markets), not the video demo's 22.
+// At 600 the buffer turned over in seconds and per-market tapes came up empty.
+const MAX_RECENT_TRADES = 3000;
 const PERSIST_THROTTLE_MS = 3000;
 
 let state = null;
@@ -39,7 +62,7 @@ function readStored() {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.markets)) return null;
+    if (!parsed || parsed.version !== STATE_VERSION || !Array.isArray(parsed.markets)) return null;
     return parsed;
   } catch {
     return null;
@@ -64,23 +87,34 @@ function persist(force = false) {
 /**
  * Backfills a plausible 24h series ending at the market's current price.
  *
- * Starts at 50% because Pronos markets open at even odds — the real charts
- * do the same, and a series that starts anywhere else reads as wrong to
- * anyone who knows the product.
+ * Starts at the market's opening odds because that is what the real charts
+ * do, and a series that starts anywhere else reads as wrong to anyone who
+ * knows the product. For a binary market that's 50%; for a unified market
+ * with N outcomes it's 100/N, since the pool opens with equal reserves.
+ *
+ * Volatility varies per market. With ~90 markets on the board, one shared
+ * noise amplitude produced ninety charts with visibly the same silhouette —
+ * which reads as generated the moment two cards sit side by side.
  */
 function backfillHistory(market, now) {
   const points = 48;
   const stepSeconds = (24 * 60 * 60) / points;
   const target = (market.prices?.[0] ?? 0.5) * 100;
+  const outcomeCount = Math.max(2, (market.outcomes || []).length);
   const series = [];
-  let value = 50;
+  let value = 100 / outcomeCount;
+
+  // Seeded off the id so a market keeps the same chart shape between the
+  // rehearsal and the stage.
+  const idSeed = (Number(market.id) || 1) % 97;
+  const volatility = 2.5 + (idSeed / 97) * 6.5;
 
   for (let i = 0; i < points; i += 1) {
     const progress = (i + 1) / points;
     // Pull toward the target while adding noise, so the line wanders but
     // still lands where the market actually is now.
     const pull = (target - value) * (0.08 + progress * 0.12);
-    const noise = (Math.random() - 0.5) * 5 * (1 - progress * 0.6);
+    const noise = (Math.random() - 0.5) * volatility * (1 - progress * 0.6);
     value = Math.max(2, Math.min(98, value + pull + noise));
     series.push({
       t: Math.floor((now - (points - 1 - i) * stepSeconds * 1000) / 1000),
@@ -213,6 +247,49 @@ function liveTick() {
  * compound two random walks on the same reserves and let a busy market run
  * away to 99% during a long take.
  */
+// Rotates through the board so coverage is guaranteed rather than hoped for.
+// Pure random targeting left most of a ~90-market board untouched for minutes
+// at a time, which showed up as cards with a dead "hace 2 h" timestamp sitting
+// next to live ones.
+let flowCursor = 0;
+
+function recordTrade(market, now, nowSec) {
+  // Slight buy lean so the pressure bar sits believably above 50%.
+  const side = Math.random() < 0.57 ? 'buy' : 'sell';
+
+  // Two tiers, because a single curve gives either all pocket change or
+  // all whales. Most orders are small the way real ones are; roughly one
+  // in six is a big ticket that breaks up the rhythm on screen.
+  const size = Math.random() < 0.84
+    ? Math.round(2 + Math.pow(Math.random(), 2.2) * 450)
+    : Math.round(300 + Math.pow(Math.random(), 1.6) * 2600);
+
+  const outcomeIndex = Math.floor(Math.random() * market.outcomes.length);
+  const price = Number(market.prices?.[outcomeIndex] ?? 0.5);
+
+  market.tradeVolume = Number(market.tradeVolume || 0) + size;
+  market.lastTradeAt = new Date(now).toISOString();
+
+  // The trade tape and activity feed show a name against every fill, so the
+  // trader is picked here rather than invented at render time — otherwise the
+  // same order shows a different name each time the tape re-renders.
+  const names = state.leaderboard;
+  const username = names.length
+    ? names[Math.floor(Math.random() * names.length)].username
+    : 'anon';
+
+  state.recentTrades.push({
+    marketId: market.id,
+    t: nowSec,
+    side,
+    size,
+    outcomeIndex,
+    username,
+    price,
+    shares: Number((size / Math.max(0.02, price)).toFixed(2)),
+  });
+}
+
 function tradeFlowTick() {
   const intensity = Math.max(1, Number(state.settings.tradeFlowIntensity) || 3);
   const active = state.markets.filter(m => m.status === 'active');
@@ -220,40 +297,28 @@ function tradeFlowTick() {
 
   const now = Date.now();
   const nowSec = Math.floor(now / 1000);
-  const tradesThisTick = 1 + Math.floor(Math.random() * intensity * 2);
 
+  // Scaled to the size of the board. A fixed count that looked busy across 22
+  // markets leaves 90 markets looking abandoned; this keeps the per-market
+  // rate roughly constant however many are on the board.
+  const sweep = Math.max(1, Math.round(active.length / 6));
+  const tradesThisTick = Math.max(1, Math.round(sweep * intensity / 3))
+    + Math.floor(Math.random() * intensity);
+
+  for (let i = 0; i < tradesThisTick; i += 1) {
+    recordTrade(active[flowCursor % active.length], now, nowSec);
+    flowCursor += 1;
+  }
+
+  // The market on screen gets extra flow layered on top of its turn in the
+  // rotation, so the chart being demonstrated stays visibly busy without
+  // starving the rest of the board.
   const focused = focusedMarketId
     ? active.find(m => m.id === Number(focusedMarketId))
     : null;
-
-  for (let i = 0; i < tradesThisTick; i += 1) {
-    // Spread across 22 markets, the one actually on camera would see an
-    // order every few seconds. Send most of the flow to whichever market is
-    // open so its chart stays busy while it is being filmed.
-    const market = (focused && Math.random() < 0.65)
-      ? focused
-      : active[Math.floor(Math.random() * active.length)];
-
-    // Slight buy lean so the pressure bar sits believably above 50%.
-    const side = Math.random() < 0.57 ? 'buy' : 'sell';
-
-    // Two tiers, because a single curve gives either all pocket change or
-    // all whales. Most orders are small the way real ones are; roughly one
-    // in six is a big ticket that breaks up the rhythm on screen.
-    const size = Math.random() < 0.84
-      ? Math.round(2 + Math.pow(Math.random(), 2.2) * 450)
-      : Math.round(300 + Math.pow(Math.random(), 1.6) * 2600);
-
-    market.tradeVolume = Number(market.tradeVolume || 0) + size;
-    market.lastTradeAt = new Date(now).toISOString();
-
-    state.recentTrades.push({
-      marketId: market.id,
-      t: nowSec,
-      side,
-      size,
-      outcomeIndex: Math.floor(Math.random() * market.outcomes.length),
-    });
+  if (focused) {
+    const extra = 1 + Math.floor(Math.random() * intensity);
+    for (let i = 0; i < extra; i += 1) recordTrade(focused, now, nowSec);
   }
 
   if (state.recentTrades.length > MAX_RECENT_TRADES) {
@@ -314,14 +379,21 @@ function notify() {
   }
 }
 
-export function initDemoStore() {
+/**
+ * @param {object} [seedState] a pre-built seed (the presentation demo passes
+ *   the live backend snapshot). A saved scenario still wins over it, so a
+ *   reload mid-presentation resumes where it left off instead of re-fetching
+ *   and re-randomising the board.
+ */
+export function initDemoStore(seedState = null) {
   if (state) return state;
   const now = Date.now();
-  state = readStored() || buildSeedState(now);
+  state = readStored() || seedState || buildSeedState(now);
   // A scenario saved before a setting existed still has to boot.
   const defaults = buildSeedState(now);
   state.settings = { ...defaults.settings, ...(state.settings || {}) };
   if (!Array.isArray(state.recentTrades)) state.recentTrades = [];
+  if (!Array.isArray(state.userTrades)) state.userTrades = [];
   ensureHistory(now);
   lastHistoryAppend = now;
   persist(true);
@@ -373,9 +445,14 @@ export function renameDemoUser(nextName) {
   return { ok: true };
 }
 
-export function resetDemoState() {
+/**
+ * @param {object} [seedState] replace the board with this snapshot instead of
+ *   the invented seed — how "Recargar del backend" in the control panel picks
+ *   up markets published after the demo was already open.
+ */
+export function resetDemoState(seedState = null) {
   const now = Date.now();
-  state = buildSeedState(now);
+  state = seedState || buildSeedState(now);
   ensureHistory(now);
   lastHistoryAppend = now;
   persist(true);
@@ -400,6 +477,7 @@ export function importDemoState(json) {
   const defaults = buildSeedState(Date.now());
   state.settings = { ...defaults.settings, ...(state.settings || {}) };
   if (!Array.isArray(state.recentTrades)) state.recentTrades = [];
+  if (!Array.isArray(state.userTrades)) state.userTrades = [];
   ensureHistory(Date.now());
   persist(true);
   startTimers();

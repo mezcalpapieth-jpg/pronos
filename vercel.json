@@ -106,6 +106,8 @@
     { "source": "/points/market",       "destination": "/points/" },
     { "source": "/points/portfolio",    "destination": "/points/" },
     { "source": "/points/admin",        "destination": "/points/" },
+    { "source": "/points-demo",         "destination": "/points/" },
+    { "source": "/points-demo/:path*",  "destination": "/points/" },
     { "source": "/deck",                "destination": "/points/" },
     { "source": "/developer",           "destination": "/points/" },
     { "source": "/points/earn",         "destination": "/points/" },
@@ -127,6 +129,13 @@
           "key": "Content-Security-Policy-Report-Only",
           "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://tally.so https://*.tally.so https://*.turnkey.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://api.turnkey.com https://*.turnkey.com https://pronos.io https://arb1.arbitrum.io https://sepolia-rollup.arbitrum.io https://*.infura.io https://*.alchemy.com https://*.ankr.com https://safe-transaction-arbitrum.safe.global https://safe-transaction-arbitrum-sepolia.safe.global https://*.sentry.io; frame-src 'self' https://tally.so https://*.tally.so https://*.turnkey.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self';"
         }
+      ]
+    },
+    {
+      "source": "/points-demo",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
+        { "key": "Cache-Control", "value": "no-store, no-cache" }
       ]
     },
     {

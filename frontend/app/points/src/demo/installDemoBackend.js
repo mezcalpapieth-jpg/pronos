@@ -25,7 +25,7 @@ const GET_LATENCY_MS = 50;
 const POST_LATENCY_MS = 260;
 
 let installed = false;
-let originalFetch = null;
+let originalFetch_ = null;
 
 export function isDemoActive() {
   try {
@@ -38,6 +38,16 @@ export function isDemoActive() {
 export function markDemoActive() {
   try {
     window.sessionStorage.setItem(DEMO_SESSION_KEY, '1');
+  } catch { /* private mode — the demo still runs for this page load */ }
+}
+
+/**
+ * Marks this session as the presentation demo, which seeds from the live
+ * backend instead of the invented markets. Set only by /points-demo.
+ */
+export function markLiveSeedDemo() {
+  try {
+    window.sessionStorage.setItem('pronos-demo-live-seed', '1');
   } catch { /* private mode — the demo still runs for this page load */ }
 }
 
@@ -66,12 +76,17 @@ async function requestBody(input, init) {
   return null;
 }
 
-export function installDemoBackend() {
+/**
+ * @param {object} [seedState] the live-backend snapshot, when the presentation
+ *   demo managed to fetch one. Omitted (or null) falls back to the invented
+ *   seed, which is what the video demo always uses.
+ */
+export function installDemoBackend(seedState = null) {
   if (installed) return;
   installed = true;
-  initDemoStore();
+  initDemoStore(seedState);
 
-  originalFetch = window.fetch.bind(window);
+  originalFetch_ = window.fetch.bind(window);
 
   window.fetch = async (input, init) => {
     const url = requestUrl(input);
@@ -79,11 +94,11 @@ export function installDemoBackend() {
     try {
       path = new URL(url, window.location.origin).pathname;
     } catch {
-      return originalFetch(input, init);
+      return originalFetch_(input, init);
     }
 
     if (!path.startsWith('/api/points/')) {
-      return originalFetch(input, init);
+      return originalFetch_(input, init);
     }
 
     const method = requestMethod(input, init);
@@ -109,8 +124,17 @@ export function installDemoBackend() {
   };
 }
 
+/**
+ * The pre-interception fetch, for callers that need the real network after
+ * the demo backend is installed — re-seeding from the live board, above all,
+ * which would otherwise read back its own fabricated response.
+ */
+export function originalFetch() {
+  return originalFetch_;
+}
+
 export function uninstallDemoBackend() {
-  if (!installed || !originalFetch) return;
-  window.fetch = originalFetch;
+  if (!installed || !originalFetch_) return;
+  window.fetch = originalFetch_;
   installed = false;
 }

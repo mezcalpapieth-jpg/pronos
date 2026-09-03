@@ -57,6 +57,8 @@
     { "source": "/points/market",       "destination": "/points/" },
     { "source": "/points/portfolio",    "destination": "/points/" },
     { "source": "/points/admin",        "destination": "/points/" },
+    { "source": "/points-demo",         "destination": "/points/" },
+    { "source": "/points-demo/:path*",  "destination": "/points/" },
     { "source": "/deck",                "destination": "/points/" },
     { "source": "/developer",           "destination": "/points/" },
     { "source": "/points/earn",         "destination": "/points/" },
@@ -103,6 +105,13 @@
     {
       "source": "/points/(.*)",
       "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache" }
+      ]
+    },
+    {
+      "source": "/points-demo",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
         { "key": "Cache-Control", "value": "no-store, no-cache" }
       ]
     },

@@ -51,10 +51,17 @@ const InvestorDeck = lazy(() => import('./pages/InvestorDeck.jsx'));
 // unadvertised path, and the panel only mounts for a session that already
 // cleared the server-side password.
 const VideoDemoGate = lazy(() => import('./demo/VideoDemoGate.jsx'));
+const PointsDemoGate = lazy(() => import('./demo/PointsDemoGate.jsx'));
 const DemoControlPanel = lazy(() => import('./demo/DemoControlPanel.jsx'));
 
 const IS_VIDEO_GATE = typeof window !== 'undefined'
   && /\/points\/video\/?$/.test(window.location.pathname);
+
+// The presentation demo's door. `trailingSlash: false` in vercel.json means
+// /points-demo/ redirects to /points-demo, but dev and hand-typed URLs can
+// still carry the slash, so match both.
+const IS_DEMO_GATE = typeof window !== 'undefined'
+  && /^\/points-demo\/?$/.test(window.location.pathname);
 
 // Admin usernames live in env var VITE_POINTS_ADMIN_USERNAMES so the client
 // can hide the admin nav link without needing a server round-trip. The real
@@ -250,7 +257,11 @@ export default function App() {
 
   const adminList = parseAdminList();
   const isAdmin = !!user?.username && adminList.includes(user.username.toLowerCase());
-  const basename = typeof window !== 'undefined' && window.location.pathname.startsWith('/points')
+  // Matched against '/points/' rather than '/points' so sibling top-level
+  // paths that merely share the prefix — /points-demo — don't get handed a
+  // basename the router can't match, which would blank the page.
+  const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+  const basename = pathname === '/points' || pathname.startsWith('/points/')
     ? '/points'
     : '/';
 
@@ -270,6 +281,14 @@ export default function App() {
     return (
       <Suspense fallback={<RouteFallback />}>
         <VideoDemoGate />
+      </Suspense>
+    );
+  }
+
+  if (IS_DEMO_GATE) {
+    return (
+      <Suspense fallback={<RouteFallback />}>
+        <PointsDemoGate />
       </Suspense>
     );
   }

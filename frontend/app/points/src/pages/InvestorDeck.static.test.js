@@ -14,7 +14,11 @@ const authSource = await readFile(new URL('../../../../api/deck/auth.js', import
 test('points app exposes the private investor deck route', () => {
   assert.match(appSource, /InvestorDeck/);
   assert.match(appSource, /path="\/deck"/);
-  assert.match(appSource, /window\.location\.pathname\.startsWith\('\/points'\)/);
+  // The deck lives at root /deck while everything else mounts under /points,
+  // so the basename has to stay dynamic. Matched against '/points/' rather
+  // than '/points' so a sibling top-level path that merely shares the prefix
+  // — /points-demo — isn't handed a basename the router can't match.
+  assert.match(appSource, /pathname === '\/points' \|\| pathname\.startsWith\('\/points\/'\)/);
   assert.match(appSource, /<BrowserRouter basename=\{basename\}>/);
 });
 

@@ -29,12 +29,36 @@ function videoDemoRequested() {
   }
 }
 
+// The presentation demo (/points-demo) additionally seeds from the live
+// backend. Read inline for the same reason as above.
+function liveSeedRequested() {
+  try {
+    return window.sessionStorage.getItem('pronos-demo-live-seed') === '1';
+  } catch {
+    return false;
+  }
+}
+
 async function bootstrap() {
   // Must run before anything renders or pre-warms: once installed, every
   // /api/points/* call in the app resolves from fabricated in-browser data.
   if (videoDemoRequested()) {
     const { installDemoBackend } = await import('./demo/installDemoBackend.js');
-    installDemoBackend();
+    // The presentation demo snapshots the real market board first, while
+    // fetch is still the real one, so it runs on Pronos's actual questions
+    // with simulated activity on top. The video demo skips this and keeps its
+    // invented markets. A null seed — network failure, or the video demo —
+    // falls back to those invented markets rather than leaving a blank page.
+    let seedState = null;
+    if (liveSeedRequested()) {
+      try {
+        const { buildLiveSeedState } = await import('./demo/demoLiveSeed.js');
+        seedState = await buildLiveSeedState();
+      } catch {
+        seedState = null;
+      }
+    }
+    installDemoBackend(seedState);
   }
 
   // Pre-warm the BTC/ETH price feeds so the 5-min crypto markets show

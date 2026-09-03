@@ -46,15 +46,20 @@ const inputStyle = {
   fontFamily: "'DM Sans', sans-serif", outline: 'none', boxSizing: 'border-box',
 };
 
-function Button({ children, onClick, tone = 'default', style }) {
-  const bg = tone === 'primary' ? ORANGE : tone === 'danger' ? '#7f1d1d' : 'rgba(255,255,255,0.08)';
+function Button({ children, onClick, tone = 'default', style, disabled = false }) {
+  const bg = disabled ? 'rgba(255,255,255,0.04)'
+    : tone === 'primary' ? ORANGE
+    : tone === 'danger' ? '#7f1d1d'
+    : 'rgba(255,255,255,0.08)';
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       style={{
-        padding: '8px 12px', background: bg, color: '#fff', border: 'none',
-        borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+        padding: '8px 12px', background: bg, color: disabled ? 'rgba(255,255,255,0.4)' : '#fff',
+        border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600,
+        cursor: disabled ? 'wait' : 'pointer',
         fontFamily: "'DM Sans', sans-serif", ...style,
       }}
     >
@@ -91,6 +96,7 @@ export default function DemoControlPanel() {
   const [draft, setDraft] = useState(BLANK_MARKET);
   const [editingId, setEditingId] = useState(null);
   const [notice, setNotice] = useState('');
+  const [busy, setBusy] = useState(false);
 
   const state = getDemoState();
 
@@ -260,6 +266,63 @@ export default function DemoControlPanel() {
     a.download = `pronos-demo-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  /**
+   * Re-pulls the live market board.
+   *
+   * The board is snapshotted once at boot, so a market published after the
+   * demo was opened is invisible until this runs. That happens more than it
+   * sounds like it should: markets get approved the morning of a talk.
+   */
+  async function handleReloadFromBackend() {
+    if (!window.confirm('¿Volver a jalar los mercados del backend? Se pierden las compras de esta sesión.')) return;
+    setBusy(true);
+    flash('Jalando mercados...');
+    try {
+      const { buildLiveSeedState } = await import('./demoLiveSeed.js');
+      // The demo backend has replaced window.fetch by now, and it answers
+      // /api/points/* from the store — so the seeder has to be handed the
+      // untouched fetch or it would re-seed from its own output.
+      const { originalFetch } = await import('./installDemoBackend.js');
+      const seed = await buildLiveSeedState({ fetchImpl: originalFetch() || window.fetch });
+      if (!seed) {
+        flash('No se pudo contactar el backend. Se quedan los mercados actuales.');
+        return;
+      }
+      resetDemoState(seed);
+      flash(`${seed.markets.length} mercados cargados. Recarga la página.`);
+    } catch {
+      flash('No se pudo contactar el backend. Se quedan los mercados actuales.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * Scales every market's volume at once.
+   *
+   * Numbers that read fine on a laptop can look small from the back of a
+   * room, and the reverse on a huge screen. Faster than editing 90 markets
+   * one at a time.
+   */
+  function handleVolumeMultiplier(factor) {
+    updateDemoState(s => {
+      for (const market of s.markets) {
+        market.volume = Math.round(Number(market.volume || 0) * factor);
+        market.tradeVolume = Math.round(Number(market.tradeVolume || 0) * factor);
+      }
+    });
+    flash(`Volumen ×${factor}.`);
+  }
+
+  function handleExitDemo() {
+    if (!window.confirm('¿Salir del demo y volver al sitio real?')) return;
+    try {
+      window.sessionStorage.removeItem('pronos-video-demo-active');
+      window.sessionStorage.removeItem('pronos-demo-live-seed');
+    } catch { /* private mode — the reload below still leaves the demo */ }
+    window.location.href = '/points/';
   }
 
   function handleImport(event) {
@@ -503,6 +566,20 @@ export default function DemoControlPanel() {
         })}
       </Section>
 
+      <Section title="Mercados del backend">
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Button onClick={handleReloadFromBackend} disabled={busy}>
+            {busy ? 'Jalando...' : 'Recargar del backend'}
+          </Button>
+          <Button onClick={() => handleVolumeMultiplier(2)}>Volumen ×2</Button>
+          <Button onClick={() => handleVolumeMultiplier(0.5)}>Volumen ÷2</Button>
+        </div>
+        <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 10, lineHeight: 1.5 }}>
+          Recargar jala otra vez los mercados activos y revive ~80 resueltos.
+          Úsalo si se publicaron mercados nuevos después de abrir el demo.
+        </p>
+      </Section>
+
       <Section title="Escenario">
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Button onClick={handleExport}>Guardar a archivo</Button>
@@ -526,6 +603,7 @@ export default function DemoControlPanel() {
           >
             Reset
           </Button>
+          <Button tone="danger" onClick={handleExitDemo}>Salir del demo</Button>
         </div>
         <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 10, lineHeight: 1.5 }}>
           Ctrl+Shift+D esconde el panel y el botón para grabar limpio. La misma
