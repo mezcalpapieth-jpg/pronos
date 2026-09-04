@@ -12,7 +12,7 @@
  * opens automatically in the username step.
  */
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import PointsLoginModal from '@app/components/PointsLoginModal.jsx';
 import PointsNav from './components/PointsNav.jsx';
@@ -28,7 +28,6 @@ const PointsHome = lazy(() => import('./pages/PointsHome.jsx'));
 const PointsMarketDetail = lazy(() => import('./pages/PointsMarketDetail.jsx'));
 const PointsCategoryPage = lazy(() => import('./pages/PointsCategoryPage.jsx'));
 const PointsAicmPage = lazy(() => import('./pages/PointsAicmPage.jsx'));
-const PointsChampionsLeaguePage = lazy(() => import('./pages/PointsChampionsLeaguePage.jsx'));
 // Shared news page — same component used by the MVP build, with the
 // admin-handoff destination passed in via the `adminPath` prop.
 const NewsPage = lazy(() => import('@app/pages/NewsPage.jsx'));
@@ -359,7 +358,10 @@ function Shell({ onOpenLogin, isAdmin }) {
           <Route path="/tiktok" element={<PublicityRedirect source="tiktok" />} />
           <Route path="/twitter" element={<PublicityRedirect source="x" />} />
           <Route path="/" element={<PointsHomeEntry onOpenLogin={onOpenLogin} />} />
-          <Route path="/c/deportes/uefa-champions-league" element={<PointsChampionsLeaguePage />} />
+          <Route
+            path="/c/deportes/uefa-champions-league"
+            element={<Navigate to="/c/deportes?sport=soccer&league=uefa-cl" replace />}
+          />
           <Route path="/c/infraestructura/aicm" element={<PointsAicmPage isAdmin={isAdmin} />} />
           {/* News page — registered BEFORE the generic /c/:slug so the
               specialized layout wins over the standard category grid.

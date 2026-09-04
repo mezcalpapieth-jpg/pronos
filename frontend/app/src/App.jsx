@@ -12,7 +12,7 @@
  * auto-opens on the username step — same pattern as the points app.
  */
 import React, { useMemo, useState, lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { usePointsAuth } from './lib/pointsAuth.js';
 import PointsLoginModal from './components/PointsLoginModal.jsx';
 import Nav from './components/Nav.jsx';
@@ -29,7 +29,6 @@ const FundingPage = lazy(() => import('./pages/FundingPage.jsx'));
 const MvpUserProfile = lazy(() => import('./pages/MvpUserProfile.jsx'));
 const Admin = lazy(() => import('./pages/Admin.jsx'));
 const WorldCupPage = lazy(() => import('./pages/WorldCupPage.jsx'));
-const ChampionsLeaguePage = lazy(() => import('./pages/ChampionsLeaguePage.jsx'));
 const CategoryPage = lazy(() => import('./pages/CategoryPage.jsx'));
 const NewsPage = lazy(() => import('./pages/NewsPage.jsx'));
 const TeamSearchPage = lazy(() => import('./pages/TeamSearchPage.jsx'));
@@ -105,7 +104,7 @@ export default function App() {
           />
           <Route
             path="/c/deportes/uefa-champions-league"
-            element={<ChampionsLeaguePage onOpenLogin={() => setLoginOpen(true)} />}
+            element={<Navigate to="/c/deportes?sport=soccer&league=uefa-cl" replace />}
           />
           {/* News feed — registered BEFORE /c/:slug so the specialized
               layout wins over the generic category grid. adminPath

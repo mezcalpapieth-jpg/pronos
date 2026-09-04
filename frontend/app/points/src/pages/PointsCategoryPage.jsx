@@ -74,7 +74,7 @@ const SPORT_TABS = [
 // espn-soccer generator).
 const SOCCER_LEAGUES = [
   { key: 'all',            tKey: 'points.league.all'           },
-  { key: 'uefa-cl',        tKey: 'points.league.uefaCl', hubPath: '/c/deportes/uefa-champions-league' },
+  { key: 'uefa-cl',        tKey: 'points.league.uefaCl' },
   { key: 'uefa-europa-league', tKey: 'points.league.europa' },
   { key: 'uefa-conference-league', tKey: 'points.league.conference' },
   { key: 'la-liga',        tKey: 'points.league.laLiga'        },
@@ -641,17 +641,15 @@ export default function PointsCategoryPage() {
             {leagueTabs.map(l => (
               <button
                 key={l.key}
-                onClick={() => l.hubPath ? navigate(l.hubPath) : setLeague(l.key)}
+                onClick={() => setLeague(l.key)}
                 style={{
                   textAlign: 'left',
                   fontFamily: 'var(--font-body)',
                   fontSize: 12,
                   padding: '8px 10px',
-                  background: l.hubPath
-                    ? 'linear-gradient(135deg, rgba(59,130,246,0.12), rgba(250,204,21,0.1))'
-                    : league === l.key ? 'var(--green-dim)' : 'transparent',
-                  color: l.hubPath || league === l.key ? 'var(--green)' : 'var(--text-secondary)',
-                  border: `1px solid ${l.hubPath || league === l.key ? 'var(--border-active)' : 'var(--border)'}`,
+                  background: league === l.key ? 'var(--green-dim)' : 'transparent',
+                  color: league === l.key ? 'var(--green)' : 'var(--text-secondary)',
+                  border: `1px solid ${league === l.key ? 'var(--border-active)' : 'var(--border)'}`,
                   borderRadius: 8,
                   cursor: 'pointer',
                 }}

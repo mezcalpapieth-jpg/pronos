@@ -52,6 +52,344 @@ function toDetailShape(market) {
   return rest;
 }
 
+// ─── Demo news feed ─────────────────────────────────────────────────────────
+
+const DEMO_NEWS_SOURCES = [
+  { id: 'el-financiero', name: 'El Financiero', lean: 'center-right', home: 'https://www.elfinanciero.com.mx/' },
+  { id: 'reuters', name: 'Reuters', lean: 'wire', home: 'https://www.reuters.com/' },
+  { id: 'mediotiempo', name: 'Mediotiempo', lean: 'sports', home: 'https://www.mediotiempo.com/' },
+  { id: 'animal-politico', name: 'Animal Político', lean: 'left', home: 'https://www.animalpolitico.com/' },
+  { id: 'milenio', name: 'Milenio', lean: 'center', home: 'https://www.milenio.com/' },
+  { id: 'macrumors', name: 'MacRumors', lean: 'tech', home: 'https://www.macrumors.com/' },
+  { id: 'coindesk', name: 'CoinDesk', lean: 'crypto', home: 'https://www.coindesk.com/' },
+  { id: 'gold-derby', name: 'Gold Derby', lean: 'entertainment', home: 'https://www.goldderby.com/' },
+];
+
+const DEMO_NEWS_LOCATIONS = {
+  cdmx: {
+    id: 'cdmx',
+    name: 'Ciudad de México',
+    region: 'mexico',
+    country: 'MX',
+    subdivisionId: 'mx-ciudad-de-mexico',
+    subdivisionName: 'Ciudad de Mexico',
+    lat: 19.4326,
+    lng: -99.1332,
+    granularity: 'city',
+  },
+  monterrey: {
+    id: 'monterrey',
+    name: 'Monterrey',
+    region: 'mexico',
+    country: 'MX',
+    subdivisionId: 'mx-nuevo-leon',
+    subdivisionName: 'Nuevo Leon',
+    lat: 25.6866,
+    lng: -100.3161,
+    granularity: 'city',
+  },
+  tijuana: {
+    id: 'tijuana',
+    name: 'Tijuana',
+    region: 'mexico',
+    country: 'MX',
+    subdivisionId: 'mx-baja-california',
+    subdivisionName: 'Baja California',
+    lat: 32.5149,
+    lng: -117.0382,
+    granularity: 'city',
+  },
+  guadalajara: {
+    id: 'guadalajara',
+    name: 'Guadalajara',
+    region: 'mexico',
+    country: 'MX',
+    subdivisionId: 'mx-jalisco',
+    subdivisionName: 'Jalisco',
+    lat: 20.6597,
+    lng: -103.3496,
+    granularity: 'city',
+  },
+  washington: {
+    id: 'washington',
+    name: 'Washington',
+    region: 'us-canada',
+    country: 'US',
+    subdivisionId: 'us-district-of-columbia',
+    subdivisionName: 'District of Columbia',
+    lat: 38.9072,
+    lng: -77.0369,
+    granularity: 'city',
+  },
+  newYork: {
+    id: 'new-york',
+    name: 'Nueva York',
+    region: 'us-canada',
+    country: 'US',
+    subdivisionId: 'us-new-york',
+    subdivisionName: 'New York',
+    lat: 40.7128,
+    lng: -74.006,
+    granularity: 'city',
+  },
+  madrid: {
+    id: 'madrid',
+    name: 'Madrid',
+    region: 'europe',
+    country: 'ES',
+    lat: 40.4168,
+    lng: -3.7038,
+    granularity: 'city',
+  },
+  london: {
+    id: 'london',
+    name: 'Londres',
+    region: 'europe',
+    country: 'GB',
+    lat: 51.5072,
+    lng: -0.1276,
+    granularity: 'city',
+  },
+  saoPaulo: {
+    id: 'sao-paulo',
+    name: 'São Paulo',
+    region: 'latam',
+    country: 'BR',
+    lat: -23.5558,
+    lng: -46.6396,
+    granularity: 'city',
+  },
+  bogota: {
+    id: 'bogota',
+    name: 'Bogotá',
+    region: 'latam',
+    country: 'CO',
+    lat: 4.711,
+    lng: -74.0721,
+    granularity: 'city',
+  },
+};
+
+function cloneLocation(key) {
+  const location = DEMO_NEWS_LOCATIONS[key];
+  return location ? { ...location } : null;
+}
+
+function sourceById(id) {
+  return DEMO_NEWS_SOURCES.find(source => source.id === id) || DEMO_NEWS_SOURCES[0];
+}
+
+function linkedMarketFor(state, needles = []) {
+  const normalizedNeedles = needles.map(value => String(value || '').toLowerCase()).filter(Boolean);
+  if (normalizedNeedles.length === 0) return null;
+  const market = state.markets.find(m => {
+    const haystack = [
+      m.question,
+      m.category,
+      m.sport,
+      m.league,
+      ...(m.topicTags || []),
+      ...(m.categoryTags || []),
+    ].join(' ').toLowerCase();
+    return normalizedNeedles.some(needle => haystack.includes(needle));
+  });
+  if (!market) return null;
+  return {
+    marketId: market.id,
+    question: market.question,
+    status: market.status,
+    category: market.category,
+    icon: market.icon || null,
+    outcome: market.outcome ?? null,
+  };
+}
+
+function buildDemoNewsItems(state, now = Date.now()) {
+  const item = ({
+    id,
+    sourceId,
+    title,
+    summary,
+    categories,
+    ageMinutes,
+    locations,
+    linkNeedles,
+  }) => {
+    const source = sourceById(sourceId);
+    const firstCategory = categories?.[0] || 'general';
+    return {
+      id,
+      url: `${source.home}#pronos-demo-${id}`,
+      title,
+      summary,
+      image: null,
+      sourceId: source.id,
+      sourceName: source.name,
+      sourceLean: source.lean,
+      sourcePriority: 1,
+      category: firstCategory,
+      categories: Array.from(new Set(categories || [firstCategory])),
+      publishedAt: new Date(now - ageMinutes * 60 * 1000).toISOString(),
+      geoLocations: (locations || []).map(cloneLocation).filter(Boolean),
+      linkedMarket: linkedMarketFor(state, linkNeedles),
+    };
+  };
+
+  return [
+    item({
+      id: 'aicm-demoras-salidas',
+      sourceId: 'el-financiero',
+      title: 'AICM concentra la atención por demoras de salida antes del cierre semanal',
+      summary: 'El tablero operativo vuelve al centro de la conversación mientras viajeros y aerolíneas esperan una tarde cargada en Ciudad de México.',
+      categories: ['economia', 'general'],
+      ageMinutes: 18,
+      locations: ['cdmx'],
+      linkNeedles: ['aicm', 'aeropuerto', 'demoras'],
+    }),
+    item({
+      id: 'peso-banxico-cierre',
+      sourceId: 'reuters',
+      title: 'Peso mexicano opera atento a Banxico y al cierre de divisas',
+      summary: 'Operadores siguen la curva de tasas y el apetito por riesgo antes de nuevos datos macro en Estados Unidos.',
+      categories: ['economia', 'tec-fin'],
+      ageMinutes: 31,
+      locations: ['cdmx', 'newYork'],
+      linkNeedles: ['mxn', 'peso', 'dolar', 'euro'],
+    }),
+    item({
+      id: 'champions-regresa',
+      sourceId: 'mediotiempo',
+      title: 'Champions League vuelve al calendario y mueve el interés de los mercados deportivos',
+      summary: 'Los cruces europeos empiezan a recuperar volumen conforme los usuarios buscan precios tempranos por equipo y resultado.',
+      categories: ['deportes', 'internacional'],
+      ageMinutes: 42,
+      locations: ['madrid', 'london'],
+      linkNeedles: ['champions', 'uefa-cl'],
+    }),
+    item({
+      id: 'agentes-financieros',
+      sourceId: 'macrumors',
+      title: 'Herramientas de IA empujan nuevas formas de análisis para traders minoristas',
+      summary: 'La conversación sobre agentes capaces de leer noticias, consultar datos y ejecutar estrategias empieza a llegar al mercado financiero.',
+      categories: ['tec-fin', 'economia'],
+      ageMinutes: 54,
+      locations: ['newYork', 'washington'],
+      linkNeedles: ['api', 'developer'],
+    }),
+    item({
+      id: 'infraestructura-federal',
+      sourceId: 'animal-politico',
+      title: 'Gobierno prepara paquete de infraestructura con foco en transporte y energía',
+      summary: 'La agenda pública incorpora proyectos regionales que podrían abrir nuevas preguntas medibles durante las próximas semanas.',
+      categories: ['politica', 'economia'],
+      ageMinutes: 67,
+      locations: ['cdmx', 'monterrey'],
+      linkNeedles: ['infraestructura'],
+    }),
+    item({
+      id: 'frontera-tijuana',
+      sourceId: 'milenio',
+      title: 'Refuerzan vigilancia en cruces de Tijuana antes de fin de semana largo',
+      summary: 'Autoridades locales esperan mayor flujo fronterizo y un operativo coordinado para reducir incidentes en los principales accesos.',
+      categories: ['seguridad', 'politica'],
+      ageMinutes: 83,
+      locations: ['tijuana'],
+      linkNeedles: ['tijuana', 'frontera'],
+    }),
+    item({
+      id: 'mexico-brasil-comercio',
+      sourceId: 'reuters',
+      title: 'México y Brasil preparan nueva ronda de conversaciones comerciales',
+      summary: 'Empresas exportadoras miran oportunidades en manufactura, alimentos y logística regional para la segunda mitad del año.',
+      categories: ['economia', 'internacional'],
+      ageMinutes: 96,
+      locations: ['cdmx', 'saoPaulo'],
+      linkNeedles: ['brasil', 'latam'],
+    }),
+    item({
+      id: 'festival-guadalajara',
+      sourceId: 'milenio',
+      title: 'Guadalajara suma cartel cultural con conciertos, cine y artes visuales',
+      summary: 'El calendario de eventos levanta expectativas para hoteles, movilidad y venta de boletos en la zona metropolitana.',
+      categories: ['cultura', 'farandula'],
+      ageMinutes: 115,
+      locations: ['guadalajara'],
+      linkNeedles: ['musica', 'concierto'],
+    }),
+    item({
+      id: 'gira-latina',
+      sourceId: 'gold-derby',
+      title: 'Nueva gira latina dispara apuestas sobre sedes y fechas de estadio',
+      summary: 'La industria del entretenimiento sigue buscando señales en anuncios de promotores, preventas y bloqueos de agenda.',
+      categories: ['farandula', 'cultura'],
+      ageMinutes: 138,
+      locations: ['cdmx', 'bogota'],
+      linkNeedles: ['bad bunny', 'spotify', 'gnp'],
+    }),
+    item({
+      id: 'prediccion-inversion',
+      sourceId: 'coindesk',
+      title: 'Mercados de predicción ganan espacio como señal alternativa para inversión',
+      summary: 'Fondos y mesas de análisis observan precios colectivos para complementar encuestas, flujos y datos tradicionales.',
+      categories: ['tec-fin', 'economia'],
+      ageMinutes: 161,
+      locations: ['newYork', 'cdmx'],
+      linkNeedles: ['bitcoin', 'crypto', 'mercado'],
+    }),
+    item({
+      id: 'nearshoring-norte',
+      sourceId: 'el-financiero',
+      title: 'Nearshoring mantiene demanda industrial en el norte de México',
+      summary: 'Parques logísticos en Nuevo León reportan conversaciones activas con proveedores ligados a autos, chips y consumo.',
+      categories: ['economia'],
+      ageMinutes: 194,
+      locations: ['monterrey'],
+      linkNeedles: ['nearshoring', 'monterrey'],
+    }),
+    item({
+      id: 'seleccion-mexicana',
+      sourceId: 'mediotiempo',
+      title: 'Selección Mexicana ajusta convocatoria y abre debate sobre goles esperados',
+      summary: 'El cuerpo técnico prueba variantes ofensivas mientras crece el interés por mercados de desempeño del próximo partido.',
+      categories: ['deportes'],
+      ageMinutes: 226,
+      locations: ['cdmx'],
+      linkNeedles: ['seleccion mexicana', 'goles'],
+    }),
+  ].sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+}
+
+function countNewsCategories(items) {
+  const counts = {};
+  for (const newsItem of items) {
+    for (const category of newsItem.categories || [newsItem.category || 'general']) {
+      counts[category] = (counts[category] || 0) + 1;
+    }
+  }
+  counts.featured = items.length;
+  return counts;
+}
+
+function handleNews(state, params) {
+  const category = String(params.get('category') || 'featured').toLowerCase();
+  const rawLimit = parseInt(params.get('limit'), 10);
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(120, rawLimit) : 120;
+  const allItems = buildDemoNewsItems(state);
+  const filtered = category === 'featured'
+    ? allItems
+    : allItems.filter(newsItem => (newsItem.categories || []).includes(category));
+  const sources = DEMO_NEWS_SOURCES.map(({ id, name, lean }) => ({ id, name, lean }));
+  return json({
+    ok: true,
+    category,
+    fetchedAt: new Date().toISOString(),
+    items: filtered.slice(0, limit),
+    counts: countNewsCategories(allItems),
+    totalCount: allItems.length,
+    sources,
+  });
+}
+
 // ─── Handlers ───────────────────────────────────────────────────────────────
 
 function handleMarkets(state, params) {
@@ -1056,7 +1394,6 @@ function handleAicmOverview() {
  */
 const EMPTY_PAYLOADS = {
   '/api/points/limit-orders': { orders: [] },
-  '/api/points/news': { items: [] },
   '/api/points/cycles/history': { cycles: [] },
   '/api/points/claimable': { claimable: [] },
   '/api/points/referrals/stats': { stats: null },
@@ -1098,6 +1435,7 @@ export function routeDemoRequest(url, method, body) {
       case '/api/points/orderbook': return handleOrderbook(state, params);
       case '/api/points/comments': return handleComments(state, params);
       case '/api/points/aicm/overview': return handleAicmOverview();
+      case '/api/points/news': return handleNews(state, params);
       default: break;
     }
     if (EMPTY_PAYLOADS[path]) return json(EMPTY_PAYLOADS[path]);

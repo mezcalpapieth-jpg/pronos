@@ -112,7 +112,7 @@ const MARKET_SPECS = [
     category: 'deportes', outcomes: ['Real Madrid', 'Manchester City', 'Bayern', 'Otro'],
     probs: [0.31, 0.27, 0.18, 0.24],
     volume: 1_980_000, endsInDays: 74, featured: true, trending: false,
-    sport: 'soccer', league: 'uefa-champions-league', topicTags: ['deportes'],
+    sport: 'soccer', league: 'uefa-cl', topicTags: ['deportes'],
   },
   {
     question: '¿Superará la aprobación presidencial el 60% en la próxima encuesta?',

@@ -60,7 +60,7 @@ const SPORT_TABS = [
 
 const SOCCER_LEAGUES = [
   { key: 'all',            label: 'Todas'          },
-  { key: 'uefa-cl',        label: 'UEFA Champions League', hubPath: '/c/deportes/uefa-champions-league' },
+  { key: 'uefa-cl',        label: 'UEFA Champions League' },
   { key: 'uefa-europa-league', label: 'UEFA Europa League' },
   { key: 'uefa-conference-league', label: 'UEFA Conference League' },
   { key: 'la-liga',        label: 'La Liga'        },
@@ -432,15 +432,13 @@ export default function CategoryPage({ onOpenLogin }) {
               {leagueOptions.map(l => (
                 <button
                   key={l.key}
-                  onClick={() => l.hubPath ? navigate(l.hubPath) : setLeague(l.key)}
+                  onClick={() => setLeague(l.key)}
                   style={{
                     display: 'block', width: isMobile ? 'auto' : '100%', textAlign: 'left',
                     padding: '6px 10px', borderRadius: 6,
-                    background: l.hubPath
-                      ? 'linear-gradient(135deg, rgba(59,130,246,0.12), rgba(250,204,21,0.1))'
-                      : league === l.key ? 'rgba(0,232,122,0.1)' : 'transparent',
-                    border: l.hubPath || league === l.key ? '1px solid rgba(0,232,122,0.3)' : '1px solid transparent',
-                    color: l.hubPath || league === l.key ? 'var(--green)' : 'var(--text-secondary)',
+                    background: league === l.key ? 'rgba(0,232,122,0.1)' : 'transparent',
+                    border: league === l.key ? '1px solid rgba(0,232,122,0.3)' : '1px solid transparent',
+                    color: league === l.key ? 'var(--green)' : 'var(--text-secondary)',
                     fontFamily: 'var(--font-mono)', fontSize: 11,
                     cursor: 'pointer', marginBottom: 4, letterSpacing: '0.04em',
                   }}
