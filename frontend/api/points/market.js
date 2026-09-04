@@ -182,6 +182,56 @@ function tokenMcapMetaFromResolverConfig(resolverCfg) {
   };
 }
 
+function publicString(value) {
+  const text = String(value || '').trim();
+  return text || null;
+}
+
+function outcomeTeamNames(outcomes) {
+  const names = (Array.isArray(outcomes) ? outcomes : [])
+    .map(publicString)
+    .filter(Boolean)
+    .filter(name => !/^(empate|si|sí|no)$/i.test(name));
+  if (names.length < 2) return {};
+  return {
+    homeName: names[0],
+    awayName: names[names.length - 1],
+  };
+}
+
+function soccerMatchMetaFromSource({ row, sourceData, resolverCfg, outcomes }) {
+  const sport = publicString(row?.sport);
+  const league = publicString(row?.league);
+  const sourceHome = sourceData?.home && typeof sourceData.home === 'object' ? sourceData.home : {};
+  const sourceAway = sourceData?.away && typeof sourceData.away === 'object' ? sourceData.away : {};
+  const fallbackNames = outcomeTeamNames(outcomes);
+  const homeName = publicString(sourceHome.name)
+    || publicString(resolverCfg?.homeName)
+    || fallbackNames.homeName
+    || null;
+  const awayName = publicString(sourceAway.name)
+    || publicString(resolverCfg?.awayName)
+    || fallbackNames.awayName
+    || null;
+  const competitionCode = publicString(sourceData?.competitionCode);
+
+  if (sport !== 'soccer' && !league && !competitionCode && !homeName && !awayName) return null;
+  if (!homeName && !awayName) return null;
+
+  return {
+    league,
+    competitionCode,
+    competitionName: publicString(sourceData?.competitionName),
+    leaguePath: publicString(resolverCfg?.leaguePath),
+    homeName,
+    awayName,
+    homeId: sourceHome.id == null ? null : String(sourceHome.id),
+    awayId: sourceAway.id == null ? null : String(sourceAway.id),
+    homeTla: publicString(sourceHome.tla),
+    awayTla: publicString(sourceAway.tla),
+  };
+}
+
 function summarizeCryptoMarketRow(row) {
   const resolverCfg = parseJsonb(row.resolver_config, null);
   const cryptoMeta = cryptoMetaFromResolverConfig(resolverCfg);
@@ -420,6 +470,12 @@ export default async function handler(req, res) {
       const resolverCfg = parseJsonb(r.resolver_config, null);
       const resolverType = r.resolver_type || null;
       const resolverSource = resolverCfg?.source || null;
+      const soccerMatchMeta = soccerMatchMetaFromSource({
+        row: r,
+        sourceData,
+        resolverCfg,
+        outcomes,
+      });
       const transcriptEvidence = viewerIsAdmin
         ? transcriptEvidenceFromResolverConfig(resolverCfg, { includeAdminDetails: true })
         : null;
@@ -656,6 +712,7 @@ export default async function handler(req, res) {
             liveScoreConfig,
             cryptoMeta,
             tokenMeta,
+            soccerMatchMeta,
             seriesMeta,
             sport: r.sport || null,
             league: r.league || null,
@@ -712,6 +769,7 @@ export default async function handler(req, res) {
           liveScoreConfig,
           cryptoMeta,
           tokenMeta,
+          soccerMatchMeta,
           seriesMeta,
           sport: r.sport || null,
           league: r.league || null,

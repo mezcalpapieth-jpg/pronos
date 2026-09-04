@@ -12,6 +12,7 @@ import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'rea
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   cancelLimitOrder,
+  fetchLeagueStandings,
   fetchMarket,
   fetchMyLimitOrders,
   fetchOrderBook,
@@ -102,6 +103,133 @@ const DETAIL_CHART_RANGES = [
 
 function detailChartRangeFor(key) {
   return DETAIL_CHART_RANGES.find(r => r.key === String(key)) || DETAIL_CHART_RANGES[0];
+}
+
+const UEFA_TABLE_LEAGUES = new Set([
+  'uefa-cl',
+  'uefa-europa-league',
+  'uefa-conference-league',
+]);
+
+const FALLBACK_LEAGUE_TABLE_NAMES = {
+  'uefa-cl': 'UEFA Champions League',
+  'uefa-europa-league': 'UEFA Europa League',
+  'uefa-conference-league': 'UEFA Conference League',
+};
+
+function cleanMarketTeamName(value) {
+  const text = String(value || '').trim();
+  return text || null;
+}
+
+function fallbackMatchTeamsFromOutcomes(market) {
+  const names = (Array.isArray(market?.outcomes) ? market.outcomes : [])
+    .map(cleanMarketTeamName)
+    .filter(Boolean)
+    .filter(name => !/^(empate|si|sí|no)$/i.test(name));
+  if (names.length < 2) return {};
+  return {
+    home: names[0],
+    away: names[names.length - 1],
+  };
+}
+
+function leagueTableTeamsForMarket(market) {
+  const fallback = fallbackMatchTeamsFromOutcomes(market);
+  return {
+    home: cleanMarketTeamName(market?.soccerMatchMeta?.homeName) || fallback.home || null,
+    away: cleanMarketTeamName(market?.soccerMatchMeta?.awayName) || fallback.away || null,
+  };
+}
+
+function marketSupportsLeagueTable(market) {
+  return market?.sport === 'soccer' && UEFA_TABLE_LEAGUES.has(String(market?.league || ''));
+}
+
+function tableNumber(value, fallback = '—') {
+  const n = Number(value);
+  return Number.isFinite(n) ? String(n) : fallback;
+}
+
+function LeagueTableRow({ row }) {
+  return (
+    <div className={`points-league-table-row${row?.highlighted ? ' highlighted' : ''}`}>
+      <span className="points-league-table-position">{tableNumber(row?.position)}</span>
+      <span className="points-league-table-team">
+        {row?.logoUrl && <img src={row.logoUrl} alt="" loading="lazy" />}
+        <span>{row?.teamName || 'Equipo'}</span>
+      </span>
+      <span>{tableNumber(row?.played)}</span>
+      <span>{tableNumber(row?.goalDifference)}</span>
+      <span>{tableNumber(row?.points)}</span>
+    </div>
+  );
+}
+
+function LeagueTablePanel({ league, table, loading, warning, t }) {
+  const groups = Array.isArray(table?.groups) ? table.groups.filter(group => Array.isArray(group?.rows) && group.rows.length > 0) : [];
+  const defaultGroupKey = table?.defaultGroupKey || groups.find(group => group.rows.some(row => row.highlighted))?.key || groups[0]?.key || null;
+  const [selectedGroupKey, setSelectedGroupKey] = useState(defaultGroupKey);
+
+  useEffect(() => {
+    setSelectedGroupKey(defaultGroupKey);
+  }, [defaultGroupKey]);
+
+  const selectedGroup = groups.find(group => group.key === selectedGroupKey) || groups[0] || null;
+  const rows = selectedGroup?.rows || (Array.isArray(table?.rows) ? table.rows : []);
+  const title = table?.league?.name || FALLBACK_LEAGUE_TABLE_NAMES[league] || t('points.detail.leagueTableTitle');
+  const seasonMeta = table?.season?.currentMatchday
+    ? `J${table.season.currentMatchday}`
+    : null;
+
+  return (
+    <section className="points-league-table-card" aria-label={t('points.detail.leagueTableTitle')}>
+      <div className="points-league-table-head">
+        <div>
+          <div className="points-league-table-kicker">{t('points.detail.leagueTableKicker')}</div>
+          <h3>{title}</h3>
+        </div>
+        {seasonMeta && <span>{seasonMeta}</span>}
+      </div>
+
+      {loading ? (
+        <div className="points-league-table-empty">{t('points.detail.leagueTableLoading')}</div>
+      ) : rows.length === 0 ? (
+        <div className="points-league-table-empty">
+          {warning ? t('points.detail.leagueTableUnavailable') : t('points.detail.leagueTableEmpty')}
+        </div>
+      ) : (
+        <>
+          {groups.length > 1 && (
+            <div className="points-league-table-toggle" aria-label={t('points.detail.leagueTableGroups')}>
+              {groups.map(group => (
+                <button
+                  type="button"
+                  key={group.key}
+                  className={group.key === selectedGroup?.key ? 'active' : ''}
+                  onClick={() => setSelectedGroupKey(group.key)}
+                >
+                  {group.name}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="points-league-table-grid points-league-table-grid-head">
+            <span>#</span>
+            <span>{t('points.detail.leagueTableTeam')}</span>
+            <span>{t('points.detail.leagueTablePlayed')}</span>
+            <span>{t('points.detail.leagueTableDiff')}</span>
+            <span>{t('points.detail.leagueTablePoints')}</span>
+          </div>
+          <div className="points-league-table-rows">
+            {rows.map(row => (
+              <LeagueTableRow key={`${row.teamId || row.teamName}-${row.position}`} row={row} />
+            ))}
+          </div>
+        </>
+      )}
+    </section>
+  );
 }
 
 function summarizeActivity(activitySets) {
@@ -2387,6 +2515,11 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   const isMobile = useIsMobile();
 
   const [market, setMarket] = useState(null);
+  const [leagueTableState, setLeagueTableState] = useState({
+    loading: false,
+    table: null,
+    warning: null,
+  });
   // historyByOutcome[i] = [{t, p}] for outcome i. Populated for every
   // outcome so the chart can render one line per option on multi markets.
   const [historyByOutcome, setHistoryByOutcome] = useState(null);
@@ -2423,6 +2556,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   const cryptoSequenceSig = market?.cryptoMeta
     ? cryptoMarketSequenceSignature(buildCryptoMarketSequence(market))
     : '';
+  const leagueTableTeams = useMemo(() => leagueTableTeamsForMarket(market), [market]);
   const tradeTapeIds = useMemo(() => tradeTapeIdsForMarket(market), [market]);
   const tradeTapeIdsKey = tradeTapeIds.join(',');
 
@@ -2459,6 +2593,45 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
       .catch(() => { if (!cancelled) { setError('load_failed'); setLoading(false); } });
     return () => { cancelled = true; };
   }, [id]);
+
+  useEffect(() => {
+    if (!market?.id || !marketSupportsLeagueTable(market)) {
+      setLeagueTableState({ loading: false, table: null, warning: null });
+      return undefined;
+    }
+
+    let cancelled = false;
+    setLeagueTableState({ loading: true, table: null, warning: null });
+    fetchLeagueStandings({
+      league: market.league,
+      home: leagueTableTeams.home,
+      away: leagueTableTeams.away,
+    })
+      .then(result => {
+        if (cancelled) return;
+        setLeagueTableState({
+          loading: false,
+          table: result?.table || null,
+          warning: result?.warning || null,
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLeagueTableState({
+          loading: false,
+          table: null,
+          warning: 'standings_source_unavailable',
+        });
+      });
+
+    return () => { cancelled = true; };
+  }, [
+    market?.id,
+    market?.league,
+    market?.sport,
+    leagueTableTeams.home,
+    leagueTableTeams.away,
+  ]);
 
   useEffect(() => {
     if (!market?.id) return undefined;
@@ -4076,6 +4249,16 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
           {/* Top holders — read-only social-proof panel. Refreshes after
               local trades and remote polling so it reflects live movement. */}
           <TopHolders marketId={market.id} refreshKey={orderBookRefresh} />
+
+          {marketSupportsLeagueTable(market) && (
+            <LeagueTablePanel
+              league={market.league}
+              table={leagueTableState.table}
+              loading={leagueTableState.loading}
+              warning={leagueTableState.warning}
+              t={t}
+            />
+          )}
 
           </aside>
         </div>

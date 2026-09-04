@@ -23,6 +23,24 @@ const LEAGUE_TO_COMPETITION = {
   'Brasileiro Série A': 'BSA',
 };
 
+const EUROPEAN_COMPETITION_TABLES = {
+  'uefa-cl': {
+    code: 'CL',
+    name: 'UEFA Champions League',
+    espnPath: 'soccer/uefa.champions',
+  },
+  'uefa-europa-league': {
+    code: 'EL',
+    name: 'UEFA Europa League',
+    espnPath: 'soccer/uefa.europa',
+  },
+  'uefa-conference-league': {
+    code: 'UCL',
+    name: 'UEFA Conference League',
+    espnPath: 'soccer/uefa.europa.conf',
+  },
+};
+
 const ESPN_STANDINGS_LEAGUES = new Set(['Liga MX', 'MLS']);
 
 function normalizeKey(value) {
@@ -64,6 +82,24 @@ function profileNameKeys(profile) {
   ].map(normalizeKey).filter(Boolean);
 }
 
+function normalizeStandingsContext(value) {
+  const isWrapped = value && typeof value === 'object' && (
+    Object.prototype.hasOwnProperty.call(value, 'profile')
+    || Object.prototype.hasOwnProperty.call(value, 'highlightTeams')
+    || Object.prototype.hasOwnProperty.call(value, 'competitionCode')
+    || Object.prototype.hasOwnProperty.call(value, 'espnPath')
+  );
+  const profile = isWrapped ? value.profile : value;
+  const highlightTeams = isWrapped && Array.isArray(value.highlightTeams) ? value.highlightTeams : [];
+  return {
+    profile: profile || null,
+    highlightTeams: highlightTeams.map(String).map(s => s.trim()).filter(Boolean),
+    league: (isWrapped ? value.league : null) || profile?.league || null,
+    competitionCode: (isWrapped ? value.competitionCode : null) || competitionCodeForProfile(profile) || null,
+    espnPath: (isWrapped ? value.espnPath : null) || espnStandingsPathForProfile(profile) || null,
+  };
+}
+
 function rowMatchesProfile(row, profile, provider = 'football-data') {
   const rowTeam = row?.team || {};
   const providerId = provider === 'espn' ? profile?.espnTeamId : profile?.footballDataId;
@@ -90,9 +126,47 @@ function rowMatchesProfile(row, profile, provider = 'football-data') {
   ));
 }
 
+function rowMatchesHighlightTeams(row, highlightTeams = []) {
+  const highlightKeys = new Set(highlightTeams.map(normalizeKey).filter(Boolean));
+  if (highlightKeys.size === 0) return false;
+  const rowTeam = row?.team || {};
+  const rowKeys = [
+    rowTeam.name,
+    rowTeam.shortName,
+    rowTeam.tla,
+    rowTeam.displayName,
+    rowTeam.shortDisplayName,
+    rowTeam.abbreviation,
+  ]
+    .map(normalizeKey)
+    .filter(Boolean);
+  if (rowKeys.some(key => highlightKeys.has(key))) return true;
+
+  const broadHighlightKeys = [...highlightKeys].filter(key => key.length >= 8);
+  return rowKeys.some(rowKey => (
+    rowKey.length >= 8
+    && broadHighlightKeys.some(highlightKey => (
+      rowKey.includes(highlightKey) || highlightKey.includes(rowKey)
+    ))
+  ));
+}
+
+function rowMatchesContext(row, context, provider = 'football-data') {
+  return rowMatchesProfile(row, context?.profile, provider)
+    || rowMatchesHighlightTeams(row, context?.highlightTeams);
+}
+
+function competitionConfigForLeagueSlug(leagueSlug) {
+  return EUROPEAN_COMPETITION_TABLES[String(leagueSlug || '').trim().toLowerCase()] || null;
+}
+
 export function competitionCodeForProfile(profile) {
   if (profile?.sport !== 'soccer') return null;
   return LEAGUE_TO_COMPETITION[profile?.league] || null;
+}
+
+export function competitionCodeForLeagueSlug(leagueSlug) {
+  return competitionConfigForLeagueSlug(leagueSlug)?.code || null;
 }
 
 export function espnStandingsPathForProfile(profile) {
@@ -102,34 +176,70 @@ export function espnStandingsPathForProfile(profile) {
   return path.startsWith('soccer/') ? path : null;
 }
 
+export function espnStandingsPathForLeagueSlug(leagueSlug) {
+  return competitionConfigForLeagueSlug(leagueSlug)?.espnPath || null;
+}
+
+function translateFootballDataGroupName(name, fallback) {
+  const raw = String(name || '').trim();
+  if (!raw) return fallback;
+  const normalized = raw.toUpperCase().replace(/[\s-]+/g, '_');
+  const group = normalized.match(/^GROUP_([A-Z])$/)?.[1];
+  if (group) return `Grupo ${group}`;
+  if (normalized === 'LEAGUE_STAGE') return 'Tabla general';
+  return raw.replace(/_/g, ' ').trim();
+}
+
+function normalizeFootballDataRow(row, context) {
+  return {
+    position: numberOrNull(row?.position),
+    teamId: row?.team?.id == null ? null : String(row.team.id),
+    teamName: displayFootballDataTeamName(row?.team),
+    logoUrl: row?.team?.crest || null,
+    played: numberOrNull(row?.playedGames),
+    won: numberOrNull(row?.won),
+    draw: numberOrNull(row?.draw),
+    lost: numberOrNull(row?.lost),
+    points: numberOrNull(row?.points),
+    goalsFor: numberOrNull(row?.goalsFor),
+    goalsAgainst: numberOrNull(row?.goalsAgainst),
+    goalDifference: numberOrNull(row?.goalDifference),
+    highlighted: rowMatchesContext(row, context),
+  };
+}
+
+function normalizeFootballDataGroup(standing, context, index) {
+  const rows = Array.isArray(standing?.table) ? standing.table : [];
+  const name = translateFootballDataGroupName(
+    standing?.group || standing?.stage,
+    context?.league || `Grupo ${index + 1}`,
+  );
+  return {
+    key: groupKeyFromName(name, `group-${index + 1}`),
+    name,
+    rows: rows.map(row => normalizeFootballDataRow(row, context)),
+  };
+}
+
 export function normalizeFootballDataStandings(data, profile) {
-  const total = (Array.isArray(data?.standings) ? data.standings : [])
-    .find(standing => String(standing?.type || '').toUpperCase() === 'TOTAL');
-  const rows = Array.isArray(total?.table) ? total.table : [];
+  const context = normalizeStandingsContext(profile);
+  const groups = (Array.isArray(data?.standings) ? data.standings : [])
+    .filter(standing => String(standing?.type || '').toUpperCase() === 'TOTAL')
+    .map((standing, index) => normalizeFootballDataGroup(standing, context, index))
+    .filter(group => group.rows.length > 0);
+  const selected = groups.find(group => group.rows.some(row => row.highlighted)) || groups[0] || null;
   return {
     league: {
-      code: data?.competition?.code || competitionCodeForProfile(profile),
-      name: data?.competition?.name || profile?.league || null,
+      code: data?.competition?.code || context.competitionCode,
+      name: data?.competition?.name || context.league || null,
     },
     season: {
       id: data?.season?.id || null,
       currentMatchday: numberOrNull(data?.season?.currentMatchday),
     },
-    rows: rows.map(row => ({
-      position: numberOrNull(row?.position),
-      teamId: row?.team?.id == null ? null : String(row.team.id),
-      teamName: displayFootballDataTeamName(row?.team),
-      logoUrl: row?.team?.crest || null,
-      played: numberOrNull(row?.playedGames),
-      won: numberOrNull(row?.won),
-      draw: numberOrNull(row?.draw),
-      lost: numberOrNull(row?.lost),
-      points: numberOrNull(row?.points),
-      goalsFor: numberOrNull(row?.goalsFor),
-      goalsAgainst: numberOrNull(row?.goalsAgainst),
-      goalDifference: numberOrNull(row?.goalDifference),
-      highlighted: rowMatchesProfile(row, profile),
-    })),
+    defaultGroupKey: selected?.key || null,
+    groups,
+    rows: selected?.rows || [],
   };
 }
 
@@ -190,7 +300,7 @@ function sortStandingsRows(rows) {
   });
 }
 
-function normalizeEspnEntry(entry, profile, index) {
+function normalizeEspnEntry(entry, context, index) {
   const stats = statMap(entry?.stats);
   const team = entry?.team || {};
   return {
@@ -206,30 +316,31 @@ function normalizeEspnEntry(entry, profile, index) {
     goalsFor: statNumber(stats, 'pointsFor'),
     goalsAgainst: statNumber(stats, 'pointsAgainst'),
     goalDifference: statNumber(stats, 'pointDifferential'),
-    highlighted: rowMatchesProfile(espnEntryMatchRow(entry), profile, 'espn'),
+    highlighted: rowMatchesContext(espnEntryMatchRow(entry), context, 'espn'),
   };
 }
 
-function normalizeEspnGroup(group, profile, index) {
-  const rawName = group?.name || group?.abbreviation || profile?.league || `Grupo ${index + 1}`;
+function normalizeEspnGroup(group, context, index) {
+  const rawName = group?.name || group?.abbreviation || context?.league || `Grupo ${index + 1}`;
   const name = translateEspnGroupName(rawName) || rawName;
   const entries = Array.isArray(group?.standings?.entries) ? group.standings.entries : [];
   return {
     key: groupKeyFromName(name, `group-${index + 1}`),
     name,
     seasonId: group?.standings?.season || null,
-    rows: sortStandingsRows(entries.map((entry, entryIndex) => normalizeEspnEntry(entry, profile, entryIndex))),
+    rows: sortStandingsRows(entries.map((entry, entryIndex) => normalizeEspnEntry(entry, context, entryIndex))),
   };
 }
 
 export function normalizeEspnStandings(data, profile) {
-  const groups = espnStandingsGroups(data).map((group, index) => normalizeEspnGroup(group, profile, index));
+  const context = normalizeStandingsContext(profile);
+  const groups = espnStandingsGroups(data).map((group, index) => normalizeEspnGroup(group, context, index));
   const selected = groups.find(group => group.rows.some(row => row.highlighted)) || groups[0] || null;
 
   return {
     league: {
-      code: profile?.league || data?.abbreviation || null,
-      name: profile?.league || data?.abbreviation || data?.name || null,
+      code: context.competitionCode || context.league || data?.abbreviation || null,
+      name: context.league || data?.abbreviation || data?.name || null,
     },
     season: {
       id: selected?.seasonId || data?.season?.year || null,
@@ -242,10 +353,11 @@ export function normalizeEspnStandings(data, profile) {
 }
 
 async function fetchFootballDataStandings(profile) {
+  const context = normalizeStandingsContext(profile);
   const apiKey = process.env.FOOTBALL_DATA_API_KEY;
   if (!apiKey) return { table: null, warning: 'football_data_key_missing' };
 
-  const competitionCode = competitionCodeForProfile(profile);
+  const competitionCode = context.competitionCode;
   if (!competitionCode) return { table: null, warning: 'standings_not_supported' };
 
   const url = `${FOOTBALL_DATA_BASE}/competitions/${encodeURIComponent(competitionCode)}/standings`;
@@ -255,13 +367,14 @@ async function fetchFootballDataStandings(profile) {
   if (!res.ok) throw new Error(`football-data ${res.status}`);
   const data = await res.json();
   return {
-    table: normalizeFootballDataStandings(data, profile),
+    table: normalizeFootballDataStandings(data, context),
     warning: null,
   };
 }
 
 async function fetchEspnStandings(profile) {
-  const path = espnStandingsPathForProfile(profile);
+  const context = normalizeStandingsContext(profile);
+  const path = context.espnPath;
   if (!path) return { table: null, warning: 'standings_not_supported' };
 
   const url = `${ESPN_WEB_BASE}/${path}/standings?region=us&lang=en&contentorigin=espn`;
@@ -269,7 +382,7 @@ async function fetchEspnStandings(profile) {
   if (!res.ok) throw new Error(`espn ${res.status}`);
   const data = await res.json();
   return {
-    table: normalizeEspnStandings(data, profile),
+    table: normalizeEspnStandings(data, context),
     warning: null,
   };
 }
@@ -280,6 +393,41 @@ async function fetchTeamStandings(profile) {
   return { table: null, warning: 'standings_not_supported' };
 }
 
+async function fetchCompetitionStandings(leagueSlug, highlightTeams = []) {
+  const config = competitionConfigForLeagueSlug(leagueSlug);
+  if (!config) return { table: null, warning: 'standings_not_supported' };
+
+  const context = {
+    profile: null,
+    highlightTeams,
+    league: config.name,
+    competitionCode: config.code,
+    espnPath: config.espnPath,
+  };
+
+  if (process.env.FOOTBALL_DATA_API_KEY && config.code) {
+    try {
+      return await fetchFootballDataStandings(context);
+    } catch (e) {
+      if (!config.espnPath) throw e;
+      console.warn('[team-standings] football-data competition standings failed; falling back to ESPN', {
+        league: leagueSlug,
+        message: e?.message,
+      });
+    }
+  }
+
+  if (config.espnPath) return fetchEspnStandings(context);
+  return { table: null, warning: 'standings_not_supported' };
+}
+
+function highlightTeamsFromQuery(query) {
+  return [query.home, query.away, query.teamA, query.teamB]
+    .flatMap(value => (Array.isArray(value) ? value : [value]))
+    .map(value => String(value || '').trim())
+    .filter(Boolean);
+}
+
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'GET, OPTIONS', credentials: true });
   if (cors) return cors;
@@ -287,6 +435,29 @@ export default async function handler(req, res) {
 
   const sport = typeof req.query.sport === 'string' ? req.query.sport : '';
   const teamSlug = typeof req.query.team === 'string' ? req.query.team : '';
+  const leagueSlug = typeof req.query.league === 'string' ? req.query.league : '';
+
+  if (leagueSlug) {
+    try {
+      const result = await fetchCompetitionStandings(leagueSlug, highlightTeamsFromQuery(req.query));
+      return res.status(200).json({
+        team: null,
+        table: result.table,
+        warning: result.warning,
+      });
+    } catch (e) {
+      console.error('[team-standings] competition fetch failed', {
+        league: leagueSlug,
+        message: e?.message,
+      });
+      return res.status(200).json({
+        team: null,
+        table: null,
+        warning: 'standings_source_unavailable',
+      });
+    }
+  }
+
   const profile = findTeamProfile(sport, teamSlug);
   if (!profile) return res.status(404).json({ error: 'team_not_found' });
 
@@ -313,8 +484,11 @@ export default async function handler(req, res) {
 
 export const _internal = {
   competitionCodeForProfile,
+  competitionCodeForLeagueSlug,
+  espnStandingsPathForLeagueSlug,
   espnStandingsPathForProfile,
   normalizeEspnStandings,
   normalizeFootballDataStandings,
   rowMatchesProfile,
+  rowMatchesHighlightTeams,
 };

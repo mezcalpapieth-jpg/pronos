@@ -202,6 +202,62 @@ test('team-calendar supplement imports standalone finals for whitelisted clubs',
   assert.equal(matchSpec.source_data.knockoutFinal, true);
 });
 
+test('team-calendar supplement skips Spanish second-division fixtures', async (t) => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.FOOTBALL_DATA_API_KEY;
+  const originalSupplement = process.env.POINTS_SOCCER_TEAM_SUPPLEMENT;
+  process.env.FOOTBALL_DATA_API_KEY = 'test-football-data-key';
+  process.env.POINTS_SOCCER_TEAM_SUPPLEMENT = '1';
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    if (originalKey == null) delete process.env.FOOTBALL_DATA_API_KEY;
+    else process.env.FOOTBALL_DATA_API_KEY = originalKey;
+    if (originalSupplement == null) delete process.env.POINTS_SOCCER_TEAM_SUPPLEMENT;
+    else process.env.POINTS_SOCCER_TEAM_SUPPLEMENT = originalSupplement;
+  });
+
+  const response = (body) => ({
+    ok: true,
+    status: 200,
+    headers: { get: () => null },
+    json: async () => body,
+  });
+  const segundaMatch = {
+    id: 887001,
+    utcDate: '2026-09-12T18:30:00.000Z',
+    stage: 'REGULAR_SEASON',
+    status: 'SCHEDULED',
+    competition: { code: 'SD', name: 'LaLiga Hypermotion' },
+    homeTeam: {
+      id: 87,
+      name: 'Rayo Vallecano de Madrid',
+      shortName: 'Rayo Vallecano',
+      tla: 'RAY',
+      crest: 'rayo.png',
+    },
+    awayTeam: {
+      id: 745,
+      name: 'Racing Club de Ferrol',
+      shortName: 'Racing Ferrol',
+      tla: 'FER',
+      crest: 'ferrol.png',
+    },
+  };
+
+  globalThis.fetch = async (url) => {
+    const text = String(url);
+    if (text.includes('/teams/87/matches')) return response({ matches: [segundaMatch] });
+    return response({ matches: [] });
+  };
+
+  const specs = await generateSoccerMarkets({ horizonDays: 14 });
+
+  assert.equal(_internal.shouldImportTeamSupplementMatch(segundaMatch), false);
+  assert.equal(_internal.teamSupplementCompetitionCode(segundaMatch, { id: 87 }), 'SD');
+  assert.equal(_internal.matchToMarketSpec(segundaMatch, 'PD'), null);
+  assert.equal(specs.some(spec => spec.source_event_id === String(segundaMatch.id)), false);
+});
+
 test('team-calendar supplement is skipped by default', async (t) => {
   const originalFetch = globalThis.fetch;
   const originalKey = process.env.FOOTBALL_DATA_API_KEY;

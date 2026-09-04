@@ -20,6 +20,166 @@
   font-weight: 600;
 }
 
+/* Compact competition table for sports market detail sidebars */
+.points-league-table-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface1);
+  overflow: hidden;
+}
+
+.points-league-table-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.points-league-table-kicker {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--orange);
+  margin-bottom: 7px;
+}
+
+.points-league-table-head h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  line-height: 1.08;
+  color: var(--text-primary);
+}
+
+.points-league-table-head > span {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.points-league-table-empty {
+  padding: 18px 16px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.points-league-table-toggle {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(78px, 1fr));
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.points-league-table-toggle button {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 7px 8px;
+  background: var(--surface2);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.points-league-table-toggle button:hover {
+  border-color: rgba(255, 85, 0, 0.42);
+  color: var(--text-primary);
+}
+
+.points-league-table-toggle button.active {
+  border-color: rgba(255, 85, 0, 0.68);
+  background: rgba(255, 85, 0, 0.12);
+  color: var(--orange);
+}
+
+.points-league-table-grid,
+.points-league-table-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 30px 34px 36px;
+  gap: 7px;
+  align-items: center;
+}
+
+.points-league-table-grid-head {
+  padding: 9px 12px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+
+.points-league-table-rows {
+  max-height: 540px;
+  overflow-y: auto;
+}
+
+.points-league-table-row {
+  min-height: 42px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.points-league-table-row:last-child {
+  border-bottom: none;
+}
+
+.points-league-table-row.highlighted {
+  background: rgba(255, 85, 0, 0.12);
+  color: var(--text-primary);
+}
+
+.points-league-table-position {
+  color: var(--text-muted);
+}
+
+.points-league-table-team {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.points-league-table-team img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+
+.points-league-table-team span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Nav CTA for logged-out users */
 .nav-signup-cta {
   background: var(--green);

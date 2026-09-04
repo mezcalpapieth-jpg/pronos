@@ -434,6 +434,14 @@ export async function fetchMarket(id) {
   return Array.isArray(legs) ? { ...market, legs } : market;
 }
 
+export async function fetchLeagueStandings({ league, home, away } = {}) {
+  const q = new URLSearchParams();
+  if (league) q.set('league', league);
+  if (home) q.set('home', home);
+  if (away) q.set('away', away);
+  return getJson(`/api/team-standings?${q}`);
+}
+
 /**
  * Batch-fetch price history for one or more market ids.
  * Returns a map of `{ [marketId]: [{t, p}] }` — `p` is the probability

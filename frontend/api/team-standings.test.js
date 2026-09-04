@@ -10,6 +10,13 @@ test('team standings maps domestic soccer leagues to football-data competitions'
   assert.equal(_internal.competitionCodeForProfile({ sport: 'basketball', league: 'NBA' }), null);
 });
 
+test('team standings maps UEFA market league slugs to competition tables', () => {
+  assert.equal(_internal.competitionCodeForLeagueSlug('uefa-cl'), 'CL');
+  assert.equal(_internal.competitionCodeForLeagueSlug('uefa-europa-league'), 'EL');
+  assert.equal(_internal.competitionCodeForLeagueSlug('uefa-conference-league'), 'UCL');
+  assert.equal(_internal.espnStandingsPathForLeagueSlug('uefa-cl'), 'soccer/uefa.champions');
+});
+
 test('team standings maps ESPN-only soccer leagues to ESPN standings paths', () => {
   assert.equal(_internal.espnStandingsPathForProfile({
     sport: 'soccer',
@@ -99,6 +106,51 @@ test('team standings normalizes football-data tables and highlights the profile 
     highlighted: true,
   });
   assert.equal(table.rows[1].highlighted, false);
+});
+
+test('team standings can highlight both clubs from a European market', () => {
+  const table = _internal.normalizeFootballDataStandings({
+    competition: { code: 'CL', name: 'UEFA Champions League' },
+    season: { id: 2026, currentMatchday: 3 },
+    standings: [
+      {
+        type: 'TOTAL',
+        stage: 'LEAGUE_STAGE',
+        table: [
+          {
+            position: 1,
+            team: { id: 524, name: 'Paris Saint-Germain FC', shortName: 'PSG', crest: 'psg.png' },
+            playedGames: 3,
+            points: 9,
+            goalDifference: 6,
+          },
+          {
+            position: 8,
+            team: { id: 57, name: 'Arsenal FC', shortName: 'Arsenal', crest: 'arsenal.png' },
+            playedGames: 3,
+            points: 6,
+            goalDifference: 2,
+          },
+          {
+            position: 15,
+            team: { id: 65, name: 'Manchester City FC', shortName: 'Man City' },
+            playedGames: 3,
+            points: 4,
+            goalDifference: 1,
+          },
+        ],
+      },
+    ],
+  }, {
+    league: 'UEFA Champions League',
+    competitionCode: 'CL',
+    highlightTeams: ['Paris Saint-Germain', 'Arsenal'],
+  });
+
+  assert.equal(table.league.code, 'CL');
+  assert.equal(table.defaultGroupKey, 'tabla-general');
+  assert.deepEqual(table.rows.map(row => row.highlighted), [true, true, false]);
+  assert.equal(table.rows.length, 3);
 });
 
 test('team standings highlights directory teams without football-data ids by aliases', () => {

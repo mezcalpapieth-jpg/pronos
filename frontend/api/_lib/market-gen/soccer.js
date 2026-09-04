@@ -103,12 +103,31 @@ const COMPETITION_TO_ESPN_PATH = {
 
 const ONE_LEGGED_FINAL_COMPETITIONS = new Set(['CL', 'EL', 'UCL', 'CLI']);
 const TOURNAMENT_COMPETITIONS = new Set(['CL', 'EL', 'UCL', 'CLI']);
+const SPANISH_SECOND_DIVISION_CODES = new Set(['SD']);
+const SPANISH_SECOND_DIVISION_NAME_RE = /\b(segunda|laliga\s*2|la\s*liga\s*2|hypermotion)\b/i;
 
 const API_BASE = 'https://api.football-data.org/v4';
 
 function soccerTeamSupplementEnabled() {
   const raw = String(process.env.POINTS_SOCCER_TEAM_SUPPLEMENT || '').trim().toLowerCase();
   return raw === '1' || raw === 'true' || raw === 'yes';
+}
+
+function teamSupplementCompetitionCode(match, team) {
+  const explicitCode = String(match?.competition?.code || '').trim().toUpperCase();
+  if (explicitCode) return explicitCode;
+  if (match?.competition?.id != null) return String(match.competition.id);
+  return `team-${team?.id || 'unknown'}`;
+}
+
+function isSpanishSecondDivisionCompetition(match) {
+  const code = String(match?.competition?.code || '').trim().toUpperCase();
+  const name = String(match?.competition?.name || '');
+  return SPANISH_SECOND_DIVISION_CODES.has(code) || SPANISH_SECOND_DIVISION_NAME_RE.test(name);
+}
+
+function shouldImportTeamSupplementMatch(match) {
+  return !isSpanishSecondDivisionCompetition(match);
 }
 
 const UEFA_FINAL_FALLBACKS = {
@@ -296,6 +315,7 @@ async function fetchTeamMatches(apiKey, team, dateFrom, dateTo) {
  * directly.
  */
 function matchToMarketSpec(match, competitionCode) {
+  if (isSpanishSecondDivisionCompetition(match)) return null;
   const homeName = match?.homeTeam?.shortName
                 || match?.homeTeam?.name
                 || 'Local';
@@ -474,8 +494,9 @@ export async function generateSoccerMarkets({ horizonDays = 14 } = {}) {
       const matches = await fetchTeamMatches(apiKey, team, dateFrom, dateTo);
       for (const rawMatch of matches) {
         if (seenMatchIds.has(rawMatch.id)) continue;
+        if (!shouldImportTeamSupplementMatch(rawMatch)) continue;
         seenMatchIds.add(rawMatch.id);
-        const code = String(rawMatch?.competition?.code || rawMatch?.competition?.id || `team-${team.id}`);
+        const code = teamSupplementCompetitionCode(rawMatch, team);
         specs.push(...matchToMarketSpecs({ ...rawMatch, _teamSupplement: true }, code));
       }
     }
@@ -496,6 +517,9 @@ export const _internal = {
   fallbackFinalMatchesForCompetition,
   matchToMarketSpec,
   matchToMarketSpecs,
+  isSpanishSecondDivisionCompetition,
+  shouldImportTeamSupplementMatch,
+  teamSupplementCompetitionCode,
   soccerTeamSupplementEnabled,
   formatDate,
 };
