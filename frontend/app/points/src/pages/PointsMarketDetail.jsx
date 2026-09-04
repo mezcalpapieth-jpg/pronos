@@ -69,7 +69,7 @@ import {
 } from '../lib/cryptoMarketHub.js';
 import { marketInterestPayload, trackInterest } from '@app/lib/interest.js';
 import { pointsPublicAssetSrc } from '@app/lib/publicAssets.js';
-import { marketImageSrc, marketPlaceholderImageSrc } from '../lib/marketImages.js';
+import { marketArtworkHidden, marketImageSrc, marketPlaceholderImageSrc } from '../lib/marketImages.js';
 import { emitPointsRefresh } from '../lib/pointsLiveRefresh.js';
 import { isVideoDemoActive, videoDemoPollMs } from '../demo/demoFlag.js';
 
@@ -718,6 +718,8 @@ function OutcomeLogo({ src, label, size = 28 }) {
 }
 
 function MarketHeroImage({ market, compact = false }) {
+  // The presentation demo shows markets with no artwork at all.
+  if (marketArtworkHidden()) return null;
   const [usePlaceholder, setUsePlaceholder] = useState(false);
   const fallback = marketPlaceholderImageSrc(market);
   const src = usePlaceholder ? fallback : marketImageSrc(market);

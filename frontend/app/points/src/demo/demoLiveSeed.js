@@ -163,6 +163,13 @@ function toDemoMarket(market, { now, revived, index, rand }) {
     seedLiquidity,
     volume: seedLiquidity,
     tradeVolume,
+    // Artwork stripped for the presentation. The archive's imagery is a mix of
+    // team crests, driver photos and auto-picked placeholders, and at ~90 cards
+    // the inconsistency is the first thing the eye lands on — a wall of clean
+    // typographic cards reads better on a projector than a patchy gallery.
+    imageUrl: null,
+    icon: null,
+    outcomeImages: null,
     status: 'active',
     outcome: null,
     resolvedAt: null,

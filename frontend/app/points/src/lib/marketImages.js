@@ -11,6 +11,23 @@ export const MARKET_CATEGORY_IMAGE_PLACEHOLDERS = Object.freeze({
   aicm: '/market-placeholders/aicm.svg',
 });
 
+/**
+ * True only inside the presentation demo (/demo), which renders markets with
+ * no artwork at all.
+ *
+ * Clearing `imageUrl` in the demo data isn't enough on its own: every render
+ * site falls back to a per-category placeholder, so ~90 cards end up carrying
+ * nine repeated drawings. Read from sessionStorage rather than imported from
+ * the demo module so this stays a two-line check in the shared bundle.
+ */
+export function marketArtworkHidden() {
+  try {
+    return window.sessionStorage.getItem('pronos-demo-live-seed') === '1';
+  } catch {
+    return false;
+  }
+}
+
 export function cleanMarketImageRef(value) {
   const text = String(value || '').trim();
   if (!text) return null;

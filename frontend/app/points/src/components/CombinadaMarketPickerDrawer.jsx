@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchMarkets } from '../lib/pointsApi.js';
 import { parlayLegGroupId } from '../lib/combinadaSlip.js';
-import { marketImageSrc, marketPlaceholderImageSrc } from '../lib/marketImages.js';
+import { marketArtworkHidden, marketImageSrc, marketPlaceholderImageSrc } from '../lib/marketImages.js';
 import { pointsPublicAssetSrc } from '@app/lib/publicAssets.js';
 import CombinadaSlipPanel from './CombinadaSlipPanel.jsx';
 
@@ -25,6 +25,8 @@ function formatPercent(price) {
 }
 
 function DrawerMarketThumbnail({ market }) {
+  // The presentation demo shows markets with no artwork at all.
+  if (marketArtworkHidden()) return null;
   const [usePlaceholder, setUsePlaceholder] = useState(false);
   const fallback = marketPlaceholderImageSrc(market);
   const src = usePlaceholder ? fallback : marketImageSrc(market);

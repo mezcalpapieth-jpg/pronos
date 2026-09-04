@@ -1,5 +1,5 @@
 /**
- * /points-demo — the door for the conference presentation.
+ * /demo — the door for the conference presentation.
  *
  * Same shape as VideoDemoGate, against its own password and session flag so
  * the stage demo and the recording demo stay independent. Verifies the

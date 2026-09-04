@@ -57,11 +57,12 @@ const DemoControlPanel = lazy(() => import('./demo/DemoControlPanel.jsx'));
 const IS_VIDEO_GATE = typeof window !== 'undefined'
   && /\/points\/video\/?$/.test(window.location.pathname);
 
-// The presentation demo's door. `trailingSlash: false` in vercel.json means
-// /points-demo/ redirects to /points-demo, but dev and hand-typed URLs can
-// still carry the slash, so match both.
+// The presentation demo's door, at /demo. /points-demo is still matched
+// because that is where the demo first shipped and the link may already be
+// out. `trailingSlash: false` in vercel.json means /demo/ redirects to /demo,
+// but dev and hand-typed URLs can still carry the slash, so match both.
 const IS_DEMO_GATE = typeof window !== 'undefined'
-  && /^\/points-demo\/?$/.test(window.location.pathname);
+  && /^\/(demo|points-demo)\/?$/.test(window.location.pathname);
 
 // Admin usernames live in env var VITE_POINTS_ADMIN_USERNAMES so the client
 // can hide the admin nav link without needing a server round-trip. The real

@@ -219,8 +219,8 @@ function pointsRootDeckDevMiddleware() {
         }
         // The presentation demo gate, same trick as /deck: serve the points
         // bundle without changing the browser URL, so App.jsx still sees
-        // /points-demo in window.location and renders the gate.
-        if (pathname === '/points-demo' || pathname === '/points-demo/') {
+        // /demo in window.location and renders the gate.
+        if (/^\/(demo|points-demo)\/?$/.test(pathname)) {
           req.url = `/points/${query ? `?${query}` : ''}`;
           return next();
         }

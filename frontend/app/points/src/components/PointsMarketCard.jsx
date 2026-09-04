@@ -31,7 +31,7 @@ import { marketInterestPayload, teamInterestPayload, trackInterest } from '@app/
 import { soccerMatchTypeLabel } from '@app/lib/soccerMarketType.js';
 import { pointsPublicAssetSrc } from '@app/lib/publicAssets.js';
 import { AICM_HUB_PATH, isAicmDelayMarket } from '../lib/aicmMarkets.js';
-import { marketImageSrc, marketPlaceholderImageSrc } from '../lib/marketImages.js';
+import { marketArtworkHidden, marketImageSrc, marketPlaceholderImageSrc } from '../lib/marketImages.js';
 import PointsBuyModal from './PointsBuyModal.jsx';
 
 const STAKE_PREVIEW = 100; // MXNP reference stake for the card payout preview
@@ -114,6 +114,8 @@ function OutcomeLogo({ src, label }) {
 }
 
 function MarketThumbnail({ market }) {
+  // The presentation demo shows markets with no artwork at all.
+  if (marketArtworkHidden()) return null;
   const [usePlaceholder, setUsePlaceholder] = useState(false);
   const fallback = marketPlaceholderImageSrc(market);
   const src = usePlaceholder ? fallback : marketImageSrc(market);

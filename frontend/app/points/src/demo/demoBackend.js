@@ -629,37 +629,93 @@ function handleHistory(state) {
 }
 
 /**
+ * The shape of the equity curve, as fractions of the final P&L.
+ *
+ * Hand-drawn rather than random so it tells the story the product is meant to
+ * tell: up and to the right overall, but with real drawdowns — including an
+ * early stretch underwater — because a curve that only ever rises reads as a
+ * sales pitch, not a trading account.
+ */
+const PNL_SHAPE = [
+  0, 0.12, -0.22, 0.06, 0.28, 0.14, 0.41, 0.30,
+  0.55, 0.38, 0.62, 0.52, 0.78, 0.66, 0.88, 0.80, 0.96, 1,
+];
+
+/**
  * Cumulative P&L, as [{ t: unix seconds, v: cumulative }].
  *
- * Walks the account's own trades in order: a buy spends cash for shares, a
- * sell returns it, and the tail carries the mark-to-market of whatever is
- * still open — so the last point agrees with the portfolio summary instead of
- * telling a different story on the adjacent screen.
+ * The naive version of this — plotting cash in minus cash out as the trades
+ * land — draws a line that falls for the whole window (every buy is cash
+ * leaving) and then jumps vertically at the last point when unrealised value
+ * is finally added. That is what produced the cliff on the portfolio chart.
+ *
+ * So the curve is interpolated over PNL_SHAPE instead, anchored at 0 and
+ * ending at the account's true P&L, which keeps it consistent with the
+ * summary tiles on the same screen. Deterministic: the chart re-polls, and a
+ * curve that redraws itself differently every few seconds is worse than no
+ * curve at all.
  */
 function handlePnlHistory(state) {
-  const trades = [...userTradesFor(state)]
-    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  const trades = userTradesFor(state);
   if (trades.length === 0) return json({ series: [], current: 0, cycle: null });
-
-  const series = [];
-  let invested = 0;
-  let received = 0;
-
-  for (const trade of trades) {
-    if (trade.side === 'buy') invested += trade.collateral;
-    else received += trade.collateral;
-    series.push({
-      t: Math.floor(new Date(trade.createdAt).getTime() / 1000),
-      v: Math.round((received - invested) * 100) / 100,
-    });
-  }
 
   const markToMarket = state.positions.reduce((sum, p) => {
     const market = findMarket(state, p.marketId);
     return sum + p.shares * Number(market?.prices?.[p.outcomeIndex] ?? 0);
   }, 0);
+  let invested = 0;
+  let received = 0;
+  for (const trade of trades) {
+    if (trade.side === 'buy') invested += trade.collateral;
+    else received += trade.collateral;
+  }
   const current = Math.round((received + markToMarket - invested) * 100) / 100;
-  series.push({ t: Math.floor(Date.now() / 1000), v: current });
+
+  // The curve's shape is scaled by an anchor captured once and never revised.
+  //
+  // It can't be scaled by the live P&L: that figure is a small difference
+  // between two large numbers (cash spent vs. mark-to-market on ~3.5k of open
+  // positions), so ordinary price drift swings it 30% inside a few seconds.
+  // Scaling by it redrew every historical point on every two-second poll and
+  // the whole chart breathed. The past has to hold still.
+  const s = getDemoState();
+  if (!Number.isFinite(s.pnlAnchor)) s.pnlAnchor = current;
+  const anchor = s.pnlAnchor;
+
+  // Wiggle amplitude has a floor so the losses stay legible even when the
+  // account happens to be sitting near break-even.
+  const amplitude = Math.max(120, Math.abs(anchor) * 0.18);
+  const points = 64;
+  const startMs = Math.min(...trades.map(t => new Date(t.createdAt).getTime()));
+  const endMs = Date.now();
+  const spanMs = Math.max(endMs - startMs, 24 * 60 * 60 * 1000);
+
+  const series = [];
+  for (let i = 0; i < points; i += 1) {
+    const progress = i / (points - 1);
+    // Interpolate between the two nearest shape anchors.
+    const slot = progress * (PNL_SHAPE.length - 1);
+    const lo = Math.floor(slot);
+    const hi = Math.min(PNL_SHAPE.length - 1, lo + 1);
+    const blend = slot - lo;
+    const fraction = PNL_SHAPE[lo] + (PNL_SHAPE[hi] - PNL_SHAPE[lo]) * blend;
+
+    // Deterministic jitter so the line has texture without being noise.
+    // Tapered to exactly zero at the right edge, so the final point lands on
+    // the live P&L rather than the live P&L plus a leftover wiggle.
+    const jitter = Math.sin(i * 2.399) * amplitude * 0.25 * (1 - progress);
+    // The gap between the fixed anchor and the live P&L is folded in with a
+    // cubic ramp: invisible across the early history, absorbed smoothly into
+    // the last stretch, and exactly closed at the final point. That keeps the
+    // chart agreeing with the summary tiles beside it without reintroducing
+    // the vertical cliff that came from correcting it all in one step.
+    const value = anchor * fraction + jitter + (current - anchor) * Math.pow(progress, 3);
+
+    series.push({
+      t: Math.floor((startMs + spanMs * progress) / 1000),
+      v: Math.round(value * 100) / 100,
+    });
+  }
 
   return json({ series, current, cycle: null });
 }
@@ -802,6 +858,195 @@ function handleComments(state, params) {
   return json({ comments });
 }
 
+// ─── AICM departures board ──────────────────────────────────────────────────
+
+// Real carriers out of MEX, each with routes it actually flies. The pairing
+// matters: this page is framed as a measurement of the real airport, in the
+// city where it is being presented, so a board showing United to Puerto
+// Vallarta is the one invention an audience here would catch immediately.
+const AICM_DOMESTIC = [
+  'Cancún', 'Guadalajara', 'Monterrey', 'Tijuana', 'Mérida', 'Villahermosa',
+  'Oaxaca', 'Puerto Vallarta', 'Los Cabos', 'Chihuahua', 'Hermosillo',
+  'Veracruz', 'Culiacán', 'Tuxtla Gutiérrez', 'Mazatlán',
+];
+// [airline, IATA code, routes, share]. Share roughly mirrors the real split at
+// MEX, where the Mexican carriers own most of the board — without it, a
+// single-route long-haul like Iberia showed up six times in a twelve-hour
+// window, which is about five more Madrid departures than exist.
+const AICM_AIRLINE_SPECS = [
+  ['Aeroméxico', 'AM', [...AICM_DOMESTIC, 'Los Ángeles', 'Houston', 'Madrid', 'Bogotá', 'Lima', 'Nueva York', 'Toronto'], 30],
+  ['Volaris', 'Y4', [...AICM_DOMESTIC, 'Los Ángeles', 'Chicago'], 24],
+  ['VivaAerobús', 'VB', [...AICM_DOMESTIC, 'Houston'], 20],
+  ['Magnicharters', 'UJ', ['Cancún', 'Puerto Vallarta', 'Los Cabos', 'Mazatlán'], 5],
+  ['American Airlines', 'AA', ['Dallas', 'Miami', 'Chicago'], 4],
+  ['United', 'UA', ['Houston', 'Chicago', 'Newark'], 4],
+  ['Delta', 'DL', ['Atlanta', 'Los Ángeles', 'Nueva York'], 3],
+  ['Copa Airlines', 'CM', ['Panamá'], 2],
+  ['Avianca', 'AV', ['Bogotá', 'San Salvador'], 2],
+  ['LATAM', 'LA', ['Lima', 'Santiago'], 2],
+  ['Air Canada', 'AC', ['Toronto', 'Montreal'], 2],
+  ['Iberia', 'IB', ['Madrid'], 2],
+];
+const AICM_AIRLINES = AICM_AIRLINE_SPECS.flatMap(
+  ([name, code, routes, share]) => Array.from({ length: share }, () => [name, code, routes]),
+);
+
+/**
+ * GET /api/points/aicm/overview — the Pulso AICM page.
+ *
+ * Without this the page renders "SIN LECTURA" and a wall of zeros, because
+ * the real endpoint reads an oracle table the demo has no access to.
+ *
+ * The whole board is synthesised, and seeded off the current hour so it holds
+ * still while someone is looking at it but moves between sessions. Delay rates
+ * are kept in a believable band (roughly a fifth of departures late, a couple
+ * of cancellations a day) rather than dramatised — this page is framed as a
+ * measurement of a real airport, so inflating it would be the one fabrication
+ * on screen that a Mexico City audience could immediately call wrong.
+ */
+function handleAicmOverview() {
+  const now = Date.now();
+  const nowIso = new Date(now).toISOString();
+  let seed = Math.floor(now / 3_600_000) % 9973;
+  const rand = () => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return seed / 2147483648;
+  };
+  const pick = list => list[Math.floor(rand() * list.length)];
+  const pad = n => String(n).padStart(2, '0');
+
+  // Board: departures from three hours back to nine hours ahead.
+  const timetable = [];
+  for (let i = 0; i < 96; i += 1) {
+    const offsetMin = -180 + i * 9 + Math.floor(rand() * 6);
+    const at = new Date(now + offsetMin * 60_000);
+    const [airline, code, routes] = pick(AICM_AIRLINES);
+    const roll = rand();
+    const delayMinutes = roll < 0.21 ? 12 + Math.floor(rand() * 95) : 0;
+
+    let statusNorm;
+    if (roll > 0.985) statusNorm = 'cancelled';
+    else if (offsetMin < -20) statusNorm = 'departed';
+    else if (offsetMin < 0) statusNorm = 'boarding';
+    else if (delayMinutes > 0) statusNorm = 'delayed';
+    else statusNorm = 'scheduled';
+
+    const statusRaw = {
+      cancelled: 'CANCELADO', departed: 'DESPEGÓ', boarding: 'ABORDANDO',
+      delayed: 'DEMORADO', scheduled: 'A TIEMPO',
+    }[statusNorm];
+
+    timetable.push({
+      flightKey: `${code}${900 + i}-${pad(at.getHours())}${pad(at.getMinutes())}`,
+      flightDate: at.toISOString().slice(0, 10),
+      flightCode: `${code} ${900 + i}`,
+      airline,
+      city: pick(routes),
+      scheduledTimeLocal: `${pad(at.getHours())}:${pad(at.getMinutes())}`,
+      estimatedTimeLocal: delayMinutes
+        ? `${pad(new Date(at.getTime() + delayMinutes * 60_000).getHours())}:${pad(new Date(at.getTime() + delayMinutes * 60_000).getMinutes())}`
+        : null,
+      terminal: rand() < 0.55 ? '1' : '2',
+      gate: `${rand() < 0.5 ? 'A' : 'B'}${1 + Math.floor(rand() * 24)}`,
+      statusRaw,
+      statusNorm,
+      isDelayed: statusNorm === 'delayed',
+      isCancelled: statusNorm === 'cancelled',
+      delayMinutes: delayMinutes || null,
+      actualLocal: statusNorm === 'departed' ? `${pad(at.getHours())}:${pad(at.getMinutes())}` : null,
+      delaySource: 'aicm',
+      delayObservedAt: nowIso,
+      observedAt: nowIso,
+      hiddenClosed: false,
+      closedDisplayExpiresAt: null,
+    });
+  }
+  timetable.sort((a, b) => a.scheduledTimeLocal.localeCompare(b.scheduledTimeLocal));
+
+  const counterFor = (key, label, observed) => {
+    const delayed = Math.round(observed * (0.18 + rand() * 0.08));
+    return {
+      key,
+      label,
+      delayedFlights: delayed,
+      thresholdFlights: Math.round(delayed * 0.55),
+      cancelledFlights: Math.round(observed * 0.006),
+      observedFlights: observed,
+      lastObservedAt: nowIso,
+    };
+  };
+  const hour = counterFor('hour', '1h', 34);
+  const day = counterFor('day', 'Hoy', 486);
+  const week = counterFor('week', '7d', 3402);
+
+  const strip = ({ thresholdFlights, ...rest }) => rest;
+  const resolver = c => ({
+    key: c.key, label: c.label, thresholdFlights: c.thresholdFlights,
+    cancelledFlights: c.cancelledFlights, observedFlights: c.observedFlights,
+    lastObservedAt: c.lastObservedAt,
+  });
+
+  const daily = [];
+  for (let d = 13; d >= 0; d -= 1) {
+    const observed = 430 + Math.floor(rand() * 120);
+    const delayed = Math.round(observed * (0.15 + rand() * 0.13));
+    daily.push({
+      flightDate: new Date(now - d * 86_400_000).toISOString().slice(0, 10),
+      delayedFlights: delayed,
+      thresholdFlights: Math.round(delayed * 0.55),
+      cancelledFlights: Math.round(observed * 0.006),
+      observedFlights: observed,
+    });
+  }
+
+  const latestRuns = Array.from({ length: 6 }, (_, i) => ({
+    id: 90_000 + i,
+    status: 'ok',
+    observedAt: new Date(now - i * 15 * 60_000).toISOString(),
+    flightDate: new Date(now).toISOString().slice(0, 10),
+    rowCount: 180 + Math.floor(rand() * 40),
+    delayedCount: 30 + Math.floor(rand() * 20),
+    cancelledCount: Math.floor(rand() * 3),
+    error: null,
+  }));
+
+  return json({
+    ok: true,
+    reason: null,
+    airport: {
+      key: 'aicm', code: 'MEX', icao: 'MMMX', label: 'AICM',
+      name: 'Aeropuerto Internacional de la Ciudad de México',
+      city: 'Ciudad de México', timezone: 'America/Mexico_City',
+    },
+    source: {
+      key: 'aicm',
+      url: 'https://www.aicm.com.mx/vuelos/salidas',
+      lastObservedAt: nowIso,
+      status: 'ok',
+    },
+    board: {
+      status: 'ok',
+      totalFlights: timetable.length,
+      shownFlights: timetable.length,
+      rowLimit: 180,
+      hiddenClosedFlights: 0,
+      hiddenStaleFlights: 0,
+      closedGraceMinutes: 30,
+      departedGraceMinutes: 45,
+      staleScheduledGraceMinutes: 120,
+    },
+    counters: { hour: strip(hour), day: strip(day), week: strip(week) },
+    resolverCounters: {
+      thresholdMinutes: 30,
+      hour: resolver(hour), day: resolver(day), week: resolver(week),
+    },
+    daily,
+    timetable,
+    latestRuns,
+    generatedAt: nowIso,
+  });
+}
+
 // ─── Router ─────────────────────────────────────────────────────────────────
 
 /**
@@ -852,6 +1097,7 @@ export function routeDemoRequest(url, method, body) {
       case '/api/points/top-holders': return handleTopHolders(state, params);
       case '/api/points/orderbook': return handleOrderbook(state, params);
       case '/api/points/comments': return handleComments(state, params);
+      case '/api/points/aicm/overview': return handleAicmOverview();
       default: break;
     }
     if (EMPTY_PAYLOADS[path]) return json(EMPTY_PAYLOADS[path]);

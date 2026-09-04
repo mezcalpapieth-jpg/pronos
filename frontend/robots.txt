@@ -9,4 +9,5 @@ Disallow: /points/video
 # Presentation demo. Real market questions, but every price, trade and volume
 # behind this path is simulated in the browser — it must never be indexed as
 # if it were real Pronos activity.
+Disallow: /demo
 Disallow: /points-demo
