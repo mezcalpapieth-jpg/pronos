@@ -184,7 +184,7 @@ export default async function handler(req, res) {
       ORDER BY t.created_at ASC
     `);
     const refundRows = await timer.time('db_refunds', () => sql`
-      SELECT d.id, d.kind, d.reference_id AS market_id, d.amount, d.created_at,
+      SELECT d.id, d.kind, d.reference_id AS market_id, d.amount, d.reason, d.created_at,
              m.parent_id, m.leg_label, m.question, m.category, m.outcomes, m.reserves,
              pm.id AS parent_market_id,
              pm.question AS parent_question,
@@ -278,7 +278,9 @@ export default async function handler(req, res) {
         outcomeIndex: null,
         outcomeLabel: r.kind === 'redemption_reversal'
           ? 'Corrección de resolución'
-          : r.kind === 'invalid_field_refund' ? 'Reembolso por participante fuera del campo' : 'Reembolso',
+          : r.kind === 'invalid_field_refund'
+            ? (r.reason || 'Reembolso por participante inválido')
+            : 'Reembolso',
         shares: 0,
         collateral,
         fee: 0,

@@ -1,6 +1,7 @@
 /**
  * ESPN-backed soccer generator for Liga MX, MLS, Leagues Cup,
- * international friendlies, and summer-break club friendlies.
+ * UEFA Europa League, UEFA Conference League, international friendlies,
+ * and summer-break club friendlies.
  *
  * Why not football-data.org: Liga MX and MLS are both paywalled on
  * their free tier, and the user specifically wants Liga MX/MLS coverage.
@@ -11,6 +12,10 @@
  *   - `mex.1` (Liga MX): every scheduled game inside the 14-day window
  *   - `usa.1` (MLS): every scheduled game inside the 14-day window
  *   - `concacaf.leagues.cup` (Leagues Cup): all scheduled games
+ *   - `uefa.europa` (UEL): all scheduled games
+ *   - `uefa.europa.conf` (UECL): all scheduled games, with a longer
+ *      lookahead because this competition can start later than the
+ *      standard two-week soccer window
  *   - `fifa.friendly` (international friendlies): all scheduled games
  *   - `club.friendly` (club friendlies): summer-break games only
  *
@@ -101,6 +106,21 @@ const ESPN_SOCCER_LEAGUES = [
     durationHours: 4,
   },
   {
+    leagueCode: 'uefa.europa',
+    league: 'uefa-europa-league',
+    leagueLabel: 'UEFA Europa League (UEL)',
+    outcomeShape: 'draw3',
+    matchTypeLabel: 'TORNEO',
+  },
+  {
+    leagueCode: 'uefa.europa.conf',
+    league: 'uefa-conference-league',
+    leagueLabel: 'UEFA Conference League (UECL)',
+    outcomeShape: 'draw3',
+    matchTypeLabel: 'TORNEO',
+    horizonDays: 45,
+  },
+  {
     leagueCode: 'fifa.friendly',
     league: 'international',
     leagueLabel: 'International Friendly',
@@ -120,6 +140,13 @@ const ESPN_SOCCER_LEAGUES = [
 function formatDateCompact(d) {
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}`;
+}
+
+function dateRangeForConfig(config, now = new Date()) {
+  const days = Number(config?.horizonDays);
+  const horizonDays = Number.isFinite(days) && days > 0 ? days : HORIZON_DAYS;
+  const horizon = new Date(now.getTime() + horizonDays * 86_400_000);
+  return `${formatDateCompact(now)}-${formatDateCompact(horizon)}`;
 }
 
 async function fetchLeagueEvents(leagueCode, dateRange) {
@@ -244,13 +271,11 @@ export async function generateEspnSoccerMarkets({
   now = new Date(),
   fetchLeagueEventsFn = fetchLeagueEvents,
 } = {}) {
-  const horizon = new Date(now.getTime() + HORIZON_DAYS * 86_400_000);
-  const dateRange = `${formatDateCompact(now)}-${formatDateCompact(horizon)}`;
-
   const specs = [];
 
   for (const config of ESPN_SOCCER_LEAGUES) {
     if (!shouldFetchLeagueEvents(config, now)) continue;
+    const dateRange = dateRangeForConfig(config, now);
     for (const ev of await fetchLeagueEventsFn(config.leagueCode, dateRange)) {
       if (!eventMatchesWhitelist(ev, config.whitelist)) continue;
       const spec = eventToSpec(ev, config);
@@ -269,6 +294,7 @@ export const _internal = {
   eventMatchesWhitelist,
   eventTeamNames,
   eventToSpec,
+  dateRangeForConfig,
   formatDateCompact,
   isPlaceholderTeamName,
   isSummerBreakDate,

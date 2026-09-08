@@ -623,6 +623,16 @@ export function buildLcdlfNominationMarketSpecs({
   seasonLabel = process.env.LCDLF_SEASON_LABEL || LCDLF_DEFAULT_SEASON_LABEL,
 } = {}) {
   if (!snapshot?.ok || !Array.isArray(snapshot.active) || snapshot.active.length < 2) return [];
+  const nominationMinStatusCount = Math.max(
+    2,
+    Number.isFinite(Number(process.env.LCDLF_NOMINATION_MIN_STATUS_COUNT))
+      ? Number(process.env.LCDLF_NOMINATION_MIN_STATUS_COUNT)
+      : 2,
+  );
+  const currentNominationCount = Array.isArray(snapshot.nominated)
+    ? snapshot.nominated.filter(row => row?.statusKey === 'nominado').length
+    : 0;
+  if (currentNominationCount >= nominationMinStatusCount) return [];
 
   const activeRows = snapshot.active
     .filter(row => row?.name && row?.slug && row.statusKey !== 'eliminado');
@@ -672,7 +682,7 @@ export function buildLcdlfNominationMarketSpecs({
       noOutcome: 1,
       closeOnStatus: false,
       statusMinStatusCount: 2,
-      nominationMinStatusCount: 2,
+      nominationMinStatusCount,
       legs: activeRows.map(row => ({
         label: row.name,
         residentName: row.name,

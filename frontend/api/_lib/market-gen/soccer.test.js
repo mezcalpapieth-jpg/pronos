@@ -75,8 +75,8 @@ test('non-final soccer matches keep the regular three-way draw market', () => {
   assert.equal(_internal.matchToMarketSpecs(soccerMatch({ id: 101, stage: 'SEMI_FINALS' }), 'CL').length, 1);
 });
 
-test('configured soccer competitions import every fixture with canonical league slugs', () => {
-  assert.deepEqual(_internal.COMPETITIONS_ALL_FIXTURES, ['CL', 'EL', 'UCL', 'CLI', 'PD', 'PL', 'SA', 'BL1']);
+test('football-data soccer competitions import every fixture with canonical league slugs', () => {
+  assert.deepEqual(_internal.COMPETITIONS_ALL_FIXTURES, ['CL', 'CLI', 'PD', 'PL', 'SA', 'BL1']);
   assert.deepEqual(_internal.COMPETITIONS_TEAM_FILTER, []);
   assert.ok(_internal.TEAM_MATCH_SUPPLEMENT_IDS.some(team => team.id === 5 && team.tla === 'BAY'));
   assert.ok(_internal.TEAM_MATCH_SUPPLEMENT_IDS.some(team => team.id === 4 && team.tla === 'BVB'));

@@ -230,6 +230,36 @@ test('buildLcdlfNominationMarketSpecs creates one parallel market from active re
   assert.deepEqual(specs[0].source_data.suggestedPricing.legProbabilityPct, [32, 32, 32]);
 });
 
+test('buildLcdlfNominationMarketSpecs waits while the current nomination slate is visible', () => {
+  const now = new Date('2026-09-04T15:37:00Z');
+  const currentSlate = [
+    { name: 'Cynthia Klitbo', slug: 'cynthia-klitbo', ok: true, statusKey: 'nominado', statusLabel: 'Nominado/a', url: 'https://example.com/cynthia' },
+    { name: 'Flor Vigna', slug: 'flor-vigna', ok: true, statusKey: 'nominado', statusLabel: 'Nominado/a', url: 'https://example.com/flor' },
+    { name: 'Memo Schutz', slug: 'memo-schutz', ok: true, statusKey: 'nominado', statusLabel: 'Nominado/a', url: 'https://example.com/memo' },
+  ];
+  const snapshot = {
+    ok: true,
+    sourceUrl: 'https://www.lacasadelosfamososmexico.tv',
+    observedAt: now.toISOString(),
+    parsedCount: 3,
+    total: 5,
+    rows: [
+      ...currentSlate,
+      { name: 'Yahir', slug: 'yahir', ok: true, statusKey: null, statusLabel: null, url: 'https://example.com/yahir' },
+      { name: 'Gema Garoa', slug: 'gema-garoa', ok: true, statusKey: null, statusLabel: null, url: 'https://example.com/gema' },
+    ],
+    active: [
+      ...currentSlate,
+      { name: 'Yahir', slug: 'yahir', ok: true, statusKey: null, statusLabel: null, url: 'https://example.com/yahir' },
+      { name: 'Gema Garoa', slug: 'gema-garoa', ok: true, statusKey: null, statusLabel: null, url: 'https://example.com/gema' },
+    ],
+    nominated: currentSlate,
+    eliminated: [],
+  };
+
+  assert.deepEqual(buildLcdlfNominationMarketSpecs({ snapshot, now }), []);
+});
+
 test('buildLcdlfResolutionReview suggests the eliminated nominee only after official evidence', async () => {
   const now = new Date('2026-08-10T12:00:00Z');
   const snapshot = {

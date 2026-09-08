@@ -72,6 +72,35 @@ test('international friendlies remain three-way and carry an international label
   assert.equal(spec.source_data.matchTypeLabel, 'INTERNACIONAL');
 });
 
+test('UEFA Europa and Conference ESPN events become tournament draw markets', () => {
+  const europa = _internal.ESPN_SOCCER_LEAGUES.find(c => c.league === 'uefa-europa-league');
+  const conference = _internal.ESPN_SOCCER_LEAGUES.find(c => c.league === 'uefa-conference-league');
+  const europaSpec = _internal.eventToSpec(espnEvent({
+    id: '401915586',
+    homeName: 'AC Milan',
+    awayName: 'Benfica',
+  }), europa);
+  const conferenceSpec = _internal.eventToSpec(espnEvent({
+    id: '401921111',
+    homeName: 'Crystal Palace',
+    awayName: 'Rayo Vallecano',
+  }), conference);
+
+  assert.equal(europaSpec.league, 'uefa-europa-league');
+  assert.equal(europaSpec.resolver_config.leaguePath, 'soccer/uefa.europa');
+  assert.equal(europaSpec.source_event_id, 'uefa.europa:401915586');
+  assert.equal(europaSpec.source_data.leagueLabel, 'UEFA Europa League (UEL)');
+  assert.equal(europaSpec.source_data.matchTypeLabel, 'TORNEO');
+  assert.deepEqual(europaSpec.outcomes, ['AC Milan', 'Empate', 'Benfica']);
+
+  assert.equal(conferenceSpec.league, 'uefa-conference-league');
+  assert.equal(conferenceSpec.resolver_config.leaguePath, 'soccer/uefa.europa.conf');
+  assert.equal(conferenceSpec.source_event_id, 'uefa.europa.conf:401921111');
+  assert.equal(conferenceSpec.source_data.leagueLabel, 'UEFA Conference League (UECL)');
+  assert.equal(conferenceSpec.source_data.matchTypeLabel, 'TORNEO');
+  assert.deepEqual(conferenceSpec.outcomes, ['Crystal Palace', 'Empate', 'Rayo Vallecano']);
+});
+
 test('club friendly feed is limited to the summer break while MLS stays year-round', () => {
   const mls = _internal.ESPN_SOCCER_LEAGUES.find(c => c.league === 'mls');
   const clubFriendly = _internal.ESPN_SOCCER_LEAGUES.find(c => c.league === 'club-friendlies');
@@ -96,8 +125,32 @@ test('generator does not fetch club friendlies outside the summer break', async 
   assert.ok(requestedLeagueCodes.includes('mex.1'));
   assert.ok(requestedLeagueCodes.includes('usa.1'));
   assert.ok(requestedLeagueCodes.includes('concacaf.leagues.cup'));
+  assert.ok(requestedLeagueCodes.includes('uefa.europa'));
+  assert.ok(requestedLeagueCodes.includes('uefa.europa.conf'));
   assert.ok(requestedLeagueCodes.includes('fifa.friendly'));
   assert.equal(requestedLeagueCodes.includes('club.friendly'), false);
+});
+
+test('Conference League uses a longer fixture lookahead than the default soccer window', async () => {
+  const ranges = new Map();
+  await generateEspnSoccerMarkets({
+    now: new Date('2026-09-08T12:00:00Z'),
+    fetchLeagueEventsFn: async (leagueCode, dateRange) => {
+      ranges.set(leagueCode, dateRange);
+      return [];
+    },
+  });
+
+  assert.equal(ranges.get('mex.1'), '20260908-20260922');
+  assert.equal(ranges.get('uefa.europa'), '20260908-20260922');
+  assert.equal(ranges.get('uefa.europa.conf'), '20260908-20261023');
+  assert.equal(
+    _internal.dateRangeForConfig(
+      _internal.ESPN_SOCCER_LEAGUES.find(c => c.league === 'uefa-conference-league'),
+      new Date('2026-09-08T12:00:00Z'),
+    ),
+    '20260908-20261023',
+  );
 });
 
 test('ESPN soccer events with placeholder team names are skipped', () => {

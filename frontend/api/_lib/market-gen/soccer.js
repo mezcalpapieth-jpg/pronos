@@ -2,8 +2,8 @@
  * Soccer market generator — football-data.org client.
  *
  * Returns an array of market specs for every upcoming match in the fetched
- * competitions: UEFA Champions League, UEFA Europa League, UEFA Conference
- * League, Copa Libertadores, La Liga, Premier League, Serie A, and Bundesliga.
+ * competitions: UEFA Champions League, Copa Libertadores, La Liga,
+ * Premier League, Serie A, and Bundesliga.
  * Only fixtures within the next `horizonDays` (default 14) are returned,
  * and only those with status=SCHEDULED (so finished/live matches don't
  * show up as "pending to create").
@@ -13,18 +13,16 @@
  *
  * Free-tier competition codes we use:
  *   CL  — UEFA Champions League
- *   EL  — UEFA Europa League
- *   UCL — UEFA Conference League
  *   CLI — Copa Libertadores
  *   PD  — La Liga
  *   PL  — Premier League
  *   SA  — Serie A
  *   BL1 — Bundesliga
  *
- * NOT in free tier (deferred to another source):
- *   Liga MX (Mexico) · MLS (Inter Miami). TheSportsDB covers both for
- *   free; a TheSportsDB-backed generator can plug in alongside this one
- *   without touching the caller.
+ * Deferred to ESPN:
+ *   Liga MX · MLS · UEFA Europa League · UEFA Conference League.
+ *   The current football-data subscription can reject EL/UCL endpoints,
+ *   while ESPN exposes those scoreboards keylessly.
  */
 
 // Legacy team TLA set kept for admin/reference tooling. Generation no longer
@@ -73,7 +71,7 @@ const TEAM_MATCH_SUPPLEMENT_IDS = [
 
 // Competition codes to pull. Everything listed here imports every scheduled
 // fixture inside the window; admin approval is the curation layer.
-const COMPETITIONS_ALL_FIXTURES = ['CL', 'EL', 'UCL', 'CLI', 'PD', 'PL', 'SA', 'BL1'];
+const COMPETITIONS_ALL_FIXTURES = ['CL', 'CLI', 'PD', 'PL', 'SA', 'BL1'];
 const COMPETITIONS_TEAM_FILTER  = [];
 
 // Map football-data competition code → canonical league slug used by

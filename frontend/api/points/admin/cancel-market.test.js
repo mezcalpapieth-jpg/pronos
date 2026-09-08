@@ -36,7 +36,7 @@ test('points history treats cancel refunds as neutral canceled markets', () => {
   assert.match(historySource, /market_cancel_refund/);
   assert.match(historySource, /void_refund/);
   assert.match(historySource, /invalid_field_refund/);
-  assert.match(historySource, /Reembolso por participante fuera del campo/);
+  assert.match(historySource, /r\.reason \|\| 'Reembolso por participante inválido'/);
   assert.match(historySource, /outcomeStatus = 'canceled'/);
   assert.match(historySource, /marketsCanceled/);
   assert.match(historySource, /side: 'refund'/);

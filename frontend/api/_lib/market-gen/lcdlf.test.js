@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateLcdlfMarkets } from './lcdlf.js';
 
-test('generateLcdlfMarkets uses official residents for nomination and elimination drafts', async () => {
+test('generateLcdlfMarkets waits on nomination drafts when the current slate is visible', async () => {
   const previousResidents = process.env.LCDLF_RESIDENTS_JSON;
   const previousDiscover = process.env.LCDLF_DISCOVER_RESIDENTS;
   try {
@@ -29,11 +29,11 @@ test('generateLcdlfMarkets uses official residents for nomination and eliminatio
       fetchImpl,
     });
 
-    assert.equal(specs.length, 2);
+    assert.equal(specs.length, 1);
     const nomination = specs.find(spec => String(spec.source_event_id).startsWith('lcdlf-mx-nomination:'));
     const elimination = specs.find(spec => String(spec.source_event_id).startsWith('lcdlf-mx-elimination:'));
 
-    assert.ok(nomination);
+    assert.equal(nomination, undefined);
     assert.ok(elimination);
     assert.equal(elimination.source, 'lcdlf-official');
     assert.deepEqual(elimination.outcomes, ['Ernesto Laguardia', 'Memo Schutz']);
@@ -44,10 +44,6 @@ test('generateLcdlfMarkets uses official residents for nomination and eliminatio
     assert.equal(elimination.resolver_config.statusKey, 'eliminado');
     assert.equal(elimination.resolver_config.closeOnStatus, false);
 
-    assert.deepEqual(nomination.outcomes, ['Ernesto Laguardia', 'Memo Schutz', 'Yahir']);
-    assert.equal(nomination.resolver_type, 'api_lcdlf');
-    assert.equal(nomination.resolver_config.shape, 'parallel-status');
-    assert.equal(nomination.resolver_config.statusKey, 'nominado');
   } finally {
     if (previousResidents === undefined) delete process.env.LCDLF_RESIDENTS_JSON;
     else process.env.LCDLF_RESIDENTS_JSON = previousResidents;

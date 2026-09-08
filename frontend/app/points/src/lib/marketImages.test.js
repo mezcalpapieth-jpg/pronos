@@ -42,6 +42,22 @@ test('sports markets render league-specific badge art when league metadata is pr
   assert.match(svg, />UCL</);
   assert.match(svg, />Champions</);
 
+  const europa = {
+    category: 'deportes',
+    sport: 'soccer',
+    league: 'uefa-europa-league',
+  };
+  assert.equal(marketPlaceholderKey(europa), 'league:uefa-europa');
+  assert.match(decodedBadgeSvg(marketPlaceholderImageSrc(europa)), />UEL</);
+
+  const conference = {
+    category: 'deportes',
+    sport: 'soccer',
+    league: 'uefa-conference-league',
+  };
+  assert.equal(marketPlaceholderKey(conference), 'league:uefa-conference');
+  assert.match(decodedBadgeSvg(marketPlaceholderImageSrc(conference)), />UECL</);
+
   const nfl = {
     category: 'deportes',
     sport: 'nfl',
