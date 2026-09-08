@@ -23,6 +23,8 @@ test('active weather market edits sync forecast date from question or end date',
   assert.match(source, /syncWeatherDateFromMarket/);
   assert.match(source, /endTime:\s*nextEndTime \?\? existing\.end_time/);
   assert.match(source, /resolverConfig: syncedApiPrice\.resolverConfig/);
+  assert.match(source, /validateBeforeMonthDeadline/);
+  assert.match(source, /deadlineCheck/);
 });
 
 test('active market edit persists outcome image refs', () => {

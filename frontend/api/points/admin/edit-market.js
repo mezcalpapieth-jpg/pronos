@@ -29,6 +29,7 @@ import { deriveMarketTags } from '../../_lib/category-tags.js';
 import { syncMananeraPhraseFromQuestion } from '../../_lib/mananera-market-sync.js';
 import { syncApiPriceFromQuestion } from '../../_lib/api-price-market-sync.js';
 import { syncWeatherDateFromMarket } from '../../_lib/weather-market-sync.js';
+import { validateBeforeMonthDeadline } from '../../_lib/manual-deadline-sanity.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 
 const sql = neon(process.env.DATABASE_URL);
@@ -204,6 +205,18 @@ export default async function handler(req, res) {
     });
     const nextResolverConfig = syncedWeather.resolverConfig || null;
     const resolverConfigChanged = !sameJson(nextResolverConfig, existingResolverConfig);
+    if (nextQuestion !== null || nextEndTime !== null || resolverConfigChanged) {
+      const deadlineCheck = validateBeforeMonthDeadline({
+        question: nextQuestion ?? existing.question,
+        endTime: nextEndTime ?? existing.end_time,
+        resolverConfig: nextResolverConfig,
+        startTime: nextStartTime ?? existing.start_time,
+        now: new Date(),
+      });
+      if (deadlineCheck) {
+        return res.status(400).json(deadlineCheck);
+      }
+    }
     if (
       nextQuestion === null
       && nextStartTime === null

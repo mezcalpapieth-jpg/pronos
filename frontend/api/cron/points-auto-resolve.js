@@ -76,6 +76,12 @@ import {
   normalizeLcdlfName,
   readLcdlfOfficialSnapshot,
 } from '../_lib/lcdlf-official.js';
+import {
+  buildNetflixTop10ResolutionReview,
+  isNetflixTop10Market,
+  NETFLIX_TOP10_PAGE,
+  NETFLIX_TOP10_SOURCE,
+} from '../_lib/netflix-top10.js';
 import { prepareGeneratedSpecs, upsertPending } from '../_lib/run-generators.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -339,13 +345,13 @@ function isManualReviewMarket({ resolverType, cfg, row, sourceData }) {
   const source = String(row?.source || resolverSource || '').trim().toLowerCase();
   if (isAutoResolvableApiChart({ resolverType: rt, source: resolverSource || source })) return false;
 
-  if (['entertainment', 'codex-entertainment', 'codex-premios-juventud-2026'].includes(source)) {
+  if (['entertainment', 'codex-entertainment', 'codex-premios-juventud-2026', 'manual-international-politics'].includes(source)) {
     return true;
   }
   if (String(row?.category || '').trim().toLowerCase() === 'musica') return true;
 
   const kind = String(sourceData?.kind || '').trim().toLowerCase();
-  return ['award', 'reality_week', 'reality_winner', 'lcdlf_week', 'concert'].includes(kind);
+  return ['award', 'reality_week', 'reality_winner', 'lcdlf_week', 'concert', 'netflix_top10', 'granja_vip_week'].includes(kind);
 }
 
 function isMananeraMarket({ cfg, row, sourceData } = {}) {
@@ -1074,6 +1080,49 @@ async function resolveEliminatedParallelLegs({ market, cfg, result, dry, report 
 }
 
 async function enrichManualReviewCandidate({ market, cfg, sourceData, outcomes }) {
+  if (isNetflixTop10Market({ cfg, row: market, sourceData })) {
+    try {
+      const review = await buildNetflixTop10ResolutionReview({
+        market,
+        cfg,
+        sourceData,
+        outcomes,
+      });
+      return {
+        cfg: {
+          ...(cfg || {}),
+          ...(review?.resolverConfigPatch || {}),
+        },
+        sourceData: {
+          ...(sourceData || {}),
+          ...(review?.sourceDataPatch || {}),
+        },
+      };
+    } catch (e) {
+      const errorCode = typeof e?.code === 'string' ? e.code : null;
+      const reason = errorCode === 'netflix_top10_not_published_yet'
+        ? 'Netflix Top 10 todavía no publicó una semana posterior a la que se usó para crear el mercado.'
+        : errorCode === 'netflix_top10_timeout'
+        ? 'La descarga de Netflix Top 10 tardó demasiado; el resolver lo intentará de nuevo en la siguiente corrida.'
+        : `No se pudo leer o interpretar Netflix Top 10: ${e?.message || 'error desconocido'}.`;
+      return {
+        cfg: {
+          ...(cfg || {}),
+          source: NETFLIX_TOP10_SOURCE,
+          suggestedOutcomeIndex: null,
+          confidenceBps: 0,
+          evidenceUrl: NETFLIX_TOP10_PAGE,
+          evidence: cfg?.evidence || [{ title: 'Netflix Top 10', url: NETFLIX_TOP10_PAGE }],
+          rationale: `${reason} Requiere revisión manual antes de pagar MXNP.`,
+        },
+        sourceData: {
+          ...(sourceData || {}),
+          netflixTop10ResolutionError: errorCode || e?.message || 'unknown',
+        },
+      };
+    }
+  }
+
   if (!isLcdlfMarket({ cfg, row: market, sourceData })) {
     return { cfg, sourceData };
   }
@@ -1341,9 +1390,9 @@ export async function runAutoResolve({ dry = false } = {}) {
               OR (
                 m.resolver_type IS NULL
                 AND (
-                  m.source IN ('entertainment', 'codex-entertainment', 'codex-premios-juventud-2026')
+                  m.source IN ('entertainment', 'codex-entertainment', 'codex-premios-juventud-2026', 'manual-international-politics')
                   OR m.category = 'musica'
-                  OR pm.source_data->>'kind' IN ('award', 'reality_week', 'reality_winner', 'concert')
+                  OR pm.source_data->>'kind' IN ('award', 'reality_week', 'reality_winner', 'concert', 'netflix_top10', 'granja_vip_week')
                 )
               )
             )

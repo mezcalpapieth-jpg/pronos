@@ -43,6 +43,8 @@ test('pending generated markets can be edited before approval', () => {
   assert.match(source, /syncMananeraPhraseFromQuestion/);
   assert.match(source, /syncApiPriceFromQuestion/);
   assert.match(source, /syncWeatherDateFromMarket/);
+  assert.match(source, /validateBeforeMonthDeadline/);
+  assert.match(source, /deadlineCheck/);
   assert.match(source, /const sourceData = parseJsonb\(r\.source_data,\s*\{\}\)/);
   assert.match(source, /suggestedPricing:\s*sourceData\?\.suggestedPricing\s*\|\|\s*null/);
   assert.match(source, /pricingSearch:\s*sourceData\?\.pricingSearch\s*\|\|\s*null/);

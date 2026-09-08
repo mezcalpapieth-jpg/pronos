@@ -238,6 +238,10 @@ test('Points admin can review scheduler resolution candidates', () => {
   assert.match(source, /ResolutionCandidatePanel/);
   assert.match(source, /resolutionCandidate/);
   assert.match(source, /adminReviewResolutionCandidate/);
+  assert.match(source, /candidate\.needsOutcome/);
+  assert.match(source, /Elegir resultado/);
+  assert.match(source, /reviewing \|\| !canConfirm/);
+  assert.match(source, /Elige un resultado antes de confirmar/);
   assert.match(source, /Confirmar resolución/);
   assert.match(source, /Negar/);
   assert.match(source, /En revisión/);

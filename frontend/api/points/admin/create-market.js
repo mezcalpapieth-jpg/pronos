@@ -36,6 +36,7 @@ import { withTransaction } from '../../_lib/db-tx.js';
 import { deriveMarketTags } from '../../_lib/category-tags.js';
 import { normalizeSeedLiquidities } from '../../_lib/market-liquidity.js';
 import { buildMarketContextBlocks } from '../../_lib/market-context-blocks.js';
+import { validateBeforeMonthDeadline } from '../../_lib/manual-deadline-sanity.js';
 import { neon } from '@neondatabase/serverless';
 
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -321,6 +322,15 @@ export default async function handler(req, res) {
   const resolverConfigVal = normalizedResolver.value.resolverConfig;
   const sourceVal = normalizedResolver.value.source;
   const sourceEventIdVal = normalizedResolver.value.sourceEventId;
+  const deadlineCheck = validateBeforeMonthDeadline({
+    question: question.trim(),
+    endTime: endDate.toISOString(),
+    resolverConfig: resolverConfigVal,
+    now: new Date(),
+  });
+  if (deadlineCheck) {
+    return res.status(400).json(deadlineCheck);
+  }
   const resolverConfigWithContext = resolverConfigVal
     ? {
         ...resolverConfigVal,

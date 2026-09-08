@@ -27,6 +27,7 @@ import { LCDLF_SOURCE } from '../../_lib/lcdlf-official.js';
 import { syncMananeraPhraseFromQuestion } from '../../_lib/mananera-market-sync.js';
 import { syncApiPriceFromQuestion } from '../../_lib/api-price-market-sync.js';
 import { syncWeatherDateFromMarket } from '../../_lib/weather-market-sync.js';
+import { validateBeforeMonthDeadline } from '../../_lib/manual-deadline-sanity.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -606,6 +607,20 @@ export async function approveOne(pid, reviewer, note, opts = {}) {
         }
       : sourceDataBase;
     const resolverConfig = syncedWeather.resolverConfig || null;
+    const deadlineCheck = validateBeforeMonthDeadline({
+      question: r.question,
+      endTime: endDate.toISOString(),
+      resolverConfig,
+      sourceData,
+      startTime: startIso,
+      now: new Date(),
+    });
+    if (deadlineCheck) {
+      const err = new Error(deadlineCheck.error);
+      err.status = 400;
+      err.detail = deadlineCheck.detail;
+      throw err;
+    }
     const marketSourceEventId = marketSourceEventForApproval(r, pid);
     const tagBundle = deriveMarketTags({
       ...r,
@@ -1023,6 +1038,20 @@ async function editPending(pid, reviewer, patch = {}, note = null) {
     });
     const resolverConfig = syncedWeather.resolverConfig || null;
     const sourceData = syncedWeather.sourceData || syncedApiPrice.sourceData || syncedMananera.sourceData || previousSourceData;
+    const deadlineCheck = validateBeforeMonthDeadline({
+      question,
+      endTime: nextEndIso,
+      resolverConfig,
+      sourceData,
+      startTime: nextStartIso,
+      now: new Date(),
+    });
+    if (deadlineCheck) {
+      const err = new Error(deadlineCheck.error);
+      err.status = 400;
+      err.detail = deadlineCheck.detail;
+      throw err;
+    }
 
     const tagBundle = deriveMarketTags({
       ...r,

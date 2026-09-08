@@ -15,6 +15,8 @@ test('points admin direct create stores manual review resolver metadata', () => 
   assert.match(source, /inegi\.org\.mx/);
   assert.match(source, /buildMarketContextBlocks/);
   assert.match(source, /contextBlocks/);
+  assert.match(source, /validateBeforeMonthDeadline/);
+  assert.match(source, /deadlineCheck/);
 });
 
 test('points admin direct create keeps parallel leg markets free of duplicate source ids', () => {

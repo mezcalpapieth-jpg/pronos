@@ -22,10 +22,17 @@ test('points auto-resolver stores next-opponent check state off market rows', ()
 
 test('points auto-resolver picks up entertainment markets after close time', () => {
   assert.match(SOURCE, /m\.resolver_type IN \('manual', 'manual_review'\)/);
-  assert.match(SOURCE, /m\.source IN \('entertainment', 'codex-entertainment', 'codex-premios-juventud-2026'\)/);
+  assert.match(SOURCE, /m\.source IN \('entertainment', 'codex-entertainment', 'codex-premios-juventud-2026', 'manual-international-politics'\)/);
   assert.match(SOURCE, /m\.category = 'musica'/);
-  assert.match(SOURCE, /pm\.source_data->>'kind' IN \('award', 'reality_week', 'reality_winner', 'concert'\)/);
+  assert.match(SOURCE, /pm\.source_data->>'kind' IN \('award', 'reality_week', 'reality_winner', 'concert', 'netflix_top10', 'granja_vip_week'\)/);
   assert.match(SOURCE, /isManualReviewMarket/);
+});
+
+test('points auto-resolver adds Netflix Top 10 suggestions to manual review', () => {
+  assert.match(SOURCE, /buildNetflixTop10ResolutionReview/);
+  assert.match(SOURCE, /isNetflixTop10Market/);
+  assert.match(SOURCE, /netflix_top10_not_published_yet/);
+  assert.match(SOURCE, /NETFLIX_TOP10_SOURCE/);
 });
 
 test('points auto-resolver lets trusted chart APIs resolve music markets', () => {

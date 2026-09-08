@@ -2682,6 +2682,10 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
   async function reviewResolutionCandidate(market, candidate, action, outcomeIndex = null) {
     if (!candidate?.id || !market?.id) return;
     const selectedOutcome = outcomeIndex == null ? candidate.outcomeIndex : outcomeIndex;
+    if (action === 'confirm' && !Number.isInteger(selectedOutcome)) {
+      alert('Elige un resultado antes de confirmar.');
+      return;
+    }
     const verb = action === 'confirm' ? 'confirmar' : 'negar';
     const label = action === 'confirm'
       ? (market.outcomes?.[selectedOutcome] || `Resultado ${Number(selectedOutcome) + 1}`)
@@ -4385,9 +4389,18 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
 
 function ResolutionCandidatePanel({ market, candidate, reviewing, onReview }) {
   const outcomes = Array.isArray(market.outcomes) ? market.outcomes : [];
-  const initialOutcome = Number.isInteger(candidate.outcomeIndex) ? candidate.outcomeIndex : 0;
+  const candidateOutcome = Number.isInteger(candidate.outcomeIndex) ? candidate.outcomeIndex : null;
+  const initialOutcome = candidateOutcome == null ? '' : String(candidateOutcome);
   const [selected, setSelected] = useState(initialOutcome);
+  useEffect(() => setSelected(initialOutcome), [candidate.id, initialOutcome]);
   const evidence = Array.isArray(candidate.evidence) ? candidate.evidence : [];
+  const outcomeLabels = outcomes.length > 0
+    ? outcomes
+    : Array.from({ length: Math.max(0, Number(candidate.outcomeCount || 0)) }, (_, i) => `Resultado ${i + 1}`);
+  const selectedOutcome = selected === '' ? null : Number(selected);
+  const canConfirm = Number.isInteger(selectedOutcome)
+    && selectedOutcome >= 0
+    && selectedOutcome < outcomeLabels.length;
 
   return (
     <div style={{
@@ -4424,7 +4437,7 @@ function ResolutionCandidatePanel({ market, candidate, reviewing, onReview }) {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <select
           value={selected}
-          onChange={(e) => setSelected(Number(e.target.value))}
+          onChange={(e) => setSelected(e.target.value)}
           disabled={reviewing}
           style={{
             padding: '6px 10px',
@@ -4438,15 +4451,20 @@ function ResolutionCandidatePanel({ market, candidate, reviewing, onReview }) {
             minWidth: 160,
           }}
         >
-          {outcomes.map((label, i) => (
+          {candidate.needsOutcome && (
+            <option value="">
+              Elegir resultado
+            </option>
+          )}
+          {outcomeLabels.map((label, i) => (
             <option key={i} value={i}>
               {label}
             </option>
           ))}
         </select>
         <button
-          onClick={() => onReview?.('confirm', selected)}
-          disabled={reviewing}
+          onClick={() => onReview?.('confirm', selectedOutcome)}
+          disabled={reviewing || !canConfirm}
           className="btn-primary"
           style={{ padding: '6px 12px', fontSize: 11 }}
         >
