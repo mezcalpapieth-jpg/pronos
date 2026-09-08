@@ -118,6 +118,12 @@ const POINTS_SCHEMA_READY_PROBE = `
       SELECT 1 FROM information_schema.columns
       WHERE table_schema = 'public'
         AND table_name = 'points_users'
+        AND column_name = 'phone_number'
+    ) AS points_users_phone_number,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'points_users'
         AND column_name = 'api_blocked_at'
     ) AS points_users_api_blocked_at,
     EXISTS (
@@ -237,6 +243,7 @@ const POINTS_SCHEMA_MIGRATIONS = [
     display_name         TEXT,
     profile_image_url    TEXT,
     profile_updated_at   TIMESTAMPTZ,
+    phone_number         TEXT,
     api_blocked_at       TIMESTAMPTZ,
     api_blocked_by       TEXT,
     api_block_reason     TEXT,
@@ -259,6 +266,7 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS display_name TEXT`,
   `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS profile_image_url TEXT`,
   `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS profile_updated_at TIMESTAMPTZ`,
+  `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS phone_number TEXT`,
   `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS api_blocked_at TIMESTAMPTZ`,
   `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS api_blocked_by TEXT`,
   `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS api_block_reason TEXT`,

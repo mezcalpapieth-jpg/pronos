@@ -27,6 +27,7 @@ test('Risk panel lets admins filter evidence and set non-payout review states', 
   assert.match(source, /Desglose del score/);
   assert.match(source, /Teléfono requerido/);
   assert.match(source, /Pedir teléfono/);
+  assert.match(source, /RiskMetric label="Teléfono" value=\{row\.phoneNumber \|\| 'Sin teléfono'\}/);
   assert.match(source, /lo muestra en Perfil/);
   assert.match(source, /verificación telefónica/);
   assert.match(source, /function RiskScoreBreakdown/);

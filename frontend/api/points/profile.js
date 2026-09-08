@@ -1,9 +1,8 @@
 /**
  * POST /api/points/profile
  *
- * Authenticated profile personalization for the points app. This keeps
- * identity lightweight for now: users can set a public display name and
- * a public image URL without adding file storage or upload moderation.
+ * Authenticated profile personalization for the points app. Users can set
+ * public display fields and a private phone number for prize/account contact.
  */
 
 import { neon } from '@neondatabase/serverless';
@@ -16,6 +15,7 @@ const schemaSql = neon(process.env.DATABASE_URL);
 
 const MAX_DISPLAY_NAME_LENGTH = 60;
 const MAX_PROFILE_IMAGE_URL_LENGTH = 800;
+const MAX_PHONE_NUMBER_LENGTH = 32;
 
 function cleanOptionalText(value, maxLength) {
   if (value == null) return null;
@@ -41,12 +41,30 @@ function cleanProfileImageUrl(value) {
   return text;
 }
 
+function cleanPhoneNumber(value) {
+  const text = cleanOptionalText(value, MAX_PHONE_NUMBER_LENGTH);
+  if (text == null || typeof text === 'object') return text;
+  const digits = text.replace(/\D/g, '');
+  const plusCount = (text.match(/\+/g) || []).length;
+  if (
+    digits.length < 7
+    || digits.length > 15
+    || plusCount > 1
+    || (plusCount === 1 && !text.startsWith('+'))
+    || !/^\+?[\d\s().-]+$/.test(text)
+  ) {
+    return { error: 'invalid_phone_number' };
+  }
+  return text;
+}
+
 function serializeProfile(row) {
   return {
     username: row.username,
     email: row.email || null,
     displayName: row.display_name || null,
     profileImageUrl: row.profile_image_url || null,
+    phoneNumber: row.phone_number || null,
     profileUpdatedAt: row.profile_updated_at || null,
   };
 }
@@ -69,15 +87,21 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'invalid_profile_image_url' });
   }
 
+  const phoneNumber = cleanPhoneNumber(req.body?.phoneNumber);
+  if (phoneNumber && typeof phoneNumber === 'object') {
+    return res.status(400).json({ error: 'invalid_phone_number' });
+  }
+
   try {
     await ensurePointsSchema(schemaSql);
     const rows = await sql`
       UPDATE points_users
          SET display_name = ${displayName},
              profile_image_url = ${profileImageUrl},
+             phone_number = ${phoneNumber},
              profile_updated_at = NOW()
        WHERE turnkey_sub_org_id = ${session.sub}
-       RETURNING username, email, display_name, profile_image_url, profile_updated_at
+       RETURNING username, email, display_name, profile_image_url, phone_number, profile_updated_at
     `;
     if (rows.length === 0) return res.status(404).json({ error: 'user_not_found' });
     return res.status(200).json({ ok: true, profile: serializeProfile(rows[0]) });

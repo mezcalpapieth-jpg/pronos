@@ -18,6 +18,7 @@ test('admin stats includes invested volume, site time, publicity links, and per-
   assert.match(statsSource, /signupRows/);
   assert.match(statsSource, /display_name/);
   assert.match(statsSource, /profile_image_url/);
+  assert.match(statsSource, /phone_number/);
   assert.match(statsSource, /volume:\s*\{/);
   assert.match(statsSource, /siteTime:\s*\{/);
   assert.match(statsSource, /publicity:\s*\{/);
@@ -30,6 +31,7 @@ test('admin stats includes invested volume, site time, publicity links, and per-
   assert.match(statsSource, /hiddenUsers:/);
   assert.match(statsSource, /displayName:\s*r\.display_name/);
   assert.match(statsSource, /profileImageUrl:\s*r\.profile_image_url/);
+  assert.match(statsSource, /phoneNumber:\s*r\.phone_number \|\| null/);
   assert.doesNotMatch(statsSource, /rn <= CASE WHEN kind = 'referral_bonus'/);
 });
 
@@ -51,6 +53,7 @@ test('site-time and publicity analytics tables are present in runtime and manual
     assert.match(migrationSource, /PRIMARY KEY \(visitor_key, source, day\)/);
     assert.match(migrationSource, /username\s+TEXT PRIMARY KEY/);
     assert.match(migrationSource, /idx_points_users_created_at/);
+    assert.match(migrationSource, /phone_number\s+TEXT/);
     assert.match(migrationSource, /idx_points_distributions_created_kind_user/);
   }
 });

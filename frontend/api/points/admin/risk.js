@@ -85,6 +85,7 @@ function formatAccountRow(row) {
   return {
     username: row.username,
     email: row.email || null,
+    phoneNumber: row.phoneNumber || null,
     balance: toNumber(row.balance),
     reviewStatus: row.reviewStatus || 'clear',
     reviewReason: row.reviewReason || '',
@@ -313,6 +314,7 @@ async function handleList(req, res) {
         SELECT
           u.username AS "username",
           u.email AS "email",
+          u.phone_number AS "phoneNumber",
           u.created_at AS "createdAt",
           COALESCE(b.balance, 0)::float AS "balance",
           COALESCE(r.status, 'clear') AS "reviewStatus",

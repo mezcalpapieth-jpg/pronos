@@ -7,7 +7,7 @@
  * Response:
  *   {
  *     authenticated: true, suborgId, username, email, walletAddress, balance,
- *     displayName, profileImageUrl, reviewStatus, phoneRequired, apiBlockedAt
+ *     displayName, profileImageUrl, phoneNumber, reviewStatus, phoneRequired, apiBlockedAt
  *   }
  *   or
  *   { authenticated: false }
@@ -50,7 +50,7 @@ export default async function handler(req, res) {
       await ensurePointsSchema(schemaSql);
       const rows = await sql`
         SELECT u.turnkey_sub_org_id, u.wallet_address, u.username, u.email,
-               u.display_name, u.profile_image_url,
+               u.display_name, u.profile_image_url, u.phone_number,
                u.api_blocked_at,
                COALESCE(r.status, 'clear') AS review_status,
                COALESCE(b.balance, 0) AS balance
@@ -74,6 +74,7 @@ export default async function handler(req, res) {
         email: r.email || session.email || null,
         displayName: r.display_name || null,
         profileImageUrl: r.profile_image_url || null,
+        phoneNumber: r.phone_number || null,
         reviewStatus,
         phoneRequired: reviewStatus === 'phone_required',
         apiBlockedAt: r.api_blocked_at || null,

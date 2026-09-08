@@ -296,6 +296,8 @@ test('Points admin stats shows signup sheet and per-user distribution detail', (
   assert.match(source, /AdminUserSignupPanel/);
   assert.match(source, /Usuarios registrados/);
   assert.match(source, /row\.email/);
+  assert.match(source, /row\.phoneNumber/);
+  assert.match(source, /Sin teléfono/);
   assert.match(source, /row\.publicitySource/);
   assert.match(source, /AdminDistributionsPanel/);
   assert.match(source, /Distribuciones por usuario/);

@@ -321,6 +321,7 @@ export default async function handler(req, res) {
           SELECT
             u.username,
             u.email,
+            u.phone_number,
             u.display_name,
             u.profile_image_url,
             u.created_at
@@ -352,6 +353,7 @@ export default async function handler(req, res) {
         SELECT
           ru.username,
           ru.email,
+          ru.phone_number,
           ru.display_name,
           ru.profile_image_url,
           ru.created_at,
@@ -397,6 +399,7 @@ export default async function handler(req, res) {
       userSignups: signupRows.map(r => ({
         username: r.username,
         email: r.email,
+        phoneNumber: r.phone_number || null,
         displayName: r.display_name || null,
         profileImageUrl: r.profile_image_url || null,
         createdAt: r.created_at,

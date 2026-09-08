@@ -4819,6 +4819,7 @@ function RiskPanel() {
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8, fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+                  <RiskMetric label="Teléfono" value={row.phoneNumber || 'Sin teléfono'} />
                   <RiskMetric label="Trades 30d" value={adminNumber(row.tradeCount)} />
                   <RiskMetric label="Mercados" value={adminNumber(row.marketCount)} />
                   <RiskMetric label="Compras" value={adminMxnp(row.buyVolume)} />
@@ -5927,7 +5928,7 @@ function AdminUserSignupPanel({ users, totalUsers }) {
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <div style={{
-            minWidth: 960,
+            minWidth: 1110,
             display: 'grid',
             gap: 0,
             fontFamily: 'var(--font-mono)',
@@ -5935,7 +5936,7 @@ function AdminUserSignupPanel({ users, totalUsers }) {
           }}>
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'minmax(220px, 1.1fr) minmax(210px, 1.15fr) minmax(90px, 0.55fr) minmax(110px, 0.6fr) minmax(90px, 0.45fr) minmax(125px, 0.6fr)',
+              gridTemplateColumns: 'minmax(220px, 1.1fr) minmax(210px, 1.05fr) minmax(150px, 0.75fr) minmax(90px, 0.5fr) minmax(110px, 0.6fr) minmax(90px, 0.45fr) minmax(125px, 0.6fr)',
               gap: 12,
               padding: '0 0 8px',
               borderBottom: '1px solid var(--border)',
@@ -5945,6 +5946,7 @@ function AdminUserSignupPanel({ users, totalUsers }) {
             }}>
               <span>Usuario</span>
               <span>Email</span>
+              <span>Teléfono</span>
               <span>Origen</span>
               <span style={{ textAlign: 'right' }}>Balance</span>
               <span style={{ textAlign: 'right' }}>Trades</span>
@@ -5953,7 +5955,7 @@ function AdminUserSignupPanel({ users, totalUsers }) {
             {rows.map(row => (
               <div key={row.username} style={{
                 display: 'grid',
-                gridTemplateColumns: 'minmax(220px, 1.1fr) minmax(210px, 1.15fr) minmax(90px, 0.55fr) minmax(110px, 0.6fr) minmax(90px, 0.45fr) minmax(125px, 0.6fr)',
+                gridTemplateColumns: 'minmax(220px, 1.1fr) minmax(210px, 1.05fr) minmax(150px, 0.75fr) minmax(90px, 0.5fr) minmax(110px, 0.6fr) minmax(90px, 0.45fr) minmax(125px, 0.6fr)',
                 gap: 12,
                 alignItems: 'center',
                 padding: '10px 0',
@@ -6002,6 +6004,15 @@ function AdminUserSignupPanel({ users, totalUsers }) {
                   color: row.email ? 'var(--text-secondary)' : 'var(--text-muted)',
                 }}>
                   {row.email || 'Sin email'}
+                </span>
+                <span style={{
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  color: row.phoneNumber ? 'var(--text-secondary)' : 'var(--text-muted)',
+                }}>
+                  {row.phoneNumber || 'Sin teléfono'}
                 </span>
                 <span style={{
                   color: row.publicitySource ? 'var(--orange)' : 'var(--text-muted)',

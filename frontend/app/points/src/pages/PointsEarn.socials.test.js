@@ -48,7 +48,10 @@ test('usuario page lets users personalize a public profile', () => {
   assert.match(source, /saveProfileSettings/);
   assert.match(source, /function ProfileSettingsCard/);
   assert.match(source, /profileImageUrl/);
-  assert.match(source, /Tu email se mantiene privado y solo lo ven admins/);
+  assert.match(source, /phoneNumber/);
+  assert.match(source, /Añade tu teléfono/);
+  assert.match(source, /Teléfono privado/);
+  assert.match(source, /Tu email y teléfono se mantienen privados y solo los ven admins/);
   assert.match(source, /Ver perfil público/);
   assert.match(source, /<ProfileSettingsCard user=\{user\} onSaved=\{refresh\} \/>/);
 });

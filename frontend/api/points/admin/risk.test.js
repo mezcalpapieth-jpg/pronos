@@ -14,6 +14,8 @@ test('admin risk endpoint is admin-only and read/review scoped', () => {
   assert.match(source, /USERNAME_RE/);
   assert.match(source, /ON CONFLICT \(username\) DO UPDATE/);
   assert.match(source, /points_account_reviews/);
+  assert.match(source, /u\.phone_number AS "phoneNumber"/);
+  assert.match(source, /phoneNumber: row\.phoneNumber \|\| null/);
   assert.match(source, /LEFT\(signal_hash, 12\)/);
 });
 

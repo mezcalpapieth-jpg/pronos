@@ -52,6 +52,25 @@ function toDetailShape(market) {
   return rest;
 }
 
+function handleProfileUpdate(body = {}) {
+  const state = updateDemoState(s => {
+    s.user.displayName = String(body.displayName || '').trim() || null;
+    s.user.profileImageUrl = String(body.profileImageUrl || '').trim() || null;
+    s.user.phoneNumber = String(body.phoneNumber || '').trim() || null;
+  });
+  return json({
+    ok: true,
+    profile: {
+      username: state.user.username,
+      email: state.user.email || null,
+      displayName: state.user.displayName || null,
+      profileImageUrl: state.user.profileImageUrl || null,
+      phoneNumber: state.user.phoneNumber || null,
+      profileUpdatedAt: new Date().toISOString(),
+    },
+  });
+}
+
 // ─── Demo news feed ─────────────────────────────────────────────────────────
 
 const DEMO_NEWS_SOURCES = [
@@ -1448,6 +1467,7 @@ export function routeDemoRequest(url, method, body) {
       case '/api/points/buy': return handleBuy(state, body || {});
       case '/api/points/quote-sell': return handleQuoteSell(state, body || {});
       case '/api/points/sell': return handleSell(state, body || {});
+      case '/api/points/profile': return handleProfileUpdate(body || {});
       default: return json({ ok: true });
     }
   }

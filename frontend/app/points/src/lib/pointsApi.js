@@ -164,6 +164,10 @@ const PUBLIC_ERROR_COPY = {
     es: 'Usa una URL válida de imagen que empiece con https:// o http://.',
     en: 'Use a valid image URL that starts with https:// or http://.',
   },
+  invalid_phone_number: {
+    es: 'Usa un teléfono válido con 7 a 15 dígitos.',
+    en: 'Use a valid phone number with 7 to 15 digits.',
+  },
   invalid_market_image_url: {
     es: 'Usa una URL de imagen válida o una ruta interna como /market-placeholders/deportes.svg.',
     en: 'Use a valid image URL or an internal path like /market-placeholders/deportes.svg.',
@@ -369,8 +373,8 @@ export async function fetchSocialLinks() {
   return getJson('/api/points/social-links');
 }
 
-export async function saveProfileSettings({ displayName, profileImageUrl }) {
-  return postJson('/api/points/profile', { displayName, profileImageUrl });
+export async function saveProfileSettings({ displayName, profileImageUrl, phoneNumber }) {
+  return postJson('/api/points/profile', { displayName, profileImageUrl, phoneNumber });
 }
 
 // ─── Public API keys ───────────────────────────────────────────────────────

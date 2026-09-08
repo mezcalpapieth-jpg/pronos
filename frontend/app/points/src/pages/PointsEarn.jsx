@@ -995,6 +995,8 @@ function ProfileSettingsCard({ user, onSaved }) {
   const lang = useLang();
   const [displayName, setDisplayName] = useState(user?.displayName || '');
   const [profileImageUrl, setProfileImageUrl] = useState(user?.profileImageUrl || '');
+  const [phoneNumber, setPhoneNumber] = useState(user?.phoneNumber || '');
+  const [phoneOpen, setPhoneOpen] = useState(() => Boolean(user?.phoneRequired || user?.phoneNumber));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [ok, setOk] = useState(null);
@@ -1004,14 +1006,16 @@ function ProfileSettingsCard({ user, onSaved }) {
   useEffect(() => {
     setDisplayName(user?.displayName || '');
     setProfileImageUrl(user?.profileImageUrl || '');
-  }, [user?.displayName, user?.profileImageUrl]);
+    setPhoneNumber(user?.phoneNumber || '');
+    if (user?.phoneRequired || user?.phoneNumber) setPhoneOpen(true);
+  }, [user?.displayName, user?.profileImageUrl, user?.phoneNumber, user?.phoneRequired]);
 
   async function handleSave() {
     setBusy(true);
     setErr(null);
     setOk(null);
     try {
-      await saveProfileSettings({ displayName, profileImageUrl });
+      await saveProfileSettings({ displayName, profileImageUrl, phoneNumber });
       await onSaved?.();
       setOk(lang === 'en' ? 'Profile saved.' : 'Perfil guardado.');
     } catch (e) {
@@ -1029,8 +1033,8 @@ function ProfileSettingsCard({ user, onSaved }) {
       </h3>
       <p style={panelBodyStyle}>
         {lang === 'en'
-          ? 'Add a name and profile picture for your public profile. Your email stays private and is only visible to admins.'
-          : 'Agrega tu nombre y foto para tu perfil público. Tu email se mantiene privado y solo lo ven admins.'}
+          ? 'Add a name and profile picture for your public profile. Your email and phone stay private and are only visible to admins.'
+          : 'Agrega tu nombre y foto para tu perfil público. Tu email y teléfono se mantienen privados y solo los ven admins.'}
       </p>
       {user?.phoneRequired && (
         <div style={{
@@ -1040,8 +1044,8 @@ function ProfileSettingsCard({ user, onSaved }) {
           background: 'rgba(255,80,0,0.08)',
         }}>
           {lang === 'en'
-            ? 'Phone verification requested: add or confirm your phone with the team before prize/API review.'
-            : 'Verificación telefónica solicitada: agrega o confirma tu teléfono con el equipo antes de revisión de premios/API.'}
+            ? 'Phone verification requested: add your phone here and save your profile so the team can contact you.'
+            : 'Verificación telefónica solicitada: agrega tu teléfono aquí y guarda tu perfil para que el equipo pueda contactarte.'}
         </div>
       )}
       {user?.apiBlockedAt && (
@@ -1144,6 +1148,43 @@ function ProfileSettingsCard({ user, onSaved }) {
             style={profileInputStyle}
           />
         </label>
+        <div style={profilePhoneBoxStyle}>
+          <button
+            type="button"
+            onClick={() => setPhoneOpen(open => !open)}
+            style={socialActionButtonStyle({ primary: user?.phoneRequired && !phoneOpen })}
+          >
+            {phoneOpen
+              ? (lang === 'en' ? 'Hide phone' : 'Ocultar teléfono')
+              : phoneNumber?.trim()
+                ? (lang === 'en' ? 'Edit phone' : 'Editar teléfono')
+                : (lang === 'en' ? 'Add your phone' : 'Añade tu teléfono')}
+          </button>
+          {phoneOpen && (
+            <label style={{ ...profileFieldLabelStyle, marginTop: 10 }}>
+              {lang === 'en' ? 'Private phone' : 'Teléfono privado'}
+              <input
+                type="tel"
+                autoComplete="tel"
+                inputMode="tel"
+                value={phoneNumber}
+                onChange={(e) => {
+                  setPhoneNumber(e.target.value);
+                  setErr(null);
+                  setOk(null);
+                }}
+                maxLength={32}
+                placeholder={lang === 'en' ? '+52 55 0000 0000' : '+52 55 0000 0000'}
+                style={profileInputStyle}
+              />
+              <span style={profileFieldHintStyle}>
+                {lang === 'en'
+                  ? 'We will only use it to coordinate prizes or account review.'
+                  : 'Lo usaremos solo para coordinar premios o revisión de cuenta.'}
+              </span>
+            </label>
+          )}
+        </div>
       </div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 16 }}>
         <button
@@ -1487,6 +1528,22 @@ const profileInputStyle = {
   fontFamily: 'var(--font-body)',
   fontSize: 14,
   outline: 'none',
+};
+
+const profilePhoneBoxStyle = {
+  border: '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 8,
+  padding: 10,
+  background: 'rgba(255,255,255,0.025)',
+};
+
+const profileFieldHintStyle = {
+  color: 'var(--text-muted)',
+  fontFamily: 'var(--font-body)',
+  fontSize: 12,
+  letterSpacing: 0,
+  lineHeight: 1.45,
+  textTransform: 'none',
 };
 
 const noticeStyle = {
