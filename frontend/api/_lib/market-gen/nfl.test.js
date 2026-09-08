@@ -54,69 +54,74 @@ function nflEvent({
 }
 
 test('NFL generator emits preseason ESPN binary markets', async () => {
-  const originalFetch = globalThis.fetch;
-  const kickoff = new Date(Date.now() + 24 * 3600_000).toISOString();
-  globalThis.fetch = async () => ({
-    ok: true,
-    json: async () => ({
-      season: { type: { type: 1, name: 'Preseason' } },
-      events: [
-        nflEvent({ id: '401873278', date: kickoff }),
-        nflEvent({
-          id: 'tbd',
-          date: new Date(Date.now() + 36 * 3600_000).toISOString(),
-          timeValid: false,
-          shortDetail: 'TBD',
+  const now = new Date('2026-09-08T12:00:00Z');
+  const kickoff = new Date(now.getTime() + 6 * 24 * 3600_000).toISOString();
+  let capturedUrl = '';
+
+  const specs = await generateNflMarkets({
+    now,
+    fetchImpl: async (url) => {
+      capturedUrl = String(url);
+      return {
+        ok: true,
+        json: async () => ({
+          season: { type: { type: 1, name: 'Preseason' } },
+          events: [
+            nflEvent({ id: '401873278', date: kickoff }),
+            nflEvent({
+              id: 'tbd',
+              date: new Date(now.getTime() + 36 * 3600_000).toISOString(),
+              timeValid: false,
+              shortDetail: 'TBD',
+            }),
+          ],
         }),
-      ],
-    }),
+      };
+    },
   });
 
-  try {
-    const specs = await generateNflMarkets();
-    assert.equal(specs.length, 1);
-    assert.equal(specs[0].source, 'espn-nfl');
-    assert.equal(specs[0].sport, 'nfl');
-    assert.equal(specs[0].league, 'nfl');
-    assert.match(specs[0].question, /pretemporada NFL/);
-    assert.deepEqual(specs[0].outcomes, ['Atlanta Falcons', 'Denver Broncos']);
-    assert.deepEqual(specs[0].outcome_images, ['atl.png', 'den.png']);
-    assert.deepEqual(specs[0].resolver_config, {
-      source: 'espn',
-      leaguePath: 'football/nfl',
-      eventId: '401873278',
-      dateYmd: kickoff.slice(0, 10),
-      shape: 'binary',
-    });
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+  assert.match(capturedUrl, /dates=20260908-20260915/);
+  assert.equal(specs.length, 1);
+  assert.equal(specs[0].source, 'espn-nfl');
+  assert.equal(specs[0].sport, 'nfl');
+  assert.equal(specs[0].league, 'nfl');
+  assert.equal(specs[0].question, 'Denver Broncos @ Atlanta Falcons');
+  assert.equal(specs[0].source_data.matchupLabel, 'Denver Broncos @ Atlanta Falcons');
+  assert.equal(specs[0].source_data.season, 'pretemporada NFL');
+  assert.deepEqual(specs[0].outcomes, ['Atlanta Falcons', 'Denver Broncos']);
+  assert.deepEqual(specs[0].outcome_images, ['atl.png', 'den.png']);
+  assert.deepEqual(specs[0].resolver_config, {
+    source: 'espn',
+    leaguePath: 'football/nfl',
+    eventId: '401873278',
+    dateYmd: kickoff.slice(0, 10),
+    shape: 'binary',
+  });
 });
 
-test('NFL generator labels regular season without preseason copy', async () => {
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => ({
-    ok: true,
-    json: async () => ({
-      season: { type: { type: 2, name: 'Regular Season' } },
-      events: [
-        nflEvent({
-          id: 'regular',
-          date: new Date(Date.now() + 24 * 3600_000).toISOString(),
-          seasonType: 2,
-          seasonSlug: 'regular-season',
-        }),
-      ],
+test('NFL generator keeps visible title to matchup label during regular season', async () => {
+  const now = new Date('2026-09-08T12:00:00Z');
+
+  const specs = await generateNflMarkets({
+    now,
+    fetchImpl: async () => ({
+      ok: true,
+      json: async () => ({
+        season: { type: { type: 2, name: 'Regular Season' } },
+        events: [
+          nflEvent({
+            id: 'regular',
+            date: new Date(now.getTime() + 24 * 3600_000).toISOString(),
+            seasonType: 2,
+            seasonSlug: 'regular-season',
+          }),
+        ],
+      }),
     }),
   });
 
-  try {
-    const specs = await generateNflMarkets();
-    assert.equal(specs.length, 1);
-    assert.match(specs[0].question, /en NFL\?$/);
-    assert.doesNotMatch(specs[0].question, /pretemporada/);
-    assert.equal(specs[0].source_data.season, 'NFL');
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+  assert.equal(specs.length, 1);
+  assert.equal(specs[0].question, 'Denver Broncos @ Atlanta Falcons');
+  assert.doesNotMatch(specs[0].question, /¿|NFL|pretemporada/);
+  assert.equal(specs[0].source_data.season, 'NFL');
 });

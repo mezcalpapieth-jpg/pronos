@@ -3,12 +3,12 @@
  *
  * ESPN's public NFL scoreboard covers preseason, regular season, and
  * postseason under the same football/nfl path. We keep scheduled games
- * in a short forward window and let the generic ESPN sports resolver
+ * in a one-week forward window and let the generic ESPN sports resolver
  * settle them once ESPN marks the event completed.
  */
 
 const BASE = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard';
-const HORIZON_DAYS = 4;
+const HORIZON_DAYS = 7;
 
 function formatDateCompact(d) {
   const pad = (n) => String(n).padStart(2, '0');
@@ -27,15 +27,18 @@ function teamLogo(competitor) {
   return competitor?.team?.logo || competitor?.team?.logos?.[0]?.href || null;
 }
 
-export async function generateNflMarkets() {
-  const now = new Date();
-  const horizon = new Date(now.getTime() + HORIZON_DAYS * 86_400_000);
-  const range = `${formatDateCompact(now)}-${formatDateCompact(horizon)}`;
+export async function generateNflMarkets({
+  now = new Date(),
+  fetchImpl = fetch,
+} = {}) {
+  const current = now instanceof Date ? now : new Date(now);
+  const horizon = new Date(current.getTime() + HORIZON_DAYS * 86_400_000);
+  const range = `${formatDateCompact(current)}-${formatDateCompact(horizon)}`;
   const url = `${BASE}?dates=${range}&limit=500`;
 
   let data;
   try {
-    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    const res = await fetchImpl(url, { headers: { Accept: 'application/json' } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     data = await res.json();
   } catch (e) {
@@ -66,13 +69,14 @@ export async function generateNflMarkets() {
     const endTime = new Date(kickoffMs + 4 * 3600_000).toISOString();
     const dateYmd = new Date(kickoff).toISOString().slice(0, 10);
     const label = seasonLabel(ev, data?.season);
+    const matchupLabel = `${away.team.displayName} @ ${home.team.displayName}`;
 
     specs.push({
       source: 'espn-nfl',
       source_event_id: String(ev.id),
       sport: 'nfl',
       league: 'nfl',
-      question: `¿Quién gana ${away.team.displayName} @ ${home.team.displayName} en ${label}?`,
+      question: matchupLabel,
       category: 'deportes',
       icon: '🏈',
       outcomes: [home.team.displayName, away.team.displayName],
@@ -92,6 +96,7 @@ export async function generateNflMarkets() {
       source_data: {
         eventId: ev.id,
         kickoffUtc: kickoff,
+        matchupLabel,
         league: 'NFL',
         season: label,
         week: ev?.week?.number ?? data?.week?.number ?? null,

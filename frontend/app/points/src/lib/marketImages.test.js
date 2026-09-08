@@ -41,6 +41,15 @@ test('sports markets render league-specific badge art when league metadata is pr
   const svg = decodedBadgeSvg(marketPlaceholderImageSrc(market));
   assert.match(svg, />UCL</);
   assert.match(svg, />Champions</);
+
+  const nfl = {
+    category: 'deportes',
+    sport: 'nfl',
+    league: 'nfl',
+    question: 'San Francisco 49ers @ Los Angeles Rams',
+  };
+  assert.equal(marketPlaceholderKey(nfl), 'league:nfl');
+  assert.match(decodedBadgeSvg(marketPlaceholderImageSrc(nfl)), />NFL</);
 });
 
 test('crypto markets render coin-specific badge art from resolver metadata', () => {

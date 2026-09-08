@@ -202,6 +202,7 @@ test('Points admin can edit active market logos and repair active parallel marke
   assert.match(source, /parallelYesProbabilityFromReserves/);
   assert.match(source, /Imagen del mercado/);
   assert.match(source, /initialMarketImageUrl/);
+  assert.match(source, /market=\{market\}/);
   assert.match(source, /imageUrl:\s*imageUrlPatch/);
   assert.match(source, /Logos de opciones/);
   assert.match(source, /initialOutcomeImages/);

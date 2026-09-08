@@ -262,17 +262,27 @@ function displayLiquiditiesForPendingRow(row, seedOverride = null, outcomesOverr
   return probabilities.map(probability => clampPendingLiquidity(avgSeed * seeds.length * probability));
 }
 
-function MarketImageField({ value, onChange, category, topic, question, label = 'Imagen del mercado' }) {
+function MarketImageField({ value, onChange, category, topic, question, market = null, label = 'Imagen del mercado' }) {
   const [previewFailed, setPreviewFailed] = useState(false);
   useEffect(() => {
     setPreviewFailed(false);
-  }, [value, category, topic, question]);
+  }, [value, category, topic, question, market]);
+
+  const marketTopicTags = Array.isArray(market?.topicTags)
+    ? market.topicTags
+    : Array.isArray(market?.topic_tags)
+      ? market.topic_tags
+      : [];
+  const previewTopicTags = topic ? [topic] : marketTopicTags;
 
   const previewMarket = {
+    ...(market && typeof market === 'object' ? market : {}),
     imageUrl: value,
-    category,
-    question,
-    topicTags: topic ? [topic] : [],
+    image_url: value,
+    category: category || market?.category,
+    question: question ?? market?.question,
+    topicTags: previewTopicTags,
+    topic_tags: previewTopicTags,
   };
   const fallback = marketPlaceholderImageSrc(previewMarket);
   const previewSrc = previewFailed ? fallback : marketImageSrc(previewMarket);
@@ -3996,6 +4006,7 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
         <MarketImageField
           value={imageUrl}
           onChange={setImageUrl}
+          market={market}
           category={category}
           question={question}
         />
