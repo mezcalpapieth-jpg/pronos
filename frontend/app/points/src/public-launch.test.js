@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const navSource = await readFile(new URL('./components/PointsNav.jsx', import.meta.url), 'utf8');
+const pointsCssSource = await readFile(new URL('./points.css', import.meta.url), 'utf8');
+const sharedComponentsCssSource = await readFile(new URL('../../../css/components.css', import.meta.url), 'utf8');
 const apiSource = await readFile(new URL('./lib/pointsApi.js', import.meta.url), 'utf8');
 const homeSource = await readFile(new URL('./pages/PointsHome.jsx', import.meta.url), 'utf8');
 const categorySource = await readFile(new URL('./pages/PointsCategoryPage.jsx', import.meta.url), 'utf8');
@@ -26,6 +28,15 @@ test('public points search uses all active markets and does not render stored ma
   assert.match(navSource, /fetchMarkets\(\{\s*status:\s*'active',\s*featured:\s*'all',\s*limit:\s*250\s*\}\)/);
   assert.doesNotMatch(navSource, /\{m\.icon\}/);
   assert.match(navSource, /background:\s*'var\(--orange\)'/);
+});
+
+test('points nav keeps the logo intact at squeezed widths', () => {
+  assert.match(navSource, /className=\{`points-nav\$\{scrolled \? ' scrolled' : ''\}`\}/);
+  assert.match(sharedComponentsCssSource, /\.nav-logo\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*flex:\s*0 0 auto;[\s\S]*line-height:\s*1;[\s\S]*white-space:\s*nowrap;/);
+  assert.match(sharedComponentsCssSource, /\.nav-logo \.green-dot\s*\{[\s\S]*flex:\s*0 0 auto;/);
+  assert.match(pointsCssSource, /@media \(max-width: 1360px\)\s*\{[\s\S]*?\.points-nav \.points-nav-search\s*\{[\s\S]*?max-width:\s*300px !important;[\s\S]*?\.points-nav \.nav-links a\s*\{[\s\S]*?font-size:\s*11px !important;/);
+  assert.match(pointsCssSource, /@media \(max-width: 1180px\)\s*\{[\s\S]*?\.points-nav \.points-mobile-menu\s*\{[\s\S]*?display:\s*block;/);
+  assert.match(pointsCssSource, /@media \(max-width: 768px\)\s*\{[\s\S]*?\.points-nav \.points-nav-search\s*\{[\s\S]*?max-width:\s*190px !important;/);
 });
 
 test('portfolio nav surfaces claimable resolved winnings count', () => {

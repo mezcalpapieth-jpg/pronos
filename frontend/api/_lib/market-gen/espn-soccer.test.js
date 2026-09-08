@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { _internal } from './espn-soccer.js';
+import { generateEspnSoccerMarkets, _internal } from './espn-soccer.js';
 
 function espnEvent({
   id = '401863600',
@@ -72,12 +72,45 @@ test('international friendlies remain three-way and carry an international label
   assert.equal(spec.source_data.matchTypeLabel, 'INTERNACIONAL');
 });
 
-test('ESPN soccer configs import all fetched MLS and club friendly events', () => {
+test('club friendly feed is limited to the summer break while MLS stays year-round', () => {
   const mls = _internal.ESPN_SOCCER_LEAGUES.find(c => c.league === 'mls');
   const clubFriendly = _internal.ESPN_SOCCER_LEAGUES.find(c => c.league === 'club-friendlies');
 
   assert.equal(mls.whitelist, undefined);
   assert.equal(clubFriendly.whitelist, undefined);
+  assert.equal(_internal.shouldFetchLeagueEvents(mls, new Date('2026-09-08T12:00:00Z')), true);
+  assert.equal(_internal.shouldFetchLeagueEvents(clubFriendly, new Date('2026-09-08T12:00:00Z')), false);
+  assert.equal(_internal.shouldFetchLeagueEvents(clubFriendly, new Date('2026-07-10T12:00:00Z')), true);
+});
+
+test('generator does not fetch club friendlies outside the summer break', async () => {
+  const requestedLeagueCodes = [];
+  await generateEspnSoccerMarkets({
+    now: new Date('2026-09-08T12:00:00Z'),
+    fetchLeagueEventsFn: async (leagueCode) => {
+      requestedLeagueCodes.push(leagueCode);
+      return [];
+    },
+  });
+
+  assert.ok(requestedLeagueCodes.includes('mex.1'));
+  assert.ok(requestedLeagueCodes.includes('usa.1'));
+  assert.ok(requestedLeagueCodes.includes('concacaf.leagues.cup'));
+  assert.ok(requestedLeagueCodes.includes('fifa.friendly'));
+  assert.equal(requestedLeagueCodes.includes('club.friendly'), false);
+});
+
+test('ESPN soccer events with placeholder team names are skipped', () => {
+  const config = _internal.ESPN_SOCCER_LEAGUES.find(c => c.league === 'club-friendlies');
+
+  assert.equal(
+    _internal.eventToSpec(espnEvent({ homeName: 'TBD Home', awayName: 'Ksour Essef' }), config),
+    null,
+  );
+  assert.equal(
+    _internal.eventToSpec(espnEvent({ homeName: 'AS FAR', awayName: 'To Be Determined' }), config),
+    null,
+  );
 });
 
 test('legacy club friendly whitelist remains available for manual inspection', () => {

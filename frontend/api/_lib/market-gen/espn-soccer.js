@@ -1,6 +1,6 @@
 /**
  * ESPN-backed soccer generator for Liga MX, MLS, Leagues Cup,
- * international friendlies, and club friendlies.
+ * international friendlies, and summer-break club friendlies.
  *
  * Why not football-data.org: Liga MX and MLS are both paywalled on
  * their free tier, and the user specifically wants Liga MX/MLS coverage.
@@ -12,7 +12,7 @@
  *   - `usa.1` (MLS): every scheduled game inside the 14-day window
  *   - `concacaf.leagues.cup` (Leagues Cup): all scheduled games
  *   - `fifa.friendly` (international friendlies): all scheduled games
- *   - `club.friendly` (club friendlies): every scheduled game in the feed
+ *   - `club.friendly` (club friendlies): summer-break games only
  *
  * Outcome shape: regular league/friendly fixtures are 3-way W/D/L.
  * Leagues Cup is binary because knockout-style tournament games must
@@ -21,6 +21,8 @@
 
 const BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer';
 const HORIZON_DAYS = 14;
+const SUMMER_BREAK_MONTHS_UTC = new Set([5, 6, 7]); // June, July, August
+const PLACEHOLDER_TEAM_RE = /^(?:tbd|to be determined)(?:\s|$)/i;
 
 // Legacy whitelists kept for tests/manual reference. Generation no longer
 // filters by team: every event in the fetched ESPN feeds enters pending.
@@ -111,6 +113,7 @@ const ESPN_SOCCER_LEAGUES = [
     leagueLabel: 'Club Friendly',
     outcomeShape: 'draw3',
     matchTypeLabel: 'AMISTOSO',
+    summerBreakOnly: true,
   },
 ];
 
@@ -145,6 +148,21 @@ function eventMatchesWhitelist(ev, whitelist) {
   return eventTeamNames(ev).some(n => whitelist.has(n));
 }
 
+function isSummerBreakDate(date = new Date()) {
+  const d = date instanceof Date ? date : new Date(date);
+  if (!Number.isFinite(d.getTime())) return false;
+  return SUMMER_BREAK_MONTHS_UTC.has(d.getUTCMonth());
+}
+
+function shouldFetchLeagueEvents(config, now = new Date()) {
+  if (!config?.summerBreakOnly) return true;
+  return isSummerBreakDate(now);
+}
+
+function isPlaceholderTeamName(name) {
+  return PLACEHOLDER_TEAM_RE.test(String(name || '').trim());
+}
+
 /**
  * Convert an ESPN soccer event into the shared market-spec shape used
  * by points_pending_markets. Returns null for events we should skip.
@@ -168,6 +186,7 @@ function eventToSpec(ev, {
   const homeName = home?.team?.displayName;
   const awayName = away?.team?.displayName;
   if (!homeName || !awayName) return null;
+  if (isPlaceholderTeamName(homeName) || isPlaceholderTeamName(awayName)) return null;
 
   // Auto-resolver waits for ESPN's `completed=true` anyway, so end_time
   // is just the hard close if the scoreboard stalls. Binary tournament
@@ -221,15 +240,18 @@ function eventToSpec(ev, {
   };
 }
 
-export async function generateEspnSoccerMarkets() {
-  const now = new Date();
+export async function generateEspnSoccerMarkets({
+  now = new Date(),
+  fetchLeagueEventsFn = fetchLeagueEvents,
+} = {}) {
   const horizon = new Date(now.getTime() + HORIZON_DAYS * 86_400_000);
   const dateRange = `${formatDateCompact(now)}-${formatDateCompact(horizon)}`;
 
   const specs = [];
 
   for (const config of ESPN_SOCCER_LEAGUES) {
-    for (const ev of await fetchLeagueEvents(config.leagueCode, dateRange)) {
+    if (!shouldFetchLeagueEvents(config, now)) continue;
+    for (const ev of await fetchLeagueEventsFn(config.leagueCode, dateRange)) {
       if (!eventMatchesWhitelist(ev, config.whitelist)) continue;
       const spec = eventToSpec(ev, config);
       if (spec) specs.push(spec);
@@ -248,4 +270,7 @@ export const _internal = {
   eventTeamNames,
   eventToSpec,
   formatDateCompact,
+  isPlaceholderTeamName,
+  isSummerBreakDate,
+  shouldFetchLeagueEvents,
 };

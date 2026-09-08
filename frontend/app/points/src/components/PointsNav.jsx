@@ -252,7 +252,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
   const balanceLabel = formatBalance(balance);
 
   return (
-    <nav id="nav" className={scrolled ? 'scrolled' : ''}>
+    <nav id="nav" className={`points-nav${scrolled ? ' scrolled' : ''}`}>
       {/* Logo with pulsing green dot — matches .nav-logo .green-dot in
           frontend/css/components.css */}
       <Link to="/" className="nav-logo" style={{ textDecoration: 'none' }}>

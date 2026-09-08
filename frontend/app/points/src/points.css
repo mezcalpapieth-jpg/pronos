@@ -180,6 +180,67 @@
   white-space: nowrap;
 }
 
+/* Points nav has more controls than the MVP header, so collapse earlier. */
+.points-nav {
+  gap: 18px;
+  overflow: visible;
+}
+
+.points-nav .nav-logo {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.points-nav .nav-logo .green-dot {
+  flex: 0 0 auto;
+}
+
+.points-nav .nav-links {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1360px) {
+  .points-nav {
+    padding: 0 32px;
+    gap: 12px;
+  }
+
+  .points-nav .points-nav-search {
+    max-width: 300px !important;
+    margin: 0 10px !important;
+  }
+
+  .points-nav .nav-links {
+    gap: 16px;
+  }
+
+  .points-nav .nav-links a {
+    font-size: 11px !important;
+  }
+}
+
+@media (max-width: 1180px) {
+  .points-nav .points-mobile-menu {
+    display: block;
+  }
+
+  .points-nav .points-nav-search {
+    max-width: 280px !important;
+    margin: 0 10px !important;
+  }
+
+  .points-nav .nav-links {
+    gap: 12px;
+  }
+
+  .points-nav .nav-links a {
+    display: none;
+  }
+}
+
 /* Nav CTA for logged-out users */
 .nav-signup-cta {
   background: var(--green);
@@ -386,6 +447,33 @@
 }
 
 @media (max-width: 768px) {
+  .points-nav {
+    padding: 0 16px;
+    height: 56px;
+    gap: 8px;
+  }
+
+  .points-nav .nav-logo {
+    font-size: 22px;
+  }
+
+  .points-nav .points-nav-search {
+    flex: 1 1 130px !important;
+    max-width: 190px !important;
+    margin: 0 4px !important;
+  }
+
+  .points-nav .points-nav-search input {
+    height: 34px;
+    padding-top: 7px !important;
+    padding-bottom: 7px !important;
+    font-size: 11px !important;
+  }
+
+  .points-nav .points-nav-search > span {
+    top: 10px !important;
+  }
+
   .points-mobile-menu {
     display: block;
   }
