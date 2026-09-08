@@ -6,8 +6,10 @@
  * Active resolver types: chainlink_price, api_price, weather_api, aicm_delay_count,
  * aicm_delay_minutes_live,
  * api_chart, api_transcript, api_lcdlf, sports_api (espn / espn-pga / espn-liv / etc.).
- * manual_review/manual markets are not auto-settled; they are queued
- * into points_resolution_candidates when their close time passes.
+ * manual_review/manual markets are queued into
+ * points_resolution_candidates when their close time passes, except
+ * trusted Netflix Top 10 markets that can be settled from official
+ * Netflix evidence.
  *
  * NOTE: this is now the ONLY auto-resolver. The older
  * /api/cron/auto-resolve was a Polymarket-Gamma mirror for the
@@ -1270,6 +1272,252 @@ async function queueManualReviewCandidate({ market, cfg, sourceData, outcomes, d
   });
 }
 
+function netflixAutoResolveOutcome({ cfg, outcomes }) {
+  const outcome = Number(cfg?.suggestedOutcomeIndex ?? cfg?.outcomeIndex);
+  const configuredOutcomeCount = Number(cfg?.outcomeCount);
+  const outcomeCount = Array.isArray(outcomes) && outcomes.length > 0
+    ? outcomes.length
+    : (Number.isInteger(configuredOutcomeCount) && configuredOutcomeCount > 0 ? configuredOutcomeCount : 2);
+  if (!Number.isInteger(outcome) || outcome < 0 || outcome >= outcomeCount) return null;
+  return outcome;
+}
+
+function canAutoResolveNetflixManualReview({ market, cfg, sourceData, outcomes }) {
+  if (!isNetflixTop10Market({ cfg, row: market, sourceData })) return false;
+  if (cfg?.autoResolve !== true) return false;
+  if (netflixAutoResolveOutcome({ cfg, outcomes }) == null) return false;
+  const confidenceBps = Number(cfg?.confidenceBps || 0);
+  if (!Number.isFinite(confidenceBps) || confidenceBps < 7800) return false;
+  return Boolean(String(cfg?.finalScore || cfg?.finalScoreText || '').trim());
+}
+
+function resolutionCandidateAuditPatch(candidate, reviewer, action, outcomeIndex = null) {
+  return {
+    resolutionCandidate: {
+      id: Number(candidate.id),
+      resolverType: candidate.resolver_type,
+      source: candidate.source,
+      sourceEventId: candidate.source_event_id,
+      outcomeIndex,
+      confidenceBps: Number(candidate.confidence_bps) || 0,
+      observedAt: candidate.observed_at,
+      evidenceUrl: candidate.evidence_url,
+      action,
+      reviewer,
+      reviewedAt: new Date().toISOString(),
+    },
+  };
+}
+
+async function upsertConfirmedResolutionCandidate(client, candidate, { reviewer, adminNote, outcomeIndex }) {
+  const pending = await client.query(
+    `INSERT INTO points_resolution_candidates
+       (points_market_id, resolver_type, source, source_event_id,
+        outcome_index, outcome_count, confidence_bps, observed_at,
+        final_score, evidence_url, evidence, rationale, raw_report, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8::timestamptz, NOW()),
+             $9, $10, $11::jsonb, $12, $13::jsonb, 'pending')
+     ON CONFLICT (points_market_id) WHERE status = 'pending'
+     DO UPDATE SET
+       resolver_type = EXCLUDED.resolver_type,
+       source = EXCLUDED.source,
+       source_event_id = EXCLUDED.source_event_id,
+       outcome_index = EXCLUDED.outcome_index,
+       outcome_count = EXCLUDED.outcome_count,
+       confidence_bps = EXCLUDED.confidence_bps,
+       observed_at = EXCLUDED.observed_at,
+       final_score = EXCLUDED.final_score,
+       evidence_url = EXCLUDED.evidence_url,
+       evidence = EXCLUDED.evidence,
+       rationale = EXCLUDED.rationale,
+       raw_report = EXCLUDED.raw_report
+     RETURNING *`,
+    [
+      candidate.points_market_id,
+      candidate.resolver_type,
+      candidate.source,
+      candidate.source_event_id,
+      candidate.outcome_index,
+      candidate.outcome_count,
+      candidate.confidence_bps,
+      candidate.observed_at,
+      candidate.final_score,
+      candidate.evidence_url,
+      JSON.stringify(candidate.evidence),
+      candidate.rationale,
+      JSON.stringify(candidate.raw_report || {}),
+    ],
+  );
+  const pendingRows = Array.isArray(pending) ? pending : (pending.rows || []);
+  const pendingCandidate = pendingRows[0];
+  if (!pendingCandidate?.id) throw new Error('netflix_auto_candidate_upsert_failed');
+
+  const confirmed = await client.query(
+    `UPDATE points_resolution_candidates
+        SET status = 'confirmed',
+            outcome_index = $1,
+            reviewer = $2,
+            admin_note = $3,
+            reviewed_at = NOW()
+      WHERE id = $4
+        AND status = 'pending'
+      RETURNING *`,
+    [outcomeIndex, reviewer, adminNote, pendingCandidate.id],
+  );
+  const confirmedRows = Array.isArray(confirmed) ? confirmed : (confirmed.rows || []);
+  if (!confirmedRows[0]?.id) throw new Error('netflix_auto_candidate_confirm_failed');
+  return confirmedRows[0];
+}
+
+async function autoResolveNetflixManualReviewMarket({ market, cfg, sourceData, outcomes, dry, report }) {
+  if (!canAutoResolveNetflixManualReview({ market, cfg, sourceData, outcomes })) return false;
+
+  const candidate = buildPointsResolutionCandidateInsert(
+    buildManualReviewCandidate({ market, cfg, sourceData, outcomes }),
+  );
+  const outcome = netflixAutoResolveOutcome({ cfg, outcomes });
+  const reviewer = 'resolver:netflix-top10';
+  const adminNote = 'Auto-resolved from official Netflix Top 10 evidence.';
+  const finalScore = candidate.final_score || cfg?.finalScore || null;
+
+  if (dry) {
+    report.resolved.push({
+      id: market.id,
+      winningIdx: outcome,
+      finalScore,
+      source: candidate.source,
+      confidenceBps: candidate.confidence_bps,
+      reason: 'netflix_auto_resolve',
+      dry: true,
+    });
+    return true;
+  }
+
+  try {
+    await withTransaction(async (client) => {
+      const locked = await client.query(
+        `SELECT id, status, parent_id, amm_mode
+           FROM points_markets
+          WHERE id = $1
+          FOR UPDATE`,
+        [market.id],
+      );
+      const lockedMarket = locked.rows[0];
+      if (!lockedMarket) throw new Error('market_not_found');
+      if (lockedMarket.parent_id || lockedMarket.status !== 'active') {
+        const err = new Error('not_active_at_write');
+        err.benign = true;
+        throw err;
+      }
+
+      const relatedIdsResult = await client.query(
+        `SELECT id FROM points_markets
+          WHERE id = $1 OR parent_id = $1
+          ORDER BY id ASC
+          FOR UPDATE`,
+        [market.id],
+      );
+      const relatedIds = relatedIdsResult.rows.map(row => Number(row.id)).filter(Number.isFinite);
+
+      await bestEffortPersistTopHolderSnapshot(
+        client,
+        market.id,
+        'cron/points-auto-resolve:netflix',
+        { resolution: { winningOutcomeIndex: outcome } },
+      );
+      await releaseOpenLimitOrdersForMarkets(client, relatedIds.length > 0 ? relatedIds : [market.id], {
+        reason: 'market_resolved',
+      });
+
+      const confirmedCandidate = await upsertConfirmedResolutionCandidate(client, candidate, {
+        reviewer,
+        adminNote,
+        outcomeIndex: outcome,
+      });
+      const configPatch = {
+        ...(cfg || {}),
+        ...resolutionCandidateAuditPatch(confirmedCandidate, reviewer, 'auto-confirm', outcome),
+      };
+
+      const updated = await client.query(
+        `UPDATE points_markets
+            SET status = 'resolved',
+                outcome = $1,
+                resolved_at = NOW(),
+                resolved_by = $2,
+                resolver_type = COALESCE(resolver_type, $4),
+                resolver_config = COALESCE(resolver_config, '{}'::jsonb) || $5::jsonb
+          WHERE id = $3
+            AND status = 'active'
+          RETURNING id`,
+        [outcome, reviewer, market.id, candidate.resolver_type, JSON.stringify(configPatch)],
+      );
+      if (updated.rows.length === 0) {
+        const err = new Error('not_active_at_write');
+        err.benign = true;
+        throw err;
+      }
+
+      if (finalScore != null && finalScore !== '') {
+        try {
+          await client.query(
+            `UPDATE points_markets SET final_score = $1 WHERE id = $2`,
+            [String(finalScore).slice(0, 240), market.id],
+          );
+        } catch (e) {
+          if (e?.code !== '42703') throw e;
+        }
+      }
+
+      if (lockedMarket.amm_mode === 'parallel') {
+        const legs = await client.query(
+          `SELECT id FROM points_markets
+            WHERE parent_id = $1
+              AND status <> 'canceled'
+            ORDER BY id ASC
+            FOR UPDATE`,
+          [market.id],
+        );
+        if (outcome >= legs.rows.length) {
+          throw new Error(`invalid_outcome: parent has ${legs.rows.length} legs, winning index ${outcome} out of range`);
+        }
+        for (let i = 0; i < legs.rows.length; i += 1) {
+          const legWinningOutcome = i === outcome ? 0 : 1;
+          await client.query(
+            `UPDATE points_markets
+                SET status = 'resolved',
+                    outcome = $1,
+                    resolved_at = NOW(),
+                    resolved_by = $2
+              WHERE id = $3
+                AND status = 'active'`,
+            [legWinningOutcome, reviewer, legs.rows[i].id],
+          );
+        }
+      }
+
+      await bestEffortPersistResolvedCryptoMarketSnapshot(
+        client,
+        market.id,
+        'cron/points-auto-resolve:netflix',
+      );
+    });
+  } catch (e) {
+    if (e?.benign) return true;
+    throw e;
+  }
+
+  report.resolved.push({
+    id: market.id,
+    winningIdx: outcome,
+    finalScore,
+    source: candidate.source,
+    confidenceBps: candidate.confidence_bps,
+    reason: 'netflix_auto_resolved',
+  });
+  return true;
+}
+
 async function queueApiChartFallbackReview({ market, cfg, sourceData, outcomes, dry, report, error }) {
   const message = error?.message || 'No se pudo leer la fuente automática.';
   const reviewCfg = {
@@ -1552,6 +1800,15 @@ export async function runAutoResolve({ dry = false } = {}) {
             sourceData,
             outcomes: marketOutcomes,
           });
+          const autoResolved = await autoResolveNetflixManualReviewMarket({
+            market: m,
+            cfg: enriched.cfg,
+            sourceData: enriched.sourceData,
+            outcomes: marketOutcomes,
+            dry,
+            report,
+          });
+          if (autoResolved) continue;
           await queueManualReviewCandidate({
             market: m,
             cfg: enriched.cfg,
@@ -1561,7 +1818,7 @@ export async function runAutoResolve({ dry = false } = {}) {
             report,
           });
         } catch (e) {
-          report.errors.push({ id: m.id, error: `manual_review_queue_failed: ${e.message}` });
+          report.errors.push({ id: m.id, error: `manual_review_process_failed: ${e.message}` });
         }
         continue;
       }

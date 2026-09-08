@@ -4,8 +4,8 @@ import { readFileSync } from 'node:fs';
 
 const SOURCE = readFileSync(new URL('./points-auto-resolve.js', import.meta.url), 'utf8');
 
-test('points auto-resolver queues manual-review markets instead of auto-paying them', () => {
-  assert.match(SOURCE, /manual_review\/manual markets are not auto-settled/);
+test('points auto-resolver queues ordinary manual-review markets', () => {
+  assert.match(SOURCE, /manual_review\/manual markets are queued/);
   assert.match(SOURCE, /buildPointsResolutionCandidateInsert/);
   assert.match(SOURCE, /points_resolution_candidates/);
   assert.match(SOURCE, /manual_review_queued/);
@@ -28,11 +28,16 @@ test('points auto-resolver picks up entertainment markets after close time', () 
   assert.match(SOURCE, /isManualReviewMarket/);
 });
 
-test('points auto-resolver adds Netflix Top 10 suggestions to manual review', () => {
+test('points auto-resolver auto-settles trusted Netflix Top 10 suggestions', () => {
   assert.match(SOURCE, /buildNetflixTop10ResolutionReview/);
   assert.match(SOURCE, /isNetflixTop10Market/);
   assert.match(SOURCE, /netflix_top10_not_published_yet/);
   assert.match(SOURCE, /NETFLIX_TOP10_SOURCE/);
+  assert.match(SOURCE, /autoResolveNetflixManualReviewMarket/);
+  assert.match(SOURCE, /canAutoResolveNetflixManualReview/);
+  assert.match(SOURCE, /resolver:netflix-top10/);
+  assert.match(SOURCE, /netflix_auto_resolved/);
+  assert.match(SOURCE, /manual_review_process_failed/);
 });
 
 test('points auto-resolver lets trusted chart APIs resolve music markets', () => {
