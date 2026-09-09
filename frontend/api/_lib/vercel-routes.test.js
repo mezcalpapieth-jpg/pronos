@@ -12,6 +12,9 @@ import { readFile } from 'node:fs/promises';
 const vercelConfig = JSON.parse(
   await readFile(new URL('../../vercel.json', import.meta.url), 'utf8'),
 );
+const rootVercelConfig = JSON.parse(
+  await readFile(new URL('../../../vercel.json', import.meta.url), 'utf8'),
+);
 const rootIndexHtml = await readFile(new URL('../../index.html', import.meta.url), 'utf8');
 
 function hasRule(rules, source, destination) {
@@ -25,6 +28,19 @@ function hasHeader(source, key, value) {
     : null;
   return Array.isArray(block?.headers)
     && block.headers.some((header) => header.key === key && header.value === value);
+}
+
+function rootHasHeader(source, key, valuePattern) {
+  const block = Array.isArray(rootVercelConfig.headers)
+    ? rootVercelConfig.headers.find((item) => item.source === source)
+    : null;
+  return Array.isArray(block?.headers)
+    && block.headers.some((header) => (
+      header.key === key
+      && (typeof valuePattern === 'string'
+        ? header.value === valuePattern
+        : valuePattern.test(header.value))
+    ));
 }
 
 function hasCron(path, schedule) {
@@ -120,6 +136,15 @@ test('private deck lives at the root deck path and hard-refreshes through the po
     hasHeader('/investors', 'X-Robots-Tag', 'noindex, nofollow'),
     'expected /investors to stay out of crawlers',
   );
+});
+
+test('root Vercel config sends non-disruptive security headers', () => {
+  assert.ok(rootHasHeader('/(.*)', 'X-Frame-Options', 'DENY'));
+  assert.ok(rootHasHeader('/(.*)', 'X-Content-Type-Options', 'nosniff'));
+  assert.ok(rootHasHeader('/(.*)', 'Referrer-Policy', 'strict-origin-when-cross-origin'));
+  assert.ok(rootHasHeader('/(.*)', 'Permissions-Policy', /geolocation=\(\)/));
+  assert.ok(rootHasHeader('/(.*)', 'Strict-Transport-Security', /includeSubDomains/));
+  assert.ok(rootHasHeader('/(.*)', 'Content-Security-Policy-Report-Only', /default-src 'self'/));
 });
 
 test('root legal pages redirect into the public points app while MVP legal remains gated under /mvp', () => {

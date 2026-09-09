@@ -22,6 +22,10 @@ import { rateLimit, clientIp } from '../../_lib/rate-limit.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
 export default async function handler(req, res) {
   // Top-level try/catch guarantees JSON output — prevents "HTTP 500" from
   // reaching the UI when something throws outside the inner handlers.
@@ -40,13 +44,21 @@ export default async function handler(req, res) {
     if (limited) return;
 
     const { email } = req.body || {};
-    if (!email || typeof email !== 'string' || !EMAIL_RE.test(email)) {
+    const normalizedEmail = normalizeEmail(email);
+    if (!email || typeof email !== 'string' || !EMAIL_RE.test(normalizedEmail)) {
       return res.status(400).json({ error: 'invalid_email' });
     }
 
+    const emailLimited = rateLimit(req, res, {
+      key: `init-otp-email:${normalizedEmail}`,
+      limit: 8,
+      windowMs: 15 * 60_000,
+    });
+    if (emailLimited) return;
+
     try {
-      const { suborgId } = await getOrCreateSuborg(email);
-      const { otpId } = await sendOtp(email);
+      const { suborgId } = await getOrCreateSuborg(normalizedEmail);
+      const { otpId } = await sendOtp(normalizedEmail);
       return res.status(200).json({ otpId, suborgId });
     } catch (e) {
       // Log full detail server-side; surface a sanitized hint to the client

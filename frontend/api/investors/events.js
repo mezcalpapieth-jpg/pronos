@@ -9,6 +9,7 @@ import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensureDeckSchema } from '../_lib/deck-schema.js';
 import { readDeckSession } from '../_lib/deck-session.js';
+import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 
 const sql = neon(process.env.DATABASE_URL);
 const EVENTS = new Set(['page_view', 'heartbeat', 'hidden', 'exit']);
@@ -29,9 +30,23 @@ export default async function handler(req, res) {
     if (cors) return cors;
     if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
 
+    const ipLimited = rateLimit(req, res, {
+      key: `investor-events:${clientIp(req)}`,
+      limit: 120,
+      windowMs: 60_000,
+    });
+    if (ipLimited) return;
+
     await ensureDeckSchema(sql);
     const session = await readDeckSession(req, res, sql);
     if (!session) return res.status(401).json({ error: 'investor_session_required' });
+
+    const sessionLimited = rateLimit(req, res, {
+      key: `investor-events-session:${session.id}`,
+      limit: 80,
+      windowMs: 60_000,
+    });
+    if (sessionLimited) return;
 
     const eventType = EVENTS.has(req.body?.eventType) ? req.body.eventType : 'page_view';
     const pageKey = cleanPageKey(req.body?.pageKey);

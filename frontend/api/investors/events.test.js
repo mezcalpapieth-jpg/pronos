@@ -8,6 +8,8 @@ test('investor page events are protected by the deck session', () => {
   assert.match(source, /ensureDeckSchema/);
   assert.match(source, /readDeckSession/);
   assert.match(source, /investor_session_required/);
+  assert.match(source, /rateLimit/);
+  assert.match(source, /investor-events-session/);
   assert.match(source, /methods:\s*'POST, OPTIONS'/);
   assert.match(source, /method_not_allowed/);
 });

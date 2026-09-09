@@ -60,6 +60,9 @@ export default async function handler(req, res) {
     if (limited) return;
 
     const { otpId, suborgId, code, publicKey, email } = req.body || {};
+    const bodyEmailNorm = typeof email === 'string' && email.length > 0
+      ? email.toLowerCase().trim()
+      : null;
     if (
       typeof otpId !== 'string' || !otpId ||
       typeof suborgId !== 'string' || !UUID_RE.test(suborgId) ||
@@ -68,6 +71,29 @@ export default async function handler(req, res) {
       (email != null && typeof email !== 'string')
     ) {
       return res.status(400).json({ error: 'invalid_input' });
+    }
+
+    const otpLimited = rateLimit(req, res, {
+      key: `verify-otp-id:${otpId}`,
+      limit: 8,
+      windowMs: 10 * 60_000,
+    });
+    if (otpLimited) return;
+
+    const suborgLimited = rateLimit(req, res, {
+      key: `verify-otp-suborg:${suborgId}`,
+      limit: 20,
+      windowMs: 10 * 60_000,
+    });
+    if (suborgLimited) return;
+
+    if (bodyEmailNorm) {
+      const emailLimited = rateLimit(req, res, {
+        key: `verify-otp-email:${bodyEmailNorm}`,
+        limit: 20,
+        windowMs: 10 * 60_000,
+      });
+      if (emailLimited) return;
     }
 
     let verificationToken;
@@ -105,9 +131,6 @@ export default async function handler(req, res) {
     // proceed without persisting an email — never fall back to the body
     // value.
     const verifiedEmail = await getSuborgRootUserEmail(suborgId);
-    const bodyEmailNorm = typeof email === 'string' && email.length > 0
-      ? email.toLowerCase().trim()
-      : null;
     if (bodyEmailNorm && verifiedEmail && bodyEmailNorm !== verifiedEmail) {
       console.warn('[auth/verify-otp] body email does not match Turnkey-verified email', {
         suborgId,

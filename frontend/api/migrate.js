@@ -337,6 +337,9 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_trades_market_created
     ON points_trades(market_id, created_at DESC)
     WHERE side IN ('buy', 'sell')`,
+  `CREATE INDEX IF NOT EXISTS idx_points_trades_recent_activity
+    ON points_trades(created_at DESC, market_id, username)
+    WHERE side IN ('buy', 'sell')`,
   `ALTER TABLE points_trades ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'web'`,
   `ALTER TABLE points_trades ADD COLUMN IF NOT EXISTS api_key_id BIGINT`,
 

@@ -9,6 +9,9 @@ test('investor dashboard endpoint is protected by the private deck session', () 
   assert.match(source, /readDeckSession/);
   assert.match(source, /investor_session_required/);
   assert.match(source, /ensurePointsSchema/);
+  assert.match(source, /rateLimit/);
+  assert.match(source, /safeMetric/);
+  assert.match(source, /metric_timeout/);
   assert.match(source, /scope:\s*'private'/);
 });
 

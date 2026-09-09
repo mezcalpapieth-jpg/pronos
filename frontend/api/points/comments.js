@@ -72,6 +72,13 @@ async function listComments(req, res) {
   if (!Number.isInteger(mid) || mid <= 0) {
     return res.status(400).json({ error: 'invalid_market_id' });
   }
+  const limited = rateLimit(req, res, {
+    key: `comments-read:${clientIp(req)}`,
+    limit: 180,
+    windowMs: 60_000,
+  });
+  if (limited) return;
+
   const limit = Math.min(MAX_LIMIT, Math.max(1, parseInt(req.query.limit, 10) || DEFAULT_LIMIT));
 
   const sql = getSql();

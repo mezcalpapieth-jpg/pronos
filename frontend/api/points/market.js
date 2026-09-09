@@ -25,6 +25,7 @@ import { isAdminUsername } from '../_lib/points-admin.js';
 import { BANXICO_FIX_RESOLUTION_CRITERIA } from '../_lib/banxico.js';
 import { FRANKFURTER_RESOLUTION_CRITERIA, FRANKFURTER_SOURCE } from '../_lib/frankfurter.js';
 import { COINGECKO_TOKEN_MCAP_SOURCE } from '../_lib/solana-token-mcap.js';
+import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import {
   WEATHER_MAX_TEMP_RESOLUTION_CRITERIA,
   weatherResolutionCriteriaForBuckets,
@@ -409,6 +410,13 @@ export default async function handler(req, res) {
     if (!Number.isInteger(id) || id <= 0) {
       return res.status(400).json({ error: 'invalid_id' });
     }
+
+    const limited = rateLimit(req, res, {
+      key: `points-market:${clientIp(req)}`,
+      limit: 240,
+      windowMs: 60_000,
+    });
+    if (limited) return;
 
     let viewerIsAdmin = false;
     try {

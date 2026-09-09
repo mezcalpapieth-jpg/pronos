@@ -22,6 +22,11 @@ test('points public lists hide bulk-hidden active markets outside trophy overrid
   assert.match(source, /m\.featured = true AND m\.hidden_from_home = false[\s\S]*?OR m\.tournament_featured = true/);
 });
 
+test('public market read endpoints have gentle abuse rate limits', () => {
+  assert.match(source, /points-markets:\$\{clientIp\(req\)\}/);
+  assert.match(detailSource, /points-market:\$\{clientIp\(req\)\}/);
+});
+
 test('points market list supports trophy shelf independent of category', () => {
   assert.match(source, /function publicCategoryAlias/);
   assert.doesNotMatch(source, /raw === 'nuevos-mercados'\) return 'world-cup'/);

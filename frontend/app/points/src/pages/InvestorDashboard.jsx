@@ -110,7 +110,7 @@ function useInvestorDashboard() {
     else setLoading(true);
     setError(null);
     try {
-      const data = await withTimeout(fetchInvestorDashboard(), 9000, 'investor_dashboard_timeout');
+      const data = await withTimeout(fetchInvestorDashboard(), 15000, 'investor_dashboard_timeout');
       setDashboard(data);
     } catch (e) {
       if (e?.status === 401 || e?.code === 'investor_session_required') {

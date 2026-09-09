@@ -14,6 +14,7 @@ import { deriveOutcomeCountryLabels } from '../_lib/outcome-country-labels.js';
 import { cachedJson, createApiTimer, setCacheHeaders } from '../_lib/api-performance.js';
 import { PRONOS_TREASURY_USERNAME } from '../_lib/points-limit-orders.js';
 import { binaryPricesWithBookTrade } from '../_lib/points-display-prices.js';
+import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 
 // Lazy neon client init — defer until the first request so a missing
 // DATABASE_URL at module-load time surfaces as a structured JSON error
@@ -109,72 +110,79 @@ export default async function handler(req, res) {
   // what throws. Inner try/catch still handles the specific DB path.
   const timer = createApiTimer(res, 'points/markets');
   try {
-  const cors = applyCors(req, res, { methods: 'GET, OPTIONS', credentials: true });
-  if (cors) return cors;
-  if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
+    const cors = applyCors(req, res, { methods: 'GET, OPTIONS', credentials: true });
+    if (cors) return cors;
+    if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
 
-  const status = req.query.status === 'resolved' ? 'resolved' : 'active';
-  const category = typeof req.query.category === 'string' ? publicCategoryAlias(req.query.category) : null;
-  // `mode` segregates off-chain Points markets from on-chain MVP markets
-  // so the two apps render isolated universes even though they share the
-  // same table. Omitted → Points default ('points'). MVP passes
-  // `?mode=onchain` on every list call. `?mode=all` skips the filter
-  // (used by the shared internal indexer + admin tools).
-  const modeParam = typeof req.query.mode === 'string' ? req.query.mode.toLowerCase() : '';
-  const modeFilter = modeParam === 'onchain' ? 'onchain'
-                    : modeParam === 'all'    ? null
-                    : 'points';
-  // Chain filter: MVP can narrow to a specific chain_id (e.g. 421614
-  // for Sepolia, 42161 for Arbitrum One) so flipping env chains between
-  // testnet and mainnet is a one-variable change — each chain sees only
-  // its own on-chain markets. Mode='points' markets have chain_id=NULL
-  // so this filter should only be sent with mode='onchain'.
-  const chainIdRaw = req.query.chain_id;
-  const chainIdFilter = Number.isFinite(Number(chainIdRaw)) && Number(chainIdRaw) > 0
-    ? Number(chainIdRaw)
-    : null;
-  // Soft cap on returned rows. Default 100 keeps the home grid snappy
-  // (trending doesn't need every market, just the ones about to close);
-  // category pages request a higher cap so nothing is hidden. Clamped
-  // at 2000 so we never return a multi-megabyte response by accident.
-  const reqLimit = Number.parseInt(req.query.limit, 10);
-  const limit = Number.isFinite(reqLimit) && reqLimit > 0
-    ? Math.min(reqLimit, 2000)
-    : 100;
-  // featured filter: the home "Trending" grid only shows curated
-  // (featured=true) markets. Category pages pass featured=all to see
-  // every public-visible market. Default without a category = trending,
-  // so featured=true. Explicit ?featured=all bypasses the curation filter,
-  // but still respects hidden_from_home for active non-trophy markets.
-  const featuredParam = typeof req.query.featured === 'string'
-    ? req.query.featured.toLowerCase()
-    : req.query.featured;
-  const tournamentOnly = !category && featuredParam === 'tournament';
-  const featuredOnly = !category && !tournamentOnly && featuredParam !== 'all';
-  const cacheKey = [
-    'points:markets:v8',
-    status,
-    category || 'all',
-    modeFilter || 'all-modes',
-    chainIdFilter || 'all-chains',
-    limit,
-    tournamentOnly ? 'tournament-featured' : featuredOnly ? 'featured' : 'all-featured',
-  ].join(':');
+    const limited = rateLimit(req, res, {
+      key: `points-markets:${clientIp(req)}`,
+      limit: 240,
+      windowMs: 60_000,
+    });
+    if (limited) return;
 
-  try {
-    setCacheHeaders(res, { scope: 'public', maxAge: 10, sMaxage: 30, staleWhileRevalidate: 120 });
-    const { value: payload, hit } = await cachedJson(cacheKey, 20_000, async () => {
-      const schemaSql = getSchemaSql();
-      const sql = getSql();
-      await timer.time('schema', () => ensurePointsSchema(schemaSql));
+    const status = req.query.status === 'resolved' ? 'resolved' : 'active';
+    const category = typeof req.query.category === 'string' ? publicCategoryAlias(req.query.category) : null;
+    // `mode` segregates off-chain Points markets from on-chain MVP markets
+    // so the two apps render isolated universes even though they share the
+    // same table. Omitted → Points default ('points'). MVP passes
+    // `?mode=onchain` on every list call. `?mode=all` skips the filter
+    // (used by the shared internal indexer + admin tools).
+    const modeParam = typeof req.query.mode === 'string' ? req.query.mode.toLowerCase() : '';
+    const modeFilter = modeParam === 'onchain' ? 'onchain'
+                      : modeParam === 'all'    ? null
+                      : 'points';
+    // Chain filter: MVP can narrow to a specific chain_id (e.g. 421614
+    // for Sepolia, 42161 for Arbitrum One) so flipping env chains between
+    // testnet and mainnet is a one-variable change — each chain sees only
+    // its own on-chain markets. Mode='points' markets have chain_id=NULL
+    // so this filter should only be sent with mode='onchain'.
+    const chainIdRaw = req.query.chain_id;
+    const chainIdFilter = Number.isFinite(Number(chainIdRaw)) && Number(chainIdRaw) > 0
+      ? Number(chainIdRaw)
+      : null;
+    // Soft cap on returned rows. Default 100 keeps the home grid snappy
+    // (trending doesn't need every market, just the ones about to close);
+    // category pages request a higher cap so nothing is hidden. Clamped
+    // at 2000 so we never return a multi-megabyte response by accident.
+    const reqLimit = Number.parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(reqLimit) && reqLimit > 0
+      ? Math.min(reqLimit, 2000)
+      : 100;
+    // featured filter: the home "Trending" grid only shows curated
+    // (featured=true) markets. Category pages pass featured=all to see
+    // every public-visible market. Default without a category = trending,
+    // so featured=true. Explicit ?featured=all bypasses the curation filter,
+    // but still respects hidden_from_home for active non-trophy markets.
+    const featuredParam = typeof req.query.featured === 'string'
+      ? req.query.featured.toLowerCase()
+      : req.query.featured;
+    const tournamentOnly = !category && featuredParam === 'tournament';
+    const featuredOnly = !category && !tournamentOnly && featuredParam !== 'all';
+    const cacheKey = [
+      'points:markets:v8',
+      status,
+      category || 'all',
+      modeFilter || 'all-modes',
+      chainIdFilter || 'all-chains',
+      limit,
+      tournamentOnly ? 'tournament-featured' : featuredOnly ? 'featured' : 'all-featured',
+    ].join(':');
 
-    // Only fetch parents / unified markets. Legs (parent_id IS NOT NULL)
-    // are rolled up below and never surface as standalone rows.
-    // `modeFilter` is NULL (skip), 'points', or 'onchain'. We pass it
-    // explicitly into each branch — Neon's tagged template takes a
-    // literal; a CASE/COALESCE around `m.mode = $` keeps the plan simple
-    // and indexable. Rows with mode IS NULL are treated as 'points' for
-    // backward-compat with pre-M3 schemas that hadn't populated the column.
+    try {
+      setCacheHeaders(res, { scope: 'public', maxAge: 10, sMaxage: 30, staleWhileRevalidate: 120 });
+      const { value: payload, hit } = await cachedJson(cacheKey, 20_000, async () => {
+        const schemaSql = getSchemaSql();
+        const sql = getSql();
+        await timer.time('schema', () => ensurePointsSchema(schemaSql));
+
+        // Only fetch parents / unified markets. Legs (parent_id IS NOT NULL)
+        // are rolled up below and never surface as standalone rows.
+        // `modeFilter` is NULL (skip), 'points', or 'onchain'. We pass it
+        // explicitly into each branch — Neon's tagged template takes a
+        // literal; a CASE/COALESCE around `m.mode = $` keeps the plan simple
+        // and indexable. Rows with mode IS NULL are treated as 'points' for
+        // backward-compat with pre-M3 schemas that hadn't populated the column.
       const rows = await timer.time('db_markets', () => sql`
         SELECT
           m.id, m.question, m.category, m.outcomes, m.reserves, m.seed_liquidity,
@@ -222,8 +230,8 @@ export default async function handler(req, res) {
         LIMIT ${limit}
       `);
 
-    // Collect parallel-parent ids so we can batch-fetch their legs in
-    // one query instead of N+1 round-trips.
+        // Collect parallel-parent ids so we can batch-fetch their legs in
+        // one query instead of N+1 round-trips.
       const parallelIds = rows
         .filter(r => r.amm_mode === 'parallel')
         .map(r => r.id);
@@ -247,202 +255,202 @@ export default async function handler(req, res) {
         }
       }
 
-      const markets = rows.map(r => {
-      const outcomes = parseJsonb(r.outcomes, ['Sí', 'No']);
-      const ammMode = r.amm_mode || 'unified';
-      const seriesMeta = publicSeriesMetaFromRow(r);
-      const sourceData = parseJsonb(r.pending_source_data, {});
-      const resolverConfig = parseJsonb(r.resolver_config, null);
-      const tags = deriveMarketTags({
-        ...r,
-        source_data: sourceData,
-        resolver_config: resolverConfig || {},
-        category_tags: parseJsonb(r.category_tags, []),
-        geo_tags: parseJsonb(r.geo_tags, []),
-        topic_tags: parseJsonb(r.topic_tags, []),
-      });
-      const outcomeCountryLabels = deriveOutcomeCountryLabels({
-        ...r,
-        outcomes,
-        source_data: sourceData,
-      });
+        const markets = rows.map(r => {
+          const outcomes = parseJsonb(r.outcomes, ['Sí', 'No']);
+          const ammMode = r.amm_mode || 'unified';
+          const seriesMeta = publicSeriesMetaFromRow(r);
+          const sourceData = parseJsonb(r.pending_source_data, {});
+          const resolverConfig = parseJsonb(r.resolver_config, null);
+          const tags = deriveMarketTags({
+            ...r,
+            source_data: sourceData,
+            resolver_config: resolverConfig || {},
+            category_tags: parseJsonb(r.category_tags, []),
+            geo_tags: parseJsonb(r.geo_tags, []),
+            topic_tags: parseJsonb(r.topic_tags, []),
+          });
+          const outcomeCountryLabels = deriveOutcomeCountryLabels({
+            ...r,
+            outcomes,
+            source_data: sourceData,
+          });
 
-      const outcomeImages = parseJsonb(r.outcome_images, null);
-      // `featured` is the admin flame. Home fetches featured=all so it
-      // can add user-starred teams on top, therefore the payload itself
-      // must still mark flame-selected rows as trending.
-      const cfg = resolverConfig;
-      const isOpenEnded = cfg?.source === 'next-opponent';
-      const startMs = r.start_time ? new Date(r.start_time).getTime() : 0;
-      const endMs   = r.end_time   ? new Date(r.end_time).getTime()   : 0;
-      const windowOk = startMs > 0 && endMs > startMs
-        && (endMs - startMs) <= 14 * 86_400_000;
-      const live = !!(!isOpenEnded
-        && windowOk
-        && startMs <= Date.now()
-        && endMs > Date.now()
-        && r.status === 'active');
+          const outcomeImages = parseJsonb(r.outcome_images, null);
+          // `featured` is the admin flame. Home fetches featured=all so it
+          // can add user-starred teams on top, therefore the payload itself
+          // must still mark flame-selected rows as trending.
+          const cfg = resolverConfig;
+          const isOpenEnded = cfg?.source === 'next-opponent';
+          const startMs = r.start_time ? new Date(r.start_time).getTime() : 0;
+          const endMs   = r.end_time   ? new Date(r.end_time).getTime()   : 0;
+          const windowOk = startMs > 0 && endMs > startMs
+            && (endMs - startMs) <= 14 * 86_400_000;
+          const live = !!(!isOpenEnded
+            && windowOk
+            && startMs <= Date.now()
+            && endMs > Date.now()
+            && r.status === 'active');
 
-      if (ammMode === 'parallel') {
-        // Aggregate legs. Each leg is a binary Sí/No market; the parent
-        // outcome's "price" is that leg's YES (outcome 0) price.
-        const legs = legsByParent.get(r.id) || [];
-        const legPrices = legs.map(l => {
-          const lr = parseJsonb(l.reserves, []).map(Number);
-          const basePrices = binaryLegPricesFromRow({
-            reserves: lr,
-            status: l.status,
-            outcome: l.outcome,
-          }, 1 / outcomes.length);
-          return binaryPricesWithBookTrade(basePrices, {
-            status: l.status,
-            outcomeIndex: l.display_trade_outcome_index,
-            price: l.display_trade_price,
-            isBookTrade: l.display_trade_is_book,
-          })[0];
+          if (ammMode === 'parallel') {
+            // Aggregate legs. Each leg is a binary Sí/No market; the parent
+            // outcome's "price" is that leg's YES (outcome 0) price.
+            const legs = legsByParent.get(r.id) || [];
+            const legPrices = legs.map(l => {
+              const lr = parseJsonb(l.reserves, []).map(Number);
+              const basePrices = binaryLegPricesFromRow({
+                reserves: lr,
+                status: l.status,
+                outcome: l.outcome,
+              }, 1 / outcomes.length);
+              return binaryPricesWithBookTrade(basePrices, {
+                status: l.status,
+                outcomeIndex: l.display_trade_outcome_index,
+                price: l.display_trade_price,
+                isBookTrade: l.display_trade_is_book,
+              })[0];
+            });
+            const seedTotal = legs.reduce((s, l) => s + Number(l.seed_liquidity || 0), 0);
+            const tradeTotal = legs.reduce((s, l) => s + Number(l.trade_volume || 0), 0);
+            // Per-outcome leg ids so the card-level buy drawer can target the
+            // right leg without an extra round-trip to /api/points/market.
+            // Each leg is binary Sí/No, ordered to match `outcomes`.
+            const legIds = legs.map(l => l.id);
+            const legStatuses = legs.map(l => l.status || null);
+            const legOutcomes = legs.map(l => l.outcome == null ? null : Number(l.outcome));
+            const activeOutcomeIndexes = legs
+              .map((l, i) => String(l.status || '').toLowerCase() === 'active' ? i : null)
+              .filter(i => i !== null);
+            return applySeriesGateToMarket({
+              id: r.id,
+              ammMode: 'parallel',
+              question: r.question,
+              category: r.category,
+              imageUrl: r.image_url || null,
+              icon: null,
+              outcomes,
+              reserves: [],   // parent has no pool
+              prices: legPrices.length === outcomes.length
+                ? legPrices
+                : outcomes.map(() => 1 / outcomes.length),
+              legIds: legIds.length === outcomes.length ? legIds : null,
+              legStatuses: legStatuses.length === outcomes.length ? legStatuses : null,
+              legOutcomes: legOutcomes.length === outcomes.length ? legOutcomes : null,
+              activeOutcomeIndexes,
+              seedLiquidity: seedTotal,
+              volume: seedTotal,
+              tradeVolume: tradeTotal,
+              startTime: r.start_time,
+              endTime: r.end_time,
+              live,
+              featured: r.featured === true,
+              hiddenFromHome: r.hidden_from_home === true,
+              tournamentFeatured: r.tournament_featured === true,
+              isTestMarket: r.is_test_market === true,
+              trending: r.tournament_featured === true || (r.hidden_from_home !== true && (r.featured === true || live)),
+              status: r.status,
+              outcome: r.outcome,
+              resolvedAt: r.resolved_at,
+              finalScore: r.final_score || null,
+              seriesMeta,
+              createdAt: r.created_at,
+              source: r.source || null,
+              sourceEventId: r.source_event_id || null,
+              resolverConfig,
+              sport: r.sport || null,
+              league: r.league || null,
+              categoryTags: tags.categoryTags,
+              geoTags: tags.geoTags,
+              topicTags: tags.topicTags,
+              outcomeImages: Array.isArray(outcomeImages) && outcomeImages.length === outcomes.length
+                ? outcomeImages
+                : null,
+              outcomeCountryLabels,
+              mode: r.mode || 'points',
+              chainId: r.chain_id || null,
+              chainMarketId: r.chain_market_id ? String(r.chain_market_id) : null,
+              chainAddress: r.chain_address || null,
+              crypto5min: false,
+            });
+          }
+
+          const reserves = parseJsonb(r.reserves, []).map(Number);
+          const prices = binaryPricesWithBookTrade(pricesFromReserves(reserves, outcomes.length), {
+            status: r.status,
+            outcomeIndex: r.display_trade_outcome_index,
+            price: r.display_trade_price,
+            isBookTrade: r.display_trade_is_book,
+          });
+          // "Live" is the red EN VIVO pill — only for fixed-window sports
+          // events. Two defenses against open-ended prediction markets
+          // accidentally showing live:
+          //   (a) resolver_config.source === 'next-opponent' is explicitly
+          //       excluded — these are 180-day open-ended fights with no
+          //       kickoff. Existing rows in production already have a
+          //       start_time stamped at creation (legacy generator bug);
+          //       this filter neutralizes them without a DB migration.
+          //   (b) duration > 14 days is also excluded as a backstop in
+          //       case any other generator ships a long-window market
+          //       with start_time set.
+          // Discriminator for crypto-5min markets (BTC/ETH "sube o baja a
+          // las HH:MM CDMX"). Exposed so the category page can offer a
+          // dedicated "5 minutos" sub-filter — otherwise resueltos and the
+          // crypto tab are dominated by 5-min rollover history.
+          const crypto5min = cfg?.shape === 'binary-direction';
+          const cryptoIntervalMinutes = cryptoIntervalFromResolverConfig(cfg);
+          return applySeriesGateToMarket({
+            id: r.id,
+            ammMode: 'unified',
+            question: r.question,
+            category: r.category,
+            imageUrl: r.image_url || null,
+            icon: null,
+            outcomes,
+            reserves,
+            prices,
+            seedLiquidity: Number(r.seed_liquidity || 0),
+            volume: Number(r.seed_liquidity || 0),
+            tradeVolume: Number(r.trade_volume || 0),
+            startTime: r.start_time,
+            endTime: r.end_time,
+            // Live = sports market currently in its game window. Mirrors the
+            // PointsMarketCard isLive computation but pre-computed here so
+            // every consumer (carousel, grid, trending tab) reads the same
+            // boolean without re-doing the date math.
+            live,
+            featured: r.featured === true,
+            hiddenFromHome: r.hidden_from_home === true,
+            tournamentFeatured: r.tournament_featured === true,
+            isTestMarket: r.is_test_market === true,
+            trending: r.tournament_featured === true || (r.hidden_from_home !== true && (r.featured === true || live)),
+            crypto5min,
+            cryptoIntervalMinutes,
+            cryptoWindowMinutes: cryptoIntervalMinutes,
+            status: r.status,
+            outcome: r.outcome,
+            resolvedAt: r.resolved_at,
+            finalScore: r.final_score || null,
+            seriesMeta,
+            createdAt: r.created_at,
+            source: r.source || null,
+            sourceEventId: r.source_event_id || null,
+            resolverConfig,
+            sport: r.sport || null,
+            league: r.league || null,
+            categoryTags: tags.categoryTags,
+            geoTags: tags.geoTags,
+            topicTags: tags.topicTags,
+            outcomeImages: Array.isArray(outcomeImages) && outcomeImages.length === outcomes.length
+              ? outcomeImages
+              : null,
+            outcomeCountryLabels,
+            mode: r.mode || 'points',
+            chainId: r.chain_id || null,
+            chainMarketId: r.chain_market_id ? String(r.chain_market_id) : null,
+            chainAddress: r.chain_address || null,
+          });
         });
-        const seedTotal = legs.reduce((s, l) => s + Number(l.seed_liquidity || 0), 0);
-        const tradeTotal = legs.reduce((s, l) => s + Number(l.trade_volume || 0), 0);
-        // Per-outcome leg ids so the card-level buy drawer can target the
-        // right leg without an extra round-trip to /api/points/market.
-        // Each leg is binary Sí/No, ordered to match `outcomes`.
-        const legIds = legs.map(l => l.id);
-        const legStatuses = legs.map(l => l.status || null);
-        const legOutcomes = legs.map(l => l.outcome == null ? null : Number(l.outcome));
-        const activeOutcomeIndexes = legs
-          .map((l, i) => String(l.status || '').toLowerCase() === 'active' ? i : null)
-          .filter(i => i !== null);
-        return applySeriesGateToMarket({
-          id: r.id,
-          ammMode: 'parallel',
-          question: r.question,
-          category: r.category,
-          imageUrl: r.image_url || null,
-          icon: null,
-          outcomes,
-          reserves: [],   // parent has no pool
-          prices: legPrices.length === outcomes.length
-            ? legPrices
-            : outcomes.map(() => 1 / outcomes.length),
-          legIds: legIds.length === outcomes.length ? legIds : null,
-          legStatuses: legStatuses.length === outcomes.length ? legStatuses : null,
-          legOutcomes: legOutcomes.length === outcomes.length ? legOutcomes : null,
-          activeOutcomeIndexes,
-          seedLiquidity: seedTotal,
-          volume: seedTotal,
-          tradeVolume: tradeTotal,
-          startTime: r.start_time,
-          endTime: r.end_time,
-          live,
-          featured: r.featured === true,
-          hiddenFromHome: r.hidden_from_home === true,
-          tournamentFeatured: r.tournament_featured === true,
-          isTestMarket: r.is_test_market === true,
-          trending: r.tournament_featured === true || (r.hidden_from_home !== true && (r.featured === true || live)),
-          status: r.status,
-          outcome: r.outcome,
-          resolvedAt: r.resolved_at,
-          finalScore: r.final_score || null,
-          seriesMeta,
-          createdAt: r.created_at,
-          source: r.source || null,
-          sourceEventId: r.source_event_id || null,
-          resolverConfig,
-          sport: r.sport || null,
-          league: r.league || null,
-          categoryTags: tags.categoryTags,
-          geoTags: tags.geoTags,
-          topicTags: tags.topicTags,
-          outcomeImages: Array.isArray(outcomeImages) && outcomeImages.length === outcomes.length
-            ? outcomeImages
-            : null,
-          outcomeCountryLabels,
-          mode: r.mode || 'points',
-          chainId: r.chain_id || null,
-          chainMarketId: r.chain_market_id ? String(r.chain_market_id) : null,
-          chainAddress: r.chain_address || null,
-          crypto5min: false,
-        });
-      }
 
-      const reserves = parseJsonb(r.reserves, []).map(Number);
-      const prices = binaryPricesWithBookTrade(pricesFromReserves(reserves, outcomes.length), {
-        status: r.status,
-        outcomeIndex: r.display_trade_outcome_index,
-        price: r.display_trade_price,
-        isBookTrade: r.display_trade_is_book,
-      });
-      // "Live" is the red EN VIVO pill — only for fixed-window sports
-      // events. Two defenses against open-ended prediction markets
-      // accidentally showing live:
-      //   (a) resolver_config.source === 'next-opponent' is explicitly
-      //       excluded — these are 180-day open-ended fights with no
-      //       kickoff. Existing rows in production already have a
-      //       start_time stamped at creation (legacy generator bug);
-      //       this filter neutralizes them without a DB migration.
-      //   (b) duration > 14 days is also excluded as a backstop in
-      //       case any other generator ships a long-window market
-      //       with start_time set.
-      // Discriminator for crypto-5min markets (BTC/ETH "sube o baja a
-      // las HH:MM CDMX"). Exposed so the category page can offer a
-      // dedicated "5 minutos" sub-filter — otherwise resueltos and the
-      // crypto tab are dominated by 5-min rollover history.
-      const crypto5min = cfg?.shape === 'binary-direction';
-      const cryptoIntervalMinutes = cryptoIntervalFromResolverConfig(cfg);
-      return applySeriesGateToMarket({
-        id: r.id,
-        ammMode: 'unified',
-        question: r.question,
-        category: r.category,
-        imageUrl: r.image_url || null,
-        icon: null,
-        outcomes,
-        reserves,
-        prices,
-        seedLiquidity: Number(r.seed_liquidity || 0),
-        volume: Number(r.seed_liquidity || 0),
-        tradeVolume: Number(r.trade_volume || 0),
-        startTime: r.start_time,
-        endTime: r.end_time,
-        // Live = sports market currently in its game window. Mirrors the
-        // PointsMarketCard isLive computation but pre-computed here so
-        // every consumer (carousel, grid, trending tab) reads the same
-        // boolean without re-doing the date math.
-        live,
-        featured: r.featured === true,
-        hiddenFromHome: r.hidden_from_home === true,
-        tournamentFeatured: r.tournament_featured === true,
-        isTestMarket: r.is_test_market === true,
-        trending: r.tournament_featured === true || (r.hidden_from_home !== true && (r.featured === true || live)),
-        crypto5min,
-        cryptoIntervalMinutes,
-        cryptoWindowMinutes: cryptoIntervalMinutes,
-        status: r.status,
-        outcome: r.outcome,
-        resolvedAt: r.resolved_at,
-        finalScore: r.final_score || null,
-        seriesMeta,
-        createdAt: r.created_at,
-        source: r.source || null,
-        sourceEventId: r.source_event_id || null,
-        resolverConfig,
-        sport: r.sport || null,
-        league: r.league || null,
-        categoryTags: tags.categoryTags,
-        geoTags: tags.geoTags,
-        topicTags: tags.topicTags,
-        outcomeImages: Array.isArray(outcomeImages) && outcomeImages.length === outcomes.length
-          ? outcomeImages
-          : null,
-        outcomeCountryLabels,
-        mode: r.mode || 'points',
-        chainId: r.chain_id || null,
-        chainMarketId: r.chain_market_id ? String(r.chain_market_id) : null,
-        chainAddress: r.chain_address || null,
-      });
-    });
-
-      return { markets };
+        return { markets };
     });
     res.setHeader('X-Pronos-Cache', hit ? 'hit' : 'miss');
     timer.end({ cache: hit ? 'hit' : 'miss', markets: payload.markets?.length || 0 });

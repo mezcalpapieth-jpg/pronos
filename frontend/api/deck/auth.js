@@ -31,8 +31,6 @@ export default async function handler(req, res) {
     });
     if (limited) return;
 
-    await ensureDeckSchema(sql);
-
     const email = normalizeDeckEmail(req.body?.email);
     const code = normalizeDeckCode(req.body?.code);
     const language = cleanLanguage(req.body?.language);
@@ -44,10 +42,27 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'invalid_code' });
     }
 
+    const emailLimited = rateLimit(req, res, {
+      key: `deck-auth-email:${email}`,
+      limit: 12,
+      windowMs: 10 * 60_000,
+    });
+    if (emailLimited) return;
+
+    const codeHash = hashDeckCode(code);
+    const codeLimited = rateLimit(req, res, {
+      key: `deck-auth-code:${codeHash.slice(0, 24)}`,
+      limit: 20,
+      windowMs: 10 * 60_000,
+    });
+    if (codeLimited) return;
+
+    await ensureDeckSchema(sql);
+
     const inviteRows = await sql`
       SELECT id, label, email_hint
       FROM deck_invites
-      WHERE code_hash = ${hashDeckCode(code)}
+      WHERE code_hash = ${codeHash}
         AND active = true
         AND revoked_at IS NULL
       LIMIT 1

@@ -12,9 +12,26 @@ import { readDeckSession } from '../_lib/deck-session.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { cachedJson, createApiTimer, setCacheHeaders } from '../_lib/api-performance.js';
 import { PRONOS_TREASURY_USERNAME } from '../_lib/points-limit-orders.js';
+import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 
-const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
-const schemaSql = neon(process.env.DATABASE_URL);
+let readSql = null;
+let schemaSql = null;
+
+function getReadSql() {
+  if (readSql) return readSql;
+  const cs = process.env.DATABASE_READ_URL || process.env.DATABASE_URL;
+  if (!cs) throw new Error('DATABASE_URL not configured');
+  readSql = neon(cs);
+  return readSql;
+}
+
+function getSchemaSql() {
+  if (schemaSql) return schemaSql;
+  const cs = process.env.DATABASE_URL;
+  if (!cs) throw new Error('DATABASE_URL not configured');
+  schemaSql = neon(cs);
+  return schemaSql;
+}
 
 function num(value) {
   const n = Number(value || 0);
@@ -113,6 +130,48 @@ function mapTopMarketsRows(rows) {
   }));
 }
 
+async function bestEffortStep(label, fn, { timeoutMs = 1_500 } = {}) {
+  let timeoutId;
+  const step = Promise.resolve().then(fn);
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('optional_step_timeout')), timeoutMs);
+  });
+  try {
+    return await Promise.race([step, timeout]);
+  } catch (e) {
+    step.catch(() => {});
+    console.warn('[investors/dashboard] optional step failed', {
+      label,
+      message: e?.message,
+      code: e?.code,
+    });
+    return null;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function safeMetric(label, fallback, fn, { timeoutMs = 5_000 } = {}) {
+  let timeoutId;
+  const query = Promise.resolve().then(fn);
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('metric_timeout')), timeoutMs);
+  });
+  try {
+    return await Promise.race([query, timeout]);
+  } catch (e) {
+    query.catch(() => {});
+    console.warn('[investors/dashboard] metric query failed', {
+      label,
+      message: e?.message,
+      code: e?.code,
+    });
+    return fallback;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export default async function handler(req, res) {
   const timer = createApiTimer(res, 'investors/dashboard', { logThresholdMs: 300 });
   try {
@@ -120,13 +179,27 @@ export default async function handler(req, res) {
     if (cors) return cors;
     if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
 
-    await timer.time('schema_deck', () => ensureDeckSchema(schemaSql));
+    const limited = rateLimit(req, res, {
+      key: `investors-dashboard:${clientIp(req)}`,
+      limit: 60,
+      windowMs: 60_000,
+    });
+    if (limited) return;
+
+    const sql = getReadSql();
+    await timer.time('schema_deck', () => bestEffortStep(
+      'schema_deck',
+      () => ensureDeckSchema(getSchemaSql()),
+    ));
     const session = await timer.time('deck_session', () => readDeckSession(req, res, sql));
     if (!session) return res.status(401).json({ error: 'investor_session_required' });
 
     setCacheHeaders(res, { scope: 'private', maxAge: 30, staleWhileRevalidate: 90 });
     const { value: payload, hit } = await cachedJson('investors:dashboard:v1', 30_000, async () => {
-      await timer.time('schema_points', () => ensurePointsSchema(schemaSql));
+      await timer.time('schema_points', () => bestEffortStep(
+        'schema_points',
+        () => ensurePointsSchema(getSchemaSql()),
+      ));
 
       const [
         summaryRows,
@@ -140,7 +213,7 @@ export default async function handler(req, res) {
         parlayRows,
         topMarketsRows,
       ] = await timer.time('db_investor_metrics', () => Promise.all([
-        sql`
+        safeMetric('summary', [{}], () => sql`
           WITH market_scope AS (
             SELECT *
             FROM points_markets
@@ -186,8 +259,8 @@ export default async function handler(req, res) {
             (SELECT COUNT(*)::int FROM market_scope WHERE status = 'resolved' AND resolved_at >= NOW() - INTERVAL '30 days') AS resolved_30d,
             (SELECT COUNT(*)::int FROM market_scope WHERE status = 'resolved' AND resolved_at >= NOW() - INTERVAL '30 days' AND resolver_type IS NOT NULL AND resolver_type NOT IN ('manual', 'manual_review')) AS auto_resolved_30d,
             (SELECT COALESCE(SUM(balance), 0) FROM points_balances) AS total_supply
-        `,
-        sql`
+        `),
+        safeMetric('daily', [], () => sql`
           WITH days AS (
             SELECT generate_series(
               (CURRENT_DATE - INTERVAL '29 days')::date,
@@ -211,8 +284,8 @@ export default async function handler(req, res) {
           LEFT JOIN points_markets m ON m.id = t.market_id
           GROUP BY d.activity_day
           ORDER BY d.activity_day ASC
-        `,
-        sql`
+        `),
+        safeMetric('category', [], () => sql`
           SELECT
             COALESCE(parent.category, m.category, 'general') AS category,
             COUNT(*)::int AS fills,
@@ -229,8 +302,8 @@ export default async function handler(req, res) {
           GROUP BY COALESCE(parent.category, m.category, 'general')
           ORDER BY gross_flow DESC, fills DESC
           LIMIT 10
-        `,
-        sql`
+        `),
+        safeMetric('cohorts', [], () => sql`
           WITH cohorts AS (
             SELECT
               username,
@@ -273,8 +346,8 @@ export default async function handler(req, res) {
            AND t3.created_at < c.cohort_week + INTERVAL '28 days'
           GROUP BY c.cohort_week
           ORDER BY c.cohort_week DESC
-        `,
-        sql`
+        `),
+        safeMetric('quality', [{}], () => sql`
           WITH roots AS (
             SELECT id, status, created_at, end_time, resolved_at, resolver_type
             FROM points_markets
@@ -308,8 +381,8 @@ export default async function handler(req, res) {
             (SELECT COUNT(*)::int FROM points_resolution_corrections WHERE created_at >= NOW() - INTERVAL '30 days') AS corrections_30d
           FROM roots
           LEFT JOIN first_activity ON first_activity.root_market_id = roots.id
-        `,
-        sql`
+        `),
+        safeMetric('distributions', [], () => sql`
           SELECT
             kind,
             COALESCE(SUM(amount), 0) AS total,
@@ -322,8 +395,8 @@ export default async function handler(req, res) {
           GROUP BY kind
           ORDER BY ABS(SUM(amount)) DESC, count DESC
           LIMIT 14
-        `,
-        sql`
+        `),
+        safeMetric('site_time', [{}], () => sql`
           SELECT
             COALESCE(SUM(seconds), 0)::int AS total_seconds_30d,
             COUNT(DISTINCT username)::int AS active_users_30d,
@@ -331,8 +404,8 @@ export default async function handler(req, res) {
             MAX(last_seen_at) AS last_seen_at
           FROM points_site_time_daily
           WHERE day >= CURRENT_DATE - INTERVAL '29 days'
-        `,
-        sql`
+        `),
+        safeMetric('publicity', [], () => sql`
           SELECT
             source,
             COALESCE(SUM(visits), 0)::int AS visits,
@@ -343,8 +416,8 @@ export default async function handler(req, res) {
           WHERE day >= CURRENT_DATE - INTERVAL '29 days'
           GROUP BY source
           ORDER BY visits DESC, conversions DESC
-        `,
-        sql`
+        `),
+        safeMetric('parlays', [{}], () => sql`
           SELECT
             COUNT(*)::int AS tickets_30d,
             COUNT(DISTINCT username)::int AS users_30d,
@@ -357,8 +430,8 @@ export default async function handler(req, res) {
           FROM points_parlay_tickets
           WHERE submitted_at >= NOW() - INTERVAL '30 days'
             AND username <> ${PRONOS_TREASURY_USERNAME}
-        `,
-        sql`
+        `),
+        safeMetric('top_markets', [], () => sql`
           SELECT
             root.id,
             root.question,
@@ -380,7 +453,7 @@ export default async function handler(req, res) {
           GROUP BY root.id, root.question, root.category, root.status, root.end_time
           ORDER BY gross_flow DESC, fills DESC, last_trade_at DESC
           LIMIT 10
-        `,
+        `),
       ]));
 
       const summary = summaryRows[0] || {};

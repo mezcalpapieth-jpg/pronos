@@ -1,16 +1,16 @@
 /**
  * GET /api/points/health
  *
- * Public diagnostic endpoint. Reports which env vars are present (NOT
- * their values) and the result of a simple database + schema probe.
- * Helps triage 500s on preview deploys without needing Vercel log
- * access — hit this URL in the browser to see which dependency is
- * misconfigured.
+ * Diagnostic endpoint. Public callers only receive a minimal availability
+ * response; signed-in admins can view env presence (NOT values) plus simple
+ * database/schema probes for triage.
  *
  * Response is always 200 JSON (so the client never sees an unparseable
  * body). A non-empty `errors` array indicates a dependency problem.
  */
 import { applyCors } from '../_lib/cors.js';
+import { readSession } from '../_lib/session.js';
+import { isAdminUsername } from '../_lib/points-admin.js';
 
 function has(name) {
   const v = process.env[name];
@@ -22,6 +22,24 @@ export default async function handler(req, res) {
     const cors = applyCors(req, res, { methods: 'GET, OPTIONS' });
     if (cors) return cors;
     if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
+
+    let detailed = false;
+    try {
+      const session = readSession(req, res);
+      detailed = isAdminUsername(session?.username);
+    } catch {
+      detailed = false;
+    }
+
+    if (!detailed) {
+      res.setHeader('Cache-Control', 'no-store, no-cache');
+      return res.status(200).json({
+        ok: true,
+        status: 'available',
+        detail: 'Sign in as an admin to view dependency diagnostics.',
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     const env = {
       DATABASE_URL:                has('DATABASE_URL'),
