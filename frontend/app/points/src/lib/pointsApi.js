@@ -267,6 +267,26 @@ export async function fetchDeckSession() {
   return getJson('/api/deck/session');
 }
 
+export async function fetchInvestorDashboard() {
+  return getJson('/api/investors/dashboard');
+}
+
+export async function trackInvestorEvent({
+  pageKey = 'investor_dashboard',
+  durationMs = 0,
+  eventType = 'page_view',
+  keepalive = false,
+} = {}) {
+  const res = await fetch('/api/investors/events', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pageKey, durationMs, eventType }),
+    keepalive,
+  });
+  return handle(res);
+}
+
 export async function deckLogout() {
   const res = await fetch('/api/deck/session', {
     method: 'DELETE',

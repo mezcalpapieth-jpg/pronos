@@ -44,6 +44,7 @@ const PointsAdmin = lazy(() => import('./pages/PointsAdmin.jsx'));
 const PointsReferralLanding = lazy(() => import('./pages/PointsReferralLanding.jsx'));
 const PointsUserProfile = lazy(() => import('./pages/PointsUserProfile.jsx'));
 const InvestorDeck = lazy(() => import('./pages/InvestorDeck.jsx'));
+const InvestorDashboard = lazy(() => import('./pages/InvestorDashboard.jsx'));
 
 // Video-recording demo. Both of these live in lazily-loaded chunks that a
 // normal visitor never downloads — the gate is only reachable at an
@@ -376,6 +377,7 @@ function Shell({ onOpenLogin, isAdmin }) {
           <Route path="/support" element={<PointsSupport onOpenLogin={onOpenLogin} />} />
           <Route path="/admin" element={<PointsAdmin isAdmin={isAdmin} />} />
           <Route path="/deck" element={<InvestorDeck />} />
+          <Route path="/investors" element={<InvestorDashboard />} />
           <Route path="/r/:username" element={<PointsReferralLanding onOpenLogin={onOpenLogin} />} />
           <Route path="/u/:username" element={<PointsUserProfile />} />
           <Route path="/points/u/:username" element={<PointsUserProfile />} />

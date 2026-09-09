@@ -21,12 +21,24 @@ export default async function handler(req, res) {
     if (!admin) return;
     await ensureDeckSchema(schemaSql);
 
-    const [summaryRows, slideRows, sessionRows, sessionSlideRows, questionRows, inviteRows] = await Promise.all([
+    const [
+      summaryRows,
+      slideRows,
+      pageRows,
+      sessionRows,
+      sessionSlideRows,
+      sessionPageRows,
+      questionRows,
+      inviteRows,
+    ] = await Promise.all([
       sql`
         SELECT
           (SELECT COUNT(*)::int FROM deck_sessions) AS sessions,
           (SELECT COUNT(DISTINCT LOWER(viewer_email))::int FROM deck_sessions) AS viewers,
           (SELECT COALESCE(SUM(duration_ms), 0)::bigint FROM deck_slide_events) AS total_ms,
+          (SELECT COUNT(DISTINCT session_id)::int FROM deck_page_events WHERE page_key = 'investor_dashboard') AS dashboard_sessions,
+          (SELECT COUNT(DISTINCT LOWER(viewer_email))::int FROM deck_page_events WHERE page_key = 'investor_dashboard') AS dashboard_viewers,
+          (SELECT COALESCE(SUM(duration_ms), 0)::bigint FROM deck_page_events WHERE page_key = 'investor_dashboard') AS dashboard_total_ms,
           (SELECT COUNT(*)::int FROM deck_questions) AS questions
       `,
       sql`
@@ -43,6 +55,34 @@ export default async function handler(req, res) {
       `,
       sql`
         SELECT
+          page_key,
+          COALESCE(SUM(duration_ms), 0)::bigint AS total_ms,
+          COUNT(DISTINCT session_id)::int AS sessions,
+          COUNT(DISTINCT LOWER(viewer_email))::int AS viewers,
+          COUNT(*)::int AS events,
+          MAX(created_at) AS last_event_at
+        FROM deck_page_events
+        GROUP BY page_key
+        ORDER BY total_ms DESC, events DESC
+      `,
+      sql`
+        WITH slide_totals AS (
+          SELECT
+            session_id,
+            COALESCE(SUM(duration_ms), 0)::bigint AS total_ms,
+            COALESCE(MAX(slide_number), 0)::int AS last_slide
+          FROM deck_slide_events
+          GROUP BY session_id
+        ),
+        page_totals AS (
+          SELECT
+            session_id,
+            COALESCE(SUM(duration_ms), 0)::bigint AS dashboard_total_ms
+          FROM deck_page_events
+          WHERE page_key = 'investor_dashboard'
+          GROUP BY session_id
+        )
+        SELECT
           ds.id,
           ds.viewer_email,
           ds.deck_language,
@@ -50,12 +90,13 @@ export default async function handler(req, res) {
           ds.last_seen_at,
           di.label AS invite_label,
           di.email_hint,
-          COALESCE(SUM(e.duration_ms), 0)::bigint AS total_ms,
-          COALESCE(MAX(e.slide_number), 0)::int AS last_slide
+          COALESCE(st.total_ms, 0)::bigint AS total_ms,
+          COALESCE(st.last_slide, 0)::int AS last_slide,
+          COALESCE(pt.dashboard_total_ms, 0)::bigint AS dashboard_total_ms
         FROM deck_sessions ds
         LEFT JOIN deck_invites di ON di.id = ds.invite_id
-        LEFT JOIN deck_slide_events e ON e.session_id = ds.id
-        GROUP BY ds.id, di.label, di.email_hint
+        LEFT JOIN slide_totals st ON st.session_id = ds.id
+        LEFT JOIN page_totals pt ON pt.session_id = ds.id
         ORDER BY ds.last_seen_at DESC
         LIMIT 80
       `,
@@ -80,6 +121,24 @@ export default async function handler(req, res) {
         ORDER BY e.session_id ASC, e.deck_language ASC, e.slide_number ASC
       `,
       sql`
+        WITH recent_sessions AS (
+          SELECT id
+          FROM deck_sessions
+          ORDER BY last_seen_at DESC
+          LIMIT 80
+        )
+        SELECT
+          e.session_id,
+          e.page_key,
+          COALESCE(SUM(e.duration_ms), 0)::bigint AS total_ms,
+          COUNT(*)::int AS events,
+          MAX(e.created_at) AS last_event_at
+        FROM deck_page_events e
+        JOIN recent_sessions rs ON rs.id = e.session_id
+        GROUP BY e.session_id, e.page_key
+        ORDER BY e.session_id ASC, e.page_key ASC
+      `,
+      sql`
         SELECT
           q.id,
           q.viewer_email,
@@ -95,6 +154,23 @@ export default async function handler(req, res) {
         LIMIT 100
       `,
       sql`
+        WITH invite_slide AS (
+          SELECT
+            ds.invite_id,
+            COALESCE(SUM(e.duration_ms), 0)::bigint AS total_ms
+          FROM deck_sessions ds
+          JOIN deck_slide_events e ON e.session_id = ds.id
+          GROUP BY ds.invite_id
+        ),
+        invite_page AS (
+          SELECT
+            ds.invite_id,
+            COALESCE(SUM(e.duration_ms), 0)::bigint AS dashboard_total_ms
+          FROM deck_sessions ds
+          JOIN deck_page_events e ON e.session_id = ds.id
+          WHERE e.page_key = 'investor_dashboard'
+          GROUP BY ds.invite_id
+        )
         SELECT
           di.id,
           di.label,
@@ -106,11 +182,13 @@ export default async function handler(req, res) {
           di.code_ciphertext,
           COUNT(DISTINCT ds.id)::int AS sessions,
           COUNT(DISTINCT LOWER(ds.viewer_email))::int AS viewers,
-          COALESCE(SUM(e.duration_ms), 0)::bigint AS total_ms
+          COALESCE(invite_slide.total_ms, 0)::bigint AS total_ms,
+          COALESCE(invite_page.dashboard_total_ms, 0)::bigint AS dashboard_total_ms
         FROM deck_invites di
         LEFT JOIN deck_sessions ds ON ds.invite_id = di.id
-        LEFT JOIN deck_slide_events e ON e.session_id = ds.id
-        GROUP BY di.id
+        LEFT JOIN invite_slide ON invite_slide.invite_id = di.id
+        LEFT JOIN invite_page ON invite_page.invite_id = di.id
+        GROUP BY di.id, invite_slide.total_ms, invite_page.dashboard_total_ms
         ORDER BY di.created_at DESC
         LIMIT 100
       `,
@@ -129,6 +207,17 @@ export default async function handler(req, res) {
       });
       sessionSlides.set(row.session_id, list);
     }
+    const sessionPages = new Map();
+    for (const row of sessionPageRows) {
+      const list = sessionPages.get(row.session_id) || [];
+      list.push({
+        pageKey: row.page_key,
+        totalMinutes: minutes(row.total_ms),
+        events: row.events,
+        lastEventAt: row.last_event_at,
+      });
+      sessionPages.set(row.session_id, list);
+    }
 
     return res.status(200).json({
       admin: admin.username,
@@ -136,6 +225,9 @@ export default async function handler(req, res) {
         sessions: summary.sessions || 0,
         viewers: summary.viewers || 0,
         totalMinutes: minutes(summary.total_ms),
+        dashboardSessions: summary.dashboard_sessions || 0,
+        dashboardViewers: summary.dashboard_viewers || 0,
+        dashboardMinutes: minutes(summary.dashboard_total_ms),
         questions: summary.questions || 0,
       },
       slides: slideRows.map(r => ({
@@ -146,6 +238,14 @@ export default async function handler(req, res) {
         sessions: r.sessions,
         events: r.events,
       })),
+      pages: pageRows.map(r => ({
+        pageKey: r.page_key,
+        totalMinutes: minutes(r.total_ms),
+        sessions: r.sessions,
+        viewers: r.viewers,
+        events: r.events,
+        lastEventAt: r.last_event_at,
+      })),
       sessions: sessionRows.map(r => ({
         id: r.id,
         viewerEmail: r.viewer_email,
@@ -155,8 +255,10 @@ export default async function handler(req, res) {
         startedAt: r.started_at,
         lastSeenAt: r.last_seen_at,
         totalMinutes: minutes(r.total_ms),
+        dashboardMinutes: minutes(r.dashboard_total_ms),
         lastSlide: r.last_slide,
         slideBreakdown: sessionSlides.get(r.id) || [],
+        pageBreakdown: sessionPages.get(r.id) || [],
       })),
       questions: questionRows.map(r => ({
         id: r.id,
@@ -180,6 +282,7 @@ export default async function handler(req, res) {
         sessions: r.sessions,
         viewers: r.viewers,
         totalMinutes: minutes(r.total_ms),
+        dashboardMinutes: minutes(r.dashboard_total_ms),
       })),
     });
   } catch (e) {

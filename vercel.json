@@ -61,7 +61,6 @@
     { "source": "/portfolio",  "destination": "/points/portfolio",  "permanent": true },
     { "source": "/admin",      "destination": "/points/admin",      "permanent": true },
     { "source": "/points/deck","destination": "/deck",              "permanent": true },
-    { "source": "/investors",  "destination": "/deck",              "permanent": true },
     { "source": "/earn",       "destination": "/points/earn",       "permanent": true },
     { "source": "/market",     "destination": "/points/market",     "permanent": true },
     { "source": "/u/:username","destination": "/points/u/:username","permanent": true },
@@ -111,6 +110,7 @@
     { "source": "/points-demo",         "destination": "/points/" },
     { "source": "/points-demo/:path*",  "destination": "/points/" },
     { "source": "/deck",                "destination": "/points/" },
+    { "source": "/investors",           "destination": "/points/" },
     { "source": "/developer",           "destination": "/points/" },
     { "source": "/points/earn",         "destination": "/points/" },
     { "source": "/points/developer",    "destination": "/points/" },
@@ -150,6 +150,13 @@
     {
       "source": "/deck",
       "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache" }
+      ]
+    },
+    {
+      "source": "/investors",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
         { "key": "Cache-Control", "value": "no-store, no-cache" }
       ]
     }

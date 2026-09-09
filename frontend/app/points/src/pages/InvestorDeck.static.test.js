@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const appSource = await readFile(new URL('../App.jsx', import.meta.url), 'utf8');
 const deckSource = await readFile(new URL('./InvestorDeck.jsx', import.meta.url), 'utf8');
+const dashboardSource = await readFile(new URL('./InvestorDashboard.jsx', import.meta.url), 'utf8');
 const manifestSource = await readFile(new URL('../lib/investorDeckManifest.js', import.meta.url), 'utf8');
 const adminSource = await readFile(new URL('./PointsAdmin.jsx', import.meta.url), 'utf8');
 const adminPanelSource = await readFile(new URL('../components/DeckAdminPanel.jsx', import.meta.url), 'utf8');
@@ -13,13 +14,36 @@ const authSource = await readFile(new URL('../../../../api/deck/auth.js', import
 
 test('points app exposes the private investor deck route', () => {
   assert.match(appSource, /InvestorDeck/);
+  assert.match(appSource, /InvestorDashboard/);
   assert.match(appSource, /path="\/deck"/);
+  assert.match(appSource, /path="\/investors"/);
   // The deck lives at root /deck while everything else mounts under /points,
   // so the basename has to stay dynamic. Matched against '/points/' rather
   // than '/points' so a sibling top-level path that merely shares the prefix
   // — /points-demo — isn't handed a basename the router can't match.
   assert.match(appSource, /pathname === '\/points' \|\| pathname\.startsWith\('\/points\/'\)/);
   assert.match(appSource, /<BrowserRouter basename=\{basename\}>/);
+});
+
+test('investor dashboard uses the private deck gate and renders aggregate metrics', () => {
+  assert.match(dashboardSource, /fetchDeckSession/);
+  assert.match(dashboardSource, /deckLogin/);
+  assert.match(dashboardSource, /deckLogout/);
+  assert.match(dashboardSource, /fetchInvestorDashboard/);
+  assert.match(dashboardSource, /trackInvestorEvent/);
+  assert.match(dashboardSource, /page_view/);
+  assert.match(dashboardSource, /heartbeat/);
+  assert.match(dashboardSource, /visibilitychange/);
+  assert.match(dashboardSource, /beforeunload/);
+  assert.match(dashboardSource, /InvestorGate/);
+  assert.match(dashboardSource, /Open deck/);
+  assert.match(dashboardSource, /30-day trading activity/);
+  assert.match(dashboardSource, /Signup cohorts/);
+  assert.match(dashboardSource, /Attribution mix/);
+  assert.match(dashboardSource, /Coverage and resolution quality/);
+  assert.match(dashboardSource, /Largest 30d volume/);
+  assert.doesNotMatch(dashboardSource, /phoneNumber/);
+  assert.doesNotMatch(dashboardSource, /viewerEmail/);
 });
 
 test('investor deck viewer gates access, toggles languages, watermarks slides, and tracks analytics', () => {
@@ -80,7 +104,11 @@ test('points admin exposes deck analytics and invite management', () => {
   assert.match(adminPanelSource, /Reemitir contraseña/);
   assert.match(adminPanelSource, /expandedSessionIds/);
   assert.match(adminPanelSource, /slideBreakdown/);
-  assert.match(adminPanelSource, /Ver láminas/);
+  assert.match(adminPanelSource, /pageBreakdown/);
+  assert.match(adminPanelSource, /dashboardMinutes/);
+  assert.match(adminPanelSource, /Dashboard viewers/);
+  assert.match(adminPanelSource, /Investor dashboard/);
+  assert.match(adminPanelSource, /Ver detalle/);
   assert.match(adminPanelSource, /Lámina \{row\.slideNumber\}/);
 });
 
@@ -88,6 +116,8 @@ test('points API client exposes deck viewer and admin endpoints', () => {
   assert.match(apiSource, /\/api\/deck\/auth/);
   assert.match(apiSource, /\/api\/deck\/events/);
   assert.match(apiSource, /\/api\/deck\/questions/);
+  assert.match(apiSource, /\/api\/investors\/dashboard/);
+  assert.match(apiSource, /\/api\/investors\/events/);
   assert.match(apiSource, /\/api\/deck\/admin\/dashboard/);
   assert.match(apiSource, /\/api\/deck\/admin\/invites/);
   assert.match(apiSource, /action:\s*'reset_code'/);
@@ -98,11 +128,17 @@ test('points API client exposes deck viewer and admin endpoints', () => {
 test('vite dev server has a local deck API fallback for localhost review', () => {
   assert.match(viteSource, /pointsRootDeckDevMiddleware/);
   assert.match(viteSource, /pathname === '\/deck'/);
+  assert.match(viteSource, /pathname === '\/investors'/);
   assert.match(viteSource, /deckDevApiMiddleware/);
+  assert.match(viteSource, /\/api\/investors\/dashboard/);
+  assert.match(viteSource, /\/api\/investors\/events/);
+  assert.match(viteSource, /pageEvents/);
+  assert.match(viteSource, /makeInvestorDashboard/);
   assert.match(viteSource, /Francisco M\./);
   assert.match(viteSource, /Chiavari/);
   assert.match(viteSource, /shareCode:\s*invite\.code/);
   assert.match(viteSource, /reset_code/);
   assert.match(viteSource, /slideBreakdown/);
+  assert.match(viteSource, /pageBreakdown/);
   assert.match(viteSource, /\/api\/deck\/session/);
 });

@@ -26,6 +26,15 @@ function deckAccessUrl() {
   return `${window.location.origin}/deck`;
 }
 
+function pageLabel(value) {
+  if (value === 'investor_dashboard') return 'Investor dashboard';
+  return String(value || 'page')
+    .split(/[-_ ]+/)
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 function deckInviteMessage(invite, code) {
   const accessCode = code || invite?.shareCode || '';
   const greeting = invite?.label ? `Hola ${invite.label},` : 'Hola,';
@@ -176,6 +185,7 @@ export default function DeckAdminPanel() {
 
   const summary = data?.summary || {};
   const slides = data?.slides || [];
+  const pages = data?.pages || [];
   const sessions = data?.sessions || [];
   const questions = data?.questions || [];
   const invites = data?.invites || [];
@@ -192,6 +202,8 @@ export default function DeckAdminPanel() {
         <Metric label="Sesiones" value={summary.sessions || 0} />
         <Metric label="Viewers" value={summary.viewers || 0} />
         <Metric label="Minutos" value={summary.totalMinutes || 0} />
+        <Metric label="Dashboard viewers" value={summary.dashboardViewers || 0} />
+        <Metric label="Min dashboard" value={summary.dashboardMinutes || 0} />
         <Metric label="Preguntas" value={summary.questions || 0} />
       </section>
 
@@ -237,7 +249,7 @@ export default function DeckAdminPanel() {
               <div>
                 <strong>{invite.label}</strong>
                 <div style={smallMuted}>
-                  {invite.emailHint || 'sin correo fijo'} · {invite.sessions} sesiones · {invite.totalMinutes} min
+                  {invite.emailHint || 'sin correo fijo'} · {invite.sessions} sesiones · {invite.totalMinutes} min deck · {invite.dashboardMinutes || 0} min dashboard
                 </div>
                 <div style={shareLine}>
                   {shareCode
@@ -278,6 +290,27 @@ export default function DeckAdminPanel() {
             </div>
           );
           })}
+        </div>
+      </section>
+
+      <section style={card}>
+        <div style={monoLabel}>Investor dashboard</div>
+        <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
+          {pages.length === 0 && <p style={{ color: 'var(--text-muted)' }}>Sin vistas del dashboard todavía.</p>}
+          {pages.map(row => (
+            <div key={row.pageKey} style={rowStyle}>
+              <div>
+                <strong>{pageLabel(row.pageKey)}</strong>
+                <div style={smallMuted}>
+                  {row.sessions} sesiones · {row.viewers} viewers · {row.events} eventos
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <strong>{row.totalMinutes} min</strong>
+                <div style={smallMuted}>{row.lastEventAt ? new Date(row.lastEventAt).toLocaleString() : 'sin fecha'}</div>
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -322,7 +355,12 @@ export default function DeckAdminPanel() {
           {sessions.map(s => {
             const expanded = Boolean(expandedSessionIds[s.id]);
             const slideBreakdown = Array.isArray(s.slideBreakdown) ? s.slideBreakdown : [];
-            const maxSlideMinutes = Math.max(...slideBreakdown.map(row => Number(row.totalMinutes || 0)), 0.1);
+            const pageBreakdown = Array.isArray(s.pageBreakdown) ? s.pageBreakdown : [];
+            const maxActivityMinutes = Math.max(
+              ...slideBreakdown.map(row => Number(row.totalMinutes || 0)),
+              ...pageBreakdown.map(row => Number(row.totalMinutes || 0)),
+              0.1,
+            );
             return (
             <div key={s.id} style={sessionCardStyle}>
               <button type="button" onClick={() => toggleSession(s.id)} style={sessionSummaryButton}>
@@ -331,18 +369,19 @@ export default function DeckAdminPanel() {
                   <div style={smallMuted}>{s.inviteLabel || 'sin etiqueta'} · {s.language.toUpperCase()} · última lámina {s.lastSlide || '-'}</div>
                 </div>
                 <div style={{ textAlign: 'right', display: 'grid', gap: 4 }}>
-                  <strong>{s.totalMinutes} min</strong>
+                  <strong>{s.totalMinutes} min deck</strong>
+                  <span style={smallMuted}>{s.dashboardMinutes || 0} min dashboard</span>
                   <span style={smallMuted}>{new Date(s.lastSeenAt).toLocaleString()}</span>
-                  <span style={sessionToggleText}>{expanded ? 'Ocultar detalle' : 'Ver láminas'} · {slideBreakdown.length}</span>
+                  <span style={sessionToggleText}>{expanded ? 'Ocultar detalle' : 'Ver detalle'} · {slideBreakdown.length + pageBreakdown.length}</span>
                 </div>
               </button>
               {expanded && (
                 <div style={sessionBreakdownStyle}>
-                  {slideBreakdown.length === 0 && (
-                    <p style={{ ...smallMuted, margin: 0 }}>Sin tiempo registrado por lámina todavía.</p>
+                  {slideBreakdown.length === 0 && pageBreakdown.length === 0 && (
+                    <p style={{ ...smallMuted, margin: 0 }}>Sin tiempo registrado todavía.</p>
                   )}
                   {slideBreakdown.map(row => {
-                    const width = `${Math.max(8, Math.round((Number(row.totalMinutes || 0) / maxSlideMinutes) * 100))}%`;
+                    const width = `${Math.max(8, Math.round((Number(row.totalMinutes || 0) / maxActivityMinutes) * 100))}%`;
                     return (
                       <div key={`${s.id}-${row.language}-${row.slideNumber}`} style={slideTimeRowStyle}>
                         <div style={{ minWidth: 112 }}>
@@ -351,6 +390,23 @@ export default function DeckAdminPanel() {
                         </div>
                         <div style={slideBarTrackStyle}>
                           <div style={{ ...slideBarFillStyle, width }} />
+                        </div>
+                        <div style={{ minWidth: 76, textAlign: 'right', fontWeight: 800 }}>
+                          {row.totalMinutes} min
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {pageBreakdown.map(row => {
+                    const width = `${Math.max(8, Math.round((Number(row.totalMinutes || 0) / maxActivityMinutes) * 100))}%`;
+                    return (
+                      <div key={`${s.id}-${row.pageKey}`} style={slideTimeRowStyle}>
+                        <div style={{ minWidth: 112 }}>
+                          <strong>{pageLabel(row.pageKey)}</strong>
+                          <div style={smallMuted}>{row.events} eventos</div>
+                        </div>
+                        <div style={slideBarTrackStyle}>
+                          <div style={{ ...dashboardBarFillStyle, width }} />
                         </div>
                         <div style={{ minWidth: 76, textAlign: 'right', fontWeight: 800 }}>
                           {row.totalMinutes} min
@@ -481,6 +537,12 @@ const slideBarFillStyle = {
   height: '100%',
   borderRadius: 999,
   background: 'linear-gradient(90deg, rgba(255,90,31,0.92), rgba(34,197,94,0.82))',
+};
+
+const dashboardBarFillStyle = {
+  height: '100%',
+  borderRadius: 999,
+  background: 'linear-gradient(90deg, rgba(96,165,250,0.92), rgba(255,90,31,0.82))',
 };
 
 const shareLine = {

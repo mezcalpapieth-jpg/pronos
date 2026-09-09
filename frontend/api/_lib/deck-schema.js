@@ -44,6 +44,20 @@ const migrations = [
   `CREATE INDEX IF NOT EXISTS idx_deck_slide_events_slide ON deck_slide_events(deck_language, slide_number)`,
   `CREATE INDEX IF NOT EXISTS idx_deck_slide_events_invite ON deck_slide_events(invite_id)`,
 
+  `CREATE TABLE IF NOT EXISTS deck_page_events (
+    id BIGSERIAL PRIMARY KEY,
+    session_id TEXT REFERENCES deck_sessions(id) ON DELETE CASCADE,
+    invite_id BIGINT REFERENCES deck_invites(id),
+    viewer_email TEXT,
+    page_key TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_deck_page_events_session ON deck_page_events(session_id, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_deck_page_events_page ON deck_page_events(page_key, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_deck_page_events_invite ON deck_page_events(invite_id)`,
+
   `CREATE TABLE IF NOT EXISTS deck_questions (
     id BIGSERIAL PRIMARY KEY,
     session_id TEXT REFERENCES deck_sessions(id) ON DELETE SET NULL,

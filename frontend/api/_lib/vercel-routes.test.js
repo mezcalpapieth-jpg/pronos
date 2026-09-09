@@ -19,6 +19,14 @@ function hasRule(rules, source, destination) {
     && rules.some((rule) => rule.source === source && rule.destination === destination);
 }
 
+function hasHeader(source, key, value) {
+  const block = Array.isArray(vercelConfig.headers)
+    ? vercelConfig.headers.find((item) => item.source === source)
+    : null;
+  return Array.isArray(block?.headers)
+    && block.headers.some((header) => header.key === key && header.value === value);
+}
+
 function hasCron(path, schedule) {
   return Array.isArray(vercelConfig.crons)
     && vercelConfig.crons.some((cron) => cron.path === path && cron.schedule === schedule);
@@ -97,12 +105,20 @@ test('private deck lives at the root deck path and hard-refreshes through the po
     'expected /points/deck to redirect to /deck',
   );
   assert.ok(
-    hasRule(vercelConfig.redirects, '/investors', '/deck'),
-    'expected /investors to redirect to /deck',
+    !hasRule(vercelConfig.redirects, '/investors', '/deck'),
+    'expected /investors to stop redirecting to /deck',
   );
   assert.ok(
     hasRule(vercelConfig.rewrites, '/deck', '/points/'),
     'expected /deck to hard-refresh through the points SPA',
+  );
+  assert.ok(
+    hasRule(vercelConfig.rewrites, '/investors', '/points/'),
+    'expected /investors to hard-refresh through the points SPA',
+  );
+  assert.ok(
+    hasHeader('/investors', 'X-Robots-Tag', 'noindex, nofollow'),
+    'expected /investors to stay out of crawlers',
   );
 });
 

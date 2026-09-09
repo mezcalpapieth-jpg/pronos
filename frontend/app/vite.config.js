@@ -209,12 +209,13 @@ function pointsRootDeckDevMiddleware() {
         if (process.env.BUILD_TARGET !== 'points') return next();
         const rawUrl = req.url || '';
         const [pathname, query = ''] = rawUrl.split('?');
-        if (pathname === '/deck') {
+        if (pathname === '/deck' || pathname === '/investors') {
           req.url = `/points/${query ? `?${query}` : ''}`;
           return next();
         }
-        if (pathname.startsWith('/deck/')) {
-          req.url = `/points/${pathname.slice('/deck/'.length)}${query ? `?${query}` : ''}`;
+        if (pathname.startsWith('/deck/') || pathname.startsWith('/investors/')) {
+          const prefix = pathname.startsWith('/deck/') ? '/deck/' : '/investors/';
+          req.url = `/points/${pathname.slice(prefix.length)}${query ? `?${query}` : ''}`;
           return next();
         }
         // The presentation demo gate, same trick as /deck: serve the points
@@ -359,6 +360,7 @@ function deckDevApiMiddleware() {
   }];
   const sessions = new Map();
   const events = [];
+  const pageEvents = [];
   const questions = [];
 
   function publicSession(session) {
@@ -399,19 +401,42 @@ function deckDevApiMiddleware() {
       bySlide.set(key, current);
     }
 
+    const byPage = new Map();
+    for (const event of pageEvents) {
+      const key = event.pageKey || 'investor_dashboard';
+      const current = byPage.get(key) || {
+        pageKey: key,
+        totalMs: 0,
+        sessions: new Set(),
+        viewers: new Set(),
+        events: 0,
+        lastEventAt: event.createdAt,
+      };
+      current.totalMs += Number(event.durationMs || 0);
+      current.sessions.add(event.sessionId);
+      if (event.viewerEmail) current.viewers.add(String(event.viewerEmail).toLowerCase());
+      current.events += 1;
+      if (new Date(event.createdAt) > new Date(current.lastEventAt)) current.lastEventAt = event.createdAt;
+      byPage.set(key, current);
+    }
+
     const minutes = ms => Math.round((Number(ms || 0) / 60000) * 10) / 10;
     const sessionRows = [...sessions.values()]
       .sort((a, b) => new Date(b.lastSeenAt) - new Date(a.lastSeenAt))
       .map(session => {
         const sessionEvents = events.filter(event => event.sessionId === session.id);
+        const sessionPageEvents = pageEvents.filter(event => event.sessionId === session.id);
         const totalMs = sessionEvents.reduce((sum, event) => sum + Number(event.durationMs || 0), 0);
+        const dashboardMs = sessionPageEvents
+          .filter(event => event.pageKey === 'investor_dashboard')
+          .reduce((sum, event) => sum + Number(event.durationMs || 0), 0);
         const lastSlide = sessionEvents.reduce((max, event) => Math.max(max, Number(event.slideNumber || 0)), 0);
         const invite = invites.find(item => item.id === session.inviteId);
-        const bySlide = new Map();
+        const slidesBySession = new Map();
         for (const event of sessionEvents) {
           if (!event.durationMs || event.durationMs <= 0) continue;
           const key = `${event.language || 'en'}:${event.slideNumber || 0}`;
-          const current = bySlide.get(key) || {
+          const current = slidesBySession.get(key) || {
             language: event.language || 'en',
             slideNumber: event.slideNumber || 0,
             totalMs: 0,
@@ -421,7 +446,21 @@ function deckDevApiMiddleware() {
           current.totalMs += Number(event.durationMs || 0);
           current.events += 1;
           if (new Date(event.createdAt) > new Date(current.lastEventAt)) current.lastEventAt = event.createdAt;
-          bySlide.set(key, current);
+          slidesBySession.set(key, current);
+        }
+        const pagesBySession = new Map();
+        for (const event of sessionPageEvents) {
+          const key = event.pageKey || 'investor_dashboard';
+          const current = pagesBySession.get(key) || {
+            pageKey: key,
+            totalMs: 0,
+            events: 0,
+            lastEventAt: event.createdAt,
+          };
+          current.totalMs += Number(event.durationMs || 0);
+          current.events += 1;
+          if (new Date(event.createdAt) > new Date(current.lastEventAt)) current.lastEventAt = event.createdAt;
+          pagesBySession.set(key, current);
         }
         return {
           id: session.id,
@@ -432,8 +471,9 @@ function deckDevApiMiddleware() {
           startedAt: session.startedAt,
           lastSeenAt: session.lastSeenAt,
           totalMinutes: minutes(totalMs),
+          dashboardMinutes: minutes(dashboardMs),
           lastSlide,
-          slideBreakdown: [...bySlide.values()]
+          slideBreakdown: [...slidesBySession.values()]
             .sort((a, b) => a.language.localeCompare(b.language) || a.slideNumber - b.slideNumber)
             .map(row => ({
               language: row.language,
@@ -442,8 +482,18 @@ function deckDevApiMiddleware() {
               events: row.events,
               lastEventAt: row.lastEventAt,
             })),
+          pageBreakdown: [...pagesBySession.values()]
+            .sort((a, b) => a.pageKey.localeCompare(b.pageKey))
+            .map(row => ({
+              pageKey: row.pageKey,
+              totalMinutes: minutes(row.totalMs),
+              events: row.events,
+              lastEventAt: row.lastEventAt,
+            })),
         };
       });
+
+    const dashboardEvents = pageEvents.filter(event => event.pageKey === 'investor_dashboard');
 
     return {
       admin: 'local-dev',
@@ -451,6 +501,9 @@ function deckDevApiMiddleware() {
         sessions: sessions.size,
         viewers: new Set([...sessions.values()].map(session => session.viewerEmail.toLowerCase())).size,
         totalMinutes: minutes(events.reduce((sum, event) => sum + Number(event.durationMs || 0), 0)),
+        dashboardSessions: new Set(dashboardEvents.map(event => event.sessionId)).size,
+        dashboardViewers: new Set(dashboardEvents.map(event => String(event.viewerEmail || '').toLowerCase()).filter(Boolean)).size,
+        dashboardMinutes: minutes(dashboardEvents.reduce((sum, event) => sum + Number(event.durationMs || 0), 0)),
         questions: questions.length,
       },
       slides: [...bySlide.values()]
@@ -463,6 +516,16 @@ function deckDevApiMiddleware() {
           sessions: row.sessions.size,
           events: row.events,
         })),
+      pages: [...byPage.values()]
+        .sort((a, b) => b.totalMs - a.totalMs || b.events - a.events)
+        .map(row => ({
+          pageKey: row.pageKey,
+          totalMinutes: minutes(row.totalMs),
+          sessions: row.sessions.size,
+          viewers: row.viewers.size,
+          events: row.events,
+          lastEventAt: row.lastEventAt,
+        })),
       sessions: sessionRows.slice(0, 80),
       questions: questions.slice(-100).reverse(),
       invites: invites.slice().reverse().map(invite => {
@@ -470,6 +533,9 @@ function deckDevApiMiddleware() {
         const inviteSessionIds = new Set(inviteSessions.map(session => session.id));
         const totalMs = events
           .filter(event => inviteSessionIds.has(event.sessionId))
+          .reduce((sum, event) => sum + Number(event.durationMs || 0), 0);
+        const dashboardMs = pageEvents
+          .filter(event => inviteSessionIds.has(event.sessionId) && event.pageKey === 'investor_dashboard')
           .reduce((sum, event) => sum + Number(event.durationMs || 0), 0);
         return {
           id: invite.id,
@@ -483,8 +549,119 @@ function deckDevApiMiddleware() {
           sessions: inviteSessions.length,
           viewers: new Set(inviteSessions.map(session => session.viewerEmail.toLowerCase())).size,
           totalMinutes: minutes(totalMs),
+          dashboardMinutes: minutes(dashboardMs),
         };
       }),
+    };
+  }
+
+  function makeInvestorDashboard() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const daily = Array.from({ length: 30 }, (_, idx) => {
+      const date = new Date(today);
+      date.setDate(today.getDate() - (29 - idx));
+      const wave = 0.7 + Math.sin(idx / 3) * 0.22;
+      const grossFlow = Math.round((820 + idx * 58) * wave);
+      return {
+        day: date.toISOString().slice(0, 10),
+        fills: 14 + (idx % 9) + Math.floor(idx / 5),
+        traders: 5 + (idx % 6),
+        markets: 3 + (idx % 5),
+        grossFlow,
+        buyVolume: Math.round(grossFlow * 0.62),
+      };
+    });
+
+    return {
+      generatedAt: now(),
+      privacy: {
+        aggregateOnly: true,
+        excludesTreasury: true,
+        userRows: false,
+        piiFields: [],
+      },
+      summary: {
+        usersTotal: 486,
+        users30d: 92,
+        tradersTotal: 154,
+        traders30d: 77,
+        traders7d: 31,
+        fills30d: daily.reduce((sum, row) => sum + row.fills, 0),
+        grossFlow30d: daily.reduce((sum, row) => sum + row.grossFlow, 0),
+        buyVolume30d: daily.reduce((sum, row) => sum + row.buyVolume, 0),
+        tradedMarkets30d: 118,
+        marketsCreated30d: 241,
+        activeMarkets: 312,
+        resolvedMarkets: 790,
+        canceledMarkets: 18,
+        overdueMarkets: 1,
+        autoResolvableMarkets: 438,
+        autoResolved30d: 164,
+        resolved30d: 189,
+        autoResolutionRate30d: 86.8,
+        totalSupply: 1834000,
+      },
+      traction: {
+        daily,
+        cohorts: [
+          { week: '2026-09-07', signups: 28, tradedWeek0: 12, tradedWeek1: 0, tradedWeek2: 0, tradedWeek3: 0, retentionWeek0: 42.9, retentionWeek1: 0, retentionWeek2: 0, retentionWeek3: 0 },
+          { week: '2026-08-31', signups: 34, tradedWeek0: 16, tradedWeek1: 9, tradedWeek2: 0, tradedWeek3: 0, retentionWeek0: 47.1, retentionWeek1: 26.5, retentionWeek2: 0, retentionWeek3: 0 },
+          { week: '2026-08-24', signups: 41, tradedWeek0: 21, tradedWeek1: 14, tradedWeek2: 10, tradedWeek3: 0, retentionWeek0: 51.2, retentionWeek1: 34.1, retentionWeek2: 24.4, retentionWeek3: 0 },
+        ],
+        siteTime: {
+          totalSeconds30d: 286200,
+          totalHours30d: 79.5,
+          activeUsers30d: 126,
+          avgDailyMinutesPerUser: 9.4,
+          lastSeenAt: now(),
+        },
+        publicity: [
+          { source: 'instagram', visits: 2300, uniqueVisitors: 1680, conversions: 102, conversionRate: 4.4, lastSeenAt: now() },
+          { source: 'tiktok', visits: 1120, uniqueVisitors: 870, conversions: 46, conversionRate: 4.1, lastSeenAt: now() },
+          { source: 'x', visits: 410, uniqueVisitors: 320, conversions: 18, conversionRate: 4.4, lastSeenAt: now() },
+        ],
+      },
+      liquidity: {
+        categories: [
+          { category: 'deportes', fills: 218, traders: 62, markets: 77, grossFlow: 52400, buyVolume: 32900 },
+          { category: 'finanzas', fills: 93, traders: 41, markets: 28, grossFlow: 27100, buyVolume: 18200 },
+          { category: 'entretenimiento', fills: 64, traders: 35, markets: 20, grossFlow: 13400, buyVolume: 8300 },
+        ],
+        topMarkets: [
+          { id: 101, question: 'San Francisco 49ers @ Los Angeles Rams', category: 'deportes', status: 'active', endTime: now(), fills: 42, traders: 18, grossFlow: 9100, buyVolume: 6200, lastTradeAt: now() },
+          { id: 102, question: 'BTC above opening price by market close?', category: 'finanzas', status: 'resolved', endTime: now(), fills: 38, traders: 15, grossFlow: 7400, buyVolume: 4600, lastTradeAt: now() },
+        ],
+        distributions30d: [
+          { kind: 'daily_claim', total: 18600, count: 248, users: 91, lastAt: now() },
+          { kind: 'signup_bonus', total: 9200, count: 92, users: 92, lastAt: now() },
+          { kind: 'invalid_field_refund', total: 4600, count: 2, users: 2, lastAt: now() },
+        ],
+        parlays30d: {
+          tickets: 29,
+          users: 14,
+          stake: 8900,
+          potentialPayout: 31100,
+          won: 4,
+          lost: 15,
+          open: 8,
+          void: 2,
+        },
+      },
+      marketEngine: {
+        marketsCreated30d: 241,
+        marketsTraded30d: 118,
+        tradedShare30d: 49,
+        avgFillsPerTradedMarket30d: 4.4,
+        avgTradersPerTradedMarket30d: 2.7,
+        avgHoursToFirstTrade30d: 5.8,
+        overdueMarkets: 1,
+        resolved30d: 189,
+        autoResolved30d: 164,
+        autoResolutionRate30d: 86.8,
+        avgResolutionDelayHours30d: 1.9,
+        corrections30d: 1,
+      },
     };
   }
 
@@ -493,7 +670,11 @@ function deckDevApiMiddleware() {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const url = new URL(req.url || '/', 'http://localhost');
-        if (!url.pathname.startsWith('/api/deck/')) return next();
+        if (
+          !url.pathname.startsWith('/api/deck/')
+          && url.pathname !== '/api/investors/dashboard'
+          && url.pathname !== '/api/investors/events'
+        ) return next();
 
         if (req.method === 'OPTIONS') {
           res.statusCode = 204;
@@ -585,6 +766,31 @@ function deckDevApiMiddleware() {
 
         if (url.pathname === '/api/deck/admin/invites' && req.method === 'GET') {
           return sendJson(res, 200, { invites: makeDashboard().invites });
+        }
+
+        if (url.pathname === '/api/investors/dashboard' && req.method === 'GET') {
+          const session = readSession(req);
+          if (!session) return sendJson(res, 401, { error: 'investor_session_required' });
+          return sendJson(res, 200, makeInvestorDashboard());
+        }
+
+        if (url.pathname === '/api/investors/events' && req.method === 'POST') {
+          const session = readSession(req);
+          if (!session) return sendJson(res, 401, { error: 'investor_session_required' });
+          const body = await readRequestJson(req);
+          const storedSession = sessions.get(session.id);
+          if (storedSession) storedSession.lastSeenAt = now();
+          pageEvents.push({
+            id: randomUUID(),
+            sessionId: session.id,
+            inviteId: session.inviteId,
+            viewerEmail: session.viewerEmail,
+            pageKey: 'investor_dashboard',
+            durationMs: Math.max(0, Math.min(30 * 60_000, Number(body.durationMs || 0))),
+            eventType: ['page_view', 'heartbeat', 'hidden', 'exit'].includes(body.eventType) ? body.eventType : 'page_view',
+            createdAt: now(),
+          });
+          return sendJson(res, 200, { ok: true });
         }
 
         if (url.pathname === '/api/deck/admin/invites' && req.method === 'POST') {

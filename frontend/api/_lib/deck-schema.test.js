@@ -19,6 +19,10 @@ test('deck schema stores hashed invite access and DocSend-style analytics tables
   assert.match(schemaSource, /CREATE TABLE IF NOT EXISTS deck_slide_events/);
   assert.match(schemaSource, /duration_ms INTEGER NOT NULL DEFAULT 0/);
   assert.match(schemaSource, /ALTER TABLE deck_slide_events ALTER COLUMN deck_language SET DEFAULT 'en'/);
+  assert.match(schemaSource, /CREATE TABLE IF NOT EXISTS deck_page_events/);
+  assert.match(schemaSource, /page_key TEXT NOT NULL/);
+  assert.match(schemaSource, /idx_deck_page_events_session/);
+  assert.match(schemaSource, /idx_deck_page_events_page/);
   assert.match(schemaSource, /CREATE TABLE IF NOT EXISTS deck_questions/);
   assert.match(schemaSource, /ALTER TABLE deck_questions ALTER COLUMN deck_language SET DEFAULT 'en'/);
 });
@@ -45,10 +49,14 @@ test('deck auth creates sessions from active invite codes only', () => {
 test('deck admin dashboard aggregates slide time and questions behind points admin auth', () => {
   assert.match(dashboardSource, /requirePointsAdmin/);
   assert.match(dashboardSource, /deck_slide_events/);
+  assert.match(dashboardSource, /deck_page_events/);
   assert.match(dashboardSource, /SUM\(duration_ms\)/);
   assert.match(dashboardSource, /recent_sessions/);
   assert.match(dashboardSource, /sessionSlideRows/);
+  assert.match(dashboardSource, /sessionPageRows/);
   assert.match(dashboardSource, /slideBreakdown/);
+  assert.match(dashboardSource, /pageBreakdown/);
+  assert.match(dashboardSource, /dashboardMinutes/);
   assert.match(dashboardSource, /deck_questions/);
   assert.match(dashboardSource, /decryptDeckCodeForAdmin/);
 });
