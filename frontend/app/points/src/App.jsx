@@ -45,6 +45,7 @@ const PointsReferralLanding = lazy(() => import('./pages/PointsReferralLanding.j
 const PointsUserProfile = lazy(() => import('./pages/PointsUserProfile.jsx'));
 const InvestorDeck = lazy(() => import('./pages/InvestorDeck.jsx'));
 const InvestorDashboard = lazy(() => import('./pages/InvestorDashboard.jsx'));
+const Ris26Page = lazy(() => import('./pages/Ris26Page.jsx'));
 
 // Video-recording demo. Both of these live in lazily-loaded chunks that a
 // normal visitor never downloads — the gate is only reachable at an
@@ -63,6 +64,9 @@ const IS_VIDEO_GATE = typeof window !== 'undefined'
 // but dev and hand-typed URLs can still carry the slash, so match both.
 const IS_DEMO_GATE = typeof window !== 'undefined'
   && /^\/(demo|points-demo)\/?$/.test(window.location.pathname);
+
+const IS_RIS26_ROUTE = typeof window !== 'undefined'
+  && /^\/(?:points\/)?ris26(?:\/|$)/.test(window.location.pathname);
 
 // Admin usernames live in env var VITE_POINTS_ADMIN_USERNAMES so the client
 // can hide the admin nav link without needing a server round-trip. The real
@@ -197,6 +201,29 @@ function PointsSiteTimeTracker({ enabled }) {
 }
 
 export default function App() {
+  // Keep the event route completely outside the normal Points chrome and
+  // account flow. It is a public summit surface, not a trading session.
+  const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+  const basename = pathname === '/points' || pathname.startsWith('/points/')
+    ? '/points'
+    : '/';
+
+  if (IS_RIS26_ROUTE) {
+    return (
+      <BrowserRouter basename={basename}>
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
+            <Route path="/ris26/*" element={<Ris26Page />} />
+          </Routes>
+        </Suspense>
+      </BrowserRouter>
+    );
+  }
+
+  return <PointsAppChrome pathname={pathname} basename={basename} />;
+}
+
+function PointsAppChrome({ pathname, basename }) {
   const { authenticated, user, loading } = usePointsAuth();
   const [loginOpen, setLoginOpen] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
@@ -258,13 +285,6 @@ export default function App() {
 
   const adminList = parseAdminList();
   const isAdmin = !!user?.username && adminList.includes(user.username.toLowerCase());
-  // Matched against '/points/' rather than '/points' so sibling top-level
-  // paths that merely share the prefix — /points-demo — don't get handed a
-  // basename the router can't match, which would blank the page.
-  const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
-  const basename = pathname === '/points' || pathname.startsWith('/points/')
-    ? '/points'
-    : '/';
 
   useEffect(() => {
     if (typeof window === 'undefined') return;

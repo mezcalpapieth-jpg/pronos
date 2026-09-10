@@ -40,9 +40,11 @@ function liveSeedRequested() {
 }
 
 async function bootstrap() {
+  const isRis26Route = /^\/(?:points\/)?ris26(?:\/|$)/.test(window.location.pathname);
+
   // Must run before anything renders or pre-warms: once installed, every
   // /api/points/* call in the app resolves from fabricated in-browser data.
-  if (videoDemoRequested()) {
+  if (!isRis26Route && videoDemoRequested()) {
     const { installDemoBackend } = await import('./demo/installDemoBackend.js');
     // The presentation demo snapshots the real market board first, while
     // fetch is still the real one, so it runs on Pronos's actual questions
@@ -65,8 +67,10 @@ async function bootstrap() {
   // live chart movement the moment the user opens one — without this,
   // the chart only starts populating on detail-page mount and re-empties
   // every navigation. The store persists across mounts.
-  preloadCryptoTicker('BTC-USD');
-  preloadCryptoTicker('ETH-USD');
+  if (!isRis26Route) {
+    preloadCryptoTicker('BTC-USD');
+    preloadCryptoTicker('ETH-USD');
+  }
 
   ReactDOM.createRoot(document.getElementById('root')).render(
     <React.StrictMode>
@@ -77,9 +81,13 @@ async function bootstrap() {
           </div>
         }
       >
-        <PointsAuthProvider>
+        {isRis26Route ? (
           <App />
-        </PointsAuthProvider>
+        ) : (
+          <PointsAuthProvider>
+            <App />
+          </PointsAuthProvider>
+        )}
       </Sentry.ErrorBoundary>
     </React.StrictMode>,
   );

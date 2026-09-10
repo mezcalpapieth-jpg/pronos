@@ -225,6 +225,10 @@ function pointsRootDeckDevMiddleware() {
           req.url = `/points/${query ? `?${query}` : ''}`;
           return next();
         }
+        if (/^\/ris26(?:\/|$)/.test(pathname)) {
+          req.url = `/points/${query ? `?${query}` : ''}`;
+          return next();
+        }
         return next();
       });
     },
@@ -343,6 +347,85 @@ function parseCookies(header = '') {
     if (key) cookies[key] = decodeURIComponent(value);
   }
   return cookies;
+}
+
+function ris26DevApiMiddleware() {
+  const cookieName = 'pronos_ris26_player_dev';
+  const now = () => new Date().toISOString();
+  const guesses = new Map();
+
+  function visitorKey(req, res) {
+    const cookies = parseCookies(req.headers?.cookie);
+    const existing = String(cookies[cookieName] || '').trim();
+    if (existing) return existing;
+    const generated = randomUUID();
+    res.setHeader('Set-Cookie', `${cookieName}=${encodeURIComponent(generated)}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax`);
+    return generated;
+  }
+
+  function makePayload(req) {
+    const cookies = parseCookies(req.headers?.cookie);
+    const own = guesses.get(cookies[cookieName]);
+    const values = [...guesses.values()];
+    const total = values.length;
+    const sum = values.reduce((acc, item) => acc + item.guess, 0);
+    const counts = new Map();
+    for (const item of values) counts.set(item.guess, (counts.get(item.guess) || 0) + 1);
+    return {
+      ok: true,
+      event: {
+        key: 'ris26',
+        title: 'RIS 26',
+        question: '¿Cuántas pelotas de ping-pong hay en el frasco?',
+      },
+      stats: {
+        total,
+        mean: total ? Number((sum / total).toFixed(1)) : null,
+        min: total ? Math.min(...values.map(item => item.guess)) : null,
+        max: total ? Math.max(...values.map(item => item.guess)) : null,
+        updatedAt: total ? values.slice().sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))[0].updatedAt : null,
+      },
+      distribution: [...counts.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([value, count]) => ({ value, count, pct: total ? Number(((count / total) * 100).toFixed(1)) : 0 })),
+      recent: values
+        .slice()
+        .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
+        .slice(0, 8)
+        .map(item => ({ displayName: item.displayName, guess: item.guess, updatedAt: item.updatedAt })),
+      ownGuess: own ? { guess: own.guess, displayName: own.displayName, updatedAt: own.updatedAt } : null,
+    };
+  }
+
+  return {
+    name: 'ris26-dev-api-middleware',
+    configureServer(server) {
+      server.middlewares.use('/api/ris26', async (req, res) => {
+        if (req.method === 'OPTIONS') {
+          res.statusCode = 204;
+          return res.end();
+        }
+        if (req.method === 'GET') {
+          return sendJson(res, 200, makePayload(req));
+        }
+        if (req.method !== 'POST') {
+          return sendJson(res, 405, { error: 'method_not_allowed' });
+        }
+        const body = await readRequestJson(req);
+        const guess = Number(body.guess);
+        if (!Number.isInteger(guess) || guess < 1 || guess > 10000) {
+          return sendJson(res, 400, { error: 'invalid_guess' });
+        }
+        const key = visitorKey(req, res);
+        guesses.set(key, {
+          guess,
+          displayName: String(body.displayName || '').trim().slice(0, 40) || null,
+          updatedAt: now(),
+        });
+        return sendJson(res, 200, { ok: true, guess: guesses.get(key) });
+      });
+    },
+  };
 }
 
 function deckDevApiMiddleware() {
@@ -905,7 +988,7 @@ export function turnkeyBrowserNodecryptoStub() {
 const isPoints = process.env.BUILD_TARGET === 'points';
 
 export default defineConfig({
-  plugins: [pointsRootDeckDevMiddleware(), sharedCssDevMiddleware(), mvpAccessDevGate(), videoAccessDevGate(), demoAccessDevGate(), deckDevApiMiddleware(), turnkeyBrowserNodecryptoStub(), react()],
+  plugins: [pointsRootDeckDevMiddleware(), sharedCssDevMiddleware(), mvpAccessDevGate(), videoAccessDevGate(), demoAccessDevGate(), ris26DevApiMiddleware(), deckDevApiMiddleware(), turnkeyBrowserNodecryptoStub(), react()],
   base: isPoints ? '/points/' : '/mvp/',
   root: isPoints ? path.resolve(__dirname, 'points') : __dirname,
   build: {

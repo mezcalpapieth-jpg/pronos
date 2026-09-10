@@ -53,6 +53,8 @@
     { "source": "/mvp/c/deportes/uefa-champions-league", "destination": "/mvp/" },
     { "source": "/mvp/privacy",   "destination": "/mvp/" },
     { "source": "/mvp/terms",     "destination": "/mvp/" },
+    { "source": "/ris26",              "destination": "/points/" },
+    { "source": "/ris26/:path*",       "destination": "/points/" },
     { "source": "/points/market",       "destination": "/points/" },
     { "source": "/points/portfolio",    "destination": "/points/" },
     { "source": "/points/admin",        "destination": "/points/" },
