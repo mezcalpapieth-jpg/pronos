@@ -569,6 +569,9 @@ function PhoneThanks({ stats }) {
       <a className="ris26-pronos-link" href="/points/">
         Visitar Pronos
       </a>
+      <a className="ris26-create-account-link" href="/points/?signup=1">
+        Crear cuenta
+      </a>
     </div>
   );
 }

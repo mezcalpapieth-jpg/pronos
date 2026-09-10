@@ -141,6 +141,19 @@ function cleanPublicityUrl(pathname, search) {
   return `${pathname}${nextSearch ? `?${nextSearch}` : ''}`;
 }
 
+function shouldOpenSignupFromSearch(search) {
+  const params = new URLSearchParams(String(search || '').replace(/^\?/, ''));
+  return params.get('signup') === '1' || params.get('crearCuenta') === '1';
+}
+
+function cleanSignupUrl(pathname, search) {
+  const params = new URLSearchParams(String(search || '').replace(/^\?/, ''));
+  params.delete('signup');
+  params.delete('crearCuenta');
+  const nextSearch = params.toString();
+  return `${pathname}${nextSearch ? `?${nextSearch}` : ''}`;
+}
+
 function sendSiteTimePulse(seconds, path) {
   if (!Number.isFinite(seconds) || seconds < 5) return;
   fetch('/api/points/analytics/pulse', {
@@ -244,6 +257,15 @@ function PointsAppChrome({ pathname, basename }) {
     if (!isHome || window.location.search) return;
     if (hasSeenIntro()) return;
     setIntroOpen(true);
+  }, [loading, authenticated]);
+
+  useEffect(() => {
+    if (loading) return;
+    if (typeof window === 'undefined') return;
+    if (!shouldOpenSignupFromSearch(window.location.search)) return;
+    if (!authenticated) setLoginOpen(true);
+    const cleanUrl = cleanSignupUrl(window.location.pathname, window.location.search);
+    window.history.replaceState(null, '', cleanUrl || '/points/');
   }, [loading, authenticated]);
 
   // Track whether we saw `needsUsername: true` in this session so we know

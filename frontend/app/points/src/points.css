@@ -1015,6 +1015,25 @@
   color: #fff8e9;
 }
 
+.ris26-create-account-link {
+  display: block;
+  margin-top: 12px;
+  color: #00e87a;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1.3;
+  text-align: center;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.ris26-create-account-link:hover,
+.ris26-create-account-link:focus-visible {
+  text-decoration: underline;
+}
+
 .ris26-operator-actions {
   display: flex;
   justify-content: flex-end;
