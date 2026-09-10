@@ -161,6 +161,12 @@ function netflixWeekClose(now = new Date()) {
   return close;
 }
 
+function startOfUtcDate(value) {
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+
 function withTimeoutSignal(timeoutMs = DISCOVERY_FETCH_TIMEOUT_MS) {
   if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
     return { signal: AbortSignal.timeout(timeoutMs), cleanup: () => {} };
@@ -406,7 +412,8 @@ function netflixProbabilityForRank(rank, mode) {
 function netflixTop10Spec(item, { scope = 'global', mode = 'number1', close = netflixWeekClose() } = {}) {
   const title = String(item?.title || '').trim();
   if (!title) return null;
-  const start = new Date(close.getTime() - 7 * 86_400_000);
+  // Keep weekly Netflix markets off live/trending until the close date.
+  const start = startOfUtcDate(close) || close;
   const titleSlug = normalizeSlug(title);
   const metric = mode === 'top3' ? 'top3' : 'number1';
   const sourceEventId = `netflix-top10:${scope}:${metric}:${isoDate(close)}:${titleSlug}`;
@@ -875,6 +882,7 @@ export const _internal = {
   explicitTags,
   latestNetflixWeek,
   movieWeekendBoxOfficeSpec,
+  startOfUtcDate,
   netflixTop10Spec,
   normalizeSlug,
   parseTsv,

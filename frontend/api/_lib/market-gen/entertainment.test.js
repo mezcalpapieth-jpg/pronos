@@ -157,7 +157,7 @@ test('Netflix Top 10 TSV rows create global and Mexico manual-review specs', () 
 
   assert.equal(globalSpec.source, 'entertainment-api');
   assert.equal(globalSpec.question, '¿La Casa será #1 global en Netflix TV esta semana?');
-  assert.equal(globalSpec.start_time, '2026-08-18T06:00:00.000Z');
+  assert.equal(globalSpec.start_time, '2026-08-25T00:00:00.000Z');
   assert.equal(globalSpec.end_time, '2026-08-25T06:00:00.000Z');
   assert.equal(globalSpec.resolver_type, 'manual_review');
   assert.equal(globalSpec.source_data.kind, 'netflix_top10');
@@ -165,9 +165,21 @@ test('Netflix Top 10 TSV rows create global and Mexico manual-review specs', () 
   assert.deepEqual(globalSpec.geo_tags, ['world']);
   assert.deepEqual(globalSpec.topic_tags, ['tv']);
   assert.equal(mexicoSpec.question, '¿Outer Banks entra al Top 3 de Netflix México esta semana?');
+  assert.equal(mexicoSpec.start_time, '2026-08-25T00:00:00.000Z');
   assert.equal(mexicoSpec.source_data.targetRank, 3);
   assert.deepEqual(mexicoSpec.geo_tags, ['mexico']);
   assert.equal(mexicoSpec.source_data.suggestedPricing.source, 'source-signals:netflix-top10-rank');
+});
+
+test('Netflix Top 10 markets open on the close date instead of a week early', () => {
+  const close = new Date('2026-09-15T06:00:00Z');
+  const spec = _internal.netflixTop10Spec(
+    { title: "Death of the Pastor's Wife", rank: 1, row: { week: '2026-09-08' } },
+    { scope: 'mx', mode: 'top3', close },
+  );
+
+  assert.equal(spec.start_time, '2026-09-15T00:00:00.000Z');
+  assert.equal(spec.end_time, '2026-09-15T06:00:00.000Z');
 });
 
 test('API entertainment discovery is gated by env vars', () => {
