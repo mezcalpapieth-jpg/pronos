@@ -912,6 +912,63 @@
   text-transform: uppercase;
 }
 
+.ris26-phone-average-card {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 16px;
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  text-align: center;
+}
+
+.ris26-phone-average-card span,
+.ris26-phone-average-card small,
+.ris26-phone-explainer strong {
+  font-family: var(--font-mono);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ris26-phone-average-card span {
+  color: rgba(247, 243, 235, 0.62);
+  font-size: 11px;
+}
+
+.ris26-phone-average-card strong {
+  color: #00e87a;
+  font-family: var(--font-display);
+  font-size: clamp(58px, 18vw, 84px);
+  line-height: 0.88;
+  letter-spacing: 0;
+}
+
+.ris26-phone-average-card small {
+  color: rgba(247, 243, 235, 0.48);
+  font-size: 10px;
+}
+
+.ris26-phone-explainer {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+  color: rgba(247, 243, 235, 0.68);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.42;
+}
+
+.ris26-phone-explainer strong {
+  color: #fff8e9;
+  font-size: 11px;
+}
+
+.ris26-phone-explainer span {
+  display: block;
+}
+
 .ris26-phone-stats {
   display: grid;
   grid-template-columns: 1fr 1fr;

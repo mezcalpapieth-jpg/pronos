@@ -544,12 +544,27 @@ function GuessForm({ onSubmitted }) {
   );
 }
 
-function PhoneThanks() {
+function PhoneThanks({ stats }) {
+  const total = Number(stats.total || 0);
+
   return (
     <div className="ris26-phone-results ris26-phone-thanks">
       <div className="ris26-submitted">
         <span>RIS 26 · Demo en vivo</span>
         <h1>Gracias por tu respuesta</h1>
+      </div>
+      <div className="ris26-phone-average-card">
+        <span>Promedio</span>
+        <strong>{fmt(stats.mean, 1)}</strong>
+        <small>{total ? `${fmt(total)} respuestas en vivo` : 'Esperando más respuestas'}</small>
+      </div>
+      <div className="ris26-phone-explainer">
+        <strong>Cómo se mueve Pronos</strong>
+        <span>
+          La media de la multitud apunta al valor real. Cada respuesta suma señal:
+          cuando más personas se concentran en un número, su precio sube; cuando
+          la opinión se dispersa, baja.
+        </span>
       </div>
       <a className="ris26-pronos-link" href="/points/">
         Visitar Pronos
@@ -609,7 +624,7 @@ function RevealResultsDialog({
             />
             {error && <div className="ris26-form-error">{error}</div>}
             <button type="submit" disabled={busy}>
-              {busy ? 'Validando...' : isReveal ? 'Reveal results' : 'Desbloquear controles'}
+              {busy ? 'Validando...' : isReveal ? 'Revelar resultado' : 'Desbloquear controles'}
             </button>
           </form>
         )}
@@ -753,7 +768,7 @@ export default function Ris26Page() {
         {!submittedGuess ? (
           <GuessForm onSubmitted={refreshAfterSubmit} />
         ) : (
-          <PhoneThanks />
+          <PhoneThanks stats={stats} />
         )}
       </main>
     );
@@ -817,7 +832,7 @@ export default function Ris26Page() {
           </div>
           <div className="ris26-operator-actions">
             <button className="ris26-reveal-button" type="button" onClick={requestReveal}>
-              Reveal results
+              Revelar resultado
             </button>
           </div>
           <div className="ris26-explainer">
